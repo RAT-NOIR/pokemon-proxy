@@ -165,6 +165,17 @@ const CardPrice = mongoose.model('CardPrice', cardPriceSchema);
 const catalogueProduitSchema = new mongoose.Schema({
     idProduct: Number, name: String, idExpansion: Number, idMetacard: Number
 });
+// Alignés sur ce qu'import-catalogue.js déclare déjà pour cette même collection (un
+// index Mongo appartient à la collection, pas au schéma qui s'y connecte — il existe
+// donc peut-être déjà côté Atlas si l'import a tourné ; cette déclaration comble
+// l'oubli côté serveur, sans risque : Mongoose ne fait rien si l'index existe déjà,
+// sinon le construit en tâche de fond. Pas d'index sur `name` : les 2 recherches du
+// serveur sont des regex insensibles à la casse (voir chercherPrixCatalogueLocal et
+// trouverProduitsLocaux), qu'un index classique n'accélère pas — l'ajouter coûterait
+// du stockage (Atlas peut être sur un palier limité) pour aucun gain de requête réel.
+catalogueProduitSchema.index({ idExpansion: 1 });
+catalogueProduitSchema.index({ idMetacard: 1 });
+catalogueProduitSchema.index({ idProduct: 1 });
 const CatalogueProduit = mongoose.model('CatalogueProduit', catalogueProduitSchema, 'catalogue_produits');
 
 // Guide des prix Cardmarket (importé via import-price-guide.js)
@@ -173,6 +184,8 @@ const guidePrixSchema = new mongoose.Schema({
     avg1: Number, avg7: Number, avg30: Number,
     avgHolo: Number, lowHolo: Number, trendHolo: Number
 });
+// Requêtes réelles sur idProduct : getPrixGuideLocal/getPrixGuideLocalLot, à chaque identification.
+guidePrixSchema.index({ idProduct: 1 });
 const GuidePrix = mongoose.model('GuidePrix', guidePrixSchema, 'guide_prix');
 
 // Codes set appris au fil de l'eau (idExpansion Cardmarket -> code court type "TWM").
@@ -652,19 +665,23 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                 const totN = totalImprime ? parseInt(String(totalImprime).replace(/\D/g, ''), 10) : null;
                 let departageTotal = null;
                 if (totN) {
+                    // Ce chemin n'a PAS d'early-exit (il faut vérifier tous les sets candidats
+                    // de toute façon), contrairement à la recherche par variante ci-dessus :
+                    // paralléliser ne change donc AUCUN volume total de requêtes TCGdex, juste
+                    // leur ordonnancement. Sets distincts typiquement peu nombreux (2 à 5 ici),
+                    // pas besoin d'un plafond de concurrence.
+                    const setIds = [...new Set(resultats.map(r => r.id.includes('-') ? r.id.slice(0, r.id.lastIndexOf('-')) : null).filter(Boolean))];
                     const countParSet = {};
-                    const matches = [];
-                    for (const r of resultats) {
+                    await Promise.all(setIds.map(async setId => {
+                        try {
+                            const s = await axios.get(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(setId)}`, { timeout: 12000 });
+                            countParSet[setId] = s.data?.cardCount?.official ?? s.data?.cardCount?.total ?? null;
+                        } catch (_) { countParSet[setId] = null; }
+                    }));
+                    const matches = resultats.filter(r => {
                         const setId = r.id.includes('-') ? r.id.slice(0, r.id.lastIndexOf('-')) : null;
-                        if (!setId) continue;
-                        if (countParSet[setId] === undefined) {
-                            try {
-                                const s = await axios.get(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(setId)}`, { timeout: 12000 });
-                                countParSet[setId] = s.data?.cardCount?.official ?? s.data?.cardCount?.total ?? null;
-                            } catch (_) { countParSet[setId] = null; }
-                        }
-                        if (countParSet[setId] === totN) matches.push(r);
-                    }
+                        return setId && countParSet[setId] === totN;
+                    });
                     if (matches.length === 1) {
                         departageTotal = matches[0];
                     } else if (matches.length > 1) {
@@ -745,60 +762,6 @@ async function getPrixDepuisTCGdex(cardId, name, number) {
 }
 
 
-
-// Récupère les noms d'attaques + talents d'une carte TCGdex (pour croiser avec
-// les noms entre crochets du catalogue Cardmarket).
-async function getAttaquesTCGdex(cardId) {
-    try {
-        const url = `https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(cardId)}`;
-        const response = await axios.get(url, { timeout: 15000 });
-        const data = response.data || {};
-        const noms = [];
-        if (Array.isArray(data.attacks)) noms.push(...data.attacks.map(a => a.name).filter(Boolean));
-        if (Array.isArray(data.abilities)) noms.push(...data.abilities.map(a => a.name).filter(Boolean));
-        return noms.map(n => n.toLowerCase().trim());
-    } catch (e) {
-        console.log(`ℹ️ Impossible de récupérer les attaques TCGdex pour "${cardId}" : ${e.message}`);
-        return [];
-    }
-}
-
-// Parmi plusieurs idProduct candidats du catalogue local, trouve celui dont les
-// attaques entre crochets correspondent le mieux aux attaques TCGdex. C'est ce
-// qui permet de distinguer LE bon Charizard TG03 parmi les 79 Charizard.
-async function trouverIdProductParAttaques(nomExact, attaquesTCGdex) {
-    try {
-        if (mongoose.connection.readyState !== 1 || attaquesTCGdex.length === 0) return null;
-
-        const regex = new RegExp(`^${echapperRegex(nomExact)}\\s*\\[`, 'i');
-        const candidats = await CatalogueProduit.find({ name: regex }).lean();
-        if (candidats.length === 0) return null;
-
-        let meilleur = null;
-        let meilleurScore = 0;
-
-        for (const c of candidats) {
-            // Extraire le contenu entre crochets : "Charizard [Battle Sense | Royal Blaze]"
-            const match = c.name.match(/\[([^\]]+)\]/);
-            if (!match) continue;
-            const attaquesCatalogue = match[1].split('|').map(s => s.toLowerCase().trim());
-
-            // Score = nombre d'attaques TCGdex retrouvées dans le nom catalogue
-            const score = attaquesTCGdex.filter(a => attaquesCatalogue.some(ac => ac.includes(a) || a.includes(ac))).length;
-            if (score > meilleurScore) { meilleurScore = score; meilleur = c; }
-        }
-
-        // On exige qu'au moins une attaque corresponde pour être sûr
-        if (meilleur && meilleurScore > 0) {
-            console.log(`🎯 idProduct ${meilleur.idProduct} identifié par attaques (${meilleurScore} correspondance(s)) : "${meilleur.name}"`);
-            return meilleur; // objet complet { idProduct, idExpansion, name, ... }
-        }
-        return null;
-    } catch (e) {
-        console.log(`ℹ️ Erreur croisement par attaques : ${e.message}`);
-        return null;
-    }
-}
 
 // ============================================================
 // Détection de région (occidental vs japonais) pour éviter de confondre
