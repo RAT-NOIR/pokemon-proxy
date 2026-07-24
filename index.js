@@ -235,6 +235,27 @@ async function lireCodeSet(idExpansion) {
     }
 }
 
+// Version groupée de lireCodeSet : un seul aller-retour Mongo pour N idExpansion au
+// lieu d'un par candidat (jusqu'à ~79 fois par requête d'identification). Number()
+// des deux côtés (clé de la Map ET valeur lue dans produits) : idExpansion est déclaré
+// Number dans le schéma, mais Mongoose ne caste que les requêtes qu'il construit
+// lui-même (findOne/$in) — une Map JS, elle, fait une égalité stricte de type, donc
+// "6096" et 6096 ne matcheraient jamais si une entrée plus ancienne avait été écrite
+// avec un type différent. Sans ce filet, un mismatch de type ferait taire le critère
+// région (±45 points) EN SILENCE, sans la moindre erreur.
+async function lireCodeSets(idsExpansion) {
+    try {
+        if (mongoose.connection.readyState !== 1) return new Map();
+        const uniques = [...new Set(idsExpansion.filter(e => e != null).map(Number))];
+        if (uniques.length === 0) return new Map();
+        const docs = await CodeSet.find({ idExpansion: { $in: uniques } }).lean();
+        return new Map(docs.map(d => [Number(d.idExpansion), d.codeSet]));
+    } catch (e) {
+        console.error("Erreur lecture codeSets (lot):", e.message);
+        return new Map();
+    }
+}
+
 async function memoriserCodeSet(idExpansion, codeSet) {
     try {
         if (mongoose.connection.readyState !== 1 || !idExpansion || !codeSet) return;
@@ -884,11 +905,32 @@ async function getPrixGuideLocal(idProduct) {
     }
 }
 
+// Version groupée de getPrixGuideLocal : un seul aller-retour Mongo pour N idProduct
+// (même repli de champs, même contrat de retour null si prix inconnu). Number() des
+// deux côtés pour la même raison que lireCodeSets ci-dessus.
+async function getPrixGuideLocalLot(idsProducts) {
+    try {
+        if (mongoose.connection.readyState !== 1) return new Map();
+        const uniques = [...new Set(idsProducts.filter(id => id != null).map(Number))];
+        if (uniques.length === 0) return new Map();
+        const docs = await GuidePrix.find({ idProduct: { $in: uniques } }).lean();
+        const map = new Map();
+        for (const g of docs) {
+            const prix = g.trend ?? g.avg ?? g.avg7 ?? g.avg30 ?? g.trendHolo ?? g.avgHolo;
+            map.set(Number(g.idProduct), typeof prix === 'number' ? prix : null);
+        }
+        return map;
+    } catch (e) {
+        console.error("Erreur lecture prix guide (lot):", e.message);
+        return new Map();
+    }
+}
+
 // ============================================================
 // Enrichit les candidats (numéro appris + prix local + région) puis les score.
 // NIVEAU 1 : 100% local, aucune requête Cardmarket, aucun risque de ban.
 // ============================================================
-async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpansionsAttendues = []) {
+async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpansionsAttendues = [], codeSetsPreChauffes = null) {
     const regionCible = regionAttendue(cardInfo);
     console.log(`🌍 Région attendue : ${regionCible || 'indéterminée'} (langue=${cardInfo.language}, total=${cardInfo.total || 'absent'})`);
 
@@ -902,11 +944,17 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
         console.log(`💡 Aucun numéro connu pour ces candidats. Pour rendre l'identification précise, lance : node apprendre-set.js ${expansions.join(' ')}`);
     }
 
-    const candidatsEnrichis = [];
-    for (const p of produits) {
-        const codeSet = await lireCodeSet(p.idExpansion); // connu si déjà appris
+    // Codes set + prix guide de TOUS les candidats en DEUX allers-retours Mongo groupés
+    // au lieu de deux PAR CANDIDAT (jusqu'à ~79 candidats -> ~158 requêtes séquentielles
+    // avant ce fix). codeSetsPreChauffes permet à l'appelant (/api/identifier) d'injecter
+    // une Map déjà récupérée, pour ne pas la redemander une seconde fois à Mongo.
+    const codeSets = codeSetsPreChauffes || await lireCodeSets(produits.map(p => p.idExpansion));
+    const prixGuide = await getPrixGuideLocalLot(produits.map(p => p.idProduct));
+
+    const candidatsEnrichis = produits.map(p => {
         const infoNum = numerosConnus.get(p.idProduct);
-        candidatsEnrichis.push({
+        const codeSet = codeSets.get(Number(p.idExpansion)) ?? null;
+        return {
             idProduct: p.idProduct,
             idExpansion: p.idExpansion,
             numeroCardmarket: infoNum ? (infoNum.numero || infoNum.numeroUrl) : null,
@@ -914,7 +962,7 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
             // V1/V2/V3 = normale/reverse/illustration, présente seulement sur les
             // sets appris AVEC les nouveaux champs (--maj). Absente = null -> neutre.
             variante: infoNum ? (infoNum.variante || null) : null,
-            prix: await getPrixGuideLocal(p.idProduct),
+            prix: prixGuide.get(Number(p.idProduct)) ?? null,
             // code de set appris (ex: "PAL", "EXP", "PGO") : sert à confronter ce que
             // l'IA a lu (setCode/stamp) au set réel du candidat.
             codeSet: codeSet || (infoNum && infoNum.codeSet) || null,
@@ -923,8 +971,8 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
             // scoring.js et se réactivera tout seul si on lui refournit un jour une
             // distance (via OffscreenCanvas côté extension, par exemple).
             region: regionDuCodeSet(codeSet || (infoNum && infoNum.codeSet))
-        });
-    }
+        };
+    });
 
     if (idExpansionsAttendues.length) {
         console.log(`🎯 Set attendu -> expansion(s) Cardmarket : ${idExpansionsAttendues.join(', ')}`);
@@ -942,7 +990,9 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
     };
     if (lu.varianteAttendue) console.log(`🔁 Reverse lue par l'IA -> on vise la variante ${lu.varianteAttendue}.`);
 
-    return choisirMeilleur(candidatsEnrichis, lu);
+    // codeSets renvoyé pour réutilisation par l'appelant (évite une 2e lecture
+    // identique, ex: la construction de `codesSet` dans /api/identifier).
+    return { ...choisirMeilleur(candidatsEnrichis, lu), codeSets };
 }
 
 function calculerVerdict(prixVinted, prixCardmarket, language, carteIncertaine) {
@@ -1018,10 +1068,12 @@ async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null) {
         const exps = (await NumeroCarte.distinct('idExpansion', { setTcgdex: setId })).filter(e => e != null);
         if (!regionAttendue || exps.length === 0) return exps;
 
-        // Filtrage par région, via le code set appris (MAJ = occidental, min = japonais)
+        // Filtrage par région, via le code set appris (MAJ = occidental, min = japonais).
+        // Un seul aller-retour Mongo pour toutes les expansions, au lieu d'un par expansion.
+        const codes = await lireCodeSets(exps);
         const gardees = [];
         for (const e of exps) {
-            const code = await lireCodeSet(e);
+            const code = codes.get(Number(e)) ?? null;
             const region = regionDuCodeSet(code);
             // Région inconnue -> on garde (on ne pénalise pas ce qu'on ignore)
             if (!region || region === regionAttendue) gardees.push(e);
@@ -1301,8 +1353,15 @@ app.post('/api/identifier', verifierJeton, verifierQuota, async (req, res) => {
         console.log(`\n📷 [identifier] ${photos.length} photo(s) reçue(s).`);
 
         // 1. Lecture de la carte par l'IA
+        const debutIA = Date.now();
         const cardInfo = await getCardIdFromAI(photos, title);
+        console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
         if (!cardInfo) return res.json({ success: false, error: "Analyse IA échouée" });
+
+        // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
+        // qui suit), pour décider plus tard si un cache/cache mémoire (reporté) vaut le
+        // coup — à comparer avec le temps d'appel IA ci-dessus, qui tourne de toute façon.
+        const debutCatalogue = Date.now();
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
         const trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
@@ -1346,12 +1405,17 @@ app.post('/api/identifier', verifierJeton, verifierQuota, async (req, res) => {
         // Si TCGdex s'est trompé de carte (numéro incohérent), on n'utilise pas son set.
         const expansionsAttendues = tcgdexDouteux ? [] : await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo));
 
+        // Codes set de TOUS les candidats en un seul aller-retour Mongo, réutilisé à la
+        // fois par le scoring ci-dessous et par `codesSet` plus bas — qui refaisait
+        // auparavant exactement la même lecture une seconde fois, candidat par candidat.
+        const codeSetsConnus = await lireCodeSets(produits.map(p => p.idExpansion));
+
         // 4. Scoring : on renvoie le CLASSEMENT, l'extension testera dans l'ordre
         let classement = [];
         if (produits.length === 1) {
             classement = [{ idProduct: produits[0].idProduct, idExpansion: produits[0].idExpansion, score: 999 }];
         } else if (produits.length > 1) {
-            const { scores, confiant } = await scorerCandidatsLocal(produits, cardInfo, photos[0], expansionsAttendues);
+            const { scores, confiant } = await scorerCandidatsLocal(produits, cardInfo, photos[0], expansionsAttendues, codeSetsConnus);
             classement = scores.map(s => ({
                 idProduct: s.candidat.idProduct,
                 idExpansion: s.candidat.idExpansion,
@@ -1362,11 +1426,13 @@ app.post('/api/identifier', verifierJeton, verifierQuota, async (req, res) => {
         }
 
         // Codes set connus : permettent à l'extension de construire les URLs d'images
+        // (simple lecture de la Map déjà récupérée ci-dessus, plus aucun aller-retour Mongo)
         const codesSet = {};
-        for (const p of produits) {
-            const c = await lireCodeSet(p.idExpansion);
-            if (c) codesSet[p.idExpansion] = c;
+        for (const [idExpansion, code] of codeSetsConnus) {
+            if (code) codesSet[idExpansion] = code;
         }
+
+        console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
