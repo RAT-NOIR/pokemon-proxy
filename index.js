@@ -5,20 +5,6 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 
-// Le module live (Puppeteer) n'est utilisé QUE par l'ancienne architecture, où le
-// serveur tournait sur ton PC. En déploiement (Render), Puppeteer n'est pas
-// installé — et c'est voulu : le prix live est désormais récupéré par l'EXTENSION,
-// depuis le navigateur de l'utilisateur. On charge donc ce module sans exiger
-// qu'il soit présent.
-let scraperFiche = null;
-let fermerBrowser = null;
-try {
-    ({ scraperFiche, fermerBrowser } = require('./live-cardmarket'));
-    console.log("🧩 Module live chargé (Puppeteer disponible).");
-} catch (e) {
-    console.log("ℹ️ Module live non chargé — normal en déploiement : le prix live est fait par l'extension.");
-}
-
 const { choisirMeilleur } = require('./scoring');
 
 const app = express();
@@ -131,11 +117,6 @@ const SEUIL_PRIX_CORRECT  = 1.10; // jusqu'à 10% plus cher -> prix correct
 // résultats qui se dégradent d'un coup, repasse sur "google/gemini-3.5-flash"
 // (stable, plus chère). L'ancien "google/gemini-2.5-flash" est arrêté oct. 2026.
 const MODELE_IA = "google/gemini-3-flash-preview";
-
-// Interrupteur du scraping live Cardmarket. Mets à false pour tester sans aucune
-// requête vers Cardmarket (utile en cas de ban IP, ou pour un fonctionnement
-// 100% guide local). À true, le live tente d'obtenir le prix exact + par langue.
-const LIVE_ACTIF = true;
 
 // ============================================================
 // MONGODB — connexion + schéma de cache
@@ -1119,115 +1100,22 @@ app.post('/api/analyser', verifierJeton, verifierQuota, async (req, res) => {
                 console.log(`🧮 Scoring local : ${classement.length} candidats classés, meilleur = ${classement[0]?.candidat?.idProduct} (score ${scores[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
             }
 
-            const numLu = cardInfo.number ? String(cardInfo.number).replace(/^0+/, '') : null;
             const carteNonEN = cardInfo.language && cardInfo.language !== 'EN';
 
-            // 2d. NIVEAU 2 — on parcourt les candidats classés. Pour chacun, le live
-            // confirme le numéro. Si ça correspond -> gagné. Sinon -> candidat suivant.
-            // Garde-fou anti-ban : maximum 3 tentatives live.
-            const MAX_ESSAIS_LIVE = 3;
-            let trouve = false;
-            let dernierResultatDouteux = null;
-
-            if (LIVE_ACTIF && scraperFiche && classement.length > 0) {
-                const nbEssais = Math.min(MAX_ESSAIS_LIVE, classement.length);
-                for (let i = 0; i < nbEssais; i++) {
-                    const produitCible = classement[i].candidat;
-                    if (!produitCible) continue;
-
-                    console.log(`🌐 Live (essai ${i + 1}/${nbEssais}) sur idProduct ${produitCible.idProduct}...`);
-                    try {
-                        // Pas de filtre d'état dans l'URL : on récupère TOUTE la grille
-                        // en une seule requête, ce qui permet d'en déduire le prix de
-                        // n'importe quel état (et d'afficher la grille complète).
-                        const live = await scraperFiche(produitCible.idProduct, cardInfo.language, null);
-                        if (!live) continue;
-
-                        if (live.codeSet && produitCible.idExpansion) {
-                            await memoriserCodeSet(produitCible.idExpansion, live.codeSet);
-                        }
-
-                        const nFiche = live.numero ? String(live.numero).replace(/^0+/, '') : null;
-                        const numeroOK = !numLu || !nFiche || nFiche === numLu;
-
-                        // Choix de l'état de référence. On retient le PIRE des deux avis
-                        // (IA vs vendeur), car l'erreur d'optimisme coûte de l'argent :
-                        //  - un vendeur PESSIMISTE est crédible (il a la carte en main et
-                        //    n'a aucun intérêt à sous-vendre) -> on le suit ;
-                        //  - un vendeur OPTIMISTE est suspect -> l'IA le corrige ;
-                        //  - une IA optimiste est corrigée par le vendeur.
-                        const grille = live.prixParEtat || {};
-                        const confianceIA = String(cardInfo.etatConfiance || '').toLowerCase();
-                        const iaFiable = cardInfo.etatEstime && (confianceIA === 'haute' || confianceIA === 'moyenne');
-                        if (cardInfo.etatEstime && !iaFiable) {
-                            console.log(`   ⚠️ Estimation IA (${cardInfo.etatEstime}) ignorée pour le prix : confiance ${confianceIA || '?'}.`);
-                        }
-
-                        const etatIA = iaFiable ? String(cardInfo.etatEstime).toUpperCase() : null;
-                        const etatRetenu = pireEtat(etatIA, etatMin);
-                        if (etatIA && etatMin && etatIA !== etatMin) {
-                            console.log(`   ⚖️ IA dit ${etatIA}, vendeur dit ${etatMin} -> on retient le pire : ${etatRetenu}`);
-                        }
-
-                        const prixSelonEtat = prixPourEtat(grille, etatRetenu);
-                        // Repli : sans grille ni état fiable, le "De" brut est trompeur
-                        // (c'est l'exemplaire le plus abîmé du marché). La tendance est
-                        // bien plus représentative de la valeur réelle de la carte.
-                        let prixLive = prixSelonEtat ?? live.prixTendance ?? live.prixParLangue;
-                        let baseEtat = null;
-                        if (prixSelonEtat != null) {
-                            const origine = (etatRetenu === etatIA && etatRetenu === etatMin) ? 'IA + vendeur'
-                                : (etatRetenu === etatIA ? 'estimé IA' : 'déclaré vendeur');
-                            baseEtat = `${etatRetenu}+ (${origine})`;
-                        }
-                        else if (live.prixTendance != null) baseEtat = `tendance du marché (état indéterminé)`;
-
-                        const resLive = {
-                            price: typeof prixLive === 'number' ? prixLive : null,
-                            url: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${produitCible.idProduct}`,
-                            source: live.prixParLangue ? 'cardmarket-live-langue' : 'cardmarket-live',
-                            filtrePar: live.prixParLangue ? 'langue' : 'global',
-                            tendance: live.prixTendance,
-                            historique: { jour1: live.moyenne1j, jours7: live.moyenne7j, jours30: live.moyenne30j },
-                            grilleEtats: grille,
-                            baseEtat
-                        };
-
-                        if (numeroOK && resLive.price !== null) {
-                            // Bon numéro + prix trouvé -> c'est la bonne carte
-                            resultat = resLive;
-                            console.log(`✅ Numéro confirmé (${nFiche || 'n/a'}) — prix retenu : ${resLive.price} €${baseEtat ? ' sur base ' + baseEtat : ''}`);
-                            trouve = true;
-                            break;
-                        } else if (!numeroOK) {
-                            console.log(`↪️ Numéro fiche (${nFiche}) ≠ lu (${numLu}) — on essaie le candidat suivant.`);
-                            // On garde ce résultat sous le coude au cas où aucun ne matche
-                            if (resLive.price !== null && !dernierResultatDouteux) dernierResultatDouteux = { ...resLive, carteIncertaine: true };
-                        }
-                    } catch (e) {
-                        console.log(`ℹ️ Live essai ${i + 1} en échec : ${e.message}`);
-                    }
-                }
-            }
-
-            // Si aucun candidat n'a le bon numéro : on prend le prix guide local du
-            // meilleur candidat (marqué incertain), ou le dernier résultat live douteux.
-            if (!trouve) {
-                if (dernierResultatDouteux) {
-                    resultat = dernierResultatDouteux;
-                    console.log(`⚠️ Aucun numéro exact trouvé — prix indicatif retenu (incertain).`);
-                } else if (classement.length > 0) {
-                    const meilleur = classement[0].candidat;
-                    const prixLocal = await getPrixGuideLocal(meilleur.idProduct);
-                    if (prixLocal !== null) {
-                        resultat = {
-                            price: prixLocal,
-                            url: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${meilleur.idProduct}`,
-                            source: 'guide-local',
-                            carteIncertaine: produits.length > 1
-                        };
-                        console.log(`📘 Repli guide local pour idProduct ${meilleur.idProduct} : ${prixLocal} €${produits.length > 1 ? ' (incertain)' : ''}`);
-                    }
+            // NIVEAU 2 — le serveur ne contacte JAMAIS Cardmarket lui-même : le live est
+            // réservé à l'extension, côté navigateur de l'utilisateur (voir /api/identifier).
+            // On prend directement le prix guide local du meilleur candidat classé.
+            if (classement.length > 0) {
+                const meilleur = classement[0].candidat;
+                const prixLocal = await getPrixGuideLocal(meilleur.idProduct);
+                if (prixLocal !== null) {
+                    resultat = {
+                        price: prixLocal,
+                        url: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${meilleur.idProduct}`,
+                        source: 'guide-local',
+                        carteIncertaine: produits.length > 1
+                    };
+                    console.log(`📘 Repli guide local pour idProduct ${meilleur.idProduct} : ${prixLocal} €${produits.length > 1 ? ' (incertain)' : ''}`);
                 }
             }
 
@@ -1558,10 +1446,3 @@ app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.r
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
 
 app.listen(PORT, () => console.log(`🚀 Serveur actif sur le port ${PORT}`));
-
-// Fermeture propre du navigateur Puppeteer quand on arrête le serveur (Ctrl+C)
-process.on('SIGINT', async () => {
-    console.log("\nArrêt du serveur, fermeture du navigateur live...");
-    try { if (fermerBrowser) await fermerBrowser(); } catch (e) {}
-    process.exit(0);
-});
