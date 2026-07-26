@@ -4,6 +4,7 @@ const cors = require('cors');
 const axios = require('axios');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const Stripe = require('stripe');
 
 const { choisirMeilleur } = require('./scoring');
 
@@ -29,6 +30,14 @@ app.use(cors({
         return callback(new Error('Origine non autorisée'));
     }
 }));
+// ⚠️ ORDRE CRITIQUE : Stripe signe le corps BRUT de la requête. Si express.json()
+// le parsait avant, l'octet-à-octet serait perdu et la vérification de signature
+// échouerait systématiquement. Cette route est donc déclarée AVANT le parser JSON
+// global, avec son propre express.raw(). `gererWebhookStripe` est une déclaration
+// de fonction (hoistée) écrite plus bas, dans la section paiement : l'ordre des
+// middlewares est garanti sans éparpiller le code Stripe en haut du fichier.
+app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gererWebhookStripe);
+
 app.use(express.json());
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
@@ -42,6 +51,18 @@ const limiteurIA = rateLimit({
     message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' }
 });
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
+
+// Limiteur dédié à la création de Checkout Sessions. Le jeton partagé est
+// extractible de l'extension distribuée : sans ce garde-fou, n'importe qui pourrait
+// faire créer des milliers de sessions Stripe. 20/h/IP laisse largement la place à
+// un achat normal (et à quelques hésitations/retours en arrière).
+const limiteurPaiement = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Trop de tentatives de paiement, réessaie plus tard.' }
+});
 
 // Jeton partagé entre l'extension et le serveur. Empêche une page web d'utiliser
 // ton serveur même si elle contournait le CORS. À définir dans le .env :
@@ -58,43 +79,120 @@ function verifierJeton(req, res, next) {
     return res.status(401).json({ success: false, error: "Non autorisé" });
 }
 
-// --- Quota quotidien de scans par personne ---
-// LIMITE_SCANS_JOUR : nombre de scans gratuits par utilisateur et par jour (défaut 10).
+// --- Accès aux scans : crédits d'accueil, allocation hebdo, crédits achetés ---
+// SCANS_ACCUEIL         : scans offerts UNE SEULE FOIS à la création du compte (sans expiration).
+// SCANS_GRATUITS_SEMAINE: allocation hebdomadaire, NON cumulable (repart à zéro chaque semaine ISO).
 // CODE_ILLIMITE : code maître secret (variable d'env sur Render). Une requête qui le
-// présente n'est PAS limitée — c'est ainsi que l'admin se débride, sans jamais mettre
-// le code dans l'extension distribuée. Chaque install envoie un userId anonyme.
-const LIMITE_SCANS_JOUR = parseInt(process.env.LIMITE_SCANS_JOUR || '10', 10);
+// présente n'est PAS limitée et ne décrémente RIEN — c'est ainsi que l'admin se débride,
+// sans jamais mettre le code dans l'extension distribuée. Chaque install envoie un userId anonyme.
+const SCANS_ACCUEIL = parseInt(process.env.SCANS_ACCUEIL || '25', 10);
+const SCANS_GRATUITS_SEMAINE = parseInt(process.env.SCANS_GRATUITS_SEMAINE || '2', 10);
 const CODE_ILLIMITE = process.env.CODE_ILLIMITE || null;
 
-async function verifierQuota(req, res, next) {
-    try {
-        // 1) Code maître -> illimité (l'admin)
-        if (CODE_ILLIMITE && req.body && req.body.codeIllimite === CODE_ILLIMITE) return next();
-        // 2) Base indisponible -> on ne bloque pas l'utilisateur pour une panne DB
-        if (mongoose.connection.readyState !== 1) return next();
-        // 3) Pas d'userId (vieille version d'extension) -> on laisse passer
-        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
-        if (!userId) return next();
+// Semaine ISO 8601 au format 'AAAA-Www' (la semaine commence le lundi, et la semaine 1
+// est celle qui contient le premier jeudi de l'année). Sert de clé de reset hebdo : une
+// nouvelle semaine = une nouvelle clé = un nouveau document, donc plus rien à remettre
+// à zéro (pas de "lire puis reset", donc pas de course entre deux scans simultanés).
+function semaineISO(date = new Date()) {
+    const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    // Jeudi de la semaine courante : c'est lui qui détermine l'année ISO.
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const debutAnnee = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const numero = Math.ceil((((d - debutAnnee) / 86400000) + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(numero).padStart(2, '0')}`;
+}
 
-        const jour = new Date().toISOString().slice(0, 10); // AAAA-MM-JJ (UTC)
-        // Incrément atomique puis vérification (on redescend si dépassement).
-        const doc = await Quota.findOneAndUpdate(
-            { userId, jour },
-            { $inc: { count: 1 } },
-            { upsert: true, new: true }
-        );
-        if (doc.count > LIMITE_SCANS_JOUR) {
-            await Quota.updateOne({ userId, jour }, { $inc: { count: -1 } });
-            return res.status(429).json({
-                success: false,
-                quotaAtteint: true,
-                error: `Limite de ${LIMITE_SCANS_JOUR} scans par jour atteinte. Réessaie demain 🐀`
-            });
+// Ordre de consommation d'un scan :
+//   0) code maître        -> passe, ne décrémente rien
+//   1) crédits d'accueil  -> décrément atomique conditionnel
+//   2) allocation hebdo   -> incrément + rollback si dépassement
+//   3) crédits ACHETÉS    -> décrément atomique conditionnel
+//   4) sinon              -> 429
+// Les gratuits passent AVANT le payant : on ne consomme jamais du crédit acheté tant
+// qu'il reste de l'offert (sinon on facture l'utilisateur pour un scan qui lui était dû).
+async function verifierAcces(req, res, next) {
+    // 0) Code maître -> illimité (l'admin), aucun décrément, aucun accès base.
+    if (CODE_ILLIMITE && req.body && req.body.codeIllimite === CODE_ILLIMITE) return next();
+
+    // 1) userId obligatoire, vérifié AVANT tout accès Mongo. Sans identifiant on ne
+    // peut rien décompter : laisser passer offrirait des scans illimités à qui
+    // omettrait simplement le champ.
+    const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+    if (!userId) {
+        return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+    }
+
+    // 2) Base indisponible -> 503, fail-CLOSED (et non fail-open comme l'ancien quota).
+    // L'identification a besoin de Mongo (catalogue, mapping, guide de prix) : sans base,
+    // trouverProduitsLocaux renvoie [] et la route répondrait un classement VIDE... après
+    // avoir payé l'appel IA. Couper ici évite de brûler des crédits OpenRouter pour une
+    // réponse inexploitable, et rend une erreur honnête au client.
+    if (mongoose.connection.readyState !== 1) {
+        console.warn("🚫 [acces] Mongo indisponible -> 503 (scan refusé avant l'appel IA)");
+        return res.status(503).json({ success: false, error: "Service momentanément indisponible, réessaie dans un instant." });
+    }
+
+    try {
+        // 3) Création du compte au premier scan. $setOnInsert : c'est l'UNIQUE endroit
+        // où la dotation d'accueil est posée — jamais réattribuée sur un doc existant.
+        try {
+            await Credit.updateOne(
+                { userId },
+                { $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL, soldeScans: 0, email: null } },
+                { upsert: true }
+            );
+        } catch (e) {
+            // 11000 = deux scans simultanés d'un compte tout neuf ont tenté de le créer
+            // en même temps ; l'autre a gagné, le doc existe, on continue.
+            if (e.code !== 11000) throw e;
         }
-        next();
+
+        // 4) Crédits d'accueil. Décrément ATOMIQUE conditionnel : le filtre soldeGratuit > 0
+        // et le $inc sont évalués dans la même opération Mongo, donc deux scans simultanés
+        // ne peuvent pas consommer le même crédit.
+        const accueil = await Credit.findOneAndUpdate(
+            { userId, soldeGratuit: { $gt: 0 } },
+            { $inc: { soldeGratuit: -1 } },
+            { new: true }
+        );
+        if (accueil) return next();
+
+        // 5) Allocation hebdomadaire. Incrément atomique puis vérification, avec
+        // rollback si dépassement (même mécanique que l'ancien quota quotidien).
+        if (SCANS_GRATUITS_SEMAINE > 0) {
+            const semaine = semaineISO();
+            const doc = await QuotaSemaine.findOneAndUpdate(
+                { userId, semaine },
+                { $inc: { count: 1 } },
+                { upsert: true, new: true }
+            );
+            if (doc.count <= SCANS_GRATUITS_SEMAINE) return next();
+            // Dépassement : on rend le jeton pris, sinon le compteur dériverait à chaque
+            // tentative refusée et fausserait le "restantSemaine" renvoyé par /api/solde.
+            await QuotaSemaine.updateOne({ userId, semaine }, { $inc: { count: -1 } });
+        }
+
+        // 6) Crédits ACHETÉS. Même décrément atomique conditionnel : c'est ce qui
+        // empêche le double-décompte (donc la perte d'argent client) sur scans parallèles.
+        const paye = await Credit.findOneAndUpdate(
+            { userId, soldeScans: { $gt: 0 } },
+            { $inc: { soldeScans: -1 } },
+            { new: true }
+        );
+        if (paye) return next();
+
+        // 7) Plus rien nulle part.
+        return res.status(429).json({
+            success: false,
+            quotaAtteint: true,          // conservé : c'est ce que lit l'extension déjà déployée
+            erreur: 'quota_epuise',
+            error: `Tes scans gratuits sont épuisés (${SCANS_GRATUITS_SEMAINE}/semaine). Recharge pour continuer 🐀`
+        });
     } catch (e) {
-        console.error("Erreur quota:", e.message);
-        next(); // en cas d'erreur, ne jamais bloquer le scan
+        // Fail-CLOSED aussi sur erreur inattendue : on ne sait pas si le décompte a eu
+        // lieu, donc on ne laisse surtout pas passer un scan non métré vers l'IA payante.
+        console.error("❌ [acces]", e.message);
+        return res.status(503).json({ success: false, error: "Service momentanément indisponible, réessaie dans un instant." });
     }
 }
 
@@ -197,14 +295,40 @@ const numeroCarteSchema = new mongoose.Schema({
 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
 
-// Compteur de scans par utilisateur et par jour (pour la limite quotidienne).
-const quotaSchema = new mongoose.Schema({
-    userId: { type: String, required: true },
-    jour:   { type: String, required: true },   // AAAA-MM-JJ
-    count:  { type: Number, default: 0 }
+// Compte d'un utilisateur : ses deux bourses de scans. Créé au 1er scan par upsert.
+// soldeGratuit et soldeScans sont volontairement SÉPARÉS : on doit pouvoir consommer
+// l'offert en priorité, et un remboursement ne doit toucher que l'acheté.
+const creditSchema = new mongoose.Schema({
+    userId:       { type: String, required: true, unique: true },
+    soldeGratuit: { type: Number, default: 0 },   // scans d'accueil, one-shot, sans expiration
+    soldeScans:   { type: Number, default: 0 },   // scans ACHETÉS (crédités par le webhook Stripe)
+    email:        { type: String, default: null } // renseigné par Stripe à l'achat, jamais par le client
 });
-quotaSchema.index({ userId: 1, jour: 1 }, { unique: true });
-const Quota = mongoose.model('Quota', quotaSchema, 'quotas');
+// default: 0 (et non SCANS_ACCUEIL) : la dotation d'accueil est posée explicitement par
+// le $setOnInsert de verifierAcces. Un default à SCANS_ACCUEIL créerait un SECOND chemin
+// d'attribution — toute écriture Mongoose créant le doc offrirait 25 scans en silence.
+const Credit = mongoose.model('Credit', creditSchema, 'credits');
+
+// Compteur de scans par utilisateur et par semaine ISO (allocation gratuite hebdo).
+// Même forme que l'ancien quota quotidien, mais la clé porte la semaine : changer de
+// semaine crée un nouveau document, donc le reset est implicite et sans race condition.
+const quotaSemaineSchema = new mongoose.Schema({
+    userId:  { type: String, required: true },
+    semaine: { type: String, required: true },   // AAAA-Www (ISO 8601)
+    count:   { type: Number, default: 0 }
+});
+quotaSemaineSchema.index({ userId: 1, semaine: 1 }, { unique: true });
+const QuotaSemaine = mongoose.model('QuotaSemaine', quotaSemaineSchema, 'quotas_semaine');
+
+// Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
+// simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
+// L'index unique sur eventId est le verrou — c'est l'insertion qui échoue (11000), pas
+// une lecture préalable qui pourrait passer entre deux appels concurrents.
+const evenementStripeSchema = new mongoose.Schema({
+    eventId: { type: String, required: true, unique: true },
+    recuLe:  { type: Date, default: Date.now }
+});
+const EvenementStripe = mongoose.model('EvenementStripe', evenementStripeSchema, 'evenements_stripe');
 
 // Récupère les numéros connus pour une liste d'idProduct -> Map(idProduct => {numero, numeroUrl})
 async function lireNumeros(idsProducts) {
@@ -1044,7 +1168,7 @@ function etatVintedVersCardmarket(etatVinted) {
     return null;
 }
 
-app.post('/api/analyser', verifierJeton, verifierQuota, async (req, res) => {
+app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
     try {
         const { imageUrl, imageUrls, title, vintedPrice, vintedEtat, debug } = req.body;
 
@@ -1193,7 +1317,7 @@ app.post('/api/analyser', verifierJeton, verifierQuota, async (req, res) => {
 // renvoie les candidats CLASSÉS, mais ne touche PAS à Cardmarket : c'est
 // l'extension qui fera le live depuis le navigateur de l'utilisateur, avec son
 // IP et ses cookies. C'est la répartition qui évite les bannissements.
-app.post('/api/identifier', verifierJeton, verifierQuota, async (req, res) => {
+app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
     try {
         const { imageUrl, imageUrls, title, vintedEtat } = req.body;
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
@@ -1437,6 +1561,190 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
         res.json({ success: false, error: e.message });
     }
 });
+// ============================================================
+// PAIEMENT — recharges de scans via Stripe Checkout
+// ============================================================
+
+const stripe = process.env.STRIPE_SECRET_KEY ? Stripe(process.env.STRIPE_SECRET_KEY) : null;
+if (!stripe) {
+    console.warn("⚠️ STRIPE_SECRET_KEY absent — les routes de paiement répondront 503.");
+}
+
+// SOURCE DE VÉRITÉ des packs, côté SERVEUR uniquement. Le client n'envoie qu'un packId :
+// s'il pouvait envoyer le nombre de scans, il suffirait de le modifier dans la requête
+// pour s'offrir 100 000 scans au prix de 20.
+// ⚠️ price_id de TEST — à remplacer par les Live avant la mise en production.
+const PACKS = {
+    p20:  { price: 'price_1TxYgxCHs5xC36JEiTYo1tVy', scans: 20 },
+    p50:  { price: 'price_1TxYhSCHs5xC36JEJD8T72vJ', scans: 50 },
+    p100: { price: 'price_1TxYhzCHs5xC36JEgQ1VFhBn', scans: 100 },
+    p200: { price: 'price_1TxYiQCHs5xC36JEtThiZz1S', scans: 200 }
+};
+
+// Crée une session de paiement et renvoie l'URL Stripe où rediriger l'utilisateur.
+// Ne crédite RIEN : le crédit n'a lieu que dans le webhook signé, après paiement confirmé.
+app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res) => {
+    try {
+        if (!stripe) return res.status(503).json({ success: false, error: "Paiement indisponible" });
+
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+
+        const pack = PACKS[req.body && req.body.packId];
+        if (!pack) return res.status(400).json({ success: false, error: "Pack inconnu" });
+
+        const session = await stripe.checkout.sessions.create({
+            mode: 'payment',
+            line_items: [{ price: pack.price, quantity: 1 }],
+            client_reference_id: userId,
+            // metadata : c'est ce que le webhook relira pour savoir QUI créditer et de
+            // COMBIEN. Écrit ici par le serveur à partir de PACKS, donc non falsifiable.
+            metadata: { userId, scans: String(pack.scans) },
+            success_url: `${process.env.SITE_URL}/merci`,
+            cancel_url: `${process.env.SITE_URL}/annule`
+        });
+
+        console.log(`💳 [recharge] session créée pour ${userId} — pack ${req.body.packId} (${pack.scans} scans)`);
+        res.json({ url: session.url });
+    } catch (e) {
+        console.error("❌ [creer-recharge]", e.message);
+        res.status(500).json({ success: false, error: "Impossible de créer la session de paiement" });
+    }
+});
+
+// Webhook Stripe — SEUL endroit où des scans payants sont crédités.
+// Pas de verifierJeton : l'appelant est Stripe, pas l'extension ; c'est la SIGNATURE
+// cryptographique qui authentifie. Le corps arrive BRUT (Buffer) grâce au express.raw()
+// monté tout en haut du fichier, avant express.json().
+// Déclaration de fonction (hoistée) : voir le app.post() en tête de fichier.
+async function gererWebhookStripe(req, res) {
+    if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+        console.error("❌ [webhook] Stripe non configuré (clé ou secret webhook manquant)");
+        return res.status(503).send('Stripe non configuré');
+    }
+
+    // 1) Authentification par signature. Tant que ceci n'a pas réussi, le contenu du
+    // corps est celui d'un inconnu : on ne le lit même pas.
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(
+            req.body,
+            req.headers['stripe-signature'],
+            process.env.STRIPE_WEBHOOK_SECRET
+        );
+    } catch (e) {
+        console.warn(`🚫 [webhook] signature invalide : ${e.message}`);
+        return res.status(400).send(`Webhook Error: ${e.message}`);
+    }
+
+    if (event.type !== 'checkout.session.completed') {
+        return res.json({ recu: true }); // event non concerné : accusé de réception, rien à faire
+    }
+
+    const session = event.data.object;
+    const userId = session.metadata?.userId || session.client_reference_id || null;
+    const scans = parseInt(session.metadata?.scans || '0', 10);
+
+    if (!userId || !Number.isFinite(scans) || scans <= 0) {
+        // Rien d'exploitable : on ACQUITTE quand même (200), sinon Stripe rejouerait
+        // indéfiniment un event que le rejeu ne réparera pas.
+        console.error(`❌ [webhook] metadata inutilisable (userId=${userId}, scans=${scans}) — event ${event.id}`);
+        return res.json({ recu: true });
+    }
+
+    // 2+3) Marque d'idempotence ET crédit dans UNE SEULE TRANSACTION.
+    // Les deux écritures committent ensemble ou pas du tout. C'est ce qui ferme
+    // définitivement la fenêtre "payé mais pas crédité" : il devient impossible que
+    // l'event soit marqué traité alors que les scans n'ont pas été ajoutés (ce que le
+    // précédent rollback manuel ne garantissait pas si Mongo tombait au mauvais moment).
+    // Atlas est un replica set -> transactions disponibles.
+    const sessionMongo = await mongoose.startSession();
+    let dejaTraite = false;
+    try {
+        await sessionMongo.withTransaction(async () => {
+            // Idempotence : l'insertion EST le verrou. Si l'event a déjà été traité,
+            // l'index unique renvoie 11000 -> on avorte la transaction, donc aucun crédit.
+            try {
+                // create([doc], {session}) — la forme tableau est obligatoire pour que
+                // Mongoose lise bien le 2e argument comme des options et non comme un
+                // second document à insérer.
+                await EvenementStripe.create([{ eventId: event.id }], { session: sessionMongo });
+            } catch (e) {
+                if (e.code === 11000) dejaTraite = true;
+                throw e;   // dans les deux cas on sort : la transaction est annulée
+            }
+
+            // Crédit. `scans` vient de metadata, écrit par NOTRE serveur à la création
+            // de la session — jamais d'une valeur envoyée par le client.
+            await Credit.updateOne(
+                { userId },
+                {
+                    $inc: { soldeScans: scans },
+                    $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL },
+                    $set: { email: session.customer_details?.email || null }
+                },
+                { upsert: true, session: sessionMongo }
+            );
+        });
+
+        console.log(`✅ [webhook] +${scans} scans crédités à ${userId} (event ${event.id})`);
+    } catch (e) {
+        if (dejaTraite) {
+            // Rejeu Stripe d'un event déjà encaissé : rien n'a été réécrit, on acquitte.
+            console.log(`↩️ [webhook] event ${event.id} déjà traité — ignoré`);
+            return res.json({ recu: true });
+        }
+        // Échec réel : la transaction a été annulée, RIEN n'est persisté — ni la marque
+        // d'idempotence, ni le crédit. Le rejeu de Stripe repassera donc proprement.
+        // 500 = "réessaie", c'est exactement ce qu'on veut.
+        console.error(`❌ [webhook] transaction échouée pour ${userId} (+${scans}, event ${event.id}) : ${e.message}`);
+        // Dernier recours : si le rejeu Stripe n'aboutissait jamais (épuisement des
+        // tentatives), cette ligne reste la trace permettant de créditer à la main.
+        console.error(`🔥 [webhook] SI AUCUN REJEU N'ABOUTIT — créditer MANUELLEMENT ${userId} de ${scans} scans (event ${event.id})`);
+        return res.status(500).send('Erreur crédit');
+    } finally {
+        await sessionMongo.endSession();
+    }
+
+    res.json({ recu: true });
+}
+
+// Consultation du solde. LECTURE SEULE : consulter son solde ne doit ni créer de
+// compte, ni consommer quoi que ce soit.
+app.post('/api/solde', verifierJeton, async (req, res) => {
+    try {
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
+        }
+
+        const credit = await Credit.findOne({ userId }).lean();
+        // Compte pas encore créé (aucun scan à ce jour) : on renvoie le solde EFFECTIF
+        // qu'il aura à son premier scan, pas des zéros — sinon un nouvel utilisateur
+        // lirait "0 scan" alors que ses crédits d'accueil l'attendent.
+        if (!credit) {
+            return res.json({
+                soldeGratuit: SCANS_ACCUEIL,
+                soldeScans: 0,
+                restantSemaine: SCANS_GRATUITS_SEMAINE
+            });
+        }
+
+        const doc = await QuotaSemaine.findOne({ userId, semaine: semaineISO() }).lean();
+        const restantSemaine = Math.max(0, SCANS_GRATUITS_SEMAINE - (doc?.count || 0));
+
+        res.json({
+            soldeGratuit: credit.soldeGratuit || 0,
+            soldeScans: credit.soldeScans || 0,
+            restantSemaine
+        });
+    } catch (e) {
+        console.error("❌ [solde]", e.message);
+        res.status(500).json({ success: false, error: "Erreur lors de la lecture du solde" });
+    }
+});
+
 // Route de réveil : l'extension l'appelle dès qu'une page Vinted se charge, pour
 // que le serveur (endormi sur le plan gratuit Render après 15 min d'inactivité)
 // soit déjà chaud quand l'utilisateur clique sur "Analyser". Volontairement
