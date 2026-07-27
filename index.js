@@ -94,6 +94,19 @@ const SCANS_ACCUEIL = parseInt(process.env.SCANS_ACCUEIL || '25', 10);
 const SCANS_GRATUITS_SEMAINE = parseInt(process.env.SCANS_GRATUITS_SEMAINE || '2', 10);
 const CODE_ILLIMITE = process.env.CODE_ILLIMITE || null;
 
+// --- Remboursement d'un scan quand RIEN n'a été livré ---
+// Plafond anti-abus, par utilisateur et par jour. 5 = large pour un usage honnête
+// (les échecs durs sont rares) et serré face à un script qui enverrait des photos
+// illisibles en boucle : au-delà, on log et on ne rembourse plus, mais le scan reste
+// débité, donc l'attaque coûte des crédits à celui qui la mène.
+const REMBOURSEMENTS_MAX_JOUR = parseInt(process.env.REMBOURSEMENTS_MAX_JOUR || '5', 10);
+// Politique élargissable SANS redéploiement de code : rembourser aussi les résultats
+// livrés « avec réserve ». Défaut FALSE, et volontairement : un résultat incertain
+// reste un résultat, et rembourser dessus offrirait des scans gratuits illimités à qui
+// envoie des photos volontairement illisibles — chacune brûlant un appel IA payant.
+// Le log [scan-incertain] sert précisément à mesurer le taux réel avant d'y toucher.
+const REMBOURSER_SI_INCERTAIN = String(process.env.REMBOURSER_SI_INCERTAIN || 'false').toLowerCase() === 'true';
+
 // Semaine ISO 8601 au format 'AAAA-Www' (la semaine commence le lundi, et la semaine 1
 // est celle qui contient le premier jeudi de l'année). Sert de clé de reset hebdo : une
 // nouvelle semaine = une nouvelle clé = un nouveau document, donc plus rien à remettre
@@ -105,6 +118,21 @@ function semaineISO(date = new Date()) {
     const debutAnnee = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     const numero = Math.ceil((((d - debutAnnee) / 86400000) + 1) / 7);
     return `${d.getUTCFullYear()}-W${String(numero).padStart(2, '0')}`;
+}
+
+// Garde-fou EN AMONT du décompte : une requête sans image ne peut rien produire, elle
+// ne doit donc rien coûter. Placé AVANT verifierAcces dans la chaîne de middlewares —
+// ne rien débiter vaut toujours mieux que débiter puis rembourser.
+// Le corps de réponse est identique à celui que les routes renvoyaient déjà pour ce
+// cas (200 + {success:false,error}) : l'extension déployée n'y voit aucun changement.
+function exigerImage(req, res, next) {
+    const { imageUrl, imageUrls } = req.body || {};
+    const photos = (Array.isArray(imageUrls) ? imageUrls : []).concat(imageUrl ? [imageUrl] : []).filter(Boolean);
+    if (photos.length === 0) {
+        console.warn("⚠️ Requête sans image -> refusée AVANT tout décompte de scan.");
+        return res.json({ success: false, error: "Aucune image reçue" });
+    }
+    return next();
 }
 
 // Ordre de consommation d'un scan :
@@ -160,7 +188,13 @@ async function verifierAcces(req, res, next) {
             { $inc: { soldeGratuit: -1 } },
             { new: true }
         );
-        if (accueil) return next();
+        // req.credit = la POCHE réellement débitée. C'est la seule information dont
+        // rembourserScan a besoin pour annuler ce débit précis. Le décompte lui-même ne
+        // bouge pas d'un pouce : il reste atomique et EN AMONT de tout traitement — le
+        // déplacer après l'identification rouvrirait la course concurrente (N scans
+        // simultanés sur 1 crédit) et un crash après l'appel OpenRouter donnerait un
+        // scan gratuit ET brûlé. On rembourse après coup, on ne déplace rien.
+        if (accueil) { req.credit = { userId, poche: 'accueil' }; return next(); }
 
         // 5) Allocation hebdomadaire. Incrément atomique puis vérification, avec
         // rollback si dépassement (même mécanique que l'ancien quota quotidien).
@@ -171,7 +205,10 @@ async function verifierAcces(req, res, next) {
                 { $inc: { count: 1 } },
                 { upsert: true, new: true }
             );
-            if (doc.count <= SCANS_GRATUITS_SEMAINE) return next();
+            // La semaine ISO est mémorisée : un remboursement hebdo n'est légitime que
+            // DANS LA MÊME semaine (sinon il offrirait un scan supplémentaire sur la
+            // semaine suivante, exactement la cumulation que le test 30/30 interdit).
+            if (doc.count <= SCANS_GRATUITS_SEMAINE) { req.credit = { userId, poche: 'hebdo', semaineIso: semaine }; return next(); }
             // Dépassement : on rend le jeton pris, sinon le compteur dériverait à chaque
             // tentative refusée et fausserait le "restantSemaine" renvoyé par /api/solde.
             await QuotaSemaine.updateOne({ userId, semaine }, { $inc: { count: -1 } });
@@ -184,7 +221,7 @@ async function verifierAcces(req, res, next) {
             { $inc: { soldeScans: -1 } },
             { new: true }
         );
-        if (paye) return next();
+        if (paye) { req.credit = { userId, poche: 'payant' }; return next(); }
 
         // 7) Plus rien nulle part.
         return res.status(429).json({
@@ -199,6 +236,97 @@ async function verifierAcces(req, res, next) {
         console.error("❌ [acces]", e.message);
         return res.status(503).json({ success: false, error: "Service momentanément indisponible, réessaie dans un instant." });
     }
+}
+
+/**
+ * Rembourse le scan débité par verifierAcces, quand la requête n'a RIEN pu livrer.
+ * ROLLBACK, pas déplacement du décompte : le débit reste atomique et en amont.
+ *
+ * @param {object} req     porte req.credit (la poche débitée), posé par verifierAcces
+ * @param {string} motif   cause courte et stable, pour le log ('ia-echec', 'aucun-prix'...)
+ * @returns {Promise<boolean>} true si un crédit a réellement été rendu
+ *
+ * Appelé AU PLUS UNE FOIS par requête (verrou `req.scanRembourse`). Un remboursement
+ * ne doit jamais rendre plus que ce qui a été pris — d'où un plafond par poche :
+ *   - payant  : +1 sans plafond (c'est de l'argent, il est dû)
+ *   - accueil : +1 mais JAMAIS au-dessus de la dotation initiale (filtre $lt atomique)
+ *   - hebdo   : décrément du compteur, uniquement DANS LA MÊME semaine ISO et sans
+ *               passer sous zéro. Hors de la semaine d'origine on ne rembourse pas :
+ *               ça offrirait un scan de plus sur la semaine suivante, c'est-à-dire la
+ *               cumulation « W29 épuisée -> W30 = 3 » que le test 30/30 interdit.
+ */
+async function rembourserScan(req, motif) {
+    const credit = req && req.credit;
+    if (!credit) return false;              // code maître, ou aucun débit à annuler
+    if (req.scanRembourse) return false;    // au plus un remboursement par requête
+    req.scanRembourse = true;
+
+    if (mongoose.connection.readyState !== 1) {
+        console.error(`❌ [scan-rembourse] impossible (Mongo indisponible) userId=${credit.userId} poche=${credit.poche} motif=${motif}`);
+        return false;
+    }
+
+    const { userId, poche } = credit;
+    const jour = new Date().toISOString().slice(0, 10);
+    let plafondPris = false;
+    try {
+        // Plafond anti-abus : incrément atomique PUIS vérification, avec rollback en cas
+        // de dépassement (même mécanique que le quota hebdo, donc pas de course).
+        const compteur = await Remboursement.findOneAndUpdate(
+            { userId, jour }, { $inc: { count: 1 } }, { upsert: true, new: true }
+        );
+        plafondPris = true;
+        if (compteur.count > REMBOURSEMENTS_MAX_JOUR) {
+            await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            console.warn(`🚫 [remboursement-plafond] userId=${userId} poche=${poche} motif=${motif} plafond=${REMBOURSEMENTS_MAX_JOUR} -> scan NON rembourse`);
+            return false;
+        }
+
+        let rendu = false;
+        if (poche === 'payant') {
+            const r = await Credit.updateOne({ userId }, { $inc: { soldeScans: 1 } });
+            rendu = (r.modifiedCount ?? r.nModified ?? 0) > 0;
+        } else if (poche === 'accueil') {
+            // Le filtre porte le plafond : impossible de dépasser la dotation initiale,
+            // même si deux remboursements se croisaient.
+            const r = await Credit.updateOne(
+                { userId, soldeGratuit: { $lt: SCANS_ACCUEIL } }, { $inc: { soldeGratuit: 1 } }
+            );
+            rendu = (r.modifiedCount ?? r.nModified ?? 0) > 0;
+            if (!rendu) console.warn(`ℹ️ [scan-rembourse] userId=${userId} poche=accueil deja au plafond (${SCANS_ACCUEIL}) -> rien a rendre`);
+        } else if (poche === 'hebdo') {
+            if (semaineISO() !== credit.semaineIso) {
+                console.warn(`ℹ️ [scan-rembourse] userId=${userId} poche=hebdo semaine changee (${credit.semaineIso} -> ${semaineISO()}) -> NON rembourse`);
+            } else {
+                const r = await QuotaSemaine.updateOne(
+                    { userId, semaine: credit.semaineIso, count: { $gt: 0 } }, { $inc: { count: -1 } }
+                );
+                rendu = (r.modifiedCount ?? r.nModified ?? 0) > 0;
+            }
+        }
+
+        if (!rendu) {
+            // Rien n'a été rendu : on libère le jeton du plafond, sinon un non-
+            // remboursement consommerait quand même le quota de remboursements.
+            await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            return false;
+        }
+        console.log(`💸 [scan-rembourse] userId=${userId} poche=${poche} motif=${motif}`);
+        return true;
+    } catch (e) {
+        if (plafondPris) { try { await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } }); } catch (_) { } }
+        console.error(`❌ [scan-rembourse] echec userId=${userId} poche=${poche} motif=${motif} : ${e.message}`);
+        return false;
+    }
+}
+
+// Trace des résultats livrés AVEC RÉSERVE. Ne rembourse rien par défaut : sert à
+// mesurer le taux réel de carteIncertaine avant de décider d'élargir la politique
+// (voir REMBOURSER_SI_INCERTAIN).
+async function signalerIncertain(req, raison) {
+    const userId = (req.credit && req.credit.userId) || (req.body && req.body.userId) || '?';
+    console.warn(`⚠️ [scan-incertain] userId=${userId} raison=${raison}`);
+    if (REMBOURSER_SI_INCERTAIN) await rembourserScan(req, `incertain:${raison}`);
 }
 
 // ============================================================
@@ -324,6 +452,17 @@ const quotaSemaineSchema = new mongoose.Schema({
 });
 quotaSemaineSchema.index({ userId: 1, semaine: 1 }, { unique: true });
 const QuotaSemaine = mongoose.model('QuotaSemaine', quotaSemaineSchema, 'quotas_semaine');
+
+// Compteur de remboursements par utilisateur et par JOUR (UTC). Même forme et même
+// mécanique que QuotaSemaine : la clé porte la date, donc le reset est implicite et
+// sans course. Sert uniquement de plafond anti-abus.
+const remboursementSchema = new mongoose.Schema({
+    userId: { type: String, required: true },
+    jour:   { type: String, required: true },   // AAAA-MM-JJ (UTC)
+    count:  { type: Number, default: 0 }
+});
+remboursementSchema.index({ userId: 1, jour: 1 }, { unique: true });
+const Remboursement = mongoose.model('Remboursement', remboursementSchema, 'remboursements');
 
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
 // simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
@@ -1325,7 +1464,7 @@ function etatVintedVersCardmarket(etatVinted) {
     return null;
 }
 
-app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
+app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
     try {
         const { imageUrl, imageUrls, title, vintedPrice, vintedEtat, debug } = req.body;
 
@@ -1341,6 +1480,8 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
         console.log(`📷 ${photos.length} photo(s) envoyée(s) à l'IA.`);
         const cardInfo = await getCardIdFromAI(photos, title);
         if (!cardInfo) {
+            // Échec DUR : aucune carte identifiée, rien n'a été livré -> on rend le scan.
+            await rembourserScan(req, 'ia-echec');
             return res.json({ success: false, error: "Analyse IA échouée (voir logs Render pour la cause exacte)" });
         }
 
@@ -1359,6 +1500,7 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
             // 2a. Identification précise via TCGdex + image
             const trouvailleTCGdex = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, imageUrl, cardInfo.language, cardInfo.total);
             if (!trouvailleTCGdex) {
+                await rembourserScan(req, 'carte-introuvable');
                 return res.json({ success: false, error: `Carte "${cardInfo.name}${cardInfo.setCode ? ' ' + cardInfo.setCode : ''} #${cardInfo.number}" non trouvée sur TCGdex` });
             }
 
@@ -1428,11 +1570,22 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
             }
 
             if (!resultat) {
+                // Carte identifiée mais AUCUN prix de référence : le scan ne livre rien
+                // d'exploitable pour l'utilisateur -> échec dur lui aussi.
+                await rembourserScan(req, 'aucun-prix');
                 return res.json({ success: false, error: "Carte identifiée mais aucun prix disponible (voir logs)" });
             }
 
             // Marquer incertain si l'identification TCGdex l'était
             if (trouvailleTCGdex.ambigu) resultat.carteIncertaine = true;
+
+            // Résultat LIVRÉ mais avec réserve : on le trace (et on ne rembourse que si
+            // la politique a été élargie explicitement).
+            if (resultat.carteIncertaine) {
+                await signalerIncertain(req, motifResolution.etat === 'non-resolu'
+                    ? `motif-${motifResolution.raison}`
+                    : (trouvailleTCGdex.ambigu ? 'tcgdex-ambigu' : 'plusieurs-candidats'));
+            }
 
             // On ne met pas en cache un résultat incertain
             if (!resultat.carteIncertaine) {
@@ -1494,13 +1647,11 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
 // renvoie les candidats CLASSÉS, mais ne touche PAS à Cardmarket : c'est
 // l'extension qui fera le live depuis le navigateur de l'utilisateur, avec son
 // IP et ses cookies. C'est la répartition qui évite les bannissements.
-app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
+app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
     try {
         const { imageUrl, imageUrls, title, vintedEtat } = req.body;
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
-        if (!photos.filter(Boolean).length) {
-            return res.json({ success: false, error: "Aucune image reçue" });
-        }
+        // exigerImage a déjà refusé les requêtes sans photo, AVANT tout décompte.
 
         console.log(`\n📷 [identifier] ${photos.length} photo(s) reçue(s).`);
 
@@ -1508,7 +1659,10 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
         const debutIA = Date.now();
         const cardInfo = await getCardIdFromAI(photos, title);
         console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
-        if (!cardInfo) return res.json({ success: false, error: "Analyse IA échouée" });
+        if (!cardInfo) {
+            await rembourserScan(req, 'ia-echec');
+            return res.json({ success: false, error: "Analyse IA échouée" });
+        }
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
         // qui suit), pour décider plus tard si un cache/cache mémoire (reporté) vaut le
@@ -1518,6 +1672,7 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
         const trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
         if (!trouvaille) {
+            await rembourserScan(req, 'carte-introuvable');
             return res.json({ success: false, error: `Carte "${cardInfo.name}" #${cardInfo.number} non trouvée sur TCGdex`, cardInfo });
         }
 
@@ -1557,9 +1712,8 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
         // Si TCGdex s'est trompé de carte (numéro incohérent), on n'utilise pas son set.
         const expansionsAttendues = tcgdexDouteux ? [] : await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo));
 
-        // Codes set de TOUS les candidats en un seul aller-retour Mongo, réutilisé à la
-        // fois par le scoring ci-dessous et par `codesSet` plus bas — qui refaisait
-        // auparavant exactement la même lecture une seconde fois, candidat par candidat.
+        // Codes set de TOUS les candidats en un seul aller-retour Mongo, injecté dans le
+        // scoring pour lui éviter de refaire la même lecture candidat par candidat.
         const codeSetsConnus = await lireCodeSets(produits.map(p => p.idExpansion));
 
         // 4. Scoring : on renvoie le CLASSEMENT, l'extension testera dans l'ordre
@@ -1608,6 +1762,20 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
 
         console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
 
+        // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
+        // le scan. (Un classement même incertain, lui, EST un résultat livré.)
+        if (classement.length === 0) {
+            await rembourserScan(req, 'aucun-candidat');
+            return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
+        }
+
+        const carteAmbigue = Boolean(trouvaille.ambigu || tcgdexDouteux || motifResolution.etat === 'non-resolu');
+        if (carteAmbigue) {
+            await signalerIncertain(req, motifResolution.etat === 'non-resolu'
+                ? `motif-${motifResolution.raison}`
+                : (tcgdexDouteux ? 'tcgdex-numero-incoherent' : 'tcgdex-ambigu'));
+        }
+
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
         res.json({
@@ -1625,7 +1793,7 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
                 // Incertain si TCGdex hésitait, s'il s'est manifestement trompé de carte,
                 // OU si la carte a un motif de reverse qu'on n'a pas su cibler (le prix
                 // peut alors varier d'un facteur 100 entre variantes — cf. Master Ball).
-                ambigu: Boolean(trouvaille.ambigu || tcgdexDouteux || motifResolution.etat === 'non-resolu')
+                ambigu: carteAmbigue
             },
             etat: {
                 estimeIA: cardInfo.etatEstime || null,
