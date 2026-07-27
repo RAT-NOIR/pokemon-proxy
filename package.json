@@ -4,7 +4,10 @@
   "description": "API d'identification de cartes Pokemon (Vinted <-> Cardmarket)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node scoring.js && node test-acces.js",
+    "test:scoring": "node scoring.js",
+    "test:acces": "node test-acces.js"
   },
   "engines": {
     "node": "22.x"
