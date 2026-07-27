@@ -321,7 +321,14 @@ async function scraperFiche(idProduct, langue = 'EN', etatMin = null) {
                 res.urlImage = img.src;
                 const parts = img.src.split('/');
                 const idx = parts.findIndex(p => p.includes('cardmarket.com'));
-                if (idx !== -1 && parts[idx + 2]) res.codeSet = parts[idx + 2];
+                // ⚠️ DÉCODAGE OBLIGATOIRE : le segment vient d'une URL, il est donc
+                // URL-encodé ("SV-P%2FCS" pour "SV-P/CS", "K%2BK" pour "K+K"). Stocké
+                // tel quel, le "%2F" survit à la normalisation du scoring et casse la
+                // comparaison de code de set (1844 documents à nettoyer a posteriori).
+                if (idx !== -1 && parts[idx + 2]) {
+                    try { res.codeSet = decodeURIComponent(parts[idx + 2]); }
+                    catch (_) { res.codeSet = parts[idx + 2]; } // séquence malformée : brut
+                }
             }
 
             // Prix par langue = le "De" (prix le plus bas des offres affichées, donc de
@@ -481,8 +488,11 @@ async function scraperListeExpansion(identifiant, maxPages = 25) {
                     const mImg = src.match(/\/(\d+)\/(\d+)\.jpg/i);
                     if (!mImg) return;
                     const idProduct = parseInt(mImg[1], 10);
+                    // ⚠️ Décodage obligatoire : segment d'URL, donc encodé ("SV-P%2FCS").
+                    // C'est CE point d'extraction qui a pollué les deux collections.
                     const mCode = src.match(/cardmarket\.com\/\d+\/([^/]+)\//i);
-                    const codeSet = mCode ? mCode[1] : null;
+                    let codeSet = mCode ? mCode[1] : null;
+                    if (codeSet) { try { codeSet = decodeURIComponent(codeSet); } catch (_) { /* brut */ } }
 
                     // --- Nom FRANÇAIS, depuis l'attribut alt de l'image ---
                     // Permet de matcher directement ce que l'IA lit sur une carte FR,
