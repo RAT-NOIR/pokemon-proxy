@@ -1753,13 +1753,6 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             console.log(`🧮 [identifier] meilleur = ${classement[0]?.idProduct} (score ${classement[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
         }
 
-        // Codes set connus : permettent à l'extension de construire les URLs d'images
-        // (simple lecture de la Map déjà récupérée ci-dessus, plus aucun aller-retour Mongo)
-        const codesSet = {};
-        for (const [idExpansion, code] of codeSetsConnus) {
-            if (code) codesSet[idExpansion] = code;
-        }
-
         console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
 
         // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
@@ -1808,7 +1801,6 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 )
             },
             classement,
-            codesSet,
             // Champ ADDITIF (l'extension actuelle l'ignore, aucun champ existant ne
             // change) : dit à l'extension COMMENT lire le prix d'une reverse.
             //   'produit-distinct' -> le produit visé EST la reverse, lecture normale.
