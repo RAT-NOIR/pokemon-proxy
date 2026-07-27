@@ -9,8 +9,9 @@
 // CONTENU : si l'expansion 6096 contient les mêmes noms de cartes qu'un set
 // TCGdex, c'est le même set. Aucun nom d'expansion nécessaire.
 //
-// USAGE : node prefill-tcgdex.js            (simulation, n'écrit rien)
-//         node prefill-tcgdex.js --ecrire   (écrit vraiment en base)
+// USAGE (la base doit être NOMMÉE, le script refuse de la deviner) :
+//         node prefill-tcgdex.js --base=test            (simulation, n'écrit rien)
+//         node prefill-tcgdex.js --base=test --ecrire   (écrit vraiment en base)
 //
 // ⚠️ Les entrées déjà apprises depuis Cardmarket ne sont JAMAIS écrasées :
 //    elles font autorité (elles ont les variantes V1/V2 que TCGdex n'a pas).
@@ -18,6 +19,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const axios = require('axios');
+const { connecterMongo } = require('./mongo-connexion');
 
 const ECRIRE = process.argv.includes('--ecrire');
 
@@ -173,8 +175,9 @@ function trouverSetsTCGdex(nomsExpansion, setsTCGdex) {
 
 // ---- 3. Programme principal ----
 async function main() {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log("✅ MongoDB connecté.");
+    // Base nommée explicitement, sinon refus (voir mongo-connexion.js). Ce script
+    // ÉCRIT avec --ecrire, et la base de production s'appelle `test`.
+    await connecterMongo({ script: 'prefill-tcgdex.js', ecrit: ECRIRE });
     console.log(ECRIRE ? "✍️  Mode ÉCRITURE : la base sera modifiée.\n" : "👀 Mode SIMULATION : rien ne sera écrit (ajoute --ecrire pour valider).\n");
 
     const setsTCGdex = await chargerSetsTCGdex();

@@ -29,6 +29,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 mongoose.set('strictQuery', false);
 
+const { connecterMongo } = require('./mongo-connexion');
 const {
     Credit, QuotaSemaine, Remboursement,
     exigerImage, verifierAcces, rembourserScan,
@@ -82,16 +83,16 @@ const poser = async (u, soldeGratuit, soldeScans) => {
 
 async function main() {
     if (!process.env.MONGODB_URI) { console.error('❌ MONGODB_URI absent du .env'); process.exit(1); }
-    await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE_TEST });
-
-    // GARDE-FOU : on refuse d'écrire ailleurs que dans la base de test.
-    const baseConnectee = mongoose.connection.db.databaseName;
-    if (baseConnectee !== BASE_TEST) {
-        console.error(`❌ ARRÊT : base connectée "${baseConnectee}" au lieu de "${BASE_TEST}". Aucune écriture effectuée.`);
+    // Le test IMPOSE sa base : contrairement aux autres scripts, elle n'est pas
+    // négociable en ligne de commande — un test ne doit jamais pouvoir viser la prod.
+    process.env.MONGODB_BASE = BASE_TEST;
+    const baseConnectee = await connecterMongo({ script: 'test-acces.js', ecrit: true });
+    if (baseConnectee !== BASE_TEST) {   // ceinture : connecterMongo a déjà refusé
+        console.error(`❌ ARRÊT : base "${baseConnectee}" au lieu de "${BASE_TEST}".`);
         await mongoose.disconnect();
         process.exit(1);
     }
-    console.log(`✅ Base "${baseConnectee}" (jamais la production). userId jetables, supprimés en fin de test.\n`);
+    console.log(`   userId jetables, supprimés en fin de test.\n`);
 
     // ---------- A. Une requête sans image ne coûte rien ----------
     console.log('--- A. exigerImage, en amont de tout décompte ---');

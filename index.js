@@ -118,11 +118,25 @@ const MODELE_IA = "google/gemini-3-flash-preview";
 // MONGODB — connexion + schéma de cache
 // ============================================================
 
+// ⚠️ EXCEPTION ASSUMÉE à la règle « nommer la base ou refuser » (mongo-connexion.js).
+// Le serveur, lui, DOIT tourner sur la production : exiger MONGODB_BASE ici casserait
+// le déploiement Render tant que la variable n'y est pas posée. Le compromis :
+//   - le nom de la base est TOUJOURS affiché au démarrage (c'est ce qui manquait) ;
+//   - si MONGODB_BASE est défini, il fait foi ET un écart est fatal.
+// Poser MONGODB_BASE=test sur Render active donc le refus, sans risque de coupure.
 if (!process.env.MONGODB_URI) {
     console.error("⚠️  MONGODB_URI n'est pas défini dans les variables d'environnement Render. Le cache sera désactivé.");
 } else {
-    mongoose.connect(process.env.MONGODB_URI)
-        .then(() => console.log("✅ MongoDB connecté"))
+    const baseVoulue = (process.env.MONGODB_BASE || '').trim() || null;
+    mongoose.connect(process.env.MONGODB_URI, baseVoulue ? { dbName: baseVoulue } : {})
+        .then(() => {
+            const reelle = mongoose.connection.db.databaseName;
+            console.log(`✅ MongoDB connecté — base "${reelle}"${baseVoulue ? '' : ' (non nommée : défaut de l\'URI)'}`);
+            if (baseVoulue && reelle !== baseVoulue) {
+                console.error(`❌ ARRÊT : base "${reelle}" alors que MONGODB_BASE="${baseVoulue}".`);
+                process.exit(1);
+            }
+        })
         .catch(err => console.error("❌ Erreur connexion MongoDB:", err.message));
 }
 

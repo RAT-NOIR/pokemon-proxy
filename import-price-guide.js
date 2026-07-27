@@ -6,6 +6,7 @@
 //   node import-price-guide.js price_guide_6.json
 
 require('dotenv').config();
+const { connecterMongo } = require('./mongo-connexion');
 const fs = require('fs');
 const mongoose = require('mongoose');
 
@@ -41,7 +42,9 @@ async function main() {
     }
 
     console.log("Connexion à MongoDB...");
-    await mongoose.connect(process.env.MONGODB_URI);
+    // Base nommée explicitement, sinon refus (voir mongo-connexion.js) : ce script
+    // ÉCRIT, et la base de production s'appelle `test`.
+    await connecterMongo({ script: 'import-price-guide.js', ecrit: true });
     console.log("✅ Connecté.");
 
     console.log(`Lecture de ${cheminFichier}...`);

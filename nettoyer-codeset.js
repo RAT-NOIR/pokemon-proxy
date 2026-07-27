@@ -21,12 +21,17 @@
 // Idempotent : après un passage, plus aucune valeur ne contient de "%", donc les
 // requêtes de sélection ne ramènent plus rien. Relançable sans effet.
 //
-// USAGE :
-//   node nettoyer-codeset.js            (SIMULATION : affiche tout, n'écrit rien)
-//   node nettoyer-codeset.js --ecrire   (écrit vraiment en base)
+// USAGE (la base doit être NOMMÉE explicitement, le script refuse de la deviner) :
+//   node nettoyer-codeset.js --base=test            (SIMULATION : affiche tout, n'écrit rien)
+//   node nettoyer-codeset.js --base=test --ecrire   (écrit vraiment en base)
+//
+// ⚠️ "test" est bien la base de PRODUCTION de ce projet — c'est le nom par défaut de
+//    Mongoose, et c'est là que vivent les vraies données. Le bac à sable est
+//    "test_scratch". Voir mongo-connexion.js.
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { connecterMongo } = require('./mongo-connexion');
 
 const ECRIRE = process.argv.includes('--ecrire');
 
@@ -52,13 +57,8 @@ function decoderPrudemment(valeur) {
 }
 
 async function main() {
-    if (!process.env.MONGODB_URI) {
-        console.error("❌ MONGODB_URI absent du .env — impossible de continuer.");
-        process.exit(1);
-    }
-
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log("✅ MongoDB connecté.");
+    // Base nommée explicitement, affichée, et refus si elle ne correspond pas.
+    await connecterMongo({ script: 'nettoyer-codeset.js', ecrit: ECRIRE });
     console.log(ECRIRE
         ? "\n✍️  MODE ÉCRITURE — les documents vont être modifiés.\n"
         : "\n👀 MODE SIMULATION (dry-run) — aucune écriture. Ajoute --ecrire pour appliquer.\n");

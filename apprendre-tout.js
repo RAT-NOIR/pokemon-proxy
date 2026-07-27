@@ -37,7 +37,7 @@ async function main() {
     const majAnciens = args.includes('--maj');
 
     installerArretPropre();
-    await connecter();
+    await connecter('apprendre-tout.js');
     console.log('');
 
     // 1. Toutes les expansions du catalogue, avec leur taille

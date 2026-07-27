@@ -8,13 +8,14 @@
 //
 // N'importe PAS live-cardmarket : aucun navigateur, aucun scraping. Lecture pure.
 //
-// USAGE :
-//   node diagnostic-carte.js Tandemaus
-//   node diagnostic-carte.js Minisange      (nom FR : marche si nomFr est en base)
-//   node diagnostic-carte.js "Umbreon ex"
+// USAGE (la base doit être NOMMÉE, le script refuse de la deviner) :
+//   node diagnostic-carte.js --base=test Tandemaus
+//   node diagnostic-carte.js --base=test Minisange      (nom FR : si nomFr est en base)
+//   node diagnostic-carte.js --base=test "Umbreon ex"
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { connecterMongo } = require('./mongo-connexion');
 mongoose.set('strictQuery', false);
 
 const NumeroCarte = mongoose.model('NumeroCarte', new mongoose.Schema({
@@ -36,15 +37,19 @@ const normaliser = n => n.toLowerCase().replace(/[\s\-'.&]/g, '');
 const NOM_VARIANTE = { V1: 'normale', V2: 'REVERSE', V3: 'illustration' };
 
 async function main() {
-    const nom = process.argv.slice(2).join(' ').trim();
+    // On retire les options (--base=...) : le reste est le nom de la carte.
+    const nom = process.argv.slice(2).filter(a => !a.startsWith('--')).join(' ').trim();
     if (!nom) {
-        console.error('Usage : node diagnostic-carte.js <nom de carte>');
-        console.error('Ex    : node diagnostic-carte.js Tandemaus');
+        console.error('Usage : node diagnostic-carte.js --base=<nom> <nom de carte>');
+        console.error('Ex    : node diagnostic-carte.js --base=test Tandemaus');
         process.exit(1);
     }
 
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log(`✅ MongoDB connecté. Recherche de "${nom}"...\n`);
+    // Lecture seule, mais la règle vaut pour TOUS les scripts : on nomme la base, on
+    // l'affiche, on refuse si elle ne correspond pas (voir mongo-connexion.js). Un
+    // diagnostic lancé sur la mauvaise base donne des conclusions fausses.
+    await connecterMongo({ script: 'diagnostic-carte.js', ecrit: false });
+    console.log(`   Recherche de "${nom}"...\n`);
 
     // 1. Candidats catalogue : même logique que trouverProduitsLocaux (1er mot + filtre normalisé)
     const premierMot = nom.replace(/^(M|Mega)[\s-]*/i, '').split(/[\s&-]/)[0];

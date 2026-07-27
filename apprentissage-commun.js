@@ -9,6 +9,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { scraperListeExpansion, fermerBrowser, setCacherFenetre } = require('./live-cardmarket');
+const { connecterMongo } = require('./mongo-connexion');
 
 // Pendant l'apprentissage, les défis Cloudflare sont fréquents : on garde la
 // fenêtre VISIBLE pour pouvoir cocher soi-même sans la faire réapparaître.
@@ -44,9 +45,11 @@ const CatalogueProduit = mongoose.models.CatalogueProduit
     || mongoose.model('CatalogueProduit', catalogueSchema, 'catalogue_produits');
 
 // --- Connexion / fermeture -------------------------------------------------
-async function connecter() {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ MongoDB connecté.');
+// La base est NOMMÉE explicitement (--base=... ou MONGODB_BASE) et le script refuse de
+// démarrer sinon : ces scripts ÉCRIVENT, et la base de production s'appelle `test`,
+// à un underscore du bac à sable `test_scratch`. Voir mongo-connexion.js.
+async function connecter(script = 'apprendre-set.js') {
+    await connecterMongo({ script, ecrit: true });
 }
 
 let fermetureEnCours = false;
