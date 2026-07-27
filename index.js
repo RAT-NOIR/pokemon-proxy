@@ -6,7 +6,12 @@ const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const Stripe = require('stripe');
 
-const { choisirMeilleur } = require('./scoring');
+const {
+    choisirMeilleur,
+    analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
+    prixDeReference, impressionEstReverse,
+    MOTIFS_CIBLABLES
+} = require('./scoring');
 
 const app = express();
 app.set('trust proxy', 1); // Render est derrière un proxy → nécessaire pour lire la vraie IP côté rate-limit
@@ -374,7 +379,22 @@ async function lireCodeSets(idsExpansion) {
     }
 }
 
-async function memoriserCodeSet(idExpansion, codeSet) {
+// Un codeSet arrive presque toujours d'une URL d'image Cardmarket, donc URL-ENCODÉ
+// ("SV-P%2FCS" pour "SV-P/CS", "K%2BK" pour "K+K"). On décode À L'ENTRÉE, une bonne
+// fois : stocké encodé, le "%2F" survit à la normalisation du scoring ("SVP2FCS" au
+// lieu de "SVPCS") et casse la comparaison de set. Point d'entrée unique, appliqué à
+// TOUS les chemins d'écriture (/api/apprendre, /api/apprendre-lot, memoriserCodeSet).
+// Une séquence malformée ("100%") est laissée telle quelle plutôt que de faire échouer
+// l'apprentissage. Voir nettoyer-codeset.js pour le rattrapage de l'existant.
+function decoderCodeSet(codeSet) {
+    if (!codeSet) return codeSet;
+    const s = String(codeSet);
+    if (!s.includes('%')) return s;
+    try { return decodeURIComponent(s); } catch (_) { return s; }
+}
+
+async function memoriserCodeSet(idExpansion, codeSetBrut) {
+    const codeSet = decoderCodeSet(codeSetBrut);
     try {
         if (mongoose.connection.readyState !== 1 || !idExpansion || !codeSet) return;
         await CodeSet.findOneAndUpdate(
@@ -435,7 +455,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
@@ -469,6 +489,15 @@ Pour "rarete" : regarde le symbole de rareté et le style de la carte. "IR" = Il
 ⚠️ NE CONFONDS PAS "rarete" et "etatEstime" : la rareté est une propriété d'IMPRESSION de la carte (IR, SR, promo, normale...), l'état est son USURE physique (NM, EX, GD...). N'écris JAMAIS un code d'état (EX, GD, NM...) dans le champ "rarete".
 
 Pour "reverse" : une REVERSE HOLO est une carte de jeu normale dont le motif holographique/brillant recouvre le FOND et les BORDURES (toute la carte scintille SAUF l'illustration), alors que sur une holo normale c'est l'ILLUSTRATION qui brille. Le numéro d'une reverse est IDENTIQUE à celui de la version normale. Réponds true UNIQUEMENT si tu distingues clairement ce scintillement de fond ; false si la carte est visiblement mate/normale ; null si reflets, sleeve ou photo ne permettent pas d'en être sûr. Ne devine pas.
+
+Pour "motif" — LE MOTIF DU FOND BRILLANT D'UNE REVERSE. C'est un marquage holographique GRAVÉ et DISCRET, répété sur toute la surface brillante de la carte (le fond et les bordures, pas l'illustration). Regarde le fond en biais, là où la lumière accroche. Quatre réponses possibles :
+- "aucun" : la carte est mate/normale, aucun fond brillant.
+- "reverse-classique" : le fond brillant est couvert de petits SYMBOLES DE TYPE répétés (les symboles énergie : flamme, goutte, éclair, feuille...). C'est le reverse le plus courant, celui de la majorité des cartes.
+- "ball" : le fond brillant est couvert de POKÉ BALLS répétées (ou d'autres balls : Friend Ball, Love Ball, Quick Ball). Des cercles séparés en deux moitiés par une bande horizontale, avec un bouton central.
+- "masterball" : le fond est couvert de MASTER BALLS — reconnaissables à leur moitié supérieure violette/mauve portant un "M" et deux pastilles rondes de chaque côté.
+- "indetermine" : reflets, sleeve, photo trop floue ou angle qui ne permet pas de voir le motif.
+RÈGLE ABSOLUE : "indetermine" vaut MIEUX que deviner. Ne dis "ball" ou "masterball" que si tu DISTINGUES réellement la forme répétée. Ne cherche pas à identifier QUEL ball précisément (Poké/Friend/Love/Quick) : réponds "ball" pour tous, sauf la Master Ball qui a sa propre valeur. Si la carte est mate, réponds "aucun", pas "indetermine".
+"motif" et "reverse" doivent être cohérents : motif "aucun" => reverse false ; tout autre motif => reverse true.
 
 Pour "language", déduis-la du TEXTE VISIBLE SUR LA CARTE elle-même (pas du titre) : JP si texte japonais, FR si texte français, DE si allemand, IT si italien, ES si espagnol, PT si portugais, KR si coréen, ZH si chinois. Si tu n'es pas sûr, réponds "EN" par défaut.
 
@@ -518,21 +547,60 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         }
         parsed.language = (parsed.language || "EN").toUpperCase();
 
-        // Normalisation des nouveaux champs pour le scoring
-        parsed.total = parsed.total ? String(parsed.total).replace(/\D/g, '') : null;
+        // Normalisation des nouveaux champs pour le scoring.
+        // `total` attend un NOMBRE (le "Y" de X/Y). L'IA y met parfois autre chose : vu
+        // en réel sur une promo chinoise, "total": "SV-P", c'est-à-dire un code de set.
+        // L'ancien nettoyage (replace(/\D/g,'')) produisait alors la chaîne VIDE, ce qui
+        // désactivait le départage par total EN SILENCE. La normalisation vit désormais
+        // dans scoring.js (module testé — voir normaliserTotal et le test "184/182").
+        const { total, brutIgnore } = normaliserTotal(parsed.total);
+        parsed.total = total;
+        if (brutIgnore) {
+            console.warn(`⚠️ IA : "total" non numérique ("${brutIgnore}") -> ignoré (départage par total désactivé).`);
+            // Repêchage : ce qu'elle a mis là est presque toujours le code du set (elle
+            // confond les deux champs). Si setCode est vide, autant récupérer
+            // l'information plutôt que de la jeter : c'est elle qui active le critère
+            // set du scoring (40 points, ou 15 en apparenté).
+            if (!parsed.setCode) {
+                parsed.setCode = brutIgnore;
+                console.warn(`   ↪️ "${brutIgnore}" repêché comme setCode (le champ était vide).`);
+            }
+        }
         parsed.rarete = parsed.rarete || 'normale';
         // reverse : on ne garde QUE true ou false explicites ; tout le reste ("null",
         // absent, chaîne "null") devient null -> le scoring restera neutre dans le doute.
         parsed.reverse = (parsed.reverse === true || parsed.reverse === 'true') ? true
             : (parsed.reverse === false || parsed.reverse === 'false') ? false
             : null;
+        // MOTIF du fond brillant. Énumération volontairement GROSSIÈRE : on ne demande
+        // pas à l'IA de nommer le ball exact (Poké/Friend/Love/Quick), c'est l'axe où
+        // l'identification visuelle échoue en pratique. Le catalogue TCGdex tranche
+        // ensuite quel produit porte ce motif (voir resoudreMotif dans scoring.js).
+        const motifLu = String(parsed.motif ?? '').trim().toLowerCase();
+        parsed.motif = MOTIFS_CIBLABLES.includes(motifLu) ? motifLu : 'indetermine';
+        // Cohérence interne de la réponse : `motif` est plus précis que `reverse`, il
+        // prime — sauf contradiction franche entre les deux, où l'on refuse de trancher
+        // plutôt que de choisir arbitrairement (le repli, lui, est mesuré dans les logs).
+        if (parsed.motif !== 'indetermine') {
+            if (parsed.reverse === true && parsed.motif === 'aucun') {
+                console.warn(`⚠️ IA incohérente : reverse=true mais motif="aucun" -> motif remis à indéterminé.`);
+                parsed.motif = 'indetermine';
+            } else {
+                parsed.reverse = parsed.motif !== 'aucun';
+            }
+        }
         // Carte "à valeur" si : numéro > total (secrète), ou rareté spéciale lue par l'IA
         const numN = parseInt(String(parsed.number).replace(/\D/g, ''), 10);
         const totN = parsed.total ? parseInt(parsed.total, 10) : null;
         const raretesElevees = ['IR', 'SR', 'SIR', 'UR', 'AR', 'SAR', 'CHR', 'CSR'];
         parsed.rareteElevee = (totN != null && numN > totN)
             || raretesElevees.includes(String(parsed.rarete).toUpperCase());
-        console.log(`🎴 IA : ${parsed.name} #${parsed.number}${parsed.total ? '/' + parsed.total : ''}, rareté=${parsed.rarete}, élevée=${parsed.rareteElevee}, langue=${parsed.language}`);
+        // `reverse` est loggé explicitement : sans lui, la ligne laissait croire que
+        // "élevée=false" concernait la reverse, alors qu'elle décrit la RARETÉ
+        // (secret/IR). On avait donc "élevée=false" suivi d'une décision reverse juste
+        // après, sans jamais voir la valeur qui l'avait déclenchée.
+        const reverseLog = parsed.reverse === null ? 'indéterminée' : parsed.reverse;
+        console.log(`🎴 IA : ${parsed.name} #${parsed.number}${parsed.total ? '/' + parsed.total : ''}, rareté=${parsed.rarete}, rareté élevée=${parsed.rareteElevee}, reverse=${reverseLog}, motif=${parsed.motif}, langue=${parsed.language}`);
         if (parsed.etatEstime) {
             const defauts = Array.isArray(parsed.defautsVus) && parsed.defautsVus.length ? parsed.defautsVus.join(', ') : 'aucun défaut vu';
             console.log(`   👁️ État estimé par l'IA : ${parsed.etatEstime} (confiance ${parsed.etatConfiance || '?'}) — ${defauts}`);
@@ -812,6 +880,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         // l'id (universel) pour que la recherche catalogue fonctionne.
         let nomExact = choisi.name;
         let variants = null;
+        let variantsDetailed = null;
         try {
             const detailEN = await axios.get(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(choisi.id)}`, { timeout: 15000 });
             if (detailEN.data?.name) {
@@ -822,10 +891,17 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             // impressions EXISTENT. Récupéré gratuitement ici (même réponse que le nom).
             // Sert à valider/infirmer la reverse lue par l'IA, sans scraper Cardmarket.
             if (detailEN.data?.variants) variants = detailEN.data.variants;
+            // variants_detailed = LA table de routage des motifs de reverse : pour
+            // chaque impression (reverse ordinaire, Poké Ball, Master Ball, holo
+            // cosmos...), son motif ET son idProduct Cardmarket. Récupéré GRATUITEMENT
+            // ici : c'est la même réponse HTTP que le nom anglais ci-dessus, aucun appel
+            // supplémentaire. C'est ce qui remplace toute règle déduite du n° de
+            // variante V1/V2/V3, lequel n'a aucune sémantique stable d'un set à l'autre.
+            if (Array.isArray(detailEN.data?.variants_detailed)) variantsDetailed = detailEN.data.variants_detailed;
         } catch (e) { /* on garde choisi.name si l'appel échoue */ }
 
         console.log(`🔗 Carte TCGdex retenue : ${choisi.id} ("${nomExact}")${ambigu ? ' [INCERTAIN]' : ''}`);
-        return { id: choisi.id, ambigu, nomExact, localId: choisi.localId || number, variants };
+        return { id: choisi.id, ambigu, nomExact, localId: choisi.localId || number, variants, variantsDetailed };
 
     } catch (e) {
         console.error(`❌ Erreur recherche TCGdex pour "${name}" #${number} :`, e.response?.status, e.message);
@@ -887,6 +963,13 @@ function regionDuCodeSet(codeSet) {
     if (/^[A-Z0-9]+$/.test(code) && /[A-Z]/.test(code)) return 'occidental';
     // Contient une minuscule = japonais (sv9a, m2a, mC, xm2a...)
     if (/[a-z]/.test(code)) return 'japonais';
+    // ⚠️ NE PAS "réparer" ce null en supprimant les séparateurs avant de tester.
+    // Les codes à séparateur ("SV-P/CS", "M-P/TH", "K+K") tombent ici et restent
+    // NEUTRES, ce qui est le comportement voulu : "SV-P/CS" est la ligne promo
+    // CHINOISE de SV-P, mais son code est en majuscules. Le normaliser en "SVPCS" le
+    // ferait classer "occidental" et infligerait -45 au BON produit sur une carte
+    // chinoise (cas Magikarp 024). Rester neutre ne coûte rien ; se tromper de région
+    // coûte 45 points au mauvais endroit. Le critère set fait le travail à sa place.
     return null;
 }
 
@@ -959,14 +1042,16 @@ async function trouverProduitsLocaux(nomExact) {
 }
 
 // Prix depuis le guide local (instantané) pour un idProduct précis.
-async function getPrixGuideLocal(idProduct) {
+// `estReverse` = l'impression VISÉE est-elle une reverse ? Si oui, le prix vit dans les
+// champs *Holo — que la reverse partage l'idProduct de la normale (Pikachu LOR 052 :
+// 0,27 € vs 10,13 €) ou qu'elle ait un produit dédié (Master Ball 806449 : 0,50 € vs
+// 24,13 €). Voir prixDeReference, testé dans scoring.js.
+async function getPrixGuideLocal(idProduct, estReverse = false) {
     try {
         if (mongoose.connection.readyState !== 1) return null;
         const g = await GuidePrix.findOne({ idProduct }).lean();
         if (!g) return null;
-        const prix = g.trend ?? g.avg ?? g.avg7 ?? g.avg30 ?? g.trendHolo ?? g.avgHolo;
-        if (typeof prix !== 'number') return null;
-        return prix;
+        return prixDeReference(g, estReverse);
     } catch (e) {
         console.error(`❌ Erreur getPrixGuideLocal pour ${idProduct} :`, e.message);
         return null;
@@ -976,17 +1061,17 @@ async function getPrixGuideLocal(idProduct) {
 // Version groupée de getPrixGuideLocal : un seul aller-retour Mongo pour N idProduct
 // (même repli de champs, même contrat de retour null si prix inconnu). Number() des
 // deux côtés pour la même raison que lireCodeSets ci-dessus.
-async function getPrixGuideLocalLot(idsProducts) {
+async function getPrixGuideLocalLot(idsProducts, estReverse = false) {
     try {
         if (mongoose.connection.readyState !== 1) return new Map();
         const uniques = [...new Set(idsProducts.filter(id => id != null).map(Number))];
         if (uniques.length === 0) return new Map();
         const docs = await GuidePrix.find({ idProduct: { $in: uniques } }).lean();
         const map = new Map();
-        for (const g of docs) {
-            const prix = g.trend ?? g.avg ?? g.avg7 ?? g.avg30 ?? g.trendHolo ?? g.avgHolo;
-            map.set(Number(g.idProduct), typeof prix === 'number' ? prix : null);
-        }
+        // Même sélection de prix que getPrixGuideLocal (via prixDeReference) : les deux
+        // chemins doivent voir le MÊME prix, sinon le scoring départage sur une valeur
+        // que la route n'affichera jamais.
+        for (const g of docs) map.set(Number(g.idProduct), prixDeReference(g, estReverse));
         return map;
     } catch (e) {
         console.error("Erreur lecture prix guide (lot):", e.message);
@@ -994,11 +1079,37 @@ async function getPrixGuideLocalLot(idsProducts) {
     }
 }
 
+// Libellés des stratégies reverse renvoyées par scoring.js. Uniquement pour les logs :
+// la valeur transmise à l'extension reste le code court ('produit-distinct'|'filtre-url').
+const LIBELLES_STRATEGIE_REVERSE = {
+    'produit-distinct': "le motif est un PRODUIT distinct -> lecture normale de sa fiche",
+    'filtre-url': "produit PARTAGÉ avec la version normale -> filtre isReverseHolo=Y (live) / trendHolo (guide)",
+    inconnue: "indéterminée"
+};
+
+// Trace unique du REPLI de motif, pensée pour être grepée en production :
+//   grep "[motif-non-resolu]" server.log
+// Champs stables et dans un ordre fixe, valeurs sans espace, une seule ligne.
+// ⚠️ Ce log ne se déclenche QUE quand la carte A un motif de reverse ET qu'on n'a pas
+// su le cibler. JAMAIS sur "pas d'idProduct par variante" : les cartes des vieux sets
+// n'ont pas de motif à départager, le chemin catalogue les résout parfaitement, et les
+// marquer incertaines viderait le drapeau de son sens (~86 % des cartes).
+function loggerReplieMotif(resolution, cardInfo, analyse, tcgdexId, titre) {
+    const motifTitre = motifDuTitre(titre) || 'aucun';
+    console.warn(
+        `⚠️ [motif-non-resolu] carte=${tcgdexId || '?'} nom=${String(cardInfo.name || '?').replace(/\s+/g, '_')}` +
+        ` motifIA=${cardInfo.motif || '?'} motifTitre=${motifTitre}` +
+        ` motifsCarte=${analyse.motifsDisponibles.join('|') || 'aucun'}` +
+        ` variantes=${analyse.entrees.length} raison=${resolution.raison}` +
+        ` -> repli catalogue + carteIncertaine`
+    );
+}
+
 // ============================================================
 // Enrichit les candidats (numéro appris + prix local + région) puis les score.
 // NIVEAU 1 : 100% local, aucune requête Cardmarket, aucun risque de ban.
 // ============================================================
-async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpansionsAttendues = [], codeSetsPreChauffes = null) {
+async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpansionsAttendues = [], codeSetsPreChauffes = null, options = {}) {
     const regionCible = regionAttendue(cardInfo);
     console.log(`🌍 Région attendue : ${regionCible || 'indéterminée'} (langue=${cardInfo.language}, total=${cardInfo.total || 'absent'})`);
 
@@ -1017,7 +1128,20 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
     // avant ce fix). codeSetsPreChauffes permet à l'appelant (/api/identifier) d'injecter
     // une Map déjà récupérée, pour ne pas la redemander une seconde fois à Mongo.
     const codeSets = codeSetsPreChauffes || await lireCodeSets(produits.map(p => p.idExpansion));
-    const prixGuide = await getPrixGuideLocalLot(produits.map(p => p.idProduct));
+
+    // Table des motifs de la carte (TCGdex), puis arbitrage IA / titre / catalogue.
+    // Tout est PUR et testé dans scoring.js ; ici on ne fait que fournir les entrées.
+    // Résolu AVANT les prix : c'est la nature de l'impression visée (reverse ou non)
+    // qui décide quel champ du guide fait foi.
+    const analyse = analyserVariantes(options.variantsDetailed);
+    const resolution = resoudreMotif(analyse, cardInfo.motif, options.titre);
+    const estReverse = impressionEstReverse(resolution.cible, cardInfo.reverse);
+
+    // Les prix des candidats sont lus sur le MÊME axe que le prix qui sera affiché.
+    // Indispensable au départage « moins cher » de la décision produit B : sur Espeon
+    // PRE 033, comparer les `trend` désignerait la Master Ball (0,50 €) comme la moins
+    // chère alors que c'est de loin la plus chère en reverse (24,13 €).
+    const prixGuide = await getPrixGuideLocalLot(produits.map(p => p.idProduct), estReverse);
 
     const candidatsEnrichis = produits.map(p => {
         const infoNum = numerosConnus.get(p.idProduct);
@@ -1050,17 +1174,50 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
         numero: cardInfo.number || null,   // le numéro lu par l'IA (ex: 79, TG06)
         setCode: cardInfo.setCode || null, // le code/stamp lu par l'IA (ex: PAL, CEL)
         idExpansionsAttendues,             // déduites du set TCGdex via le pré-remplissage
+        rarete: cardInfo.rarete || null,   // brut : neutralise le critère prix sur les promos
         rareteElevee: cardInfo.rareteElevee,
         regionAttendue: regionCible,
-        // reverse lue -> on attend la variante V2. false/null -> pas d'exigence
-        // (on n'affirme PAS V1 : la carte pourrait être une illustration V3).
-        varianteAttendue: cardInfo.reverse === true ? 'V2' : null
+        // Le routage du motif de reverse. La règle "reverse -> V2" a DISPARU : le
+        // numéro de variante Cardmarket n'a pas de sémantique stable, et dans Obsidian
+        // Flames il désignait un holo à 37 €. C'est le catalogue TCGdex qui fait foi.
+        motif: { ...resolution, strategieParIdProduct: analyse.strategieParIdProduct }
     };
-    if (lu.varianteAttendue) console.log(`🔁 Reverse lue par l'IA -> on vise la variante ${lu.varianteAttendue}.`);
+
+    const resultat = choisirMeilleur(candidatsEnrichis, lu);
+
+    // INSTRUMENTATION du correctif « promo » (neutralisation du critère prix).
+    // Mesuré hors ligne sur 15 promos réelles : 0 gagnant changé, mais le critère
+    // n'était réellement en jeu que sur 7 d'entre elles et la marge médiane était de
+    // 50 points — l'échantillon ne dit donc rien des cas SERRÉS. Sur le seul cas serré
+    // connu (Magikarp 024), la marge n'est que de 10 points et repose entièrement sur
+    // POIDS.setPartiel, dont le seuil de bascule est 6. Ce log mesure en production la
+    // fréquence réelle des bascules, pour savoir si ces 9 points de réserve sont
+    // confortables ou si on vit sur de la chance.
+    // Coût : un second scoring en mémoire, uniquement sur les promos. Aucune I/O.
+    if (String(cardInfo.rarete || '').toLowerCase() === 'promo') {
+        const sansNeutralisation = choisirMeilleur(candidatsEnrichis, { ...lu, rarete: null });
+        const avant = sansNeutralisation.scores[0], apres = resultat.scores[0];
+        if (avant && apres && avant.candidat.idProduct !== apres.candidat.idProduct) {
+            console.log(
+                `📊 [promo-neutralise] carte=${options.tcgdexId || '?'}` +
+                ` gagnantAvant=${avant.candidat.idProduct} scoreAvant=${avant.score}` +
+                ` gagnantApres=${apres.candidat.idProduct} scoreApres=${apres.score}`
+            );
+        }
+    }
+
+    // Trois états, volontairement DISTINCTS (le 2e n'est pas un échec) :
+    if (resolution.etat === 'non-resolu') {
+        loggerReplieMotif(resolution, cardInfo, analyse, options.tcgdexId, options.titre);
+    } else if (resolution.etat === 'resolu' && resolution.cible !== 'aucun') {
+        console.log(`🔁 Motif "${resolution.cible}" -> produit(s) ${resolution.vises.join(', ')} · ${LIBELLES_STRATEGIE_REVERSE[resultat.strategieReverse] || LIBELLES_STRATEGIE_REVERSE.inconnue}${resolution.raison ? ` (${resolution.raison})` : ''}`);
+    }
+    // 'aucun-motif' : silence volontaire. C'est le cas de l'immense majorité des cartes
+    // (tous les sets d'avant Prismatic Evolutions), il n'y a rien à signaler.
 
     // codeSets renvoyé pour réutilisation par l'appelant (évite une 2e lecture
     // identique, ex: la construction de `codesSet` dans /api/identifier).
-    return { ...choisirMeilleur(candidatsEnrichis, lu), codeSets };
+    return { ...resultat, codeSets, motif: resolution, estReverse };
 }
 
 function calculerVerdict(prixVinted, prixCardmarket, language, carteIncertaine) {
@@ -1211,15 +1368,28 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
 
             // 2c. NIVEAU 1 — scoring local (classe TOUS les candidats par pertinence)
             let classement = [];
+            let motifResolution = { etat: 'aucun-motif', cible: null, raison: null };
+            let estReverse = false;
+            const optionsMotif = { variantsDetailed: trouvailleTCGdex.variantsDetailed, titre: title, tcgdexId: trouvailleTCGdex.id };
             if (produits.length === 1) {
-                classement = [{ candidat: produits[0], confiant: true }];
+                const analyseSolo = analyserVariantes(trouvailleTCGdex.variantsDetailed);
+                motifResolution = resoudreMotif(analyseSolo, cardInfo.motif, title);
+                estReverse = impressionEstReverse(motifResolution.cible, cardInfo.reverse);
+                if (motifResolution.etat === 'non-resolu') loggerReplieMotif(motifResolution, cardInfo, analyseSolo, trouvailleTCGdex.id, title);
+                classement = [{
+                    candidat: produits[0], confiant: true,
+                    strategie: analyseSolo.strategieParIdProduct.get(produits[0].idProduct) ?? null
+                }];
             } else if (produits.length > 1) {
                 const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo));
-                const { scores, confiant } = await scorerCandidatsLocal(produits, cardInfo, imageUrl, expAttendues);
+                const { scores, confiant, motif, estReverse: rev } = await scorerCandidatsLocal(produits, cardInfo, imageUrl, expAttendues, null, optionsMotif);
+                motifResolution = motif;
+                estReverse = rev;
                 // scores est déjà trié par score décroissant ; on récupère les produits complets
                 classement = scores.map(s => ({
                     candidat: produits.find(p => p.idProduct === s.candidat.idProduct),
-                    score: s.score
+                    score: s.score,
+                    strategie: s.strategie
                 }));
                 console.log(`🧮 Scoring local : ${classement.length} candidats classés, meilleur = ${classement[0]?.candidat?.idProduct} (score ${scores[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
             }
@@ -1231,15 +1401,22 @@ app.post('/api/analyser', verifierJeton, verifierAcces, async (req, res) => {
             // On prend directement le prix guide local du meilleur candidat classé.
             if (classement.length > 0) {
                 const meilleur = classement[0].candidat;
-                const prixLocal = await getPrixGuideLocal(meilleur.idProduct);
+                // C'est la NATURE de l'impression visée (reverse ou non) qui décide du
+                // champ de prix, pas la stratégie de lecture : un produit dédié à une
+                // Master Ball ne se vend qu'en reverse holo, son prix est donc dans
+                // trendHolo (24,13 €) et pas dans trend (0,50 €).
+                const prixLocal = await getPrixGuideLocal(meilleur.idProduct, estReverse);
                 if (prixLocal !== null) {
                     resultat = {
                         price: prixLocal,
                         url: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${meilleur.idProduct}`,
                         source: 'guide-local',
-                        carteIncertaine: produits.length > 1
+                        // Incertain si plusieurs candidats OU si la carte a un motif de
+                        // reverse qu'on n'a pas su cibler (écart de prix jusqu'à x100).
+                        carteIncertaine: produits.length > 1 || motifResolution.etat === 'non-resolu'
                     };
-                    console.log(`📘 Repli guide local pour idProduct ${meilleur.idProduct} : ${prixLocal} €${produits.length > 1 ? ' (incertain)' : ''}`);
+                    const mention = estReverse ? ' [prix reverse : trendHolo]' : '';
+                    console.log(`📘 Repli guide local pour idProduct ${meilleur.idProduct} : ${prixLocal} €${mention}${resultat.carteIncertaine ? ' (incertain)' : ''}`);
                 }
             }
 
@@ -1387,14 +1564,36 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
 
         // 4. Scoring : on renvoie le CLASSEMENT, l'extension testera dans l'ordre
         let classement = [];
+        // Stratégie reverse du GAGNANT + état de résolution du motif (champs additifs).
+        let strategieReverse = null;
+        let motifResolution = { etat: 'aucun-motif', cible: null, raison: null };
+        const optionsMotif = { variantsDetailed: trouvaille.variantsDetailed, titre: title, tcgdexId: trouvaille.id };
+
         if (produits.length === 1) {
-            classement = [{ idProduct: produits[0].idProduct, idExpansion: produits[0].idExpansion, score: 999 }];
+            // Un seul produit pour ce nom : rien à départager, mais la table dit quand
+            // même COMMENT lire sa reverse (produit partagé ou non).
+            const analyse = analyserVariantes(trouvaille.variantsDetailed);
+            motifResolution = resoudreMotif(analyse, cardInfo.motif, title);
+            strategieReverse = analyse.strategieParIdProduct.get(produits[0].idProduct) ?? null;
+            classement = [{
+                idProduct: produits[0].idProduct, idExpansion: produits[0].idExpansion,
+                score: 999, strategie: strategieReverse
+            }];
+            if (motifResolution.etat === 'non-resolu') loggerReplieMotif(motifResolution, cardInfo, analyse, trouvaille.id, title);
         } else if (produits.length > 1) {
-            const { scores, confiant } = await scorerCandidatsLocal(produits, cardInfo, photos[0], expansionsAttendues, codeSetsConnus);
+            const { scores, confiant, strategieReverse: strat, motif } = await scorerCandidatsLocal(
+                produits, cardInfo, photos[0], expansionsAttendues, codeSetsConnus, optionsMotif
+            );
+            strategieReverse = strat;
+            motifResolution = motif;
             classement = scores.map(s => ({
                 idProduct: s.candidat.idProduct,
                 idExpansion: s.candidat.idExpansion,
                 score: s.score,
+                // Stratégie PAR CANDIDAT : sur une même carte les deux mécanismes
+                // coexistent (produit de base partagé + motifs en produits distincts),
+                // donc une stratégie globale serait fausse pour une partie du classement.
+                strategie: s.strategie,
                 detail: s.detail
             }));
             console.log(`🧮 [identifier] meilleur = ${classement[0]?.idProduct} (score ${classement[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
@@ -1423,8 +1622,10 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
                 langue: cardInfo.language,
                 rareteElevee: cardInfo.rareteElevee,
                 tcgdexId: trouvaille.id,
-                // Incertain si TCGdex hésitait, OU s'il s'est manifestement trompé de carte
-                ambigu: Boolean(trouvaille.ambigu || tcgdexDouteux)
+                // Incertain si TCGdex hésitait, s'il s'est manifestement trompé de carte,
+                // OU si la carte a un motif de reverse qu'on n'a pas su cibler (le prix
+                // peut alors varier d'un facteur 100 entre variantes — cf. Master Ball).
+                ambigu: Boolean(trouvaille.ambigu || tcgdexDouteux || motifResolution.etat === 'non-resolu')
             },
             etat: {
                 estimeIA: cardInfo.etatEstime || null,
@@ -1440,6 +1641,21 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
             },
             classement,
             codesSet,
+            // Champ ADDITIF (l'extension actuelle l'ignore, aucun champ existant ne
+            // change) : dit à l'extension COMMENT lire le prix d'une reverse.
+            //   'produit-distinct' -> le produit visé EST la reverse, lecture normale.
+            //   'filtre-url'       -> même produit que la normale : il faut ajouter
+            //                         isReverseHolo=Y à l'URL, sinon on lit le prix de
+            //                         la commune (bug Pikachu 052 : 0,02 € affiché).
+            //   null               -> pas de reverse attendue, ou données insuffisantes.
+            reverse: {
+                attendue: cardInfo.reverse === true,
+                motif: motifResolution.cible,        // 'pokeball' n'existe pas ici : classes
+                                                     // grossières 'ball' | 'masterball' |
+                                                     // 'reverse-classique' | 'aucun' | null
+                etat: motifResolution.etat,          // 'resolu' | 'aucun-motif' | 'non-resolu'
+                strategie: strategieReverse
+            },
             // Codes langue Cardmarket, pour que l'extension construise l'URL du live
             codeLangue: { EN: 1, FR: 2, DE: 3, ES: 4, IT: 5, ZH: 6, JP: 7, PT: 8, RU: 9, KR: 10 }[cardInfo.language] || 1
         });
@@ -1455,7 +1671,9 @@ app.post('/api/identifier', verifierJeton, verifierAcces, async (req, res) => {
 // utilisateurs, une carte à la fois, sans jamais scraper en masse.
 app.post('/api/apprendre', verifierJeton, async (req, res) => {
     try {
-        const { idProduct, idExpansion, codeSet, numero } = req.body;
+        const { idProduct, idExpansion, numero } = req.body;
+        // Décodé à l'entrée : le userscript l'extrait d'une URL d'image (voir decoderCodeSet).
+        const codeSet = decoderCodeSet(req.body.codeSet);
         if (!idProduct) return res.json({ success: false });
 
         if (codeSet && idExpansion) await memoriserCodeSet(idExpansion, codeSet);
@@ -1536,7 +1754,8 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
                             idExpansion: idExpansion != null ? Number(idExpansion) : null,
                             numero:      c.numero    != null ? String(c.numero)    : null,
                             numeroUrl:   c.numeroUrl != null ? String(c.numeroUrl) : null,
-                            codeSet:     c.codeSet  || null,
+                            // Décodé à l'entrée : le lot vient d'URLs d'images (voir decoderCodeSet)
+                            codeSet:     decoderCodeSet(c.codeSet) || null,
                             nomFr:       c.nomFr    || null,
                             variante:    c.variante || null,
                             slug:        c.slug     || null,
