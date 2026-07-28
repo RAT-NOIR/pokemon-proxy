@@ -356,6 +356,63 @@ function impressionEstReverse(cibleMotif, reverseLueParIA = false) {
     return reverseLueParIA === true;
 }
 
+// ============================================================
+// HIÉRARCHIE DE CONFIANCE : numéro + total  >  set déclaré  >  NOM
+// ============================================================
+// Le NOM est le signal le plus fragile de la chaîne : il dépend d'une lecture OCR, de
+// la langue imprimée sur la carte, et il peut être FAUX TOUT EN EXISTANT AILLEURS —
+// auquel cas aucune étape en aval ne peut le suspecter. Cas réel : une carte "Dana"
+// (Team Up 173/181) lue "Kahili", qui est un vrai nom de carte mais dans Lost Thunder.
+// Le numéro et le total, eux, étaient justes.
+//
+// Le TOTAL est un discriminant de SET mesuré comme fort : sur 216 sets TCGdex et 112
+// tailles distinctes, 55 % des tailles n'appartiennent qu'à un seul set. Team Up est
+// le SEUL set à 181 cartes ; Lost Thunder en a 214, il était donc exclu d'office.
+// ⚠️ MAIS il s'effondre sous 30 cartes (18 sets font exactement 30 : les trainer kits,
+// 16 % de tailles isolées seulement). Le total doit donc RESTREINDRE les candidats,
+// jamais décider seul, et ne jamais réduire l'ensemble à zéro.
+
+/**
+ * Sets dont la taille officielle correspond au total imprimé.
+ * PURE : on lui passe la liste des sets (telle que renvoyée par /v2/en/sets).
+ * @returns {Array} les sets compatibles ; [] si le total est inconnu ou sans correspondance
+ */
+function setsCompatiblesAvecTotal(sets, total) {
+    const t = parseInt(String(total ?? '').replace(/\D/g, ''), 10);
+    if (!Array.isArray(sets) || !Number.isFinite(t) || t <= 0) return [];
+    // `official` = le dénominateur imprimé sur la carte (X/official). `total` inclut les
+    // secrètes, qui ne sont PAS au dénominateur — on ne l'accepte qu'en repli.
+    return sets.filter(s => (s?.cardCount?.official ?? null) === t
+        || (s?.cardCount?.official == null && (s?.cardCount?.total ?? null) === t));
+}
+
+// Chiffres d'un numéro. ⚠️ STRICTEMENT la même normalisation que le critère numéro et
+// que l'extension : ne pas la modifier ici sans la modifier partout.
+const chiffresDuNumero = n => { const m = String(n).match(/\d+/); return m ? String(parseInt(m[0], 10)) : null; };
+
+// Forme complète normalisée, préfixe COMPRIS : "TG09" -> "TG9", "001C" -> "1C".
+// N'REMPLACE PAS la normalisation ci-dessus : elle s'y ajoute, uniquement pour
+// préférer une égalité exacte à une égalité de chiffres.
+const numeroComplet = n => String(n).trim().toUpperCase().replace(/(\d+)/, d => String(parseInt(d, 10)));
+
+/**
+ * Compare un numéro lu à un numéro de candidat.
+ * @returns {'exact'|'chiffres'|null}
+ *
+ * La distinction est NÉCESSAIRE : les numéros à préfixe alphabétique sont fréquents
+ * (1936 documents en base : "TG09", "SV14", "001C"...) et ils COLLISIONNENT avec les
+ * numéros nus dans la même expansion — mesuré : l'expansion 3630 contient "SV14" ET
+ * "14", l'expansion 4361 contient "001C", "001L", "001P" et "001M". Apparier sur les
+ * seuls chiffres y ramènerait plusieurs produits sans distinction, d'où la préférence
+ * stricte pour l'égalité exacte.
+ */
+function comparerNumeros(lu, candidat) {
+    if (lu == null || candidat == null) return null;
+    if (numeroComplet(lu) === numeroComplet(candidat)) return 'exact';
+    const a = chiffresDuNumero(lu), b = chiffresDuNumero(candidat);
+    return (a && b && a === b) ? 'chiffres' : null;
+}
+
 /**
  * Normalise le champ `total` lu par l'IA (le "Y" de X/Y).
  * On prend le DERNIER groupe de chiffres : quand l'IA recopie la fraction entière
@@ -590,6 +647,7 @@ module.exports = {
     normaliserCodeSet, codesApparentes,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
+    setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -1023,7 +1081,77 @@ if (require.main === module) {
         verifier('   ... marge de 10 points', avecPromo.scores[0].score - avecPromo.scores[1].score, 10);
     }
 
-    // --- Test 19 : non-régression — sans motif ciblé, rien ne bouge ---
+    // --- Test 19 : le TOTAL comme discriminant de SET (cas Dana lue "Kahili") ---
+    // Tailles officielles RÉELLES relevées sur TCGdex (/v2/en/sets).
+    console.log('\n=== Test 19 : le total restreint les sets ===');
+    {
+        const SETS = [   // extrait réel, champs tels que TCGdex les renvoie
+            { id: 'sm9', name: 'Team Up', cardCount: { official: 181, total: 196 } },
+            { id: 'sm8', name: 'Lost Thunder', cardCount: { official: 214, total: 240 } },
+            { id: 'sm7', name: 'Celestial Storm', cardCount: { official: 168, total: 183 } },
+            { id: 'tk-hs-r', name: 'HS Trainer Kit (Raichu)', cardCount: { official: 30, total: 30 } },
+            { id: 'tk-hs-g', name: 'HS Trainer Kit (Gyarados)', cardCount: { official: 30, total: 30 } },
+        ];
+        const ids = t => setsCompatiblesAvecTotal(SETS, t).map(s => s.id).join(',');
+        verifier('total 181 -> Team Up SEUL', ids(181), 'sm9');
+        verifier('   ... Lost Thunder (214) exclu', setsCompatiblesAvecTotal(SETS, 181).some(s => s.id === 'sm8'), false);
+        verifier('total 214 -> Lost Thunder', ids(214), 'sm8');
+        // Le total ne doit PAS prétendre trancher là où il est faible : 18 sets réels
+        // font exactement 30 cartes (trainer kits). On les renvoie tous, l'appelant
+        // décidera que c'est trop peu discriminant.
+        verifier('total 30 -> plusieurs sets (discriminant faible)', ids(30), 'tk-hs-r,tk-hs-g');
+        verifier('total absent -> aucune restriction', setsCompatiblesAvecTotal(SETS, null).length, 0);
+        verifier('total inconnu -> aucune restriction', setsCompatiblesAvecTotal(SETS, 999).length, 0);
+        // "196" est le total AVEC les secrètes : il n'est pas au dénominateur imprimé.
+        verifier('total avec secrètes non retenu', setsCompatiblesAvecTotal(SETS, 196).length, 0);
+    }
+
+    // --- Test 20 : comparaison de numéros à PRÉFIXE (collisions réelles) ---
+    // Cas mesurés en base : l'expansion 3630 contient "SV14" ET "14" ; l'expansion 4361
+    // contient "001C", "001L", "001P", "001M" — apparier sur les chiffres seuls y
+    // ramènerait plusieurs produits indistinguables.
+    console.log('\n=== Test 20 : numéros à préfixe et collisions ===');
+    {
+        verifier('"173" vs "173" -> exact', comparerNumeros('173', '173'), 'exact');
+        verifier('"TG09" vs "TG09" -> exact', comparerNumeros('TG09', 'TG09'), 'exact');
+        verifier('"TG9" vs "TG09" -> exact (zéro de tête)', comparerNumeros('TG9', 'TG09'), 'exact');
+        verifier('"SV14" vs "14" -> chiffres seulement', comparerNumeros('SV14', '14'), 'chiffres');
+        verifier('"14" vs "SV14" -> chiffres seulement', comparerNumeros('14', 'SV14'), 'chiffres');
+        verifier('"001C" vs "001L" -> chiffres seulement', comparerNumeros('001C', '001L'), 'chiffres');
+        verifier('"173" vs "174" -> aucune', comparerNumeros('173', '174'), null);
+        verifier('numéro absent -> aucune', comparerNumeros(null, '173'), null);
+        // ⚠️ La normalisation en chiffres reste STRICTEMENT celle du critère numéro et
+        // de l'extension : toute divergence recréerait un bug de prix.
+        verifier('chiffres de "TG09" == chiffres de "9"', chiffresDuNumero('TG09'), chiffresDuNumero('9'));
+    }
+
+    // --- Test 21 : RÉGRESSION Dana/Kahili — nom faux mais plausible ---
+    // L'IA a lu "Kahili" au lieu de "Dana" : un nom qui EXISTE, mais dans Lost Thunder.
+    // Numéro et total étaient justes (173/181). Team Up est le seul set à 181 cartes,
+    // et son expansion Cardmarket est 2407. Tous les produits "Kahili" réels sont
+    // ailleurs (2370, 3324, 3876, 6329, 6581) : restreindre à l'expansion du total
+    // suffit à les écarter tous. Prix issus de guide_prix, aucun inventé.
+    console.log('\n=== Test 21 : régression Dana 173/181 lue "Kahili" ===');
+    {
+        const lu = {
+            numero: '173', total: '181', rareteElevee: true, regionAttendue: 'occidental',
+            idExpansionsAttendues: [2407]   // déduit du total 181 -> sm9 -> exp 2407
+        };
+        const candidats = [
+            // le BON produit, atteint par le numéro dans l'expansion du total
+            { idProduct: 369098, idExpansion: 2407, numeroCardmarket: '173', codeSet: 'TEU', variante: 'V2', prix: 92.02, region: 'occidental' },
+            // les "Kahili" réels du catalogue, tous hors de l'expansion attendue
+            { idProduct: 365814, idExpansion: 2370, numeroCardmarket: '179', codeSet: 'LOT', prix: 0.30, region: 'occidental' },
+            { idProduct: 365843, idExpansion: 2370, numeroCardmarket: '210', codeSet: 'LOT', prix: 1.20, region: 'occidental' },
+            { idProduct: 558943, idExpansion: 3876, numeroCardmarket: '055', codeSet: 'sm7a', prix: 0.50, region: 'japonais' },
+        ];
+        const { gagnant, confiant } = choisirMeilleur(candidats, lu);
+        verifier('gagnant = Dana TEU 173', gagnant.candidat.idProduct, 369098);
+        verifier('   ... et non le Kahili retenu avant (365843)', gagnant.candidat.idProduct !== 365843, true);
+        verifier('   ... confiance haute', confiant, true);
+    }
+
+    // --- Test 22 : non-régression — sans motif ciblé, rien ne bouge ---
     console.log('\n=== Test 16 : aucun motif ciblé -> critères motif et variante inertes ===');
     {
         const lu = { numero: 153, rareteElevee: false, regionAttendue: 'occidental' };

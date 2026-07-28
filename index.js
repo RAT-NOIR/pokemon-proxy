@@ -20,6 +20,7 @@ const {
     choisirMeilleur,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
+    setsCompatiblesAvecTotal, comparerNumeros,
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
@@ -646,6 +647,109 @@ function genererVariantesNom(name) {
     return [...variantes];
 }
 
+// Liste des sets TCGdex, mémorisée pour la durée du process. Elle sert à traduire un
+// TOTAL imprimé en SET, ce qui est le signal le plus fiable dont on dispose. Un seul
+// appel réseau, réutilisé par toutes les identifications : sans ce cache, chaque scan
+// paierait une requête supplémentaire pour une donnée qui bouge quelques fois par an.
+let _setsTCGdex = null;
+let _setsTCGdexExpire = 0;
+const DUREE_CACHE_SETS_MS = 24 * 60 * 60 * 1000;
+
+async function chargerSetsTCGdex() {
+    if (_setsTCGdex && Date.now() < _setsTCGdexExpire) return _setsTCGdex;
+    try {
+        const r = await axios.get('https://api.tcgdex.net/v2/en/sets', { timeout: 20000 });
+        if (Array.isArray(r.data) && r.data.length) {
+            _setsTCGdex = r.data;
+            _setsTCGdexExpire = Date.now() + DUREE_CACHE_SETS_MS;
+        }
+    } catch (e) {
+        console.warn(`⚠️ Liste des sets TCGdex indisponible (${e.message}) — le total ne pourra pas restreindre les sets.`);
+    }
+    return _setsTCGdex || [];
+}
+
+// Sets dont la taille officielle == total lu. [] si total absent/inconnu.
+async function setsPourTotal(totalImprime) {
+    if (!totalImprime) return [];
+    const sets = await chargerSetsTCGdex();
+    return setsCompatiblesAvecTotal(sets, totalImprime);
+}
+
+const setIdDeCarte = idCarte => (idCarte && idCarte.includes('-')) ? idCarte.slice(0, idCarte.lastIndexOf('-')) : null;
+
+/**
+ * Détail d'une carte TCGdex : nom ANGLAIS + variantes. Un seul appel, deux usages.
+ * Le nom trouvé peut être dans la langue de recherche (ex: français) alors que le
+ * catalogue Cardmarket est en anglais — d'où la récupération par l'id, universel.
+ * `variants_detailed` vient de la MÊME réponse : c'est la table de routage des motifs
+ * de reverse (motif -> idProduct Cardmarket), obtenue sans requête supplémentaire.
+ */
+async function detailCarteTCGdex(idCarte, nomTrouve = null) {
+    try {
+        const r = await axios.get(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(idCarte)}`, { timeout: 15000 });
+        const nomExact = r.data?.name || null;
+        if (nomExact && nomTrouve && nomExact !== nomTrouve) {
+            console.log(`🔤 Nom anglais récupéré : "${nomExact}" (trouvé en "${nomTrouve}").`);
+        }
+        return {
+            nomExact,
+            variants: r.data?.variants || null,
+            variantsDetailed: Array.isArray(r.data?.variants_detailed) ? r.data.variants_detailed : null
+        };
+    } catch (e) {
+        return { nomExact: null, variants: null, variantsDetailed: null };
+    }
+}
+
+/**
+ * Identifie une carte SANS UTILISER SON NOM : uniquement le total (qui donne le set)
+ * et le numéro (qui donne la carte dans ce set).
+ *
+ * C'est le chemin de secours quand le nom est démontrablement faux ou inexploitable :
+ *  - nom halluciné mais plausible (Dana lue "Kahili") : le nom existe ailleurs, donc
+ *    rien en aval ne peut le suspecter ;
+ *  - nom impossible à apparier entre TCGdex et Cardmarket ("_____'s Pikachu", où le
+ *    nombre de tirets bas diffère d'une source à l'autre).
+ * Dans les deux cas le numéro était parfaitement lisible.
+ */
+async function identifierParTotalEtNumero(number, totalImprime) {
+    const sets = await setsPourTotal(totalImprime);
+    if (sets.length === 0) return null;
+    if (sets.length > 5) {
+        // Total peu discriminant (typiquement <= 30 : trainer kits, promos POP).
+        console.log(`ℹ️ [total] ${sets.length} sets à ${totalImprime} cartes — trop peu discriminant, on n'essaie pas.`);
+        return null;
+    }
+
+    const trouvees = [];
+    await Promise.all(sets.map(async s => {
+        try {
+            const detail = await axios.get(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(s.id)}`, { timeout: 15000 });
+            for (const c of (detail.data?.cards || [])) {
+                const corr = comparerNumeros(number, c.localId);
+                if (corr) trouvees.push({ carte: c, set: s, correspondance: corr });
+            }
+        } catch (_) { /* set indisponible : on continue avec les autres */ }
+    }));
+
+    if (trouvees.length === 0) return null;
+    // Une égalité EXACTE prime sur une égalité de chiffres (cf. "SV14" vs "14").
+    const exactes = trouvees.filter(t => t.correspondance === 'exact');
+    const retenues = exactes.length ? exactes : trouvees;
+    const gagnante = retenues[0];
+
+    console.log(`🎯 [total] ${totalImprime} cartes -> set ${gagnante.set.id} ("${gagnante.set.name}") ; n°${number} -> ${gagnante.carte.id} ("${gagnante.carte.name}")`);
+    if (retenues.length > 1) console.log(`   ⚠️ ${retenues.length} cartes candidates à ce numéro — identification marquée incertaine.`);
+    return {
+        id: gagnante.carte.id,
+        localId: gagnante.carte.localId,
+        nom: gagnante.carte.name,
+        setId: gagnante.set.id,
+        ambigu: retenues.length > 1
+    };
+}
+
 async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue = 'EN', totalImprime = null) {
     try {
         const variantes = genererVariantesNom(name);
@@ -692,9 +796,54 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             }
         }
 
+        // ---- LE TOTAL PASSE AVANT LE NOM ----------------------------------------
+        // Hiérarchie : numéro + total > set déclaré > NOM. Un set dont la taille ne
+        // correspond pas au total imprimé ne doit pas pouvoir gagner, quel que soit
+        // le nom lu — c'est ce qui aurait écarté Lost Thunder (214 cartes) sur une
+        // carte lue "173/181", Team Up étant le seul set à 181 cartes.
+        const resultatsDuNom = resultats;   // conservés comme filet, voir plus bas
+        const setsDuTotal = await setsPourTotal(totalImprime);
+        const idsSetsDuTotal = new Set(setsDuTotal.map(s => s.id));
+        if (setsDuTotal.length && resultats.length) {
+            const compatibles = resultats.filter(r => idsSetsDuTotal.has(setIdDeCarte(r.id)));
+            if (compatibles.length && compatibles.length < resultats.length) {
+                console.log(`🎯 Total ${totalImprime} -> ${resultats.length} résultats réduits à ${compatibles.length} (sets de la bonne taille).`);
+                resultats = compatibles;
+            } else if (compatibles.length === 0) {
+                // Le nom a ramené des cartes, mais AUCUNE dans un set de la bonne taille :
+                // c'est le nom qui est suspect, pas le total. On ne s'appuie plus dessus.
+                console.warn(`⚠️ Aucun résultat de "${nomUtilise}" n'appartient à un set de ${totalImprime} cartes — le NOM lu est suspect.`);
+                resultats = [];
+            }
+        }
+
+        // Nom inexploitable (aucun résultat, ou tous écartés par le total) : on
+        // identifie sans lui, par le total puis le numéro.
         if (resultats.length === 0) {
-            console.error(`⚠️ TCGdex : aucun résultat pour "${name}" #${number} (même avec variantes).`);
-            return null;
+            const parTotal = await identifierParTotalEtNumero(number, totalImprime);
+            if (parTotal) {
+                const detail = await detailCarteTCGdex(parTotal.id);
+                console.log(`🔗 Carte TCGdex retenue SANS le nom : ${parTotal.id} ("${detail.nomExact || parTotal.nom}")`);
+                return {
+                    id: parTotal.id, ambigu: parTotal.ambigu,
+                    nomExact: detail.nomExact || parTotal.nom,
+                    localId: parTotal.localId || number,
+                    variants: detail.variants, variantsDetailed: detail.variantsDetailed,
+                    source: 'total+numero'   // le nom lu est écarté, il ne sert plus à rien en aval
+                };
+            }
+            // ⚠️ FILET : le total est une PRÉFÉRENCE, jamais un veto qui fait tout perdre.
+            // Si le nom avait ramené des cartes et que le total les a toutes écartées
+            // SANS rien proposer en échange, c'est le TOTAL qui était mal lu — pas le
+            // nom. On restaure alors les résultats du nom plutôt que d'échouer là où
+            // l'ancien code réussissait.
+            if (resultatsDuNom.length) {
+                console.warn(`↩️ Le total ${totalImprime} n'a rien donné non plus : il est probablement mal lu. On revient aux ${resultatsDuNom.length} résultat(s) du nom.`);
+                resultats = resultatsDuNom;
+            } else {
+                console.error(`⚠️ TCGdex : aucun résultat pour "${name}" #${number} (même avec variantes).`);
+                return null;
+            }
         }
 
         let choisi = resultats[0];
@@ -757,33 +906,15 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             }
         }
 
-        // Le nom du candidat peut être dans la langue de recherche (ex: français).
-        // Or le catalogue Cardmarket est en anglais -> on récupère le nom ANGLAIS via
-        // l'id (universel) pour que la recherche catalogue fonctionne.
-        let nomExact = choisi.name;
-        let variants = null;
-        let variantsDetailed = null;
-        try {
-            const detailEN = await axios.get(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(choisi.id)}`, { timeout: 15000 });
-            if (detailEN.data?.name) {
-                if (detailEN.data.name !== choisi.name) console.log(`🔤 Nom anglais récupéré : "${detailEN.data.name}" (trouvé en "${choisi.name}").`);
-                nomExact = detailEN.data.name;
-            }
-            // variants = { normal, reverse, holo, firstEdition, wPromo } : dit quelles
-            // impressions EXISTENT. Récupéré gratuitement ici (même réponse que le nom).
-            // Sert à valider/infirmer la reverse lue par l'IA, sans scraper Cardmarket.
-            if (detailEN.data?.variants) variants = detailEN.data.variants;
-            // variants_detailed = LA table de routage des motifs de reverse : pour
-            // chaque impression (reverse ordinaire, Poké Ball, Master Ball, holo
-            // cosmos...), son motif ET son idProduct Cardmarket. Récupéré GRATUITEMENT
-            // ici : c'est la même réponse HTTP que le nom anglais ci-dessus, aucun appel
-            // supplémentaire. C'est ce qui remplace toute règle déduite du n° de
-            // variante V1/V2/V3, lequel n'a aucune sémantique stable d'un set à l'autre.
-            if (Array.isArray(detailEN.data?.variants_detailed)) variantsDetailed = detailEN.data.variants_detailed;
-        } catch (e) { /* on garde choisi.name si l'appel échoue */ }
+        const detail = await detailCarteTCGdex(choisi.id, choisi.name);
+        const nomExact = detail.nomExact || choisi.name;
 
         console.log(`🔗 Carte TCGdex retenue : ${choisi.id} ("${nomExact}")${ambigu ? ' [INCERTAIN]' : ''}`);
-        return { id: choisi.id, ambigu, nomExact, localId: choisi.localId || number, variants, variantsDetailed };
+        return {
+            id: choisi.id, ambigu, nomExact, localId: choisi.localId || number,
+            variants: detail.variants, variantsDetailed: detail.variantsDetailed,
+            source: 'nom'
+        };
 
     } catch (e) {
         console.error(`❌ Erreur recherche TCGdex pour "${name}" #${number} :`, e.response?.status, e.message);
@@ -919,6 +1050,50 @@ async function trouverProduitsLocaux(nomExact) {
         return [];
     } catch (e) {
         console.error(`❌ Erreur trouverProduitsLocaux pour "${nomExact}" :`, e.message);
+        return [];
+    }
+}
+
+/**
+ * Retrouve des produits Cardmarket par (expansion, NUMÉRO) — sans jamais passer par le
+ * nom. C'est le pendant catalogue de identifierParTotalEtNumero : une fois le SET connu
+ * grâce au total, le numéro suffit à désigner la carte.
+ *
+ * Règle le nom halluciné (Dana lue "Kahili") ET le nom inapparieable ("_____'s Pikachu",
+ * dont le nombre de tirets bas diffère entre TCGdex et Cardmarket).
+ *
+ * ⚠️ PRÉFÉRENCE STRICTE POUR L'ÉGALITÉ EXACTE. Les numéros à préfixe sont fréquents
+ * (1936 en base : "TG09", "SV14", "001C") et ils collisionnent avec les numéros nus de
+ * la même expansion — mesuré : l'expansion 3630 contient "SV14" ET "14", l'expansion
+ * 4361 contient "001C"/"001L"/"001P"/"001M". On ne retombe sur l'égalité de chiffres
+ * que si aucune correspondance exacte n'existe, et on renvoie alors TOUS les candidats
+ * plutôt que d'en choisir un : c'est au scoring de trancher.
+ */
+async function trouverProduitsParNumero(idExpansions, numeroLu) {
+    try {
+        if (mongoose.connection.readyState !== 1) return [];
+        const exps = [...new Set((idExpansions || []).filter(e => e != null).map(Number))];
+        if (!exps.length || numeroLu == null) return [];
+
+        const docs = await NumeroCarte.find({ idExpansion: { $in: exps } }, { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }).lean();
+        const notes = [];
+        for (const d of docs) {
+            const corr = comparerNumeros(numeroLu, d.numero) || comparerNumeros(numeroLu, d.numeroUrl);
+            if (corr) notes.push({ idProduct: d.idProduct, idExpansion: d.idExpansion, correspondance: corr });
+        }
+        if (!notes.length) return [];
+
+        const exactes = notes.filter(n => n.correspondance === 'exact');
+        const retenus = exactes.length ? exactes : notes;
+        const ids = retenus.map(n => n.idProduct);
+
+        // On renvoie les documents CATALOGUE, pour rester interchangeable avec
+        // trouverProduitsLocaux (même forme : { idProduct, name, idExpansion, ... }).
+        const produits = await CatalogueProduit.find({ idProduct: { $in: ids } }).lean();
+        console.log(`🔢 Repli par NUMÉRO : n°${numeroLu} dans l'expansion ${exps.join('/')} -> ${produits.length} produit(s) (correspondance ${exactes.length ? 'exacte' : 'sur les chiffres'}).`);
+        return produits;
+    } catch (e) {
+        console.error(`❌ Erreur trouverProduitsParNumero :`, e.message);
         return [];
     }
 }
@@ -1247,8 +1422,16 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 return res.json({ success: false, error: `Carte "${cardInfo.name}${cardInfo.setCode ? ' ' + cardInfo.setCode : ''} #${cardInfo.number}" non trouvée sur TCGdex` });
             }
 
-            // 2b. Candidats Cardmarket (avec idExpansion) via le catalogue local
-            const produits = await trouverProduitsLocaux(trouvailleTCGdex.nomExact);
+            // 2b. Candidats Cardmarket. Même hiérarchie que /api/identifier : le nom
+            //     n'est utilisé que s'il est fiable, sinon on passe par le NUMÉRO dans
+            //     l'expansion déduite du total.
+            const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo));
+            const nomFiable = trouvailleTCGdex.source !== 'total+numero';
+            let produits = nomFiable ? await trouverProduitsLocaux(trouvailleTCGdex.nomExact) : [];
+            if (produits.length === 0 && expAttendues.length) {
+                const parNumero = await trouverProduitsParNumero(expAttendues, cardInfo.number);
+                if (parNumero.length) produits = parNumero;
+            }
             console.log(`🗂️ Catalogue local : ${produits.length} produit(s) pour "${trouvailleTCGdex.nomExact}".`);
 
             // 2c. NIVEAU 1 — scoring local (classe TOUS les candidats par pertinence)
@@ -1266,7 +1449,6 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                     strategie: analyseSolo.strategieParIdProduct.get(produits[0].idProduct) ?? null
                 }];
             } else if (produits.length > 1) {
-                const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo));
                 const { scores, confiant, motif, estReverse: rev } = await scorerCandidatsLocal(produits, cardInfo, imageUrl, expAttendues, null, optionsMotif);
                 motifResolution = motif;
                 estReverse = rev;
@@ -1419,26 +1601,31 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             return res.json({ success: false, error: `Carte "${cardInfo.name}" #${cardInfo.number} non trouvée sur TCGdex`, cardInfo });
         }
 
-        // Garde-fou : si le numéro de la carte trouvée contredit celui lu sur la photo,
-        // c'est que TCGdex s'est trompé de carte (typiquement : set trop récent, absent
-        // de sa base -> il retombe sur une homonyme d'un autre set). Dans ce cas on ne
-        // se fie plus à son nom : on repart de ce que l'IA a lu.
+        // Garde-fou : le numéro de la carte trouvée contredit-il celui lu sur la photo ?
+        // ⚠️ On N'INVENTE PLUS DE CAUSE. L'ancienne version concluait « set trop récent
+        // pour TCGdex » et repartait chercher dans le catalogue avec le NOM LU PAR L'IA
+        // — le pire repli possible, puisque c'est précisément le nom qui est en cause
+        // quand il est halluciné. Diagnostic faux au passage : le cas réel qui a déclenché
+        // ce correctif portait sur Team Up, un set de 2019.
+        // On se contente donc de CONSTATER le désaccord, et on bascule sur le chemin
+        // numéro + total, qui ne dépend d'aucun nom.
         const numLuIA = String(cardInfo.number || '').replace(/^0+/, '').toLowerCase();
         const numTCG = String(trouvaille.localId || '').replace(/^0+/, '').toLowerCase();
-        let nomPourCatalogue = trouvaille.nomExact;
-        let tcgdexDouteux = false;
-        if (numLuIA && numTCG && numLuIA !== numTCG) {
-            tcgdexDouteux = true;
-            nomPourCatalogue = cardInfo.name;
-            console.log(`⚠️ [identifier] TCGdex renvoie le n°${numTCG} alors que l'IA a lu ${numLuIA} : set probablement trop récent pour TCGdex.`);
-            console.log(`   -> on cherche dans le catalogue avec le nom lu par l'IA ("${cardInfo.name}") plutôt qu'avec celui de TCGdex.`);
+        const nomPourCatalogue = trouvaille.nomExact;
+        const numeroContredit = Boolean(numLuIA && numTCG && numLuIA !== numTCG);
+        // Le nom n'est PAS digne de confiance si TCGdex a été trouvé sans lui, ou si le
+        // numéro de la carte retenue contredit celui, parfaitement lisible, de la photo.
+        const nomSuspect = trouvaille.source === 'total+numero' || numeroContredit;
+        if (numeroContredit) {
+            console.warn(`⚠️ [identifier] désaccord de numéro : TCGdex donne ${numTCG}, l'IA a lu ${numLuIA}.`);
+            console.warn(`   -> on ne se fie plus au NOM ; identification par numéro + total.`);
         }
 
         // Validateur de reverse (TCGdex) : on ne garde "reverse=true" que si cette
         // carte possède RÉELLEMENT une impression reverse. Neutralise les faux
         // positifs (une holo normale lue à tort comme reverse par l'IA). On ne
         // l'applique PAS si TCGdex s'est trompé de carte (variants d'une autre carte).
-        if (cardInfo.reverse === true && !tcgdexDouteux && trouvaille.variants) {
+        if (cardInfo.reverse === true && !numeroContredit && trouvaille.variants) {
             if (trouvaille.variants.reverse === false) {
                 console.log(`↩️ TCGdex : pas de reverse connue pour cette carte -> on ignore le "reverse" lu par l'IA.`);
                 cardInfo.reverse = false;
@@ -1447,13 +1634,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             }
         }
 
-        // 3. Candidats Cardmarket via le catalogue local
-        const produits = await trouverProduitsLocaux(nomPourCatalogue);
-        console.log(`🗂️ [identifier] ${produits.length} candidat(s) pour "${nomPourCatalogue}".`);
+        // Le set TCGdex nous dit dans quelle(s) expansion(s) Cardmarket chercher. Calculé
+        // AVANT les produits : quand le nom est suspect, c'est l'expansion + le numéro
+        // qui désignent la carte, et le nom ne sert plus du tout.
+        const expansionsAttendues = await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo));
 
-        // Le set TCGdex nous dit dans quelle(s) expansion(s) Cardmarket chercher.
-        // Si TCGdex s'est trompé de carte (numéro incohérent), on n'utilise pas son set.
-        const expansionsAttendues = tcgdexDouteux ? [] : await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo));
+        // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
+        //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
+        //    halluciné (Dana lue "Kahili") ou inapparieable ("_____'s Pikachu").
+        let produits = nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue);
+        let voieCatalogue = 'nom';
+        if (produits.length === 0 && expansionsAttendues.length) {
+            const parNumero = await trouverProduitsParNumero(expansionsAttendues, cardInfo.number);
+            if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
+        }
+        console.log(`🗂️ [identifier] ${produits.length} candidat(s) via ${voieCatalogue === 'nom' ? `le nom "${nomPourCatalogue}"` : `le NUMÉRO ${cardInfo.number}`}.`);
 
         // Codes set de TOUS les candidats en un seul aller-retour Mongo, injecté dans le
         // scoring pour lui éviter de refaire la même lecture candidat par candidat.
@@ -1464,6 +1659,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Stratégie reverse du GAGNANT + état de résolution du motif (champs additifs).
         let strategieReverse = null;
         let motifResolution = { etat: 'aucun-motif', cible: null, raison: null };
+        // Confiance de l'IDENTIFICATION (quel produit), à ne pas confondre avec la
+        // confiance de l'ÉTAT lue par l'IA (NM/EX/GD). Elle part telle quelle vers
+        // l'extension dans un champ distinct — voir carte.confianceIdentification.
+        let identificationConfiante = true;
         const optionsMotif = { variantsDetailed: trouvaille.variantsDetailed, titre: title, tcgdexId: trouvaille.id };
 
         if (produits.length === 1) {
@@ -1483,6 +1682,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             );
             strategieReverse = strat;
             motifResolution = motif;
+            identificationConfiante = confiant;
             classement = scores.map(s => ({
                 idProduct: s.candidat.idProduct,
                 idExpansion: s.candidat.idExpansion,
@@ -1505,11 +1705,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
-        const carteAmbigue = Boolean(trouvaille.ambigu || tcgdexDouteux || motifResolution.etat === 'non-resolu');
+        const carteAmbigue = Boolean(trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu');
         if (carteAmbigue) {
             await signalerIncertain(req, motifResolution.etat === 'non-resolu'
                 ? `motif-${motifResolution.raison}`
-                : (tcgdexDouteux ? 'tcgdex-numero-incoherent' : 'tcgdex-ambigu'));
+                : (numeroContredit ? 'tcgdex-numero-incoherent' : 'tcgdex-ambigu'));
         }
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
@@ -1529,7 +1729,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // Incertain si TCGdex hésitait, s'il s'est manifestement trompé de carte,
                 // OU si la carte a un motif de reverse qu'on n'a pas su cibler (le prix
                 // peut alors varier d'un facteur 100 entre variantes — cf. Master Ball).
-                ambigu: carteAmbigue
+                ambigu: carteAmbigue,
+                // ⚠️ CONFIANCE DE L'IDENTIFICATION — quel PRODUIT a été retenu. À ne pas
+                // confondre avec etat.confianceIA plus bas, qui porte sur l'usure lue sur
+                // la photo (NM/EX/GD). Les deux sont indépendantes : une carte peut être
+                // parfaitement identifiée avec un état incertain, et l'inverse.
+                //   'haute' -> le gagnant devance nettement le 2e (>= 30 points)
+                //   'basse' -> écart faible, ou identification obtenue sans le nom
+                confianceIdentification: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
+                // Par quel signal la carte a été identifiée : 'nom' ou 'total+numero'
+                // (nom écarté car halluciné ou inapparieable).
+                sourceIdentification: trouvaille.source || 'nom',
+                // Par quel signal les produits candidats ont été trouvés au catalogue.
+                voieCatalogue
             },
             etat: {
                 estimeIA: cardInfo.etatEstime || null,
