@@ -22,8 +22,9 @@
 // requêtes de sélection ne ramènent plus rien. Relançable sans effet.
 //
 // USAGE (la base doit être NOMMÉE explicitement, le script refuse de la deviner) :
-//   node nettoyer-codeset.js --base=test            (SIMULATION : affiche tout, n'écrit rien)
-//   node nettoyer-codeset.js --base=test --ecrire   (écrit vraiment en base)
+//   node nettoyer-codeset.js --base=test   (SIMULATION : affiche tout, n'écrit rien)
+//   node nettoyer-codeset.js --base=test --ecrire --confirmer-production
+//                                          (écrit vraiment — double verrou en prod)
 //
 // ⚠️ "test" est bien la base de PRODUCTION de ce projet — c'est le nom par défaut de
 //    Mongoose, et c'est là que vivent les vraies données. Le bac à sable est
@@ -58,7 +59,7 @@ function decoderPrudemment(valeur) {
 
 async function main() {
     // Base nommée explicitement, affichée, et refus si elle ne correspond pas.
-    await connecterMongo({ script: 'nettoyer-codeset.js', ecrit: ECRIRE });
+    await connecterMongo({ script: 'nettoyer-codeset.js', ecrit: ECRIRE, confirmationProduction: true });
     console.log(ECRIRE
         ? "\n✍️  MODE ÉCRITURE — les documents vont être modifiés.\n"
         : "\n👀 MODE SIMULATION (dry-run) — aucune écriture. Ajoute --ecrire pour appliquer.\n");

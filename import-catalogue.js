@@ -40,7 +40,7 @@ async function main() {
     console.log("Connexion à MongoDB...");
     // Base nommée explicitement, sinon refus (voir mongo-connexion.js) : ce script
     // ÉCRIT, et la base de production s'appelle `test`.
-    await connecterMongo({ script: 'import-catalogue.js', ecrit: true });
+    await connecterMongo({ script: 'import-catalogue.js', ecrit: true, confirmationProduction: true });
     console.log("✅ Connecté.");
 
     console.log(`Lecture de ${cheminFichier}...`);

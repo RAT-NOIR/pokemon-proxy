@@ -177,7 +177,7 @@ function trouverSetsTCGdex(nomsExpansion, setsTCGdex) {
 async function main() {
     // Base nommée explicitement, sinon refus (voir mongo-connexion.js). Ce script
     // ÉCRIT avec --ecrire, et la base de production s'appelle `test`.
-    await connecterMongo({ script: 'prefill-tcgdex.js', ecrit: ECRIRE });
+    await connecterMongo({ script: 'prefill-tcgdex.js', ecrit: ECRIRE, confirmationProduction: true });
     console.log(ECRIRE ? "✍️  Mode ÉCRITURE : la base sera modifiée.\n" : "👀 Mode SIMULATION : rien ne sera écrit (ajoute --ecrire pour valider).\n");
 
     const setsTCGdex = await chargerSetsTCGdex();

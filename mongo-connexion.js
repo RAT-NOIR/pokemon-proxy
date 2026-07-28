@@ -38,12 +38,19 @@ function baseDemandee() {
  * @param {object} options
  * @param {string} options.script   nom du script appelant, pour les messages d'aide
  * @param {boolean} options.ecrit   le script écrit-il ? (change la formulation des avertissements)
+ * @param {boolean} options.confirmationProduction
+ *        si true ET qu'on écrit ET que la cible est la production, exige en plus le
+ *        drapeau --confirmer-production. Réservé aux opérations de MASSE (réécriture
+ *        ou import de milliers de documents) : nommer la base protège de l'erreur de
+ *        cible, ce second drapeau protège de l'erreur de geste. Les scripts
+ *        d'apprentissage incrémental ne l'activent pas — ils tournent souvent, et une
+ *        friction permanente finirait par être contournée.
  * @returns {Promise<string>} le nom de la base réellement connectée
  *
  * Ne renvoie JAMAIS sur une base non demandée : en cas d'écart, le processus s'arrête
  * avec un code de sortie 1, connexion fermée, avant toute opération.
  */
-async function connecterMongo({ script = 'ce script', ecrit = false } = {}) {
+async function connecterMongo({ script = 'ce script', ecrit = false, confirmationProduction = false } = {}) {
     if (!process.env.MONGODB_URI) {
         console.error("❌ MONGODB_URI absent du .env — impossible de continuer.");
         process.exit(1);
@@ -77,6 +84,22 @@ async function connecterMongo({ script = 'ce script', ecrit = false } = {}) {
         console.log(`🗄️  Base : "${reelle}"  ⚠️  PRODUCTION${ecrit ? " — ce script ÉCRIT" : " (lecture seule)"}`);
     } else {
         console.log(`🗄️  Base : "${reelle}"${reelle === BASE_BAC_A_SABLE ? ' (bac à sable)' : ''}`);
+    }
+
+    // Second verrou, pour les écritures de MASSE en production : nommer la base protège
+    // de l'erreur de CIBLE, ce drapeau protège de l'erreur de GESTE (un --ecrire lancé
+    // par réflexe, une flèche haute dans l'historique du terminal).
+    if (ecrit && confirmationProduction && reelle === BASE_PRODUCTION
+        && !process.argv.includes('--confirmer-production')) {
+        console.error("");
+        console.error(`❌ ARRÊT : écriture de masse sur la PRODUCTION ("${reelle}") sans confirmation.`);
+        console.error(`   Relance avec --confirmer-production si c'est bien ce que tu veux :`);
+        console.error(`     node ${script} --base=${reelle} --ecrire --confirmer-production`);
+        console.error("");
+        console.error("   Pense à une sauvegarde d'abord :");
+        console.error(`     node backup-collections.js --base=${reelle}`);
+        await mongoose.disconnect();
+        process.exit(1);
     }
     return reelle;
 }
