@@ -181,6 +181,18 @@ async function main() {
         v('code maître -> passe', passe, true);
         v('   aucune poche débitée', req.credit, undefined);
         v('   remboursement sans objet', await acces2.rembourserScan(req, 'ia-echec'), false);
+
+        // Un code FAUX n'ouvre aucun droit : il retombe dans le décompte normal, donc
+        // une tentative coûte un scan à celui qui la fait. C'est ce qui rend le
+        // brute-force auto-punitif, en plus du limiteur 60/h/IP sur les routes de scan.
+        const u = neuf('code-faux');
+        const reqFaux = { body: { userId: u, codeIllimite: 'PAS-LE-BON' }, ip: '203.0.113.7' };
+        let passeFaux = false;
+        await acces2.verifierAcces(reqFaux, { status() { return this; }, json() { return this; } }, () => { passeFaux = true; });
+        v('code faux -> pas de passe-droit', reqFaux.credit.poche, 'accueil');
+        v('   la tentative COÛTE un scan', (await solde(u)).gratuit, SCANS_ACCUEIL - 1);
+        v('   accès quand même accordé (quota normal)', passeFaux, true);
+
         delete process.env.CODE_ILLIMITE;
         delete require.cache[require.resolve('./acces')];
     }

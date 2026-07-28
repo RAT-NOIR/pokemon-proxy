@@ -122,6 +122,23 @@ async function verifierAcces(req, res, next) {
     // 0) Code maître -> illimité (l'admin), aucun décrément, aucun accès base.
     if (CODE_ILLIMITE && req.body && req.body.codeIllimite === CODE_ILLIMITE) return next();
 
+    // Tentative de code maître REFUSÉE. C'était silencieux jusqu'ici : personne n'aurait
+    // jamais su que quelqu'un cherchait. Deux précautions dans la condition :
+    //  - on ne logge QUE si un code NON VIDE a été fourni. L'extension lit la valeur
+    //    depuis chrome.storage.local, vide chez tous les utilisateurs : sans ce filtre,
+    //    chaque scan produirait une ligne et noierait le signal qu'on veut voir.
+    //  - on ne logge JAMAIS la valeur essayée, seulement sa longueur. Une frappe ratée
+    //    de l'admin déposerait sinon un quasi-secret en clair dans les logs Render.
+    const codeFourni = req.body && typeof req.body.codeIllimite === 'string'
+        ? req.body.codeIllimite.trim() : '';
+    if (codeFourni) {
+        console.warn(
+            `🚫 [code-illimite-refuse] date=${new Date().toISOString()}` +
+            ` ip=${req.ip || '?'} userId=${(req.body.userId && String(req.body.userId).slice(0, 80)) || '?'}` +
+            ` longueur=${codeFourni.length} route=${req.originalUrl || '?'}`
+        );
+    }
+
     // 1) userId obligatoire, vérifié AVANT tout accès Mongo. Sans identifiant on ne
     // peut rien décompter : laisser passer offrirait des scans illimités à qui
     // omettrait simplement le champ.
