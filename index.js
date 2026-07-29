@@ -21,6 +21,10 @@ const {
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros,
+    // rangDuNumero ne pilote encore RIEN : il ne sert qu'aux traces et au journal,
+    // le temps de mesurer la fréquence réelle du rang 3 avant le point 4.
+    rangDuNumero, normaliserCodeSet, codesApparentes,
+    regionDuCodeSet,
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
@@ -966,30 +970,9 @@ async function getPrixDepuisTCGdex(cardId, name, number) {
 // Détection de région (occidental vs japonais) pour éviter de confondre
 // une carte FR/EN (ex: Destined Rivals) avec son édition japonaise (sv9a).
 // ============================================================
-
-// Région d'un code set Cardmarket : les codes occidentaux sont en MAJUSCULES
-// (DRI, TWM, OBF, PAL...), les japonais en minuscules / format sv+chiffres
-// (sv9a, sv10s, m2a...). Règle empirique fiable sur nos données.
-function regionDuCodeSet(codeSet) {
-    if (!codeSet) return null;
-    // Le préfixe "x" = les "Additionals" (reverse holos, cartes bonus) et NE change
-    // PAS la région : xPRE = Additionals de PRE (occidental), xsv8a = Additionals de
-    // sv8a (japonais). On le retire avant de classer, sinon le "x" minuscule fait
-    // passer une expansion occidentale (xPRE) pour du japonais et on l'écarte à tort.
-    const code = codeSet.replace(/^x/, '');
-    // Un code purement en majuscules (lettres) = occidental
-    if (/^[A-Z0-9]+$/.test(code) && /[A-Z]/.test(code)) return 'occidental';
-    // Contient une minuscule = japonais (sv9a, m2a, mC, xm2a...)
-    if (/[a-z]/.test(code)) return 'japonais';
-    // ⚠️ NE PAS "réparer" ce null en supprimant les séparateurs avant de tester.
-    // Les codes à séparateur ("SV-P/CS", "M-P/TH", "K+K") tombent ici et restent
-    // NEUTRES, ce qui est le comportement voulu : "SV-P/CS" est la ligne promo
-    // CHINOISE de SV-P, mais son code est en majuscules. Le normaliser en "SVPCS" le
-    // ferait classer "occidental" et infligerait -45 au BON produit sur une carte
-    // chinoise (cas Magikarp 024). Rester neutre ne coûte rien ; se tromper de région
-    // coûte 45 points au mauvais endroit. Le critère set fait le travail à sa place.
-    return null;
-}
+// regionDuCodeSet vit dans scoring.js : c'est une fonction PURE, et ses cas limites
+// (MCDP vs MCD11, SI vs SI-JP, xPRE vs xsv8a, "SV-P/CS" neutre) sont vérifiés par la
+// suite de tests de ce module. Elle est importée en tête de fichier.
 
 // Région attendue déduite de ce que l'IA a lu :
 //  - langue JP -> japonais (= bucket ASIATIQUE)
@@ -1310,6 +1293,61 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
                 ` gagnantApres=${apres.candidat.idProduct} scoreApres=${apres.score}`
             );
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // TROIS TRACES, pour instruire les décisions qui restent à prendre.
+    // Format stable, une ligne, valeurs sans espace : grep "[region-conflit]" etc.
+    // Elles ne changent AUCUN comportement — elles mesurent celui qui existe.
+    // ════════════════════════════════════════════════════════════════════════
+    const gagnantEnrichi = resultat.scores[0]?.candidat ?? null;
+
+    // 1. CONFLIT DE RÉGION — un candidat portant le BON numéro, écarté par le malus de
+    //    région. C'est la signature exacte du bug Charmander McDonald's. La liste des
+    //    exceptions vient d'être posée : ce log dit si elle est complète, et un
+    //    conflit qui persiste désigne un code japonais qu'on n'a pas encore recensé.
+    if (regionCible && cardInfo.number != null) {
+        const ecartes = candidatsEnrichis.filter(c =>
+            c.region && c.region !== regionCible && comparerNumeros(cardInfo.number, c.numeroCardmarket));
+        if (ecartes.length) {
+            console.warn(
+                `⚠️ [region-conflit] carte=${options.tcgdexId || '?'} numeroLu=${cardInfo.number}` +
+                ` regionAttendue=${regionCible} ecartes=${ecartes.length}` +
+                ` codes=${[...new Set(ecartes.map(c => c.codeSet || '?'))].slice(0, 6).join('|')}` +
+                ` idProducts=${ecartes.slice(0, 6).map(c => c.idProduct).join('|')}` +
+                ` gagnant=${gagnantEnrichi?.idProduct ?? '?'} gagnantRegion=${gagnantEnrichi?.region ?? '?'}`
+            );
+        }
+    }
+
+    // 2. RANG DU GAGNANT + distribution. Le rang ne pilote RIEN pour l'instant : c'est
+    //    sa fréquence réelle qu'on mesure avant d'en faire un critère de classement
+    //    (point 4). Un gagnant de rang 3 — numéro connu et CONTREDISANT celui lu — est
+    //    le cas Scizor, que le score seul ne sait pas écarter.
+    if (cardInfo.number != null) {
+        const rangs = candidatsEnrichis.map(c => rangDuNumero(cardInfo.number, c.numeroCardmarket));
+        const compte = r => rangs.filter(x => x === r).length;
+        console.log(
+            `📊 [rang] carte=${options.tcgdexId || '?'} numeroLu=${cardInfo.number}` +
+            ` gagnant=${gagnantEnrichi?.idProduct ?? '?'} rangGagnant=${rangDuNumero(cardInfo.number, gagnantEnrichi?.numeroCardmarket) ?? 'sans-objet'}` +
+            ` candidats=${candidatsEnrichis.length} rang1=${compte(1)} rang2=${compte(2)} rang3=${compte(3)}`
+        );
+    }
+
+    // 3. ACCORD DU setCode LU. Aucune collection ne conservait les réponses de l'IA :
+    //    sa fiabilité était donc invérifiable. Comparaison STRICTE (égalité après
+    //    normalisation) — c'est la fiabilité BRUTE de la lecture qu'on veut, pas celle
+    //    du mécanisme de parenté partielle du scoring, qui la masquerait.
+    if (cardInfo.setCode) {
+        const luN = normaliserCodeSet(cardInfo.setCode);
+        const gagnantN = gagnantEnrichi?.codeSet ? normaliserCodeSet(gagnantEnrichi.codeSet) : null;
+        console.log(
+            `📊 [setcode] carte=${options.tcgdexId || '?'} lu=${cardInfo.setCode} normalise=${luN || 'vide'}` +
+            ` gagnant=${gagnantEnrichi?.codeSet ?? 'inconnu'}` +
+            ` accord=${gagnantN ? (luN === gagnantN) : 'indeterminable'}` +
+            ` apparente=${gagnantN ? codesApparentes(luN, gagnantN) : 'indeterminable'}` +
+            ` langue=${cardInfo.language}`
+        );
     }
 
     // Trois états, volontairement DISTINCTS (le 2e n'est pas un échec) :

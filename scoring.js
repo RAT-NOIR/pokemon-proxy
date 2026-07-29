@@ -430,6 +430,96 @@ function comparerNumeros(lu, candidat) {
     return (a && b && a === b) ? 'chiffres' : null;
 }
 
+// ============================================================
+// EXCEPTIONS : les sets JAPONAIS dont le code Cardmarket est en MAJUSCULES
+// ============================================================
+// La règle « majuscules = occidental » vaut pour l'immense majorité du catalogue, mais
+// elle a une famille d'exceptions, et elle coûte 45 points au BON candidat quand elle
+// se trompe. C'est le mécanisme du cas Charmander McDonald's : le bon produit (MCDP,
+// 1033,83 €) portait le bon numéro et le bon code partiel, et perdait quand même contre
+// un sv2a à 0,04 € — uniquement à cause du malus de région.
+//
+// POURQUOI CES SETS-LÀ. Ce sont les sets japonais d'AVANT la convention moderne. Depuis
+// l'ère Sun & Moon, Cardmarket code le japonais en minuscules (sv9a, sm3+, s12a, m2a),
+// ce que la règle générale attrape très bien. Mais les sets antérieurs ont gardé leurs
+// sigles historiques en capitales :
+//   EC1-EC5  l'ère « Pokémon-e » / e-Reader (2001-2003) : les cartes portaient un code
+//            à points scannable par le lecteur e-Reader de la Game Boy Advance. C'est
+//            une famille ENTIÈRE, pas des cas isolés — d'où les cinq codes.
+//   PCG1-9   ère « Pokémon Card Game » (EX japonais, 2004-2006)
+//   ADV2-4   ère « ADV » (Ruby & Sapphire japonais, 2003)
+//   CP1-CP6  les « Concept Pack » japonais (Double Crisis, PokéKyun, 20th Anniversary…)
+//   L2/L3/LL ère HeartGold SoulSilver japonaise (Reviving Legends, Lost Link…)
+//   VS       « Pokémon Card VS » (2001)      WEB  « Pokémon Card web » (2001)
+//   MCDP     McDonald's « Original Minimum Pack », la promo JAPONAISE de 2002 — à ne
+//            pas confondre avec MCD11/MCD16/MCD22, les McDonald's occidentaux, dont le
+//            produit le plus cher vaut 22,69 € quand MCDP monte à 1626 €.
+//
+// VÉRIFICATION. Ces 29 codes ont été confirmés un par un contre la base par le NOM
+// d'expansion Cardmarket (slugSet), seul signal indépendant du code : « Rocket-Gang-
+// Strikes-Back », « PokeKyun-Collection », « Pokemon-CardVS », « McDonalds-Original-
+// Minimum-Pack » sont des noms de sets japonais, et aucun des 29 n'a de jumelle
+// occidentale au même nom. Le champ `setTcgdex` ne pouvait PAS servir d'arbitre : le
+// pré-remplissage a rabattu ces sets sur leur équivalent occidental faute de mieux
+// (EC1 -> ecard1 = Expedition), ce qui les fait passer pour occidentaux à tort — c'est
+// d'ailleurs ce piège qui m'avait fait suspecter SM, SK et EX, tous trois occidentaux.
+//
+// ⚠️ SI A ÉTÉ RETIRÉ DE CETTE LISTE. « Southern Islands » existe dans les deux régions
+// et Cardmarket les distingue : exp 1633 code SI = l'édition OCCIDENTALE (numérotée
+// 1..18), exp 4357 code SI-JP = la japonaise. Classer SI en japonais aurait infligé
+// -45 aux 18 vraies cartes occidentales. C'est la raison de la règle « -JP » ci-dessous.
+//
+// Effet mesuré : 30 expansions reclassées, 2250 produits (2232 pour les 29 codes,
+// 18 pour SI-JP), tous d'occidental vers japonais, et AUCUN set occidental emporté.
+// Couverture en numéros dans ces expansions : 98,9 % — le vivier de candidats était
+// donc bien fourni, ce n'est pas la matière qui manquait mais le classement.
+const CODES_JAPONAIS_MAJUSCULES = new Set([
+    'EC1', 'EC2', 'EC3', 'EC4', 'EC5',
+    'PCG1', 'PCG2', 'PCG3', 'PCG4', 'PCG5', 'PCG6', 'PCG7', 'PCG8', 'PCG9',
+    'ADV2', 'ADV3', 'ADV4',
+    'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6',
+    'L2', 'L3', 'LL',
+    'VS', 'WEB',
+    'MCDP'
+]);
+
+/**
+ * Région d'un code set Cardmarket : les codes occidentaux sont en MAJUSCULES (DRI, TWM,
+ * OBF, PAL...), les japonais en minuscules / format sv+chiffres (sv9a, sv10s, m2a...).
+ * Règle empirique fiable sur nos données, SAUF pour les sets japonais historiques
+ * recensés dans CODES_JAPONAIS_MAJUSCULES ci-dessus.
+ * @returns {'occidental'|'japonais'|null} null = indéterminé, et c'est un résultat
+ */
+function regionDuCodeSet(codeSet) {
+    if (!codeSet) return null;
+    // Le préfixe "x" = les "Additionals" (reverse holos, cartes bonus) et NE change
+    // PAS la région : xPRE = Additionals de PRE (occidental), xsv8a = Additionals de
+    // sv8a (japonais). On le retire avant de classer, sinon le "x" minuscule fait
+    // passer une expansion occidentale (xPRE) pour du japonais et on l'écarte à tort.
+    const code = String(codeSet).replace(/^x/, '');
+    // Les exceptions d'abord : elles sont en majuscules, donc la règle générale les
+    // classerait "occidental" et infligerait -45 au bon candidat.
+    if (CODES_JAPONAIS_MAJUSCULES.has(code.toUpperCase())) return 'japonais';
+    // Suffixe "-JP" : Cardmarket s'en sert quand un set existe dans les DEUX régions
+    // (Southern-Islands vs Southern-Islands-JP). Règle GÉNÉRALE, donc elle couvrira
+    // aussi les futurs cas sans qu'on ait à toucher la liste. À placer AVANT le test
+    // majuscules : "SI-JP" contient un tiret et retombait sinon dans le cas neutre,
+    // ce qui lui faisait perdre le bonus de +45 auquel il a droit.
+    if (/-JP$/i.test(code)) return 'japonais';
+    // Un code purement en majuscules (lettres) = occidental
+    if (/^[A-Z0-9]+$/.test(code) && /[A-Z]/.test(code)) return 'occidental';
+    // Contient une minuscule = japonais (sv9a, m2a, mC, xm2a...)
+    if (/[a-z]/.test(code)) return 'japonais';
+    // ⚠️ NE PAS "réparer" ce null en supprimant les séparateurs avant de tester.
+    // Les codes à séparateur ("SV-P/CS", "M-P/TH", "K+K") tombent ici et restent
+    // NEUTRES, ce qui est le comportement voulu : "SV-P/CS" est la ligne promo
+    // CHINOISE de SV-P, mais son code est en majuscules. Le normaliser en "SVPCS" le
+    // ferait classer "occidental" et infligerait -45 au BON produit sur une carte
+    // chinoise (cas Magikarp 024). Rester neutre ne coûte rien ; se tromper de région
+    // coûte 45 points au mauvais endroit. Le critère set fait le travail à sa place.
+    return null;
+}
+
 /**
  * Numéro de carte déduit du SLUG Cardmarket, avec le code de set en désambiguïsateur.
  *
@@ -740,7 +830,7 @@ module.exports = {
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
-    numeroDepuisSlug,
+    numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -1272,6 +1362,66 @@ if (require.main === module) {
         verifier('"Rotom-mC248" sans code -> null (MC248 ne commence pas par un chiffre)', numeroDepuisSlug('Rotom-mC248', null), null);
         verifier('slug vide -> null', numeroDepuisSlug('', 'ABC'), null);
         verifier('slug absent -> null', numeroDepuisSlug(null, 'ABC'), null);
+    }
+
+    // --- Test 23 : RÉGION — les sets japonais à code en majuscules ---
+    // Tous les codes ci-dessous existent en base, et leur région a été établie par le
+    // NOM d'expansion Cardmarket (slugSet), pas par le code lui-même.
+    console.log('\n=== Test 23 : région des codes set ===');
+    {
+        // Les exceptions japonaises. MCDP = McDonald's japonais 2002 (jusqu'à 1626 €),
+        // MCD11/16/22 = les McDonald's occidentaux (22,69 € au plus cher).
+        verifier('MCDP -> japonais (McDonalds-Original-Minimum-Pack)', regionDuCodeSet('MCDP'), 'japonais');
+        verifier('MCD11 -> occidental (McDonalds-Collection-2011)', regionDuCodeSet('MCD11'), 'occidental');
+        verifier('EC3 -> japonais (Wind-from-the-Sea)', regionDuCodeSet('EC3'), 'japonais');
+        verifier('EC5 -> japonais (Mysterious-Mountains)', regionDuCodeSet('EC5'), 'japonais');
+        verifier('VS -> japonais (Pokemon-CardVS)', regionDuCodeSet('VS'), 'japonais');
+        verifier('WEB -> japonais (Pokemon-Cardweb)', regionDuCodeSet('WEB'), 'japonais');
+        verifier('PCG3 -> japonais (Rocket-Gang-Strikes-Back)', regionDuCodeSet('PCG3'), 'japonais');
+        verifier('CP3 -> japonais (PokeKyun-Collection)', regionDuCodeSet('CP3'), 'japonais');
+        // Le préfixe "x" (Additionals) ne change pas la région.
+        verifier('xMCDP -> japonais (Additionals de MCDP)', regionDuCodeSet('xMCDP'), 'japonais');
+        verifier('xPRE -> occidental (Additionals de PRE)', regionDuCodeSet('xPRE'), 'occidental');
+        verifier('xsv8a -> japonais', regionDuCodeSet('xsv8a'), 'japonais');
+
+        // ⚠️ LE PIÈGE. Southern Islands existe dans les DEUX régions, et Cardmarket les
+        // distingue par le suffixe : exp 1633 "SI" = occidentale (18 cartes numérotées
+        // 1..18), exp 4357 "SI-JP" = japonaise. Mettre SI dans la liste des exceptions
+        // aurait infligé -45 aux 18 vraies cartes occidentales.
+        verifier('SI -> occidental (Southern-Islands, exp 1633)', regionDuCodeSet('SI'), 'occidental');
+        verifier('SI-JP -> japonais (Southern-Islands-JP, exp 4357)', regionDuCodeSet('SI-JP'), 'japonais');
+        verifier('si-jp -> japonais (casse indifférente)', regionDuCodeSet('si-jp'), 'japonais');
+
+        // Faux positifs écartés : leur setTcgdex pointe vers un set de l'ère e-Card,
+        // mais leur NOM d'expansion dit clairement l'occident.
+        verifier('SK -> occidental (Skyridge)', regionDuCodeSet('SK'), 'occidental');
+        verifier('EX -> occidental (Expedition-Base-Set)', regionDuCodeSet('EX'), 'occidental');
+        verifier('SM -> occidental (SM-Black-Star-Promos)', regionDuCodeSet('SM'), 'occidental');
+
+        // Règle générale, inchangée.
+        verifier('DRI -> occidental', regionDuCodeSet('DRI'), 'occidental');
+        verifier('sv2a -> japonais', regionDuCodeSet('sv2a'), 'japonais');
+        verifier('mC -> japonais (chinois, rangé côté JP par Cardmarket)', regionDuCodeSet('mC'), 'japonais');
+        // Les codes à séparateur restent NEUTRES : se tromper de région coûte 45 points.
+        verifier('SV-P/CS -> null (neutre, cas Magikarp 024)', regionDuCodeSet('SV-P/CS'), null);
+        verifier('K+K -> null (neutre)', regionDuCodeSet('K+K'), null);
+        verifier('code absent -> null', regionDuCodeSet(null), null);
+
+        // Le cas Charmander de bout en bout : le bon produit MCDP gagne, et le prix
+        // retenu passe de 0,04 € (sv2a) à 1033,83 € (guide_prix, valeurs réelles).
+        const lu = {
+            numero: '004', total: '018', setCode: 'MCD', rarete: 'promo',
+            rareteElevee: false, regionAttendue: 'japonais', idExpansionsAttendues: []
+        };
+        const candidats = [
+            { idProduct: 562000, idExpansion: 4178, numeroCardmarket: '004', codeSet: 'MCDP', prix: 1033.83, region: regionDuCodeSet('MCDP') },
+            { idProduct: 719446, idExpansion: 5100, numeroCardmarket: '004', codeSet: 'sv2a', prix: 0.04, region: regionDuCodeSet('sv2a') },
+            { idProduct: 362775, idExpansion: 4515, numeroCardmarket: '4', codeSet: 'MCD18F', prix: 1.85, region: regionDuCodeSet('MCD18F') }
+        ];
+        const { gagnant } = choisirMeilleur(candidats, lu);
+        verifier('Charmander McDo JP : le MCDP japonais gagne', gagnant.candidat.idProduct, 562000);
+        verifier('   ... et non le sv2a à 0,04 €', gagnant.candidat.idProduct !== 719446, true);
+        verifier('   ... rang du numéro = 1', rangDuNumero('004', gagnant.candidat.numeroCardmarket), 1);
     }
 
     // --- Test 21 : RÉGRESSION Dana/Kahili — nom faux mais plausible ---
