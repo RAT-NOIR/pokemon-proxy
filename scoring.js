@@ -72,10 +72,27 @@ function normaliserCodeSet(code) {
  * (POIDS.setPartiel), jamais le bonus plein — sinon le critère ne discriminerait
  * plus un set de son sous-set, ce qui est exactement le bug qu'on corrige.
  */
+// Longueur minimale de la partie commune pour qu'une parenté soit crédible.
+// ⚠️ MESURÉ, pas choisi. Sur les 747 codes du catalogue, 822 paires décrochaient un
+// bonus partiel ; 618 d'entre elles (75 %) ne partageaient que DEUX caractères, et
+// toutes étaient fautives : "sv9a"~"SV", "DRI"~"DR", "FLF"~"FL", et surtout "mC"~"MCD"
+// — c'est cette dernière qui a fait gagner un produit japonais sans rapport contre le
+// McDonald's japonais à 1 034 €, en lui offrant un +15 imérité.
+// À 3 caractères, tout ce qui est légitime survit : "PRE"~"xPRE", "DRI"~"xDRI",
+// "SM-P"~"SM-P/CS", "MCD"~"MCDP", "MCD"~"MCD11".
+const LONGUEUR_MIN_PARENTE = 3;
+
 function codesApparentes(a, b) {
     if (!a || !b || a === b) return false;
     const sansX = s => (s.startsWith('X') && s.length >= 3) ? s.slice(1) : s;
-    const prefixe = (x, y) => x.startsWith(y) || y.startsWith(x);
+    // Le plus COURT des deux doit être un préfixe du plus long, ET faire au moins
+    // LONGUEUR_MIN_PARENTE caractères : sans ce plancher, n'importe quel code de deux
+    // lettres est préfixe d'une multitude de codes plus longs, au hasard de l'alphabet.
+    const prefixe = (x, y) => {
+        if (!x || !y) return false;
+        const [court, long] = x.length <= y.length ? [x, y] : [y, x];
+        return court.length >= LONGUEUR_MIN_PARENTE && long.startsWith(court);
+    };
     return prefixe(a, b) || prefixe(sansX(a), b) || prefixe(a, sansX(b));
 }
 
@@ -414,6 +431,81 @@ function comparerNumeros(lu, candidat) {
 }
 
 /**
+ * Numéro de carte déduit du SLUG Cardmarket, avec le code de set en désambiguïsateur.
+ *
+ * POURQUOI CETTE FONCTION EXISTE. Le slug d'une fiche a la forme
+ * `Nom[-Lv12][-V2]-CODEnnn`, où le code de set et le numéro sont COLLÉS. L'ancienne
+ * règle prenait les chiffres de fin (`/(\d+)$/`) et avalait donc ceux du code :
+ *     "Porygon-Z-sI100340"  code sI100  -> 100340   au lieu de 340
+ *     "Alakazam-B21"        code B2     ->     21   au lieu de 1
+ *     "Mewtwo-V-UNION-V3"   code SWSH   ->      3   (c'est le marqueur de VARIANTE)
+ * Taux d'erreur mesuré sur 6854 documents témoins (ceux qui portent aussi un numéro
+ * lu dans le TITRE, lequel fait foi et sert d'arbitre gratuit) : 28,4 %.
+ * Avec la règle ci-dessous : 0,2 %, et ZÉRO régression — aucun cas que l'ancienne
+ * règle réussissait n'est cassé, elle s'abstient seulement 232 fois de plus.
+ *
+ * L'ABSTENTION EST UN RÉSULTAT. Renvoyer null vaut mieux qu'un numéro plausible et
+ * faux : un candidat sans numéro connu se classe « inconnu » (rang 2), alors qu'un
+ * faux numéro crédible le fait gagner contre la bonne carte.
+ *
+ * ⚠️ Cette fonction est le SEUL endroit où cette règle est écrite. Elle est appelée
+ * par live-cardmarket.js (à la lecture) et par nettoyer-slugs.js (au rattrapage) :
+ * si les deux divergeaient, les documents d'avant et d'après ne voudraient plus dire
+ * la même chose.
+ *
+ * @param {string} slug     dernier segment de l'URL, query string DÉJÀ retirée
+ * @param {string|null} codeSet  code de set du produit (ex "sI100", "B2", "mC")
+ * @returns {string|null}   le numéro, ou null si on ne sait pas
+ */
+function numeroDepuisSlug(slug, codeSet) {
+    const segments = String(slug || '').split('-').filter(Boolean);
+    // On remonte les marqueurs de FIN qui ne sont pas des numéros : la variante
+    // Cardmarket (V1/V2/V3) et le niveau des vieilles cartes (Lv65).
+    let i = segments.length - 1;
+    while (i >= 0 && /^(V\d+|Lv\d+)$/i.test(segments[i])) i--;
+    if (i < 0) return null;
+
+    let queue = String(segments[i]).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const code = codeSet ? normaliserCodeSet(codeSet) : null;
+    if (code && queue.startsWith(code)) queue = queue.slice(code.length);
+
+    // Ce qui reste doit COMMENCER par un chiffre. Sinon le segment est du texte
+    // ("Online-Code-Card-...-PKM"), et il n'y a pas de numéro à en tirer.
+    const m = /^\d/.test(queue) ? queue.match(/^(\d+)/) : null;
+    if (!m) return null;
+    // "AR000", "SV000" : aucune carte ne porte le numéro 0. C'est un remplissage du
+    // slug, pas un numéro — 6 documents témoins le confirment.
+    if (/^0+$/.test(m[1])) return null;
+    return m[1];
+}
+
+/**
+ * RANG d'un candidat vis-à-vis du numéro lu. Trois états, et pas deux : la nuance
+ * porte sur la différence entre « je ne sais pas » et « je sais que non ».
+ *
+ *   1 -> son numéro CORRESPOND à celui lu           : candidat légitime
+ *   2 -> son numéro est INCONNU (jamais appris)     : rien ne l'accuse, rien ne l'appuie
+ *   3 -> son numéro est connu et CONTREDIT le lu    : le catalogue le disculpe
+ *
+ * Le rang 3 est le seul apport réel par rapport au score actuel : aujourd'hui un
+ * candidat dont le numéro contredit la photo perd des points mais reste en course, et
+ * il gagne dès que les autres critères le rattrapent — c'est le mécanisme du cas
+ * Scizor (5 points contre 20 : un malus de −50 ne l'aurait pas renversé, seul un
+ * classement par rangs le peut).
+ *
+ * @param {string|number|null} numeroLu        ce que l'IA a lu sur la photo
+ * @param {string|number|null} numeroCandidat  le numéro du candidat en base
+ * @returns {1|2|3|null}  null si rien n'a été lu — il n'y a alors pas de rang à établir
+ */
+function rangDuNumero(numeroLu, numeroCandidat) {
+    const lu = numeroLu != null ? String(numeroLu).trim() : '';
+    if (!lu) return null;
+    const cand = numeroCandidat != null ? String(numeroCandidat).trim() : '';
+    if (!cand) return 2;
+    return comparerNumeros(lu, cand) ? 1 : 3;
+}
+
+/**
  * Normalise le champ `total` lu par l'IA (le "Y" de X/Y).
  * On prend le DERNIER groupe de chiffres : quand l'IA recopie la fraction entière
  * ("184/182"), le total est le nombre d'APRÈS le slash. Prendre le premier donnerait
@@ -647,7 +739,8 @@ module.exports = {
     normaliserCodeSet, codesApparentes,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
-    setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero,
+    setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
+    numeroDepuisSlug,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -815,6 +908,16 @@ if (require.main === module) {
         verifier('"XY" vs "YCS" -> malus plein (pas de dérive sur le X)', scoreSet('XY', 'YCS'), -40);
         // Un partiel ne devient JAMAIS un exact : l'écart doit rester de 25 points.
         verifier('exact devance partiel de 25', scoreSet('PRE', 'PRE') - scoreSet('PRE', 'xPRE'), 25);
+
+        // ---- Plancher de longueur sur la parenté (mesuré : 618 paires fautives) ----
+        // Le cas réel : le code japonais "mC" décrochait +15 face au stamp "MCD" lu par
+        // l'IA, et faisait gagner un produit sans rapport contre le McDonald's japonais.
+        verifier('"MCD" vs "mC" -> malus (2 car. communs, insuffisant)', scoreSet('MCD', 'mC'), -40);
+        verifier('"MCD" vs "MCDP" -> partiel (3 car.)', scoreSet('MCD', 'MCDP'), 15);
+        verifier('"MCD" vs "MCD11" -> partiel (3 car.)', scoreSet('MCD', 'MCD11'), 15);
+        verifier('"EC" vs "EC3" -> malus (2 car. communs)', scoreSet('EC', 'EC3'), -40);
+        verifier('"DRI" vs "DR" -> malus (2 car. communs)', scoreSet('DRI', 'DR'), -40);
+        verifier('"SM-P" vs "SM-P/CS" -> partiel conservé', scoreSet('SM-P', 'SM-P/CS'), 15);
     }
 
     // --- Test 8 : lecture du motif dans le TITRE de l'annonce ---
@@ -1123,6 +1226,52 @@ if (require.main === module) {
         // ⚠️ La normalisation en chiffres reste STRICTEMENT celle du critère numéro et
         // de l'extension : toute divergence recréerait un bug de prix.
         verifier('chiffres de "TG09" == chiffres de "9"', chiffresDuNumero('TG09'), chiffresDuNumero('9'));
+
+        // --- RANGS. Trois états, la nuance étant entre « inconnu » et « contredit ».
+        // Mesurés en production par le journal des scans AVANT d'en faire un critère de
+        // classement : c'est la fréquence réelle du rang 3 qui dira si le mécanisme sert.
+        verifier('lu 173, candidat 173 -> rang 1', rangDuNumero('173', '173'), 1);
+        verifier('lu 14, candidat "SV14" -> rang 1 (chiffres suffisent)', rangDuNumero('14', 'SV14'), 1);
+        verifier('lu 173, candidat inconnu -> rang 2', rangDuNumero('173', null), 2);
+        verifier('lu 173, candidat "" -> rang 2 (vide == inconnu)', rangDuNumero('173', ''), 2);
+        verifier('lu 173, candidat 174 -> rang 3 (contredit)', rangDuNumero('173', '174'), 3);
+        verifier('rien lu -> pas de rang', rangDuNumero(null, '173'), null);
+        verifier('lu vide -> pas de rang', rangDuNumero('  ', '173'), null);
+        // Le cas Scizor : le numéro lu (074) contre un candidat occidental n°074 d'un
+        // autre set reste rang 1 — le rang ne remplace pas le critère set, il l'assiste.
+        verifier('lu 074, candidat 074 d\'un autre set -> rang 1', rangDuNumero('074', '74'), 1);
+    }
+
+    // --- Test 22 : numéro déduit du SLUG (code de set collé au numéro) ---
+    // Tous les slugs ci-dessous sont RÉELS, relevés dans numeros_cartes, avec leur
+    // vrai codeSet et le `numero` du titre qui sert d'arbitre. L'ancienne règle
+    // (/(\d+)$/) se trompait sur 28,4 % des 6854 documents témoins ; celle-ci sur 0,2 %.
+    console.log('\n=== Test 22 : numéro déduit du slug Cardmarket ===');
+    {
+        // Cas nominal : le code se détache proprement.
+        verifier('"Rotom-mC248" + code mC -> 248', numeroDepuisSlug('Rotom-mC248', 'mC'), '248');
+        // Code à suffixe numérique COLLÉ au numéro — l'ancienne règle rendait 100340.
+        verifier('"Porygon-Z-sI100340" + code sI100 -> 340', numeroDepuisSlug('Porygon-Z-sI100340', 'sI100'), '340');
+        // Un seul chiffre de code, un seul de numéro : l'ancienne règle rendait 21.
+        verifier('"Alakazam-B21" + code B2 -> 1', numeroDepuisSlug('Alakazam-B21', 'B2'), '1');
+        verifier('"Mewtwo-B210" + code B2 -> 10', numeroDepuisSlug('Mewtwo-B210', 'B2'), '10');
+        // Marqueur de VARIANTE final : ce n'est pas un numéro. Ancienne règle : 3.
+        verifier('"Mewtwo-V-UNION-V3" -> null (V3 = variante)', numeroDepuisSlug('Mewtwo-V-UNION-V3', 'SWSH'), null);
+        // Le niveau des vieilles cartes n'est pas un numéro non plus.
+        verifier('"Pikachu-Lv12-EP08" + code EP08 -> null', numeroDepuisSlug('Pikachu-Lv12-EP08', 'EP08'), null);
+        // Slug qui s'arrête au code : rien à extraire, on s'abstient.
+        verifier('"Arcanine-Lv48-DP3" + code DP3 -> null', numeroDepuisSlug('Arcanine-Lv48-DP3', 'DP3'), null);
+        verifier('"Moo-Moo-Milk-N1" + code N1 -> null', numeroDepuisSlug('Moo-Moo-Milk-N1', 'N1'), null);
+        // Numéro dans son propre segment : le code n'y est pas, on prend tel quel.
+        verifier('"Flygon-Lv65-WCD09RR-005" -> 005', numeroDepuisSlug('Flygon-Lv65-WCD09RR-005', 'WCD09'), '005');
+        // Remplissage à zéro : ce n'est pas un numéro de carte.
+        verifier('"Raichu-Lv46-V2-AR000" + code AR -> null', numeroDepuisSlug('Raichu-Lv46-V2-AR000', 'AR'), null);
+        // Pas de numéro du tout (les Code Card, avant qu'on les écarte du vivier).
+        verifier('"Online-Code-Card-Hoopa-V-Box" -> null', numeroDepuisSlug('Online-Code-Card-Hoopa-V-Box', 'PKM'), null);
+        // Code inconnu : on ne détache rien, mais on ne renvoie pas n'importe quoi.
+        verifier('"Rotom-mC248" sans code -> null (MC248 ne commence pas par un chiffre)', numeroDepuisSlug('Rotom-mC248', null), null);
+        verifier('slug vide -> null', numeroDepuisSlug('', 'ABC'), null);
+        verifier('slug absent -> null', numeroDepuisSlug(null, 'ABC'), null);
     }
 
     // --- Test 21 : RÉGRESSION Dana/Kahili — nom faux mais plausible ---

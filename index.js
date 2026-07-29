@@ -24,6 +24,11 @@ const {
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
+// Journal des scans : une ligne par identification, en base. Les logs Render sont
+// éphémères ; les seuils qu'on pose (ratio, rangs, fiabilité du setCode) ont besoin de
+// données qui survivent au redéploiement. Jamais sur le chemin critique — voir le module.
+const { enregistrerScan } = require('./journal-scans');
+
 const app = express();
 app.set('trust proxy', 1); // Render est derrière un proxy → nécessaire pour lire la vraie IP côté rate-limit
 const PORT = process.env.PORT || 3000;
@@ -1010,6 +1015,48 @@ function normaliserNom(nom) {
     return nom.toLowerCase().replace(/[\s\-'.&]/g, '');
 }
 
+// ============================================================
+// ÉCARTE LES NON-CARTES du vivier de candidats
+// ============================================================
+// Cardmarket range dans le même catalogue que les cartes les « Online / Live Code
+// Card » : les cartons de code numérique glissés dans les boosters. Ce ne sont pas des
+// cartes Pokémon, on ne les scannera jamais, et elles n'ont aucune raison de disputer
+// un score à la vraie carte.
+//
+// POURQUOI CE CRITÈRE-LÀ, ET LUI SEUL. Mesuré sur les 70 975 produits du catalogue :
+//   - 1246 produits contiennent « Code Card », dont 460 portaient un numeroUrl parasite
+//     valant "2" (extrait de "?language=2" — voir nettoyer-slugs.js), ce qui les rendait
+//     appariables à n'importe quelle carte n°2 ;
+//   - un seul porte un `numero` : idProduct 279891, numero "CC-1", dans l'expansion 1645
+//     (code PKM) dont les 443 produits sont TOUS des Code Cards. "CC-1" est la référence
+//     Cardmarket du carton lui-même, pas un numéro de carte : rien à sauver ;
+//   - contrôle décisif : 0 produit non-Code-Card ne partage un idMetacard avec une Code
+//     Card. L'exclusion ne peut donc pas emporter une impression légitime par ricochet.
+//
+// Et surtout, les autres familles qu'on aurait pu croire non-cartes n'en sont pas :
+// « Suspicious Food Tin » et « Amulet Coin » sont de vrais Dresseurs, « Talonflame
+// (Theme Deck) » une vraie carte, « [… | Burn Booster] » et « [Random Spark] » des noms
+// d'attaques. Hors Code Card, les motifs Display/Playmat/Portfolio/Figurine ne ramènent
+// AUCUN produit. Un filtre par mots-clés « booster / tin / coin » jetterait des cartes
+// réelles : « Code Card » est le seul critère juste, et il suffit.
+const EST_CODE_CARD = /code\s*card/i;
+
+function ecarterNonCartes(produits, contexte) {
+    if (!Array.isArray(produits) || produits.length === 0) return produits;
+    const gardes = produits.filter(p => !EST_CODE_CARD.test(String(p?.name || '')));
+    const ecartes = produits.length - gardes.length;
+    if (ecartes > 0) {
+        console.log(`🚮 ${ecartes} Code Card écartée(s) du vivier (${contexte}) — reste ${gardes.length} candidat(s).`);
+    }
+    // Vivier vidé : on renvoie bien le vide. Un vivier composé UNIQUEMENT de Code Cards
+    // ne peut produire qu'un verdict faux ; mieux vaut l'échec franc, qui rembourse le
+    // scan, qu'un prix de carton de code présenté comme celui d'une carte.
+    if (gardes.length === 0 && produits.length > 0) {
+        console.warn(`⚠️ [non-cartes] les ${produits.length} candidat(s) de "${contexte}" étaient tous des Code Cards.`);
+    }
+    return gardes;
+}
+
 // Retrouve le(s) produit(s) dans le catalogue local pour un nom de carte donné.
 // Utilise une comparaison NORMALISÉE (ignore espaces, tirets, casse, ponctuation)
 // car le format Cardmarket est très irrégulier (MKangaskhan, Mega Kangaskhan ex...).
@@ -1030,7 +1077,7 @@ async function trouverProduitsLocaux(nomExact) {
             for (const variante of variantes) {
                 const regex = new RegExp(`^${echapperRegex(variante)}(\\s*\\[|$)`, 'i');
                 const r = await CatalogueProduit.find({ name: regex }).lean();
-                if (r.length > 0) return r;
+                if (r.length > 0) return ecarterNonCartes(r, `nom court "${nomExact}"`);
             }
             return [];
         }
@@ -1045,7 +1092,7 @@ async function trouverProduitsLocaux(nomExact) {
 
         if (resultats.length > 0) {
             console.log(`ℹ️ Catalogue local : ${resultats.length} produit(s) via correspondance normalisée pour "${nomExact}".`);
-            return resultats;
+            return ecarterNonCartes(resultats, `nom "${nomExact}"`);
         }
         return [];
     } catch (e) {
@@ -1091,7 +1138,9 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
         // trouverProduitsLocaux (même forme : { idProduct, name, idExpansion, ... }).
         const produits = await CatalogueProduit.find({ idProduct: { $in: ids } }).lean();
         console.log(`🔢 Repli par NUMÉRO : n°${numeroLu} dans l'expansion ${exps.join('/')} -> ${produits.length} produit(s) (correspondance ${exactes.length ? 'exacte' : 'sur les chiffres'}).`);
-        return produits;
+        // C'est ici que les Code Cards faisaient le plus de dégâts : 460 d'entre elles
+        // portaient un numeroUrl "2", donc ce repli les ramenait pour toute carte n°2.
+        return ecarterNonCartes(produits, `numéro ${numeroLu} / exp ${exps.join('|')}`);
     } catch (e) {
         console.error(`❌ Erreur trouverProduitsParNumero :`, e.message);
         return [];
@@ -1405,6 +1454,12 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
         // 1. Cache Mongo (sauté si debug=true, pratique pour retester une carte sans attendre 24h)
         let resultat = debug ? null : await lireCache(cardInfo.name, cardInfo.number, cardInfo.language);
+        // Portée élargie : sert au log du ratio, en dehors du bloc d'identification.
+        let idCarteTCGdex = null;
+        // Idem pour le journal : la ligne est composée DANS le bloc d'identification
+        // (où vivent candidats, scores et motif) mais écrite APRÈS, une fois les prix
+        // connus. Reste null quand le cache a répondu — il n'y a alors pas eu de scan.
+        let ligneJournal = null;
         if (debug) console.log("🐛 Mode debug : lecture du cache sautée.");
 
         // 2. Flux combiné orienté JUSTESSE :
@@ -1421,6 +1476,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 await rembourserScan(req, 'carte-introuvable');
                 return res.json({ success: false, error: `Carte "${cardInfo.name}${cardInfo.setCode ? ' ' + cardInfo.setCode : ''} #${cardInfo.number}" non trouvée sur TCGdex` });
             }
+            idCarteTCGdex = trouvailleTCGdex.id;
 
             // 2b. Candidats Cardmarket. Même hiérarchie que /api/identifier : le nom
             //     n'est utilisé que s'il est fiable, sinon on passe par le NUMÉRO dans
@@ -1428,9 +1484,10 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo));
             const nomFiable = trouvailleTCGdex.source !== 'total+numero';
             let produits = nomFiable ? await trouverProduitsLocaux(trouvailleTCGdex.nomExact) : [];
+            let voieCatalogue = 'nom';
             if (produits.length === 0 && expAttendues.length) {
                 const parNumero = await trouverProduitsParNumero(expAttendues, cardInfo.number);
-                if (parNumero.length) produits = parNumero;
+                if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
             }
             console.log(`🗂️ Catalogue local : ${produits.length} produit(s) pour "${trouvailleTCGdex.nomExact}".`);
 
@@ -1438,6 +1495,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             let classement = [];
             let motifResolution = { etat: 'aucun-motif', cible: null, raison: null };
             let estReverse = false;
+            // Un candidat unique n'a rien à départager : la confiance est haute par
+            // construction (c'est déjà ce que dit `confiant: true` dans ce cas-là).
+            let confianceScoring = true;
             const optionsMotif = { variantsDetailed: trouvailleTCGdex.variantsDetailed, titre: title, tcgdexId: trouvailleTCGdex.id };
             if (produits.length === 1) {
                 const analyseSolo = analyserVariantes(trouvailleTCGdex.variantsDetailed);
@@ -1459,7 +1519,23 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                     strategie: s.strategie
                 }));
                 console.log(`🧮 Scoring local : ${classement.length} candidats classés, meilleur = ${classement[0]?.candidat?.idProduct} (score ${scores[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
+                confianceScoring = confiant;
             }
+
+            // Composition de la ligne de journal. Les prix seront ajoutés plus bas.
+            ligneJournal = {
+                route: 'analyser',
+                userId: req.credit?.userId,
+                nom: cardInfo.name, numero: cardInfo.number, total: cardInfo.total,
+                setCode: cardInfo.setCode, langue: cardInfo.language, rarete: cardInfo.rarete,
+                idProduct: classement[0]?.candidat?.idProduct,
+                score: classement[0]?.score,
+                nbCandidats: produits.length,
+                confiance: confianceScoring ? 'haute' : 'basse',
+                sourceIdentification: trouvailleTCGdex.source || 'nom',
+                voieCatalogue,
+                motifEtat: motifResolution.etat
+            };
 
             const carteNonEN = cardInfo.language && cardInfo.language !== 'EN';
 
@@ -1476,6 +1552,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 if (prixLocal !== null) {
                     resultat = {
                         price: prixLocal,
+                        idProduct: meilleur.idProduct,   // tracé dans le log du ratio
                         url: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${meilleur.idProduct}`,
                         source: 'guide-local',
                         // Incertain si plusieurs candidats OU si la carte a un motif de
@@ -1520,6 +1597,39 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
         const prixVintedNombre = vintedPrice ? parseFloat(String(vintedPrice).replace(',', '.')) : null;
         const verdict = calculerVerdict(prixVintedNombre, resultat.price, cardInfo.language, resultat.carteIncertaine);
+
+        // ---- TRACE DU RATIO, pour fonder un seuil sur des données plutôt que sur une
+        // intuition. Un ratio énorme du côté "trop cher" est bien plus souvent une
+        // erreur d'identification qu'un vendeur délirant : les quatre cas connus sont
+        // à x150, x150, x750 et x2750, et 16,8 % du catalogue cote moins de 0,10 €,
+        // ce qui est la zone où atterrit une identification ratée.
+        // ⚠️ Ce log ne couvre QUE /api/analyser. Dans le flux réel, c'est l'extension
+        // qui lit le prix live et calcule le verdict : le serveur n'y voit jamais le
+        // ratio. Le garde-fou doit donc vivre côté extension (spécification à part).
+        // Format stable, une ligne, grepable : grep "[ratio]" server.log
+        if (prixVintedNombre && resultat.price > 0) {
+            const ratio = prixVintedNombre / resultat.price;
+            console.log(
+                `📊 [ratio] carte=${idCarteTCGdex || '?'} idProduct=${resultat.idProduct ?? '?'}` +
+                ` vinted=${prixVintedNombre} reference=${resultat.price} ratio=${ratio.toFixed(1)}` +
+                ` source=${resultat.source || '?'} incertain=${Boolean(resultat.carteIncertaine)}` +
+                ` langue=${cardInfo.language}`
+            );
+        }
+
+        // JOURNAL — même ligne que le log ci-dessus, mais PERSISTANTE. Les logs Render
+        // sont éphémères ; cette collection est ce qui restera pour fonder les seuils.
+        // Écrite seulement si un scan a réellement eu lieu (ligneJournal reste null
+        // quand le cache a répondu : rien n'a été identifié, il n'y a rien à mesurer).
+        if (ligneJournal) {
+            enregistrerScan({
+                ...ligneJournal,
+                carteIncertaine: Boolean(resultat.carteIncertaine),
+                prixVinted: prixVintedNombre,
+                prixReference: resultat.price,
+                sourcePrix: resultat.source || null
+            });
+        }
 
         // Le prix est fiable par langue UNIQUEMENT si le live filtré a réussi.
         // Sinon (guide local ou repli TCGdex = toutes langues), on prévient.
@@ -1713,6 +1823,26 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         }
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
+
+        // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
+        // C'est ICI que se joue la mesure qui compte : /api/identifier est le flux RÉEL,
+        // celui de l'extension. Les prix restent vides sur cette route (c'est le
+        // navigateur de l'utilisateur qui lit le live, le serveur ne voit jamais le prix
+        // final) — d'où le renvoi du ratio par l'extension, à spécifier séparément.
+        enregistrerScan({
+            route: 'identifier',
+            userId: req.credit?.userId,
+            nom: cardInfo.name, numero: cardInfo.number, total: cardInfo.total,
+            setCode: cardInfo.setCode, langue: cardInfo.language, rarete: cardInfo.rarete,
+            idProduct: classement[0]?.idProduct,
+            score: classement[0]?.score,
+            nbCandidats: produits.length,
+            confiance: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
+            carteIncertaine: carteAmbigue,
+            sourceIdentification: trouvaille.source || 'nom',
+            voieCatalogue,
+            motifEtat: motifResolution.etat
+        });
 
         res.json({
             success: true,
