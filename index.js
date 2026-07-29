@@ -23,7 +23,7 @@ const {
     setsCompatiblesAvecTotal, comparerNumeros,
     // rangDuNumero ne pilote encore RIEN : il ne sert qu'aux traces et au journal,
     // le temps de mesurer la fréquence réelle du rang 3 avant le point 4.
-    rangDuNumero, normaliserCodeSet, codesApparentes,
+    rangDuNumero, bilanDesRangs, normaliserCodeSet, codesApparentes,
     regionDuCodeSet,
     MOTIFS_CIBLABLES
 } = require('./scoring');
@@ -267,6 +267,27 @@ async function lireCodeSets(idsExpansion) {
         return new Map(docs.map(d => [Number(d.idExpansion), d.codeSet]));
     } catch (e) {
         console.error("Erreur lecture codeSets (lot):", e.message);
+        return new Map();
+    }
+}
+
+// Régions DÉRIVÉES, lues dans codes_set. C'est la seule source d'où peut venir un verdict
+// « occidental » : scoring.regionDuCodeSet ne le déduit plus de la casse du code, parce
+// que cette présomption se trompait sur 4620 produits japonais. La dérivation, elle,
+// compare le nom d'expansion Cardmarket au catalogue international de TCGdex — et son
+// origine est tracée dans le champ regionSource, consultable en base.
+// Absence = région inconnue = critère NEUTRE. Voir deriver-region.js.
+async function lireRegions(idsExpansion) {
+    try {
+        if (mongoose.connection.readyState !== 1) return new Map();
+        const uniques = [...new Set(idsExpansion.filter(e => e != null).map(Number))];
+        if (uniques.length === 0) return new Map();
+        const docs = await CodeSet.find({ idExpansion: { $in: uniques } }, { idExpansion: 1, region: 1 }).lean();
+        // Même précaution de type que lireCodeSets : un mismatch ferait taire le critère
+        // région (±45 points) en silence.
+        return new Map(docs.filter(d => d.region).map(d => [Number(d.idExpansion), d.region]));
+    } catch (e) {
+        console.error("Erreur lecture régions (lot):", e.message);
         return new Map();
     }
 }
@@ -1040,6 +1061,55 @@ function ecarterNonCartes(produits, contexte) {
     return gardes;
 }
 
+// ============================================================
+// CHOIX DU VIVIER — la règle du « aucun candidat au numéro lu »
+// ============================================================
+// LE TROU QU'ELLE BOUCHE. Aujourd'hui, trouverProduitsParNumero n'est tenté QUE si le
+// vivier par nom est VIDE. Or il existe un cas où il est plein et pourtant inutilisable :
+// l'IA lit un nom faux qui EXISTE ailleurs. Mesuré sur le cas réel — « Kahili » lu au
+// lieu de « Dana » ramène 8 produits, aucun au n°173, et le scoring rend quand même un
+// gagnant à 70 points sans le moindre avertissement.
+//
+// Ce cas ne passe aujourd'hui que grâce à `numeroContredit`, qui exige que TCGdex ait
+// rendu une carte au numéro divergent. Ce garde-fou tombe dès que TCGdex est D'ACCORD
+// avec la mauvaise lecture (voir le test 24 de scoring.js, qui simule cet accord).
+//
+// LA RÈGLE, en clair :
+//   1. Vivier par le nom. S'il contient AU MOINS UN candidat de rang 1 (son numéro
+//      correspond à celui lu) -> on le garde. Comportement inchangé.
+//   2. Sinon, si les expansions attendues sont connues -> on construit AUSSI le vivier
+//      par numéro. S'il a un rang 1, IL REMPLACE le vivier par nom, avec une trace.
+//   3. Si aucun des deux n'a de rang 1 -> on garde le meilleur vivier disponible et on
+//      LIVRE le prix, marqué `carteIncertaine` avec le motif `aucun-candidat-au-numero`.
+//      Un prix avec réserve vaut mieux que rien, et la politique de remboursement traite
+//      déjà « livré avec réserve » comme livré.
+//   4. Aucun vivier du tout -> échec dur et remboursement. Inchangé (`aucun-candidat`).
+//
+// On ne réordonne RIEN : le rang ne devient pas un critère de score. Il sert à choisir
+// le vivier, puis à qualifier la confiance.
+async function viviersAvecRangs(vivierNom, numeroLu, idExpansionsAttendues, contexte) {
+    const rangsNom = bilanDesRangs(vivierNom, numeroLu);
+    if (!rangsNom.aucunRang1) {
+        return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: false };
+    }
+    // Le vivier par nom ne peut pas contenir la bonne carte. On tente le numéro.
+    console.warn(
+        `⚠️ [vivier-sans-rang1] ${contexte} : ${vivierNom.length} candidat(s) par le nom,` +
+        ` aucun au numéro ${numeroLu} -> tentative par le NUMÉRO`
+    );
+    const exps = (idExpansionsAttendues || []).filter(e => e != null);
+    if (exps.length) {
+        const parNumero = await trouverProduitsParNumero(exps, numeroLu);
+        if (parNumero.length) {
+            console.log(`   ↪️ vivier REMPLACÉ : ${parNumero.length} candidat(s) par le numéro ${numeroLu}.`);
+            return { produits: parNumero, voie: 'numero-substitue', aucunCandidatAuNumero: false };
+        }
+    }
+    // Ni l'un ni l'autre. On livre quand même, mais la réserve est explicite.
+    console.warn(`   ⚠️ aucun candidat au numéro ${numeroLu} par aucune voie -> résultat marqué incertain.`);
+    return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: true };
+}
+
 // Retrouve le(s) produit(s) dans le catalogue local pour un nom de carte donné.
 // Utilise une comparaison NORMALISÉE (ignore espaces, tirets, casse, ponctuation)
 // car le format Cardmarket est très irrégulier (MKangaskhan, Mega Kangaskhan ex...).
@@ -1217,6 +1287,8 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
     // avant ce fix). codeSetsPreChauffes permet à l'appelant (/api/identifier) d'injecter
     // une Map déjà récupérée, pour ne pas la redemander une seconde fois à Mongo.
     const codeSets = codeSetsPreChauffes || await lireCodeSets(produits.map(p => p.idExpansion));
+    // Régions dérivées : un « occidental » ne peut venir que d'ici (voir lireRegions).
+    const regions = await lireRegions(produits.map(p => p.idExpansion));
 
     // Table des motifs de la carte (TCGdex), puis arbitrage IA / titre / catalogue.
     // Tout est PUR et testé dans scoring.js ; ici on ne fait que fournir les entrées.
@@ -1251,7 +1323,10 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
             // (bruit sur photos d'annonce). Le critère image du scoring reste dans
             // scoring.js et se réactivera tout seul si on lui refournit un jour une
             // distance (via OffscreenCanvas côté extension, par exemple).
-            region: regionDuCodeSet(codeSet || (infoNum && infoNum.codeSet))
+            // La région dérivée en base fait foi ; à défaut, seules les preuves tirées du
+            // code lui-même (minuscule, suffixe -JP, liste vérifiée) sont retenues. Un
+            // code non vérifié donne null, et le critère région reste alors NEUTRE.
+            region: regionDuCodeSet(codeSet || (infoNum && infoNum.codeSet), regions.get(Number(p.idExpansion)) ?? null)
         };
     });
 
@@ -1320,17 +1395,24 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
         }
     }
 
-    // 2. RANG DU GAGNANT + distribution. Le rang ne pilote RIEN pour l'instant : c'est
-    //    sa fréquence réelle qu'on mesure avant d'en faire un critère de classement
-    //    (point 4). Un gagnant de rang 3 — numéro connu et CONTREDISANT celui lu — est
-    //    le cas Scizor, que le score seul ne sait pas écarter.
+    // 2. LES DEUX SIGNAUX DE RANG. Mesuré : le rang 3 pris candidat par candidat n'est
+    //    PAS un signal (majoritaire partout — 135/153 sur Charmander, 78/85 sur
+    //    Magikarp), parce que le même nom existe dans beaucoup d'autres sets. Seuls
+    //    `aucunRang1` et le rang du GAGNANT sont exploitables. Voir bilanDesRangs.
+    const rangs = bilanDesRangs(candidatsEnrichis, cardInfo.number, gagnantEnrichi);
     if (cardInfo.number != null) {
-        const rangs = candidatsEnrichis.map(c => rangDuNumero(cardInfo.number, c.numeroCardmarket));
-        const compte = r => rangs.filter(x => x === r).length;
         console.log(
             `📊 [rang] carte=${options.tcgdexId || '?'} numeroLu=${cardInfo.number}` +
-            ` gagnant=${gagnantEnrichi?.idProduct ?? '?'} rangGagnant=${rangDuNumero(cardInfo.number, gagnantEnrichi?.numeroCardmarket) ?? 'sans-objet'}` +
-            ` candidats=${candidatsEnrichis.length} rang1=${compte(1)} rang2=${compte(2)} rang3=${compte(3)}`
+            ` gagnant=${gagnantEnrichi?.idProduct ?? '?'} rangGagnant=${rangs.rangGagnant ?? 'sans-objet'}` +
+            ` candidats=${candidatsEnrichis.length} rang1=${rangs.rang1} rang2=${rangs.rang2} rang3=${rangs.rang3}` +
+            ` aucunRang1=${rangs.aucunRang1}`
+        );
+    }
+    if (rangs.aucunRang1) {
+        console.warn(
+            `⚠️ [aucun-rang1] carte=${options.tcgdexId || '?'} numeroLu=${cardInfo.number}` +
+            ` candidats=${candidatsEnrichis.length} -> AUCUN ne porte ce numéro,` +
+            ` le vivier ne peut pas contenir la bonne carte`
         );
     }
 
@@ -1361,7 +1443,9 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
 
     // codeSets renvoyé pour réutilisation par l'appelant (évite une 2e lecture
     // identique, ex: la construction de `codesSet` dans /api/identifier).
-    return { ...resultat, codeSets, motif: resolution, estReverse };
+    // `rangs` remonte les deux signaux : l'appelant décide (voir la règle documentée
+    // sur `viviersAvecRangs`), les expose à l'extension et les journalise.
+    return { ...resultat, codeSets, motif: resolution, estReverse, rangs };
 }
 
 function calculerVerdict(prixVinted, prixCardmarket, language, carteIncertaine) {
@@ -1440,10 +1524,11 @@ async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null) {
         // Filtrage par région, via le code set appris (MAJ = occidental, min = japonais).
         // Un seul aller-retour Mongo pour toutes les expansions, au lieu d'un par expansion.
         const codes = await lireCodeSets(exps);
+        const regionsDerivees = await lireRegions(exps);
         const gardees = [];
         for (const e of exps) {
             const code = codes.get(Number(e)) ?? null;
-            const region = regionDuCodeSet(code);
+            const region = regionDuCodeSet(code, regionsDerivees.get(Number(e)) ?? null);
             // Région inconnue -> on garde (on ne pénalise pas ce qu'on ignore)
             if (!region || region === regionAttendue) gardees.push(e);
             else console.log(`   ℹ️ Expansion ${e} (${code}, ${region}) écartée du set attendu : on cherche de l'${regionAttendue}.`);
@@ -1792,9 +1877,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //    halluciné (Dana lue "Kahili") ou inapparieable ("_____'s Pikachu").
         let produits = nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue);
         let voieCatalogue = 'nom';
+        let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {
             const parNumero = await trouverProduitsParNumero(expansionsAttendues, cardInfo.number);
             if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
+        } else if (produits.length > 0) {
+            // Le vivier par nom est plein : reste à savoir s'il PEUT contenir la bonne
+            // carte. Voir viviersAvecRangs pour la règle et le cas Kahili.
+            const choix = await viviersAvecRangs(produits, cardInfo.number, expansionsAttendues, `[identifier] "${nomPourCatalogue}"`);
+            produits = choix.produits;
+            voieCatalogue = choix.voie;
+            aucunCandidatAuNumero = choix.aucunCandidatAuNumero;
         }
         console.log(`🗂️ [identifier] ${produits.length} candidat(s) via ${voieCatalogue === 'nom' ? `le nom "${nomPourCatalogue}"` : `le NUMÉRO ${cardInfo.number}`}.`);
 
@@ -1811,6 +1904,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // confiance de l'ÉTAT lue par l'IA (NM/EX/GD). Elle part telle quelle vers
         // l'extension dans un champ distinct — voir carte.confianceIdentification.
         let identificationConfiante = true;
+        // Bilan des rangs du vivier retenu. Rempli par le scoring quand il y a plusieurs
+        // candidats ; calculé à la main pour le cas du candidat unique, qui ne passe pas
+        // par scorerCandidatsLocal mais mérite le même diagnostic.
+        let rangsScoring = null;
         const optionsMotif = { variantsDetailed: trouvaille.variantsDetailed, titre: title, tcgdexId: trouvaille.id };
 
         if (produits.length === 1) {
@@ -1824,13 +1921,22 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 score: 999, strategie: strategieReverse
             }];
             if (motifResolution.etat === 'non-resolu') loggerReplieMotif(motifResolution, cardInfo, analyse, trouvaille.id, title);
+            // Un seul candidat : son numéro est-il celui qu'on a lu ? Le vivier a déjà
+            // été choisi par viviersAvecRangs, mais le rang du gagnant reste à qualifier.
+            const infoSolo = (await lireNumeros([produits[0].idProduct])).get(produits[0].idProduct);
+            rangsScoring = bilanDesRangs(
+                [{ numeroCardmarket: infoSolo ? (infoSolo.numero || infoSolo.numeroUrl) : null }],
+                cardInfo.number,
+                { numeroCardmarket: infoSolo ? (infoSolo.numero || infoSolo.numeroUrl) : null }
+            );
         } else if (produits.length > 1) {
-            const { scores, confiant, strategieReverse: strat, motif } = await scorerCandidatsLocal(
+            const { scores, confiant, strategieReverse: strat, motif, rangs } = await scorerCandidatsLocal(
                 produits, cardInfo, photos[0], expansionsAttendues, codeSetsConnus, optionsMotif
             );
             strategieReverse = strat;
             motifResolution = motif;
             identificationConfiante = confiant;
+            rangsScoring = rangs;
             classement = scores.map(s => ({
                 idProduct: s.candidat.idProduct,
                 idExpansion: s.candidat.idExpansion,
@@ -1853,11 +1959,22 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
-        const carteAmbigue = Boolean(trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu');
+        // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
+        const gagnantContreditNumero = rangsScoring?.rangGagnant === 3;
+
+        // Les deux signaux de rang entrent dans l'incertitude, chacun avec SON motif —
+        // un motif générique empêcherait de mesurer lequel se déclenche.
+        const carteAmbigue = Boolean(
+            trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
+            || aucunCandidatAuNumero || gagnantContreditNumero
+        );
         if (carteAmbigue) {
-            await signalerIncertain(req, motifResolution.etat === 'non-resolu'
-                ? `motif-${motifResolution.raison}`
-                : (numeroContredit ? 'tcgdex-numero-incoherent' : 'tcgdex-ambigu'));
+            await signalerIncertain(req,
+                aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
+                    : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
+                        : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
+                            : numeroContredit ? 'tcgdex-numero-incoherent'
+                                : 'tcgdex-ambigu');
         }
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
@@ -1879,7 +1996,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             carteIncertaine: carteAmbigue,
             sourceIdentification: trouvaille.source || 'nom',
             voieCatalogue,
-            motifEtat: motifResolution.etat
+            motifEtat: motifResolution.etat,
+            // Les deux signaux de rang, persistés : c'est ce qui permettra de mesurer
+            // leur fréquence réelle sans dépendre des logs éphémères de Render.
+            aucunCandidatAuNumero,
+            rangGagnant: rangsScoring?.rangGagnant ?? null,
+            // Écart entre le 1er et le 2e du classement : rend visibles les
+            // identifications qui « tiennent à un fil » avant qu'un testeur les remonte.
+            ecartScore: (classement.length > 1 && Number.isFinite(classement[0]?.score) && Number.isFinite(classement[1]?.score))
+                ? classement[0].score - classement[1].score
+                : null
         });
 
         res.json({
@@ -1909,7 +2035,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // (nom écarté car halluciné ou inapparieable).
                 sourceIdentification: trouvaille.source || 'nom',
                 // Par quel signal les produits candidats ont été trouvés au catalogue.
-                voieCatalogue
+                //   'nom' | 'numero' | 'numero-substitue' (le vivier par nom ne pouvait
+                //   pas contenir la bonne carte — voir viviersAvecRangs)
+                voieCatalogue,
+                // ⚠️ SIGNAL DE PREMIÈRE CLASSE. true = AUCUN candidat, par aucune voie, ne
+                // porte le numéro lu sur la photo. Le prix est livré, mais il ne peut pas
+                // être celui de la carte scannée : l'extension doit le présenter comme
+                // douteux, pas comme un verdict.
+                aucunCandidatAuNumero,
+                // 1 = le numéro du produit retenu correspond à celui lu ; 2 = inconnu ;
+                // 3 = le catalogue le CONTREDIT. null = rien de lu, donc pas de rang.
+                rangGagnant: rangsScoring?.rangGagnant ?? null
             },
             etat: {
                 estimeIA: cardInfo.etatEstime || null,

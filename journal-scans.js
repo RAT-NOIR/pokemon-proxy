@@ -71,6 +71,22 @@ const journalScanSchema = new mongoose.Schema({
     // porte exactement sur ce qui sera mis en production ensuite.
     rang: Number,
 
+    // --- LES DEUX SIGNAUX DE RANG, en sorties de première classe ---
+    // aucunCandidatAuNumero : AUCUN candidat du vivier ne portait le numéro lu, par
+    //   aucune voie. Le prix a été livré, mais il ne peut pas être celui de la carte
+    //   scannée. C'est le cas Kahili, et le seul que le score seul ne voit pas.
+    // rangGagnant : 3 = le catalogue contredit le numéro lu pour le produit retenu.
+    // Ces deux champs existent pour être COMPTÉS : c'est leur fréquence réelle qui dira
+    // si les garde-fous servent, et sur quels sets ils se déclenchent.
+    aucunCandidatAuNumero: Boolean,
+    rangGagnant: Number,
+
+    // Écart de score entre le 1er et le 2e du classement. « Un écart de 5 points contre
+    // 20 se renverse au premier bruit » : ce champ rend la liste des identifications
+    // fragiles interrogeable, au lieu d'attendre qu'un testeur en remonte une.
+    // null quand il n'y a qu'un candidat — il n'y a alors rien à départager.
+    ecartScore: Number,
+
     // --- PLAUSIBILITÉ DU PRIX ---
     // ratio = prix demandé sur Vinted / prix de référence. Un ratio énorme du côté
     // « trop cher » trahit presque toujours une identification ratée, pas un vendeur
@@ -173,6 +189,9 @@ function enregistrerScan(d = {}) {
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
             rang: rangDuNumero(d.numero, numeroGagnant),
+            aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
+            rangGagnant: Number.isFinite(d.rangGagnant) ? d.rangGagnant : null,
+            ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,
             sourcePrix: d.sourcePrix || null,
             setCodeAccord: memeCode(d.setCode, codeSetGagnant)

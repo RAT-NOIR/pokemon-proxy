@@ -478,19 +478,53 @@ const CODES_JAPONAIS_MAJUSCULES = new Set([
     'PCG1', 'PCG2', 'PCG3', 'PCG4', 'PCG5', 'PCG6', 'PCG7', 'PCG8', 'PCG9',
     'ADV2', 'ADV3', 'ADV4',
     'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6',
-    'L2', 'L3', 'LL',
+    'L2', 'L3', 'LL', 'L1SS',
     'VS', 'WEB',
-    'MCDP'
+    'MCDP',
+    // Ajouts établis de la même façon, par le nom d'expansion Cardmarket :
+    //   DP1 « Space-Time-Creation », DP2 « Secret-of-the-Lakes », DP3 « Shining-Darkness »
+    //     = l'ère Diamant & Perle japonaise (時空の創造 / 湖の秘密 / 輝く闇), 364 produits.
+    //   L1SS « SoulSilver-Collection » = le jumeau de L1HG. Le Japon a scindé HGSS en deux
+    //     sets de ~75 cartes (79 + 71) là où l'Occident en a fait un de 141. L1HG est
+    //     retrouvé par la dérivation (son jumeau HS occupe la place internationale du tag
+    //     hgss1) mais L1SS n'a AUCUN tag : seule la liste peut le voir.
+    //   EXP « Expansion-Pack » = le Base Set japonais (拡張パック).
+    'DP1', 'DP2', 'DP3',
+    'EXP'
 ]);
 
 /**
- * Région d'un code set Cardmarket : les codes occidentaux sont en MAJUSCULES (DRI, TWM,
- * OBF, PAL...), les japonais en minuscules / format sv+chiffres (sv9a, sv10s, m2a...).
- * Règle empirique fiable sur nos données, SAUF pour les sets japonais historiques
- * recensés dans CODES_JAPONAIS_MAJUSCULES ci-dessus.
- * @returns {'occidental'|'japonais'|null} null = indéterminé, et c'est un résultat
+ * Région d'un code set Cardmarket, à TROIS ÉTATS.
+ *
+ * ⚠️ LA PRÉSOMPTION « MAJUSCULES DONC OCCIDENTAL » A ÉTÉ RETIRÉE. Elle paraissait fiable
+ * et elle l'était pour les sets modernes, mais elle affirmait l'occident sur toute la
+ * moitié japonaise historique du catalogue : mesuré, 50 codes et 4620 produits, dont
+ * « Darkness-and-to-Light » à 2370 €, un XY japonais à 1933 €, « Plasma-Gale » à 1049 €
+ * et le « World-Champions-Pack » à 990 €. Tous prenaient -45 sur une carte japonaise.
+ *
+ * Une liste en dur ne suffisait pas non plus : 12 des 29 codes vérifiés ne sont trouvés
+ * que par elle, mais 26 autres ne sont trouvés que par la dérivation depuis le nom
+ * d'expansion. D'où l'architecture retenue : liste + dérivation + trois états.
+ *
+ * Cette fonction ne rend donc QUE ce qu'elle peut prouver :
+ *   'japonais'   -> minuscule dans le code, suffixe -JP, ou code de la liste vérifiée
+ *   'occidental' -> UNIQUEMENT si `regionEnBase` l'affirme (dérivation, voir
+ *                   deriver-region.js : le nom d'expansion figure au catalogue
+ *                   international de TCGdex)
+ *   null         -> inconnu, et c'est un RÉSULTAT : le critère région reste NEUTRE,
+ *                   ni bonus ni malus. Se tromper de région coûte 45 points au mauvais
+ *                   endroit ; ne rien affirmer ne coûte rien.
+ *
+ * @param {string|null} codeSet
+ * @param {string|null} regionEnBase  région dérivée et stockée dans codes_set ; elle
+ *   fait foi quand elle existe, puisqu'elle vient d'une comparaison de noms vérifiable
+ *   en base plutôt que d'une heuristique sur la casse du code.
+ * @returns {'occidental'|'japonais'|null}
  */
-function regionDuCodeSet(codeSet) {
+function regionDuCodeSet(codeSet, regionEnBase = null) {
+    // La donnée dérivée l'emporte : elle est tracée en base (champ regionSource) et
+    // corrigeable sans toucher au code.
+    if (regionEnBase === 'occidental' || regionEnBase === 'japonais') return regionEnBase;
     if (!codeSet) return null;
     // Le préfixe "x" = les "Additionals" (reverse holos, cartes bonus) et NE change
     // PAS la région : xPRE = Additionals de PRE (occidental), xsv8a = Additionals de
@@ -506,10 +540,13 @@ function regionDuCodeSet(codeSet) {
     // majuscules : "SI-JP" contient un tiret et retombait sinon dans le cas neutre,
     // ce qui lui faisait perdre le bonus de +45 auquel il a droit.
     if (/-JP$/i.test(code)) return 'japonais';
-    // Un code purement en majuscules (lettres) = occidental
-    if (/^[A-Z0-9]+$/.test(code) && /[A-Z]/.test(code)) return 'occidental';
     // Contient une minuscule = japonais (sv9a, m2a, mC, xm2a...)
     if (/[a-z]/.test(code)) return 'japonais';
+    // ⚠️ ICI SE TROUVAIT « code en majuscules donc occidental ». La règle est SUPPRIMÉE :
+    // elle affirmait sans preuve, et se trompait sur 4620 produits japonais. L'occident
+    // ne s'obtient plus que par `regionEnBase`, c'est-à-dire par la dérivation depuis le
+    // nom d'expansion, tracée en base. Un code non vérifié n'affirme rien.
+    //
     // ⚠️ NE PAS "réparer" ce null en supprimant les séparateurs avant de tester.
     // Les codes à séparateur ("SV-P/CS", "M-P/TH", "K+K") tombent ici et restent
     // NEUTRES, ce qui est le comportement voulu : "SV-P/CS" est la ligne promo
@@ -593,6 +630,47 @@ function rangDuNumero(numeroLu, numeroCandidat) {
     const cand = numeroCandidat != null ? String(numeroCandidat).trim() : '';
     if (!cand) return 2;
     return comparerNumeros(lu, cand) ? 1 : 3;
+}
+
+/**
+ * Bilan des rangs sur un vivier de candidats.
+ *
+ * ⚠️ CE QUE CETTE FONCTION MESURE, ET CE QU'ELLE NE MESURE PAS. Le rang 3 pris candidat
+ * par candidat n'est PAS un signal : il est majoritaire partout (mesuré sur les cas
+ * réels — 135/153 sur Charmander, 80/94 sur Squirtle, 78/85 sur Magikarp), simplement
+ * parce qu'une carte du même nom existe dans beaucoup d'autres sets. Deux seuls
+ * indicateurs sont exploitables, et ce sont eux que cette fonction expose :
+ *
+ *   aucunRang1  -> AUCUN candidat du vivier ne porte le numéro lu. La réponse ne peut
+ *                  donc pas être juste : ce n'est pas le classement qui est mauvais,
+ *                  c'est le VIVIER. Témoin mesuré : le nom halluciné « Kahili » ramène
+ *                  8 produits réels, aucun au n°173, et le score rend pourtant un
+ *                  gagnant à 70 points sans le moindre avertissement.
+ *   rangGagnant -> 3 signifie que le catalogue CONTREDIT le numéro lu pour le gagnant.
+ *
+ * La protection actuelle contre ce cas (`numeroContredit` dans index.js) exige que
+ * TCGdex ait trouvé une carte au numéro divergent : elle tombe dès que TCGdex est
+ * d'accord avec la mauvaise lecture. Ces deux indicateurs, eux, ne dépendent que du
+ * catalogue Cardmarket.
+ *
+ * @param {Array} candidats  vivier enrichi ({ numeroCardmarket })
+ * @param {string|number|null} numeroLu
+ * @param {object|null} gagnant  le candidat retenu, pour son rang
+ * @returns {{rang1:number, rang2:number, rang3:number, aucunRang1:boolean, rangGagnant:1|2|3|null}}
+ */
+function bilanDesRangs(candidats, numeroLu, gagnant = null) {
+    const liste = Array.isArray(candidats) ? candidats : [];
+    const rangs = liste.map(c => rangDuNumero(numeroLu, c && c.numeroCardmarket));
+    const compte = r => rangs.filter(x => x === r).length;
+    const rang1 = compte(1);
+    return {
+        rang1, rang2: compte(2), rang3: compte(3),
+        // Un vivier vide n'est pas « sans rang 1 » : il n'y a rien à juger, et l'échec
+        // dur (aucun candidat) est déjà traité ailleurs, avec remboursement.
+        // De même si rien n'a été lu : sans numéro, aucun rang n'a de sens.
+        aucunRang1: liste.length > 0 && numeroLu != null && String(numeroLu).trim() !== '' && rang1 === 0,
+        rangGagnant: gagnant ? rangDuNumero(numeroLu, gagnant.numeroCardmarket) : null
+    };
 }
 
 /**
@@ -830,7 +908,7 @@ module.exports = {
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
-    numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES,
+    numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -1372,7 +1450,11 @@ if (require.main === module) {
         // Les exceptions japonaises. MCDP = McDonald's japonais 2002 (jusqu'à 1626 €),
         // MCD11/16/22 = les McDonald's occidentaux (22,69 € au plus cher).
         verifier('MCDP -> japonais (McDonalds-Original-Minimum-Pack)', regionDuCodeSet('MCDP'), 'japonais');
-        verifier('MCD11 -> occidental (McDonalds-Collection-2011)', regionDuCodeSet('MCD11'), 'occidental');
+        // MCD11 est bien occidental, mais ce n'est plus SA CASSE qui le dit : c'est la
+        // dérivation, qui a reconnu « McDonalds-Collection-2011 » au catalogue TCGdex et
+        // l'a écrit en base. Sans cette donnée, la fonction ne présume rien.
+        verifier('MCD11 seul -> null (plus de présomption)', regionDuCodeSet('MCD11'), null);
+        verifier('MCD11 + base -> occidental', regionDuCodeSet('MCD11', 'occidental'), 'occidental');
         verifier('EC3 -> japonais (Wind-from-the-Sea)', regionDuCodeSet('EC3'), 'japonais');
         verifier('EC5 -> japonais (Mysterious-Mountains)', regionDuCodeSet('EC5'), 'japonais');
         verifier('VS -> japonais (Pokemon-CardVS)', regionDuCodeSet('VS'), 'japonais');
@@ -1381,25 +1463,39 @@ if (require.main === module) {
         verifier('CP3 -> japonais (PokeKyun-Collection)', regionDuCodeSet('CP3'), 'japonais');
         // Le préfixe "x" (Additionals) ne change pas la région.
         verifier('xMCDP -> japonais (Additionals de MCDP)', regionDuCodeSet('xMCDP'), 'japonais');
-        verifier('xPRE -> occidental (Additionals de PRE)', regionDuCodeSet('xPRE'), 'occidental');
+        verifier('xPRE + base -> occidental (Additionals de PRE)', regionDuCodeSet('xPRE', 'occidental'), 'occidental');
         verifier('xsv8a -> japonais', regionDuCodeSet('xsv8a'), 'japonais');
 
         // ⚠️ LE PIÈGE. Southern Islands existe dans les DEUX régions, et Cardmarket les
         // distingue par le suffixe : exp 1633 "SI" = occidentale (18 cartes numérotées
         // 1..18), exp 4357 "SI-JP" = japonaise. Mettre SI dans la liste des exceptions
         // aurait infligé -45 aux 18 vraies cartes occidentales.
-        verifier('SI -> occidental (Southern-Islands, exp 1633)', regionDuCodeSet('SI'), 'occidental');
+        verifier('SI seul -> null, SURTOUT PAS japonais', regionDuCodeSet('SI'), null);
+        verifier('SI + base -> occidental (Southern-Islands, exp 1633)', regionDuCodeSet('SI', 'occidental'), 'occidental');
         verifier('SI-JP -> japonais (Southern-Islands-JP, exp 4357)', regionDuCodeSet('SI-JP'), 'japonais');
         verifier('si-jp -> japonais (casse indifférente)', regionDuCodeSet('si-jp'), 'japonais');
 
         // Faux positifs écartés : leur setTcgdex pointe vers un set de l'ère e-Card,
         // mais leur NOM d'expansion dit clairement l'occident.
-        verifier('SK -> occidental (Skyridge)', regionDuCodeSet('SK'), 'occidental');
-        verifier('EX -> occidental (Expedition-Base-Set)', regionDuCodeSet('EX'), 'occidental');
-        verifier('SM -> occidental (SM-Black-Star-Promos)', regionDuCodeSet('SM'), 'occidental');
+        // Ces trois-là sont le piège du setTcgdex : leur tag pointe vers un set de l'ère
+        // e-Card, ce qui les faisait suspecter japonais. Ce qui compte ici est qu'aucun ne
+        // soit classé JAPONAIS — leur occident vient de la dérivation par le nom.
+        for (const c of ['SK', 'EX', 'SM']) {
+            verifier(`${c} seul -> null, jamais japonais`, regionDuCodeSet(c), null);
+            verifier(`${c} + base -> occidental`, regionDuCodeSet(c, 'occidental'), 'occidental');
+        }
 
-        // Règle générale, inchangée.
-        verifier('DRI -> occidental', regionDuCodeSet('DRI'), 'occidental');
+        // ⚠️ FIN DE LA PRÉSOMPTION. Un code en majuscules n'affirme plus l'occident :
+        // il faut que la dérivation l'ait établi et stocké (2e argument).
+        verifier('DRI seul -> null (plus de présomption)', regionDuCodeSet('DRI'), null);
+        verifier('DRI + base "occidental" -> occidental', regionDuCodeSet('DRI', 'occidental'), 'occidental');
+        verifier('SVI seul -> null', regionDuCodeSet('SVI'), null);
+        verifier('SVI + base "occidental" -> occidental', regionDuCodeSet('SVI', 'occidental'), 'occidental');
+        // La base ne peut pas contredire une preuve de japonais tirée du code lui-même :
+        // elle est CONSULTÉE d'abord, donc une valeur erronée en base l'emporterait —
+        // c'est voulu (elle est corrigeable en base), mais le cas doit être explicite.
+        verifier('base vide -> on retombe sur le code', regionDuCodeSet('sv2a', null), 'japonais');
+        verifier('base "inconnu" ignorée -> on retombe sur le code', regionDuCodeSet('EC3', 'inconnu'), 'japonais');
         verifier('sv2a -> japonais', regionDuCodeSet('sv2a'), 'japonais');
         verifier('mC -> japonais (chinois, rangé côté JP par Cardmarket)', regionDuCodeSet('mC'), 'japonais');
         // Les codes à séparateur restent NEUTRES : se tromper de région coûte 45 points.
@@ -1448,6 +1544,86 @@ if (require.main === module) {
         verifier('gagnant = Dana TEU 173', gagnant.candidat.idProduct, 369098);
         verifier('   ... et non le Kahili retenu avant (365843)', gagnant.candidat.idProduct !== 365843, true);
         verifier('   ... confiance haute', confiant, true);
+    }
+
+    // --- Test 24 : LE TÉMOIN — ce que les rangs achètent là où numeroContredit lâche ---
+    // Dana/Kahili passe aujourd'hui, mais uniquement parce que TCGdex était en DÉSACCORD
+    // avec la mauvaise lecture : le garde-fou `numeroContredit` (index.js) exige que
+    // TCGdex ait rendu une carte au numéro divergent. Ce test simule le cas où TCGdex est
+    // D'ACCORD avec l'erreur — il confirme le nom halluciné AU BON NUMÉRO — donc où
+    // numeroContredit ne se déclenche pas et où le vivier par NOM est utilisé tel quel.
+    // C'est le seul scénario qui prouve la valeur des deux signaux de rang.
+    console.log('\n=== Test 24 : témoin Kahili — TCGdex d\'accord avec la mauvaise lecture ===');
+    {
+        // Vivier tel que trouverProduitsLocaux("Kahili") le rend RÉELLEMENT : 8 produits
+        // en base, dont voici les quatre servant déjà au test 21. AUCUN n'est au n°173.
+        const vivierNom = [
+            { idProduct: 365814, idExpansion: 2370, numeroCardmarket: '179', codeSet: 'LOT', prix: 0.30, region: 'occidental' },
+            { idProduct: 365843, idExpansion: 2370, numeroCardmarket: '210', codeSet: 'LOT', prix: 1.20, region: 'occidental' },
+            { idProduct: 558943, idExpansion: 3876, numeroCardmarket: '055', codeSet: 'sm7a', prix: 0.50, region: 'japonais' },
+        ];
+        // TCGdex est d'accord : il a "trouvé" Kahili et n'annonce aucune incohérence, donc
+        // `nomSuspect` reste faux et le repli par numéro n'est jamais tenté aujourd'hui.
+        const lu = { numero: '173', total: '181', rareteElevee: true, regionAttendue: 'occidental', idExpansionsAttendues: [] };
+        const { gagnant } = choisirMeilleur(vivierNom, lu);
+
+        // Le score, seul, rend un gagnant PLAUSIBLE et FAUX, sans le moindre signal.
+        verifier('le score seul rend un gagnant (faux)', Boolean(gagnant), true);
+        verifier('   ... ce n\'est pas Dana 369098', gagnant.candidat.idProduct !== 369098, true);
+
+        // Les deux signaux, eux, le voient.
+        const bilan = bilanDesRangs(vivierNom, '173', gagnant.candidat);
+        verifier('aucunRang1 = true (le vivier ne PEUT pas contenir la bonne carte)', bilan.aucunRang1, true);
+        verifier('   ... 0 candidat au rang 1', bilan.rang1, 0);
+        verifier('   ... tous au rang 3 (numéro connu et contradictoire)', bilan.rang3, vivierNom.length);
+        verifier('   ... et le gagnant lui-même est au rang 3', bilan.rangGagnant, 3);
+
+        // Conséquence attendue côté serveur (voir index.js) : on tente le vivier par
+        // NUMÉRO, qui contient Dana, et il remplace le vivier par nom.
+        const vivierNumero = [
+            { idProduct: 369098, idExpansion: 2407, numeroCardmarket: '173', codeSet: 'TEU', variante: 'V2', prix: 92.02, region: 'occidental' }
+        ];
+        const bilanNum = bilanDesRangs(vivierNumero, '173');
+        verifier('le vivier par NUMÉRO a un rang 1 -> il remplace', bilanNum.aucunRang1, false);
+        const g2 = choisirMeilleur(vivierNumero, lu).gagnant;
+        verifier('   ... et rend bien Dana', g2.candidat.idProduct, 369098);
+
+        // Garde-fous de bilanDesRangs : ne rien affirmer quand il n'y a rien à juger.
+        verifier('vivier vide -> aucunRang1 = false', bilanDesRangs([], '173').aucunRang1, false);
+        verifier('numéro non lu -> aucunRang1 = false', bilanDesRangs(vivierNom, null).aucunRang1, false);
+    }
+
+    // --- Test 25 : régression — les trois cas ajoutés au jeu ---
+    // Valeurs relevées en base (catalogue_produits, numeros_cartes, guide_prix).
+    console.log('\n=== Test 25 : Magikarp promo chinois, Nita TEU180, Evelyn TEU175 ===');
+    {
+        // (a) MAGIKARP PROMO CHINOIS — le cas qui surveille la région PAR LE BAS.
+        // SV-P/CS doit rester NEUTRE : le "réparer" en occidental infligerait -45 au bon
+        // candidat sur une carte chinoise. La marge tient aux 15 points de setPartiel.
+        const luMagikarp = {
+            numero: '024', setCode: 'SV-P', rarete: 'promo',
+            rareteElevee: false, regionAttendue: 'japonais', idExpansionsAttendues: []
+        };
+        const magikarps = [
+            { idProduct: 851878, idExpansion: 6328, numeroCardmarket: '024', codeSet: 'SV-P/CS', prix: 114.80, region: regionDuCodeSet('SV-P/CS') },
+            { idProduct: 701536, idExpansion: 5257, numeroCardmarket: '080', codeSet: 'sv1a', prix: 162.16, region: regionDuCodeSet('sv1a') },
+            { idProduct: 715678, idExpansion: 5318, numeroCardmarket: '203', codeSet: 'PAL', prix: 503.22, region: regionDuCodeSet('PAL', 'occidental') },
+        ];
+        const gm = choisirMeilleur(magikarps, luMagikarp).gagnant;
+        verifier('Magikarp promo chinois : le SV-P/CS gagne', gm.candidat.idProduct, 851878);
+        verifier('   ... région restée NEUTRE (pas de -45)', gm.candidat.region, null);
+        verifier('   ... score 65 (set+15, numéro+50, région 0, prix 0)', gm.score, 65);
+
+        // (b) et (c) NITA et EVELYN — noms hallucinés qui n'existent PAS au catalogue
+        // ("Nix", "Vesper" -> 0 produit), donc le repli par numéro se déclenche seul.
+        // On vérifie ici le second maillon : dans l'expansion du total, le numéro suffit.
+        for (const [nom, num, bon, prix] of [['Nita TEU180', '180', 369105, 37.98], ['Evelyn TEU175', '175', 369100, 38.31]]) {
+            const lu = { numero: num, total: '181', rareteElevee: true, regionAttendue: 'occidental', idExpansionsAttendues: [2407] };
+            const cands = [{ idProduct: bon, idExpansion: 2407, numeroCardmarket: num, codeSet: 'TEU', prix, region: regionDuCodeSet('TEU', 'occidental') }];
+            const g = choisirMeilleur(cands, lu).gagnant;
+            verifier(`${nom} : le bon produit gagne`, g.candidat.idProduct, bon);
+            verifier(`   ... rang du numéro = 1`, rangDuNumero(num, g.candidat.numeroCardmarket), 1);
+        }
     }
 
     // --- Test 22 : non-régression — sans motif ciblé, rien ne bouge ---
