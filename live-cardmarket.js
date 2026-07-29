@@ -14,6 +14,9 @@
 
 const puppeteer = require('puppeteer');
 const path = require('path');
+// Règle d'extraction du numéro depuis le slug — définie UNE fois, dans le module pur
+// et testé, et partagée avec nettoyer-slugs.js. Voir numeroDepuisSlug.
+const { numeroDepuisSlug } = require('./scoring');
 const { exec } = require('child_process');
 
 // Bip sonore réel. Le caractère BEL (\x07) est ignoré par le terminal VS Code et
@@ -512,7 +515,17 @@ async function scraperListeExpansion(identifiant, maxPages = 25) {
                     // href = /fr/Pokemon/Products/Singles/Destined-Rivals/Team-Rockets-Petrel-V1-DRI176
                     const href = a.getAttribute('href') || '';
                     const morceaux = href.split('/').filter(Boolean);
-                    const dernierSegment = morceaux[morceaux.length - 1] || '';
+                    // ⚠️ QUERY STRING RETIRÉE. Cardmarket sert parfois des liens
+                    // "...-mC248?language=2" : sans ce split, le dernier segment garde
+                    // "?language=2", et le numéro de secours ci-dessous — qui prend les
+                    // chiffres de FIN — capturait le "2" de language au lieu du 248.
+                    // Mesuré : 9367 documents pollués, dont 2513 où ce faux numéro
+                    // faisait autorité (aucun numéro de titre pour le contredire), tous
+                    // devenus appariables à n'importe quelle carte n°2.
+                    // Le seul paramètre rencontré est `language` (9367/9367) — rien
+                    // d'utile n'est perdu. slugSet n'est pas concerné : ce n'est pas le
+                    // dernier segment, donc il n'a jamais porté la query string.
+                    const dernierSegment = (morceaux[morceaux.length - 1] || '').split('?')[0];
                     const slugSet = morceaux[morceaux.length - 2] || null;
 
                     // Variante V1/V2/V3 : c'est ce qui distingue la version normale de
@@ -520,12 +533,14 @@ async function scraperListeExpansion(identifiant, maxPages = 25) {
                     const mVar = dernierSegment.match(/-(V\d+)-/i);
                     const variante = mVar ? mVar[1].toUpperCase() : null;
 
-                    // Numéro de secours depuis l'URL (...DRI176 -> 176)
-                    const mUrl = dernierSegment.match(/(\d+)$/);
-                    const numeroUrl = mUrl ? mUrl[1] : null;
-
+                    // ⚠️ Le numéro de secours n'est PAS calculé ici. Ce code s'exécute
+                    // dans le navigateur, il ne peut pas appeler scoring.js — et la règle
+                    // d'extraction est trop subtile pour être dupliquée sans dériver
+                    // (code de set collé au numéro, marqueurs de variante et de niveau).
+                    // On remonte donc la matière brute, et numeroDepuisSlug tranche
+                    // côté Node, juste après.
                     res.push({
-                        idProduct, numero, numeroUrl, codeSet,
+                        idProduct, numero, codeSet,
                         nomFr, variante, slugSet,
                         slug: dernierSegment || null
                     });
@@ -534,6 +549,11 @@ async function scraperListeExpansion(identifiant, maxPages = 25) {
             });
 
             if (lot.length === 0) break;
+            // Numéro de secours, calculé ICI par la règle partagée avec le rattrapage
+            // (nettoyer-slugs.js). Une seule définition, dans scoring.js : c'est ce qui
+            // garantit que les documents lus aujourd'hui et ceux corrigés hier disent
+            // la même chose.
+            for (const c of lot) c.numeroUrl = numeroDepuisSlug(c.slug, c.codeSet);
             toutes.push(...lot);
             console.log(`   page ${site} : ${lot.length} cartes (total ${toutes.length})`);
             if (lot.length < PAR_PAGE) break; // dernière page atteinte
