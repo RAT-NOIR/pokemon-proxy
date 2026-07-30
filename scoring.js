@@ -641,12 +641,22 @@ function rangDuNumero(numeroLu, numeroCandidat) {
  * parce qu'une carte du même nom existe dans beaucoup d'autres sets. Deux seuls
  * indicateurs sont exploitables, et ce sont eux que cette fonction expose :
  *
- *   aucunRang1  -> AUCUN candidat du vivier ne porte le numéro lu. La réponse ne peut
- *                  donc pas être juste : ce n'est pas le classement qui est mauvais,
- *                  c'est le VIVIER. Témoin mesuré : le nom halluciné « Kahili » ramène
- *                  8 produits réels, aucun au n°173, et le score rend pourtant un
- *                  gagnant à 70 points sans le moindre avertissement.
+ *   aucunRang1  -> aucun candidat ne porte le numéro lu ET au moins un le CONTREDIT.
+ *                  La réponse ne peut donc pas être juste : ce n'est pas le classement
+ *                  qui est mauvais, c'est le VIVIER. Témoin mesuré : le nom halluciné
+ *                  « Kahili » ramène 8 produits réels, tous au rang 3, et le score rend
+ *                  pourtant un gagnant à 70 points sans le moindre avertissement.
  *   rangGagnant -> 3 signifie que le catalogue CONTREDIT le numéro lu pour le gagnant.
+ *
+ * ⚠️ POURQUOI `aucunRang1` EXIGE UNE PREUVE POSITIVE (au moins un rang 3), et pas
+ * seulement l'absence de rang 1. « Je ne sais pas » et « je sais que non » ne commandent
+ * pas la même action : un vivier dont AUCUN numéro n'est connu (tous au rang 2) ne
+ * prouve rien et ne doit rien déclencher. Sans cette clause, un appelant qui oublie
+ * d'enrichir ses candidats voit tous les rangs à 2 et croit avoir la preuve du
+ * contraire — c'est exactement le bug qui a fait afficher 0,05 € sur le Salamèche
+ * McDonald's : les 153 candidats arrivaient sans leur champ numeroCardmarket, donc
+ * rang1=0 rang2=153, et la substitution de vivier se déclenchait à chaque scan.
+ * La preuve positive rend cette erreur de câblage INOFFENSIVE plutôt que nuisible.
  *
  * La protection actuelle contre ce cas (`numeroContredit` dans index.js) exige que
  * TCGdex ait trouvé une carte au numéro divergent : elle tombe dès que TCGdex est
@@ -662,13 +672,19 @@ function bilanDesRangs(candidats, numeroLu, gagnant = null) {
     const liste = Array.isArray(candidats) ? candidats : [];
     const rangs = liste.map(c => rangDuNumero(numeroLu, c && c.numeroCardmarket));
     const compte = r => rangs.filter(x => x === r).length;
-    const rang1 = compte(1);
+    const rang1 = compte(1), rang2 = compte(2), rang3 = compte(3);
+    const numeroLisible = numeroLu != null && String(numeroLu).trim() !== '';
     return {
-        rang1, rang2: compte(2), rang3: compte(3),
+        rang1, rang2, rang3,
         // Un vivier vide n'est pas « sans rang 1 » : il n'y a rien à juger, et l'échec
         // dur (aucun candidat) est déjà traité ailleurs, avec remboursement.
         // De même si rien n'a été lu : sans numéro, aucun rang n'a de sens.
-        aucunRang1: liste.length > 0 && numeroLu != null && String(numeroLu).trim() !== '' && rang1 === 0,
+        // Et il faut au moins un rang 3 : voir la note sur la preuve positive ci-dessus.
+        aucunRang1: liste.length > 0 && numeroLisible && rang1 === 0 && rang3 > 0,
+        // Vrai quand AUCUN candidat n'a de numéro connu. À ne pas confondre avec le
+        // signal ci-dessus : ici on ne sait rien, là on sait que c'est faux. Sert au log,
+        // qui doit dire ce qu'il a réellement constaté.
+        aucunNumeroConnu: liste.length > 0 && rang2 === liste.length,
         rangGagnant: gagnant ? rangDuNumero(numeroLu, gagnant.numeroCardmarket) : null
     };
 }
@@ -1591,6 +1607,28 @@ if (require.main === module) {
         // Garde-fous de bilanDesRangs : ne rien affirmer quand il n'y a rien à juger.
         verifier('vivier vide -> aucunRang1 = false', bilanDesRangs([], '173').aucunRang1, false);
         verifier('numéro non lu -> aucunRang1 = false', bilanDesRangs(vivierNom, null).aucunRang1, false);
+
+        // ⚠️ LE TEST QUI MANQUAIT, et qui a coûté une soirée. Les documents de
+        // `catalogue_produits` ne portent PAS de numeroCardmarket — ce champ n'est ajouté
+        // que par l'enrichissement. Branché sur les documents bruts, bilanDesRangs voyait
+        // 153 rangs 2 et concluait « aucun candidat au bon numéro », ce qui déclenchait la
+        // substitution de vivier à CHAQUE scan : le Salamèche McDonald's a affiché 0,05 €
+        // pour cette raison. La preuve positive exigée (au moins un rang 3) rend
+        // désormais cette erreur de câblage silencieuse au lieu de nuisible.
+        const documentsCatalogueBruts = [
+            { idProduct: 562000, idExpansion: 4178, name: 'Charmander [Lunge | Scratch]' },
+            { idProduct: 719446, idExpansion: 5100, name: 'Charmander [Ember]' }
+        ];
+        const brut = bilanDesRangs(documentsCatalogueBruts, '004');
+        verifier('documents catalogue BRUTS -> 100 % de rang 2', brut.rang2, documentsCatalogueBruts.length);
+        verifier('   ... aucunNumeroConnu = true (on ne sait rien)', brut.aucunNumeroConnu, true);
+        verifier('   ... et aucunRang1 reste FALSE (pas de preuve du contraire)', brut.aucunRang1, false);
+        // La distinction porte bien sur la PREUVE, pas sur le nombre de candidats.
+        const melange = [
+            { idProduct: 1, numeroCardmarket: '210' },   // contredit
+            { idProduct: 2, numeroCardmarket: null }     // inconnu
+        ];
+        verifier('un seul contredit, un inconnu -> aucunRang1 = true', bilanDesRangs(melange, '173').aucunRang1, true);
     }
 
     // --- Test 25 : régression — les trois cas ajoutés au jeu ---

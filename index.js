@@ -1077,37 +1077,93 @@ function ecarterNonCartes(produits, contexte) {
 // LA RÈGLE, en clair :
 //   1. Vivier par le nom. S'il contient AU MOINS UN candidat de rang 1 (son numéro
 //      correspond à celui lu) -> on le garde. Comportement inchangé.
-//   2. Sinon, si les expansions attendues sont connues -> on construit AUSSI le vivier
-//      par numéro. S'il a un rang 1, IL REMPLACE le vivier par nom, avec une trace.
+//   2. Sinon — et seulement si au moins un candidat CONTREDIT le numéro, voir la note
+//      sur la preuve positive dans bilanDesRangs — on construit le vivier par NUMÉRO :
+//      d'abord dans les expansions attendues (si elles ont survécu au contrôle de
+//      setCode), puis, à défaut seulement, sur TOUT le catalogue.
 //   3. Si aucun des deux n'a de rang 1 -> on garde le meilleur vivier disponible et on
 //      LIVRE le prix, marqué `carteIncertaine` avec le motif `aucun-candidat-au-numero`.
 //      Un prix avec réserve vaut mieux que rien, et la politique de remboursement traite
 //      déjà « livré avec réserve » comme livré.
 //   4. Aucun vivier du tout -> échec dur et remboursement. Inchangé (`aucun-candidat`).
 //
+// ⚠️ POURQUOI LE PÉRIMÈTRE D'ABORD, ET TOUT LE CATALOGUE SEULEMENT ENSUITE. Le réflexe
+// était de chercher d'emblée dans tout le catalogue, pour ne pas dépendre d'un set
+// attendu qui peut être faux. MESURÉ SUR LES DIX CAS : ça en casse quatre.
+//   - le n°173 existe dans 115 produits occidentaux, TOUS à 120 points, le bon à 95 :
+//     sans setCode lu, le total (181 -> Team Up) est le SEUL discriminant, et c'est
+//     exactement ce que l'expansion attendue apporte. Idem pour Nita et Evelyn.
+//   - le n°024 existe dans 510 produits ; les promos SVP et SV-P décrochent +40 (code
+//     égal au « SV-P » lu) contre +15 pour la ligne chinoise SV-P/CS, qui est la bonne.
+// Le périmètre n'est donc PAS le problème : le périmètre INVALIDE l'est. C'est pour ça
+// que le contrôle vit en amont, dans expansionsDuSetTCGdex — quand le setCode lu
+// contredit le code de l'expansion attendue, celle-ci est abandonnée et ne cadre plus
+// rien. Le vivier sans périmètre reste utile en DERNIER recours : au plus ~850 produits
+// (mesuré : 828 pour le n°004, 855 pour le n°1), mieux que rien du tout.
+//
 // On ne réordonne RIEN : le rang ne devient pas un critère de score. Il sert à choisir
 // le vivier, puis à qualifier la confiance.
+//
+// ⚠️ Les candidats reçus ici viennent du CATALOGUE et ne portent donc PAS de numéro :
+// il faut le lire avant de pouvoir juger d'un rang. La première version l'a oublié, et
+// comme rangDuNumero rend « inconnu » sur un champ absent, la substitution se
+// déclenchait à CHAQUE scan — c'est ce qui a fait afficher 0,05 € sur le Salamèche.
 async function viviersAvecRangs(vivierNom, numeroLu, idExpansionsAttendues, contexte) {
-    const rangsNom = bilanDesRangs(vivierNom, numeroLu);
+    // Enrichissement MINIMAL : uniquement le numéro, seul champ dont les rangs dépendent.
+    // C'est l'étape qui manquait : les documents catalogue n'ont pas de numeroCardmarket.
+    const rangsDe = async produits => {
+        const numeros = await lireNumeros(produits.map(p => p.idProduct));
+        return bilanDesRangs(produits.map(p => {
+            const d = numeros.get(p.idProduct);
+            return { idProduct: p.idProduct, numeroCardmarket: d ? (d.numero || d.numeroUrl) : null };
+        }), numeroLu);
+    };
+    const rangsNom = await rangsDe(vivierNom);
+
     if (!rangsNom.aucunRang1) {
-        return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: false };
+        // Cas fréquent et sain. Mais si AUCUN numéro n'est connu, on le dit : ce n'est
+        // pas la même chose qu'un vivier validé, et ça signale un set non appris.
+        if (rangsNom.aucunNumeroConnu) {
+            console.log(`ℹ️ ${contexte} : ${vivierNom.length} candidat(s), aucun numéro appris — rangs indisponibles, vivier conservé.`);
+        }
+        return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: false, rangs: rangsNom };
     }
-    // Le vivier par nom ne peut pas contenir la bonne carte. On tente le numéro.
+
+    // Preuve positive : au moins un candidat porte un numéro connu, et il contredit.
+    // Le log dit ce qu'il a RÉELLEMENT constaté — combien de numéros étaient lisibles,
+    // combien contredisaient. « aucun au numéro X » tout court était mensonger quand le
+    // vivier n'avait simplement aucun numéro appris.
     console.warn(
         `⚠️ [vivier-sans-rang1] ${contexte} : ${vivierNom.length} candidat(s) par le nom,` +
-        ` aucun au numéro ${numeroLu} -> tentative par le NUMÉRO`
+        ` ${rangsNom.rang1 + rangsNom.rang3} à numéro connu dont ${rangsNom.rang3} qui CONTREDISENT` +
+        ` le numéro ${numeroLu}, 0 qui le portent, ${rangsNom.rang2} sans numéro appris` +
+        ` -> recherche par NUMÉRO`
     );
+
+    // 1er repli : DANS LES EXPANSIONS ATTENDUES. Elles ont déjà passé le contrôle de
+    // setCode (voir expansionsDuSetTCGdex) : si elles sont encore là, elles ne sont pas
+    // contredites. Et elles portent une information que le numéro seul n'a pas — sur les
+    // trois cas Team Up, le total est le SEUL discriminant entre 115 produits au n°173.
     const exps = (idExpansionsAttendues || []).filter(e => e != null);
-    if (exps.length) {
-        const parNumero = await trouverProduitsParNumero(exps, numeroLu);
-        if (parNumero.length) {
-            console.log(`   ↪️ vivier REMPLACÉ : ${parNumero.length} candidat(s) par le numéro ${numeroLu}.`);
-            return { produits: parNumero, voie: 'numero-substitue', aucunCandidatAuNumero: false };
+    for (const [ouCherche, chercher] of [
+        [`l'expansion attendue ${exps.join('/') || '—'}`, () => exps.length ? trouverProduitsParNumero(exps, numeroLu) : []],
+        // 2e repli, en DERNIER recours : tout le catalogue. Moins discriminant (mesuré :
+        // il fait perdre 4 des 10 cas s'il passe en premier), mais mieux que rien quand
+        // aucune expansion n'est attendue ou qu'elle ne contient pas ce numéro.
+        ['tout le catalogue', () => trouverProduitsParNumeroPartout(numeroLu)]
+    ]) {
+        const parNumero = await chercher();
+        if (!parNumero.length) continue;
+        const rangs2 = await rangsDe(parNumero);
+        if (rangs2.rang1 > 0) {
+            console.log(`   ↪️ vivier REMPLACÉ depuis ${ouCherche} : ${parNumero.length} candidat(s), ${rangs2.rang1} au rang 1.`);
+            return { produits: parNumero, voie: 'numero-substitue', aucunCandidatAuNumero: false, rangs: rangs2 };
         }
     }
-    // Ni l'un ni l'autre. On livre quand même, mais la réserve est explicite.
+    // Aucune voie ne donne de candidat au bon numéro. On livre quand même — un prix avec
+    // réserve vaut mieux que rien — mais la réserve est explicite et nommée.
     console.warn(`   ⚠️ aucun candidat au numéro ${numeroLu} par aucune voie -> résultat marqué incertain.`);
-    return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: true };
+    return { produits: vivierNom, voie: 'nom', aucunCandidatAuNumero: true, rangs: rangsNom };
 }
 
 // Retrouve le(s) produit(s) dans le catalogue local pour un nom de carte donné.
@@ -1176,6 +1232,47 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
         if (!exps.length || numeroLu == null) return [];
 
         const docs = await NumeroCarte.find({ idExpansion: { $in: exps } }, { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }).lean();
+        return departagerParNumero(docs, numeroLu, `l'expansion ${exps.join('/')}`);
+    } catch (e) {
+        console.error(`❌ Erreur trouverProduitsParNumero :`, e.message);
+        return [];
+    }
+}
+
+/**
+ * Même recherche, mais SANS PÉRIMÈTRE : tout le catalogue.
+ *
+ * ⚠️ POURQUOI ELLE EXISTE. La version restreinte ci-dessus a besoin d'expansions
+ * attendues, qui viennent du pont total -> set, donc de TCGdex. Quand TCGdex ne connaît
+ * pas le set (les sets japonais anciens, le McDonald's japonais 2002), le pont désigne un
+ * set de même taille et la recherche se fait au mauvais endroit — le Salamèche McDonald's
+ * a affiché 0,05 € pour cette raison : n°004 cherché dans « Detective Pikachu ».
+ * Sans périmètre, on ne peut pas se tromper de périmètre. Le coût est mesuré : au plus
+ * ~850 produits (828 pour le n°004, 855 pour le n°1, 67 pour le n°203), pour deux
+ * allers-retours Mongo groupés au scoring quelle que soit la taille du vivier.
+ */
+async function trouverProduitsParNumeroPartout(numeroLu) {
+    try {
+        if (mongoose.connection.readyState !== 1 || numeroLu == null) return [];
+        // On ne peut pas filtrer côté Mongo : la comparaison de numéros est normalisée
+        // (zéros de tête, préfixes) et doit rester STRICTEMENT celle du scoring. On lit
+        // donc les numéros connus et on départage en mémoire, comme ci-dessus.
+        const docs = await NumeroCarte.find(
+            { $or: [{ numero: { $type: 'string', $ne: '' } }, { numeroUrl: { $type: 'string', $ne: '' } }] },
+            { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }
+        ).lean();
+        return departagerParNumero(docs, numeroLu, 'tout le catalogue');
+    } catch (e) {
+        console.error(`❌ Erreur trouverProduitsParNumeroPartout :`, e.message);
+        return [];
+    }
+}
+
+// Cœur commun aux deux recherches par numéro : préférence STRICTE pour l'égalité exacte,
+// repli sur les chiffres seulement si aucune exacte n'existe, puis retour des documents
+// CATALOGUE (même forme que trouverProduitsLocaux, donc interchangeables).
+async function departagerParNumero(docs, numeroLu, ouCherche) {
+    try {
         const notes = [];
         for (const d of docs) {
             const corr = comparerNumeros(numeroLu, d.numero) || comparerNumeros(numeroLu, d.numeroUrl);
@@ -1190,12 +1287,12 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
         // On renvoie les documents CATALOGUE, pour rester interchangeable avec
         // trouverProduitsLocaux (même forme : { idProduct, name, idExpansion, ... }).
         const produits = await CatalogueProduit.find({ idProduct: { $in: ids } }).lean();
-        console.log(`🔢 Repli par NUMÉRO : n°${numeroLu} dans l'expansion ${exps.join('/')} -> ${produits.length} produit(s) (correspondance ${exactes.length ? 'exacte' : 'sur les chiffres'}).`);
+        console.log(`🔢 Recherche par NUMÉRO : n°${numeroLu} dans ${ouCherche} -> ${produits.length} produit(s) (correspondance ${exactes.length ? 'exacte' : 'sur les chiffres'}).`);
         // C'est ici que les Code Cards faisaient le plus de dégâts : 460 d'entre elles
         // portaient un numeroUrl "2", donc ce repli les ramenait pour toute carte n°2.
-        return ecarterNonCartes(produits, `numéro ${numeroLu} / exp ${exps.join('|')}`);
+        return ecarterNonCartes(produits, `numéro ${numeroLu} / ${ouCherche}`);
     } catch (e) {
-        console.error(`❌ Erreur trouverProduitsParNumero :`, e.message);
+        console.error(`❌ Erreur departagerParNumero :`, e.message);
         return [];
     }
 }
@@ -1512,14 +1609,54 @@ function pireEtat(a, b) {
 // internationale, suppléments) : les cartes y portent les mêmes noms. Sans filtre,
 // on pourrait donc récompenser l'édition japonaise alors que la carte est
 // française. On ne retient que les expansions de la RÉGION attendue.
-async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null) {
+async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null, setCodeLu = null) {
     try {
         if (mongoose.connection.readyState !== 1 || !tcgdexCardId) return [];
         const setId = String(tcgdexCardId).split('-')[0];
         if (!setId) return [];
 
         const exps = (await NumeroCarte.distinct('idExpansion', { setTcgdex: setId })).filter(e => e != null);
-        if (!regionAttendue || exps.length === 0) return exps;
+        if (exps.length === 0) return exps;
+
+        // ════════════════════════════════════════════════════════════════════
+        // INVALIDATION PAR LE setCode LU
+        // ════════════════════════════════════════════════════════════════════
+        // Le set attendu vient du pont total -> set, donc de TCGdex, qui ne connaît pas
+        // tous les sets japonais : sur le Salamèche McDonald's, le total 18 a résolu vers
+        // « Detective Pikachu ». Or l'information qui invalidait cette piste était déjà
+        // là — l'IA avait lu le stamp « MCD », sans aucun rapport avec Detective Pikachu.
+        //
+        // Règle : si un setCode a été lu ET qu'AUCUNE expansion candidate ne porte un code
+        // égal ou apparenté, la piste est invalidée. Elle ne doit alors ni scorer (+40)
+        // ni servir de PÉRIMÈTRE de recherche — c'est le second usage qui a fait le plus
+        // de dégâts, puisqu'il transforme une fausse piste en filtre.
+        //
+        // ⚠️ Le risque est BORNÉ, et dans le bon sens. Si l'IA lit mal le setCode alors que
+        // l'expansion était juste, on n'invalide pas une bonne réponse : on élargit la
+        // recherche (le vivier par numéro couvre tout le catalogue) au lieu de la
+        // restreindre à tort. Une invalidation ne peut donc que retirer un périmètre,
+        // jamais écarter la bonne carte. Et le silence est la règle : sans setCode lu, ou
+        // avec un setCode compatible, rien ne change.
+        if (setCodeLu) {
+            const luN = normaliserCodeSet(setCodeLu);
+            const codes = await lireCodeSets(exps);
+            const compatible = exps.some(e => {
+                const c = codes.get(Number(e));
+                if (!c) return true;   // code inconnu -> on ne peut rien contredire
+                const cN = normaliserCodeSet(c);
+                return cN === luN || codesApparentes(luN, cN);
+            });
+            if (!compatible) {
+                console.warn(
+                    `⚠️ [set-attendu-invalide] setCode lu "${setCodeLu}" incompatible avec` +
+                    ` le(s) code(s) de l'expansion attendue (${exps.map(e => codes.get(Number(e)) || '?').join('|')})` +
+                    ` déduite de ${setId} -> piste ABANDONNÉE (ni score, ni périmètre)`
+                );
+                return [];
+            }
+        }
+
+        if (!regionAttendue) return exps;
 
         // Filtrage par région, via le code set appris (MAJ = occidental, min = japonais).
         // Un seul aller-retour Mongo pour toutes les expansions, au lieu d'un par expansion.
@@ -1604,13 +1741,21 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             // 2b. Candidats Cardmarket. Même hiérarchie que /api/identifier : le nom
             //     n'est utilisé que s'il est fiable, sinon on passe par le NUMÉRO dans
             //     l'expansion déduite du total.
-            const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo));
+            const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo), cardInfo.setCode);
             const nomFiable = trouvailleTCGdex.source !== 'total+numero';
             let produits = nomFiable ? await trouverProduitsLocaux(trouvailleTCGdex.nomExact) : [];
             let voieCatalogue = 'nom';
+            let aucunCandidatAuNumero = false;
             if (produits.length === 0 && expAttendues.length) {
                 const parNumero = await trouverProduitsParNumero(expAttendues, cardInfo.number);
                 if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
+            } else if (produits.length > 0) {
+                // Même règle que /api/identifier : le vivier par nom peut être plein et
+                // pourtant incapable de contenir la bonne carte. Voir viviersAvecRangs.
+                const choix = await viviersAvecRangs(produits, cardInfo.number, expAttendues, `[analyser] "${trouvailleTCGdex.nomExact}"`);
+                produits = choix.produits;
+                voieCatalogue = choix.voie;
+                aucunCandidatAuNumero = choix.aucunCandidatAuNumero;
             }
             console.log(`🗂️ Catalogue local : ${produits.length} produit(s) pour "${trouvailleTCGdex.nomExact}".`);
 
@@ -1657,7 +1802,11 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 confiance: confianceScoring ? 'haute' : 'basse',
                 sourceIdentification: trouvailleTCGdex.source || 'nom',
                 voieCatalogue,
-                motifEtat: motifResolution.etat
+                motifEtat: motifResolution.etat,
+                aucunCandidatAuNumero,
+                ecartScore: (classement.length > 1 && Number.isFinite(classement[0]?.score) && Number.isFinite(classement[1]?.score))
+                    ? classement[0].score - classement[1].score
+                    : null
             };
 
             const carteNonEN = cardInfo.language && cardInfo.language !== 'EN';
@@ -1870,7 +2019,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Le set TCGdex nous dit dans quelle(s) expansion(s) Cardmarket chercher. Calculé
         // AVANT les produits : quand le nom est suspect, c'est l'expansion + le numéro
         // qui désignent la carte, et le nom ne sert plus du tout.
-        const expansionsAttendues = await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo));
+        const expansionsAttendues = await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo), cardInfo.setCode);
 
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
