@@ -51,6 +51,13 @@ const journalScanSchema = new mongoose.Schema({
     setCode: String,      // le code/stamp lu sur la carte — c'est SA fiabilité qu'on mesure
     langue: String,
     rarete: String,
+    // Ce que l'IA dit de SA PROPRE lecture du nom, et le nom brut qu'elle a lu (katakana,
+    // français...). C'est le seul moyen de comprendre après coup une traduction fautive —
+    // « Gengar » lu sur un Machoc japonais était invérifiable sans ces deux champs.
+    // `nomConfiance` sert aussi de garde-fou actif : à 'basse', le nom ne choisit plus
+    // les candidats (voir nomSuspect dans index.js).
+    nomConfiance: String, // 'haute' | 'moyenne' | 'basse'
+    nomBrut: String,
 
     // --- CE QUI A ÉTÉ RETENU (la sortie) ---
     idProduct: Number,
@@ -60,7 +67,10 @@ const journalScanSchema = new mongoose.Schema({
     nbCandidats: Number,
     confiance: String,        // 'haute' | 'basse'
     carteIncertaine: Boolean,
-    sourceIdentification: String, // 'nom' | 'total+numero'
+    sourceIdentification: String, // 'nom' | 'total+numero' | 'catalogue-local'
+    // true = identifiée SANS TCGdex, donc sans variantsDetailed : le motif de reverse n'a
+    // pas pu être routé. À compter séparément, c'est une identification dégradée.
+    identifieeEnLocal: Boolean,
     voieCatalogue: String,        // 'nom' | 'numero'
     motifEtat: String,            // 'resolu' | 'aucun-motif' | 'non-resolu'
 
@@ -186,6 +196,9 @@ function enregistrerScan(d = {}) {
             confiance: d.confiance || null,
             carteIncertaine: d.carteIncertaine != null ? Boolean(d.carteIncertaine) : null,
             sourceIdentification: d.sourceIdentification || null,
+            identifieeEnLocal: d.identifieeEnLocal != null ? Boolean(d.identifieeEnLocal) : null,
+            nomConfiance: d.nomConfiance || null,
+            nomBrut: d.nomBrut || null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
             rang: rangDuNumero(d.numero, numeroGagnant),

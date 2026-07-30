@@ -33,6 +33,11 @@ const {
 // données qui survivent au redéploiement. Jamais sur le chemin critique — voir le module.
 const { enregistrerScan } = require('./journal-scans');
 
+// Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
+// carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
+// Testée en bac à sable par test-identification-locale.js.
+const { identifierEnLocal } = require('./identification-locale');
+
 const app = express();
 app.set('trust proxy', 1); // Render est derrière un proxy → nécessaire pour lire la vraie IP côté rate-limit
 const PORT = process.env.PORT || 3000;
@@ -368,7 +373,25 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+
+LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
+Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
+vers une carte qui existe vraiment, ailleurs, et le prix rendu est celui d'une autre carte.
+- "nomBrut" : recopie ce qui est IMPRIMÉ, sans traduire. Sur une carte japonaise, ce sont des
+  katakana (ex: "ワンリキー", "ハッサム"). Sur une carte française, le nom français
+  (ex: "Carabaffe"). Si tu ne peux pas le lire, mets null — ne le reconstitue pas.
+- "name" : le nom ANGLAIS officiel correspondant. Sur une carte japonaise, cela demande de
+  translittérer PUIS traduire (ワンリキー = Machop, ハッサム = Scizor). Si tu n'es pas sûr de
+  la correspondance, garde le nom que tu lis dans "nomBrut" et baisse "nomConfiance".
+- "nomConfiance" :
+  * "haute"   : tu LIS le nom distinctement et tu es sûr de sa traduction anglaise.
+  * "moyenne" : tu lis le nom mais hésites sur la traduction, OU tu déduis surtout de l'illustration.
+  * "basse"   : nom peu lisible (flou, reflet, sleeve, angle), langue que tu déchiffres mal, ou
+                tu t'appuies principalement sur le titre de l'annonce plutôt que sur la carte.
+⚠️ NE DEVINE JAMAIS un Pokémon célèbre par défaut. Si l'illustration ne te dit rien de sûr,
+"nomConfiance" doit être "basse" — c'est une information UTILE, pas un aveu d'échec. Un nom en
+confiance basse est traité autrement en aval ; un nom faux en confiance haute produit un faux prix.
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
@@ -394,6 +417,15 @@ Si aucune photo du verso n'est fournie, dis-le via etatConfiance "basse".
 defautsVus : décris ce que tu OBSERVES réellement (ex: "blanchiment bord gauche", "rayure sur l'illustration", "coin corné"). Tableau vide [] si tu ne vois aucun défaut. N'invente rien.
 
 IMPORTANT pour "number" et "total" : le numéro de collection est imprimé en bas de la carte sous la forme "X/Y" (ex: "184/182", "025/165"). Lis les DEUX nombres avec attention, ils sont petits mais cruciaux. "number" = le X (avant le slash), "total" = le Y (après le slash). Si le X est SUPÉRIEUR au Y (ex: 184/182), c'est une carte secrète/spéciale (souvent une Illustration Rare) — lis bien, ne confonds pas 184 avec 8.
+Le numéro est le signal le plus DISCRIMINANT dont on dispose : il permet de retrouver la carte
+même quand son nom est douteux. Cherche-le donc partout : en bas de la carte, mais aussi dans le
+TITRE de l'annonce, qui le contient très souvent sous la forme "099/128" ou "055/088".
+Si malgré tout tu ne le lis pas, réponds null — n'invente PAS un numéro, et ne recopie pas celui
+d'une autre carte visible sur la photo. Un numéro absent est traité proprement en aval ; un
+numéro inventé désigne une carte qui n'a rien à voir.
+Sur les cartes JAPONAISES anciennes, le numéro peut être imprimé seul, sans total, ou porter un
+préfixe (ex: "S19"). Recopie-le tel quel dans "number" et laisse "total" à null si tu ne vois
+aucun dénominateur.
 
 Le "setCode" est le petit code alphabétique (2 à 4 lettres) imprimé en bas de la carte à côté du numéro, ou parfois dans le titre de l'annonce (ex: "BLK 129"). Si tu ne le vois pas clairement, réponds null, n'invente rien.
 IMPORTANT — les TAMPONS/STAMPS de réimpression : si la carte porte un tampon anniversaire ou de sous-set (le logo doré "Celebrations 25 ans", le tampon "Pokémon 151", "Trainer Gallery", "Prize Pack"...), ce sont des réimpressions qui GARDENT le numéro d'origine (ex: Florizarre 15/102 en Celebrations). Dans ce cas, indique le set du TAMPON dans "setCode" (ex: "CEL" pour Celebrations, "MEW" pour 151, "TG" pour Trainer Gallery), PAS le set d'origine — c'est ce qui permet de distinguer la réimpression de la carte vintage au même numéro.
@@ -454,11 +486,39 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         const clean = content.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(clean);
 
-        if (!parsed.name || !parsed.number) {
-            console.error("JSON IA incomplet:", parsed);
+        // ⚠️ ON NE JETTE PLUS LA RÉPONSE QUAND LE NUMÉRO MANQUE. L'ancienne version rendait
+        // null dans ce cas, ce qui la rendait indiscernable d'une VRAIE panne (clé
+        // invalide, quota, timeout, JSON illisible) : même retour, même message « Analyse
+        // IA échouée », même motif de remboursement. Deux annonces réelles « e-series 5
+        // jap » sont mortes là, alors que l'IA avait parfaitement répondu — elle n'avait
+        // simplement pas pu lire le numéro. L'appelant a besoin de distinguer les deux
+        // pour rembourser avec le bon motif et pour que le journal les compte séparément.
+        if (!parsed.name) {
+            console.error("JSON IA sans nom — inexploitable :", parsed);
             return null;
         }
+        // Numéro absent : on renvoie quand même la lecture, avec un drapeau explicite.
+        parsed.numeroIllisible = !parsed.number;
+        if (parsed.numeroIllisible) {
+            parsed.number = null;
+            console.warn(`⚠️ IA : numéro de collection NON LU pour "${parsed.name}" — le numéro est le signal le plus discriminant, sans lui l'identification n'est pas fiable.`);
+        }
         parsed.language = (parsed.language || "EN").toUpperCase();
+
+        // --- NOM : ce que l'IA a lu, et à quel point elle y croit -----------
+        // `nomBrut` est conservé tel quel (katakana, français...) : il ne sert pas au
+        // scoring mais il est la seule trace de ce qui était RÉELLEMENT imprimé, donc le
+        // seul moyen de comprendre après coup une traduction fautive.
+        parsed.nomBrut = (typeof parsed.nomBrut === 'string' && parsed.nomBrut.trim()) ? parsed.nomBrut.trim() : null;
+        const confiancesNom = ['haute', 'moyenne', 'basse'];
+        const confLue = String(parsed.nomConfiance ?? '').trim().toLowerCase();
+        // Absente ou hors énumération -> 'moyenne'. Volontairement PAS 'basse' : traiter un
+        // champ manquant comme une alerte rendrait tout scan suspect le jour où le modèle
+        // cesse de le renvoyer, et viderait le signal de son sens.
+        parsed.nomConfiance = confiancesNom.includes(confLue) ? confLue : 'moyenne';
+        if (parsed.nomConfiance === 'basse') {
+            console.warn(`⚠️ IA : nom "${parsed.name}" en confiance BASSE (brut : ${parsed.nomBrut ?? 'illisible'}) — le nom ne fera pas foi pour choisir les candidats.`);
+        }
 
         // Normalisation des nouveaux champs pour le scoring.
         // `total` attend un NOMBRE (le "Y" de X/Y). L'IA y met parfois autre chose : vu
@@ -513,7 +573,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         // (secret/IR). On avait donc "élevée=false" suivi d'une décision reverse juste
         // après, sans jamais voir la valeur qui l'avait déclenchée.
         const reverseLog = parsed.reverse === null ? 'indéterminée' : parsed.reverse;
-        console.log(`🎴 IA : ${parsed.name} #${parsed.number}${parsed.total ? '/' + parsed.total : ''}, rareté=${parsed.rarete}, rareté élevée=${parsed.rareteElevee}, reverse=${reverseLog}, motif=${parsed.motif}, langue=${parsed.language}`);
+        console.log(`🎴 IA : ${parsed.name} #${parsed.number ?? 'ILLISIBLE'}${parsed.total ? '/' + parsed.total : ''}, nomConfiance=${parsed.nomConfiance}${parsed.nomBrut ? ` (brut "${parsed.nomBrut}")` : ''}, rareté=${parsed.rarete}, rareté élevée=${parsed.rareteElevee}, reverse=${reverseLog}, motif=${parsed.motif}, langue=${parsed.language}`);
         if (parsed.etatEstime) {
             const defauts = Array.isArray(parsed.defautsVus) && parsed.defautsVus.length ? parsed.defautsVus.join(', ') : 'aucun défaut vu';
             console.log(`   👁️ État estimé par l'IA : ${parsed.etatEstime} (confiance ${parsed.etatConfiance || '?'}) — ${defauts}`);
@@ -1733,8 +1793,17 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             // 2a. Identification précise via TCGdex + image
             const trouvailleTCGdex = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, imageUrl, cardInfo.language, cardInfo.total);
             if (!trouvailleTCGdex) {
-                await rembourserScan(req, 'carte-introuvable');
-                return res.json({ success: false, error: `Carte "${cardInfo.name}${cardInfo.setCode ? ' ' + cardInfo.setCode : ''} #${cardInfo.number}" non trouvée sur TCGdex` });
+                // Même distinction de motif que /api/identifier : un numéro illisible n'est
+                // pas une carte introuvable. Le chemin d'identification LOCALE, lui, n'est
+                // branché que sur /api/identifier — la route réellement utilisée par
+                // l'extension. L'ajouter ici doublerait la surface sans gain visible.
+                await rembourserScan(req, cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable');
+                return res.json({
+                    success: false,
+                    error: cardInfo.numeroIllisible
+                        ? `Numéro de collection illisible sur la photo — identification impossible pour "${cardInfo.name}"`
+                        : `Carte "${cardInfo.name}${cardInfo.setCode ? ' ' + cardInfo.setCode : ''} #${cardInfo.number}" non trouvée sur TCGdex`
+                });
             }
             idCarteTCGdex = trouvailleTCGdex.id;
 
@@ -1977,10 +2046,53 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const debutCatalogue = Date.now();
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
-        const trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
+        let trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
+
+        // ════════════════════════════════════════════════════════════════════
+        // REPLI LOCAL — avant tout remboursement
+        // ════════════════════════════════════════════════════════════════════
+        // TCGdex ne connaît pas tout : les e-Series japonaises en sont absentes, et notre
+        // propre catalogue a la réponse. Mesuré sur les annonces réelles — Arbok 099 ->
+        // 160,08 €, Rhydon 055 -> 72,22 €, Ledian 007 -> 147,94 € — alors que la route
+        // répondait « non trouvée sur TCGdex » et remboursait. Voir identification-locale.js.
+        let identificationLocale = false;
+        let produitsImposes = null;
         if (!trouvaille) {
-            await rembourserScan(req, 'carte-introuvable');
-            return res.json({ success: false, error: `Carte "${cardInfo.name}" #${cardInfo.number} non trouvée sur TCGdex`, cardInfo });
+            const local = await identifierEnLocal({
+                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
+                rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total
+            });
+            if (local) {
+                identificationLocale = true;
+                produitsImposes = local.produits;
+                const nomGagnant = local.produits.find(p => p.idProduct === local.gagnant?.candidat?.idProduct);
+                console.log(
+                    `🗃️ [identifier] TCGdex muet -> IDENTIFICATION LOCALE : ${local.produits.length} candidat(s)` +
+                    ` via ${local.voie} (${local.raison}), gagnant ${local.gagnant?.candidat?.idProduct}` +
+                    ` code=${local.gagnant?.candidat?.codeSet} écart=${local.ecartScore}`
+                );
+                // `trouvaille` synthétique : tout l'aval l'attend. Ses champs TCGdex sont
+                // NULS, et c'est le fond du sujet — sans variantsDetailed on ne sait pas
+                // router les motifs de reverse (jusqu'à x100 d'écart), d'où `ambigu: true`.
+                trouvaille = {
+                    id: null, localId: null, variants: null, variantsDetailed: null,
+                    nomExact: nomGagnant ? String(nomGagnant.name).split('[')[0].trim() : cardInfo.name,
+                    source: 'catalogue-local', ambigu: true
+                };
+            } else {
+                // Deux motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
+                // aboutir, et ce n'est pas la même défaillance qu'une carte introuvable.
+                const motif = cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
+                await rembourserScan(req, motif);
+                return res.json({
+                    success: false,
+                    error: cardInfo.numeroIllisible
+                        ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
+                        : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
+                    cardInfo
+                });
+            }
         }
 
         // Garde-fou : le numéro de la carte trouvée contredit-il celui lu sur la photo ?
@@ -1995,9 +2107,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const numTCG = String(trouvaille.localId || '').replace(/^0+/, '').toLowerCase();
         const nomPourCatalogue = trouvaille.nomExact;
         const numeroContredit = Boolean(numLuIA && numTCG && numLuIA !== numTCG);
-        // Le nom n'est PAS digne de confiance si TCGdex a été trouvé sans lui, ou si le
-        // numéro de la carte retenue contredit celui, parfaitement lisible, de la photo.
-        const nomSuspect = trouvaille.source === 'total+numero' || numeroContredit;
+        // Le nom n'est PAS digne de confiance si TCGdex a été trouvé sans lui, si le
+        // numéro de la carte retenue contredit celui, parfaitement lisible, de la photo,
+        // ou si l'IA ELLE-MÊME annonce une confiance basse sur le nom.
+        //
+        // ⚠️ Ce troisième cas est le seul qui ne dépende PAS de l'accord de TCGdex. Les
+        // deux premiers exigent que TCGdex ait vu quelque chose de contradictoire : ils
+        // tombent dès qu'il est d'accord avec une mauvaise lecture. Le cas réel qui l'a
+        // motivé : l'IA a lu « Gengar » sur un Machoc japonais — un nom qui existe, dans
+        // d'autres sets, et que rien en aval ne pouvait mettre en doute.
+        const nomPeuFiable = cardInfo.nomConfiance === 'basse';
+        const nomSuspect = trouvaille.source === 'total+numero' || numeroContredit || nomPeuFiable;
+        if (nomPeuFiable) {
+            console.warn(`⚠️ [identifier] l'IA annonce une confiance BASSE sur le nom -> le nom ne servira pas à choisir les candidats.`);
+        }
         if (numeroContredit) {
             console.warn(`⚠️ [identifier] désaccord de numéro : TCGdex donne ${numTCG}, l'IA a lu ${numLuIA}.`);
             console.warn(`   -> on ne se fie plus au NOM ; identification par numéro + total.`);
@@ -2024,13 +2147,31 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
         //    halluciné (Dana lue "Kahili") ou inapparieable ("_____'s Pikachu").
-        let produits = nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue);
-        let voieCatalogue = 'nom';
+        let produits = produitsImposes ?? (nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue));
+        let voieCatalogue = identificationLocale ? 'local-nom-numero' : 'nom';
         let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {
             const parNumero = await trouverProduitsParNumero(expansionsAttendues, cardInfo.number);
             if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
-        } else if (produits.length > 0) {
+        }
+        // 2e usage du chemin local : le nom est suspect ET l'expansion attendue n'a rien
+        // donné. C'est le cas Rhydon/Ledian — TCGdex trouve la carte ailleurs, déclare le
+        // nom suspect, et le pont total -> set désigne un set de 2025. Sans ce repli il ne
+        // reste RIEN, alors que le catalogue contient la bonne carte au bon numéro.
+        if (produits.length === 0 && !identificationLocale) {
+            const local = await identifierEnLocal({
+                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
+                rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total
+            });
+            if (local) {
+                identificationLocale = true;
+                produits = local.produits;
+                voieCatalogue = 'local-nom-numero';
+                console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet}`);
+            }
+        }
+        if (produits.length > 0 && !identificationLocale) {
             // Le vivier par nom est plein : reste à savoir s'il PEUT contenir la bonne
             // carte. Voir viviersAvecRangs pour la règle et le cas Kahili.
             const choix = await viviersAvecRangs(produits, cardInfo.number, expansionsAttendues, `[identifier] "${nomPourCatalogue}"`);
@@ -2115,15 +2256,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // un motif générique empêcherait de mesurer lequel se déclenche.
         const carteAmbigue = Boolean(
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
-            || aucunCandidatAuNumero || gagnantContreditNumero
+            || aucunCandidatAuNumero || gagnantContreditNumero || identificationLocale || nomPeuFiable
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
-                    : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
-                        : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
-                            : numeroContredit ? 'tcgdex-numero-incoherent'
-                                : 'tcgdex-ambigu');
+                identificationLocale ? 'identification-locale-sans-tcgdex'
+                    : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
+                        : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
+                            : nomPeuFiable ? 'nom-confiance-basse'
+                                : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
+                                    : numeroContredit ? 'tcgdex-numero-incoherent'
+                                        : 'tcgdex-ambigu');
         }
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
@@ -2144,6 +2287,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             confiance: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
             carteIncertaine: carteAmbigue,
             sourceIdentification: trouvaille.source || 'nom',
+            identifieeEnLocal: identificationLocale,
+            nomConfiance: cardInfo.nomConfiance,
+            nomBrut: cardInfo.nomBrut,
             voieCatalogue,
             motifEtat: motifResolution.etat,
             // Les deux signaux de rang, persistés : c'est ce qui permettra de mesurer
@@ -2180,9 +2326,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 //   'haute' -> le gagnant devance nettement le 2e (>= 30 points)
                 //   'basse' -> écart faible, ou identification obtenue sans le nom
                 confianceIdentification: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
-                // Par quel signal la carte a été identifiée : 'nom' ou 'total+numero'
-                // (nom écarté car halluciné ou inapparieable).
+                // Par quel signal la carte a été identifiée : 'nom', 'total+numero' (nom
+                // écarté car halluciné ou inapparieable) ou 'catalogue-local' (TCGdex muet).
                 sourceIdentification: trouvaille.source || 'nom',
+                // ⚠️ true = identifiée SANS TCGdex, donc sans variantsDetailed : le motif de
+                // reverse n'a pas pu être routé et l'écart de prix entre impressions peut
+                // atteindre x100. L'extension doit présenter le prix avec réserve.
+                identifieeEnLocal: identificationLocale,
+                // Ce que l'IA dit de sa propre lecture du nom, et le nom brut qu'elle a lu.
+                nomConfiance: cardInfo.nomConfiance || null,
+                nomBrut: cardInfo.nomBrut || null,
                 // Par quel signal les produits candidats ont été trouvés au catalogue.
                 //   'nom' | 'numero' | 'numero-substitue' (le vivier par nom ne pouvait
                 //   pas contenir la bonne carte — voir viviersAvecRangs)
