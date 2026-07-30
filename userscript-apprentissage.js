@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage manuel Cardmarket
 // @namespace    rat-market
-// @version      1.2
+// @version      1.3
 // @description  Bouton "Apprendre cette page" sur les galeries Singles. Lit UNIQUEMENT la page ouverte — ne navigue jamais.
 // @match        https://www.cardmarket.com/*/Pokemon/Products/Singles*
 // @grant        GM_xmlhttpRequest
@@ -10,7 +10,7 @@
 // ==/UserScript==
 
 // ============================================================
-// CE QUI A CHANGÉ EN 1.2, ET POURQUOI
+// CE QUI A CHANGÉ EN 1.3, ET POURQUOI
 // ============================================================
 // 1. LA QUERY STRING EST RETIRÉE DU SLUG. La 1.1 prenait le dernier segment de l'href
 //    tel quel, donc "Rotom-mC248?language=2", et en extrayait les chiffres de FIN : le
@@ -30,8 +30,13 @@
 // 4. LA COUVERTURE DE L'EXPANSION est affichée après chaque envoi. Sans elle, on ne sait
 //    pas quand une galerie est finie. Le serveur la renvoie désormais.
 //
-// 5. PAGINATION visible et perSite=100 proposé. Une galerie de 125 cartes se fait en
-//    2 pages au lieu de 7. Le script ne navigue jamais de lui-même : il propose un lien.
+// 5. PAGINATION visible, MAIS AUCUN paramètre d'URL ajouté. La 1.2 proposait
+//    "?perSite=100" pour tourner moins de pages : Cloudflare y a répondu par un ban.
+//    Un paramètre inhabituel sur une galerie ressemble à du scraping, et c'est
+//    exactement ce que la répartition des rôles cherche à éviter — on navigue comme un
+//    humain, page par page, avec les URL que le site propose lui-même. Le script se
+//    contente donc d'AFFICHER où on en est et de reprendre le lien "page suivante"
+//    présent dans la page. Il ne fabrique aucune URL et ne navigue jamais de lui-même.
 
 (function () {
   'use strict';
@@ -40,7 +45,6 @@
   const URL_API    = 'https://pokemon-proxy-ratnoir666.onrender.com';
   const JETON      = 'K10-Sr7izvo-CG3bSRfCbhSnw8KTNrbJ';
   const TAILLE_LOT = 25;
-  const PAR_PAGE   = 100;   // moins de pages à tourner à la main
 
   // ===== Lecture de la page ================================================
   // ⚠️ MÊME logique que scraperListeExpansion (live-cardmarket.js), à une exception
@@ -96,31 +100,28 @@
   }
 
   // ===== Contexte de la page : quelle galerie, quelle page ? ===============
+  // ⚠️ On LIT la page, on ne fabrique aucune URL. Le lien "page suivante" est celui que
+  //    Cardmarket affiche lui-même — ajouter un paramètre maison (perSite) a déclenché un
+  //    ban Cloudflare, et c'est mérité : ça ne ressemble pas à de la navigation humaine.
   function contexteDeLaPage() {
     const morceaux = location.pathname.split('/').filter(Boolean);
     const slugSet = morceaux[morceaux.length - 1] || '?';
-    const params = new URLSearchParams(location.search);
-    const page = parseInt(params.get('site') || '1', 10) || 1;
-    const perSite = parseInt(params.get('perSite') || '0', 10) || null;
+    const page = parseInt(new URLSearchParams(location.search).get('site') || '1', 10) || 1;
     // Nombre total de pages : Cardmarket l'affiche dans sa pagination.
     let pages = null;
-    for (const el of document.querySelectorAll('[aria-label], .pagination a, .pagination span')) {
+    for (const el of document.querySelectorAll('.pagination a, .pagination span, nav a, nav span')) {
       const m = (el.textContent || '').trim().match(/^(\d+)$/);
       if (m) pages = Math.max(pages || 0, parseInt(m[1], 10));
     }
-    return { slugSet, page, perSite, pages };
-  }
-
-  function urlAvecPerSite() {
-    const u = new URL(location.href);
-    u.searchParams.set('perSite', String(PAR_PAGE));
-    u.searchParams.delete('site');
-    return u.toString();
-  }
-  function urlPageSuivante(ctx) {
-    const u = new URL(location.href);
-    u.searchParams.set('site', String(ctx.page + 1));
-    return u.toString();
+    // Le lien de la page suivante, tel qu'il EXISTE dans la page. null s'il n'y en a pas.
+    let hrefSuivant = null;
+    for (const a of document.querySelectorAll('.pagination a, nav a')) {
+      const t = (a.textContent || '').trim();
+      const aria = (a.getAttribute('aria-label') || '').toLowerCase();
+      const estSuivant = t === String(page + 1) || /suivant|next/.test(aria) || /suivant|next/i.test(t);
+      if (estSuivant && a.getAttribute('href')) { hrefSuivant = a.href; break; }
+    }
+    return { slugSet, page, pages, hrefSuivant };
   }
 
   // ===== Envoi d'un lot (GM_xmlhttpRequest = pas de CORS) ==================
@@ -148,10 +149,7 @@
     'box-shadow:0 4px 16px rgba(0,0,0,.4);width:278px';
   panneau.innerHTML =
     '<div style="font-weight:600;margin-bottom:2px">🐀 Apprendre cette page</div>' +
-    `<div style="color:#888;font-size:11px;margin-bottom:8px">${ctx.slugSet} · page ${ctx.page}${ctx.pages ? '/' + ctx.pages : ''}${ctx.perSite ? ' · ' + ctx.perSite + '/page' : ''}</div>` +
-    (ctx.perSite !== PAR_PAGE
-      ? `<div style="margin-bottom:8px"><a id="rm-persite" href="${urlAvecPerSite()}" style="color:#D4AF37;font-size:11px">↻ recharger à ${PAR_PAGE} cartes par page</a></div>`
-      : '') +
+    `<div style="color:#888;font-size:11px;margin-bottom:8px">${ctx.slugSet} · page ${ctx.page}${ctx.pages ? '/' + ctx.pages : ''}</div>` +
     '<button id="rm-go" style="width:100%;padding:7px;background:#0c0c0e;color:#D4AF37;' +
     'border:1px solid #D4AF37;border-radius:6px;cursor:pointer;font-weight:600">Apprendre</button>' +
     '<div id="rm-barwrap" style="display:none;height:6px;background:#333;border-radius:3px;margin-top:10px;overflow:hidden">' +
@@ -212,9 +210,10 @@
         html += `<br><span style="color:${couleur}">📊 expansion couverte à ${pc} % ` +
                 `(${couverture.avecNumero}/${couverture.produits} numéros)</span>`;
         if (pc < 90) {
-          html += ctx.pages && ctx.page < ctx.pages
-            ? `<br><a href="${urlPageSuivante(ctx)}" style="color:#D4AF37">→ page ${ctx.page + 1}/${ctx.pages}</a>`
-            : `<br><span style="color:#888">Reste des cartes sans numéro de titre : rien de plus à tirer d'ici.</span>`;
+          // Le lien vient de la PAGE, pas de nous : voir contexteDeLaPage.
+          html += ctx.hrefSuivant
+            ? `<br><a href="${ctx.hrefSuivant}" style="color:#D4AF37">→ page suivante${ctx.pages ? ` (${ctx.page + 1}/${ctx.pages})` : ''}</a>`
+            : `<br><span style="color:#888">Dernière page. Le reste n'a pas de numéro dans son titre : rien de plus à tirer d'ici.</span>`;
         } else {
           html += '<br><span style="color:#67c23a">Expansion terminée 🎉</span>';
         }

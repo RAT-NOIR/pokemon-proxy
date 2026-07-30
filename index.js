@@ -25,6 +25,10 @@ const {
     // le temps de mesurer la fréquence réelle du rang 3 avant le point 4.
     rangDuNumero, bilanDesRangs, normaliserCodeSet, codesApparentes,
     regionDuCodeSet,
+    // numeroDepuisSlug : /api/apprendre-lot recalcule le numeroUrl lui-même plutôt que
+    // de faire confiance au client. L'oubli de cet import a cassé l'endpoint en
+    // production — node --check ne valide que la SYNTAXE, pas la résolution des noms.
+    numeroDepuisSlug,
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
