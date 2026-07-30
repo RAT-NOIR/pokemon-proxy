@@ -2113,8 +2113,58 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // numéro + total, qui ne dépend d'aucun nom.
         const numLuIA = String(cardInfo.number || '').replace(/^0+/, '').toLowerCase();
         const numTCG = String(trouvaille.localId || '').replace(/^0+/, '').toLowerCase();
-        const nomPourCatalogue = trouvaille.nomExact;
         const numeroContredit = Boolean(numLuIA && numTCG && numLuIA !== numTCG);
+
+        // ════════════════════════════════════════════════════════════════════
+        // ARBITRAGE DU NOM par le catalogue local
+        // ════════════════════════════════════════════════════════════════════
+        // Quand TCGdex trouve la carte SANS le nom (source 'total+numero'), il conclut que
+        // « le NOM lu est suspect ». C'est une inférence, et elle est fausse dès que TCGdex
+        // n'a simplement pas le set. Trace réelle : une carte japonaise Flareon 017/088
+        // (EC4 « Split Earth », 239,94 €). Le total 088 est IMPRIMÉ sur la carte et il est
+        // juste, mais le seul set de 88 cartes que connaisse TCGdex est « Perfect Order »
+        // (2025) — donc aucun Flareon n'y figure, le nom a été déclaré suspect, et le
+        // repli par total a rendu... « Turtonator », à 0,02 €. Que le serveur a APPRIS.
+        //
+        // Le catalogue local est un arbitre INDÉPENDANT : contient-il une carte de ce nom
+        // à ce numéro ? Vérifié sur les cinq cas réels —
+        //   Flareon 017 -> OUI (EC4, 239,94 €)      le nom est corroboré, TCGdex a tort
+        //   Pyroli 017  -> OUI, via nomFr           même carte, nom français
+        //   Nix 180     -> OUI, via nomFr           « Nix » EST le nom français de Nita
+        //   Vesper 175  -> OUI, via nomFr           idem pour Evelyn
+        //   Kahili 173  -> NON                      là c'est une vraie hallucination
+        //                                           (Dana s'appelle « Méridia » en français)
+        // Le même test distingue donc une lecture juste d'une hallucination, sans dépendre
+        // de la couverture de TCGdex. Et il corrige au passage deux cas que je prenais pour
+        // des hallucinations : nos noms de catalogue sont anglais, la lecture était bonne.
+        if (trouvaille.source === 'total+numero' && !identificationLocale) {
+            const arbitre = await identifierEnLocal({
+                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
+                rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total
+            });
+            if (arbitre) {
+                const gagnantArbitre = arbitre.produits.find(p => p.idProduct === arbitre.gagnant?.candidat?.idProduct);
+                console.log(
+                    `⚖️ [nom-corrobore] le catalogue local CONFIRME "${cardInfo.name}" au n°${cardInfo.number}` +
+                    ` -> ${arbitre.gagnant?.candidat?.idProduct} code=${arbitre.gagnant?.candidat?.codeSet}` +
+                    ` prix=${arbitre.gagnant?.candidat?.prix}. TCGdex proposait "${trouvaille.nomExact}"` +
+                    ` (${trouvaille.id}) : sa suggestion est ÉCARTÉE.`
+                );
+                identificationLocale = true;
+                localIncertain = arbitre.incertain;
+                produitsImposes = arbitre.produits;
+                trouvaille = {
+                    id: null, localId: null, variants: null, variantsDetailed: null,
+                    nomExact: gagnantArbitre ? String(gagnantArbitre.name).split('[')[0].trim() : cardInfo.name,
+                    source: 'catalogue-local', ambigu: arbitre.incertain
+                };
+            } else {
+                console.log(`⚖️ [nom-non-corrobore] aucun "${cardInfo.name}" au n°${cardInfo.number} dans le catalogue local -> le nom est bien suspect, on garde le chemin total+numéro.`);
+            }
+        }
+
+        const nomPourCatalogue = trouvaille.nomExact;
         // Le nom n'est PAS digne de confiance si TCGdex a été trouvé sans lui, si le
         // numéro de la carte retenue contredit celui, parfaitement lisible, de la photo,
         // ou si l'IA ELLE-MÊME annonce une confiance basse sur le nom.

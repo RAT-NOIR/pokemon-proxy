@@ -72,6 +72,44 @@ const CAS = [
         lu: { nomLu: 'Scizor', numeroLu: '074', regionAttendue: 'japonais', setCodeLu: 'EC3' },
         attendu: 652068, codeAttendu: 'EC3'
     },
+    // ---- L'ARBITRAGE DU NOM ------------------------------------------------
+    // Ces cas décident si TCGdex a le droit d'écarter le nom lu. Quand il trouve la carte
+    // SANS le nom, il conclut « nom suspect » — inférence fausse dès qu'il n'a pas le set.
+    {
+        nom: 'ARBITRAGE — Flareon 017 : TCGdex n\'a pas le set, le nom est JUSTE',
+        // Trace réelle : total 088 imprimé et correct (EC4 « Split Earth »), mais le seul
+        // set de 88 cartes connu de TCGdex est « Perfect Order » (2025). Il a donc rendu
+        // « Turtonator » à 0,02 € — et le serveur l'a appris. Le catalogue local corrobore.
+        lu: { nomLu: 'Flareon', numeroLu: '017', regionAttendue: 'japonais', total: '088' },
+        attendu: 653910, prixAttendu: 239.94, codeAttendu: 'EC4'
+    },
+    {
+        nom: 'ARBITRAGE — Pyroli 017 : la même carte, nom FRANÇAIS',
+        lu: { nomLu: 'Pyroli', numeroLu: '017', regionAttendue: 'japonais', total: '088' },
+        attendu: 653910, codeAttendu: 'EC4'
+    },
+    {
+        nom: 'ARBITRAGE — Nix 180 : « Nix » EST le nom français de Nita',
+        // Je prenais ce cas pour une hallucination : nos noms de catalogue sont anglais,
+        // et la lecture était en réalité correcte. nomFr le résout directement.
+        lu: { nomLu: 'Nix', numeroLu: '180', regionAttendue: 'occidental', total: '181' },
+        attendu: 369105, codeAttendu: 'TEU',
+        // TEU a de vraies reverses : l'incertitude est ici MÉRITÉE.
+        attendMotifARouter: true
+    },
+    {
+        nom: 'ARBITRAGE — Vesper 175 : nom français d\'Evelyn',
+        lu: { nomLu: 'Vesper', numeroLu: '175', regionAttendue: 'occidental', total: '181' },
+        attendu: 369100, codeAttendu: 'TEU', attendMotifARouter: true
+    },
+    {
+        nom: 'ARBITRAGE — Kahili 173 : la VRAIE hallucination, doit être REFUSÉE',
+        // Dana s'appelle « Méridia » en français, pas « Kahili ». Aucun produit de ce nom
+        // ne porte le n°173 : le nom n'est pas corroboré, et le chemin total+numéro doit
+        // garder la main. C'est le test qui empêche l'arbitrage de tout avaler.
+        lu: { nomLu: 'Kahili', numeroLu: '173', regionAttendue: 'occidental', total: '181' },
+        attendNull: true
+    },
     {
         nom: 'Numéro absent -> refus explicite',
         lu: { nomLu: 'Arbok', numeroLu: null, regionAttendue: 'japonais' },
@@ -86,7 +124,10 @@ const CAS = [
 
 // Les noms dont il faut copier les produits (tous ceux qui portent un de ces noms, en
 // anglais comme en français, pour que le vivier du bac à sable soit RÉALISTE).
-const NOMS_A_COPIER = ['Arbok', 'Rhydon', 'Ledian', 'Wartortle', 'Scizor'];
+const NOMS_A_COPIER = ['Arbok', 'Rhydon', 'Ledian', 'Wartortle', 'Scizor', 'Flareon', 'Nita', 'Evelyn', 'Dana', 'Kahili'];
+// Les noms FRANÇAIS testés, à retrouver via nomFr : ils n'existent pas côté catalogue,
+// qui est en anglais. « Nix » = Nita, « Vesper » = Evelyn, « Pyroli » = Flareon.
+const NOMS_FR_A_COPIER = [/^Carabaffe$/i, /^Pyroli$/i, /^Nix$/i, /^Vesper$/i, /^Méridia$/i];
 
 let echecs = 0;
 function verifier(libelle, obtenu, attendu) {
@@ -119,7 +160,7 @@ async function main() {
     let produits = [];
     for (const r of regexNoms) produits.push(...await CatP.find({ name: r }).lean());
     // Plus tout produit dont le nomFr correspond à un des cas français testés.
-    const idsFr = (await NumP.find({ nomFr: { $in: [/^Carabaffe$/i, /^Cizayox$/i] } }, { idProduct: 1 }).lean()).map(d => d.idProduct);
+    const idsFr = (await NumP.find({ nomFr: { $in: NOMS_FR_A_COPIER } }, { idProduct: 1 }).lean()).map(d => d.idProduct);
     if (idsFr.length) produits.push(...await CatP.find({ idProduct: { $in: idsFr } }).lean());
     const ids = [...new Set(produits.map(p => p.idProduct))];
     produits = [...new Map(produits.map(p => [p.idProduct, p])).values()];
@@ -207,6 +248,10 @@ async function main() {
         // le drapeau pour rien. Sur les cas à égalité, en revanche, elle est méritée.
         if (cas.attendEgalite) {
             verifier('incertain — car rien ne départage les deux premiers', r.incertain, true);
+        } else if (cas.attendMotifARouter) {
+            // Set moderne : il a de vraies reverses, l'incertitude est méritée.
+            verifier('cette expansion A des reverses -> motif à router', r.motifARouter, true);
+            verifier('   ... donc marqué incertain, à juste titre', r.incertain, true);
         } else {
             verifier('aucun motif de reverse à router dans cette expansion', r.motifARouter, false);
             verifier('   ... donc PAS marqué incertain (identification nette)', r.incertain, false);
