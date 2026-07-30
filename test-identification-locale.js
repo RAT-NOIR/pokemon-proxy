@@ -89,6 +89,28 @@ const CAS = [
         attendu: 653910, codeAttendu: 'EC4'
     },
     {
+        nom: 'MOTIF — Whitney\'s Furret VS 018 : set à reverses, mais carte MATE',
+        // Cas réel. Le set VS contient 24 produits cotés en holo sur 151, donc le test
+        // d'expansion concluait « motif à router » -> incertain -> l'extension SUPPRIMAIT
+        // le verdict, sur une identification pourtant nette. Or l'IA avait lu motif
+        // « aucun » et reverse false en confiance haute : il n'y a rien à router sur CETTE
+        // carte. On regardait le set là où il fallait regarder la carte.
+        lu: {
+            nomLu: "Whitney's Furret", numeroLu: '018', regionAttendue: 'japonais',
+            setCodeLu: 'VS', total: '141', motifLu: 'aucun', reverseLu: false
+        },
+        attendu: 554338, codeAttendu: 'VS'
+    },
+    {
+        nom: 'MOTIF — le même, mais reverse INDÉTERMINÉE : l\'incertitude revient',
+        // Dans le doute, on ne relâche rien : reverse null ne vaut pas reverse false.
+        lu: {
+            nomLu: "Whitney's Furret", numeroLu: '018', regionAttendue: 'japonais',
+            setCodeLu: 'VS', total: '141', motifLu: 'indetermine', reverseLu: null
+        },
+        attendu: 554338, codeAttendu: 'VS', attendMotifARouter: true
+    },
+    {
         nom: 'ARBITRAGE — Nix 180 : « Nix » EST le nom français de Nita',
         // Je prenais ce cas pour une hallucination : nos noms de catalogue sont anglais,
         // et la lecture était en réalité correcte. nomFr le résout directement.
@@ -124,7 +146,7 @@ const CAS = [
 
 // Les noms dont il faut copier les produits (tous ceux qui portent un de ces noms, en
 // anglais comme en français, pour que le vivier du bac à sable soit RÉALISTE).
-const NOMS_A_COPIER = ['Arbok', 'Rhydon', 'Ledian', 'Wartortle', 'Scizor', 'Flareon', 'Nita', 'Evelyn', 'Dana', 'Kahili'];
+const NOMS_A_COPIER = ['Arbok', 'Rhydon', 'Ledian', 'Wartortle', 'Scizor', 'Flareon', 'Nita', 'Evelyn', 'Dana', 'Kahili', "Whitney's Furret"];
 // Les noms FRANÇAIS testés, à retrouver via nomFr : ils n'existent pas côté catalogue,
 // qui est en anglais. « Nix » = Nita, « Vesper » = Evelyn, « Pyroli » = Flareon.
 const NOMS_FR_A_COPIER = [/^Carabaffe$/i, /^Pyroli$/i, /^Nix$/i, /^Vesper$/i, /^Méridia$/i];

@@ -65,7 +65,8 @@ const EST_CODE_CARD = /code\s*card/i;
  */
 async function identifierEnLocal({
     nomLu, numeroLu, regionAttendue = null, setCodeLu = null,
-    rarete = null, rareteElevee = false, total = null
+    rarete = null, rareteElevee = false, total = null,
+    motifLu = null, reverseLu = null
 } = {}) {
     if (mongoose.connection.readyState !== 1) return null;
     // Sans numéro, ce chemin n'a pas de discriminant : le nom seul ramène jusqu'à 153
@@ -172,9 +173,22 @@ async function identifierEnLocal({
     // Le test porte sur l'EXPANSION entière, pas sur le seul produit retenu : un
     // trendHolo absent sur une carte peut vouloir dire « prix inconnu », alors qu'une
     // expansion entière sans aucun prix holo n'a démontrablement pas d'impression reverse.
+    // ⚠️ ET LA CARTE PASSE AVANT LE SET. Le test sur l'expansion dit si des reverses
+    // EXISTENT dans ce set ; il ne dit pas si CETTE carte en est une. Quand l'IA a lu
+    // motif « aucun » ET reverse explicitement false, il n'y a rien à router, même dans un
+    // set qui contient des reverses par ailleurs. Cas réel — Whitney's Furret VS 018 : le
+    // set VS a 24 produits cotés en holo sur 151, donc le test d'expansion disait « motif à
+    // router », le résultat sortait incertain, et l'extension SUPPRIMAIT le verdict. Sur
+    // une identification pourtant nette (candidat unique, nom corroboré, rang 1) et une
+    // carte lue mate en confiance haute. On regardait le set là où il fallait regarder
+    // la carte.
+    // `reverseLu === null` (indéterminé) ne suffit PAS : dans le doute, l'incertitude reste.
+    const rienARouterSurCetteCarte = motifLu === 'aucun' && reverseLu === false;
     const expGagnante = resultat.gagnant?.candidat?.idExpansion ?? null;
     let motifARouter = true;
-    if (expGagnante != null) {
+    if (rienARouterSurCetteCarte) {
+        motifARouter = false;
+    } else if (expGagnante != null) {
         const idsExp = (await CatalogueProduit.find(
             { idExpansion: Number(expGagnante) }, { idProduct: 1 }
         ).lean()).map(x => x.idProduct);
