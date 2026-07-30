@@ -160,6 +160,30 @@ async function identifierEnLocal({
         ? resultat.scores[0].score - resultat.scores[1].score
         : null;
 
+    // ---- 4. Y a-t-il vraiment un motif de reverse à router ? --------------
+    // L'incertitude de ce chemin vient de la PERTE de variantsDetailed, donc de
+    // l'impossibilité de viser la bonne impression. Encore faut-il qu'il y ait plusieurs
+    // impressions. Mesuré : sur les 521 produits des cinq séries e-Reader (EC1..EC5),
+    // AUCUN n'a de trendHolo > 0 — ces cartes de 2001-2003 n'ont pas de reverse. Contre
+    // 100/180 sur PRE et 166/244 sur DRI, des sets modernes. Marquer une carte e-Series
+    // incertaine « parce qu'on n'a pas pu router le motif » n'a donc aucun objet, et
+    // c'est ce qui faisait sortir « bonne carte mais incertaine » sur Starmie EC4.
+    //
+    // Le test porte sur l'EXPANSION entière, pas sur le seul produit retenu : un
+    // trendHolo absent sur une carte peut vouloir dire « prix inconnu », alors qu'une
+    // expansion entière sans aucun prix holo n'a démontrablement pas d'impression reverse.
+    const expGagnante = resultat.gagnant?.candidat?.idExpansion ?? null;
+    let motifARouter = true;
+    if (expGagnante != null) {
+        const idsExp = (await CatalogueProduit.find(
+            { idExpansion: Number(expGagnante) }, { idProduct: 1 }
+        ).lean()).map(x => x.idProduct);
+        const holos = idsExp.length
+            ? await GuidePrix.countDocuments({ idProduct: { $in: idsExp }, trendHolo: { $gt: 0 } })
+            : 0;
+        motifARouter = holos > 0;
+    }
+
     return {
         produits: retenus.map(n => n.p),
         scores: resultat.scores,
@@ -169,8 +193,21 @@ async function identifierEnLocal({
         ecartScore,
         egaliteAuSommet: ecartScore === 0,
         rangs: bilanDesRangs(enrichis, numeroLu, resultat.gagnant?.candidat),
-        // TOUJOURS vrai : voir l'en-tête. Perdre variantsDetailed suffit à le justifier.
-        incertain: true
+        // L'expansion du gagnant contient-elle des impressions reverse ? Si non, ne pas
+        // avoir routé le motif ne coûte RIEN, et l'incertitude tombe.
+        motifARouter,
+        // INCERTAIN si l'une de ces trois choses est vraie :
+        //   - il existe un motif de reverse qu'on n'a pas pu router (écart jusqu'à x100)
+        //   - rien ne départage les deux premiers candidats (égalité au sommet)
+        //   - le produit retenu ne porte pas le numéro lu
+        // Une identification locale nette, sur une carte sans reverse, n'a PAS de raison
+        // d'être présentée avec réserve : c'était le cas des e-Series, où le prix juste
+        // sortait quand même marqué douteux.
+        incertain: Boolean(
+            motifARouter
+            || ecartScore === 0
+            || bilanDesRangs(enrichis, numeroLu, resultat.gagnant?.candidat).rangGagnant !== 1
+        )
     };
 }
 

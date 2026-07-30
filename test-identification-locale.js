@@ -124,10 +124,18 @@ async function main() {
     const ids = [...new Set(produits.map(p => p.idProduct))];
     produits = [...new Map(produits.map(p => [p.idProduct, p])).values()];
 
-    const numeros = await NumP.find({ idProduct: { $in: ids } }).lean();
+    // ⚠️ On copie les EXPANSIONS ENTIÈRES des candidats, pas seulement les produits qui
+    // portent les noms testés. C'est indispensable au contrôle `motifARouter` : il compte
+    // les prix holo de toute l'expansion pour savoir si elle contient des impressions
+    // reverse. Sur un sous-ensemble, une expansion à reverses pourrait passer pour une
+    // expansion sans, et le test validerait un faux « pas de motif à router ».
     const exps = [...new Set(produits.map(p => p.idExpansion).filter(e => e != null))];
+    const produitsExps = await CatP.find({ idExpansion: { $in: exps } }).lean();
+    produits = [...new Map([...produits, ...produitsExps].map(p => [p.idProduct, p])).values()];
+    const idsComplets = produits.map(p => p.idProduct);
+    const numeros = await NumP.find({ idProduct: { $in: idsComplets } }).lean();
     const codes = await CsP.find({ idExpansion: { $in: exps } }).lean();
-    const guides = await GuP.find({ idProduct: { $in: ids } }).lean();
+    const guides = await GuP.find({ idProduct: { $in: idsComplets } }).lean();
     console.log(`   copié : ${produits.length} produits, ${numeros.length} numéros, ${codes.length} codes de set, ${guides.length} prix`);
     await mongoose.disconnect();
 
@@ -193,7 +201,16 @@ async function main() {
             }
             verifier('   ... rang du numéro = 1', r.rangs.rangGagnant, 1);
         }
-        verifier('résultat marqué incertain (pas de variantsDetailed)', r.incertain, true);
+        // L'incertitude n'est plus systématique : elle est JUSTIFIÉE ou elle tombe.
+        // Mesuré : les 521 produits des cinq séries e-Reader n'ont AUCUN trendHolo > 0,
+        // donc aucune impression reverse à router — marquer douteux un prix juste userait
+        // le drapeau pour rien. Sur les cas à égalité, en revanche, elle est méritée.
+        if (cas.attendEgalite) {
+            verifier('incertain — car rien ne départage les deux premiers', r.incertain, true);
+        } else {
+            verifier('aucun motif de reverse à router dans cette expansion', r.motifARouter, false);
+            verifier('   ... donc PAS marqué incertain (identification nette)', r.incertain, false);
+        }
     }
 
     // ---- 4. Nettoyage, vérifié --------------------------------------------

@@ -80,6 +80,26 @@ function normaliserCodeSet(code) {
 // McDonald's japonais à 1 034 €, en lui offrant un +15 imérité.
 // À 3 caractères, tout ce qui est légitime survit : "PRE"~"xPRE", "DRI"~"xDRI",
 // "SM-P"~"SM-P/CS", "MCD"~"MCDP", "MCD"~"MCD11".
+// ============================================================
+// ALIAS DES CODES LUS SUR LA CARTE
+// ============================================================
+// Ce que l'IA lit sur la carte n'est pas toujours le code que Cardmarket emploie. Sur les
+// cartes de l'ère « Pokémon-e » (e-Reader, 2001-2003), le marquage imprimé est le petit
+// logo « e » suivi du numéro de série — l'IA lit donc « e1 », « e4 »... — alors que
+// Cardmarket code ces sets « EC1 », « EC4 ». Mesuré sur les cinq séries : aucune paire
+// n'est ni égale ni apparentée, et « E1 » fait deux caractères, donc sous le seuil de
+// parenté. Résultat : la BONNE carte prenait -40 au critère set.
+// Cas réel — Dark Arbok e1 099 : le bon produit (EC1, 160,08 €) gagnait à 55 points au
+// lieu de 135, sa marge tenant entièrement à autre chose que le set.
+//
+// ⚠️ Table d'ALIAS, pas de devinette : chaque entrée est une correspondance vérifiable
+// entre un marquage physique et un code Cardmarket, sur une famille de sets fermée
+// (l'ère e-Reader n'aura jamais de sixième série). On ne « répare » pas le seuil de
+// parenté, qui protège de 618 rapprochements fautifs mesurés.
+const ALIAS_CODES_LUS = new Map([
+    ['E1', 'EC1'], ['E2', 'EC2'], ['E3', 'EC3'], ['E4', 'EC4'], ['E5', 'EC5']
+]);
+
 const LONGUEUR_MIN_PARENTE = 3;
 
 function codesApparentes(a, b) {
@@ -755,7 +775,11 @@ function scorerCandidat(candidat, lu) {
     //        set de base encaissait le bonus plein : 80 points d'écart injustifiés.
     //      - SANS RAPPORT       -> malus plein (édition démontrablement fausse)
     const attendues = lu.idExpansionsAttendues || (lu.idExpansionAttendu != null ? [lu.idExpansionAttendu] : []);
-    const codeIA = normaliserCodeSet(lu.setCode);
+    // Le code LU passe par la table d'alias : le marquage physique d'une carte n'est pas
+    // toujours le code Cardmarket (« e1 » imprimé vs « EC1 » chez Cardmarket). Voir
+    // ALIAS_CODES_LUS. Le code du CANDIDAT, lui, vient de notre base : pas d'alias.
+    const codeLuBrut = normaliserCodeSet(lu.setCode);
+    const codeIA = ALIAS_CODES_LUS.get(codeLuBrut) || codeLuBrut;
     const codeCand = normaliserCodeSet(candidat.codeSet);
     if (codeIA && codeCand && codeIA === codeCand) {
         score += POIDS.set; detail.set = `+${POIDS.set} (code ${candidat.codeSet} = stamp lu)`;
@@ -925,6 +949,7 @@ module.exports = {
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
+    ALIAS_CODES_LUS,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -1102,6 +1127,19 @@ if (require.main === module) {
         verifier('"EC" vs "EC3" -> malus (2 car. communs)', scoreSet('EC', 'EC3'), -40);
         verifier('"DRI" vs "DR" -> malus (2 car. communs)', scoreSet('DRI', 'DR'), -40);
         verifier('"SM-P" vs "SM-P/CS" -> partiel conservé', scoreSet('SM-P', 'SM-P/CS'), 15);
+
+        // --- ALIAS DES CODES LUS : le marquage physique n'est pas le code Cardmarket ---
+        // Sur une carte de l'ère e-Reader, l'IA lit le logo « e » + le numéro de série.
+        // Sans alias, les cinq séries prenaient -40 sur le BON candidat (mesuré).
+        // Cas réel Dark Arbok e1 099 : 55 points au lieu de 135.
+        verifier('lu "e1" vs "EC1" -> exact via alias', scoreSet('e1', 'EC1'), 40);
+        verifier('lu "e4" vs "EC4" -> exact via alias', scoreSet('e4', 'EC4'), 40);
+        verifier('lu "E5" vs "EC5" -> exact via alias (casse indifférente)', scoreSet('E5', 'EC5'), 40);
+        // L'alias ne doit pas rapprocher ce qui n'a rien à voir.
+        verifier('lu "e1" vs "EC4" -> malus (séries différentes)', scoreSet('e1', 'EC4'), -40);
+        verifier('lu "e1" vs "DRI" -> malus', scoreSet('e1', 'DRI'), -40);
+        // Et il ne s'applique QUE au code lu, jamais au code du candidat en base.
+        verifier('lu "EC1" vs "E1" -> malus (E1 n\'est pas un code Cardmarket)', scoreSet('EC1', 'E1'), -40);
     }
 
     // --- Test 8 : lecture du motif dans le TITRE de l'annonce ---

@@ -2056,6 +2056,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // 160,08 €, Rhydon 055 -> 72,22 €, Ledian 007 -> 147,94 € — alors que la route
         // répondait « non trouvée sur TCGdex » et remboursait. Voir identification-locale.js.
         let identificationLocale = false;
+        let localIncertain = false;
         let produitsImposes = null;
         if (!trouvaille) {
             const local = await identifierEnLocal({
@@ -2065,12 +2066,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             });
             if (local) {
                 identificationLocale = true;
+                localIncertain = local.incertain;
                 produitsImposes = local.produits;
                 const nomGagnant = local.produits.find(p => p.idProduct === local.gagnant?.candidat?.idProduct);
                 console.log(
                     `🗃️ [identifier] TCGdex muet -> IDENTIFICATION LOCALE : ${local.produits.length} candidat(s)` +
                     ` via ${local.voie} (${local.raison}), gagnant ${local.gagnant?.candidat?.idProduct}` +
-                    ` code=${local.gagnant?.candidat?.codeSet} écart=${local.ecartScore}`
+                    ` code=${local.gagnant?.candidat?.codeSet} écart=${local.ecartScore}` +
+                    ` motifARouter=${local.motifARouter} incertain=${local.incertain}`
                 );
                 // `trouvaille` synthétique : tout l'aval l'attend. Ses champs TCGdex sont
                 // NULS, et c'est le fond du sujet — sans variantsDetailed on ne sait pas
@@ -2078,7 +2081,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 trouvaille = {
                     id: null, localId: null, variants: null, variantsDetailed: null,
                     nomExact: nomGagnant ? String(nomGagnant.name).split('[')[0].trim() : cardInfo.name,
-                    source: 'catalogue-local', ambigu: true
+                    source: 'catalogue-local',
+                    // `ambigu` suit le VERDICT du module, pas le simple fait d'être passé
+                    // par le chemin local : sur une carte sans impression reverse (toutes
+                    // les e-Series, mesuré sur 521 produits), n'avoir pas routé le motif ne
+                    // coûte rien. Marquer douteux un prix juste use le drapeau pour rien.
+                    ambigu: local.incertain
                 };
             } else {
                 // Deux motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
@@ -2166,9 +2174,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             });
             if (local) {
                 identificationLocale = true;
+                localIncertain = local.incertain;
                 produits = local.produits;
                 voieCatalogue = 'local-nom-numero';
-                console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet}`);
+                console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet} motifARouter=${local.motifARouter} incertain=${local.incertain}`);
             }
         }
         if (produits.length > 0 && !identificationLocale) {
@@ -2256,11 +2265,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // un motif générique empêcherait de mesurer lequel se déclenche.
         const carteAmbigue = Boolean(
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
-            || aucunCandidatAuNumero || gagnantContreditNumero || identificationLocale || nomPeuFiable
+            || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                identificationLocale ? 'identification-locale-sans-tcgdex'
+                localIncertain ? 'identification-locale-sans-tcgdex'
                     : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
                         : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
                             : nomPeuFiable ? 'nom-confiance-basse'
