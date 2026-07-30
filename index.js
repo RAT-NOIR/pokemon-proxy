@@ -741,28 +741,69 @@ function genererVariantesNom(name) {
 // TOTAL imprimé en SET, ce qui est le signal le plus fiable dont on dispose. Un seul
 // appel réseau, réutilisé par toutes les identifications : sans ce cache, chaque scan
 // paierait une requête supplémentaire pour une donnée qui bouge quelques fois par an.
-let _setsTCGdex = null;
-let _setsTCGdexExpire = 0;
+// ⚠️ UNE LISTE PAR LANGUE, et c'est décisif. /v2/en/sets ne contient que les 218 sets
+// INTERNATIONAUX ; /v2/ja/sets en contient 177, dont les sets japonais avec leur total
+// IMPRIMÉ exact. Mesuré :
+//     total 128 -> en: AUCUN     ja: E1 「基本拡張パック」
+//     total  92 -> en: ex12      ja: E2 「地図にない町」
+//     total  87 -> en: AUCUN     ja: E3 「海からの風」   (le set de Scizor)
+//     total  88 -> en: me03      ja: E4 「裂けた大地」, E5  (celui de Flareon et Rhydon)
+// Interroger la liste `en` pour une carte japonaise donnait donc « Perfect Order » (2025)
+// sur un total de 88 : c'est ce qui a fait rendre « Turtonator » à 0,02 € au lieu d'un
+// Flareon EC4 à 239,94 €. Et les ids japonais de TCGdex (E1..E5) sont EXACTEMENT ce que
+// l'IA lit sur la carte, ce que la table ALIAS_CODES_LUS relie aux codes Cardmarket
+// EC1..EC5 — la correspondance est vérifiée une par une, sans exception.
+const _setsTCGdex = new Map();      // langueApi -> { liste, expire }
 const DUREE_CACHE_SETS_MS = 24 * 60 * 60 * 1000;
 
-async function chargerSetsTCGdex() {
-    if (_setsTCGdex && Date.now() < _setsTCGdexExpire) return _setsTCGdex;
-    try {
-        const r = await axios.get('https://api.tcgdex.net/v2/en/sets', { timeout: 20000 });
-        if (Array.isArray(r.data) && r.data.length) {
-            _setsTCGdex = r.data;
-            _setsTCGdexExpire = Date.now() + DUREE_CACHE_SETS_MS;
-        }
-    } catch (e) {
-        console.warn(`⚠️ Liste des sets TCGdex indisponible (${e.message}) — le total ne pourra pas restreindre les sets.`);
-    }
-    return _setsTCGdex || [];
+/**
+ * Quelle LISTE DE SETS consulter pour une carte de cette langue.
+ *
+ * ⚠️ DÉLIBÉRÉMENT DIFFÉRENT de langueVersTCGdex, qui sert à chercher un NOM (et où
+ * interroger le français a tout son sens). Ici on cherche des TAILLES de sets, et la
+ * mesure impose deux choses :
+ *   - le bucket ASIATIQUE (JP/ZH/KR, comme dans regionAttendue) -> 'ja', la seule liste
+ *     qui contienne les sets japonais avec leur total imprimé (E1..E5, PCG8...) ;
+ *   - TOUT LE RESTE -> 'en', qui est la liste la plus COMPLÈTE : 218 sets contre 200 en
+ *     français. Utiliser 'fr' pour une carte française perdrait 18 sets et rendrait le
+ *     pont plus ambigu (mesuré : total 182 donne 2 sets en fr là où en en donne moins).
+ * Le comportement des cartes occidentales est donc rigoureusement INCHANGÉ.
+ */
+const LANGUES_ASIATIQUES = ['JP', 'ZH', 'ZH-CN', 'ZH-TW', 'CN', 'TW', 'KR'];
+function langueDesSetsTCGdex(langue) {
+    return LANGUES_ASIATIQUES.includes(String(langue || '').toUpperCase()) ? 'ja' : 'en';
 }
 
-// Sets dont la taille officielle == total lu. [] si total absent/inconnu.
-async function setsPourTotal(totalImprime) {
+async function chargerSetsTCGdex(langueApi = 'en') {
+    const lg = String(langueApi || 'en').toLowerCase();
+    const cache = _setsTCGdex.get(lg);
+    if (cache && Date.now() < cache.expire) return cache.liste;
+    try {
+        const r = await axios.get(`https://api.tcgdex.net/v2/${lg}/sets`, { timeout: 20000 });
+        if (Array.isArray(r.data) && r.data.length) {
+            _setsTCGdex.set(lg, { liste: r.data, expire: Date.now() + DUREE_CACHE_SETS_MS });
+            return r.data;
+        }
+    } catch (e) {
+        console.warn(`⚠️ Liste des sets TCGdex [${lg}] indisponible (${e.message}) — le total ne pourra pas restreindre les sets.`);
+    }
+    return cache?.liste || [];
+}
+
+/**
+ * Sets dont la taille officielle == total lu, dans la langue de la CARTE.
+ *
+ * ⚠️ PAS DE REPLI D'UNE LANGUE SUR L'AUTRE. Pour une carte japonaise dont aucun set
+ * japonais ne fait la bonne taille, on renvoie [] — et c'est la bonne réponse. Se rabattre
+ * sur le catalogue international proposerait des produits d'une AUTRE édition, et cette
+ * fausse piste ne serait pas seulement inutile : elle sert de PÉRIMÈTRE de recherche.
+ * Mesuré sur le Salamèche McDonald's — total 18, aucun set japonais de cette taille, et
+ * la liste `en` proposait « Southern Islands » et « Detective Pikachu ». Un pont vide
+ * laisse la main au nom, au numéro et à la région, qui eux ne se trompent pas d'édition.
+ */
+async function setsPourTotal(totalImprime, langue = null) {
     if (!totalImprime) return [];
-    const sets = await chargerSetsTCGdex();
+    const sets = await chargerSetsTCGdex(langueDesSetsTCGdex(langue));
     return setsCompatiblesAvecTotal(sets, totalImprime);
 }
 
@@ -803,8 +844,11 @@ async function detailCarteTCGdex(idCarte, nomTrouve = null) {
  *    nombre de tirets bas diffère d'une source à l'autre).
  * Dans les deux cas le numéro était parfaitement lisible.
  */
-async function identifierParTotalEtNumero(number, totalImprime) {
-    const sets = await setsPourTotal(totalImprime);
+async function identifierParTotalEtNumero(number, totalImprime, langue = null) {
+    // La langue de la CARTE choisit le catalogue : les sets japonais ne sont pas dans
+    // /v2/en/sets, et y chercher un total japonais désigne un produit d'une autre édition.
+    const langueApi = langueDesSetsTCGdex(langue);
+    const sets = await setsPourTotal(totalImprime, langue);
     if (sets.length === 0) return null;
     if (sets.length > 5) {
         // Total peu discriminant (typiquement <= 30 : trainer kits, promos POP).
@@ -815,7 +859,7 @@ async function identifierParTotalEtNumero(number, totalImprime) {
     const trouvees = [];
     await Promise.all(sets.map(async s => {
         try {
-            const detail = await axios.get(`https://api.tcgdex.net/v2/en/sets/${encodeURIComponent(s.id)}`, { timeout: 15000 });
+            const detail = await axios.get(`https://api.tcgdex.net/v2/${langueApi}/sets/${encodeURIComponent(s.id)}`, { timeout: 15000 });
             for (const c of (detail.data?.cards || [])) {
                 const corr = comparerNumeros(number, c.localId);
                 if (corr) trouvees.push({ carte: c, set: s, correspondance: corr });
@@ -892,7 +936,11 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         // le nom lu — c'est ce qui aurait écarté Lost Thunder (214 cartes) sur une
         // carte lue "173/181", Team Up étant le seul set à 181 cartes.
         const resultatsDuNom = resultats;   // conservés comme filet, voir plus bas
-        const setsDuTotal = await setsPourTotal(totalImprime);
+        // La langue de la CARTE choisit le catalogue de sets. Avec la liste `en`, un total
+        // japonais de 88 désignait « Perfect Order » (2025) et tous les résultats du nom
+        // « Flareon » étaient écartés comme suspects : le nom était juste, c'est TCGdex qui
+        // n'avait pas le set. Avec la liste `ja`, 88 donne E4/E5, où Flareon figure.
+        const setsDuTotal = await setsPourTotal(totalImprime, langue);
         const idsSetsDuTotal = new Set(setsDuTotal.map(s => s.id));
         if (setsDuTotal.length && resultats.length) {
             const compatibles = resultats.filter(r => idsSetsDuTotal.has(setIdDeCarte(r.id)));
@@ -910,7 +958,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         // Nom inexploitable (aucun résultat, ou tous écartés par le total) : on
         // identifie sans lui, par le total puis le numéro.
         if (resultats.length === 0) {
-            const parTotal = await identifierParTotalEtNumero(number, totalImprime);
+            const parTotal = await identifierParTotalEtNumero(number, totalImprime, langue);
             if (parTotal) {
                 const detail = await detailCarteTCGdex(parTotal.id);
                 console.log(`🔗 Carte TCGdex retenue SANS le nom : ${parTotal.id} ("${detail.nomExact || parTotal.nom}")`);
@@ -993,6 +1041,31 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                     ambigu = true;
                     console.log(`⚠️ ${resultats.length} impressions possibles pour "${name}" #${number} et pas de set pour trancher — le live vérifiera.`);
                 }
+            }
+        }
+
+        // ---- CONTRÔLE FINAL : le total imprimé contredit-il le set retenu ? -----
+        // TCGdex annonce lui-même le nombre officiel de cartes de chaque set. Si l'IA a lu
+        // un total et que le set retenu en annonce un AUTRE, la carte retenue ne peut pas
+        // venir de ce set. Cas réel — Wartortle lu « 019/029 » : TCGdex retenait PCG8-019,
+        // alors que PCG8 「きせきの結晶」 compte 75 cartes officielles. Une carte imprimée
+        // /029 n'en vient pas. Le filtre par total ne l'attrapait pas, parce qu'AUCUN set
+        // (ni en, ni ja) ne fait 29 cartes : la liste des sets compatibles était vide, donc
+        // le filtre entier était sauté.
+        // On ne REJETTE pas — le total peut être mal lu, et la carte retenue reste le
+        // meilleur candidat connu — mais on cesse de la présenter comme une certitude.
+        const totalLu = totalImprime ? parseInt(String(totalImprime).replace(/\D/g, ''), 10) : null;
+        if (totalLu) {
+            const setRetenu = setIdDeCarte(choisi.id);
+            const infoSet = (await chargerSetsTCGdex(langueDesSetsTCGdex(langue))).find(s => s.id === setRetenu);
+            const officiel = infoSet?.cardCount?.official ?? null;
+            if (officiel && officiel !== totalLu) {
+                ambigu = true;
+                console.warn(
+                    `⚠️ [total-contredit-le-set] le total lu est ${totalLu}, mais le set retenu` +
+                    ` ${setRetenu} ("${infoSet.name}") en compte ${officiel} officiellement.` +
+                    ` La carte retenue ne peut pas venir de ce set -> résultat marqué INCERTAIN.`
+                );
             }
         }
 
