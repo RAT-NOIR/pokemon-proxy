@@ -35,7 +35,7 @@ const {
 // Journal des scans : une ligne par identification, en base. Les logs Render sont
 // éphémères ; les seuils qu'on pose (ratio, rangs, fiabilité du setCode) ont besoin de
 // données qui survivent au redéploiement. Jamais sur le chemin critique — voir le module.
-const { enregistrerScan } = require('./journal-scans');
+const { enregistrerScan, enregistrerEchec } = require('./journal-scans');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -1829,6 +1829,10 @@ function etatVintedVersCardmarket(etatVinted) {
 }
 
 app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
+    // Portée élargie jusqu'au catch : une ligne d'échec 'erreur-serveur' qui ne dit pas
+    // CE QUE L'IA AVAIT LU ne sert à rien pour diagnostiquer. Déclarée ici plutôt que
+    // dans le try, où elle serait hors de portée du bloc qui en a le plus besoin.
+    let cardInfo = null;
     try {
         const { imageUrl, imageUrls, title, vintedPrice, vintedEtat, debug } = req.body;
 
@@ -1842,10 +1846,11 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         console.log(`📷 ${photos.length} photo(s) envoyée(s) à l'IA.`);
-        const cardInfo = await getCardIdFromAI(photos, title);
+        cardInfo = await getCardIdFromAI(photos, title);
         if (!cardInfo) {
             // Échec DUR : aucune carte identifiée, rien n'a été livré -> on rend le scan.
-            await rembourserScan(req, 'ia-echec');
+            const rendu = await rembourserScan(req, 'ia-echec');
+            enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
             return res.json({ success: false, error: "Analyse IA échouée (voir logs Render pour la cause exacte)" });
         }
 
@@ -1874,7 +1879,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 // pas une carte introuvable. Le chemin d'identification LOCALE, lui, n'est
                 // branché que sur /api/identifier — la route réellement utilisée par
                 // l'extension. L'ajouter ici doublerait la surface sans gain visible.
-                await rembourserScan(req, cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable');
+                const motif = cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
+                const rendu = await rembourserScan(req, motif);
+                enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, cardInfo, motifEchec: motif, rembourse: rendu });
                 return res.json({
                     success: false,
                     error: cardInfo.numeroIllisible
@@ -1992,7 +1999,8 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             if (!resultat) {
                 // Carte identifiée mais AUCUN prix de référence : le scan ne livre rien
                 // d'exploitable pour l'utilisateur -> échec dur lui aussi.
-                await rembourserScan(req, 'aucun-prix');
+                const rendu = await rembourserScan(req, 'aucun-prix');
+                enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, cardInfo, motifEchec: 'aucun-prix', rembourse: rendu });
                 return res.json({ success: false, error: "Carte identifiée mais aucun prix disponible (voir logs)" });
             }
 
@@ -2089,6 +2097,11 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
     } catch (error) {
         console.error("❌ Erreur /api/analyser:", error);
+        // Le catch NE REMBOURSE PAS, et ce n'est pas un oubli qu'on corrige au passage :
+        // à ce stade on ignore si un résultat a été livré. On le CONSTATE donc dans le
+        // journal (rembourse: false) plutôt que de le deviner. Si ces lignes s'avèrent
+        // fréquentes, c'est un chantier à part — des scans payés pour rien.
+        enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
         res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
@@ -2101,6 +2114,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 // l'extension qui fera le live depuis le navigateur de l'utilisateur, avec son
 // IP et ses cookies. C'est la répartition qui évite les bannissements.
 app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
+    // Même raison que dans /api/analyser : le catch doit pouvoir journaliser CE QUE
+    // L'IA AVAIT LU, sinon la ligne d'échec ne désigne aucune carte.
+    let cardInfo = null;
     try {
         const { imageUrl, imageUrls, title, vintedEtat } = req.body;
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
@@ -2110,10 +2126,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
         // 1. Lecture de la carte par l'IA
         const debutIA = Date.now();
-        const cardInfo = await getCardIdFromAI(photos, title);
+        cardInfo = await getCardIdFromAI(photos, title);
         console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
         if (!cardInfo) {
-            await rembourserScan(req, 'ia-echec');
+            const rendu = await rembourserScan(req, 'ia-echec');
+            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
             return res.json({ success: false, error: "Analyse IA échouée" });
         }
 
@@ -2172,7 +2189,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // Deux motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
                 // aboutir, et ce n'est pas la même défaillance qu'une carte introuvable.
                 const motif = cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
-                await rembourserScan(req, motif);
+                const rendu = await rembourserScan(req, motif);
+                enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, cardInfo, motifEchec: motif, rembourse: rendu });
                 return res.json({
                     success: false,
                     error: cardInfo.numeroIllisible
@@ -2390,7 +2408,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
         // le scan. (Un classement même incertain, lui, EST un résultat livré.)
         if (classement.length === 0) {
-            await rembourserScan(req, 'aucun-candidat');
+            const rendu = await rembourserScan(req, 'aucun-candidat');
+            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, cardInfo, motifEchec: 'aucun-candidat', rembourse: rendu });
             return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
@@ -2528,6 +2547,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
     } catch (e) {
         console.error("❌ [identifier]", e.message);
+        // Voir /api/analyser : on constate l'absence de remboursement, on ne la corrige pas ici.
+        enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
         res.json({ success: false, error: e.message });
     }
 });

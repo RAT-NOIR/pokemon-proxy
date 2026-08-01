@@ -44,6 +44,36 @@ const journalScanSchema = new mongoose.Schema({
     route: String,        // 'identifier' (flux réel, extension) | 'analyser' (flux serveur)
     userId: String,
 
+    // --- SUCCÈS OU ÉCHEC ------------------------------------------------------
+    // Le trou le plus grave du dispositif jusqu'ici : `enregistrerScan` n'était appelée
+    // qu'APRÈS l'identification, donc tout scan qui échouait sortait par un `return`
+    // antérieur et ne laissait AUCUNE trace. Les 42,6 % d'incertaines mesurées sur les
+    // 47 premières lignes sont donc un pourcentage calculé sur les SURVIVANTS : tant que
+    // les morts ne sont pas comptés, on ne sait pas si l'outil rate 5 % ou 40 % des scans.
+    //
+    // ⚠️ LES 47 LIGNES ANTÉRIEURES N'ONT PAS CE CHAMP. Elles sont toutes des succès (elles
+    // ne pouvaient pas être autre chose). Pour compter les succès, interroger
+    // `{ resultat: { $ne: 'echec' } }` et non `{ resultat: 'succes' }`, sinon on perd
+    // l'historique sans s'en apercevoir.
+    resultat: String,     // 'succes' | 'echec'
+
+    // Le motif EXACT, jamais un « échec » générique : c'est la répartition entre ces
+    // motifs qui dira où porter l'effort. Les valeurs viennent des `return` réels des
+    // deux routes, pas d'une nomenclature inventée :
+    //   'ia-echec'          -> l'IA n'a rien rendu du tout (getCardIdFromAI null)
+    //   'numero-illisible'  -> l'IA le déclare elle-même ; aucun chemin ne peut aboutir
+    //   'carte-introuvable' -> ni TCGdex ni le catalogue local ne connaissent la carte
+    //   'aucun-candidat'    -> carte identifiée, mais zéro produit Cardmarket à tester
+    //   'aucun-prix'        -> produit trouvé, aucun prix de référence (route analyser)
+    //   'erreur-serveur'    -> exception remontée au catch de la route
+    motifEchec: String,
+
+    // Le crédit a-t-il RÉELLEMENT été rendu ? Valeur de retour de `rembourserScan`, pas
+    // une supposition : elle rend `false` sur plafond quotidien atteint, poche 'accueil'
+    // déjà pleine, semaine ISO changée ou Mongo indisponible. Un échec non remboursé est
+    // un scan payé pour rien — c'est exactement ce qu'il faut pouvoir compter.
+    rembourse: Boolean,
+
     // --- CE QUE L'IA A LU (l'entrée du problème) ---
     nom: String,
     numero: String,
@@ -201,7 +231,15 @@ function enregistrerScan(d = {}) {
             nomBrut: d.nomBrut || null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
-            rang: rangDuNumero(d.numero, numeroGagnant),
+            resultat: d.motifEchec ? 'echec' : 'succes',
+            motifEchec: d.motifEchec || null,
+            rembourse: d.rembourse != null ? Boolean(d.rembourse) : null,
+            // ⚠️ PAS de rang sur une ligne d'échec. `rangDuNumero(numero, null)` rend 2,
+            // c'est-à-dire « le numéro du gagnant est inconnu » — or sur un échec il n'y a
+            // pas de gagnant du tout. Laisser passer ce 2 ferait grossir le rang 2 de tous
+            // les échecs et fausserait précisément la fréquence que ce journal existe pour
+            // mesurer.
+            rang: d.motifEchec ? null : rangDuNumero(d.numero, numeroGagnant),
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             rangGagnant: Number.isFinite(d.rangGagnant) ? d.rangGagnant : null,
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
@@ -215,4 +253,34 @@ function enregistrerScan(d = {}) {
     });
 }
 
-module.exports = { enregistrerScan, JournalScan, RETENTION_JOURS };
+/**
+ * Écrit une ligne d'ÉCHEC. Même collection, même TTL, même contrat : FIRE-AND-FORGET,
+ * à appeler SANS await. Un scan déjà perdu ne doit pas l'être deux fois parce que sa
+ * statistique n'a pas pu s'écrire.
+ *
+ * Ce n'est qu'un adaptateur au-dessus d'`enregistrerScan` : il aplatit `cardInfo` pour
+ * que les appelants n'aient pas à recopier huit champs à chaque `return`. Un champ
+ * recopié à la main sur six sites est un champ oublié sur l'un des six.
+ *
+ * @param {object}      o
+ * @param {string}      o.route       'identifier' | 'analyser'
+ * @param {string}      o.userId
+ * @param {object|null} o.cardInfo    ce que l'IA a lu — null quand elle n'a rien rendu
+ * @param {string}      o.motifEchec  voir la liste dans le schéma
+ * @param {boolean}     o.rembourse   valeur de retour de rembourserScan, pas une intention
+ * @returns {void}
+ */
+function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse } = {}) {
+    const c = cardInfo || {};
+    enregistrerScan({
+        route, userId, motifEchec,
+        rembourse: rembourse != null ? Boolean(rembourse) : null,
+        // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
+        // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
+        nom: c.name, numero: c.number, total: c.total,
+        setCode: c.setCode, langue: c.language, rarete: c.rarete,
+        nomBrut: c.nomBrut, nomConfiance: c.nomConfiance
+    });
+}
+
+module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS };

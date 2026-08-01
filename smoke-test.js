@@ -64,6 +64,56 @@ function chargerLesModules() {
     // dans un processus séparé, ce qui teste exactement ce que fait Render.
 }
 
+// ---- 1 bis. LES IMPORTS MANQUANTS QUE L'EXÉCUTION NE RÉVÈLE PAS ---------
+// Le démarrage du serveur n'exécute PAS le corps des routes. Un helper appelé dans une
+// branche rarement prise — un `return` d'échec, un catch — reste donc invisible même
+// quand tout est vert. C'est littéralement la panne `numeroDepuisSlug` : elle vivait
+// dans /api/apprendre-lot, une route que rien n'appelait au démarrage.
+//
+// Ce contrôle est STATIQUE et général : pour chaque module local, il compare ce que le
+// module EXPORTE, ce qu'index.js IMPORTE, et ce qu'index.js UTILISE. Un nom utilisé,
+// exporté quelque part, mais absent de la ligne d'import est une panne à retardement.
+// Les noms qu'index.js définit lui-même sont écartés — ce sont des homonymes, pas des
+// oublis.
+function verifierLesImports() {
+    console.log('\n=== 1 bis. Imports : utilisés mais jamais importés ===');
+    const fs = require('fs');
+    const brut = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+    // Les commentaires sont RETIRÉS d'abord. Les blocs d'import de ce fichier sont
+    // abondamment commentés, et ces commentaires contiennent des virgules : sans ce
+    // nettoyage, la découpe prenait « pas la résolution des noms.\n numeroDepuisSlug »
+    // pour un nom d'import et déclarait manquant un import parfaitement présent.
+    // Le `[^:]` épargne les `https://` — on ne veut pas amputer une ligne de code.
+    const source = brut.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+    // Ce qu'index.js importe réellement, toutes lignes `const { a, b } = require('./x')`.
+    const importes = new Set();
+    for (const m of source.matchAll(/(?:const|let)\s*\{([^}]+)\}\s*=\s*require\(['"]\.\/[^'"]+['"]\)/g)) {
+        for (const n of m[1].split(',')) {
+            const nom = n.split(':').pop().trim();
+            if (nom) importes.add(nom);
+        }
+    }
+    // Ce qu'index.js définit lui-même : homonymes légitimes, à ne pas signaler.
+    const locaux = new Set();
+    for (const m of source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) locaux.add(m[1]);
+    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) locaux.add(m[1]);
+
+    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion'];
+    const oublis = [];
+    for (const m of modules) {
+        for (const nom of Object.keys(require(m))) {
+            if (importes.has(nom) || locaux.has(nom)) continue;
+            // Utilisé comme APPEL. Les commentaires ayant déjà été retirés, une occurrence
+            // ici est forcément du code exécutable.
+            const utilise = new RegExp(`\\b${nom}\\s*\\(`).test(source);
+            if (utilise) oublis.push(`${nom} (exporté par ${m})`);
+        }
+    }
+    verifier(`aucun identifiant utilisé sans être importé`, oublis.length, 0);
+    for (const o of oublis) console.log(`     ❌ ${o}`);
+}
+
 // ---- Utilitaires réseau -------------------------------------------------
 function portLibre() {
     return new Promise((resolve, reject) => {
@@ -248,6 +298,7 @@ async function testerLesRoutes() {
         process.exit(1);
     }
     chargerLesModules();
+    verifierLesImports();
     await testerLesRoutes();
     console.log(`\n${echecs === 0 ? '🎉 Smoke test au vert.' : `⚠️ ${echecs} vérification(s) en échec.`}`);
     process.exit(echecs === 0 ? 0 : 1);
