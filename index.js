@@ -855,7 +855,7 @@ async function detailCarteTCGdex(idCarte, nomTrouve = null) {
  *    nombre de tirets bas diffère d'une source à l'autre).
  * Dans les deux cas le numéro était parfaitement lisible.
  */
-async function identifierParTotalEtNumero(number, totalImprime, langue = null) {
+async function identifierParTotalEtNumero(number, totalImprime, langue = null, nomLu = null, nomBrut = null) {
     // La langue de la CARTE choisit le catalogue : les sets japonais ne sont pas dans
     // /v2/en/sets, et y chercher un total japonais désigne un produit d'une autre édition.
     const langueApi = langueDesSetsTCGdex(langue);
@@ -867,35 +867,94 @@ async function identifierParTotalEtNumero(number, totalImprime, langue = null) {
         return null;
     }
 
-    const trouvees = [];
-    await Promise.all(sets.map(async s => {
+    // ⚠️ DÉTERMINISME. Chaque set RETOURNE ses trouvailles au lieu de les empiler dans un
+    // tableau partagé : `Promise.all` préserve l'ordre des VALEURS RENDUES, jamais celui
+    // des réponses HTTP. L'ancienne version faisait `trouvees.push(...)` depuis les
+    // callbacks, puis prenait `retenues[0]` — c'est-à-dire le set dont la réponse réseau
+    // arrivait la première. Mesuré : cinq appels identiques sur le même scan (Rhydon,
+    // n°055, total 088) ont rendu E4, E5, E5, E4, E5. Deux conséquences que rien ne
+    // signalait : un banc dont les lignes basculent selon la latence, et un utilisateur
+    // qui scanne deux fois la même carte et voit deux prix différents.
+    // ⚠️ UN SET INJOIGNABLE REND LE RÉSULTAT INCOMPLET, ET DOIT LE DIRE.
+    // L'ancienne version avalait l'erreur en silence (`catch (_) {}`) et continuait avec
+    // les sets restants. Conséquence jamais vue : quand E5 ne répondait pas, il ne restait
+    // qu'UN candidat, `ambigu` valait donc `false`, et une identification réellement
+    // ambiguë sortait AVEC CONFIANCE. Un aléa réseau transformait un doute en certitude —
+    // c'est ce qui explique la ligne du journal marquée `incertain=false` alors que deux
+    // sets répondaient au même numéro.
+    let setsInjoignables = 0;
+    const parSet = await Promise.all(sets.map(async s => {
         try {
             const detail = await axios.get(`https://api.tcgdex.net/v2/${langueApi}/sets/${encodeURIComponent(s.id)}`, { timeout: 15000 });
-            for (const c of (detail.data?.cards || [])) {
-                const corr = comparerNumeros(number, c.localId);
-                if (corr) trouvees.push({ carte: c, set: s, correspondance: corr });
-            }
-        } catch (_) { /* set indisponible : on continue avec les autres */ }
+            return (detail.data?.cards || [])
+                .map(c => ({ carte: c, set: s, correspondance: comparerNumeros(number, c.localId) }))
+                .filter(t => t.correspondance);
+        } catch (e) {
+            setsInjoignables++;
+            console.warn(`⚠️ [total] set ${s.id} injoignable (${e.message}) — le résultat sera marqué incertain.`);
+            return [];
+        }
     }));
-
+    const trouvees = parSet.flat();
     if (trouvees.length === 0) return null;
+
     // Une égalité EXACTE prime sur une égalité de chiffres (cf. "SV14" vs "14").
     const exactes = trouvees.filter(t => t.correspondance === 'exact');
-    const retenues = exactes.length ? exactes : trouvees;
+    let retenues = exactes.length ? exactes : trouvees;
+
+    // ---- ARBITRAGE PAR LE NOM LU --------------------------------------------
+    // Cette fonction est le chemin « le nom est suspect », et elle ignorait donc le nom
+    // ENTIÈREMENT. C'était trop large : sur le Rhydon, le nom n'était pas suspect, il
+    // n'avait simplement jamais été consulté — la recherche par nom avait rendu zéro
+    // parce qu'on interroge /v2/ja avec un nom ANGLAIS quand TCGdex y stocke les noms
+    // japonais. Or E4-055 est « ライドン » et E5-055 « マグカルゴ » : ce ne sont pas des
+    // Pokémon voisins, le nom tranche sans le moindre appel réseau.
+    // Le nom n'est utilisé ici que pour DÉPARTAGER des candidats déjà retenus par le
+    // numéro : il ne peut ni en ajouter, ni faire échouer la recherche.
+    const formesLues = [nomLu, nomBrut].filter(Boolean);
+    if (retenues.length > 1 && formesLues.length) {
+        // Les noms tels que TCGdex les rend DANS CETTE LANGUE. En `ja`, c'est `nomBrut`
+        // (katakana) qui correspond ; en `en`, le nom translittéré par l'IA.
+        //
+        // ⚠️ IL N'Y A PAS DE REPLI PAR LE NOM ANGLAIS, et ce n'est pas un oubli. J'avais
+        // écrit ce repli — récupérer le nom anglais du candidat pour le comparer à un nom
+        // latin — avant de le mesurer : /v2/en/cards/E4-055 répond 404, alors que
+        // /v2/ja/cards/E4-055 rend « ライドン ». Les identifiants de sets japonais
+        // N'EXISTENT PAS dans l'espace de noms anglais ; le repli était donc du code mort
+        // qui avait l'air de fonctionner, ce qui est pire que pas de code du tout.
+        // Conséquence assumée : quand l'IA n'a rendu qu'un nom latin sur une carte
+        // japonaise, l'égalité N'EST PAS tranchée — elle est signalée (`ambigu: true`) et
+        // le choix reste déterministe. C'est la liaison par le CODE de set, mesurée à part,
+        // qui donnera l'arbitre local qui manque ici.
+        const concordants = retenues.filter(t => nomConcorde(formesLues, [t.carte.name]));
+        if (concordants.length && concordants.length < retenues.length) {
+            console.log(`🔤 [total] ${retenues.length} candidats au n°${number} -> ${concordants.length} retenu(s) par le NOM lu "${formesLues[0]}".`);
+            retenues = concordants;
+        }
+    }
+
+    // Tri STABLE, appliqué même quand un seul candidat reste : le choix ne doit jamais
+    // dépendre de l'ordre d'arrivée. À défaut d'arbitrage, on veut un résultat REPRODUCTIBLE
+    // et signalé, pas un tirage au sort silencieux.
+    retenues = [...retenues].sort((a, b) =>
+        String(a.set.id).localeCompare(String(b.set.id)) || String(a.carte.id).localeCompare(String(b.carte.id)));
     const gagnante = retenues[0];
 
     console.log(`🎯 [total] ${totalImprime} cartes -> set ${gagnante.set.id} ("${gagnante.set.name}") ; n°${number} -> ${gagnante.carte.id} ("${gagnante.carte.name}")`);
-    if (retenues.length > 1) console.log(`   ⚠️ ${retenues.length} cartes candidates à ce numéro — identification marquée incertaine.`);
+    if (retenues.length > 1) console.log(`   ⚠️ ${retenues.length} cartes candidates à ce numéro, et le nom ne les départage pas — identification marquée incertaine (choix déterministe : ${gagnante.carte.id}).`);
+    if (setsInjoignables) console.log(`   ⚠️ ${setsInjoignables} set(s) sur ${sets.length} n'ont pas répondu : on ne peut pas affirmer qu'aucun autre ne portait ce numéro.`);
     return {
         id: gagnante.carte.id,
         localId: gagnante.carte.localId,
         nom: gagnante.carte.name,
         setId: gagnante.set.id,
-        ambigu: retenues.length > 1
+        // Ambigu si plusieurs candidats subsistent, OU si un set n'a pas répondu : dans
+        // les deux cas on ne peut pas garantir que ce numéro ne désigne qu'une carte.
+        ambigu: retenues.length > 1 || setsInjoignables > 0
     };
 }
 
-async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue = 'EN', totalImprime = null) {
+async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue = 'EN', totalImprime = null, nomBrut = null) {
     try {
         const variantes = genererVariantesNom(name);
         let resultats = [];
@@ -906,9 +965,21 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         const langueCarte = langueVersTCGdex(langue);
         const languesAEssayer = langueCarte === 'en' ? ['en'] : [langueCarte, 'en'];
 
+        // ⚠️ LE NOM BRUT SUR LA ROUTE NON ANGLAISE. TCGdex stocke ses noms DANS la langue
+        // interrogée : /v2/ja rend « ライドン », pas « Rhydon ». Interroger cette route avec
+        // le nom translittéré par l'IA ne pouvait donc rien rendre, et la chaîne basculait
+        // systématiquement sur le chemin total+numéro pour les cartes japonaises — celui
+        // qui a produit Turtonator pour un Flareon et m3 pour un Rhydon.
+        // `nomBrut` est ce que l'IA a lu SANS le traduire : c'est exactement la clé de
+        // cette route. Il passe EN PREMIER quand il existe, le nom translittéré reste en
+        // repli. Sur les routes anglaises, rien ne change.
+        const variantesPour = langApi => (langApi !== 'en' && nomBrut)
+            ? [nomBrut, ...variantes.filter(v => v !== nomBrut)]
+            : variantes;
+
         // Pour chaque langue, chaque variante de nom, essayer : numéro strict -> numéro large
         for (const langApi of languesAEssayer) {
-            for (const variante of variantes) {
+            for (const variante of variantesPour(langApi)) {
                 resultats = await chercherCartesTCGdex(variante, `eq:${encodeURIComponent(number)}`, langApi);
                 if (resultats.length === 0) {
                     const numeroSansZeros = String(number).replace(/^0+/, '') || number;
@@ -926,7 +997,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         // Dernier recours : recherche par NOM SEUL (sans numéro) dans les deux langues
         if (resultats.length === 0) {
             for (const langApi of languesAEssayer) {
-                for (const variante of variantes) {
+                for (const variante of variantesPour(langApi)) {
                     const parNom = await chercherCartesTCGdexNomSeul(variante, langApi);
                     if (parNom.length > 0) {
                         const numLu = String(number).replace(/^0+/, '');
@@ -969,7 +1040,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         // Nom inexploitable (aucun résultat, ou tous écartés par le total) : on
         // identifie sans lui, par le total puis le numéro.
         if (resultats.length === 0) {
-            const parTotal = await identifierParTotalEtNumero(number, totalImprime, langue);
+            const parTotal = await identifierParTotalEtNumero(number, totalImprime, langue, name, nomBrut);
             if (parTotal) {
                 const detail = await detailCarteTCGdex(parTotal.id);
                 console.log(`🔗 Carte TCGdex retenue SANS le nom : ${parTotal.id} ("${detail.nomExact || parTotal.nom}")`);
@@ -2095,7 +2166,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         //    e) repli TCGdex si rien d'autre n'a marché
         if (!resultat) {
             // 2a. Identification précise via TCGdex + image
-            const trouvailleTCGdex = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, imageUrl, cardInfo.language, cardInfo.total);
+            const trouvailleTCGdex = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, imageUrl, cardInfo.language, cardInfo.total, cardInfo.nomBrut);
             if (!trouvailleTCGdex) {
                 // Même distinction de motif que /api/identifier : un numéro illisible n'est
                 // pas une carte introuvable. Le chemin d'identification LOCALE, lui, n'est
@@ -2396,7 +2467,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         }
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
-        let trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
+        let trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
 
         // ════════════════════════════════════════════════════════════════════
         // REPLI LOCAL — avant tout remboursement
@@ -2710,7 +2781,6 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //
         // ON NE REFUSE QU'EN DERNIER RECOURS : vivier de preuve vide, ou égalité au sommet
         // (rien ne départage). Un prix faux facturé coûte plus cher qu'un scan remboursé.
-        let vetoNomGagnant = null;
         // TROISIÈME ÉTAT : le nom lu et le numéro lu s'excluent l'un l'autre. Aucun veto —
         // on ne sait pas laquelle des deux lectures accuser — mais aucun verdict non plus.
         let nomNumeroIncoherents = false;
@@ -2722,7 +2792,6 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.warn(`⚠️ [nom-numero-incoherents] ${avis.raison} -> le prix est livré SANS verdict.`);
             }
             if (avis.veto) {
-                vetoNomGagnant = avis;
                 console.warn(`🚫 [veto-nom] gagnant ${classement[0].idProduct} "${String(gagnantProduit.name).split('[')[0].trim()}" ÉCARTÉ : ${avis.raison}`);
 
                 const codeSetsPreuve = await lireCodeSets(avis.preuves.map(p => p.idExpansion));
