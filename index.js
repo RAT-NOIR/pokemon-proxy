@@ -33,6 +33,9 @@ const {
     // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
     // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
     ALIAS_CODES_LUS, nomConcorde,
+    // numeroAmbiguDansPerimetre : règle GÉNÉRALE des préfixes alphabétiques. Une clé
+    // (code + numéro) ne doit pas se déclencher quand « 019 » et « S19 » coexistent.
+    numeroAmbiguDansPerimetre,
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
@@ -1408,7 +1411,7 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
 // RELAIENT, ils ne se remplacent pas. Le contre-exemple qui l'établit : « Vaporeon » seul
 // ramène 71 produits — pour lui, seul le code tranche ; « Dark Dragonite » n'a pas de
 // numéro — pour lui, seul le nom tranche.
-async function trouverParSetCodeEtNumero(setCodeLu, numeroLu) {
+async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
     try {
         if (mongoose.connection.readyState !== 1 || numeroLu == null) return [];
         const brut = normaliserCodeSet(setCodeLu);
@@ -1420,13 +1423,53 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu) {
         // requête. C'est ~45 Ko par scan, à comparer aux ~4 s d'appel IA que tout scan paie
         // de toute façon. Pas de cache : codes_set s'enrichit en continu via /api/apprendre,
         // et un cache périmé rendrait un code introuvable sans le moindre signe.
-        const lignes = await CodeSet.find({}, { idExpansion: 1, codeSet: 1 }).lean();
-        const exps = lignes.filter(l => normaliserCodeSet(l.codeSet) === code).map(l => l.idExpansion);
-        if (!exps.length) return [];
+        const lignes = await CodeSet.find({}, { idExpansion: 1, codeSet: 1, region: 1 }).lean();
+        let exps = lignes.filter(l => normaliserCodeSet(l.codeSet) === code);
 
-        // Même départage que partout ailleurs (préférence STRICTE pour l'égalité exacte) :
-        // le numéro ne doit pas se comparer différemment selon le chemin emprunté.
-        return await trouverProduitsParNumero(exps, numeroLu);
+        // CODE APPARENTÉ, EN REPLI SEULEMENT. L'IA lit ce qui est IMPRIMÉ sur la carte, et
+        // l'imprimé n'est pas toujours le code Cardmarket : « MCD » lu pour l'expansion
+        // « MCDP ». Sans ce repli, zéro code exact -> le chemin ne se déclenche pas, alors
+        // que la bonne réponse est à un caractère. Mesuré sur ce cas : 14 codes apparentés,
+        // 15 produits au n°004 — dont UN SEUL japonais, et c'est la bonne carte (562000,
+        // Charmander MCDP). Les 14 autres sont les McDonald's occidentaux.
+        // C'est donc la RÉGION qui tranche, pas le code : le filtre ci-dessous n'est pas un
+        // raffinement, c'est ce qui rend le repli utilisable.
+        let parParente = false;
+        if (!exps.length) {
+            const cousins = lignes.filter(l => codesApparentes(code, normaliserCodeSet(l.codeSet)));
+            if (cousins.length) {
+                const region = regionAttendue({ language: langue });
+                const filtres = region ? cousins.filter(l => l.region === region) : [];
+                // Sans région attendue, ou si elle n'élimine rien, on garde TOUS les cousins :
+                // le nombre de produits trouvés fera office de garde-fou (le chemin ne
+                // tranche que sur un produit unique).
+                exps = filtres.length ? filtres : cousins;
+                parParente = true;
+            }
+        }
+        if (!exps.length) return [];
+        const ids = exps.map(l => l.idExpansion);
+
+        // ⚠️ PAS de `trouverProduitsParNumero` ici, et c'est délibéré : sa préférence
+        // stricte pour l'égalité exacte CHOISIT entre « 019 » et « S19 » au lieu de
+        // constater qu'elle ne sait pas. Sur une clé censée être exacte, ce départage est
+        // un piège — voir numeroAmbiguDansPerimetre. On lit donc les numéros du périmètre,
+        // on vérifie l'absence d'ambiguïté de préfixe, et on ne rend que les correspondances.
+        const docs = await NumeroCarte.find(
+            { idExpansion: { $in: ids.map(Number) } },
+            { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }
+        ).lean();
+        const numerosDuPerimetre = docs.map(d => d.numero || d.numeroUrl);
+        if (numeroAmbiguDansPerimetre(numeroLu, numerosDuPerimetre)) {
+            console.log(`🎯 [setcode-numero] ${setCodeLu}+${numeroLu} : plusieurs FORMES du même nombre coexistent dans ce périmètre (préfixe) -> clé ambiguë, on ne tranche pas.`);
+            return [];
+        }
+        const retenus = docs.filter(d => comparerNumeros(numeroLu, d.numero) || comparerNumeros(numeroLu, d.numeroUrl));
+        if (!retenus.length) return [];
+        if (parParente) console.log(`🎯 [setcode-numero] code « ${setCodeLu} » inconnu, replié sur ${exps.map(l => l.codeSet).join('/')} par parenté${exps.length < 3 ? ' + région' : ''}.`);
+
+        const produits = await CatalogueProduit.find({ idProduct: { $in: retenus.map(d => d.idProduct) } }).lean();
+        return ecarterNonCartes(produits, `${setCodeLu}+${numeroLu}`);
     } catch (e) {
         console.error(`❌ Erreur trouverParSetCodeEtNumero :`, e.message);
         return [];
@@ -2338,7 +2381,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
         // gain d'identification se paierait en erreurs de prix.
         let produitsImposes = null, voieImposee = null;
-        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, cardInfo.number);
+        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, cardInfo.number, cardInfo.language);
         if (pisteCode.length === 1) {
             const avis = await nomOpposeUnVeto(cardInfo, pisteCode[0]);
             if (avis.veto) {
@@ -2715,6 +2758,36 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     });
                 }
             }
+        }
+
+        // ════════════════════════════════════════════════════════════════════
+        // ÉGALITÉ AU SOMMET DU CHEMIN PRINCIPAL — aucun verdict
+        // ════════════════════════════════════════════════════════════════════
+        // La règle existait déjà dans le re-classement du veto ; elle n'avait jamais été
+        // écrite pour le chemin principal, où elle vaut le plus. Mesuré sur le journal :
+        // 27 scans ont un écart mesurable, NEUF sont des égalités parfaites, et SEPT sont
+        // sorties avec confiance=haute. Le cas le plus cher : un Wartortle EC1-S19 à
+        // 48,01 € rendu comme un PCG8 à 3,76 € — cinq de ces neuf lignes — sur 53 candidats
+        // strictement à égalité.
+        //
+        // Sur une égalité parfaite, le départage par le prix N'EST PAS un arbitrage : les
+        // critères ont tous parlé et aucun ne sépare les candidats. Choisir « le moins
+        // cher » revient à tirer au sort, avec l'apparence d'une réponse. On ne joue plus.
+        //
+        // Cette règle couvre aussi, sans être écrite pour elles, les 2 345 paires de
+        // variantes qui partagent un même numéro — dont 537 japonaises que TCGdex ne peut
+        // pas router faute de variants_detailed. Une holo et une non-holo au même numéro,
+        // au même score, c'est exactement une égalité parfaite.
+        if (classement.length > 1 && classement[0].score === classement[1].score) {
+            const exAequo = classement.filter(c => c.score === classement[0].score).length;
+            console.warn(`🚫 [egalite-parfaite] ${exAequo} candidats à ${classement[0].score} points sur ${classement.length} : aucun critère ne les sépare -> aucun verdict, scan remboursé.`);
+            const rendu = await rembourserScan(req, 'egalite-parfaite');
+            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
+            return res.json({
+                success: false,
+                error: `${exAequo} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu — aucun critère ne les départage. Scan remboursé plutôt qu'un prix tiré au sort.`,
+                cardInfo
+            });
         }
 
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.

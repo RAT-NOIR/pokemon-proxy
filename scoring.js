@@ -450,6 +450,39 @@ function comparerNumeros(lu, candidat) {
     return (a && b && a === b) ? 'chiffres' : null;
 }
 
+/**
+ * LE NUMÉRO LU EST-IL AMBIGU dans ce périmètre ?
+ *
+ * ⚠️ RÈGLE GÉNÉRALE, pas un correctif de cas. Les numéros à préfixe alphabétique sont
+ * fréquents — 1936 documents en base — et ils COLLISIONNENT avec les numéros nus de la
+ * même expansion. Ce n'est pas une hypothèse : l'expansion 3630 contient « SV14 » ET
+ * « 14 », l'expansion 4361 contient « 001C », « 001L », « 001P » et « 001M ».
+ *
+ * La quatrième carte que cette classe nous coûte est un Wartortle : le numéro imprimé est
+ * « S19 », l'IA lit « 019 », et une clé (code + numéro) tombe alors sur le VRAI « 019 » de
+ * la même expansion — avec l'assurance d'une correspondance exacte, sur le mauvais produit.
+ * La préférence stricte pour l'égalité exacte, qui protège le scoring, devient ici un
+ * piège : elle CHOISIT au lieu de constater qu'elle ne sait pas.
+ *
+ * D'où cette fonction, à appeler avant toute décision prise sur la seule foi d'un numéro :
+ * si plusieurs FORMES distinctes du même nombre coexistent dans le périmètre, le numéro lu
+ * ne désigne rien de façon sûre. Mieux vaut ne pas se déclencher que se déclencher faux.
+ *
+ * @param {string|number|null} numeroLu           ce que l'IA a lu
+ * @param {Array<string|null>} numerosDuPerimetre tous les numéros publiés du périmètre
+ * @returns {boolean} true si au moins deux formes distinctes correspondent aux chiffres lus
+ */
+function numeroAmbiguDansPerimetre(numeroLu, numerosDuPerimetre) {
+    const chiffres = chiffresDuNumero(numeroLu);
+    if (!chiffres) return false;
+    const formes = new Set();
+    for (const n of (numerosDuPerimetre || [])) {
+        if (n == null || String(n).trim() === '') continue;
+        if (chiffresDuNumero(n) === chiffres) formes.add(numeroComplet(n));
+    }
+    return formes.size > 1;
+}
+
 // ============================================================
 // EXCEPTIONS : les sets JAPONAIS dont le code Cardmarket est en MAJUSCULES
 // ============================================================
@@ -988,6 +1021,7 @@ module.exports = {
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
+    numeroComplet, numeroAmbiguDansPerimetre,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
     ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
