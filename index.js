@@ -1475,16 +1475,16 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu) {
 async function nomOpposeUnVeto(cardInfo, produit) {
     try {
         // (b) — l'IA elle-même doute de sa lecture : le nom n'a pas voix au chapitre.
-        if (cardInfo.nomConfiance !== 'haute') return { veto: false, preuves: [], raison: 'confiance du nom non haute -> veto désarmé' };
+        if (cardInfo.nomConfiance !== 'haute') return { veto: false, preuves: [], incoherent: false, raison: 'confiance du nom non haute -> veto désarmé' };
 
         const formesLues = [cardInfo.name, cardInfo.nomBrut].filter(Boolean);
-        if (!formesLues.length) return { veto: false, preuves: [], raison: 'aucun nom lu' };
+        if (!formesLues.length) return { veto: false, preuves: [], incoherent: false, raison: 'aucun nom lu' };
 
         const info = (await lireNumeros([produit.idProduct])).get(produit.idProduct);
         const formesCandidat = [String(produit.name || '').split('[')[0].trim(), info?.nomFr].filter(Boolean);
-        if (!formesCandidat.length) return { veto: false, preuves: [], raison: 'candidat sans nom exploitable' };
+        if (!formesCandidat.length) return { veto: false, preuves: [], incoherent: false, raison: 'candidat sans nom exploitable' };
 
-        if (nomConcorde(formesLues, formesCandidat)) return { veto: false, preuves: [], raison: 'concordance' };
+        if (nomConcorde(formesLues, formesCandidat)) return { veto: false, preuves: [], incoherent: false, raison: 'concordance' };
 
         // (a) — LA PREUVE. On réutilise volontairement trouverProduitsLocaux : c'est la MÊME
         // résolution de nom que partout ailleurs (variantes, normalisation), donc le veto ne
@@ -1492,12 +1492,12 @@ async function nomOpposeUnVeto(cardInfo, produit) {
         // Mongo, et seulement dans le cas de désaccord — mesuré à 1 scan sur 23 où le chemin
         // par le code tranche.
         const ailleurs = await trouverProduitsLocaux(cardInfo.name);
-        if (!ailleurs.length) return { veto: false, preuves: [], raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
+        if (!ailleurs.length) return { veto: false, preuves: [], incoherent: false, raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
 
         // ... AU NUMÉRO LU. Sans cette seconde condition, un nom halluciné mais réel
         // (« Kahili ») suffirait à refuser un code correct.
         if (cardInfo.number == null || String(cardInfo.number).trim() === '') {
-            return { veto: false, preuves: [], raison: 'aucun numéro lu -> la preuve ne peut pas être établie' };
+            return { veto: false, preuves: [], incoherent: false, raison: 'aucun numéro lu -> la preuve ne peut pas être établie' };
         }
         const numeros = await lireNumeros(ailleurs.map(p => p.idProduct));
         const auNumeroLu = ailleurs.filter(p => {
@@ -1505,7 +1505,34 @@ async function nomOpposeUnVeto(cardInfo, produit) {
             return d && (comparerNumeros(cardInfo.number, d.numero) || comparerNumeros(cardInfo.number, d.numeroUrl));
         });
         if (!auNumeroLu.length) {
-            return { veto: false, preuves: [], raison: `aucun "${cardInfo.name}" au n°${cardInfo.number} au catalogue -> le nom est aussi douteux que le code, on laisse passer` };
+            // ─── LE TROISIÈME ÉTAT ───────────────────────────────────────────────────
+            // « Le nom lu et le numéro lu ne se rejoignent sur aucun produit » N'EST PAS
+            // une absence d'information : c'est une PREUVE POSITIVE D'INCOHÉRENCE. On sait
+            // qu'une des deux lectures est fausse, on ignore seulement laquelle. Ça ne
+            // justifie pas de refuser un candidat — on ne sait pas lequel accuser — mais ça
+            // justifie de SUPPRIMER LE VERDICT. Même principe que bilanDesRangs : trois
+            // états, pas deux.
+            // Cas mesuré : « Light Jolteon » lu au n°135 alors que le seul Light Jolteon du
+            // catalogue est NDE-48. Le scan est sorti avec incertain=NON et le prix d'une
+            // « Lightning Energy ».
+            //
+            // ⚠️ MAIS SEULEMENT SI DES NUMÉROS EXISTENT POUR CE NOM. Sans cette condition on
+            // retomberait dans l'erreur qu'on vient de corriger : 41 expansions — 2 101
+            // produits, 3,0 % du catalogue, dont tout le Rocket Gang japonais — n'ont AUCUN
+            // numéro publié par Cardmarket. Pour elles, ne rien trouver au numéro lu ne
+            // prouve rien du tout, et les signaler toutes viderait l'avertissement de son
+            // sens. Absence de donnée n'est pas preuve de contradiction.
+            const avecNumero = ailleurs.filter(p => {
+                const d = numeros.get(p.idProduct);
+                return d && (d.numero || d.numeroUrl);
+            });
+            if (!avecNumero.length) {
+                return { veto: false, preuves: [], incoherent: false, raison: `aucun "${cardInfo.name}" n'a de numéro publié -> la preuve est impossible, on laisse passer` };
+            }
+            return {
+                veto: false, preuves: [], incoherent: true,
+                raison: `"${cardInfo.name}" est connu à ${avecNumero.length} numéro(s), mais JAMAIS au n°${cardInfo.number} : une des deux lectures est fausse`
+            };
         }
 
         return {
@@ -1519,7 +1546,7 @@ async function nomOpposeUnVeto(cardInfo, produit) {
     } catch (e) {
         // Un veto qui casse ne doit pas casser le scan : en cas de doute, on laisse passer.
         console.error(`❌ Erreur nomOpposeUnVeto :`, e.message);
-        return { veto: false, preuves: [], raison: 'erreur -> veto désarmé' };
+        return { veto: false, preuves: [], incoherent: false, raison: 'erreur -> veto désarmé' };
     }
 }
 
@@ -2626,9 +2653,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // ON NE REFUSE QU'EN DERNIER RECOURS : vivier de preuve vide, ou égalité au sommet
         // (rien ne départage). Un prix faux facturé coûte plus cher qu'un scan remboursé.
         let vetoNomGagnant = null;
+        // TROISIÈME ÉTAT : le nom lu et le numéro lu s'excluent l'un l'autre. Aucun veto —
+        // on ne sait pas laquelle des deux lectures accuser — mais aucun verdict non plus.
+        let nomNumeroIncoherents = false;
         {
             const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
             const avis = gagnantProduit ? await nomOpposeUnVeto(cardInfo, gagnantProduit) : { veto: false };
+            if (avis.incoherent) {
+                nomNumeroIncoherents = true;
+                console.warn(`⚠️ [nom-numero-incoherents] ${avis.raison} -> le prix est livré SANS verdict.`);
+            }
             if (avis.veto) {
                 vetoNomGagnant = avis;
                 console.warn(`🚫 [veto-nom] gagnant ${classement[0].idProduct} "${String(gagnantProduit.name).split('[')[0].trim()}" ÉCARTÉ : ${avis.raison}`);
@@ -2676,13 +2710,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const carteAmbigue = Boolean(
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
+            || nomNumeroIncoherents
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
                 localIncertain ? 'identification-locale-sans-tcgdex'
-                    : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
-                        : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
-                            : nomPeuFiable ? 'nom-confiance-basse'
+                    : nomNumeroIncoherents ? 'nom-numero-incoherents'
+                        : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
+                            : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
+                                : nomPeuFiable ? 'nom-confiance-basse'
                                 : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
                                     : numeroContredit ? 'tcgdex-numero-incoherent'
                                         : 'tcgdex-ambigu');
@@ -2714,6 +2750,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Les deux signaux de rang, persistés : c'est ce qui permettra de mesurer
             // leur fréquence réelle sans dépendre des logs éphémères de Render.
             aucunCandidatAuNumero,
+            nomNumeroIncoherents,
             rangGagnant: rangsScoring?.rangGagnant ?? null,
             // Écart entre le 1er et le 2e du classement : rend visibles les
             // identifications qui « tiennent à un fil » avant qu'un testeur les remonte.
@@ -2768,6 +2805,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // être celui de la carte scannée : l'extension doit le présenter comme
                 // douteux, pas comme un verdict.
                 aucunCandidatAuNumero,
+                // ⚠️ SIGNAL DE PREMIÈRE CLASSE. true = le nom lu existe au catalogue à
+                // d'autres numéros mais JAMAIS à celui qui a été lu. Une des deux lectures
+                // est fausse et on ignore laquelle : l'extension doit livrer le prix SANS
+                // verdict — ni bonne affaire, ni surcote.
+                nomNumeroIncoherents,
                 // 1 = le numéro du produit retenu correspond à celui lu ; 2 = inconnu ;
                 // 3 = le catalogue le CONTREDIT. null = rien de lu, donc pas de rang.
                 rangGagnant: rangsScoring?.rangGagnant ?? null

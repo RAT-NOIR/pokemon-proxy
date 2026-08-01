@@ -121,6 +121,15 @@ const journalScanSchema = new mongoose.Schema({
     aucunCandidatAuNumero: Boolean,
     rangGagnant: Number,
 
+    // TROISIÈME ÉTAT DU NOM. true = le nom lu est connu du catalogue à d'autres numéros,
+    // mais JAMAIS à celui qui a été lu. Une des deux lectures est fausse et on ignore
+    // laquelle : le prix part, le verdict non. Persisté pour être COMPTÉ — c'est sa
+    // fréquence réelle qui dira si l'avertissement reste rare et donc lisible. Mesuré à
+    // 3 scans sur 49 avant sa mise en service, dont un seul nouvel avertissement.
+    // ⚠️ false quand AUCUN produit de ce nom n'a de numéro publié : 2 101 produits sont
+    // dans ce cas (3,0 % du catalogue) et ne rien y trouver ne prouve rien.
+    nomNumeroIncoherents: Boolean,
+
     // Écart de score entre le 1er et le 2e du classement. « Un écart de 5 points contre
     // 20 se renverse au premier bruit » : ce champ rend la liste des identifications
     // fragiles interrogeable, au lieu d'attendre qu'un testeur en remonte une.
@@ -241,6 +250,7 @@ function enregistrerScan(d = {}) {
             // mesurer.
             rang: d.motifEchec ? null : rangDuNumero(d.numero, numeroGagnant),
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
+            nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
             rangGagnant: Number.isFinite(d.rangGagnant) ? d.rangGagnant : null,
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,

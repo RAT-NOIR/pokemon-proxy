@@ -157,7 +157,35 @@ function verifier(libelle, obtenu, attendu) {
             const doc = await CatalogueProduit.findOne({ idProduct });
             const avis = await nomOpposeUnVeto({ name: nom, number: numero, nomConfiance: 'haute' }, doc);
             verifier(`"${nom}" n°${numero} -> pas de veto`, avis.veto, false);
+            // ... mais le TROISIÈME ÉTAT, lui, se déclenche : le nom est connu à d'autres
+            // numéros, jamais à celui-là. Preuve positive d'incohérence -> pas de verdict.
+            verifier(`"${nom}" n°${numero} -> incohérent, donc SANS verdict`, avis.incoherent, true);
         }
+    }
+
+    // ---- 8. LE TROISIÈME ÉTAT NE DOIT PAS SE DÉCLENCHER SANS PREUVE --------
+    // C'est la garantie que l'avertissement reste rare, donc lisible.
+    console.log('\n=== 8. Les trois états, et ce qui les sépare ===');
+    {
+        const CatalogueProduit = mongoose.connection.collection('catalogue_produits');
+        // ROG : 65 produits, AUCUN numéro publié. Ne rien trouver au numéro lu n'y prouve
+        // rien — 2 101 produits sont dans ce cas. Sans cette garde, on les signalerait tous.
+        const dracolosse = await CatalogueProduit.findOne({ idProduct: 585145 });
+        const rog = await nomOpposeUnVeto({ name: 'Dark Dragonite', number: '149', nomConfiance: 'haute' }, dracolosse);
+        verifier('ROG : concordance, donc ni veto ni incohérence', [rog.veto, rog.incoherent], [false, false]);
+
+        // Kahili : le nom EST connu (8 produits), mais pas au n°173. Le troisième état se
+        // déclenche donc, et c'est assumé : on préfère marquer douteuse une réponse juste
+        // plutôt que livrer un prix faux avec assurance.
+        const dodrio = (await trouverParSetCodeEtNumero('e3', '062'))[0];
+        const kahili = await nomOpposeUnVeto({ name: 'Kahili', number: '173', nomConfiance: 'haute' }, dodrio);
+        verifier('Kahili : pas de veto', kahili.veto, false);
+        verifier('Kahili : incohérent -> signalé, jamais refusé', kahili.incoherent, true);
+
+        // Confiance basse : tout est désarmé, y compris le troisième état. L'IA doute déjà
+        // de sa lecture du nom, et `nomPeuFiable` marque la carte de son côté.
+        const basse = await nomOpposeUnVeto({ name: 'Light Jolteon', number: '135', nomConfiance: 'basse' }, dodrio);
+        verifier('confiance basse -> aucun des deux états', [basse.veto, basse.incoherent], [false, false]);
     }
 
     console.log(`\n${ko === 0 ? '🎉' : '💥'} ${ok}/${ok + ko} assertions passées.`);
