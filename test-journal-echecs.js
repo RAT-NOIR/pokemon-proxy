@@ -74,7 +74,10 @@ async function attendreLigne(filtre, limiteMs = 5000) {
             name: 'Dark Dragonite', number: '149', total: null, setCode: 'ROG',
             language: 'JP', rarete: 'Holo Rare', nomBrut: 'わるいカイリュー', nomConfiance: 'haute'
         },
-        motifEchec: 'carte-introuvable', rembourse: true
+        motifEchec: 'carte-introuvable', rembourse: true,
+        // Les deux URL qui rendent la ligne revérifiable des mois plus tard.
+        imageUrl: 'https://images1.vinted.net/t/00_01234_photo.jpeg',
+        vintedUrl: 'https://www.vinted.fr/items/1234567890-carte-pokemon'
     });
     const echec = await attendreLigne({ userId: MARQUEUR, motifEchec: 'carte-introuvable' });
     if (!echec) {
@@ -99,6 +102,10 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // LE point qui ne se déduit pas du code : rangDuNumero('149', null) rend 2.
         verifier('rang NUL sur un échec', echec.rang ?? null, null);
         verifier('idProduct nul', echec.idProduct ?? null, null);
+        // Sans ces deux URL, une ligne d'échec ne peut plus être revérifiée dès que
+        // l'annonce disparaît — c'est ce qui a coûté trois lignes du premier banc.
+        verifier('imageUrl conservée', echec.imageUrl, 'https://images1.vinted.net/t/00_01234_photo.jpeg');
+        verifier('vintedUrl conservée', echec.vintedUrl, 'https://www.vinted.fr/items/1234567890-carte-pokemon');
     }
 
     // ---- 2. L'IA N'A RIEN RENDU ------------------------------------------------

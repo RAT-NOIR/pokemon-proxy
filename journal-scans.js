@@ -16,9 +16,19 @@
 //   - il n'est JAMAIS sur le chemin critique. Un échec d'écriture ne remonte pas :
 //     un scan qui a livré un prix ne doit pas échouer parce qu'une statistique n'a
 //     pas pu s'écrire. Appel sans await, erreurs avalées et tracées.
-//   - il ne stocke aucune image, aucun titre d'annonce, aucune URL Vinted. Le userId
-//     suffit à corréler ; le reste serait de la donnée personnelle sans usage.
 //   - il n'appelle jamais Cardmarket ni TCGdex.
+//
+// ⚠️ DÉCISION RENVERSÉE — les URL sont maintenant conservées. La version d'origine de ce
+// module écartait volontairement l'URL de l'annonce et celle de l'image : « le userId
+// suffit à corréler, le reste serait de la donnée personnelle sans usage ». C'était faux,
+// et la construction du premier banc l'a démontré en trois jours : les annonces Vinted
+// disparaissent dès que la carte est vendue. Trois lignes du banc ont dû être marquées
+// « inconnu » — dont un Ledian holo à départager entre deux impressions — parce que
+// l'annonce n'existait plus et qu'il ne restait aucune trace de ce qui avait été scanné.
+// Un banc reconstruit de mémoire n'est pas un banc.
+// Avec ces deux champs, CHAQUE scan devient une ligne de banc vérifiable des mois plus
+// tard. C'est la différence entre mesurer et se souvenir. Le TTL de 90 jours borne la
+// conservation, et aucune image n'est stockée — seulement son URL.
 //
 // PURGE. Index TTL de 90 jours (voir RETENTION_JOURS). Trois mois couvrent un
 // trimestre complet — assez pour mesurer une dérive saisonnière et pour accumuler
@@ -43,6 +53,15 @@ const journalScanSchema = new mongoose.Schema({
 
     route: String,        // 'identifier' (flux réel, extension) | 'analyser' (flux serveur)
     userId: String,
+
+    // --- DE QUOI REVÉRIFIER LE SCAN DES MOIS PLUS TARD ---
+    // imageUrl  : la PREMIÈRE photo envoyée à l'IA — celle sur laquelle le verdict s'est
+    //             joué. Déjà reçue par les deux routes, il n'y avait qu'à la garder.
+    // vintedUrl : l'URL de l'annonce. ⚠️ L'extension NE L'ENVOIE PAS ENCORE : le champ est
+    //             accepté dès maintenant (`vintedUrl` ou `url` dans le corps), il se
+    //             remplira tout seul le jour où elle le fera, sans redéploiement du serveur.
+    imageUrl: String,
+    vintedUrl: String,
 
     // --- SUCCÈS OU ÉCHEC ------------------------------------------------------
     // Le trou le plus grave du dispositif jusqu'ici : `enregistrerScan` n'était appelée
@@ -221,6 +240,10 @@ function enregistrerScan(d = {}) {
             le: new Date(),
             route: d.route || null,
             userId: d.userId || null,
+            // Bornées : une URL Vinted fait ~120 caractères, une URL d'image ~200. Le
+            // plafond protège d'un corps de requête fabriqué qui gonflerait la collection.
+            imageUrl: d.imageUrl ? String(d.imageUrl).slice(0, 500) : null,
+            vintedUrl: d.vintedUrl ? String(d.vintedUrl).slice(0, 500) : null,
             nom: d.nom || null,
             numero: d.numero != null ? String(d.numero) : null,
             total: d.total != null ? String(d.total) : null,
@@ -280,10 +303,10 @@ function enregistrerScan(d = {}) {
  * @param {boolean}     o.rembourse   valeur de retour de rembourserScan, pas une intention
  * @returns {void}
  */
-function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse } = {}) {
+function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
-        route, userId, motifEchec,
+        route, userId, motifEchec, imageUrl, vintedUrl,
         rembourse: rembourse != null ? Boolean(rembourse) : null,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
