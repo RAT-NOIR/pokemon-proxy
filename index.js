@@ -1463,21 +1463,28 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu) {
  *      son veto à un code correct, et on aurait reconstruit le bug d'origine à l'envers :
  *      c'est exactement le cas Kahili, où le nom lu n'existe sur aucune carte.
  *
- * @returns {Promise<{veto: boolean, raison: string}>}
+ * CE QUE LE VETO REND EN PLUS DU REFUS. Sa condition de preuve DÉSIGNE déjà des produits :
+ * ceux qui portent le nom lu au numéro lu. Ce n'est pas un sous-produit du refus, c'est la
+ * réponse. « Flareon au n°017 existe (653910) et n'est pas Turtonator » — 653910 est la
+ * bonne carte, à 239,94 € contre 0,02 €. `preuves` porte donc cet ensemble, pour que
+ * l'appelant le RE-CLASSE au lieu de se contenter d'écarter le gagnant. Refuser un prix
+ * faux vaut mieux que le facturer ; rendre le bon vaut mieux que les deux.
+ *
+ * @returns {Promise<{veto: boolean, raison: string, preuves: object[]}>}
  */
 async function nomOpposeUnVeto(cardInfo, produit) {
     try {
         // (b) — l'IA elle-même doute de sa lecture : le nom n'a pas voix au chapitre.
-        if (cardInfo.nomConfiance !== 'haute') return { veto: false, raison: 'confiance du nom non haute -> veto désarmé' };
+        if (cardInfo.nomConfiance !== 'haute') return { veto: false, preuves: [], raison: 'confiance du nom non haute -> veto désarmé' };
 
         const formesLues = [cardInfo.name, cardInfo.nomBrut].filter(Boolean);
-        if (!formesLues.length) return { veto: false, raison: 'aucun nom lu' };
+        if (!formesLues.length) return { veto: false, preuves: [], raison: 'aucun nom lu' };
 
         const info = (await lireNumeros([produit.idProduct])).get(produit.idProduct);
         const formesCandidat = [String(produit.name || '').split('[')[0].trim(), info?.nomFr].filter(Boolean);
-        if (!formesCandidat.length) return { veto: false, raison: 'candidat sans nom exploitable' };
+        if (!formesCandidat.length) return { veto: false, preuves: [], raison: 'candidat sans nom exploitable' };
 
-        if (nomConcorde(formesLues, formesCandidat)) return { veto: false, raison: 'concordance' };
+        if (nomConcorde(formesLues, formesCandidat)) return { veto: false, preuves: [], raison: 'concordance' };
 
         // (a) — LA PREUVE. On réutilise volontairement trouverProduitsLocaux : c'est la MÊME
         // résolution de nom que partout ailleurs (variantes, normalisation), donc le veto ne
@@ -1485,12 +1492,12 @@ async function nomOpposeUnVeto(cardInfo, produit) {
         // Mongo, et seulement dans le cas de désaccord — mesuré à 1 scan sur 23 où le chemin
         // par le code tranche.
         const ailleurs = await trouverProduitsLocaux(cardInfo.name);
-        if (!ailleurs.length) return { veto: false, raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
+        if (!ailleurs.length) return { veto: false, preuves: [], raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
 
         // ... AU NUMÉRO LU. Sans cette seconde condition, un nom halluciné mais réel
         // (« Kahili ») suffirait à refuser un code correct.
         if (cardInfo.number == null || String(cardInfo.number).trim() === '') {
-            return { veto: false, raison: 'aucun numéro lu -> la preuve ne peut pas être établie' };
+            return { veto: false, preuves: [], raison: 'aucun numéro lu -> la preuve ne peut pas être établie' };
         }
         const numeros = await lireNumeros(ailleurs.map(p => p.idProduct));
         const auNumeroLu = ailleurs.filter(p => {
@@ -1498,17 +1505,21 @@ async function nomOpposeUnVeto(cardInfo, produit) {
             return d && (comparerNumeros(cardInfo.number, d.numero) || comparerNumeros(cardInfo.number, d.numeroUrl));
         });
         if (!auNumeroLu.length) {
-            return { veto: false, raison: `aucun "${cardInfo.name}" au n°${cardInfo.number} au catalogue -> le nom est aussi douteux que le code, on laisse passer` };
+            return { veto: false, preuves: [], raison: `aucun "${cardInfo.name}" au n°${cardInfo.number} au catalogue -> le nom est aussi douteux que le code, on laisse passer` };
         }
 
         return {
             veto: true,
+            // L'ensemble de preuve EST le nouveau vivier. Voir le re-classement dans
+            // /api/identifier : ces produits portent le nom lu ET le numéro lu, ce qui en
+            // fait de bien meilleurs candidats que celui qu'on vient d'écarter.
+            preuves: auNumeroLu,
             raison: `"${cardInfo.name}" au n°${cardInfo.number} existe au catalogue (${auNumeroLu.slice(0, 3).map(p => p.idProduct).join(', ')}) et n'est pas "${formesCandidat[0]}"`
         };
     } catch (e) {
         // Un veto qui casse ne doit pas casser le scan : en cas de doute, on laisse passer.
         console.error(`❌ Erreur nomOpposeUnVeto :`, e.message);
-        return { veto: false, raison: 'erreur -> veto désarmé' };
+        return { veto: false, preuves: [], raison: 'erreur -> veto désarmé' };
     }
 }
 
@@ -2594,6 +2605,69 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // VETO PAR LE NOM SUR LE GAGNANT, PUIS RE-CLASSEMENT
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI ICI, ET PAS SEULEMENT SUR LE CHEMIN PAR LE CODE. Mesuré sur les 49
+        // premiers scans journalisés : cinq verdicts portaient un nom qui ne pouvait pas
+        // être celui de la carte — Flareon rendu « Turtonator » (0,02 € au lieu de
+        // 239,94 €), Light Jolteon rendu « Lightning Energy », Dark Haunter rendu
+        // « Darkness Energy », Misty's Staryu rendu « Team Rocket's Archer ». TROIS sont
+        // partis avec confiance=haute, sans le moindre avertissement, et QUATRE au rang 1 :
+        // le numéro correspondait. Ni les rangs, ni l'écart de score, ni la région ne
+        // peuvent voir cette classe — seul le nom la voit.
+        //
+        // ON NE SE CONTENTE PAS DE REFUSER. La condition de preuve du veto DÉSIGNE déjà des
+        // produits : ceux qui portent le nom lu AU numéro lu. Ce sont de meilleurs candidats
+        // que celui qu'on écarte, par construction. Ils deviennent donc le vivier, et le
+        // scoring habituel les départage — région, code de set, prix, tout ce qui existe.
+        // Le veto n'est pas un garde-fou de plus : c'est un correctif.
+        //
+        // ON NE REFUSE QU'EN DERNIER RECOURS : vivier de preuve vide, ou égalité au sommet
+        // (rien ne départage). Un prix faux facturé coûte plus cher qu'un scan remboursé.
+        let vetoNomGagnant = null;
+        {
+            const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
+            const avis = gagnantProduit ? await nomOpposeUnVeto(cardInfo, gagnantProduit) : { veto: false };
+            if (avis.veto) {
+                vetoNomGagnant = avis;
+                console.warn(`🚫 [veto-nom] gagnant ${classement[0].idProduct} "${String(gagnantProduit.name).split('[')[0].trim()}" ÉCARTÉ : ${avis.raison}`);
+
+                const codeSetsPreuve = await lireCodeSets(avis.preuves.map(p => p.idExpansion));
+                const r = await scorerCandidatsLocal(
+                    avis.preuves, cardInfo, photos[0], expansionsAttendues, codeSetsPreuve, optionsMotif
+                );
+                // « Ne tranche pas » = égalité au sommet. Deux candidats au même score, c'est
+                // le cas Carabaffe : « le moins cher gagne » y désignerait un produit à
+                // 3,76 € sans le moindre fondement. Une égalité n'est pas un verdict.
+                const egaliteAuSommet = r.scores.length > 1 && r.scores[0].score === r.scores[1].score;
+                if (r.scores.length && !egaliteAuSommet) {
+                    produits = avis.preuves;
+                    voieCatalogue = 'veto-nom-reclasse';
+                    identificationConfiante = r.confiant;
+                    strategieReverse = r.strategieReverse;
+                    motifResolution = r.motif;
+                    rangsScoring = r.rangs;
+                    aucunCandidatAuNumero = false;   // ces produits portent le numéro lu, par construction
+                    classement = r.scores.map(s => ({
+                        idProduct: s.candidat.idProduct, idExpansion: s.candidat.idExpansion,
+                        score: s.score, strategie: s.strategie, detail: s.detail
+                    }));
+                    console.log(`♻️ [veto-nom] RE-CLASSÉ sur ${avis.preuves.length} candidat(s) portant "${cardInfo.name}" au n°${cardInfo.number} -> ${classement[0].idProduct} (score ${classement[0].score})`);
+                } else {
+                    const motifRefus = r.scores.length ? 'nom-contredit-egalite' : 'nom-contredit-sans-repli';
+                    console.warn(`🚫 [veto-nom] le vivier de preuve ${r.scores.length ? 'NE TRANCHE PAS (égalité au sommet)' : 'est VIDE'} -> refus.`);
+                    const rendu = await rembourserScan(req, motifRefus);
+                    enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, cardInfo, motifEchec: motifRefus, rembourse: rendu });
+                    return res.json({
+                        success: false,
+                        error: `Le produit retenu ne porte pas le nom lu sur la carte ("${cardInfo.name}"), et aucun candidat ne le départage — scan remboursé plutôt qu'un prix faux.`,
+                        cardInfo
+                    });
+                }
+            }
+        }
+
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
         const gagnantContreditNumero = rangsScoring?.rangGagnant === 3;
 
@@ -3100,4 +3174,10 @@ if (require.main === module) {
 }
 
 // Exporté pour les tests UNIQUEMENT. Le serveur, lui, ne lit jamais ces exports.
-module.exports = { app, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux };
+module.exports = {
+    app, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux,
+    // Exportés pour que le re-classement du veto soit rejouable À L'IDENTIQUE dans les
+    // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
+    // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
+    scorerCandidatsLocal, lireCodeSets, lireNumeros
+};

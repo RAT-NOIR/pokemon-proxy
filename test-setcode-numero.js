@@ -15,7 +15,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { trouverParSetCodeEtNumero, nomOpposeUnVeto } = require('./index');
+const { trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets } = require('./index');
 
 let ok = 0, ko = 0;
 function verifier(libelle, obtenu, attendu) {
@@ -121,6 +121,43 @@ function verifier(libelle, obtenu, attendu) {
         verifier('setCode absent -> aucun produit', (await trouverParSetCodeEtNumero(null, '053')).length, 0);
         verifier('numéro absent -> aucun produit', (await trouverParSetCodeEtNumero('ROG', null)).length, 0);
         verifier('code inconnu du catalogue -> aucun produit', (await trouverParSetCodeEtNumero('ZZZZ9', '001')).length, 0);
+    }
+
+    // ---- 6. LE RE-CLASSEMENT : le veto ne se contente pas de refuser ------
+    // La condition de preuve DÉSIGNE des produits ; ils deviennent le vivier et le scoring
+    // habituel les départage. Rejoué sur le verdict le plus cher du journal.
+    console.log('\n=== 6. Re-classement après veto — le cas Flareon/Turtonator ===');
+    {
+        const turtonator = (await trouverParSetCodeEtNumero('m3', '017'))[0];
+        const cardInfo = { name: 'Flareon', number: '017', total: '088', nomBrut: 'ブースター', nomConfiance: 'haute', language: 'JP' };
+        const avis = await nomOpposeUnVeto(cardInfo, turtonator);
+        verifier('le veto écarte Turtonator', avis.veto, true);
+        verifier('il rend un vivier de preuve non vide', avis.preuves.length > 0, true);
+
+        const codeSets = await lireCodeSets(avis.preuves.map(p => p.idExpansion));
+        const r = await scorerCandidatsLocal(avis.preuves, cardInfo, null, [], codeSets, {});
+        verifier('le re-classement désigne le Flareon d\'EC4', r.scores[0]?.candidat?.idProduct, 653910);
+        // Un seul candidat porte « Flareon » au n°017 : il n'y a pas d'égalité à craindre.
+        verifier('pas d\'égalité au sommet', r.scores.length > 1 && r.scores[0].score === r.scores[1].score, false);
+    }
+
+    // ---- 7. CE QUE LE VETO NE TOUCHE PAS -----------------------------------
+    // Trois autres verdicts faux du journal. Le nom lu ET le numéro lu ne se rejoignent
+    // sur AUCUN produit : « Light Jolteon » n'est connu qu'en NDE-48, l'IA a lu 135. Une
+    // des deux lectures est fausse et rien en local ne dit laquelle -> pas de preuve,
+    // pas de veto. C'est la condition (a) qui fait son travail, pas une lacune.
+    console.log('\n=== 7. Sans preuve au numéro lu, pas de veto ===');
+    {
+        const CatalogueProduit = mongoose.connection.collection('catalogue_produits');
+        for (const [nom, numero, idProduct] of [
+            ['Light Jolteon', '135', 554732],
+            ['Dark Haunter', '093', 871882],
+            ["Misty's Staryu", '120', 821952]
+        ]) {
+            const doc = await CatalogueProduit.findOne({ idProduct });
+            const avis = await nomOpposeUnVeto({ name: nom, number: numero, nomConfiance: 'haute' }, doc);
+            verifier(`"${nom}" n°${numero} -> pas de veto`, avis.veto, false);
+        }
     }
 
     console.log(`\n${ko === 0 ? '🎉' : '💥'} ${ok}/${ok + ko} assertions passées.`);
