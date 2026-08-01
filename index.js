@@ -3311,5 +3311,7 @@ module.exports = {
     // Exportés pour que le re-classement du veto soit rejouable À L'IDENTIQUE dans les
     // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
     // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
-    scorerCandidatsLocal, lireCodeSets, lireNumeros
+    scorerCandidatsLocal, lireCodeSets, lireNumeros,
+    // Le pont total -> set, exporté pour être DIAGNOSTIQUÉ sur pièces plutôt que déduit.
+    setsPourTotal, identifierParTotalEtNumero
 };
