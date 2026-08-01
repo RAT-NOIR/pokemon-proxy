@@ -29,6 +29,10 @@ const {
     // de faire confiance au client. L'oubli de cet import a cassé l'endpoint en
     // production — node --check ne valide que la SYNTAXE, pas la résolution des noms.
     numeroDepuisSlug,
+    // ALIAS_CODES_LUS : le marquage physique e-Reader (E1..E5) n'est pas le code
+    // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
+    // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
+    ALIAS_CODES_LUS, nomConcorde,
     MOTIFS_CIBLABLES
 } = require('./scoring');
 
@@ -1376,6 +1380,138 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
     }
 }
 
+// ============================================================
+// CHEMIN DE RECHERCHE : le code de set LU + le numéro LU
+// ============================================================
+// POURQUOI IL EXISTE, ET POURQUOI IL EST EN TÊTE. Jusqu'ici le setCode ne servait qu'à
+// SCORER un candidat déjà trouvé, ou à invalider une expansion attendue. Or (code, numéro)
+// est une CLÉ du catalogue : il n'y avait aucune raison de ne pas s'en servir pour
+// chercher. Ce chemin ne dépend ni de TCGdex, ni du nom, ni du titre de l'annonce — donc
+// il survit exactement là où les autres tombent. Trace réelle : l'Aquali δ, où TCGdex
+// avait trouvé la bonne carte (PCG6-030) et où le catalogue a été interrogé avec le nom
+// d'AFFICHAGE japonais de TCGdex, « Vaporeon（デルタ種）», qui ne correspond à rien chez
+// nous. La bonne réponse était là et elle a été jetée à la dernière étape.
+//
+// CE QU'IL COUVRE, MESURÉ (49 scans journalisés, catalogue de 69 729 produits) :
+//   - l'IA rend un setCode sur 67,3 % des scans ; il existe au catalogue dans 84,8 % de
+//     ces cas ; code ET numéro exploitables sur 55,1 % des scans ;
+//   - il tranche (un seul produit) sur 85,2 % de ceux-là, soit 47 % de tous les scans ;
+//   - plafond : (code + numéro) désigne un produit UNIQUE pour 77,7 % du catalogue.
+//
+// CE QU'IL NE COUVRERA JAMAIS, ET C'EST STRUCTUREL. 41 expansions — 2 101 produits, 3,0 %
+// du catalogue — n'ont AUCUN numéro publié par Cardmarket. Le Rocket Gang japonais (ROG,
+// 65 produits, 65 déjà lus, 0 numéro) en fait partie : ROG+149 rend zéro produit, quoi que
+// l'IA lise sur la carte, et aucun apprentissage n'y changera rien. Pour ces 2 101
+// produits, c'est le NOM qui tranche — il désigne un produit unique dans 92,2 % des cas
+// dès lors que l'expansion est connue.
+// D'où la règle : setCode+numéro D'ABORD, puis nom+région. Les deux mécanismes se
+// RELAIENT, ils ne se remplacent pas. Le contre-exemple qui l'établit : « Vaporeon » seul
+// ramène 71 produits — pour lui, seul le code tranche ; « Dark Dragonite » n'a pas de
+// numéro — pour lui, seul le nom tranche.
+async function trouverParSetCodeEtNumero(setCodeLu, numeroLu) {
+    try {
+        if (mongoose.connection.readyState !== 1 || numeroLu == null) return [];
+        const brut = normaliserCodeSet(setCodeLu);
+        if (!brut) return [];
+        const code = ALIAS_CODES_LUS.get(brut) || brut;
+
+        // Les 747 lignes de codes_set sont lues en entier : la normalisation (majuscules,
+        // suppression des séparateurs) se fait en JS et ne peut pas être poussée dans la
+        // requête. C'est ~45 Ko par scan, à comparer aux ~4 s d'appel IA que tout scan paie
+        // de toute façon. Pas de cache : codes_set s'enrichit en continu via /api/apprendre,
+        // et un cache périmé rendrait un code introuvable sans le moindre signe.
+        const lignes = await CodeSet.find({}, { idExpansion: 1, codeSet: 1 }).lean();
+        const exps = lignes.filter(l => normaliserCodeSet(l.codeSet) === code).map(l => l.idExpansion);
+        if (!exps.length) return [];
+
+        // Même départage que partout ailleurs (préférence STRICTE pour l'égalité exacte) :
+        // le numéro ne doit pas se comparer différemment selon le chemin emprunté.
+        return await trouverProduitsParNumero(exps, numeroLu);
+    } catch (e) {
+        console.error(`❌ Erreur trouverParSetCodeEtNumero :`, e.message);
+        return [];
+    }
+}
+
+/**
+ * LE VETO PAR LE NOM. Le code cherche, le nom peut REFUSER.
+ *
+ * POURQUOI. Le chemin ci-dessus est aveugle par construction, et c'est sa force jusqu'au
+ * moment où l'IA lit mal le code. Cas réel du journal : « Meowth · n°062 · total 088 »
+ * avec un setCode lu « e3 » au lieu de « e4 » — un chiffre sur un tampon e-Reader.
+ * e3+062 désigne EC3-062, qui est un DODRIO. Sans veto, ce scan rendrait Dodrio avec
+ * assurance, là où le nom le sauve aujourd'hui.
+ *
+ * DEUX GARDE-FOUS, sans lesquels ce veto ferait plus de mal que de bien :
+ *
+ *   a) PREUVE POSITIVE DE DISCORDANCE, jamais une simple absence de correspondance.
+ *      « Je ne sais pas » et « je sais que non » ne commandent pas la même action — c'est
+ *      la règle déjà posée pour bilanDesRangs, et elle vaut ici mot pour mot. Un nomFr
+ *      absent, une lecture française, un katakana seul : tout cela ne correspond à rien
+ *      sans rien prouver.
+ *      LA PREUVE EXIGÉE EST DONC : le nom lu, AU NUMÉRO LU, existe ailleurs au catalogue.
+ *      « Il existe une carte appelée X portant le numéro N, et ce n'est pas celle-ci. »
+ *      ⚠️ Une première version se contentait de « le nom lu existe quelque part » : trop
+ *      faible, et mesuré comme tel. « Kahili » désigne 8 produits RÉELS au catalogue —
+ *      la carte existe, c'est la lecture qui est fausse (Dana s'appelle « Méridia » en
+ *      français). Ce veto-là aurait refusé un code correct sur la seule foi d'un nom
+ *      halluciné. Au numéro lu, en revanche, la distinction est nette et déjà mesurée
+ *      sur les cas réels : « Meowth » au n°062 existe (EC4), « Kahili » au n°173 n'existe
+ *      pas. C'est exactement le test d'arbitrage du nom déjà en place plus bas.
+ *
+ *   b) DÉSARMÉ quand nomConfiance n'est pas 'haute'. Sinon un nom halluciné opposerait
+ *      son veto à un code correct, et on aurait reconstruit le bug d'origine à l'envers :
+ *      c'est exactement le cas Kahili, où le nom lu n'existe sur aucune carte.
+ *
+ * @returns {Promise<{veto: boolean, raison: string}>}
+ */
+async function nomOpposeUnVeto(cardInfo, produit) {
+    try {
+        // (b) — l'IA elle-même doute de sa lecture : le nom n'a pas voix au chapitre.
+        if (cardInfo.nomConfiance !== 'haute') return { veto: false, raison: 'confiance du nom non haute -> veto désarmé' };
+
+        const formesLues = [cardInfo.name, cardInfo.nomBrut].filter(Boolean);
+        if (!formesLues.length) return { veto: false, raison: 'aucun nom lu' };
+
+        const info = (await lireNumeros([produit.idProduct])).get(produit.idProduct);
+        const formesCandidat = [String(produit.name || '').split('[')[0].trim(), info?.nomFr].filter(Boolean);
+        if (!formesCandidat.length) return { veto: false, raison: 'candidat sans nom exploitable' };
+
+        if (nomConcorde(formesLues, formesCandidat)) return { veto: false, raison: 'concordance' };
+
+        // (a) — LA PREUVE. On réutilise volontairement trouverProduitsLocaux : c'est la MÊME
+        // résolution de nom que partout ailleurs (variantes, normalisation), donc le veto ne
+        // peut pas être plus sévère que la recherche par nom elle-même. Deux allers-retours
+        // Mongo, et seulement dans le cas de désaccord — mesuré à 1 scan sur 23 où le chemin
+        // par le code tranche.
+        const ailleurs = await trouverProduitsLocaux(cardInfo.name);
+        if (!ailleurs.length) return { veto: false, raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
+
+        // ... AU NUMÉRO LU. Sans cette seconde condition, un nom halluciné mais réel
+        // (« Kahili ») suffirait à refuser un code correct.
+        if (cardInfo.number == null || String(cardInfo.number).trim() === '') {
+            return { veto: false, raison: 'aucun numéro lu -> la preuve ne peut pas être établie' };
+        }
+        const numeros = await lireNumeros(ailleurs.map(p => p.idProduct));
+        const auNumeroLu = ailleurs.filter(p => {
+            const d = numeros.get(p.idProduct);
+            return d && (comparerNumeros(cardInfo.number, d.numero) || comparerNumeros(cardInfo.number, d.numeroUrl));
+        });
+        if (!auNumeroLu.length) {
+            return { veto: false, raison: `aucun "${cardInfo.name}" au n°${cardInfo.number} au catalogue -> le nom est aussi douteux que le code, on laisse passer` };
+        }
+
+        return {
+            veto: true,
+            raison: `"${cardInfo.name}" au n°${cardInfo.number} existe au catalogue (${auNumeroLu.slice(0, 3).map(p => p.idProduct).join(', ')}) et n'est pas "${formesCandidat[0]}"`
+        };
+    } catch (e) {
+        // Un veto qui casse ne doit pas casser le scan : en cas de doute, on laisse passer.
+        console.error(`❌ Erreur nomOpposeUnVeto :`, e.message);
+        return { veto: false, raison: 'erreur -> veto désarmé' };
+    }
+}
+
 /**
  * Même recherche, mais SANS PÉRIMÈTRE : tout le catalogue.
  *
@@ -2139,6 +2275,30 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // coup — à comparer avec le temps d'appel IA ci-dessus, qui tourne de toute façon.
         const debutCatalogue = Date.now();
 
+        // ════════════════════════════════════════════════════════════════════
+        // CHEMIN 1 — setCode LU + numéro LU, EN TÊTE
+        // ════════════════════════════════════════════════════════════════════
+        // Voir trouverParSetCodeEtNumero pour le pourquoi et les chiffres. Ce chemin ne
+        // décide QUE de l'identité du produit ; TCGdex reste appelé juste après pour ses
+        // variants_detailed, qui sont la seule chose qu'il apporte et que Cardmarket ne
+        // sait pas donner (routage du motif de reverse, jusqu'à x100 d'écart de prix).
+        // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
+        // gain d'identification se paierait en erreurs de prix.
+        let produitsImposes = null, voieImposee = null;
+        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, cardInfo.number);
+        if (pisteCode.length === 1) {
+            const avis = await nomOpposeUnVeto(cardInfo, pisteCode[0]);
+            if (avis.veto) {
+                console.warn(`🚫 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} désigne ${pisteCode[0].idProduct} "${String(pisteCode[0].name).split('[')[0].trim()}", REFUSÉ : ${avis.raison}`);
+            } else {
+                produitsImposes = pisteCode;
+                voieImposee = 'setcode-numero';
+                console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode[0].idProduct} "${String(pisteCode[0].name).split('[')[0].trim()}" (${avis.raison})`);
+            }
+        } else if (pisteCode.length > 1) {
+            console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire.`);
+        }
+
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
         let trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total);
 
@@ -2151,8 +2311,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // répondait « non trouvée sur TCGdex » et remboursait. Voir identification-locale.js.
         let identificationLocale = false;
         let localIncertain = false;
-        let produitsImposes = null;
-        if (!trouvaille) {
+        if (!trouvaille && produitsImposes) {
+            // Le chemin par le code a déjà tranché et TCGdex est muet : on n'a plus rien à
+            // lui demander. `trouvaille` synthétique, comme pour l'identification locale —
+            // ses champs TCGdex sont nuls, donc pas de routage de motif possible, d'où
+            // `identifieeEnLocal` et le drapeau d'ambiguïté qui va avec.
+            const gagnant = produitsImposes[0];
+            identificationLocale = true;
+            localIncertain = true;
+            console.log(`🗃️ [identifier] TCGdex muet, mais setCode+numéro avait déjà tranché -> ${gagnant.idProduct}`);
+            trouvaille = {
+                id: null, localId: null, variants: null, variantsDetailed: null,
+                nomExact: String(gagnant.name || '').split('[')[0].trim(),
+                source: 'setcode-numero', ambigu: true
+            };
+        } else if (!trouvaille) {
             const local = await identifierEnLocal({
                 nomLu: cardInfo.name, numeroLu: cardInfo.number,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
@@ -2235,7 +2408,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Le même test distingue donc une lecture juste d'une hallucination, sans dépendre
         // de la couverture de TCGdex. Et il corrige au passage deux cas que je prenais pour
         // des hallucinations : nos noms de catalogue sont anglais, la lecture était bonne.
-        if (trouvaille.source === 'total+numero' && !identificationLocale) {
+        // `!produitsImposes` : quand setCode+numéro a tranché, il n'y a plus rien à
+        // arbitrer — le produit est déjà désigné par une clé, et le nom a déjà eu son
+        // droit de veto dessus. Relancer l'arbitre ici ne pourrait que le contredire.
+        if (trouvaille.source === 'total+numero' && !identificationLocale && !produitsImposes) {
             const arbitre = await identifierEnLocal({
                 nomLu: cardInfo.name, numeroLu: cardInfo.number,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
@@ -2307,7 +2483,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
         //    halluciné (Dana lue "Kahili") ou inapparieable ("_____'s Pikachu").
         let produits = produitsImposes ?? (nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue));
-        let voieCatalogue = identificationLocale ? 'local-nom-numero' : 'nom';
+        let voieCatalogue = voieImposee ?? (identificationLocale ? 'local-nom-numero' : 'nom');
         let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {
             const parNumero = await trouverProduitsParNumero(expansionsAttendues, cardInfo.number);
@@ -2334,7 +2510,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet} motifARouter=${local.motifARouter} incertain=${local.incertain}`);
             }
         }
-        if (produits.length > 0 && !identificationLocale) {
+        if (produits.length > 0 && !identificationLocale && !produitsImposes) {
+            // `!produitsImposes` : viviersAvecRangs REMPLACE un vivier par nom qui ne peut
+            // pas contenir la bonne carte. Un produit désigné par (code + numéro) n'est pas
+            // un vivier par nom — il porte déjà le numéro lu, par construction. Le laisser
+            // passer ici reviendrait à défaire la décision qu'on vient de prendre.
+            //
             // Le vivier par nom est plein : reste à savoir s'il PEUT contenir la bonne
             // carte. Voir viviersAvecRangs pour la règle et le cas Kahili.
             const choix = await viviersAvecRangs(produits, cardInfo.number, expansionsAttendues, `[identifier] "${nomPourCatalogue}"`);
@@ -2501,8 +2682,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 nomConfiance: cardInfo.nomConfiance || null,
                 nomBrut: cardInfo.nomBrut || null,
                 // Par quel signal les produits candidats ont été trouvés au catalogue.
-                //   'nom' | 'numero' | 'numero-substitue' (le vivier par nom ne pouvait
-                //   pas contenir la bonne carte — voir viviersAvecRangs)
+                //   'setcode-numero'     -> clé exacte (code de set lu + numéro lu), le
+                //                           chemin le plus direct : ni TCGdex ni nom
+                //   'nom' | 'numero'
+                //   'numero-substitue'   -> le vivier par nom ne pouvait pas contenir la
+                //                           bonne carte (voir viviersAvecRangs)
+                //   'local-nom-numero'   -> identification dans le seul catalogue local
                 voieCatalogue,
                 // ⚠️ SIGNAL DE PREMIÈRE CLASSE. true = AUCUN candidat, par aucune voie, ne
                 // porte le numéro lu sur la photo. Le prix est livré, mais il ne peut pas
@@ -2901,4 +3086,18 @@ app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.r
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
 
-app.listen(PORT, () => console.log(`🚀 Serveur actif sur le port ${PORT}`));
+// `require.main === module` : vrai quand on lance `node index.js` — ce que fait Render, et
+// ce que fait le smoke test qui démarre un processus séparé. Faux quand un TEST require ce
+// fichier pour appeler ses fonctions.
+//
+// POURQUOI CE GARDE-FOU. Sans lui, les fonctions d'identification n'étaient testables
+// qu'en les RÉÉCRIVANT dans un script de mesure — et une réécriture ne teste que la
+// réécriture. C'est exactement ce qui a produit la contradiction « la simulation dit
+// 3 candidats, la production en rend 2 » : le script de mesure n'appliquait pas la
+// préférence stricte pour l'égalité exacte. On teste maintenant le VRAI code.
+if (require.main === module) {
+    app.listen(PORT, () => console.log(`🚀 Serveur actif sur le port ${PORT}`));
+}
+
+// Exporté pour les tests UNIQUEMENT. Le serveur, lui, ne lit jamais ces exports.
+module.exports = { app, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux };

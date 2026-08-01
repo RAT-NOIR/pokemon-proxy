@@ -652,6 +652,46 @@ function rangDuNumero(numeroLu, numeroCandidat) {
     return comparerNumeros(lu, cand) ? 1 : 3;
 }
 
+// Normalisation des NOMS pour la comparaison. Volontairement large : elle doit rapprocher
+// « Misty's Staryu » de « Mistys Staryu » et « Vaporeon δ Delta Species » de « Vaporeon »,
+// sans jamais rapprocher deux Pokémon différents. Les parenthèses PLEINE CHASSE （） sont
+// incluses : le nom d'affichage japonais de TCGdex les utilise, et sans elles
+// « Vaporeon（デルタ種）» ne correspondait à rien — c'est exactement ce qui a fait perdre
+// l'Aquali δ à la dernière étape alors que tout le reste était juste.
+function normaliserNomPourComparaison(s) {
+    return String(s || '').toLowerCase().replace(/[\s\-’'.&()（）　]/g, '');
+}
+
+/**
+ * Le nom lu CONCORDE-t-il avec ce candidat ?
+ *
+ * ⚠️ CE QUE CETTE FONCTION N'EST PAS. Elle ne rend PAS un veto. Elle répond « oui / non »
+ * à une question de correspondance, et « non » ne veut pas dire « contredit » : un nomFr
+ * absent, une forme inattendue (« Persian obscur » contre « Dark Persian »), un katakana
+ * seul — tout cela donne « non » sans rien prouver du tout. C'est l'appelant qui doit
+ * ajouter la PREUVE POSITIVE avant de refuser quoi que ce soit ; voir nomOpposeUnVeto
+ * dans index.js. La distinction est la même que pour bilanDesRangs : « je ne sais pas »
+ * et « je sais que non » ne commandent pas la même action.
+ *
+ * La comparaison est PRÉFIXÉE dans les deux sens, parce que les deux côtés portent des
+ * suffixes que l'autre n'a pas : le catalogue écrit « Vaporeon δ Delta Species », l'IA
+ * lit « Vaporeon ». Un préfixe commun suffit donc, et il ne rapproche pas deux espèces.
+ *
+ * @param {string[]} formesLues      ce que l'IA a lu : nom translittéré, nomBrut...
+ * @param {string[]} formesCandidat  ce que le catalogue connaît : nom anglais, nomFr
+ * @returns {boolean}
+ */
+function nomConcorde(formesLues, formesCandidat) {
+    const lues = (formesLues || []).map(normaliserNomPourComparaison).filter(Boolean);
+    const cands = (formesCandidat || []).map(normaliserNomPourComparaison).filter(Boolean);
+    for (const a of lues) {
+        for (const b of cands) {
+            if (a === b || a.startsWith(b) || b.startsWith(a)) return true;
+        }
+    }
+    return false;
+}
+
 /**
  * Bilan des rangs sur un vivier de candidats.
  *
@@ -949,7 +989,7 @@ module.exports = {
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
-    ALIAS_CODES_LUS,
+    ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 
@@ -1713,6 +1753,44 @@ if (require.main === module) {
         verifier('aucune stratégie annoncée', strategieReverse, null);
         verifier('scores égaux', scores[0].score, scores[1].score);
         verifier('le moins cher en tête (décision B)', scores[0].candidat.idProduct, 870374);
+    }
+
+    // ---- 26. nomConcorde : la moitié PURE du veto par le nom ----------------
+    // Toutes les valeurs viennent du journal de production (journal_scans) ou du
+    // catalogue Cardmarket. Aucune n'est inventée.
+    {
+        console.log('\n--- 26. nomConcorde ---');
+        // LE CAS QUI JUSTIFIE LE VETO. « e3 » lu pour « e4 » : setCode + numéro rend
+        // EC3-062 = Dodrio, là où la carte est un Meowth (EC4-062, total 088).
+        verifier('Meowth ≠ Dodrio -> discordance',
+            nomConcorde(['Meowth', 'ニャース'], ['Dodrio', 'Dodrio']), false);
+        verifier('Meowth = Meowth/Miaouss -> concordance',
+            nomConcorde(['Meowth', 'ニャース'], ['Meowth', 'Miaouss']), true);
+
+        // LES CAS QUI DOIVENT LAISSER PASSER. Ce sont eux qui font qu'une simple absence
+        // de correspondance ne peut pas valoir refus.
+        verifier('Vaporeon vs "Vaporeon δ Delta Species" -> concordance (préfixe)',
+            nomConcorde(['Vaporeon'], ['Vaporeon δ Delta Species']), true);
+        verifier('nom d\'affichage japonais de TCGdex, parenthèses pleine chasse',
+            nomConcorde(['Vaporeon'], ['Vaporeon（デルタ種）']), true);
+        verifier('lecture française vs nom anglais, via nomFr',
+            nomConcorde(['Persian obscur'], ['Dark Persian', 'Persian obscur']), true);
+        verifier('nomFr ABSENT et lecture française -> pas de concordance (mais pas un veto)',
+            nomConcorde(['Persian obscur'], ['Dark Persian']), false);
+        verifier('apostrophe : Misty\'s Staryu = Mistys Staryu',
+            nomConcorde(["Misty's Staryu"], ['Mistys Staryu']), true);
+        verifier('katakana seul contre nom anglais -> pas de concordance',
+            nomConcorde(['わるいカイリュー'], ['Dark Dragonite']), false);
+
+        // LES QUATRE VERDICTS FAUX QUE LE JOURNAL A GARDÉS (30 juillet 2026).
+        verifier('Flareon ≠ Turtonator', nomConcorde(['Flareon', 'ブースター'], ['Turtonator']), false);
+        verifier('Light Jolteon ≠ Lightning Energy', nomConcorde(['Light Jolteon'], ['Lightning Energy']), false);
+        verifier('Dark Haunter ≠ Darkness Energy', nomConcorde(['Dark Haunter'], ['Darkness Energy']), false);
+        verifier('Misty\'s Staryu ≠ Team Rocket\'s Archer', nomConcorde(["Misty's Staryu"], ["Team Rocket's Archer"]), false);
+
+        // Entrées vides : aucune concordance, et surtout aucune exception.
+        verifier('aucun nom lu', nomConcorde([], ['Pikachu']), false);
+        verifier('candidat sans nom', nomConcorde(['Pikachu'], [null, '']), false);
     }
 
     console.log(`\n${echecs === 0 ? '🎉 Tous les tests passent.' : `⚠️ ${echecs} test(s) en échec.`}`);
