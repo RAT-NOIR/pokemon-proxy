@@ -685,6 +685,48 @@ function rangDuNumero(numeroLu, numeroCandidat) {
     return comparerNumeros(lu, cand) ? 1 : 3;
 }
 
+// ============================================================================
+// LE PRINCIPE — « je ne sais pas » n'est pas « je sais que non »
+// ============================================================================
+// Ce projet a produit QUATRE FOIS le même défaut, à quatre endroits sans rapport les uns
+// avec les autres. À chaque fois, une absence d'information a été traitée comme une
+// information, et à chaque fois dans le sens qui AUGMENTE la confiance :
+//
+//   1. bilanDesRangs confondait « aucun candidat ne porte le numéro lu » et « aucun
+//      candidat n'a de numéro connu ». Le vivier n'était pas enrichi : tous les candidats
+//      étaient au rang 2, donc rang3 === 0, donc « pas d'alerte » — alors que la vraie
+//      lecture était « je n'ai rien regardé ». D'où `aucunRang1 = rang1===0 && rang3>0` :
+//      il faut une CONTRADICTION observée, pas un silence.
+//
+//   2. Le veto par le nom refusait un candidat sur une simple absence de correspondance.
+//      Un nomFr manquant, un katakana seul, une lecture française suffisaient à écarter
+//      une bonne réponse. D'où la preuve exigée : le nom lu, AU NUMÉRO LU, existe ailleurs.
+//      « Kahili » désigne 8 produits réels — la carte existe, c'est la lecture qui est
+//      fausse : ne rien trouver ne prouve rien.
+//
+//   3. regionDuCodeSet présumait « code en majuscules donc occidental ». Une convention
+//      d'écriture tenait lieu de preuve, et se trompait sur 4620 produits japonais, à
+//      -45 points chacun. D'où les TROIS états : occidental prouvé, japonais prouvé,
+//      INCONNU neutre.
+//
+//   4. identifierParTotalEtNumero avalait un set injoignable en silence. Perdre une
+//      source RÉDUISAIT le nombre de candidats, donc `ambigu = retenues.length > 1`
+//      devenait false : un aléa réseau transformait un doute en certitude. Le cas le plus
+//      net, parce qu'il inverse littéralement le sens de la preuve.
+//
+// LA RÈGLE, à appliquer avant d'écrire le moindre garde-fou :
+//   - une SOURCE PERDUE propage l'incertitude, elle ne la réduit jamais. Si on n'a pas pu
+//     regarder, on le dit et on le compte ; on ne conclut pas de ce qu'on n'a pas vu ;
+//   - un signal négatif exige une PREUVE POSITIVE. « Aucun candidat ne correspond » ne
+//     vaut que si on a effectivement pu comparer ;
+//   - à défaut de preuve, l'état neutre existe. Trois états valent mieux que deux forcés.
+//
+// ⚠️ NE PAS confondre avec les replis LÉGITIMES. lireCodeSets, lireRegions, lireNumeros et
+// getPrixGuideLocalLot rendent une Map vide en cas d'erreur, et c'est correct : le critère
+// correspondant devient NEUTRE (0 point), ce qui est exactement « je ne sais pas ». Le
+// défaut n'est pas de rendre du vide, c'est de rendre du vide là où l'appelant lira « j'ai
+// regardé et il n'y a rien ».
+
 // Normalisation des NOMS pour la comparaison. Volontairement large : elle doit rapprocher
 // « Misty's Staryu » de « Mistys Staryu » et « Vaporeon δ Delta Species » de « Vaporeon »,
 // sans jamais rapprocher deux Pokémon différents. Les parenthèses PLEINE CHASSE （） sont

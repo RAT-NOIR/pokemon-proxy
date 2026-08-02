@@ -2478,6 +2478,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // répondait « non trouvée sur TCGdex » et remboursait. Voir identification-locale.js.
         let identificationLocale = false;
         let localIncertain = false;
+        // ⚠️ L'écart de score du chemin LOCAL n'était nulle part : ni au journal, ni dans
+        // la réponse. Il n'existait que dans un console.log, donc éphémère sur Render.
+        // Conséquence mesurée : la statistique « 9 égalités sur 27 » ne comptait QUE le
+        // chemin principal, alors que le chemin local porte 46,8 % des identifications.
+        // Un seuil dérivé de cette mesure aurait été fixé sur la moitié du volume.
+        let ecartScoreLocal = null;
         if (!trouvaille && produitsImposes) {
             // Le chemin par le code a déjà tranché et TCGdex est muet : on n'a plus rien à
             // lui demander. `trouvaille` synthétique, comme pour l'identification locale —
@@ -2504,6 +2510,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             if (local) {
                 identificationLocale = true;
                 localIncertain = local.incertain;
+                ecartScoreLocal = local.ecartScore;
                 produitsImposes = local.produits;
                 const nomGagnant = local.produits.find(p => p.idProduct === local.gagnant?.candidat?.idProduct);
                 console.log(
@@ -2597,6 +2604,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 );
                 identificationLocale = true;
                 localIncertain = arbitre.incertain;
+                ecartScoreLocal = arbitre.ecartScore;
                 produitsImposes = arbitre.produits;
                 trouvaille = {
                     id: null, localId: null, variants: null, variantsDetailed: null,
@@ -2672,6 +2680,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             if (local) {
                 identificationLocale = true;
                 localIncertain = local.incertain;
+                ecartScoreLocal = local.ecartScore;
                 produits = local.produits;
                 voieCatalogue = 'local-nom-numero';
                 console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet} motifARouter=${local.motifARouter} incertain=${local.incertain}`);
@@ -2742,6 +2751,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 idProduct: s.candidat.idProduct,
                 idExpansion: s.candidat.idExpansion,
                 score: s.score,
+                // Prix guide du candidat, sur le MÊME axe que celui qui sera affiché.
+                // Sert à arbitrer les égalités : voir la règle de l'écart de prix.
+                prix: Number.isFinite(s.candidat.prix) ? s.candidat.prix : null,
                 // Stratégie PAR CANDIDAT : sur une même carte les deux mécanismes
                 // coexistent (produit de base partagé + motifs en produits distincts),
                 // donc une stratégie globale serait fausse pour une partie du classement.
@@ -2784,6 +2796,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // TROISIÈME ÉTAT : le nom lu et le numéro lu s'excluent l'un l'autre. Aucun veto —
         // on ne sait pas laquelle des deux lectures accuser — mais aucun verdict non plus.
         let nomNumeroIncoherents = false;
+        // Égalité au sommet dont l'écart de prix est trop faible pour changer le verdict :
+        // le prix part, mais avec réserve. Voir la règle de l'écart de prix plus bas.
+        let egaliteSansEnjeu = false;
         {
             const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
             const avis = gagnantProduit ? await nomOpposeUnVeto(cardInfo, gagnantProduit) : { veto: false };
@@ -2847,16 +2862,49 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // variantes qui partagent un même numéro — dont 537 japonaises que TCGdex ne peut
         // pas router faute de variants_detailed. Une holo et une non-holo au même numéro,
         // au même score, c'est exactement une égalité parfaite.
+        // ---- L'ÉGALITÉ S'ARBITRE PAR L'ÉCART DE PRIX, PAS PAR ELLE-MÊME -------
+        // Une égalité n'est pas nuisible en soi : si les candidats valent la même chose,
+        // le prix affiché est utile quel que soit celui qu'on retient. Le seuil ci-dessous
+        // est DÉRIVÉ, pas choisi — 17 égalités rejouées sur les scans journalisés, tous
+        // chemins confondus (10 par le chemin local, 7 par le principal) :
+        //
+        //   rapport de prix entre ex aequo :  min 2,21x  médiane 7,49x  q75 12,77x  max 559x
+        //   écart ABSOLU :                    médiane 4,56 €  q75 44,25 €  max 1031,98 €
+        //
+        // ⚠️ LE RAPPORT NE DISCRIMINE PAS : aucune égalité n'est en dessous de 2,21x, et
+        // 47 % dépassent 10x. Des candidats « qui valent à peu près la même chose », il n'y
+        // en a pas un seul. C'est l'écart ABSOLU qui sépare, et la distribution y montre une
+        // rupture nette : 0,55 € · 0,88 € · puis 2,27 €. D'où le seuil à 1,00 €, qui tombe
+        // dans le vide entre les deux groupes plutôt qu'au milieu d'un continuum.
+        //   sous 1,00 € (3 cas sur 17) : Raichu 0,15 -> 1,03 €, Misty's Staryu 0,06 -> 0,61 €.
+        //     Le verdict « bonne affaire ou non » est le même dans les deux cas : on affiche.
+        //   au-dessus (14 cas) : Wartortle 3,76 -> 48,01 €, Charmander 1,85 -> 1033,83 €.
+        //     Là, le choix DÉCIDE du verdict : on refuse et on rembourse.
+        //
+        // PRIX INCONNUS = REFUS. On ne peut pas mesurer l'enjeu, donc on ne parie pas.
+        // C'est le principe des sources perdues (voir scoring.js) : ne pas savoir ne doit
+        // jamais valoir permission.
+        const ECART_PRIX_TOLERABLE = 1.00;
         if (classement.length > 1 && classement[0].score === classement[1].score) {
-            const exAequo = classement.filter(c => c.score === classement[0].score).length;
-            console.warn(`🚫 [egalite-parfaite] ${exAequo} candidats à ${classement[0].score} points sur ${classement.length} : aucun critère ne les sépare -> aucun verdict, scan remboursé.`);
-            const rendu = await rembourserScan(req, 'egalite-parfaite');
-            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
-            return res.json({
-                success: false,
-                error: `${exAequo} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu — aucun critère ne les départage. Scan remboursé plutôt qu'un prix tiré au sort.`,
-                cardInfo
-            });
+            const exAequo = classement.filter(c => c.score === classement[0].score);
+            const prix = exAequo.map(c => c.prix).filter(p => Number.isFinite(p) && p > 0);
+            const ecartPrix = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
+            const sansEnjeu = ecartPrix != null && ecartPrix < ECART_PRIX_TOLERABLE;
+
+            if (sansEnjeu) {
+                console.warn(`⚠️ [egalite-sans-enjeu] ${exAequo.length} candidats à ${classement[0].score} points, mais ${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} € : l'écart (${ecartPrix.toFixed(2)} €) ne change pas le verdict -> on affiche AVEC réserve.`);
+                egaliteSansEnjeu = true;
+            } else {
+                const enjeu = ecartPrix != null ? `${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} €` : 'prix inconnus';
+                console.warn(`🚫 [egalite-parfaite] ${exAequo.length} candidats à ${classement[0].score} points sur ${classement.length} (${enjeu}) : aucun critère ne les sépare et le choix décide du prix -> aucun verdict, scan remboursé.`);
+                const rendu = await rembourserScan(req, 'egalite-parfaite');
+                enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
+                return res.json({
+                    success: false,
+                    error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : scan remboursé plutôt qu'un prix tiré au sort.`,
+                    cardInfo
+                });
+            }
         }
 
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
@@ -2867,11 +2915,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const carteAmbigue = Boolean(
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
-            || nomNumeroIncoherents
+            || nomNumeroIncoherents || egaliteSansEnjeu
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                localIncertain ? 'identification-locale-sans-tcgdex'
+                egaliteSansEnjeu ? 'egalite-sans-enjeu'
+                    : localIncertain ? 'identification-locale-sans-tcgdex'
                     : nomNumeroIncoherents ? 'nom-numero-incoherents'
                         : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
                             : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
@@ -2913,9 +2962,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             rangGagnant: rangsScoring?.rangGagnant ?? null,
             // Écart entre le 1er et le 2e du classement : rend visibles les
             // identifications qui « tiennent à un fil » avant qu'un testeur les remonte.
+            // L'écart du classement quand il y en a un ; sinon celui du chemin LOCAL, qui
+            // départage lui aussi des candidats et dont l'égalité comptait autant.
             ecartScore: (classement.length > 1 && Number.isFinite(classement[0]?.score) && Number.isFinite(classement[1]?.score))
                 ? classement[0].score - classement[1].score
-                : null
+                : (Number.isFinite(ecartScoreLocal) ? ecartScoreLocal : null)
         });
 
         res.json({
