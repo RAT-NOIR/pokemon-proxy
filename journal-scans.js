@@ -160,6 +160,20 @@ const journalScanSchema = new mongoose.Schema({
     // sur des chiffres le jour où elle vaudra quelque chose, plutôt que sur un principe.
     totalInvalidable: Boolean,
 
+    // --- PAR QUEL LIEN L'IDENTIFICATION EST-ELLE PASSÉE ? ---
+    // Ces trois champs existent pour une question précise, à laquelle il a été impossible
+    // de répondre au moment où elle comptait : « combien de scans sont passés par un
+    // identifiant TCGdex partagé ? » — 69 identifiants le sont, chacun couvrant un set
+    // japonais ET son jumeau occidental, et c'est la cause du dernier verdict faux du banc.
+    // Sans ces champs, la mesure du gain apporté par la table close est impossible :
+    // on ne saurait dire quelles lignes elle aurait touchées.
+    setTcgdex: String,            // l'identifiant TCGdex de l'expansion retenue
+    idExpansionGagnante: Number,  // l'expansion elle-même, pour recouper sans relire le catalogue
+    regionSource: String,         // d'où vient sa région : liste-verifiee, code-minuscule,
+                                  // place-internationale-prise-par-X, nom-hors-catalogue...
+                                  // Une région dérivée d'un nom hors catalogue ne vaut pas
+                                  // une région tirée de la liste vérifiée : le champ le dit.
+
     // Écart de score entre le 1er et le 2e du classement. « Un écart de 5 points contre
     // 20 se renverse au premier bruit » : ce champ rend la liste des identifications
     // fragiles interrogeable, au lieu d'attendre qu'un testeur en remonte une.
@@ -286,6 +300,9 @@ function enregistrerScan(d = {}) {
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
             totalInvalidable: d.totalInvalidable != null ? Boolean(d.totalInvalidable) : null,
+            setTcgdex: d.setTcgdex || null,
+            idExpansionGagnante: Number.isFinite(d.idExpansionGagnante) ? d.idExpansionGagnante : null,
+            regionSource: d.regionSource || null,
             rangGagnant: Number.isFinite(d.rangGagnant) ? d.rangGagnant : null,
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,

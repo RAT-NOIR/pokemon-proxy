@@ -727,6 +727,14 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // défaut n'est pas de rendre du vide, c'est de rendre du vide là où l'appelant lira « j'ai
 // regardé et il n'y a rien ».
 
+// Les langues dont les cartes sont imprimées au Japon. SOURCE UNIQUE, et elle doit le
+// rester : cette liste existait en double, plus large dans index.js (avec ZH-CN, ZH-TW,
+// CN, TW) que dans pokedex.js. Deux listes qui divergent, c'est une carte taïwanaise que
+// le pont TCGdex traite comme japonaise pendant que la règle du numéro de Pokédex la
+// traite comme occidentale — deux verdicts opposés sur la même carte, sans que rien ne
+// le signale. Même raison que pour la normalisation des numéros : un seul endroit.
+const LANGUES_ASIATIQUES = ['JP', 'ZH', 'ZH-CN', 'ZH-TW', 'CN', 'TW', 'KR'];
+
 // Normalisation des NOMS pour la comparaison. Volontairement large : elle doit rapprocher
 // « Misty's Staryu » de « Mistys Staryu » et « Vaporeon δ Delta Species » de « Vaporeon »,
 // sans jamais rapprocher deux Pokémon différents. Les parenthèses PLEINE CHASSE （） sont
@@ -1065,7 +1073,7 @@ module.exports = {
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
     numeroComplet, numeroAmbiguDansPerimetre,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
-    ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison,
+    ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison, LANGUES_ASIATIQUES,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
 };
 

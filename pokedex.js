@@ -38,7 +38,7 @@
 // quatre sets ordonnés par le Pokédex : PARTOUT AILLEURS, la coïncidence tombe à
 // 139 sur 65 249, soit 0,21 %. Un cas sur cinq cents, avant même les bornes ci-dessus.
 
-const { normaliserNomPourComparaison } = require('./scoring');
+const { normaliserNomPourComparaison, LANGUES_ASIATIQUES } = require('./scoring');
 
 // Chargé une fois au require. 53 Ko, 2845 noms — négligeable en mémoire, et surtout
 // AUCUN appel réseau sur le chemin critique. Voir construire-table-pokedex.js.
@@ -51,7 +51,6 @@ try {
     console.warn(`⚠️ [pokedex] table introuvable (${e.message}) — la règle du numéro de Pokédex est INACTIVE.`);
 }
 
-const LANGUES_ASIATIQUES = ['JP', 'ZH', 'KR'];
 // Même extraction de chiffres que partout ailleurs. Ne pas la diverger.
 const chiffres = n => { const m = String(n ?? '').match(/\d+/); return m ? parseInt(m[0], 10) : null; };
 
@@ -110,4 +109,4 @@ function numeroEstUnDexId({ nom, numero, total, langue } = {}) {
     };
 }
 
-module.exports = { dexIdsDuNom, numeroEstUnDexId, LANGUES_ASIATIQUES };
+module.exports = { dexIdsDuNom, numeroEstUnDexId };

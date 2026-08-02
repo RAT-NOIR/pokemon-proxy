@@ -32,7 +32,7 @@ const {
     // ALIAS_CODES_LUS : le marquage physique e-Reader (E1..E5) n'est pas le code
     // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
     // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
-    ALIAS_CODES_LUS, nomConcorde,
+    ALIAS_CODES_LUS, nomConcorde, LANGUES_ASIATIQUES,
     // numeroAmbiguDansPerimetre : règle GÉNÉRALE des préfixes alphabétiques. Une clé
     // (code + numéro) ne doit pas se déclencher quand « 019 » et « S19 » coexistent.
     numeroAmbiguDansPerimetre,
@@ -47,6 +47,11 @@ const { enregistrerScan, enregistrerEchec } = require('./journal-scans');
 // La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
 // est le numéro de Pokédex de l'espèce, pas le rang de la carte dans son set. Voir pokedex.js.
 const { numeroEstUnDexId } = require('./pokedex');
+
+// La table close des sets japonais vintage — écrite à la main, vérifiée ligne à ligne.
+// Elle ne pilote PAS encore l'identification : elle sert à lever l'ambiguïté des
+// identifiants TCGdex partagés. Voir sets-vintage-japonais.js.
+const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -784,7 +789,6 @@ const DUREE_CACHE_SETS_MS = 24 * 60 * 60 * 1000;
  *     pont plus ambigu (mesuré : total 182 donne 2 sets en fr là où en en donne moins).
  * Le comportement des cartes occidentales est donc rigoureusement INCHANGÉ.
  */
-const LANGUES_ASIATIQUES = ['JP', 'ZH', 'ZH-CN', 'ZH-TW', 'CN', 'TW', 'KR'];
 function langueDesSetsTCGdex(langue) {
     return LANGUES_ASIATIQUES.includes(String(langue || '').toUpperCase()) ? 'ja' : 'en';
 }
@@ -1675,6 +1679,42 @@ async function nomOpposeUnVeto(cardInfo, produit) {
         // Un veto qui casse ne doit pas casser le scan : en cas de doute, on laisse passer.
         console.error(`❌ Erreur nomOpposeUnVeto :`, e.message);
         return { veto: false, preuves: [], incoherent: false, raison: 'erreur -> veto désarmé' };
+    }
+}
+
+/**
+ * L'identifiant TCGdex de cette expansion est-il PARTAGÉ avec d'autres expansions ?
+ *
+ * POURQUOI CETTE QUESTION DÉCIDE D'UN VERDICT. Mesuré : 69 identifiants TCGdex sont
+ * portés par plusieurs expansions Cardmarket, et le motif est systématique — chaque set
+ * japonais partage le sien avec son jumeau occidental (neo4 -> N4 + NDE, base5 -> ROG + TR,
+ * ecard3 -> EC4 + EC5 + SK). Nos liens ont été appris depuis le catalogue ANGLAIS, qui ne
+ * distingue pas les deux éditions. Un identifiant partagé ne peut donc PAS désigner une
+ * expansion : il en désigne deux, dont une seule est la bonne.
+ *
+ * Ce n'est pas une imperfection à tolérer, c'est la cause du dernier verdict faux et
+ * affirmé du banc : un Rhydon japonais rendu comme un produit d'un set de 2025.
+ *
+ * @returns {Promise<{setTcgdex: string|null, partage: boolean, autres: number[], regionSource: string|null}>}
+ */
+async function diagnosticLienTcgdex(idExpansion) {
+    const vide = { setTcgdex: null, partage: false, autres: [], regionSource: null };
+    try {
+        if (mongoose.connection.readyState !== 1 || idExpansion == null) return vide;
+        const exp = Number(idExpansion);
+        const ids = (await NumeroCarte.distinct('setTcgdex', { idExpansion: exp })).filter(Boolean);
+        const cs = await CodeSet.findOne({ idExpansion: exp }, { regionSource: 1 }).lean();
+        if (!ids.length) return { ...vide, regionSource: cs?.regionSource ?? null };
+        // Un seul identifiant attendu par expansion ; s'il y en a plusieurs, le premier
+        // suffit pour poser la question du partage.
+        const setTcgdex = ids[0];
+        const autres = (await NumeroCarte.distinct('idExpansion', { setTcgdex }))
+            .map(Number).filter(e => Number.isFinite(e) && e !== exp);
+        return { setTcgdex, partage: autres.length > 0, autres, regionSource: cs?.regionSource ?? null };
+    } catch (e) {
+        // Principe des sources perdues : en cas d'erreur on ne conclut PAS « lien propre ».
+        console.error(`❌ Erreur diagnosticLienTcgdex :`, e.message);
+        return vide;
     }
 }
 
@@ -2960,6 +3000,26 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             }
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // IDENTIFIANT TCGdex PARTAGÉ — ambiguïté déclarée
+        // ════════════════════════════════════════════════════════════════════
+        // 69 identifiants TCGdex sont portés par plusieurs expansions Cardmarket, parce que
+        // nos liens ont été appris depuis le catalogue ANGLAIS, qui ne distingue pas un set
+        // japonais de son jumeau occidental. Sur une carte japonaise, un tel lien ne
+        // désigne pas une expansion : il en désigne deux.
+        // La table close (sets-vintage-japonais.js) lève l'ambiguïté pour les expansions
+        // qu'elle couvre — vérifiées une par une. Pour les autres, mesuré à 63 expansions
+        // japonaises, on ne peut pas trancher : la carte sort AVERTIE, jamais affirmée.
+        const lienGagnant = await diagnosticLienTcgdex(classement[0]?.idExpansion);
+        const lienAmbigu = Boolean(
+            lienGagnant.partage
+            && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase())
+            && !EXPANSIONS_VINTAGE.has(Number(classement[0]?.idExpansion))
+        );
+        if (lienAmbigu) {
+            console.warn(`⚠️ [lien-tcgdex-partage] l'expansion ${classement[0].idExpansion} partage l'identifiant « ${lienGagnant.setTcgdex} » avec ${lienGagnant.autres.join(', ')} et n'est pas dans la table close -> ambiguïté déclarée, aucun verdict affirmé.`);
+        }
+
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
         const gagnantContreditNumero = rangsScoring?.rangGagnant === 3;
 
@@ -2968,7 +3028,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const carteAmbigue = Boolean(
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
-            || nomNumeroIncoherents || egaliteSansEnjeu
+            || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
             // NEUTRALISER LE NUMÉRO, C'EST PERDRE UNE SOURCE — donc propager l'incertitude,
             // jamais la réduire (voir le principe dans scoring.js). Mesuré au banc : sans
             // cette ligne, la règle du numéro de Pokédex FAIT EMPIRER le critère de
@@ -2981,7 +3041,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                avisDex.estDex ? 'numero-pokedex-neutralise'
+                lienAmbigu ? 'lien-tcgdex-partage'
+                    : avisDex.estDex ? 'numero-pokedex-neutralise'
                     : egaliteSansEnjeu ? 'egalite-sans-enjeu'
                     : localIncertain ? 'identification-locale-sans-tcgdex'
                     : nomNumeroIncoherents ? 'nom-numero-incoherents'
@@ -3023,6 +3084,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             aucunCandidatAuNumero,
             nomNumeroIncoherents,
             totalInvalidable,
+            // Par quel lien l'identification est passée. Aucun changement de comportement :
+            // ces trois champs sont la seule façon de mesurer, au tour suivant, ce que la
+            // table close aura réellement corrigé.
+            setTcgdex: lienGagnant.setTcgdex,
+            idExpansionGagnante: classement[0]?.idExpansion ?? null,
+            regionSource: lienGagnant.regionSource,
             rangGagnant: rangsScoring?.rangGagnant ?? null,
             // Écart entre le 1er et le 2e du classement : rend visibles les
             // identifications qui « tiennent à un fil » avant qu'un testeur les remonte.
