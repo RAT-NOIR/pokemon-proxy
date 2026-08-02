@@ -85,6 +85,18 @@ function numeroEstUnDexId({ nom, numero, total, langue } = {}) {
     }
     // Un total imprimé signe une numérotation moderne : le nombre est alors un vrai rang
     // de carte, et une coïncidence avec le dexId n'est qu'une coïncidence.
+    //
+    // ⚠️ DEUX ÉTATS ICI, PAS TROIS, ET C'EST DÉLIBÉRÉ. Le motif « je ne sais pas traité
+    // comme je sais que non » (voir le principe dans scoring.js) voudrait un troisième
+    // état : total lu et FIABLE / pas de total / total DOUTEUX. Il n'est pas écrit, parce
+    // que son coût a été mesuré à ZÉRO ligne. Le seul cas du banc qui l'exercerait est un
+    // Wartortle lu « 019 / 029 » dont le total ne correspond à aucun set japonais connu :
+    // or le dexId de Carabaffe est 8, et 19 ≠ 8 — la règle ne se déclencherait pas même en
+    // traitant ce total comme douteux.
+    // On n'écrit donc pas la branche, MAIS on compte le phénomène : le champ
+    // `totalInvalidable` du journal marque les scans dont le total ne correspond à aucun
+    // set connu de la région lue. Le jour où ce compteur monte, la branche s'écrira sur
+    // des chiffres et non sur un principe. Voir index.js, où le champ est calculé.
     if (total != null && String(total).trim() !== '' && chiffres(total) != null) {
         return { estDex: false, dexId: null, raison: `total ${total} imprimé -> numérotation moderne` };
     }

@@ -2478,6 +2478,18 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             console.warn(`🔢 [numero-pokedex] ${avisDex.raison} -> le numéro est NEUTRALISÉ (recherche, nomSuspect, rangs).`);
         }
 
+        // DETTE COMPTÉE, PAS TRAITÉE. La borne « total présent » de la règle ci-dessus n'a
+        // que deux états ; le troisième (« total douteux ») n'est pas écrit parce que son
+        // coût est mesuré à ZÉRO ligne du banc. Ce compteur est ce qui permettra de trancher
+        // avec des chiffres le jour venu — voir pokedex.js et journal-scans.js.
+        // ⚠️ Il NE COMMANDE RIEN : `setsPourTotal` lit un cache déjà chaud (aucun appel
+        // réseau supplémentaire) et le résultat ne va qu'au journal.
+        let totalInvalidable = null;
+        if (cardInfo.total != null && String(cardInfo.total).trim() !== '') {
+            totalInvalidable = (await setsPourTotal(cardInfo.total, cardInfo.language)).length === 0;
+            if (totalInvalidable) console.log(`📊 [total-invalidable] total ${cardInfo.total} : aucun set de cette taille en [${langueDesSetsTCGdex(cardInfo.language)}]. Compté, sans conséquence.`);
+        }
+
         // ════════════════════════════════════════════════════════════════════
         // CHEMIN 1 — setCode LU + numéro LU, EN TÊTE
         // ════════════════════════════════════════════════════════════════════
@@ -3010,6 +3022,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // leur fréquence réelle sans dépendre des logs éphémères de Render.
             aucunCandidatAuNumero,
             nomNumeroIncoherents,
+            totalInvalidable,
             rangGagnant: rangsScoring?.rangGagnant ?? null,
             // Écart entre le 1er et le 2e du classement : rend visibles les
             // identifications qui « tiennent à un fil » avant qu'un testeur les remonte.

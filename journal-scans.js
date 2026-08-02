@@ -149,6 +149,17 @@ const journalScanSchema = new mongoose.Schema({
     // dans ce cas (3,0 % du catalogue) et ne rien y trouver ne prouve rien.
     nomNumeroIncoherents: Boolean,
 
+    // LE TOTAL LU CORRESPOND-IL À UN SET EXISTANT DE SA RÉGION ?
+    // true = aucun set connu de cette taille dans la langue de la carte. Le total est donc
+    // soit mal lu, soit celui d'un set que TCGdex ignore — et on ne peut pas trancher :
+    // mesuré, un « 018 » invalidable était le VRAI total du McDonald's japonais, absent de
+    // TCGdex. C'est pourquoi ce champ ne COMMANDE RIEN aujourd'hui : il compte.
+    // Il existe pour une raison précise : la borne « total présent » de la règle du numéro
+    // de Pokédex n'a que deux états, faute d'un troisième (« total douteux ») dont le coût
+    // a été mesuré à zéro ligne. Ce compteur est ce qui permettra d'écrire cette branche
+    // sur des chiffres le jour où elle vaudra quelque chose, plutôt que sur un principe.
+    totalInvalidable: Boolean,
+
     // Écart de score entre le 1er et le 2e du classement. « Un écart de 5 points contre
     // 20 se renverse au premier bruit » : ce champ rend la liste des identifications
     // fragiles interrogeable, au lieu d'attendre qu'un testeur en remonte une.
@@ -274,6 +285,7 @@ function enregistrerScan(d = {}) {
             rang: d.motifEchec ? null : rangDuNumero(d.numero, numeroGagnant),
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
+            totalInvalidable: d.totalInvalidable != null ? Boolean(d.totalInvalidable) : null,
             rangGagnant: Number.isFinite(d.rangGagnant) ? d.rangGagnant : null,
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,
