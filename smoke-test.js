@@ -49,7 +49,7 @@ function verifier(libelle, obtenu, attendu) {
 // les destructurations sont résolues, les erreurs de syntaxe ET d'encodage lèvent.
 function chargerLesModules() {
     console.log('\n=== 1. Chargement réel des modules ===');
-    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion'];
+    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion', './pokedex'];
     for (const m of modules) {
         try {
             const mod = require(m);
@@ -99,7 +99,7 @@ function verifierLesImports() {
     for (const m of source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) locaux.add(m[1]);
     for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) locaux.add(m[1]);
 
-    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion'];
+    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion', './pokedex'];
     const oublis = [];
     for (const m of modules) {
         for (const nom of Object.keys(require(m))) {

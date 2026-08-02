@@ -29,6 +29,7 @@ const S = require('./scoring.js');
 const {
     trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets
 } = require('./index');
+const { numeroEstUnDexId } = require('./pokedex');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -86,17 +87,26 @@ const VERITE = {
         const cardInfo = cardInfoDe(d);
         let retenu = d.idProduct, incertain = Boolean(d.carteIncertaine), voie = d.voieCatalogue;
 
+        // 0. LA RÈGLE DU NUMÉRO DE POKÉDEX. Quand elle se déclenche, le nombre lu n'est
+        //    pas un numéro de carte : il ne sert plus ni de clé, ni de preuve, ni de rang.
+        const avisDex = numeroEstUnDexId({ nom: d.nom, numero: d.numero, total: d.total, langue: d.langue });
+        const numeroCarte = avisDex.estDex ? null : d.numero;
+        const cardInfoNeutre = { ...cardInfo, number: numeroCarte };
+        // Perdre une source propage l'incertitude : sans le numéro, l'identification ne
+        // tient plus qu'au nom, et sur ces cartes vintage le nom ne suffit pas.
+        if (avisDex.estDex) { voie = 'numero-pokedex-neutralise'; incertain = true; }
+
         // 1. Le chemin par le code, en tête.
-        const piste = await trouverParSetCodeEtNumero(d.setCode, d.numero, d.langue);
+        const piste = await trouverParSetCodeEtNumero(d.setCode, numeroCarte, d.langue);
         if (piste.length === 1) {
-            const a = await nomOpposeUnVeto(cardInfo, piste[0]);
+            const a = await nomOpposeUnVeto(cardInfoNeutre, piste[0]);
             if (!a.veto) { retenu = piste[0].idProduct; voie = 'setcode-numero'; }
         }
 
         // 2. Le veto par le nom sur le gagnant, et son re-classement.
         const prod = catById.get(retenu);
         if (prod) {
-            const avis = await nomOpposeUnVeto(cardInfo, prod);
+            const avis = await nomOpposeUnVeto(cardInfoNeutre, prod);
             if (avis.incoherent) incertain = true;
             if (avis.veto) {
                 const cs = await lireCodeSets(avis.preuves.map(p => p.idExpansion));

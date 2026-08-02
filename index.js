@@ -44,6 +44,10 @@ const {
 // données qui survivent au redéploiement. Jamais sur le chemin critique — voir le module.
 const { enregistrerScan, enregistrerEchec } = require('./journal-scans');
 
+// La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
+// est le numéro de Pokédex de l'espèce, pas le rang de la carte dans son set. Voir pokedex.js.
+const { numeroEstUnDexId } = require('./pokedex');
+
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
 // Testée en bac à sable par test-identification-locale.js.
@@ -978,7 +982,15 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             : variantes;
 
         // Pour chaque langue, chaque variante de nom, essayer : numéro strict -> numéro large
+        // ⚠️ `number` peut être NUL : c'est le cas quand la règle du numéro de Pokédex l'a
+        // neutralisé (voir pokedex.js). On saute alors la recherche numérotée — la
+        // construire avec `null` produirait la requête « eq:null », deux appels réseau pour
+        // rien à chaque variante et à chaque langue — et on laisse la recherche par NOM SEUL
+        // plus bas faire le travail. C'est exactement ce qu'on veut : sans numéro de carte
+        // exploitable, le nom est le seul signal.
+        const numeroExploitable = number != null && String(number).trim() !== '';
         for (const langApi of languesAEssayer) {
+            if (!numeroExploitable) break;
             for (const variante of variantesPour(langApi)) {
                 resultats = await chercherCartesTCGdex(variante, `eq:${encodeURIComponent(number)}`, langApi);
                 if (resultats.length === 0) {
@@ -1000,8 +1012,10 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                 for (const variante of variantesPour(langApi)) {
                     const parNom = await chercherCartesTCGdexNomSeul(variante, langApi);
                     if (parNom.length > 0) {
-                        const numLu = String(number).replace(/^0+/, '');
-                        const matchNum = parNom.filter(c => String(c.localId).replace(/^0+/, '') === numLu);
+                        // Sans numéro exploitable, on garde TOUT ce que le nom a ramené :
+                        // filtrer sur un numéro neutralisé écarterait la bonne carte.
+                        const numLu = numeroExploitable ? String(number).replace(/^0+/, '') : null;
+                        const matchNum = numLu ? parNom.filter(c => String(c.localId).replace(/^0+/, '') === numLu) : [];
                         resultats = matchNum.length > 0 ? matchNum : parNom;
                         nomUtilise = variante;
                         console.log(`ℹ️ TCGdex : trouvé par nom seul via "${variante}" en [${langApi}] (${resultats.length} résultat(s)).`);
@@ -2443,6 +2457,28 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const debutCatalogue = Date.now();
 
         // ════════════════════════════════════════════════════════════════════
+        // LE NOMBRE IMPRIMÉ EST-IL UN NUMÉRO DE POKÉDEX ?
+        // ════════════════════════════════════════════════════════════════════
+        // Voir pokedex.js pour la règle et ses trois bornes. Quand elle se déclenche, le
+        // nombre lu N'EST PAS un numéro de carte, et il ne doit donc plus servir à rien :
+        //   - ni de clé de recherche (il désignerait une autre carte, souvent dans un des
+        //     quatre sets ordonnés par le Pokédex) ;
+        //   - ni à disqualifier le NOM (`nomSuspect`) : c'est ce désaccord de numéro qui a
+        //     jeté « Koga's Ditto », un nom pourtant JUSTE, sur un 72 contre 132 ;
+        //   - ni au classement par rangs, qui conclurait « aucun candidat ne porte ce
+        //     numéro » — vrai, et sans le moindre intérêt.
+        // `numeroCarte` remplace donc `cardInfo.number` PARTOUT en aval. Le nombre lu reste
+        // dans cardInfo, il part au journal et à l'extension : on le neutralise, on ne
+        // l'efface pas.
+        const avisDex = numeroEstUnDexId({
+            nom: cardInfo.name, numero: cardInfo.number, total: cardInfo.total, langue: cardInfo.language
+        });
+        const numeroCarte = avisDex.estDex ? null : cardInfo.number;
+        if (avisDex.estDex) {
+            console.warn(`🔢 [numero-pokedex] ${avisDex.raison} -> le numéro est NEUTRALISÉ (recherche, nomSuspect, rangs).`);
+        }
+
+        // ════════════════════════════════════════════════════════════════════
         // CHEMIN 1 — setCode LU + numéro LU, EN TÊTE
         // ════════════════════════════════════════════════════════════════════
         // Voir trouverParSetCodeEtNumero pour le pourquoi et les chiffres. Ce chemin ne
@@ -2452,9 +2488,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
         // gain d'identification se paierait en erreurs de prix.
         let produitsImposes = null, voieImposee = null;
-        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, cardInfo.number, cardInfo.language);
+        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, numeroCarte, cardInfo.language);
         if (pisteCode.length === 1) {
-            const avis = await nomOpposeUnVeto(cardInfo, pisteCode[0]);
+            const avis = await nomOpposeUnVeto({ ...cardInfo, number: numeroCarte }, pisteCode[0]);
             if (avis.veto) {
                 console.warn(`🚫 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} désigne ${pisteCode[0].idProduct} "${String(pisteCode[0].name).split('[')[0].trim()}", REFUSÉ : ${avis.raison}`);
             } else {
@@ -2467,7 +2503,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         }
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
-        let trouvaille = await trouverCarteTCGdex(cardInfo.name, cardInfo.number, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
+        let trouvaille = await trouverCarteTCGdex(cardInfo.name, numeroCarte, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
 
         // ════════════════════════════════════════════════════════════════════
         // REPLI LOCAL — avant tout remboursement
@@ -2500,7 +2536,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             };
         } else if (!trouvaille) {
             const local = await identifierEnLocal({
-                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
@@ -2556,7 +2592,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // ce correctif portait sur Team Up, un set de 2019.
         // On se contente donc de CONSTATER le désaccord, et on bascule sur le chemin
         // numéro + total, qui ne dépend d'aucun nom.
-        const numLuIA = String(cardInfo.number || '').replace(/^0+/, '').toLowerCase();
+        const numLuIA = String(numeroCarte || '').replace(/^0+/, '').toLowerCase();
         const numTCG = String(trouvaille.localId || '').replace(/^0+/, '').toLowerCase();
         const numeroContredit = Boolean(numLuIA && numTCG && numLuIA !== numTCG);
 
@@ -2587,7 +2623,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // droit de veto dessus. Relancer l'arbitre ici ne pourrait que le contredire.
         if (trouvaille.source === 'total+numero' && !identificationLocale && !produitsImposes) {
             const arbitre = await identifierEnLocal({
-                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
@@ -2661,7 +2697,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         let voieCatalogue = voieImposee ?? (identificationLocale ? 'local-nom-numero' : 'nom');
         let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {
-            const parNumero = await trouverProduitsParNumero(expansionsAttendues, cardInfo.number);
+            const parNumero = await trouverProduitsParNumero(expansionsAttendues, numeroCarte);
             if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
         }
         // 2e usage du chemin local : le nom est suspect ET l'expansion attendue n'a rien
@@ -2670,7 +2706,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // reste RIEN, alors que le catalogue contient la bonne carte au bon numéro.
         if (produits.length === 0 && !identificationLocale) {
             const local = await identifierEnLocal({
-                nomLu: cardInfo.name, numeroLu: cardInfo.number,
+                nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
@@ -2694,7 +2730,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             //
             // Le vivier par nom est plein : reste à savoir s'il PEUT contenir la bonne
             // carte. Voir viviersAvecRangs pour la règle et le cas Kahili.
-            const choix = await viviersAvecRangs(produits, cardInfo.number, expansionsAttendues, `[identifier] "${nomPourCatalogue}"`);
+            const choix = await viviersAvecRangs(produits, numeroCarte, expansionsAttendues, `[identifier] "${nomPourCatalogue}"`);
             produits = choix.produits;
             voieCatalogue = choix.voie;
             aucunCandidatAuNumero = choix.aucunCandidatAuNumero;
@@ -2736,7 +2772,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             const infoSolo = (await lireNumeros([produits[0].idProduct])).get(produits[0].idProduct);
             rangsScoring = bilanDesRangs(
                 [{ numeroCardmarket: infoSolo ? (infoSolo.numero || infoSolo.numeroUrl) : null }],
-                cardInfo.number,
+                numeroCarte,
                 { numeroCardmarket: infoSolo ? (infoSolo.numero || infoSolo.numeroUrl) : null }
             );
         } else if (produits.length > 1) {
@@ -2801,7 +2837,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         let egaliteSansEnjeu = false;
         {
             const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
-            const avis = gagnantProduit ? await nomOpposeUnVeto(cardInfo, gagnantProduit) : { veto: false };
+            // `numeroCarte` et non `cardInfo.number` : la preuve du veto ET le troisième
+            // état reposent sur « ce nom, À CE NUMÉRO ». Avec un numéro de Pokédex, les
+            // deux tests portent sur un numéro qui n'existe dans aucun catalogue — c'est
+            // précisément ce qui faisait sortir Light Jolteon, Dark Haunter et Misty's
+            // Staryu en « incohérents » alors que la seule incohérence était la nôtre.
+            const avis = gagnantProduit ? await nomOpposeUnVeto({ ...cardInfo, number: numeroCarte }, gagnantProduit) : { veto: false };
             if (avis.incoherent) {
                 nomNumeroIncoherents = true;
                 console.warn(`⚠️ [nom-numero-incoherents] ${avis.raison} -> le prix est livré SANS verdict.`);
@@ -2916,10 +2957,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu
+            // NEUTRALISER LE NUMÉRO, C'EST PERDRE UNE SOURCE — donc propager l'incertitude,
+            // jamais la réduire (voir le principe dans scoring.js). Mesuré au banc : sans
+            // cette ligne, la règle du numéro de Pokédex FAIT EMPIRER le critère de
+            // lancement, de 1 à 3 verdicts faux et affirmés. Elle retire un drapeau qui se
+            // levait pour une mauvaise raison — le « troisième état » du nom — sans encore
+            // fournir le chemin d'identification qui le remplace. Tant que ce chemin
+            // n'existe pas, l'identification repose sur le seul nom, et sur ces cartes
+            // vintage le nom ne suffit pas : « Mew » ramène 75 candidats.
+            || avisDex.estDex
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                egaliteSansEnjeu ? 'egalite-sans-enjeu'
+                avisDex.estDex ? 'numero-pokedex-neutralise'
+                    : egaliteSansEnjeu ? 'egalite-sans-enjeu'
                     : localIncertain ? 'identification-locale-sans-tcgdex'
                     : nomNumeroIncoherents ? 'nom-numero-incoherents'
                         : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
