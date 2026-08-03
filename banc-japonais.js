@@ -21,7 +21,21 @@
 // jamais une réimplémentation : c'est l'erreur qui a produit « la simulation dit 12, la
 // production dit 0 ».
 //
-// LECTURE SEULE, sur la base de production. USAGE : node banc-japonais.js
+// ⚠️ CES 44 CARTES NE SONT PLUS UN JEU DE TEST. Une quinzaine de correctifs en ont été
+// dérivés — la règle du Pokédex, la table close, l'asymétrie Lv.N, la région de l'IPB,
+// l'armement du périmètre, la garde du setCode — et chacun a été mesuré sur elles. Elles
+// sont devenues un jeu d'ENTRAÎNEMENT : un score de 100 % dessus ne prouverait plus rien.
+// C'est le troisième défaut de mesure de ce chantier, après « la référence tirée du système
+// mesuré » et « le garde-fou validé sur les cas qui l'ont inspiré ».
+//
+// D'OÙ LE HOLDOUT. Les scans postérieurs à DATE_HOLDOUT sont rapportés SÉPARÉMENT et ne se
+// mélangent jamais aux 44. C'est ce lot-là qui décide, et lui seul.
+//
+// LECTURE SEULE, sur la base de production.
+// USAGE :
+//   node banc-japonais.js                 les deux lots, séparément
+//   node banc-japonais.js --holdout       le lot frais SEUL, avec ses quatre cellules
+//   node banc-japonais.js --auto-controle vérifie que le banc sait signaler une erreur
 
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -65,6 +79,29 @@ const VERITE = {
 // retenu » — c'est-à-dire `null`, puisque ces cinq scans avaient ÉCHOUÉ. Le banc comptait
 // donc l'échec comme la bonne réponse, et affichait une identification correcte comme une
 // régression. Un banc qui prend l'échec pour la vérité est pire qu'un banc absent.
+// ════════════════════════════════════════════════════════════════════════════
+// LA FRONTIÈRE ENTRAÎNEMENT / HOLDOUT
+// ════════════════════════════════════════════════════════════════════════════
+// Tout scan enregistré À PARTIR de cette date appartient au lot frais. La frontière est une
+// DATE et non une liste : une liste se complète après coup, une date non — c'est ce qui
+// empêche de reclasser une carte du mauvais côté quand le résultat déplaît.
+// ⚠️ NE JAMAIS LA RECULER. La reculer reviendrait à faire entrer dans l'entraînement des
+// cartes qui ont décidé, ou l'inverse.
+const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
+
+// Les quatre cellules du lot frais, définies par le CHEMIN DE CODE et non par l'ère : ce
+// sont elles qui décident du parcours, et les échecs venaient tous de la colonne « sans
+// total ». `occidental` est la cinquième, hors grille : toutes les gardes de ce chantier
+// sont conditionnées à LANGUES_ASIATIQUES, donc une régression occidentale serait invisible.
+function celluleDe(d) {
+    if (!['JP', 'ZH', 'ZH-CN', 'ZH-TW', 'CN', 'TW', 'KR'].includes(String(d.langue || '').toUpperCase())) {
+        return 'occidental (contrôle)';
+    }
+    const total = d.total != null && String(d.total).trim() !== '';
+    const code = d.setCode != null && String(d.setCode).trim() !== '';
+    return `${total ? 'avec total' : 'SANS total'} · ${code ? 'setCode lu' : 'setCode NON lu'}`;
+}
+
 const VERITE_PAR_NOM = {
     'Raichu': 654243,          // Intro-Pack-Bulbasaur/Raichu-IPB3
     "Koga's Ditto": 605387,    // Challenge-from-the-Darkness/Kogas-Ditto-CFTD
@@ -90,12 +127,27 @@ const VERITE_PAR_NOM = {
         .map(l => S.normaliserCodeSet(l.codeSet)).filter(Boolean);
 
     const docs = await J.find({}).sort({ le: 1 }).lean();
+    // ⚠️ LE HOLDOUT N'EST PAS FILTRÉ PAR LANGUE. Le lot frais contient 10 cartes
+    // occidentales de contrôle : toutes les gardes de ce chantier sont conditionnées à
+    // LANGUES_ASIATIQUES, donc une régression occidentale ne se verrait nulle part.
+    const estHoldout = d => d.le instanceof Date && d.le >= DATE_HOLDOUT;
     const vues = new Map();
-    for (const d of docs.filter(d => ['JP', 'ZH', 'KR'].includes(d.langue))) {
-        const k = `${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
+    for (const d of docs) {
+        const asiatique = ['JP', 'ZH', 'KR'].includes(d.langue);
+        if (!asiatique && !estHoldout(d)) continue;   // l'entraînement reste japonais
+        const k = `${estHoldout(d) ? 'H' : 'E'}|${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
         if (!vues.has(k)) vues.set(k, d);
     }
-    const bancs = [...vues.values()].map((d, i) => ({ cle: `JP${String(i + 1).padStart(3, '0')}`, d }));
+    const tous = [...vues.values()];
+    const seulementHoldout = process.argv.includes('--holdout');
+    let iE = 0, iH = 0;
+    const bancs = tous
+        .filter(d => !seulementHoldout || estHoldout(d))
+        .map(d => ({ cle: estHoldout(d) ? `H${String(++iH).padStart(3, '0')}` : `JP${String(++iE).padStart(3, '0')}`, d, holdout: estHoldout(d) }));
+    const nbHoldout = tous.filter(estHoldout).length;
+    console.log(`ENTRAÎNEMENT ${tous.length - nbHoldout} cartes  ·  HOLDOUT ${nbHoldout} cartes (scans du ${DATE_HOLDOUT.toISOString().slice(0, 10)} ou après)`);
+    if (nbHoldout === 0) console.log('   (aucun scan dans le lot frais pour l\'instant — le tableau ci-dessous ne porte que sur l\'entraînement)\n');
+    else console.log('');
 
     const cardInfoDe = d => ({
         name: d.nom, number: d.numero, total: d.total, setCode: d.setCode,
@@ -227,18 +279,25 @@ const VERITE_PAR_NOM = {
         return { valeur: d.idProduct, source: 'bloc' };
     }
 
-    const R = { avant: { juste: 0, faux: 0, refus: 0, signale: 0 }, apres: { juste: 0, faux: 0, refus: 0, signale: 0 } };
-    const lec = { juste: 0, contredite: 0, 'invérifiable': 0 };
-    const provenance = { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0 };
-    let exclus = 0, retenus = 0;
-    const detail = [], sansVerite = [];
-    for (const { cle, d } of bancs) {
+    // DEUX JEUX DE COMPTEURS, jamais mélangés : entraînement et holdout.
+    const vide = () => ({
+        avant: { juste: 0, faux: 0, refus: 0, signale: 0 },
+        apres: { juste: 0, faux: 0, refus: 0, signale: 0 },
+        lec: { juste: 0, contredite: 0, 'invérifiable': 0 },
+        provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0 },
+        cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
+    });
+    const LOTS = { entrainement: vide(), holdout: vide() };
+    for (const { cle, d, holdout } of bancs) {
+        const L = holdout ? LOTS.holdout : LOTS.entrainement;
+        const R = L, lec = L.lec, provenance = L.provenance, detail = L.detail, sansVerite = L.sansVerite;
+        L.cellules.set(celluleDe(d), (L.cellules.get(celluleDe(d)) || 0) + 1);
         const v = verite(cle, d);
         provenance[v.source]++;
-        if (v.source === 'inconnu') { exclus++; continue; }
-        if (v.source === 'SANS-VERITE') { exclus++; sansVerite.push({ cle, d }); continue; }
+        if (v.source === 'inconnu') { L.exclus++; continue; }
+        if (v.source === 'SANS-VERITE') { L.exclus++; sansVerite.push({ cle, d }); continue; }
         const attendu = v.valeur;
-        retenus++;
+        L.retenus++;
         const l = lecture(d, attendu);
         lec[l.verdict]++;
         const a = await apres(d);
@@ -259,35 +318,51 @@ const VERITE_PAR_NOM = {
         if (iAvant !== 'juste' || iApres !== 'juste') detail.push({ cle, d, attendu, a, l, iAvant, iApres, source: v.source });
     }
 
-    const p = x => `${(100 * x / retenus).toFixed(1)} %`;
-    console.log('── D\'OÙ VIENT LA VÉRITÉ DE CHAQUE LIGNE ──');
-    console.log(`   idProduct fourni par le testeur, par CLÉ .......... ${provenance.cle}`);
-    console.log(`   idProduct fourni par le testeur, par NOM .......... ${provenance.nom}`);
-    console.log(`   validé EN BLOC (« toutes les autres : attendu = retenu ») ${provenance.bloc}`);
-    console.log(`   « inconnu » — carte non retrouvée, EXCLUE ......... ${provenance.inconnu}`);
-    console.log(`   SANS VÉRITÉ (production en échec), EXCLUE ......... ${provenance['SANS-VERITE']}`);
-    for (const x of sansVerite) console.log(`      ${x.cle} "${x.d.nom}" n°${x.d.numero ?? '—'} — aucune référence, rien à comparer`);
-    console.log(`\n${bancs.length} cartes distinctes · ${exclus} exclues · ${retenus} exploitables\n`);
-    console.log('── TAUX DE LECTURE IA ──');
-    console.log(`   juste (nom ET numéro confirmés) . ${String(lec.juste).padStart(3)}  ${p(lec.juste)}`);
-    console.log(`   CONTREDITE par la carte attendue  ${String(lec.contredite).padStart(3)}  ${p(lec.contredite)}`);
-    console.log(`   invérifiable (numéro non publié) . ${String(lec['invérifiable']).padStart(3)}  ${p(lec['invérifiable'])}`);
-    console.log('\n── TROIS ISSUES, JAMAIS DEUX ──');
-    console.log('                     AVANT          APRÈS');
-    console.log(`   JUSTE ......... ${String(R.avant.juste).padStart(3)}  ${p(R.avant.juste).padStart(7)}   ${String(R.apres.juste).padStart(3)}  ${p(R.apres.juste).padStart(7)}`);
-    console.log(`   FAUX .......... ${String(R.avant.faux).padStart(3)}  ${p(R.avant.faux).padStart(7)}   ${String(R.apres.faux).padStart(3)}  ${p(R.apres.faux).padStart(7)}`);
-    console.log(`     dont signalé  ${String(R.avant.signale).padStart(3)}              ${String(R.apres.signale).padStart(3)}`);
-    console.log(`     FAUX ET AFFIRMÉ ${String(R.avant.faux - R.avant.signale).padStart(2)}              ${String(R.apres.faux - R.apres.signale).padStart(3)}   ← le seuil de lancement`);
-    console.log(`   REFUS ......... ${String(R.avant.refus).padStart(3)}  ${p(R.avant.refus).padStart(7)}   ${String(R.apres.refus).padStart(3)}  ${p(R.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
+    // ⚠️ LES DEUX LOTS SONT RAPPORTÉS SÉPARÉMENT, JAMAIS ADDITIONNÉS. Additionner un jeu
+    // d'entraînement et un holdout donnerait un chiffre qui ne veut rien dire : le premier
+    // est optimisé, le second seul décide.
+    function rapporter(titre, L) {
+        if (!L.retenus && !L.exclus) return;
+        const p = x => `${(100 * x / Math.max(1, L.retenus)).toFixed(1)} %`;
+        console.log(`\n${'═'.repeat(76)}\n  ${titre}\n${'═'.repeat(76)}`);
+        console.log('── D\'OÙ VIENT LA VÉRITÉ DE CHAQUE LIGNE ──');
+        console.log(`   idProduct fourni par le testeur, par CLÉ .......... ${L.provenance.cle}`);
+        console.log(`   idProduct fourni par le testeur, par NOM .......... ${L.provenance.nom}`);
+        console.log(`   validé EN BLOC (« toutes les autres : attendu = retenu ») ${L.provenance.bloc}`);
+        console.log(`   « inconnu » — carte non retrouvée, EXCLUE ......... ${L.provenance.inconnu}`);
+        console.log(`   SANS VÉRITÉ (production en échec), EXCLUE ......... ${L.provenance['SANS-VERITE']}`);
+        for (const x of L.sansVerite) console.log(`      ${x.cle} "${x.d.nom}" n°${x.d.numero ?? '—'} — aucune référence, rien à comparer`);
 
-    console.log('\n── LES LIGNES QUI BOUGENT OU RESTENT FAUSSES ──');
-    for (const x of detail) {
-        const nomAtt = String(catById.get(x.attendu)?.name ?? '?').split('[')[0].trim();
-        const ic = { juste: '✅', faux: '❌', refus: '⛔' };
-        console.log(`${x.cle}  "${x.d.nom}" n°${x.d.numero} code=${x.d.setCode ?? '—'} total=${x.d.total ?? '—'}  [lecture ${x.l.verdict}${x.l.champ ? ` : ${x.l.champ}` : ''}] [vérité: ${x.source}]`);
-        console.log(`      attendu ${x.attendu} "${nomAtt}"`);
-        console.log(`      AVANT ${x.d.idProduct} ${ic[x.iAvant]}  ->  APRÈS ${x.a.retenu} ${ic[x.iApres]} incertain=${x.a.incertain} voie=${x.a.voie}`);
+        console.log('\n── RÉPARTITION RÉELLE DANS LES CELLULES ──');
+        for (const [c, n] of [...L.cellules.entries()].sort((a, b) => b[1] - a[1])) {
+            console.log(`   ${c.padEnd(32)} ${String(n).padStart(3)}`);
+        }
+        console.log(`\n${L.retenus + L.exclus} cartes distinctes · ${L.exclus} exclues · ${L.retenus} exploitables\n`);
+        console.log('── TAUX DE LECTURE IA ──');
+        console.log(`   juste (nom ET numéro confirmés) . ${String(L.lec.juste).padStart(3)}  ${p(L.lec.juste)}`);
+        console.log(`   CONTREDITE par la carte attendue  ${String(L.lec.contredite).padStart(3)}  ${p(L.lec.contredite)}`);
+        console.log(`   invérifiable (numéro non publié) . ${String(L.lec['invérifiable']).padStart(3)}  ${p(L.lec['invérifiable'])}`);
+        console.log('\n── TROIS ISSUES, JAMAIS DEUX ──');
+        console.log('                     AVANT          APRÈS');
+        console.log(`   JUSTE ......... ${String(L.avant.juste).padStart(3)}  ${p(L.avant.juste).padStart(7)}   ${String(L.apres.juste).padStart(3)}  ${p(L.apres.juste).padStart(7)}`);
+        console.log(`   FAUX .......... ${String(L.avant.faux).padStart(3)}  ${p(L.avant.faux).padStart(7)}   ${String(L.apres.faux).padStart(3)}  ${p(L.apres.faux).padStart(7)}`);
+        console.log(`     dont signalé  ${String(L.avant.signale).padStart(3)}              ${String(L.apres.signale).padStart(3)}`);
+        console.log(`     FAUX ET AFFIRMÉ ${String(L.avant.faux - L.avant.signale).padStart(2)}              ${String(L.apres.faux - L.apres.signale).padStart(3)}   ← le seuil de lancement`);
+        console.log(`   REFUS ......... ${String(L.avant.refus).padStart(3)}  ${p(L.avant.refus).padStart(7)}   ${String(L.apres.refus).padStart(3)}  ${p(L.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
+
+        if (L.detail.length) {
+            console.log('\n── LES LIGNES QUI BOUGENT OU RESTENT FAUSSES ──');
+            for (const x of L.detail) {
+                const nomAtt = String(catById.get(x.attendu)?.name ?? '?').split('[')[0].trim();
+                const ic = { juste: '✅', faux: '❌', refus: '⛔' };
+                console.log(`${x.cle}  "${x.d.nom}" n°${x.d.numero} code=${x.d.setCode ?? '—'} total=${x.d.total ?? '—'}  [lecture ${x.l.verdict}${x.l.champ ? ` : ${x.l.champ}` : ''}] [vérité: ${x.source}]`);
+                console.log(`      attendu ${x.attendu} "${nomAtt}"`);
+                console.log(`      AVANT ${x.d.idProduct} ${ic[x.iAvant]}  ->  APRÈS ${x.a.retenu} ${ic[x.iApres]} incertain=${x.a.incertain} voie=${x.a.voie}`);
+            }
+        }
     }
+    if (!seulementHoldout) rapporter('ENTRAÎNEMENT — 44 cartes ayant servi à dériver les correctifs. NE DÉCIDE DE RIEN.', LOTS.entrainement);
+    rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
 
     // ════════════════════════════════════════════════════════════════════════
     // AUTO-CONTRÔLE : le banc sait-il se tromper ?

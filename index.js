@@ -1586,17 +1586,28 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // Charmander MCDP). Les 14 autres sont les McDonald's occidentaux.
         // C'est donc la RÉGION qui tranche, pas le code : le filtre ci-dessous n'est pas un
         // raffinement, c'est ce qui rend le repli utilisable.
-        let parParente = false;
+        let parParente = false, parenteRetenue = null;
         if (!exps.length) {
             const cousins = lignes.filter(l => codesApparentes(code, normaliserCodeSet(l.codeSet)));
             if (cousins.length) {
+                // ── LA BORNE DE RÉGION, ET SES DEUX ÉTATS ────────────────────────────
+                // Un cousin dont la région est CONNUE et DIFFÉRENTE de celle attendue est
+                // ÉCARTÉ : deux codes de régions différentes ne sont jamais apparentés.
+                // Un cousin de région INCONNUE, lui, RESTE candidat — inconnu n'est pas
+                // contradiction (premier principe). Mesuré sur le cas qui compte : « MCD »
+                // en région japonaise a 14 cousins ; la borne jette les 9 McDonald's
+                // occidentaux, garde MCDP et 4 dont la région est inconnue.
+                // ⚠️ L'ancienne version retombait sur TOUS les cousins quand le filtre ne
+                // laissait rien — donc y compris ceux d'une autre région. C'était une
+                // préférence, pas une borne.
                 const region = regionAttendue({ language: langue });
-                const filtres = region ? cousins.filter(l => l.region === region) : [];
-                // Sans région attendue, ou si elle n'élimine rien, on garde TOUS les cousins :
-                // le nombre de produits trouvés fera office de garde-fou (le chemin ne
-                // tranche que sur un produit unique).
-                exps = filtres.length ? filtres : cousins;
+                exps = region ? cousins.filter(l => !l.region || l.region === region) : cousins;
+                if (!exps.length) {
+                    console.log(`🎯 [setcode-numero] « ${code} » n'a que des cousins d'une autre région que ${region} -> aucune parenté retenue.`);
+                    return [];
+                }
                 parParente = true;
+                parenteRetenue = `${code}~${exps.map(l => l.codeSet).join('/')}`;
             }
         }
         if (!exps.length) return [];
@@ -2911,6 +2922,41 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Quatrième principe — sans cette liste, le bruit ferait preuve.
         const codesReels = [...(await lireTousLesCodesSet())];
         const compat = setCodeCompatibleVintage(cardInfo.setCode, { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes }, codesReels);
+
+        // ── DIAGNOSTIC DU setCode LU — journalisé, AUCUN effet sur le scoring ────────
+        // Deux questions, un seul champ :
+        //   1. l'IA met-elle autre chose qu'un code dans ce champ ? Un « PROMO » ou un
+        //      « HOLO » n'est pas un code de set : c'est une catégorie ou une rareté, et
+        //      elle ne discrimine rien (il existe des promos vintage comme modernes). On
+        //      ne la traite pas — on la COMPTE. Si la classe grossit, on décidera sur des
+        //      chiffres plutôt que sur un cas.
+        //   2. quand une PARENTÉ est retenue, laquelle ? Toute la chaîne repose désormais
+        //      dessus (MCD~MCDP, e1~EC1, DP5~DP5c) et c'est un rapprochement approximatif
+        //      au cœur d'un système dont on a passé la semaine à retirer les approximations.
+        //      Le journaliser rend une dérive future VISIBLE au lieu d'être découverte par
+        //      un prix faux.
+        let setCodeResolution = null, parenteJournal = null;
+        if (cardInfo.setCode) {
+            const MOTS_CATEGORIE = new Set(['promo', 'holo', 'reverse', 'rare', 'commune', 'common', 'uncommon',
+                'normale', 'normal', 'ir', 'sr', 'sir', 'ar', 'ur', 'secret', 'fullart', 'full art']);
+            const brutLu = normaliserCodeSet(cardInfo.setCode);
+            const codeLu = ALIAS_CODES_LUS.get(brutLu) || brutLu;
+            if (MOTS_CATEGORIE.has(String(cardInfo.setCode).trim().toLowerCase())) {
+                setCodeResolution = 'mot-non-code';
+                console.log(`📊 [setcode-diagnostic] « ${cardInfo.setCode} » n'est pas un code de set mais une catégorie/rareté — compté, sans effet.`);
+            } else if (codesReels.includes(codeLu)) {
+                setCodeResolution = 'exact';
+            } else {
+                const cousins = codesReels.filter(c => codesApparentes(codeLu, c));
+                if (cousins.length) {
+                    setCodeResolution = 'parente';
+                    parenteJournal = `${codeLu}~${cousins.slice(0, 5).join('/')}`;
+                    console.log(`📊 [setcode-diagnostic] parenté retenue : ${parenteJournal}`);
+                } else {
+                    setCodeResolution = 'inconnu';
+                }
+            }
+        }
         const sansPerimetreTCGdex = numeroCarte != null && expansionsAttendues.length === 0;
         if ((numeroCarte == null || sansPerimetreTCGdex)
             && compat.compatible
@@ -3230,6 +3276,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Par quel lien l'identification est passée. Aucun changement de comportement :
             // ces trois champs sont la seule façon de mesurer, au tour suivant, ce que la
             // table close aura réellement corrigé.
+            setCodeResolution,
+            parenteRetenue: parenteJournal,
             setTcgdex: lienGagnant.setTcgdex,
             idExpansionGagnante: classement[0]?.idExpansion ?? null,
             regionSource: lienGagnant.regionSource,

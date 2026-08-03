@@ -102,6 +102,32 @@ const ALIAS_CODES_LUS = new Map([
 
 const LONGUEUR_MIN_PARENTE = 3;
 
+// ============================================================================
+// LA RÈGLE DE PARENTÉ, EN UNE PHRASE
+// ============================================================================
+// DEUX CODES SONT APPARENTÉS SI LE PLUS COURT, D'AU MOINS TROIS CARACTÈRES, EST UN PRÉFIXE
+// DU PLUS LONG — un « X » initial pouvant être ignoré de chaque côté (les « Additionals »
+// de Cardmarket préfixent leur code d'un X : xPRE, xASC, xsv2a).
+//
+// POURQUOI TROIS CARACTÈRES, ET PAS DEUX. Mesuré : à deux caractères, 822 paires du
+// catalogue deviennent « apparentées » dont 618 sans aucun rapport — n'importe quel code de
+// deux lettres est préfixe d'une multitude d'autres, au hasard de l'alphabet.
+//
+// CE QU'ELLE VAUT, MESURÉ SUR LE CATALOGUE (747 codes réels) :
+//   102 paires apparentées, dont 71 de MÊME région, 1 seule de régions DIFFÉRENTES
+//   (SVI occidental ~ svIba japonais) et 30 dont une région est inconnue.
+// Et sur les scans journalisés : 30 setCode résolus exactement, 4 par parenté, 2 sans
+// correspondance. La parenté sert donc peu — mais les 4 cas incluent le Charmander
+// McDonald's à 1033 € (MCD ~ MCDP) et le Dracolosse (DP5 ~ DP5c).
+//
+// ⚠️ ELLE EST APPROXIMATIVE PAR CONSTRUCTION, ET ELLE EST AU CŒUR DE LA CHAÎNE. C'est
+// pourquoi elle est BORNÉE PAR LA RÉGION chez ses appelants : un cousin dont la région est
+// CONNUE et DIFFÉRENTE de celle attendue n'est jamais retenu. Un cousin de région inconnue,
+// lui, reste candidat — inconnu n'est pas contradiction (premier principe). Mesuré sur le
+// cas qui compte : « MCD » en région japonaise a 14 cousins, la borne en jette 9 (tous les
+// McDonald's occidentaux) et garde MCDP.
+// La fonction elle-même reste PURE et sans région : c'est l'appelant qui connaît la région
+// attendue, et c'est à lui de borner.
 function codesApparentes(a, b) {
     if (!a || !b || a === b) return false;
     const sansX = s => (s.startsWith('X') && s.length >= 3) ? s.slice(1) : s;

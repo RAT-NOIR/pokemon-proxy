@@ -223,7 +223,23 @@ const journalScanSchema = new mongoose.Schema({
     // true  : l'IA a lu un code et il correspond à celui du gagnant
     // false : elle en a lu un et il ne correspond pas
     // null  : elle n'a rien lu, ou le code du gagnant est inconnu -> hors mesure
-    setCodeAccord: Boolean
+    setCodeAccord: Boolean,
+
+    // COMMENT LE setCode LU S'EST RÉSOLU — compté, sans aucun effet sur le scoring.
+    //   'exact'        -> il désigne un code de set du catalogue
+    //   'parente'      -> il ne désigne rien exactement, mais il est apparenté à un code réel
+    //   'mot-non-code' -> l'IA a mis une CATÉGORIE dans ce champ (« PROMO », « HOLO », une
+    //                     rareté). Ça ne discrimine rien : il existe des promos vintage
+    //                     comme modernes. On le compte pour décider un jour sur des
+    //                     chiffres, pas sur un cas.
+    //   'inconnu'      -> ne résout vers rien : bruit d'OCR (voir le quatrième principe)
+    setCodeResolution: String,
+
+    // La parenté RETENUE, quand il y en a une : « MCD~MCDP ». Toute la chaîne en dépend
+    // maintenant — MCD~MCDP a sauvé un Charmander à 1033 €, DP5~DP5c un Dracolosse — et
+    // c'est un rapprochement approximatif au cœur du système. Le journaliser rend une
+    // dérive future visible, au lieu d'être découverte par un prix faux.
+    parenteRetenue: String
 }, { versionKey: false });
 
 const JournalScan = mongoose.models.JournalScan
@@ -335,7 +351,9 @@ function enregistrerScan(d = {}) {
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,
             sourcePrix: d.sourcePrix || null,
-            setCodeAccord: memeCode(d.setCode, codeSetGagnant)
+            setCodeAccord: memeCode(d.setCode, codeSetGagnant),
+            setCodeResolution: d.setCodeResolution || null,
+            parenteRetenue: d.parenteRetenue || null
         });
     })().catch(e => {
         // Trace, jamais de propagation. Un journal muet vaut mieux qu'un scan cassé.
