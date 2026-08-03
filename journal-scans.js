@@ -108,6 +108,17 @@ const journalScanSchema = new mongoose.Schema({
     nomConfiance: String, // 'haute' | 'moyenne' | 'basse'
     nomBrut: String,
 
+    // LE LOGO DU SET, en ÉNUMÉRATION FERMÉE — journalisé, sans aucun effet.
+    // ⚠️ IL NE MARQUE AUCUN POINT ET N'ENTRE DANS AUCUNE DÉCISION. C'est la discipline
+    // qui a marché pour les motifs de reverse : on mesure d'abord sa PRÉSENCE et sa
+    // FIABILITÉ sur des scans réels, on câble ensuite. Le modèle a déjà halluciné des noms
+    // sur les Full Art ; il peut halluciner un symbole.
+    // 'aucun' est une VRAIE valeur, pas un vide : les japonaises de 1996-1997 ne portent
+    // aucun logo de set, et c'est précisément ce qui distingue le Pokémon Jungle de 1997
+    // (1,40 €) du Darkness-and-to-Light de 2001 (2,46 €) — la seule paire du banc que
+    // rien d'autre ne sépare.
+    symboleSet: String,
+
     // --- CE QUI A ÉTÉ RETENU (la sortie) ---
     idProduct: Number,
     codeSetGagnant: String,   // code de set réel du produit retenu
@@ -286,6 +297,7 @@ function enregistrerScan(d = {}) {
             identifieeEnLocal: d.identifieeEnLocal != null ? Boolean(d.identifieeEnLocal) : null,
             nomConfiance: d.nomConfiance || null,
             nomBrut: d.nomBrut || null,
+            symboleSet: d.symboleSet || null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
             resultat: d.motifEchec ? 'echec' : 'succes',

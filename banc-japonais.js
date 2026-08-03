@@ -185,18 +185,44 @@ const VERITE_PAR_NOM = {
         return { verdict: 'juste', champ: null };
     }
 
-    const R = { avant: { juste: 0, faux: 0, signale: 0 }, apres: { juste: 0, faux: 0, signale: 0 } };
+    // ════════════════════════════════════════════════════════════════════════
+    // D'OÙ VIENT LA VÉRITÉ DE CHAQUE LIGNE — l'audit de l'instrument lui-même
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ LE DÉFAUT LE PLUS GRAVE DE TOUT LE CHANTIER ÉTAIT ICI, dans l'instrument et non
+    // dans le code mesuré : le banc tirait sa référence de la chose qu'il mesurait. Quand
+    // aucune vérité n'était fournie, il prenait `d.idProduct` — ce que la PRODUCTION avait
+    // retenu. Sur un scan qui avait ÉCHOUÉ, cela vaut `null` : le banc notait donc juste
+    // l'échec lui-même, et comptait deux identifications correctes comme des régressions.
+    // UNE MESURE QUI DÉRIVE SA RÉFÉRENCE DU SYSTÈME MESURÉ NE MESURE RIEN.
+    //
+    // La provenance est désormais explicite et comptée. Cinq cas, et un seul est interdit :
+    //   'cle'          la clé JPxxx porte un idProduct fourni par le testeur (URL Cardmarket)
+    //   'nom'          idem, rattaché par le nom de la carte
+    //   'bloc'         aucune vérité individuelle, MAIS la production avait abouti et le
+    //                  testeur a validé en bloc « toutes les autres lignes : attendu =
+    //                  retenu ». C'est une affirmation du testeur, pas une dérivation.
+    //   'inconnu'      le testeur n'a pas pu retrouver la carte -> exclue
+    //   'SANS-VERITE'  la production avait ÉCHOUÉ et aucune vérité n'a été fournie. Il n'y
+    //                  a RIEN à comparer -> exclue, et comptée à part. C'est le cas qui
+    //                  produisait le mensonge.
+    function verite(cle, d) {
+        if (VERITE[cle] !== undefined) return { valeur: VERITE[cle], source: VERITE[cle] === 'inconnu' ? 'inconnu' : 'cle' };
+        if (VERITE_PAR_NOM[d.nom] !== undefined) return { valeur: VERITE_PAR_NOM[d.nom], source: 'nom' };
+        if (d.idProduct == null) return { valeur: null, source: 'SANS-VERITE' };
+        return { valeur: d.idProduct, source: 'bloc' };
+    }
+
+    const R = { avant: { juste: 0, faux: 0, refus: 0, signale: 0 }, apres: { juste: 0, faux: 0, refus: 0, signale: 0 } };
     const lec = { juste: 0, contredite: 0, 'invérifiable': 0 };
+    const provenance = { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0 };
     let exclus = 0, retenus = 0;
-    const detail = [];
+    const detail = [], sansVerite = [];
     for (const { cle, d } of bancs) {
-        // Priorité : la clé, puis le nom, puis — à défaut de vérité fournie — ce que la
-        // production avait retenu. Cet ordre compte : sans la table par NOM, les cinq
-        // cartes fournies sous forme d'URL retombaient sur le dernier cas et le banc
-        // prenait leur ÉCHEC pour la bonne réponse.
-        const v = VERITE[cle] !== undefined ? VERITE[cle] : VERITE_PAR_NOM[d.nom];
-        const attendu = v === undefined ? d.idProduct : v;
-        if (attendu === 'inconnu') { exclus++; continue; }
+        const v = verite(cle, d);
+        provenance[v.source]++;
+        if (v.source === 'inconnu') { exclus++; continue; }
+        if (v.source === 'SANS-VERITE') { exclus++; sansVerite.push({ cle, d }); continue; }
+        const attendu = v.valeur;
         retenus++;
         const l = lecture(d, attendu);
         lec[l.verdict]++;
@@ -207,34 +233,70 @@ const VERITE_PAR_NOM = {
         // Le compter parmi les « faux et affirmés » gonflait le seul chiffre qui décide du
         // lancement, et dans le mauvais sens — il faisait passer une amélioration réelle
         // pour une régression.
-        const signaleAvant = Boolean(d.carteIncertaine) || d.idProduct == null;
-        const signaleApres = Boolean(a.incertain) || a.retenu == null;
-        R.avant[okAvant ? 'juste' : 'faux']++;
-        if (!okAvant && signaleAvant) R.avant.signale++;
-        R.apres[okApres ? 'juste' : 'faux']++;
-        if (!okApres && signaleApres) R.apres.signale++;
-        if (!okAvant || !okApres) detail.push({ cle, d, attendu, a, l, okAvant, okApres });
+        // TROIS ISSUES, jamais deux. Un REFUS (aucun produit rendu) n'est ni une réussite
+        // ni un mensonge : l'utilisateur est remboursé et n'a vu aucun prix. Le ranger
+        // parmi les « faux » gonflait le chiffre qui décide du lancement.
+        const issue = r => r.id === attendu ? 'juste' : (r.id == null ? 'refus' : 'faux');
+        const iAvant = issue({ id: d.idProduct }), iApres = issue({ id: a.retenu });
+        R.avant[iAvant]++; R.apres[iApres]++;
+        if (iAvant === 'faux' && d.carteIncertaine) R.avant.signale++;
+        if (iApres === 'faux' && a.incertain) R.apres.signale++;
+        if (iAvant !== 'juste' || iApres !== 'juste') detail.push({ cle, d, attendu, a, l, iAvant, iApres, source: v.source });
     }
 
     const p = x => `${(100 * x / retenus).toFixed(1)} %`;
-    console.log(`${bancs.length} cartes distinctes · ${exclus} exclues (inconnu) · ${retenus} exploitables\n`);
+    console.log('── D\'OÙ VIENT LA VÉRITÉ DE CHAQUE LIGNE ──');
+    console.log(`   idProduct fourni par le testeur, par CLÉ .......... ${provenance.cle}`);
+    console.log(`   idProduct fourni par le testeur, par NOM .......... ${provenance.nom}`);
+    console.log(`   validé EN BLOC (« toutes les autres : attendu = retenu ») ${provenance.bloc}`);
+    console.log(`   « inconnu » — carte non retrouvée, EXCLUE ......... ${provenance.inconnu}`);
+    console.log(`   SANS VÉRITÉ (production en échec), EXCLUE ......... ${provenance['SANS-VERITE']}`);
+    for (const x of sansVerite) console.log(`      ${x.cle} "${x.d.nom}" n°${x.d.numero ?? '—'} — aucune référence, rien à comparer`);
+    console.log(`\n${bancs.length} cartes distinctes · ${exclus} exclues · ${retenus} exploitables\n`);
     console.log('── TAUX DE LECTURE IA ──');
     console.log(`   juste (nom ET numéro confirmés) . ${String(lec.juste).padStart(3)}  ${p(lec.juste)}`);
     console.log(`   CONTREDITE par la carte attendue  ${String(lec.contredite).padStart(3)}  ${p(lec.contredite)}`);
     console.log(`   invérifiable (numéro non publié) . ${String(lec['invérifiable']).padStart(3)}  ${p(lec['invérifiable'])}`);
-    console.log('\n── TAUX D\'IDENTIFICATION ──');
+    console.log('\n── TROIS ISSUES, JAMAIS DEUX ──');
     console.log('                     AVANT          APRÈS');
-    console.log(`   juste ......... ${String(R.avant.juste).padStart(3)}  ${p(R.avant.juste).padStart(7)}   ${String(R.apres.juste).padStart(3)}  ${p(R.apres.juste).padStart(7)}`);
+    console.log(`   JUSTE ......... ${String(R.avant.juste).padStart(3)}  ${p(R.avant.juste).padStart(7)}   ${String(R.apres.juste).padStart(3)}  ${p(R.apres.juste).padStart(7)}`);
     console.log(`   FAUX .......... ${String(R.avant.faux).padStart(3)}  ${p(R.avant.faux).padStart(7)}   ${String(R.apres.faux).padStart(3)}  ${p(R.apres.faux).padStart(7)}`);
     console.log(`     dont signalé  ${String(R.avant.signale).padStart(3)}              ${String(R.apres.signale).padStart(3)}`);
-    console.log(`     FAUX ET AFFIRMÉ ${String(R.avant.faux - R.avant.signale).padStart(2)}              ${String(R.apres.faux - R.apres.signale).padStart(3)}`);
+    console.log(`     FAUX ET AFFIRMÉ ${String(R.avant.faux - R.avant.signale).padStart(2)}              ${String(R.apres.faux - R.apres.signale).padStart(3)}   ← le seuil de lancement`);
+    console.log(`   REFUS ......... ${String(R.avant.refus).padStart(3)}  ${p(R.avant.refus).padStart(7)}   ${String(R.apres.refus).padStart(3)}  ${p(R.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
 
     console.log('\n── LES LIGNES QUI BOUGENT OU RESTENT FAUSSES ──');
     for (const x of detail) {
         const nomAtt = String(catById.get(x.attendu)?.name ?? '?').split('[')[0].trim();
-        console.log(`${x.cle}  "${x.d.nom}" n°${x.d.numero} code=${x.d.setCode ?? '—'} total=${x.d.total ?? '—'}  [lecture ${x.l.verdict}${x.l.champ ? ` : ${x.l.champ}` : ''}]`);
+        const ic = { juste: '✅', faux: '❌', refus: '⛔' };
+        console.log(`${x.cle}  "${x.d.nom}" n°${x.d.numero} code=${x.d.setCode ?? '—'} total=${x.d.total ?? '—'}  [lecture ${x.l.verdict}${x.l.champ ? ` : ${x.l.champ}` : ''}] [vérité: ${x.source}]`);
         console.log(`      attendu ${x.attendu} "${nomAtt}"`);
-        console.log(`      AVANT ${x.d.idProduct} ${x.okAvant ? '✅' : '❌'} incertain=${Boolean(x.d.carteIncertaine)}  ->  APRÈS ${x.a.retenu} ${x.okApres ? '✅' : '❌'} incertain=${x.a.incertain} voie=${x.a.voie}`);
+        console.log(`      AVANT ${x.d.idProduct} ${ic[x.iAvant]}  ->  APRÈS ${x.a.retenu} ${ic[x.iApres]} incertain=${x.a.incertain} voie=${x.a.voie}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // AUTO-CONTRÔLE : le banc sait-il se tromper ?
+    // ════════════════════════════════════════════════════════════════════════
+    // Un instrument qu'on n'a jamais vu signaler une erreur n'est pas vérifié. On injecte
+    // une vérité FAUSSE connue sur une ligne aujourd'hui juste : le banc doit la compter
+    // comme fausse. S'il la compte juste, il ne compare rien.
+    if (process.argv.includes('--auto-controle')) {
+        console.log('\n── AUTO-CONTRÔLE : injection d\'une vérité fausse ──');
+        const temoin = bancs.find(({ cle, d }) => {
+            const v = verite(cle, d);
+            return v.source !== 'inconnu' && v.source !== 'SANS-VERITE' && d.idProduct === v.valeur;
+        });
+        if (!temoin) { console.log('   aucune ligne juste disponible comme témoin'); }
+        else {
+            const vraie = verite(temoin.cle, temoin.d).valeur;
+            const fausse = 999999999;
+            const a = await apres(temoin.d);
+            const avecVraie = a.retenu === vraie ? 'juste' : (a.retenu == null ? 'refus' : 'faux');
+            const avecFausse = a.retenu === fausse ? 'juste' : (a.retenu == null ? 'refus' : 'faux');
+            console.log(`   témoin ${temoin.cle} "${temoin.d.nom}" — la chaîne rend ${a.retenu}`);
+            console.log(`     avec la vraie vérité (${vraie})   -> ${avecVraie}   ${avecVraie === 'juste' ? '✅' : '❌'}`);
+            console.log(`     avec une vérité FAUSSE (${fausse}) -> ${avecFausse}   ${avecFausse === 'faux' ? '✅ le banc la signale' : '❌ LE BANC NE COMPARE RIEN'}`);
+        }
     }
 
     await mongoose.disconnect();

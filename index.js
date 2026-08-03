@@ -393,7 +393,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "aucun/cercle-chiffre/R/stade/fossile/etoile/VS/web/e/autre/indetermine — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
 Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
@@ -449,6 +449,19 @@ aucun dénominateur.
 
 Le "setCode" est le petit code alphabétique (2 à 4 lettres) imprimé en bas de la carte à côté du numéro, ou parfois dans le titre de l'annonce (ex: "BLK 129"). Si tu ne le vois pas clairement, réponds null, n'invente rien.
 IMPORTANT — les TAMPONS/STAMPS de réimpression : si la carte porte un tampon anniversaire ou de sous-set (le logo doré "Celebrations 25 ans", le tampon "Pokémon 151", "Trainer Gallery", "Prize Pack"...), ce sont des réimpressions qui GARDENT le numéro d'origine (ex: Florizarre 15/102 en Celebrations). Dans ce cas, indique le set du TAMPON dans "setCode" (ex: "CEL" pour Celebrations, "MEW" pour 151, "TG" pour Trainer Gallery), PAS le set d'origine — c'est ce qui permet de distinguer la réimpression de la carte vintage au même numéro.
+
+Pour "symboleSet" — LE LOGO DU SET, petit pictogramme imprimé à côté du numéro, en bas de la carte. À ne pas confondre avec le symbole de RARETÉ (rond/losange/étoile) ni avec le symbole d'ÉNERGIE du type. Réponds par UNE de ces valeurs, jamais autre chose :
+- "aucun" : la carte ne porte AUCUN logo de set à cet endroit. C'est une VRAIE information, pas une absence de réponse : les plus anciennes cartes japonaises (1996-1997) n'en portent pas.
+- "cercle-chiffre" : un chiffre inscrit dans un cercle (blanc sur noir, ou noir sur blanc).
+- "R" : une lettre R stylisée (Team Rocket).
+- "stade" : une silhouette de bâtiment ou d'arène.
+- "fossile" : un motif d'ammonite, d'os ou de fossile.
+- "etoile" : une étoile, seule ou dans une forme.
+- "VS" : les deux lettres VS.
+- "web" : une toile d'araignée ou un motif de réseau.
+- "e" : un logo contenant la lettre e (ère e-Reader), souvent accompagné d'une bande de points scannables sur le bord de la carte.
+- "autre" : un logo bien visible mais qui ne ressemble à aucun des précédents.
+- "indetermine" : reflets, sleeve, cadrage ou flou t'empêchent de trancher. N'invente pas.
 
 Pour "rarete" : regarde le symbole de rareté et le style de la carte. "IR" = Illustration Rare (illustration pleine, personnage humain souvent), "SIR"/"SR" = Special/Super Rare, "AR" = Art Rare, "promo" = carte promotionnelle, "normale" = carte de jeu standard. Si tu n'es pas sûr, réponds "normale".
 ⚠️ NE CONFONDS PAS "rarete" et "etatEstime" : la rareté est une propriété d'IMPRESSION de la carte (IR, SR, promo, normale...), l'état est son USURE physique (NM, EX, GD...). N'écris JAMAIS un code d'état (EX, GD, NM...) dans le champ "rarete".
@@ -1445,10 +1458,12 @@ async function trouverProduitsLocaux(nomExact) {
             //   δ Delta Species ............ +39 candidats             non adopté
             //   ☆ / Star .................... +0                       sans objet
             //   Prime / LEGEND / BREAK ...... +7                       non adopté
-            // Le critère n'est pas la taille : un « Charizard ex » est une AUTRE carte, à
-            // un autre prix, et l'IA lit « ex » parce que c'est écrit dans le bandeau du
-            // nom. Le niveau, lui, est une petite mention que l'IA ne reprend pas — le
-            // même Pokémon, pas une autre carte.
+            // LE CRITÈRE, EN UNE LIGNE : on élargit sur ce qui n'est PAS lu par l'IA,
+            // jamais sur ce qui distingue deux cartes différentes.
+            // Un « Charizard ex » est une AUTRE carte, à un autre prix, et l'IA lit « ex »
+            // parce que c'est écrit dans le bandeau du nom. Le niveau est une petite
+            // mention qu'elle ne reprend pas : même Pokémon, pas autre carte. δ et
+            // Prime/LEGEND/BREAK restent dehors pour la même raison qu'« ex ».
             const sansNiveau = nomProduit.replace(/[\s-]*Lv\.?\s?(X|\d+)\b/i, '').trim();
             return sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau));
         });
@@ -3137,6 +3152,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             identifieeEnLocal: identificationLocale,
             nomConfiance: cardInfo.nomConfiance,
             nomBrut: cardInfo.nomBrut,
+            symboleSet: cardInfo.symboleSet,
             voieCatalogue,
             motifEtat: motifResolution.etat,
             // Les deux signaux de rang, persistés : c'est ce qui permettra de mesurer
