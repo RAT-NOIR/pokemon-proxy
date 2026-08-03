@@ -727,6 +727,34 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // défaut n'est pas de rendre du vide, c'est de rendre du vide là où l'appelant lira « j'ai
 // regardé et il n'y a rien ».
 
+// ============================================================================
+// LE SECOND PRINCIPE — deux sources de vérité qui divergent sans signal
+// ============================================================================
+// Le premier principe (« je ne sais pas » n'est pas « je sais que non ») porte sur une
+// information ABSENTE. Celui-ci porte sur une information PRÉSENTE EN DOUBLE, et il ne se
+// diagnostique pas de la même façon : rien ne manque, rien ne lève d'erreur, chaque module
+// pris isolément se comporte correctement. Le défaut n'existe qu'ENTRE eux.
+//
+// L'OCCURRENCE QUI L'A RÉVÉLÉ. `LANGUES_ASIATIQUES` existait deux fois : dans index.js
+// avec ZH-CN, ZH-TW, CN, TW, et dans pokedex.js sans eux. Une carte taïwanaise était donc
+// JAPONAISE pour le pont total -> set, et OCCIDENTALE pour la règle du numéro de Pokédex.
+// Deux verdicts opposés sur la même carte, dans le même scan, sans le moindre avertissement.
+// Aucun test ne pouvait l'attraper : chaque liste était juste pour son module.
+// ⚠️ Il dormait : le journal ne contient aucune carte ZH-TW/CN/TW, donc AUCUN chiffre déjà
+// mesuré n'était faux et aucune ligne du banc ne bascule. Le défaut n'avait pas encore
+// coûté — il attendait la première carte taïwanaise.
+//
+// LA RÈGLE : une donnée de référence n'a qu'un seul lieu de déclaration. Si deux modules
+// en ont besoin, le second l'IMPORTE — il ne la recopie pas, même identique, même « pour
+// éviter une dépendance ». Une copie identique aujourd'hui est une divergence demain, et
+// c'est précisément la sorte de divergence que personne ne va chercher.
+// La même exigence vaut déjà, pour la même raison, sur la normalisation des numéros
+// (chiffresDuNumero, partagée avec l'extension) : ce n'est pas une préférence de style.
+//
+// CE QUI A ÉTÉ VÉRIFIÉ APRÈS COUP : aucune autre constante n'est déclarée des deux côtés,
+// et aucune ne porte le même contenu sous deux noms différents. Le contrôle ne couvre que
+// les constantes en MAJUSCULES — les tables locales en minuscules restent à surveiller.
+
 // Les langues dont les cartes sont imprimées au Japon. SOURCE UNIQUE, et elle doit le
 // rester : cette liste existait en double, plus large dans index.js (avec ZH-CN, ZH-TW,
 // CN, TW) que dans pokedex.js. Deux listes qui divergent, c'est une carte taïwanaise que

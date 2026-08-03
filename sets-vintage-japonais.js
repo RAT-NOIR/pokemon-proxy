@@ -43,9 +43,9 @@ const SETS_VINTAGE_JAPONAIS = [
     { nom: "Leaders' Stadium", annee: 1998, slug: 'Leaders-Stadium', exp: 4466, code: 'G1', prod: 96, regionSource: 'place-internationale-prise-par-GH' },
     { nom: 'Challenge from the Darkness', annee: 1999, slug: 'Challenge-from-the-Darkness', exp: 4467, code: 'G2', prod: 98, regionSource: 'place-internationale-prise-par-GC' },
     { nom: 'Southern Islands', annee: 1999, slug: 'Southern-Islands-JP', exp: 4357, code: 'SI-JP', prod: 18, regionSource: 'code-suffixe-JP' },
-    { nom: 'Gold, Silver, to a New World...', annee: 2000, slug: 'Gold-Silver-to-a-New-World', exp: null, code: 'N1', prod: null, regionSource: 'derive' },
-    { nom: 'Crossing the Ruins...', annee: 2000, slug: 'Crossing-the-Ruins', exp: null, code: 'N2', prod: null, regionSource: 'derive' },
-    { nom: 'Awakening Legends', annee: 2000, slug: 'Awakening-Legends', exp: null, code: 'N3', prod: null, regionSource: 'derive' },
+    { nom: 'Gold, Silver, to a New World...', annee: 2000, slug: 'Gold-Silver-to-a-New-World', exp: 4506, code: 'N1', prod: 96, regionSource: 'place-internationale-prise-par-NG' },
+    { nom: 'Crossing the Ruins...', annee: 2000, slug: 'Crossing-the-Ruins', exp: 4507, code: 'N2', prod: 57, regionSource: 'place-internationale-prise-par-NDI' },
+    { nom: 'Awakening Legends', annee: 2000, slug: 'Awakening-Legends', exp: 4508, code: 'N3', prod: 57, regionSource: 'place-internationale-prise-par-NR' },
     { nom: 'Darkness, and to Light...', annee: 2001, slug: 'Darkness-and-to-Light', exp: 4509, code: 'N4', prod: 113, regionSource: 'place-internationale-prise-par-NDE' },
     { nom: 'Pokémon VS', annee: 2001, slug: 'Pokemon-CardVS', exp: 4168, code: 'VS', prod: 151, regionSource: 'liste-verifiee' },
     { nom: 'Pokémon Card web', annee: 2001, slug: 'Pokemon-Cardweb', exp: 4355, code: 'WEB', prod: 48, regionSource: 'liste-verifiee' },
@@ -54,9 +54,16 @@ const SETS_VINTAGE_JAPONAIS = [
     { nom: 'Wind from the Sea', annee: 2002, slug: 'Wind-from-the-Sea', exp: 5023, code: 'EC3', prod: 90, regionSource: 'liste-verifiee' },
     { nom: 'Split Earth', annee: 2002, slug: 'Split-Earth', exp: 5024, code: 'EC4', prod: 91, regionSource: 'liste-verifiee' },
     { nom: 'Mysterious Mountains', annee: 2002, slug: 'Mysterious-Mountains', exp: 5025, code: 'EC5', prod: 91, regionSource: 'liste-verifiee' },
-    { nom: 'Miracle of the Desert', annee: 2003, slug: 'Miracle-of-the-Desert', exp: null, code: 'ADV2', prod: null, regionSource: 'derive' },
-    { nom: 'Rulers of the Heavens', annee: 2003, slug: 'Rulers-of-the-Heavens', exp: null, code: 'ADV3', prod: null, regionSource: 'derive' },
-    { nom: 'Magma VS Aqua: Two Ambitions', annee: 2003, slug: 'Magma-VS-Aqua-Two-Ambitions', exp: null, code: 'ADVex1', prod: null, regionSource: 'derive' },
+    { nom: 'Miracle of the Desert', annee: 2003, slug: 'Miracle-of-the-Desert', exp: 5873, code: 'ADV2', prod: 53, regionSource: 'liste-verifiee' },
+    { nom: 'Rulers of the Heavens', annee: 2003, slug: 'Rulers-of-the-Heavens', exp: 5872, code: 'ADV3', prod: 54, regionSource: 'liste-verifiee' },
+    { nom: 'Magma VS Aqua: Two Ambitions', annee: 2003, slug: 'Magma-VS-Aqua-Two-Ambitions', exp: 5869, code: 'ADVex1', prod: 80, regionSource: 'code-minuscule' },
+    // ⚠️ RÉGION NON VÉRIFIÉE PAR MOI. codes_set dit INCONNUE (regionSource 'nom-hors-catalogue') :
+    // le nom de l'expansion n'existe pas au catalogue international, donc la dérivation ne
+    // conclut rien. L'attestation vient de chartmon.com/pokemon/jp/sets, qui date ce set de
+    // 1999 dans l'ère japonaise — RAPPORTÉE PAR LE TESTEUR : ma propre requête sur cette page
+    // a reçu un HTTP 403, je n'ai donc pas pu la vérifier moi-même. La provenance est écrite
+    // ici pour que ce soit relisible, pas pour faire croire à une vérification.
+    { nom: 'Intro Pack (Bulbasaur)', annee: 1999, slug: 'Intro-Pack-Bulbasaur', exp: 5059, code: 'IPB', prod: 41, regionSource: 'chartmon-rapporte-par-testeur' },
     // Hors de la liste pokesymbols mais exigés par le banc : promo et sets dérivés japonais
     // dont la région est établie et le slug unique.
     { nom: "McDonald's Original Minimum Pack", annee: 2002, slug: 'McDonalds-Original-Minimum-Pack', exp: 4178, code: 'MCDP', prod: 24, regionSource: 'liste-verifiee' },
@@ -71,22 +78,14 @@ const SETS_VINTAGE_JAPONAIS = [
 // d'admission interdit.
 const SETS_NON_PROUVES = [
     {
-        nom: 'Intro Pack Bulbasaur', slug: 'Intro-Pack-Bulbasaur', exp: 5059, code: 'IPB', prod: 41,
-        // La région lue en base est INCONNUE (regionSource: 'nom-hors-catalogue') : le nom
-        // de l'expansion n'existe pas au catalogue international, donc la dérivation ne
-        // peut rien conclure. Et pokesymbols ne le liste pas non plus — c'est un deck de
-        // démarrage, pas un set principal.
-        preuveManquante: 'région INCONNUE en base, et absent de la liste pokesymbols',
-        // ⚠️ CE REFUS A UN COÛT CONNU ET CHIFFRÉ : le Raichu du testeur est
-        // Intro-Pack-Bulbasaur/Raichu-IPB3. Sans cette ligne, cette carte n'a pas de
-        // périmètre. Le refus est assumé tant que la région n'est pas établie.
-        cout: 'le Raichu (Raichu-IPB3) reste sans périmètre'
-    },
-    {
         nom: 'ADV Expansion Pack', slug: null, code: 'ADV1', prod: null,
-        // La correspondance de nom tombe sur « Expansion-Pack » (EXP, 1996) : un homonyme
-        // à seize ans d'écart. C'est le piège exact du contre-test.
-        preuveManquante: 'aucun slug distinct trouvé ; le nom tombe sur l\'homonyme de 1996'
+        // Le refus tient, mais pour une raison MEILLEURE que celle que j'avais donnée. Ce
+        // n'était pas une ambiguïté d'homonyme tranchable par l'année : il n'y a
+        // simplement AUCUNE expansion cible. Relevé : la base contient douze expansions à
+        // code ADV (advD à advJ, ADV2, ADV3, ADV4, ADVex1, ADV-P), et pas une seule ne
+        // correspond à l'ADV Expansion Pack de 2003. Une date n'aide pas à choisir entre
+        // zéro candidat.
+        preuveManquante: 'aucune expansion ADV1 en base — IMPASSE, pas ambiguïté'
     },
     {
         nom: 'Expansion Sheet (Vending Machine, séries 1 à 3)', slug: 'Expansion-Sheet', code: 'EXS', prod: null,
