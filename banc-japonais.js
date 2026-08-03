@@ -98,6 +98,12 @@ const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
 // un scan n'est rangé en VERIFICATION que s'il est POSTÉRIEUR à cette date. Déclarer une
 // carte après l'avoir scannée ne la sortira donc pas du holdout. La règle ne peut que le
 // rendre plus STRICT, jamais plus flatteur — c'est exactement la propriété exigée.
+// Les vérités saisies à la main par saisir-verites.js, indexées par clé. Elles portent leur
+// provenance — 'saisie-a-l-aveugle' ou 'saisie-apres-candidats' — et le rapport la reprend :
+// une vérité obtenue après avoir vu la liste des candidats ne vaut pas la même chose.
+let VERITES_SAISIES = {};
+try { VERITES_SAISIES = require('./banc-verites.json').verites || {}; } catch (_) { }
+
 let VERIFICATION = [];
 try {
     VERIFICATION = (require('./banc-verification.json').cartes || [])
@@ -310,9 +316,23 @@ const VERITE_PAR_NOM = {
     //   'SANS-VERITE'  la production avait ÉCHOUÉ et aucune vérité n'a été fournie. Il n'y
     //                  a RIEN à comparer -> exclue, et comptée à part. C'est le cas qui
     //                  produisait le mensonge.
+    // ⚠️ UN INCIDENT TECHNIQUE N'EST PAS UN ÉCHEC D'IDENTIFICATION. Un appel IA qui n'a rien
+    // rendu, une exception serveur, un réveil de Render trop lent : la chaîne n'a jamais eu
+    // l'occasion de se tromper. Les compter parmi les refus — ou pire, leur donner une
+    // vérité et les compter faux — ferait porter au tableau la qualité du réseau.
+    // Ils sortent donc dans une catégorie à eux, comptée et nommée.
+    // (Un quota épuisé ou un serveur endormi, eux, ne laissent AUCUNE ligne : `verifierAcces`
+    //  et le timeout agissent avant toute écriture au journal. Rien à exclure dans ce cas.)
+    const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
+
     function verite(cle, d) {
+        if (MOTIFS_TECHNIQUES.has(d.motifEchec)) return { valeur: null, source: 'TECHNIQUE' };
         if (VERITE[cle] !== undefined) return { valeur: VERITE[cle], source: VERITE[cle] === 'inconnu' ? 'inconnu' : 'cle' };
         if (VERITE_PAR_NOM[d.nom] !== undefined) return { valeur: VERITE_PAR_NOM[d.nom], source: 'nom' };
+        if (VERITES_SAISIES[cle] !== undefined) {
+            const v = VERITES_SAISIES[cle];
+            return { valeur: v.idProduct, source: v.idProduct === 'inconnu' ? 'inconnu' : `saisie:${v.source}` };
+        }
         if (d.idProduct == null) return { valeur: null, source: 'SANS-VERITE' };
         return { valeur: d.idProduct, source: 'bloc' };
     }
@@ -322,7 +342,7 @@ const VERITE_PAR_NOM = {
         avant: { juste: 0, faux: 0, refus: 0, signale: 0 },
         apres: { juste: 0, faux: 0, refus: 0, signale: 0 },
         lec: { juste: 0, contredite: 0, 'invérifiable': 0 },
-        provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0 },
+        provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0, TECHNIQUE: 0 },
         cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
     });
     const LOTS = { entrainement: vide(), holdout: vide(), verification: vide() };
@@ -331,7 +351,8 @@ const VERITE_PAR_NOM = {
         const R = L, lec = L.lec, provenance = L.provenance, detail = L.detail, sansVerite = L.sansVerite;
         L.cellules.set(celluleDe(d), (L.cellules.get(celluleDe(d)) || 0) + 1);
         const v = verite(cle, d);
-        provenance[v.source]++;
+        provenance[v.source] = (provenance[v.source] || 0) + 1;
+        if (v.source === 'TECHNIQUE') { L.exclus++; continue; }
         if (v.source === 'inconnu') { L.exclus++; continue; }
         if (v.source === 'SANS-VERITE') { L.exclus++; sansVerite.push({ cle, d }); continue; }
         const attendu = v.valeur;
@@ -369,6 +390,10 @@ const VERITE_PAR_NOM = {
         console.log(`   validé EN BLOC (« toutes les autres : attendu = retenu ») ${L.provenance.bloc}`);
         console.log(`   « inconnu » — carte non retrouvée, EXCLUE ......... ${L.provenance.inconnu}`);
         console.log(`   SANS VÉRITÉ (production en échec), EXCLUE ......... ${L.provenance['SANS-VERITE']}`);
+        console.log(`   INCIDENT TECHNIQUE (IA muette, erreur serveur), EXCLUE ${L.provenance.TECHNIQUE}`);
+        for (const [k, n] of Object.entries(L.provenance)) {
+            if (k.startsWith('saisie:')) console.log(`   saisie à la main — ${k.slice(7).padEnd(24)} ${n}`);
+        }
         for (const x of L.sansVerite) console.log(`      ${x.cle} "${x.d.nom}" n°${x.d.numero ?? '—'} — aucune référence, rien à comparer`);
 
         console.log('\n── RÉPARTITION RÉELLE DANS LES CELLULES ──');

@@ -120,18 +120,10 @@ const LONGUEUR_MIN_PARENTE = 3;
 // correspondance. La parenté sert donc peu — mais les 4 cas incluent le Charmander
 // McDonald's à 1033 € (MCD ~ MCDP) et le Dracolosse (DP5 ~ DP5c).
 //
-// LA CLAUSE DU « X » INITIAL, MESURÉE. Elle ne relève pas du même registre que le reste :
-// ce n'est pas une heuristique de ressemblance, c'est le DÉCODAGE D'UNE CONVENTION de
-// Cardmarket, qui préfixe d'un X les « Additionals » d'un set. Mesuré : 102 paires avec la
-// clause, 85 sans — les 17 paires qu'elle seule produit sont TOUTES de la forme
-// `X<code>` ~ `<code>` et TOUTES de même région : xPRE~PRE, xsv2a~sv2a, xBLK~BLK…
-// Aucun rapprochement fortuit, parce que le X n'est pas un préfixe alphabétique parmi
-// d'autres : c'est un marqueur.
-// ⚠️ ET ELLE N'A JAMAIS SERVI : les quatre parentés réellement utilisées par la chaîne
-// (MCD~MCDP, DP5~DP5c, ADVE~ADVex1 ; E1~EC1 passe par l'alias, pas par la parenté)
-// fonctionnent toutes SANS elle. Elle est donc justifiée mais inexercée — ce qui n'est pas
-// la même chose qu'injustifiée, et c'est pourquoi elle est documentée ici plutôt que
-// retirée en silence.
+// ⚠️ LA CONVENTION DU « X » A ÉTÉ SORTIE D'ICI — voir memeCodeParConventionX plus bas.
+// Elle vivait à l'intérieur de cette règle de préfixe et en héritait le risque, alors
+// qu'elle n'est pas de la même nature : un décodage exact n'est pas une ressemblance
+// approchée. Les mélanger faisait lire la première comme une heuristique.
 //
 // ⚠️ ELLE EST APPROXIMATIVE PAR CONSTRUCTION, ET ELLE EST AU CŒUR DE LA CHAÎNE. C'est
 // pourquoi elle est BORNÉE PAR LA RÉGION chez ses appelants : un cousin dont la région est
@@ -143,16 +135,40 @@ const LONGUEUR_MIN_PARENTE = 3;
 // attendue, et c'est à lui de borner.
 function codesApparentes(a, b) {
     if (!a || !b || a === b) return false;
-    const sansX = s => (s.startsWith('X') && s.length >= 3) ? s.slice(1) : s;
     // Le plus COURT des deux doit être un préfixe du plus long, ET faire au moins
     // LONGUEUR_MIN_PARENTE caractères : sans ce plancher, n'importe quel code de deux
     // lettres est préfixe d'une multitude de codes plus longs, au hasard de l'alphabet.
-    const prefixe = (x, y) => {
-        if (!x || !y) return false;
-        const [court, long] = x.length <= y.length ? [x, y] : [y, x];
-        return court.length >= LONGUEUR_MIN_PARENTE && long.startsWith(court);
-    };
-    return prefixe(a, b) || prefixe(sansX(a), b) || prefixe(a, sansX(b));
+    const [court, long] = a.length <= b.length ? [a, b] : [b, a];
+    return court.length >= LONGUEUR_MIN_PARENTE && long.startsWith(court);
+}
+
+/**
+ * LA CONVENTION DU « X » — un décodage, pas une ressemblance.
+ *
+ * Cardmarket préfixe d'un X le code des « Additionals » d'un set : xPRE pour PRE, xsv2a
+ * pour sv2a, xBLK pour BLK. La carte, elle, imprime le code de base. Reconnaître ce
+ * préfixe n'est donc pas une heuristique : c'est lire une convention documentée.
+ *
+ * ⚠️ POURQUOI ELLE EST SÉPARÉE DE codesApparentes, ET POURQUOI ELLE EXIGE L'ÉGALITÉ EXACTE.
+ * Elle y vivait comme une clause, et en héritait le risque : un lecteur futur l'aurait lue
+ * comme une ressemblance de plus, et la règle de préfixe à trois caractères reste capable
+ * de rapprochements fortuits PAR CONSTRUCTION. Ici, après retrait du X de chaque côté, on
+ * exige une ÉGALITÉ STRICTE — donc aucun rapprochement fortuit n'est possible. Deux règles
+ * de natures différentes ne doivent pas partager une implémentation.
+ *
+ * MESURÉ : elle produit 17 paires, toutes de la forme `X<code>` ~ `<code>`, toutes de même
+ * région. Et elle n'a jamais servi : les quatre parentés réellement utilisées par la chaîne
+ * (MCD~MCDP, DP5~DP5c, ADVE~ADVex1 ; E1~EC1 passe par l'alias) fonctionnent toutes sans
+ * elle. Justifiée mais inexercée — ce qui n'est pas la même chose qu'injustifiée.
+ */
+function memeCodeParConventionX(a, b) {
+    if (!a || !b || a === b) return false;
+    const sansX = s => (s.startsWith('X') && s.length >= 3) ? s.slice(1) : s;
+    const na = sansX(a), nb = sansX(b);
+    // Au moins un des deux devait porter le X : sinon on ne décode rien, on compare deux
+    // codes bruts, et l'égalité stricte a déjà été écartée plus haut.
+    if (na === a && nb === b) return false;
+    return na === nb;
 }
 
 // ============================================================
@@ -1022,6 +1038,15 @@ function scorerCandidat(candidat, lu) {
     const codeCand = normaliserCodeSet(candidat.codeSet);
     if (codeIA && codeCand && codeIA === codeCand) {
         score += POIDS.set; detail.set = `+${POIDS.set} (code ${candidat.codeSet} = stamp lu)`;
+    } else if (codeIA && codeCand && memeCodeParConventionX(codeIA, codeCand)) {
+        // ⚠️ MÊME POIDS QU'AVANT, DÉLIBÉRÉMENT. On pourrait défendre les points PLEINS —
+        // après retrait du X les codes sont ÉGAUX, donc le candidat est bien les
+        // « Additionals » du set imprimé. Mais ce serait un changement de SCORING, et il
+        // n'a pas été mesuré. La séparation d'avec `codesApparentes` porte sur la
+        // TRAÇABILITÉ et sur la nature de la règle, pas sur ce qu'elle vaut. Le jour où on
+        // voudra lui donner 40 points, ce sera avec un banc à l'appui.
+        score += POIDS.setPartiel;
+        detail.set = `+${POIDS.setPartiel} (code ${candidat.codeSet} = ${lu.setCode} par la convention X des Additionals)`;
     } else if (codeIA && codeCand && codesApparentes(codeIA, codeCand)) {
         score += POIDS.setPartiel;
         detail.set = `+${POIDS.setPartiel} (code ${candidat.codeSet} apparenté au stamp lu ${lu.setCode}, mais pas identique)`;
@@ -1187,7 +1212,7 @@ module.exports = {
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
-    numeroComplet, numeroAmbiguDansPerimetre,
+    numeroComplet, numeroAmbiguDansPerimetre, memeCodeParConventionX,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
     ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison, LANGUES_ASIATIQUES,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE
@@ -1991,6 +2016,33 @@ if (require.main === module) {
         // Entrées vides : aucune concordance, et surtout aucune exception.
         verifier('aucun nom lu', nomConcorde([], ['Pikachu']), false);
         verifier('candidat sans nom', nomConcorde(['Pikachu'], [null, '']), false);
+    }
+
+    // ---- 27. La convention du X, séparée de la parenté ----------------------
+    // Toutes les valeurs viennent de codes_set. Aucune n'est inventée.
+    {
+        console.log('\n--- 27. memeCodeParConventionX ---');
+        verifier('xPRE = PRE (Additionals)', memeCodeParConventionX('XPRE', 'PRE'), true);
+        verifier('symétrique : PRE = xPRE', memeCodeParConventionX('PRE', 'XPRE'), true);
+        verifier('xsv2a = sv2a', memeCodeParConventionX('XSV2A', 'SV2A'), true);
+
+        // ⚠️ LE CAS QUI JUSTIFIE LA SÉPARATION. L'ancienne clause, noyée dans la règle de
+        // préfixe, appariait « xsv8a » et « sv8 » — deux sets DIFFÉRENTS. L'égalité stricte
+        // après retrait du X le refuse. La séparation n'a pas seulement clarifié : elle a
+        // retiré une approximation réelle (16 paires au lieu de 17).
+        verifier('xsv8a ≠ sv8 — deux sets différents', memeCodeParConventionX('XSV8A', 'SV8'), false);
+        verifier('... et la parenté par préfixe, elle, les rapprochait', codesApparentes('XSV8A', 'SV8'), false);
+
+        verifier('aucun X des deux côtés -> pas un décodage', memeCodeParConventionX('PRE', 'PREM'), false);
+        verifier('codes identiques -> rien à décoder', memeCodeParConventionX('PRE', 'PRE'), false);
+        verifier('X seul, trop court pour être un préfixe', memeCodeParConventionX('XA', 'A'), false);
+
+        // Les quatre parentés réellement utilisées passent TOUTES par le préfixe, jamais
+        // par la convention : la séparation ne leur retire rien.
+        verifier('MCD ~ MCDP reste une parenté de préfixe', codesApparentes('MCD', 'MCDP'), true);
+        verifier('MCD ~ MCDP n\'est PAS une convention X', memeCodeParConventionX('MCD', 'MCDP'), false);
+        verifier('DP5 ~ DP5C reste une parenté', codesApparentes('DP5', 'DP5C'), true);
+        verifier('ADVE ~ ADVEX1 reste une parenté', codesApparentes('ADVE', 'ADVEX1'), true);
     }
 
     console.log(`\n${echecs === 0 ? '🎉 Tous les tests passent.' : `⚠️ ${echecs} test(s) en échec.`}`);

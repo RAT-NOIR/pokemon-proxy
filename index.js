@@ -32,7 +32,7 @@ const {
     // ALIAS_CODES_LUS : le marquage physique e-Reader (E1..E5) n'est pas le code
     // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
     // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
-    ALIAS_CODES_LUS, nomConcorde, LANGUES_ASIATIQUES,
+    ALIAS_CODES_LUS, nomConcorde, LANGUES_ASIATIQUES, memeCodeParConventionX,
     // numeroAmbiguDansPerimetre : règle GÉNÉRALE des préfixes alphabétiques. Une clé
     // (code + numéro) ne doit pas se déclencher quand « 019 » et « S19 » coexistent.
     numeroAmbiguDansPerimetre,
@@ -1588,7 +1588,7 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // raffinement, c'est ce qui rend le repli utilisable.
         let parParente = false, parenteRetenue = null;
         if (!exps.length) {
-            const cousins = lignes.filter(l => codesApparentes(code, normaliserCodeSet(l.codeSet)));
+            const cousins = lignes.filter(l => { const c = normaliserCodeSet(l.codeSet); return memeCodeParConventionX(code, c) || codesApparentes(code, c); });
             if (cousins.length) {
                 // ── LA BORNE DE RÉGION, ET SES DEUX ÉTATS ────────────────────────────
                 // Un cousin dont la région est CONNUE et DIFFÉRENTE de celle attendue est
@@ -2947,11 +2947,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             } else if (codesReels.includes(codeLu)) {
                 setCodeResolution = 'exact';
             } else {
+                // DEUX MÉCANISMES DISTINCTS, DEUX VALEURS DISTINCTES. La convention du X est
+                // un décodage exact ; la parenté est une ressemblance de préfixe. Les
+                // confondre dans le journal reviendrait à ne pas pouvoir dire, dans six
+                // mois, lequel des deux a produit un rapprochement douteux.
+                const parConvention = codesReels.filter(c => memeCodeParConventionX(codeLu, c));
                 const cousins = codesReels.filter(c => codesApparentes(codeLu, c));
-                if (cousins.length) {
+                if (parConvention.length) {
+                    setCodeResolution = 'convention-x';
+                    parenteJournal = `${codeLu}=${parConvention.slice(0, 5).join('/')}`;
+                    console.log(`📊 [setcode-diagnostic] convention X (décodage exact) : ${parenteJournal}`);
+                } else if (cousins.length) {
                     setCodeResolution = 'parente';
                     parenteJournal = `${codeLu}~${cousins.slice(0, 5).join('/')}`;
-                    console.log(`📊 [setcode-diagnostic] parenté retenue : ${parenteJournal}`);
+                    console.log(`📊 [setcode-diagnostic] parenté retenue (préfixe, approximatif) : ${parenteJournal}`);
                 } else {
                     setCodeResolution = 'inconnu';
                 }

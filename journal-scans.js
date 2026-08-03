@@ -227,7 +227,12 @@ const journalScanSchema = new mongoose.Schema({
 
     // COMMENT LE setCode LU S'EST RÉSOLU — compté, sans aucun effet sur le scoring.
     //   'exact'        -> il désigne un code de set du catalogue
-    //   'parente'      -> il ne désigne rien exactement, mais il est apparenté à un code réel
+    //   'convention-x' -> décodage EXACT de la convention Cardmarket : les « Additionals »
+    //                     d'un set portent son code préfixé d'un X (xPRE pour PRE). Après
+    //                     retrait du préfixe, égalité stricte — aucun rapprochement fortuit.
+    //   'parente'      -> ressemblance de PRÉFIXE, approximative par construction. Séparée
+    //                     de la précédente exprès : dans six mois, il faudra pouvoir dire
+    //                     lequel des deux mécanismes a produit un rapprochement douteux.
     //   'mot-non-code' -> l'IA a mis une CATÉGORIE dans ce champ (« PROMO », « HOLO », une
     //                     rareté). Ça ne discrimine rien : il existe des promos vintage
     //                     comme modernes. On le compte pour décider un jour sur des

@@ -163,13 +163,13 @@ const CODES_VINTAGE = new Set(SETS_VINTAGE_JAPONAIS.map(s => s.code));
  * @returns {{compatible: boolean, raison: string}}
  */
 function setCodeCompatibleVintage(setCodeLu, scoring, codesReelsDuCatalogue = null) {
-    const { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes } = scoring;
+    const { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes, memeCodeParConventionX } = scoring;
     const brut = normaliserCodeSet(setCodeLu);
     if (!brut) return { compatible: true, raison: 'aucun setCode lu — rien ne contredit l\'hypothèse vintage' };
     const code = ALIAS_CODES_LUS.get(brut) || brut;
     const codes = SETS_VINTAGE_JAPONAIS.map(s => normaliserCodeSet(s.code));
     if (codes.includes(code)) return { compatible: true, raison: `« ${code} » est dans la table close` };
-    const cousin = codes.find(c => codesApparentes(code, c));
+    const cousin = codes.find(c => memeCodeParConventionX(code, c) || codesApparentes(code, c));
     if (cousin) return { compatible: true, raison: `« ${code} » apparenté à « ${cousin} »` };
 
     // ── LE BRUIT N'EST PAS UNE CONTRADICTION ──────────────────────────────────
@@ -181,7 +181,7 @@ function setCodeCompatibleVintage(setCodeLu, scoring, codesReelsDuCatalogue = nu
     // le gagnant est pourtant EC3, dans la table close, à cause d'un setCode lu « null ».
     if (Array.isArray(codesReelsDuCatalogue) && codesReelsDuCatalogue.length) {
         const reel = codesReelsDuCatalogue.includes(code)
-            || codesReelsDuCatalogue.some(c => codesApparentes(code, c));
+            || codesReelsDuCatalogue.some(c => memeCodeParConventionX(code, c) || codesApparentes(code, c));
         if (!reel) {
             return { compatible: true, raison: `« ${code} » ne résout vers aucun set du catalogue — BRUIT, pas une contradiction` };
         }
