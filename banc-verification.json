@@ -1,0 +1,36 @@
+{
+  "_lisezMoi": [
+    "LE TROISIÈME SEAU — les cartes RESCANNÉES pour vérification.",
+    "",
+    "POURQUOI IL EXISTE. La frontière par date envoie tout nouveau scan dans le holdout.",
+    "Or rescanner le Rhydon ou le Dracolosse — deux cartes sur lesquelles la moitié des",
+    "correctifs ont été dérivés — les ferait entrer dans le seul lot censé être propre, et",
+    "gonflerait son score avec des cartes d'entraînement. Elles vont donc dans VERIFICATION,",
+    "rapporté à part, et qui ne décide de rien.",
+    "",
+    "LA FRONTIÈRE NE PEUT PAS ÊTRE RÉÉCRITE APRÈS COUP. Chaque entrée porte `declareLe`, et",
+    "un scan n'est rangé en VERIFICATION que s'il est POSTÉRIEUR à cette date. Déclarer une",
+    "carte après l'avoir scannée ne la sortira donc pas du holdout : la règle ne peut que le",
+    "rendre plus strict, jamais plus flatteur. C'est la propriété que le testeur a exigée.",
+    "",
+    "L'APPARIEMENT se fait sur le nom ET le numéro lus — les deux seules choses connues",
+    "avant de scanner. Un rescan qui lit un nom différent ne sera pas apparié, et restera",
+    "donc dans le holdout : là encore, l'erreur va dans le sens strict."
+  ],
+  "cartes": [
+    {
+      "nom": "Rhydon",
+      "numero": "055",
+      "declareLe": "2026-08-03T00:00:00Z",
+      "motif": "le banc ne peut pas rejouer la route complète ; identifierEnLocal rend déjà 653962 en rejeu manuel, mais seul un vrai scan le prouve",
+      "attendu": 653962
+    },
+    {
+      "nom": "Dragonite",
+      "numero": "180",
+      "declareLe": "2026-08-03T00:00:00Z",
+      "motif": "l'asymétrie Lv.N est corrigée mais le banc rejoue depuis un idProduct enregistré par un build antérieur",
+      "attendu": 698502
+    }
+  ]
+}

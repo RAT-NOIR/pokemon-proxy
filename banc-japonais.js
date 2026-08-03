@@ -89,6 +89,34 @@ const VERITE = {
 // cartes qui ont décidé, ou l'inverse.
 const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
 
+// ── LE TROISIÈME SEAU : VERIFICATION ────────────────────────────────────────
+// La date seule ne suffit pas. Rescanner le Rhydon ou le Dracolosse — deux cartes
+// d'ENTRAÎNEMENT — les enverrait dans le holdout et gonflerait le seul lot censé être
+// propre. Elles vont donc dans un troisième seau, rapporté à part, qui ne décide de rien.
+//
+// LA DÉCLARATION NE PEUT PAS ÊTRE RÉÉCRITE APRÈS COUP : chaque entrée porte `declareLe`, et
+// un scan n'est rangé en VERIFICATION que s'il est POSTÉRIEUR à cette date. Déclarer une
+// carte après l'avoir scannée ne la sortira donc pas du holdout. La règle ne peut que le
+// rendre plus STRICT, jamais plus flatteur — c'est exactement la propriété exigée.
+let VERIFICATION = [];
+try {
+    VERIFICATION = (require('./banc-verification.json').cartes || [])
+        .map(c => ({ ...c, declareLe: new Date(c.declareLe) }));
+} catch (_) { /* fichier absent : aucun scan de vérification, le holdout prend tout */ }
+
+function estVerification(d) {
+    if (!(d.le instanceof Date)) return null;
+    for (const c of VERIFICATION) {
+        if (String(d.nom || '').trim() !== String(c.nom).trim()) continue;
+        if (String(d.numero ?? '').trim() !== String(c.numero).trim()) continue;
+        // ⚠️ LA CLAUSE QUI REND LA FRONTIÈRE INFALSIFIABLE : déclarée AVANT le scan, sinon
+        // la carte reste dans le holdout.
+        if (!(d.le >= c.declareLe)) continue;
+        return c;
+    }
+    return null;
+}
+
 // Les quatre cellules du lot frais, définies par le CHEMIN DE CODE et non par l'ère : ce
 // sont elles qui décident du parcours, et les échecs venaient tous de la colonne « sans
 // total ». `occidental` est la cinquième, hors grille : toutes les gardes de ce chantier
@@ -130,23 +158,33 @@ const VERITE_PAR_NOM = {
     // ⚠️ LE HOLDOUT N'EST PAS FILTRÉ PAR LANGUE. Le lot frais contient 10 cartes
     // occidentales de contrôle : toutes les gardes de ce chantier sont conditionnées à
     // LANGUES_ASIATIQUES, donc une régression occidentale ne se verrait nulle part.
-    const estHoldout = d => d.le instanceof Date && d.le >= DATE_HOLDOUT;
+    // TROIS SEAUX. L'ordre de test compte : VERIFICATION avant HOLDOUT, sinon un rescan
+    // déclaré partirait quand même dans le lot frais.
+    const seauDe = d => {
+        if (!(d.le instanceof Date) || d.le < DATE_HOLDOUT) return 'entrainement';
+        return estVerification(d) ? 'verification' : 'holdout';
+    };
     const vues = new Map();
     for (const d of docs) {
+        const seau = seauDe(d);
         const asiatique = ['JP', 'ZH', 'KR'].includes(d.langue);
-        if (!asiatique && !estHoldout(d)) continue;   // l'entraînement reste japonais
-        const k = `${estHoldout(d) ? 'H' : 'E'}|${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
+        // L'entraînement reste japonais ; le holdout accueille aussi les 10 occidentales
+        // de contrôle, sans quoi une régression occidentale serait invisible.
+        if (seau === 'entrainement' && !asiatique) continue;
+        const k = `${seau}|${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
         if (!vues.has(k)) vues.set(k, d);
     }
     const tous = [...vues.values()];
     const seulementHoldout = process.argv.includes('--holdout');
-    let iE = 0, iH = 0;
+    const prefixe = { entrainement: 'JP', holdout: 'H', verification: 'V' };
+    const compteurs = { entrainement: 0, holdout: 0, verification: 0 };
     const bancs = tous
-        .filter(d => !seulementHoldout || estHoldout(d))
-        .map(d => ({ cle: estHoldout(d) ? `H${String(++iH).padStart(3, '0')}` : `JP${String(++iE).padStart(3, '0')}`, d, holdout: estHoldout(d) }));
-    const nbHoldout = tous.filter(estHoldout).length;
-    console.log(`ENTRAÎNEMENT ${tous.length - nbHoldout} cartes  ·  HOLDOUT ${nbHoldout} cartes (scans du ${DATE_HOLDOUT.toISOString().slice(0, 10)} ou après)`);
-    if (nbHoldout === 0) console.log('   (aucun scan dans le lot frais pour l\'instant — le tableau ci-dessous ne porte que sur l\'entraînement)\n');
+        .filter(d => !seulementHoldout || seauDe(d) === 'holdout')
+        .map(d => { const s = seauDe(d); return { cle: `${prefixe[s]}${String(++compteurs[s]).padStart(3, '0')}`, d, seau: s }; });
+    const n = s => tous.filter(d => seauDe(d) === s).length;
+    console.log(`ENTRAÎNEMENT ${n('entrainement')}  ·  HOLDOUT ${n('holdout')}  ·  VÉRIFICATION ${n('verification')}   (frontière : ${DATE_HOLDOUT.toISOString().slice(0, 10)})`);
+    if (VERIFICATION.length) console.log(`   ${VERIFICATION.length} carte(s) déclarée(s) en vérification : ${VERIFICATION.map(c => `${c.nom} n°${c.numero}`).join(', ')}`);
+    if (n('holdout') === 0) console.log('   (aucun scan dans le lot frais — le tableau ci-dessous ne porte que sur l\'entraînement)\n');
     else console.log('');
 
     const cardInfoDe = d => ({
@@ -287,9 +325,9 @@ const VERITE_PAR_NOM = {
         provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0 },
         cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
     });
-    const LOTS = { entrainement: vide(), holdout: vide() };
-    for (const { cle, d, holdout } of bancs) {
-        const L = holdout ? LOTS.holdout : LOTS.entrainement;
+    const LOTS = { entrainement: vide(), holdout: vide(), verification: vide() };
+    for (const { cle, d, seau } of bancs) {
+        const L = LOTS[seau];
         const R = L, lec = L.lec, provenance = L.provenance, detail = L.detail, sansVerite = L.sansVerite;
         L.cellules.set(celluleDe(d), (L.cellules.get(celluleDe(d)) || 0) + 1);
         const v = verite(cle, d);
@@ -361,7 +399,10 @@ const VERITE_PAR_NOM = {
             }
         }
     }
-    if (!seulementHoldout) rapporter('ENTRAÎNEMENT — 44 cartes ayant servi à dériver les correctifs. NE DÉCIDE DE RIEN.', LOTS.entrainement);
+    if (!seulementHoldout) {
+        rapporter('ENTRAÎNEMENT — cartes ayant servi à dériver les correctifs. NE DÉCIDE DE RIEN.', LOTS.entrainement);
+        rapporter('VÉRIFICATION — rescans de cartes d\'entraînement, déclarés AVANT le scan. NE DÉCIDE DE RIEN.', LOTS.verification);
+    }
     rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
 
     // ════════════════════════════════════════════════════════════════════════

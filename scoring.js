@@ -120,6 +120,19 @@ const LONGUEUR_MIN_PARENTE = 3;
 // correspondance. La parenté sert donc peu — mais les 4 cas incluent le Charmander
 // McDonald's à 1033 € (MCD ~ MCDP) et le Dracolosse (DP5 ~ DP5c).
 //
+// LA CLAUSE DU « X » INITIAL, MESURÉE. Elle ne relève pas du même registre que le reste :
+// ce n'est pas une heuristique de ressemblance, c'est le DÉCODAGE D'UNE CONVENTION de
+// Cardmarket, qui préfixe d'un X les « Additionals » d'un set. Mesuré : 102 paires avec la
+// clause, 85 sans — les 17 paires qu'elle seule produit sont TOUTES de la forme
+// `X<code>` ~ `<code>` et TOUTES de même région : xPRE~PRE, xsv2a~sv2a, xBLK~BLK…
+// Aucun rapprochement fortuit, parce que le X n'est pas un préfixe alphabétique parmi
+// d'autres : c'est un marqueur.
+// ⚠️ ET ELLE N'A JAMAIS SERVI : les quatre parentés réellement utilisées par la chaîne
+// (MCD~MCDP, DP5~DP5c, ADVE~ADVex1 ; E1~EC1 passe par l'alias, pas par la parenté)
+// fonctionnent toutes SANS elle. Elle est donc justifiée mais inexercée — ce qui n'est pas
+// la même chose qu'injustifiée, et c'est pourquoi elle est documentée ici plutôt que
+// retirée en silence.
+//
 // ⚠️ ELLE EST APPROXIMATIVE PAR CONSTRUCTION, ET ELLE EST AU CŒUR DE LA CHAÎNE. C'est
 // pourquoi elle est BORNÉE PAR LA RÉGION chez ses appelants : un cousin dont la région est
 // CONNUE et DIFFÉRENTE de celle attendue n'est jamais retenu. Un cousin de région inconnue,
