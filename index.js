@@ -1002,6 +1002,40 @@ async function identifierParTotalEtNumero(number, totalImprime, langue = null, n
     };
 }
 
+/**
+ * LE NOM QUI PARTIRA INTERROGER LE CATALOGUE — et il doit être en alphabet LATIN.
+ *
+ * ⚠️ RÉGRESSION DE PRODUCTION, ET ELLE VENAIT DE MOI. Le catalogue Cardmarket est en
+ * ANGLAIS. En câblant `nomBrut` sur la route /v2/ja — pour que « ライドン » trouve enfin
+ * la bonne carte — j'ai rendu la recherche par nom EFFICACE en japonais, et TCGdex a donc
+ * commencé à rendre des `name` japonais. Ce nom partait ensuite dans
+ * `trouverProduitsLocaux`, qui cherchait « ガラガラ » dans un catalogue anglais et ne
+ * trouvait rien. Résultat : « aucun produit Cardmarket pour "ガラガラ" » sur 6 scans sur 8.
+ *
+ * C'EST EXACTEMENT LE DÉFAUT DIAGNOSTIQUÉ SUR L'AQUALI il y a des semaines — « le catalogue
+ * est interrogé avec le nom d'affichage de TCGdex » — recréé par le correctif censé aider,
+ * et cette fois sur TOUTES les cartes japonaises au lieu d'une.
+ *
+ * ET LE SYMPTÔME PARADOXAL QUI L'A RÉVÉLÉ : le Rhydon PASSAIT. Son kana lu (サイドン) ne
+ * correspond pas à celui de TCGdex (ライドン), la route japonaise échouait donc, le repli
+ * anglais prenait la main et tout marchait. Autrement dit : le succès dépendait d'une
+ * lecture FAUSSE. Plus l'IA lisait juste, plus la chaîne cassait.
+ *
+ * LA RÈGLE : on préfère le nom anglais de TCGdex ; à défaut, le nom trouvé S'IL EST LATIN ;
+ * à défaut, le nom translittéré par l'IA. Jamais un nom que le catalogue ne peut pas lire.
+ */
+function nomPourLeCatalogue(nomAnglaisTCGdex, nomTrouve, nomLuParIA) {
+    const estLatin = s => typeof s === 'string' && s.trim() !== '' && !/[^\x00-\x7FÀ-ÿŒœ]/.test(s);
+    if (estLatin(nomAnglaisTCGdex)) return nomAnglaisTCGdex;
+    if (estLatin(nomTrouve)) return nomTrouve;
+    if (estLatin(nomLuParIA)) {
+        console.log(`🔤 [nom-catalogue] TCGdex ne rend qu'un nom non latin ("${nomTrouve}") -> on garde le nom lu par l'IA : "${nomLuParIA}".`);
+        return nomLuParIA;
+    }
+    // Aucun nom latin nulle part : on rend ce qu'on a, et l'aval le signalera.
+    return nomAnglaisTCGdex || nomTrouve || nomLuParIA || null;
+}
+
 async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue = 'EN', totalImprime = null, nomBrut = null) {
     try {
         const variantes = genererVariantesNom(name);
@@ -1104,7 +1138,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                 console.log(`🔗 Carte TCGdex retenue SANS le nom : ${parTotal.id} ("${detail.nomExact || parTotal.nom}")`);
                 return {
                     id: parTotal.id, ambigu: parTotal.ambigu,
-                    nomExact: detail.nomExact || parTotal.nom,
+                    nomExact: nomPourLeCatalogue(detail.nomExact, parTotal.nom, name),
                     localId: parTotal.localId || number,
                     variants: detail.variants, variantsDetailed: detail.variantsDetailed,
                     source: 'total+numero'   // le nom lu est écarté, il ne sert plus à rien en aval
@@ -1210,7 +1244,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         }
 
         const detail = await detailCarteTCGdex(choisi.id, choisi.name);
-        const nomExact = detail.nomExact || choisi.name;
+        const nomExact = nomPourLeCatalogue(detail.nomExact, choisi.name, name);
 
         console.log(`🔗 Carte TCGdex retenue : ${choisi.id} ("${nomExact}")${ambigu ? ' [INCERTAIN]' : ''}`);
         return {
