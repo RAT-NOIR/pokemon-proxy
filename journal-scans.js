@@ -41,6 +41,10 @@ const { rangDuNumero } = require('./scoring');
 // n'est pas instantanée à la seconde près, ce qui est sans importance ici.
 const RETENTION_JOURS = 90;
 
+// La version qui produit les lignes. Render expose RENDER_GIT_COMMIT ; en local, on le dit.
+// Tronqué à 12 caractères : de quoi identifier un commit, pas de quoi peser.
+const VERSION = String(process.env.RENDER_GIT_COMMIT || process.env.VERSION || 'local').slice(0, 12);
+
 // Modèles guardés : ce module est requis par index.js, qui déclare déjà ses propres
 // modèles sur les mêmes collections. Sans le garde, un second require lèverait
 // OverwriteModelError.
@@ -62,6 +66,17 @@ const journalScanSchema = new mongoose.Schema({
     //             remplira tout seul le jour où elle le fera, sans redéploiement du serveur.
     imageUrl: String,
     vintedUrl: String,
+
+    // QUELLE VERSION DU CODE A PRODUIT CETTE LIGNE.
+    // ⚠️ SON ABSENCE A DÉJÀ COÛTÉ. Le banc rejoue depuis l'`idProduct` enregistré : quand
+    // une ligne échoue, impossible de savoir si c'est le code ACTUEL qui échoue ou un build
+    // d'il y a trois jours. Deux fois de suite — le Rhydon et le Dragonite — il a fallu
+    // rejouer les fonctions à la main pour découvrir qu'elles rendaient déjà la bonne
+    // réponse et que seul le journal était périmé. Sans ce champ, un banc vieillit sans le
+    // dire, et on corrige des défauts déjà corrigés.
+    // Renseigné depuis la variable d'environnement du déploiement (Render expose
+    // RENDER_GIT_COMMIT) ; 'local' à défaut.
+    version: String,
 
     // --- SUCCÈS OU ÉCHEC ------------------------------------------------------
     // Le trou le plus grave du dispositif jusqu'ici : `enregistrerScan` n'était appelée
@@ -280,6 +295,7 @@ function enregistrerScan(d = {}) {
             // plafond protège d'un corps de requête fabriqué qui gonflerait la collection.
             imageUrl: d.imageUrl ? String(d.imageUrl).slice(0, 500) : null,
             vintedUrl: d.vintedUrl ? String(d.vintedUrl).slice(0, 500) : null,
+            version: VERSION,
             nom: d.nom || null,
             numero: d.numero != null ? String(d.numero) : null,
             total: d.total != null ? String(d.total) : null,

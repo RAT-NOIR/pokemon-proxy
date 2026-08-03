@@ -728,6 +728,31 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // regardé et il n'y a rien ».
 
 // ============================================================================
+// LE QUATRIÈME PRINCIPE — contredire prouve, ne pas lire ne prouve rien
+// ============================================================================
+// C'est le MIROIR du premier, et il se trompe dans l'autre sens. Le premier dit qu'une
+// absence d'information ne doit pas valoir information. Celui-ci dit ce qui, à l'inverse,
+// FAIT preuve : une lecture qui CONTREDIT.
+//
+// L'OCCURRENCE. Le périmètre vintage ne devait pas s'armer sur une carte moderne. La garde
+// écrite pour ça — « le setCode lu ne correspond à aucun set de la table close » — a
+// parfaitement bloqué les cinq cartes promo qui la motivaient. Puis la mesure hors banc a
+// montré qu'elle bloquait aussi ce qu'elle n'aurait pas dû :
+//   « M-P », « BW-P », « CLK », « EVO », « CEL »  -> des sets RÉELS, modernes. CONTRADICTION.
+//   « null » (le mot, rendu par l'IA au lieu du JSON null)  -> ne résout vers RIEN. BRUIT.
+// Les deux étaient traités pareil. Or le premier prouve que la carte n'est pas vintage ; le
+// second ne prouve rien du tout. Mesuré : 1 scan sur 55 — un Furret dont le gagnant est
+// pourtant EC3, dans la table close — était bloqué par du bruit d'OCR.
+//
+// LA RÈGLE : une lecture ne fait preuve QUE si elle désigne quelque chose de réel. Un code
+// qui résout vers un set existant contredit ; un code qui ne résout vers rien est du bruit,
+// et le bruit se traite comme l'absence — neutre.
+// ⚠️ ET LE PIÈGE DE MÉTHODE QUI VA AVEC : cette garde avait été conçue en observant les cinq
+// lignes qu'elle devait bloquer, puis validée sur ces mêmes cinq lignes. Un garde-fou
+// mesuré sur les cas qui l'ont inspiré est toujours parfait. C'est en le passant sur les
+// 55 scans du journal, dont il n'avait jamais vu 50, que le défaut est apparu.
+
+// ============================================================================
 // LE PRIX N'EST JAMAIS UNE PREUVE
 // ============================================================================
 // Sur une égalité de score, le départage « le moins cher gagne » a l'apparence d'un

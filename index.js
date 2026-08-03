@@ -562,6 +562,24 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
             console.warn(`⚠️ IA : nom "${parsed.name}" en confiance BASSE (brut : ${parsed.nomBrut ?? 'illisible'}) — le nom ne fera pas foi pour choisir les candidats.`);
         }
 
+        // ── LE MOT « null » N'EST PAS UNE VALEUR ─────────────────────────────────
+        // Le modèle rend parfois la CHAÎNE "null" (ou "none", "aucun", "n/a") au lieu du
+        // null JSON. Vu en production : un scan de Furret portant setCode:"null", que la
+        // chaîne a traité comme un vrai code — il se normalisait en « NULL » et servait de
+        // preuve. Conséquence mesurée : le périmètre vintage refusait de s'armer sur cette
+        // carte, alors que son expansion (EC3) est dans la table close. Une lecture ratée
+        // était devenue une contradiction.
+        // On nettoie donc À L'ENTRÉE, une seule fois, plutôt que de s'en défendre à chaque
+        // usage en aval.
+        const MOTS_VIDES = new Set(['null', 'none', 'undefined', 'aucun', 'n/a', 'na', '-', '?', '']);
+        for (const champ of ['setCode', 'name', 'nomBrut', 'number', 'total', 'rarete', 'symboleSet']) {
+            const v = parsed[champ];
+            if (typeof v === 'string' && MOTS_VIDES.has(v.trim().toLowerCase())) {
+                if (champ === 'setCode') console.warn(`⚠️ IA : setCode rendu comme le MOT "${v}" -> traité comme absent (voir le quatrième principe).`);
+                parsed[champ] = null;
+            }
+        }
+
         // Normalisation des nouveaux champs pour le scoring.
         // `total` attend un NOMBRE (le "Y" de X/Y). L'IA y met parfois autre chose : vu
         // en réel sur une promo chinoise, "total": "SV-P", c'est-à-dire un code de set.
@@ -1742,6 +1760,27 @@ async function nomOpposeUnVeto(cardInfo, produit) {
  *
  * @returns {Promise<{setTcgdex: string|null, partage: boolean, autres: number[], regionSource: string|null}>}
  */
+// Tous les codes de set RÉELS du catalogue, normalisés. Mémorisé pour la durée du process :
+// 747 codes qui bougent quelques fois par mois, relus à chaque scan sinon.
+// Sert à distinguer une CONTRADICTION (un vrai set) d'un BRUIT (un code qui ne résout vers
+// rien) — voir le quatrième principe dans scoring.js.
+let _codesSetReels = null;
+async function lireTousLesCodesSet() {
+    if (_codesSetReels) return _codesSetReels;
+    try {
+        if (mongoose.connection.readyState !== 1) return [];
+        const docs = await CodeSet.find({}, { codeSet: 1 }).lean();
+        _codesSetReels = docs.map(d => normaliserCodeSet(d.codeSet)).filter(Boolean);
+        return _codesSetReels;
+    } catch (e) {
+        // Principe des sources perdues : sans la liste, on ne peut pas prouver qu'un code
+        // est du bruit. On rend une liste vide, et `setCodeCompatibleVintage` retombe alors
+        // sur son comportement d'avant — prudent, jamais inventif.
+        console.error('❌ Erreur lireTousLesCodesSet :', e.message);
+        return [];
+    }
+}
+
 async function diagnosticLienTcgdex(idExpansion) {
     const vide = { setTcgdex: null, partage: false, autres: [], regionSource: null };
     try {
@@ -2867,7 +2906,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //      justes, 5 justes basculaient — d'où la garde ci-dessous, qui ramène les
         //      risques à zéro sans perdre un seul gain.
         let perimetreVintage = false;
-        const compat = setCodeCompatibleVintage(cardInfo.setCode, { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes });
+        // Les codes RÉELS du catalogue : ils permettent de distinguer une contradiction
+        // (« CLK », un vrai set moderne) d'un bruit d'OCR (un code qui ne résout vers rien).
+        // Quatrième principe — sans cette liste, le bruit ferait preuve.
+        const codesReels = [...(await lireTousLesCodesSet())];
+        const compat = setCodeCompatibleVintage(cardInfo.setCode, { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes }, codesReels);
         const sansPerimetreTCGdex = numeroCarte != null && expansionsAttendues.length === 0;
         if ((numeroCarte == null || sansPerimetreTCGdex)
             && compat.compatible

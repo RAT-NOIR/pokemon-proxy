@@ -84,6 +84,11 @@ const VERITE_PAR_NOM = {
     const numDocs = await Num.find({}, { idProduct: 1, numero: 1, numeroUrl: 1, nomFr: 1 }).lean();
     const numParId = new Map(numDocs.map(d => [d.idProduct, d]));
 
+    // Les codes de set RÉELS : sans eux, un bruit d'OCR ferait preuve (4e principe).
+    const codesReels = (await mongoose.connection.collection('codes_set')
+        .find({}, { projection: { codeSet: 1 } }).toArray())
+        .map(l => S.normaliserCodeSet(l.codeSet)).filter(Boolean);
+
     const docs = await J.find({}).sort({ le: 1 }).lean();
     const vues = new Map();
     for (const d of docs.filter(d => ['JP', 'ZH', 'KR'].includes(d.langue))) {
@@ -117,7 +122,7 @@ const VERITE_PAR_NOM = {
         //    SUGGESTION AVERTIE : `incertain` est forcé, jamais un verdict affirmé.
         // Deux portes : aucun numéro exploitable, OU un numéro mais aucune expansion
         // attendue — gardé par la compatibilité du setCode lu avec la table close.
-        const compat = setCodeCompatibleVintage(d.setCode, S);
+        const compat = setCodeCompatibleVintage(d.setCode, S, codesReels);
         let sansExpansion = false;
         if (numeroCarte != null) {
             const sets = await setsPourTotal(d.total, d.langue);

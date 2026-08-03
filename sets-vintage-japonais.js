@@ -162,7 +162,7 @@ const CODES_VINTAGE = new Set(SETS_VINTAGE_JAPONAIS.map(s => s.code));
  * @param {string|null} setCodeLu
  * @returns {{compatible: boolean, raison: string}}
  */
-function setCodeCompatibleVintage(setCodeLu, scoring) {
+function setCodeCompatibleVintage(setCodeLu, scoring, codesReelsDuCatalogue = null) {
     const { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes } = scoring;
     const brut = normaliserCodeSet(setCodeLu);
     if (!brut) return { compatible: true, raison: 'aucun setCode lu — rien ne contredit l\'hypothèse vintage' };
@@ -171,7 +171,22 @@ function setCodeCompatibleVintage(setCodeLu, scoring) {
     if (codes.includes(code)) return { compatible: true, raison: `« ${code} » est dans la table close` };
     const cousin = codes.find(c => codesApparentes(code, c));
     if (cousin) return { compatible: true, raison: `« ${code} » apparenté à « ${cousin} »` };
-    return { compatible: false, raison: `« ${code} » ne correspond à aucun set de la table close — la carte n'est PAS vintage` };
+
+    // ── LE BRUIT N'EST PAS UNE CONTRADICTION ──────────────────────────────────
+    // Quatrième principe (voir scoring.js) : une lecture ne fait preuve que si elle
+    // désigne quelque chose de RÉEL. « M-P » ou « CLK » sont des sets existants et
+    // modernes : ils prouvent que la carte n'est pas vintage. Un code qui ne résout vers
+    // aucun set du catalogue est du bruit d'OCR, et le bruit se traite comme l'absence.
+    // Mesuré : sans cette distinction, 1 scan sur 55 était bloqué à tort — un Furret dont
+    // le gagnant est pourtant EC3, dans la table close, à cause d'un setCode lu « null ».
+    if (Array.isArray(codesReelsDuCatalogue) && codesReelsDuCatalogue.length) {
+        const reel = codesReelsDuCatalogue.includes(code)
+            || codesReelsDuCatalogue.some(c => codesApparentes(code, c));
+        if (!reel) {
+            return { compatible: true, raison: `« ${code} » ne résout vers aucun set du catalogue — BRUIT, pas une contradiction` };
+        }
+    }
+    return { compatible: false, raison: `« ${code} » désigne un set réel hors de la table close — la carte n'est PAS vintage` };
 }
 
 module.exports = {
