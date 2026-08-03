@@ -728,6 +728,30 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // regardé et il n'y a rien ».
 
 // ============================================================================
+// LE PRIX N'EST JAMAIS UNE PREUVE
+// ============================================================================
+// Sur une égalité de score, le départage « le moins cher gagne » a l'apparence d'un
+// arbitrage. Ce n'en est pas un : tous les critères ont parlé et aucun ne sépare les
+// candidats. Choisir par le prix, c'est tirer au sort en donnant au tirage la forme d'une
+// réponse.
+//
+// ET LA MESURE DIT PIRE QUE « AU HASARD » : sur ce corpus, la bonne carte est
+// systématiquement du côté CHER.
+//   Wartortle  : retenu 3,76 € (PCG8), vérité 48,01 € (EC1-S19)      — ×13
+//   Raichu     : neuf ex aequo de 3,02 € à 221,98 €, vérité 221,98 € — LE PLUS CHER des neuf
+//   Charmander : retenu 1,85 €, vérité 1033,83 € (MCDP)              — ×559
+// Ce n'est pas une coïncidence : une carte vintage japonaise rare est chère PARCE QU'ELLE
+// est rare, et ses homonymes modernes sont nombreux et sans valeur. Le départage par le
+// moins cher choisit donc la mauvaise réponse plus souvent que le hasard.
+//
+// LA RÈGLE : le prix ne désigne jamais un candidat. Il ne sert qu'à décider entre AVERTIR
+// et REFUSER — écart faible, le choix n'a pas de conséquence, on affiche avec réserve ;
+// écart fort, le choix décide du verdict, on refuse et on rembourse. Le seuil est dérivé
+// (voir ECART_PRIX_TOLERABLE dans index.js), pas choisi.
+// ⚠️ Ceci vaut sur TOUS les chemins, principal comme local : le même raisonnement, la même
+// mesure, la même conclusion.
+
+// ============================================================================
 // LE SECOND PRINCIPE — deux sources de vérité qui divergent sans signal
 // ============================================================================
 // Le premier principe (« je ne sais pas » n'est pas « je sais que non ») porte sur une
