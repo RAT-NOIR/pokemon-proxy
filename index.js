@@ -51,7 +51,7 @@ const { numeroEstUnDexId } = require('./pokedex');
 // La table close des sets japonais vintage — écrite à la main, vérifiée ligne à ligne.
 // Elle ne pilote PAS encore l'identification : elle sert à lever l'ambiguïté des
 // identifiants TCGdex partagés. Voir sets-vintage-japonais.js.
-const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
+const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage } = require('./sets-vintage-japonais');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -393,7 +393,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "aucun/cercle-chiffre/R/stade/fossile/etoile/VS/web/e/autre/indetermine — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
 Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
@@ -450,18 +450,27 @@ aucun dénominateur.
 Le "setCode" est le petit code alphabétique (2 à 4 lettres) imprimé en bas de la carte à côté du numéro, ou parfois dans le titre de l'annonce (ex: "BLK 129"). Si tu ne le vois pas clairement, réponds null, n'invente rien.
 IMPORTANT — les TAMPONS/STAMPS de réimpression : si la carte porte un tampon anniversaire ou de sous-set (le logo doré "Celebrations 25 ans", le tampon "Pokémon 151", "Trainer Gallery", "Prize Pack"...), ce sont des réimpressions qui GARDENT le numéro d'origine (ex: Florizarre 15/102 en Celebrations). Dans ce cas, indique le set du TAMPON dans "setCode" (ex: "CEL" pour Celebrations, "MEW" pour 151, "TG" pour Trainer Gallery), PAS le set d'origine — c'est ce qui permet de distinguer la réimpression de la carte vintage au même numéro.
 
-Pour "symboleSet" — LE LOGO DU SET, petit pictogramme imprimé à côté du numéro, en bas de la carte. À ne pas confondre avec le symbole de RARETÉ (rond/losange/étoile) ni avec le symbole d'ÉNERGIE du type. Réponds par UNE de ces valeurs, jamais autre chose :
-- "aucun" : la carte ne porte AUCUN logo de set à cet endroit. C'est une VRAIE information, pas une absence de réponse : les plus anciennes cartes japonaises (1996-1997) n'en portent pas.
-- "cercle-chiffre" : un chiffre inscrit dans un cercle (blanc sur noir, ou noir sur blanc).
-- "R" : une lettre R stylisée (Team Rocket).
-- "stade" : une silhouette de bâtiment ou d'arène.
-- "fossile" : un motif d'ammonite, d'os ou de fossile.
-- "etoile" : une étoile, seule ou dans une forme.
-- "VS" : les deux lettres VS.
-- "web" : une toile d'araignée ou un motif de réseau.
-- "e" : un logo contenant la lettre e (ère e-Reader), souvent accompagné d'une bande de points scannables sur le bord de la carte.
-- "autre" : un logo bien visible mais qui ne ressemble à aucun des précédents.
-- "indetermine" : reflets, sleeve, cadrage ou flou t'empêchent de trancher. N'invente pas.
+Pour "symboleSet" — LE LOGO DU SET, petit pictogramme imprimé à côté du numéro, en bas de la carte. À ne pas confondre avec le symbole de RARETÉ (rond/losange/étoile) ni avec le symbole d'ÉNERGIE du type. Il fait quelques millimètres : si tu ne le distingues pas nettement, réponds "illisible". Ne devine JAMAIS le dessin, c'est le champ où une invention coûte le plus cher. Réponds par UNE de ces valeurs, jamais autre chose :
+- "logo-tcg" : le logo « Pokémon Trading Card Game », jaune et rouge.
+- "R" : un grand R noir, penché.
+- "fossile" : une griffe ou patte squelettique, os noirs.
+- "feuilles" : un bouquet de feuilles ovales groupées en rosace.
+- "pokeball" : une Poké Ball pleine, noir et blanc.
+- "gym" : un cercle contenant le mot GYM.
+- "palmier" : un palmier, en aplat d'une seule couleur.
+- "etoile" : une étoile à cinq branches, contour épais, intérieur vide.
+- "ruines" : une pyramide à degrés vue de face, avec un escalier central.
+- "couronne" : un anneau surmonté de pointes, comme une couronne posée.
+- "eclair" : un éclat en étoile bleu et violet, dynamique.
+- "vs" : un grand « VS » bleu et or.
+- "e1", "e2", "e3", "e4", "e5" : un cercle ouvert contenant le chiffre 1, 2, 3, 4 ou 5. LIS LE CHIFFRE : c'est lui qui distingue cinq sets différents. Si le cercle est visible mais le chiffre non, réponds "illisible".
+- "mcdo" : les arches dorées McDonald's sur fond rouge, en COULEUR.
+- "empreintes" : deux empreintes de pattes.
+- "croix" : une croix aux branches épaisses avec un ovale au centre.
+- "cercle-chiffre" : le numéro de la carte imprimé dans un cercle, et AUCUN symbole de set.
+- "promo-etoile" : une étoile portant le mot PROMO.
+- "aucun" : rien à cet emplacement. C'est une VRAIE réponse, pas une absence de réponse — mais ne la donne que si tu vois clairement l'emplacement et qu'il est vide.
+- "illisible" : reflet, sleeve, cadrage ou résolution insuffisante. C'est la bonne réponse dans le doute.
 
 Pour "rarete" : regarde le symbole de rareté et le style de la carte. "IR" = Illustration Rare (illustration pleine, personnage humain souvent), "SIR"/"SR" = Special/Super Rare, "AR" = Art Rare, "promo" = carte promotionnelle, "normale" = carte de jeu standard. Si tu n'es pas sûr, réponds "normale".
 ⚠️ NE CONFONDS PAS "rarete" et "etatEstime" : la rareté est une propriété d'IMPRESSION de la carte (IR, SR, promo, normale...), l'état est son USURE physique (NM, EX, GD...). N'écris JAMAIS un code d'état (EX, GD, NM...) dans le champ "rarete".
@@ -2847,11 +2856,26 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // vivier d'origine : la table couvre 24 expansions et 1 835 produits, pas tout le
         // vintage. Mieux vaut un vivier large et signalé qu'un refus dû à une table
         // incomplète.
+        //
+        // DEUX PORTES D'ENTRÉE, et la seconde a été mesurée avant d'être écrite :
+        //   a) aucun numéro exploitable — la famille d'origine ;
+        //   b) un numéro, mais AUCUNE EXPANSION ATTENDUE. C'est le cas du Rhydon : le pont
+        //      total -> set désigne « E4 », et « E4 » ne correspond à aucune expansion
+        //      Cardmarket (69 identifiants TCGdex sont partagés, le vintage japonais est
+        //      faux par construction). La chaîne se rabat alors sur tout le catalogue et
+        //      rend un set de 2025. Mesuré : 32 scans concernés, 7 lignes deviennent
+        //      justes, 5 justes basculaient — d'où la garde ci-dessous, qui ramène les
+        //      risques à zéro sans perdre un seul gain.
         let perimetreVintage = false;
-        if (numeroCarte == null && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase()) && produits.length > 1) {
+        const compat = setCodeCompatibleVintage(cardInfo.setCode, { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes });
+        const sansPerimetreTCGdex = numeroCarte != null && expansionsAttendues.length === 0;
+        if ((numeroCarte == null || sansPerimetreTCGdex)
+            && compat.compatible
+            && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase())
+            && produits.length > 1) {
             const dedans = produits.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
             if (dedans.length) {
-                console.log(`🗾 [perimetre-vintage] sans numéro exploitable : ${produits.length} candidat(s) -> ${dedans.length} dans les 24 sets japonais vintage.`);
+                console.log(`🗾 [perimetre-vintage] ${numeroCarte == null ? "sans numéro exploitable" : "aucune expansion attendue, " + compat.raison} : ${produits.length} candidat(s) -> ${dedans.length} dans les 24 sets japonais vintage.`);
                 produits = dedans;
                 voieCatalogue = 'perimetre-vintage';
                 perimetreVintage = true;

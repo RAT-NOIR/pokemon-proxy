@@ -30,8 +30,8 @@ const {
     trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets
 } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
-const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
-const { trouverProduitsLocaux } = require('./index');
+const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage } = require('./sets-vintage-japonais');
+const { trouverProduitsLocaux, setsPourTotal } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -115,7 +115,17 @@ const VERITE_PAR_NOM = {
         // 0 bis. LE PÉRIMÈTRE FERMÉ. Sans numéro exploitable et en langue asiatique, le
         //    vivier par le nom est restreint aux 24 sets japonais vintage. Sortie en
         //    SUGGESTION AVERTIE : `incertain` est forcé, jamais un verdict affirmé.
-        if (numeroCarte == null && ['JP', 'ZH', 'KR'].includes(d.langue)) {
+        // Deux portes : aucun numéro exploitable, OU un numéro mais aucune expansion
+        // attendue — gardé par la compatibilité du setCode lu avec la table close.
+        const compat = setCodeCompatibleVintage(d.setCode, S);
+        let sansExpansion = false;
+        if (numeroCarte != null) {
+            const sets = await setsPourTotal(d.total, d.langue);
+            const exps = new Set();
+            for (const s of sets) for (const e of await Num.distinct('idExpansion', { setTcgdex: s.id })) if (e != null) exps.add(Number(e));
+            sansExpansion = exps.size === 0;
+        }
+        if ((numeroCarte == null || sansExpansion) && compat.compatible && ['JP', 'ZH', 'KR'].includes(d.langue)) {
             const parNom = await trouverProduitsLocaux(d.nom);
             const dedans = parNom.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
             if (parNom.length > 1 && dedans.length) {
