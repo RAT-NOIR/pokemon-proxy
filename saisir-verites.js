@@ -62,6 +62,64 @@ function ecrireVerites(v) { fs.writeFileSync(SORTIE, JSON.stringify(v, null, 2),
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const demander = q => new Promise(r => rl.question(q, x => r(x.trim())));
 
+const NumeroCarte = mongoose.model('Nvs', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
+
+/**
+ * RÉSOUT CE QUE LE TESTEUR A SOUS LES YEUX vers un idProduct.
+ *
+ * POURQUOI. L'idProduct est une donnée INTERNE : elle n'apparaît nulle part sur Cardmarket.
+ * Exiger qu'elle soit tapée à la main, c'est garantir des fautes de frappe silencieuses sur
+ * soixante-dix lignes — et une vérité fausse est pire qu'une vérité manquante, parce qu'elle
+ * ne se signale pas. Ce que le testeur a réellement devant lui, c'est l'URL de la fiche ou
+ * son slug : « Rhydon-V2-EC4055 ».
+ *
+ * ⚠️ ELLE REFUSE PLUTÔT QUE D'APPROCHER. Aucun repli sur « le plus proche » : un slug
+ * inconnu est rejeté avec son message. C'est le quatrième principe appliqué à la saisie —
+ * ne rien trouver n'autorise pas à désigner quelque chose.
+ *
+ * ⚠️ ET ELLE NE TRANCHE PAS ENTRE LES VARIANTES. Un même slug peut couvrir V1/V2/V3 : on
+ * les montre toutes et c'est le testeur qui choisit. Choisir à sa place reviendrait à
+ * remettre le jugement de la chaîne dans la vérité censée la juger.
+ *
+ * @returns {Promise<{ok: boolean, idProduct?: number, moyen: string, message?: string, choix?: object[]}>}
+ */
+async function resoudreSaisie(saisie, Cat) {
+    const brut = String(saisie).trim();
+    if (/^\d+$/.test(brut)) return { ok: true, idProduct: Number(brut), moyen: 'idProduct' };
+
+    // Une URL Cardmarket : le dernier segment est le slug du produit, l'avant-dernier le
+    // slug du set. Le second sert à départager si le slug seul est ambigu.
+    let moyen = 'slug', slug = brut, slugSet = null;
+    if (/^https?:\/\//i.test(brut)) {
+        moyen = 'url';
+        const segments = brut.split('?')[0].split('#')[0].replace(/\/+$/, '').split('/');
+        slug = decodeURIComponent(segments[segments.length - 1] || '');
+        slugSet = decodeURIComponent(segments[segments.length - 2] || '') || null;
+        if (!slug) return { ok: false, moyen, message: 'URL sans segment final exploitable' };
+    }
+
+    // Recherche EXACTE d'abord, puis insensible à la casse — jamais approchée.
+    const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let docs = await NumeroCarte.find({ slug }).lean();
+    if (!docs.length) docs = await NumeroCarte.find({ slug: new RegExp(`^${echapper(slug)}$`, 'i') }).lean();
+    if (!docs.length) {
+        return { ok: false, moyen, message: `aucun produit ne porte le slug « ${slug} » — rien n'est enregistré` };
+    }
+    // Le slug du set, quand l'URL le fournit, lève une éventuelle ambiguïté.
+    if (docs.length > 1 && slugSet) {
+        const filtres = docs.filter(d => String(d.slugSet || '').toLowerCase() === slugSet.toLowerCase());
+        if (filtres.length) docs = filtres;
+    }
+    if (docs.length === 1) return { ok: true, idProduct: docs[0].idProduct, moyen };
+
+    const choix = [];
+    for (const d of docs) {
+        const p = await Cat.findOne({ idProduct: d.idProduct }).lean();
+        choix.push({ idProduct: d.idProduct, nom: String(p?.name ?? '').split('[')[0].trim(), numero: d.numero || d.numeroUrl || null, variante: d.variante || null, slugSet: d.slugSet || null });
+    }
+    return { ok: false, moyen, choix, message: `${docs.length} produits portent ce slug` };
+}
+
 (async () => {
     const t0 = Date.now();
     while (mongoose.connection.readyState !== 1 && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 100));
@@ -99,7 +157,7 @@ const demander = q => new Promise(r => rl.question(q, x => r(x.trim())));
         let vuLesCandidats = false;
         let reponse = '';
         while (true) {
-            reponse = await demander(`\n  idProduct de la VRAIE carte ? (« inconnu » · « ? » pour voir les candidats · « q » pour arrêter)\n  > `);
+            reponse = await demander(`\n  La VRAIE carte ? — idProduct, slug (Rhydon-V2-EC4055) ou URL Cardmarket\n  (« inconnu » · « ? » pour voir les candidats · « q » pour arrêter)\n  > `);
             if (reponse === '?') {
                 if (!vuLesCandidats) {
                     vuLesCandidats = true;
@@ -118,31 +176,53 @@ const demander = q => new Promise(r => rl.question(q, x => r(x.trim())));
             V2.verites[cle] = {
                 idProduct: 'inconnu',
                 source: vuLesCandidats ? 'inconnu-apres-candidats' : 'inconnu-a-l-aveugle',
+                moyen: 'inconnu',
                 lu: { nom: d.nom, numero: d.numero, total: d.total, setCode: d.setCode },
                 saisiLe: new Date().toISOString()
             };
             console.log('  -> marqué « inconnu ». Cette ligne sera EXCLUE du calcul, jamais comptée juste.');
-        } else if (/^\d+$/.test(reponse)) {
-            const p = await Cat.findOne({ idProduct: Number(reponse) }).lean();
-            if (!p) { console.log(`  ⚠️ aucun produit ${reponse} au catalogue — rien n'a été enregistré, on repasse dessus au prochain lancement.`); continue; }
+        } else {
+            const r = await resoudreSaisie(reponse, Cat);
+            if (!r.ok) {
+                console.log(`  ⚠️ ${r.message} — RIEN n'a été enregistré, on repassera sur cette carte.`);
+                if (r.choix) {
+                    // On MONTRE les variantes et on ne choisit pas : trancher à la place du
+                    // testeur remettrait le jugement de la chaîne dans la vérité censée la juger.
+                    console.log('     Retape la réponse avec l\'idProduct de la bonne variante :');
+                    for (const c of r.choix) {
+                        console.log(`       ${String(c.idProduct).padEnd(8)} n°${String(c.numero ?? '—').padEnd(6)} variante ${String(c.variante ?? '—').padEnd(4)} [${c.slugSet ?? '?'}]  ${c.nom}`);
+                    }
+                }
+                continue;
+            }
+            const p = await Cat.findOne({ idProduct: r.idProduct }).lean();
+            if (!p) { console.log(`  ⚠️ aucun produit ${r.idProduct} au catalogue — rien n'a été enregistré.`); continue; }
             const cs = parExp.get(Number(p.idExpansion));
-            console.log(`  -> ${p.idProduct} « ${String(p.name).split('[')[0].trim()} » [${cs?.codeSet ?? '?'} / ${cs?.region ?? 'INCONNUE'}]`);
+            console.log(`  -> ${p.idProduct} « ${String(p.name).split('[')[0].trim()} » [${cs?.codeSet ?? '?'} / ${cs?.region ?? 'INCONNUE'}]   (désigné par ${r.moyen})`);
             V2.verites[cle] = {
-                idProduct: Number(reponse),
+                idProduct: r.idProduct,
                 nom: String(p.name).split('[')[0].trim(),
                 codeSet: cs?.codeSet ?? null,
+                // DEUX PROVENANCES DISTINCTES, parce qu'elles répondent à deux questions
+                // différentes le jour où une vérité se révèle fausse : ai-je été influencé
+                // par la liste des candidats, et par quel chemin la vérité est-elle entrée ?
                 source: vuLesCandidats ? 'saisie-apres-candidats' : 'saisie-a-l-aveugle',
+                moyen: r.moyen,          // 'idProduct' | 'slug' | 'url'
+                saisieBrute: reponse,    // ce qui a été tapé, tel quel
                 lu: { nom: d.nom, numero: d.numero, total: d.total, setCode: d.setCode },
                 saisiLe: new Date().toISOString()
             };
-        } else { console.log('  ⚠️ réponse non comprise — rien enregistré, on repassera dessus.'); continue; }
+        }
         ecrireVerites(V2);
     }
 
     const V3 = lireVerites();
     const n = Object.keys(V3.verites).length;
     const aveugle = Object.values(V3.verites).filter(v => String(v.source).includes('aveugle')).length;
+    const parMoyen = new Map();
+    for (const v of Object.values(V3.verites)) parMoyen.set(v.moyen ?? '?', (parMoyen.get(v.moyen ?? '?') || 0) + 1);
     console.log(`\n${SORTIE} : ${n} vérité(s) enregistrée(s), dont ${aveugle} à l'aveugle et ${n - aveugle} après avoir vu les candidats.`);
+    console.log(`   par moyen de désignation : ${[...parMoyen.entries()].map(([k, v]) => `${k}=${v}`).join('  ')}`);
     rl.close();
     await mongoose.disconnect();
 })().catch(async e => { console.error('ERREUR', e.message, e.stack); rl.close(); try { await mongoose.disconnect(); } catch (_) { } process.exit(1); });
