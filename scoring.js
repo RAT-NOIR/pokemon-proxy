@@ -783,6 +783,27 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // regardé et il n'y a rien ».
 
 // ============================================================================
+// LE CINQUIÈME PRINCIPE — le succès dépendait d'une lecture fausse
+// ============================================================================
+// LE SUCCÈS DÉPENDAIT D'UNE LECTURE FAUSSE. Plus l'IA lisait juste, plus la chaîne cassait.
+//
+// C'est le plus retors des cinq, parce qu'il inverse le sens du symptôme : un correctif qui
+// AMÉLIORE une brique peut casser la chaîne, et la panne apparaît quand les choses vont
+// MIEUX. Aucun test unitaire ne peut le voir — chaque brique fait ce qu'on lui demande.
+//
+// L'OCCURRENCE. `nomBrut` a été câblé sur /v2/ja pour que « ライドン » trouve enfin sa
+// carte. La recherche japonaise est donc devenue EFFICACE, TCGdex s'est mis à rendre des
+// noms japonais, et ces noms sont partis interroger un catalogue ANGLAIS : six scans sur
+// huit en « aucun produit Cardmarket pour "ガラガラ" ».
+// Et le seul cas qui PASSAIT — le Rhydon — passait parce que le kana lu (サイドン) ne
+// correspondait PAS à celui de TCGdex (ライドン) : la route japonaise échouait, le repli
+// anglais prenait la main, tout marchait. Une erreur de lecture masquait le défaut.
+//
+// CE QU'IL FAUT EN TIRER : quand une brique s'améliore, il faut mesurer la CHAÎNE, pas la
+// brique. Et se demander ce que l'ancienne version réussissait PAR ACCIDENT — parce que ce
+// sont ces réussites-là qui disparaissent en premier, sans que rien ne les pleure.
+
+// ============================================================================
 // LE QUATRIÈME PRINCIPE — contredire prouve, ne pas lire ne prouve rien
 // ============================================================================
 // C'est le MIROIR du premier, et il se trompe dans l'autre sens. Le premier dit qu'une

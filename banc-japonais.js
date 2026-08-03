@@ -98,6 +98,45 @@ const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
 // un scan n'est rangé en VERIFICATION que s'il est POSTÉRIEUR à cette date. Déclarer une
 // carte après l'avoir scannée ne la sortira donc pas du holdout. La règle ne peut que le
 // rendre plus STRICT, jamais plus flatteur — c'est exactement la propriété exigée.
+// ════════════════════════════════════════════════════════════════════════════
+// LES FENÊTRES HORS SERVICE — et le critère qui empêche d'en abuser
+// ════════════════════════════════════════════════════════════════════════════
+// UNE RÉGRESSION QUI CASSE TOUT N'EST PAS UN ÉCHEC D'IDENTIFICATION, c'est un build hors
+// service. Le compter dans le tableau ferait porter au score la qualité d'un déploiement.
+//
+// ⚠️ MAIS UNE EXCLUSION PAR VERSION EST INFALSIFIABLE, ET C'EST EXACTEMENT CE QUI LA REND
+// DANGEREUSE : elle peut devenir la sortie de secours de tout résultat qui déplaît. D'où le
+// critère, écrit ici pour qu'on bute dessus le jour où on aura envie de sauver un chiffre :
+//
+//   1. L'ÉCHEC DOIT ÊTRE TOTAL OU QUASI TOTAL, et mécaniquement attribuable à un DÉFAUT
+//      IDENTIFIÉ — un défaut qu'on peut nommer, situer dans le code, et dont on peut dire
+//      pourquoi il touche telle famille de cartes. « Ce build fait moins bien » n'est
+//      JAMAIS un motif : c'est précisément ce que le banc est là pour mesurer.
+//   2. LA FENÊTRE EST ÉNUMÉRÉE EN DUR, version par version. Pas d'intervalle ouvert, pas de
+//      « depuis telle date ». L'élargir exige de modifier ce fichier, donc un commit, donc
+//      une trace.
+//   3. LES LIGNES EXCLUES RESTENT VISIBLES ET COMPTÉES dans leur catégorie. Une exclusion
+//      qui efface n'est pas une exclusion, c'est un maquillage.
+//   4. ⚠️ ON EXCLUT LA FENÊTRE ENTIÈRE, SUCCÈS COMPRIS. C'est la garantie la plus solide
+//      contre l'abus, et elle est automatique : exclure n'est jamais gratuit, puisqu'on
+//      perd aussi ce que le build cassé avait réussi. Si la tentation d'exclure vient un
+//      jour d'un chiffre qui déplaît, elle butera sur le prix à payer.
+//
+// LA FENÊTRE ACTUELLE : les trois builds qui ont tourné entre le câblage de `nomBrut` sur
+// /v2/ja et son correctif. Défaut identifié : `nomExact` reprenait le nom rendu par TCGdex
+// DANS LA LANGUE DE LA ROUTE, et ce nom japonais partait interroger un catalogue anglais.
+// Il ne touche que les cartes dont l'identifiant de set n'existe QUE côté japonais — pour
+// les autres, /v2/en/cards rend un nom anglais et rien ne casse.
+const FENETRES_HORS_SERVICE = [
+    {
+        versions: ['fe9f77df0f8f', '746eedf203e5', 'd6c340b39ae7'],
+        defaut: 'nomExact reprenait le nom TCGdex dans la langue de la route ; le catalogue anglais était interrogé en japonais',
+        corrigePar: '83789c2'
+    }
+];
+const VERSIONS_HORS_SERVICE = new Set(FENETRES_HORS_SERVICE.flatMap(f => f.versions));
+const estHorsService = d => d.version != null && VERSIONS_HORS_SERVICE.has(String(d.version));
+
 // Les vérités saisies à la main par saisir-verites.js, indexées par clé. Elles portent leur
 // provenance — 'saisie-a-l-aveugle' ou 'saisie-apres-candidats' — et le rapport la reprend :
 // une vérité obtenue après avoir vu la liste des candidats ne vaut pas la même chose.
@@ -170,8 +209,15 @@ const VERITE_PAR_NOM = {
         if (!(d.le instanceof Date) || d.le < DATE_HOLDOUT) return 'entrainement';
         return estVerification(d) ? 'verification' : 'holdout';
     };
+    // ⚠️ LES LIGNES HORS SERVICE SONT ÉCARTÉES **AVANT** LE DÉDOUBLONNAGE, et c'est le point
+    // qui compte : le dédoublonnage garde la PREMIÈRE ligne vue. Si une ligne cassée restait
+    // dans le lot, elle masquerait sa remplaçante — la carte rescannée après correction
+    // n'apparaîtrait jamais. Une ligne hors service ne doit ni compter, NI MASQUER SA
+    // REMPLAÇANTE.
+    const horsService = docs.filter(estHorsService);
+    const exploitables = docs.filter(d => !estHorsService(d));
     const vues = new Map();
-    for (const d of docs) {
+    for (const d of exploitables) {
         const seau = seauDe(d);
         const asiatique = ['JP', 'ZH', 'KR'].includes(d.langue);
         // L'entraînement reste japonais ; le holdout accueille aussi les 10 occidentales
@@ -190,6 +236,16 @@ const VERITE_PAR_NOM = {
     const n = s => tous.filter(d => seauDe(d) === s).length;
     console.log(`ENTRAÎNEMENT ${n('entrainement')}  ·  HOLDOUT ${n('holdout')}  ·  VÉRIFICATION ${n('verification')}   (frontière : ${DATE_HOLDOUT.toISOString().slice(0, 10)})`);
     if (VERIFICATION.length) console.log(`   ${VERIFICATION.length} carte(s) déclarée(s) en vérification : ${VERIFICATION.map(c => `${c.nom} n°${c.numero}`).join(', ')}`);
+    if (horsService.length) {
+        // VISIBLES ET COMPTÉES, jamais effacées — et on montre ce que l'exclusion COÛTE.
+        const reussies = horsService.filter(d => d.idProduct != null).length;
+        console.log(`\n⛔ ${horsService.length} ligne(s) HORS SERVICE, écartées avant dédoublonnage :`);
+        for (const f of FENETRES_HORS_SERVICE) console.log(`   builds ${f.versions.join(', ')} — ${f.defaut} (corrigé par ${f.corrigePar})`);
+        for (const d of horsService) {
+            console.log(`     ${d.le?.toISOString?.().slice(0, 16)}  ${String(d.nom ?? '—').padEnd(16)} ${String(d.motifEchec ?? d.resultat ?? '?').padEnd(18)} build ${d.version}`);
+        }
+        console.log(`   ⚠️ dont ${reussies} qui avaient ABOUTI : l'exclusion les perd aussi. Elle n'est jamais gratuite.`);
+    }
     if (n('holdout') === 0) console.log('   (aucun scan dans le lot frais — le tableau ci-dessous ne porte que sur l\'entraînement)\n');
     else console.log('');
 
