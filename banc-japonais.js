@@ -30,6 +30,8 @@ const {
     trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets
 } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
+const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
+const { trouverProduitsLocaux } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -55,6 +57,20 @@ const VERITE = {
     JP004: 'inconnu', // Ledian holo : V1 ou V2 indéterminable, annonce disparue
     JP030: 'inconnu', // Meowth : ROG ou EC4-062 ?
     JP034: 'inconnu'  // Misty's Staryu : carte non retrouvée
+};
+
+// ⚠️ VÉRITÉS DONNÉES PAR NOM, PAS PAR CLÉ. Le testeur a fourni cinq cartes sous forme
+// d'URL Cardmarket sans les rattacher à un numéro de ligne. Sans cette table, elles
+// tombaient dans le cas « absente de VERITE -> attendu = ce que la production avait
+// retenu » — c'est-à-dire `null`, puisque ces cinq scans avaient ÉCHOUÉ. Le banc comptait
+// donc l'échec comme la bonne réponse, et affichait une identification correcte comme une
+// régression. Un banc qui prend l'échec pour la vérité est pire qu'un banc absent.
+const VERITE_PAR_NOM = {
+    'Raichu': 654243,          // Intro-Pack-Bulbasaur/Raichu-IPB3
+    "Koga's Ditto": 605387,    // Challenge-from-the-Darkness/Kogas-Ditto-CFTD
+    'Tangela': 557645,         // Expansion-Pack/Tangela
+    'Dragonite': 698502,       // Cry-from-the-Mysterious/Dragonite-Lv61-DP5c
+    'Jigglypuff': 584684       // Pokemon-Jungle (PJU), « Jungle, No.039 »
 };
 
 (async () => {
@@ -95,6 +111,32 @@ const VERITE = {
         // Perdre une source propage l'incertitude : sans le numéro, l'identification ne
         // tient plus qu'au nom, et sur ces cartes vintage le nom ne suffit pas.
         if (avisDex.estDex) { voie = 'numero-pokedex-neutralise'; incertain = true; }
+
+        // 0 bis. LE PÉRIMÈTRE FERMÉ. Sans numéro exploitable et en langue asiatique, le
+        //    vivier par le nom est restreint aux 24 sets japonais vintage. Sortie en
+        //    SUGGESTION AVERTIE : `incertain` est forcé, jamais un verdict affirmé.
+        if (numeroCarte == null && ['JP', 'ZH', 'KR'].includes(d.langue)) {
+            const parNom = await trouverProduitsLocaux(d.nom);
+            const dedans = parNom.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
+            if (parNom.length > 1 && dedans.length) {
+                const cs = await lireCodeSets(dedans.map(p => p.idExpansion));
+                const r = await scorerCandidatsLocal(dedans, cardInfoNeutre, null, [], cs, {});
+                const eg = r.scores.length > 1 && r.scores[0].score === r.scores[1].score;
+                if (r.scores.length && !eg) {
+                    retenu = r.scores[0].candidat.idProduct;
+                    voie = 'perimetre-vintage';
+                    incertain = true;   // suggestion avertie, arbitrage F
+                    return { retenu, incertain, voie };
+                }
+                // Égalité dans le périmètre : on retombe sur la règle de l'égalité.
+                if (eg) {
+                    const prix = r.scores.filter(s => s.score === r.scores[0].score).map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
+                    const ecart = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
+                    if (ecart == null || ecart >= 1.00) return { retenu: null, incertain: true, voie: 'REFUS-egalite-perimetre' };
+                    return { retenu: r.scores[0].candidat.idProduct, incertain: true, voie: 'perimetre-egalite-sans-enjeu' };
+                }
+            }
+        }
 
         // 1. Le chemin par le code, en tête.
         const piste = await trouverParSetCodeEtNumero(d.setCode, numeroCarte, d.langue);
@@ -148,7 +190,11 @@ const VERITE = {
     let exclus = 0, retenus = 0;
     const detail = [];
     for (const { cle, d } of bancs) {
-        const v = VERITE[cle];
+        // Priorité : la clé, puis le nom, puis — à défaut de vérité fournie — ce que la
+        // production avait retenu. Cet ordre compte : sans la table par NOM, les cinq
+        // cartes fournies sous forme d'URL retombaient sur le dernier cas et le banc
+        // prenait leur ÉCHEC pour la bonne réponse.
+        const v = VERITE[cle] !== undefined ? VERITE[cle] : VERITE_PAR_NOM[d.nom];
         const attendu = v === undefined ? d.idProduct : v;
         if (attendu === 'inconnu') { exclus++; continue; }
         retenus++;
@@ -156,10 +202,17 @@ const VERITE = {
         lec[l.verdict]++;
         const a = await apres(d);
         const okAvant = d.idProduct === attendu, okApres = a.retenu === attendu;
+        // ⚠️ UN REFUS N'AFFIRME RIEN. Un scan qui ne rend aucun produit (`retenu === null`)
+        // est un échec, pas un mensonge : l'utilisateur est remboursé et n'a vu aucun prix.
+        // Le compter parmi les « faux et affirmés » gonflait le seul chiffre qui décide du
+        // lancement, et dans le mauvais sens — il faisait passer une amélioration réelle
+        // pour une régression.
+        const signaleAvant = Boolean(d.carteIncertaine) || d.idProduct == null;
+        const signaleApres = Boolean(a.incertain) || a.retenu == null;
         R.avant[okAvant ? 'juste' : 'faux']++;
-        if (!okAvant && d.carteIncertaine) R.avant.signale++;
+        if (!okAvant && signaleAvant) R.avant.signale++;
         R.apres[okApres ? 'juste' : 'faux']++;
-        if (!okApres && a.incertain) R.apres.signale++;
+        if (!okApres && signaleApres) R.apres.signale++;
         if (!okAvant || !okApres) detail.push({ cle, d, attendu, a, l, okAvant, okApres });
     }
 

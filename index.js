@@ -1429,7 +1429,28 @@ async function trouverProduitsLocaux(nomExact) {
         // Garde ceux dont le nom (partie avant "[") normalisé correspond à une de nos cibles
         const resultats = preselection.filter(p => {
             const nomProduit = p.name.split('[')[0].trim();
-            return cibles.has(normaliserNom(nomProduit));
+            if (cibles.has(normaliserNom(nomProduit))) return true;
+            // ── L'ASYMÉTRIE DU NIVEAU ──────────────────────────────────────────────
+            // `genererVariantesNom` élargit le nom CHERCHÉ ; rien n'élargissait le nom du
+            // PRODUIT. La recherche était donc asymétrique : « Dragonite Lv.61 » trouvait
+            // « Dragonite », mais « Dragonite » ne trouvait pas « Dragonite Lv.61 ».
+            // Cas réel : la vérité du testeur est 698502 « Dragonite Lv.61 » (DP5c), et le
+            // vivier par le nom ne l'a JAMAIS contenue — l'échec venait d'avant le
+            // périmètre, pas du périmètre.
+            //
+            // ⚠️ SEULEMENT LE NIVEAU, et c'est mesuré famille par famille sur les 41 noms
+            // du journal (2093 candidats au total aujourd'hui) :
+            //   Lv.N / Lv.X ............... +184 candidats  (+8,8 %)   ADOPTÉ
+            //   ex / GX / V / VMAX / VSTAR  +484 candidats  (+23 %)    REFUSÉ
+            //   δ Delta Species ............ +39 candidats             non adopté
+            //   ☆ / Star .................... +0                       sans objet
+            //   Prime / LEGEND / BREAK ...... +7                       non adopté
+            // Le critère n'est pas la taille : un « Charizard ex » est une AUTRE carte, à
+            // un autre prix, et l'IA lit « ex » parce que c'est écrit dans le bandeau du
+            // nom. Le niveau, lui, est une petite mention que l'IA ne reprend pas — le
+            // même Pokémon, pas une autre carte.
+            const sansNiveau = nomProduit.replace(/[\s-]*Lv\.?\s?(X|\d+)\b/i, '').trim();
+            return sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau));
         });
 
         if (resultats.length > 0) {
@@ -2789,6 +2810,41 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         }
         console.log(`🗂️ [identifier] ${produits.length} candidat(s) via ${voieCatalogue === 'nom' ? `le nom "${nomPourCatalogue}"` : `le NUMÉRO ${cardInfo.number}`}.`);
 
+        // ════════════════════════════════════════════════════════════════════
+        // PÉRIMÈTRE FERMÉ DES SETS JAPONAIS VINTAGE
+        // ════════════════════════════════════════════════════════════════════
+        // QUAND. Carte asiatique ET aucun numéro de carte exploitable — soit qu'il n'y en
+        // ait pas, soit que la règle du Pokédex l'ait neutralisé. C'est exactement la
+        // famille qui échouait : les cinq échecs journalisés ont TOUS `total = —`, et les
+        // cartes qui tombent sont précisément celles qui n'impriment pas de total.
+        //
+        // POURQUOI ÇA MARCHE. Sans numéro, le nom seul ramène des dizaines de candidats
+        // répartis sur autant de sets — mesuré : « Raichu » 114 produits sur 24 expansions,
+        // « Tangela » 60 sur 19. Le périmètre les ramène à 9 et 3. Il ne devine rien : il
+        // retire les sets où la carte NE PEUT PAS être, parce qu'ils sont postérieurs ou
+        // occidentaux.
+        //
+        // ⚠️ SORTIE EN SUGGESTION AVERTIE, JAMAIS UN VERDICT. Le périmètre restreint sans
+        // prouver : il dit où chercher, pas laquelle c'est. Tant que le banc n'a pas montré
+        // zéro faux-et-affirmé sur ces lignes, le prix part avec réserve.
+        //
+        // ⚠️ IL NE PEUT QUE RESTREINDRE. Si le périmètre ne garde rien, on conserve le
+        // vivier d'origine : la table couvre 24 expansions et 1 835 produits, pas tout le
+        // vintage. Mieux vaut un vivier large et signalé qu'un refus dû à une table
+        // incomplète.
+        let perimetreVintage = false;
+        if (numeroCarte == null && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase()) && produits.length > 1) {
+            const dedans = produits.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
+            if (dedans.length) {
+                console.log(`🗾 [perimetre-vintage] sans numéro exploitable : ${produits.length} candidat(s) -> ${dedans.length} dans les 24 sets japonais vintage.`);
+                produits = dedans;
+                voieCatalogue = 'perimetre-vintage';
+                perimetreVintage = true;
+            } else {
+                console.log(`🗾 [perimetre-vintage] aucun des ${produits.length} candidats n'est dans la table close -> vivier inchangé.`);
+            }
+        }
+
         // Codes set de TOUS les candidats en un seul aller-retour Mongo, injecté dans le
         // scoring pour lui éviter de refaire la même lecture candidat par candidat.
         const codeSetsConnus = await lireCodeSets(produits.map(p => p.idExpansion));
@@ -3029,6 +3085,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
+            // Le périmètre restreint sans prouver : sa sortie est une suggestion, pas un
+            // verdict. Arbitrage explicite, à ne pas lever avant que le banc le justifie.
+            || perimetreVintage
             // NEUTRALISER LE NUMÉRO, C'EST PERDRE UNE SOURCE — donc propager l'incertitude,
             // jamais la réduire (voir le principe dans scoring.js). Mesuré au banc : sans
             // cette ligne, la règle du numéro de Pokédex FAIT EMPIRER le critère de
@@ -3041,7 +3100,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         );
         if (carteAmbigue) {
             await signalerIncertain(req,
-                lienAmbigu ? 'lien-tcgdex-partage'
+                perimetreVintage ? 'perimetre-vintage-suggestion'
+                    : lienAmbigu ? 'lien-tcgdex-partage'
                     : avisDex.estDex ? 'numero-pokedex-neutralise'
                     : egaliteSansEnjeu ? 'egalite-sans-enjeu'
                     : localIncertain ? 'identification-locale-sans-tcgdex'
