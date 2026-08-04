@@ -33,5 +33,13 @@
     "declareLe": "2026-08-04T14:00:00Z",
     "pourquoi": "premier lot de diagnostic : la chaîne fonctionne-t-elle ? Ces cartes serviront à trouver des bugs, donc elles sont de l'entraînement."
   },
-  "fenetres": []
+  "fenetres": [
+    {
+      "lot": "diagnostic-15jp-10occ",
+      "debut": "2026-08-04T10:42:30Z",
+      "fin": null,
+      "declareLe": "2026-08-04T10:42:30Z",
+      "pourquoi": "Premier lot de diagnostic : la chaîne fonctionne-t-elle bout en bout ? Ces cartes serviront à TROUVER des bugs, elles sont donc de l'entraînement par nature et n'ont rien à faire dans le holdout. Elles doivent aussi remplir les deux cellules vides du verrou — « asiatique · setCode hors table close » (celle qui reproduit le plantage du 4 août) et « occidentale »."
+    }
+  ]
 }
