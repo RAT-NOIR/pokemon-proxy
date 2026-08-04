@@ -162,6 +162,51 @@ function estVerification(d) {
     return null;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// LE QUATRIÈME SEAU : LES FENÊTRES DE LOT
+// ════════════════════════════════════════════════════════════════════════════
+// LE PROBLÈME. Un lot de diagnostic sert à trouver des bugs : ses cartes deviennent donc
+// de l'ENTRAÎNEMENT par nature. La frontière par date les enverrait dans le holdout et le
+// contaminerait. Le seau VÉRIFICATION ne convient pas non plus : il apparie sur
+// nom + numéro, et on ne sait pas d'avance ce que l'IA va lire sur une carte donnée.
+//
+// LA RÈGLE. Tout scan dont la date tombe dans une fenêtre OUVERTE va dans son lot, quoi
+// que l'IA ait lu. Aucun appariement, donc rien à savoir d'avance — c'est ce qui la rend
+// utilisable sur un lot dont on ignore le contenu exact.
+//
+// TROIS CLAUSES, ET C'EST CE QUI L'EMPÊCHE DE FLATTER LE HOLDOUT :
+//   1. `debut` EST la déclaration : la fenêtre ne prend que les scans POSTÉRIEURS. La
+//      déclarer après avoir scanné ne rattrape rien. (Même clause que `declareLe`.)
+//   2. ELLE EMPORTE TOUT, SUCCÈS COMPRIS — comme les fenêtres hors service. Une fenêtre
+//      ne peut donc que RETIRER du holdout, jamais l'embellir, et elle se paie.
+//   3. LA PREUVE EST DANS GIT : reculer `debut` après coup laisse une trace dans
+//      l'historique du fichier.
+//
+// ⚠️ ET LE DANGER PROPRE À CE MÉCANISME : UNE FENÊTRE LAISSÉE OUVERTE AVALE TOUS LES
+// SCANS SUIVANTS et vide le holdout sans que personne le voie. C'est le seul mode de
+// défaillance silencieux du dispositif — d'où l'annonce en TÊTE de chaque rapport, avec
+// l'âge en jours, qu'on regarde le lot frais ou non.
+let FENETRES_LOTS = [];
+try {
+    FENETRES_LOTS = (require('./banc-lots.json').fenetres || []).map(f => ({
+        ...f,
+        debut: new Date(f.debut),
+        fin: f.fin ? new Date(f.fin) : null
+    }));
+} catch (_) { /* fichier absent : aucune fenêtre, le holdout prend tout */ }
+
+/** La fenêtre qui contient ce scan, ou null. Bornes : [debut, fin[ — fin exclusive. */
+function fenetreDe(d) {
+    if (!(d.le instanceof Date)) return null;
+    for (const f of FENETRES_LOTS) {
+        if (!(f.debut instanceof Date) || isNaN(f.debut)) continue;
+        if (d.le < f.debut) continue;                    // clause 1 : postérieurs seulement
+        if (f.fin && d.le >= f.fin) continue;
+        return f;
+    }
+    return null;
+}
+
 // Les quatre cellules du lot frais, définies par le CHEMIN DE CODE et non par l'ère : ce
 // sont elles qui décident du parcours, et les échecs venaient tous de la colonne « sans
 // total ». `occidental` est la cinquième, hors grille : toutes les gardes de ce chantier
@@ -186,7 +231,29 @@ const VERITE_PAR_NOM = {
 (async () => {
     const t0 = Date.now();
     while (mongoose.connection.readyState !== 1 && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 100));
-    console.log(`\nbase : ${mongoose.connection.db.databaseName} (lecture seule)\n`);
+    console.log(`\nbase : ${mongoose.connection.db.databaseName} (lecture seule)`);
+
+    // ⚠️ EN TÊTE DE CHAQUE RAPPORT, AVANT TOUT LE RESTE, ET QUEL QUE SOIT LE MODE.
+    // Une fenêtre laissée ouverte est le seul mode de défaillance SILENCIEUX du
+    // dispositif : elle avale tous les scans suivants et vide le holdout sans que rien ne
+    // le signale. On ne peut pas empêcher l'oubli — on peut le rendre impossible à ne pas
+    // voir. L'âge en jours est là pour ça : « ouverte depuis 1 jour » se lit autrement que
+    // « ouverte depuis 23 jours ».
+    const ouvertes = FENETRES_LOTS.filter(f => !f.fin);
+    if (ouvertes.length) {
+        console.log(`\n${'▓'.repeat(76)}`);
+        for (const f of ouvertes) {
+            const jours = Math.floor((Date.now() - f.debut.getTime()) / 86400000);
+            console.log(`  🟡 FENÊTRE OUVERTE « ${f.lot} » depuis ${jours} jour(s) (${f.debut.toISOString().slice(0, 16)})`);
+            if (f.pourquoi) console.log(`     ${f.pourquoi}`);
+            console.log(`     -> TOUT scan postérieur va dans ce lot et NON dans le holdout.`);
+            console.log(`     -> Referme-la quand le lot est fini : "fin" dans banc-lots.json, puis commit.`);
+        }
+        console.log(`${'▓'.repeat(76)}`);
+    } else if (FENETRES_LOTS.length) {
+        console.log(`(${FENETRES_LOTS.length} fenêtre(s) de lot, toutes fermées)`);
+    }
+    console.log('');
 
     const produits = (await Cat.find({}, { idProduct: 1, idExpansion: 1, name: 1 }).lean())
         .filter(p => !EST_CODE_CARD.test(String(p.name || '')));
@@ -205,9 +272,14 @@ const VERITE_PAR_NOM = {
     // LANGUES_ASIATIQUES, donc une régression occidentale ne se verrait nulle part.
     // TROIS SEAUX. L'ordre de test compte : VERIFICATION avant HOLDOUT, sinon un rescan
     // déclaré partirait quand même dans le lot frais.
+    // ORDRE : du plus SPÉCIFIQUE au plus général. La déclaration par carte
+    // (VERIFICATION) l'emporte sur la fenêtre, qui l'emporte sur le holdout. Chacune ne
+    // peut que retirer du holdout — jamais y ajouter.
     const seauDe = d => {
         if (!(d.le instanceof Date) || d.le < DATE_HOLDOUT) return 'entrainement';
-        return estVerification(d) ? 'verification' : 'holdout';
+        if (estVerification(d)) return 'verification';
+        if (fenetreDe(d)) return 'lot';
+        return 'holdout';
     };
     // ⚠️ LES LIGNES HORS SERVICE SONT ÉCARTÉES **AVANT** LE DÉDOUBLONNAGE, et c'est le point
     // qui compte : le dédoublonnage garde la PREMIÈRE ligne vue. Si une ligne cassée restait
@@ -228,13 +300,21 @@ const VERITE_PAR_NOM = {
     }
     const tous = [...vues.values()];
     const seulementHoldout = process.argv.includes('--holdout');
-    const prefixe = { entrainement: 'JP', holdout: 'H', verification: 'V' };
-    const compteurs = { entrainement: 0, holdout: 0, verification: 0 };
+    const prefixe = { entrainement: 'JP', holdout: 'H', verification: 'V', lot: 'L' };
+    const compteurs = { entrainement: 0, holdout: 0, verification: 0, lot: 0 };
     const bancs = tous
         .filter(d => !seulementHoldout || seauDe(d) === 'holdout')
         .map(d => { const s = seauDe(d); return { cle: `${prefixe[s]}${String(++compteurs[s]).padStart(3, '0')}`, d, seau: s }; });
     const n = s => tous.filter(d => seauDe(d) === s).length;
-    console.log(`ENTRAÎNEMENT ${n('entrainement')}  ·  HOLDOUT ${n('holdout')}  ·  VÉRIFICATION ${n('verification')}   (frontière : ${DATE_HOLDOUT.toISOString().slice(0, 10)})`);
+    console.log(`ENTRAÎNEMENT ${n('entrainement')}  ·  HOLDOUT ${n('holdout')}  ·  VÉRIFICATION ${n('verification')}  ·  LOTS ${n('lot')}   (frontière : ${DATE_HOLDOUT.toISOString().slice(0, 10)})`);
+    // Ce que chaque fenêtre a réellement capté — visible et compté, comme les lignes hors
+    // service. Une fenêtre qui capte plus que prévu doit sauter aux yeux.
+    for (const f of FENETRES_LOTS) {
+        const pris = tous.filter(d => fenetreDe(d) === f && seauDe(d) === 'lot');
+        if (pris.length || !f.fin) {
+            console.log(`   lot « ${f.lot} » : ${pris.length} carte(s)${f.fin ? ` (fermée le ${f.fin.toISOString().slice(0, 10)})` : ' — OUVERTE'}`);
+        }
+    }
     if (VERIFICATION.length) console.log(`   ${VERIFICATION.length} carte(s) déclarée(s) en vérification : ${VERIFICATION.map(c => `${c.nom} n°${c.numero}`).join(', ')}`);
     if (horsService.length) {
         // VISIBLES ET COMPTÉES, jamais effacées — et on montre ce que l'exclusion COÛTE.
@@ -401,7 +481,7 @@ const VERITE_PAR_NOM = {
         provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0, TECHNIQUE: 0 },
         cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
     });
-    const LOTS = { entrainement: vide(), holdout: vide(), verification: vide() };
+    const LOTS = { entrainement: vide(), holdout: vide(), verification: vide(), lot: vide() };
     for (const { cle, d, seau } of bancs) {
         const L = LOTS[seau];
         const R = L, lec = L.lec, provenance = L.provenance, detail = L.detail, sansVerite = L.sansVerite;
@@ -483,6 +563,9 @@ const VERITE_PAR_NOM = {
     if (!seulementHoldout) {
         rapporter('ENTRAÎNEMENT — cartes ayant servi à dériver les correctifs. NE DÉCIDE DE RIEN.', LOTS.entrainement);
         rapporter('VÉRIFICATION — rescans de cartes d\'entraînement, déclarés AVANT le scan. NE DÉCIDE DE RIEN.', LOTS.verification);
+        // Un lot de diagnostic sert à TROUVER des bugs : ses cartes deviennent de
+        // l'entraînement par construction. Rapporté, jamais décisionnaire.
+        rapporter('LOTS DÉCLARÉS — scans de diagnostic, fenêtre ouverte AVANT le scan. NE DÉCIDE DE RIEN.', LOTS.lot);
     }
     rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
 

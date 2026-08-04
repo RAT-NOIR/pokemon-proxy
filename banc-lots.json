@@ -1,0 +1,37 @@
+{
+  "_lisezMoi": [
+    "LES FENÊTRES DE LOT — un seau décidé AVANT le scan, prouvable APRÈS.",
+    "",
+    "POURQUOI. Un lot de diagnostic sert à trouver des bugs : ses cartes deviennent donc",
+    "de l'ENTRAÎNEMENT par nature. La frontière par date les enverrait dans le holdout et",
+    "le contaminerait ; le seau VÉRIFICATION ne convient pas non plus, il apparie sur",
+    "nom + numéro et on ne sait pas d'avance ce que l'IA va lire.",
+    "",
+    "LA RÈGLE. Tout scan dont la date tombe dans une fenêtre OUVERTE va dans son lot,",
+    "quoi que l'IA ait lu. Aucun appariement, donc rien à savoir d'avance.",
+    "",
+    "TROIS CLAUSES, ET ELLES SONT CE QUI REND LA FENÊTRE INFALSIFIABLE :",
+    "  1. `debut` EST la déclaration : la fenêtre ne prend que les scans POSTÉRIEURS.",
+    "     Déclarer après avoir scanné ne rattrape donc rien.",
+    "  2. ELLE EMPORTE TOUT, SUCCÈS COMPRIS. Comme les fenêtres hors service : exclure",
+    "     n'est jamais gratuit. Une fenêtre ne peut que RETIRER du holdout, jamais",
+    "     l'embellir.",
+    "  3. LA PREUVE EST DANS GIT. `declareLe` dit quand la ligne a été écrite ; la date du",
+    "     commit qui l'a ajoutée est la preuve qu'on ne peut pas réécrire après coup.",
+    "     Reculer `debut` a posteriori laisserait une trace dans l'historique.",
+    "",
+    "FERMER une fenêtre = poser `fin` et committer. Un second commit, daté lui aussi.",
+    "",
+    "⚠️ UNE FENÊTRE LAISSÉE OUVERTE AVALE TOUS LES SCANS SUIVANTS et vide le holdout sans",
+    "que personne le voie. C'est pourquoi le banc annonce toute fenêtre ouverte EN TÊTE de",
+    "chaque rapport, avec son âge en jours."
+  ],
+  "_exemple": {
+    "lot": "diagnostic-15jp-10occ",
+    "debut": "2026-08-04T14:00:00Z",
+    "fin": null,
+    "declareLe": "2026-08-04T14:00:00Z",
+    "pourquoi": "premier lot de diagnostic : la chaîne fonctionne-t-elle ? Ces cartes serviront à trouver des bugs, donc elles sont de l'entraînement."
+  },
+  "fenetres": []
+}
