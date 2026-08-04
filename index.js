@@ -16,6 +16,17 @@ const {
     semaineISO, SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE
 } = require('./acces');
 
+// ⚠️ LE MODULE ENTIER, en plus de la déstructuration. Il existe pour UNE raison :
+// `setCodeCompatibleVintage` reçoit un « scoring » en paramètre et y déstructure les
+// fonctions dont il a besoin. Cette ligne passait un objet FABRIQUÉ À LA MAIN avec trois
+// fonctions sur quatre — production morte au premier setCode hors table close
+// (« memeCodeParConventionX is not a function »), pendant que les 52 tests de la table et
+// les 32 du chemin par le code passaient au vert : EUX passaient le module entier.
+// Un stub fabriqué à la main est une SECONDE source de vérité qui diverge en silence
+// (deuxième principe) — et ici la divergence était invisible parce que les deux appelants
+// ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
+// fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
+const SCORING = require('./scoring');
 const {
     choisirMeilleur,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
@@ -2955,7 +2966,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // (« CLK », un vrai set moderne) d'un bruit d'OCR (un code qui ne résout vers rien).
         // Quatrième principe — sans cette liste, le bruit ferait preuve.
         const codesReels = [...(await lireTousLesCodesSet())];
-        const compat = setCodeCompatibleVintage(cardInfo.setCode, { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes }, codesReels);
+        // ⚠️ LE MODULE ENTIER, jamais un objet fabriqué ici. Voir le require en tête de
+        // fichier : la version « { normaliserCodeSet, ALIAS_CODES_LUS, codesApparentes } »
+        // a tué la production, parce que la fonction en déstructure QUATRE.
+        const compat = setCodeCompatibleVintage(cardInfo.setCode, SCORING, codesReels);
 
         // ── DIAGNOSTIC DU setCode LU — journalisé, AUCUN effet sur le scoring ────────
         // Deux questions, un seul champ :
