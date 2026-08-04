@@ -122,6 +122,43 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     verifier('faux réseau armé', /\[faux-reseau\] armé/.test(srv.lire()));
     verifier('Mongo connecté sur test_scratch', await srv.attendreMongo());
 
+    // ════════════════════════════════════════════════════════════════════════
+    // L'ÉTAT DE L'ENREGISTREMENT TCGdex — trois cas, trois messages
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ UN FICHIER VIDE NE DOIT PAS PASSER POUR UN CACHE LÉGITIME. Avant cette
+    // distinction, « absent » et « vide » produisaient la même sortie : toutes les URL
+    // manquantes, donc le verdict « la chaîne demande autre chose à TCGdex » — un
+    // diagnostic FAUX, qui aurait envoyé chercher une régression inexistante.
+    // On lit donc l'état sur la ligne d'armement, et on décide AVANT de regarder les URL.
+    const etatTcgdex = (srv.lire().match(/TCGDEX-(\w+)/) || [])[1] ?? 'INCONNU';
+    let couvertes = [];
+    try { couvertes = JSON.parse((srv.lire().match(/CHARGES-COUVERTES (\[.*\])/) || [])[1] ?? '[]'); } catch (_) { }
+
+    let enregistrementUtilisable = false;
+    if (etatTcgdex === 'PRESENT') {
+        // PARTIEL : le fichier existe et contient des réponses, mais pas pour toutes les
+        // charges présentes. C'est distinct d'un changement de comportement.
+        const attendues = donnees.charges.map(c => c.source?._id).filter(Boolean);
+        const manquantes = attendues.filter(id => !couvertes.includes(id));
+        if (manquantes.length) {
+            verifier(`enregistrement TCGdex complet`, false,
+                `PARTIEL : ${manquantes.length} charge(s) sur ${attendues.length} jamais enregistrée(s) -> node verrou-charges.js --base=test`);
+        } else {
+            verifier(`enregistrement TCGdex présent et complet (${couvertes.length} charge(s))`, true);
+            enregistrementUtilisable = true;
+        }
+    } else if (etatTcgdex === 'VIDE') {
+        verifier('enregistrement TCGdex non vide', false,
+            'le fichier EXISTE mais ne contient AUCUNE réponse — la phase 2 a échoué (vidage IPC ?). Ce n\'est PAS un cache légitime.');
+    } else if (etatTcgdex === 'ILLISIBLE') {
+        verifier('enregistrement TCGdex lisible', false, 'verrou/tcgdex.json est corrompu -> réenregistre');
+    } else if (etatTcgdex === 'ABSENT') {
+        verifier('enregistrement TCGdex présent', false,
+            'aucun fichier verrou/tcgdex.json -> node verrou-charges.js --base=test');
+    } else {
+        verifier('état de l\'enregistrement TCGdex lisible', false, `ligne d'armement non reconnue`);
+    }
+
     console.log('\n=== 3. /api/identifier sur chaque charge ===');
     const urlsInconnues = new Set();
     for (const c of donnees.charges) {
@@ -190,9 +227,16 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // interroge une route, une langue ou un identifiant qu'elle n'interrogeait pas. Ça
     // n'arrive presque jamais volontairement — ça arrive en modifiant une fonction en
     // amont. Le message doit donc le dire, pas afficher une exception réseau.
-    if (urlsInconnues.size) {
+    if (urlsInconnues.size && !enregistrementUtilisable) {
+        // ⚠️ NE PAS ACCUSER LA CHAÎNE QUAND C'EST L'ENREGISTREMENT QUI MANQUE. Sans cette
+        // garde, un tcgdex.json absent ou vide produisait le verdict « comportement
+        // changé » et envoyait chercher une régression qui n'existe pas.
+        console.log(`\nℹ️ ${urlsInconnues.size} URL TCGdex non enregistrée(s) — ATTENDU, l'enregistrement n'est pas`);
+        console.log(`   utilisable (voir ci-dessus). Ce n'est pas un changement de comportement.`);
+    } else if (urlsInconnues.size) {
         echecs++;
         console.log(`\n❌ LA CHAÎNE DEMANDE MAINTENANT AUTRE CHOSE À TCGdex (${urlsInconnues.size} URL non enregistrée(s))`);
+        console.log(`   L'enregistrement est complet et à jour : ces URL sont donc NOUVELLES.`);
         for (const u of urlsInconnues) console.log(`     ${u}`);
         console.log(`   Deux lectures, et une seule est bénigne :`);
         console.log(`     - VOULU   : tu as ajouté un appel. Réenregistre : node verrou-charges.js --base=test`);

@@ -67,6 +67,12 @@ function vider() {
         fs.writeFileSync(SORTIE, JSON.stringify({
             enregistreLe: new Date().toISOString(),
             nb: Object.keys(capture).length,
+            // ⚠️ POUR QUELLES CHARGES. Sans ça, un enregistrement fait pour une seule
+            // charge passerait pour valable face à trois : les URL manquantes seraient
+            // étiquetées « la chaîne demande autre chose », alors que la vraie cause est
+            // que l'enregistrement est PARTIEL. Un contenant présent avec un contenu
+            // incomplet doit se distinguer d'un contenu à jour.
+            chargesCouvertes: donnees.charges.map(c => c.source?._id).filter(Boolean),
             reponses: capture
         }, null, 2), 'utf8');
         console.log(`🎬 [enregistreur] ${Object.keys(capture).length} réponse(s) TCGdex écrites.`);

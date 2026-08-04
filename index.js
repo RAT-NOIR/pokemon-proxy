@@ -2619,11 +2619,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         // exigerImage a déjà refusé les requêtes sans photo, AVANT tout décompte.
 
+        // ⚓ JALON DU VERROU (« route ») — voir verrou/jalons.js. Ne pas reformuler ni
+        // déplacer sans mettre le verrou à jour : il lit ce texte pour savoir jusqu'où la
+        // chaîne est allée, et un jalon perdu se manifeste par un échec qui accuse le code
+        // alors que seul le log a bougé.
         console.log(`\n📷 [identifier] ${photos.length} photo(s) reçue(s).`);
 
         // 1. Lecture de la carte par l'IA
         const debutIA = Date.now();
         cardInfo = await getCardIdFromAI(photos, title);
+        // ⚓ JALON DU VERROU (« ia-lue ») — voir verrou/jalons.js.
         console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
         if (!cardInfo) {
             const rendu = await rembourserScan(req, 'ia-echec');
@@ -2927,6 +2932,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             voieCatalogue = choix.voie;
             aucunCandidatAuNumero = choix.aucunCandidatAuNumero;
         }
+        // ⚓ JALON DU VERROU (« vivier ») — voir verrou/jalons.js. C'est lui qui prouve que
+        // la sortie « carte introuvable » a été passée : sans ce jalon, deux charges qui
+        // ressortaient trois lignes plus haut ont affiché huit ✅ sans rien vérifier.
         console.log(`🗂️ [identifier] ${produits.length} candidat(s) via ${voieCatalogue === 'nom' ? `le nom "${nomPourCatalogue}"` : `le NUMÉRO ${cardInfo.number}`}.`);
 
         // ════════════════════════════════════════════════════════════════════
@@ -3092,6 +3100,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             console.log(`🧮 [identifier] meilleur = ${classement[0]?.idProduct} (score ${classement[0]?.score}), confiance ${confiant ? 'HAUTE' : 'BASSE'}`);
         }
 
+        // ⚓ JALON DU VERROU (« perimetre-vintage ») — LE PLUS IMPORTANT DES CINQ.
+        // Il est écrit APRÈS l'appel à setCodeCompatibleVintage et AVANT la sortie « aucun
+        // produit Cardmarket » : l'atteindre PROUVE que la ligne qui a tué la production le
+        // 4 août (« memeCodeParConventionX is not a function ») a bien été exécutée.
+        // Ne pas reformuler, ne pas déplacer au-dessus de cet appel — voir verrou/jalons.js.
         console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
 
         // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
@@ -3348,6 +3361,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 : (Number.isFinite(ecartScoreLocal) ? ecartScoreLocal : null)
         });
 
+        // ⚓ JALON DU VERROU (« verdict ») — le cinquième et le seul qui ne soit pas un log :
+        // c'est `success: true` qui le marque. Voir verrou/jalons.js.
         res.json({
             success: true,
             carte: {

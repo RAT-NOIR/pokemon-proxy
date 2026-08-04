@@ -43,11 +43,32 @@ const donnees = JSON.parse(fs.readFileSync(CHARGES, 'utf8'));
 // la suite. Déterministe, et sans inventer de marqueur artificiel.
 const parImage = new Map(donnees.charges.map(c => [c.imageUrl, c.lecture]));
 
-// Les réponses TCGdex enregistrées. Absentes = le verrou le dira ; il ne fabrique rien.
+// ════════════════════════════════════════════════════════════════════════════
+// TROIS ÉTATS DE L'ENREGISTREMENT, ET ILS NE DOIVENT PAS SE RESSEMBLER
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ LE DÉFAUT QUE ÇA CORRIGE. La version précédente faisait `tcgdex = {}` quand le
+// fichier était absent, ET `tcgdex = {}` quand il existait mais ne contenait rien. Les
+// deux produisaient la même sortie : toutes les URL « non enregistrées », donc un verdict
+// « la chaîne demande autre chose à TCGdex » — un diagnostic FAUX, puisque la vraie cause
+// était qu'il n'y avait aucun enregistrement du tout.
+// UN FICHIER VIDE QUI PASSE POUR UN CACHE LÉGITIME est exactement la famille de défaut
+// qu'on traque : un contenant présent, un contenu absent, et rien qui distingue les deux.
+// Les trois états sont donc nommés, et le verrou les lit sur cette ligne.
 const FICHIER_TCGDEX = path.join(__dirname, 'tcgdex.json');
-let tcgdex = {};
+let tcgdex = {}, etatTcgdex = 'ABSENT', couvertes = [];
 if (fs.existsSync(FICHIER_TCGDEX)) {
-    tcgdex = JSON.parse(fs.readFileSync(FICHIER_TCGDEX, 'utf8')).reponses || {};
+    let brut = null;
+    // ⚠️ LE BOM EST RETIRÉ AVANT L'ANALYSE. Sur Windows, tout outil qui touche ce fichier
+    // (`Out-File -Encoding utf8` de PowerShell 5.1 en tête) y ajoute un BOM que JSON.parse
+    // refuse. Sans ce nettoyage, un fichier parfaitement valide est déclaré CORROMPU et on
+    // part chercher une panne inexistante — vu à l'instant en testant l'état « vide ».
+    try { brut = JSON.parse(fs.readFileSync(FICHIER_TCGDEX, 'utf8').replace(/^﻿/, '')); }
+    catch (e) { etatTcgdex = 'ILLISIBLE'; }
+    if (brut) {
+        tcgdex = brut.reponses || {};
+        couvertes = brut.chargesCouvertes || [];
+        etatTcgdex = Object.keys(tcgdex).length === 0 ? 'VIDE' : 'PRESENT';
+    }
 }
 
 axios.post = async function (url, corps) {
@@ -91,4 +112,7 @@ axios.get = async function (url) {
     return { status: enreg.statut, data: enreg.data };
 };
 
-console.log(`🎛️ [faux-reseau] armé : ${parImage.size} lecture(s), ${Object.keys(tcgdex).length} réponse(s) TCGdex, tout autre appel lève.`);
+// La ligne que le verrou lit pour connaître l'état. Format stable, volontairement.
+console.log(`🎛️ [faux-reseau] armé : ${parImage.size} lecture(s), TCGDEX-${etatTcgdex}` +
+    ` ${Object.keys(tcgdex).length} réponse(s), ${couvertes.length} charge(s) couverte(s).`);
+console.log(`🎛️ [faux-reseau] CHARGES-COUVERTES ${JSON.stringify(couvertes)}`);

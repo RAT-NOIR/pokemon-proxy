@@ -1,0 +1,153 @@
+{
+  "enregistreLe": "2026-08-04T10:20:06.687Z",
+  "nb": 5,
+  "reponses": {
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%84%E3%81%95%E3%81%97%E3%81%84%E3%82%A6%E3%82%A4%E3%83%B3%E3%83%87%E3%82%A3": {
+      "statut": 200,
+      "data": []
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=Light%20Arcanine": {
+      "statut": 200,
+      "data": []
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=Light": {
+      "statut": 200,
+      "data": []
+    },
+    "https://api.tcgdex.net/v2/en/cards?name=Light%20Arcanine": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "neo4-12",
+          "localId": "12",
+          "name": "Light Arcanine",
+          "image": "https://assets.tcgdex.net/en/neo/neo4/12"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/en/cards/neo4-12": {
+      "statut": 200,
+      "data": {
+        "category": "Pokemon",
+        "id": "neo4-12",
+        "illustrator": "Atsuko Nishida",
+        "image": "https://assets.tcgdex.net/en/neo/neo4/12",
+        "localId": "12",
+        "name": "Light Arcanine",
+        "rarity": "Rare",
+        "set": {
+          "cardCount": {
+            "official": 105,
+            "total": 113
+          },
+          "id": "neo4",
+          "logo": "https://assets.tcgdex.net/en/neo/neo4/logo",
+          "name": "Neo Destiny",
+          "symbol": "https://assets.tcgdex.net/univ/neo/neo4/symbol"
+        },
+        "variants": {
+          "firstEdition": true,
+          "holo": true,
+          "normal": false,
+          "reverse": false,
+          "wPromo": false
+        },
+        "variants_detailed": [
+          {
+            "type": "holo",
+            "size": "standard",
+            "variantId": "jr7oetx1mqug9"
+          },
+          {
+            "type": "holo",
+            "size": "standard",
+            "stamp": [
+              "1st-edition"
+            ],
+            "variantId": "3a83wf50ts0izj268xwv3crwi"
+          }
+        ],
+        "dexId": [
+          59
+        ],
+        "hp": 100,
+        "types": [
+          "Fire"
+        ],
+        "evolveFrom": "Growlithe",
+        "description": "This legendary Chinese Pokémon is easily recognized by its large flowing mane.",
+        "stage": "Stage1",
+        "abilities": [
+          {
+            "type": "Pokemon Power",
+            "name": "Drive Off",
+            "effect": "As long as Light Arcanine is your Active Pokémon, once during your turn (before your attack), if your opponent has any Benched Pokémon, he or she chooses 1 of them and switches it with the Defending Pokémon. This power can't be used while Light Arcanine is Asleep, Confused, or Paralyzed."
+          }
+        ],
+        "attacks": [
+          {
+            "cost": [
+              "Fire",
+              "Fire",
+              "Colorless"
+            ],
+            "name": "Gentle Flames",
+            "effect": "If the Defending Pokémon is a Baby Pokémon, this attack does 10 damage instead of 50. If the Defending Pokémon is a Basic Pokémon, this attack does 30 damage instead of 50.",
+            "damage": 50
+          }
+        ],
+        "weaknesses": [
+          {
+            "type": "Water",
+            "value": "×2"
+          }
+        ],
+        "retreat": 2,
+        "legal": {
+          "standard": false,
+          "expanded": false
+        },
+        "updated": "2026-05-23T17:38:06+01:00",
+        "pricing": {
+          "cardmarket": {
+            "updated": "2026-08-04T08:02:30.145Z",
+            "unit": "EUR",
+            "idProduct": 274664,
+            "avg": 123.71,
+            "low": 30,
+            "trend": 208.22,
+            "avg1": 120,
+            "avg7": 136.73,
+            "avg30": 159.08,
+            "avg-holo": null,
+            "low-holo": null,
+            "trend-holo": 32.97,
+            "avg1-holo": 29.99,
+            "avg7-holo": 41.21,
+            "avg30-holo": 47.13
+          },
+          "tcgplayer": {
+            "unit": "USD",
+            "updated": "2026-08-04T08:02:38.282Z",
+            "1st-edition-holofoil": {
+              "productId": 86734,
+              "lowPrice": 479.99,
+              "midPrice": 479.99,
+              "highPrice": 479.99,
+              "marketPrice": 440,
+              "directLowPrice": null
+            },
+            "unlimited-holofoil": {
+              "productId": 86734,
+              "lowPrice": 176.95,
+              "midPrice": 245,
+              "highPrice": 9999,
+              "marketPrice": 380.39,
+              "directLowPrice": null
+            }
+          }
+        }
+      }
+    }
+  }
+}
