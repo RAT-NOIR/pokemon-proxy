@@ -1,0 +1,27 @@
+{
+  "poseLe": "2026-08-04T09:43:09.552Z",
+  "suites": [
+    "smoke-test.js",
+    "scoring.js",
+    "test-setcode-numero.js",
+    "test-table-vintage.js",
+    "test-pokedex.js",
+    "test-acces.js",
+    "test-journal-echecs.js"
+  ],
+  "couvertes": [
+    "ecarterNonCartes",
+    "echapperRegex",
+    "genererVariantesNom",
+    "getPrixGuideLocalLot",
+    "lireCodeSets",
+    "lireNumeros",
+    "lireRegions",
+    "nomOpposeUnVeto",
+    "normaliserNom",
+    "regionAttendue",
+    "scorerCandidatsLocal",
+    "trouverParSetCodeEtNumero",
+    "trouverProduitsLocaux"
+  ]
+}

@@ -3439,7 +3439,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         console.error("❌ [identifier]", e.message);
         // Voir /api/analyser : on constate l'absence de remboursement, on ne la corrige pas ici.
         enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
-        res.json({ success: false, error: e.message });
+        // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il est resté au log et au journal ; la réponse ne
+        // porte qu'un texte générique. Le 4 août, un utilisateur a lu dans son extension
+        // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
+        // information qui ne l'aide en rien et qui décrit notre code à qui la reçoit.
+        res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
 
@@ -3473,7 +3477,8 @@ app.post('/api/apprendre', verifierJeton, async (req, res) => {
         res.json({ success: true });
     } catch (e) {
         console.error("❌ [apprendre]", e.message);
-        res.json({ success: false, error: e.message });
+        // Message brut au log, jamais dans la réponse — voir /api/identifier.
+        res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
 // Apprentissage par LOT depuis le userscript. Règle de priorité :
@@ -3596,7 +3601,8 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
         res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, couverture });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
-        res.json({ success: false, error: e.message });
+        // Message brut au log, jamais dans la réponse — voir /api/identifier.
+        res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
 // ============================================================
