@@ -87,7 +87,7 @@ const VERITE = {
 // empêche de reclasser une carte du mauvais côté quand le résultat déplaît.
 // ⚠️ NE JAMAIS LA RECULER. La reculer reviendrait à faire entrer dans l'entraînement des
 // cartes qui ont décidé, ou l'inverse.
-const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
+// (la constante elle-même vit dans banc-seaux.js — source unique)
 
 // ── LE TROISIÈME SEAU : VERIFICATION ────────────────────────────────────────
 // La date seule ne suffit pas. Rescanner le Rhydon ou le Dracolosse — deux cartes
@@ -127,40 +127,21 @@ const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
 // DANS LA LANGUE DE LA ROUTE, et ce nom japonais partait interroger un catalogue anglais.
 // Il ne touche que les cartes dont l'identifiant de set n'existe QUE côté japonais — pour
 // les autres, /v2/en/cards rend un nom anglais et rien ne casse.
-const FENETRES_HORS_SERVICE = [
-    {
-        versions: ['fe9f77df0f8f', '746eedf203e5', 'd6c340b39ae7'],
-        defaut: 'nomExact reprenait le nom TCGdex dans la langue de la route ; le catalogue anglais était interrogé en japonais',
-        corrigePar: '83789c2'
-    }
-];
-const VERSIONS_HORS_SERVICE = new Set(FENETRES_HORS_SERVICE.flatMap(f => f.versions));
-const estHorsService = d => d.version != null && VERSIONS_HORS_SERVICE.has(String(d.version));
+// ⚠️ LA LISTE ELLE-MÊME VIT DANS banc-seaux.js, avec l'attribution de seau et la
+// numérotation. La doctrine (les quatre clauses ci-dessus) reste ici ; les DONNÉES sont
+// partagées, parce que `saisir-verites.js` doit exclure exactement les mêmes lignes.
+// Il ne le faisait pas : 8 vérités ont été saisies sur des lignes que le banc n'ouvre pas.
+const {
+    DATE_HOLDOUT, FENETRES_HORS_SERVICE, estHorsService,
+    VERIFICATION, estVerification, FENETRES_LOTS, fenetreDe,
+    seauDe, numeroter, identiteDe, rattacherVerites
+} = require('./banc-seaux');
 
 // Les vérités saisies à la main par saisir-verites.js, indexées par clé. Elles portent leur
 // provenance — 'saisie-a-l-aveugle' ou 'saisie-apres-candidats' — et le rapport la reprend :
 // une vérité obtenue après avoir vu la liste des candidats ne vaut pas la même chose.
 let VERITES_SAISIES = {};
 try { VERITES_SAISIES = require('./banc-verites.json').verites || {}; } catch (_) { }
-
-let VERIFICATION = [];
-try {
-    VERIFICATION = (require('./banc-verification.json').cartes || [])
-        .map(c => ({ ...c, declareLe: new Date(c.declareLe) }));
-} catch (_) { /* fichier absent : aucun scan de vérification, le holdout prend tout */ }
-
-function estVerification(d) {
-    if (!(d.le instanceof Date)) return null;
-    for (const c of VERIFICATION) {
-        if (String(d.nom || '').trim() !== String(c.nom).trim()) continue;
-        if (String(d.numero ?? '').trim() !== String(c.numero).trim()) continue;
-        // ⚠️ LA CLAUSE QUI REND LA FRONTIÈRE INFALSIFIABLE : déclarée AVANT le scan, sinon
-        // la carte reste dans le holdout.
-        if (!(d.le >= c.declareLe)) continue;
-        return c;
-    }
-    return null;
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 // LE QUATRIÈME SEAU : LES FENÊTRES DE LOT
@@ -186,26 +167,7 @@ function estVerification(d) {
 // SCANS SUIVANTS et vide le holdout sans que personne le voie. C'est le seul mode de
 // défaillance silencieux du dispositif — d'où l'annonce en TÊTE de chaque rapport, avec
 // l'âge en jours, qu'on regarde le lot frais ou non.
-let FENETRES_LOTS = [];
-try {
-    FENETRES_LOTS = (require('./banc-lots.json').fenetres || []).map(f => ({
-        ...f,
-        debut: new Date(f.debut),
-        fin: f.fin ? new Date(f.fin) : null
-    }));
-} catch (_) { /* fichier absent : aucune fenêtre, le holdout prend tout */ }
-
-/** La fenêtre qui contient ce scan, ou null. Bornes : [debut, fin[ — fin exclusive. */
-function fenetreDe(d) {
-    if (!(d.le instanceof Date)) return null;
-    for (const f of FENETRES_LOTS) {
-        if (!(f.debut instanceof Date) || isNaN(f.debut)) continue;
-        if (d.le < f.debut) continue;                    // clause 1 : postérieurs seulement
-        if (f.fin && d.le >= f.fin) continue;
-        return f;
-    }
-    return null;
-}
+// (chargement et prédicat : voir banc-seaux.js — source unique)
 
 // Les quatre cellules du lot frais, définies par le CHEMIN DE CODE et non par l'ère : ce
 // sont elles qui décident du parcours, et les échecs venaient tous de la colonne « sans
@@ -272,40 +234,47 @@ const VERITE_PAR_NOM = {
     // LANGUES_ASIATIQUES, donc une régression occidentale ne se verrait nulle part.
     // TROIS SEAUX. L'ordre de test compte : VERIFICATION avant HOLDOUT, sinon un rescan
     // déclaré partirait quand même dans le lot frais.
-    // ORDRE : du plus SPÉCIFIQUE au plus général. La déclaration par carte
-    // (VERIFICATION) l'emporte sur la fenêtre, qui l'emporte sur le holdout. Chacune ne
-    // peut que retirer du holdout — jamais y ajouter.
-    const seauDe = d => {
-        if (!(d.le instanceof Date) || d.le < DATE_HOLDOUT) return 'entrainement';
-        if (estVerification(d)) return 'verification';
-        if (fenetreDe(d)) return 'lot';
-        return 'holdout';
-    };
+    // (ordre des seaux, dédoublonnage et numérotation : banc-seaux.js — source unique)
     // ⚠️ LES LIGNES HORS SERVICE SONT ÉCARTÉES **AVANT** LE DÉDOUBLONNAGE, et c'est le point
     // qui compte : le dédoublonnage garde la PREMIÈRE ligne vue. Si une ligne cassée restait
     // dans le lot, elle masquerait sa remplaçante — la carte rescannée après correction
     // n'apparaîtrait jamais. Une ligne hors service ne doit ni compter, NI MASQUER SA
     // REMPLAÇANTE.
-    const horsService = docs.filter(estHorsService);
-    const exploitables = docs.filter(d => !estHorsService(d));
-    const vues = new Map();
-    for (const d of exploitables) {
-        const seau = seauDe(d);
-        const asiatique = ['JP', 'ZH', 'KR'].includes(d.langue);
-        // L'entraînement reste japonais ; le holdout accueille aussi les 10 occidentales
-        // de contrôle, sans quoi une régression occidentale serait invisible.
-        if (seau === 'entrainement' && !asiatique) continue;
-        const k = `${seau}|${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
-        if (!vues.has(k)) vues.set(k, d);
-    }
-    const tous = [...vues.values()];
+    // ⚠️ L'ENTRAÎNEMENT RESTE JAPONAIS : les 44 cartes d'origine le sont, et y faire entrer
+    // une occidentale changerait rétroactivement le jeu qui a produit les correctifs.
+    // Le filtre est appliqué AVANT la numérotation, comme avant.
+    const docsUtiles = docs.filter(d => {
+        const dd = { ...d, le: d.le instanceof Date ? d.le : new Date(d.le) };
+        return !(seauDe(dd) === 'entrainement' && !['JP', 'ZH', 'KR'].includes(d.langue));
+    }).map(d => ({ ...d, le: d.le instanceof Date ? d.le : new Date(d.le) }));
+
+    const { lignes: toutesLignes, horsService } = numeroter(docsUtiles);
     const seulementHoldout = process.argv.includes('--holdout');
-    const prefixe = { entrainement: 'JP', holdout: 'H', verification: 'V', lot: 'L' };
-    const compteurs = { entrainement: 0, holdout: 0, verification: 0, lot: 0 };
-    const bancs = tous
-        .filter(d => !seulementHoldout || seauDe(d) === 'holdout')
-        .map(d => { const s = seauDe(d); return { cle: `${prefixe[s]}${String(++compteurs[s]).padStart(3, '0')}`, d, seau: s }; });
-    const n = s => tous.filter(d => seauDe(d) === s).length;
+    const bancs = toutesLignes.filter(l => !seulementHoldout || l.seau === 'holdout');
+    const tous = toutesLignes.map(l => l.d);
+    const n = s => toutesLignes.filter(l => l.seau === s).length;
+
+    // ⚠️ LES VÉRITÉS SONT RATTACHÉES PAR IDENTITÉ, PAS PAR CLÉ. Une clé positionnelle
+    // dépend du seau, de l'ordre et du nombre de lignes qui précèdent : changer la règle
+    // des seaux renumérote tout et détache silencieusement ce qui a été saisi. C'est
+    // exactement ce qui s'est produit — 32 vérités saisies sous H009..H033 pendant que le
+    // banc numérotait L001..L025, aucune rattachée, et rien pour le dire.
+    const rattachement = rattacherVerites(toutesLignes, VERITES_SAISIES);
+    if (rattachement.desaccords.length) {
+        console.log(`\n⚠️ ${rattachement.desaccords.length} vérité(s) saisie(s) sous une clé qui a CHANGÉ depuis :`);
+        for (const x of rattachement.desaccords.slice(0, 8)) {
+            console.log(`     « ${x.enregistree} » -> « ${x.actuelle} » (${x.seau})   "${x.lu?.nom}" n°${x.lu?.numero ?? '—'}`);
+        }
+        if (rattachement.desaccords.length > 8) console.log(`     … et ${rattachement.desaccords.length - 8} autre(s)`);
+        console.log(`   Elles sont RATTACHÉES quand même : l'ancre est l'identité de la carte, pas la clé.`);
+        console.log(`   Ce message dit que la règle des seaux a bougé depuis la saisie — pas qu'il y a une perte.`);
+    }
+    if (rattachement.orphelines.length) {
+        console.log(`\n⚠️ ${rattachement.orphelines.length} vérité(s) ORPHELINE(S) — saisies sur des lignes que le banc n'ouvre pas :`);
+        for (const o of rattachement.orphelines.slice(0, 10)) {
+            console.log(`     « ${o.cle} » ${o.lu ? `"${o.lu.nom}" n°${o.lu.numero ?? '—'}` : ''} — ${o.raison}`);
+        }
+    }
     console.log(`ENTRAÎNEMENT ${n('entrainement')}  ·  HOLDOUT ${n('holdout')}  ·  VÉRIFICATION ${n('verification')}  ·  LOTS ${n('lot')}   (frontière : ${DATE_HOLDOUT.toISOString().slice(0, 10)})`);
     // Ce que chaque fenêtre a réellement capté — visible et compté, comme les lignes hors
     // service. Une fenêtre qui capte plus que prévu doit sauter aux yeux.
@@ -465,9 +434,10 @@ const VERITE_PAR_NOM = {
         if (MOTIFS_TECHNIQUES.has(d.motifEchec)) return { valeur: null, source: 'TECHNIQUE' };
         if (VERITE[cle] !== undefined) return { valeur: VERITE[cle], source: VERITE[cle] === 'inconnu' ? 'inconnu' : 'cle' };
         if (VERITE_PAR_NOM[d.nom] !== undefined) return { valeur: VERITE_PAR_NOM[d.nom], source: 'nom' };
-        if (VERITES_SAISIES[cle] !== undefined) {
-            const v = VERITES_SAISIES[cle];
-            return { valeur: v.idProduct, source: v.idProduct === 'inconnu' ? 'inconnu' : `saisie:${v.source}` };
+        // Rattachement PAR IDENTITÉ de la carte lue, jamais par la clé positionnelle.
+        const vs = rattachement.parIdentite.get(identiteDe(d));
+        if (vs !== undefined) {
+            return { valeur: vs.idProduct, source: vs.idProduct === 'inconnu' ? 'inconnu' : `saisie:${vs.source}` };
         }
         if (d.idProduct == null) return { valeur: null, source: 'SANS-VERITE' };
         return { valeur: d.idProduct, source: 'bloc' };

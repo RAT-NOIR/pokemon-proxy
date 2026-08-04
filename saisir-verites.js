@@ -44,14 +44,12 @@ const CS = mongoose.model('Cv', new mongoose.Schema({}, { strict: false }), 'cod
 const seauVoulu = (process.argv.find(a => a.startsWith('--seau=')) || '--seau=holdout').split('=')[1];
 const tout = process.argv.includes('--tout');
 
-let VERIFICATION = [];
-try { VERIFICATION = (require('./banc-verification.json').cartes || []).map(c => ({ ...c, declareLe: new Date(c.declareLe) })); } catch (_) { }
-const estVerification = d => VERIFICATION.some(c =>
-    String(d.nom || '').trim() === String(c.nom).trim()
-    && String(d.numero ?? '').trim() === String(c.numero).trim()
-    && d.le >= c.declareLe);
-const seauDe = d => (!(d.le instanceof Date) || d.le < DATE_HOLDOUT) ? 'entrainement'
-    : (estVerification(d) ? 'verification' : 'holdout');
+// ⚠️ SEAUX ET NUMÉROTATION : UNE SEULE SOURCE, partagée avec le banc. Ce fichier avait sa
+// PROPRE copie de `seauDe` — trois seaux au lieu de quatre — et n'excluait pas les lignes
+// hors service. Conséquence mesurée : 32 vérités saisies une par une sous H009..H033 quand
+// le banc numérotait L001..L025. Aucune n'est arrivée, et rien ne le disait.
+// Voir banc-seaux.js : deux définitions de la même règle divergent toujours.
+const { seauDe, numeroter } = require('./banc-seaux');
 
 function lireVerites() {
     try { return JSON.parse(fs.readFileSync(SORTIE, 'utf8')); }
@@ -126,14 +124,11 @@ async function resoudreSaisie(saisie, Cat) {
     const lignes = await CS.find({}, { idExpansion: 1, codeSet: 1, region: 1 }).lean();
     const parExp = new Map(lignes.map(l => [Number(l.idExpansion), l]));
 
-    const docs = (await J.find({}).sort({ le: 1 }).lean()).filter(d => seauDe(d) === seauVoulu);
-    const vues = new Map();
-    for (const d of docs) {
-        const k = `${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
-        if (!vues.has(k)) vues.set(k, d);
-    }
-    const prefixe = { holdout: 'H', verification: 'V', entrainement: 'JP' }[seauVoulu] || 'X';
-    const cartes = [...vues.values()].map((d, i) => ({ cle: `${prefixe}${String(i + 1).padStart(3, '0')}`, d }));
+    // ⚠️ ON NUMÉROTE TOUT LE CORPUS, PUIS ON FILTRE. Jamais l'inverse : filtrer d'abord
+    // faisait dépendre la clé de la question posée, et c'est ce qui a détaché 32 vérités.
+    const docs = (await J.find({}).sort({ le: 1 }).lean());
+    const { lignes } = numeroter(docs);
+    const cartes = lignes.filter(l => l.seau === seauVoulu).map(l => ({ cle: l.cle, d: l.d }));
 
     const V = lireVerites();
     const aFaire = cartes.filter(c => tout || V.verites[c.cle] === undefined);

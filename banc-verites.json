@@ -1,0 +1,485 @@
+{
+  "_lisezMoi": "Vérités du banc, saisies à la main. `source` dit COMMENT elles ont été obtenues.",
+  "verites": {
+    "H001": {
+      "idProduct": 549081,
+      "nom": "Pidgeotto",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Pidgeotto",
+      "lu": {
+        "nom": "Pidgeotto",
+        "numero": "017",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:13:57.989Z"
+    },
+    "H002": {
+      "idProduct": 698502,
+      "nom": "Dragonite Lv.61",
+      "codeSet": "DP5c",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Cry-from-the-Mysterious/Dragonite-Lv61-DP5c",
+      "lu": {
+        "nom": "Dragonite",
+        "numero": "080",
+        "total": null,
+        "setCode": "DP5"
+      },
+      "saisiLe": "2026-08-04T15:15:40.366Z"
+    },
+    "H003": {
+      "idProduct": 549051,
+      "nom": "Mewtwo",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Mewtwo-V2?msockid=15effc596cac6d2b2782e82a6d006cf6",
+      "lu": {
+        "nom": "Mewtwo",
+        "numero": "150",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:16:25.312Z"
+    },
+    "H004": {
+      "idProduct": 654099,
+      "nom": "Dragonite",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Dragonite-V2-UNP",
+      "lu": {
+        "nom": "Dragonite",
+        "numero": "149",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:17:41.290Z"
+    },
+    "H005": {
+      "idProduct": 606441,
+      "nom": "Flaaffy",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Flaaffy-GSNW",
+      "lu": {
+        "nom": "Flaaffy",
+        "numero": "180",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:20:40.382Z"
+    },
+    "H006": {
+      "idProduct": 606563,
+      "nom": "Natu",
+      "codeSet": "N2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Crossing-the-Ruins/Natu-CTR",
+      "lu": {
+        "nom": "Natu",
+        "numero": "177",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:21:27.914Z"
+    },
+    "H007": {
+      "idProduct": 584681,
+      "nom": "Marowak",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Marowak?msockid=15effc596cac6d2b2782e82a6d006cf6",
+      "lu": {
+        "nom": "Marowak",
+        "numero": "105",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:22:31.933Z"
+    },
+    "H008": {
+      "idProduct": 606813,
+      "nom": "Light Arcanine",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Darkness-and-to-Light/Light-Arcanine-DL",
+      "lu": {
+        "nom": "Light Arcanine",
+        "numero": "059",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:23:32.441Z"
+    },
+    "H009": {
+      "idProduct": 724966,
+      "nom": "Ninetales",
+      "codeSet": "sv3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Ruler-of-the-Black-Flame/Ninetales-V2-sv3110",
+      "lu": {
+        "nom": "Ninetales",
+        "numero": "110",
+        "total": "108",
+        "setCode": "sv3"
+      },
+      "saisiLe": "2026-08-04T15:24:25.545Z"
+    },
+    "H010": {
+      "idProduct": 707675,
+      "nom": "Tyranitar",
+      "codeSet": "sv2D",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Clay-Burst/Tyranitar-V2-sv2D079",
+      "lu": {
+        "nom": "Tyranitar",
+        "numero": "079",
+        "total": "071",
+        "setCode": "sv2D"
+      },
+      "saisiLe": "2026-08-04T15:24:57.823Z"
+    },
+    "H011": {
+      "idProduct": 693067,
+      "nom": "Gardevoir ex",
+      "codeSet": "sv1S",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Scarlet-ex/Gardevoir-ex-V3-sv1S101",
+      "lu": {
+        "nom": "Gardevoir ex",
+        "numero": "101",
+        "total": "078",
+        "setCode": "sv1S"
+      },
+      "saisiLe": "2026-08-04T15:25:46.722Z"
+    },
+    "H012": {
+      "idProduct": 585035,
+      "nom": "Grimer",
+      "codeSet": "ROG",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Rocket-Gang/Grimer",
+      "lu": {
+        "nom": "Grimer",
+        "numero": "088",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:26:15.312Z"
+    },
+    "H013": {
+      "idProduct": 584720,
+      "nom": "Articuno",
+      "codeSet": "MFO",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Mystery-of-the-Fossils/Articuno",
+      "lu": {
+        "nom": "Articuno",
+        "numero": "144",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:27:43.660Z"
+    },
+    "H014": {
+      "idProduct": 584637,
+      "nom": "Scyther",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Scyther",
+      "lu": {
+        "nom": "Scyther",
+        "numero": "123",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:29:17.513Z"
+    },
+    "H015": {
+      "idProduct": 571797,
+      "nom": "Farfetch'd",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos/Farfetchd",
+      "lu": {
+        "nom": "Farfetch'd",
+        "numero": "083",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:31:17.445Z"
+    },
+    "H016": {
+      "idProduct": 605356,
+      "nom": "Sabrina's Jynx",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Challenge-from-the-Darkness/Sabrinas-Jynx-CFTD",
+      "lu": {
+        "nom": "Sabrina's Jynx",
+        "numero": "124",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:32:20.732Z"
+    },
+    "H017": {
+      "idProduct": 606579,
+      "nom": "Hitmontop",
+      "codeSet": "N2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Crossing-the-Ruins/Hitmontop-CTR",
+      "lu": {
+        "nom": "Hitmontop",
+        "numero": "237",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:33:09.950Z"
+    },
+    "H018": {
+      "idProduct": 606726,
+      "nom": "Blissey",
+      "codeSet": "N3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Awakening-Legends/Blissey-AL",
+      "lu": {
+        "nom": "Blissey",
+        "numero": "242",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:34:25.977Z"
+    },
+    "H019": {
+      "idProduct": 571895,
+      "nom": "Jynx",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Jynx-V2",
+      "lu": {
+        "nom": "Jynx",
+        "numero": "124",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:35:44.672Z"
+    },
+    "H020": {
+      "idProduct": 606725,
+      "nom": "Porygon2",
+      "codeSet": "N3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Awakening-Legends/Porygon2-AL",
+      "lu": {
+        "nom": "Porygon2",
+        "numero": "233",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:36:22.767Z"
+    },
+    "H021": {
+      "idProduct": 562010,
+      "nom": "Slowpoke",
+      "codeSet": "MCDP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/McDonalds-Original-Minimum-Pack/Slowpoke",
+      "lu": {
+        "nom": "Slowpoke",
+        "numero": "014",
+        "total": "018",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:37:26.616Z"
+    },
+    "H022": {
+      "idProduct": 554566,
+      "nom": "Karen's Houndoom",
+      "codeSet": "VS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-CardVS/Karens-Houndoom",
+      "lu": {
+        "nom": "Karen's Houndoom",
+        "numero": "092",
+        "total": "141",
+        "setCode": "VS"
+      },
+      "saisiLe": "2026-08-04T15:38:13.022Z"
+    },
+    "H023": {
+      "idProduct": 606887,
+      "nom": "Light Togetic",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Darkness-and-to-Light/Light-Togetic-DL",
+      "lu": {
+        "nom": "Light Togetic",
+        "numero": "176",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:38:47.936Z"
+    },
+    "H024": {
+      "idProduct": 571114,
+      "nom": "Ross's Wailmer",
+      "codeSet": "TLVS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Theater-Limited-VS-Pack/Rosss-Wailmer",
+      "lu": {
+        "nom": "Ross's Wailmer",
+        "numero": "005",
+        "total": "018",
+        "setCode": "VS"
+      },
+      "saisiLe": "2026-08-04T15:39:32.766Z"
+    },
+    "H025": {
+      "idProduct": 869700,
+      "nom": "Mega Gardevoir ex",
+      "codeSet": "ASC",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Ascended-Heroes/Mega-Gardevoir-ex-ASC089",
+      "lu": {
+        "nom": "Mega Gardevoir ex",
+        "numero": "089",
+        "total": "217",
+        "setCode": "ASC"
+      },
+      "saisiLe": "2026-08-04T15:40:42.242Z"
+    },
+    "H026": {
+      "idProduct": 282685,
+      "nom": "Articuno",
+      "codeSet": "ROS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Roaring-Skies/Articuno-ROS17",
+      "lu": {
+        "nom": "Articuno",
+        "numero": "17",
+        "total": "108",
+        "setCode": "ROS"
+      },
+      "saisiLe": "2026-08-04T15:41:34.015Z"
+    },
+    "H027": {
+      "idProduct": 895874,
+      "nom": "Slowbro",
+      "codeSet": "PBL",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Slowbro-V2-PBL090",
+      "lu": {
+        "nom": "Slowbro",
+        "numero": "090",
+        "total": "084",
+        "setCode": "PBL"
+      },
+      "saisiLe": "2026-08-04T15:42:07.063Z"
+    },
+    "H028": {
+      "idProduct": 895903,
+      "nom": "Gladion's Final Battle",
+      "codeSet": "PBL",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Gladions-Final-Battle-V3-PBL118",
+      "lu": {
+        "nom": "Gladion's Final Battle",
+        "numero": "118",
+        "total": "084",
+        "setCode": "PBL"
+      },
+      "saisiLe": "2026-08-04T15:42:36.590Z"
+    },
+    "H029": {
+      "idProduct": 275836,
+      "nom": "Cyndaquil",
+      "codeSet": "SS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/EX-Sandstorm/Cyndaquil-SS59",
+      "lu": {
+        "nom": "Cyndaquil",
+        "numero": "59",
+        "total": "100",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-04T15:44:19.962Z"
+    },
+    "H030": {
+      "idProduct": 280898,
+      "nom": "Vaporeon",
+      "codeSet": "PLF",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Plasma-Freeze/Vaporeon-PLF20",
+      "lu": {
+        "nom": "Vaporeon",
+        "numero": "20",
+        "total": "116",
+        "setCode": "PLF"
+      },
+      "saisiLe": "2026-08-04T15:45:48.220Z"
+    },
+    "H031": {
+      "idProduct": 293405,
+      "nom": "Mewtwo",
+      "codeSet": "EVO",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Evolutions/Mewtwo-V1-EVO51",
+      "lu": {
+        "nom": "Mewtwo",
+        "numero": "51",
+        "total": "108",
+        "setCode": "EVO"
+      },
+      "saisiLe": "2026-08-04T15:47:32.127Z"
+    },
+    "H033": {
+      "idProduct": 794609,
+      "nom": "Durant ex",
+      "codeSet": "SSP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Surging-Sparks/Durant-ex-V3-SSP236",
+      "lu": {
+        "nom": "Durant ex",
+        "numero": "236",
+        "total": "191",
+        "setCode": "SSP"
+      },
+      "saisiLe": "2026-08-04T15:49:39.692Z"
+    }
+  }
+}
