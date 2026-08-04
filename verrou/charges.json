@@ -1,0 +1,80 @@
+{
+  "extraitLe": "2026-08-04T09:51:14.356Z",
+  "extraitDe": "test",
+  "empreintePrompt": {
+    "hash": "47124bc54ff9c182",
+    "modele": "google/gemini-3-flash-preview",
+    "taillePrompt": 11351
+  },
+  "commentRafraichir": "node verrou-charges.js --base=test",
+  "charges": [
+    {
+      "cellule": "asiatique · setCode HORS table close",
+      "pourquoi": "le chemin exact du plantage memeCodeParConventionX",
+      "source": {
+        "_id": "6a71064df3a1a8efba20ba75",
+        "le": "2026-08-03T21:21:17.314Z",
+        "version": "99302e157fae"
+      },
+      "imageUrl": "https://images1.vinted.net/t/06_0051a_y9j3qxthT1bXsGTeCfqFjnWr/f800/1781628007.webp?s=fa56c427be67d9d2ab9dd2f0f50312e262179e1a",
+      "lecture": {
+        "name": "Dragonite",
+        "number": "180",
+        "total": null,
+        "setCode": "DP5",
+        "language": "JP",
+        "rarete": "normale",
+        "nomBrut": "カイリュー",
+        "nomConfiance": "haute",
+        "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "asiatique · aucun setCode lu",
+      "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
+      "source": {
+        "_id": "6a70ff010713d5aa99d64eb3",
+        "le": "2026-08-03T20:50:09.122Z",
+        "version": "d6c340b39ae7"
+      },
+      "imageUrl": "https://images1.vinted.net/t/01_0218d_LZqg36NWERMoRiQg4Z1WjaZh/f800/1785515871.webp?s=38eed2b1c0427f020b7938db4751ab54fd02372c",
+      "lecture": {
+        "name": "Light Arcanine",
+        "number": "059",
+        "total": null,
+        "setCode": null,
+        "language": "JP",
+        "rarete": "normale",
+        "nomBrut": "やさしいウインディ",
+        "nomConfiance": "haute",
+        "symboleSet": "etoile",
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    }
+  ]
+}
