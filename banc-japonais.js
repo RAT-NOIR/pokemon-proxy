@@ -474,9 +474,31 @@ const VERITE_PAR_NOM = {
     }
 
     // DEUX JEUX DE COMPTEURS, jamais mélangés : entraînement et holdout.
+    //
+    // ════════════════════════════════════════════════════════════════════════
+    // ET, À L'INTÉRIEUR DE CHAQUE SEAU, DEUX ORIGINES DE VÉRITÉ QUI NE VALENT PAS PAREIL
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ UN TAUX CALCULÉ SUR DES VÉRITÉS « EN BLOC » MENT PAR CONSTRUCTION. Quand aucune
+    // vérité individuelle n'a été fournie, `verite()` retombe sur `attendu = d.idProduct` :
+    // la référence est alors CE QU'ON MESURE. La colonne AVANT vaut donc 100 % de justes
+    // par arithmétique, jamais par évaluation — le seau LOTS a affiché « JUSTE 20 100,0 % »
+    // à sa première exécution, sur zéro vérité vérifiée.
+    // C'EST LE MÊME DÉFAUT QUE LE BANC QUI PRENAIT L'ÉCHEC POUR LA VÉRITÉ, dans l'autre
+    // sens : là il notait juste un échec, ici il note juste une réussite. Une mesure qui
+    // dérive sa référence du système mesuré ne mesure rien, quel que soit le signe.
+    //
+    // LES DEUX ORIGINES SONT DONC COMPTÉES À PART :
+    //   - INDIVIDUELLE (cle, nom, saisie:*) : quelqu'un a désigné CETTE carte. Le taux a
+    //     un sens dans les deux colonnes.
+    //   - EN BLOC : AVANT est tautologique. Seul le MOUVEMENT avant -> après y garde un
+    //     sens, car `apres(d)` recalcule et peut s'écarter de ce que la production avait
+    //     retenu : ces lignes détectent une RÉGRESSION, jamais une réussite.
+    // `issuesVides` et non `compteurs` : ce dernier nomme déjà les compteurs de seaux plus
+    // haut, et deux définitions du même nom dans un fichier est exactement ce qu'on évite.
+    const issuesVides = () => ({ juste: 0, faux: 0, refus: 0, signale: 0 });
     const vide = () => ({
-        avant: { juste: 0, faux: 0, refus: 0, signale: 0 },
-        apres: { juste: 0, faux: 0, refus: 0, signale: 0 },
+        ind: { avant: issuesVides(), apres: issuesVides(), retenus: 0 },
+        blocs: { avant: issuesVides(), apres: issuesVides(), retenus: 0, bouge: 0 },
         lec: { juste: 0, contredite: 0, 'invérifiable': 0 },
         provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0, TECHNIQUE: 0 },
         cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
@@ -507,9 +529,14 @@ const VERITE_PAR_NOM = {
         // parmi les « faux » gonflait le chiffre qui décide du lancement.
         const issue = r => r.id === attendu ? 'juste' : (r.id == null ? 'refus' : 'faux');
         const iAvant = issue({ id: d.idProduct }), iApres = issue({ id: a.retenu });
-        R.avant[iAvant]++; R.apres[iApres]++;
-        if (iAvant === 'faux' && d.carteIncertaine) R.avant.signale++;
-        if (iApres === 'faux' && a.incertain) R.apres.signale++;
+        // L'ORIGINE DE LA VÉRITÉ DÉCIDE DU COMPTEUR. Voir le bloc au-dessus de `vide()` :
+        // une ligne validée en bloc ne peut pas produire un « faux » à l'AVANT.
+        const G = (v.source === 'bloc') ? R.blocs : R.ind;
+        G.retenus++;
+        G.avant[iAvant]++; G.apres[iApres]++;
+        if (iAvant === 'faux' && d.carteIncertaine) G.avant.signale++;
+        if (iApres === 'faux' && a.incertain) G.apres.signale++;
+        if (v.source === 'bloc' && iAvant !== iApres) R.blocs.bouge++;
         if (iAvant !== 'juste' || iApres !== 'juste') detail.push({ cle, d, attendu, a, l, iAvant, iApres, source: v.source });
     }
 
@@ -537,17 +564,55 @@ const VERITE_PAR_NOM = {
             console.log(`   ${c.padEnd(32)} ${String(n).padStart(3)}`);
         }
         console.log(`\n${L.retenus + L.exclus} cartes distinctes · ${L.exclus} exclues · ${L.retenus} exploitables\n`);
-        console.log('── TAUX DE LECTURE IA ──');
+
+        // ⚠️ EN TÊTE, PARCE QUE C'EST LE SEUL CONTRÔLE NON TAUTOLOGIQUE DU RAPPORT.
+        // Il ne compare pas « attendu » à « retenu » — il compare CE QUE L'IA A LU au
+        // produit réellement désigné. Il garde donc tout son sens même sur des lignes
+        // validées en bloc, là où le taux de justes n'en a aucun.
+        console.log('── TAUX DE LECTURE IA — le seul contrôle indépendant de la vérité fournie ──');
         console.log(`   juste (nom ET numéro confirmés) . ${String(L.lec.juste).padStart(3)}  ${p(L.lec.juste)}`);
-        console.log(`   CONTREDITE par la carte attendue  ${String(L.lec.contredite).padStart(3)}  ${p(L.lec.contredite)}`);
+        console.log(`   CONTREDITE par la carte retenue   ${String(L.lec.contredite).padStart(3)}  ${p(L.lec.contredite)}`);
         console.log(`   invérifiable (numéro non publié) . ${String(L.lec['invérifiable']).padStart(3)}  ${p(L.lec['invérifiable'])}`);
+
+        // ---- LE TAUX DE JUSTES, sur les seules vérités INDIVIDUELLES ----
+        const I = L.ind, B = L.blocs;
+        const pi = x => `${(100 * x / Math.max(1, I.retenus)).toFixed(1)} %`;
         console.log('\n── TROIS ISSUES, JAMAIS DEUX ──');
-        console.log('                     AVANT          APRÈS');
-        console.log(`   JUSTE ......... ${String(L.avant.juste).padStart(3)}  ${p(L.avant.juste).padStart(7)}   ${String(L.apres.juste).padStart(3)}  ${p(L.apres.juste).padStart(7)}`);
-        console.log(`   FAUX .......... ${String(L.avant.faux).padStart(3)}  ${p(L.avant.faux).padStart(7)}   ${String(L.apres.faux).padStart(3)}  ${p(L.apres.faux).padStart(7)}`);
-        console.log(`     dont signalé  ${String(L.avant.signale).padStart(3)}              ${String(L.apres.signale).padStart(3)}`);
-        console.log(`     FAUX ET AFFIRMÉ ${String(L.avant.faux - L.avant.signale).padStart(2)}              ${String(L.apres.faux - L.apres.signale).padStart(3)}   ← le seuil de lancement`);
-        console.log(`   REFUS ......... ${String(L.avant.refus).padStart(3)}  ${p(L.avant.refus).padStart(7)}   ${String(L.apres.refus).padStart(3)}  ${p(L.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
+        if (I.retenus === 0 && B.retenus === 0) {
+            // Rien d'exploitable du tout : ne pas parler de vérités en bloc qui n'existent pas.
+            console.log(`   (aucune ligne exploitable — ${L.exclus} exclue(s), rien à mesurer)`);
+        } else if (I.retenus === 0) {
+            // ⚠️ LE REFUS. Afficher « 100 % de justes » sur des vérités dérivées de la
+            // production serait un mensonge par construction, pas une bizarrerie à
+            // signaler en note de bas de page. On ne l'affiche pas.
+            console.log(`   ⛔ TAUX REFUSÉ — aucune vérité individuelle sur ce seau.`);
+            console.log(`      Les ${B.retenus} ligne(s) exploitables sont validées EN BLOC : leur « attendu » EST`);
+            console.log(`      ce que la production avait retenu. Un taux de justes y vaudrait 100 % par`);
+            console.log(`      arithmétique, jamais par évaluation.`);
+            console.log(`      -> node saisir-verites.js   (puis relancer le banc)`);
+        } else {
+            console.log(`   (sur les ${I.retenus} ligne(s) à vérité INDIVIDUELLE ; les ${B.retenus} validées en bloc sont plus bas)`);
+            console.log('                     AVANT          APRÈS');
+            console.log(`   JUSTE ......... ${String(I.avant.juste).padStart(3)}  ${pi(I.avant.juste).padStart(7)}   ${String(I.apres.juste).padStart(3)}  ${pi(I.apres.juste).padStart(7)}`);
+            console.log(`   FAUX .......... ${String(I.avant.faux).padStart(3)}  ${pi(I.avant.faux).padStart(7)}   ${String(I.apres.faux).padStart(3)}  ${pi(I.apres.faux).padStart(7)}`);
+            console.log(`     dont signalé  ${String(I.avant.signale).padStart(3)}              ${String(I.apres.signale).padStart(3)}`);
+            console.log(`     FAUX ET AFFIRMÉ ${String(I.avant.faux - I.avant.signale).padStart(2)}              ${String(I.apres.faux - I.apres.signale).padStart(3)}   ← le seuil de lancement`);
+            console.log(`   REFUS ......... ${String(I.avant.refus).padStart(3)}  ${pi(I.avant.refus).padStart(7)}   ${String(I.apres.refus).padStart(3)}  ${pi(I.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
+        }
+
+        // ---- LES LIGNES EN BLOC, à part, avec ce qu'elles peuvent et ne peuvent pas dire ----
+        if (B.retenus) {
+            console.log(`\n── ${B.retenus} LIGNE(S) VALIDÉE(S) EN BLOC — détecteur de régression, PAS un taux ──`);
+            console.log(`   AVANT y vaut 100 % de justes par construction (attendu = ce que la production`);
+            console.log(`   avait retenu). Seul le MOUVEMENT a un sens : il révèle ce que les décisions`);
+            console.log(`   ajoutées CHANGENT par rapport à la production.`);
+            console.log(`   inchangées ${String(B.retenus - B.bouge).padStart(3)}   ·   déplacées ${String(B.bouge).padStart(3)}` +
+                `   (après : ${B.apres.juste} juste, ${B.apres.faux} faux, ${B.apres.refus} refus)`);
+            if (B.apres.faux) {
+                console.log(`   ⚠️ ${B.apres.faux} ligne(s) deviennent FAUSSES après nos décisions : régression réelle,`);
+                console.log(`      la seule information que ce bloc puisse produire.`);
+            }
+        }
 
         if (L.detail.length) {
             console.log('\n── LES LIGNES QUI BOUGENT OU RESTENT FAUSSES ──');

@@ -1,5 +1,5 @@
 {
-  "extraitLe": "2026-08-04T10:27:54.988Z",
+  "extraitLe": "2026-08-04T10:57:45.623Z",
   "extraitDe": "test",
   "empreintePrompt": {
     "hash": "47124bc54ff9c182",
@@ -9,26 +9,98 @@
   "commentRafraichir": "node verrou-charges.js --base=test",
   "charges": [
     {
+      "cellule": "asiatique · setCode HORS table close",
+      "pourquoi": "le chemin exact du plantage memeCodeParConventionX du 4 août",
+      "profondeurExigee": "perimetre-vintage",
+      "source": {
+        "_id": "6a71c2be486b51e3ab380b1f",
+        "le": "2026-08-04T10:45:18.381Z",
+        "version": "b3cb941af7a1",
+        "idProduct": 693067
+      },
+      "imageUrl": "https://images1.vinted.net/t/02_00a54_3JTWKBkjppbynX2HmTgTVUAa/f800/1785761579.webp?s=26f368ac4f0d62bef07f6efafea7a90c3d1e1ea0",
+      "lecture": {
+        "name": "Gardevoir ex",
+        "number": "101",
+        "total": "078",
+        "setCode": "sv1S",
+        "language": "JP",
+        "rarete": "SIR",
+        "nomBrut": "サーナイトex",
+        "nomConfiance": "haute",
+        "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
       "cellule": "asiatique · aucun setCode lu",
       "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a70ff010713d5aa99d64eb3",
-        "le": "2026-08-03T20:50:09.122Z",
-        "version": "d6c340b39ae7",
-        "idProduct": 606813
+        "_id": "6a71c3b2486b51e3ab380bcb",
+        "le": "2026-08-04T10:49:22.309Z",
+        "version": "b3cb941af7a1",
+        "idProduct": 606887
       },
-      "imageUrl": "https://images1.vinted.net/t/01_0218d_LZqg36NWERMoRiQg4Z1WjaZh/f800/1785515871.webp?s=38eed2b1c0427f020b7938db4751ab54fd02372c",
+      "imageUrl": "https://images1.vinted.net/t/02_010b3_z1CZ4zheRgzJmnb4cqbGSJgB/f800/1785775974.webp?s=a803018145cf185c11ecf302d682e6706b5336ea",
       "lecture": {
-        "name": "Light Arcanine",
-        "number": "059",
+        "name": "Light Togetic",
+        "number": "176",
         "total": null,
         "setCode": null,
         "language": "JP",
         "rarete": "normale",
-        "nomBrut": "やさしいウインディ",
+        "nomBrut": "やさしいトゲチック",
         "nomConfiance": "haute",
         "symboleSet": "etoile",
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "occidentale",
+      "pourquoi": "toutes les gardes du chantier sont conditionnées à LANGUES_ASIATIQUES : sans elle, une régression occidentale est invisible",
+      "profondeurExigee": "perimetre-vintage",
+      "source": {
+        "_id": "6a71c4e5486b51e3ab380c9d",
+        "le": "2026-08-04T10:54:29.161Z",
+        "version": "b3cb941af7a1",
+        "idProduct": 794609
+      },
+      "imageUrl": "https://images1.vinted.net/t/01_012cc_jkcRQbRkog9Wn59CtZCHynmZ/f800/1785840739.webp?s=eca7b3ce0c8d3ab66a17bc428a9f5fc0f69671cd",
+      "lecture": {
+        "name": "Durant ex",
+        "number": "236",
+        "total": "191",
+        "setCode": "SSP",
+        "language": "FR",
+        "rarete": "SIR",
+        "nomBrut": "Fermite ex",
+        "nomConfiance": "haute",
+        "symboleSet": null,
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
