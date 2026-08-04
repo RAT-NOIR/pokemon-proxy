@@ -62,7 +62,7 @@ const { numeroEstUnDexId } = require('./pokedex');
 // La table close des sets japonais vintage — écrite à la main, vérifiée ligne à ligne.
 // Elle ne pilote PAS encore l'identification : elle sert à lever l'ambiguïté des
 // identifiants TCGdex partagés. Voir sets-vintage-japonais.js.
-const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage } = require('./sets-vintage-japonais');
+const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = require('./sets-vintage-japonais');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -467,19 +467,19 @@ Pour "symboleSet" — LE LOGO DU SET, petit pictogramme imprimé à côté du nu
 - "fossile" : une griffe ou patte squelettique, os noirs.
 - "feuilles" : un bouquet de feuilles ovales groupées en rosace.
 - "pokeball" : une Poké Ball pleine, noir et blanc.
-- "gym" : un cercle contenant le mot GYM.
+- "gym" : les trois lettres GYM, écrites en toutes lettres.
 - "palmier" : un palmier, en aplat d'une seule couleur.
-- "etoile" : une étoile à cinq branches, contour épais, intérieur vide.
+- "etoile" : une étoile à cinq branches, contour large, intérieur vide, SANS aucun texte écrit dessus.
 - "ruines" : une pyramide à degrés vue de face, avec un escalier central.
-- "couronne" : un anneau surmonté de pointes, comme une couronne posée.
-- "eclair" : un éclat en étoile bleu et violet, dynamique.
-- "vs" : un grand « VS » bleu et or.
+- "couronne" : un bandeau circulaire surmonté de dents triangulaires, comme une couronne posée.
+- "eclair" : un éclat anguleux violet et indigo, tracé en biais, aux angles irréguliers.
+- "vs" : les deux lettres V et S, très grandes, dorées.
 - "e1", "e2", "e3", "e4", "e5" : un cercle ouvert contenant le chiffre 1, 2, 3, 4 ou 5. LIS LE CHIFFRE : c'est lui qui distingue cinq sets différents. Si le cercle est visible mais le chiffre non, réponds "illisible".
-- "mcdo" : les arches dorées McDonald's sur fond rouge, en COULEUR.
 - "empreintes" : deux empreintes de pattes.
-- "croix" : une croix aux branches épaisses avec un ovale au centre.
-- "cercle-chiffre" : le numéro de la carte imprimé dans un cercle, et AUCUN symbole de set.
-- "promo-etoile" : une étoile portant le mot PROMO.
+- "croix" : une croix aux bras épais, avec un ovale au milieu.
+- "mcdo" : les deux arches jaunes de McDonald's, en forme de M.
+- "cercle-chiffre" : le NUMÉRO DE LA CARTE lui-même, entouré d'un trait fin, et AUCUN pictogramme de set à côté.
+- "promo-etoile" : une étoile qui PORTE LE MOT « PROMO » écrit dessus. Si tu ne lis pas ce mot, réponds "etoile".
 - "aucun" : rien à cet emplacement. C'est une VRAIE réponse, pas une absence de réponse — mais ne la donne que si tu vois clairement l'emplacement et qu'il est vide.
 - "illisible" : reflet, sleeve, cadrage ou résolution insuffisante. C'est la bonne réponse dans le doute.
 
@@ -3238,7 +3238,39 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             const ecartPrix = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
             const sansEnjeu = ecartPrix != null && ecartPrix < ECART_PRIX_TOLERABLE;
 
-            if (sansEnjeu) {
+            // ════════════════════════════════════════════════════════════════
+            // DÉPARTAGE PAR LE SYMBOLE DU SET — avant le refus, jamais dans le scoring
+            // ════════════════════════════════════════════════════════════════
+            // Voir departagerParSymbole (sets-vintage-japonais.js) pour les quatre verrous
+            // et la mesure qui les justifie. Ici, deux choses seulement :
+            //   - il s'applique AVANT la décision de refus, parce qu'il n'a de sens que
+            //     là : sur une égalité déjà tranchée il n'y a rien à départager ;
+            //   - il ne touche NI les scores NI l'ordre du classement. Il choisit un
+            //     gagnant parmi des candidats que le scoring déclare équivalents.
+            // ⚠️ SORTIE EN SUGGESTION AVERTIE, TOUJOURS. `perimetreVintage` force
+            // `carteAmbigue` plus bas : le prix part avec réserve. Un signal lu juste 6
+            // fois sur 7 transforme un refus en suggestion, jamais en affirmation.
+            const avisSymbole = departagerParSymbole(
+                cardInfo.symboleSet,
+                exAequo.map(c => ({ ...c, codeSet: codeSetsConnus.get(Number(c.idExpansion)) ?? null })),
+                SCORING
+            );
+            if (avisSymbole.gagnant) {
+                console.log(`🔣 [symbole-departage] ${avisSymbole.raison} -> ${avisSymbole.gagnant.idProduct} retenu, EN SUGGESTION AVERTIE.`);
+                // On remonte le désigné en tête sans toucher à un seul score : le
+                // classement reste celui du scoring, on ne fait que choisir dans l'égalité.
+                classement = [
+                    classement.find(c => c.idProduct === avisSymbole.gagnant.idProduct),
+                    ...classement.filter(c => c.idProduct !== avisSymbole.gagnant.idProduct)
+                ];
+                perimetreVintage = true;   // force la réserve : suggestion, pas verdict
+            } else if (cardInfo.symboleSet) {
+                console.log(`🔣 [symbole-departage] ${avisSymbole.raison}`);
+            }
+
+            if (avisSymbole.gagnant) {
+                // Départagé : on continue vers le verdict, avec réserve. Aucun refus.
+            } else if (sansEnjeu) {
                 console.warn(`⚠️ [egalite-sans-enjeu] ${exAequo.length} candidats à ${classement[0].score} points, mais ${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} € : l'écart (${ecartPrix.toFixed(2)} €) ne change pas le verdict -> on affiche AVEC réserve.`);
                 egaliteSansEnjeu = true;
             } else {

@@ -1,5 +1,5 @@
 {
-  "poseLe": "2026-08-04T09:43:09.552Z",
+  "poseLe": "2026-08-04T16:21:57.509Z",
   "suites": [
     "smoke-test.js",
     "scoring.js",
@@ -7,7 +7,8 @@
     "test-table-vintage.js",
     "test-pokedex.js",
     "test-acces.js",
-    "test-journal-echecs.js"
+    "test-journal-echecs.js",
+    "test-symbole-departage.js"
   ],
   "couvertes": [
     "ecarterNonCartes",

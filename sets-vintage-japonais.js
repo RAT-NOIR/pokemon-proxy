@@ -189,7 +189,76 @@ function setCodeCompatibleVintage(setCodeLu, scoring, codesReelsDuCatalogue = nu
     return { compatible: false, raison: `« ${code} » désigne un set réel hors de la table close — la carte n'est PAS vintage` };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// DÉPARTAGE D'UNE ÉGALITÉ PARFAITE PAR LE SYMBOLE DU SET
+// ════════════════════════════════════════════════════════════════════════════
+// CE QU'IL FAIT, ET STRICTEMENT RIEN D'AUTRE : quand plusieurs candidats sont à ÉGALITÉ
+// PARFAITE de score et qu'un seul d'entre eux appartient à un set dont le symbole DÉCLARÉ
+// est celui que l'IA a lu, on retient celui-là. Aucun point n'est ajouté, aucun classement
+// n'est modifié : le scoring reste exactement ce qu'il était. C'est un départage, pas un
+// signal.
+//
+// POURQUOI SEULEMENT LÀ. Mesuré sur 25 scans réels avec vérités saisies à l'aveugle :
+// l'IA rend une valeur DANS l'énumération fermée 16 fois sur 16 (zéro invention), se tait
+// ou avoue « illisible » 52 % du temps, et sur les 7 lignes où elle se prononce et où la
+// comparaison est possible, elle a raison 6 fois. Un signal qui se tait plus souvent qu'il
+// ne se trompe est ce qu'il faut pour DÉPARTAGER — pas pour peser dans un score, où une
+// erreur écarterait la bonne carte avec assurance.
+//
+// LES QUATRE VERROUS, chacun pour une raison mesurée :
+//   1. RIEN SANS LECTURE EXPLICITE. Champ vide, « illisible » : aucun effet. Ne pas savoir
+//      n'autorise pas à désigner (quatrième principe).
+//   2. JAMAIS UN SYMBOLE MARQUÉ NON FIABLE. `symboleFiable: false` couvre « gym » (G1 et
+//      G2 le partagent) et « logo-tcg » (EXP et WEB le partagent) : ces dessins ne
+//      DÉSIGNENT rien, ils sont portés par plusieurs sets. Un symbole lu juste une fois ne
+//      les rachète pas.
+//   3. EXACTEMENT UN CANDIDAT. Zéro correspondance -> le symbole ne prouve rien ici. Deux
+//      ou plus -> il ne départage pas, il faut se taire.
+//   4. `symbole: null` N'EST PAS UNE CORRESPONDANCE. null = NON RELEVÉ, absence de donnée.
+//      Un set dont on n'a pas relevé le symbole ne peut ni gagner ni perdre par lui.
+//
+// ⚠️ ET LA SORTIE RESTE UNE SUGGESTION AVERTIE. Un départage par un signal lu à 6 sur 7 ne
+// fabrique pas un verdict affirmé. Ce qu'on gagne, c'est de transformer un REFUS en
+// suggestion — jamais un refus en affirmation.
+//
+// @param {string|null} symboleLu    ce que l'IA a répondu dans `symboleSet`
+// @param {{idProduct:number, codeSet:string|null}[]} exAequo  les candidats à égalité
+// @param {object} scoring           le module scoring ENTIER (jamais un extrait — voir index.js)
+// @returns {{gagnant: object|null, raison: string}}
+function departagerParSymbole(symboleLu, exAequo, scoring) {
+    const { normaliserCodeSet } = scoring;
+    const lu = String(symboleLu ?? '').trim();
+    if (!lu || lu.toLowerCase() === 'illisible') {
+        return { gagnant: null, raison: 'aucun symbole lu — rien à départager' };
+    }
+    // La table, indexée par code de set normalisé.
+    const parCode = new Map();
+    for (const s of SETS_VINTAGE_JAPONAIS) parCode.set(normaliserCodeSet(s.code), s);
+
+    const correspondants = exAequo.filter(c => {
+        const s = parCode.get(normaliserCodeSet(c.codeSet));
+        if (!s) return false;                    // set hors table close : rien de déclaré
+        if (s.symbole == null) return false;     // verrou 4 : non relevé n'est pas égal
+        if (s.symboleFiable === false) return false; // verrou 2 : porté par plusieurs sets
+        return s.symbole === lu;
+    });
+
+    if (correspondants.length === 1) {
+        const g = correspondants[0];
+        const s = parCode.get(normaliserCodeSet(g.codeSet));
+        return { gagnant: g, raison: `symbole « ${lu} » lu, et « ${g.codeSet} » (${s.nom}) est le SEUL ex aequo à le porter` };
+    }
+    if (correspondants.length === 0) {
+        return { gagnant: null, raison: `symbole « ${lu} » lu, mais aucun ex aequo ne le porte (ou il est marqué non fiable) — il ne prouve rien ici` };
+    }
+    return {
+        gagnant: null,
+        raison: `symbole « ${lu} » lu, mais ${correspondants.length} ex aequo le portent (${correspondants.map(c => c.codeSet).join(', ')}) — il ne départage pas`
+    };
+}
+
 module.exports = {
     SETS_VINTAGE_JAPONAIS, SETS_NON_PROUVES,
-    EXPANSIONS_VINTAGE, CODES_VINTAGE, setCodeCompatibleVintage
+    EXPANSIONS_VINTAGE, CODES_VINTAGE, setCodeCompatibleVintage,
+    departagerParSymbole
 };
