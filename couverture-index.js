@@ -54,6 +54,21 @@ const SUITES_TOUTES = [...SUITES_HORS_LIGNE, 'banc-japonais.js'];
 
 const cliquet = process.argv.includes('--cliquet');
 const poser = process.argv.includes('--poser-plancher');
+// ════════════════════════════════════════════════════════════════════════════
+// --avec=<dossier> : FUSIONNER LA COUVERTURE PRODUITE PAR LE VERROU
+// ════════════════════════════════════════════════════════════════════════════
+// LE DÉFAUT QUE ÇA CORRIGE. Le verrou fait traverser la route entière à ses charges —
+// trouverCarteTCGdex, expansionsDuSetTCGdex, nomPourLeCatalogue, viviersAvecRangs — et le
+// cliquet n'en voyait RIEN : il ne mesurait que ses propres suites. Il annonçait « 36
+// jamais exécutées » sur des fonctions qui venaient de tourner quatre fois.
+// Un cliquet qui sous-estime la couverture réelle ne protège pas ce qu'il croit protéger :
+// une fonction couverte par le seul verrou pouvait cesser de l'être sans que rien ne bouge.
+//
+// ⚠️ POURQUOI PAS AJOUTER LE VERROU À LA LISTE DES SUITES : le verrou APPELLE ce script.
+// Il s'appellerait lui-même, indéfiniment. La fusion est la seule forme qui évite la
+// récursion — le verrou mesure, puis passe son dossier de couverture ici.
+const argAvec = process.argv.find(a => a.startsWith('--avec='));
+const DOSSIER_EXTERNE = argAvec ? argAvec.slice('--avec='.length) : null;
 // Le plancher se pose sur les MÊMES suites que celles que le cliquet rejouera — sans quoi
 // il serait posé trop haut et reculerait dès la première exécution.
 const suites = (cliquet || poser) ? SUITES_HORS_LIGNE : SUITES_TOUTES;
@@ -78,11 +93,15 @@ function mesurer(listeSuites, bavard) {
         }
     }
 
+    // Les dossiers à dépouiller : celui qu'on vient de produire, plus celui du verrou s'il
+    // a été fourni. La fusion est GRATUITE conceptuellement — le compteur prend déjà le MAX
+    // par nom sur toutes les exécutions, quelle qu'en soit la source.
+    const dossiers = [dossier, ...(DOSSIER_EXTERNE && fs.existsSync(DOSSIER_EXTERNE) ? [DOSSIER_EXTERNE] : [])];
     const compteur = new Map();
-    for (const f of fs.readdirSync(dossier)) {
+    for (const dos of dossiers) for (const f of fs.readdirSync(dos)) {
         if (!f.endsWith('.json')) continue;
         let data;
-        try { data = JSON.parse(fs.readFileSync(path.join(dossier, f), 'utf8')); } catch (_) { continue; }
+        try { data = JSON.parse(fs.readFileSync(path.join(dos, f), 'utf8')); } catch (_) { continue; }
         for (const script of data.result || []) {
             // ⚠️ LE FILTRE DOIT ÊTRE EXACT. `endsWith('index.js')` ramasse les centaines
             // d'index.js de node_modules (mongoose, express, stripe) : la première mesure
@@ -109,10 +128,16 @@ if (poser) {
     fs.writeFileSync(PLANCHER, JSON.stringify({
         poseLe: new Date().toISOString(),
         suites: SUITES_HORS_LIGNE,
+        // ⚠️ LE PLANCHER DIT S'IL INCLUT LA COUVERTURE DU VERROU. Sans ce drapeau, un
+        // cliquet lancé à la main SANS --avec comparerait une mesure amputée à un plancher
+        // complet et annoncerait des dizaines de régressions imaginaires. Le drapeau permet
+        // de REFUSER la comparaison plutôt que de la rendre fausse.
+        avecVerrou: Boolean(DOSSIER_EXTERNE),
         // On enregistre les COUVERTES : c'est sur elles que porte l'interdiction de recul.
         couvertes
     }, null, 2), 'utf8');
-    console.log(`\n📝 plancher posé : ${PLANCHER} — ${couvertes.length} fonction(s) couverte(s), ${jamais.length} non couverte(s)`);
+    console.log(`\n📝 plancher posé : ${PLANCHER} — ${couvertes.length} fonction(s) couverte(s), ${jamais.length} non couverte(s)` +
+        `${DOSSIER_EXTERNE ? ' (couverture du verrou INCLUSE)' : ''}`);
     process.exit(0);
 }
 
@@ -122,6 +147,13 @@ if (cliquet) {
         process.exit(0);
     }
     const plancher = JSON.parse(fs.readFileSync(PLANCHER, 'utf8'));
+    if (plancher.avecVerrou && !DOSSIER_EXTERNE) {
+        // Comparer serait pire que ne rien faire : on refuse, on ne devine pas.
+        console.log(`  ⛔ MESURE ABANDONNÉE — le plancher inclut la couverture du verrou, pas cette mesure.`);
+        console.log(`     Comparer les deux annoncerait des régressions qui n'existent pas.`);
+        console.log(`     Lance : node verrou-avant-push.js   (il fournit --avec)`);
+        process.exit(2);
+    }
     const ensemble = new Set(couvertes);
     const perdues = plancher.couvertes.filter(n => !ensemble.has(n));
     const gagnees = couvertes.filter(n => !plancher.couvertes.includes(n));

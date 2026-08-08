@@ -112,6 +112,25 @@ axios.get = async function (url) {
     return { status: enreg.statut, data: enreg.data };
 };
 
+// ⚠️ SORTIR PROPREMENT POUR QUE LA COUVERTURE SOIT ÉCRITE. V8 ne dépose le fichier
+// NODE_V8_COVERAGE qu'à une sortie NORMALE. Le verrou tue le serveur avec SIGTERM, que
+// Node traite par défaut en terminant sans rien écrire : le dossier restait VIDE, et le
+// cliquet fusionnait zéro couverture tout en annonçant « le cliquet tient ». Un contrôle
+// qui mesure le vide sans le dire est exactement ce qu'on traque.
+// Le handler vit ICI, dans le préchargement de test — pas une ligne dans index.js.
+// ⚠️ PAR IPC, PAS PAR SIGNAL. Sur Windows, SIGTERM envoyé à un autre processus n'est PAS
+// délivrable : `child.kill()` appelle TerminateProcess et la sortie n'est jamais propre,
+// handler ou pas. Mesuré — le dossier restait vide après avoir posé les handlers.
+// Le message IPC, lui, passe : c'est déjà comme ça que l'enregistreur vide sa cassette.
+for (const sig of ['SIGTERM', 'SIGINT']) {
+    process.on(sig, () => { console.log(`🎛️ [faux-reseau] ${sig} — sortie propre.`); process.exit(0); });
+}
+process.on('message', m => {
+    if (m !== 'arret') return;
+    console.log('🎛️ [faux-reseau] arrêt demandé — sortie propre pour que la couverture soit écrite.');
+    process.exit(0);
+});
+
 // La ligne que le verrou lit pour connaître l'état. Format stable, volontairement.
 console.log(`🎛️ [faux-reseau] armé : ${parImage.size} lecture(s), TCGDEX-${etatTcgdex}` +
     ` ${Object.keys(tcgdex).length} réponse(s), ${couvertes.length} charge(s) couverte(s).`);

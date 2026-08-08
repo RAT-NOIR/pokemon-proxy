@@ -49,6 +49,9 @@ const { demarrer, appeler } = require('./verrou/serveur');
 const JETON = process.env.JETON_API || 'jeton-verrou';
 const USER_VERROU = 'verrou-avant-push';
 const FICHIER_CHARGES = path.join(__dirname, 'verrou', 'charges.json');
+// Dossier stable plutôt que temporaire : il est inspectable, et `--poser-plancher` peut
+// s'en servir après coup sans relancer le verrou.
+const DOSSIER_COUVERTURE = path.join(__dirname, 'verrou', 'couverture');
 
 let echecs = 0, avertissements = 0;
 function verifier(libelle, ok, detail = '') {
@@ -118,12 +121,22 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     }
 
     console.log('\n=== 2. Serveur réel, réseau rejoué ===');
+    // ⚠️ LE SERVEUR ENFANT EST INSTRUMENTÉ. NODE_V8_COVERAGE est hérité par les processus
+    // fils : la couverture d'index.js par les charges est donc capturée telle quelle, sans
+    // une ligne d'instrumentation dans le code de production. C'est ce dossier que le
+    // cliquet fusionnera — sans lui, il annonçait « jamais exécutées » des fonctions qui
+    // venaient de tourner quatre fois.
+    // Vidé à chaque exécution : une couverture d'hier ferait passer pour couvert ce qui ne
+    // l'est plus.
+    fs.rmSync(DOSSIER_COUVERTURE, { recursive: true, force: true });
+    fs.mkdirSync(DOSSIER_COUVERTURE, { recursive: true });
     let srv;
     try {
         srv = await demarrer(path.join(__dirname, 'verrou', 'faux-reseau.js'), {
             VERROU_CHARGES: FICHIER_CHARGES,
             JETON_API: JETON,
-            OPENROUTER_API_KEY: ''
+            OPENROUTER_API_KEY: '',
+            NODE_V8_COVERAGE: DOSSIER_COUVERTURE
         });
     } catch (e) {
         verifier('le serveur démarre', false, e.message);
@@ -172,6 +185,10 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
 
     console.log('\n=== 3. /api/identifier sur chaque charge ===');
     const urlsInconnues = new Set();
+    // La garde du cliquet : si une charge n'atteint pas sa profondeur, elle n'a pas
+    // traversé le code qu'elle devait traverser, et la couverture produite est AMPUTÉE.
+    // La comparer au plancher annoncerait des régressions qui n'en sont pas.
+    let profondeursAtteintes = true;
     for (const c of donnees.charges) {
         const avant = srv.lire().length;
         const r = await appeler(srv.port, 'POST', '/api/identifier', {
@@ -198,6 +215,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         // ---- LA PROFONDEUR, le contrôle qui manquait ----
         const p = profondeurAtteinte(nouveau, r.json);
         const suffit = profondeurSuffisante(p.atteint, c.profondeurExigee);
+        if (!suffit.ok) profondeursAtteintes = false;
         if (suffit.ok) {
             console.log(`  ✅ [${nom}] profondeur « ${p.atteint} » atteinte (exigée : ${c.profondeurExigee})`);
         } else if (suffit.raison) {
@@ -256,7 +274,17 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     }
 
     verifier('le serveur est toujours en vie', srv.enfant.exitCode === null);
-    srv.enfant.kill();
+    // ⚠️ ON ATTEND SA SORTIE. Le préchargement le fait sortir proprement sur SIGTERM pour
+    // que V8 dépose la couverture ; enchaîner sur le cliquet sans attendre la lirait avant
+    // qu'elle soit écrite.
+    await new Promise(resolve => {
+        srv.enfant.once('exit', resolve);
+        try { srv.enfant.send('arret'); } catch (_) { srv.enfant.kill(); }
+        setTimeout(() => { try { srv.enfant.kill(); } catch (_) { } resolve(); }, 8000);
+    });
+    const fichiersCouv = fs.existsSync(DOSSIER_COUVERTURE) ? fs.readdirSync(DOSSIER_COUVERTURE).length : 0;
+    verifier(`couverture du serveur écrite (${fichiersCouv} fichier(s))`, fichiersCouv > 0,
+        'V8 n\'a rien déposé — le cliquet fusionnerait du vide');
 
     // ---- Nettoyage du bac à sable ----
     try {
@@ -270,12 +298,22 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         await bac.close();
     } catch (e) { console.log(`\n⚠️ nettoyage impossible : ${e.message}`); }
 
-    console.log('\n=== 4. Cliquet de couverture ===');
-    try {
-        execFileSync(process.execPath, ['couverture-index.js', '--cliquet'], { cwd: __dirname, stdio: 'inherit' });
-    } catch (e) {
-        echecs++;
-        console.log('  ❌ le cliquet a reculé (voir ci-dessus)');
+    console.log('\n=== 4. Cliquet de couverture (suites + couverture du verrou) ===');
+    if (!profondeursAtteintes) {
+        // ⚠️ ABANDON, PAS ÉCHEC DU CLIQUET. La couverture est amputée pour une raison déjà
+        // signalée plus haut ; la comparer produirait un second message d'erreur qui
+        // accuserait le mauvais coupable.
+        console.log('  ⛔ MESURE ABANDONNÉE — une charge n\'a pas atteint sa profondeur.');
+        console.log('     La couverture produite est amputée : la comparer annoncerait des');
+        console.log('     régressions qui n\'existent pas. Corrige la profondeur d\'abord.');
+    } else {
+        try {
+            execFileSync(process.execPath, ['couverture-index.js', '--cliquet', `--avec=${DOSSIER_COUVERTURE}`],
+                { cwd: __dirname, stdio: 'inherit' });
+        } catch (e) {
+            echecs++;
+            console.log('  ❌ le cliquet a reculé (voir ci-dessus)');
+        }
     }
 
     console.log('');
