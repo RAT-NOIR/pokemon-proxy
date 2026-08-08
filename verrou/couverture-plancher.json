@@ -1,5 +1,5 @@
 {
-  "poseLe": "2026-08-08T20:32:28.511Z",
+  "poseLe": "2026-08-08T21:39:02.002Z",
   "suites": [
     "test-chargement.js",
     "smoke-test.js",
@@ -11,19 +11,42 @@
     "test-journal-echecs.js",
     "test-symbole-departage.js"
   ],
+  "avecVerrou": true,
   "couvertes": [
+    "chargerSetsTCGdex",
+    "chercherCartesTCGdex",
+    "chercherCartesTCGdexNomSeul",
+    "detailCarteTCGdex",
+    "diagnosticLienTcgdex",
     "ecarterNonCartes",
     "echapperRegex",
+    "estLatin",
+    "etatVintedVersCardmarket",
+    "expansionsDuSetTCGdex",
     "genererVariantesNom",
+    "getCardIdFromAI",
     "getPrixGuideLocalLot",
+    "langueDesSetsTCGdex",
+    "langueVersTCGdex",
     "lireCodeSets",
     "lireNumeros",
     "lireRegions",
+    "lireTousLesCodesSet",
     "nomOpposeUnVeto",
+    "nomPourLeCatalogue",
     "normaliserNom",
+    "origin",
+    "pireEtat",
+    "rangsDe",
     "regionAttendue",
     "scorerCandidatsLocal",
+    "setIdDeCarte",
+    "setsPourTotal",
+    "trouverCarteTCGdex",
     "trouverParSetCodeEtNumero",
-    "trouverProduitsLocaux"
+    "trouverProduitsLocaux",
+    "variantesPour",
+    "verifierJeton",
+    "viviersAvecRangs"
   ]
 }
