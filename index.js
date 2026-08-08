@@ -3141,6 +3141,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Égalité au sommet dont l'écart de prix est trop faible pour changer le verdict :
         // le prix part, mais avec réserve. Voir la règle de l'écart de prix plus bas.
         let egaliteSansEnjeu = false;
+        // Le départage par le symbole a-t-il tranché une égalité parfaite ? Drapeau DISTINCT
+        // de `perimetreVintage` : les deux forcent la réserve, mais pour des raisons
+        // différentes, et c'est cette différence qu'on veut pouvoir compter.
+        let departageParSymbole = false;
+        let symboleDepartageRaison = null;
         {
             const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
             // `numeroCarte` et non `cardInfo.number` : la preuve du veto ET le troisième
@@ -3255,6 +3260,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 exAequo.map(c => ({ ...c, codeSet: codeSetsConnus.get(Number(c.idExpansion)) ?? null })),
                 SCORING
             );
+            symboleDepartageRaison = avisSymbole.raison;
             if (avisSymbole.gagnant) {
                 console.log(`🔣 [symbole-departage] ${avisSymbole.raison} -> ${avisSymbole.gagnant.idProduct} retenu, EN SUGGESTION AVERTIE.`);
                 // On remonte le désigné en tête sans toucher à un seul score : le
@@ -3263,7 +3269,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     classement.find(c => c.idProduct === avisSymbole.gagnant.idProduct),
                     ...classement.filter(c => c.idProduct !== avisSymbole.gagnant.idProduct)
                 ];
-                perimetreVintage = true;   // force la réserve : suggestion, pas verdict
+                // ⚠️ SON PROPRE DRAPEAU, PAS CELUI DU PÉRIMÈTRE. La première version
+                // réutilisait `perimetreVintage` pour forcer la réserve — ça marchait, et
+                // ça rendait les deux mécanismes INDISCERNABLES au journal. Deux causes
+                // sous un seul nom, c'est une mesure qu'on ne peut plus faire.
+                departageParSymbole = true;
             } else if (cardInfo.symboleSet) {
                 console.log(`🔣 [symbole-departage] ${avisSymbole.raison}`);
             }
@@ -3318,6 +3328,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Le périmètre restreint sans prouver : sa sortie est une suggestion, pas un
             // verdict. Arbitrage explicite, à ne pas lever avant que le banc le justifie.
             || perimetreVintage
+            // Le départage par le symbole : il choisit dans une égalité que le scoring
+            // déclare parfaite, sur un signal lu juste 6 fois sur 7. Suggestion, jamais
+            // verdict — c'est la condition à laquelle il a été écrit.
+            || departageParSymbole
             // NEUTRALISER LE NUMÉRO, C'EST PERDRE UNE SOURCE — donc propager l'incertitude,
             // jamais la réduire (voir le principe dans scoring.js). Mesuré au banc : sans
             // cette ligne, la règle du numéro de Pokédex FAIT EMPIRER le critère de
@@ -3328,21 +3342,39 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // vintage le nom ne suffit pas : « Mew » ramène 75 candidats.
             || avisDex.estDex
         );
-        if (carteAmbigue) {
-            await signalerIncertain(req,
-                perimetreVintage ? 'perimetre-vintage-suggestion'
+        // ════════════════════════════════════════════════════════════════════
+        // LA RAISON DE LA RÉSERVE — calculée UNE FOIS, donnée à ses DEUX consommateurs
+        // ════════════════════════════════════════════════════════════════════
+        // Elle ne vivait que dans l'appel à `signalerIncertain`, c'est-à-dire dans un
+        // `console.warn` — ÉPHÉMÈRE sur Render. Le journal, lui, ne portait que le booléen
+        // `carteIncertaine` : on savait qu'il y avait une réserve, jamais laquelle.
+        // Conséquence immédiate : le départage par symbole venait d'être écrit et RIEN
+        // n'aurait pu dire s'il s'était déclenché une seule fois en production. Une branche
+        // qu'on ne peut pas compter est une branche qu'on ne connaît pas.
+        //
+        // ⚠️ UNE SEULE EXPRESSION, DEUX USAGES. La recopier pour le journal en ferait une
+        // seconde source de vérité qui divergerait au premier ajout — deuxième principe,
+        // trois fois vérifié cette semaine.
+        //
+        // ÉNUMÉRATION FERMÉE, une valeur par CAUSE — jamais un motif générique, sinon on ne
+        // peut plus mesurer lequel se déclenche. `perimetre-vintage-suggestion` couvrait
+        // deux mécanismes distincts depuis que le départage réutilisait son drapeau : c'est
+        // corrigé, ils ont chacun le leur.
+        const raisonReserve = !carteAmbigue ? null
+            : departageParSymbole ? 'symbole-departage'
+                : perimetreVintage ? 'perimetre-vintage-suggestion'
                     : lienAmbigu ? 'lien-tcgdex-partage'
-                    : avisDex.estDex ? 'numero-pokedex-neutralise'
-                    : egaliteSansEnjeu ? 'egalite-sans-enjeu'
-                    : localIncertain ? 'identification-locale-sans-tcgdex'
-                    : nomNumeroIncoherents ? 'nom-numero-incoherents'
-                        : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
-                            : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
-                                : nomPeuFiable ? 'nom-confiance-basse'
-                                : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
-                                    : numeroContredit ? 'tcgdex-numero-incoherent'
-                                        : 'tcgdex-ambigu');
-        }
+                        : avisDex.estDex ? 'numero-pokedex-neutralise'
+                            : egaliteSansEnjeu ? 'egalite-sans-enjeu'
+                                : localIncertain ? 'identification-locale-sans-tcgdex'
+                                    : nomNumeroIncoherents ? 'nom-numero-incoherents'
+                                        : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
+                                            : gagnantContreditNumero ? 'gagnant-contredit-le-numero'
+                                                : nomPeuFiable ? 'nom-confiance-basse'
+                                                    : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
+                                                        : numeroContredit ? 'tcgdex-numero-incoherent'
+                                                            : 'tcgdex-ambigu';
+        if (carteAmbigue) await signalerIncertain(req, raisonReserve);
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
@@ -3379,6 +3411,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // ces trois champs sont la seule façon de mesurer, au tour suivant, ce que la
             // table close aura réellement corrigé.
             setCodeResolution,
+            // POURQUOI le prix part avec réserve, en énumération fermée. Sans ce champ,
+            // `carteIncertaine` dit qu'il y a une réserve et jamais laquelle : impossible
+            // de compter un mécanisme plutôt qu'un autre, ni de savoir si une branche
+            // neuve s'est déclenchée une seule fois.
+            raisonReserve,
+            // La phrase exacte rendue par le départage — y compris quand il N'A PAS
+            // tranché. « aucun ex aequo ne porte ce symbole » est une mesure autant que
+            // « il a tranché » : c'est elle qui dira si le signal sert ou s'il est inerte.
+            symboleDepartage: symboleDepartageRaison,
             parenteRetenue: parenteJournal,
             setTcgdex: lienGagnant.setTcgdex,
             idExpansionGagnante: classement[0]?.idExpansion ?? null,

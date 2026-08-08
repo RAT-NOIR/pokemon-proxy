@@ -1,10 +1,10 @@
 {
-  "extraitLe": "2026-08-04T10:57:45.623Z",
+  "extraitLe": "2026-08-08T19:46:31.905Z",
   "extraitDe": "test",
   "empreintePrompt": {
-    "hash": "47124bc54ff9c182",
+    "hash": "0ab60556949acbd7",
     "modele": "google/gemini-3-flash-preview",
-    "taillePrompt": 11351
+    "taillePrompt": 11546
   },
   "commentRafraichir": "node verrou-charges.js --base=test",
   "charges": [

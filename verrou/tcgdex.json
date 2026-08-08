@@ -1,5 +1,5 @@
 {
-  "enregistreLe": "2026-08-04T10:57:51.312Z",
+  "enregistreLe": "2026-08-08T19:46:41.675Z",
   "nb": 19,
   "chargesCouvertes": [
     "6a71c2be486b51e3ab380b1f",
@@ -1564,15 +1564,15 @@
         "updated": "2026-05-13T09:44:20+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-04T08:02:29.464Z",
+            "updated": "2026-08-08T08:02:24.300Z",
             "unit": "EUR",
             "idProduct": 274667,
-            "avg": 46.89,
-            "low": 11.11,
-            "trend": 83.52,
-            "avg1": 260,
-            "avg7": 68.61,
-            "avg30": 59.49,
+            "avg": 74.34,
+            "low": 15,
+            "trend": 73.56,
+            "avg1": 40.56,
+            "avg7": 67.14,
+            "avg30": 60.08,
             "avg-holo": null,
             "low-holo": null,
             "trend-holo": 36.46,
@@ -1582,7 +1582,7 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-08-04T08:02:38.282Z",
+            "updated": "2026-08-08T08:02:22.747Z",
             "1st-edition-holofoil": {
               "productId": 86750,
               "lowPrice": 9999,
@@ -1593,8 +1593,8 @@
             },
             "unlimited-holofoil": {
               "productId": 86750,
-              "lowPrice": 150,
-              "midPrice": 175.99,
+              "lowPrice": 86.94,
+              "midPrice": 151.98,
               "highPrice": 733.1,
               "marketPrice": 62.64,
               "directLowPrice": null
@@ -3750,15 +3750,15 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-04T08:02:29.464Z",
+                "updated": "2026-08-08T08:02:24.300Z",
                 "unit": "EUR",
                 "idProduct": 794609,
                 "avg": 24.17,
                 "low": 15.8,
-                "trend": 22.03,
-                "avg1": 27,
-                "avg7": 22.87,
-                "avg30": 23.8,
+                "trend": 21.66,
+                "avg1": 17.2,
+                "avg7": 21.77,
+                "avg30": 22.31,
                 "avg-holo": null,
                 "low-holo": null,
                 "trend-holo": 0,
@@ -3768,14 +3768,14 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-08-04T08:03:34.889Z",
+                "updated": "2026-08-08T08:02:41.453Z",
                 "holofoil": {
                   "productId": 589930,
                   "lowPrice": 34.28,
-                  "midPrice": 40,
+                  "midPrice": 41.05,
                   "highPrice": 269.9,
-                  "marketPrice": 35.43,
-                  "directLowPrice": null
+                  "marketPrice": 36.71,
+                  "directLowPrice": 41.39
                 }
               }
             }
@@ -3824,15 +3824,15 @@
         "updated": "2026-06-08T13:16:55+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-04T08:02:29.464Z",
+            "updated": "2026-08-08T08:02:24.300Z",
             "unit": "EUR",
             "idProduct": 794609,
             "avg": 24.17,
             "low": 15.8,
-            "trend": 22.03,
-            "avg1": 27,
-            "avg7": 22.87,
-            "avg30": 23.8,
+            "trend": 21.66,
+            "avg1": 17.2,
+            "avg7": 21.77,
+            "avg30": 22.31,
             "avg-holo": null,
             "low-holo": null,
             "trend-holo": 0,
@@ -3842,14 +3842,14 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-08-04T08:03:34.889Z",
+            "updated": "2026-08-08T08:02:41.453Z",
             "holofoil": {
               "productId": 589930,
               "lowPrice": 34.28,
-              "midPrice": 40,
+              "midPrice": 41.05,
               "highPrice": 269.9,
-              "marketPrice": 35.43,
-              "directLowPrice": null
+              "marketPrice": 36.71,
+              "directLowPrice": 41.39
             }
           }
         }

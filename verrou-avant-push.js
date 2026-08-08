@@ -82,11 +82,22 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // écrite ici ne peut la remplir. La faire échouer rendrait le verrou rouge en
     // permanence, et un verrou toujours rouge est un verrou qu'on apprend à ignorer —
     // exactement le raisonnement appliqué à la dérive du prompt.
-    if (donnees.charges.length < 3) {
-        avertir(`${donnees.charges.length} cellule(s) sur 3`,
-            'manque de données au journal, pas un défaut du code — scanne une carte du type manquant');
+    // Le nombre voulu vient des charges elles-mêmes : le mettre en dur ici en ferait une
+    // seconde source qui divergerait au premier ajout de cellule (ce qui vient d'arriver).
+    const voulues = donnees.cellulesVoulues ?? 3;
+    if (donnees.cellulesVoulues == null) {
+        // Sans ce champ, on ne peut PAS savoir combien de cellules sont attendues
+        // aujourd'hui : les charges sont plus vieilles que la liste actuelle. Afficher
+        // « 3 sur 3 » serait rassurant et faux.
+        avertir('charges extraites avant la liste de cellules actuelle',
+            'le compte de cellules ci-dessous peut être périmé -> node verrou-charges.js --base=test');
+    }
+    if (donnees.charges.length < voulues) {
+        avertir(`${donnees.charges.length} cellule(s) sur ${voulues}`,
+            'manque de données au journal, pas un défaut du code');
+        for (const m of donnees.cellulesManquantes ?? []) console.log(`      manquante : ${m}`);
     } else {
-        verifier('3 cellules sur 3', true);
+        verifier(`${voulues} cellules sur ${voulues}`, true);
     }
     for (const c of donnees.charges) {
         console.log(`     ${c.cellule}`);

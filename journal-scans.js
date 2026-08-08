@@ -240,6 +240,35 @@ const journalScanSchema = new mongoose.Schema({
     //   'inconnu'      -> ne résout vers rien : bruit d'OCR (voir le quatrième principe)
     setCodeResolution: String,
 
+    // POURQUOI LE PRIX EST PARTI AVEC RÉSERVE — énumération fermée, une valeur par CAUSE.
+    // ⚠️ CE CHAMP MANQUAIT ET ÇA S'EST VU TOUT DE SUITE. `carteIncertaine` disait qu'il y
+    // avait une réserve, jamais laquelle : la raison ne vivait que dans un `console.warn`,
+    // donc éphémère sur Render. Au moment d'écrire le départage par le symbole, RIEN
+    // n'aurait pu dire s'il s'était déclenché une seule fois en production — et une
+    // branche qu'on ne peut pas compter est une branche qu'on ne connaît pas.
+    //   'symbole-departage'               -> le symbole du set a tranché une égalité parfaite
+    //   'perimetre-vintage-suggestion'    -> le périmètre a restreint sans prouver
+    //   'lien-tcgdex-partage'             -> identifiant TCGdex partagé JP/occidental
+    //   'numero-pokedex-neutralise'       -> le nombre lu était un numéro de Pokédex
+    //   'egalite-sans-enjeu'              -> ex aequo, mais moins de 1,00 € d'écart
+    //   'identification-locale-sans-tcgdex' -> pas de variants_detailed, motif non routé
+    //   'nom-numero-incoherents'          -> le nom existe, jamais à ce numéro
+    //   'aucun-candidat-au-numero'        -> aucun candidat ne porte le numéro lu
+    //   'gagnant-contredit-le-numero'     -> rang 3 sur le gagnant
+    //   'nom-confiance-basse'             -> l'IA doute de sa propre lecture du nom
+    //   'motif-<raison>'                  -> motif de reverse non résolu
+    //   'tcgdex-numero-incoherent' | 'tcgdex-ambigu'
+    // ⚠️ 'perimetre-vintage-suggestion' A RECOUVERT DEUX MÉCANISMES pendant un commit : le
+    // départage réutilisait le drapeau du périmètre. Deux causes sous un seul nom, c'est
+    // une mesure qu'on ne peut plus faire — d'où une valeur par cause, sans exception.
+    raisonReserve: String,
+
+    // LA PHRASE EXACTE RENDUE PAR LE DÉPARTAGE PAR SYMBOLE, y compris quand il n'a PAS
+    // tranché. « symbole "e2" lu, mais aucun ex aequo ne le porte » est une mesure autant
+    // que « il a tranché » : c'est la répartition entre ces deux cas qui dira si le signal
+    // sert vraiment ou s'il est inerte. null = aucune égalité à départager sur ce scan.
+    symboleDepartage: String,
+
     // La parenté RETENUE, quand il y en a une : « MCD~MCDP ». Toute la chaîne en dépend
     // maintenant — MCD~MCDP a sauvé un Charmander à 1033 €, DP5~DP5c un Dracolosse — et
     // c'est un rapprochement approximatif au cœur du système. Le journaliser rend une
@@ -358,6 +387,8 @@ function enregistrerScan(d = {}) {
             sourcePrix: d.sourcePrix || null,
             setCodeAccord: memeCode(d.setCode, codeSetGagnant),
             setCodeResolution: d.setCodeResolution || null,
+            raisonReserve: d.raisonReserve || null,
+            symboleDepartage: d.symboleDepartage || null,
             parenteRetenue: d.parenteRetenue || null
         });
     })().catch(e => {

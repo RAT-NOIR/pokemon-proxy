@@ -86,6 +86,20 @@ const CELLULES = [
         pourquoi: 'toutes les gardes du chantier sont conditionnées à LANGUES_ASIATIQUES : sans elle, une régression occidentale est invisible',
         profondeurExigee: 'perimetre-vintage',
         test: d => !S.LANGUES_ASIATIQUES.includes(String(d.langue || '').toUpperCase())
+    },
+    {
+        // ⚠️ ELLE SERA VIDE AU DÉBUT, ET C'EST NORMAL — comme la cellule occidentale l'a
+        // été. Le départage par le symbole a été écrit avec 24 assertions unitaires et
+        // ZÉRO passage en conditions réelles. Tant qu'aucun scan ne produit une égalité
+        // parfaite tranchée par le symbole, cette branche reste inconnue : elle marche
+        // en test et personne ne peut dire ce qu'elle fait en production.
+        // La cellule existe pour que le jour où ça arrive, la ligne devienne
+        // AUTOMATIQUEMENT une charge du verrou — et la branche passe du côté couvert
+        // sans qu'on ait à y penser.
+        nom: 'égalité parfaite départagée par le symbole',
+        pourquoi: 'la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte',
+        profondeurExigee: 'verdict',
+        test: d => d.raisonReserve === 'symbole-departage'
     }
 ];
 
@@ -194,11 +208,15 @@ const CELLULES = [
     fs.writeFileSync(SORTIE, JSON.stringify({
         extraitLe: new Date().toISOString(),
         extraitDe: prod.db.databaseName,
+        // Le nombre de cellules VOULUES, pour que le verrou sache combien manquent sans
+        // avoir à connaître la liste. Un nombre en dur des deux côtés divergerait.
+        cellulesVoulues: CELLULES.length,
+        cellulesManquantes: CELLULES.filter(c => !charges.some(ch => ch.cellule === c.nom)).map(c => c.nom),
         empreintePrompt: empreinte,
         commentRafraichir: 'node verrou-charges.js --base=test',
         charges
     }, null, 2), 'utf8');
-    console.log(`\n📝 ${SORTIE} — ${charges.length}/3 cellules · empreinte ${empreinte.hash}`);
+    console.log(`\n📝 ${SORTIE} — ${charges.length}/${CELLULES.length} cellules · empreinte ${empreinte.hash}`);
     await prod.close();
 
     // ── PHASE 2 : ENREGISTREMENT DE TCGdex ───────────────────────────────────
