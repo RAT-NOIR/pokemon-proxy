@@ -45,8 +45,9 @@
     {
       "lot": "symbole-40",
       "debut": "2026-08-08T19:58:44Z",
-      "fin": null,
+      "fin": "2026-08-08T20:23:30Z",
       "declareLe": "2026-08-08T19:58:44Z",
+      "fermeeLe": "2026-08-08T20:23:30Z",
       "pourquoi": "Mesurer la lecture du symbole sous le prompt corrigé (le mot « étoile » retiré de la description de l'éclair). 40 cartes japonaises vintage sans total et sans code de set, en DEUX séances de 20 décidées d'avance — la seconde aura lieu quel que soit le résultat de la première. Ces cartes serviront à trouver des bugs, elles sont donc de l'entraînement. Ne pas additionner aux 7 lignes lues sous l'ancien prompt : deux instruments."
     }
   ]
