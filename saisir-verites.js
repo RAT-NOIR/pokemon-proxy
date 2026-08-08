@@ -49,7 +49,7 @@ const tout = process.argv.includes('--tout');
 // hors service. Conséquence mesurée : 32 vérités saisies une par une sous H009..H033 quand
 // le banc numérotait L001..L025. Aucune n'est arrivée, et rien ne le disait.
 // Voir banc-seaux.js : deux définitions de la même règle divergent toujours.
-const { seauDe, numeroter } = require('./banc-seaux');
+const { seauDe, numeroter, identiteDe } = require('./banc-seaux');
 
 function lireVerites() {
     try { return JSON.parse(fs.readFileSync(SORTIE, 'utf8')); }
@@ -127,12 +127,25 @@ async function resoudreSaisie(saisie, Cat) {
     // ⚠️ ON NUMÉROTE TOUT LE CORPUS, PUIS ON FILTRE. Jamais l'inverse : filtrer d'abord
     // faisait dépendre la clé de la question posée, et c'est ce qui a détaché 32 vérités.
     const docs = (await J.find({}).sort({ le: 1 }).lean());
-    const { lignes } = numeroter(docs);
-    const cartes = lignes.filter(l => l.seau === seauVoulu).map(l => ({ cle: l.cle, d: l.d }));
+    // `lignesNumerotees` et non `lignes` : ce dernier nomme déjà les codes de set lus plus
+    // haut. Deux `const` du même nom dans une portée est une SyntaxError, donc un fichier
+    // qui ne se charge pas — invisible pour toutes les suites, aucune ne le chargeait.
+    const { lignes: lignesNumerotees } = numeroter(docs);
+    const cartes = lignesNumerotees.filter(l => l.seau === seauVoulu).map(l => ({ cle: l.cle, d: l.d }));
 
     const V = lireVerites();
-    const aFaire = cartes.filter(c => tout || V.verites[c.cle] === undefined);
-    console.log(`\n${cartes.length} carte(s) dans le seau « ${seauVoulu} », ${aFaire.length} à saisir.\n`);
+    // ⚠️ « DÉJÀ SAISIE » SE DÉCIDE PAR IDENTITÉ, PAS PAR CLÉ. Une clé positionnelle change
+    // dès que la règle des seaux bouge : mesuré à l'instant, l'outil annonçait « 65 à
+    // saisir » alors que 24 cartes avaient déjà leur vérité — il les aurait toutes
+    // redemandées, et une saisie refaite n'est pas garantie identique à la première.
+    // C'est la MÊME cause que les 32 vérités détachées, à un autre endroit : le banc
+    // rattachait déjà par identité, cet outil décidait encore par clé.
+    const dejaSaisies = new Set(Object.values(V.verites)
+        .map(v => v && v.lu ? identiteDe({ nom: v.lu.nom, numero: v.lu.numero, setCode: v.lu.setCode, total: v.lu.total }) : null)
+        .filter(Boolean));
+    const aFaire = cartes.filter(c => tout || !dejaSaisies.has(identiteDe(c.d)));
+    const deja = cartes.length - aFaire.length;
+    console.log(`\n${cartes.length} carte(s) dans le seau « ${seauVoulu} », ${deja} déjà saisie(s), ${aFaire.length} à saisir.\n`);
     if (!aFaire.length) { rl.close(); await mongoose.disconnect(); return; }
 
     for (let i = 0; i < aFaire.length; i++) {

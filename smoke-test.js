@@ -75,43 +75,21 @@ function chargerLesModules() {
 // exporté quelque part, mais absent de la ligne d'import est une panne à retardement.
 // Les noms qu'index.js définit lui-même sont écartés — ce sont des homonymes, pas des
 // oublis.
+// ⚠️ CE CONTRÔLE A ÉTÉ DÉPLACÉ ET GÉNÉRALISÉ — voir verifier-sources.js et
+// test-chargement.js. Il ne portait que sur index.js ; il porte maintenant sur les 51
+// fichiers du projet, y compris les outils en ligne de commande que RIEN ne chargeait.
+// C'est ce trou qui a laissé partir un `const lignes` déclaré deux fois dans
+// saisir-verites.js, avec huit suites au vert.
+// La fonction ci-dessous délègue : en garder une seconde copie ici la ferait diverger de
+// l'autre au premier correctif — deuxième principe, quatre fois vérifié cette semaine.
 function verifierLesImports() {
     console.log('\n=== 1 bis. Imports : utilisés mais jamais importés ===');
-    const fs = require('fs');
-    const brut = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
-    // Les commentaires sont RETIRÉS d'abord. Les blocs d'import de ce fichier sont
-    // abondamment commentés, et ces commentaires contiennent des virgules : sans ce
-    // nettoyage, la découpe prenait « pas la résolution des noms.\n numeroDepuisSlug »
-    // pour un nom d'import et déclarait manquant un import parfaitement présent.
-    // Le `[^:]` épargne les `https://` — on ne veut pas amputer une ligne de code.
-    const source = brut.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-
-    // Ce qu'index.js importe réellement, toutes lignes `const { a, b } = require('./x')`.
-    const importes = new Set();
-    for (const m of source.matchAll(/(?:const|let)\s*\{([^}]+)\}\s*=\s*require\(['"]\.\/[^'"]+['"]\)/g)) {
-        for (const n of m[1].split(',')) {
-            const nom = n.split(':').pop().trim();
-            if (nom) importes.add(nom);
-        }
-    }
-    // Ce qu'index.js définit lui-même : homonymes légitimes, à ne pas signaler.
-    const locaux = new Set();
-    for (const m of source.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g)) locaux.add(m[1]);
-    for (const m of source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)) locaux.add(m[1]);
-
-    const modules = ['./scoring', './acces', './journal-scans', './identification-locale', './mongo-connexion', './pokedex'];
-    const oublis = [];
-    for (const m of modules) {
-        for (const nom of Object.keys(require(m))) {
-            if (importes.has(nom) || locaux.has(nom)) continue;
-            // Utilisé comme APPEL. Les commentaires ayant déjà été retirés, une occurrence
-            // ici est forcément du code exécutable.
-            const utilise = new RegExp(`\\b${nom}\\s*\\(`).test(source);
-            if (utilise) oublis.push(`${nom} (exporté par ${m})`);
-        }
-    }
+    const { verifierImports } = require('./verifier-sources');
+    const oublis = verifierImports(path.join(__dirname, 'index.js'))
+        .map(o => `${o.nom} (exporté par ${o.module})`);
     verifier(`aucun identifiant utilisé sans être importé`, oublis.length, 0);
     for (const o of oublis) console.log(`     ❌ ${o}`);
+    console.log(`     (le projet entier est couvert par : node test-chargement.js)`);
 }
 
 // ---- Utilitaires réseau -------------------------------------------------

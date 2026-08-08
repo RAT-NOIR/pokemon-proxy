@@ -44,9 +44,9 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 // ⚠️ LE CLIQUET N'UTILISE QUE LES SUITES HORS LIGNE. Le banc lit la base de PRODUCTION :
 // en faire dépendre une barrière avant push rendrait le push impossible dès que le réseau
 // tousse, et ferait porter à la barrière la disponibilité d'un service tiers.
-const SUITES_HORS_LIGNE = ['smoke-test.js', 'scoring.js', 'test-setcode-numero.js',
-    'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js', 'test-journal-echecs.js',
-    'test-symbole-departage.js'];
+const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
+    'test-setcode-numero.js', 'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
+    'test-journal-echecs.js', 'test-symbole-departage.js'];
 // Le banc est inclus dans la mesure COMPLÈTE : c'est lui qui affichait vert pendant que la
 // production était morte, et la question « que couvre l'instrument » n'a de sens que s'il
 // est dedans.
