@@ -41,6 +41,13 @@
       "declareLe": "2026-08-04T10:42:30Z",
       "fermeeLe": "2026-08-04T10:56:06Z",
       "pourquoi": "Premier lot de diagnostic : la chaîne fonctionne-t-elle bout en bout ? Ces cartes serviront à TROUVER des bugs, elles sont donc de l'entraînement par nature et n'ont rien à faire dans le holdout. Elles doivent aussi remplir les deux cellules vides du verrou — « asiatique · setCode hors table close » (celle qui reproduit le plantage du 4 août) et « occidentale »."
+    },
+    {
+      "lot": "symbole-40",
+      "debut": "2026-08-08T19:58:44Z",
+      "fin": null,
+      "declareLe": "2026-08-08T19:58:44Z",
+      "pourquoi": "Mesurer la lecture du symbole sous le prompt corrigé (le mot « étoile » retiré de la description de l'éclair). 40 cartes japonaises vintage sans total et sans code de set, en DEUX séances de 20 décidées d'avance — la seconde aura lieu quel que soit le résultat de la première. Ces cartes serviront à trouver des bugs, elles sont donc de l'entraînement. Ne pas additionner aux 7 lignes lues sous l'ancien prompt : deux instruments."
     }
   ]
 }
