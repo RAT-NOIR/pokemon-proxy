@@ -1,6 +1,10 @@
 {
-  "extraitLe": "2026-08-08T19:46:31.905Z",
+  "extraitLe": "2026-08-08T19:53:50.735Z",
   "extraitDe": "test",
+  "cellulesVoulues": 4,
+  "cellulesManquantes": [
+    "égalité parfaite départagée par le symbole"
+  ],
   "empreintePrompt": {
     "hash": "0ab60556949acbd7",
     "modele": "google/gemini-3-flash-preview",
