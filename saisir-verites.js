@@ -41,7 +41,13 @@ const J = mongoose.model('Jv', new mongoose.Schema({}, { strict: false }), 'jour
 const Cat = mongoose.model('Pv', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
 const CS = mongoose.model('Cv', new mongoose.Schema({}, { strict: false }), 'codes_set');
 
-const seauVoulu = (process.argv.find(a => a.startsWith('--seau=')) || '--seau=holdout').split('=')[1];
+// ⚠️ PAR DÉFAUT : TOUS LES SEAUX. L'ancien défaut était `--seau=holdout`, et il a menti —
+// il annonçait « 0 à saisir » pendant que 41 cartes attendaient dans le seau « lot ». Un
+// outil qui répond « rien à faire » sur une question qu'on ne lui a pas posée est pire
+// qu'un outil qui refuse : on le croit.
+// Le seau de chaque carte est affiché, et `--seau=<nom>` reste disponible pour restreindre.
+const argSeau = process.argv.find(a => a.startsWith('--seau='));
+const seauVoulu = argSeau ? argSeau.split('=')[1] : null;   // null = tous
 const tout = process.argv.includes('--tout');
 
 // ⚠️ SEAUX ET NUMÉROTATION : UNE SEULE SOURCE, partagée avec le banc. Ce fichier avait sa
@@ -131,7 +137,9 @@ async function resoudreSaisie(saisie, Cat) {
     // haut. Deux `const` du même nom dans une portée est une SyntaxError, donc un fichier
     // qui ne se charge pas — invisible pour toutes les suites, aucune ne le chargeait.
     const { lignes: lignesNumerotees } = numeroter(docs);
-    const cartes = lignesNumerotees.filter(l => l.seau === seauVoulu).map(l => ({ cle: l.cle, d: l.d }));
+    const cartes = lignesNumerotees
+        .filter(l => seauVoulu == null || l.seau === seauVoulu)
+        .map(l => ({ cle: l.cle, d: l.d, seau: l.seau }));
 
     const V = lireVerites();
     // ⚠️ « DÉJÀ SAISIE » SE DÉCIDE PAR IDENTITÉ, PAS PAR CLÉ. Une clé positionnelle change
@@ -145,13 +153,20 @@ async function resoudreSaisie(saisie, Cat) {
         .filter(Boolean));
     const aFaire = cartes.filter(c => tout || !dejaSaisies.has(identiteDe(c.d)));
     const deja = cartes.length - aFaire.length;
-    console.log(`\n${cartes.length} carte(s) dans le seau « ${seauVoulu} », ${deja} déjà saisie(s), ${aFaire.length} à saisir.\n`);
+    console.log(`\n${cartes.length} carte(s) ${seauVoulu ? `dans le seau « ${seauVoulu} »` : 'tous seaux confondus'}, ${deja} déjà saisie(s), ${aFaire.length} à saisir.`);
+    // OÙ elles sont, pour qu'un seau vide ne passe pas pour « rien à faire ».
+    const parSeau = new Map();
+    for (const c of aFaire) parSeau.set(c.seau, (parSeau.get(c.seau) || 0) + 1);
+    for (const [s, n] of [...parSeau.entries()].sort((a, b) => b[1] - a[1])) {
+        console.log(`   ${String(n).padStart(3)} à saisir dans « ${s} »`);
+    }
+    console.log('');
     if (!aFaire.length) { rl.close(); await mongoose.disconnect(); return; }
 
     for (let i = 0; i < aFaire.length; i++) {
-        const { cle, d } = aFaire[i];
+        const { cle, d, seau } = aFaire[i];
         console.log('\n' + '═'.repeat(78));
-        console.log(`  ${cle}   (${i + 1}/${aFaire.length})   scanné le ${d.le?.toISOString?.().slice(0, 16)}   build ${d.version ?? '?'}`);
+        console.log(`  ${cle}  [${seau}]   (${i + 1}/${aFaire.length})   scanné le ${d.le?.toISOString?.().slice(0, 16)}   build ${d.version ?? '?'}`);
         console.log('═'.repeat(78));
         console.log(`  IMAGE   : ${d.imageUrl ?? '(non enregistrée)'}`);
         console.log(`  ANNONCE : ${d.vintedUrl ?? '(non enregistrée — l\'extension ne l\'envoie pas encore)'}`);

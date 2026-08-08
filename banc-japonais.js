@@ -21,6 +21,30 @@
 // jamais une réimplémentation : c'est l'erreur qui a produit « la simulation dit 12, la
 // production dit 0 ».
 //
+// ════════════════════════════════════════════════════════════════════════════
+// LA RÈGLE DE SYMÉTRIE — une décision part dans les DEUX ou dans AUCUN
+// ════════════════════════════════════════════════════════════════════════════
+// UNE DÉCISION QUI PART EN PRODUCTION ENTRE DANS `apres()` DANS LE MÊME COMMIT.
+// Si l'un des deux ne peut pas être fait, AUCUN DES DEUX NE PART.
+//
+// POURQUOI, MESURÉ. Le départage par le symbole a été déployé sans être ajouté ici. Sur
+// le lot « symbole-40 », la colonne APRÈS a donc annoncé -7 justes et +10 refus par
+// rapport à AVANT : le banc refusait 9 cartes que la production départageait, et les 12
+// départages étaient tous JUSTES. L'instrument déclarait une régression là où il y avait
+// un gain — et il l'aurait déclarée à chaque mesure suivante.
+//
+// C'EST L'ERREUR SYMÉTRIQUE DE CELLE QU'ON A PASSÉ LA SEMAINE À CORRIGER. Jusqu'ici
+// l'instrument était EN AVANCE sur le système : il simulait des décisions que la
+// production n'avait pas encore (d'où la colonne APRÈS). Cette fois il était EN RETARD.
+// Les deux produisent le même mensonge, dans des directions opposées, et aucune suite ne
+// peut les voir : `apres()` et la route ne se comparent nulle part.
+//
+// COMMENT LE VÉRIFIER À LA MAIN, faute de contrôle automatique : toute décision qui
+// choisit ou refuse un produit existe à DEUX endroits — la route dans index.js, et
+// `apres()` ici. Aujourd'hui : la règle du numéro de Pokédex, le périmètre vintage, le
+// chemin setCode+numéro, le veto par le nom, la règle d'égalité, le départage par le
+// symbole. Six. Si le compte diverge, la colonne APRÈS ment.
+//
 // ⚠️ CES 44 CARTES NE SONT PLUS UN JEU DE TEST. Une quinzaine de correctifs en ont été
 // dérivés — la règle du Pokédex, la table close, l'asymétrie Lv.N, la région de l'IPB,
 // l'armement du périmètre, la garde du setCode — et chacun a été mesuré sur elles. Elles
@@ -44,7 +68,7 @@ const {
     trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets
 } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
-const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage } = require('./sets-vintage-japonais');
+const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = require('./sets-vintage-japonais');
 const { trouverProduitsLocaux, setsPourTotal } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
@@ -58,20 +82,34 @@ const EST_CODE_CARD = /code\s*card/i;
 // VU JUSTE : idProduct attendu = idProduct retenu.
 // 'inconnu' = le testeur n'a pas pu retrouver la carte (annonce vendue et disparue). Ces
 // lignes sont EXCLUES du calcul, jamais comptées comme des réussites.
-const VERITE = {
-    JP001: 562000,   // Charmander  -> MCDP-004     (McDonalds-Original-Minimum-Pack)
-    JP002: 654781,   // Wartortle   -> EC1-S19      (Base-Expansion-Pack)
-    JP007: 654781,   // Wartortle   -> EC1-S19      (même carte que JP002)
-    JP003: 653962,   // Rhydon      -> EC4-055 V2   (Split-Earth)
-    JP009: 651965,   // Porygon2    -> EC2-063      (The-Town-on-No-Map)
-    JP017: 653910,   // Flareon     -> EC4-017 V2   (Split-Earth, holo)
-    JP026: 606835,   // Light Jolteon -> N4         (Darkness-and-to-Light)
-    JP031: 606847,   // Dark Haunter  -> N4         (Darkness-and-to-Light)
-    JP036: 571754,   // Mew         -> SI-JP        (Southern-Islands-JP)
-    JP004: 'inconnu', // Ledian holo : V1 ou V2 indéterminable, annonce disparue
-    JP030: 'inconnu', // Meowth : ROG ou EC4-062 ?
-    JP034: 'inconnu'  // Misty's Staryu : carte non retrouvée
-};
+// ⚠️ ANCRÉES PAR IDENTITÉ DE LA CARTE LUE, PLUS PAR CLÉ. Elles étaient posées sur
+// « JP001 »..« JP044 », c'est-à-dire sur une POSITION : le seau, l'ordre, le
+// dédoublonnage et le nombre de lignes qui précèdent. Elles tenaient parce que le seau
+// d'entraînement n'avait pas bougé — une bombe non amorcée. La même construction avait
+// déjà détaché 32 vérités saisies quand les fenêtres de lot sont apparues, et fait
+// reproposer 24 cartes déjà renseignées.
+// Les identités ci-dessous sont EXTRAITES du journal, aucune n'est écrite de mémoire.
+//
+// ⚠️ ELLES NE S'APPLIQUENT QU'AUX SEAUX D'ENTRAÎNEMENT ET DE VÉRIFICATION. C'est ce qui
+// empêche la contamination mesurée : « Raichu n°026, sans code, sans total » désigne DEUX
+// cartes physiques différentes — JP041 dans l'entraînement, L046 dans le lot — et leur
+// lecture est identique au caractère près. L'identité seule ne les sépare pas ; le seau,
+// si. Une vérité d'entraînement n'a rien à dire sur une carte d'un lot frais.
+const SEAUX_VERITES_CODEES = new Set(['entrainement', 'verification']);
+const VERITE = [
+    { lu: { nom: "Charmander", numero: "004", setCode: "MCD", total: "018" }, idProduct: 562000, note: 'MCDP-004' },
+    { lu: { nom: "Wartortle", numero: "019", setCode: "e1", total: "029" }, idProduct: 654781, note: 'EC1-S19' },
+    { lu: { nom: "Wartortle", numero: "019", setCode: null, total: "029" }, idProduct: 654781, note: 'EC1-S19, même carte lue sans code' },
+    { lu: { nom: "Rhydon", numero: "055", setCode: null, total: "088" }, idProduct: 653962, note: 'EC4-055 V2' },
+    { lu: { nom: "Porygon2", numero: "063", setCode: "e2", total: "092" }, idProduct: 651965, note: 'EC2-063' },
+    { lu: { nom: "Flareon", numero: "017", setCode: null, total: "088" }, idProduct: 653910, note: 'EC4-017 V2, holo' },
+    { lu: { nom: "Light Jolteon", numero: "135", setCode: null, total: null }, idProduct: 606835, note: 'N4' },
+    { lu: { nom: "Dark Haunter", numero: "093", setCode: null, total: null }, idProduct: 606847, note: 'N4' },
+    { lu: { nom: "Mew", numero: "151", setCode: null, total: null }, idProduct: 571754, note: 'SI-JP' },
+    { lu: { nom: "Ledian", numero: "007", setCode: null, total: "088" }, idProduct: 'inconnu', note: 'holo V1 ou V2 indéterminable, annonce disparue' },
+    { lu: { nom: "Meowth", numero: "062", setCode: "e3", total: "088" }, idProduct: 'inconnu', note: 'ROG ou EC4-062 ?' },
+    { lu: { nom: "Misty's Staryu", numero: "120", setCode: null, total: null }, idProduct: 'inconnu', note: 'carte non retrouvée' }
+];
 
 // ⚠️ VÉRITÉS DONNÉES PAR NOM, PAS PAR CLÉ. Le testeur a fourni cinq cartes sous forme
 // d'URL Cardmarket sans les rattacher à un numéro de ligne. Sans cette table, elles
@@ -79,6 +117,19 @@ const VERITE = {
 // retenu » — c'est-à-dire `null`, puisque ces cinq scans avaient ÉCHOUÉ. Le banc comptait
 // donc l'échec comme la bonne réponse, et affichait une identification correcte comme une
 // régression. Un banc qui prend l'échec pour la vérité est pire qu'un banc absent.
+//
+// ⚠️ ELLES SONT MAINTENANT ANCRÉES PAR IDENTITÉ, PLUS PAR NOM SEUL — et ce n'était pas
+// une précaution théorique : « Raichu » désignait DEUX lignes, JP041 dans l'entraînement
+// et L046 dans le lot frais. La vérité d'entraînement (654243) écrasait celle que le
+// testeur avait saisie pour L046 (584721), et le banc comptait FAUSSE une identification
+// que la production avait réussie. Un nom seul ne désigne pas une carte.
+const VERITE_PAR_NOM = [
+    { lu: { nom: "Raichu", numero: "026", setCode: null, total: null }, idProduct: 654243, note: 'Intro-Pack-Bulbasaur/Raichu-IPB3' },
+    { lu: { nom: "Koga's Ditto", numero: "132", setCode: "G2", total: null }, idProduct: 605387, note: 'Challenge-from-the-Darkness' },
+    { lu: { nom: "Tangela", numero: "114", setCode: null, total: null }, idProduct: 557645, note: 'Expansion-Pack' },
+    { lu: { nom: "Dragonite", numero: "180", setCode: "DP5", total: null }, idProduct: 698502, note: 'Cry-from-the-Mysterious Lv.61' },
+    { lu: { nom: "Jigglypuff", numero: "039", setCode: null, total: null }, idProduct: 584684, note: 'Pokemon-Jungle, No.039' }
+];
 // ════════════════════════════════════════════════════════════════════════════
 // LA FRONTIÈRE ENTRAÎNEMENT / HOLDOUT
 // ════════════════════════════════════════════════════════════════════════════
@@ -182,13 +233,8 @@ function celluleDe(d) {
     return `${total ? 'avec total' : 'SANS total'} · ${code ? 'setCode lu' : 'setCode NON lu'}`;
 }
 
-const VERITE_PAR_NOM = {
-    'Raichu': 654243,          // Intro-Pack-Bulbasaur/Raichu-IPB3
-    "Koga's Ditto": 605387,    // Challenge-from-the-Darkness/Kogas-Ditto-CFTD
-    'Tangela': 557645,         // Expansion-Pack/Tangela
-    'Dragonite': 698502,       // Cry-from-the-Mysterious/Dragonite-Lv61-DP5c
-    'Jigglypuff': 584684       // Pokemon-Jungle (PJU), « Jungle, No.039 »
-};
+// (l'ancienne table par nom seul vivait ici — elle est remontée plus haut, ancrée par
+//  identité, avec la contamination « Raichu » qu'elle produisait)
 
 (async () => {
     const t0 = Date.now();
@@ -344,9 +390,23 @@ const VERITE_PAR_NOM = {
                     incertain = true;   // suggestion avertie, arbitrage F
                     return { retenu, incertain, voie };
                 }
-                // Égalité dans le périmètre : on retombe sur la règle de l'égalité.
+                // Égalité dans le périmètre : le SYMBOLE d'abord, l'écart de prix ensuite.
                 if (eg) {
-                    const prix = r.scores.filter(s => s.score === r.scores[0].score).map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
+                    const exAequo = r.scores.filter(s => s.score === r.scores[0].score);
+                    // ⚠️ LE DÉPARTAGE PAR LE SYMBOLE, DANS LE MÊME ORDRE QU'EN PRODUCTION.
+                    // Il manquait ici pendant un commit, et la colonne APRÈS a menti de
+                    // -7 justes et +10 refus sur le lot « symbole-40 » : le banc refusait
+                    // 9 cartes que la production départageait correctement. Voir la règle
+                    // de symétrie en tête de fichier.
+                    const avisSym = departagerParSymbole(
+                        d.symboleSet,
+                        exAequo.map(s => ({ idProduct: s.candidat.idProduct, codeSet: cs.get(Number(s.candidat.idExpansion)) ?? null })),
+                        S
+                    );
+                    if (avisSym.gagnant) {
+                        return { retenu: avisSym.gagnant.idProduct, incertain: true, voie: 'symbole-departage' };
+                    }
+                    const prix = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
                     const ecart = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
                     if (ecart == null || ecart >= 1.00) return { retenu: null, incertain: true, voie: 'REFUS-egalite-perimetre' };
                     return { retenu: r.scores[0].candidat.idProduct, incertain: true, voie: 'perimetre-egalite-sans-enjeu' };
@@ -432,8 +492,17 @@ const VERITE_PAR_NOM = {
 
     function verite(cle, d) {
         if (MOTIFS_TECHNIQUES.has(d.motifEchec)) return { valeur: null, source: 'TECHNIQUE' };
-        if (VERITE[cle] !== undefined) return { valeur: VERITE[cle], source: VERITE[cle] === 'inconnu' ? 'inconnu' : 'cle' };
-        if (VERITE_PAR_NOM[d.nom] !== undefined) return { valeur: VERITE_PAR_NOM[d.nom], source: 'nom' };
+        // Les deux tables codées en dur, ancrées par IDENTITÉ et bornées aux seaux
+        // d'entraînement et de vérification — voir leur en-tête pour la contamination
+        // « Raichu » que cette borne supprime.
+        const seau = seauDe(d);
+        if (SEAUX_VERITES_CODEES.has(seau)) {
+            const ident = identiteDe(d);
+            const parCle = VERITE.find(v => identiteDe({ ...v.lu }) === ident);
+            if (parCle) return { valeur: parCle.idProduct, source: parCle.idProduct === 'inconnu' ? 'inconnu' : 'cle' };
+            const parNom = VERITE_PAR_NOM.find(v => identiteDe({ ...v.lu }) === ident);
+            if (parNom) return { valeur: parNom.idProduct, source: 'nom' };
+        }
         // Rattachement PAR IDENTITÉ de la carte lue, jamais par la clé positionnelle.
         const vs = rattachement.parIdentite.get(identiteDe(d));
         if (vs !== undefined) {
