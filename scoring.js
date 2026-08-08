@@ -804,6 +804,37 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // sont ces réussites-là qui disparaissent en premier, sans que rien ne les pleure.
 
 // ============================================================================
+// LE SIXIÈME PRINCIPE — un mot ambigu dans une énumération fermée coûte deux fois
+// ============================================================================
+// UN MOT QUI APPARAÎT DANS DEUX DESCRIPTIONS D'UNE MÊME ÉNUMÉRATION N'EST PAS UNE
+// MALADRESSE DE RÉDACTION : C'EST UNE RÉPONSE QU'ON SOUFFLE AU MODÈLE.
+//
+// LE CAS, MESURÉ. La valeur « eclair » était décrite comme « un éclat EN ÉTOILE bleu et
+// violet », alors qu'« etoile » est une autre valeur de la même liste. Sur un Light
+// Togetic du set N4, le modèle a répondu « etoile ». Ce n'était pas une hallucination :
+// c'était le mot qu'on lui avait donné. Une recherche mécanique en a trouvé QUATRE autres
+// — « cercle » partagé par gym, e1..e5 et cercle-chiffre ; « branches » par etoile et
+// croix ; « pointes » par etoile et couronne ; « bleu » par eclair et vs.
+//
+// LE GAIN, ET C'EST LUI LA SURPRISE. Retirer ces mots n'a pas seulement supprimé l'erreur.
+// Il a rendu le modèle PLUS SÛR DE LUI :
+//     ancien prompt :  7 prononcées sur 15 (48 %),  6 justes, 1 fausse
+//     nouveau prompt : 28 prononcées sur 32 (78 %), 28 justes, 0 fausse
+// On attendait moins de fautes ; on a aussi obtenu deux fois plus de réponses. Un modèle
+// qui hésite entre deux étiquettes voisines ne se trompe pas seulement une fois sur sept :
+// il se TAIT le reste du temps. L'ambiguïté ne coûte pas qu'en justesse, elle coûte en
+// couverture — et cette moitié-là du coût est invisible tant qu'on ne mesure que les
+// erreurs.
+//
+// CE QU'IL FAUT EN FAIRE, au prochain champ en énumération fermée : chercher les mots
+// partagés AVANT de mesurer le taux, parce qu'un taux mesuré sur une énumération ambiguë
+// mesure la rédaction autant que le modèle. Le contrôle est mécanique et gratuit —
+// mesure-mots-symboles.js le fait en une seconde. Et quand un partage est INÉVITABLE
+// (« etoile » et « promo-etoile » désignent vraiment la même forme), il ne faut pas le
+// masquer mais le TRANCHER dans le texte : « si tu ne lis pas le mot PROMO, réponds
+// etoile ». Une règle explicite vaut mieux qu'un synonyme retiré.
+
+// ============================================================================
 // LE QUATRIÈME PRINCIPE — contredire prouve, ne pas lire ne prouve rien
 // ============================================================================
 // C'est le MIROIR du premier, et il se trompe dans l'autre sens. Le premier dit qu'une
