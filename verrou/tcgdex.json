@@ -1,10 +1,11 @@
 {
-  "enregistreLe": "2026-08-08T19:53:56.531Z",
-  "nb": 19,
+  "enregistreLe": "2026-08-08T21:12:44.280Z",
+  "nb": 21,
   "chargesCouvertes": [
     "6a71c2be486b51e3ab380b1f",
-    "6a71c3b2486b51e3ab380bcb",
-    "6a71c4e5486b51e3ab380c9d"
+    "6a778ff541c0673e928ab762",
+    "6a71c4e5486b51e3ab380c9d",
+    "6a778f1541c0673e928ab69d"
   ],
   "reponses": {
     "https://api.tcgdex.net/v2/ja/sets": {
@@ -1458,148 +1459,76 @@
         "method": "GET"
       }
     },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%84%E3%81%95%E3%81%97%E3%81%84%E3%83%88%E3%82%B2%E3%83%81%E3%83%83%E3%82%AF": {
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%91%E3%82%BD%E3%82%B3%E3%83%B3%E5%A4%A7%E6%9A%B4%E8%B5%B0%EF%BC%81": {
       "statut": 200,
       "data": []
     },
-    "https://api.tcgdex.net/v2/ja/cards?name=Light%20Togetic": {
+    "https://api.tcgdex.net/v2/ja/cards?name=Computer%20Error": {
       "statut": 200,
       "data": []
     },
-    "https://api.tcgdex.net/v2/ja/cards?name=Light": {
+    "https://api.tcgdex.net/v2/ja/cards?name=Computer": {
       "statut": 200,
       "data": []
     },
-    "https://api.tcgdex.net/v2/en/cards?name=Light%20Togetic": {
+    "https://api.tcgdex.net/v2/en/cards?name=Computer%20Error": {
       "statut": 200,
       "data": [
         {
-          "id": "neo4-15",
-          "localId": "15",
-          "name": "Light Togetic",
-          "image": "https://assets.tcgdex.net/en/neo/neo4/15"
+          "id": "basep-16",
+          "localId": "16",
+          "name": "Computer Error",
+          "image": "https://assets.tcgdex.net/en/base/basep/16"
         }
       ]
     },
-    "https://api.tcgdex.net/v2/en/cards/neo4-15": {
+    "https://api.tcgdex.net/v2/en/cards/basep-16": {
       "statut": 200,
       "data": {
-        "category": "Pokemon",
-        "id": "neo4-15",
-        "illustrator": "Naoyo Kimura",
-        "image": "https://assets.tcgdex.net/en/neo/neo4/15",
-        "localId": "15",
-        "name": "Light Togetic",
-        "rarity": "Rare",
+        "category": "Trainer",
+        "id": "basep-16",
+        "illustrator": "Sumiyoshi Kizuki",
+        "image": "https://assets.tcgdex.net/en/base/basep/16",
+        "localId": "16",
+        "name": "Computer Error",
+        "rarity": "Common",
         "set": {
           "cardCount": {
-            "official": 105,
-            "total": 113
+            "official": 53,
+            "total": 53
           },
-          "id": "neo4",
-          "logo": "https://assets.tcgdex.net/en/neo/neo4/logo",
-          "name": "Neo Destiny",
-          "symbol": "https://assets.tcgdex.net/univ/neo/neo4/symbol"
+          "id": "basep",
+          "logo": "https://assets.tcgdex.net/en/base/basep/logo",
+          "name": "Wizards Black Star Promos",
+          "symbol": "https://assets.tcgdex.net/univ/base/basep/symbol"
         },
         "variants": {
-          "firstEdition": true,
-          "holo": true,
-          "normal": false,
+          "firstEdition": false,
+          "holo": false,
+          "normal": true,
           "reverse": false,
           "wPromo": false
         },
         "variants_detailed": [
           {
-            "type": "holo",
+            "type": "normal",
             "size": "standard",
-            "variantId": "jr7oetx1mqug9"
-          },
-          {
-            "type": "holo",
-            "size": "standard",
-            "stamp": [
-              "1st-edition"
-            ],
-            "variantId": "3a83wf50ts0izj268xwv3crwi"
+            "variantId": "endfynwn4n10gzq",
+            "pricing": {
+              "cardmarket": null,
+              "tcgplayer": null
+            }
           }
         ],
-        "dexId": [
-          176
-        ],
-        "hp": 60,
-        "types": [
-          "Colorless"
-        ],
-        "evolveFrom": "Togepi",
-        "description": "It becomes depressed if it is not near kind-hearted people. Is is able to float in the air without moving its wings.",
-        "stage": "Stage1",
-        "abilities": [
-          {
-            "type": "Pokemon Power",
-            "name": "Gift",
-            "effect": "When you play Light Togetic from your hand, your opponent may search his or her deck for a Pokémon Tool card, show that card to you, and put it into his or her hand. Either way, you may do the same, and then each player who searched shuffles his or her deck."
-          }
-        ],
-        "attacks": [
-          {
-            "cost": [
-              "Colorless",
-              "Colorless"
-            ],
-            "name": "Sweet Kiss",
-            "effect": "Your opponent may draw a card.",
-            "damage": 30
-          }
-        ],
-        "resistances": [
-          {
-            "type": "Fighting",
-            "value": "-30"
-          }
-        ],
+        "effect": "You may draw up to 5 cards, then your opponent may draw up to 5 cards. Your turn is over now (you don't get to attack).",
         "legal": {
           "standard": false,
           "expanded": false
         },
-        "updated": "2026-05-13T09:44:20+01:00",
+        "updated": "2026-07-10T13:27:19+01:00",
         "pricing": {
-          "cardmarket": {
-            "updated": "2026-08-08T08:02:24.286Z",
-            "unit": "EUR",
-            "idProduct": 274667,
-            "avg": 74.34,
-            "low": 15,
-            "trend": 73.56,
-            "avg1": 40.56,
-            "avg7": 67.14,
-            "avg30": 60.08,
-            "avg-holo": null,
-            "low-holo": null,
-            "trend-holo": 36.46,
-            "avg1-holo": 16.99,
-            "avg7-holo": 57.9,
-            "avg30-holo": 29.16
-          },
-          "tcgplayer": {
-            "unit": "USD",
-            "updated": "2026-08-08T08:02:22.747Z",
-            "1st-edition-holofoil": {
-              "productId": 86750,
-              "lowPrice": 9999,
-              "midPrice": 9999,
-              "highPrice": 9999,
-              "marketPrice": 290,
-              "directLowPrice": null
-            },
-            "unlimited-holofoil": {
-              "productId": 86750,
-              "lowPrice": 86.94,
-              "midPrice": 151.98,
-              "highPrice": 733.1,
-              "marketPrice": 62.64,
-              "directLowPrice": null
-            }
-          }
+          "cardmarket": null,
+          "tcgplayer": null
         }
       }
     },
@@ -3750,7 +3679,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-08T08:02:24.286Z",
+                "updated": "2026-08-08T08:02:24.484Z",
                 "unit": "EUR",
                 "idProduct": 794609,
                 "avg": 24.17,
@@ -3824,7 +3753,7 @@
         "updated": "2026-06-08T13:16:55+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-08T08:02:24.286Z",
+            "updated": "2026-08-08T08:02:24.484Z",
             "unit": "EUR",
             "idProduct": 794609,
             "avg": 24.17,
@@ -3853,6 +3782,91 @@
             }
           }
         }
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%A9%E3%83%95%E3%83%AC%E3%82%B7%E3%82%A2": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "SV4a-003",
+          "localId": "003",
+          "name": "ラフレシア",
+          "image": "https://assets.tcgdex.net/ja/SV/SV4a/003"
+        },
+        {
+          "id": "SM11b-003",
+          "localId": "003",
+          "name": "ラフレシアGX"
+        },
+        {
+          "id": "M2-003",
+          "localId": "003",
+          "name": "ラフレシア"
+        },
+        {
+          "id": "S9a-003",
+          "localId": "003",
+          "name": "ラフレシア",
+          "image": "https://assets.tcgdex.net/ja/S/S9a/003"
+        },
+        {
+          "id": "MC-003",
+          "localId": "003",
+          "name": "エリカのラフレシアex"
+        },
+        {
+          "id": "SM10-004",
+          "localId": "004",
+          "name": "ラフレシア"
+        },
+        {
+          "id": "PMCG4-010",
+          "localId": "010",
+          "name": "ラフレシア"
+        },
+        {
+          "id": "PMCG5-014",
+          "localId": "014",
+          "name": "エリカのラフレシア"
+        },
+        {
+          "id": "PMCG2-014",
+          "localId": "014",
+          "name": "ラフレシア"
+        },
+        {
+          "id": "SV2a-045",
+          "localId": "045",
+          "name": "ラフレシア",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/045"
+        },
+        {
+          "id": "SM11b-062",
+          "localId": "062",
+          "name": "ラフレシアGX"
+        },
+        {
+          "id": "SM11b-069",
+          "localId": "069",
+          "name": "ラフレシアGX"
+        },
+        {
+          "id": "SV4a-193",
+          "localId": "193",
+          "name": "ラフレシア",
+          "image": "https://assets.tcgdex.net/ja/SV/SV4a/193"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/en/cards/SV4a-003": {
+      "statut": 404,
+      "erreur": "Request failed with status code 404",
+      "data": {
+        "type": "https://tcgdex.dev/errors/not-found",
+        "title": "The resource you are trying to reach does not exists",
+        "status": 404,
+        "endpoint": "/en/cards/SV4a-003",
+        "method": "GET"
       }
     }
   }

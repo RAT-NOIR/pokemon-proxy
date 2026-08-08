@@ -480,6 +480,591 @@
         "setCode": "SSP"
       },
       "saisiLe": "2026-08-04T15:49:39.692Z"
+    },
+    "L026": {
+      "idProduct": 606442,
+      "nom": "Pichu",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Pichu-GSNW",
+      "lu": {
+        "nom": "Pichu",
+        "numero": "172",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:41:03.497Z"
+    },
+    "L027": {
+      "idProduct": 606808,
+      "nom": "Cyndaquil",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Darkness-and-to-Light/Cyndaquil-DL",
+      "lu": {
+        "nom": "Cyndaquil",
+        "numero": "155",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:41:48.140Z"
+    },
+    "L028": {
+      "idProduct": 584688,
+      "nom": "Persian",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Pokemon-Jungle/Persian",
+      "lu": {
+        "nom": "Persian",
+        "numero": "053",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:42:20.471Z"
+    },
+    "L029": {
+      "idProduct": 548611,
+      "nom": "Rattata",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Rattata",
+      "lu": {
+        "nom": "Rattata",
+        "numero": "019",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:43:16.061Z"
+    },
+    "L031": {
+      "idProduct": 585143,
+      "nom": "Dratini",
+      "codeSet": "ROG",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Rocket-Gang/Dratini",
+      "lu": {
+        "nom": "Dratini",
+        "numero": "147",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:44:56.636Z"
+    },
+    "L032": {
+      "idProduct": 605375,
+      "nom": "Blaine's Doduo",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Challenge-from-the-Darkness/Blaines-Doduo-CFTD",
+      "lu": {
+        "nom": "Blaine's Doduo",
+        "numero": "084",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:45:23.026Z"
+    },
+    "L033": {
+      "idProduct": 654079,
+      "nom": "Fisherman",
+      "codeSet": "EC5",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Mysterious-Mountains/Fisherman-EC5079",
+      "lu": {
+        "nom": "Fisherman",
+        "numero": "079",
+        "total": "088",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:46:00.373Z"
+    },
+    "L034": {
+      "idProduct": 557657,
+      "nom": "Beedrill",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Beedrill",
+      "lu": {
+        "nom": "Beedrill",
+        "numero": "015",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:46:23.189Z"
+    },
+    "L035": {
+      "idProduct": 584683,
+      "nom": "Spearow",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Spearow",
+      "lu": {
+        "nom": "Spearow",
+        "numero": "021",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:46:45.255Z"
+    },
+    "L036": {
+      "idProduct": 584719,
+      "nom": "Lapras",
+      "codeSet": "MFO",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Mystery-of-the-Fossils/Lapras",
+      "lu": {
+        "nom": "Lapras",
+        "numero": "131",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:47:16.327Z"
+    },
+    "L037": {
+      "idProduct": 548541,
+      "nom": "Paras",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Paras",
+      "lu": {
+        "nom": "Paras",
+        "numero": "046",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:48:02.804Z"
+    },
+    "L038": {
+      "idProduct": 557666,
+      "nom": "Ponyta",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Ponyta",
+      "lu": {
+        "nom": "Ponyta",
+        "numero": "077",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:48:30.818Z"
+    },
+    "L039": {
+      "idProduct": 606575,
+      "nom": "Larvitar",
+      "codeSet": "N2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Crossing-the-Ruins/Larvitar-CTR",
+      "lu": {
+        "nom": "Larvitar",
+        "numero": "246",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:49:00.999Z"
+    },
+    "L040": {
+      "idProduct": 584729,
+      "nom": "Hypno",
+      "codeSet": "MFO",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Mystery-of-the-Fossils/Hypno",
+      "lu": {
+        "nom": "Hypno",
+        "numero": "097",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:49:27.970Z"
+    },
+    "L041": {
+      "idProduct": 606447,
+      "nom": "Girafarig",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Girafarig-GSNW",
+      "lu": {
+        "nom": "Girafarig",
+        "numero": "203",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:50:01.554Z"
+    },
+    "L042": {
+      "idProduct": 605339,
+      "nom": "Giovanni's Gyarados",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Challenge-from-the-Darkness/Giovannis-Gyarados-CFTD",
+      "lu": {
+        "nom": "Giovanni's Gyarados",
+        "numero": "130",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:50:36.126Z"
+    },
+    "L043": {
+      "idProduct": 760242,
+      "nom": "Brock's Rhyhorn",
+      "codeSet": "CGN",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Nivi-City-Gym/Brocks-Rhyhorn-CGN",
+      "lu": {
+        "nom": "Brock's Rhyhorn",
+        "numero": "111",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:51:09.704Z"
+    },
+    "L044": {
+      "idProduct": 585145,
+      "nom": "Dark Dragonite",
+      "codeSet": "ROG",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Rocket-Gang/Dark-Dragonite",
+      "lu": {
+        "nom": "Dark Dragonite",
+        "numero": "149",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:51:42.082Z"
+    },
+    "L045": {
+      "idProduct": 650606,
+      "nom": "Pikachu",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Expansion-Pack/Pikachu-EC1016",
+      "lu": {
+        "nom": "Pikachu",
+        "numero": "016",
+        "total": "128",
+        "setCode": "e1"
+      },
+      "saisiLe": "2026-08-08T20:52:32.445Z"
+    },
+    "L046": {
+      "idProduct": 584721,
+      "nom": "Raichu",
+      "codeSet": "MFO",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Mystery-of-the-Fossils/Raichu",
+      "lu": {
+        "nom": "Raichu",
+        "numero": "026",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:52:54.665Z"
+    },
+    "L047": {
+      "idProduct": 606690,
+      "nom": "Remoraid",
+      "codeSet": "N3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Awakening-Legends/Remoraid-AL",
+      "lu": {
+        "nom": "Remoraid",
+        "numero": "223",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:53:17.059Z"
+    },
+    "L048": {
+      "idProduct": 605143,
+      "nom": "Misty's Golduck",
+      "codeSet": "G1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Leaders-Stadium/Mistys-Golduck-LST",
+      "lu": {
+        "nom": "Misty's Golduck",
+        "numero": "055",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:53:41.430Z"
+    },
+    "L049": {
+      "idProduct": 571770,
+      "nom": "Mew",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Mew-V2",
+      "lu": {
+        "nom": "Mew",
+        "numero": "151",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:54:43.530Z"
+    },
+    "L050": {
+      "idProduct": 584692,
+      "nom": "Pidgeot",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Pokemon-Jungle/Pidgeot",
+      "lu": {
+        "nom": "Pidgeot",
+        "numero": "018",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:55:13.286Z"
+    },
+    "L051": {
+      "idProduct": 548556,
+      "nom": "Charmander",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Charmander",
+      "lu": {
+        "nom": "Charmander",
+        "numero": "004",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T20:55:49.487Z"
+    },
+    "L052": {
+      "idProduct": 606684,
+      "nom": "Entei",
+      "codeSet": "N3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Awakening-Legends/Entei-AL",
+      "lu": {
+        "nom": "Entei",
+        "numero": "244",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:04:56.202Z"
+    },
+    "L053": {
+      "idProduct": 584696,
+      "nom": "Snorlax",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Snorlax",
+      "lu": {
+        "nom": "Snorlax",
+        "numero": "143",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:05:19.346Z"
+    },
+    "L054": {
+      "idProduct": 571745,
+      "nom": "Vileplume",
+      "codeSet": "SI-JP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Southern-Islands-JP/Vileplume",
+      "lu": {
+        "nom": "Vileplume",
+        "numero": "045",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:05:47.758Z"
+    },
+    "L055": {
+      "idProduct": 584634,
+      "nom": "Victreebel",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Pokemon-Jungle/Victreebel",
+      "lu": {
+        "nom": "Victreebel",
+        "numero": "071",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:06:13.670Z"
+    },
+    "L056": {
+      "idProduct": 548496,
+      "nom": "Caterpie",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Caterpie",
+      "lu": {
+        "nom": "Caterpie",
+        "numero": "010",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:06:36.741Z"
+    },
+    "L057": {
+      "idProduct": 654769,
+      "nom": "Bayleef",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Expansion-Pack/Bayleef-EC1S07",
+      "lu": {
+        "nom": "Bayleef",
+        "numero": "007",
+        "total": "029",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:07:11.625Z"
+    },
+    "L058": {
+      "idProduct": 651938,
+      "nom": "Electrode",
+      "codeSet": "EC2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/The-Town-on-No-Map/Electrode-V2-EC2036",
+      "lu": {
+        "nom": "Electrode",
+        "numero": "036",
+        "total": "092",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:08:02.891Z"
+    },
+    "L059": {
+      "idProduct": 650682,
+      "nom": "Fearow",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Expansion-Pack/Fearow-V1-EC1092",
+      "lu": {
+        "nom": "Fearow",
+        "numero": "092",
+        "total": "128",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:08:32.980Z"
+    },
+    "L060": {
+      "idProduct": 654010,
+      "nom": "Nidoqueen",
+      "codeSet": "EC5",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Mysterious-Mountains/Nidoqueen-V2-EC5010",
+      "lu": {
+        "nom": "Nidoqueen",
+        "numero": "010",
+        "total": "088",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:09:02.966Z"
+    },
+    "L061": {
+      "idProduct": 650711,
+      "nom": "Machamp",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Base-Expansion-Pack/Machamp-V2-EC1121",
+      "lu": {
+        "nom": "Machamp",
+        "numero": "121",
+        "total": "128",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:09:36.102Z"
+    },
+    "L062": {
+      "idProduct": 554416,
+      "nom": "Clair's Blastoise",
+      "codeSet": "VS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-CardVS/Clairs-Blastoise",
+      "lu": {
+        "nom": "Clair's Blastoise",
+        "numero": "046",
+        "total": "141",
+        "setCode": "VS"
+      },
+      "saisiLe": "2026-08-08T21:09:56.536Z"
+    },
+    "L063": {
+      "idProduct": 605126,
+      "nom": "Erika's Victreebel",
+      "codeSet": "G1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Leaders-Stadium/Erikas-Victreebel-LST",
+      "lu": {
+        "nom": "Erika's Victreebel",
+        "numero": "071",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:10:38.966Z"
+    },
+    "L064": {
+      "idProduct": 606888,
+      "nom": "Dark Ursaring",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Darkness-and-to-Light/Dark-Ursaring-DL",
+      "lu": {
+        "nom": "Dark Ursaring",
+        "numero": "217",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:11:04.050Z"
+    },
+    "L065": {
+      "idProduct": 605999,
+      "nom": "Computer Error",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Computer-Error-UNP",
+      "lu": {
+        "nom": "Computer Error",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-08-08T21:11:23.474Z"
     }
   }
 }

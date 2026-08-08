@@ -1,10 +1,8 @@
 {
-  "extraitLe": "2026-08-08T19:53:50.735Z",
+  "extraitLe": "2026-08-08T21:12:37.469Z",
   "extraitDe": "test",
   "cellulesVoulues": 4,
-  "cellulesManquantes": [
-    "égalité parfaite départagée par le symbole"
-  ],
+  "cellulesManquantes": [],
   "empreintePrompt": {
     "hash": "0ab60556949acbd7",
     "modele": "google/gemini-3-flash-preview",
@@ -53,22 +51,22 @@
       "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a71c3b2486b51e3ab380bcb",
-        "le": "2026-08-04T10:49:22.309Z",
-        "version": "b3cb941af7a1",
-        "idProduct": 606887
+        "_id": "6a778ff541c0673e928ab762",
+        "le": "2026-08-08T20:22:13.238Z",
+        "version": "7ba621d7c737",
+        "idProduct": 605999
       },
-      "imageUrl": "https://images1.vinted.net/t/02_010b3_z1CZ4zheRgzJmnb4cqbGSJgB/f800/1785775974.webp?s=a803018145cf185c11ecf302d682e6706b5336ea",
+      "imageUrl": "https://images1.vinted.net/t/01_001f9_yWSYuAXm8QRYDnstRmNf68fM/f800/1786202202.webp?s=b50f1475cc49facc8622bfdbc8e31ffa133e5541",
       "lecture": {
-        "name": "Light Togetic",
-        "number": "176",
+        "name": "Computer Error",
+        "number": null,
         "total": null,
         "setCode": null,
         "language": "JP",
-        "rarete": "normale",
-        "nomBrut": "やさしいトゲチック",
+        "rarete": "promo",
+        "nomBrut": "パソコン大暴走！",
         "nomConfiance": "haute",
-        "symboleSet": "etoile",
+        "symboleSet": "R",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
@@ -105,6 +103,42 @@
         "nomBrut": "Fermite ex",
         "nomConfiance": "haute",
         "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "égalité parfaite départagée par le symbole",
+      "pourquoi": "la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte",
+      "profondeurExigee": "verdict",
+      "source": {
+        "_id": "6a778f1541c0673e928ab69d",
+        "le": "2026-08-08T20:18:29.058Z",
+        "version": "7ba621d7c737",
+        "idProduct": 571745
+      },
+      "imageUrl": "https://images1.vinted.net/t/05_009d4_E1Ysy7PhZUQAkjKMWvS2Nuoq/f800/1786192804.webp?s=aa30c31f9cc6003f29b69058c47edd9a114a7887",
+      "lecture": {
+        "name": "Vileplume",
+        "number": "045",
+        "total": null,
+        "setCode": null,
+        "language": "JP",
+        "rarete": "normale",
+        "nomBrut": "ラフレシア",
+        "nomConfiance": "haute",
+        "symboleSet": "palmier",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
