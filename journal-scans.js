@@ -263,6 +263,19 @@ const journalScanSchema = new mongoose.Schema({
     // une mesure qu'on ne peut plus faire — d'où une valeur par cause, sans exception.
     raisonReserve: String,
 
+    // LE NIVEAU DE LA RÉSERVE — 'forte' | 'faible'. La table raison -> niveau vit dans
+    // index.js, avec la justesse mesurée à côté de chaque entrée et la règle de
+    // rétrogradation. Journalisé pour que la répartition forte/faible se mesure au lot
+    // suivant sans avoir à rejouer la table.
+    // Mesuré le 2026-08-08 sur 65 scans : 32 % des réserves fortes, 51 % faibles.
+    niveauReserve: String,
+
+    // L'idProduct du concurrent renvoyé à l'extension, quand il y en a un. Le champ
+    // complet (nom, codeSet, prixGuide) part dans la RÉPONSE ; ici on ne garde que
+    // l'identifiant, qui suffit à retrouver le reste et ne duplique aucun catalogue.
+    // null = aucune égalité, donc aucun concurrent à proposer.
+    concurrentIdProduct: Number,
+
     // LA PHRASE EXACTE RENDUE PAR LE DÉPARTAGE PAR SYMBOLE, y compris quand il n'a PAS
     // tranché. « symbole "e2" lu, mais aucun ex aequo ne le porte » est une mesure autant
     // que « il a tranché » : c'est la répartition entre ces deux cas qui dira si le signal
@@ -388,6 +401,8 @@ function enregistrerScan(d = {}) {
             setCodeAccord: memeCode(d.setCode, codeSetGagnant),
             setCodeResolution: d.setCodeResolution || null,
             raisonReserve: d.raisonReserve || null,
+            niveauReserve: d.niveauReserve || null,
+            concurrentIdProduct: Number.isFinite(d.concurrentIdProduct) ? d.concurrentIdProduct : null,
             symboleDepartage: d.symboleDepartage || null,
             parenteRetenue: d.parenteRetenue || null
         });

@@ -1258,13 +1258,32 @@ function choisirMeilleur(candidats, lu) {
     };
 }
 
+// ============================================================================
+// « EX AEQUO » — UNE SEULE DÉFINITION, ET C'EST CELLE-CI
+// ============================================================================
+// Elle est triviale — deux scores égaux — et c'est justement pour ça qu'elle mérite un
+// nom. La règle de l'égalité parfaite, le départage par le symbole et le candidat
+// concurrent renvoyé à l'extension reposent TOUS les trois sur cette notion. Écrite en
+// ligne à trois endroits, elle finirait par diverger : quelqu'un ajouterait une tolérance
+// à l'un des trois « parce qu'un point d'écart ne veut rien dire », et le concurrent
+// désignerait alors une carte que la règle d'égalité n'aurait jamais considérée.
+// C'est le deuxième principe, payé trois fois cette semaine — LANGUES_ASIATIQUES, l'objet
+// scoring fabriqué à la main, et seauDe recopié dans l'outil de saisie.
+//
+// ⚠️ SI UN JOUR ON VEUT UNE TOLÉRANCE, elle se pose ICI et nulle part ailleurs. Elle
+// changera alors les trois comportements d'un coup, ce qui est exactement ce qu'on veut :
+// une notion, une décision, un endroit.
+function sontExAequo(scoreA, scoreB) {
+    return Number.isFinite(scoreA) && Number.isFinite(scoreB) && scoreA === scoreB;
+}
+
 module.exports = {
     scorerCandidat, choisirMeilleur, POIDS,
     normaliserCodeSet, codesApparentes,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
     setsCompatiblesAvecTotal, comparerNumeros, chiffresDuNumero, rangDuNumero,
-    numeroComplet, numeroAmbiguDansPerimetre, memeCodeParConventionX,
+    numeroComplet, numeroAmbiguDansPerimetre, memeCodeParConventionX, sontExAequo,
     numeroDepuisSlug, regionDuCodeSet, CODES_JAPONAIS_MAJUSCULES, bilanDesRangs,
     ALIAS_CODES_LUS, nomConcorde, normaliserNomPourComparaison, LANGUES_ASIATIQUES,
     MOTIFS_CIBLABLES, MOTIFS_REVERSE, FOILS_BALL, FOILS_TEXTURE

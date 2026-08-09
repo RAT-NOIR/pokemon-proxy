@@ -43,7 +43,7 @@ const {
     // ALIAS_CODES_LUS : le marquage physique e-Reader (E1..E5) n'est pas le code
     // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
     // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
-    ALIAS_CODES_LUS, nomConcorde, LANGUES_ASIATIQUES, memeCodeParConventionX,
+    ALIAS_CODES_LUS, nomConcorde, LANGUES_ASIATIQUES, memeCodeParConventionX, sontExAequo,
     // numeroAmbiguDansPerimetre : règle GÉNÉRALE des préfixes alphabétiques. Une clé
     // (code + numéro) ne doit pas se déclencher quand « 019 » et « S19 » coexistent.
     numeroAmbiguDansPerimetre,
@@ -3237,8 +3237,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // C'est le principe des sources perdues (voir scoring.js) : ne pas savoir ne doit
         // jamais valoir permission.
         const ECART_PRIX_TOLERABLE = 1.00;
-        if (classement.length > 1 && classement[0].score === classement[1].score) {
-            const exAequo = classement.filter(c => c.score === classement[0].score);
+        // `sontExAequo` et non `===` en ligne : c'est LA définition de l'égalité, partagée
+        // avec le candidat concurrent renvoyé à l'extension. Voir scoring.js.
+        if (classement.length > 1 && sontExAequo(classement[0].score, classement[1].score)) {
+            const exAequo = classement.filter(c => sontExAequo(c.score, classement[0].score));
             const prix = exAequo.map(c => c.prix).filter(p => Number.isFinite(p) && p > 0);
             const ecartPrix = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
             const sansEnjeu = ecartPrix != null && ecartPrix < ECART_PRIX_TOLERABLE;
@@ -3376,6 +3378,79 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                                                             : 'tcgdex-ambigu';
         if (carteAmbigue) await signalerIncertain(req, raisonReserve);
 
+        // ════════════════════════════════════════════════════════════════════
+        // LE NIVEAU DE LA RÉSERVE — deux valeurs, et la table vit ICI
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI CÔTÉ SERVEUR, et pas dans l'extension. Si elle recopiait une table
+        // raison -> niveau, il n'existerait AUCUN défaut sûr pour une valeur qu'elle ne
+        // connaît pas encore : la faire tomber vers « faible » muselleraient une réserve
+        // mesurée à 12/12, vers « forte » promouvrait une réserve tiède en quasi-affirmation
+        // et casserait le contrat « quand l'outil affirme, il a raison ». C'est ici qu'on
+        // mesure, c'est donc ici qu'on classe.
+        //
+        // LE NIVEAU PILOTE LE COMPORTEMENT, LA RAISON ALIMENTE LE TEXTE. L'extension n'a
+        // jamais besoin de connaître la liste des raisons pour décider quoi faire.
+        //
+        // ⚠️ RÈGLE DE RÉTROGRADATION, ÉCRITE AVANT D'EN AVOIR BESOIN :
+        //   UNE ENTRÉE CLASSÉE « FORTE » REDESCEND EN « FAIBLE » À LA PREMIÈRE MESURE OÙ
+        //   ELLE RATE. Sans discussion, sans attendre un échantillon plus grand, sans
+        //   chercher si le cas était particulier.
+        //   La raison est un arbitrage assumé : mieux vaut perdre douze bonnes cartes que
+        //   casser une seule fois « quand l'outil affirme, il a raison ». Un contrat de
+        //   confiance ne se répare pas en le remesurant.
+        //   ⚠️ Et « forte » n'a jamais voulu dire « prouvé ». `symbole-departage` est à
+        //   12/12, mais l'intervalle de confiance à 95 % sur 12 succès va de 74 % à 100 % :
+        //   c'est excellent, ce n'est pas une certitude. Toute entrée forte est à remesurer
+        //   à chaque lot.
+        //
+        // JUSTESSE MESURÉE, sur 65 scans réels avec vérités saisies à l'aveugle (2026-08-08).
+        // Le chiffre est à côté de chaque entrée pour que la prochaine promotion se fasse
+        // sur une mesure et non sur une impression.
+        const NIVEAU_RESERVE = {
+            'symbole-departage': 'forte',   // 12/12 justes — le symbole du set a désigné un seul ex aequo
+            // Tout le reste est FAIBLE tant qu'aucune mesure ne justifie mieux :
+            'perimetre-vintage-suggestion': 'faible',   // 10/16 justes — la classe la plus fréquente et la plus tiède
+            'tcgdex-numero-incoherent': 'faible',       // 1/2 — deux lignes ne mesurent rien
+            'egalite-sans-enjeu': 'faible',             // non mesurée isolément
+            'numero-pokedex-neutralise': 'faible',      // non mesurée isolément
+            'nom-numero-incoherents': 'faible',
+            'aucun-candidat-au-numero': 'faible',
+            'gagnant-contredit-le-numero': 'faible',
+            'nom-confiance-basse': 'faible',
+            'identification-locale-sans-tcgdex': 'faible',
+            'lien-tcgdex-partage': 'faible',
+            'tcgdex-ambigu': 'faible'
+        };
+        // Défaut FAIBLE pour toute raison non listée — y compris `motif-<raison>`, qui est
+        // construite dynamiquement. Ici le défaut est sûr : c'est le serveur qui décide, et
+        // une raison qu'il ne s'est pas encore donné la peine de mesurer n'a rien prouvé.
+        const niveauReserve = !carteAmbigue ? null : (NIVEAU_RESERVE[raisonReserve] ?? 'faible');
+
+        // ════════════════════════════════════════════════════════════════════
+        // LE CANDIDAT CONCURRENT — seulement quand il y a vraiment hésitation
+        // ════════════════════════════════════════════════════════════════════
+        // ⚠️ IL N'EST RENVOYÉ QUE SUR UNE ÉGALITÉ, au sens de `sontExAequo` — LA définition
+        // du scoring, pas un seuil inventé ici. Sur `perimetre-vintage-suggestion`, le
+        // deuxième du classement est parfois à 105 points derrière (mesuré) : annoncer
+        // « on hésite entre X et Y » serait un mensonge d'interface.
+        // Hors égalité -> null. Pas d'approximation.
+        //
+        // ⚠️ `prixGuide` ET NON `prix`. C'est le prix du GUIDE local, pas le prix live que
+        // l'extension lit pour le gagnant. Les deux ne sont pas sur le même axe et les
+        // mettre côte à côte ferait croire à une comparaison qui n'en est pas une. Le nom
+        // du champ est la seule barrière qui survit à la relecture.
+        let concurrent = null;
+        if (carteAmbigue && classement.length > 1 && sontExAequo(classement[0].score, classement[1].score)) {
+            const c2 = classement[1];
+            const p2 = produits.find(p => p.idProduct === c2.idProduct);
+            concurrent = {
+                idProduct: c2.idProduct,
+                nom: p2 ? String(p2.name).split('[')[0].trim() : null,
+                codeSet: codeSetsConnus.get(Number(c2.idExpansion)) ?? null,
+                prixGuide: Number.isFinite(c2.prix) ? c2.prix : null
+            };
+        }
+
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
@@ -3416,6 +3491,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // de compter un mécanisme plutôt qu'un autre, ni de savoir si une branche
             // neuve s'est déclenchée une seule fois.
             raisonReserve,
+            niveauReserve,
+            concurrentIdProduct: concurrent?.idProduct ?? null,
             // La phrase exacte rendue par le départage — y compris quand il N'A PAS
             // tranché. « aucun ex aequo ne porte ce symbole » est une mesure autant que
             // « il a tranché » : c'est elle qui dira si le signal sert ou s'il est inerte.
@@ -3452,6 +3529,26 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // OU si la carte a un motif de reverse qu'on n'a pas su cibler (le prix
                 // peut alors varier d'un facteur 100 entre variantes — cf. Master Ball).
                 ambigu: carteAmbigue,
+                // ⚠️ LES DEUX AXES NE SE FUSIONNENT JAMAIS, et ce commentaire est là pour
+                // qu'aucun refactor ne les rapproche. `ambigu` / `niveauReserve` disent la
+                // confiance dans L'IDENTIFICATION — quelle carte c'est. Le verdict de prix
+                // (bonne affaire ou non) est un AUTRE axe, calculé plus bas.
+                // INVARIANT : un prix auquel on ne se fie pas ne porte AUCUN verdict, quelle
+                // que soit la force de l'identification. Une identification forte n'autorise
+                // pas un verdict de prix ; elle autorise seulement à nommer la carte.
+                // Les fusionner produirait un verdict affirmé sur une prémisse non prouvée —
+                // exactement ce que le contrat « quand l'outil affirme, il a raison » interdit.
+                //
+                // NIVEAU DE LA RÉSERVE : 'forte' | 'faible' | null (null = aucune réserve).
+                // Le NIVEAU pilote le comportement de l'extension, la RAISON alimente son
+                // texte. L'extension n'a jamais besoin de connaître la liste des raisons.
+                niveauReserve,
+                raisonReserve,
+                // Le principal concurrent, UNIQUEMENT sur une vraie égalité de score. null
+                // dès qu'un écart existe : hors égalité, « on hésite entre X et Y » serait
+                // faux. `prixGuide` est le prix du GUIDE local — PAS le prix live du
+                // gagnant, et les deux ne se comparent pas.
+                concurrent,
                 // ⚠️ CONFIANCE DE L'IDENTIFICATION — quel PRODUIT a été retenu. À ne pas
                 // confondre avec etat.confianceIA plus bas, qui porte sur l'usure lue sur
                 // la photo (NM/EX/GD). Les deux sont indépendantes : une carte peut être
