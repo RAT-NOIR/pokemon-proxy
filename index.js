@@ -3362,6 +3362,43 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // peut plus mesurer lequel se déclenche. `perimetre-vintage-suggestion` couvrait
         // deux mécanismes distincts depuis que le départage réutilisait son drapeau : c'est
         // corrigé, ils ont chacun le leur.
+        //
+        // ════════════════════════════════════════════════════════════════════
+        // LE PRINCIPE D'ORDRE — quelle cause gagne quand plusieurs s'appliquent
+        // ════════════════════════════════════════════════════════════════════
+        // LE PROBLÈME DE FOND N'EST PAS L'ORDRE ACTUEL, c'est qu'une carte relève souvent de
+        // PLUSIEURS causes et qu'un seul champ doit en désigner une. Le recouvrement est
+        // apparu trois fois — le départage sous le drapeau du périmètre, puis deux égalités
+        // parfaites rapportées comme « périmètre » — et il reviendra à chaque nouvelle
+        // raison tant que la règle d'arbitrage n'est pas écrite. La voici.
+        //
+        //   RÈGLE 1 — UNE CAUSE QUI SAPE LA PRÉMISSE D'UNE AUTRE PASSE DEVANT, quelle que
+        //   soit sa spécificité. Un doute sur l'ENTRÉE bat une précision sur la SORTIE.
+        //   Exemple : `nom-confiance-basse` dit que l'IA doute de sa propre lecture ;
+        //   `symbole-departage` suppose au contraire que la lecture était assez bonne pour
+        //   construire un vivier. Annoncer « forte » sur une carte dont le nom est douteux
+        //   serait promouvoir une conclusion bâtie sur une prémisse qu'on sait fragile.
+        //   ⚠️ C'est la clause qui manque encore à l'ordre ci-dessous.
+        //
+        //   RÈGLE 2 — À DÉFAUT, LA PLUS SPÉCIFIQUE L'EMPORTE : celle qui décrit le mécanisme
+        //   le plus ÉTROIT. Elle porte le plus d'information, et surtout elle se mesure le
+        //   mieux — une classe étroite est homogène, donc sa justesse veut dire quelque
+        //   chose. Une égalité parfaite est plus spécifique qu'un périmètre qui restreint :
+        //   elle devra donc passer devant lui.
+        //
+        //   ⚠️ ET LA LIMITE DE LA RÈGLE 2, à garder en tête avant chaque promotion en
+        //   « forte » : la justesse mesurée d'une classe étroite est CONDITIONNELLE au
+        //   mélange de causes générales présentes dans l'échantillon. `symbole-departage`
+        //   est à 12/12 sur des cartes dont le nom était fiable ; ce chiffre ne dit rien
+        //   d'une carte où il ne l'est pas. C'est exactement ce que la règle 1 protège.
+        //
+        // ⚠️ CHANGER CET ORDRE CRÉE UN NOUVEL INSTRUMENT, ET LES MESURES REPARTENT DE ZÉRO.
+        // `raisonReserve` est FIGÉE au moment du scan : les lignes déjà au journal gardent
+        // leur ancienne étiquette, les nouvelles en reçoivent une autre. Les statistiques
+        // par raison ne sont donc PAS additionnables de part et d'autre d'un changement
+        // d'ordre — exactement comme les 7 lignes lues sous l'ancien prompt ne s'ajoutent
+        // pas aux 28 lues sous le nouveau. Deux instruments, deux mesures.
+        // Le jour où l'ordre change : le noter ici avec sa date, et repartir d'un lot neuf.
         const raisonReserve = !carteAmbigue ? null
             : departageParSymbole ? 'symbole-departage'
                 : perimetreVintage ? 'perimetre-vintage-suggestion'
@@ -3802,13 +3839,43 @@ if (!stripe) {
 // SOURCE DE VÉRITÉ des packs, côté SERVEUR uniquement. Le client n'envoie qu'un packId :
 // s'il pouvait envoyer le nombre de scans, il suffirait de le modifier dans la requête
 // pour s'offrir 100 000 scans au prix de 20.
-// ⚠️ price_id de TEST — à remplacer par les Live avant la mise en production.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// LES price_id VIENNENT DE L'ENVIRONNEMENT, PLUS DU CODE
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI. Un price_id est un identifiant D'ENVIRONNEMENT : celui de Test et celui de
+// Live sont deux objets différents chez Stripe, et une clé Live avec un price de Test
+// échoue à la création de session. Les écrire dans le code obligeait à modifier le code
+// pour passer en production — c'est-à-dire à faire un déploiement dont le SEUL but est de
+// changer quatre chaînes, avec toutes les occasions d'erreur que ça implique.
+// Le nombre de scans, LUI, reste dans le code : c'est une décision produit, pas une
+// coordonnée d'environnement, et il ne doit pas pouvoir changer sans revue.
+//
+// ⚠️ FAIL-CLOSED, ET C'EST DÉLIBÉRÉ. Un pack dont le price_id est absent n'est pas vendu :
+// aucun repli sur une valeur codée en dur. Un repli silencieux ferait payer le prix de
+// Test en production, ou l'inverse — et personne ne s'en apercevrait avant le premier
+// relevé. Mieux vaut une route qui refuse bruyamment qu'un paiement au mauvais tarif.
 const PACKS = {
-    p20:  { price: 'price_1TxYgxCHs5xC36JEiTYo1tVy', scans: 20 },
-    p50:  { price: 'price_1TxYhSCHs5xC36JEJD8T72vJ', scans: 50 },
-    p100: { price: 'price_1TxYhzCHs5xC36JEgQ1VFhBn', scans: 100 },
-    p200: { price: 'price_1TxYiQCHs5xC36JEtThiZz1S', scans: 200 }
+    p20: { price: process.env.STRIPE_PRICE_P20, scans: 20 },
+    p50: { price: process.env.STRIPE_PRICE_P50, scans: 50 },
+    p100: { price: process.env.STRIPE_PRICE_P100, scans: 100 },
+    p200: { price: process.env.STRIPE_PRICE_P200, scans: 200 }
 };
+// AU DÉMARRAGE, ON DIT CE QUI EST VENDABLE. Sans cette ligne, un price_id oublié se
+// découvrirait au premier client qui essaie de payer.
+{
+    const configures = Object.entries(PACKS).filter(([, p]) => p.price);
+    const manquants = Object.keys(PACKS).filter(k => !PACKS[k].price);
+    if (manquants.length) {
+        console.warn(`⚠️ [stripe] ${manquants.length} pack(s) SANS price_id — non vendables : ${manquants.join(', ')}`);
+        console.warn(`   Pose STRIPE_PRICE_P20 / P50 / P100 / P200 dans l'environnement.`);
+    }
+    if (stripe) {
+        // Le mode de la CLÉ, pour qu'une clé Live avec des prix de Test se voie tout de suite.
+        const mode = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live') ? 'LIVE' : 'TEST';
+        console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s)`);
+    }
+}
 
 // Crée une session de paiement et renvoie l'URL Stripe où rediriger l'utilisateur.
 // Ne crédite RIEN : le crédit n'a lieu que dans le webhook signé, après paiement confirmé.
@@ -3821,6 +3888,12 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
 
         const pack = PACKS[req.body && req.body.packId];
         if (!pack) return res.status(400).json({ success: false, error: "Pack inconnu" });
+        // Pack connu mais price_id absent de l'environnement : on REFUSE plutôt que de
+        // créer une session qui échouerait chez Stripe avec un message technique.
+        if (!pack.price) {
+            console.error(`❌ [recharge] pack ${req.body.packId} sans price_id — vérifie STRIPE_PRICE_* dans l'environnement`);
+            return res.status(503).json({ success: false, error: "Ce pack est momentanément indisponible" });
+        }
 
         const session = await stripe.checkout.sessions.create({
             mode: 'payment',
@@ -3829,6 +3902,14 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
             // metadata : c'est ce que le webhook relira pour savoir QUI créditer et de
             // COMBIEN. Écrit ici par le serveur à partir de PACKS, donc non falsifiable.
             metadata: { userId, scans: String(pack.scans) },
+            // ⚠️ ACCEPTATION EXPLICITE DES CONDITIONS DE VENTE. Vente à des consommateurs
+            // dans l'UE : le consentement doit être un acte positif, et il doit être
+            // PROUVABLE. Stripe horodate l'acceptation et la conserve sur la session, ce
+            // qu'aucune case cochée dans l'extension ne ferait aussi bien.
+            // ⚠️ DÉPENDANCE : Stripe REFUSE la création de session si l'URL des conditions
+            // n'est pas renseignée dans le Dashboard (Paramètres > Informations publiques).
+            // À poser AVANT de déployer, sinon toutes les recharges tombent en 500.
+            consent_collection: { terms_of_service: 'required' },
             success_url: `${process.env.SITE_URL}/merci`,
             cancel_url: `${process.env.SITE_URL}/annule`
         });
