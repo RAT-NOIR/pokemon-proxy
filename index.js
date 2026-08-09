@@ -3388,9 +3388,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //
         //   ⚠️ ET LA LIMITE DE LA RÈGLE 2, à garder en tête avant chaque promotion en
         //   « forte » : la justesse mesurée d'une classe étroite est CONDITIONNELLE au
-        //   mélange de causes générales présentes dans l'échantillon. `symbole-departage`
-        //   est à 12/12 sur des cartes dont le nom était fiable ; ce chiffre ne dit rien
-        //   d'une carte où il ne l'est pas. C'est exactement ce que la règle 1 protège.
+        //   mélange de causes générales présentes dans l'échantillon. C'est exactement ce
+        //   que la règle 1 protège, et ce n'est pas une précaution théorique — c'est
+        //   MESURÉ : les 12 lignes `symbole-departage` ont TOUTES `nomConfiance: 'haute'`.
+        //   Le 12/12 ne dit donc rien d'une carte dont le nom serait douteux ; il n'a
+        //   jamais été mis à l'épreuve dans ce cas.
+        //
+        //   ÉTAT AU 2026-08-08 : la règle 1 n'a encore RIEN à arbitrer. Zéro ligne sort
+        //   « forte » avec une prémisse sapée, et pour une raison plus large qu'un hasard
+        //   heureux — `nomConfiance: 'basse'` n'est apparue AUCUNE fois sur les 131 lignes
+        //   du journal. Le garde `nomPeuFiable` n'a jamais servi en production.
+        //   ⚠️ Ce qui veut dire que sa fréquence réelle est INCONNUE, pas nulle. Le jour où
+        //   elle apparaît, la règle 1 doit déjà être appliquée dans l'ordre ci-dessous —
+        //   sinon la première carte concernée sortira « forte » à tort.
         //
         // ⚠️ CHANGER CET ORDRE CRÉE UN NOUVEL INSTRUMENT, ET LES MESURES REPARTENT DE ZÉRO.
         // `raisonReserve` est FIGÉE au moment du scan : les lignes déjà au journal gardent
@@ -3873,7 +3883,21 @@ const PACKS = {
     if (stripe) {
         // Le mode de la CLÉ, pour qu'une clé Live avec des prix de Test se voie tout de suite.
         const mode = String(process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live') ? 'LIVE' : 'TEST';
-        console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s)`);
+        // ⚠️ LE SECRET DE WEBHOOK EST ANNONCÉ ICI, et c'est le plus important des cinq.
+        // C'est le SEUL réglage dont l'absence ou l'erreur ne se voit NULLE PART tant qu'un
+        // vrai paiement n'a pas échoué : la clé, les prix et l'URL des CGV se manifestent à
+        // la création de la session, donc avant que le client paie. Le secret de webhook,
+        // lui, n'intervient qu'APRÈS — le client a payé, la signature est rejetée, le
+        // crédit n'a jamais lieu, et Stripe réessaie trois jours en silence.
+        // On ne peut pas vérifier qu'il est le BON (seul un événement réel le dirait), mais
+        // on peut dire qu'il est là et à quel mode il ressemble.
+        const wh = String(process.env.STRIPE_WEBHOOK_SECRET || '');
+        const etatWh = !wh ? '❌ ABSENT — aucun paiement ne sera crédité'
+            : (wh.startsWith('whsec_') ? `présent (${wh.slice(0, 11)}…)` : '⚠️ présent mais ne commence pas par whsec_');
+        console.log(`💳 [stripe] clé ${mode} · ${configures.length}/4 pack(s) configuré(s) · secret webhook : ${etatWh}`);
+        if (!wh) {
+            console.error(`❌ [stripe] STRIPE_WEBHOOK_SECRET manquant : les clients pourront PAYER sans être crédités.`);
+        }
     }
 }
 
