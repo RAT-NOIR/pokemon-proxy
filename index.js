@@ -2440,7 +2440,11 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
                 idProduct: classement[0]?.candidat?.idProduct,
                 score: classement[0]?.score,
                 nbCandidats: produits.length,
-                confiance: confianceScoring ? 'haute' : 'basse',
+                // Aligné sur /api/identifier : `confiance` n'est plus écrit nulle part,
+                // c'est `margeConfortable` (la marge du classement, et rien d'autre).
+                // Deux routes qui n'écrivent pas le même champ pour la même notion
+                // rendraient toute mesure par route incomparable.
+                margeConfortable: confianceScoring,
                 sourceIdentification: trouvailleTCGdex.source || 'nom',
                 voieCatalogue,
                 motifEtat: motifResolution.etat,
@@ -3047,9 +3051,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Stratégie reverse du GAGNANT + état de résolution du motif (champs additifs).
         let strategieReverse = null;
         let motifResolution = { etat: 'aucun-motif', cible: null, raison: null };
-        // Confiance de l'IDENTIFICATION (quel produit), à ne pas confondre avec la
-        // confiance de l'ÉTAT lue par l'IA (NM/EX/GD). Elle part telle quelle vers
-        // l'extension dans un champ distinct — voir carte.confianceIdentification.
+        // La MARGE du classement : le gagnant devance-t-il le 2e d'au moins 30 points ?
+        // Elle part telle quelle vers l'extension sous `carte.margeConfortable` — sans être
+        // mélangée à `ambigu`, contrairement à l'ancien `confianceIdentification`.
+        // À ne pas confondre avec la confiance de l'ÉTAT lue par l'IA (NM/EX/GD).
         let identificationConfiante = true;
         // Bilan des rangs du vivier retenu. Rempli par le scoring quand il y a plusieurs
         // candidats ; calculé à la main pour le cas du candidat unique, qui ne passe pas
@@ -3527,7 +3532,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             idProduct: classement[0]?.idProduct,
             score: classement[0]?.score,
             nbCandidats: produits.length,
-            confiance: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
+            // ⚠️ `confiance` N'EST PLUS ÉCRIT. Il valait
+            // `(identificationConfiante && !carteAmbigue) ? 'haute' : 'basse'` — deux
+            // notions dans un champ. Les 131 lignes déjà au journal le portent avec cette
+            // ANCIENNE sémantique ; les nouvelles portent `margeConfortable`, qui n'est
+            // PAS la même chose. Ne pas additionner les deux, ne pas relire les anciennes
+            // comme des marges.
+            margeConfortable: identificationConfiante,
             carteIncertaine: carteAmbigue,
             sourceIdentification: trouvaille.source || 'nom',
             identifieeEnLocal: identificationLocale,
@@ -3614,13 +3625,27 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // concurrent. À 7 — cas réel, mesuré — le concurrent est un ex aequo pris
                 // parmi six, et proposer un choix binaire tromperait l'utilisateur.
                 nbExAequo,
-                // ⚠️ CONFIANCE DE L'IDENTIFICATION — quel PRODUIT a été retenu. À ne pas
-                // confondre avec etat.confianceIA plus bas, qui porte sur l'usure lue sur
-                // la photo (NM/EX/GD). Les deux sont indépendantes : une carte peut être
-                // parfaitement identifiée avec un état incertain, et l'inverse.
-                //   'haute' -> le gagnant devance nettement le 2e (>= 30 points)
-                //   'basse' -> écart faible, ou identification obtenue sans le nom
-                confianceIdentification: (identificationConfiante && !carteAmbigue) ? 'haute' : 'basse',
+                // ════════════════════════════════════════════════════════════
+                // margeConfortable — UNE SEULE NOTION : l'écart au 2e du classement
+                // ════════════════════════════════════════════════════════════
+                // Il s'appelait `confianceIdentification` et valait
+                // `(identificationConfiante && !carteAmbigue) ? 'haute' : 'basse'`.
+                // ⚠️ CE MÉLANGE A DÉJÀ TROMPÉ SON LECTEUR, et de la pire façon : parce que
+                // le champ tombait à 'basse' pour TOUTE réserve, une consigne d'extension
+                // le prenant comme garde-fou prioritaire sur `niveauReserve` aurait
+                // rétrogradé 100 % des réserves fortes — en SILENCE, avec l'apparence d'un
+                // fonctionnement normal. Un champ dont le nom promet autre chose que ce
+                // qu'il contient trompe son lecteur une fois, puis toujours.
+                //
+                // Il ne dit plus qu'UNE chose, et son nom la dit : le gagnant devance-t-il
+                // le 2e d'au moins SEUIL_MARGE_CONFORTABLE points. INDÉPENDANT d'`ambigu` :
+                // les deux axes se lisent ensemble, ils ne se recouvrent plus.
+                //
+                // ⚠️ SIGNAL EN RÉSERVE, PAS UN SIGNAL D'AFFICHAGE. Le seuil de 30 points
+                // n'a JAMAIS été mesuré (voir scoring.js) : rien ne justifie aujourd'hui
+                // d'afficher quoi que ce soit sur une marge mince. Il est journalisé et
+                // attend qu'une mesure lui donne un sens. Ne lui invente pas d'usage.
+                margeConfortable: identificationConfiante,
                 // Par quel signal la carte a été identifiée : 'nom', 'total+numero' (nom
                 // écarté car halluciné ou inapparieable) ou 'catalogue-local' (TCGdex muet).
                 sourceIdentification: trouvaille.source || 'nom',

@@ -1247,8 +1247,18 @@ function choisirMeilleur(candidats, lu) {
 
     const meilleur = scores[0];
     const second = scores[1];
-    // Confiance haute si le meilleur devance nettement le 2e (écart >= 30 points)
-    const confiant = !second || (meilleur.score - second.score) >= 30;
+    // ⚠️ SEUIL POSÉ À L'ESTIME, JAMAIS MESURÉ — et il faut que ça reste écrit.
+    // « 30 points » n'a été dérivé d'aucune distribution : il a été choisi parce qu'il
+    // valait environ un critère fort du barème (le set vaut 40, la variante 35, le numéro
+    // 50). Aucun banc n'a jamais comparé la justesse au-dessus et en dessous.
+    // Il ne doit donc PAS devenir une vérité par ancienneté. Ce qu'il faudrait pour le
+    // dériver : la justesse mesurée par tranche d'écart, sur des lignes à vérité
+    // individuelle — exactement ce qu'on a fait pour l'écart de PRIX (1,00 €, dérivé de
+    // 17 égalités rejouées), et pas encore pour celui-ci.
+    // En attendant, il n'alimente RIEN d'affiché : `margeConfortable` est journalisé et
+    // laissé en réserve. Un seuil non mesuré ne doit pas piloter ce que voit un utilisateur.
+    const SEUIL_MARGE_CONFORTABLE = 30;
+    const confiant = !second || (meilleur.score - second.score) >= SEUIL_MARGE_CONFORTABLE;
 
     return {
         gagnant: meilleur,

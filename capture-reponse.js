@@ -12,7 +12,23 @@ const cible = process.argv[2] || 'Vileplume';
 
 (async () => {
     const donnees = JSON.parse(fs.readFileSync(FICHIER_CHARGES, 'utf8'));
-    const charge = donnees.charges.find(c => String(c.lecture.name).includes(cible)) || donnees.charges[0];
+    // ⚠️ ÉCHEC BRUYANT SUR UNE CLÉ INCONNUE. La version d'origine retombait sur
+    // `donnees.charges[0]` : demander « Light Togetic » rendait la réponse de Gardevoir ex,
+    // sans un mot. Un outil de VÉRIFICATION qui répond autre chose que ce qu'on lui demande
+    // est pire qu'un outil absent — on croit avoir vérifié, et c'est la capture qui part
+    // en passation. Le repli silencieux est exactement le défaut qu'on traque partout
+    // ailleurs dans ce projet.
+    const norm = s => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const charge = donnees.charges.find(c => norm(c.lecture.name).includes(norm(cible)));
+    if (!charge) {
+        console.error(`\n❌ Aucune charge ne correspond à « ${cible} ».`);
+        console.error(`   Les charges disponibles sont :`);
+        for (const c of donnees.charges) {
+            console.error(`     ${String(c.lecture.name).padEnd(20)} — ${c.cellule}`);
+        }
+        console.error(`\n   node capture-reponse.js "<nom exact ou fragment>"`);
+        process.exit(1);
+    }
     const srv = await demarrer(path.join(__dirname, 'verrou', 'faux-reseau.js'), {
         VERROU_CHARGES: FICHIER_CHARGES, JETON_API: JETON, OPENROUTER_API_KEY: ''
     });
@@ -37,6 +53,38 @@ const cible = process.argv[2] || 'Vileplume';
         return o;
     };
     console.log(JSON.stringify(anonymiser(j), null, 2));
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LA PREUVE QUI COMPTE : classement[0] EST-IL LE PRODUIT RETENU ?
+    // ════════════════════════════════════════════════════════════════════════
+    // La réponse ne contient PAS l'idProduct du gagnant : l'extension doit le lire dans
+    // `classement[0]`. Si une décision tardive changeait le gagnant sans réordonner le
+    // classement, l'extension tarifierait un AUTRE produit — avec un verdict prononcé si
+    // la réserve est forte. On ne le déduit donc pas, on le VÉRIFIE : le serveur vient
+    // d'écrire une ligne de journal dans test_scratch avec l'idProduct RÉELLEMENT retenu.
+    try {
+        const mongoose = require('mongoose');
+        const bac = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+        // La ligne que ce scan vient d'écrire (fire-and-forget : on laisse le temps).
+        await new Promise(r => setTimeout(r, 1500));
+        const ligne = await bac.collection('journal_scans')
+            .find({ userId: 'capture-reponse' }).sort({ le: -1 }).limit(1).next();
+        console.log('\n── PREUVE : classement[0] EST-IL LE GAGNANT ? ──');
+        if (!ligne) {
+            console.log('   ⚠️ aucune ligne de journal — preuve IMPOSSIBLE, ne pas conclure');
+        } else {
+            const retenu = ligne.idProduct;
+            const premier = j?.classement?.[0]?.idProduct ?? null;
+            const ok = retenu != null && retenu === premier;
+            console.log(`   idProduct retenu (journal) : ${retenu}`);
+            console.log(`   classement[0].idProduct    : ${premier}`);
+            console.log(`   ${ok ? '✅ IDENTIQUES — classement[0] est bien le gagnant' : '❌ DIFFÉRENTS — l\'extension tarifierait le mauvais produit'}`);
+            console.log(`   raisonReserve=${ligne.raisonReserve ?? '—'} · niveauReserve=${ligne.niveauReserve ?? '—'} · nbExAequo=${ligne.nbExAequo ?? '—'}`);
+        }
+        await bac.collection('journal_scans').deleteMany({ userId: 'capture-reponse' });
+        await bac.collection('credits').deleteMany({ userId: 'capture-reponse' });
+        await bac.close();
+    } catch (e) { console.log(`\n   ⚠️ preuve impossible : ${e.message}`); }
 
     console.log('\n── CLÉS DE PREMIER NIVEAU ──');
     console.log('   ' + Object.keys(j || {}).join(' · '));

@@ -140,7 +140,21 @@ const journalScanSchema = new mongoose.Schema({
     numeroGagnant: String,    // son numéro en base
     score: Number,
     nbCandidats: Number,
-    confiance: String,        // 'haute' | 'basse'
+    // ⚠️ CHAMP HISTORIQUE, PLUS ÉCRIT DEPUIS LE 2026-08-08. Il valait
+    // `(identificationConfiante && !carteAmbigue) ? 'haute' : 'basse'` — DEUX notions dans
+    // un seul champ : la marge du classement ET la présence d'une réserve. Ce mélange a
+    // trompé son lecteur (voir carte.margeConfortable dans index.js).
+    // Les 131 lignes antérieures le portent avec cette ancienne sémantique. Elles ne sont
+    // PAS comparables aux lignes récentes : ne pas additionner, ne pas relire un ancien
+    // « basse » comme une marge mince — il peut n'être qu'une réserve.
+    confiance: String,        // 'haute' | 'basse' — HISTORIQUE
+
+    // LA MARGE DU CLASSEMENT, et rien d'autre : le gagnant devance-t-il le 2e d'au moins
+    // 30 points ? INDÉPENDANT de `carteIncertaine`.
+    // ⚠️ SIGNAL EN RÉSERVE. Le seuil de 30 n'a jamais été mesuré (voir scoring.js) : il
+    // n'alimente aucun affichage. Il est journalisé pour qu'une mesure puisse un jour lui
+    // donner un sens — justesse par tranche d'écart, sur des lignes à vérité individuelle.
+    margeConfortable: Boolean,
     carteIncertaine: Boolean,
     sourceIdentification: String, // 'nom' | 'total+numero' | 'catalogue-local'
     // true = identifiée SANS TCGdex, donc sans variantsDetailed : le motif de reverse n'a
@@ -376,7 +390,9 @@ function enregistrerScan(d = {}) {
             numeroGagnant: numeroGagnant != null ? String(numeroGagnant) : null,
             score: Number.isFinite(d.score) ? d.score : null,
             nbCandidats: Number.isFinite(d.nbCandidats) ? d.nbCandidats : null,
-            confiance: d.confiance || null,
+            // `confiance` n'est plus alimenté — voir le schéma. Les anciennes lignes le
+            // gardent, les nouvelles portent `margeConfortable`.
+            margeConfortable: d.margeConfortable != null ? Boolean(d.margeConfortable) : null,
             carteIncertaine: d.carteIncertaine != null ? Boolean(d.carteIncertaine) : null,
             sourceIdentification: d.sourceIdentification || null,
             identifieeEnLocal: d.identifieeEnLocal != null ? Boolean(d.identifieeEnLocal) : null,

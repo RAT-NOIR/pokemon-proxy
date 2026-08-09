@@ -100,6 +100,30 @@ const CELLULES = [
         pourquoi: 'la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte',
         profondeurExigee: 'verdict',
         test: d => d.raisonReserve === 'symbole-departage'
+    },
+    {
+        // ⚠️ LE CHEMIN QUI REÇOIT TOUT LE SOIN DE LA REFONTE D'AFFICHAGE, et qu'aucune
+        // charge n'exerçait. La réserve FAIBLE est la plus fréquente (51 % des réserves,
+        // mesuré) et c'est elle que l'extension traitera le plus. Valider les trois autres
+        // cellules en laissant celle-là sans réponse réelle serait couvrir le facile.
+        nom: 'réserve FAIBLE',
+        pourquoi: 'le cas le plus fréquent côté utilisateur — 51 % des réserves — et le plus travaillé à l\'affichage',
+        profondeurExigee: 'verdict',
+        test: d => d.raisonReserve === 'perimetre-vintage-suggestion'
+    },
+    {
+        // ⚠️ CELLULE QUI ACCEPTE UN ÉCHEC. Les trois issues de l'extension sont : verdict
+        // ferme, prix avec réserve, AUCUN prix. La troisième n'était exercée par aucune
+        // charge — or c'est celle où l'utilisateur est remboursé et ne voit rien, donc
+        // celle dont un plantage passerait le plus inaperçu.
+        // La profondeur exigée est `perimetre-vintage` et non `verdict` : par construction
+        // un refus ne rend pas de verdict, c'est le jalon juste avant qui prouve que la
+        // chaîne est allée jusqu'à la décision de refuser.
+        nom: 'aucun prix (refus remboursé)',
+        pourquoi: 'la troisième issue vue par l\'utilisateur, jamais exercée jusqu\'ici',
+        profondeurExigee: 'perimetre-vintage',
+        accepteEchec: true,
+        test: d => d.resultat === 'echec' && d.motifEchec === 'egalite-parfaite'
     }
 ];
 
@@ -113,13 +137,17 @@ const CELLULES = [
 
     const journal = await prod.collection('journal_scans').find({}).sort({ le: -1 }).toArray();
     // ⚠️ LA CONDITION QUI MANQUAIT : `idProduct` non nul. Voir l'en-tête.
-    const abouties = journal.filter(d => d.idProduct != null && d.imageUrl && d.nom);
+    // ⚠️ SAUF POUR LES CELLULES `accepteEchec`. Un refus n'a PAS d'idProduct — c'est sa
+    // définition. Leur imposer la même condition rendrait la troisième issue de
+    // l'utilisateur (aucun prix) inexerçable par construction.
+    const avecPhoto = journal.filter(d => d.imageUrl && d.nom);
+    const abouties = avecPhoto.filter(d => d.idProduct != null);
     console.log(`${journal.length} lignes au journal · ${abouties.length} ont abouti ET portent une photo\n`);
 
     console.log('── phase 1 : les charges ──');
     const charges = [];
     for (const c of CELLULES) {
-        const d = abouties.find(c.test);
+        const d = (c.accepteEchec ? avecPhoto : abouties).find(c.test);
         if (!d) {
             // Une cellule vide n'est pas une panne du code : c'est un manque de données.
             // Le verrou le dira en AVERTISSEMENT, jamais en échec — un verrou rouge en
@@ -200,6 +228,12 @@ const CELLULES = [
     // Chaque gagnant est-il bien dans la tranche ? Si non, la charge ne pourra pas aboutir
     // et il vaut mieux le savoir ici que dans un verrou rouge sans explication.
     for (const c of charges) {
+        // Une charge d'ÉCHEC n'a pas de gagnant : il n'y a rien à vérifier, et annoncer
+        // « ABSENT » y serait faux.
+        if (c.source.idProduct == null) {
+            console.log(`   ${c.lecture.name} : charge d'ÉCHEC, aucun gagnant attendu`);
+            continue;
+        }
         const present = ids.includes(c.source.idProduct);
         console.log(`   gagnant ${c.source.idProduct} (${c.lecture.name}) : ${present ? 'présent' : '⚠️ ABSENT de la tranche'}`);
     }
