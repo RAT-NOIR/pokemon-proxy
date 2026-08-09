@@ -3487,7 +3487,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // mettre côte à côte ferait croire à une comparaison qui n'en est pas une. Le nom
         // du champ est la seule barrière qui survit à la relecture.
         let concurrent = null;
-        if (carteAmbigue && classement.length > 1 && sontExAequo(classement[0].score, classement[1].score)) {
+        // COMBIEN SONT À ÉGALITÉ, gagnant compris. C'est ce qui distingue un DUEL d'une
+        // FOULE, et sans lui `concurrent` ment par omission.
+        // ⚠️ MESURÉ SUR UN CAS RÉEL : un Vileplume japonais sort avec SEPT candidats à 45
+        // points. `concurrent` y désigne le deuxième de la liste triée, c'est-à-dire un
+        // ex aequo ARBITRAIRE parmi six. Afficher « on hésite entre X et Y » sur cette
+        // carte serait un mensonge d'interface — le genre de faute qui se voit sur la
+        // capture d'écran d'un utilisateur et jamais dans nos mesures.
+        // L'extension ne doit proposer un choix binaire que si nbExAequo vaut 2.
+        let nbExAequo = null;
+        if (classement.length > 1 && sontExAequo(classement[0].score, classement[1].score)) {
+            nbExAequo = classement.filter(c => sontExAequo(c.score, classement[0].score)).length;
+        }
+        if (carteAmbigue && nbExAequo != null) {
             const c2 = classement[1];
             const p2 = produits.find(p => p.idProduct === c2.idProduct);
             concurrent = {
@@ -3540,6 +3552,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             raisonReserve,
             niveauReserve,
             concurrentIdProduct: concurrent?.idProduct ?? null,
+            nbExAequo,
             // La phrase exacte rendue par le départage — y compris quand il N'A PAS
             // tranché. « aucun ex aequo ne porte ce symbole » est une mesure autant que
             // « il a tranché » : c'est elle qui dira si le signal sert ou s'il est inerte.
@@ -3596,6 +3609,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // faux. `prixGuide` est le prix du GUIDE local — PAS le prix live du
                 // gagnant, et les deux ne se comparent pas.
                 concurrent,
+                // ⚠️ COMBIEN SONT À ÉGALITÉ, gagnant compris. null = aucune égalité.
+                // À LIRE AVANT `concurrent` : à 2, c'est un duel et le concurrent est LE
+                // concurrent. À 7 — cas réel, mesuré — le concurrent est un ex aequo pris
+                // parmi six, et proposer un choix binaire tromperait l'utilisateur.
+                nbExAequo,
                 // ⚠️ CONFIANCE DE L'IDENTIFICATION — quel PRODUIT a été retenu. À ne pas
                 // confondre avec etat.confianceIA plus bas, qui porte sur l'usure lue sur
                 // la photo (NM/EX/GD). Les deux sont indépendantes : une carte peut être

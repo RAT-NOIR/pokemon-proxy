@@ -276,6 +276,12 @@ const journalScanSchema = new mongoose.Schema({
     // null = aucune égalité, donc aucun concurrent à proposer.
     concurrentIdProduct: Number,
 
+    // COMBIEN DE CANDIDATS À ÉGALITÉ PARFAITE, gagnant compris. null = aucune égalité.
+    // Journalisé pour mesurer ce que le départage a RÉELLEMENT à trancher : un duel et une
+    // foule de sept ne sont pas la même difficulté, et le taux de justesse du symbole
+    // devra être relu par tranche. Mesuré sur un cas réel : 7 ex aequo sur un Vileplume.
+    nbExAequo: Number,
+
     // LA PHRASE EXACTE RENDUE PAR LE DÉPARTAGE PAR SYMBOLE, y compris quand il n'a PAS
     // tranché. « symbole "e2" lu, mais aucun ex aequo ne le porte » est une mesure autant
     // que « il a tranché » : c'est la répartition entre ces deux cas qui dira si le signal
@@ -403,6 +409,7 @@ function enregistrerScan(d = {}) {
             raisonReserve: d.raisonReserve || null,
             niveauReserve: d.niveauReserve || null,
             concurrentIdProduct: Number.isFinite(d.concurrentIdProduct) ? d.concurrentIdProduct : null,
+            nbExAequo: Number.isFinite(d.nbExAequo) ? d.nbExAequo : null,
             symboleDepartage: d.symboleDepartage || null,
             parenteRetenue: d.parenteRetenue || null
         });
