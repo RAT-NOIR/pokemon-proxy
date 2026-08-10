@@ -163,6 +163,18 @@ const journalScanSchema = new mongoose.Schema({
     voieCatalogue: String,        // 'nom' | 'numero'
     motifEtat: String,            // 'resolu' | 'aucun-motif' | 'non-resolu'
 
+    // COMMENT LIRE LE PRIX D'UNE REVERSE — 'filtre-url' | 'produit-distinct' | null.
+    // ⚠️ ELLE PARTAIT DANS LA RÉPONSE ET N'ÉTAIT CONSERVÉE NULLE PART. Même dette que
+    // `nomExact` et `raisonReserve` avant elle : une valeur de jonction, calculée à
+    // chaque scan, vivante une milliseconde. Conséquence CONSTATÉE le 2026-08-10 :
+    // impossible de fabriquer une charge de verrou sur la branche reverse, parce
+    // qu'aucune des 131 lignes du journal ne permettait de sélectionner un scan qui
+    // l'avait empruntée. Une branche qu'on ne peut pas sélectionner est une branche
+    // qu'on ne peut pas verrouiller.
+    // Le plus proche substitut disponible était `motifEtat: 'resolu'` (37 lignes) — il
+    // dit qu'UNE stratégie a été choisie, jamais laquelle.
+    strategieReverse: String,
+
     // --- RANG DU GAGNANT ---
     // 1 = son numéro correspond à celui lu ; 2 = son numéro est inconnu ; 3 = son
     // numéro est connu et CONTREDIT celui lu. Calculé ici par la même fonction pure
@@ -401,6 +413,7 @@ function enregistrerScan(d = {}) {
             symboleSet: d.symboleSet || null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
+            strategieReverse: d.strategieReverse || null,
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,
             rembourse: d.rembourse != null ? Boolean(d.rembourse) : null,

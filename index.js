@@ -2637,7 +2637,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         if (!cardInfo) {
             const rendu = await rembourserScan(req, 'ia-echec');
             enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
-            return res.json({ success: false, error: "Analyse IA échouée" });
+            // ⚠️ `rembourse` — VOIR LA NOTE COMPLÈTE SUR LA PREMIÈRE SORTIE DE REFUS, plus bas.
+            return res.json({ success: false, rembourse: rendu, error: "Analyse IA échouée" });
         }
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
@@ -2777,6 +2778,28 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: motif, rembourse: rendu });
                 return res.json({
                     success: false,
+                    // ════════════════════════════════════════════════════════════
+                    // `rembourse` — UN NOM EXACT, UNE VALEUR, AUCUNE DÉDUCTION
+                    // ════════════════════════════════════════════════════════════
+                    // La réponse de refus n'avait que `success: false` et un texte. Un REFUS
+                    // DÉLIBÉRÉ — celui qui protège l'utilisateur d'un prix faux, et qui lui
+                    // rend son crédit — y était indiscernable d'une PANNE. L'extension
+                    // affichait donc « Analyse impossible » en rouge sur 15 % des scans,
+                    // c'est-à-dire au moment précis où l'outil rend son plus grand service.
+                    // Apprendre à son utilisateur à se méfier de la seule mécanique qui le
+                    // protège est le pire échange possible.
+                    //
+                    // ⚠️ LA VALEUR EST `rendu`, PAS `true` EN DUR. `rembourserScan` peut
+                    // échouer, et annoncer un remboursement qui n'a pas eu lieu serait une
+                    // seconde source de vérité sur l'état d'un compte — exactement le défaut
+                    // que le deuxième principe interdit. Le champ dit ce qui S'EST PASSÉ.
+                    //
+                    // ⚠️ CE QU'IL NE DIT PAS : il ne sépare pas un refus délibéré d'une panne
+                    // technique remboursée (`ia-echec` sort avec `rembourse: true`). Les deux
+                    // rendent le crédit ; seul le premier est un service. Si l'extension doit
+                    // un jour les distinguer, il faudra un `motifRefus` en énumération fermée,
+                    // pas une déduction sur le texte d'erreur ni sur la présence de cardInfo.
+                    rembourse: rendu,
                     error: cardInfo.numeroIllisible
                         ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
                         : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
@@ -3117,7 +3140,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         if (classement.length === 0) {
             const rendu = await rembourserScan(req, 'aucun-candidat');
             enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'aucun-candidat', rembourse: rendu });
-            return res.json({ success: false, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
+            // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
+            return res.json({ success: false, rembourse: rendu, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -3194,6 +3218,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: motifRefus, rembourse: rendu });
                     return res.json({
                         success: false,
+                        // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
+                        // Celle-ci est le refus délibéré par excellence : on préfère rendre le
+                        // crédit plutôt que facturer un prix qu'on sait faux.
+                        rembourse: rendu,
                         error: `Le produit retenu ne porte pas le nom lu sur la carte ("${cardInfo.name}"), et aucun candidat ne le départage — scan remboursé plutôt qu'un prix faux.`,
                         cardInfo
                     });
@@ -3297,6 +3325,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
                 return res.json({
                     success: false,
+                    // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
+                    // Refus délibéré, lui aussi : une égalité parfaite n'est pas un verdict.
+                    rembourse: rendu,
                     error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : scan remboursé plutôt qu'un prix tiré au sort.`,
                     cardInfo
                 });
@@ -3476,7 +3507,46 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Défaut FAIBLE pour toute raison non listée — y compris `motif-<raison>`, qui est
         // construite dynamiquement. Ici le défaut est sûr : c'est le serveur qui décide, et
         // une raison qu'il ne s'est pas encore donné la peine de mesurer n'a rien prouvé.
-        const niveauReserve = !carteAmbigue ? null : (NIVEAU_RESERVE[raisonReserve] ?? 'faible');
+        // ════════════════════════════════════════════════════════════════════
+        // LE PLAFOND DU RANG 3 — la règle 1, appliquée pour la première fois
+        // ════════════════════════════════════════════════════════════════════
+        // CE QUI TENAIT DÉJÀ, ET CE QUI NE TENAIT PAS. `gagnantContreditNumero` entre dans
+        // `carteAmbigue` depuis le début : une carte de rang 3 a TOUJOURS une réserve, c'est
+        // structurel et vérifié sur le journal (5 lignes de rang 3, 5 avec réserve, 0 sans).
+        // Ce qui ne tenait pas, c'est le NIVEAU. Les 4 lignes de rang 3 récentes portent
+        // toutes `raisonReserve: 'symbole-departage'`, qui est classé FORTE — c'est-à-dire
+        // le niveau qui autorise l'extension à quasi-affirmer. La réserve existait ; elle
+        // ne freinait rien.
+        //
+        // RÈGLE 1 (voir le principe d'ordre plus haut) : une cause qui SAPE LA PRÉMISSE
+        // d'une autre passe devant, quelle que soit sa spécificité. Le départage par
+        // symbole suppose que le vivier contient la bonne carte ; un rang 3 dit que le
+        // catalogue CONTREDIT le numéro lu pour le gagnant. On ne peut pas affirmer à
+        // partir d'une prémisse qu'on sait attaquée.
+        //
+        // ⚠️ C'EST UN PLAFOND, PAS UN CHANGEMENT DE RAISON. `raisonReserve` reste
+        // `symbole-departage` : les statistiques par raison restent additionnables avec
+        // celles déjà au journal, et le changement d'ordre qui créerait un nouvel
+        // instrument n'a pas lieu. Seul le niveau est borné, et seulement vers le bas —
+        // ce plafond ne peut jamais promouvoir une réserve.
+        //
+        // ⚠️ CE N'EST PAS UN NO-OP, ET IL FAUT LE DIRE. Rejoué sur le journal : 4 des 12
+        // lignes `symbole-departage` sont de rang 3 et sortiraient désormais FAIBLE au lieu
+        // de FORTE. Ces 4 cartes faisaient partie du 12/12 juste — on perd donc de la
+        // couverture sur des cartes qui étaient bonnes. C'est l'arbitrage déjà écrit dans
+        // la règle de rétrogradation : mieux vaut perdre douze bonnes cartes que casser une
+        // seule fois « quand l'outil affirme, il a raison ».
+        //
+        // ⚠️ ET LA CAUSE DE CES 4 LIGNES EST AILLEURS — voir la note sur `cardInfo.number`
+        // dans scorerCandidatsLocal. Pichu #172, Cyndaquil #155, Hypno #097, Entei #244
+        // sont des numéros de POKÉDEX : le rang 3 y est un faux positif né de ce que les
+        // rangs sont calculés sur le numéro BRUT quand tout le reste de la chaîne utilise
+        // `numeroCarte`, neutralisé. Ce plafond ne corrige pas cette divergence, il en
+        // limite le dégât. Quand elle sera corrigée, le plafond redeviendra le no-op qu'il
+        // aurait dû être.
+        const niveauReserve = !carteAmbigue ? null
+            : gagnantContreditNumero ? 'faible'
+                : (NIVEAU_RESERVE[raisonReserve] ?? 'faible');
 
         // ════════════════════════════════════════════════════════════════════
         // LE CANDIDAT CONCURRENT — seulement quand il y a vraiment hésitation
@@ -3547,6 +3617,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             symboleSet: cardInfo.symboleSet,
             voieCatalogue,
             motifEtat: motifResolution.etat,
+            // ⚠️ ELLE PART DANS LA RÉPONSE DEPUIS LE DÉBUT ET N'ÉTAIT PAS JOURNALISÉE.
+            // Sans elle, aucune ligne du journal ne permet de sélectionner un scan passé
+            // par la branche reverse : c'est ce qui a rendu impossible la cinquième
+            // cellule du verrou. Voir journal-scans.js.
+            strategieReverse,
             // Les deux signaux de rang, persistés : c'est ce qui permettra de mesurer
             // leur fréquence réelle sans dépendre des logs éphémères de Render.
             aucunCandidatAuNumero,
@@ -3718,11 +3793,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         console.error("❌ [identifier]", e.message);
         // Voir /api/analyser : on constate l'absence de remboursement, on ne la corrige pas ici.
         enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
+        // ⚠️ `rembourse: false` — ET C'EST LE SEUL CAS OÙ LE ROUGE EST JUSTE. Ce chemin ne
+        // rembourse pas (l'absence est constatée ici, pas corrigée : voir /api/analyser).
+        // Le champ dit donc la vérité désagréable plutôt que rien du tout.
         // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il est resté au log et au journal ; la réponse ne
         // porte qu'un texte générique. Le 4 août, un utilisateur a lu dans son extension
         // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
         // information qui ne l'aide en rien et qui décrit notre code à qui la reçoit.
-        res.json({ success: false, error: "Erreur serveur interne" });
+        res.json({ success: false, rembourse: false, error: "Erreur serveur interne" });
     }
 });
 

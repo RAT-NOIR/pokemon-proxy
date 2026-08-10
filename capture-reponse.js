@@ -73,7 +73,7 @@ const cible = process.argv[2] || 'Vileplume';
         if (!ligne) {
             console.log('   ⚠️ aucune ligne de journal — preuve IMPOSSIBLE, ne pas conclure');
         } else {
-            const retenu = ligne.idProduct;
+            const retenu = ligne.idProduct ?? null;
             const premier = j?.classement?.[0]?.idProduct ?? null;
             const annonce = j?.carte?.idProduct ?? null;
             // LES TROIS DOIVENT COÏNCIDER. `carte.idProduct` est le champ que l'extension
@@ -81,12 +81,31 @@ const cible = process.argv[2] || 'Vileplume';
             // serveur a RÉELLEMENT retenu. Si les trois ne sont pas égaux, l'un des deux
             // contrats ment, et l'extension tariferait un autre produit — avec un verdict
             // prononcé quand la réserve est forte.
-            const ok = retenu != null && retenu === premier && retenu === annonce;
             console.log(`   idProduct retenu (journal) : ${retenu}`);
             console.log(`   carte.idProduct (annoncé)  : ${annonce}`);
             console.log(`   classement[0].idProduct    : ${premier}`);
-            console.log(`   ${ok ? '✅ LES TROIS COÏNCIDENT — carte.idProduct est le gagnant, et classement[0] aussi' : '❌ DIVERGENCE — l\'extension tarifierait le mauvais produit'}`);
-            console.log(`   raisonReserve=${ligne.raisonReserve ?? '—'} · niveauReserve=${ligne.niveauReserve ?? '—'} · nbExAequo=${ligne.nbExAequo ?? '—'}`);
+            // ⚠️ RIEN À COMPARER N'EST PAS UNE DIVERGENCE. Sur un refus, les trois valeurs
+            // sont nulles — aucun produit n'a été retenu, c'est tout l'objet du refus — et
+            // l'ancienne condition (`retenu != null && ...`) rendait FAUX, donc imprimait
+            // « DIVERGENCE — l'extension tarifierait le mauvais produit ». Un outil de
+            // vérification qui crie au loup fait chasser des fantômes, et la fois suivante
+            // on ne le croit plus quand il a raison. TROIS ÉTATS, PAS DEUX : c'est le même
+            // premier principe que partout ailleurs ici — « je ne sais pas » n'est pas
+            // « je sais que non ».
+            if (retenu == null && premier == null && annonce == null) {
+                const refus = j && j.success === false;
+                console.log(`   ⃝ SANS OBJET — aucun produit retenu${refus ? ' (refus)' : ''} : les trois valeurs sont nulles, il n'y a rien à comparer.`);
+                // Ce que le refus DOIT porter, lui, se vérifie : le marqueur de remboursement.
+                if (refus) {
+                    console.log(`   rembourse (réponse) : ${j.rembourse === undefined ? '❌ ABSENT — l\'extension ne peut pas distinguer un refus remboursé d\'une panne' : j.rembourse}`);
+                    console.log(`   rembourse (journal) : ${ligne.rembourse ?? '—'} · motifEchec=${ligne.motifEchec ?? '—'}`);
+                }
+            } else if (retenu != null && retenu === premier && retenu === annonce) {
+                console.log('   ✅ LES TROIS COÏNCIDENT — carte.idProduct est le gagnant, et classement[0] aussi');
+            } else {
+                console.log('   ❌ DIVERGENCE — l\'extension tarifierait le mauvais produit');
+            }
+            console.log(`   raisonReserve=${ligne.raisonReserve ?? '—'} · niveauReserve=${ligne.niveauReserve ?? '—'} · nbExAequo=${ligne.nbExAequo ?? '—'} · strategieReverse=${ligne.strategieReverse ?? '—'}`);
         }
         await bac.collection('journal_scans').deleteMany({ userId: 'capture-reponse' });
         await bac.collection('credits').deleteMany({ userId: 'capture-reponse' });
