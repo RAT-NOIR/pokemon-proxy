@@ -75,10 +75,17 @@ const cible = process.argv[2] || 'Vileplume';
         } else {
             const retenu = ligne.idProduct;
             const premier = j?.classement?.[0]?.idProduct ?? null;
-            const ok = retenu != null && retenu === premier;
+            const annonce = j?.carte?.idProduct ?? null;
+            // LES TROIS DOIVENT COÏNCIDER. `carte.idProduct` est le champ que l'extension
+            // doit lire ; `classement[0]` est l'ordre du tableau ; le journal est ce que le
+            // serveur a RÉELLEMENT retenu. Si les trois ne sont pas égaux, l'un des deux
+            // contrats ment, et l'extension tariferait un autre produit — avec un verdict
+            // prononcé quand la réserve est forte.
+            const ok = retenu != null && retenu === premier && retenu === annonce;
             console.log(`   idProduct retenu (journal) : ${retenu}`);
+            console.log(`   carte.idProduct (annoncé)  : ${annonce}`);
             console.log(`   classement[0].idProduct    : ${premier}`);
-            console.log(`   ${ok ? '✅ IDENTIQUES — classement[0] est bien le gagnant' : '❌ DIFFÉRENTS — l\'extension tarifierait le mauvais produit'}`);
+            console.log(`   ${ok ? '✅ LES TROIS COÏNCIDENT — carte.idProduct est le gagnant, et classement[0] aussi' : '❌ DIVERGENCE — l\'extension tarifierait le mauvais produit'}`);
             console.log(`   raisonReserve=${ligne.raisonReserve ?? '—'} · niveauReserve=${ligne.niveauReserve ?? '—'} · nbExAequo=${ligne.nbExAequo ?? '—'}`);
         }
         await bac.collection('journal_scans').deleteMany({ userId: 'capture-reponse' });

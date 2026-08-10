@@ -1,11 +1,13 @@
 {
-  "enregistreLe": "2026-08-08T21:12:44.280Z",
-  "nb": 21,
+  "enregistreLe": "2026-08-10T18:48:56.169Z",
+  "nb": 27,
   "chargesCouvertes": [
     "6a71c2be486b51e3ab380b1f",
     "6a778ff541c0673e928ab762",
     "6a71c4e5486b51e3ab380c9d",
-    "6a778f1541c0673e928ab69d"
+    "6a778f1541c0673e928ab69d",
+    "6a778fe541c0673e928ab750",
+    "6a778e8541c0673e928ab64b"
   ],
   "reponses": {
     "https://api.tcgdex.net/v2/ja/sets": {
@@ -3679,15 +3681,15 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-08T08:02:24.484Z",
+                "updated": "2026-08-10T08:02:25.017Z",
                 "unit": "EUR",
                 "idProduct": 794609,
-                "avg": 24.17,
+                "avg": 22.09,
                 "low": 15.8,
-                "trend": 21.66,
-                "avg1": 17.2,
-                "avg7": 21.77,
-                "avg30": 22.31,
+                "trend": 20.15,
+                "avg1": 18.83,
+                "avg7": 21.44,
+                "avg30": 22.23,
                 "avg-holo": null,
                 "low-holo": null,
                 "trend-holo": 0,
@@ -3697,14 +3699,14 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-08-08T08:02:41.453Z",
+                "updated": "2026-08-10T08:02:23.284Z",
                 "holofoil": {
                   "productId": 589930,
-                  "lowPrice": 34.28,
-                  "midPrice": 41.05,
+                  "lowPrice": 34.93,
+                  "midPrice": 41.1,
                   "highPrice": 269.9,
-                  "marketPrice": 36.71,
-                  "directLowPrice": 41.39
+                  "marketPrice": 36.45,
+                  "directLowPrice": null
                 }
               }
             }
@@ -3753,15 +3755,15 @@
         "updated": "2026-06-08T13:16:55+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-08T08:02:24.484Z",
+            "updated": "2026-08-10T08:02:25.017Z",
             "unit": "EUR",
             "idProduct": 794609,
-            "avg": 24.17,
+            "avg": 22.09,
             "low": 15.8,
-            "trend": 21.66,
-            "avg1": 17.2,
-            "avg7": 21.77,
-            "avg30": 22.31,
+            "trend": 20.15,
+            "avg1": 18.83,
+            "avg7": 21.44,
+            "avg30": 22.23,
             "avg-holo": null,
             "low-holo": null,
             "trend-holo": 0,
@@ -3771,14 +3773,14 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-08-08T08:02:41.453Z",
+            "updated": "2026-08-10T08:02:23.284Z",
             "holofoil": {
               "productId": 589930,
-              "lowPrice": 34.28,
-              "midPrice": 41.05,
+              "lowPrice": 34.93,
+              "midPrice": 41.1,
               "highPrice": 269.9,
-              "marketPrice": 36.71,
-              "directLowPrice": 41.39
+              "marketPrice": 36.45,
+              "directLowPrice": null
             }
           }
         }
@@ -3866,6 +3868,229 @@
         "title": "The resource you are trying to reach does not exists",
         "status": 404,
         "endpoint": "/en/cards/SV4a-003",
+        "method": "GET"
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%83%AA%E3%83%B3%E3%82%B0%E3%83%9E": {
+      "statut": 200,
+      "data": []
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=Dark%20Ursaring": {
+      "statut": 200,
+      "data": []
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=Dark": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "neo4-097",
+          "localId": "097",
+          "name": "Dark Porygon2"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/en/cards/neo4-097": {
+      "statut": 404,
+      "erreur": "Request failed with status code 404",
+      "data": {
+        "type": "https://tcgdex.dev/errors/not-found",
+        "title": "The resource you are trying to reach does not exists",
+        "status": 404,
+        "endpoint": "/en/cards/neo4-097",
+        "method": "GET"
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%9F%E3%83%A5%E3%82%A6": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "SVK-006",
+          "localId": "006",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SVK/006"
+        },
+        {
+          "id": "PMCG3-033",
+          "localId": "033",
+          "name": "ミュウ"
+        },
+        {
+          "id": "SM10-036",
+          "localId": "036",
+          "name": "ミュウツー"
+        },
+        {
+          "id": "SM10-037",
+          "localId": "037",
+          "name": "ミュウ"
+        },
+        {
+          "id": "SV10-039",
+          "localId": "039",
+          "name": "ロケット団のミュウツーex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV10/039"
+        },
+        {
+          "id": "M-P-043",
+          "localId": "043",
+          "name": "ロケット団のミュウツーex"
+        },
+        {
+          "id": "S12a-050",
+          "localId": "050",
+          "name": "ミュウツーV",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/050"
+        },
+        {
+          "id": "PMCG1-050",
+          "localId": "050",
+          "name": "ミュウツー"
+        },
+        {
+          "id": "S12a-051",
+          "localId": "051",
+          "name": "ミュウツーVSTAR",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/051"
+        },
+        {
+          "id": "SM12a-052",
+          "localId": "052",
+          "name": "ミュウツー&ミュウGX"
+        },
+        {
+          "id": "S12a-052",
+          "localId": "052",
+          "name": "ミュウ",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/052"
+        },
+        {
+          "id": "S12a-053",
+          "localId": "053",
+          "name": "ミュウV",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/053"
+        },
+        {
+          "id": "SM12a-054",
+          "localId": "054",
+          "name": "ミュウツー"
+        },
+        {
+          "id": "S12a-054",
+          "localId": "054",
+          "name": "ミュウVMAX",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/054"
+        },
+        {
+          "id": "SM12a-055",
+          "localId": "055",
+          "name": "ミュウ"
+        },
+        {
+          "id": "PMCG6-055",
+          "localId": "055",
+          "name": "R団のミュウツー"
+        },
+        {
+          "id": "M2a-063",
+          "localId": "063",
+          "name": "ロケット団のミュウツーex"
+        },
+        {
+          "id": "neo4-068",
+          "localId": "068",
+          "name": "輝くミュウツー"
+        },
+        {
+          "id": "SV4a-076",
+          "localId": "076",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV4a/076"
+        },
+        {
+          "id": "SV2a-150",
+          "localId": "150",
+          "name": "ミュウツー",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/150"
+        },
+        {
+          "id": "SV2a-151",
+          "localId": "151",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/151"
+        },
+        {
+          "id": "SV2a-183",
+          "localId": "183",
+          "name": "ミュウツー",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/183"
+        },
+        {
+          "id": "S12a-183",
+          "localId": "183",
+          "name": "ミュウ",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/183"
+        },
+        {
+          "id": "SV2a-195",
+          "localId": "195",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/195"
+        },
+        {
+          "id": "SV2a-205",
+          "localId": "205",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/205"
+        },
+        {
+          "id": "SV2a-208",
+          "localId": "208",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/208"
+        },
+        {
+          "id": "S12a-221",
+          "localId": "221",
+          "name": "ミュウツーVSTAR",
+          "image": "https://assets.tcgdex.net/ja/S/S12a/221"
+        },
+        {
+          "id": "SM12a-222",
+          "localId": "222",
+          "name": "ミュウツー&ミュウGX"
+        },
+        {
+          "id": "M2a-237",
+          "localId": "237",
+          "name": "ロケット団のミュウツーex"
+        },
+        {
+          "id": "MC-290",
+          "localId": "290",
+          "name": "ロケット団のミュウツーex"
+        },
+        {
+          "id": "SV4a-327",
+          "localId": "327",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV4a/327"
+        },
+        {
+          "id": "SV4a-347",
+          "localId": "347",
+          "name": "ミュウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV4a/347"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/en/cards/SVK-006": {
+      "statut": 404,
+      "erreur": "Request failed with status code 404",
+      "data": {
+        "type": "https://tcgdex.dev/errors/not-found",
+        "title": "The resource you are trying to reach does not exists",
+        "status": 404,
+        "endpoint": "/en/cards/SVK-006",
         "method": "GET"
       }
     }

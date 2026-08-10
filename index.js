@@ -3587,6 +3587,18 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         res.json({
             success: true,
             carte: {
+                // ⚠️ LE GAGNANT EST NOMMÉ, PAS DÉDUIT D'UN ORDRE DE TABLEAU.
+                // Il n'était lisible que dans `classement[0]`, c'est-à-dire par un contrat
+                // IMPLICITE entre deux dépôts qui ne se voient pas : « le premier du
+                // tableau est celui qu'on a retenu ». Il se trouve que c'est vrai — vérifié
+                // par capture-reponse.js, qui relit la ligne de journal écrite par le scan
+                // lui-même — mais un lecteur ne pouvait pas le savoir, et l'agent de
+                // l'extension a eu raison de s'en inquiéter : si une décision tardive
+                // changeait le gagnant sans réordonner, l'extension tariferait un AUTRE
+                // produit, avec un verdict prononcé quand la réserve est forte.
+                // Désormais c'est écrit. `classement` garde son ordre, mais plus personne
+                // n'a besoin d'y croire.
+                idProduct: classement[0]?.idProduct ?? null,
                 nom: cardInfo.name,
                 nomExact: trouvaille.nomExact,
                 numero: cardInfo.number,
@@ -3625,27 +3637,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // concurrent. À 7 — cas réel, mesuré — le concurrent est un ex aequo pris
                 // parmi six, et proposer un choix binaire tromperait l'utilisateur.
                 nbExAequo,
-                // ════════════════════════════════════════════════════════════
-                // margeConfortable — UNE SEULE NOTION : l'écart au 2e du classement
-                // ════════════════════════════════════════════════════════════
-                // Il s'appelait `confianceIdentification` et valait
-                // `(identificationConfiante && !carteAmbigue) ? 'haute' : 'basse'`.
-                // ⚠️ CE MÉLANGE A DÉJÀ TROMPÉ SON LECTEUR, et de la pire façon : parce que
-                // le champ tombait à 'basse' pour TOUTE réserve, une consigne d'extension
-                // le prenant comme garde-fou prioritaire sur `niveauReserve` aurait
-                // rétrogradé 100 % des réserves fortes — en SILENCE, avec l'apparence d'un
-                // fonctionnement normal. Un champ dont le nom promet autre chose que ce
-                // qu'il contient trompe son lecteur une fois, puis toujours.
-                //
-                // Il ne dit plus qu'UNE chose, et son nom la dit : le gagnant devance-t-il
-                // le 2e d'au moins SEUIL_MARGE_CONFORTABLE points. INDÉPENDANT d'`ambigu` :
-                // les deux axes se lisent ensemble, ils ne se recouvrent plus.
-                //
-                // ⚠️ SIGNAL EN RÉSERVE, PAS UN SIGNAL D'AFFICHAGE. Le seuil de 30 points
-                // n'a JAMAIS été mesuré (voir scoring.js) : rien ne justifie aujourd'hui
-                // d'afficher quoi que ce soit sur une marge mince. Il est journalisé et
-                // attend qu'une mesure lui donne un sens. Ne lui invente pas d'usage.
-                margeConfortable: identificationConfiante,
+                // ⚠️ `margeConfortable` N'EST PAS DANS LA RÉPONSE, ET C'EST DÉLIBÉRÉ.
+                // Il l'a été quelques heures, sous le nom `confianceIdentification`, en
+                // mélangeant DEUX notions — la marge du classement et la présence d'une
+                // réserve. Ce mélange a piégé son lecteur : parce que le champ tombait à
+                // 'basse' pour TOUTE réserve, une consigne le prenant comme garde-fou
+                // prioritaire sur `niveauReserve` aurait rétrogradé 100 % des réserves
+                // fortes, en silence.
+                // Il reste JOURNALISÉ, où il ne coûte rien et demeure mesurable. Mesuré sur
+                // les 65 lignes récentes : UNE SEULE dirait quelque chose qu'`ambigu` ne dit
+                // pas. Un champ dans un contrat entre deux dépôts qui ne se voient pas est
+                // une invitation à s'en servir ; une ligne sur 65 ne la justifie pas.
+                // On le remesurera au prochain lot ; s'il reste à ce niveau, on le
+                // supprimera pour de bon.
                 // Par quel signal la carte a été identifiée : 'nom', 'total+numero' (nom
                 // écarté car halluciné ou inapparieable) ou 'catalogue-local' (TCGdex muet).
                 sourceIdentification: trouvaille.source || 'nom',
