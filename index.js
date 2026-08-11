@@ -2727,6 +2727,18 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
     let annonce = { imageUrl: null, vintedUrl: null };
     try {
         const { imageUrl, imageUrls, title, vintedEtat } = req.body;
+        // ⚠️ LE PRIX DEMANDÉ SUR L'ANNONCE — accepté à l'entrée depuis le 2026-08-11.
+        // Il était renseigné sur 0 des 142 lignes du journal, et ce n'était PAS un oubli
+        // d'écriture : la route ne le recevait pas. Sans lui, impossible de dire de quel
+        // côté de la fourchette tombe une annonce, donc impossible de mesurer ce que la
+        // règle de la fourchette rapporterait.
+        // ⚠️ CE N'EST PAS UNE RÉFÉRENCE. C'est la chose qu'on JUGE : il ne calibre rien,
+        // il ne corrige rien, il ne pilote aucune décision de ce serveur. Il est lu, il
+        // est journalisé, et c'est tout.
+        // Validé plutôt que fait confiance : une chaîne, un zéro ou un négatif deviennent
+        // null. Un 0 n'est pas un prix, c'est une absence — même règle que le guide.
+        const prixVintedBrut = Number(req.body?.prixVinted);
+        const prixVinted = Number.isFinite(prixVintedBrut) && prixVintedBrut > 0 ? prixVintedBrut : null;
         // `vintedUrl` ou `url` : l'extension n'en envoie encore AUCUN des deux. Les deux
         // noms sont acceptés pour que le champ se remplisse sans toucher au serveur.
         annonce = {
@@ -3509,12 +3521,51 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 const enjeu = ecartPrix != null ? `${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} €` : 'prix inconnus';
                 console.warn(`🚫 [egalite-parfaite] ${exAequo.length} candidats à ${classement[0].score} points sur ${classement.length} (${enjeu}) : aucun critère ne les sépare et le choix décide du prix -> aucun verdict, scan remboursé.`);
                 const rendu = await rembourserScan(req, 'egalite-parfaite');
-                enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
+                // ════════════════════════════════════════════════════════════
+                // LA FOURCHETTE DES CANDIDATS — de la DONNÉE, jamais un verdict
+                // ════════════════════════════════════════════════════════════
+                // ON RENONCE À DIRE QUELLE CARTE C'EST, PAS À TOUT DIRE. Cas réel : deux
+                // candidats à 1,90 € et 2,94 € pour une annonce à 85 €. Le refus est
+                // techniquement correct — rien ne les départage — mais il jette une réponse
+                // CERTAINE : quelle que soit la carte, 85 € est très au-dessus. L'utilisateur
+                // repart sans rien alors qu'on savait. Le contraste avec Articuno est net :
+                // 17,38 € à 404,55 € pour une annonce à 60 €, la fourchette ENCADRE le prix
+                // et le refus est la seule réponse honnête.
+                //
+                // ⚠️ CE SONT DES PRIX GUIDE, ET LE SERVEUR NE TRANCHE PAS. Il n'a pas le prix
+                // live — c'est le navigateur qui le lit — donc il envoie la donnée et laisse
+                // l'extension décider. C'est la séparation des deux axes, tenue : ici on ne
+                // parle QUE de prix, l'identification reste refusée.
+                //
+                // ⚠️ AUCUN SEUIL N'EST POSÉ ICI, ET C'EST DÉLIBÉRÉ. Comparer un prix guide à
+                // un prix réel demande une marge, et cette marge doit sortir d'une mesure —
+                // la distribution de prixLive/prixGuide sur un même produit, qu'on ne peut
+                // pas encore calculer (voir `prixLive` dans journal-scans.js). Poser un
+                // nombre maintenant ferait un second SEUIL_MARGE_CONFORTABLE, « posé à
+                // l'estime, jamais mesuré ». L'extension gardera donc la fourchette sans
+                // s'en servir jusqu'à ce que le seuil existe.
+                //
+                // ⚠️ CE N'EST PAS RÉTROACTIF. Les 17 refus déjà au journal resteront muets :
+                // ils ne portent ni fourchette, ni nbExAequo, ni nbCandidats. La mesure de
+                // cette classe repart de zéro à partir d'ici.
+                const fourchette = (prix.length >= 2)
+                    ? { min: Math.min(...prix), max: Math.max(...prix), n: exAequo.length }
+                    : null;
+                enregistrerEchec({
+                    route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+                    motifEchec: 'egalite-parfaite', rembourse: rendu,
+                    fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted
+                });
                 return res.json({
                     success: false,
                     // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
                     // Refus délibéré, lui aussi : une égalité parfaite n'est pas un verdict.
                     ...champsDeRefus('egalite-parfaite', rendu),
+                    // DONNÉE, PAS VERDICT. `min`/`max` sont des prix GUIDE ; `n` dit combien
+                    // de candidats sont à égalité — à 2 c'est un duel, à 9 une foule.
+                    // null quand moins de deux candidats ont un prix connu : on ne borne
+                    // rien avec une seule borne.
+                    fourchette,
                     error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : scan remboursé plutôt qu'un prix tiré au sort.`,
                     cardInfo
                 });
@@ -3833,6 +3884,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // comme des marges.
             margeConfortable: identificationConfiante,
             carteIncertaine: carteAmbigue,
+            // ⚠️ LE PRIX DEMANDÉ, SUR LES SCANS ABOUTIS AUSSI — et pas seulement sur les
+            // refus. C'est sur ces lignes-là qu'on pourra un jour rapprocher un prix
+            // d'annonce du prix live du produit retenu, donc mesurer ce que vaut le guide.
+            // `prixReference` et `ratio` restent nuls sur cette route : le serveur ne voit
+            // jamais le prix final, et un ratio calculé sur le prix GUIDE serait une
+            // troisième grandeur mélangée aux deux autres.
+            prixVinted,
             sourceIdentification: trouvaille.source || 'nom',
             identifieeEnLocal: identificationLocale,
             nomConfiance: cardInfo.nomConfiance,

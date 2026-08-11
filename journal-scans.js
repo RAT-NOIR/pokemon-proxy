@@ -237,9 +237,32 @@ const journalScanSchema = new mongoose.Schema({
     // « trop cher » trahit presque toujours une identification ratée, pas un vendeur
     // délirant. Les deux prix sont conservés en plus du ratio : sans eux, impossible
     // de distinguer un x1000 sur une carte à 0,02 € d'un x1000 sur une carte à 20 €.
+    // ⚠️ `prixVinted` EST RENSEIGNÉ SUR 0 DES 142 LIGNES au 2026-08-11, et ce n'était pas
+    // un oubli d'écriture : /api/identifier ne RECEVAIT aucun prix — son corps valait
+    // { imageUrl, imageUrls, title, vintedEtat }. Le champ est désormais accepté à
+    // l'entrée. C'est ce qui permettra de dire de quel côté de `fourchette` tombe une
+    // annonce ; ce n'est JAMAIS une référence pour calibrer quoi que ce soit — c'est la
+    // chose qu'on juge.
     prixVinted: Number,
     prixReference: Number,
     ratio: Number,
+
+    // ⚠️ LE PRIX LIVE CARDMARKET DU PRODUIT RETENU — la seule mesure qui fasse foi, et la
+    // seule qui puisse calibrer un seuil. `prixVinted` et le prix guide ne sont PAS deux
+    // mesures du même objet ; `prixLive` et le prix guide, si — même idProduct, deux
+    // sources. C'est leur rapport qui dira de combien le guide s'écarte du réel.
+    //
+    // ⚠️ IL NE PEUT PAS ARRIVER DANS LA MÊME REQUÊTE QUE LE SCAN. L'extension lit le live
+    // APRÈS avoir reçu la réponse — il lui faut l'idProduct pour savoir quoi lire. Le
+    // renseigner exige donc un retour, et un identifiant que l'extension puisse renvoyer :
+    // voir `scanId`. Sans cet identifiant, on ne saurait pas à quelle ligne l'attacher.
+    prixLive: Number,
+    // Ce sur quoi l'extension a FILTRÉ pour lire ce prix live. Sans ces deux champs, le
+    // rapport prixLive/prixGuide mélange l'écart guide-réel avec l'effet du filtre, et un
+    // seuil tiré de ce mélange absorberait du bruit qui n'est pas de l'incertitude.
+    // Le guide Cardmarket est GLOBAL : ni par état, ni par langue (voir guide_prix).
+    prixLiveEtat: String,        // l'état sur lequel l'offre a été lue (NM, EX, GD…)
+    prixLiveCodeLangue: Number,  // le code langue Cardmarket du filtre (1=EN, 2=FR, 7=JP…)
     // D'OÙ vient le prix de référence : 'guide-local' | 'tcgdex' | 'cache'. Sans lui,
     // un ratio aberrant serait indiscernable d'un simple repli sur une source moins
     // précise, et on tirerait un seuil d'une comparaison qui n'en est pas une.
@@ -307,6 +330,20 @@ const journalScanSchema = new mongoose.Schema({
     // foule de sept ne sont pas la même difficulté, et le taux de justesse du symbole
     // devra être relu par tranche. Mesuré sur un cas réel : 7 ex aequo sur un Vileplume.
     nbExAequo: Number,
+
+    // ⚠️ LA FOURCHETTE DES CANDIDATS SUR UN REFUS — { min, max, n }, en PRIX GUIDE.
+    // Sur un refus par égalité parfaite, on renonce à dire QUELLE carte c'est, mais on
+    // sait entre quels prix elle se trouve. Une annonce très au-dessus du max (ou très
+    // en dessous du min) permet un verdict de PRIX sans avoir départagé l'IDENTITÉ.
+    // ⚠️ CE SONT DES PRIX GUIDE, pas des prix live. Le nom du champ le porte, comme
+    // `prixGuide` du concurrent : les comparer à un prix réel sans marge mélange deux
+    // sources — c'est tout le sujet du seuil, qui n'est pas encore mesuré.
+    // Mesuré à l'ouverture (16 refus rejoués) : rapport max/min médian ×5,4, de ×1,5 à ×73.
+    fourchette: {
+        min: Number,   // le moins cher des ex aequo
+        max: Number,   // le plus cher
+        n: Number      // combien d'ex aequo — à 2 c'est un duel, à 9 c'est une foule
+    },
 
     // LA PHRASE EXACTE RENDUE PAR LE DÉPARTAGE PAR SYMBOLE, y compris quand il n'a PAS
     // tranché. « symbole "e2" lu, mais aucun ex aequo ne le porte » est une mesure autant
@@ -439,6 +476,14 @@ function enregistrerScan(d = {}) {
             niveauReserve: d.niveauReserve || null,
             concurrentIdProduct: Number.isFinite(d.concurrentIdProduct) ? d.concurrentIdProduct : null,
             nbExAequo: Number.isFinite(d.nbExAequo) ? d.nbExAequo : null,
+            // La fourchette n'est écrite que si ses DEUX bornes sont des prix. Une borne
+            // seule ne borne rien, et un min sans max se lirait comme un intervalle ouvert.
+            fourchette: (d.fourchette && Number.isFinite(d.fourchette.min) && Number.isFinite(d.fourchette.max))
+                ? { min: d.fourchette.min, max: d.fourchette.max, n: Number.isFinite(d.fourchette.n) ? d.fourchette.n : null }
+                : null,
+            prixLive: Number.isFinite(d.prixLive) ? d.prixLive : null,
+            prixLiveEtat: d.prixLiveEtat || null,
+            prixLiveCodeLangue: Number.isFinite(d.prixLiveCodeLangue) ? d.prixLiveCodeLangue : null,
             symboleDepartage: d.symboleDepartage || null,
             parenteRetenue: d.parenteRetenue || null
         });
@@ -465,7 +510,8 @@ function enregistrerScan(d = {}) {
  * @param {boolean}     o.rembourse   valeur de retour de rembourserScan, pas une intention
  * @returns {void}
  */
-function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl } = {}) {
+function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl,
+    fourchette, nbExAequo, nbCandidats, prixVinted } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
         route, userId, motifEchec, imageUrl, vintedUrl,
@@ -474,7 +520,13 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,
         setCode: c.setCode, langue: c.language, rarete: c.rarete,
-        nomBrut: c.nomBrut, nomConfiance: c.nomConfiance
+        nomBrut: c.nomBrut, nomConfiance: c.nomConfiance,
+        // ⚠️ LES REFUS NE PORTAIENT PRESQUE RIEN, et personne ne l'avait vu parce qu'on ne
+        // les mesurait jamais. Mesuré le 2026-08-11 sur les 17 refus par égalité parfaite :
+        // nbCandidats 0/17 · nbExAequo 0/17 · concurrentIdProduct 0/17 · ecartScore 0/17.
+        // Une ligne d'échec disait QUE la chaîne avait refusé, jamais CONTRE QUOI — donc
+        // aucune idée d'amélioration des refus n'était évaluable sans tout rejouer.
+        fourchette, nbExAequo, nbCandidats, prixVinted
     });
 }
 
