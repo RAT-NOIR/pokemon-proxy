@@ -4403,6 +4403,12 @@ module.exports = {
     // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
     // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
     scorerCandidatsLocal, lireCodeSets, lireNumeros,
+    // ⚠️ EXPORTÉ POUR MESURER LE VIVIER, pas pour être appelé ailleurs. Le banc construit
+    // son vivier avec le nom LU, la production avec le `nomExact` que rend cette fonction :
+    // ce sont deux catalogues différents, et `nomExact` n'est PAS journalisé. Sans cet
+    // export, la seule façon de comparer les deux constructions serait de réimplémenter la
+    // résolution TCGdex — ce qui ne prouverait rien, exactement comme pour le veto.
+    trouverCarteTCGdex,
     // Le pont total -> set, exporté pour être DIAGNOSTIQUÉ sur pièces plutôt que déduit.
     setsPourTotal, identifierParTotalEtNumero
 };
