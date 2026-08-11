@@ -65,6 +65,13 @@
 // ⚠️ LE RETRAIT EST DÉCLARÉ AVANT LA SÉLECTION (voir la boucle), pour qu'il ne puisse pas
 // être décidé en voyant quelle charge sort.
 //
+// EMPLOI À CE JOUR — une fois, et refermé le même jour :
+//   « réserve FAIBLE », retirée par fb49871 (union des viviers) le 2026-08-11, requalifiée
+//   le 2026-08-11 après le lot « requalification-verrou » (4 scans, 2 lignes utilisables).
+//   Couverture pendant le retrait : 37 fonctions, soit une DE PLUS qu'avec les 6 charges —
+//   le chemin restait exercé, seule l'issue ne l'était plus. C'est la vérification qui
+//   justifiait le retrait, et elle doit être refaite à chaque emploi.
+//
 // LECTURE SEULE sur la production. ÉCRITURE uniquement dans test_scratch.
 // USAGE :  node verrou-charges.js --base=test
 
@@ -74,6 +81,10 @@ const fs = require('fs');
 const path = require('path');
 const S = require('./scoring');
 const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
+// ⚠️ L'IDENTITÉ D'UNE CARTE VIENT D'ICI, jamais d'une clé refaite sur place. C'est la même
+// notion que celle qui rattache les vérités au banc (`nom|numero|setCode|total`), et la
+// règle de distinction ci-dessous en dépend entièrement.
+const SEAUX = require('./banc-seaux');
 const { empreintePrompt } = require('./verrou/empreinte');
 const { demarrer, appeler } = require('./verrou/serveur');
 
@@ -156,22 +167,14 @@ const CELLULES = [
         nom: 'réserve FAIBLE',
         pourquoi: 'le cas le plus fréquent côté utilisateur — 51 % des réserves — et le plus travaillé à l\'affichage',
         profondeurExigee: 'verdict',
-        test: d => d.raisonReserve === 'perimetre-vintage-suggestion',
-        // ════════════════════════════════════════════════════════════════════
-        // CHARGE PÉRIMÉE PAR UN CHANGEMENT DÉLIBÉRÉ — voir RETRAIT, en tête de fichier
-        // ════════════════════════════════════════════════════════════════════
-        invalidee: {
-            par: 'fb49871',
-            le: '2026-08-11',
-            charge: 'Dark Ursaring #217 JP (la plus récente de la classe, 2026-08-08T20:21)',
-            pourquoi:
-                'l\'union des viviers amène « Dark Ursaring » (606888) à côté de « Dark Porygon2 » (606889) ; ' +
-                'rien ne les sépare (même expansion N4, aucun numéro connu, symbole illisible), donc la ligne ' +
-                'sort désormais en REFUS remboursé au lieu d\'un prix avec réserve faible. La profondeur ' +
-                '« verdict » qu\'elle encodait décrivait un comportement que ce commit a délibérément changé.',
-            attendu: 'la classe compte 18 lignes ; 17 ont un vivier inchangé par l\'union. Le premier scan ' +
-                'd\'une vintage japonaise postérieur à fb49871 requalifiera la cellule — relancer verrou-charges.js.'
-        }
+        // ⚠️ CELLULE REQUALIFIÉE LE 2026-08-11 — le bloc `invalidee` qui la retirait a été
+        // supprimé ici même. Historique : retirée par fb49871 (l'union des viviers avait
+        // périmé sa charge, Dark Ursaring passant du prix-avec-réserve au refus remboursé),
+        // puis rouverte par le lot « requalification-verrou » de banc-lots.json — 4 scans,
+        // dont 2 lignes `perimetre-vintage-suggestion` produites SOUS le nouveau code.
+        // Le retrait aura donc duré le temps d'une fenêtre de cinq minutes, ce qui est
+        // exactement la durée qu'il devait avoir.
+        test: d => d.raisonReserve === 'perimetre-vintage-suggestion'
     },
     {
         // ⚠️ CELLULE QUI ACCEPTE UN ÉCHEC. Les trois issues de l'extension sont : verdict
@@ -209,26 +212,87 @@ const CELLULES = [
     console.log('── phase 1 : les charges ──');
     const charges = [];
     const invalidees = [];
+    // Pourquoi chaque cellule est restée vide, s'il y en a. TROIS raisons distinctes, et
+    // elles ne se lisent pas de la même façon — voir `cellulesManquantes` plus bas.
+    const raisonVide = new Map();
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ÉTAPE 1 — LES RETRAITS, AVANT TOUTE SÉLECTION
+    // ════════════════════════════════════════════════════════════════════════
+    // Si on sélectionnait d'abord, on saurait quelle charge sort et le retrait deviendrait
+    // une décision prise EN CONNAISSANCE DU RÉSULTAT. Déclaré ici, il ne peut pas l'être.
+    const servables = [];
     for (const c of CELLULES) {
-        // ⚠️ RETRAIT DÉCLARÉ AVANT SÉLECTION, et l'ordre compte : si on sélectionnait
-        // d'abord, on saurait quelle charge sort et le retrait deviendrait une décision
-        // prise EN CONNAISSANCE DU RÉSULTAT. Déclaré ici, il ne peut pas l'être.
         if (c.invalidee) {
             invalidees.push(`${c.nom} — charge invalidée par ${c.invalidee.par} (${c.invalidee.le}) : ${c.invalidee.charge}`);
             console.log(`⊘ ${c.nom} : RETIRÉE — invalidée par ${c.invalidee.par} le ${c.invalidee.le}`);
             console.log(`     charge : ${c.invalidee.charge}`);
             console.log(`     motif  : ${c.invalidee.pourquoi}`);
             console.log(`     suite  : ${c.invalidee.attendu}`);
+            raisonVide.set(c.nom, `INVALIDÉE par ${c.invalidee.par} (${c.invalidee.le}) : ${c.invalidee.charge}`);
             continue;
         }
-        const d = (c.accepteEchec ? avecPhoto : abouties).find(c.test);
+        servables.push({ c, vivier: (c.accepteEchec ? avecPhoto : abouties).filter(c.test) });
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ÉTAPE 2 — L'ORDRE DE SERVICE : LA PLUS CONTRAINTE D'ABORD
+    // ════════════════════════════════════════════════════════════════════════
+    // POURQUOI UN ORDRE EXPLICITE. La règle de distinction ci-dessous fait dépendre le
+    // choix d'une cellule de ce que les précédentes ont déjà pris. Sans ordre DÉCLARÉ,
+    // « qui garde la carte disputée » serait tranché par un détail d'itération que
+    // personne n'a écrit — et ça bougerait au premier ajout de cellule, en silence.
+    //
+    // L'ORDRE EST : vivier le plus PETIT d'abord. Une cellule qui n'a que deux lignes
+    // éligibles doit servir avant celle qui en a dix-sept, sinon elle se retrouve sans
+    // charge alors que l'autre avait le choix. C'est la règle du plus contraint, et elle
+    // maximise le nombre de cellules servies — pas le résultat de l'une d'elles.
+    //
+    // ⚠️ ÉGALITÉ DE TAILLE : l'ordre de DÉCLARATION dans CELLULES tranche. Il faut une
+    // clause explicite, sinon `sort` n'est pas déterministe entre égaux selon le moteur,
+    // et deux exécutions pourraient rendre deux jeux de charges différents.
+    //
+    // ⚠️ CET ORDRE NE REGARDE PAS CE QUE LA CHARGE PRODUIT — seulement combien de lignes
+    // sont éligibles. C'est ce qui le distingue d'une sélection sur le résultat, et c'est
+    // vérifiable : la taille des viviers est imprimée ci-dessous.
+    const rang = new Map(CELLULES.map((c, i) => [c.nom, i]));
+    servables.sort((a, b) => (a.vivier.length - b.vivier.length) || (rang.get(a.c.nom) - rang.get(b.c.nom)));
+    console.log('   ordre de service (vivier le plus petit d\'abord) : '
+        + servables.map(s => `${s.c.nom} (${s.vivier.length})`).join(' · ') + '\n');
+
+    // ════════════════════════════════════════════════════════════════════════
+    // ÉTAPE 3 — LA RÈGLE DE DISTINCTION : la plus récente PAS DÉJÀ PRISE
+    // ════════════════════════════════════════════════════════════════════════
+    // SIX CELLULES QUI REJOUENT CINQ CARTES ANNONCENT UNE COUVERTURE QU'ELLES N'ONT PAS.
+    // Constaté le 2026-08-11 : « Hitmontop #237 » était à la fois la plus récente sans
+    // setCode et la plus récente en `perimetre-vintage-suggestion`, donc la charge de DEUX
+    // cellules. Deux conséquences, toutes deux mauvaises : un changement de comportement
+    // sur cette carte faisait tomber deux cellules d'un coup — une régression deux fois
+    // plus large qu'elle n'est — et le rapport annonçait six situations pour cinq.
+    //
+    // ⚠️ CE N'EST PAS SÉLECTIONNER SUR LE RÉSULTAT. La règle ne regarde jamais ce que la
+    // charge produit ; elle regarde si une AUTRE cellule tient déjà cette carte. Elle se
+    // vérifie en lisant les clés des six charges : elles doivent être six identités
+    // différentes.
+    //
+    // L'IDENTITÉ VIENT DE banc-seaux.js, la source unique — pas d'une clé refaite ici.
+    // Deux lignes de journal de la même carte sont la MÊME carte : dédoublonner par `_id`
+    // laisserait passer deux scans du même Hitmontop et ne réglerait rien.
+    const prises = new Set();
+    for (const { c, vivier } of servables) {
+        const d = vivier.find(x => !prises.has(SEAUX.identiteDe(x)));
         if (!d) {
             // Une cellule vide n'est pas une panne du code : c'est un manque de données.
             // Le verrou le dira en AVERTISSEMENT, jamais en échec — un verrou rouge en
             // permanence est un verrou qu'on apprend à ignorer.
-            console.log(`⚠️ ${c.nom} : aucune ligne aboutie avec photo — cellule vide`);
+            const cause = vivier.length
+                ? `ses ${vivier.length} ligne(s) éligibles sont déjà prises par des cellules plus contraintes`
+                : 'aucune ligne au journal';
+            console.log(`⚠️ ${c.nom} : ${cause} — cellule vide`);
+            raisonVide.set(c.nom, cause);
             continue;
         }
+        prises.add(SEAUX.identiteDe(d));
         charges.push({
             cellule: c.nom,
             pourquoi: c.pourquoi,
@@ -319,16 +383,26 @@ const CELLULES = [
         // Le nombre de cellules VOULUES, pour que le verrou sache combien manquent sans
         // avoir à connaître la liste. Un nombre en dur des deux côtés divergerait.
         cellulesVoulues: CELLULES.length,
-        // ⚠️ DEUX RAISONS D'ÊTRE MANQUANTE, ET ELLES NE SE VALENT PAS. « aucune ligne au
-        // journal » est un manque de DONNÉES, qui se comble en scannant. « invalidée par
-        // <commit> » est un choix TRAÇABLE : un changement délibéré a modifié le
-        // comportement que la charge encodait, et on le déclare au lieu d'aller chercher
-        // une charge qui passe — ce qui serait sélectionner sur le résultat.
+        // ⚠️ TROIS RAISONS D'ÊTRE MANQUANTE, ET ELLES NE SE VALENT PAS.
+        //   « aucune ligne au journal »      -> manque de DONNÉES, se comble en scannant.
+        //   « déjà prises par des cellules plus contraintes » -> manque de DIVERSITÉ : les
+        //      lignes existent mais décrivent des cartes qu'une autre cellule rejoue déjà.
+        //      Se comble aussi en scannant, mais en scannant AUTRE CHOSE.
+        //   « INVALIDÉE par <commit> »       -> choix TRAÇABLE : un changement délibéré a
+        //      modifié le comportement que la charge encodait, et on le déclare au lieu
+        //      d'aller chercher une charge qui passe — ce qui serait sélectionner sur le
+        //      résultat.
         cellulesManquantes: CELLULES
             .filter(c => !charges.some(ch => ch.cellule === c.nom))
-            .map(c => c.invalidee
-                ? `${c.nom} — INVALIDÉE par ${c.invalidee.par} (${c.invalidee.le}) : ${c.invalidee.charge}`
-                : `${c.nom} — aucune ligne au journal`),
+            .map(c => `${c.nom} — ${raisonVide.get(c.nom) ?? 'raison inconnue'}`),
+        // ⚠️ LE CHIFFRE QUI DÉCRIT LA COUVERTURE RÉELLE. Le nombre de cellules dit combien
+        // de situations on VOULAIT couvrir ; celui-ci dit combien de cartes différentes
+        // traversent réellement la route. Quand les deux divergent, c'est le second qui a
+        // raison — et c'est arrivé : six cellules pour cinq cartes, le 2026-08-11.
+        cartesDistinctes: new Set(charges.map(ch => SEAUX.identiteDe({
+            nom: ch.lecture.name, numero: ch.lecture.number,
+            setCode: ch.lecture.setCode, total: ch.lecture.total
+        }))).size,
         empreintePrompt: empreinte,
         commentRafraichir: 'node verrou-charges.js --base=test',
         charges

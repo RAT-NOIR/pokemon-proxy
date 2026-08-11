@@ -97,10 +97,26 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     }
     if (donnees.charges.length < voulues) {
         avertir(`${donnees.charges.length} cellule(s) sur ${voulues}`,
-            'manque de données au journal, pas un défaut du code');
+            'manque de données ou retrait déclaré, pas un défaut du code');
         for (const m of donnees.cellulesManquantes ?? []) console.log(`      manquante : ${m}`);
     } else {
         verifier(`${voulues} cellules sur ${voulues}`, true);
+    }
+    // ⚠️ LE CHIFFRE QUI DÉCRIT LA COUVERTURE RÉELLE, à côté du nombre de cellules et
+    // jamais à sa place. Six cellules qui rejouent cinq cartes annoncent une couverture
+    // qu'elles n'ont pas : un changement sur la carte partagée fait tomber deux cellules
+    // d'un coup, et le rapport laisse croire à deux situations distinctes.
+    // La règle de distinction (verrou-charges.js) doit rendre les deux nombres ÉGAUX ;
+    // s'ils divergent, c'est elle qui a échoué, et il faut le voir sans creuser.
+    const distinctes = donnees.cartesDistinctes;
+    if (distinctes == null) {
+        avertir('charges extraites avant le comptage des cartes distinctes',
+            'la couverture réelle est inconnue -> node verrou-charges.js --base=test');
+    } else if (distinctes < donnees.charges.length) {
+        avertir(`${distinctes} carte(s) distincte(s) pour ${donnees.charges.length} charge(s)`,
+            'des cellules rejouent la MÊME carte : la couverture annoncée est surévaluée');
+    } else {
+        verifier(`${distinctes} cartes distinctes pour ${donnees.charges.length} charge(s)`, true);
     }
     for (const c of donnees.charges) {
         console.log(`     ${c.cellule}`);

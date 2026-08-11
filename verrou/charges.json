@@ -1,10 +1,9 @@
 {
-  "extraitLe": "2026-08-11T09:22:20.286Z",
+  "extraitLe": "2026-08-11T19:26:14.264Z",
   "extraitDe": "test",
   "cellulesVoulues": 6,
-  "cellulesManquantes": [
-    "réserve FAIBLE — INVALIDÉE par fb49871 (2026-08-11) : Dark Ursaring #217 JP (la plus récente de la classe, 2026-08-08T20:21)"
-  ],
+  "cellulesManquantes": [],
+  "cartesDistinctes": 6,
   "empreintePrompt": {
     "hash": "0ab60556949acbd7",
     "modele": "google/gemini-3-flash-preview",
@@ -17,58 +16,22 @@
       "pourquoi": "le chemin exact du plantage memeCodeParConventionX du 4 août",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a71c2be486b51e3ab380b1f",
-        "le": "2026-08-04T10:45:18.381Z",
-        "version": "b3cb941af7a1",
-        "idProduct": 693067
+        "_id": "6a7aee52baa33e9aaed2dbc7",
+        "le": "2026-08-11T09:41:38.164Z",
+        "version": "f930c4d33681",
+        "idProduct": 570688
       },
-      "imageUrl": "https://images1.vinted.net/t/02_00a54_3JTWKBkjppbynX2HmTgTVUAa/f800/1785761579.webp?s=26f368ac4f0d62bef07f6efafea7a90c3d1e1ea0",
+      "imageUrl": "https://images1.vinted.net/t/02_00255_ZfiVX7xNR2nHQ6BXfMGqB7ZN/f800/1786398964.webp?s=f3759ae59fe0c7cefe11fabc86f3101e06d0cda1",
       "lecture": {
-        "name": "Gardevoir ex",
-        "number": "101",
-        "total": "078",
-        "setCode": "sv1S",
-        "language": "JP",
-        "rarete": "SIR",
-        "nomBrut": "サーナイトex",
-        "nomConfiance": "haute",
-        "symboleSet": null,
-        "motif": null,
-        "reverse": null,
-        "rareteElevee": null,
-        "etatEstime": null,
-        "etatConfiance": null
-      },
-      "champsAbsentsDuJournal": [
-        "motif",
-        "reverse",
-        "rareteElevee",
-        "etatEstime",
-        "etatConfiance",
-        "title"
-      ]
-    },
-    {
-      "cellule": "asiatique · aucun setCode lu",
-      "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
-      "profondeurExigee": "perimetre-vintage",
-      "source": {
-        "_id": "6a778ff541c0673e928ab762",
-        "le": "2026-08-08T20:22:13.238Z",
-        "version": "7ba621d7c737",
-        "idProduct": 605999
-      },
-      "imageUrl": "https://images1.vinted.net/t/01_001f9_yWSYuAXm8QRYDnstRmNf68fM/f800/1786202202.webp?s=b50f1475cc49facc8622bfdbc8e31ffa133e5541",
-      "lecture": {
-        "name": "Computer Error",
-        "number": null,
+        "name": "Pikachu",
+        "number": "123/PCG-P",
         "total": null,
-        "setCode": null,
+        "setCode": "PCG-P",
         "language": "JP",
         "rarete": "promo",
-        "nomBrut": "パソコン大暴走！",
+        "nomBrut": "ピカチュウ",
         "nomConfiance": "haute",
-        "symboleSet": "R",
+        "symboleSet": "mcdo",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
@@ -125,22 +88,22 @@
       "pourquoi": "la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte",
       "profondeurExigee": "verdict",
       "source": {
-        "_id": "6a778f1541c0673e928ab69d",
-        "le": "2026-08-08T20:18:29.058Z",
-        "version": "7ba621d7c737",
-        "idProduct": 571745
+        "_id": "6a7aeeb9baa33e9aaed2dbea",
+        "le": "2026-08-11T09:43:21.060Z",
+        "version": "f930c4d33681",
+        "idProduct": 585047
       },
-      "imageUrl": "https://images1.vinted.net/t/05_009d4_E1Ysy7PhZUQAkjKMWvS2Nuoq/f800/1786192804.webp?s=aa30c31f9cc6003f29b69058c47edd9a114a7887",
+      "imageUrl": "https://images1.vinted.net/t/05_01c2f_B84P1X3hGhhmmyKFzHPbUsEL/f800/1786411935.webp?s=4c9e2d790722d5e058473f78150708770480f655",
       "lecture": {
-        "name": "Vileplume",
-        "number": "045",
+        "name": "Dark Charizard",
+        "number": "006",
         "total": null,
         "setCode": null,
         "language": "JP",
         "rarete": "normale",
-        "nomBrut": "ラフレシア",
+        "nomBrut": "わるいリザードン",
         "nomConfiance": "haute",
-        "symboleSet": "palmier",
+        "symboleSet": "R",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
@@ -161,20 +124,92 @@
       "pourquoi": "la troisième issue vue par l'utilisateur, jamais exercée jusqu'ici",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a778e8541c0673e928ab64b",
-        "le": "2026-08-08T20:16:05.897Z",
-        "version": "7ba621d7c737",
+        "_id": "6a7b7435e8122c6abf218204",
+        "le": "2026-08-11T19:12:53.176Z",
+        "version": "71103b9687b9",
         "idProduct": null
       },
-      "imageUrl": "https://images1.vinted.net/t/05_0016f_ZyLKcB3BtkE4ugXhJXjPaJxm/f800/1786190543.webp?s=e051997940f9b5d9d8d2c2095c1e28de09c79113",
+      "imageUrl": "https://images1.vinted.net/t/06_00ec4_oVZZiZsAFz2fKR47TTvAYp2v/f800/1786442617.webp?s=502827af04845a7e9ec4083c9b408dccc1903c13",
       "lecture": {
-        "name": "Mew",
-        "number": "151",
+        "name": "Articuno",
+        "number": "144",
+        "total": null,
+        "setCode": "ANA",
+        "language": "JP",
+        "rarete": "promo",
+        "nomBrut": "フリーザー",
+        "nomConfiance": "haute",
+        "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "réserve FAIBLE",
+      "pourquoi": "le cas le plus fréquent côté utilisateur — 51 % des réserves — et le plus travaillé à l'affichage",
+      "profondeurExigee": "verdict",
+      "source": {
+        "_id": "6a7b7454e8122c6abf218212",
+        "le": "2026-08-11T19:13:24.677Z",
+        "version": "71103b9687b9",
+        "idProduct": 651958
+      },
+      "imageUrl": "https://images1.vinted.net/t/01_0132b_mBNaF3Be2rQCuchHqiw6F72k/f800/1786447928.webp?s=a15e081c22545b43441af7b28a7eef19b14a9132",
+      "lecture": {
+        "name": "Hitmontop",
+        "number": "237",
+        "total": null,
+        "setCode": null,
+        "language": "JP",
+        "rarete": "promo",
+        "nomBrut": "カポエラー",
+        "nomConfiance": "haute",
+        "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "asiatique · aucun setCode lu",
+      "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
+      "profondeurExigee": "perimetre-vintage",
+      "source": {
+        "_id": "6a7b73f4e8122c6abf2181ed",
+        "le": "2026-08-11T19:11:48.095Z",
+        "version": "71103b9687b9",
+        "idProduct": 584725
+      },
+      "imageUrl": "https://images1.vinted.net/t/06_00ecf_UZt6uJZV3fAnEXpiu8V3ofPV/f800/1786464973.webp?s=a7e72d27d165cd7d92e79b6e44a5668dffd76ce2",
+      "lecture": {
+        "name": "Slowbro",
+        "number": "080",
         "total": null,
         "setCode": null,
         "language": "JP",
         "rarete": "normale",
-        "nomBrut": "ミュウ",
+        "nomBrut": "ヤドラン",
         "nomConfiance": "haute",
         "symboleSet": null,
         "motif": null,
