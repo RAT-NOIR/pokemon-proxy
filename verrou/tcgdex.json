@@ -1,12 +1,11 @@
 {
-  "enregistreLe": "2026-08-10T18:48:56.169Z",
-  "nb": 27,
+  "enregistreLe": "2026-08-11T09:22:26.148Z",
+  "nb": 23,
   "chargesCouvertes": [
     "6a71c2be486b51e3ab380b1f",
     "6a778ff541c0673e928ab762",
     "6a71c4e5486b51e3ab380c9d",
     "6a778f1541c0673e928ab69d",
-    "6a778fe541c0673e928ab750",
     "6a778e8541c0673e928ab64b"
   ],
   "reponses": {
@@ -3681,12 +3680,12 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-10T08:02:25.017Z",
+                "updated": "2026-08-11T08:02:25.353Z",
                 "unit": "EUR",
                 "idProduct": 794609,
                 "avg": 22.09,
                 "low": 15.8,
-                "trend": 20.15,
+                "trend": 20.38,
                 "avg1": 18.83,
                 "avg7": 21.44,
                 "avg30": 22.23,
@@ -3699,13 +3698,13 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-08-10T08:02:23.284Z",
+                "updated": "2026-08-11T08:02:23.098Z",
                 "holofoil": {
                   "productId": 589930,
                   "lowPrice": 34.93,
-                  "midPrice": 41.1,
+                  "midPrice": 41,
                   "highPrice": 269.9,
-                  "marketPrice": 36.45,
+                  "marketPrice": 36.32,
                   "directLowPrice": null
                 }
               }
@@ -3755,12 +3754,12 @@
         "updated": "2026-06-08T13:16:55+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-10T08:02:25.017Z",
+            "updated": "2026-08-11T08:02:25.353Z",
             "unit": "EUR",
             "idProduct": 794609,
             "avg": 22.09,
             "low": 15.8,
-            "trend": 20.15,
+            "trend": 20.38,
             "avg1": 18.83,
             "avg7": 21.44,
             "avg30": 22.23,
@@ -3773,13 +3772,13 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-08-10T08:02:23.284Z",
+            "updated": "2026-08-11T08:02:23.098Z",
             "holofoil": {
               "productId": 589930,
               "lowPrice": 34.93,
-              "midPrice": 41.1,
+              "midPrice": 41,
               "highPrice": 269.9,
-              "marketPrice": 36.45,
+              "marketPrice": 36.32,
               "directLowPrice": null
             }
           }
@@ -3868,35 +3867,6 @@
         "title": "The resource you are trying to reach does not exists",
         "status": 404,
         "endpoint": "/en/cards/SV4a-003",
-        "method": "GET"
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%83%AA%E3%83%B3%E3%82%B0%E3%83%9E": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=Dark%20Ursaring": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=Dark": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "neo4-097",
-          "localId": "097",
-          "name": "Dark Porygon2"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/en/cards/neo4-097": {
-      "statut": 404,
-      "erreur": "Request failed with status code 404",
-      "data": {
-        "type": "https://tcgdex.dev/errors/not-found",
-        "title": "The resource you are trying to reach does not exists",
-        "status": 404,
-        "endpoint": "/en/cards/neo4-097",
         "method": "GET"
       }
     },

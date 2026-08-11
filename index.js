@@ -1426,6 +1426,39 @@ function ecarterNonCartes(produits, contexte) {
 // il faut le lire avant de pouvoir juger d'un rang. La première version l'a oublié, et
 // comme rangDuNumero rend « inconnu » sur un champ absent, la substitution se
 // déclenchait à CHAQUE scan — c'est ce qui a fait afficher 0,05 € sur le Salamèche.
+/**
+ * Le vivier par le nom, cherché avec les DEUX noms disponibles et UNI.
+ *
+ * `nomCatalogue` est le nom rendu par TCGdex (pont de langue vers un catalogue anglais) ;
+ * `nomLu` est ce que l'IA a lu sur la photo. Ils coïncident presque toujours — mesuré :
+ * 62 fois sur 65. Quand ils divergent, c'est parce que TCGdex a désigné une autre carte,
+ * et le vivier construit sur son seul nom ne contient alors pas la bonne.
+ *
+ * ⚠️ L'UNION NE PEUT QUE GROSSIR LE VIVIER, jamais le réduire : elle ne retire aucun
+ * candidat que la version d'origine aurait retenu. Le seul risque est en aval, dans le
+ * classement — et il est mesuré à +1 candidat au pire sur 38 lignes.
+ *
+ * Dédoublonnage par `idProduct` : les deux recherches ramènent massivement les mêmes
+ * produits, et un doublon fausserait les comptes d'ex aequo autant que le scoring.
+ */
+async function viviersUnis(nomCatalogue, nomLu) {
+    const premier = nomCatalogue ? await trouverProduitsLocaux(nomCatalogue) : [];
+    // Même nom (à la casse et aux accents près) : rien à unir, on évite l'aller-retour Mongo.
+    const memeNom = nomCatalogue && nomLu && normaliserNom(nomCatalogue) === normaliserNom(nomLu);
+    if (memeNom || !nomLu) return premier;
+
+    const second = await trouverProduitsLocaux(nomLu);
+    if (!second.length) return premier;
+
+    const parId = new Map();
+    for (const p of [...premier, ...second]) if (!parId.has(p.idProduct)) parId.set(p.idProduct, p);
+    const union = [...parId.values()];
+    if (union.length !== premier.length) {
+        console.log(`🔗 [vivier-uni] "${nomCatalogue}" (${premier.length}) + "${nomLu}" (${second.length}) -> ${union.length} candidat(s) uniques.`);
+    }
+    return union;
+}
+
 async function viviersAvecRangs(vivierNom, numeroLu, idExpansionsAttendues, contexte) {
     // Enrichissement MINIMAL : uniquement le numéro, seul champ dont les rangs dépendent.
     // C'est l'étape qui manquait : les documents catalogue n'ont pas de numeroCardmarket.
@@ -3027,7 +3060,35 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
         //    halluciné (Dana lue "Kahili") ou inapparieable ("_____'s Pikachu").
-        let produits = produitsImposes ?? (nomSuspect ? [] : await trouverProduitsLocaux(nomPourCatalogue));
+        // ════════════════════════════════════════════════════════════════════
+        // L'UNION DES DEUX NOMS — le vivier ne peut plus perdre la carte à l'entrée
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI DEUX NOMS. `nomPourCatalogue` vient de TCGdex : c'est un PONT DE LANGUE,
+        // parce que le catalogue Cardmarket est en anglais et que la lecture ne l'est pas
+        // toujours (voir nomPourLeCatalogue). Mais quand TCGdex se trompe de carte, ce pont
+        // mène ailleurs — et le nom LU, lui, était bon. Mesuré : « Dark Ursaring » lu juste,
+        // TCGdex rend `neo4-097` = « Dark Porygon2 », et le vivier ne contient alors AUCUN
+        // Ursaring. Aucun classement ne peut rattraper une carte absente du vivier.
+        //
+        // CHERCHER AVEC LES DEUX ET UNIR : le vivier ne peut que grossir, donc la bonne
+        // carte ne peut plus être perdue à l'entrée.
+        //
+        // ⚠️ CE QUE ÇA COÛTE, MESURÉ AVANT D'ÊTRE ÉCRIT (mesure-vivier-union.js, 38 lignes
+        // où cette construction s'applique réellement) :
+        //   candidats ajoutés : UNE seule ligne sur 38 en gagne, maximum +1, médiane 0
+        //   verdicts : juste->juste 29 · faux->faux 7 · refus->refus 1 · faux->refus 1
+        //   ZÉRO ligne juste ne bascule. ZÉRO ligne ne devient juste.
+        // Le seul mouvement est « Dark Ursaring » : un prix FAUX devient un REFUS, parce
+        // que l'union amène bien la bonne carte mais que rien ne la sépare de l'autre.
+        // C'est un gain au sens du principe « un prix faux facturé coûte plus cher qu'un
+        // scan remboursé », et ce n'est PAS une identification retrouvée.
+        //
+        // ⚠️ CE QUE ÇA NE RÉSOUT PAS. Le départage de deux candidats que le scoring note à
+        // égalité reste entier — c'est le prochain chantier, pas celui-ci.
+        //
+        // `nomSuspect` garde son veto sur les DEUX noms : quand le nom est halluciné ou
+        // inapparieable, l'unir à un autre nom ne le rendrait pas fiable.
+        let produits = produitsImposes ?? (nomSuspect ? [] : await viviersUnis(nomPourCatalogue, cardInfo.name));
         let voieCatalogue = voieImposee ?? (identificationLocale ? 'local-nom-numero' : 'nom');
         let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {

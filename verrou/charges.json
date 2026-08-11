@@ -1,8 +1,10 @@
 {
-  "extraitLe": "2026-08-10T18:48:45.044Z",
+  "extraitLe": "2026-08-11T09:22:20.286Z",
   "extraitDe": "test",
   "cellulesVoulues": 6,
-  "cellulesManquantes": [],
+  "cellulesManquantes": [
+    "réserve FAIBLE — INVALIDÉE par fb49871 (2026-08-11) : Dark Ursaring #217 JP (la plus récente de la classe, 2026-08-08T20:21)"
+  ],
   "empreintePrompt": {
     "hash": "0ab60556949acbd7",
     "modele": "google/gemini-3-flash-preview",
@@ -139,42 +141,6 @@
         "nomBrut": "ラフレシア",
         "nomConfiance": "haute",
         "symboleSet": "palmier",
-        "motif": null,
-        "reverse": null,
-        "rareteElevee": null,
-        "etatEstime": null,
-        "etatConfiance": null
-      },
-      "champsAbsentsDuJournal": [
-        "motif",
-        "reverse",
-        "rareteElevee",
-        "etatEstime",
-        "etatConfiance",
-        "title"
-      ]
-    },
-    {
-      "cellule": "réserve FAIBLE",
-      "pourquoi": "le cas le plus fréquent côté utilisateur — 51 % des réserves — et le plus travaillé à l'affichage",
-      "profondeurExigee": "verdict",
-      "source": {
-        "_id": "6a778fe541c0673e928ab750",
-        "le": "2026-08-08T20:21:57.818Z",
-        "version": "7ba621d7c737",
-        "idProduct": 606889
-      },
-      "imageUrl": "https://images1.vinted.net/t/06_023d6_tyCqa8FAZSwcTrhQe74LT6G3/f800/1786107533.webp?s=0153c3887eb8d122f1f70576fc8e3c99fb21870d",
-      "lecture": {
-        "name": "Dark Ursaring",
-        "number": "217",
-        "total": null,
-        "setCode": null,
-        "language": "JP",
-        "rarete": "normale",
-        "nomBrut": "わるいリングマ",
-        "nomConfiance": "haute",
-        "symboleSet": "illisible",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
