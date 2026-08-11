@@ -53,9 +53,11 @@
     {
       "lot": "requalification-verrou",
       "debut": "2026-08-11T19:09:53Z",
-      "fin": null,
+      "fin": "2026-08-11T19:14:50Z",
       "declareLe": "2026-08-11T19:09:53Z",
-      "pourquoi": "Requalifier la cellule « réserve FAIBLE » du verrou, retirée par fb49871 : l'union des viviers a périmé sa charge (Dark Ursaring sort désormais en refus remboursé au lieu d'un prix avec réserve faible). Il faut au moins une carte japonaise vintage scannée APRÈS fb49871 pour que verrou-charges.js puisse extraire une charge décrivant le comportement actuel. Ces cartes servent à réparer un instrument, donc elles sont de l'entraînement par nature et n'ont rien à faire dans le holdout — même raisonnement que les deux lots précédents. ⚠️ FENÊTRE OUVERTE : la fermer dès que la cellule est requalifiée (poser `fin`, second commit daté), sinon elle avalera tous les scans suivants et videra le holdout en silence."
+      "fermeeLe": "2026-08-11T19:14:50Z",
+      "pourquoi": "Requalifier la cellule « réserve FAIBLE » du verrou, retirée par fb49871 : l'union des viviers a périmé sa charge (Dark Ursaring sort désormais en refus remboursé au lieu d'un prix avec réserve faible). Il faut au moins une carte japonaise vintage scannée APRÈS fb49871 pour que verrou-charges.js puisse extraire une charge décrivant le comportement actuel. Ces cartes servent à réparer un instrument, donc elles sont de l'entraînement par nature et n'ont rien à faire dans le holdout — même raisonnement que les deux lots précédents.",
+      "resultat": "4 scans attrapés, tous japonais vintage : Slowbro #080 -> 584725 (réserve faible), Growlithe #058 -> refus, Articuno #144 -> refus, Hitmontop #237 -> 651958 (réserve faible). DEUX lignes peuvent requalifier la cellule ; verrou-charges.js prendra la plus récente, Hitmontop #237 (19:13:24Z). ⚠️ `fin` est posée à 19:14:50Z et NON sur l'horodatage de la dernière ligne : les bornes sont [debut, fin[ et une fin à 19:13:24Z aurait éjecté Hitmontop de son propre lot."
     }
   ]
 }
