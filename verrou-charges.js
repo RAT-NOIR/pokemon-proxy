@@ -34,6 +34,37 @@
 // de reverse en particulier — ne sont PAS exercées. Le correctif est W1 : journaliser la
 // réponse IA brute, qui est la première jonction de la chaîne au même titre que `nomExact`.
 //
+// ════════════════════════════════════════════════════════════════════════════
+// LE RETRAIT D'UNE CHARGE PÉRIMÉE — et pourquoi ce n'est pas de la triche
+// ════════════════════════════════════════════════════════════════════════════
+// UNE CHARGE ENCODE UN COMPORTEMENT CONSTATÉ AVANT LE CHANGEMENT qu'on est en train
+// d'écrire. Sa `profondeurExigee` a été relevée sur une ligne de journal, donc sur du
+// code plus ancien. Quand un correctif DÉLIBÉRÉ modifie ce comportement, la charge cesse
+// de décrire ce qu'elle prétend décrire — et le verrou rougit pour une raison qui n'est
+// pas une régression.
+//
+// TROIS ISSUES POSSIBLES, ET DEUX SONT MAUVAISES :
+//   ✗ choisir une autre charge de la même cellule : c'est SÉLECTIONNER SUR LE RÉSULTAT.
+//     On garde la charge qui passe et on jette celle qui échoue — le verrou devient un
+//     miroir. C'est exactement ce qu'il existe pour interdire.
+//   ✗ pousser avec le verrou rouge : on apprend à ignorer un verrou rouge, et le jour où
+//     il désigne une vraie régression, personne ne le lit.
+//   ✓ RETIRER LA CHARGE EXPLICITEMENT, en nommant le commit qui l'invalide et la date.
+//     La cellule retombe en AVERTISSEMENT — nommée, manquante, datée — au même titre
+//     qu'une cellule sans données. Rien n'est vert en silence.
+//
+// LA DIFFÉRENCE EST VÉRIFIABLE, pas déclarative : le commit nommé est dans l'historique,
+// et on peut relire ce qu'il a changé. Un retrait dont le commit ne touche pas le chemin
+// de la cellule se voit en trente secondes.
+//
+// ⚠️ CE QUE LE RETRAIT NE DIT PAS. Il ne dit pas que le chemin n'est plus couvert — il dit
+// que cette ISSUE ne l'est plus. Vérifier ce qui reste couvert par les autres charges
+// AVANT de retirer, et l'écrire : c'est la seule partie du raisonnement qui puisse être
+// fausse, et elle se mesure au cliquet de couverture.
+//
+// ⚠️ LE RETRAIT EST DÉCLARÉ AVANT LA SÉLECTION (voir la boucle), pour qu'il ne puisse pas
+// être décidé en voyant quelle charge sort.
+//
 // LECTURE SEULE sur la production. ÉCRITURE uniquement dans test_scratch.
 // USAGE :  node verrou-charges.js --base=test
 
@@ -66,6 +97,22 @@ const codesTable = SETS_VINTAGE_JAPONAIS.map(s => S.normaliserCodeSet(s.code));
 // LES TROIS CELLULES, définies par le CHEMIN DE CODE qu'elles empruntent — pas par l'ère
 // ni par le goût. Chacune DÉCLARE LA PROFONDEUR qu'elle doit atteindre : sans ça, une
 // charge qui sort au bout de trois lignes ressemble à une charge qui a tout traversé.
+// ⚠️ DEUX ESPÈCES DE CELLULES, ET UNE SEULE EST SOLIDE DANS LE TEMPS.
+//   - Celles dont la profondeur exigée est un JALON (`perimetre-vintage`) encodent un
+//     CHEMIN : « la chaîne est passée par là ». Un correctif d'identification ne les
+//     invalide pas — le chemin reste emprunté. Elles sont robustes.
+//   - Celles dont la profondeur est `verdict`, ou qui attendent un ÉCHEC, encodent une
+//     ISSUE : « cette carte-là sort avec ce résultat-là ». Toute amélioration de
+//     l'identification peut légitimement les périmer.
+// AUJOURD'HUI : 3 du premier type (les trois `perimetre-vintage`), 3 du second
+// (« égalité départagée par le symbole », « réserve FAIBLE », « aucun prix »).
+//
+// ⚠️ ET LES TROIS FRAGILES SONT MENACÉES PAR LE MÊME CHANTIER — celui qui fera du NOM un
+// critère de scoring. Elles reposent toutes sur une ÉGALITÉ : Vileplume sur une égalité
+// que le symbole départage, Mew sur une égalité qu'on refuse, « réserve FAIBLE » sur une
+// suggestion de périmètre. Si le nom sépare les candidats, ces égalités disparaissent et
+// les trois cellules cessent d'exercer ce pour quoi elles existent — sans qu'aucune
+// régression ait eu lieu. Le mécanisme de retrait ci-dessus servira donc encore.
 const CELLULES = [
     {
         nom: 'asiatique · setCode HORS table close',
@@ -109,7 +156,22 @@ const CELLULES = [
         nom: 'réserve FAIBLE',
         pourquoi: 'le cas le plus fréquent côté utilisateur — 51 % des réserves — et le plus travaillé à l\'affichage',
         profondeurExigee: 'verdict',
-        test: d => d.raisonReserve === 'perimetre-vintage-suggestion'
+        test: d => d.raisonReserve === 'perimetre-vintage-suggestion',
+        // ════════════════════════════════════════════════════════════════════
+        // CHARGE PÉRIMÉE PAR UN CHANGEMENT DÉLIBÉRÉ — voir RETRAIT, en tête de fichier
+        // ════════════════════════════════════════════════════════════════════
+        invalidee: {
+            par: 'fb49871',
+            le: '2026-08-11',
+            charge: 'Dark Ursaring #217 JP (la plus récente de la classe, 2026-08-08T20:21)',
+            pourquoi:
+                'l\'union des viviers amène « Dark Ursaring » (606888) à côté de « Dark Porygon2 » (606889) ; ' +
+                'rien ne les sépare (même expansion N4, aucun numéro connu, symbole illisible), donc la ligne ' +
+                'sort désormais en REFUS remboursé au lieu d\'un prix avec réserve faible. La profondeur ' +
+                '« verdict » qu\'elle encodait décrivait un comportement que ce commit a délibérément changé.',
+            attendu: 'la classe compte 18 lignes ; 17 ont un vivier inchangé par l\'union. Le premier scan ' +
+                'd\'une vintage japonaise postérieur à fb49871 requalifiera la cellule — relancer verrou-charges.js.'
+        }
     },
     {
         // ⚠️ CELLULE QUI ACCEPTE UN ÉCHEC. Les trois issues de l'extension sont : verdict
@@ -146,7 +208,19 @@ const CELLULES = [
 
     console.log('── phase 1 : les charges ──');
     const charges = [];
+    const invalidees = [];
     for (const c of CELLULES) {
+        // ⚠️ RETRAIT DÉCLARÉ AVANT SÉLECTION, et l'ordre compte : si on sélectionnait
+        // d'abord, on saurait quelle charge sort et le retrait deviendrait une décision
+        // prise EN CONNAISSANCE DU RÉSULTAT. Déclaré ici, il ne peut pas l'être.
+        if (c.invalidee) {
+            invalidees.push(`${c.nom} — charge invalidée par ${c.invalidee.par} (${c.invalidee.le}) : ${c.invalidee.charge}`);
+            console.log(`⊘ ${c.nom} : RETIRÉE — invalidée par ${c.invalidee.par} le ${c.invalidee.le}`);
+            console.log(`     charge : ${c.invalidee.charge}`);
+            console.log(`     motif  : ${c.invalidee.pourquoi}`);
+            console.log(`     suite  : ${c.invalidee.attendu}`);
+            continue;
+        }
         const d = (c.accepteEchec ? avecPhoto : abouties).find(c.test);
         if (!d) {
             // Une cellule vide n'est pas une panne du code : c'est un manque de données.
@@ -245,7 +319,16 @@ const CELLULES = [
         // Le nombre de cellules VOULUES, pour que le verrou sache combien manquent sans
         // avoir à connaître la liste. Un nombre en dur des deux côtés divergerait.
         cellulesVoulues: CELLULES.length,
-        cellulesManquantes: CELLULES.filter(c => !charges.some(ch => ch.cellule === c.nom)).map(c => c.nom),
+        // ⚠️ DEUX RAISONS D'ÊTRE MANQUANTE, ET ELLES NE SE VALENT PAS. « aucune ligne au
+        // journal » est un manque de DONNÉES, qui se comble en scannant. « invalidée par
+        // <commit> » est un choix TRAÇABLE : un changement délibéré a modifié le
+        // comportement que la charge encodait, et on le déclare au lieu d'aller chercher
+        // une charge qui passe — ce qui serait sélectionner sur le résultat.
+        cellulesManquantes: CELLULES
+            .filter(c => !charges.some(ch => ch.cellule === c.nom))
+            .map(c => c.invalidee
+                ? `${c.nom} — INVALIDÉE par ${c.invalidee.par} (${c.invalidee.le}) : ${c.invalidee.charge}`
+                : `${c.nom} — aucune ligne au journal`),
         empreintePrompt: empreinte,
         commentRafraichir: 'node verrou-charges.js --base=test',
         charges
