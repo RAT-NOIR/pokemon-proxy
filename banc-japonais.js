@@ -428,7 +428,21 @@ function celluleDe(d) {
             if (avis.incoherent) incertain = true;
             if (avis.veto) {
                 const cs = await lireCodeSets(avis.preuves.map(p => p.idExpansion));
-                const r = await scorerCandidatsLocal(avis.preuves, cardInfo, null, [], cs, {});
+                // ⚠️ `cardInfoNeutre`, PAS `cardInfo`. Cette ligne était le SEUL endroit du
+                // banc qui repassait au numéro BRUT, alors que tout le reste du fichier
+                // utilise `cardInfoNeutre` : c'était une incohérence INTERNE au banc, et
+                // c'est elle qu'on corrige ici.
+                //
+                // ⚠️ CE QUE CE CORRECTIF NE FAIT PAS : rétablir la symétrie avec la
+                // production. Le banc neutralise le numéro jusque dans le critère de
+                // SCORING ; la production, elle, ne le neutralise que pour les diagnostics
+                // (voir `numeroBrutPourScoring` dans index.js — lot B retenu). Le banc a
+                // donc TOUJOURS mesuré un comportement que la production n'a jamais eu, sur
+                // les cartes à numéro de Pokédex : 56 lignes de journal sur 131.
+                // C'est exactement ce que la mesure du lot B doit chiffrer. Tant qu'elle
+                // n'est pas faite, ne pas lire les colonnes AVANT/APRÈS de ces lignes-là
+                // comme une prédiction de ce que fera la production.
+                const r = await scorerCandidatsLocal(avis.preuves, cardInfoNeutre, null, [], cs, {});
                 const eg = r.scores.length > 1 && r.scores[0].score === r.scores[1].score;
                 if (r.scores.length && !eg) { retenu = r.scores[0].candidat.idProduct; voie = 'veto-nom-reclasse'; }
                 else { retenu = null; voie = 'REFUS-veto'; incertain = true; }

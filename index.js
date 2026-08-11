@@ -2051,7 +2051,30 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
     }
 
     const lu = {
-        numero: cardInfo.number || null,   // le numéro lu par l'IA (ex: 79, TG06)
+        // ════════════════════════════════════════════════════════════════════
+        // ⚠️ LA SEULE LIGNE DE CETTE FONCTION QUI DÉCIDE DE L'IDENTIFICATION
+        // ════════════════════════════════════════════════════════════════════
+        // Les deux autres lectures du numéro dans cette fonction — le contrôle
+        // `region-conflit` et `bilanDesRangs` — sont des DIAGNOSTICS : un console.warn et
+        // des signaux journalisés. Elles ont reçu le numéro EFFECTIF (neutralisé quand
+        // c'est un numéro de Pokédex). Celle-ci note les candidats, donc elle choisit la
+        // carte, donc elle change le prix affiché.
+        //
+        // LOT B, RETENU DÉLIBÉRÉMENT. Lui donner le numéro effectif est probablement juste
+        // — un numéro de Pokédex n'est pas un numéro de collection, et un candidat qui
+        // « correspond » à 172 y correspond par coïncidence. Mais ça toucherait 56 des 131
+        // lignes du journal (43 %), et l'effet n'est PAS mesuré : le banc ne peut pas y
+        // répondre puisqu'il neutralise déjà. Un contrat d'affichage additif n'a aucune
+        // raison de voyager avec un changement d'identification non mesuré.
+        // La mesure qui décidera : sur ces 56 lignes, combien changent de gagnant, et
+        // parmi celles-là combien vont vers la BONNE carte.
+        //
+        // ⚠️ L'ABSENCE DE L'OPTION DONNE LE COMPORTEMENT CORRIGÉ, pas l'ancien. C'est
+        // délibéré : le jour où le lot B part, il suffit de supprimer cette option et ses
+        // deux passages dans /api/identifier — aucun appelant ne peut hériter de l'ancien
+        // comportement par oubli. Les autres appelants (banc, mesures, tests) ne la
+        // passent pas et sont donc déjà sur le comportement cible.
+        numero: (options.numeroBrutPourScoring !== undefined ? options.numeroBrutPourScoring : cardInfo.number) || null,
         setCode: cardInfo.setCode || null, // le code/stamp lu par l'IA (ex: PAL, CEL)
         idExpansionsAttendues,             // déduites du set TCGdex via le pré-remplissage
         rarete: cardInfo.rarete || null,   // brut : neutralise le critère prix sur les promos
@@ -2605,6 +2628,63 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 // renvoie les candidats CLASSÉS, mais ne touche PAS à Cardmarket : c'est
 // l'extension qui fera le live depuis le navigateur de l'utilisateur, avec son
 // IP et ses cookies. C'est la répartition qui évite les bannissements.
+// ════════════════════════════════════════════════════════════════════════════
+// LA NATURE D'UN REFUS — énumération FERMÉE, et la table vit ICI
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI DEUX CHAMPS ET PAS UN. `rembourse` seul est inutilisable : `ia-echec` est
+// une PANNE et sort pourtant avec `rembourse: true`. Une extension qui peindrait en
+// doré tout ce qui est remboursé apprendrait à l'utilisateur qu'une panne est un
+// service — l'inverse exact de ce qu'on veut lui enseigner.
+// D'où la même séparation que `niveauReserve` / `raisonReserve`, qui a déjà fait ses
+// preuves : LE CHAMP QUI PILOTE L'AFFICHAGE est distinct de CELUI QUI ALIMENTE LE
+// TEXTE. `natureRefus` décide de la couleur ; `motifRefus` dit lequel, pour le libellé.
+//
+// POURQUOI LA TABLE EST CÔTÉ SERVEUR. Si l'extension recopiait motif -> nature, il
+// n'existerait aucun défaut sûr pour une valeur qu'elle ne connaît pas encore. C'est
+// ici qu'on ajoute des motifs, c'est donc ici qu'on les classe.
+//
+// ⚠️ LE DÉFAUT EST `echec-technique`, ET LE SENS DU DÉFAUT EST LE POINT. Un motif
+// oublié dans cette table sort en ROUGE. On perd alors l'effet « l'outil t'a protégé »
+// sur un refus qui le méritait — c'est un coût d'affichage. Le défaut inverse ferait
+// passer une panne pour un service : c'est un coût de CONFIANCE, et il ne se répare
+// pas. Entre les deux, on choisit toujours de se dévaloriser.
+//
+// ⚠️ CE QUE CETTE TABLE NE COUVRE PAS. Les refus des MIDDLEWARES arrivent avant le
+// corps de la route, ne consomment aucun crédit et ne portent donc ni `rembourse` ni
+// `motifRefus` : jeton invalide (401), image absente (400), quota épuisé (429, qui a
+// déjà son `quotaAtteint: true`, lu par l'extension déployée), accès indisponible
+// (503). Ils se distinguent par le CODE HTTP, qui n'est pas 200 — contrairement à
+// tous les refus ci-dessous. Une allowlist branchée sur `motifRefus` ne doit donc être
+// consultée QUE sur une réponse 200.
+const NATURE_REFUS = {
+    // ── REFUS DÉLIBÉRÉS : la chaîne a fonctionné, et elle refuse de livrer un prix
+    //    qu'elle sait ou soupçonne faux. Le crédit est rendu. C'est le service rendu,
+    //    pas la panne — mesuré à 15 % des scans.
+    'numero-illisible': 'refus-delibere',        // le numéro de collection n'est pas lisible sur la photo
+    'carte-introuvable': 'refus-delibere',       // ni TCGdex ni le catalogue local ne connaissent cette carte
+    'aucun-candidat': 'refus-delibere',          // aucun produit Cardmarket ne porte ce nom
+    'nom-contredit-egalite': 'refus-delibere',   // le gagnant ne porte pas le nom lu, et le vivier de preuve ne départage pas
+    'nom-contredit-sans-repli': 'refus-delibere',// idem, et le vivier de preuve est vide
+    'egalite-parfaite': 'refus-delibere',        // plusieurs cartes correspondent aussi bien, l'écart de prix décide du verdict
+    'aucun-prix': 'refus-delibere',              // ⚠️ /api/analyser UNIQUEMENT — jamais émis par /api/identifier
+
+    // ── ÉCHECS TECHNIQUES : quelque chose n'a pas marché. Rouge, même remboursé.
+    'ia-echec': 'echec-technique',               // le modèle n'a rien rendu d'exploitable — REMBOURSÉ, et pourtant une panne
+    'erreur-serveur': 'echec-technique'          // exception dans la route — NON remboursé
+};
+// UN SEUL ENDROIT CONSTRUIT LES TROIS CHAMPS, pour qu'aucune sortie ne puisse en
+// oublier un ni les faire diverger. Les cinq sorties de /api/identifier l'appellent.
+function champsDeRefus(motifRefus, rembourse) {
+    return {
+        // ⚠️ LA VALEUR RÉELLE, jamais `true` en dur : `rembourserScan` peut échouer, et
+        // annoncer un remboursement qui n'a pas eu lieu serait une seconde source de
+        // vérité sur l'état d'un compte.
+        rembourse: Boolean(rembourse),
+        motifRefus,
+        natureRefus: NATURE_REFUS[motifRefus] ?? 'echec-technique'
+    };
+}
+
 app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
     // Même raison que dans /api/analyser : le catch doit pouvoir journaliser CE QUE
     // L'IA AVAIT LU, sinon la ligne d'échec ne désigne aucune carte.
@@ -2637,8 +2717,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         if (!cardInfo) {
             const rendu = await rembourserScan(req, 'ia-echec');
             enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
-            // ⚠️ `rembourse` — VOIR LA NOTE COMPLÈTE SUR LA PREMIÈRE SORTIE DE REFUS, plus bas.
-            return res.json({ success: false, rembourse: rendu, error: "Analyse IA échouée" });
+            // ⚠️ REMBOURSÉ, ET POURTANT UNE PANNE. C'est précisément le cas qui rendait
+            // `rembourse` inutilisable seul : voir la table NATURE_REFUS au-dessus.
+            return res.json({ success: false, ...champsDeRefus('ia-echec', rendu), error: "Analyse IA échouée" });
         }
 
         // Instrumentation : mesure le coût du bloc catalogue+TCGdex+scoring (tout ce
@@ -2665,8 +2746,46 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         });
         const numeroCarte = avisDex.estDex ? null : cardInfo.number;
         if (avisDex.estDex) {
-            console.warn(`🔢 [numero-pokedex] ${avisDex.raison} -> le numéro est NEUTRALISÉ (recherche, nomSuspect, rangs).`);
+            // ⚠️ « scoring » N'EST PAS DANS CETTE LISTE, et c'est exact : voir le lot B
+            // retenu, sur `numeroBrutPourScoring`. Ce log dit ce qui EST neutralisé.
+            console.warn(`🔢 [numero-pokedex] ${avisDex.raison} -> le numéro est NEUTRALISÉ (recherche, nomSuspect, rangs, région).`);
         }
+        // ════════════════════════════════════════════════════════════════════
+        // LE cardInfo EFFECTIF — « PARTOUT en aval » rendu vrai
+        // ════════════════════════════════════════════════════════════════════
+        // La phrase ci-dessus était écrite depuis le début ; elle n'était pas tenue.
+        // `scorerCandidatsLocal` recevait `cardInfo` BRUT et y lisait le numéro TROIS fois :
+        //   - `lu.numero`, le critère de scoring
+        //   - le contrôle `region-conflit`
+        //   - `bilanDesRangs`, qui produit `rangGagnant`
+        // pendant que le reste de la route — recherche, veto par le nom, identification
+        // locale, périmètre vintage — utilisait `numeroCarte`, neutralisé. DEUX DÉFINITIONS
+        // DE « LE NUMÉRO LU » DANS LA MÊME ROUTE, à quelques lignes d'écart, sans signal :
+        // le deuxième principe, pour la troisième fois en une semaine. Les deux premières
+        // étaient le veto par le nom (Light Jolteon, Dark Haunter, Misty's Staryu, sortis
+        // « incohérents » alors que la seule incohérence était la nôtre) et le troisième
+        // état ; celle-ci a produit QUATRE faux rangs 3 — Pichu #172, Cyndaquil #155,
+        // Hypno #097, Entei #244, qui sont les numéros de Pokédex de ces espèces.
+        //
+        // ⚠️ CHANGEMENT D'INSTRUMENT, AU MÊME TITRE QU'UN CHANGEMENT DE PROMPT.
+        // `rangGagnant` change de valeur sur les lignes à numéro de Pokédex : les rangs
+        // journalisés avant ce commit et après ne s'additionnent pas. On ne préserve pas la
+        // comparabilité d'une mesure fausse — la valeur d'avant ne mesurait pas le rang du
+        // gagnant, elle mesurait le désaccord entre un numéro de Pokédex et un numéro de
+        // collection, ce qui n'a jamais eu d'intérêt.
+        //
+        // ⚠️ LA PORTÉE S'ARRÊTE AUX DIAGNOSTICS, ET C'EST UN CHOIX. Ce correctif couvre le
+        // contrôle `region-conflit` (un console.warn) et `bilanDesRangs` (des signaux
+        // journalisés) : aucun des deux ne choisit une carte, donc aucun ne change un prix.
+        // Le critère `numero` du SCORING, lui, garde le nombre brut pour l'instant — voir
+        // `numeroBrutPourScoring` dans scorerCandidatsLocal. Le neutraliser est
+        // probablement juste, mais toucherait 56 des 131 lignes du journal et n'est PAS
+        // mesuré : ça part dans un lot séparé, après la mesure, jamais avec un contrat
+        // d'affichage.
+        //
+        // `cardInfo` BRUT reste la source pour le journal, la réponse et les messages : on
+        // neutralise le numéro, on ne l'efface pas.
+        const cardInfoEffectif = { ...cardInfo, number: numeroCarte };
 
         // DETTE COMPTÉE, PAS TRAITÉE. La borne « total présent » de la règle ci-dessus n'a
         // que deux états ; le troisième (« total douteux ») n'est pas écrit parce que son
@@ -2779,7 +2898,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 return res.json({
                     success: false,
                     // ════════════════════════════════════════════════════════════
-                    // `rembourse` — UN NOM EXACT, UNE VALEUR, AUCUNE DÉDUCTION
+                    // TROIS CHAMPS, UN NOM EXACT CHACUN, AUCUNE DÉDUCTION
                     // ════════════════════════════════════════════════════════════
                     // La réponse de refus n'avait que `success: false` et un texte. Un REFUS
                     // DÉLIBÉRÉ — celui qui protège l'utilisateur d'un prix faux, et qui lui
@@ -2788,18 +2907,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // c'est-à-dire au moment précis où l'outil rend son plus grand service.
                     // Apprendre à son utilisateur à se méfier de la seule mécanique qui le
                     // protège est le pire échange possible.
-                    //
-                    // ⚠️ LA VALEUR EST `rendu`, PAS `true` EN DUR. `rembourserScan` peut
-                    // échouer, et annoncer un remboursement qui n'a pas eu lieu serait une
-                    // seconde source de vérité sur l'état d'un compte — exactement le défaut
-                    // que le deuxième principe interdit. Le champ dit ce qui S'EST PASSÉ.
-                    //
-                    // ⚠️ CE QU'IL NE DIT PAS : il ne sépare pas un refus délibéré d'une panne
-                    // technique remboursée (`ia-echec` sort avec `rembourse: true`). Les deux
-                    // rendent le crédit ; seul le premier est un service. Si l'extension doit
-                    // un jour les distinguer, il faudra un `motifRefus` en énumération fermée,
-                    // pas une déduction sur le texte d'erreur ni sur la présence de cardInfo.
-                    rembourse: rendu,
+                    // `rembourse` · `motifRefus` · `natureRefus` : voir NATURE_REFUS, juste
+                    // au-dessus de cette route, pour l'énumération fermée et le sens du défaut.
+                    ...champsDeRefus(motif, rendu),
                     error: cardInfo.numeroIllisible
                         ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
                         : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
@@ -3105,8 +3215,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 { numeroCardmarket: infoSolo ? (infoSolo.numero || infoSolo.numeroUrl) : null }
             );
         } else if (produits.length > 1) {
+            // ⚠️ `cardInfoEffectif`, PAS `cardInfo` : voir le bloc du numéro de Pokédex.
+            // C'est ce paramètre qui portait la divergence — les rangs et le contrôle de
+            // région lisaient le numéro BRUT pendant que toute la route utilisait le
+            // neutralisé.
+            // ⚠️ `numeroBrutPourScoring` EST LE LOT B, RETENU. Il rend au seul critère de
+            // scoring le numéro brut, c'est-à-dire le comportement d'aujourd'hui, le temps
+            // de mesurer ce que sa neutralisation change sur les 56 lignes concernées.
+            // Le supprimer ici et à l'appel du veto EST le lot B, en entier.
             const { scores, confiant, strategieReverse: strat, motif, rangs } = await scorerCandidatsLocal(
-                produits, cardInfo, photos[0], expansionsAttendues, codeSetsConnus, optionsMotif
+                produits, cardInfoEffectif, photos[0], expansionsAttendues, codeSetsConnus,
+                { ...optionsMotif, numeroBrutPourScoring: cardInfo.number }
             );
             strategieReverse = strat;
             motifResolution = motif;
@@ -3140,8 +3259,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         if (classement.length === 0) {
             const rendu = await rembourserScan(req, 'aucun-candidat');
             enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'aucun-candidat', rembourse: rendu });
-            // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
-            return res.json({ success: false, rembourse: rendu, error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
+            // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
+            return res.json({ success: false, ...champsDeRefus('aucun-candidat', rendu), error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -3191,8 +3310,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.warn(`🚫 [veto-nom] gagnant ${classement[0].idProduct} "${String(gagnantProduit.name).split('[')[0].trim()}" ÉCARTÉ : ${avis.raison}`);
 
                 const codeSetsPreuve = await lireCodeSets(avis.preuves.map(p => p.idExpansion));
+                // ⚠️ `cardInfoEffectif` ici aussi — voir le bloc du numéro de Pokédex. Un
+                // seul des deux appels corrigé rétablirait la divergence à l'intérieur de
+                // la même route. `numeroBrutPourScoring` : lot B retenu, voir l'autre appel.
                 const r = await scorerCandidatsLocal(
-                    avis.preuves, cardInfo, photos[0], expansionsAttendues, codeSetsPreuve, optionsMotif
+                    avis.preuves, cardInfoEffectif, photos[0], expansionsAttendues, codeSetsPreuve,
+                    { ...optionsMotif, numeroBrutPourScoring: cardInfo.number }
                 );
                 // « Ne tranche pas » = égalité au sommet. Deux candidats au même score, c'est
                 // le cas Carabaffe : « le moins cher gagne » y désignerait un produit à
@@ -3218,10 +3341,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: motifRefus, rembourse: rendu });
                     return res.json({
                         success: false,
-                        // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
-                        // Celle-ci est le refus délibéré par excellence : on préfère rendre le
-                        // crédit plutôt que facturer un prix qu'on sait faux.
-                        rembourse: rendu,
+                        // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la
+                        // route. Celle-ci est le refus délibéré par excellence : on préfère
+                        // rendre le crédit plutôt que facturer un prix qu'on sait faux.
+                        // `motifRefus` porte ici la variable locale du même nom, qui vaut
+                        // 'nom-contredit-egalite' ou 'nom-contredit-sans-repli' — les deux
+                        // sont dans la table.
+                        ...champsDeRefus(motifRefus, rendu),
                         error: `Le produit retenu ne porte pas le nom lu sur la carte ("${cardInfo.name}"), et aucun candidat ne le départage — scan remboursé plutôt qu'un prix faux.`,
                         cardInfo
                     });
@@ -3325,9 +3451,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'egalite-parfaite', rembourse: rendu });
                 return res.json({
                     success: false,
-                    // ⚠️ `rembourse` — voir la note complète sur la sortie « carte introuvable ».
+                    // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
                     // Refus délibéré, lui aussi : une égalité parfaite n'est pas un verdict.
-                    rembourse: rendu,
+                    ...champsDeRefus('egalite-parfaite', rendu),
                     error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : scan remboursé plutôt qu'un prix tiré au sort.`,
                     cardInfo
                 });
@@ -3585,6 +3711,42 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             };
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // LE NOM DU PRODUIT TARIFÉ — lu SUR le gagnant, pas à côté
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI IL FALLAIT UN TROISIÈME NOM. La réponse en portait déjà deux, et AUCUN
+        // n'était extrait du produit retenu :
+        //   `nom`      = ce que l'IA a lu sur la photo (cardInfo.name)
+        //   `nomExact` = le nom TCGdex, ou celui du gagnant du module LOCAL — figé plus
+        //                haut, AVANT que le scoring produise `classement`
+        // Sur la charge « Dark Ursaring », `nom` vaut "Dark Ursaring" et `nomExact` vaut
+        // "Dark Porygon2" ; le produit 606889 s'appelle bien « Dark Porygon2 » au catalogue.
+        // `nomExact` avait donc raison — PAR LE CHEMIN EMPRUNTÉ, pas par construction. C'est
+        // un contrat implicite de plus, du même genre que « le premier du classement est le
+        // gagnant », et il se rompra le jour où une décision tardive changera le gagnant.
+        //
+        // MESURÉ sur les 108 lignes de journal ayant un idProduct : sur DOUZE, le nom LU
+        // désigne autre chose que le produit tarifé (Misty's Staryu -> Team Rocket's Archer,
+        // Light Jolteon -> Lightning Energy, Mew -> Mew ex...). Le compte mélange deux
+        // époques — plusieurs de ces cas ont été corrigés depuis — mais il donne l'ordre de
+        // grandeur du piège.
+        //
+        // CE QUE ÇA CASSAIT, ET C'EST LE POINT. Le bloc de réserve faible repose sur une
+        // prémisse FALSIFIABLE : « Si c'est bien X », l'utilisateur regarde sa photo et
+        // confirme. Si X est ce que l'IA a lu, il confirme « oui, c'est bien un Dark
+        // Ursaring » pendant qu'on lui affiche le prix d'un Dark Porygon2 : la vérification
+        // ne vérifie plus rien, et elle RASSURE À TORT. Une prémisse falsifiable qui porte
+        // sur la mauvaise proposition est pire qu'aucune vérification.
+        //
+        // ⚠️ C'EST LUI QUE LA PRÉMISSE DOIT NOMMER. Il est extrait de `produits` par
+        // l'idProduct du gagnant : il ne PEUT pas diverger du produit tarifé, et il ne peut
+        // pas être null (tout `classement[0]` vient de `produits`, y compris après le
+        // re-classement du veto, qui remplace les deux ensemble).
+        // `nomExact` reste dans la réponse pour qui s'en sert déjà, mais il sort de la
+        // logique d'affichage : plus personne n'a à choisir entre deux noms dont l'un ment.
+        const produitGagnant = produits.find(p => p.idProduct === classement[0]?.idProduct);
+        const nomProduit = produitGagnant ? String(produitGagnant.name).split('[')[0].trim() : null;
+
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
@@ -3674,7 +3836,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // Désormais c'est écrit. `classement` garde son ordre, mais plus personne
                 // n'a besoin d'y croire.
                 idProduct: classement[0]?.idProduct ?? null,
+                // ⚠️ LE NOM À AFFICHER, ET LE SEUL QUI NE PUISSE PAS MENTIR sur ce qui est
+                // tarifé : il est extrait du produit gagnant. C'est LUI que doit nommer la
+                // prémisse « Si c'est bien X ». Voir le bloc au-dessus de `res.json`.
+                nomProduit,
+                // Ce que l'IA a lu sur la photo. À afficher comme une LECTURE, jamais comme
+                // l'identité du produit tarifé — les deux divergent, et pas rarement.
                 nom: cardInfo.name,
+                // Le nom de l'identification (TCGdex ou module local), figé AVANT le
+                // scoring. Conservé pour qui s'en sert déjà ; il peut valoir null.
                 nomExact: trouvaille.nomExact,
                 numero: cardInfo.number,
                 total: cardInfo.total || null,
@@ -3793,14 +3963,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         console.error("❌ [identifier]", e.message);
         // Voir /api/analyser : on constate l'absence de remboursement, on ne la corrige pas ici.
         enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
-        // ⚠️ `rembourse: false` — ET C'EST LE SEUL CAS OÙ LE ROUGE EST JUSTE. Ce chemin ne
-        // rembourse pas (l'absence est constatée ici, pas corrigée : voir /api/analyser).
-        // Le champ dit donc la vérité désagréable plutôt que rien du tout.
+        // ⚠️ `natureRefus: 'echec-technique'` ET `rembourse: false` — le seul cas où le
+        // rouge est pleinement juste : ce chemin ne rembourse pas (l'absence est constatée
+        // ici, pas corrigée : voir /api/analyser). Les champs disent la vérité désagréable
+        // plutôt que rien du tout.
         // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il est resté au log et au journal ; la réponse ne
         // porte qu'un texte générique. Le 4 août, un utilisateur a lu dans son extension
         // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
         // information qui ne l'aide en rien et qui décrit notre code à qui la reçoit.
-        res.json({ success: false, rembourse: false, error: "Erreur serveur interne" });
+        res.json({ success: false, ...champsDeRefus('erreur-serveur', false), error: "Erreur serveur interne" });
     }
 });
 

@@ -97,8 +97,14 @@ const cible = process.argv[2] || 'Vileplume';
                 console.log(`   ⃝ SANS OBJET — aucun produit retenu${refus ? ' (refus)' : ''} : les trois valeurs sont nulles, il n'y a rien à comparer.`);
                 // Ce que le refus DOIT porter, lui, se vérifie : le marqueur de remboursement.
                 if (refus) {
-                    console.log(`   rembourse (réponse) : ${j.rembourse === undefined ? '❌ ABSENT — l\'extension ne peut pas distinguer un refus remboursé d\'une panne' : j.rembourse}`);
-                    console.log(`   rembourse (journal) : ${ligne.rembourse ?? '—'} · motifEchec=${ligne.motifEchec ?? '—'}`);
+                    console.log(`   rembourse (réponse)  : ${j.rembourse === undefined ? '❌ ABSENT' : j.rembourse}`);
+                    console.log(`   motifRefus (réponse) : ${j.motifRefus === undefined ? '❌ ABSENT' : j.motifRefus}`);
+                    console.log(`   natureRefus (réponse): ${j.natureRefus === undefined ? '❌ ABSENT — l\'extension ne peut pas distinguer un refus délibéré d\'une panne' : j.natureRefus}`);
+                    // LE MOTIF DE LA RÉPONSE DOIT ÊTRE CELUI DU JOURNAL. Ce sont deux écritures
+                    // distinctes du même fait ; si elles divergent, l'une des deux ment et on ne
+                    // saurait pas laquelle. Le journal reste la référence historique.
+                    const accord = j.motifRefus === ligne.motifEchec;
+                    console.log(`   motifEchec (journal) : ${ligne.motifEchec ?? '—'} · rembourse=${ligne.rembourse ?? '—'}  ${accord ? '✅ accord' : '❌ DÉSACCORD réponse/journal'}`);
                 }
             } else if (retenu != null && retenu === premier && retenu === annonce) {
                 console.log('   ✅ LES TROIS COÏNCIDENT — carte.idProduct est le gagnant, et classement[0] aussi');
