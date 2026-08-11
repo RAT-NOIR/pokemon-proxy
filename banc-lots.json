@@ -49,6 +49,13 @@
       "declareLe": "2026-08-08T19:58:44Z",
       "fermeeLe": "2026-08-08T20:23:30Z",
       "pourquoi": "Mesurer la lecture du symbole sous le prompt corrigé (le mot « étoile » retiré de la description de l'éclair). 40 cartes japonaises vintage sans total et sans code de set, en DEUX séances de 20 décidées d'avance — la seconde aura lieu quel que soit le résultat de la première. Ces cartes serviront à trouver des bugs, elles sont donc de l'entraînement. Ne pas additionner aux 7 lignes lues sous l'ancien prompt : deux instruments."
+    },
+    {
+      "lot": "requalification-verrou",
+      "debut": "2026-08-11T19:09:53Z",
+      "fin": null,
+      "declareLe": "2026-08-11T19:09:53Z",
+      "pourquoi": "Requalifier la cellule « réserve FAIBLE » du verrou, retirée par fb49871 : l'union des viviers a périmé sa charge (Dark Ursaring sort désormais en refus remboursé au lieu d'un prix avec réserve faible). Il faut au moins une carte japonaise vintage scannée APRÈS fb49871 pour que verrou-charges.js puisse extraire une charge décrivant le comportement actuel. Ces cartes servent à réparer un instrument, donc elles sont de l'entraînement par nature et n'ont rien à faire dans le holdout — même raisonnement que les deux lots précédents. ⚠️ FENÊTRE OUVERTE : la fermer dès que la cellule est requalifiée (poser `fin`, second commit daté), sinon elle avalera tous les scans suivants et videra le holdout en silence."
     }
   ]
 }
