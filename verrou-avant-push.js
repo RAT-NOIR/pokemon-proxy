@@ -136,6 +136,28 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         verifier(`empreinte du prompt inchangée (${actuelle.hash})`, true);
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // LA PROVENANCE DES CHARGES — de quoi comparer deux sorties dans six semaines
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ DEUX EXÉCUTIONS SÉPARÉES PAR UNE RÉEXTRACTION NE SE COMPARENT PAS LIGNE À LIGNE.
+    // Les charges sont choisies dans le journal : un journal plus long en rend d'autres.
+    // Mesuré le 2026-08-11 — passer de 131 à 142 lignes a changé QUATRE charges sur six,
+    // sans qu'aucun code ait bougé. Une sortie relue plus tard doit permettre de dire si
+    // elle est comparable à une autre, et non de le deviner.
+    // Ces trois nombres sont là pour ça, à côté de l'empreinte du prompt qui joue le même
+    // rôle pour la lecture de l'IA.
+    console.log(`  ⓘ provenance des charges : base « ${donnees.extraitDe ?? '?'} »`
+        + ` · extraites le ${String(donnees.extraitLe ?? '?').slice(0, 19).replace('T', ' ')}`);
+    if (donnees.lignesAuJournal == null) {
+        avertir('charges extraites avant l\'enregistrement de la taille du journal',
+            'impossible de dire si une autre sortie leur est comparable -> node verrou-charges.js --base=test');
+    } else {
+        const e = donnees.lignesEligibles ?? {};
+        console.log(`     journal au moment de l'extraction : ${donnees.lignesAuJournal} ligne(s)`
+            + (e.avecPhoto != null ? ` · ${e.avecPhoto} avec photo · ${e.abouties} abouties` : ''));
+        console.log(`     -> deux sorties ne se comparent ligne à ligne que si CES nombres sont identiques.`);
+    }
+
     console.log('\n=== 2. Serveur réel, réseau rejoué ===');
     // ⚠️ LE SERVEUR ENFANT EST INSTRUMENTÉ. NODE_V8_COVERAGE est hérité par les processus
     // fils : la couverture d'index.js par les charges est donc capturée telle quelle, sans

@@ -380,6 +380,13 @@ const CELLULES = [
     fs.writeFileSync(SORTIE, JSON.stringify({
         extraitLe: new Date().toISOString(),
         extraitDe: prod.db.databaseName,
+        // ⚠️ DE QUOI DIRE SI DEUX EXÉCUTIONS SONT COMPARABLES, sans avoir à le déduire.
+        // Une réextraction sur un journal plus long rend des charges DIFFÉRENTES : le
+        // 2026-08-11, passer de 131 à 142 lignes a changé quatre charges sur six. Deux
+        // sorties du verrou séparées par une réextraction ne se comparent donc pas ligne
+        // à ligne, et rien ne le disait. Ces deux nombres le disent.
+        lignesAuJournal: journal.length,
+        lignesEligibles: { avecPhoto: avecPhoto.length, abouties: abouties.length },
         // Le nombre de cellules VOULUES, pour que le verrou sache combien manquent sans
         // avoir à connaître la liste. Un nombre en dur des deux côtés divergerait.
         cellulesVoulues: CELLULES.length,
