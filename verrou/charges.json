@@ -1,10 +1,10 @@
 {
-  "extraitLe": "2026-08-12T19:30:25.537Z",
+  "extraitLe": "2026-08-12T19:43:46.778Z",
   "extraitDe": "test",
-  "lignesAuJournal": 153,
+  "lignesAuJournal": 154,
   "lignesEligibles": {
-    "avecPhoto": 104,
-    "abouties": 77
+    "avecPhoto": 105,
+    "abouties": 78
   },
   "cellulesVoulues": 6,
   "cellulesManquantes": [],
@@ -57,12 +57,12 @@
       "pourquoi": "la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte",
       "profondeurExigee": "verdict",
       "source": {
-        "_id": "6a7aeeb9baa33e9aaed2dbea",
-        "le": "2026-08-11T09:43:21.060Z",
-        "version": "f930c4d33681",
+        "_id": "6a7ccb844079b583bb4e883b",
+        "le": "2026-08-12T19:37:40.727Z",
+        "version": "a3d345e783d5",
         "idProduct": 585047
       },
-      "imageUrl": "https://images1.vinted.net/t/05_01c2f_B84P1X3hGhhmmyKFzHPbUsEL/f800/1786411935.webp?s=4c9e2d790722d5e058473f78150708770480f655",
+      "imageUrl": "https://images1.vinted.net/t/04_02280_QYZcuy1LeMUb3jBWmnZN4YM2/f800/1786003666.webp?s=823df65436f5ada867c0e3c7fecf8b4b9f49a6e3",
       "lecture": {
         "name": "Dark Charizard",
         "number": "006",

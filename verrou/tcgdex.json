@@ -1,9 +1,9 @@
 {
-  "enregistreLe": "2026-08-12T19:30:32.149Z",
+  "enregistreLe": "2026-08-12T19:43:53.603Z",
   "nb": 20,
   "chargesCouvertes": [
     "6a7aee52baa33e9aaed2dbc7",
-    "6a7aeeb9baa33e9aaed2dbea",
+    "6a7ccb844079b583bb4e883b",
     "6a7cc8951e3a5bd07ba5c972",
     "6a7b7435e8122c6abf218204",
     "6a7cc8b71e3a5bd07ba5c984",
@@ -2339,7 +2339,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-12T08:02:25.335Z",
+                "updated": "2026-08-12T08:02:24.913Z",
                 "unit": "EUR",
                 "idProduct": 895874,
                 "avg": 15.07,
@@ -2419,7 +2419,7 @@
         "updated": "2026-07-18T09:39:17+02:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-12T08:02:25.335Z",
+            "updated": "2026-08-12T08:02:24.913Z",
             "unit": "EUR",
             "idProduct": 895874,
             "avg": 15.07,
