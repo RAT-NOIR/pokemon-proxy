@@ -1,13 +1,13 @@
 {
-  "enregistreLe": "2026-08-11T19:30:59.828Z",
-  "nb": 26,
+  "enregistreLe": "2026-08-12T19:30:32.149Z",
+  "nb": 20,
   "chargesCouvertes": [
     "6a7aee52baa33e9aaed2dbc7",
-    "6a71c4e5486b51e3ab380c9d",
     "6a7aeeb9baa33e9aaed2dbea",
+    "6a7cc8951e3a5bd07ba5c972",
     "6a7b7435e8122c6abf218204",
-    "6a7b7454e8122c6abf218212",
-    "6a7b73f4e8122c6abf2181ed"
+    "6a7cc8b71e3a5bd07ba5c984",
+    "6a7c37e30afc13c76c94805e"
   ],
   "reponses": {
     "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%94%E3%82%AB%E3%83%81%E3%83%A5%E3%82%A6&localId=eq:123%2FPCG-P": {
@@ -191,6 +191,27 @@
         "title": "The resource you are trying to reach does not exists",
         "status": 404,
         "endpoint": "/en/cards/SM11b-016",
+        "method": "GET"
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%83%AA%E3%82%B6%E3%83%BC%E3%83%89%E3%83%B3": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "PMCG4-017",
+          "localId": "017",
+          "name": "わるいリザードン"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/en/cards/PMCG4-017": {
+      "statut": 404,
+      "erreur": "Request failed with status code 404",
+      "data": {
+        "type": "https://tcgdex.dev/errors/not-found",
+        "title": "The resource you are trying to reach does not exists",
+        "status": 404,
+        "endpoint": "/en/cards/PMCG4-017",
         "method": "GET"
       }
     },
@@ -2269,63 +2290,40 @@
         }
       ]
     },
-    "https://api.tcgdex.net/v2/fr/cards?name=Fermite%20ex&localId=eq:236": {
+    "https://api.tcgdex.net/v2/fr/cards?name=Flagadoss&localId=eq:090": {
       "statut": 200,
       "data": []
     },
-    "https://api.tcgdex.net/v2/fr/cards?name=Fermite%20ex&localId=236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/fr/cards?name=Durant%20ex&localId=eq:236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/fr/cards?name=Durant%20ex&localId=236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/fr/cards?name=Durant&localId=eq:236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/fr/cards?name=Durant&localId=236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/en/cards?name=Durant%20ex&localId=eq:236": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/en/cards?name=Durant%20ex&localId=236": {
+    "https://api.tcgdex.net/v2/fr/cards?name=Flagadoss&localId=90": {
       "statut": 200,
       "data": [
         {
-          "id": "sv08-236",
-          "localId": "236",
-          "name": "Durant ex",
-          "image": "https://assets.tcgdex.net/en/sv/sv08/236"
+          "id": "me05-090",
+          "localId": "090",
+          "name": "Flagadoss",
+          "image": "https://assets.tcgdex.net/fr/me/me05/090"
         }
       ]
     },
-    "https://api.tcgdex.net/v2/en/cards/sv08-236": {
+    "https://api.tcgdex.net/v2/en/cards/me05-090": {
       "statut": 200,
       "data": {
         "category": "Pokemon",
-        "id": "sv08-236",
-        "illustrator": "osare",
-        "image": "https://assets.tcgdex.net/en/sv/sv08/236",
-        "localId": "236",
-        "name": "Durant ex",
-        "rarity": "Special illustration rare",
+        "id": "me05-090",
+        "illustrator": "Mékayu",
+        "image": "https://assets.tcgdex.net/en/me/me05/090",
+        "localId": "090",
+        "name": "Slowbro",
+        "rarity": "Illustration rare",
         "set": {
           "cardCount": {
-            "official": 191,
-            "total": 252
+            "official": 84,
+            "total": 120
           },
-          "id": "sv08",
-          "logo": "https://assets.tcgdex.net/en/sv/sv08/logo",
-          "name": "Surging Sparks"
+          "id": "me05",
+          "logo": "https://assets.tcgdex.net/en/me/me05/logo",
+          "name": "Pitch Black",
+          "symbol": "https://assets.tcgdex.net/univ/me/me05/symbol"
         },
         "variants": {
           "firstEdition": false,
@@ -2341,15 +2339,15 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-08-11T08:02:24.737Z",
+                "updated": "2026-08-12T08:02:25.335Z",
                 "unit": "EUR",
-                "idProduct": 794609,
-                "avg": 22.09,
-                "low": 15.8,
-                "trend": 20.38,
-                "avg1": 18.83,
-                "avg7": 21.44,
-                "avg30": 22.23,
+                "idProduct": 895874,
+                "avg": 15.07,
+                "low": 6,
+                "trend": 12.58,
+                "avg1": 13.63,
+                "avg7": 13.91,
+                "avg30": 15.12,
                 "avg-holo": null,
                 "low-holo": null,
                 "trend-holo": 0,
@@ -2359,13 +2357,13 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-08-11T08:02:23.098Z",
+                "updated": "2026-08-12T08:02:23.215Z",
                 "holofoil": {
-                  "productId": 589930,
-                  "lowPrice": 34.93,
-                  "midPrice": 41,
-                  "highPrice": 269.9,
-                  "marketPrice": 36.32,
+                  "productId": 704847,
+                  "lowPrice": 12.49,
+                  "midPrice": 17.51,
+                  "highPrice": 150,
+                  "marketPrice": 14.69,
                   "directLowPrice": null
                 }
               }
@@ -2373,57 +2371,63 @@
           }
         ],
         "dexId": [
-          632
+          80
         ],
-        "hp": 190,
+        "hp": 130,
         "types": [
-          "Grass"
+          "Psychic"
         ],
-        "stage": "Basic",
-        "suffix": "ex",
-        "abilities": [
-          {
-            "type": "Ability",
-            "name": "Sudden Shearing",
-            "effect": "When you play this Pokémon from your hand onto your Bench during your turn, you may discard the top card of your opponent's deck."
-          }
-        ],
+        "evolveFrom": "Slowpoke",
+        "stage": "Stage1",
         "attacks": [
           {
             "cost": [
-              "Grass",
+              "Psychic"
+            ],
+            "name": "All Out",
+            "effect": "If you have no cards in your hand, this attack does 160 more damage.",
+            "damage": "50+"
+          },
+          {
+            "cost": [
+              "Colorless",
               "Colorless",
               "Colorless"
             ],
-            "name": "Vengeful Crush",
-            "effect": "This attack does 30 more damage for each Prize card your opponent has taken.",
-            "damage": "120+"
+            "name": "Zen Headbutt",
+            "damage": 110
           }
         ],
         "weaknesses": [
           {
-            "type": "Fire",
+            "type": "Darkness",
             "value": "×2"
           }
         ],
-        "retreat": 2,
-        "regulationMark": "H",
+        "resistances": [
+          {
+            "type": "Fighting",
+            "value": "-30"
+          }
+        ],
+        "retreat": 3,
+        "regulationMark": "J",
         "legal": {
           "standard": true,
           "expanded": true
         },
-        "updated": "2026-06-08T13:16:55+01:00",
+        "updated": "2026-07-18T09:39:17+02:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-08-11T08:02:24.737Z",
+            "updated": "2026-08-12T08:02:25.335Z",
             "unit": "EUR",
-            "idProduct": 794609,
-            "avg": 22.09,
-            "low": 15.8,
-            "trend": 20.38,
-            "avg1": 18.83,
-            "avg7": 21.44,
-            "avg30": 22.23,
+            "idProduct": 895874,
+            "avg": 15.07,
+            "low": 6,
+            "trend": 12.58,
+            "avg1": 13.63,
+            "avg7": 13.91,
+            "avg30": 15.12,
             "avg-holo": null,
             "low-holo": null,
             "trend-holo": 0,
@@ -2433,38 +2437,17 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-08-11T08:02:23.098Z",
+            "updated": "2026-08-12T08:02:23.215Z",
             "holofoil": {
-              "productId": 589930,
-              "lowPrice": 34.93,
-              "midPrice": 41,
-              "highPrice": 269.9,
-              "marketPrice": 36.32,
+              "productId": 704847,
+              "lowPrice": 12.49,
+              "midPrice": 17.51,
+              "highPrice": 150,
+              "marketPrice": 14.69,
               "directLowPrice": null
             }
           }
         }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%83%AA%E3%82%B6%E3%83%BC%E3%83%89%E3%83%B3": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "PMCG4-017",
-          "localId": "017",
-          "name": "わるいリザードン"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/en/cards/PMCG4-017": {
-      "statut": 404,
-      "erreur": "Request failed with status code 404",
-      "data": {
-        "type": "https://tcgdex.dev/errors/not-found",
-        "title": "The resource you are trying to reach does not exists",
-        "status": 404,
-        "endpoint": "/en/cards/PMCG4-017",
-        "method": "GET"
       }
     },
     "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%95%E3%83%AA%E3%83%BC%E3%82%B6%E3%83%BC": {
@@ -2549,99 +2532,45 @@
         "method": "GET"
       }
     },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%AB%E3%83%9D%E3%82%A8%E3%83%A9%E3%83%BC": {
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%82%AB%E3%82%A4%E3%83%AA%E3%83%A5%E3%83%BC": {
       "statut": 200,
       "data": [
         {
-          "id": "MC-367",
-          "localId": "367",
-          "name": "カポエラー"
-        },
-        {
-          "id": "MC-751",
-          "localId": "751",
-          "name": "カポエラー"
+          "id": "PMCG4-053",
+          "localId": "053",
+          "name": "わるいカイリュー"
         }
       ]
     },
-    "https://api.tcgdex.net/v2/en/cards/MC-367": {
+    "https://api.tcgdex.net/v2/en/cards/PMCG4-053": {
       "statut": 404,
       "erreur": "Request failed with status code 404",
       "data": {
         "type": "https://tcgdex.dev/errors/not-found",
         "title": "The resource you are trying to reach does not exists",
         "status": 404,
-        "endpoint": "/en/cards/MC-367",
+        "endpoint": "/en/cards/PMCG4-053",
         "method": "GET"
       }
     },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%A4%E3%83%89%E3%83%A9%E3%83%B3": {
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%8F%E3%82%8B%E3%81%84%E3%82%A2%E3%83%BC%E3%83%9C%E3%83%83%E3%82%AF": {
       "statut": 200,
       "data": [
         {
-          "id": "SV1V-020",
-          "localId": "020",
-          "name": "ヤドラン",
-          "image": "https://assets.tcgdex.net/ja/SV/SV1V/020"
-        },
-        {
-          "id": "PMCG3-028",
-          "localId": "028",
-          "name": "ヤドラン"
-        },
-        {
-          "id": "M5-029",
-          "localId": "029",
-          "name": "ヤドラン"
-        },
-        {
-          "id": "PMCG4-036",
-          "localId": "036",
-          "name": "わるいヤドラン"
-        },
-        {
-          "id": "SV4a-037",
-          "localId": "037",
-          "name": "ヤドラン",
-          "image": "https://assets.tcgdex.net/ja/SV/SV4a/037"
-        },
-        {
-          "id": "PMCG6-048",
-          "localId": "048",
-          "name": "ナツメのヤドラン"
-        },
-        {
-          "id": "M-P-071",
-          "localId": "071",
-          "name": "メガヤドランex"
-        },
-        {
-          "id": "SV2a-080",
-          "localId": "080",
-          "name": "ヤドラン",
-          "image": "https://assets.tcgdex.net/ja/SV/SV2a/080"
-        },
-        {
-          "id": "M5-087",
-          "localId": "087",
-          "name": "ヤドラン"
-        },
-        {
-          "id": "SV4a-220",
-          "localId": "220",
-          "name": "ヤドラン",
-          "image": "https://assets.tcgdex.net/ja/SV/SV4a/220"
+          "id": "PMCG4-008",
+          "localId": "008",
+          "name": "わるいアーボック"
         }
       ]
     },
-    "https://api.tcgdex.net/v2/en/cards/SV1V-020": {
+    "https://api.tcgdex.net/v2/en/cards/PMCG4-008": {
       "statut": 404,
       "erreur": "Request failed with status code 404",
       "data": {
         "type": "https://tcgdex.dev/errors/not-found",
         "title": "The resource you are trying to reach does not exists",
         "status": 404,
-        "endpoint": "/en/cards/SV1V-020",
+        "endpoint": "/en/cards/PMCG4-008",
         "method": "GET"
       }
     }
