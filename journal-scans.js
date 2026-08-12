@@ -163,6 +163,28 @@ const journalScanSchema = new mongoose.Schema({
     voieCatalogue: String,        // 'nom' | 'numero'
     motifEtat: String,            // 'resolu' | 'aucun-motif' | 'non-resolu'
 
+    // ════════════════════════════════════════════════════════════════════════
+    // LES TROIS ENTRÉES DE LA RÉSOLUTION DE MOTIF — trois causes, zéro observabilité
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ CES TROIS CHAMPS EXISTENT PARCE QU'UN FAUX-ET-AFFIRMÉ EST PARTI EN PRODUCTION
+    // SANS QU'ON PUISSE DIRE POURQUOI. Le 2026-08-12, une annonce « Rayquaza 153/217
+    // Reverse Pokeball » à 9,99 € a été cotée sur l'impression holo (0,02 €) au lieu de
+    // sa reverse : verdict AFFIRMÉ, +49850 %, aucune réserve.
+    // Trois causes possibles, et le journal ne permettait d'en écarter AUCUNE :
+    //   a) le titre n'atteint pas le serveur     -> `titreAnnonce` le dit
+    //   b) l'IA n'a rapporté aucun motif          -> `motifIA` le dit
+    //   c) l'IA a rapporté un motif, mais le MAUVAIS, et la chaîne a résolu vers le
+    //      mauvais produit sans que rien ne s'y oppose  -> `motifIA` + `motifCible` le disent
+    // Trois hypothèses, un seul champ manquant chacune. Sans elles, toute garde écrite
+    // sur le titre est bâtie sur du sable — on ne saurait même pas si elle reçoit son
+    // entrée.
+    //
+    // ⚠️ `motifEtat` SEUL NE SUFFIT PAS, et c'est ce que le cas a montré : il valait
+    // « resolu » sur la ligne fautive. Résolu VERS QUOI ? Il ne le disait pas.
+    titreAnnonce: String,   // le titre de l'annonce Vinted, tel que reçu (tronqué)
+    motifIA: String,        // ce que l'IA a rapporté : 'aucun'|'ball'|'masterball'|'reverse-classique'|'indetermine'
+    motifCible: String,     // le motif RETENU par resoudreMotif — la sortie, à côté de son état
+
     // COMMENT LIRE LE PRIX D'UNE REVERSE — 'filtre-url' | 'produit-distinct' | null.
     // ⚠️ ELLE PARTAIT DANS LA RÉPONSE ET N'ÉTAIT CONSERVÉE NULLE PART. Même dette que
     // `nomExact` et `raisonReserve` avant elle : une valeur de jonction, calculée à
@@ -501,6 +523,11 @@ function enregistrerScan(d = {}) {
             symboleSet: d.symboleSet || null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
+            // Tronqué à 200 : un titre Vinted tient largement dedans, et on ne veut pas
+            // qu'un titre aberrant fasse grossir la collection sans limite.
+            titreAnnonce: d.titreAnnonce ? String(d.titreAnnonce).slice(0, 200) : null,
+            motifIA: d.motifIA || null,
+            motifCible: d.motifCible || null,
             strategieReverse: d.strategieReverse || null,
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,

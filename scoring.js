@@ -347,6 +347,18 @@ function motifDuTitre(titre) {
     if (t.includes('masterball')) return 'masterball';
     if (FOILS_BALL.some(f => t.includes(f.replace('-', '')))) return 'ball';
     if (t.includes('ball')) return 'ball';   // "reverse ball", "ball pattern"
+    // ⚠️ LE MOT « REVERSE » SEUL, ET IL ARRIVE EN DERNIER. Jusqu'au 2026-08-12 cette
+    // fonction ne reconnaissait QUE les motifs *ball* : un titre disant simplement
+    // « reverse » rendait `null`, donc le titre — notre signal le plus fiable, écrit par
+    // quelqu'un qui a la carte en main — était muet sur le cas le plus fréquent.
+    // C'est ce qui manquait au Rayquaza : « Reverse Pokeball » passait par la branche
+    // `ball` (heureusement), mais « Rayquaza reverse » n'aurait rien rendu du tout.
+    //
+    // ⚠️ L'ORDRE EST CE QUI REND CE TEST SÛR. « Reverse Pokeball » contient les deux mots ;
+    // `ball` est plus SPÉCIFIQUE et doit gagner. Déplacer cette ligne au-dessus ferait
+    // viser la reverse ordinaire d'une carte qui a une Poké Ball — l'écart de prix entre
+    // les deux atteint x100 (cf. Master Ball 806449 : 0,50 € contre 24,13 €).
+    if (t.includes('reverse')) return 'reverse-classique';
     return null;
 }
 
@@ -406,8 +418,47 @@ function resoudreMotif(analyse, motifIA, titre) {
 
     if (motifIA === 'aucun') return finir('aucun');
 
+    // ════════════════════════════════════════════════════════════════════════
+    // LE VRAI DÉSACCORD — l'IA parle, le titre parle, et ils se contredisent
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ LE GARDE `conflit-ia-titre` CI-DESSUS NE COUVRE QUE LE SILENCE DE L'IA
+    // (`motifIA === 'aucun'`). Son nom promettait le conflit ; le code ne traitait que le
+    // cas où l'IA se tait. Il restait donc une TROISIÈME cause, non couverte et non
+    // observable : l'IA rapporte un motif, mais le MAUVAIS, et la chaîne résolvait vers
+    // le mauvais produit sans que rien ne s'y oppose — en rendant `resolu`, donc SANS
+    // réserve. C'est le chemin du faux-et-affirmé du 2026-08-12.
+    //
+    // RÈGLE 1 DU PRINCIPE D'ORDRE : un doute sur l'ENTRÉE bat une précision sur la
+    // SORTIE. Quand les deux sources nomment un motif, que la carte possède les DEUX, et
+    // qu'elles ne disent pas la même chose, on ne sait pas laquelle croire. Viser l'une
+    // des deux serait parier avec l'apparence d'une réponse.
+    //
+    // ⚠️ CE QUE ÇA COÛTE, ET IL FAUT LE SAVOIR : on PERD le ciblage. `non-resolu` renvoie
+    // un vivier non trié, donc la décision produit B (le moins cher) peut encore désigner
+    // la mauvaise impression — mais elle le fera AVEC une réserve déclarée au lieu d'un
+    // verdict affirmé. Ça transforme un faux-et-affirmé en avertissement ; ce n'est pas
+    // une identification retrouvée.
+    //
+    // ⚠️ LA CONDITION EXIGE `dispo` DES DEUX CÔTÉS, et c'est ce qui préserve
+    // `titre-prime-sur-ia` juste en dessous : si le motif lu par l'IA n'existe pas sur
+    // cette carte, il n'y a pas de désaccord à arbitrer — le catalogue a déjà tranché, et
+    // le titre l'emporte sans réserve. Le désaccord n'existe qu'entre deux possibles.
+    //
+    // ⚠️⚠️ ET LA COMPARAISON SE FAIT PAR FAMILLE, PAS PAR ÉTIQUETTE. « masterball » est
+    // une SPÉCIALISATION de « ball », pas son contraire : l'IA voit « des balls » sur la
+    // photo, le titre dit LAQUELLE. Les traiter comme un désaccord détruirait le cas
+    // mesuré du test 10 — Espeon PRE 033, IA « ball » + titre « MASTERBALL » -> 806449 à
+    // 24,13 €, contre 805422 à 0,17 € sans ciblage. Un facteur 48, transformé en réserve
+    // pour rien.
+    // Le VRAI désaccord est entre FAMILLES : une reverse ordinaire n'est pas une ball.
+    const famille = m => (m === 'ball' || m === 'masterball') ? 'ball' : m;
+    if (motifTitre && famille(motifIA) !== famille(motifTitre) && dispo(motifIA) && dispo(motifTitre)) {
+        return { etat: 'non-resolu', ...vide, raison: 'desaccord-ia-titre' };
+    }
+
     // L'IA voit un motif spécial. Le titre a priorité sur SON IDENTITÉ s'il en nomme un
-    // que la carte possède réellement.
+    // que la carte possède réellement — cas atteint seulement quand le motif lu par l'IA
+    // n'est PAS disponible sur la carte (sinon le désaccord ci-dessus a déjà tranché).
     if ((motifIA === 'ball' || motifIA === 'masterball') && motifTitre && dispo(motifTitre)) {
         return finir(motifTitre, motifTitre !== motifIA ? 'titre-prime-sur-ia' : null);
     }
@@ -1578,6 +1629,59 @@ if (require.main === module) {
         const energie = resoudreMotif(a, 'reverse-classique', 'Rayquaza reverse 153');
         verifier('reverse à symboles de type -> 870374', choisirMeilleur(candidats, lu(energie)).gagnant.candidat.idProduct, 870374);
         verifier('   ... produit distinct (pas de filtre)', a.strategieParIdProduct.get(870374), 'produit-distinct');
+
+        // ════════════════════════════════════════════════════════════════════
+        // LE FAUX-ET-AFFIRMÉ DU 2026-08-12, REJOUÉ SUR SES VRAIES DONNÉES
+        // ════════════════════════════════════════════════════════════════════
+        // Annonce « Rayquaza 153/217 Reverse Pokeball » à 9,99 €. La chaîne a coté
+        // l'impression HOLO (869764, guide 0,12 €, plancher live 0,02 €) et a AFFIRMÉ
+        // « +49850 % ». Ce n'était pas une erreur d'identification — 869764 est bien le
+        // seul Rayquaza de son expansion — mais un ciblage de motif manqué.
+        // Ces quatre assertions verrouillent les quatre entrées possibles.
+        const production = resoudreMotif(a, 'aucun', null);
+        verifier('CAS DE PRODUCTION : IA muette + AUCUN titre -> impression normale', production.cible, 'aucun');
+        verifier('   ... et c\'est « resolu », donc SANS réserve — le trou exact', production.etat, 'resolu');
+
+        // Avec le titre, le garde existant tire : l'IA se tait, le vendeur nomme une ball.
+        const avecTitre = resoudreMotif(a, 'aucun', 'Rayquaza 153/217 Reverse Pokeball');
+        verifier('même lecture + LE TITRE -> non résolu', avecTitre.etat, 'non-resolu');
+        verifier('   ... raison : le silence de l\'IA contre le titre', avecTitre.raison, 'conflit-ia-titre');
+
+        // ⚠️ LA TROISIÈME CAUSE, celle que `conflit-ia-titre` ne couvrait PAS : l'IA parle,
+        // mais dit autre chose que le titre. Avant ce garde, la chaîne résolvait vers l'un
+        // des deux sans que rien ne s'y oppose, et sortait « resolu » — donc affirmé.
+        const desaccord = resoudreMotif(a, 'reverse-classique', 'Rayquaza 153/217 Reverse Pokeball');
+        verifier('DÉSACCORD reverse vs ball -> non résolu', desaccord.etat, 'non-resolu');
+        verifier('   ... raison nommée', desaccord.raison, 'desaccord-ia-titre');
+        const desaccordInverse = resoudreMotif(a, 'ball', 'Rayquaza reverse');
+        verifier('DÉSACCORD ball vs reverse (sens inverse) -> non résolu', desaccordInverse.etat, 'non-resolu');
+
+        // ⚠️ ET CE QUI NE DOIT PAS ÊTRE UN DÉSACCORD : « masterball » est une
+        // SPÉCIALISATION de « ball ». L'IA voit des balls, le titre dit LAQUELLE. Les
+        // traiter comme contradictoires détruirait le cas mesuré du test 10 (Espeon
+        // PRE 033 : 24,13 € au lieu de 0,17 €, un facteur 48).
+        const affinage = resoudreMotif(a, 'masterball', 'Rayquaza friend ball 153');
+        verifier('MÊME FAMILLE (masterball/ball) -> le titre affine, pas de réserve', affinage.etat, 'resolu');
+        verifier('   ... et cible bien la ball', affinage.cible, 'ball');
+    }
+
+    // --- Test 11 bis : le mot « reverse » seul au titre ---
+    // Jusqu'au 2026-08-12, `motifDuTitre` ne reconnaissait QUE les motifs *ball* : un
+    // titre disant simplement « reverse » rendait null, donc le signal le plus fiable
+    // qu'on ait — écrit par quelqu'un qui a la carte en main — était muet sur le cas le
+    // plus fréquent.
+    console.log('\n=== Test 11 bis : « reverse » au titre ===');
+    {
+        verifier('« reverse » seul est reconnu', motifDuTitre('Rayquaza reverse'), 'reverse-classique');
+        verifier('« reverse holo » aussi', motifDuTitre('carte reverse holo'), 'reverse-classique');
+        // ⚠️ L'ORDRE EST CE QUI REND CE TEST SÛR : « Reverse Pokeball » contient les deux
+        // mots, et `ball` est plus SPÉCIFIQUE. L'inverser ferait viser la reverse
+        // ordinaire d'une carte qui a une Poké Ball.
+        verifier('« Reverse Pokeball » reste une BALL, pas une reverse ordinaire',
+            motifDuTitre('Rayquaza 153/217 Reverse Pokeball'), 'ball');
+        verifier('« Master Ball reverse » reste une masterball',
+            motifDuTitre('Mentali Master Ball reverse'), 'masterball');
+        verifier('un titre sans motif rend toujours null', motifDuTitre('Salamèche holo 1ère édition'), null);
     }
 
     // --- Test 12 : Pikachu LOR 052 — la reverse n'est PAS un produit distinct ---

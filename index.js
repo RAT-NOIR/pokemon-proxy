@@ -3930,6 +3930,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             symboleSet: cardInfo.symboleSet,
             voieCatalogue,
             motifEtat: motifResolution.etat,
+            // ⚠️ LES TROIS ENTRÉES DE LA RÉSOLUTION DE MOTIF — voir journal-scans.js.
+            // Sans elles on ne peut distinguer « le titre n'arrive pas » de « l'IA n'a rien
+            // dit » de « l'IA a dit autre chose ». Trois causes, et le faux-et-affirmé du
+            // Rayquaza du 2026-08-12 ne permettait d'en écarter aucune.
+            titreAnnonce: title,
+            motifIA: cardInfo.motif,
+            motifCible: motifResolution.cible,
             // ⚠️ ELLE PART DANS LA RÉPONSE DEPUIS LE DÉBUT ET N'ÉTAIT PAS JOURNALISÉE.
             // Sans elle, aucune ligne du journal ne permet de sélectionner un scan passé
             // par la branche reverse : c'est ce qui a rendu impossible la cinquième
