@@ -312,6 +312,31 @@ const journalScanSchema = new mongoose.Schema({
     prixLive: Number,
     prixLiveEtat: String,        // l'état sur lequel l'offre a été lue (MT, NM, EX, GD, LP, PL, PO)
     prixLiveCodeLangue: Number,  // le code langue Cardmarket du filtre (1=EN, 2=FR, 7=JP…)
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CE QUE L'EXTENSION VOIT DE LA PAGE — pour calibrer ses gardes de cohérence
+    // ════════════════════════════════════════════════════════════════════════
+    // `prixLive` est un PLANCHER : il ne dit rien de la forme de l'offre autour de lui.
+    // Ces champs disent cette forme, et ils servent à répondre à des questions que le
+    // plancher seul ne peut pas trancher — « ce 0,02 € est-il le prix de la carte, ou le
+    // signe qu'on regarde la mauvaise impression ? »
+    //
+    // ⚠️ MESURÉ AVANT D'ÊTRE ACCEPTÉ, et le résultat tempère : une grille plate n'est PAS
+    // rare. Sur les 75 959 produits du guide, 62,6 % n'ont AUCUNE cotation holo et 27,9 %
+    // ont un trend ≤ 0,20 €. Un signal partagé par 10,3 % du catalogue ne DÉSIGNE pas une
+    // erreur — il dit « carte commune ». C'est pour ça que ces champs sont journalisés
+    // pour MESURER, et qu'aucune garde n'est câblée dessus ici.
+    prixLiveTendance: Number,    // la tendance affichée sur la fiche, à côté du plancher
+    prixLiveNM: Number,          // le prix de la ligne NM de la grille
+    // La grille complète, état -> prix. C'est la forme la plus riche : les deux entiers
+    // ci-dessous s'en DÉDUISENT quand elle est là.
+    grilleLive: { type: Map, of: Number },
+    // ⚠️ DEUX ENTIERS, ET LE SECOND N'EST PAS UN BOOLÉEN — DÉLIBÉRÉMENT. « toutes les
+    // valeurs sont égales » se lit `grilleValeursDistinctes === 1`, mais l'entier dit en
+    // plus COMBIEN de paliers existent. Un booléen aurait jeté cette information, et on
+    // ne peut pas la reconstruire après coup.
+    grilleNbEtats: Number,
+    grilleValeursDistinctes: Number,
     // Quand le retour est arrivé. Sert à mesurer le TAUX DE PERTE : l'extension tire sans
     // attendre, une partie des retours se perdra, et on veut le connaître plutôt que le
     // supposer. Une ligne sans `retourLe` est un scanId émis sans retour reçu.

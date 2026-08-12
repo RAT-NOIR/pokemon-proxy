@@ -94,12 +94,28 @@ function verifier(libelle, obtenu, attendu) {
     verifier('   ... et la ligne n\'a PAS été touchée', apresTentative.prixLive ?? null, null);
 
     console.log('\n=== Le retour légitime passe, et écrit ce qu\'on lui donne ===');
-    verifier('retour valide -> 200', (await poster({ userId: MOI, scanId, prixLive: 24.13, prixLiveEtat: 'ex', prixLiveCodeLangue: 7 })).status, 200);
+    verifier('retour valide -> 200', (await poster({
+        userId: MOI, scanId, prixLive: 24.13, prixLiveEtat: 'ex', prixLiveCodeLangue: 7,
+        prixLiveTendance: 29.07, prixLiveNM: 31.5,
+        // ⚠️ « pastèque » n'est pas un état : la clé doit être ÉCARTÉE, pas stockée.
+        grilleLive: { NM: 31.5, ex: 24.13, GD: 24.13, 'pastèque': 9 },
+        // Compteurs VOLONTAIREMENT FAUX : la grille doit faire foi et le désaccord être tracé.
+        grilleNbEtats: 99, grilleValeursDistinctes: 99
+    })).status, 200);
     const ecrite = await JournalScan.findById(scanId).lean();
     verifier('   prixLive écrit', ecrite.prixLive, 24.13);
     verifier('   état normalisé en majuscules', ecrite.prixLiveEtat, 'EX');
     verifier('   code langue écrit', ecrite.prixLiveCodeLangue, 7);
     verifier('   retourLe horodaté', ecrite.retourLe instanceof Date, true);
+    verifier('   tendance écrite', ecrite.prixLiveTendance, 29.07);
+    verifier('   prix NM écrit', ecrite.prixLiveNM, 31.5);
+    // La grille est une Map côté mongoose : on la relit en objet pour comparer.
+    const g = ecrite.grilleLive instanceof Map ? Object.fromEntries(ecrite.grilleLive) : ecrite.grilleLive;
+    verifier('   grille normalisée, clé hors ORDRE_ETATS écartée', g, { NM: 31.5, EX: 24.13, GD: 24.13 });
+    // ⚠️ LE POINT QUI COMPTE : les compteurs sont DÉDUITS de la grille, pas recopiés.
+    // Envoyés à 99/99, ils ressortent à 3/2 — une seule source pour un même fait.
+    verifier('   nbEtats DÉDUIT de la grille (99 envoyé, ignoré)', ecrite.grilleNbEtats, 3);
+    verifier('   valeurs distinctes DÉDUITES (24,13 compte une fois)', ecrite.grilleValeursDistinctes, 2);
     // ⚠️ CE QUI NE DOIT PAS AVOIR BOUGÉ. La route COMPLÈTE une ligne, elle ne la réécrit
     // pas : un $set trop large effacerait le scan lui-même, et personne ne le verrait.
     verifier('   idProduct intact', ecrite.idProduct, 606889);
@@ -109,6 +125,19 @@ function verifier(libelle, obtenu, attendu) {
     verifier('second retour -> 409', (await poster({ userId: MOI, scanId, prixLive: 999 })).status, 409);
     const apresSecond = await JournalScan.findById(scanId).lean();
     verifier('   ... et le premier prix est INTACT', apresSecond.prixLive, 24.13);
+
+    console.log('\n=== Sans grille, les deux entiers sont pris tels quels ===');
+    // Ce sont alors les SEULS témoins de la forme de l'offre : les refuser reviendrait à
+    // exiger la grille complète, que l'extension ne peut pas toujours lire.
+    const scan2 = await JournalScan.create({ route: 'identifier', userId: MOI, idProduct: 1, nom: 'sans-grille' });
+    verifier('retour sans grille -> 200', (await poster({
+        userId: MOI, scanId: String(scan2._id), prixLive: 0.02,
+        grilleNbEtats: 2, grilleValeursDistinctes: 1
+    })).status, 200);
+    const sansGrille = await JournalScan.findById(scan2._id).lean();
+    verifier('   nbEtats conservé', sansGrille.grilleNbEtats, 2);
+    verifier('   valeurs distinctes conservées (grille plate)', sansGrille.grilleValeursDistinctes, 1);
+    verifier('   aucune grille inventée', sansGrille.grilleLive ?? null, null);
 
     console.log('\n=== Aucun crédit débité ===');
     // La route ne passe pas par verifierAcces : renvoyer une mesure ne doit rien coûter,

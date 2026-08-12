@@ -4198,13 +4198,75 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
         const codeLangue = Number(req.body?.prixLiveCodeLangue);
         const codeLangueValide = Number.isInteger(codeLangue) && codeLangue >= 1 && codeLangue <= 10 ? codeLangue : null;
 
+        // ════════════════════════════════════════════════════════════════════
+        // LA FORME DE L'OFFRE — tendance, prix NM, grille, et deux entiers
+        // ════════════════════════════════════════════════════════════════════
+        // `prixLive` est un PLANCHER : il ne dit rien de ce qu'il y a autour. Ces champs
+        // disent la forme, et ils servent à calibrer des gardes de cohérence côté
+        // extension — la mesure se fait ici parce que c'est ici que les données
+        // s'accumulent.
+        // ⚠️ AUCUNE GARDE N'EST CÂBLÉE DESSUS. Mesuré d'abord : sur les 75 959 produits du
+        // guide, 62,6 % n'ont AUCUNE cotation holo et 27,9 % ont un trend ≤ 0,20 €. Une
+        // grille plate est partagée par 10,3 % du catalogue : elle dit « carte commune »,
+        // pas « erreur ». On collecte, on ne conclut pas.
+        const nbPositif = v => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : null; };
+        const prixLiveTendance = nbPositif(req.body?.prixLiveTendance);
+        const prixLiveNM = nbPositif(req.body?.prixLiveNM);
+
+        // LA GRILLE, si elle est envoyée. Clés VALIDÉES sur ORDRE_ETATS : une clé libre
+        // rendrait la stratification impossible plus tard, et Mongo accepterait n'importe
+        // quoi dans une Map.
+        let grilleLive = null;
+        const brute = req.body?.grilleLive;
+        if (brute && typeof brute === 'object' && !Array.isArray(brute)) {
+            const g = {};
+            for (const [k, v] of Object.entries(brute)) {
+                const e = String(k).toUpperCase();
+                const p = nbPositif(v);
+                if (ORDRE_ETATS.includes(e) && p != null) g[e] = p;
+            }
+            if (Object.keys(g).length) grilleLive = g;
+        }
+
+        // ⚠️ UNE SEULE SOURCE POUR LES DEUX ENTIERS. Quand la grille est là, ils s'en
+        // DÉDUISENT — les accepter en plus créerait deux versions du même fait, qui
+        // divergeraient au premier bug de l'extension sans que personne ne le voie.
+        // Un désaccord est tracé : c'est un signal sur l'extension, pas sur la carte.
+        let grilleNbEtats = null, grilleValeursDistinctes = null;
+        if (grilleLive) {
+            const vals = Object.values(grilleLive);
+            grilleNbEtats = vals.length;
+            grilleValeursDistinctes = new Set(vals).size;
+            const dEtats = Number(req.body?.grilleNbEtats);
+            const dDistinctes = Number(req.body?.grilleValeursDistinctes);
+            if ((Number.isFinite(dEtats) && dEtats !== grilleNbEtats)
+                || (Number.isFinite(dDistinctes) && dDistinctes !== grilleValeursDistinctes)) {
+                console.warn(`⚠️ [retour-live] les compteurs envoyés contredisent la grille :`
+                    + ` reçus ${dEtats}/${dDistinctes}, déduits ${grilleNbEtats}/${grilleValeursDistinctes}.`
+                    + ` La GRILLE fait foi.`);
+            }
+        } else {
+            // Pas de grille : on prend les entiers tels quels, ce sont les seuls témoins.
+            const e = Number(req.body?.grilleNbEtats);
+            const d = Number(req.body?.grilleValeursDistinctes);
+            grilleNbEtats = Number.isInteger(e) && e >= 0 ? e : null;
+            grilleValeursDistinctes = Number.isInteger(d) && d >= 0 ? d : null;
+        }
+
         // GARDE 1 + 2 EN UNE SEULE ÉCRITURE CONDITIONNELLE, et c'est délibéré : un
         // findOne suivi d'un update laisserait une fenêtre entre la vérification et
         // l'écriture. La garde 3 (`prixLive` absent) y est incluse pour la même raison —
         // deux retours simultanés sur le même scanId ne peuvent pas passer tous les deux.
         const maj = await JournalScan.findOneAndUpdate(
             { _id: scanId, userId, prixLive: null },
-            { $set: { prixLive, prixLiveEtat: etat, prixLiveCodeLangue: codeLangueValide, retourLe: new Date() } },
+            {
+                $set: {
+                    prixLive, prixLiveEtat: etat, prixLiveCodeLangue: codeLangueValide,
+                    prixLiveTendance, prixLiveNM, grilleLive,
+                    grilleNbEtats, grilleValeursDistinctes,
+                    retourLe: new Date()
+                }
+            },
             { new: true }
         ).lean();
 
@@ -4225,7 +4287,9 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
         }
 
         console.log(`💶 [retour-live] scan ${scanId} · idProduct ${maj.idProduct ?? '?'} · live ${prixLive} €` +
-            ` · état ${etat || '?'} · langue ${codeLangueValide ?? '?'}`);
+            ` · état ${etat || '?'} · langue ${codeLangueValide ?? '?'}` +
+            ` · tendance ${prixLiveTendance ?? '—'} · NM ${prixLiveNM ?? '—'}` +
+            ` · grille ${grilleNbEtats ?? '—'} état(s)/${grilleValeursDistinctes ?? '—'} valeur(s)`);
         res.json({ success: true });
     } catch (e) {
         console.error("❌ [retour-live]", e.message);
