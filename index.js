@@ -53,7 +53,10 @@ const {
 // Journal des scans : une ligne par identification, en base. Les logs Render sont
 // éphémères ; les seuils qu'on pose (ratio, rangs, fiabilité du setCode) ont besoin de
 // données qui survivent au redéploiement. Jamais sur le chemin critique — voir le module.
-const { enregistrerScan, enregistrerEchec } = require('./journal-scans');
+// `JournalScan` : le modèle lui-même, pour /api/retour-live qui COMPLÈTE une ligne déjà
+// écrite. C'est la seule route qui touche au journal autrement qu'en y ajoutant — d'où
+// les trois gardes qui l'entourent, et l'écriture conditionnelle plutôt qu'un update sec.
+const { enregistrerScan, enregistrerEchec, JournalScan } = require('./journal-scans');
 
 // La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
 // est le numéro de Pokédex de l'espèce, pas le rang de la carte dans son set. Voir pokedex.js.
@@ -3861,12 +3864,38 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
         const etatMin = etatVintedVersCardmarket(vintedEtat);
 
+        // ════════════════════════════════════════════════════════════════════
+        // LE PRIX GUIDE RÉELLEMENT RETENU — l'autre moitié de la paire
+        // ════════════════════════════════════════════════════════════════════
+        // `prixLive` seul ne calibre rien : il lui faut son homologue guide, et il doit
+        // s'agir du prix EXACTEMENT utilisé par la chaîne — même produit, même axe
+        // normal/reverse. Le re-dériver plus tard depuis `guide_prix` donnerait une
+        // TROISIÈME valeur, qui divergerait de celle-ci au premier changement de
+        // `prixDeReference`. C'est le deuxième principe, appliqué à une mesure.
+        //
+        // ⚠️ LE CHEMIN À CANDIDAT UNIQUE NE PASSE PAS PAR LE SCORING, donc `classement[0]`
+        // n'y porte pas de prix. Sans le repli ci-dessous, toutes ces lignes sortiraient
+        // avec un guide nul — et la calibration se ferait alors uniquement sur les cartes
+        // à plusieurs candidats, c'est-à-dire sur un échantillon biaisé, sans que rien ne
+        // le dise. Un findOne indexé de plus vaut mieux qu'un biais invisible.
+        const prixGuideRetenu = Number.isFinite(classement[0]?.prix)
+            ? classement[0].prix
+            : (classement[0]?.idProduct != null
+                ? await getPrixGuideLocal(classement[0].idProduct,
+                    impressionEstReverse(motifResolution.cible, cardInfo.reverse))
+                : null);
+
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
         // C'est ICI que se joue la mesure qui compte : /api/identifier est le flux RÉEL,
         // celui de l'extension. Les prix restent vides sur cette route (c'est le
         // navigateur de l'utilisateur qui lit le live, le serveur ne voit jamais le prix
         // final) — d'où le renvoi du ratio par l'extension, à spécifier séparément.
-        enregistrerScan({
+        // ⚠️ ON GARDE L'IDENTIFIANT DE LA LIGNE, sans attendre son écriture. C'est lui que
+        // l'extension renverra avec le prix live (voir /api/retour-live) : sans lui, un
+        // retour ne pourrait être rapproché de son scan que par (userId, horodatage),
+        // c'est-à-dire par une jointure approximative sur la seule donnée qui doit rester
+        // exacte. Vaut null si Mongo n'est pas connecté — il n'y aura alors pas de ligne.
+        const scanId = enregistrerScan({
             route: 'identifier',
             userId: req.credit?.userId,
             // Ce qui rend cette ligne revérifiable dans six mois — voir journal-scans.js.
@@ -3891,6 +3920,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // jamais le prix final, et un ratio calculé sur le prix GUIDE serait une
             // troisième grandeur mélangée aux deux autres.
             prixVinted,
+            // Le prix guide du gagnant, tel que la chaîne l'a utilisé. Sans lui, le prix
+            // live renvoyé plus tard n'aurait rien à quoi se comparer.
+            prixGuideRetenu,
             sourceIdentification: trouvaille.source || 'nom',
             identifieeEnLocal: identificationLocale,
             nomConfiance: cardInfo.nomConfiance,
@@ -3942,6 +3974,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // c'est `success: true` qui le marque. Voir verrou/jalons.js.
         res.json({
             success: true,
+            // ⚠️ L'IDENTIFIANT DE CE SCAN, à renvoyer avec le prix live sur /api/retour-live.
+            // null = le journal n'a pas pu écrire (Mongo absent) : dans ce cas il n'y a
+            // aucune ligne à compléter, et l'extension doit simplement ne rien renvoyer.
+            // Il n'est PAS un secret, mais il n'est pas devinable : c'est ce qui empêche
+            // d'attacher un prix à un scan qu'on ne possède pas.
+            scanId,
             carte: {
                 // ⚠️ LE GAGNANT EST NOMMÉ, PAS DÉDUIT D'UN ORDRE DE TABLEAU.
                 // Il n'était lisible que dans `classement[0]`, c'est-à-dire par un contrat
@@ -4091,6 +4129,101 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
         // information qui ne l'aide en rien et qui décrit notre code à qui la reçoit.
         res.json({ success: false, ...champsDeRefus('erreur-serveur', false), error: "Erreur serveur interne" });
+    }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// LE RETOUR DU PRIX LIVE — la seule mesure qui puisse calibrer un seuil
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI UNE ROUTE À PART, et pas un champ de plus sur /api/identifier : l'extension
+// ne CONNAÎT pas le prix live au moment du scan. Il lui faut l'idProduct — donc la
+// réponse — pour savoir quoi lire sur Cardmarket. Le prix live n'existe qu'après.
+//
+// CE QU'IL SERT À MESURER. Le prix guide dont dispose ce serveur et le prix live que
+// paie l'utilisateur sont DEUX MESURES DU MÊME OBJET : même idProduct, deux sources.
+// C'est leur rapport, et lui seul, qui peut dire de combien le guide s'écarte du réel —
+// donc calibrer la marge de la règle de la fourchette. `prixVinted` ne le peut pas : ce
+// n'est pas une mesure de la carte, c'est la chose qu'on juge.
+// ⚠️ La calibration se lit dans la QUEUE HAUTE du rapport, jamais dans sa médiane —
+// l'explication complète est dans journal-scans.js, sur le champ `prixLive`.
+//
+// ⚠️ AUCUN CRÉDIT N'EST DÉBITÉ. `verifierJeton` seul, pas `verifierAcces` : renvoyer une
+// mesure ne doit rien coûter, sinon personne ne la renvoie et la donnée n'existe jamais.
+//
+// TROIS GARDES, ET SANS ELLES CETTE ROUTE EMPOISONNERAIT LA SEULE DONNÉE QUI DOIT RESTER
+// PROPRE — elle accepterait des prix arbitraires pour des scans arbitraires :
+//   1. le scanId doit EXISTER ;
+//   2. il doit APPARTENIR au userId qui poste — sinon n'importe qui pourrait écrire dans
+//      la ligne d'un autre, et l'identifiant, qui voyage dans une réponse HTTP, n'est pas
+//      un secret ;
+//   3. un SECOND retour sur le même scanId est REFUSÉ. Pas « écrasé » : refusé. Un prix
+//      live est une observation datée ; la remplacer effacerait la première sans trace, et
+//      autoriserait à pousser une valeur jusqu'à ce qu'elle arrange.
+// Les trois rendent un code HTTP distinct, pour que l'extension puisse les distinguer
+// sans lire le texte.
+app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
+    try {
+        if (mongoose.connection.readyState !== 1) {
+            return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
+        }
+        const userId = req.body?.userId ? String(req.body.userId).slice(0, 80) : null;
+        const scanId = req.body?.scanId ? String(req.body.scanId) : null;
+        if (!userId || !scanId) {
+            return res.status(400).json({ success: false, error: "userId et scanId sont requis" });
+        }
+        // Un identifiant mal formé n'atteint pas Mongo : `findOne` lèverait un CastError
+        // qui sortirait en 500, c'est-à-dire en « panne serveur » pour une faute d'entrée.
+        if (!mongoose.Types.ObjectId.isValid(scanId)) {
+            return res.status(400).json({ success: false, error: "scanId invalide" });
+        }
+        // ⚠️ UN 0 N'EST PAS UN PRIX, c'est une absence de cotation — même règle que le
+        // guide, où un `trend: 0` a déjà produit un « 0 € » gagnant par défaut.
+        const prixLive = Number(req.body?.prixLive);
+        if (!Number.isFinite(prixLive) || prixLive <= 0) {
+            return res.status(400).json({ success: false, error: "prixLive doit être un nombre strictement positif" });
+        }
+        // ÉNUMÉRATION FERMÉE, la même que le reste de la chaîne (ORDRE_ETATS). Un état
+        // libre rendrait la stratification impossible au moment où elle servira.
+        const etat = req.body?.prixLiveEtat ? String(req.body.prixLiveEtat).toUpperCase() : null;
+        if (etat && !ORDRE_ETATS.includes(etat)) {
+            return res.status(400).json({ success: false, error: `prixLiveEtat doit être l'un de ${ORDRE_ETATS.join(', ')}` });
+        }
+        const codeLangue = Number(req.body?.prixLiveCodeLangue);
+        const codeLangueValide = Number.isInteger(codeLangue) && codeLangue >= 1 && codeLangue <= 10 ? codeLangue : null;
+
+        // GARDE 1 + 2 EN UNE SEULE ÉCRITURE CONDITIONNELLE, et c'est délibéré : un
+        // findOne suivi d'un update laisserait une fenêtre entre la vérification et
+        // l'écriture. La garde 3 (`prixLive` absent) y est incluse pour la même raison —
+        // deux retours simultanés sur le même scanId ne peuvent pas passer tous les deux.
+        const maj = await JournalScan.findOneAndUpdate(
+            { _id: scanId, userId, prixLive: null },
+            { $set: { prixLive, prixLiveEtat: etat, prixLiveCodeLangue: codeLangueValide, retourLe: new Date() } },
+            { new: true }
+        ).lean();
+
+        if (!maj) {
+            // L'écriture conditionnelle a échoué : on relit pour DIRE LAQUELLE des trois
+            // gardes a mordu. Un refus qui ne dit pas pourquoi est un refus qu'on ne peut
+            // pas corriger — et l'extension a besoin de distinguer « scan inconnu » (bug
+            // de son côté) de « déjà renvoyé » (comportement normal, à ne pas réessayer).
+            const ligne = await JournalScan.findById(scanId, { userId: 1, prixLive: 1 }).lean();
+            if (!ligne) {
+                return res.status(404).json({ success: false, error: "scanId inconnu" });
+            }
+            if (ligne.userId !== userId) {
+                console.warn(`🚫 [retour-live] ${userId} tente d'écrire dans le scan de ${ligne.userId} (${scanId}).`);
+                return res.status(403).json({ success: false, error: "Ce scan n'appartient pas à cet utilisateur" });
+            }
+            return res.status(409).json({ success: false, error: "Un prix live a déjà été renvoyé pour ce scan" });
+        }
+
+        console.log(`💶 [retour-live] scan ${scanId} · idProduct ${maj.idProduct ?? '?'} · live ${prixLive} €` +
+            ` · état ${etat || '?'} · langue ${codeLangueValide ?? '?'}`);
+        res.json({ success: true });
+    } catch (e) {
+        console.error("❌ [retour-live]", e.message);
+        // Message brut au log, jamais dans la réponse — voir /api/identifier.
+        res.status(500).json({ success: false, error: "Erreur serveur interne" });
     }
 });
 

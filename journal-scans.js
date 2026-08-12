@@ -253,16 +253,47 @@ const journalScanSchema = new mongoose.Schema({
     // sources. C'est leur rapport qui dira de combien le guide s'écarte du réel.
     //
     // ⚠️ IL NE PEUT PAS ARRIVER DANS LA MÊME REQUÊTE QUE LE SCAN. L'extension lit le live
-    // APRÈS avoir reçu la réponse — il lui faut l'idProduct pour savoir quoi lire. Le
-    // renseigner exige donc un retour, et un identifiant que l'extension puisse renvoyer :
-    // voir `scanId`. Sans cet identifiant, on ne saurait pas à quelle ligne l'attacher.
+    // APRÈS avoir reçu la réponse — il lui faut l'idProduct pour savoir quoi lire. D'où
+    // `/api/retour-live` et l'identifiant rendu par `enregistrerScan`.
+    //
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️⚠️ COMMENT CALIBRER K — LA QUEUE HAUTE, JAMAIS LA MÉDIANE
+    // ════════════════════════════════════════════════════════════════════════
+    // CE PARAGRAPHE EXISTE POUR EMPÊCHER UNE ERREUR PRÉVISIBLE, dans six semaines, par
+    // quelqu'un qui n'aura pas suivi. Le guide Cardmarket est une TENDANCE GLOBALE — ni
+    // par état, ni par langue (voir guidePrixSchema : avg, low, trend, avg30…). Le prix
+    // live que lit l'extension est un PLANCHER FILTRÉ, par état et par langue.
+    //
+    // UN PLANCHER EST PRESQUE TOUJOURS SOUS UNE TENDANCE. Le rapport prixLive/prixGuide
+    // sera donc massivement inférieur à 1, et cette masse est STRUCTURELLE : elle ne
+    // mesure aucune incertitude, seulement la différence entre deux définitions.
+    // Calibrer K sur la médiane reviendrait à mesurer cet écart de définition et à
+    // l'appeler « marge de sécurité ». Le seuil serait beaucoup trop serré, et la règle
+    // de la fourchette annoncerait des verdicts sûrs qui ne le sont pas.
+    //
+    // CE QUI INTÉRESSE K, C'EST LA QUEUE HAUTE : le cas RARE où le plancher réel DÉPASSE
+    // la tendance — carte recherchée, offre rare, guide en retard. C'est le seul cas où
+    // un candidat peut valoir plus cher que son prix guide ne le laisse croire, donc le
+    // seul contre lequel la fourchette doit se protéger. K se lit dans un quantile haut
+    // (q95, q99), pas au centre.
+    //
+    // ⚠️ ET LA STRATIFICATION SE FAIT À LA COLLECTE, PAS APRÈS. Un K unique serait trop
+    // lâche sur du NM et trop serré sur du GD. Les deux champs ci-dessous sont là pour
+    // qu'on puisse séparer les populations le jour venu — les ajouter plus tard ne
+    // rattraperait pas les lignes déjà écrites.
+    // ⚠️ L'AUTRE MOITIÉ DE LA PAIRE, et elle doit être écrite AU MOMENT DU SCAN. C'est le
+    // prix guide EXACTEMENT utilisé par la chaîne — même produit, même axe normal/reverse.
+    // Le re-dériver plus tard depuis `guide_prix` donnerait une TROISIÈME valeur, qui
+    // divergerait de celle-ci au premier changement de `prixDeReference` : deuxième
+    // principe, appliqué à une mesure.
+    prixGuideRetenu: Number,
     prixLive: Number,
-    // Ce sur quoi l'extension a FILTRÉ pour lire ce prix live. Sans ces deux champs, le
-    // rapport prixLive/prixGuide mélange l'écart guide-réel avec l'effet du filtre, et un
-    // seuil tiré de ce mélange absorberait du bruit qui n'est pas de l'incertitude.
-    // Le guide Cardmarket est GLOBAL : ni par état, ni par langue (voir guide_prix).
-    prixLiveEtat: String,        // l'état sur lequel l'offre a été lue (NM, EX, GD…)
+    prixLiveEtat: String,        // l'état sur lequel l'offre a été lue (MT, NM, EX, GD, LP, PL, PO)
     prixLiveCodeLangue: Number,  // le code langue Cardmarket du filtre (1=EN, 2=FR, 7=JP…)
+    // Quand le retour est arrivé. Sert à mesurer le TAUX DE PERTE : l'extension tire sans
+    // attendre, une partie des retours se perdra, et on veut le connaître plutôt que le
+    // supposer. Une ligne sans `retourLe` est un scanId émis sans retour reçu.
+    retourLe: Date,
     // D'OÙ vient le prix de référence : 'guide-local' | 'tcgdex' | 'cache'. Sans lui,
     // un ratio aberrant serait indiscernable d'un simple repli sur une source moins
     // précise, et on tirerait un seuil d'une comparaison qui n'en est pas une.
@@ -385,12 +416,31 @@ function memeCode(a, b) {
  * Écrit une ligne de journal. FIRE-AND-FORGET : à appeler SANS await.
  *
  * @param {object} d  tout est optionnel ; les champs absents restent absents
- * @returns {void}    ne renvoie rien exprès, pour qu'aucun appelant ne soit tenté d'attendre
+ * @returns {string|null}  L'IDENTIFIANT DE LA LIGNE, connu AVANT son écriture.
+ *
+ * ⚠️ IL NE FAUT TOUJOURS PAS ATTENDRE CETTE FONCTION. Elle rend un identifiant, pas une
+ * promesse : l'écriture reste en fire-and-forget, hors du chemin critique. L'identifiant
+ * est fabriqué ici plutôt que relu après coup, précisément pour qu'on n'ait jamais besoin
+ * d'attendre l'écriture pour le connaître.
+ *
+ * POURQUOI IL EXISTE. Le prix LIVE Cardmarket ne peut pas arriver avec le scan :
+ * l'extension a besoin de l'idProduct — donc de la réponse — pour savoir quoi lire. Le
+ * renseigner exige un retour, et un retour exige de savoir À QUELLE LIGNE l'attacher.
+ * Sans cet identifiant, la seule façon de rapprocher un retour de son scan serait de
+ * deviner par (userId, horodatage), c'est-à-dire une jointure approximative sur la seule
+ * donnée qui doit rester exacte.
+ *
+ * `null` quand Mongo n'est pas connecté : il n'y aura pas de ligne, donc pas d'identifiant
+ * à promettre. Un identifiant rendu pour une ligne qui n'existe pas ferait échouer tous
+ * les retours, sans qu'on sache pourquoi.
  */
 function enregistrerScan(d = {}) {
     // Pas de connexion : on sort en silence. Le scan, lui, a pu aboutir (guide en
     // cache, repli TCGdex) — ce n'est pas à la statistique de le faire échouer.
-    if (mongoose.connection.readyState !== 1) return;
+    if (mongoose.connection.readyState !== 1) return null;
+
+    // L'identifiant est décidé ICI, avant l'écriture, et rendu à l'appelant.
+    const _id = new mongoose.Types.ObjectId();
 
     (async () => {
         let numeroGagnant = d.numeroGagnant ?? null;
@@ -420,6 +470,7 @@ function enregistrerScan(d = {}) {
             : null;
 
         await JournalScan.create({
+            _id,
             le: new Date(),
             route: d.route || null,
             userId: d.userId || null,
@@ -481,6 +532,7 @@ function enregistrerScan(d = {}) {
             fourchette: (d.fourchette && Number.isFinite(d.fourchette.min) && Number.isFinite(d.fourchette.max))
                 ? { min: d.fourchette.min, max: d.fourchette.max, n: Number.isFinite(d.fourchette.n) ? d.fourchette.n : null }
                 : null,
+            prixGuideRetenu: Number.isFinite(d.prixGuideRetenu) ? d.prixGuideRetenu : null,
             prixLive: Number.isFinite(d.prixLive) ? d.prixLive : null,
             prixLiveEtat: d.prixLiveEtat || null,
             prixLiveCodeLangue: Number.isFinite(d.prixLiveCodeLangue) ? d.prixLiveCodeLangue : null,
@@ -491,6 +543,8 @@ function enregistrerScan(d = {}) {
         // Trace, jamais de propagation. Un journal muet vaut mieux qu'un scan cassé.
         console.warn(`⚠️ [journal-scans] écriture impossible : ${e.message}`);
     });
+
+    return String(_id);
 }
 
 /**
