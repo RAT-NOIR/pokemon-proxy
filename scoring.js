@@ -160,6 +160,29 @@ function codesApparentes(a, b) {
  * région. Et elle n'a jamais servi : les quatre parentés réellement utilisées par la chaîne
  * (MCD~MCDP, DP5~DP5c, ADVE~ADVex1 ; E1~EC1 passe par l'alias) fonctionnent toutes sans
  * elle. Justifiée mais inexercée — ce qui n'est pas la même chose qu'injustifiée.
+ *
+ * ════════════════════════════════════════════════════════════════════════════
+ * ⚠️ ON SAIT MAINTENANT POURQUOI ELLE EST INEXERCÉE, ET CE N'EST PAS RASSURANT
+ * ════════════════════════════════════════════════════════════════════════════
+ * Diagnostiqué le 2026-08-12, sur un faux-et-affirmé en production.
+ * `trouverParSetCodeEtNumero` ne consulte les cousins qu'EN REPLI — `if (!exps.length)`,
+ * c'est-à-dire seulement quand la correspondance EXACTE ne rend rien. Or le cas d'usage
+ * principal de cette convention est exactement l'inverse : les Additionals d'un set dont
+ * le code de base correspond, lui, parfaitement.
+ *   Rayquaza « ASC » 153  ->  ASC(6395) trouvé exactement, 1 candidat, l'impression holo
+ *                             xASC(6455) contient les DEUX reverses, au même n°153,
+ *                             déjà en base avec source=cardmarket
+ * Le repli n'a donc jamais tourné, et les reverses sont restées invisibles. Prix affiché :
+ * 0,02 € pour une carte à 4,48 €, verdict AFFIRMÉ.
+ *
+ * DONC : « inexercée » ne voulait pas dire « inutile ». Ça voulait dire QU'ELLE N'EST PAS
+ * BRANCHÉE AU BON ENDROIT. Une clause juste, appelée à un moment où son cas ne peut pas
+ * se présenter, ressemble à du code mort et n'en est pas.
+ *
+ * ⚠️ ET LE PROBLÈME DÉPASSE LA REVERSE : les Additionals contiennent aussi des promos et
+ * des illustrations alternatives, toutes invisibles pour cette même raison. Chantier
+ * séparé — étendre le périmètre PARTOUT changerait l'identification sur tous les scans
+ * `setcode-numero` (17 lignes au journal du 2026-08-12), et doit être mesuré avant.
  */
 function memeCodeParConventionX(a, b) {
     if (!a || !b || a === b) return false;

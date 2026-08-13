@@ -185,6 +185,19 @@ const journalScanSchema = new mongoose.Schema({
     motifIA: String,        // ce que l'IA a rapporté : 'aucun'|'ball'|'masterball'|'reverse-classique'|'indetermine'
     motifCible: String,     // le motif RETENU par resoudreMotif — la sortie, à côté de son état
 
+    // ⚠️ LA LECTURE BRUTE DU « REVERSE », CAPTURÉE AVANT LE VALIDATEUR TCGdex.
+    // Elle est le premier des trois faits de la contradiction qu'on veut détecter :
+    //   l'IA lit reverse=true · TCGdex confirme qu'une reverse EXISTE · le produit retenu
+    //   n'en est PAS une
+    // Journaliser `cardInfo.reverse` au moment de l'écriture aurait enregistré la valeur
+    // d'APRÈS validation — le validateur l'écrase — donc un champ qui ment sans jamais se
+    // contredire. Voir sa capture dans /api/identifier.
+    reverseLu: Boolean,
+    // Le validateur a-t-il ANNULÉ cette lecture ? C'est le « choix silencieux » qu'on lui
+    // reproche : TCGdex gagne, la lecture de l'IA disparaît, et rien ne le déclarait.
+    // Compté ici en attendant de décider s'il doit poser une réserve.
+    reverseAnnuleeParTcgdex: Boolean,
+
     // COMMENT LIRE LE PRIX D'UNE REVERSE — 'filtre-url' | 'produit-distinct' | null.
     // ⚠️ ELLE PARTAIT DANS LA RÉPONSE ET N'ÉTAIT CONSERVÉE NULLE PART. Même dette que
     // `nomExact` et `raisonReserve` avant elle : une valeur de jonction, calculée à
@@ -553,6 +566,8 @@ function enregistrerScan(d = {}) {
             titreAnnonce: d.titreAnnonce ? String(d.titreAnnonce).slice(0, 200) : null,
             motifIA: d.motifIA || null,
             motifCible: d.motifCible || null,
+            reverseLu: d.reverseLu != null ? Boolean(d.reverseLu) : null,
+            reverseAnnuleeParTcgdex: d.reverseAnnuleeParTcgdex != null ? Boolean(d.reverseAnnuleeParTcgdex) : null,
             strategieReverse: d.strategieReverse || null,
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,

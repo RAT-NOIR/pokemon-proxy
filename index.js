@@ -3058,10 +3058,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // carte possède RÉELLEMENT une impression reverse. Neutralise les faux
         // positifs (une holo normale lue à tort comme reverse par l'IA). On ne
         // l'applique PAS si TCGdex s'est trompé de carte (variants d'une autre carte).
+        // ⚠️ LA LECTURE BRUTE EST CAPTURÉE AVANT LE VALIDATEUR, ET C'EST INDISPENSABLE.
+        // Le bloc ci-dessous ÉCRASE `cardInfo.reverse` quand TCGdex dit qu'aucune reverse
+        // n'existe. Journaliser `cardInfo.reverse` plus bas — au moment de l'écriture, à
+        // 800 lignes d'ici — enregistrerait donc la valeur d'APRÈS validation en croyant
+        // enregistrer ce que l'IA a lu. Le champ aurait menti sans jamais se contredire.
+        const reverseLu = cardInfo.reverse === true;
+        // Et l'annulation elle-même devient observable : c'est le « choix silencieux »
+        // qu'on reproche à ce validateur, et on ne pouvait pas le compter.
+        let reverseAnnuleeParTcgdex = false;
         if (cardInfo.reverse === true && !numeroContredit && trouvaille.variants) {
             if (trouvaille.variants.reverse === false) {
                 console.log(`↩️ TCGdex : pas de reverse connue pour cette carte -> on ignore le "reverse" lu par l'IA.`);
                 cardInfo.reverse = false;
+                reverseAnnuleeParTcgdex = true;
             } else if (trouvaille.variants.reverse === true) {
                 console.log(`✅ TCGdex confirme qu'une reverse existe pour cette carte.`);
             }
@@ -3937,6 +3947,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             titreAnnonce: title,
             motifIA: cardInfo.motif,
             motifCible: motifResolution.cible,
+            // ⚠️ `reverseLu` EST LA LECTURE BRUTE, capturée avant le validateur TCGdex —
+            // voir sa capture plus haut. Sans elle, la contradiction « l'IA lit reverse,
+            // TCGdex confirme qu'une reverse existe, le produit retenu n'en est pas une »
+            // n'est pas mesurable après coup : on ne saurait jamais ce que l'IA avait lu.
+            reverseLu,
+            reverseAnnuleeParTcgdex,
             // ⚠️ ELLE PART DANS LA RÉPONSE DEPUIS LE DÉBUT ET N'ÉTAIT PAS JOURNALISÉE.
             // Sans elle, aucune ligne du journal ne permet de sélectionner un scan passé
             // par la branche reverse : c'est ce qui a rendu impossible la cinquième
