@@ -362,6 +362,32 @@ function motifDuTitre(titre) {
     return null;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// CHANTIER À PART, NOTÉ ICI PARCE QUE C'EST ICI QU'ON LE CHERCHERA : LA 1re ÉDITION
+// ════════════════════════════════════════════════════════════════════════════
+// C'est le signal de titre le plus prometteur APRÈS « reverse », et il ne passe PAS par
+// cette fonction. `motifDuTitre` rend un MOTIF D'IMPRESSION, arbitré par `resoudreMotif`
+// contre les `variants_detailed` d'une même carte. La 1re édition est un autre axe : elle
+// ne désigne pas une autre impression du même produit, mais souvent un AUTRE PRODUIT dans
+// une AUTRE expansion Cardmarket. La router demanderait de toucher au choix du vivier,
+// pas au choix du motif.
+//
+// CE QU'ON A DÉJÀ POUR LE FAIRE : TCGdex expose `variants.firstEdition` (vu sur me02.5-153
+// et me02.5-090), et le vendeur l'écrit très souvent — « 1st Edition », « 1ère édition »,
+// « edition 1 », le tampon est le premier argument de vente d'une vintage.
+// CE QUE ÇA VAUT : sur le vintage l'écart de prix entre 1re et unlimited se compte en
+// dizaines de pourcents à plusieurs fois, bien au-dessus du bruit qu'on traque ailleurs.
+//
+// ⚠️ NE PAS L'AJOUTER À `motifDuTitre` PAR COMMODITÉ. Le glisser dans l'énumération des
+// motifs le ferait arbitrer contre `parMotif`, qui ne le contient pas — il serait donc
+// systématiquement « non disponible », et le veto du catalogue l'écarterait en silence.
+// Un signal qu'on croit brancher et qui ne peut structurellement jamais tirer est pire
+// que pas de signal : voir `strategieReverse`, resté nul pendant deux semaines.
+//
+// ⚠️ NON MESURÉ : on ne sait pas sur quelle fraction des annonces vintage le tampon est
+// annoncé au titre, ni à quelle fréquence il est FAUX. À mesurer sur `titreAnnonce`
+// (journalisé depuis le 2026-08-12) avant d'écrire quoi que ce soit.
+
 /**
  * Arbitre entre ce que l'IA a vu, ce que le titre annonce et ce que la carte POSSÈDE,
  * puis renvoie les produits à viser.
