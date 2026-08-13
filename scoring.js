@@ -935,6 +935,36 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // etoile ». Une règle explicite vaut mieux qu'un synonyme retiré.
 
 // ============================================================================
+// LE SEPTIÈME PRINCIPE — un instrument qui se trompe coûte plus cher qu'un bug
+// ============================================================================
+// PARCE QU'IL ENVOIE CORRIGER LÀ OÙ IL N'Y A RIEN. Un défaut de production fait une
+// mauvaise réponse ; un défaut d'INSTRUMENT fait travailler une semaine sur un problème
+// qui n'existe pas, et détourne du vrai. Le coût n'est pas du même ordre.
+//
+// LA SEMAINE OÙ ON L'A COMPRIS — cinq fois, et à chaque fois le produit allait MIEUX
+// qu'on ne le croyait, ou le défaut était ailleurs :
+//   1. le BANC tirait sa vérité du système mesuré : il ne pouvait que se donner raison.
+//   2. les VIVIERS étaient reconstruits autrement que par la chaîne, donc on mesurait
+//      une chaîne qui n'existait pas.
+//   3. l'objet `scoring` FABRIQUÉ À LA MAIN dans un test avait trois fonctions sur
+//      quatre : 52 assertions vertes certifiaient un appel qui tuait la production.
+//   4. le « 3-0 » du vivier n'existait pas : la comparaison ignorait les REPLIS de la
+//      route, qui rattrapaient deux des trois cas.
+//   5. la ROUTE DE LANGUE : un outil interrogeait /v2/en pour une carte japonaise et
+//      comparait Ninetales à Bonsly. La conclusion — « une classe entière de reverses
+//      japonaises est hors d'atteinte » — était fausse, et allait faire écrire un pont
+//      de code inutile.
+//
+// CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
+//   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
+//   - il doit APPELER le code de production, jamais le réimplémenter — une simulation
+//     qui « vérifie » un chemin que la production n'emprunte pas ne prouve rien ;
+//   - il doit porter sa propre SONDE D'AUTO-CONTRÔLE : dire ce qu'il n'a pas pu mesurer,
+//     refuser de conclure sous l'échantillon, et nommer la base qu'il lit ;
+//   - et quand il se trompe, l'incident s'écrit LÀ OÙ IL S'EST PRODUIT, pas seulement
+//     dans un rapport — voir l'en-tête de mesure-route-langue.js.
+
+// ============================================================================
 // LE QUATRIÈME PRINCIPE — contredire prouve, ne pas lire ne prouve rien
 // ============================================================================
 // C'est le MIROIR du premier, et il se trompe dans l'autre sens. Le premier dit qu'une
