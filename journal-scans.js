@@ -213,6 +213,16 @@ const journalScanSchema = new mongoose.Schema({
     // d'identifiants `ja` et `en` sont DISJOINTS — mesuré le 2026-08-14. Une carte trouvée
     // en [ja] a donc des variantes NULLES, pas des variantes fausses.
     langueRoute: String,
+    // ⚠️ L'IDENTIFIANT DE LA CARTE TCGdex RETENUE — à ne pas confondre avec `setTcgdex`
+    // plus bas, qui est celui de l'EXPANSION et qui vient de NOS liens appris, pas de
+    // TCGdex. Les confondre a produit une mesure entièrement fausse le 2026-08-13 :
+    // `mesure-route-langue.js` reconstruisait un identifiant de carte en collant
+    // `setTcgdex` et le numéro lu, puis concluait « la route japonaise est muette 13 fois
+    // sur 14 ». Elle interrogeait des identifiants qui n'avaient jamais été rendus par
+    // TCGdex. Sans ce champ, on ne peut ni rejouer une route, ni savoir quelle carte a
+    // réellement servi — septième principe, un instrument qui se trompe coûte plus cher
+    // qu'un bug.
+    carteTcgdexId: String,
     // Le champ `variants_detailed` est-il revenu, et avec combien d'impressions ?
     // Présence et vacuité sont DEUX faits distincts : un tableau vide dit « aucune
     // impression routable pour cette carte », un champ absent dit « je n'ai pas pu
@@ -593,6 +603,7 @@ function enregistrerScan(d = {}) {
             // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,
+            carteTcgdexId: d.carteTcgdexId || null,
             variantsDetailedPresent: d.variantsDetailedPresent != null ? Boolean(d.variantsDetailedPresent) : null,
             // Number.isFinite et non `|| null` : 0 est une valeur SIGNIFIANTE ici (le champ
             // est revenu vide), et `0 || null` l'effacerait en la confondant avec l'absence.

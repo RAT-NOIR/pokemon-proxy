@@ -23,9 +23,36 @@
 // croyait, ou le défaut était ailleurs.
 //
 // ============================================================================
-// CE QUE CET OUTIL MESURE : la production tombe-t-elle dans le même piège ?
+// ⛔ CET OUTIL EST RETIRÉ — SA CONCLUSION ÉTAIT FAUSSE (2026-08-14)
 // ============================================================================
-// USAGE : node mesure-route-langue.js --base=<nom>
+// IL A PRODUIT : « la route de langue est MUETTE 13 fois sur 14 ». C'EST FAUX, et le
+// défaut est dans l'outil, pas dans la production.
+//
+// CE QU'IL CROYAIT FAIRE : rejouer, pour des cartes réellement identifiées, la carte
+// TCGdex retenue sur sa route de langue et sur /v2/en.
+// CE QU'IL FAISAIT : fabriquer un identifiant de carte en collant `l.setTcgdex` et le
+// numéro lu, zéro-comblé à trois chiffres. Or `setTcgdex` est l'identifiant de
+// l'EXPANSION, et il vient de NOS LIENS APPRIS (`lienGagnant.setTcgdex`, dérivé de la
+// collection numeros_cartes) — pas de TCGdex, et pas de la carte retenue. Les
+// identifiants interrogés n'avaient donc jamais été rendus par TCGdex : leur muteté ne
+// dit rien du tout, et surtout rien de la route.
+// S'ajoutait un second défaut : le zéro-comblage à 3 chiffres, qui construit « 009 » là
+// où un set occidental écrit « 9 ».
+//
+// LE FAIT QUI L'ANNULE, mesuré en direct le 2026-08-14 sur 6 identifiants VRAIS : les
+// espaces d'identifiants /v2/ja et /v2/en sont DISJOINTS — un identifiant répond sur une
+// route et se tait sur l'autre. Un identifiant fabriqué ne répond nulle part.
+//
+// POURQUOI JE NE LE SUPPRIME PAS : la discipline en tête de fichier reste juste et a été
+// écrite avant l'incident. C'est l'outil qui l'a enfreinte. Le laisser retiré et daté
+// vaut mieux que de l'effacer — un outil supprimé ne prévient personne.
+//
+// CE QUI LE REMPLACE : `carteTcgdexId` et `langueRoute` au journal (16ff3a6 et suivant).
+// La question devient directement lisible, sans reconstruire quoi que ce soit. La mesure
+// ne pourra porter que sur les scans POSTÉRIEURS à leur mise en production.
+//
+// ============================================================================
+// USAGE : node mesure-route-langue.js --base=<nom>   (⛔ ne pas s'appuyer sur sa sortie)
 require('dotenv').config();
 const BASE = process.argv.find(a => a.startsWith('--base='))?.split('=')[1];
 if (!BASE) { console.error('❌ --base=<nom> obligatoire'); process.exit(1); }

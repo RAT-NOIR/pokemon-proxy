@@ -4149,6 +4149,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // ⚠️ `null` = TCGdex muet (identification locale ou setcode+numéro), à ne pas
             // confondre avec 'en'. Trois états, pas deux.
             langueRoute: trouvaille.langueRoute ?? null,
+            // ⚠️ LA CARTE, pas l'expansion. `setTcgdex` plus bas vient de nos liens appris ;
+            // celui-ci est l'identifiant que TCGdex a réellement rendu. Sans lui, aucune
+            // route n'est rejouable — voir la note du champ dans journal-scans.js.
+            carteTcgdexId: trouvaille.id ?? null,
             // Présence = le champ est revenu sous forme de tableau. Vacuité = il est revenu
             // VIDE, ce qui n'est pas la même chose et ne se déduit pas de la présence :
             // un tableau vide dit « cette carte n'a aucune impression routable », un champ
