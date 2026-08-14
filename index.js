@@ -882,16 +882,50 @@ async function setsPourTotal(totalImprime, langue = null) {
 
 const setIdDeCarte = idCarte => (idCarte && idCarte.includes('-')) ? idCarte.slice(0, idCarte.lastIndexOf('-')) : null;
 
+// ════════════════════════════════════════════════════════════════════════════
+// LA ROUTE DU DÉTAIL EST FIXE, ET CE N'EST PAS CELLE DE LA RECHERCHE
+// ════════════════════════════════════════════════════════════════════════════
+// `detailCarteTCGdex` interroge TOUJOURS /v2/en, quelle que soit la route sur laquelle
+// la carte a été TROUVÉE. Les deux ne coïncident que sur les cartes occidentales.
+//
+// ⚠️ ET LES ESPACES D'IDENTIFIANTS SONT DISJOINTS — mesuré en direct le 2026-08-14 sur
+// 6 identifiants (sonde live, pas de fixture) :
+//     sv3-110    [ja] キュウコン (黒炎の支配者)    [en] MUET
+//     sv1a-001   [ja] トロピウス                  [en] MUET
+//     me02.5-153 [ja] MUET                       [en] Rayquaza · reverse: true
+//   même carte sur les deux routes : 0   ·   deux cartes différentes : 0
+// Un identifiant répond sur UNE route et se tait sur l'autre. Donc pour une carte
+// résolue sur la route `ja`, cet appel ne rend pas UNE MAUVAISE CARTE : il ne rend RIEN.
+// `nomExact`, `variants` et `variantsDetailed` sortent tous les trois à null, et avec eux
+// le validateur de reverse et le routage de motif — en silence, sans se contredire.
+//
+// C'est le DEUXIÈME PRINCIPE (voir scoring.js) : deux sources de vérité — la route qui
+// trouve, la route qui détaille — divergent sans qu'aucun signal ne le dise.
+//
+// ⚠️ CE QUI N'EST PAS MESURÉ : la FRÉQUENCE. La sonde établit que les espaces sont
+// disjoints, sur 6 identifiants dont 4 choisis à la main. Elle ne dit pas combien de
+// scans réels tombent dedans — c'est `langueRoute` + `variantsDetailedPresent` au
+// journal qui le diront, et rien ne doit être décidé avant.
+//
+// ⚠️ NE PAS « CORRIGER » EN PASSANT LA ROUTE ICI SANS MESURER D'ABORD. Le nom rendu par
+// /v2/ja est en kana, et `nomPourLeCatalogue` le rejette au profit du nom lu par l'IA :
+// aligner la route changerait donc l'identification japonaise, pas seulement le routage
+// des reverses. C'est un chantier à part, et il a son avertissement — on ne casse pas un
+// correcteur accidentel en croyant supprimer un défaut.
+const ROUTE_DU_DETAIL = 'en';
+
 /**
  * Détail d'une carte TCGdex : nom ANGLAIS + variantes. Un seul appel, deux usages.
  * Le nom trouvé peut être dans la langue de recherche (ex: français) alors que le
  * catalogue Cardmarket est en anglais — d'où la récupération par l'id, universel.
  * `variants_detailed` vient de la MÊME réponse : c'est la table de routage des motifs
  * de reverse (motif -> idProduct Cardmarket), obtenue sans requête supplémentaire.
+ *
+ * ⚠️ Toujours sur ROUTE_DU_DETAIL — voir le bloc juste au-dessus pour ce que ça coûte.
  */
 async function detailCarteTCGdex(idCarte, nomTrouve = null) {
     try {
-        const r = await axios.get(`https://api.tcgdex.net/v2/en/cards/${encodeURIComponent(idCarte)}`, { timeout: 15000 });
+        const r = await axios.get(`https://api.tcgdex.net/v2/${ROUTE_DU_DETAIL}/cards/${encodeURIComponent(idCarte)}`, { timeout: 15000 });
         const nomExact = r.data?.name || null;
         if (nomExact && nomTrouve && nomExact !== nomTrouve) {
             console.log(`🔤 Nom anglais récupéré : "${nomExact}" (trouvé en "${nomTrouve}").`);
@@ -1061,6 +1095,21 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         const langueCarte = langueVersTCGdex(langue);
         const languesAEssayer = langueCarte === 'en' ? ['en'] : [langueCarte, 'en'];
 
+        // ════════════════════════════════════════════════════════════════════
+        // QUELLE ROUTE A RÉELLEMENT TROUVÉ LA CARTE
+        // ════════════════════════════════════════════════════════════════════
+        // Le repli ci-dessus est SILENCIEUX : une carte japonaise introuvable en [ja] est
+        // cherchée en [en], et rien en aval ne distingue les deux cas. Trois questions
+        // qu'on ne pouvait pas poser faute de ce champ :
+        //   - la muteté de la route japonaise est-elle subie ou auto-infligée ? (répondue :
+        //     subie — `nomBrut` est en kana sur 128/135 lignes)
+        //   - combien d'identifications japonaises JUSTES passent par une carte occidentale
+        //     ramenée par le repli, donc par une carte qui n'est pas la leur ?
+        //   - le repli apporte-t-il quelque chose ? On ne retire pas un correcteur
+        //     accidentel avant d'avoir mesuré ce qu'il corrige.
+        // Une ligne au journal débloque les trois. Elle ne change AUCUN comportement.
+        let langueRoute = null;
+
         // ⚠️ LE NOM BRUT SUR LA ROUTE NON ANGLAISE. TCGdex stocke ses noms DANS la langue
         // interrogée : /v2/ja rend « ライドン », pas « Rhydon ». Interroger cette route avec
         // le nom translittéré par l'IA ne pouvait donc rien rendre, et la chaîne basculait
@@ -1091,6 +1140,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                 }
                 if (resultats.length > 0) {
                     nomUtilise = variante;
+                    langueRoute = langApi;
                     if (langApi !== 'en' || variante !== name) console.log(`ℹ️ TCGdex : trouvé via "${variante}" en [${langApi}] (recherche initiale "${name}").`);
                     break;
                 }
@@ -1110,6 +1160,7 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                         const matchNum = numLu ? parNom.filter(c => String(c.localId).replace(/^0+/, '') === numLu) : [];
                         resultats = matchNum.length > 0 ? matchNum : parNom;
                         nomUtilise = variante;
+                        langueRoute = langApi;
                         console.log(`ℹ️ TCGdex : trouvé par nom seul via "${variante}" en [${langApi}] (${resultats.length} résultat(s)).`);
                         break;
                     }
@@ -1155,7 +1206,11 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
                     nomExact: nomPourLeCatalogue(detail.nomExact, parTotal.nom, name),
                     localId: parTotal.localId || number,
                     variants: detail.variants, variantsDetailed: detail.variantsDetailed,
-                    source: 'total+numero'   // le nom lu est écarté, il ne sert plus à rien en aval
+                    source: 'total+numero',   // le nom lu est écarté, il ne sert plus à rien en aval
+                    // Ce chemin ne cherche PAS par nom : sa route est celle du catalogue de
+                    // SETS (`langueDesSetsTCGdex`), qui ne connaît que 'ja' et 'en'. On
+                    // journalise la route réellement empruntée, pas celle qu'on aurait prise.
+                    langueRoute: langueDesSetsTCGdex(langue)
                 };
             }
             // ⚠️ FILET : le total est une PRÉFÉRENCE, jamais un veto qui fait tout perdre.
@@ -1264,7 +1319,12 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         return {
             id: choisi.id, ambigu, nomExact, localId: choisi.localId || number,
             variants: detail.variants, variantsDetailed: detail.variantsDetailed,
-            source: 'nom'
+            source: 'nom',
+            // ⚠️ La route qui a TROUVÉ, pas celle qui a DÉTAILLÉ. `variants` ci-dessus vient
+            // de ROUTE_DU_DETAIL ('en') dans tous les cas — voir le bloc de
+            // detailCarteTCGdex. Quand `langueRoute` n'est pas 'en', les deux champs
+            // décrivent des routes différentes, et `variants` est probablement nul.
+            langueRoute
         };
 
     } catch (e) {
@@ -2901,7 +2961,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille = {
                 id: null, localId: null, variants: null, variantsDetailed: null,
                 nomExact: String(gagnant.name || '').split('[')[0].trim(),
-                source: 'setcode-numero', ambigu: true
+                source: 'setcode-numero', ambigu: true,
+                // TCGdex est muet : AUCUNE route n'a trouvé. `null` et non 'en' — ne pas
+                // confondre « pas de route » avec « la route anglaise ».
+                langueRoute: null
             };
         } else if (!trouvaille) {
             const local = await identifierEnLocal({
@@ -2935,7 +2998,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // par le chemin local : sur une carte sans impression reverse (toutes
                     // les e-Series, mesuré sur 521 produits), n'avoir pas routé le motif ne
                     // coûte rien. Marquer douteux un prix juste use le drapeau pour rien.
-                    ambigu: local.incertain
+                    ambigu: local.incertain,
+                    // Identification 100 % locale : TCGdex n'a été d'aucun secours, aucune
+                    // route n'a abouti. Voir la note de l'autre trouvaille synthétique.
+                    langueRoute: null
                 };
             } else {
                 // Deux motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
@@ -3605,6 +3671,108 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             console.warn(`⚠️ [lien-tcgdex-partage] l'expansion ${classement[0].idExpansion} partage l'identifiant « ${lienGagnant.setTcgdex} » avec ${lienGagnant.autres.join(', ')} et n'est pas dans la table close -> ambiguïté déclarée, aucun verdict affirmé.`);
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // CONTRADICTION A -> CORRECTION B — l'impression retenue n'est pas celle lue
+        // ════════════════════════════════════════════════════════════════════
+        // LE CAS QUI L'A MOTIVÉE. Rayquaza me02.5-153, occidentale moderne, sortie FAUSSE
+        // ET AFFIRMÉE : l'annonce dit reverse, TCGdex confirme qu'une reverse existe, et le
+        // produit retenu est l'impression NORMALE. Le motif n'a même pas été consulté — la
+        // chaîne avait tranché par setcode+numéro bien avant. Une réserve n'aurait rien
+        // signalé, parce qu'aucune n'était levée.
+        //
+        // A EST UNE CONTRADICTION, PAS UN SILENCE. Quatrième principe : contredire prouve,
+        // ne pas lire ne prouve rien. Les trois faits doivent être POSITIFS —
+        //   1. l'impression VOULUE est une reverse : l'IA l'a lue (avant le validateur,
+        //      d'où `reverseLu`) OU le titre de l'annonce le dit ;
+        //   2. TCGdex ROUTE une reverse pour cette carte : `variants_detailed` donne au
+        //      moins un idProduct de reverse. Pas « variants.reverse === true », qui dit
+        //      seulement qu'elle existe quelque part — ici il faut de quoi la désigner ;
+        //   3. TCGdex désigne le produit RETENU comme l'impression NON reverse. C'est une
+        //      appartenance à `parMotif['aucun']`, pas une absence de la liste des reverses :
+        //      un produit inconnu de la table ne prouve rien (premier principe).
+        //
+        // ⚠️ 4. ET LA CONDITION DE ROUTE — c'est elle qui empêche la garde de se tromper.
+        // Les faits 2 et 3 sortent tous les deux de `variantsDetailed`, donc de
+        // ROUTE_DU_DETAIL ('en'), JAMAIS de la route qui a trouvé la carte. Les espaces
+        // d'identifiants `ja` et `en` étant disjoints (mesuré, voir detailCarteTCGdex),
+        // une carte trouvée en [ja] a des `variantsDetailed` nuls : la garde ne pourrait
+        // que se taire. On l'écrit quand même explicitement, parce qu'un garde qui tient
+        // par une coïncidence de nullité tombe le jour où TCGdex remplit la route `ja`.
+        //
+        // ⚠️ CE QUE `langueRoute` NE DIT PAS, et il faut le lire avant de s'appuyer dessus :
+        // une carte trouvée par la route de sa langue reste une carte trouvée PAR RECHERCHE
+        // DE NOM. Elle peut donc être la mauvaise carte de la BONNE langue — c'est
+        // exactement « Dark Ursaring » lu juste et rendu `neo4-097` = « Dark Porygon2 ».
+        // La route élimine UN mode d'erreur (la carte d'une autre région), pas tous.
+        //
+        // B = LA CORRECTION, ET ELLE NE DEVINE RIEN. Les idProducts des impressions reverse
+        // sont DÉJÀ dans `variantsDetailed` : B va simplement les chercher au catalogue. Ce
+        // n'est pas un élargissement de périmètre, c'est une lecture d'une table qu'on avait
+        // sous la main et qu'on ne consultait pas sur ce chemin.
+        //
+        // TROIS SORTIES, ET AUCUNE N'AFFIRME :
+        //   3a `impression-corrigee`  — B trouve UNE reverse au catalogue -> on la substitue.
+        //   3b `impression-contredite` — B ne trouve rien, OU en trouve plusieurs et rien ne
+        //      les départage. Le produit retenu ne bouge pas, mais la contradiction est
+        //      déclarée. Une égalité n'est pas un verdict, ici comme ailleurs.
+        // Les deux partent en réserve FAIBLE : dans un cas on vient de changer de produit
+        // sur la foi d'une table, dans l'autre on sait qu'on affiche probablement la
+        // mauvaise impression. Ni l'un ni l'autre n'autorise à quasi-affirmer.
+        let impressionCorrigee = false, impressionContredite = false;
+        {
+            const analyseA = analyserVariantes(trouvaille.variantsDetailed);
+            const idGagnant = classement[0]?.idProduct;
+            const routeDuFait = trouvaille.langueRoute === ROUTE_DU_DETAIL;
+            // Fait 1 — deux sources, l'une suffit. `reverseLu` est la lecture BRUTE de l'IA,
+            // capturée avant le validateur ; `motifDuTitre` lit le titre de l'annonce, qui
+            // est écrit par le vendeur et ne passe par aucun modèle.
+            const motifTitre = motifDuTitre(title);
+            const reverseVoulue = reverseLu === true || (motifTitre != null && motifTitre !== 'aucun');
+            // Fait 2 — des reverses ROUTABLES, et pas celle qu'on tient déjà.
+            const ciblesReverse = [...new Set([
+                ...analyseA.parMotif['reverse-classique'],
+                ...analyseA.parMotif['ball'],
+                ...analyseA.parMotif['masterball']
+            ])].filter(id => id != null && id !== idGagnant);
+            // Fait 3 — appartenance POSITIVE à la classe non-reverse.
+            const gagnantEstNonReverse = idGagnant != null && analyseA.parMotif['aucun'].includes(idGagnant);
+
+            if (routeDuFait && reverseVoulue && ciblesReverse.length && gagnantEstNonReverse) {
+                console.warn(
+                    `⚠️ [impression-contredite] reverse voulue (ia=${reverseLu} titre=${motifTitre ?? '—'})` +
+                    ` mais le gagnant ${idGagnant} est l'impression NON reverse de ${trouvaille.id}.` +
+                    ` Reverses routables : ${ciblesReverse.join(', ')}.`
+                );
+                // B — on ne les invente pas, on les lit au catalogue.
+                const trouvesAuCatalogue = await CatalogueProduit.find({ idProduct: { $in: ciblesReverse } }).lean();
+                const utilisables = ecarterNonCartes(trouvesAuCatalogue, `[impression] reverses de ${trouvaille.id}`);
+                if (utilisables.length === 1) {
+                    const remplacant = utilisables[0];
+                    impressionCorrigee = true;
+                    strategieReverse = analyseA.strategieParIdProduct.get(remplacant.idProduct) ?? null;
+                    // Le remplaçant prend la tête ; l'ancien gagnant reste dans le classement,
+                    // derrière, parce que l'extension teste dans l'ordre et qu'il reste un
+                    // repli valable si la reverse n'a pas d'offre.
+                    classement = [
+                        {
+                            idProduct: remplacant.idProduct, idExpansion: remplacant.idExpansion,
+                            score: classement[0].score, strategie: strategieReverse,
+                            detail: 'impression-corrigee'
+                        },
+                        ...classement
+                    ];
+                    if (!produits.some(p => p.idProduct === remplacant.idProduct)) produits = [remplacant, ...produits];
+                    console.warn(`♻️ [impression-corrigee] ${idGagnant} -> ${remplacant.idProduct} "${String(remplacant.name).split('[')[0].trim()}" (stratégie ${strategieReverse ?? 'inconnue'}).`);
+                } else {
+                    impressionContredite = true;
+                    console.warn(
+                        `🚧 [impression-contredite] ${utilisables.length === 0 ? 'aucune' : utilisables.length} reverse(s) au catalogue` +
+                        ` -> le produit retenu ne bouge pas, la contradiction est déclarée.`
+                    );
+                }
+            }
+        }
+
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
         const gagnantContreditNumero = rangsScoring?.rangGagnant === 3;
 
@@ -3614,6 +3782,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
+            // Les deux sorties de la contradiction A. `impression-corrigee` est incertaine
+            // parce qu'on vient de CHANGER de produit sur la foi d'une table ;
+            // `impression-contredite` parce qu'on sait afficher probablement la mauvaise
+            // impression et qu'on n'a pas su faire mieux. Voir le bloc A -> B plus haut.
+            || impressionCorrigee || impressionContredite
             // Le périmètre restreint sans prouver : sa sortie est une suggestion, pas un
             // verdict. Arbitrage explicite, à ne pas lever avant que le banc le justifie.
             || perimetreVintage
@@ -3696,7 +3869,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // d'ordre — exactement comme les 7 lignes lues sous l'ancien prompt ne s'ajoutent
         // pas aux 28 lues sous le nouveau. Deux instruments, deux mesures.
         // Le jour où l'ordre change : le noter ici avec sa date, et repartir d'un lot neuf.
+        // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-08-14. Deux entrées ajoutées EN TÊTE :
+        // `impression-corrigee` et `impression-contredite`. Elles passent devant
+        // `symbole-departage` par la RÈGLE 1 : quand B a substitué le produit, le départage
+        // par symbole portait sur un gagnant qui n'est plus le gagnant — sa prémisse est
+        // sapée, pas seulement moins spécifique. Les lignes déjà au journal gardent leur
+        // ancienne étiquette ; les statistiques par raison ne sont pas additionnables de
+        // part et d'autre de cette date pour les scans qui déclenchent la contradiction A.
         const raisonReserve = !carteAmbigue ? null
+            : impressionCorrigee ? 'impression-corrigee'
+            : impressionContredite ? 'impression-contredite'
             : departageParSymbole ? 'symbole-departage'
                 : perimetreVintage ? 'perimetre-vintage-suggestion'
                     : lienAmbigu ? 'lien-tcgdex-partage'
@@ -3753,7 +3935,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             'nom-confiance-basse': 'faible',
             'identification-locale-sans-tcgdex': 'faible',
             'lien-tcgdex-partage': 'faible',
-            'tcgdex-ambigu': 'faible'
+            'tcgdex-ambigu': 'faible',
+            // Les deux sorties de la contradiction A — FAIBLES par construction, et elles
+            // le resteront tant qu'un lot n'aura pas mesuré leur justesse. Zéro ligne au
+            // journal aujourd'hui : ce sont des classes NEUVES, pas des classes tièdes.
+            'impression-corrigee': 'faible',     // non mesurée — B vient de changer le produit
+            'impression-contredite': 'faible'    // non mesurée — on sait qu'on affiche peut-être la mauvaise impression
         };
         // Défaut FAIBLE pour toute raison non listée — y compris `motif-<raison>`, qui est
         // construite dynamiquement. Ici le défaut est sûr : c'est le serveur qui décide, et
@@ -3953,6 +4140,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // n'est pas mesurable après coup : on ne saurait jamais ce que l'IA avait lu.
             reverseLu,
             reverseAnnuleeParTcgdex,
+            // ⚠️ LA ROUTE QUI A TROUVÉ, ET CE QU'ELLE A RAPPORTÉ — les deux ensemble, jamais
+            // l'une sans l'autre. `langueRoute` dit d'où vient la CARTE ; les deux champs
+            // suivants disent si elle portait l'INFORMATION dont la garde A a besoin. Savoir
+            // qu'une carte vient de [ja] sans savoir que ses `variantsDetailed` sont vides
+            // ne permet de conclure ni sur la portée de la garde, ni sur ce que le repli
+            // apporte réellement. C'est la combinaison qui mesure, pas la route seule.
+            // ⚠️ `null` = TCGdex muet (identification locale ou setcode+numéro), à ne pas
+            // confondre avec 'en'. Trois états, pas deux.
+            langueRoute: trouvaille.langueRoute ?? null,
+            // Présence = le champ est revenu sous forme de tableau. Vacuité = il est revenu
+            // VIDE, ce qui n'est pas la même chose et ne se déduit pas de la présence :
+            // un tableau vide dit « cette carte n'a aucune impression routable », un champ
+            // absent dit « je n'ai pas pu demander ». Premier principe.
+            variantsDetailedPresent: Array.isArray(trouvaille.variantsDetailed),
+            variantsDetailedNb: Array.isArray(trouvaille.variantsDetailed) ? trouvaille.variantsDetailed.length : null,
             // ⚠️ ELLE PART DANS LA RÉPONSE DEPUIS LE DÉBUT ET N'ÉTAIT PAS JOURNALISÉE.
             // Sans elle, aucune ligne du journal ne permet de sélectionner un scan passé
             // par la branche reverse : c'est ce qui a rendu impossible la cinquième

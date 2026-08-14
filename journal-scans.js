@@ -198,6 +198,28 @@ const journalScanSchema = new mongoose.Schema({
     // Compté ici en attendant de décider s'il doit poser une réserve.
     reverseAnnuleeParTcgdex: Boolean,
 
+    // ════════════════════════════════════════════════════════════════════════
+    // LA ROUTE TCGdex QUI A TROUVÉ LA CARTE, ET CE QU'ELLE A RAPPORTÉ
+    // ════════════════════════════════════════════════════════════════════════
+    // 'en' | 'ja' | 'fr' | ... | null (TCGdex muet : identification locale ou setcode+numéro).
+    // Le repli de langue est SILENCIEUX : une carte japonaise introuvable en [ja] est
+    // cherchée en [en], et rien ne distinguait les deux cas après coup. Trois questions
+    // restaient donc sans réponse possible — combien d'identifications japonaises passent
+    // par une carte occidentale ramenée par le repli, ce que ce repli apporte vraiment, et
+    // sur quelle population la garde A peut s'appliquer.
+    //
+    // ⚠️ NE PAS LIRE `langueRoute` COMME LA ROUTE DE `variants`. Le détail d'une carte est
+    // TOUJOURS pris sur /v2/en (voir ROUTE_DU_DETAIL dans index.js), et les espaces
+    // d'identifiants `ja` et `en` sont DISJOINTS — mesuré le 2026-08-14. Une carte trouvée
+    // en [ja] a donc des variantes NULLES, pas des variantes fausses.
+    langueRoute: String,
+    // Le champ `variants_detailed` est-il revenu, et avec combien d'impressions ?
+    // Présence et vacuité sont DEUX faits distincts : un tableau vide dit « aucune
+    // impression routable pour cette carte », un champ absent dit « je n'ai pas pu
+    // demander ». Les confondre reviendrait à lire un silence comme une négation.
+    variantsDetailedPresent: Boolean,
+    variantsDetailedNb: Number,
+
     // COMMENT LIRE LE PRIX D'UNE REVERSE — 'filtre-url' | 'produit-distinct' | null.
     // ⚠️ ELLE PARTAIT DANS LA RÉPONSE ET N'ÉTAIT CONSERVÉE NULLE PART. Même dette que
     // `nomExact` et `raisonReserve` avant elle : une valeur de jonction, calculée à
@@ -568,6 +590,13 @@ function enregistrerScan(d = {}) {
             motifCible: d.motifCible || null,
             reverseLu: d.reverseLu != null ? Boolean(d.reverseLu) : null,
             reverseAnnuleeParTcgdex: d.reverseAnnuleeParTcgdex != null ? Boolean(d.reverseAnnuleeParTcgdex) : null,
+            // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
+            // ferait passer une identification 100 % locale pour une identification anglaise.
+            langueRoute: d.langueRoute || null,
+            variantsDetailedPresent: d.variantsDetailedPresent != null ? Boolean(d.variantsDetailedPresent) : null,
+            // Number.isFinite et non `|| null` : 0 est une valeur SIGNIFIANTE ici (le champ
+            // est revenu vide), et `0 || null` l'effacerait en la confondant avec l'absence.
+            variantsDetailedNb: Number.isFinite(d.variantsDetailedNb) ? d.variantsDetailedNb : null,
             strategieReverse: d.strategieReverse || null,
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,
