@@ -761,16 +761,77 @@ function langueVersTCGdex(langue) {
     return map[(langue || 'EN').toUpperCase()] || 'en';
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// UNE PANNE N'EST PAS UNE ABSENCE — ET LA CONFUSION A COÛTÉ DEUX SCANS
+// ════════════════════════════════════════════════════════════════════════════
+// LE CAS RÉEL, 2026-08-15. Deux cartes japonaises du même set, 17 secondes d'écart :
+// « Abra » 11:47:29 et « Dark Kadabra » 11:47:46, toutes deux sorties en
+// `carte-introuvable` — « ni sur TCGdex ni dans le catalogue local ». Or TCGdex les
+// connaît : /v2/ja rend PMCG4-034 et PMCG4-008, vérifié. Les scans qui encadrent, à
+// 11:41 et 11:54, sont passés. Ce n'était pas une absence, c'était le réseau.
+//
+// CE QUI L'A RENDU INVISIBLE : `trouverCarteTCGdex` avalait TOUTE exception dans son
+// catch final et rendait `null` — la même valeur que « zéro résultat ». Deux états du
+// monde radicalement différents, une seule valeur pour les dire.
+//
+// DEUX CONSÉQUENCES, ET LA SECONDE EST LA PIRE :
+//   - L'AFFICHAGE. `NATURE_REFUS['carte-introuvable']` vaut 'refus-delibere' : une panne
+//     réseau sortait donc en doré, dans la couleur qui affirme que la chaîne a
+//     fonctionné. C'est exactement l'inversion que cette table a été écrite pour
+//     empêcher, et elle s'est produite au premier cas réel.
+//   - LA MESURE. Tant que les deux se confondent, TOUTE statistique de
+//     `carte-introuvable` est suspecte — y compris celles sur lesquelles on s'est déjà
+//     appuyés. Une panne qu'on ne sait pas distinguer d'une absence est une panne qu'on
+//     ne saura jamais mesurer.
+//
+// LA LIGNE DE PARTAGE, ET ELLE EST CONSERVATRICE. Est une PANNE : toute erreur sans
+// réponse HTTP (DNS, connexion coupée, timeout), plus les 429 et les 5xx — le serveur a
+// parlé, mais pour dire qu'il ne peut pas servir. N'est PAS une panne : une réponse
+// propre, 404 compris. Un 404 sur une recherche par nom veut dire « je n'ai rien », et
+// c'est une information, pas un incident.
+// ⚠️ EN CAS DE DOUTE ON CLASSE EN PANNE (le `return true` final), parce que les deux
+// erreurs ne coûtent pas la même chose : traiter une absence comme une panne fait perdre
+// un repli et rembourse ; traiter une panne comme une absence fabrique un verdict faux.
+function estUnePanneReseau(e) {
+    if (!e) return false;
+    if (e.response) {
+        const s = e.response.status;
+        return s === 429 || s >= 500;
+    }
+    return true;
+}
+
+// UN SEUL RÉESSAI, ET COURT. Le correctif le moins cher de tous : quelques centaines de
+// millisecondes auraient sauvé les deux scans du 15 août sans rien changer d'autre.
+// ⚠️ UN SEUL — pas une boucle. Une insistance plus longue transformerait un incident
+// TCGdex en latence utilisateur, et le scan a déjà payé ~4 s d'appel IA.
+// Le réessai ne s'applique QU'AUX PANNES : rejouer un 404 ne rendrait rien de nouveau.
+const DELAI_REESSAI_TCGDEX_MS = 400;
+async function getTCGdex(url, timeout = 15000) {
+    try {
+        return await axios.get(url, { timeout });
+    } catch (e) {
+        if (!estUnePanneReseau(e)) throw e;
+        console.warn(`↻ [tcgdex] ${e.code || e.response?.status || e.message} sur ${url} — un seul réessai dans ${DELAI_REESSAI_TCGDEX_MS} ms.`);
+        await new Promise(r => setTimeout(r, DELAI_REESSAI_TCGDEX_MS));
+        return await axios.get(url, { timeout });
+    }
+}
+
+// Valeur de retour DISTINCTE de `null`, pour que l'appelant puisse séparer les deux états.
+// Gelée : elle est comparée par identité (`===`), jamais copiée ni étendue.
+const TCGDEX_EN_PANNE = Object.freeze({ panne: true });
+
 async function chercherCartesTCGdex(name, numberFilter, langueApi = 'en') {
     const url = `https://api.tcgdex.net/v2/${langueApi}/cards?name=${encodeURIComponent(name)}&localId=${numberFilter}`;
-    const response = await axios.get(url, { timeout: 15000 });
+    const response = await getTCGdex(url);
     return Array.isArray(response.data) ? response.data : [];
 }
 
 // Recherche TCGdex par nom seul (sans numéro), pour les cas où le numéro bloque le match
 async function chercherCartesTCGdexNomSeul(name, langueApi = 'en') {
     const url = `https://api.tcgdex.net/v2/${langueApi}/cards?name=${encodeURIComponent(name)}`;
-    const response = await axios.get(url, { timeout: 15000 });
+    const response = await getTCGdex(url);
     return Array.isArray(response.data) ? response.data : [];
 }
 
@@ -907,12 +968,36 @@ const setIdDeCarte = idCarte => (idCarte && idCarte.includes('-')) ? idCarte.sli
 // scans réels tombent dedans — c'est `langueRoute` + `variantsDetailedPresent` au
 // journal qui le diront, et rien ne doit être décidé avant.
 //
-// ⚠️ NE PAS « CORRIGER » EN PASSANT LA ROUTE ICI SANS MESURER D'ABORD. Le nom rendu par
-// /v2/ja est en kana, et `nomPourLeCatalogue` le rejette au profit du nom lu par l'IA :
-// aligner la route changerait donc l'identification japonaise, pas seulement le routage
-// des reverses. C'est un chantier à part, et il a son avertissement — on ne casse pas un
-// correcteur accidentel en croyant supprimer un défaut.
-const ROUTE_DU_DETAIL = 'en';
+// ── LA ROUTE EST DÉSORMAIS ALIGNÉE, ET VOICI POURQUOI C'ÉTAIT SANS RISQUE ────────────
+// La crainte était qu'aligner casse l'identification japonaise, /v2/ja rendant des noms
+// en kana. Vérifié dans le code plutôt que supposé : `nomPourLeCatalogue` a justement été
+// écrite pour ce cas. Les deux situations donnent le MÊME résultat —
+//   détail sur /v2/en (muet) : nomAnglais=null, nomTrouvé=kana -> tombe sur le nom de l'IA
+//   détail sur /v2/ja        : nomAnglais=kana, nomTrouvé=kana -> tombe sur le nom de l'IA
+// `estLatin` rejette le kana dans les deux cas. La crainte n'avait pas d'objet.
+//
+// ET LE SECOND APPEL QU'ON AURAIT PU IMAGINER (variantes sur la route de la carte, nom
+// latin sur /v2/en) NE PEUT RIEN RENDRE : l'identifiant japonais n'existe pas côté
+// occidental — mesuré sur PMCG4-034/008/053/017, tous MUETS en /v2/en. Il n'y a aucun nom
+// latin à aller chercher par identifiant. Aligner la route ne coûte donc AUCUN appel de
+// plus : c'est le même appel, sur la bonne route. Sur une carte occidentale,
+// `langueRoute === 'en'` et rien ne change du tout.
+//
+// ⚠️ LE GAIN EST PETIT, ET IL FAUT LE DIRE. /v2/ja rend bien `variants_detailed`, mais
+// SANS AUCUN idProduct Cardmarket (0 sur 4 cartes mesurées) : le routage des motifs n'est
+// PAS restauré sur les japonaises, la table de routage n'existe pas. Ce qu'on gagne, c'est
+// un `variants.reverse` FACTUEL par carte, là où identification-locale.js se rabat sur un
+// proxy par EXPANSION (le trendHolo du set entier). Remplacer un proxy par un fait vaut
+// le geste : c'est le genre de proxy qui ment sans prévenir.
+//
+// ⚠️⚠️ ET LA VRAIE RÈGLE, CELLE À RETENIR POUR NE PAS REJOUER CE RAISONNEMENT :
+// C'EST L'ÂGE DU SET QUI DÉCIDE DE LA PRÉSENCE DES idProduct, PAS LA LANGUE.
+// `base5-39` (Dark Kadabra, Team Rocket, 2000, OCCIDENTALE) rend lui aussi 0 idProduct sur
+// 2 variantes ; `me02.5-153` (Rayquaza, 2025) en rend 3 sur 3. Le vintage japonais n'est
+// pas mal servi parce qu'il est japonais — il l'est parce qu'il est vieux, et le vintage
+// occidental l'est autant. Toute conclusion « TCGdex traite mal le japonais » tirée de
+// l'absence de variantes est donc fausse : elle confond deux axes.
+const ROUTE_DU_DETAIL_PAR_DEFAUT = 'en';
 
 /**
  * Détail d'une carte TCGdex : nom ANGLAIS + variantes. Un seul appel, deux usages.
@@ -921,11 +1006,14 @@ const ROUTE_DU_DETAIL = 'en';
  * `variants_detailed` vient de la MÊME réponse : c'est la table de routage des motifs
  * de reverse (motif -> idProduct Cardmarket), obtenue sans requête supplémentaire.
  *
- * ⚠️ Toujours sur ROUTE_DU_DETAIL — voir le bloc juste au-dessus pour ce que ça coûte.
+ * ⚠️ `routeApi` DOIT être la route qui a TROUVÉ la carte : les espaces d'identifiants sont
+ * disjoints d'une route à l'autre, donc un identifiant japonais interrogé en /v2/en ne rend
+ * RIEN — ni nom, ni variantes. Voir le bloc juste au-dessus.
  */
-async function detailCarteTCGdex(idCarte, nomTrouve = null) {
+async function detailCarteTCGdex(idCarte, nomTrouve = null, routeApi = ROUTE_DU_DETAIL_PAR_DEFAUT) {
     try {
-        const r = await axios.get(`https://api.tcgdex.net/v2/${ROUTE_DU_DETAIL}/cards/${encodeURIComponent(idCarte)}`, { timeout: 15000 });
+        const route = routeApi || ROUTE_DU_DETAIL_PAR_DEFAUT;
+        const r = await getTCGdex(`https://api.tcgdex.net/v2/${route}/cards/${encodeURIComponent(idCarte)}`, 15000);
         const nomExact = r.data?.name || null;
         if (nomExact && nomTrouve && nomExact !== nomTrouve) {
             console.log(`🔤 Nom anglais récupéré : "${nomExact}" (trouvé en "${nomTrouve}").`);
@@ -1199,7 +1287,9 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
         if (resultats.length === 0) {
             const parTotal = await identifierParTotalEtNumero(number, totalImprime, langue, name, nomBrut);
             if (parTotal) {
-                const detail = await detailCarteTCGdex(parTotal.id);
+                // Ce chemin ne cherche pas par nom : sa route est celle du catalogue de SETS,
+                // et c'est donc elle qui doit servir à détailler la carte trouvée.
+                const detail = await detailCarteTCGdex(parTotal.id, null, langueDesSetsTCGdex(langue));
                 console.log(`🔗 Carte TCGdex retenue SANS le nom : ${parTotal.id} ("${detail.nomExact || parTotal.nom}")`);
                 return {
                     id: parTotal.id, ambigu: parTotal.ambigu,
@@ -1312,7 +1402,10 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             }
         }
 
-        const detail = await detailCarteTCGdex(choisi.id, choisi.name);
+        // ⚠️ SUR LA ROUTE QUI A TROUVÉ LA CARTE. Avant l'alignement, ce détail partait
+        // toujours en /v2/en : pour toute carte trouvée en [ja], il ne rendait rien, et
+        // `variants`/`variantsDetailed` sortaient nuls sans que rien ne le dise.
+        const detail = await detailCarteTCGdex(choisi.id, choisi.name, langueRoute);
         const nomExact = nomPourLeCatalogue(detail.nomExact, choisi.name, name);
 
         console.log(`🔗 Carte TCGdex retenue : ${choisi.id} ("${nomExact}")${ambigu ? ' [INCERTAIN]' : ''}`);
@@ -1320,14 +1413,21 @@ async function trouverCarteTCGdex(name, number, setCode, imageUrlVinted, langue 
             id: choisi.id, ambigu, nomExact, localId: choisi.localId || number,
             variants: detail.variants, variantsDetailed: detail.variantsDetailed,
             source: 'nom',
-            // ⚠️ La route qui a TROUVÉ, pas celle qui a DÉTAILLÉ. `variants` ci-dessus vient
-            // de ROUTE_DU_DETAIL ('en') dans tous les cas — voir le bloc de
-            // detailCarteTCGdex. Quand `langueRoute` n'est pas 'en', les deux champs
-            // décrivent des routes différentes, et `variants` est probablement nul.
+            // La route qui a trouvé la carte — et, depuis l'alignement, celle qui l'a aussi
+            // détaillée. Les deux ne peuvent plus diverger : `variants` ci-dessus décrit
+            // bien la carte retenue, pas une homonyme d'un autre espace d'identifiants.
             langueRoute
         };
 
     } catch (e) {
+        // ⚠️ DEUX ÉTATS DU MONDE, DEUX VALEURS DE RETOUR. Ce catch rendait `null` dans tous
+        // les cas — la même valeur que « zéro résultat ». Un incident réseau était donc
+        // indiscernable d'une carte qui n'existe pas, et sortait en refus délibéré doré.
+        // Voir estUnePanneReseau pour la ligne de partage et pour le sens du doute.
+        if (estUnePanneReseau(e)) {
+            console.error(`🔌 TCGdex INJOIGNABLE pour "${name}" #${number} (${e.code || e.response?.status || e.message}) — PANNE, pas une absence.`);
+            return TCGDEX_EN_PANNE;
+        }
         console.error(`❌ Erreur recherche TCGdex pour "${name}" #${number} :`, e.response?.status, e.message);
         return null;
     }
@@ -2766,7 +2866,14 @@ const NATURE_REFUS = {
 
     // ── ÉCHECS TECHNIQUES : quelque chose n'a pas marché. Rouge, même remboursé.
     'ia-echec': 'echec-technique',               // le modèle n'a rien rendu d'exploitable — REMBOURSÉ, et pourtant une panne
-    'erreur-serveur': 'echec-technique'          // exception dans la route — NON remboursé
+    'erreur-serveur': 'echec-technique',         // exception dans la route — NON remboursé
+    // ⚠️ CELUI-CI EXISTE PARCE QUE SON ABSENCE A MENTI. Le 2026-08-15 à 11:47, deux cartes
+    // japonaises que TCGdex connaît sont sorties en `carte-introuvable`, donc en
+    // 'refus-delibere', donc en doré — la couleur qui dit « la chaîne a fonctionné, cette
+    // carte n'existe pas ». C'était le réseau. Une panne classée en refus délibéré est la
+    // pire sortie possible : elle affirme une absence qu'on n'a jamais constatée, et elle
+    // pollue toutes les statistiques de `carte-introuvable` au passage.
+    'tcgdex-injoignable': 'echec-technique'      // TCGdex n'a pas répondu, même après un réessai — REMBOURSÉ, et pourtant une panne
 };
 // UN SEUL ENDROIT CONSTRUIT LES TROIS CHAMPS, pour qu'aucune sortie ne puisse en
 // oublier un ni les faire diverger. Les cinq sorties de /api/identifier l'appellent.
@@ -2933,6 +3040,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
         let trouvaille = await trouverCarteTCGdex(cardInfo.name, numeroCarte, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
+        // ⚠️ PANNE ET ABSENCE SE SÉPARENT ICI, ET NULLE PART AILLEURS. `trouvaille` reprend
+        // sa valeur `null` habituelle pour que tout l'aval soit inchangé ; le drapeau, lui,
+        // survit et commande deux choses, une par étape :
+        //   - le MOTIF du refus final : une panne n'est pas un refus délibéré (NATURE_REFUS) ;
+        //   - le droit de REPLIER par nom seul, qui n'est ouvert que sur absence RÉELLE.
+        // Replier sur une panne échangerait un refus honnête contre une identification
+        // hasardeuse : c'est le mauvais sens de l'échange, le seul que le critère de
+        // lancement interdit.
+        const tcgdexEnPanne = trouvaille === TCGDEX_EN_PANNE;
+        if (tcgdexEnPanne) trouvaille = null;
 
         // ════════════════════════════════════════════════════════════════════
         // REPLI LOCAL — avant tout remboursement
@@ -2942,6 +3059,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // 160,08 €, Rhydon 055 -> 72,22 €, Ledian 007 -> 147,94 € — alors que la route
         // répondait « non trouvée sur TCGdex » et remboursait. Voir identification-locale.js.
         let identificationLocale = false;
+        // Le repli par NOM SEUL borné au périmètre vintage (étape 3). Drapeau DISTINCT de
+        // `perimetreVintage`, qui est déclaré bien plus bas et RESTREINT un vivier déjà
+        // constitué : ici le périmètre ne restreint pas, il AUTORISE un vivier qui n'aurait
+        // pas existé. Deux mécanismes, deux mesures — les confondre rendrait l'un des deux
+        // illisible dans les statistiques.
+        let nomSeulVintage = false;
         let localIncertain = false;
         // ⚠️ L'écart de score du chemin LOCAL n'était nulle part : ni au journal, ni dans
         // la réponse. Il n'existait que dans un console.log, donc éphémère sur Render.
@@ -3003,10 +3126,67 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // route n'a abouti. Voir la note de l'autre trouvaille synthétique.
                     langueRoute: null
                 };
-            } else {
-                // Deux motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
+            }
+            // ════════════════════════════════════════════════════════════════
+            // ÉTAPE 3 — LE REPLI PAR NOM SEUL, SUR ABSENCE RÉELLE UNIQUEMENT
+            // ════════════════════════════════════════════════════════════════
+            // LE TROU QU'IL BOUCHE, ET SA TAILLE. Quand la règle du Pokédex tire,
+            // `numeroCarte` vaut null — et les DEUX chemins de secours exigent un numéro :
+            // `trouverParSetCodeEtNumero` rend [] d'entrée, et `identifierEnLocal` s'arrête
+            // à sa première garde (voir identification-locale.js). Le scan ne peut alors
+            // aboutir QUE si TCGdex répond. Mesuré sur le journal : 70 lignes sur 162
+            // (43 %) déclenchent la règle et n'ont donc AUCUN repli si TCGdex cligne.
+            // ⚠️ Ce n'est PAS justifié par les deux refus du 15 août : ceux-là étaient une
+            // panne, et le repli ne doit surtout pas s'y appliquer. C'est un trou
+            // STRUCTUREL, démontré par lecture du code, pas par ces deux lignes.
+            //
+            // TROIS BORNES, ET AUCUNE N'EST NÉGOCIABLE :
+            //   1. ABSENCE RÉELLE. `!tcgdexEnPanne` : replier sur une panne échangerait un
+            //      refus honnête contre une identification hasardeuse.
+            //   2. AUCUN NUMÉRO EXPLOITABLE. C'est la seule situation où les autres chemins
+            //      sont structurellement hors jeu. Avec un numéro, `identifierEnLocal` a
+            //      déjà fait son travail et fait mieux — on ne la double pas.
+            //   3. LE PÉRIMÈTRE VINTAGE, ET IL EST OBLIGATOIRE ICI. Sans numéro, un nom seul
+            //      ramène jusqu'à 153 produits (« Charmander ») que rien ne départage —
+            //      c'est très exactement la raison pour laquelle identifierEnLocal REFUSE
+            //      de tourner sans numéro, et cette raison reste valable. Le périmètre est
+            //      ce qui la lève : il ramène ces viviers à une poignée. S'il ne garde
+            //      rien, on renonce et on refuse, comme avant.
+            //
+            // ⚠️ SORTIE EN SUGGESTION AVERTIE, JAMAIS UN VERDICT. `ambigu: true` en dur :
+            // ce chemin n'a ni numéro, ni TCGdex, ni variantes — trois sources perdues.
+            if (!identificationLocale && !tcgdexEnPanne && numeroCarte == null
+                && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase())) {
+                const parNomSeul = await trouverProduitsLocaux(cardInfo.name);
+                const dedans = parNomSeul.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
+                if (dedans.length) {
+                    identificationLocale = true;
+                    localIncertain = true;
+                    produitsImposes = dedans;
+                    voieImposee = 'nom-seul-vintage';
+                    nomSeulVintage = true;
+                    console.log(
+                        `🗾 [nom-seul-vintage] TCGdex absent ET numéro neutralisé : "${cardInfo.name}"` +
+                        ` -> ${parNomSeul.length} produit(s) au nom, ${dedans.length} dans les 24 sets japonais vintage.`
+                    );
+                    trouvaille = {
+                        id: null, localId: null, variants: null, variantsDetailed: null,
+                        nomExact: String(dedans[0].name).split('[')[0].trim(),
+                        source: 'nom-seul-vintage', ambigu: true, langueRoute: null
+                    };
+                } else {
+                    console.log(`🗾 [nom-seul-vintage] "${cardInfo.name}" : ${parNomSeul.length} produit(s) au nom, AUCUN dans la table close -> on ne replie pas.`);
+                }
+            }
+            if (!trouvaille) {
+                // Trois motifs DISTINCTS : sans numéro lisible, aucun chemin ne peut
                 // aboutir, et ce n'est pas la même défaillance qu'une carte introuvable.
-                const motif = cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
+                // ⚠️ ET UNE PANNE N'EST NI L'UNE NI L'AUTRE : `tcgdex-injoignable` est un
+                // ÉCHEC TECHNIQUE, donc rouge chez l'extension. Dire « carte introuvable »
+                // quand le réseau a lâché, c'est affirmer une absence qu'on n'a pas
+                // constatée — et c'est ce qui est arrivé le 2026-08-15 à 11:47.
+                const motif = tcgdexEnPanne ? 'tcgdex-injoignable'
+                    : cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
                 const rendu = await rembourserScan(req, motif);
                 // ⚠️ ICI, `cardInfo.reverse` EST ENCORE LA LECTURE BRUTE : cette sortie est
                 // en AMONT du validateur TCGdex, qui l'écrase plus bas. Les trois autres
@@ -3031,9 +3211,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // `rembourse` · `motifRefus` · `natureRefus` : voir NATURE_REFUS, juste
                     // au-dessus de cette route, pour l'énumération fermée et le sens du défaut.
                     ...champsDeRefus(motif, rendu),
-                    error: cardInfo.numeroIllisible
-                        ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
-                        : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
+                    // ⚠️ LE TEXTE SUIT LE MOTIF. « Introuvable » est une AFFIRMATION sur le
+                    // monde ; on ne la prononce que si on a effectivement cherché et rien
+                    // trouvé. Sur panne, on dit ce qu'on sait — le service ne répond pas —
+                    // et on invite à réessayer, ce qui est la bonne action de l'utilisateur.
+                    error: tcgdexEnPanne
+                        ? `Le service de référence (TCGdex) n'a pas répondu, même après un nouvel essai. La carte n'a pas pu être cherchée — votre crédit est rendu, réessayez dans un instant.`
+                        : cardInfo.numeroIllisible
+                            ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
+                            : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
                     cardInfo
                 });
             }
@@ -3708,13 +3894,18 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //      appartenance à `parMotif['aucun']`, pas une absence de la liste des reverses :
         //      un produit inconnu de la table ne prouve rien (premier principe).
         //
-        // ⚠️ 4. ET LA CONDITION DE ROUTE — c'est elle qui empêche la garde de se tromper.
-        // Les faits 2 et 3 sortent tous les deux de `variantsDetailed`, donc de
-        // ROUTE_DU_DETAIL ('en'), JAMAIS de la route qui a trouvé la carte. Les espaces
-        // d'identifiants `ja` et `en` étant disjoints (mesuré, voir detailCarteTCGdex),
-        // une carte trouvée en [ja] a des `variantsDetailed` nuls : la garde ne pourrait
-        // que se taire. On l'écrit quand même explicitement, parce qu'un garde qui tient
-        // par une coïncidence de nullité tombe le jour où TCGdex remplit la route `ja`.
+        // ⚠️ 4. ET LA CONDITION DE ROUTE — elle a changé de nature, pas d'objet.
+        // AVANT L'ALIGNEMENT : les faits 2 et 3 venaient de /v2/en quelle que soit la route
+        // qui avait trouvé la carte. Les espaces d'identifiants étant disjoints, une carte
+        // trouvée en [ja] avait des `variantsDetailed` NULS, et la garde ne pouvait que se
+        // taire — elle tenait par une coïncidence de nullité, pas par une preuve.
+        // DEPUIS L'ALIGNEMENT : le détail est pris sur `langueRoute`, donc les faits 2 et 3
+        // décrivent LA carte retenue, par construction. La condition devient structurelle.
+        // ON LA GARDE ÉCRITE QUAND MÊME, et c'est délibéré : elle dit que la garde exige
+        // une carte réellement trouvée par une route (`langueRoute` non nul). Les
+        // trouvailles SYNTHÉTIQUES — identification locale, setcode+numéro — n'en ont pas :
+        // TCGdex n'a rien vu, et une garde qui s'appuierait sur ses variantes s'appuierait
+        // sur du vide.
         //
         // ⚠️ CE QUE `langueRoute` NE DIT PAS, et il faut le lire avant de s'appuyer dessus :
         // une carte trouvée par la route de sa langue reste une carte trouvée PAR RECHERCHE
@@ -3739,7 +3930,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         {
             const analyseA = analyserVariantes(trouvaille.variantsDetailed);
             const idGagnant = classement[0]?.idProduct;
-            const routeDuFait = trouvaille.langueRoute === ROUTE_DU_DETAIL;
+            const routeDuFait = trouvaille.langueRoute != null;
             // Fait 1 — deux sources, l'une suffit. `reverseLu` est la lecture BRUTE de l'IA,
             // capturée avant le validateur ; `motifDuTitre` lit le titre de l'annonce, qui
             // est écrit par le vendeur et ne passe par aucun modèle.
@@ -3804,6 +3995,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // `impression-contredite` parce qu'on sait afficher probablement la mauvaise
             // impression et qu'on n'a pas su faire mieux. Voir le bloc A -> B plus haut.
             || impressionCorrigee || impressionContredite
+            // Le repli par nom seul : ni numéro, ni TCGdex, ni variantes. Trois sources
+            // perdues d'un coup — c'est le vivier le moins étayé que la chaîne produise,
+            // et il ne sort jamais autrement qu'en suggestion avertie.
+            || nomSeulVintage
             // Le périmètre restreint sans prouver : sa sortie est une suggestion, pas un
             // verdict. Arbitrage explicite, à ne pas lever avant que le banc le justifie.
             || perimetreVintage
@@ -3896,6 +4091,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const raisonReserve = !carteAmbigue ? null
             : impressionCorrigee ? 'impression-corrigee'
             : impressionContredite ? 'impression-contredite'
+            // Devant tout le reste par la RÈGLE 1 : ce repli dit que le vivier lui-même
+            // n'existe que par défaut de tout le reste. C'est une prémisse plus faible que
+            // n'importe quelle raison portant sur le DÉPARTAGE à l'intérieur du vivier.
+            : nomSeulVintage ? 'nom-seul-vintage'
             : departageParSymbole ? 'symbole-departage'
                 : perimetreVintage ? 'perimetre-vintage-suggestion'
                     : lienAmbigu ? 'lien-tcgdex-partage'
@@ -3957,7 +4156,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // le resteront tant qu'un lot n'aura pas mesuré leur justesse. Zéro ligne au
             // journal aujourd'hui : ce sont des classes NEUVES, pas des classes tièdes.
             'impression-corrigee': 'faible',     // non mesurée — B vient de changer le produit
-            'impression-contredite': 'faible'    // non mesurée — on sait qu'on affiche peut-être la mauvaise impression
+            'impression-contredite': 'faible',   // non mesurée — on sait qu'on affiche peut-être la mauvaise impression
+            // Ni numéro, ni TCGdex, ni variantes : le vivier le moins étayé de la chaîne.
+            // Il ne pourra JAMAIS passer en « forte » — ce n'est pas une classe en attente
+            // de mesure, c'est une classe dont la faiblesse est constitutive.
+            'nom-seul-vintage': 'faible'
         };
         // Défaut FAIBLE pour toute raison non listée — y compris `motif-<raison>`, qui est
         // construite dynamiquement. Ici le défaut est sûr : c'est le serveur qui décide, et

@@ -954,6 +954,31 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      comparait Ninetales à Bonsly. La conclusion — « une classe entière de reverses
 //      japonaises est hors d'atteinte » — était fausse, et allait faire écrire un pont
 //      de code inutile.
+//   6. L'IDENTIFIANT RECONSTRUIT : le même outil collait `setTcgdex` (qui désigne
+//      l'EXPANSION, et qui vient de NOS liens appris) au numéro lu, pour en faire un
+//      identifiant de CARTE. Il interrogeait des identifiants qui n'ont jamais existé et
+//      concluait « la route japonaise est muette 13 fois sur 14 ». Entièrement faux.
+//   7. LE CHAMP LU TROP TÔT : un compteur affichait « TCGdex a répondu : 100 % des
+//      abouties, 0 % des refusées » — un résultat qui avait l'air d'une découverte. Il
+//      lisait `setTcgdex`, calculé APRÈS les sorties de refus : le champ est nul sur toute
+//      ligne d'échec par construction. Le compteur mesurait « la ligne a-t-elle abouti ».
+//
+// ⚠️ DEUX FAMILLES, ET LA SECONDE EST PLUS INSIDIEUSE.
+// Les cas 2, 5, 6 et 7 se ressemblent : l'outil FABRIQUE une entrée que le système n'a
+// jamais produite — une clé positionnelle, un endpoint, un identifiant, un champ lu hors
+// de son moment. C'est toujours la même faute sous quatre costumes, et elle se reconnaît
+// à une question : « le système a-t-il réellement produit cette valeur, à ce moment-là ? »
+//
+// Mais il en existe une AUTRE, et elle a mordu le 2026-08-15 :
+//   8. L'ABSENCE LUE COMME UNE VALEUR CONTRAIRE. Un outil comptait les refus avec
+//      `resultat !== 'succes'` et en trouvait 80 sur 162. Quarante-neuf étaient des lignes
+//      ANCIENNES, écrites avant que le champ `resultat` existe : absent, donc « différent
+//      de succes », donc compté comme un échec. Le vrai chiffre était 31.
+//      C'EST LE PREMIER PRINCIPE PRIS DANS L'INSTRUMENT — « je ne sais pas » traité comme
+//      « je sais que non » — et il l'a été dans le compteur qui devait mesurer ce défaut.
+//      La parade est mécanique : sur un journal qui a une HISTOIRE, ne jamais tester un
+//      champ par la négative. Tester la présence de ce qui prouve (`motifEchec != null`),
+//      jamais l'absence de ce qui infirme.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;

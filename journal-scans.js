@@ -100,6 +100,11 @@ const journalScanSchema = new mongoose.Schema({
     //   'aucun-candidat'    -> carte identifiée, mais zéro produit Cardmarket à tester
     //   'aucun-prix'        -> produit trouvé, aucun prix de référence (route analyser)
     //   'erreur-serveur'    -> exception remontée au catch de la route
+    //   'tcgdex-injoignable'-> TCGdex n'a pas répondu, même après réessai. ⚠️ À NE PAS
+    //      AGRÉGER AVEC 'carte-introuvable' : l'un dit « cette carte n'existe pas », l'autre
+    //      « je n'ai pas pu regarder ». Ils se confondaient jusqu'au 2026-08-15, ce qui rend
+    //      SUSPECTE toute statistique de 'carte-introuvable' antérieure à cette date — les
+    //      deux seules lignes du journal étaient en réalité une panne réseau de 17 secondes.
     motifEchec: String,
 
     // Le crédit a-t-il RÉELLEMENT été rendu ? Valeur de retour de `rembourserScan`, pas
@@ -433,6 +438,15 @@ const journalScanSchema = new mongoose.Schema({
     // branche qu'on ne peut pas compter est une branche qu'on ne connaît pas.
     //   'symbole-departage'               -> le symbole du set a tranché une égalité parfaite
     //   'perimetre-vintage-suggestion'    -> le périmètre a restreint sans prouver
+    //   'nom-seul-vintage'                -> ⚠️ À NE PAS CONFONDRE AVEC LA PRÉCÉDENTE, et la
+    //      distinction est le fond du sujet : là, le périmètre RESTREINT un vivier déjà
+    //      constitué ; ici il AUTORISE un vivier qui n'aurait pas existé du tout. Ni numéro
+    //      (neutralisé par la règle du Pokédex), ni TCGdex (absent, et absence RÉELLE —
+    //      jamais une panne), ni variantes. Trois sources perdues d'un coup : c'est le
+    //      vivier le moins étayé que la chaîne produise, et sa faiblesse est CONSTITUTIVE,
+    //      pas en attente de mesure. Elle ne passera jamais en « forte ».
+    //   'impression-corrigee'             -> B a substitué la reverse au produit normal
+    //   'impression-contredite'           -> la reverse existe, on n'a pas su la désigner
     //   'lien-tcgdex-partage'             -> identifiant TCGdex partagé JP/occidental
     //   'numero-pokedex-neutralise'       -> le nombre lu était un numéro de Pokédex
     //   'egalite-sans-enjeu'              -> ex aequo, mais moins de 1,00 € d'écart
