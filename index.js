@@ -949,16 +949,25 @@ const setIdDeCarte = idCarte => (idCarte && idCarte.includes('-')) ? idCarte.sli
 // `detailCarteTCGdex` interroge TOUJOURS /v2/en, quelle que soit la route sur laquelle
 // la carte a été TROUVÉE. Les deux ne coïncident que sur les cartes occidentales.
 //
-// ⚠️ ET LES ESPACES D'IDENTIFIANTS SONT DISJOINTS — mesuré en direct le 2026-08-14 sur
-// 6 identifiants (sonde live, pas de fixture) :
-//     sv3-110    [ja] キュウコン (黒炎の支配者)    [en] MUET
-//     sv1a-001   [ja] トロピウス                  [en] MUET
-//     me02.5-153 [ja] MUET                       [en] Rayquaza · reverse: true
-//   même carte sur les deux routes : 0   ·   deux cartes différentes : 0
-// Un identifiant répond sur UNE route et se tait sur l'autre. Donc pour une carte
-// résolue sur la route `ja`, cet appel ne rend pas UNE MAUVAISE CARTE : il ne rend RIEN.
-// `nomExact`, `variants` et `variantsDetailed` sortent tous les trois à null, et avec eux
-// le validateur de reverse et le routage de motif — en silence, sans se contredire.
+// ⚠️ LES ESPACES D'IDENTIFIANTS SONT MAJORITAIREMENT DISJOINTS — ET LES EXCEPTIONS SONT
+// LE PIRE CAS. Mesuré sur 15 identifiants de set le 2026-08-15 : 13 ne répondent que sur
+// UNE route (PMCG*, E*, SV* côté ja ; base*, gym*, neo… côté en), 2 répondent sur les DEUX.
+// ⚠️ CORRECTION D'UNE AFFIRMATION TROP FORTE que j'avais écrite la veille sur 6
+// identifiants seulement : « les espaces sont disjoints » est FAUX en général.
+//   neo1  [ja] 金、銀、新世界へ... 96 cartes   |   [en] Neo Genesis 111 cartes
+//   neo4  [ja] 闇、そして光へ...  113 cartes   |   [en] Neo Destiny 113 cartes
+// Des comptes de cartes DIFFÉRENTS sur neo1 : ce ne sont pas deux localisations du même
+// set, ce sont DEUX SETS DIFFÉRENTS qui partagent un identifiant. C'est le défaut
+// `lien-tcgdex-partage` à sa source, chez TCGdex lui-même.
+//
+// D'OÙ DEUX RÉGIMES DE DÉGÂT, ET NON UN SEUL, quand on détaille une carte japonaise sur
+// la route occidentale :
+//   - familles route-spécifiques (PMCG, E, SV…) : l'appel ne rend RIEN. `nomExact`,
+//     `variants` et `variantsDetailed` sortent à null, et avec eux le validateur de
+//     reverse et le routage de motif — en silence, sans se contredire.
+//   - familles partagées (neo…) : l'appel rend UNE AUTRE CARTE, celle du set occidental
+//     homonyme. C'est pire, et c'est invisible : les champs sont pleins, ils sont faux.
+// L'alignement de la route ci-dessous ferme les deux, pas seulement le premier.
 //
 // C'est le DEUXIÈME PRINCIPE (voir scoring.js) : deux sources de vérité — la route qui
 // trouve, la route qui détaille — divergent sans qu'aucun signal ne le dise.
@@ -977,11 +986,13 @@ const setIdDeCarte = idCarte => (idCarte && idCarte.includes('-')) ? idCarte.sli
 // `estLatin` rejette le kana dans les deux cas. La crainte n'avait pas d'objet.
 //
 // ET LE SECOND APPEL QU'ON AURAIT PU IMAGINER (variantes sur la route de la carte, nom
-// latin sur /v2/en) NE PEUT RIEN RENDRE : l'identifiant japonais n'existe pas côté
-// occidental — mesuré sur PMCG4-034/008/053/017, tous MUETS en /v2/en. Il n'y a aucun nom
-// latin à aller chercher par identifiant. Aligner la route ne coûte donc AUCUN appel de
-// plus : c'est le même appel, sur la bonne route. Sur une carte occidentale,
-// `langueRoute === 'en'` et rien ne change du tout.
+// latin sur /v2/en) NE PEUT RIEN RENDRE DE BON : sur les familles route-spécifiques
+// l'identifiant japonais n'existe pas côté occidental (PMCG4-034/008/053/017 tous MUETS
+// en /v2/en), et sur les familles PARTAGÉES il rendrait le nom d'une AUTRE carte. Dans
+// les deux cas, il n'y a pas de nom latin fiable à récupérer par identifiant — et il n'en
+// faut pas, `nomPourLeCatalogue` retombant déjà sur la lecture de l'IA.
+// Aligner la route ne coûte donc AUCUN appel de plus : c'est le même appel, sur la bonne
+// route. Sur une carte occidentale, `langueRoute === 'en'` et rien ne change du tout.
 //
 // ⚠️ LE GAIN EST PETIT, ET IL FAUT LE DIRE. /v2/ja rend bien `variants_detailed`, mais
 // SANS AUCUN idProduct Cardmarket (0 sur 4 cartes mesurées) : le routage des motifs n'est
