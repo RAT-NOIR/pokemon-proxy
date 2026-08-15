@@ -198,6 +198,19 @@ const journalScanSchema = new mongoose.Schema({
     // Compté ici en attendant de décider s'il doit poser une réserve.
     reverseAnnuleeParTcgdex: Boolean,
 
+    // ⚠️ LA RÈGLE DU NUMÉRO DE POKÉDEX S'EST-ELLE DÉCLENCHÉE ? Le numéro lu reste dans
+    // `numero`, mais rien ne disait s'il avait été NEUTRALISÉ en aval — et c'est ce qui
+    // change tout : quand la règle tire, `numeroCarte` vaut null, donc le chemin
+    // setcode+numéro ET l'identification locale sont tous les deux hors jeu (ils exigent
+    // un numéro), et le scan ne peut plus aboutir que si TCGdex répond.
+    // Il a fallu RECALCULER cette valeur hors ligne pour diagnostiquer le refus « Dark
+    // Kadabra » du 2026-08-15. Un champ qu'on doit recalculer pour lire une ligne n'est
+    // pas journalisé — d'autant qu'il dépend de la table dex-ids, qui change.
+    // `raisonReserve: 'numero-pokedex-neutralise'` n'en tenait pas lieu : elle n'apparaît
+    // que si la carte sort AVEC un prix, et seulement si aucune raison plus spécifique ne
+    // l'a précédée dans la cascade.
+    estDex: Boolean,
+
     // ════════════════════════════════════════════════════════════════════════
     // LA ROUTE TCGdex QUI A TROUVÉ LA CARTE, ET CE QU'ELLE A RAPPORTÉ
     // ════════════════════════════════════════════════════════════════════════
@@ -600,6 +613,7 @@ function enregistrerScan(d = {}) {
             motifCible: d.motifCible || null,
             reverseLu: d.reverseLu != null ? Boolean(d.reverseLu) : null,
             reverseAnnuleeParTcgdex: d.reverseAnnuleeParTcgdex != null ? Boolean(d.reverseAnnuleeParTcgdex) : null,
+            estDex: d.estDex != null ? Boolean(d.estDex) : null,
             // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,
@@ -672,11 +686,36 @@ function enregistrerScan(d = {}) {
  * @returns {void}
  */
 function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl,
-    fourchette, nbExAequo, nbCandidats, prixVinted } = {}) {
+    fourchette, nbExAequo, nbCandidats, prixVinted,
+    // ⚠️ `reverseLu` EST UN PARAMÈTRE EXPLICITE, ET SURTOUT PAS `cardInfo.reverse`.
+    // Le validateur TCGdex ÉCRASE `cardInfo.reverse` en cours de route. Trois des cinq
+    // sorties de refus sont en AVAL de lui : y lire `cardInfo.reverse` enregistrerait la
+    // valeur d'APRÈS validation en croyant enregistrer la lecture de l'IA — un champ qui
+    // ment sans jamais se contredire, exactement le défaut que la capture de `reverseLu`
+    // avait été écrite pour empêcher côté succès. On le fait donc passer par l'appelant,
+    // qui seul sait où il en est ; absent, il reste null, et null veut dire « on ne sait
+    // pas », pas « false ».
+    reverseLu, motifIA, estDex } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
         route, userId, motifEchec, imageUrl, vintedUrl,
         rembourse: rembourse != null ? Boolean(rembourse) : null,
+        // ⚠️ LES REFUS ÉTAIENT BEAUCOUP PLUS PAUVRES QUE LES SUCCÈS, alors que ce sont eux
+        // qu'on cherche à comprendre. Mesuré le 2026-08-15 sur le refus « Dark Kadabra » :
+        // impossible de savoir depuis le journal si la règle du Pokédex s'était déclenchée,
+        // ni ce que l'IA avait lu du motif — il a fallu RECALCULER `estDex` hors ligne pour
+        // répondre. Un champ qu'on doit recalculer pour lire une ligne n'est pas journalisé.
+        //
+        // ⚠️ `raisonReserve` N'EST PAS DANS CETTE LISTE, ET C'EST DÉLIBÉRÉ. Elle n'existe
+        // pas au moment d'un refus : elle est calculée bien plus bas, sur un prix qu'on va
+        // LIVRER, à partir d'un gagnant qu'un refus n'a pas. En inventer une ici
+        // fabriquerait une valeur qui n'a jamais existé dans la décision — et c'est
+        // précisément le défaut qu'on vient de corriger deux fois cette semaine (un champ
+        // lu hors du moment où il est rempli). Ce qui EXISTE au moment du refus, ce sont
+        // les faits ci-dessous, et c'est eux qu'on écrit.
+        reverseLu: reverseLu != null ? Boolean(reverseLu) : null,
+        motifIA: motifIA ?? c.motif ?? null,
+        estDex: estDex != null ? Boolean(estDex) : null,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,

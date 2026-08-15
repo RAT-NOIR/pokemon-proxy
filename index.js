@@ -3008,7 +3008,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // aboutir, et ce n'est pas la même défaillance qu'une carte introuvable.
                 const motif = cardInfo.numeroIllisible ? 'numero-illisible' : 'carte-introuvable';
                 const rendu = await rembourserScan(req, motif);
-                enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: motif, rembourse: rendu });
+                // ⚠️ ICI, `cardInfo.reverse` EST ENCORE LA LECTURE BRUTE : cette sortie est
+                // en AMONT du validateur TCGdex, qui l'écrase plus bas. Les trois autres
+                // sorties de refus, elles, sont en aval et doivent passer la capture.
+                enregistrerEchec({
+                    route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+                    motifEchec: motif, rembourse: rendu,
+                    reverseLu: cardInfo.reverse === true, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                });
                 return res.json({
                     success: false,
                     // ════════════════════════════════════════════════════════════
@@ -3410,7 +3417,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // le scan. (Un classement même incertain, lui, EST un résultat livré.)
         if (classement.length === 0) {
             const rendu = await rembourserScan(req, 'aucun-candidat');
-            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'aucun-candidat', rembourse: rendu });
+            // `reverseLu` est la CAPTURE, pas `cardInfo.reverse` : on est en aval du validateur.
+            enregistrerEchec({
+                route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+                motifEchec: 'aucun-candidat', rembourse: rendu,
+                reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
+            });
             // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
             return res.json({ success: false, ...champsDeRefus('aucun-candidat', rendu), error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
         }
@@ -3490,7 +3502,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     const motifRefus = r.scores.length ? 'nom-contredit-egalite' : 'nom-contredit-sans-repli';
                     console.warn(`🚫 [veto-nom] le vivier de preuve ${r.scores.length ? 'NE TRANCHE PAS (égalité au sommet)' : 'est VIDE'} -> refus.`);
                     const rendu = await rembourserScan(req, motifRefus);
-                    enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: motifRefus, rembourse: rendu });
+                    enregistrerEchec({
+                        route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+                        motifEchec: motifRefus, rembourse: rendu,
+                        reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                    });
                     return res.json({
                         success: false,
                         // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la
@@ -3633,7 +3649,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 enregistrerEchec({
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
-                    fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted
+                    fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
+                    reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
                 });
                 return res.json({
                     success: false,
@@ -4140,6 +4157,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // n'est pas mesurable après coup : on ne saurait jamais ce que l'IA avait lu.
             reverseLu,
             reverseAnnuleeParTcgdex,
+            // La règle du Pokédex a-t-elle tiré ? Journalisée sur les SUCCÈS comme sur les
+            // refus : c'est elle qui met `numeroCarte` à null, donc qui retire d'un coup le
+            // chemin setcode+numéro ET l'identification locale, qui exigent tous deux un
+            // numéro. Sans ce champ, il fallait la recalculer hors ligne pour lire une ligne.
+            estDex: avisDex.estDex,
             // ⚠️ LA ROUTE QUI A TROUVÉ, ET CE QU'ELLE A RAPPORTÉ — les deux ensemble, jamais
             // l'une sans l'autre. `langueRoute` dit d'où vient la CARTE ; les deux champs
             // suivants disent si elle portait l'INFORMATION dont la garde A a besoin. Savoir
