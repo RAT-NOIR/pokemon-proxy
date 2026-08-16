@@ -24,6 +24,11 @@ const v = (nom, obtenu, attendu) => {
 };
 
 (async () => {
+    // ⚠️ L'ORDRE COMPTE : c'est `require('./index')` qui OUVRE la connexion Mongo (il le
+    // fait au chargement, avec MONGODB_BASE lu en tête de ce fichier). Attendre la
+    // connexion AVANT de le charger attend donc quelque chose que personne n'a demandé.
+    const { rembourserSiRienLivre } = require('./index');
+    const { Credit } = require('./acces');
     for (let i = 0; i < 60 && mongoose.connection.readyState !== 1; i++) await new Promise(r => setTimeout(r, 500));
     if (mongoose.connection.readyState !== 1) { console.error('❌ Mongo non connecté.'); process.exit(1); }
     // ⚠️ GARDE DURE : on ne touche pas la production, même par accident de variable.
@@ -32,8 +37,6 @@ const v = (nom, obtenu, attendu) => {
         console.error(`❌ REFUS : base « ${base} », attendu « test_scratch ». La base de PROD s'appelle « test ».`);
         process.exit(1);
     }
-    const { rembourserSiRienLivre } = require('./index');
-    const { Credit } = require('./acces');
     console.log(`base : ${base}\n`);
 
     const neuf = s => `T-catch-${s}-${Date.now()}`;
