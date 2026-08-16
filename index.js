@@ -2819,12 +2819,12 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 
     } catch (error) {
         console.error("❌ Erreur /api/analyser:", error);
-        // Le catch NE REMBOURSE PAS, et ce n'est pas un oubli qu'on corrige au passage :
-        // à ce stade on ignore si un résultat a été livré. On le CONSTATE donc dans le
-        // journal (rembourse: false) plutôt que de le deviner. Si ces lignes s'avèrent
-        // fréquentes, c'est un chantier à part — des scans payés pour rien.
-        enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
-        res.json({ success: false, error: "Erreur serveur interne" });
+        // ⚠️ LE CATCH REMBOURSE DÉSORMAIS — voir rembourserSiRienLivre. L'objection qui
+        // l'en empêchait (« on ignore si un résultat a été livré ») était juste ; elle se
+        // tranche par `res.headersSent`, pas par l'abstention.
+        const rendu = await rembourserSiRienLivre(req, res, 'erreur-serveur');
+        enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: rendu });
+        if (!res.headersSent) res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
 
@@ -2863,6 +2863,38 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 // (503). Ils se distinguent par le CODE HTTP, qui n'est pas 200 — contrairement à
 // tous les refus ci-dessous. Une allowlist branchée sur `motifRefus` ne doit donc être
 // consultée QUE sur une réponse 200.
+// ════════════════════════════════════════════════════════════════════════════
+// UN BUG SERVEUR NE SE FACTURE PAS — ET « ON NE SAIT PAS » SE TRANCHE
+// ════════════════════════════════════════════════════════════════════════════
+// LE CAS RÉEL. Deux scans du 2026-08-03 ("Dragonite" n°080 et n°180, japonais, setCode
+// « DP5 » lu alors que seul « DP5c » existe au catalogue) ont levé une exception et sont
+// sortis en `erreur-serveur` avec `rembourse: false`. Crédit débité, rien rendu, rien
+// livré. Ce sont les deux seules lignes du journal dans ce cas — et deux de trop.
+//
+// L'OBJECTION QUI BLOQUAIT LE CORRECTIF ÉTAIT JUSTE : dans un `catch`, on ignore si un
+// résultat a déjà été livré, et rembourser après une livraison offrirait un scan gratuit
+// sur un résultat rendu. Le code CONSTATAIT donc l'absence de remboursement au lieu de
+// la corriger — prudence honnête, mais qui laissait l'utilisateur payer nos pannes.
+//
+// LA SORTIE N'EST PAS L'ABSTENTION, C'EST LA QUESTION POSÉE AU BON ENDROIT. Express sait
+// si une réponse est partie : `res.headersSent`. Trois états au lieu de deux —
+//   réponse déjà envoyée -> un résultat A été livré      -> on ne rembourse PAS
+//   rien envoyé           -> l'utilisateur n'a rien reçu -> on rembourse
+//   pas de crédit débité  -> rembourserScan rend false tout seul (code maître)
+// C'est le premier principe appliqué à l'argent : « je ne sais pas » ne doit pas être
+// traité comme « je sais que non » — il doit cesser d'être « je ne sais pas ».
+//
+// ⚠️ LE DOUBLE REMBOURSEMENT RESTE IMPOSSIBLE, et ce n'est pas cette fonction qui le
+// garantit : `rembourserScan` pose `req.scanRembourse` au premier appel et refuse les
+// suivants (acces.js). Vérifié par test-acces.js, « 2e appel refusé (verrou req) ».
+async function rembourserSiRienLivre(req, res, motif) {
+    if (res && res.headersSent) {
+        console.warn(`💸 [catch] réponse DÉJÀ envoyée (motif ${motif}) -> pas de remboursement : un résultat a été livré.`);
+        return false;
+    }
+    return await rembourserScan(req, motif);
+}
+
 const NATURE_REFUS = {
     // ── REFUS DÉLIBÉRÉS : la chaîne a fonctionné, et elle refuse de livrer un prix
     //    qu'elle sait ou soupçonne faux. Le crédit est rendu. C'est le service rendu,
@@ -4583,17 +4615,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
     } catch (e) {
         console.error("❌ [identifier]", e.message);
-        // Voir /api/analyser : on constate l'absence de remboursement, on ne la corrige pas ici.
-        enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: false });
-        // ⚠️ `natureRefus: 'echec-technique'` ET `rembourse: false` — le seul cas où le
-        // rouge est pleinement juste : ce chemin ne rembourse pas (l'absence est constatée
-        // ici, pas corrigée : voir /api/analyser). Les champs disent la vérité désagréable
-        // plutôt que rien du tout.
-        // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il est resté au log et au journal ; la réponse ne
-        // porte qu'un texte générique. Le 4 août, un utilisateur a lu dans son extension
+        // ⚠️ ON REMBOURSE MAINTENANT — voir rembourserSiRienLivre, au-dessus de NATURE_REFUS.
+        // `natureRefus: 'echec-technique'` reste juste : c'est une panne, pas un refus
+        // délibéré. Mais une panne n'a jamais eu à être facturée.
+        const rendu = await rembourserSiRienLivre(req, res, 'erreur-serveur');
+        enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: rendu });
+        // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il reste au log ; la réponse ne porte qu'un texte
+        // générique. Le 4 août, un utilisateur a lu dans son extension
         // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
         // information qui ne l'aide en rien et qui décrit notre code à qui la reçoit.
-        res.json({ success: false, ...champsDeRefus('erreur-serveur', false), error: "Erreur serveur interne" });
+        // ⚠️ `champsDeRefus` reçoit la valeur RÉELLE `rendu`, jamais `false` en dur : le
+        // champ `rembourse` de la réponse est lu par l'extension pour son texte, et lui
+        // faire annoncer un non-remboursement qui a eu lieu serait une seconde source de
+        // vérité sur l'état du compte.
+        if (!res.headersSent) res.json({ success: false, ...champsDeRefus('erreur-serveur', rendu), error: "Erreur serveur interne" });
     }
 });
 
@@ -5191,5 +5226,9 @@ module.exports = {
     // résolution TCGdex — ce qui ne prouverait rien, exactement comme pour le veto.
     trouverCarteTCGdex,
     // Le pont total -> set, exporté pour être DIAGNOSTIQUÉ sur pièces plutôt que déduit.
-    setsPourTotal, identifierParTotalEtNumero
+    setsPourTotal, identifierParTotalEtNumero,
+    // ⚠️ EXPORTÉE POUR ÊTRE TESTÉE, PAS POUR ÊTRE RÉUTILISÉE AILLEURS. La chaîne argent
+    // ne part jamais sans preuve : test-remboursement-catch.js exerce cette fonction
+    // exacte, celle que les deux `catch` appellent — pas une copie de sa logique.
+    rembourserSiRienLivre
 };
