@@ -86,6 +86,12 @@
 //   3. AUCUNE DES LIGNES CASSÉES N'EST DANS LE HOLDOUT. Casser une ligne fraîche coûte
 //      le seul seau qui décide ; une casse en entraînement ou en lot se paie en mesure,
 //      pas en pouvoir de décision.
+//      ⚠️ AUJOURD'HUI CETTE CLAUSE EST SATISFAITE PAR VACUITÉ, ET CE N'EST PAS LA MÊME
+//      CHOSE QUE SATISFAITE. Le holdout ne porte que 2 vérités individuelles : aucune
+//      de ses lignes ne peut être comptée « cassée », faute de quoi la comparer. La
+//      clause ne mordra qu'une fois les 27 fiches saisies. Lire « 0 casse en holdout »
+//      comme un feu vert serait relire une absence comme une valeur contraire —
+//      exactement l'erreur d'instrument que ce chantier passe son temps à fermer.
 //
 // ET AUCUN CHAMP NOUVEAU N'EST NÉCESSAIRE POUR Y ARRIVER. `symboleSet` et
 // `codeSetGagnant` sont déjà journalisés : l'effet du veto se recalcule après coup, sur

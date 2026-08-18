@@ -58,6 +58,11 @@ const {
 // les trois gardes qui l'entourent, et l'écriture conditionnelle plutôt qu'un update sec.
 const { enregistrerScan, enregistrerEchec, JournalScan } = require('./journal-scans');
 
+// « Rien trouvé » et « pas pu chercher » sont deux états, jamais un seul. Voir sources.js :
+// six requêtes catalogue rendaient `[]` dans les deux cas, et l'aval lisait ce vide comme
+// un fait sur le catalogue.
+const { interrogerSource, dansUnScan, sourcesTombees } = require('./sources');
+
 // La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
 // est le numéro de Pokédex de l'espèce, pas le rang de la carte dans son set. Voir pokedex.js.
 const { numeroEstUnDexId } = require('./pokedex');
@@ -103,6 +108,13 @@ app.use(cors({
 app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gererWebhookStripe);
 
 app.use(express.json());
+
+// ⚠️ OUVRE LE CONTEXTE DE SCAN POUR TOUTE LA SUITE DE LA CHAÎNE. Sans lui,
+// `interrogerSource` n'aurait nulle part où retenir les sources tombées, et
+// `sourcesTombees()` rendrait toujours [] — le correctif serait inerte sans le dire.
+// Global plutôt que posé sur les deux routes d'IA : un contexte vide ne coûte rien, une
+// route ajoutée plus tard sans le middleware coûterait une mesure fausse.
+app.use((req, res, next) => dansUnScan(next));
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
 // se contourne en changeant d'identifiant). Ne s'applique QU'aux routes IA coûteuses —
@@ -1616,12 +1628,18 @@ function ecarterNonCartes(produits, contexte) {
  * produits, et un doublon fausserait les comptes d'ex aequo autant que le scoring.
  */
 async function viviersUnis(nomCatalogue, nomLu) {
-    const premier = nomCatalogue ? await trouverProduitsLocaux(nomCatalogue) : [];
+    // Les deux interrogations sont ENVELOPPÉES : une panne sur l'une ou l'autre est
+    // retenue par le contexte de scan (sources.js) au lieu de se confondre avec « ce nom
+    // n'existe pas au catalogue ». Le comportement reste le même — on continue avec ce
+    // qu'on a — mais la sortie finale saura qu'elle n'a pas tout vu.
+    const { liste: premier } = nomCatalogue
+        ? await interrogerSource('catalogue/nom', () => trouverProduitsLocaux(nomCatalogue))
+        : { liste: [] };
     // Même nom (à la casse et aux accents près) : rien à unir, on évite l'aller-retour Mongo.
     const memeNom = nomCatalogue && nomLu && normaliserNom(nomCatalogue) === normaliserNom(nomLu);
     if (memeNom || !nomLu) return premier;
 
-    const second = await trouverProduitsLocaux(nomLu);
+    const { liste: second } = await interrogerSource('catalogue/nom', () => trouverProduitsLocaux(nomLu));
     if (!second.length) return premier;
 
     const parId = new Map();
@@ -1671,11 +1689,15 @@ async function viviersAvecRangs(vivierNom, numeroLu, idExpansionsAttendues, cont
     // trois cas Team Up, le total est le SEUL discriminant entre 115 produits au n°173.
     const exps = (idExpansionsAttendues || []).filter(e => e != null);
     for (const [ouCherche, chercher] of [
-        [`l'expansion attendue ${exps.join('/') || '—'}`, () => exps.length ? trouverProduitsParNumero(exps, numeroLu) : []],
+        [`l'expansion attendue ${exps.join('/') || '—'}`,
+        () => exps.length
+            ? interrogerSource('catalogue/numero-expansion', () => trouverProduitsParNumero(exps, numeroLu)).then(r => r.liste)
+            : []],
         // 2e repli, en DERNIER recours : tout le catalogue. Moins discriminant (mesuré :
         // il fait perdre 4 des 10 cas s'il passe en premier), mais mieux que rien quand
         // aucune expansion n'est attendue ou qu'elle ne contient pas ce numéro.
-        ['tout le catalogue', () => trouverProduitsParNumeroPartout(numeroLu)]
+        ['tout le catalogue',
+            () => interrogerSource('catalogue/numero-partout', () => trouverProduitsParNumeroPartout(numeroLu)).then(r => r.liste)]
     ]) {
         const parNumero = await chercher();
         if (!parNumero.length) continue;
@@ -1753,8 +1775,12 @@ async function trouverProduitsLocaux(nomExact) {
         }
         return [];
     } catch (e) {
-        console.error(`❌ Erreur trouverProduitsLocaux pour "${nomExact}" :`, e.message);
-        return [];
+        // ⚠️ NE REND PLUS `[]`. Une source qui décide seule qu'une panne vaut « rien
+        // trouvé » EST le défaut que sources.js ferme : l'aval lirait ce vide comme un
+        // fait sur le catalogue. On nomme la source et on relance — c'est
+        // `interrogerSource`, au point d'appel, qui décide et qui journalise.
+        e.source = 'trouverProduitsLocaux';
+        throw e;
     }
 }
 
@@ -1782,8 +1808,9 @@ async function trouverProduitsParNumero(idExpansions, numeroLu) {
         const docs = await NumeroCarte.find({ idExpansion: { $in: exps } }, { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1 }).lean();
         return departagerParNumero(docs, numeroLu, `l'expansion ${exps.join('/')}`);
     } catch (e) {
-        console.error(`❌ Erreur trouverProduitsParNumero :`, e.message);
-        return [];
+        // Rapporte, ne décide pas — voir sources.js et `trouverProduitsLocaux`.
+        e.source = 'trouverProduitsParNumero';
+        throw e;
     }
 }
 
@@ -1886,8 +1913,9 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         const produits = await CatalogueProduit.find({ idProduct: { $in: retenus.map(d => d.idProduct) } }).lean();
         return ecarterNonCartes(produits, `${setCodeLu}+${numeroLu}`);
     } catch (e) {
-        console.error(`❌ Erreur trouverParSetCodeEtNumero :`, e.message);
-        return [];
+        // Rapporte, ne décide pas — voir sources.js et `trouverProduitsLocaux`.
+        e.source = 'trouverParSetCodeEtNumero';
+        throw e;
     }
 }
 
@@ -1949,7 +1977,7 @@ async function nomOpposeUnVeto(cardInfo, produit) {
         // peut pas être plus sévère que la recherche par nom elle-même. Deux allers-retours
         // Mongo, et seulement dans le cas de désaccord — mesuré à 1 scan sur 23 où le chemin
         // par le code tranche.
-        const ailleurs = await trouverProduitsLocaux(cardInfo.name);
+        const { liste: ailleurs } = await interrogerSource('catalogue/nom', () => trouverProduitsLocaux(cardInfo.name));
         if (!ailleurs.length) return { veto: false, preuves: [], incoherent: false, raison: `"${cardInfo.name}" inconnu du catalogue -> aucune preuve, on laisse passer` };
 
         // ... AU NUMÉRO LU. Sans cette seconde condition, un nom halluciné mais réel
@@ -2089,8 +2117,9 @@ async function trouverProduitsParNumeroPartout(numeroLu) {
         ).lean();
         return departagerParNumero(docs, numeroLu, 'tout le catalogue');
     } catch (e) {
-        console.error(`❌ Erreur trouverProduitsParNumeroPartout :`, e.message);
-        return [];
+        // Rapporte, ne décide pas — voir sources.js et `trouverProduitsLocaux`.
+        e.source = 'trouverProduitsParNumeroPartout';
+        throw e;
     }
 }
 
@@ -2118,8 +2147,11 @@ async function departagerParNumero(docs, numeroLu, ouCherche) {
         // portaient un numeroUrl "2", donc ce repli les ramenait pour toute carte n°2.
         return ecarterNonCartes(produits, `numéro ${numeroLu} / ${ouCherche}`);
     } catch (e) {
-        console.error(`❌ Erreur departagerParNumero :`, e.message);
-        return [];
+        // Rapporte, ne décide pas. Appelée UNIQUEMENT depuis les deux `trouverProduits
+        // ParNumero*` : son exception remonte à travers eux jusqu'à leur point d'appel,
+        // qui est enveloppé. Pas de point d'appel propre à envelopper ici.
+        e.source = e.source || 'departagerParNumero';
+        throw e;
     }
 }
 
@@ -2521,8 +2553,11 @@ async function expansionsDuSetTCGdex(tcgdexCardId, regionAttendue = null, setCod
         }
         return gardees;
     } catch (e) {
-        console.error("Erreur expansionsDuSetTCGdex :", e.message);
-        return [];
+        // Rapporte, ne décide pas — voir sources.js et `trouverProduitsLocaux`. Celle-ci
+        // interroge TCGdex : son vide alimentait le PÉRIMÈTRE d'expansions attendues, donc
+        // une panne y élargissait silencieusement la recherche au lieu de la restreindre.
+        e.source = 'expansionsDuSetTCGdex';
+        throw e;
     }
 }
 
@@ -2611,13 +2646,17 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             // 2b. Candidats Cardmarket. Même hiérarchie que /api/identifier : le nom
             //     n'est utilisé que s'il est fiable, sinon on passe par le NUMÉRO dans
             //     l'expansion déduite du total.
-            const expAttendues = await expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo), cardInfo.setCode);
+            const { liste: expAttendues } = await interrogerSource('tcgdex/expansions',
+                () => expansionsDuSetTCGdex(trouvailleTCGdex.id, regionAttendue(cardInfo), cardInfo.setCode));
             const nomFiable = trouvailleTCGdex.source !== 'total+numero';
-            let produits = nomFiable ? await trouverProduitsLocaux(trouvailleTCGdex.nomExact) : [];
+            let produits = nomFiable
+                ? (await interrogerSource('catalogue/nom', () => trouverProduitsLocaux(trouvailleTCGdex.nomExact))).liste
+                : [];
             let voieCatalogue = 'nom';
             let aucunCandidatAuNumero = false;
             if (produits.length === 0 && expAttendues.length) {
-                const parNumero = await trouverProduitsParNumero(expAttendues, cardInfo.number);
+                const { liste: parNumero } = await interrogerSource('catalogue/numero-expansion',
+                    () => trouverProduitsParNumero(expAttendues, cardInfo.number));
                 if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
             } else if (produits.length > 0) {
                 // Même règle que /api/identifier : le vivier par nom peut être plein et
@@ -2923,16 +2962,57 @@ const NATURE_REFUS = {
     // pollue toutes les statistiques de `carte-introuvable` au passage.
     'tcgdex-injoignable': 'echec-technique'      // TCGdex n'a pas répondu, même après un réessai — REMBOURSÉ, et pourtant une panne
 };
+// ════════════════════════════════════════════════════════════════════════════
+// LES REFUS QUI AFFIRMENT UNE ABSENCE — et la seule chose qui peut les démentir
+// ════════════════════════════════════════════════════════════════════════════
+// Ces deux motifs-là ne disent pas « je ne sais pas trancher » : ils disent « cette carte
+// n'existe pas ». C'est une AFFIRMATION SUR LE MONDE, et elle n'a le droit d'être
+// prononcée que si on a effectivement cherché. Si une source est tombée pendant le scan,
+// on n'a pas cherché — on a échoué à chercher, et ce n'est pas la même sortie.
+// Les autres motifs ne sont pas concernés : `egalite-parfaite` affirme qu'on a trouvé
+// PLUSIEURS candidats, `numero-illisible` parle de la photo. Une panne ne les rend pas
+// faux, elle ne les touche pas.
+const REFUS_D_ABSENCE = new Set(['carte-introuvable', 'aucun-candidat']);
+
 // UN SEUL ENDROIT CONSTRUIT LES TROIS CHAMPS, pour qu'aucune sortie ne puisse en
 // oublier un ni les faire diverger. Les cinq sorties de /api/identifier l'appellent.
+//
+// ⚠️ ET C'EST POUR ÇA QUE LA REQUALIFICATION EST ICI ET NULLE PART AILLEURS. La clause
+// aurait pu être écrite à chacune des sorties d'absence ; elle aurait alors été oubliée
+// à la sixième, comme les trois champs l'auraient été sans cette fonction.
 function champsDeRefus(motifRefus, rembourse) {
+    // CLAUSE 3 — un refus d'absence prononcé alors qu'une source est tombée n'est pas un
+    // refus délibéré, c'est un échec technique. Le MOTIF ne bouge pas (il dit par où on
+    // est sorti, et les statistiques par motif restent comparables) ; c'est la NATURE qui
+    // change, donc la couleur affichée et le sens rendu à l'utilisateur.
+    const tombees = sourcesTombees();
+    const absenceNonConstatee = tombees.length > 0 && REFUS_D_ABSENCE.has(motifRefus);
+    if (absenceNonConstatee) {
+        console.warn(`⚠️ [absence-non-constatee] « ${motifRefus} » requalifié en echec-technique :` +
+            ` ${tombees.join(', ')} n'a pas répondu. On n'affirme pas une absence qu'on n'a pas constatée.`);
+    }
+    // ⚠️ LA CLAUSE 2 EST ÉCRITE ICI ET REPORTÉE, POUR QU'ELLE NE SE PERDE PAS.
+    // Elle dirait : `sourcesTombees().length > 0` force `carteIncertaine`, même sur un
+    // SUCCÈS — un prix calculé sur un vivier amputé par une panne est un prix dont on ne
+    // répond pas. Elle n'est pas écrite aujourd'hui pour deux raisons :
+    //   · elle fait basculer des scans RÉUSSIS en réserve, à 57,1 % de réserve déjà
+    //     (52 succès sur 91). C'est une décision de PRODUIT, pas un correctif, et elle ne
+    //     part pas dans le même lot qu'un correctif d'honnêteté ;
+    //   · son coût rétroactif est nul là où il est mesurable et inconnu ailleurs. Sur les
+    //     172 lignes : 0 sur `catalogue/numero-expansion` et `catalogue/numero-partout`
+    //     (leur trace, `aucunCandidatAuNumero`, n'a JAMAIS été vraie), 0 sur
+    //     `catalogue/nom` par construction (une panne y donne un refus, pas un succès), et
+    //     NON MESURABLE sur `catalogue/setcode-numero`, dont la borne large est de 11
+    //     succès ayant lu un setCode mais abouti par une autre voie.
+    // Le report est donc gratuit sur ce qu'on sait mesurer. Quand `sourcesEnPanne` aura
+    // couru quelques semaines, le vrai coût se lira au journal au lieu de se borner.
     return {
         // ⚠️ LA VALEUR RÉELLE, jamais `true` en dur : `rembourserScan` peut échouer, et
         // annoncer un remboursement qui n'a pas eu lieu serait une seconde source de
         // vérité sur l'état d'un compte.
         rembourse: Boolean(rembourse),
         motifRefus,
-        natureRefus: NATURE_REFUS[motifRefus] ?? 'echec-technique'
+        natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique')
     };
 }
 
@@ -3087,7 +3167,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
         // gain d'identification se paierait en erreurs de prix.
         let produitsImposes = null, voieImposee = null;
-        const pisteCode = await trouverParSetCodeEtNumero(cardInfo.setCode, numeroCarte, cardInfo.language);
+        // ⚠️ ENVELOPPÉ, et c'est le site le plus sournois des six : une panne ici n'efface
+        // pas un candidat, elle efface un CHEMIN ENTIER — le scan continue par une autre
+        // voie et peut réussir, sans que rien ne dise que le chemin en tête n'a pas été
+        // essayé. C'est le seul des six dont le coût passé n'a pas pu être chiffré.
+        const { liste: pisteCode } = await interrogerSource('catalogue/setcode-numero',
+            () => trouverParSetCodeEtNumero(cardInfo.setCode, numeroCarte, cardInfo.language));
         if (pisteCode.length === 1) {
             const avis = await nomOpposeUnVeto({ ...cardInfo, number: numeroCarte }, pisteCode[0]);
             if (avis.veto) {
@@ -3220,7 +3305,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // ce chemin n'a ni numéro, ni TCGdex, ni variantes — trois sources perdues.
             if (!identificationLocale && !tcgdexEnPanne && numeroCarte == null
                 && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase())) {
-                const parNomSeul = await trouverProduitsLocaux(cardInfo.name);
+                const { liste: parNomSeul } = await interrogerSource('catalogue/nom', () => trouverProduitsLocaux(cardInfo.name));
                 const dedans = parNomSeul.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
                 if (dedans.length) {
                     identificationLocale = true;
@@ -3402,7 +3487,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Le set TCGdex nous dit dans quelle(s) expansion(s) Cardmarket chercher. Calculé
         // AVANT les produits : quand le nom est suspect, c'est l'expansion + le numéro
         // qui désignent la carte, et le nom ne sert plus du tout.
-        const expansionsAttendues = await expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo), cardInfo.setCode);
+        const { liste: expansionsAttendues } = await interrogerSource('tcgdex/expansions',
+            () => expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo), cardInfo.setCode));
 
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
@@ -3439,7 +3525,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         let voieCatalogue = voieImposee ?? (identificationLocale ? 'local-nom-numero' : 'nom');
         let aucunCandidatAuNumero = false;
         if (produits.length === 0 && expansionsAttendues.length) {
-            const parNumero = await trouverProduitsParNumero(expansionsAttendues, numeroCarte);
+            const { liste: parNumero } = await interrogerSource('catalogue/numero-expansion',
+                () => trouverProduitsParNumero(expansionsAttendues, numeroCarte));
             if (parNumero.length) { produits = parNumero; voieCatalogue = 'numero'; }
         }
         // 2e usage du chemin local : le nom est suspect ET l'expansion attendue n'a rien
@@ -4511,7 +4598,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // tranché. « aucun ex aequo ne porte ce symbole » est une mesure autant que
             // « il a tranché » : c'est elle qui dira si le signal sert ou s'il est inerte.
             symboleDepartage: symboleDepartageRaison,
-            parenteRetenue: parenteJournal,
+            // ⚠️ `parenteRetenue` n'est plus journalisé — supprimé le 2026-08-18 après
+            // 0 occurrence sur 117 lignes. `parenteJournal` reste, il alimente la trace
+            // `[setcode-diagnostic]` à la console. Voir journal-scans.js pour la raison.
             setTcgdex: lienGagnant.setTcgdex,
             idExpansionGagnante: classement[0]?.idExpansion ?? null,
             regionSource: lienGagnant.regionSource,
@@ -5298,9 +5387,12 @@ module.exports = {
     // exacte, celle que les deux `catch` appellent — pas une copie de sa logique.
     rembourserSiRienLivre,
     // ⚠️ EXPORTÉES POUR MESURER SI UNE ABSENCE ÉTAIT RÉELLE, pas pour être appelées
-    // ailleurs. Ces deux fonctions rendent `[]` aussi bien quand aucun produit ne porte le
-    // numéro que quand la requête a levé — c'est ce qui rend `aucunCandidatAuNumero`
-    // ambigu. Les rejouer sur les lignes déjà au journal est la seule façon de borner la
-    // part de pannes déguisées, et une réimplémentation ne prouverait rien.
-    trouverProduitsParNumero, trouverProduitsParNumeroPartout
+    // ailleurs. Ces deux fonctions relancent désormais leur exception (voir sources.js) ;
+    // les rejouer sur les lignes déjà au journal reste la seule façon de borner la part
+    // de pannes déguisées, et une réimplémentation ne prouverait rien.
+    trouverProduitsParNumero, trouverProduitsParNumeroPartout,
+    // ⚠️ EXPORTÉE POUR ÊTRE TESTÉE. La requalification d'un refus d'absence en échec
+    // technique se décide ICI et nulle part ailleurs : un test qui la réimplémenterait ne
+    // testerait que lui-même. Voir test-sources.js.
+    champsDeRefus, REFUS_D_ABSENCE
 };

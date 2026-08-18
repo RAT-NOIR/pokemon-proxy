@@ -10,8 +10,9 @@
 // CE QU'IL VÉRIFIE, ET QUI NE SE DÉDUIT PAS DU CODE :
 //   1. la ligne d'échec est bien écrite, avec resultat='echec' ;
 //   2. `cardInfo` est correctement aplati — c'est là qu'un champ se perd en silence ;
-//   3. `rang` reste NUL sur un échec (sinon rangDuNumero rendrait 2 et ferait grossir
-//      le rang 2 de tous les échecs, faussant la mesure que le journal existe pour faire) ;
+//   3. `rang` et `setCodeAccord` ne sont PLUS écrits (supprimés le 2026-08-18, champs
+//      dérivés que rien ne lisait) ET que leur formule de recalcul les retrouve depuis
+//      les champs journalisés — sinon « recalculable » n'est qu'une promesse ;
 //   4. `rembourse` distingue false de null : « remboursement tenté et refusé » n'est
 //      pas « pas de remboursement du tout » ;
 //   5. un succès reste un succès (resultat='succes' sans qu'aucun appelant le passe) ;
@@ -22,7 +23,11 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS } = require('./journal-scans');
+const { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCode } = require('./journal-scans');
+// ⚠️ IMPORTÉE, JAMAIS RECOPIÉE. `rangDuNumero` est la fonction qui écrivait le champ
+// `rang` avant sa suppression : c'est elle qui doit prouver qu'il reste recalculable,
+// pas une réimplémentation, qui ne démontrerait que sa propre cohérence.
+const { rangDuNumero } = require('./scoring');
 
 const BASE = process.env.MONGODB_BASE || 'test_scratch';
 // ⚠️ La base de PRODUCTION s'appelle « test ». Ce n'est pas un nom de bac à sable et
@@ -99,8 +104,14 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         verifier('nomConfiance', echec.nomConfiance, 'haute');
         // total absent de la carte -> absent de la ligne. C'est une information, pas un trou.
         verifier('total (aucun imprimé sur la carte)', echec.total ?? null, null);
-        // LE point qui ne se déduit pas du code : rangDuNumero('149', null) rend 2.
-        verifier('rang NUL sur un échec', echec.rang ?? null, null);
+        // ⚠️ `rang` a été SUPPRIMÉ le 2026-08-18 (champ dérivé, jamais lu). Le point qui
+        // ne se déduit pas du code reste vrai et se vérifie maintenant sur la FORMULE :
+        // rangDuNumero('149', null) rend 2, et ce 2 ne doit jamais compter sur un échec,
+        // où il n'y a pas de gagnant du tout.
+        verifier('`rang` n\'est plus écrit sur un échec', echec.rang ?? null, null);
+        verifier('  ... et sa formule rend bien null sur un échec',
+            echec.motifEchec ? null : rangDuNumero(echec.numero, echec.numeroGagnant), null);
+        verifier('  ... alors que rangDuNumero seul rendrait 2', rangDuNumero(echec.numero, null), 2);
         verifier('idProduct nul', echec.idProduct ?? null, null);
         // Sans ces deux URL, une ligne d'échec ne peut plus être revérifiée dès que
         // l'annonce disparaît — c'est ce qui a coûté trois lignes du premier banc.
@@ -140,9 +151,21 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         verifier('resultat', succes.resultat, 'succes');
         verifier('motifEchec absent', succes.motifEchec ?? null, null);
         verifier('rembourse absent', succes.rembourse ?? null, null);
+
+        // ── LES DEUX CHAMPS DÉRIVÉS SUPPRIMÉS LE 2026-08-18 ────────────────────
+        // ⚠️ UNE PROMESSE DE RECALCUL LAISSÉE EN COMMENTAIRE N'ENGAGE PERSONNE. Les
+        // deux champs ont été supprimés parce qu'ils se recalculent depuis des sources
+        // journalisées ; ce qui suit vérifie que c'est encore vrai à chaque exécution,
+        // avec les fonctions nommées dans les commentaires de suppression.
+        verifier('`rang` n\'est plus écrit', succes.rang ?? null, null);
+        verifier('`setCodeAccord` n\'est plus écrit', succes.setCodeAccord ?? null, null);
         // idProduct inexistant au catalogue -> pas de numéro gagnant -> rang 2
-        // (« son numéro est inconnu »), qui est le comportement d'AVANT et doit le rester.
-        verifier('rang toujours calculé sur un succès', succes.rang, 2);
+        // (« son numéro est inconnu »). C'est ce que le champ valait avant, et c'est ce
+        // que sa formule doit continuer à rendre depuis la ligne seule.
+        verifier('  ... mais la FORMULE de `rang` le retrouve depuis la ligne',
+            succes.motifEchec ? null : rangDuNumero(succes.numero, succes.numeroGagnant), 2);
+        verifier('  ... et celle de `setCodeAccord` aussi',
+            memeCode(succes.setCode, succes.codeSetGagnant), null);
     }
 
     // ---- 4. LE TTL -------------------------------------------------------------

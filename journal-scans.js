@@ -35,7 +35,15 @@
 // quelques milliers de scans — et bornent la croissance sans surveillance.
 
 const mongoose = require('mongoose');
-const { rangDuNumero } = require('./scoring');
+// ⚠️ PLUS AUCUN IMPORT DE scoring.js ICI depuis la suppression de `rang` le 2026-08-18.
+// `rangDuNumero` n'y servait qu'à ce champ dérivé ; la formule de recalcul est écrite à
+// l'endroit de la suppression, et elle nomme scoring.js comme source.
+//
+// ⚠️ `sourcesTombees` EST LU ICI, ET PAS PASSÉ PAR LES APPELANTS. Même raison que
+// `champsDeRefus` dans index.js : ce qui doit figurer sur TOUTE ligne ne peut pas dépendre
+// du soin de chaque appelant. Il y a huit points d'écriture au journal ; le neuvième
+// oublierait le champ, et l'oubli serait invisible. Voir sources.js.
+const { sourcesTombees } = require('./sources');
 
 // 90 jours. Mongo purge par un balayage qui tourne toutes les 60 s : la suppression
 // n'est pas instantanée à la seconde près, ce qui est sans importance ici.
@@ -310,12 +318,34 @@ const journalScanSchema = new mongoose.Schema({
     // dit qu'UNE stratégie a été choisie, jamais laquelle.
     strategieReverse: String,
 
-    // --- RANG DU GAGNANT ---
-    // 1 = son numéro correspond à celui lu ; 2 = son numéro est inconnu ; 3 = son
-    // numéro est connu et CONTREDIT celui lu. Calculé ici par la même fonction pure
-    // que celle qui pilotera le classement (scoring.rangDuNumero), pour que la mesure
-    // porte exactement sur ce qui sera mis en production ensuite.
-    rang: Number,
+    // ⚠️ `rang` A ÉTÉ SUPPRIMÉ LE 2026-08-18 — champ DÉRIVÉ, jamais lu par une décision.
+    // Il valait 1 (le numéro du gagnant correspond au numéro lu), 2 (numéro du gagnant
+    // inconnu) ou 3 (connu et contredisant), et null sur toute ligne d'échec.
+    //
+    //     LA FORMULE, pour qu'il reste recalculable dans six mois :
+    //         rang = d.motifEchec ? null : rangDuNumero(d.numero, d.numeroGagnant)
+    //     `rangDuNumero` vient de scoring.js ; `numero` et `numeroGagnant` sont tous deux
+    //     journalisés, donc toute mesure passée ou future le retrouve.
+    //
+    // PREUVE FAITE AVANT LA SUPPRESSION, pas supposée : recalculé sur les 172 documents
+    // avec la fonction qui l'avait écrit — 172/172, zéro divergence. Un champ dérivé
+    // stocké ne fait que dériver de ses sources, et peut s'en écarter en silence.
+    // ⚠️ `rangGagnant` reste : lui EST consulté (index.js, `rangGagnant === 3`).
+
+    // QUELLES SOURCES SONT TOMBÉES PENDANT CE SCAN, par nom.
+    // 'catalogue/nom' · 'catalogue/numero-expansion' · 'catalogue/numero-partout' ·
+    // 'catalogue/setcode-numero' · 'tcgdex/expansions'
+    //
+    // ⚠️ LE NOM, PAS SEULEMENT LE COMPTE, et c'est délibéré : le 2026-08-15, savoir QU'IL
+    // y avait eu une panne a demandé une enquête de plusieurs heures — builds, fenêtres
+    // horaires, rejeu du code — parce que rien ne disait LAQUELLE. Le compte est la
+    // longueur du tableau ; on ne stocke pas un dérivé de plus (voir `rang` et
+    // `setCodeAccord`, supprimés le même jour pour cette raison exacte).
+    //
+    // CE CHAMP EST CONSULTÉ, ce n'est pas un signal de plus en attente : `champsDeRefus`
+    // s'en sert pour requalifier un refus d'absence en échec technique. C'est la condition
+    // que pose la règle en tête de sets-vintage-japonais.js.
+    sourcesEnPanne: [String],
 
     // --- LES DEUX SIGNAUX DE RANG, en sorties de première classe ---
     // aucunCandidatAuNumero : AUCUN candidat du vivier ne portait le numéro lu, par
@@ -490,11 +520,18 @@ const journalScanSchema = new mongoose.Schema({
     // précise, et on tirerait un seuil d'une comparaison qui n'en est pas une.
     sourcePrix: String,
 
-    // --- DÉSACCORD DE CODE SET ---
-    // true  : l'IA a lu un code et il correspond à celui du gagnant
-    // false : elle en a lu un et il ne correspond pas
-    // null  : elle n'a rien lu, ou le code du gagnant est inconnu -> hors mesure
-    setCodeAccord: Boolean,
+    // ⚠️ `setCodeAccord` A ÉTÉ SUPPRIMÉ LE 2026-08-18 — champ DÉRIVÉ, jamais lu par une
+    // décision. Il valait true (l'IA a lu un code et il correspond à celui du gagnant),
+    // false (elle en a lu un et il ne correspond pas), null (rien lu, ou code du gagnant
+    // inconnu -> hors mesure).
+    //
+    //     LA FORMULE, pour qu'il reste recalculable dans six mois :
+    //         setCodeAccord = memeCode(d.setCode, d.codeSetGagnant)
+    //     `memeCode` est plus bas dans ce fichier et reste EXPORTÉE pour cela seul ;
+    //     `setCode` et `codeSetGagnant` sont tous deux journalisés.
+    //
+    // PREUVE FAITE AVANT LA SUPPRESSION : recalculé sur les 172 documents avec cette
+    // fonction-là — 172/172, zéro divergence.
 
     // COMMENT LE setCode LU S'EST RÉSOLU — compté, sans aucun effet sur le scoring.
     //   'exact'        -> il désigne un code de set du catalogue
@@ -582,11 +619,22 @@ const journalScanSchema = new mongoose.Schema({
     // sert vraiment ou s'il est inerte. null = aucune égalité à départager sur ce scan.
     symboleDepartage: String,
 
-    // La parenté RETENUE, quand il y en a une : « MCD~MCDP ». Toute la chaîne en dépend
-    // maintenant — MCD~MCDP a sauvé un Charmander à 1033 €, DP5~DP5c un Dracolosse — et
-    // c'est un rapprochement approximatif au cœur du système. Le journaliser rend une
-    // dérive future visible, au lieu d'être découverte par un prix faux.
-    parenteRetenue: String
+    // ⚠️ `parenteRetenue` A ÉTÉ SUPPRIMÉ LE 2026-08-18, ET SA RAISON N'EST PAS CELLE DES
+    // DEUX AUTRES. Il devait porter la parenté retenue quand il y en avait une —
+    // « MCD~MCDP », « xPRE=PRE » — pour rendre visible un rapprochement approximatif.
+    //
+    //     JAMAIS RENSEIGNÉ : 0 ligne sur 117 portant le champ, et 0 ligne à
+    //     `setCodeResolution` valant 'parente' ou 'convention-x', les deux seules
+    //     résolutions qui l'écrivent (index.js). Le compte est cohérent : le chemin
+    //     n'a jamais été emprunté en production.
+    //
+    //     NON RECALCULABLE : la chaîne nomme les sets apparentés TELS QU'ILS ÉTAIENT EN
+    //     BASE au moment du scan, et la base s'enrichit. Contrairement à `rang` et
+    //     `setCodeAccord`, aucune preuve de recalculabilité n'était possible.
+    //
+    // SUPPRIMÉ FAUTE D'AVOIR JAMAIS RIEN MESURÉ. Si le besoin revient, il reviendra avec
+    // un usage, et le champ sera recréé POUR cet usage. Le diagnostic reste visible dans
+    // les logs : index.js journalise toujours `[setcode-diagnostic]` à la console.
 }, { versionKey: false });
 
 const JournalScan = mongoose.models.JournalScan
@@ -718,6 +766,8 @@ function enregistrerScan(d = {}) {
             // Tronqué ICI, une seule fois, pour que tous les appelants soient bornés de la
             // même façon — un appelant qui oublierait de tronquer ne peut pas exister.
             messageErreur: d.messageErreur ? String(d.messageErreur).slice(0, 300) : null,
+            // ⚠️ LU DU CONTEXTE, JAMAIS DE L'APPELANT — voir l'import en tête de fichier.
+            sourcesEnPanne: sourcesTombees(),
             // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,
@@ -730,12 +780,6 @@ function enregistrerScan(d = {}) {
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,
             rembourse: d.rembourse != null ? Boolean(d.rembourse) : null,
-            // ⚠️ PAS de rang sur une ligne d'échec. `rangDuNumero(numero, null)` rend 2,
-            // c'est-à-dire « le numéro du gagnant est inconnu » — or sur un échec il n'y a
-            // pas de gagnant du tout. Laisser passer ce 2 ferait grossir le rang 2 de tous
-            // les échecs et fausserait précisément la fréquence que ce journal existe pour
-            // mesurer.
-            rang: d.motifEchec ? null : rangDuNumero(d.numero, numeroGagnant),
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
             totalHorsTailleDeSet: d.totalHorsTailleDeSet != null ? Boolean(d.totalHorsTailleDeSet) : null,
@@ -746,7 +790,6 @@ function enregistrerScan(d = {}) {
             ecartScore: Number.isFinite(d.ecartScore) ? d.ecartScore : null,
             prixVinted, prixReference, ratio,
             sourcePrix: d.sourcePrix || null,
-            setCodeAccord: memeCode(d.setCode, codeSetGagnant),
             setCodeResolution: d.setCodeResolution || null,
             raisonReserve: d.raisonReserve || null,
             niveauReserve: d.niveauReserve || null,
@@ -761,8 +804,7 @@ function enregistrerScan(d = {}) {
             prixLive: Number.isFinite(d.prixLive) ? d.prixLive : null,
             prixLiveEtat: d.prixLiveEtat || null,
             prixLiveCodeLangue: Number.isFinite(d.prixLiveCodeLangue) ? d.prixLiveCodeLangue : null,
-            symboleDepartage: d.symboleDepartage || null,
-            parenteRetenue: d.parenteRetenue || null
+            symboleDepartage: d.symboleDepartage || null
         });
     })().catch(e => {
         // Trace, jamais de propagation. Un journal muet vaut mieux qu'un scan cassé.
