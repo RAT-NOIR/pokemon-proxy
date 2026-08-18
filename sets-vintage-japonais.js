@@ -1,3 +1,70 @@
+// ════════════════════════════════════════════════════════════════════════════
+// LA RÈGLE QUI PASSE AVANT TOUTES LES AUTRES DANS CE CHANTIER
+// ════════════════════════════════════════════════════════════════════════════
+// AUCUN SIGNAL NOUVEAU N'EST AJOUTÉ TANT QU'UN SIGNAL DÉJÀ CALCULÉ RESTE NON CONSULTÉ.
+// Soit on le branche, soit on le supprime.
+//
+// POURQUOI. Ajouter un signal est facile et se sent productif ; le brancher demande de
+// mesurer ce qu'il casse. Le chantier a donc accumulé des champs calculés à chaque scan,
+// écrits en base, et que rien ne lit — chacun ayant l'air d'un progrès au moment où il a
+// été écrit. Le cas qui a fait adopter la règle : `totalInvalidable`. Calculé sur tous les
+// scans depuis le 2026-08-04, jamais consulté, et SON NOM PRÉPARAIT LA MAUVAISE
+// CONCLUSION — « total invalidable » invitait à jeter le total, alors que sur les 7 lignes
+// marquées, ZÉRO portait un total mal lu. Sur Bayleef, le total (029) était le signal le
+// plus précis de la ligne : il désignait les 29 cartes de la sous-série « S » d'EC1.
+// Un signal non branché ne dort pas : il vieillit, et il ment quand on le réveille.
+//
+// L'INVENTAIRE, au 2026-08-18 — champs calculés à chaque scan, journalisés, qu'AUCUNE
+// décision du serveur ne lit :
+//   · totalHorsTailleDeSet  (ex-totalInvalidable) — renommé, toujours non branché
+//   · setCodeResolution     — 5 valeurs assignées (exact / convention-x / parente /
+//                             mot-non-code / inconnu), jamais relues
+//   · setCodeAccord         — calculé dans journal-scans.js, jamais relu
+//   · rang                  — rang du numéro lu contre celui du gagnant, jamais relu
+//                             (⚠️ `rangGagnant`, lui, EST consulté : index.js, rang 3)
+//   · parenteRetenue        — la chaîne « code~codes » ; `parParente` est relu, elle non
+//   · symboleSet            — consulté en UN seul endroit, `departagerParSymbole`, et
+//                             uniquement pour départager une égalité parfaite
+// Ne SONT PAS dans cette liste, et c'est délibéré : les copies journalisées d'une décision
+// déjà prise (`identifieeEnLocal`, `margeConfortable`, `motifCible`, `symboleDepartage`,
+// `reverseAnnuleeParTcgdex`, `voieCatalogue`, `raisonReserve`), qui sont des TRACES et non
+// des signaux en attente ; l'instrumentation déclarée journal-only (`exAequoIds`,
+// `vivierIds`, `vivierTaille`, `messageErreur`, `carteTcgdexId`, `variantsDetailed*`) ;
+// et `fourchette`, consultée en aval — elle part dans la réponse HTTP à l'extension.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// CE QUE LE VETO PAR LE SYMBOLE COÛTERAIT — mesuré le 2026-08-18, NON BRANCHÉ
+// ════════════════════════════════════════════════════════════════════════════
+// Question posée : le symbole, aujourd'hui simple départage, devrait-il aussi INTERDIRE un
+// gagnant dont le set contredit ce qui a été lu ? Sur les 143 lignes numérotées du banc,
+// 46 sont mesurables (symbole fiable relevé + set du gagnant connu + un produit retenu).
+// Le symbole CONFIRME le gagnant sur 29, le CONTREDIT sur 17. Et les 17 se séparent en deux
+// populations qui ne valent pas la même chose :
+//
+//   gagnant DANS la table  ->  7 lignes : 1 juste · 4 fausses · 2 sans vérité
+//   gagnant HORS table     -> 10 lignes : 7 justes · 1 fausse · 2 sans vérité
+//
+// ⚠️ LE VETO NON BORNÉ CASSE 8 LIGNES JUSTES POUR EN TOUCHER 5 FAUSSES : il est perdant.
+// Et la cause n'est pas statistique, elle est structurelle — cette table ne couvre que
+// 24 sets japonais vintage. Un Mewtwo d'Evolutions dont l'IA lit « eclair » ne contredit
+// rien : la table est MUETTE sur son set. C'est le premier principe, appliqué à un index
+// partiel — « je ne sais pas » n'est pas « je sais que non ». Un veto ne peut donc porter
+// que sur les lignes dont le gagnant est LUI AUSSI dans la table.
+// ⚠️ ET MÊME BORNÉ, IL N'EST PAS GRATUIT : il casserait Light Togetic (« etoile » lu, N1,
+// vérité N4), et très probablement Golem n°122 (« e5 » lu, gagnant EC1) — dont le total
+// 128 est exactement le corps d'EC1, ce qui met trois signaux contre le symbole. Le
+// symbole se trompe aussi, et sur les e-Card il confond les chiffres.
+// RIEN N'EST BRANCHÉ. Les deux chiffres décident ensemble, et ils disent : pas encore.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// LES PRÉFIXES ALPHABÉTIQUES — un problème de 71 000 produits, pas de vintage japonais
+// ════════════════════════════════════════════════════════════════════════════
+// 1 936 produits du catalogue (28 préfixes distincts : S, TG, SV, GG, H…) portent un
+// numéro à préfixe alphabétique et sont donc HORS D'ATTEINTE du chemin `local-nom-numero`,
+// qui filtre par égalité stricte du numéro. L'IA lit « 007 », le catalogue porte « S07 » :
+// le bon candidat est écarté AVANT tout scoring, en silence. Le cas Bayleef en est un, la
+// classe est bien plus large — et elle n'a rien de japonais ni de vintage.
+//
 // ============================================================
 // LA TABLE CLOSE DES SETS JAPONAIS VINTAGE (1996-2003)
 // ============================================================

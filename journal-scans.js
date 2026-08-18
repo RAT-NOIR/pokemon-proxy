@@ -251,6 +251,15 @@ const journalScanSchema = new mongoose.Schema({
     // être remesurés sur un lot neuf — les anciens chiffres ne s'y ajoutent pas.
     exAequoIds: [Number],     // les idProduct à égalité au sommet, AU MOMENT DU SCAN
     vivierIds: [Number],      // le vivier retenu, celui que le scoring a réellement vu
+    // ⚠️ CE QUE `vivierIds` RÉPARE, SUR UN CAS RÉEL PLUTÔT QU'EN PRINCIPE.
+    // Bayleef, 2026-08-08 : retenu 670000 (L1SS, n°007), vrai 654769 (EC1, n°S07), écart
+    // de score 70. La question qui décide — le bon candidat était-il seulement au vivier ?
+    // — n'a PAS pu être lue : le champ n'existait pas. Elle a dû être INFÉRÉE de
+    // `voieCatalogue = local-nom-numero`, de la règle de filtrage par numéro de ce chemin,
+    // et de l'incompatibilité « S07 » ≠ « 007 ». L'inférence était solide ; elle restait
+    // une inférence, et l'écart entre les deux est exactement ce que ce champ supprime.
+    // Sans lui, un échec de PÉRIMÈTRE se lit comme un échec de PRÉDICTEUR — et on part
+    // saisir neuf vérités pour valider une hypothèse que le cas ne mettait pas en cause.
     // Le vivier est BORNÉ à l'écriture (voir enregistrerScan) : « Pikachu » ramène 431
     // produits, et une ligne de journal n'est pas un dépôt. La TAILLE VRAIE est gardée à
     // part, sans quoi une borne silencieuse ferait croire à un vivier plus petit qu'il
@@ -327,16 +336,47 @@ const journalScanSchema = new mongoose.Schema({
     // dans ce cas (3,0 % du catalogue) et ne rien y trouver ne prouve rien.
     nomNumeroIncoherents: Boolean,
 
-    // LE TOTAL LU CORRESPOND-IL À UN SET EXISTANT DE SA RÉGION ?
-    // true = aucun set connu de cette taille dans la langue de la carte. Le total est donc
-    // soit mal lu, soit celui d'un set que TCGdex ignore — et on ne peut pas trancher :
-    // mesuré, un « 018 » invalidable était le VRAI total du McDonald's japonais, absent de
-    // TCGdex. C'est pourquoi ce champ ne COMMANDE RIEN aujourd'hui : il compte.
-    // Il existe pour une raison précise : la borne « total présent » de la règle du numéro
-    // de Pokédex n'a que deux états, faute d'un troisième (« total douteux ») dont le coût
-    // a été mesuré à zéro ligne. Ce compteur est ce qui permettra d'écrire cette branche
-    // sur des chiffres le jour où elle vaudra quelque chose, plutôt que sur un principe.
-    totalInvalidable: Boolean,
+    // LE TOTAL LU CORRESPOND-IL À LA TAILLE D'UN SET CONNU DE SA RÉGION ?
+    //   null  -> aucun total lu, OU liste des sets indisponible : HORS MESURE
+    //   true  -> la liste a été consultée et aucun set n'a cette taille
+    //   false -> un set au moins a cette taille
+    //
+    // ⚠️ IL S'APPELAIT `totalInvalidable`, ET CE NOM PRÉPARAIT LA MAUVAISE CONCLUSION.
+    // Le champ dit une chose vraie et étroite : « aucun set connu ne fait ce compte ».
+    // De là partent DEUX lectures, et une seule est juste.
+    //
+    //   LECTURE FAUSSE — « donc le total est mal lu, écartons-le ». C'est ce que le mot
+    //   « invalidable » suggère, et c'est démenti par les chiffres. Sur les 7 lignes
+    //   marquées à ce jour, ZÉRO porte un total mal lu :
+    //     · Slowpoke 014/018   -> MCDP, dont le corps fait exactement 18
+    //     · Ross's Wailmer 005/018 -> TLVS, 18 produits
+    //     · Mimikyu GX 010/026 -> smD, numéros 001 à 026
+    //     · Bayleef 007/029    -> les 29 produits de la sous-série « S » d'EC1
+    //     · les 3 autres (2026-08-15) -> liste des sets indisponible, voir plus bas
+    //   Sur Bayleef, le total était le signal LE PLUS PRÉCIS de la ligne — il désignait
+    //   une sous-série de 29 cartes — et c'est ce champ-là qui invitait à le jeter.
+    //
+    //   LECTURE JUSTE — « donc ce n'est pas la taille d'un SET ». Un total qui ne
+    //   correspond à aucun set correspond très souvent à autre chose de réel : le CORPS
+    //   d'un set dont TCGdex publie le compte avec les secrètes (EC1 : 128 + 29 = 157),
+    //   une SOUS-SÉRIE numérotée à part (BRS : TG01..TG30), ou un set que TCGdex ignore.
+    //   ⚠️ C'est une piste, pas une décision : 2 cartes seulement l'exercent aujourd'hui,
+    //   dont une seule à vérité saisie. Rien n'est branché dessus.
+    //
+    // ⚠️ ET LE null N'EST PAS UN DÉTAIL : `chargerSetsTCGdex` rend une liste VIDE quand
+    // elle est injoignable. Tant que le champ était un booléen à deux états, une panne de
+    // réseau s'écrivait « aucun set de cette taille » — une absence lue comme une valeur
+    // contraire, la même famille d'erreur d'instrument que le catch d'identification a
+    // déjà fermée. Trois des sept true sont exactement ça.
+    //
+    // Ce champ ne COMMANDE RIEN : il compte. Il existe pour une raison précise — la borne
+    // « total présent » de la règle du numéro de Pokédex n'a que deux états, faute d'un
+    // troisième (« total douteux ») dont le coût a été mesuré à zéro ligne.
+    //
+    // ⚠️ LES DOCUMENTS ANTÉRIEURS AU RENOMMAGE PORTENT ENCORE `totalInvalidable` (117 au
+    // 2026-08-18, dont 7 à true). Toute mesure qui remonte avant cette date doit lire les
+    // DEUX noms, ou dire qu'elle ne le fait pas.
+    totalHorsTailleDeSet: Boolean,
 
     // --- PAR QUEL LIEN L'IDENTIFICATION EST-ELLE PASSÉE ? ---
     // Ces trois champs existent pour une question précise, à laquelle il a été impossible
@@ -698,7 +738,7 @@ function enregistrerScan(d = {}) {
             rang: d.motifEchec ? null : rangDuNumero(d.numero, numeroGagnant),
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
-            totalInvalidable: d.totalInvalidable != null ? Boolean(d.totalInvalidable) : null,
+            totalHorsTailleDeSet: d.totalHorsTailleDeSet != null ? Boolean(d.totalHorsTailleDeSet) : null,
             setTcgdex: d.setTcgdex || null,
             idExpansionGagnante: Number.isFinite(d.idExpansionGagnante) ? d.idExpansionGagnante : null,
             regionSource: d.regionSource || null,

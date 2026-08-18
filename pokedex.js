@@ -93,9 +93,13 @@ function numeroEstUnDexId({ nom, numero, total, langue } = {}) {
     // or le dexId de Carabaffe est 8, et 19 ≠ 8 — la règle ne se déclencherait pas même en
     // traitant ce total comme douteux.
     // On n'écrit donc pas la branche, MAIS on compte le phénomène : le champ
-    // `totalInvalidable` du journal marque les scans dont le total ne correspond à aucun
-    // set connu de la région lue. Le jour où ce compteur monte, la branche s'écrira sur
-    // des chiffres et non sur un principe. Voir index.js, où le champ est calculé.
+    // `totalHorsTailleDeSet` du journal marque les scans dont le total ne correspond à
+    // aucun set connu de la région lue. Le jour où ce compteur monte, la branche s'écrira
+    // sur des chiffres et non sur un principe. Voir index.js, où le champ est calculé.
+    // ⚠️ IL S'APPELAIT `totalInvalidable` ET CE NOM MENTAIT : sur les 7 lignes marquées,
+    // aucune ne porte un total mal lu. Un total sans set de cette taille désigne le plus
+    // souvent autre chose de RÉEL — le corps d'un set, ou une sous-série numérotée à part.
+    // Le détail des deux lectures est dans journal-scans.js, à la déclaration du champ.
     if (total != null && String(total).trim() !== '' && chiffres(total) != null) {
         return { estDex: false, dexId: null, raison: `total ${total} imprimé -> numérotation moderne` };
     }

@@ -3054,12 +3054,27 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // que deux états ; le troisième (« total douteux ») n'est pas écrit parce que son
         // coût est mesuré à ZÉRO ligne du banc. Ce compteur est ce qui permettra de trancher
         // avec des chiffres le jour venu — voir pokedex.js et journal-scans.js.
-        // ⚠️ Il NE COMMANDE RIEN : `setsPourTotal` lit un cache déjà chaud (aucun appel
-        // réseau supplémentaire) et le résultat ne va qu'au journal.
-        let totalInvalidable = null;
+        // ⚠️ Il NE COMMANDE RIEN : la liste des sets est lue dans un cache déjà chaud
+        // (aucun appel réseau supplémentaire) et le résultat ne va qu'au journal.
+        //
+        // ⚠️ TROIS ÉTATS, PAS DEUX — et le troisième est celui qui manquait.
+        // `chargerSetsTCGdex` rend une liste VIDE quand elle est injoignable. L'ancienne
+        // écriture (`setsPourTotal(...).length === 0`) ne pouvait donc pas distinguer
+        // « aucun set ne fait cette taille » de « je n'ai pas pu regarder » — le même
+        // défaut absence/panne que le catch d'identification a déjà fermé. Mesuré : sur les
+        // 7 lignes marquées, 3 tombent dans une seule fenêtre de 43 minutes le 2026-08-15,
+        // sur un seul build, et TOUTES les trois retrouvent leur set au rejeu d'aujourd'hui
+        // avec un code inchangé depuis le 2026-07-30. C'était la liste, pas les cartes.
+        //   null  -> aucun total lu, OU liste indisponible : HORS MESURE
+        //   true  -> la liste a été consultée et aucun set n'a cette taille
+        //   false -> un set au moins a cette taille
+        let totalHorsTailleDeSet = null;
         if (cardInfo.total != null && String(cardInfo.total).trim() !== '') {
-            totalInvalidable = (await setsPourTotal(cardInfo.total, cardInfo.language)).length === 0;
-            if (totalInvalidable) console.log(`📊 [total-invalidable] total ${cardInfo.total} : aucun set de cette taille en [${langueDesSetsTCGdex(cardInfo.language)}]. Compté, sans conséquence.`);
+            const setsConnus = await chargerSetsTCGdex(langueDesSetsTCGdex(cardInfo.language));
+            totalHorsTailleDeSet = setsConnus.length === 0
+                ? null
+                : setsCompatiblesAvecTotal(setsConnus, cardInfo.total).length === 0;
+            if (totalHorsTailleDeSet) console.log(`📊 [total-hors-taille-de-set] total ${cardInfo.total} : aucun set de cette taille en [${langueDesSetsTCGdex(cardInfo.language)}]. Compté, sans conséquence.`);
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -4479,7 +4494,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // leur fréquence réelle sans dépendre des logs éphémères de Render.
             aucunCandidatAuNumero,
             nomNumeroIncoherents,
-            totalInvalidable,
+            totalHorsTailleDeSet,
             // Par quel lien l'identification est passée. Aucun changement de comportement :
             // ces trois champs sont la seule façon de mesurer, au tour suivant, ce que la
             // table close aura réellement corrigé.
