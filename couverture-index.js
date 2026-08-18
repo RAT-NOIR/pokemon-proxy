@@ -46,7 +46,7 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 // tousse, et ferait porter à la barrière la disponibilité d'un service tiers.
 const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
     'test-setcode-numero.js', 'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
-    'test-journal-echecs.js', 'test-symbole-departage.js'];
+    'test-journal-echecs.js', 'test-symbole-departage.js', 'test-banc-seaux.js'];
 // Le banc est inclus dans la mesure COMPLÈTE : c'est lui qui affichait vert pendant que la
 // production était morte, et la question « que couvre l'instrument » n'a de sens que s'il
 // est dedans.

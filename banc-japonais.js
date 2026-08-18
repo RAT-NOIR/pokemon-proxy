@@ -1,3 +1,28 @@
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ AUCUNE MESURE NE SE RÉCLAME DU HOLDOUT AUJOURD'HUI — 2026-08-18
+// ════════════════════════════════════════════════════════════════════════════
+// LE SEAU QUI EXISTE POUR DÉCIDER EST VIDE DE SENS. Sur ses 29 lignes :
+//     2 seulement portent une vérité INDIVIDUELLE — et l'une des deux n'est pas fraîche :
+//       elle est HÉRITÉE, par identité, d'une carte déjà saisie dans un lot de diagnostic
+//       (Dark Dragonite n°149). Une seule vérité du holdout porte sur une carte que rien
+//       d'autre n'a vue.
+//    21 sont validées EN BLOC — « attendu = ce que la production a retenu ». Elles
+//       affichent 100 % de justes PAR ARITHMÉTIQUE, jamais par évaluation.
+//     6 sont sans vérité (la production a échoué, il n'y a rien à comparer).
+// Un « taux de justesse du holdout » calculé là-dessus mesure la production contre
+// elle-même. C'est le défaut que ce banc a déjà commis une fois (« LOTS : JUSTE 20
+// 100,0 % » sur zéro vérité vérifiée), dans l'autre sens.
+//
+// CE QUI RESTE VALIDE SUR CE SEAU, et rien d'autre :
+//   · le MOUVEMENT avant -> après sur les lignes en bloc : `apres(d)` recalcule et peut
+//     s'écarter du gagnant de production. Ça détecte une RÉGRESSION, jamais une réussite.
+//   · le taux de LECTURE, qui ne dépend pas de la vérité fournie.
+//
+// LEVÉE DE L'AVERTISSEMENT : quand les 27 lignes (21 en bloc + 6 sans vérité) auront une
+// vérité individuelle saisie. Leurs photos ont été contrôlées le 2026-08-18 — 28 sur 28
+// répondent encore sur le CDN Vinted, aucune n'est perdue, la saisie est donc possible en
+// entier. Tant qu'elle n'est pas faite, ce paragraphe reste en tête du fichier.
+//
 // ============================================================
 // LE BANC JAPONAIS — le taux, point de correctif par point de correctif
 // ============================================================

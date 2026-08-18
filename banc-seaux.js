@@ -113,11 +113,10 @@ function numeroter(docs) {
 
     const vues = new Map();
     for (const d of exploitables) {
-        const seau = seauDe(d);
-        // ⚠️ LA CLÉ DE DÉDOUBLONNAGE PORTE LE SEAU. Deux scans identiques de part et d'autre
-        // d'une frontière sont deux lignes distinctes, et c'est voulu : l'un a servi à
-        // dériver un correctif, l'autre le mesure.
-        const k = `${seau}|${d.nom ?? ''}|${d.numero ?? ''}|${d.setCode ?? ''}|${d.total ?? ''}`;
+        // ⚠️ PAS DE CLÉ ÉCRITE EN LIGNE ICI. Elle l'a été, elle recopiait les composantes
+        // de `identiteDe`, et les deux pouvaient diverger en silence. Une seule définition,
+        // en bas de ce fichier — voir `cleDeDedoublonnage` et le contrôle qui la garde.
+        const k = cleDeDedoublonnage(d);
         if (!vues.has(k)) vues.set(k, d);
     }
 
@@ -139,10 +138,42 @@ function numeroter(docs) {
 // L'identité, elle, ne bouge pas : c'est ce que l'IA a lu sur CETTE carte. `saisir-verites`
 // l'enregistre déjà, sous le champ `lu`. On s'y accroche, et la clé redevient ce qu'elle
 // aurait toujours dû être : une ÉTIQUETTE D'AFFICHAGE.
-const identite = (nom, numero, setCode, total) =>
-    `${nom ?? ''}|${numero ?? ''}|${setCode ?? ''}|${total ?? ''}`;
-const identiteDe = d => identite(d.nom, d.numero, d.setCode, d.total);
-const identiteDeVerite = v => v && v.lu ? identite(v.lu.nom, v.lu.numero, v.lu.setCode, v.lu.total) : null;
+//
+// ⚠️ `setCode` EST SORTI DE LA CLÉ LE 2026-08-18, ET C'EST UNE CORRECTION DU MÊME DÉFAUT.
+// Une identité ne peut reposer que sur ce qui NE BOUGE PAS d'un scan à l'autre. Mesuré
+// sur les 143 lignes numérotées :
+//     nom      rendu 100,0 %      numero   rendu 95,8 %
+//     total    rendu  49,0 %      setCode  rendu 46,9 %  ← et il VARIE
+// Sur les 17 groupes nom+numéro rescannés, `setCode` change de valeur dans 4 — presque
+// toujours « lu une fois, pas lu l'autre ». Résultat : 3 cartes occupaient DEUX places de
+// seau chacune (Wartortle, Articuno, Dark Dragonite), et les trois avaient abouti au MÊME
+// produit. La scission était un artefact de lecture, pas une distinction entre cartes.
+// Coût du retrait, chiffré AVANT de le faire : 0 vérité détachée, 0 collision, 137 -> 134
+// identités, 143 -> 141 lignes au banc. `total` reste dans la clé — rendu aussi rarement,
+// mais il ne varie que dans 1 groupe sur 17, et il porte une information que rien d'autre
+// ne porte (voir `totalHorsTailleDeSet`).
+//
+// ⚠️ ET LA LISTE DES COMPOSANTES N'EST ÉCRITE QU'UNE FOIS, EXPRÈS. Jusqu'ici ce fichier
+// contenait DEUX définitions de l'identité : celle-ci, et une copie écrite en ligne dans
+// `numeroter()` pour dédoublonner. Deux définitions de la même règle dans deux endroits
+// divergent toujours — c'était la sixième occurrence du motif, et cette fois les deux
+// copies étaient dans le MÊME FICHIER, celui qui existe pour qu'il n'y en ait qu'une.
+// `cleDeDedoublonnage` dérive maintenant de `identiteDe`, et `test-banc-seaux.js` ÉCHOUE
+// si quelqu'un les fait diverger à nouveau.
+const COMPOSANTES_IDENTITE = Object.freeze(['nom', 'numero', 'total']);
+const identite = source => COMPOSANTES_IDENTITE.map(k => source?.[k] ?? '').join('|');
+const identiteDe = d => identite(d);
+const identiteDeVerite = v => v && v.lu ? identite(v.lu) : null;
+
+/**
+ * La clé de DÉDOUBLONNAGE : l'identité de la carte, PLUS le seau.
+ *
+ * ⚠️ LE SEAU EN FAIT PARTIE, ET C'EST VOULU. Deux scans identiques de part et d'autre
+ * d'une frontière sont deux lignes distinctes : l'un a servi à dériver un correctif,
+ * l'autre le mesure. Mais rien d'autre que le seau ne s'ajoute à l'identité — sinon deux
+ * définitions redivergent.
+ */
+const cleDeDedoublonnage = d => `${seauDe(d)}|${identiteDe(d)}`;
 
 /**
  * Rattache les vérités saisies aux lignes numérotées, PAR IDENTITÉ.
@@ -192,5 +223,9 @@ module.exports = {
     VERIFICATION, estVerification,
     FENETRES_LOTS, fenetreDe,
     seauDe, numeroter,
+    // COMPOSANTES_IDENTITE et cleDeDedoublonnage sont exportées POUR ÊTRE CONTRÔLÉES.
+    // Sans elles, aucun test ne peut vérifier que les deux définitions n'ont pas
+    // redivergé — et c'est exactement ce qui s'est produit six fois.
+    COMPOSANTES_IDENTITE, cleDeDedoublonnage,
     identiteDe, identiteDeVerite, rattacherVerites
 };
