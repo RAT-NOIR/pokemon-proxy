@@ -100,6 +100,19 @@ const journalScanSchema = new mongoose.Schema({
     //   'aucun-candidat'    -> carte identifiée, mais zéro produit Cardmarket à tester
     //   'aucun-prix'        -> produit trouvé, aucun prix de référence (route analyser)
     //   'erreur-serveur'    -> exception remontée au catch de la route
+    // ⚠️ LE MESSAGE DE L'EXCEPTION, TRONQUÉ À 300 CARACTÈRES. Jusqu'ici `motifEchec`
+    // disait QU'il y avait eu une exception, jamais LAQUELLE : le texte n'existait que
+    // dans les logs Render, éphémères. Les deux `erreur-serveur` du 2026-08-03 sont donc
+    // indiagnosticables aujourd'hui, et c'est cette impasse qu'on ferme.
+    // 300 : de quoi porter « X is not a function » et le début d'une pile, pas de quoi
+    // faire grossir la collection sur une exception bavarde.
+    // ⚠️⚠️ IL RESTE MASQUÉ CÔTÉ RÉPONSE HTTP, ET CE N'EST PAS NÉGOCIABLE. `e.message` brut
+    // avait été retiré des réponses après qu'un utilisateur a lu
+    // « memeCodeParConventionX is not a function » dans son extension — le nom d'une
+    // fonction interne, qui ne l'aide en rien et décrit notre code à qui la reçoit.
+    // Le journaliser NE LE RÉINTRODUIT PAS dans la réponse : les deux chemins sont
+    // distincts, et la réponse garde son texte générique.
+    messageErreur: String,
     //   'tcgdex-injoignable'-> TCGdex n'a pas répondu, même après réessai. ⚠️ À NE PAS
     //      AGRÉGER AVEC 'carte-introuvable' : l'un dit « cette carte n'existe pas », l'autre
     //      « je n'ai pas pu regarder ». Ils se confondaient jusqu'au 2026-08-15, ce qui rend
@@ -215,6 +228,34 @@ const journalScanSchema = new mongoose.Schema({
     // que si la carte sort AVEC un prix, et seulement si aucune raison plus spécifique ne
     // l'a précédée dans la cascade.
     estDex: Boolean,
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LE GROUPE D'ÉGALITÉ ET LE VIVIER — ÉCRITS AU SCAN, PLUS JAMAIS REJOUÉS
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️⚠️ CES DEUX CHAMPS REMPLACENT LE REJEU COMME SOURCE. Ils ne le complètent pas :
+    // ils le REMPLACENT. Quiconque voudra « vérifier » en recalculant le vivier hors ligne
+    // refera l'erreur qui a coûté deux tours de mesures — mesuré le 2026-08-16 :
+    // reconstruire le vivier avec `trouverProduitsLocaux` + le périmètre diverge du
+    // gagnant de production sur 27 lignes comparables sur 109, soit 24,8 %. La cause est
+    // structurelle : la route unit DEUX noms (`viviersUnis`), passe par `viviersAvecRangs`,
+    // peut recevoir `produitsImposes` du chemin setCode+numéro, et tire ses
+    // `expansionsAttendues` de la carte TCGdex. Aucune reproduction hors ligne n'a ces
+    // quatre entrées.
+    // ⚠️ TANT QUE CES CHAMPS N'EXISTENT PAS SUR UN LOT, LA COLONNE « APRÈS » DU BANC EST
+    // INUTILISABLE — `banc-japonais.js` construit lui aussi son vivier par reproduction
+    // (voir sa ligne `trouverProduitsLocaux(d.nom)`), et 17 des 18 lignes qui bougent y
+    // passent. Aucune décision d'identification ne doit s'appuyer sur le banc d'ici là.
+    //
+    // ⚠️ ET ILS NE VALENT QUE POUR LES SCANS À VENIR. Les 138 lignes déjà au journal ne
+    // les auront JAMAIS. La clôture, le coût de collecte et le taux de départage devront
+    // être remesurés sur un lot neuf — les anciens chiffres ne s'y ajoutent pas.
+    exAequoIds: [Number],     // les idProduct à égalité au sommet, AU MOMENT DU SCAN
+    vivierIds: [Number],      // le vivier retenu, celui que le scoring a réellement vu
+    // Le vivier est BORNÉ à l'écriture (voir enregistrerScan) : « Pikachu » ramène 431
+    // produits, et une ligne de journal n'est pas un dépôt. La TAILLE VRAIE est gardée à
+    // part, sans quoi une borne silencieuse ferait croire à un vivier plus petit qu'il
+    // n'était — exactement le genre de champ qui ment sans se contredire.
+    vivierTaille: Number,
 
     // ════════════════════════════════════════════════════════════════════════
     // LA ROUTE TCGdex QUI A TROUVÉ LA CARTE, ET CE QU'ELLE A RAPPORTÉ
@@ -628,6 +669,15 @@ function enregistrerScan(d = {}) {
             reverseLu: d.reverseLu != null ? Boolean(d.reverseLu) : null,
             reverseAnnuleeParTcgdex: d.reverseAnnuleeParTcgdex != null ? Boolean(d.reverseAnnuleeParTcgdex) : null,
             estDex: d.estDex != null ? Boolean(d.estDex) : null,
+            // ⚠️ LE VIVIER EST BORNÉ ICI, ET SA TAILLE VRAIE EST GARDÉE À PART. Sans ce
+            // couple, une borne silencieuse ferait lire « vivier de 200 » là où il y en
+            // avait 431. Le plafond est haut : il ne coupe que les viviers pathologiques.
+            exAequoIds: Array.isArray(d.exAequoIds) ? d.exAequoIds.map(Number).filter(Number.isFinite) : null,
+            vivierIds: Array.isArray(d.vivierIds) ? d.vivierIds.map(Number).filter(Number.isFinite).slice(0, 200) : null,
+            vivierTaille: Number.isFinite(d.vivierTaille) ? d.vivierTaille : (Array.isArray(d.vivierIds) ? d.vivierIds.length : null),
+            // Tronqué ICI, une seule fois, pour que tous les appelants soient bornés de la
+            // même façon — un appelant qui oublierait de tronquer ne peut pas exister.
+            messageErreur: d.messageErreur ? String(d.messageErreur).slice(0, 300) : null,
             // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,
@@ -709,7 +759,12 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // avait été écrite pour empêcher côté succès. On le fait donc passer par l'appelant,
     // qui seul sait où il en est ; absent, il reste null, et null veut dire « on ne sait
     // pas », pas « false ».
-    reverseLu, motifIA, estDex } = {}) {
+    reverseLu, motifIA, estDex,
+    // ⚠️ LES REFUS EN ONT AUTANT BESOIN QUE LES SUCCÈS — plus, même : `egalite-parfaite`
+    // EST un refus pour cause d'égalité, et jusqu'ici il ne disait pas ENTRE QUOI.
+    // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
+    // groupe était couvert par un index, ni de mesurer la clôture après coup.
+    exAequoIds, vivierIds, vivierTaille, messageErreur } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
         route, userId, motifEchec, imageUrl, vintedUrl,
@@ -730,6 +785,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         reverseLu: reverseLu != null ? Boolean(reverseLu) : null,
         motifIA: motifIA ?? c.motif ?? null,
         estDex: estDex != null ? Boolean(estDex) : null,
+        exAequoIds, vivierIds, vivierTaille, messageErreur,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,

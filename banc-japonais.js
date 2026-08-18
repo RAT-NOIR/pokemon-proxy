@@ -383,7 +383,15 @@ function celluleDe(d) {
             if (parNom.length > 1 && dedans.length) {
                 const cs = await lireCodeSets(dedans.map(p => p.idExpansion));
                 const r = await scorerCandidatsLocal(dedans, cardInfoNeutre, null, [], cs, {});
-                const eg = r.scores.length > 1 && r.scores[0].score === r.scores[1].score;
+                // ⚠️ `sontExAequo`, JAMAIS un `===` en ligne. Elle a été extraite dans
+                // scoring.js pour qu'il n'existe pas un second seuil d'égalité ailleurs —
+                // et le banc en portait TROIS. Aujourd'hui les deux se comportent pareil
+                // (l'égalité est stricte), donc rien ne signalerait la divergence ; le jour
+                // où la définition bouge, la production changerait et le banc garderait
+                // l'ancienne. C'est la forme exacte du défaut que la règle de symétrie
+                // existe pour attraper, et elle ne couvrait que les DÉCISIONS, pas les
+                // SEUILS qu'elles utilisent.
+                const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
                 if (r.scores.length && !eg) {
                     retenu = r.scores[0].candidat.idProduct;
                     voie = 'perimetre-vintage';
@@ -392,7 +400,7 @@ function celluleDe(d) {
                 }
                 // Égalité dans le périmètre : le SYMBOLE d'abord, l'écart de prix ensuite.
                 if (eg) {
-                    const exAequo = r.scores.filter(s => s.score === r.scores[0].score);
+                    const exAequo = r.scores.filter(s => S.sontExAequo(s.score, r.scores[0].score));
                     // ⚠️ LE DÉPARTAGE PAR LE SYMBOLE, DANS LE MÊME ORDRE QU'EN PRODUCTION.
                     // Il manquait ici pendant un commit, et la colonne APRÈS a menti de
                     // -7 justes et +10 refus sur le lot « symbole-40 » : le banc refusait
@@ -443,7 +451,7 @@ function celluleDe(d) {
                 // n'est pas faite, ne pas lire les colonnes AVANT/APRÈS de ces lignes-là
                 // comme une prédiction de ce que fera la production.
                 const r = await scorerCandidatsLocal(avis.preuves, cardInfoNeutre, null, [], cs, {});
-                const eg = r.scores.length > 1 && r.scores[0].score === r.scores[1].score;
+                const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
                 if (r.scores.length && !eg) { retenu = r.scores[0].candidat.idProduct; voie = 'veto-nom-reclasse'; }
                 else { retenu = null; voie = 'REFUS-veto'; incertain = true; }
             }

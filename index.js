@@ -2823,7 +2823,12 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         // l'en empêchait (« on ignore si un résultat a été livré ») était juste ; elle se
         // tranche par `res.headersSent`, pas par l'abstention.
         const rendu = await rembourserSiRienLivre(req, res, 'erreur-serveur');
-        enregistrerEchec({ route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: rendu });
+        // ⚠️ Le message part au JOURNAL, jamais dans la réponse — voir `messageErreur`.
+        enregistrerEchec({
+            route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo,
+            motifEchec: 'erreur-serveur', rembourse: rendu,
+            messageErreur: `${error?.message ?? error} @ ${String(error?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`
+        });
         if (!res.headersSent) res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
@@ -3682,6 +3687,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Égalité au sommet dont l'écart de prix est trop faible pour changer le verdict :
         // le prix part, mais avec réserve. Voir la règle de l'écart de prix plus bas.
         let egaliteSansEnjeu = false;
+        // ⚠️ LE GROUPE D'ÉGALITÉ, HISSÉ HORS DU BLOC QUI LE CALCULE. Il vivait dans le
+        // `if` de l'égalité et mourait avec lui ; le journal ne recevait que son NOMBRE.
+        // Sans les identifiants, la clôture d'un index sur ce groupe ne se mesure pas —
+        // et la seule autre source, le rejeu hors ligne, diverge de la production sur
+        // 24,8 % des gagnants. Voir la note de `exAequoIds` dans journal-scans.js.
+        let exAequoIds = null;
         // Le départage par le symbole a-t-il tranché une égalité parfaite ? Drapeau DISTINCT
         // de `perimetreVintage` : les deux forcent la réserve, mais pour des raisons
         // différentes, et c'est cette différence qu'on veut pouvoir compter.
@@ -3797,6 +3808,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // avec le candidat concurrent renvoyé à l'extension. Voir scoring.js.
         if (classement.length > 1 && sontExAequo(classement[0].score, classement[1].score)) {
             const exAequo = classement.filter(c => sontExAequo(c.score, classement[0].score));
+            // Capturé ICI, à la source, avant tout départage : c'est le groupe que le
+            // scoring N'A PAS SU séparer, et c'est lui qui décide de tout ce qui suit.
+            exAequoIds = exAequo.map(c => c.idProduct);
             const prix = exAequo.map(c => c.prix).filter(p => Number.isFinite(p) && p > 0);
             const ecartPrix = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
             const sansEnjeu = ecartPrix != null && ecartPrix < ECART_PRIX_TOLERABLE;
@@ -3879,7 +3893,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
                     fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
-                    reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                    reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                    // Le refus par égalité est LE cas où ces champs manquaient le plus :
+                    // il dit « je ne sais pas départager » sans dire entre quoi.
+                    exAequoIds, vivierIds: produits.map(p => p.idProduct), vivierTaille: produits.length
                 });
                 return res.json({
                     success: false,
@@ -4124,6 +4141,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // d'ordre — exactement comme les 7 lignes lues sous l'ancien prompt ne s'ajoutent
         // pas aux 28 lues sous le nouveau. Deux instruments, deux mesures.
         // Le jour où l'ordre change : le noter ici avec sa date, et repartir d'un lot neuf.
+        // ⚠️⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-08-16, LE PLUS LOURD DES DEUX.
+        // `egalite-sans-enjeu` passe devant `perimetre-vintage-suggestion`. Les
+        // statistiques par raison REPARTENT DE ZÉRO à cette date, exactement comme au
+        // changement de prompt : les 16 lignes de `perimetre-vintage-suggestion` déjà au
+        // journal ne s'additionnent PAS aux suivantes, puisqu'une partie d'entre elles
+        // aurait porté l'autre étiquette sous le nouvel ordre. Le 10/16 appartient à
+        // l'ancien instrument ; le prochain lot mesure le nouveau.
+        // À ÉCRIRE DANS LA NOTE DU LOT, faute de quoi quelqu'un comparera les deux périodes.
+        //
         // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-08-14. Deux entrées ajoutées EN TÊTE :
         // `impression-corrigee` et `impression-contredite`. Elles passent devant
         // `symbole-departage` par la RÈGLE 1 : quand B a substitué le produit, le départage
@@ -4139,10 +4165,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // n'importe quelle raison portant sur le DÉPARTAGE à l'intérieur du vivier.
             : nomSeulVintage ? 'nom-seul-vintage'
             : departageParSymbole ? 'symbole-departage'
-                : perimetreVintage ? 'perimetre-vintage-suggestion'
-                    : lienAmbigu ? 'lien-tcgdex-partage'
-                        : avisDex.estDex ? 'numero-pokedex-neutralise'
-                            : egaliteSansEnjeu ? 'egalite-sans-enjeu'
+                // ⚠️ RECOUVREMENT CORRIGÉ — 2026-08-16. `egaliteSansEnjeu` passe DEVANT
+                // `perimetreVintage`. Avant, une carte qui était les DEUX était rapportée
+                // comme « périmètre », et la classe la plus fréquente absorbait des lignes
+                // qui n'étaient pas les siennes. Mesuré : L038 Ponyta et L056 Caterpie ont
+                // `ecartScore = 0` — donc une égalité — sont classées « périmètre », et
+                // sont toutes deux FAUSSES. Elles tirent vers le bas le taux de la classe
+                // qu'on cherche justement à promouvoir (10/16 aujourd'hui).
+                // RÈGLE 2 : la plus SPÉCIFIQUE l'emporte. Une égalité parfaite est plus
+                // étroite qu'un périmètre qui restreint — le périmètre dit d'où viennent
+                // les candidats, l'égalité dit que rien ne les sépare.
+                : egaliteSansEnjeu ? 'egalite-sans-enjeu'
+                    : perimetreVintage ? 'perimetre-vintage-suggestion'
+                        : lienAmbigu ? 'lien-tcgdex-partage'
+                            : avisDex.estDex ? 'numero-pokedex-neutralise'
                                 : localIncertain ? 'identification-locale-sans-tcgdex'
                                     : nomNumeroIncoherents ? 'nom-numero-incoherents'
                                         : aucunCandidatAuNumero ? 'aucun-candidat-au-numero'
@@ -4408,6 +4444,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // chemin setcode+numéro ET l'identification locale, qui exigent tous deux un
             // numéro. Sans ce champ, il fallait la recalculer hors ligne pour lire une ligne.
             estDex: avisDex.estDex,
+            // ⚠️ LE GROUPE D'ÉGALITÉ ET LE VIVIER — voir journal-scans.js pour la raison,
+            // et surtout pour l'avertissement : ces champs REMPLACENT le rejeu, ils ne le
+            // complètent pas. `exAequoIds` est nul quand il n'y a pas eu d'égalité, et
+            // c'est une information : le scoring a tranché.
+            exAequoIds,
+            vivierIds: produits.map(p => p.idProduct),
+            vivierTaille: produits.length,
             // ⚠️ LA ROUTE QUI A TROUVÉ, ET CE QU'ELLE A RAPPORTÉ — les deux ensemble, jamais
             // l'une sans l'autre. `langueRoute` dit d'où vient la CARTE ; les deux champs
             // suivants disent si elle portait l'INFORMATION dont la garde A a besoin. Savoir
@@ -4619,7 +4662,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // `natureRefus: 'echec-technique'` reste juste : c'est une panne, pas un refus
         // délibéré. Mais une panne n'a jamais eu à être facturée.
         const rendu = await rembourserSiRienLivre(req, res, 'erreur-serveur');
-        enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo, motifEchec: 'erreur-serveur', rembourse: rendu });
+        // ⚠️ LE MESSAGE VA AU JOURNAL, ET SEULEMENT LÀ. Les deux Dragonite du 2026-08-03
+        // sont indiagnosticables parce que leur exception n'existait que dans les logs
+        // Render. La PREMIÈRE LIGNE DE PILE accompagne le message : sans elle on saurait
+        // « quoi » sans savoir « où ». La réponse HTTP, elle, garde son texte générique.
+        enregistrerEchec({
+            route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
+            motifEchec: 'erreur-serveur', rembourse: rendu,
+            messageErreur: `${e?.message ?? e} @ ${String(e?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`
+        });
         // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il reste au log ; la réponse ne porte qu'un texte
         // générique. Le 4 août, un utilisateur a lu dans son extension
         // « memeCodeParConventionX is not a function » : le nom d'une fonction interne, une
