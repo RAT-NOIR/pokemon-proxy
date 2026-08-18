@@ -5296,5 +5296,11 @@ module.exports = {
     // ⚠️ EXPORTÉE POUR ÊTRE TESTÉE, PAS POUR ÊTRE RÉUTILISÉE AILLEURS. La chaîne argent
     // ne part jamais sans preuve : test-remboursement-catch.js exerce cette fonction
     // exacte, celle que les deux `catch` appellent — pas une copie de sa logique.
-    rembourserSiRienLivre
+    rembourserSiRienLivre,
+    // ⚠️ EXPORTÉES POUR MESURER SI UNE ABSENCE ÉTAIT RÉELLE, pas pour être appelées
+    // ailleurs. Ces deux fonctions rendent `[]` aussi bien quand aucun produit ne porte le
+    // numéro que quand la requête a levé — c'est ce qui rend `aucunCandidatAuNumero`
+    // ambigu. Les rejouer sur les lignes déjà au journal est la seule façon de borner la
+    // part de pannes déguisées, et une réimplémentation ne prouverait rien.
+    trouverProduitsParNumero, trouverProduitsParNumeroPartout
 };

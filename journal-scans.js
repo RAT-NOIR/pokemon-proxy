@@ -840,4 +840,8 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     });
 }
 
-module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS };
+// ⚠️ `memeCode` EST EXPORTÉE POUR QUE `setCodeAccord` SOIT RECALCULABLE, pas pour être
+// réutilisée ailleurs. Avant de supprimer un champ dérivé, il faut PROUVER qu'il se
+// recalcule depuis ses sources — et le prouver avec la fonction qui l'a écrit, jamais
+// avec une réimplémentation, qui ne démontrerait que sa propre cohérence.
+module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCode };

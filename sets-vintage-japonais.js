@@ -54,6 +54,44 @@
 // vérité N4), et très probablement Golem n°122 (« e5 » lu, gagnant EC1) — dont le total
 // 128 est exactement le corps d'EC1, ce qui met trois signaux contre le symbole. Le
 // symbole se trompe aussi, et sur les e-Card il confond les chiffres.
+//
+// LA BORNE EST LA TABLE CLOSE, PAS LE VOCABULAIRE. Le découpage série e / hors série e a
+// été fait : 2 lignes seulement lisent un symbole e, on n'en conclut rien. Exclure la
+// série e reste une PRÉCAUTION GRATUITE — ça ne change pas l'échange, ça retire seulement
+// Golem des indécidables — mais ce n'est pas elle qui rend le veto acceptable.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// LA RÈGLE DE DÉCISION, ÉCRITE AVANT LES CHIFFRES QUI LA DÉCLENCHERONT
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ ELLE EST ÉCRITE MAINTENANT PARCE QU'UNE RÈGLE ÉCRITE APRÈS SE RENÉGOCIE. Le veto a
+// été refusé sur un échange de 4 contre 1 mesuré sur 6 lignes — exactement le motif qui
+// avait fait refuser la promotion de `perimetre-vintage-suggestion` sur un 4/4. La
+// discipline ne doit pas dépendre de qui propose la règle.
+//
+// POPULATION D'ÉVALUATION, et rien d'autre :
+//   symbole relevé ET `symboleFiable: true`  ·  gagnant dans un set DE CETTE TABLE
+//   ·  ligne portant une vérité INDIVIDUELLE (les « en bloc » ne peuvent ni confirmer
+//      ni infirmer : leur vérité est ce qu'on mesure)
+// Les indécidables sont comptés et affichés, jamais convertis en l'un ou l'autre camp.
+//
+// ON BRANCHE QUAND LES TROIS SONT VRAIES :
+//   1. N ≥ 12 lignes DÉCIDABLES dans cette population.
+//      12 n'est pas un chiffre rond : c'est le premier effectif où, à l'échange observé
+//      aujourd'hui (4 corrigées pour 1 cassée), les deux intervalles de Wilson à 95 %
+//      cessent de se recouvrir — 10/12 -> [55,2 % ; 95,3 %] contre 2/12 -> [4,7 % ;
+//      44,8 %]. À 10 lignes ils se recouvrent encore.
+//   2. LES DEUX INTERVALLES DE WILSON À 95 % NE SE RECOUVRENT PAS : borne basse du taux
+//      de correction > borne haute du taux de casse. Aujourd'hui, sur 5 décidables, ils
+//      se recouvrent sur 24,9 points.
+//   3. AUCUNE DES LIGNES CASSÉES N'EST DANS LE HOLDOUT. Casser une ligne fraîche coûte
+//      le seul seau qui décide ; une casse en entraînement ou en lot se paie en mesure,
+//      pas en pouvoir de décision.
+//
+// ET AUCUN CHAMP NOUVEAU N'EST NÉCESSAIRE POUR Y ARRIVER. `symboleSet` et
+// `codeSetGagnant` sont déjà journalisés : l'effet du veto se recalcule après coup, sur
+// chaque nouveau lot, sans rien brancher. C'est le même argument qui fait supprimer
+// `setCodeAccord` — un dérivé recalculable n'a pas besoin d'être stocké, et un veto
+// mesurable après coup n'a pas besoin d'être branché pour être mesuré.
 // RIEN N'EST BRANCHÉ. Les deux chiffres décident ensemble, et ils disent : pas encore.
 //
 // ════════════════════════════════════════════════════════════════════════════
