@@ -17,7 +17,7 @@
 //
 // USAGE : node test-sources.js   (aucun réseau ; index.js ouvre sa connexion Mongo au
 //         chargement, comme pour toutes les suites qui l'importent)
-const { interrogerSource, dansUnScan, sourcesTombees } = require('./sources');
+const { interrogerSource, dansUnScan, sourcesTombees, pannesHorsContexte } = require('./sources');
 const { champsDeRefus, REFUS_D_ABSENCE } = require('./index');
 
 let echecs = 0;
@@ -72,6 +72,33 @@ const tombe = () => { throw new Error('connexion perdue (simulée)'); };
         verifier('le scan concurrent ne la voit PAS', vuB, []);
     }
     verifier('hors de tout scan, rien à mesurer', sourcesTombees(), []);
+
+    console.log('\n--- 2 bis. UNE PANNE HORS CONTEXTE EST BRUYANTE ---');
+    // ⚠️ L'ASSERTION QUI MANQUAIT. Les autres testent toutes le cas où le store EXISTE.
+    // Aucune ne testait son absence — or c'est là que `getStore()?.add()` avalait la
+    // panne en silence, réintroduisant le défaut que ce module ferme.
+    {
+        const avant = pannesHorsContexte();
+        const cris = [];
+        const vrai = console.error;
+        console.error = (...a) => { cris.push(a.join(' ')); };
+        const r = await interrogerSource('catalogue/nom', tombe);   // hors de tout dansUnScan
+        console.error = vrai;
+        verifier('l\'appelant n\'est PAS trompé : panne remontée quand même', r.panne, true);
+        verifier('et il sait qu\'elle n\'a pas été retenue', r.horsContexte, true);
+        verifier('le compteur de pannes hors contexte monte', pannesHorsContexte() - avant, 1);
+        verifier('un cri DISTINCT est émis', cris.some(l => l.includes('[panne-hors-contexte]')), true);
+        verifier('  ... en plus du cri ordinaire', cris.some(l => l.includes('[source-injoignable]')), true);
+        // Et le contraire : dans un contexte, aucun cri « hors contexte ».
+        const cris2 = [];
+        console.error = (...a) => { cris2.push(a.join(' ')); };
+        const dedans = await dansUnScan(async () => interrogerSource('catalogue/nom', tombe));
+        console.error = vrai;
+        verifier('dans un contexte, aucun cri « hors contexte »',
+            cris2.some(l => l.includes('[panne-hors-contexte]')), false);
+        verifier('  ... et horsContexte vaut false', dedans.horsContexte, false);
+        verifier('  ... et le compteur ne bouge plus', pannesHorsContexte() - avant, 1);
+    }
 
     console.log('\n--- 3. LA CLAUSE 3 — un refus d\'absence non constatée ---');
     verifier('les motifs d\'absence sont bien deux', [...REFUS_D_ABSENCE].sort(),

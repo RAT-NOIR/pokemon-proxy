@@ -288,6 +288,99 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // 7e CELLULE — UNE SOURCE TOMBÉE NE PRODUIT PAS UNE ABSENCE AFFIRMÉE
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ ET C'EST LA SEULE CELLULE QUI ASSERTE SUR LA RÉPONSE. Les six autres n'assertent
+    // rien du résultat, et c'est délibéré : figer un idProduct ferait de ce verrou un
+    // second banc, qui casserait à chaque amélioration du scoring et qu'on « réparerait »
+    // en baissant ses attentes. Ici on n'asserte pas un RÉSULTAT, on asserte un CONTRAT :
+    // « la chaîne n'affirme jamais une absence qu'elle n'a pas constatée ». Ce contrat ne
+    // doit jamais s'assouplir, quel que soit le scoring.
+    //
+    // POURQUOI ELLE EXISTE. La parade de sources.js est couverte par 31 assertions qui
+    // SIMULENT une source qui tombe. Aucune ne prouvait qu'une panne Mongo réelle
+    // traverse la route jusqu'à la réponse rendue. C'est exactement l'écart qui existait
+    // le 4 août entre huit suites vertes et une production morte.
+    //
+    // ELLE NE CONSOMME AUCUNE CHARGE NOUVELLE : elle rejoue la première, avec le
+    // catalogue coupé. Ce qu'on mesure n'est pas la carte, c'est la sortie.
+    console.log('\n=== 3 bis. 7e cellule : le catalogue tombe pendant un scan ===');
+    if (!donnees.charges.length) {
+        console.log('  ⛔ aucune charge disponible — cellule non exercée.');
+    } else {
+        const c7 = donnees.charges[0];
+        const avant7 = srv.lire().length;
+        srv.enfant.send('panne-catalogue');
+        // L'IPC est asynchrone : sans cette attente, la requête pourrait partir avant que
+        // le serveur ait armé la panne, et la cellule passerait au vert en n'exerçant rien.
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire()); i++) {
+            await new Promise(r => setTimeout(r, 50));
+        }
+        verifier('[7e] la panne est armée côté serveur', /PANNE-CATALOGUE ARMEE/.test(srv.lire()));
+
+        const r7 = await appeler(srv.port, 'POST', '/api/identifier', {
+            userId: USER_VERROU, imageUrls: [c7.imageUrl], title: null, vintedEtat: null
+        }, JETON);
+        srv.enfant.send('panne-catalogue-off');
+        const logs7 = srv.lire().slice(avant7);
+
+        verifier('[7e] réponse HTTP', r7.status === 200, `status ${r7.status}`);
+        // ⚠️ PAS SORTIE PAR LE CATCH. Une panne de source doit produire un REFUS PROPRE,
+        // pas une exception : si la route sortait par son catch, l'utilisateur verrait
+        // « Erreur serveur interne » et la parade n'aurait servi à rien.
+        const msg7 = r7.json?.error ?? '';
+        const propre7 = msg7 !== 'Erreur serveur interne' && !SIGNATURE_EXCEPTION.test(msg7);
+        verifier('[7e] la route n\'est pas sortie par son catch', propre7, msg7);
+        if (!propre7) {
+            // ⚠️ SORTIR PAR LE CATCH SUR UNE PANNE DE SOURCE VEUT DIRE UNE CHOSE PRÉCISE :
+            // une requête catalogue n'est PAS enveloppée quelque part sur le chemin. La
+            // cellule ne sert à rien si elle dit qu'il y a un trou sans dire lequel — on
+            // recrache donc la trace du serveur, qui porte la pile complète.
+            const pile = logs7.split('\n');
+            const i = pile.findIndex(l => /Erreur \/api\/identifier/.test(l));
+            console.log('       ── la requête non enveloppée est dans cette pile ──');
+            for (const l of pile.slice(Math.max(0, i), i + 12)) console.log(`       ${l.trim().slice(0, 150)}`);
+        }
+        verifier('[7e] la source est bien tombée', /\[source-injoignable\] catalogue\//.test(logs7));
+        // ⚠️ LE CONTRÔLE QUI VALIDE LE MIDDLEWARE DE CONTEXTE, en conditions réelles.
+        // Si `dansUnScan` n'enveloppait pas tout le corps de la route, la panne serait
+        // tombée hors contexte et cette ligne apparaîtrait. C'est la seule preuve qu'on
+        // ait que le contexte couvre la requête entière.
+        verifier('[7e] la panne est tombée DANS le contexte du scan',
+            !/\[panne-hors-contexte\]/.test(logs7),
+            'le contexte n\'enveloppe pas tout le corps de la route');
+        verifier('[7e] le scan ne rend AUCUN prix', r7.json?.success === false, JSON.stringify(r7.json?.success));
+        // Le cœur de la cellule.
+        verifier('[7e] le refus sort en ÉCHEC TECHNIQUE, pas en refus délibéré',
+            r7.json?.natureRefus === 'echec-technique',
+            `natureRefus = ${r7.json?.natureRefus} (motif ${r7.json?.motifRefus})`);
+        verifier('[7e] la requalification est tracée', /\[absence-non-constatee\]/.test(logs7));
+        verifier('[7e] le crédit est rendu', r7.json?.rembourse === true, String(r7.json?.rembourse));
+
+        // ---- ET LA LIGNE DE JOURNAL PORTE LE NOM DE LA SOURCE ----
+        // Sans ça, on saurait qu'il y a eu une panne sans savoir laquelle — et on referait
+        // l'enquête du 2026-08-15 à chaque fois.
+        try {
+            const mongoose7 = require('mongoose');
+            const bac7 = await mongoose7.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+            const ligne = await bac7.collection('journal_scans')
+                .findOne({ userId: USER_VERROU }, { sort: { le: -1 } });
+            verifier('[7e] la ligne de journal porte `sourcesEnPanne`',
+                Array.isArray(ligne?.sourcesEnPanne) && ligne.sourcesEnPanne.length > 0,
+                JSON.stringify(ligne?.sourcesEnPanne ?? null));
+            console.log(`       -> motif ${r7.json?.motifRefus} · nature ${r7.json?.natureRefus}` +
+                ` · sources ${JSON.stringify(ligne?.sourcesEnPanne ?? [])}`);
+            // Sur un `erreur-serveur`, c'est cette ligne qui nomme la requête NON
+            // enveloppée : sans elle, la cellule dit qu'il y a un trou sans dire où.
+            if (ligne?.messageErreur) console.log(`       -> exception : ${ligne.messageErreur}`);
+            await bac7.close();
+        } catch (e) {
+            echecs++;
+            console.log(`  ❌ [7e] lecture du journal impossible : ${e.message}`);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // LA CHAÎNE DEMANDE-T-ELLE AUTRE CHOSE À TCGdex QU'AU MOMENT DE L'ENREGISTREMENT ?
     // ════════════════════════════════════════════════════════════════════════
     // Ce n'est PAS un trou de cache. C'est un CHANGEMENT DE COMPORTEMENT : la chaîne
@@ -331,7 +424,15 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         if (bac.db.databaseName === 'test_scratch') {
             const n = await bac.collection('credits').deleteMany({ userId: USER_VERROU });
             const j = await bac.collection('journal_scans').deleteMany({ userId: USER_VERROU });
-            console.log(`\n🧹 test_scratch : ${n.deletedCount} crédit(s), ${j.deletedCount} ligne(s) de journal supprimées.`);
+            // ⚠️ `remboursements` MANQUAIT, ET ÇA A FAIT MENTIR UNE ASSERTION. Le compteur
+            // anti-abus est par (userId, JOUR) et plafonné à 5 : il survivait au nettoyage,
+            // donc à la sixième exécution du verrou dans la même journée, le remboursement
+            // était refusé par le plafond et la 7e cellule annonçait « le crédit n'est pas
+            // rendu ». Un défaut du dispositif, pas de la production — et le pire genre :
+            // il n'apparaît qu'après plusieurs passages, donc jamais quand on le cherche.
+            const rb = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
+            console.log(`\n🧹 test_scratch : ${n.deletedCount} crédit(s), ${j.deletedCount} ligne(s) de journal,` +
+                ` ${rb.deletedCount} compteur(s) de remboursement supprimés.`);
         }
         await bac.close();
     } catch (e) { console.log(`\n⚠️ nettoyage impossible : ${e.message}`); }
@@ -357,6 +458,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     console.log('');
     if (echecs === 0) {
         console.log(`Ce qui a tourné : le serveur démarre, ${donnees.charges.length} charge(s) traversent la route jusqu'à leur profondeur exigée, aucune exception, le cliquet tient.`);
+        console.log(`   + la 7e cellule : le catalogue tombe pendant un scan, et le refus sort en échec technique.`);
         if (avertissements) console.log(`${avertissements} avertissement(s) ci-dessus — à lire, ils ne bloquent pas.`);
         console.log(`Ce qui n'a PAS tourné : aucun appel réel au modèle, aucune vérification d'identification. C'est U4.`);
     } else {

@@ -28,8 +28,38 @@
 // le verrou reconnaît et rapporte À PART, avec l'URL exacte et les deux lectures possibles.
 
 const axios = require('axios');
+const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
+
+// ════════════════════════════════════════════════════════════════════════════
+// QUATRIÈME RÈGLE — FAIRE TOMBER UNE SOURCE MONGO, SUR COMMANDE
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI. La parade « une panne n'est pas une absence » (sources.js) est couverte par
+// 31 assertions unitaires qui SIMULENT une source qui tombe. Elles ne prouvent pas que
+// Mongo tombe de cette façon-là, ni que la panne traverse la route jusqu'à la réponse
+// rendue à l'utilisateur. C'est exactement ce qui distinguait le verrou du 4 août des
+// suites vertes qui l'avaient laissé passer.
+//
+// CE QU'ON CASSE, ET RIEN D'AUTRE : les requêtes sur `catalogue_produits`. C'est le
+// choix qui rend la cellule DÉTERMINISTE — aucun chemin catalogue ne peut aboutir, donc
+// la route sort forcément par un refus d'absence — tout en laissant vivants les crédits
+// (le remboursement doit marcher), `numeros_cartes` et `codes_set` (le journal doit
+// s'écrire). Casser tout Mongo mesurerait le plantage, pas la parade.
+//
+// ⚠️ ARMÉE PAR IPC, JAMAIS PAR DEVINETTE. La première forme envisagée armait la panne en
+// reconnaissant l'image de la charge — mais la même image sert à la charge normale et à
+// celle-ci, et le verrou aurait cassé les deux. Le message IPC est explicite, il dit
+// QUAND commencer et QUAND arrêter, et il ne dépend d'aucune coïncidence.
+let catalogueEnPanne = false;
+const execOriginal = mongoose.Query.prototype.exec;
+mongoose.Query.prototype.exec = function (...args) {
+    const collection = this.mongooseCollection?.name ?? this.model?.collection?.name ?? '';
+    if (catalogueEnPanne && collection === 'catalogue_produits') {
+        return Promise.reject(new Error('[faux-reseau] catalogue_produits injoignable (panne simulée)'));
+    }
+    return execOriginal.apply(this, args);
+};
 
 const CHARGES = process.env.VERROU_CHARGES;
 if (!CHARGES) {
@@ -126,6 +156,16 @@ for (const sig of ['SIGTERM', 'SIGINT']) {
     process.on(sig, () => { console.log(`🎛️ [faux-reseau] ${sig} — sortie propre.`); process.exit(0); });
 }
 process.on('message', m => {
+    if (m === 'panne-catalogue') {
+        catalogueEnPanne = true;
+        console.log('🎛️ [faux-reseau] PANNE-CATALOGUE ARMEE — catalogue_produits injoignable.');
+        return;
+    }
+    if (m === 'panne-catalogue-off') {
+        catalogueEnPanne = false;
+        console.log('🎛️ [faux-reseau] PANNE-CATALOGUE LEVEE.');
+        return;
+    }
     if (m !== 'arret') return;
     console.log('🎛️ [faux-reseau] arrêt demandé — sortie propre pour que la couverture soit écrite.');
     process.exit(0);

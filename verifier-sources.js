@@ -127,4 +127,88 @@ function verifierImports(fichier) {
     return oublis;
 }
 
-module.exports = { fichiersDuProjet, verifierSyntaxe, verifierImports, RACINE };
+// ════════════════════════════════════════════════════════════════════════════
+// TROISIÈME CONTRÔLE — LES SOURCES SONT-ELLES TOUJOURS ENVELOPPÉES ?
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI. Neuf points d'appel ont été enveloppés dans `interrogerSource` le 2026-08-18,
+// pour que « rien trouvé » cesse de se confondre avec « pas pu chercher ». Le DIXIÈME,
+// écrit dans six mois, ne le sera pas — et rien ne le dirait. C'est la même famille que
+// les deux définitions de l'identité qui pouvaient diverger en silence, et elle se ferme
+// de la même façon : par un contrôle qui ÉCHOUE.
+//
+// ⚠️ CE CONTRÔLE EST TEXTUEL, ET DÉLIBÉRÉMENT STRICT. Il exige que `interrogerSource`
+// apparaisse sur la ligne de l'appel ou dans les deux lignes qui la précèdent — la forme
+// qu'ont les neuf enveloppes existantes. Si tu enveloppes autrement (une variable
+// intermédiaire, un helper de plus), ce contrôle criera à tort.
+//   -> DANS CE CAS ON ADAPTE LE CONTRÔLE, ON NE LE SUPPRIME PAS.
+// Un faux positif coûte une minute de lecture ; un faux négatif coûte un refus qui
+// affirme une absence que personne n'a constatée.
+//
+// CE QU'IL NE VOIT PAS, et il faut le savoir : un appel indirect (via une variable, un
+// tableau de fonctions, un `this`). Aucun n'existe aujourd'hui ; si l'un apparaît, ce
+// contrôle passera au vert sans rien garantir.
+
+// QUI A LE DROIT D'APPELER UNE SOURCE À NU, ET POURQUOI.
+// L'enveloppe sert à ce qu'une panne ne devienne pas une ABSENCE AFFIRMÉE À
+// L'UTILISATEUR. Un outil en ligne de commande n'affirme rien à personne : quand une
+// source lui tombe dessus, l'exception remonte, le script s'arrête, et celui qui l'a
+// lancé le voit tout de suite. Les envelopper les rendrait au contraire silencieux —
+// exactement l'inverse du but.
+//
+// ⚠️ LA RÈGLE ÉCHOUE PAR DÉFAUT, ET C'EST LE POINT. Ce sont les OUTILS qui sont
+// dispensés, nommés par leur préfixe ; tout fichier qui n'est pas manifestement un outil
+// est contrôlé. Un nouveau fichier de production ne peut donc pas se dispenser par
+// omission — il faudrait l'ajouter ici, à la main, et ça se verrait en relecture.
+// Mesuré au moment d'écrire ce contrôle : 24 appels à nu, dans 10 fichiers, TOUS des
+// outils. Zéro dans index.js.
+const PREFIXES_OUTILS = ['test-', 'mesure-', 'banc-', 'verrou-'];
+const OUTILS_NOMMES = new Set(['saisir-verites.js', 'verifier-sources.js', 'smoke-test.js']);
+const estUnOutil = fichier => {
+    const base = path.basename(fichier);
+    return OUTILS_NOMMES.has(base) || PREFIXES_OUTILS.some(p => base.startsWith(p));
+};
+
+/** Les sources qui ne doivent JAMAIS être appelées sans enveloppe. */
+const SOURCES_A_ENVELOPPER = [
+    'trouverProduitsLocaux',
+    'trouverProduitsParNumero',
+    'trouverProduitsParNumeroPartout',
+    'trouverParSetCodeEtNumero',
+    'expansionsDuSetTCGdex',
+    // ⚠️ AJOUTÉE APRÈS COUP, ET PAS PAR RAISONNEMENT : la 7e cellule du verrou l'a
+    // trouvée à son premier passage. Elle vit dans identification-locale.js, interroge
+    // `catalogue_produits` sans filet, et une panne y sortait la route par son catch —
+    // « Erreur serveur interne » là où un refus propre était possible. L'inventaire des
+    // six sources, fait à la main, l'avait manquée. C'est la valeur du bout-en-bout.
+    'identifierEnLocal'
+];
+
+/**
+ * @returns {{fichier: string, ligne: number, nom: string, code: string}[]} les appels nus
+ */
+function verifierEnveloppes(fichier, noms = SOURCES_A_ENVELOPPER) {
+    const brut = fs.readFileSync(fichier, 'utf8');
+    const lignes = brut.split('\n');
+    const nus = [];
+    for (let i = 0; i < lignes.length; i++) {
+        const l = lignes[i];
+        // Commentaires et lignes de doc : ce fichier-ci en est plein, et ils citent les
+        // noms suivis de parenthèses.
+        if (/^\s*(\/\/|\*|\/\*)/.test(l)) continue;
+        for (const nom of noms) {
+            // L'appel, et pas la déclaration ni un accès de propriété.
+            if (!new RegExp(`(?<![.\\w])${nom}\\s*\\(`).test(l)) continue;
+            if (new RegExp(`function\\s+${nom}\\s*\\(`).test(l)) continue;
+            // La fenêtre : la ligne elle-même et les deux qui précèdent.
+            const fenetre = lignes.slice(Math.max(0, i - 2), i + 1).join('\n');
+            if (/interrogerSource\s*\(/.test(fenetre)) continue;
+            nus.push({ fichier: path.relative(RACINE, fichier), ligne: i + 1, nom, code: l.trim().slice(0, 110) });
+        }
+    }
+    return nus;
+}
+
+module.exports = {
+    fichiersDuProjet, verifierSyntaxe, verifierImports, RACINE,
+    SOURCES_A_ENVELOPPER, verifierEnveloppes, estUnOutil
+};

@@ -99,6 +99,25 @@ app.use(cors({
         return callback(new Error('Origine non autorisée'));
     }
 }));
+// ════════════════════════════════════════════════════════════════════════════
+// LE CONTEXTE DE SCAN — EN TOUT PREMIER, AVANT LA MOINDRE ROUTE
+// ════════════════════════════════════════════════════════════════════════════
+// Il ouvre le contexte dans lequel `interrogerSource` retient les sources tombées
+// (sources.js). Sans lui, `sourcesTombees()` rendrait toujours [] et la requalification
+// des refus d'absence serait inerte SANS LE DIRE.
+//
+// ⚠️ IL EST POSÉ AVANT TOUTES LES ROUTES, Y COMPRIS LE WEBHOOK STRIPE, ET C'EST UNE
+// CORRECTION. Sa première version était placée après `express.json()`, donc APRÈS la
+// déclaration du webhook : cette route-là n'avait aucun contexte, et une panne qui y
+// serait tombée aurait disparu en silence. Elle n'interroge aucune de ces sources
+// aujourd'hui — mais « aujourd'hui » n'est pas une garantie, et un trou de couverture
+// qui dépend de l'ordre de déclaration des routes est exactement le genre de piège qui
+// se referme six mois plus tard. Un contexte vide ne coûte rien ; un contexte manquant
+// coûte une mesure fausse.
+// ⚠️ IL NE TOUCHE PAS AU CORPS DE LA REQUÊTE : il n'enveloppe que le contexte asynchrone.
+// La signature Stripe, qui dépend des octets bruts, est rigoureusement inchangée.
+app.use((req, res, next) => dansUnScan(next));
+
 // ⚠️ ORDRE CRITIQUE : Stripe signe le corps BRUT de la requête. Si express.json()
 // le parsait avant, l'octet-à-octet serait perdu et la vérification de signature
 // échouerait systématiquement. Cette route est donc déclarée AVANT le parser JSON
@@ -108,13 +127,6 @@ app.use(cors({
 app.post('/api/webhook-stripe', express.raw({ type: 'application/json' }), gererWebhookStripe);
 
 app.use(express.json());
-
-// ⚠️ OUVRE LE CONTEXTE DE SCAN POUR TOUTE LA SUITE DE LA CHAÎNE. Sans lui,
-// `interrogerSource` n'aurait nulle part où retenir les sources tombées, et
-// `sourcesTombees()` rendrait toujours [] — le correctif serait inerte sans le dire.
-// Global plutôt que posé sur les deux routes d'IA : un contexte vide ne coûte rien, une
-// route ajoutée plus tard sans le middleware coûterait une mesure fausse.
-app.use((req, res, next) => dansUnScan(next));
 
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
 // se contourne en changeant d'identifiant). Ne s'applique QU'aux routes IA coûteuses —
@@ -3238,14 +3250,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 langueRoute: null
             };
         } else if (!trouvaille) {
-            const local = await identifierEnLocal({
+            // Enveloppée : voir le 3e appel plus bas, et sources.js. `valeur` et pas
+            // `liste` — cette source rend un objet ou null.
+            const { valeur: local } = await interrogerSource('catalogue/local-nom-numero', () => identifierEnLocal({
                 nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
                 // impression à router, pas seulement son set. Voir identification-locale.js.
                 motifLu: cardInfo.motif, reverseLu: cardInfo.reverse
-            });
+            }));
             if (local) {
                 identificationLocale = true;
                 localIncertain = local.incertain;
@@ -3411,14 +3425,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // arbitrer — le produit est déjà désigné par une clé, et le nom a déjà eu son
         // droit de veto dessus. Relancer l'arbitre ici ne pourrait que le contredire.
         if (trouvaille.source === 'total+numero' && !identificationLocale && !produitsImposes) {
-            const arbitre = await identifierEnLocal({
+            // Enveloppée : voir sources.js. `valeur` et pas `liste`.
+            const { valeur: arbitre } = await interrogerSource('catalogue/local-nom-numero', () => identifierEnLocal({
                 nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
                 // impression à router, pas seulement son set. Voir identification-locale.js.
                 motifLu: cardInfo.motif, reverseLu: cardInfo.reverse
-            });
+            }));
             if (arbitre) {
                 const gagnantArbitre = arbitre.produits.find(p => p.idProduct === arbitre.gagnant?.candidat?.idProduct);
                 console.log(
@@ -3534,14 +3549,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // nom suspect, et le pont total -> set désigne un set de 2025. Sans ce repli il ne
         // reste RIEN, alors que le catalogue contient la bonne carte au bon numéro.
         if (produits.length === 0 && !identificationLocale) {
-            const local = await identifierEnLocal({
+            // ⚠️ ENVELOPPÉE COMME LES AUTRES, ET C'EST LA 7e CELLULE DU VERROU QUI L'A
+            // TROUVÉE. Elle interroge `catalogue_produits` (identification-locale.js) sans
+            // aucun filet : au premier passage de la cellule, une panne du catalogue est
+            // sortie ici en EXCEPTION, la route a fini dans son catch, et l'utilisateur a
+            // lu « Erreur serveur interne » là où un refus propre était possible.
+            // ⚠️ `valeur` ET PAS `liste` : cette source-là rend un OBJET ou null, pas un
+            // tableau. Voir sources.js, qui rend les deux pour cette raison exacte.
+            const { valeur: local } = await interrogerSource('catalogue/local-nom-numero', () => identifierEnLocal({
                 nomLu: cardInfo.name, numeroLu: numeroCarte,
                 regionAttendue: regionAttendue(cardInfo), setCodeLu: cardInfo.setCode,
                 rarete: cardInfo.rarete, rareteElevee: cardInfo.rareteElevee, total: cardInfo.total,
                 // Ce que l'IA a lu du motif : c'est la CARTE qui décide s'il y a une
                 // impression à router, pas seulement son set. Voir identification-locale.js.
                 motifLu: cardInfo.motif, reverseLu: cardInfo.reverse
-            });
+            }));
             if (local) {
                 identificationLocale = true;
                 localIncertain = local.incertain;
