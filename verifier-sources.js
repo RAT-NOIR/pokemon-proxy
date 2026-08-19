@@ -162,7 +162,15 @@ function verifierImports(fichier) {
 // Mesuré au moment d'écrire ce contrôle : 24 appels à nu, dans 10 fichiers, TOUS des
 // outils. Zéro dans index.js.
 const PREFIXES_OUTILS = ['test-', 'mesure-', 'banc-', 'verrou-'];
-const OUTILS_NOMMES = new Set(['saisir-verites.js', 'verifier-sources.js', 'smoke-test.js']);
+// ⚠️ `candidats-fiche.js` EST UN OUTIL, ET L'ENVELOPPER SERAIT NUISIBLE. Il construit la
+// liste de candidats que le testeur lit pour saisir une vérité. Si une requête catalogue
+// y tombait et qu'`interrogerSource` la traduisait en liste vide, l'outil afficherait
+// « aucun candidat » — et le testeur répondrait « aucun », enregistrant un DÉFAUT DE
+// PÉRIMÈTRE qui n'existe pas. On fabriquerait une mesure fausse pour éviter une exception.
+// Ici l'exception est la bonne sortie : elle arrête la saisie, visiblement, tout de suite.
+const OUTILS_NOMMES = new Set([
+    'saisir-verites.js', 'verifier-sources.js', 'smoke-test.js', 'candidats-fiche.js'
+]);
 const estUnOutil = fichier => {
     const base = path.basename(fichier);
     return OUTILS_NOMMES.has(base) || PREFIXES_OUTILS.some(p => base.startsWith(p));

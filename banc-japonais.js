@@ -553,7 +553,18 @@ function celluleDe(d) {
         // Rattachement PAR IDENTITÉ de la carte lue, jamais par la clé positionnelle.
         const vs = rattachement.parIdentite.get(identiteDe(d));
         if (vs !== undefined) {
-            return { valeur: vs.idProduct, source: vs.idProduct === 'inconnu' ? 'inconnu' : `saisie:${vs.source}` };
+            // ⚠️ TROIS VALEURS SPÉCIALES, ET ELLES NE DISENT PAS LA MÊME CHOSE.
+            //   'inconnu'        -> le testeur n'a pas su reconnaître la carte. Limite de
+            //                      l'observateur : exclue, et on ne peut rien en conclure.
+            //   'hors-perimetre' -> il l'a reconnue, et elle n'est dans AUCUN candidat que
+            //                      la chaîne propose. C'est un DÉFAUT DE VIVIER, mesurable
+            //                      et attribuable — exclue du taux, mais COMPTÉE à part.
+            // Les confondre effacerait la seule mesure qui dise « le périmètre a raté la
+            // carte » ; et laisser 'hors-perimetre' tomber dans le cas général la compterait
+            // FAUSSE, ce qui accuserait le scoring d'une faute du vivier.
+            if (vs.idProduct === 'inconnu') return { valeur: null, source: 'inconnu' };
+            if (vs.idProduct === 'hors-perimetre') return { valeur: null, source: 'hors-perimetre' };
+            return { valeur: vs.idProduct, source: `saisie:${vs.source}` };
         }
         if (d.idProduct == null) return { valeur: null, source: 'SANS-VERITE' };
         return { valeur: d.idProduct, source: 'bloc' };
@@ -586,7 +597,7 @@ function celluleDe(d) {
         ind: { avant: issuesVides(), apres: issuesVides(), retenus: 0 },
         blocs: { avant: issuesVides(), apres: issuesVides(), retenus: 0, bouge: 0 },
         lec: { juste: 0, contredite: 0, 'invérifiable': 0 },
-        provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'SANS-VERITE': 0, TECHNIQUE: 0 },
+        provenance: { cle: 0, nom: 0, bloc: 0, inconnu: 0, 'hors-perimetre': 0, 'SANS-VERITE': 0, TECHNIQUE: 0 },
         cellules: new Map(), exclus: 0, retenus: 0, detail: [], sansVerite: []
     });
     const LOTS = { entrainement: vide(), holdout: vide(), verification: vide(), lot: vide() };
@@ -598,6 +609,9 @@ function celluleDe(d) {
         provenance[v.source] = (provenance[v.source] || 0) + 1;
         if (v.source === 'TECHNIQUE') { L.exclus++; continue; }
         if (v.source === 'inconnu') { L.exclus++; continue; }
+        // Exclue du taux comme 'inconnu', mais elle n'a pas la même cause : le compteur de
+        // provenance ci-dessus la garde séparée, et le rapport la nomme.
+        if (v.source === 'hors-perimetre') { L.exclus++; continue; }
         if (v.source === 'SANS-VERITE') { L.exclus++; sansVerite.push({ cle, d }); continue; }
         const attendu = v.valeur;
         L.retenus++;
@@ -638,6 +652,8 @@ function celluleDe(d) {
         console.log(`   idProduct fourni par le testeur, par NOM .......... ${L.provenance.nom}`);
         console.log(`   validé EN BLOC (« toutes les autres : attendu = retenu ») ${L.provenance.bloc}`);
         console.log(`   « inconnu » — carte non retrouvée, EXCLUE ......... ${L.provenance.inconnu}`);
+        console.log(`   HORS PÉRIMÈTRE — reconnue, ABSENTE du vivier ..... ${L.provenance['hors-perimetre']}` +
+            (L.provenance['hors-perimetre'] ? '   ⚠️ défaut de vivier, pas de scoring' : ''));
         console.log(`   SANS VÉRITÉ (production en échec), EXCLUE ......... ${L.provenance['SANS-VERITE']}`);
         console.log(`   INCIDENT TECHNIQUE (IA muette, erreur serveur), EXCLUE ${L.provenance.TECHNIQUE}`);
         for (const [k, n] of Object.entries(L.provenance)) {

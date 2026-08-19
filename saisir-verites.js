@@ -31,9 +31,12 @@ require('dotenv').config();
 const fs = require('fs');
 const readline = require('readline');
 const mongoose = require('mongoose');
-const S = require('./scoring.js');
-const { numeroEstUnDexId } = require('./pokedex');
-const { trouverProduitsLocaux, scorerCandidatsLocal, lireCodeSets, lireNumeros } = require('./index');
+// ⚠️ LA LISTE DES CANDIDATS N'EST PLUS CONSTRUITE ICI. Elle vient de `candidats-fiche.js`,
+// partagée avec le générateur de fiches — sinon « #3 » désignerait une carte dans la fiche
+// et une autre dans l'outil, et la vérité enregistrée serait fausse en silence.
+// (`scoring`, `pokedex` et les fonctions de vivier ne sont plus importés ici : ils sont
+//  passés dans ce module-là, avec la construction qui les utilisait.)
+const { construireCandidats } = require('./candidats-fiche');
 
 const SORTIE = 'banc-verites.json';
 const DATE_HOLDOUT = new Date('2026-08-03T00:00:00Z');
@@ -178,23 +181,67 @@ async function resoudreSaisie(saisie, Cat) {
         console.log(`     confiance du nom : ${d.nomConfiance ?? '—'}`);
 
         let vuLesCandidats = false;
+        // ⚠️ LA LISTE AFFICHÉE FAIT AUTORITÉ POUR « #N », ET ELLE SEULE. La fiche préparée
+        // à l'avance porte la même liste (même fonction), mais le catalogue peut s'enrichir
+        // entre sa génération et la saisie : un « #3 » qui désignerait un rang d'une liste
+        // périmée fabriquerait une vérité fausse en silence. « #N » n'est donc accepté
+        // qu'APRÈS que l'outil a imprimé sa propre liste, ici et maintenant.
+        let listeAffichee = null;
         let reponse = '';
         while (true) {
-            reponse = await demander(`\n  La VRAIE carte ? — idProduct, slug (Rhydon-V2-EC4055) ou URL Cardmarket\n  (« inconnu » · « ? » pour voir les candidats · « q » pour arrêter)\n  > `);
+            reponse = await demander(
+                `\n  La VRAIE carte ? — « #3 » (rang dans la liste) · idProduct · slug · URL Cardmarket` +
+                `\n  (« ? » voir les candidats · « aucun » si elle n'est dans AUCUN · « inconnu » · « q » arrêter)\n  > `);
             if (reponse === '?') {
                 if (!vuLesCandidats) {
                     vuLesCandidats = true;
                     console.log('\n  ⚠️ Les candidats vont s\'afficher. Ce fait sera enregistré dans la provenance :');
                     console.log('     une vérité saisie APRÈS avoir vu la liste ne vaut pas une vérité saisie à l\'aveugle.');
                 }
-                await afficherCandidats(d, parExp);
+                listeAffichee = await afficherCandidats(d);
                 continue;
+            }
+            // « #N » : traduit en idProduct AVANT toute autre résolution.
+            const m = /^#\s*(\d+)$/.exec(reponse);
+            if (m) {
+                if (!listeAffichee) {
+                    console.log('  ⚠️ « #N » n\'est accepté qu\'après avoir affiché la liste ici (tape « ? »).');
+                    console.log('     La fiche préparée peut avoir été générée avant un enrichissement du catalogue :');
+                    console.log('     seul le rang que CET outil vient d\'imprimer désigne à coup sûr la bonne carte.');
+                    continue;
+                }
+                const choix = listeAffichee.find(x => x.rang === Number(m[1]));
+                if (!choix) { console.log(`  ⚠️ il n'y a pas de rang ${m[1]} dans la liste affichée.`); continue; }
+                console.log(`  #${choix.rang} -> ${choix.idProduct} « ${choix.nom} » [${choix.codeSet ?? '?'}] n°${choix.numero ?? '—'}`);
+                reponse = String(choix.idProduct);
             }
             break;
         }
         if (reponse.toLowerCase() === 'q') { console.log('\n  Arrêt demandé. Ce qui a été saisi est conservé.'); break; }
 
         const V2 = lireVerites();
+        // ⚠️ « AUCUN DE CEUX-LÀ » N'EST PAS « INCONNU », ET LES CONFONDRE PERDRAIT LA SEULE
+        // MESURE QUI COMPTE ICI. « inconnu » dit « je n'ai pas su reconnaître la carte » —
+        // c'est une limite du testeur. « aucun » dit « je l'ai reconnue, et elle n'est dans
+        // AUCUN candidat que la chaîne propose » — c'est un DÉFAUT DE PÉRIMÈTRE, mesurable,
+        // et c'est exactement ce que le vivier par le nom rate. Se rabattre sur un candidat
+        // approchant pour « avoir une réponse » fabriquerait une vérité fausse ET effacerait
+        // le défaut du même coup.
+        if (reponse.toLowerCase() === 'aucun') {
+            V2.verites[cle] = {
+                idProduct: 'hors-perimetre',
+                source: 'defaut-perimetre',
+                moyen: 'aucun-candidat-plausible',
+                // Ce que la chaîne proposait au moment du constat : sans ça, on saurait
+                // qu'elle a raté la carte sans savoir ce qu'elle offrait à la place.
+                candidatsVus: listeAffichee ? listeAffichee.length : null,
+                lu: { nom: d.nom, numero: d.numero, total: d.total, setCode: d.setCode },
+                saisiLe: new Date().toISOString()
+            };
+            console.log('  -> marqué « hors périmètre ». EXCLUE du taux, et COMPTÉE comme défaut de vivier.');
+            ecrireVerites(V2);
+            continue;
+        }
         if (reponse.toLowerCase() === 'inconnu' || reponse === '') {
             V2.verites[cle] = {
                 idProduct: 'inconnu',
@@ -250,25 +297,30 @@ async function resoudreSaisie(saisie, Cat) {
     await mongoose.disconnect();
 })().catch(async e => { console.error('ERREUR', e.message, e.stack); rl.close(); try { await mongoose.disconnect(); } catch (_) { } process.exit(1); });
 
-// Les candidats, à la demande seulement. Volontairement affichés PAR PRIX CROISSANT et non
-// par score : l'ordre du scoring désignerait un favori, et c'est précisément ce qu'on ne
-// veut pas suggérer.
-async function afficherCandidats(d, parExp) {
-    const dex = numeroEstUnDexId({ nom: d.nom, numero: d.numero, total: d.total, langue: d.langue });
-    const produits = await trouverProduitsLocaux(d.nom);
-    if (!produits.length) { console.log('\n     (aucun candidat par le nom)'); return; }
-    const cs = await lireCodeSets(produits.map(p => p.idExpansion));
-    const r = await scorerCandidatsLocal(produits, {
-        name: d.nom, number: dex.estDex ? null : d.numero, total: d.total, setCode: d.setCode,
-        language: d.langue, motif: null, reverse: false
-    }, null, [], cs, {});
-    const nums = await lireNumeros(r.scores.map(s => s.candidat.idProduct));
-    const liste = r.scores.slice(0, 15).sort((a, b) => (a.candidat.prix ?? 0) - (b.candidat.prix ?? 0));
-    console.log(`\n     ${r.scores.length} candidat(s) — les 15 premiers, PAR PRIX (pas par score : l'ordre du scoring désignerait un favori)`);
-    for (const s of liste) {
-        const p = produits.find(x => x.idProduct === s.candidat.idProduct);
-        const c = parExp.get(Number(s.candidat.idExpansion));
-        const nu = nums.get(s.candidat.idProduct);
-        console.log(`       ${String(s.candidat.idProduct).padEnd(8)} ${String(c?.codeSet ?? '?').padEnd(9)} ${String(c?.region ?? 'INCONNUE').padEnd(11)} n°${String(nu?.numero ?? nu?.numeroUrl ?? '—').padEnd(6)} ${String(s.candidat.prix ?? '—').padStart(8)} €  ${String(p?.name ?? '').split('[')[0].trim()}`);
+/**
+ * Les candidats, à la demande seulement, NUMÉROTÉS pour être désignables par « #N ».
+ *
+ * La liste vient de `candidats-fiche.js` — la même que celle de la fiche préparée. Elle
+ * est PAR PRIX CROISSANT et non par score : l'ordre du scoring désignerait un favori.
+ *
+ * @returns {Promise<object[]>} la liste affichée, qui fait autorité pour « #N »
+ */
+async function afficherCandidats(d) {
+    const { total, liste, retenu, aucun } = await construireCandidats(d);
+    if (aucun) { console.log('\n     (aucun candidat par le nom — réponds « aucun »)'); return []; }
+    console.log(`\n     ${total} candidat(s) — les ${liste.length} premiers, PAR PRIX (pas par score : l'ordre du scoring désignerait un favori)`);
+    for (const c of liste) {
+        console.log(`     #${String(c.rang).padEnd(3)} ${String(c.idProduct).padEnd(8)} ${String(c.codeSet ?? '?').padEnd(9)} ` +
+            `n°${String(c.numero ?? '—').padEnd(6)} ${String(c.prix ?? '—').padStart(8)} €  ${c.nom}`);
+        console.log(`          ${c.nomSet ?? '(set inconnu)'}${c.variante ? `  ·  variante ${c.variante}` : ''}`);
     }
+    // ⚠️ EN DERNIER, ET NOMMÉ. Le montrer en tête ferait de lui la réponse par défaut :
+    // le banc mesurerait l'accord du testeur avec la chaîne, pas la vérité. Il n'a pas de
+    // rang — on ne peut pas le choisir par « #N » sans avoir lu ce qu'il est.
+    if (retenu) {
+        console.log(`\n     ── ce que la PRODUCTION avait retenu (à ne regarder qu'après avoir décidé) ──`);
+        console.log(`        ${retenu.idProduct}  ${retenu.codeSet ?? '?'}  n°${retenu.numero ?? '—'}  ${retenu.prix ?? '—'} €  ${retenu.nom}`);
+        console.log(`        ${retenu.nomSet ?? '(set inconnu)'}   -> pour le désigner, tape son idProduct`);
+    }
+    return liste;
 }
