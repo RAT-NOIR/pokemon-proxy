@@ -35,6 +35,23 @@
 //   - une dérive du modèle : il ne l'appelle pas. C'est le rôle d'U4.
 //
 // GRATUIT, HORS LIGNE, ÉCRITURES CONFINÉES À test_scratch.
+//
+// CE QU'IL VIDE EN SORTANT, dans test_scratch et pour le seul `verrou-avant-push` :
+//   · credits            — la poche du faux utilisateur
+//   · journal_scans      — les lignes des 7 charges
+//   · remboursements     ← AJOUTÉE LE 2026-08-19, ET SON ABSENCE FAISAIT MENTIR UNE
+//     ASSERTION. Le compteur anti-abus de `rembourserScan` est par (userId, JOUR) et
+//     plafonné à 5. Il survivait au nettoyage : relevé en base, il était à 5/5 les 04,
+//     10, 11, 12, 18 et 19 août. À partir de la 6e exécution du verrou dans une même
+//     journée, le remboursement était donc refusé PAR LE PLAFOND, et la 7e cellule
+//     annonçait « le crédit n'est pas rendu » — un défaut du dispositif, présenté comme
+//     un défaut de la production. Le pire genre : il n'apparaît qu'après plusieurs
+//     passages, donc jamais quand on le cherche.
+//   ⚠️ TOUTE COLLECTION QU'UNE CHARGE FAIT ÉCRIRE DOIT ÊTRE DANS CETTE LISTE. Une
+//   collection oubliée ne salit pas seulement le bac : elle rend le verrou NON
+//   REPRODUCTIBLE, et un verrou dont le résultat dépend du nombre de fois qu'on l'a
+//   lancé ne vaut pas mieux que pas de verrou.
+//
 // USAGE :  node verrou-avant-push.js
 // Prérequis : node verrou-charges.js --base=test
 
