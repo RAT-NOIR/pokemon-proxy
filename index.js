@@ -3034,6 +3034,35 @@ function champsDeRefus(motifRefus, rembourse) {
         // aucune des deux situations ne peut être ni mesurée ni expliquée.
         // null quand le scan est remboursé, ou qu'aucun remboursement n'a été tenté.
         // Énumération fermée : voir RAISONS_NON_REMBOURSE dans sources.js.
+        //
+        // ════════════════════════════════════════════════════════════════════
+        // CONTRAT D'AFFICHAGE — POUR L'EXTENSION, ARRÊTÉ LE 2026-08-19, CIBLE 1.0.5
+        // ════════════════════════════════════════════════════════════════════
+        // ⚠️ CETTE NOTE VIT ICI PARCE QUE C'EST ICI QUE LE CHAMP EST PRODUIT. L'extension
+        // est un autre dépôt ; une règle d'affichage écrite seulement là-bas se perd entre
+        // deux versions — c'est ce qui est arrivé à la traduction des pannes. Écrite du
+        // côté qui émet, elle survit au renumérotage des versions.
+        //
+        // LA RÈGLE, EN UNE PHRASE : ON NE PARLE D'ARGENT QUE QUAND IL Y A PRÉJUDICE.
+        // Neuf causes, une seule mérite une phrase à l'utilisateur.
+        //
+        //   'plafond-jour'   -> PARLE. C'est la seule où l'utilisateur a perdu quelque
+        //                       chose : il y avait un crédit à rendre et on a refusé.
+        //                       Dire quoi (« la limite de remboursements du jour est
+        //                       atteinte »), pas pourquoi techniquement.
+        //   'deja-livre'     -> SE TAIT. Un résultat A ÉTÉ livré, donc le scan est dû.
+        //                       Afficher « non remboursé » ici serait un reproche à propos
+        //                       d'un service rendu.
+        //   'aucun-debit'    -> SE TAIT. Rien n'a été pris, il n'y a rien à rendre. C'est
+        //                       le cas ORDINAIRE — 32 lignes sur 172 au 2026-08-19 — et en
+        //                       parler fabriquerait une inquiétude sans objet.
+        //   les six autres   -> SE TAISENT, même raison : ce sont des « rien à rendre »,
+        //                       pas des refus de rendre. Elles restent au journal, pour
+        //                       être comptées.
+        //
+        // ⚠️ CE QUE ÇA CORRIGE : l'extension tire aujourd'hui son texte du seul booléen
+        // `rembourse`, donc elle parle sur les NEUF. La règle n'est pas « montrer
+        // `rembourse` », c'est « montrer `raisonNonRembourse === 'plafond-jour'` ».
         raisonNonRembourse: rembourse ? null : raisonNonRemboursement(),
         motifRefus,
         natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique')

@@ -980,6 +980,27 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      champ par la négative. Tester la présence de ce qui prouve (`motifEchec != null`),
 //      jamais l'absence de ce qui infirme.
 //
+// ⚠️ ET UNE TROISIÈME FAMILLE, TROUVÉE LE 2026-08-19 : L'ISOLEMENT PARFAIT.
+//   9. UN TEST QUI FABRIQUE UNE IDENTITÉ NEUVE À CHAQUE CAS NE PEUT JAMAIS DÉCLENCHER
+//      UNE RÈGLE D'ACCUMULATION. `test-remboursement-catch.js` prenait un userId neuf par
+//      cas — la bonne pratique, celle qui empêche un cas de contaminer le suivant. Elle
+//      garantit aussi que le compteur de remboursements est TOUJOURS à zéro, donc que le
+//      plafond de 5 par (userId, jour) ne peut PAS se déclencher. Le fichier était donc
+//      structurellement aveugle à la seule règle qui, ce jour-là, refusait de rendre de
+//      l'argent.
+//      ⚠️ CE N'EST PAS UN DÉFAUT DE CE FICHIER, ET C'EST BIEN LE POINT : l'isolement est
+//      correct, et c'est LUI qui crée l'angle mort. Deux disciplines justes qui se
+//      contredisent — « chaque cas part d'un état propre » et « les règles d'accumulation
+//      doivent être exercées » — et rien ne signale laquelle manque.
+//      LA PARADE : toute règle qui compte par (identité, fenêtre) a besoin d'un cas qui
+//      RÉUTILISE l'identité, et ce cas doit être nommé comme tel. Voir test-acces.js
+//      section J, qui le faisait déjà pour ce plafond — c'est en le cherchant qu'on l'a
+//      trouvé, pas en le sachant.
+//      ⚠️ ET LA CORRECTION DE MA PROPRE AFFIRMATION : j'avais écrit « le plafond n'avait
+//      jamais été testé ». C'était faux — test-acces.js J l'exerce depuis le début, avec
+//      8 tentatives sur un seul utilisateur. Ce qui était vrai est plus étroit : le
+//      fichier de la chaîne argent, lui, ne pouvait pas l'atteindre.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation
