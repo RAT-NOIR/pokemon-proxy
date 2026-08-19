@@ -43,7 +43,7 @@ const mongoose = require('mongoose');
 // `champsDeRefus` dans index.js : ce qui doit figurer sur TOUTE ligne ne peut pas dépendre
 // du soin de chaque appelant. Il y a huit points d'écriture au journal ; le neuvième
 // oublierait le champ, et l'oubli serait invisible. Voir sources.js.
-const { sourcesTombees } = require('./sources');
+const { sourcesTombees, raisonNonRemboursement } = require('./sources');
 
 // 90 jours. Mongo purge par un balayage qui tourne toutes les 60 s : la suppression
 // n'est pas instantanée à la seconde près, ce qui est sans importance ici.
@@ -346,6 +346,23 @@ const journalScanSchema = new mongoose.Schema({
     // s'en sert pour requalifier un refus d'absence en échec technique. C'est la condition
     // que pose la règle en tête de sets-vintage-japonais.js.
     sourcesEnPanne: [String],
+
+    // POURQUOI LE SCAN N'A PAS ÉTÉ REMBOURSÉ — énumération fermée (sources.js).
+    // null = remboursé, ou aucun remboursement tenté.
+    //
+    // ⚠️ `rembourse: false` RECOUVRAIT NEUF SITUATIONS, ET UNE SEULE EST UN PRÉJUDICE.
+    // Mesuré au 2026-08-19 : 32 lignes à `rembourse: false`, toutes SANS `userId` —
+    // c'est-à-dire « aucun débit à annuler », le cas parfaitement ordinaire. Rien ne
+    // permettait de les distinguer d'un 'plafond-jour', qui lui veut dire qu'un
+    // utilisateur a payé une panne. Le booléen répondait « non » à deux questions
+    // différentes : « a-t-on rendu ? » et « devait-on rendre ? ».
+    //
+    // 🔴 CELLE QU'ON SURVEILLE : 'plafond-jour'. Le plafond anti-abus est de 5 par
+    // (userId, jour) et ne distingue pas l'abus de la panne — un utilisateur actif
+    // pendant une demi-heure d'indisponibilité peut le dépasser sans rien avoir fait
+    // d'anormal. Il n'a jamais mordu à ce jour (collection `remboursements` vide en
+    // production), et c'est ce champ qui le dira le jour où ça change.
+    raisonNonRembourse: String,
 
     // --- LES DEUX SIGNAUX DE RANG, en sorties de première classe ---
     // aucunCandidatAuNumero : AUCUN candidat du vivier ne portait le numéro lu, par
@@ -766,8 +783,9 @@ function enregistrerScan(d = {}) {
             // Tronqué ICI, une seule fois, pour que tous les appelants soient bornés de la
             // même façon — un appelant qui oublierait de tronquer ne peut pas exister.
             messageErreur: d.messageErreur ? String(d.messageErreur).slice(0, 300) : null,
-            // ⚠️ LU DU CONTEXTE, JAMAIS DE L'APPELANT — voir l'import en tête de fichier.
+            // ⚠️ LUS DU CONTEXTE, JAMAIS DE L'APPELANT — voir l'import en tête de fichier.
             sourcesEnPanne: sourcesTombees(),
+            raisonNonRembourse: d.rembourse === true ? null : raisonNonRemboursement(),
             // ⚠️ `null` VOULU quand TCGdex est muet — surtout pas un défaut vers 'en', qui
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,

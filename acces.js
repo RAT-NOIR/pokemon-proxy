@@ -14,6 +14,11 @@
 // établie, ce qui permet au test de pointer une base `test_scratch` sans rien changer.
 
 const mongoose = require('mongoose');
+// ⚠️ POURQUOI LA RAISON PASSE PAR LE CONTEXTE DE SCAN ET NON PAR UN RETOUR. Sept
+// appelants lisent le booléen de `rembourserScan` ; en faire un objet les casserait tous,
+// et un huitième appelant qui oublierait de transmettre la raison ne signalerait rien.
+// Le contexte est déjà le porteur de `sourcesEnPanne`, pour exactement ce motif.
+const { noterNonRemboursement } = require('./sources');
 
 // --- Accès aux scans : crédits d'accueil, allocation hebdo, crédits achetés ---
 // SCANS_ACCUEIL         : scans offerts UNE SEULE FOIS à la création du compte (sans expiration).
@@ -248,13 +253,18 @@ async function verifierAcces(req, res, next) {
  *               cumulation « W29 épuisée -> W30 = 3 » que le test 30/30 interdit.
  */
 async function rembourserScan(req, motif) {
+    // ⚠️ CHAQUE `return false` NOMME SA CAUSE. Il y en a neuf, et le journal n'en gardait
+    // qu'un booléen : « non remboursé » couvrait aussi bien « il n'y avait rien à rendre »
+    // que « le plafond du jour est atteint », c'est-à-dire un utilisateur qui a payé une
+    // panne. Voir RAISONS_NON_REMBOURSE dans sources.js — énumération FERMÉE.
     const credit = req && req.credit;
-    if (!credit) return false;              // code maître, ou aucun débit à annuler
-    if (req.scanRembourse) return false;    // au plus un remboursement par requête
+    if (!credit) { noterNonRemboursement('aucun-debit'); return false; }        // code maître, ou aucun débit
+    if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }  // un seul par requête
     req.scanRembourse = true;
 
     if (mongoose.connection.readyState !== 1) {
         console.error(`❌ [scan-rembourse] impossible (Mongo indisponible) userId=${credit.userId} poche=${credit.poche} motif=${motif}`);
+        noterNonRemboursement('mongo-absent');
         return false;
     }
 
@@ -271,6 +281,11 @@ async function rembourserScan(req, motif) {
         if (compteur.count > REMBOURSEMENTS_MAX_JOUR) {
             await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
             console.warn(`🚫 [remboursement-plafond] userId=${userId} poche=${poche} motif=${motif} plafond=${REMBOURSEMENTS_MAX_JOUR} -> scan NON rembourse`);
+            // 🔴 LA SEULE DES NEUF CAUSES OÙ L'UTILISATEUR PERD RÉELLEMENT QUELQUE CHOSE.
+            // Les autres disent « il n'y avait rien à rendre » ; celle-ci dit « il y avait
+            // quelque chose à rendre et on a refusé ». C'est elle qu'on veut pouvoir
+            // compter — jamais mesurée jusqu'ici faute d'être distinguée.
+            noterNonRemboursement('plafond-jour');
             return false;
         }
 
@@ -285,10 +300,14 @@ async function rembourserScan(req, motif) {
                 { userId, soldeGratuit: { $lt: SCANS_ACCUEIL } }, { $inc: { soldeGratuit: 1 } }
             );
             rendu = (r.modifiedCount ?? r.nModified ?? 0) > 0;
-            if (!rendu) console.warn(`ℹ️ [scan-rembourse] userId=${userId} poche=accueil deja au plafond (${SCANS_ACCUEIL}) -> rien a rendre`);
+            if (!rendu) {
+                console.warn(`ℹ️ [scan-rembourse] userId=${userId} poche=accueil deja au plafond (${SCANS_ACCUEIL}) -> rien a rendre`);
+                noterNonRemboursement('accueil-au-plafond');
+            }
         } else if (poche === 'hebdo') {
             if (semaineISO() !== credit.semaineIso) {
                 console.warn(`ℹ️ [scan-rembourse] userId=${userId} poche=hebdo semaine changee (${credit.semaineIso} -> ${semaineISO()}) -> NON rembourse`);
+                noterNonRemboursement('hebdo-semaine-changee');
             } else {
                 const r = await QuotaSemaine.updateOne(
                     { userId, semaine: credit.semaineIso, count: { $gt: 0 } }, { $inc: { count: -1 } }
@@ -301,6 +320,11 @@ async function rembourserScan(req, motif) {
             // Rien n'a été rendu : on libère le jeton du plafond, sinon un non-
             // remboursement consommerait quand même le quota de remboursements.
             await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            // Les deux branches ci-dessus ont déjà nommé leur cause ; celle qui reste est
+            // « l'écriture n'a modifié aucun document » — poche payante sans compte, ou
+            // compteur hebdo déjà à zéro. `noterNonRemboursement` n'écrit qu'une fois,
+            // donc cet appel ne recouvre jamais une cause plus précise.
+            noterNonRemboursement('poche-introuvable');
             return false;
         }
         console.log(`💸 [scan-rembourse] userId=${userId} poche=${poche} motif=${motif}`);
@@ -308,6 +332,7 @@ async function rembourserScan(req, motif) {
     } catch (e) {
         if (plafondPris) { try { await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } }); } catch (_) { } }
         console.error(`❌ [scan-rembourse] echec userId=${userId} poche=${poche} motif=${motif} : ${e.message}`);
+        noterNonRemboursement('erreur');
         return false;
     }
 }

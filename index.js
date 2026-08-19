@@ -61,7 +61,8 @@ const { enregistrerScan, enregistrerEchec, JournalScan } = require('./journal-sc
 // « Rien trouvé » et « pas pu chercher » sont deux états, jamais un seul. Voir sources.js :
 // six requêtes catalogue rendaient `[]` dans les deux cas, et l'aval lisait ce vide comme
 // un fait sur le catalogue.
-const { interrogerSource, dansUnScan, sourcesTombees } = require('./sources');
+const { interrogerSource, dansUnScan, sourcesTombees,
+    noterNonRemboursement, raisonNonRemboursement } = require('./sources');
 
 // La cause racine du vintage japonais : sur les cartes de 1996-2003, le nombre imprimé
 // est le numéro de Pokédex de l'espèce, pas le rang de la carte dans son set. Voir pokedex.js.
@@ -2946,6 +2947,10 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
 async function rembourserSiRienLivre(req, res, motif) {
     if (res && res.headersSent) {
         console.warn(`💸 [catch] réponse DÉJÀ envoyée (motif ${motif}) -> pas de remboursement : un résultat a été livré.`);
+        // La neuvième cause, et la seule qui ne vient pas de `rembourserScan` : ce n'est
+        // pas un échec de remboursement, c'est un refus JUSTIFIÉ — un résultat a été
+        // livré, donc le scan est dû. La distinguer des huit autres est tout l'intérêt.
+        noterNonRemboursement('deja-livre');
         return false;
     }
     return await rembourserScan(req, motif);
@@ -3023,6 +3028,13 @@ function champsDeRefus(motifRefus, rembourse) {
         // annoncer un remboursement qui n'a pas eu lieu serait une seconde source de
         // vérité sur l'état d'un compte.
         rembourse: Boolean(rembourse),
+        // ⚠️ POURQUOI, QUAND `rembourse` EST FAUX. Neuf causes se cachaient derrière ce
+        // booléen, dont une seule — 'plafond-jour' — signifie que l'utilisateur a perdu
+        // quelque chose. Les autres disent « il n'y avait rien à rendre ». Sans ce champ,
+        // aucune des deux situations ne peut être ni mesurée ni expliquée.
+        // null quand le scan est remboursé, ou qu'aucun remboursement n'a été tenté.
+        // Énumération fermée : voir RAISONS_NON_REMBOURSE dans sources.js.
+        raisonNonRembourse: rembourse ? null : raisonNonRemboursement(),
         motifRefus,
         natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique')
     };

@@ -28,7 +28,12 @@ const v = (nom, obtenu, attendu) => {
     // fait au chargement, avec MONGODB_BASE lu en tête de ce fichier). Attendre la
     // connexion AVANT de le charger attend donc quelque chose que personne n'a demandé.
     const { rembourserSiRienLivre } = require('./index');
-    const { Credit } = require('./acces');
+    const { Credit, Remboursement } = require('./acces');
+    // ⚠️ CHAQUE CAS TOURNE DANS SON PROPRE CONTEXTE DE SCAN. `noterNonRemboursement`
+    // n'écrit qu'UNE fois par contexte — le premier refus est celui qui compte — donc
+    // partager un contexte entre deux cas ferait passer la raison du premier pour celle
+    // du second, et le test se mentirait à lui-même.
+    const { dansUnScan, raisonNonRemboursement, RAISONS_NON_REMBOURSE } = require('./sources');
     for (let i = 0; i < 60 && mongoose.connection.readyState !== 1; i++) await new Promise(r => setTimeout(r, 500));
     if (mongoose.connection.readyState !== 1) { console.error('❌ Mongo non connecté.'); process.exit(1); }
     // ⚠️ GARDE DURE : on ne touche pas la production, même par accident de variable.
@@ -95,6 +100,80 @@ const v = (nom, obtenu, attendu) => {
         v('aucun débit -> remboursement sans objet', await rembourserSiRienLivre(req, { headersSent: false }, 'erreur-serveur'), false);
     }
 
+    // ── 6. `rembourse: false` DIT MAINTENANT POURQUOI ───────────────────
+    // ⚠️ NEUF CAUSES SE CACHAIENT DERRIÈRE UN BOOLÉEN, et une seule est un préjudice.
+    // Un test qui vérifie seulement « false » ne distingue pas « il n'y avait rien à
+    // rendre » de « on a refusé de rendre » — et c'est de l'argent.
+    console.log('\n── 6. la raison du non-remboursement, une valeur par cause ──');
+    {
+        const u = neuf('raison-ok');
+        await Credit.deleteOne({ userId: u }); await Remboursement.deleteMany({ userId: u });
+        await Credit.create({ userId: u, soldeGratuit: 10, soldePayant: 0 });
+        await dansUnScan(async () => {
+            const req = { credit: { userId: u, poche: 'accueil' } };
+            v('remboursé -> aucune raison', await rembourserSiRienLivre(req, { headersSent: false }, 'x'), true);
+            v('   raison null quand ça marche', raisonNonRemboursement(), null);
+        });
+        await dansUnScan(async () => {
+            v('aucun débit -> « aucun-debit »',
+                await rembourserSiRienLivre({}, { headersSent: false }, 'x') === false && raisonNonRemboursement(), 'aucun-debit');
+        });
+        await dansUnScan(async () => {
+            const req = { credit: { userId: u, poche: 'accueil' } };
+            v('réponse déjà partie -> « deja-livre »',
+                await rembourserSiRienLivre(req, { headersSent: true }, 'x') === false && raisonNonRemboursement(), 'deja-livre');
+        });
+        await dansUnScan(async () => {
+            const req = { credit: { userId: u, poche: 'accueil' } };
+            await rembourserSiRienLivre(req, { headersSent: false }, 'x');
+            v('2e appel dans la même requête -> « deja-rembourse »',
+                await rembourserSiRienLivre(req, { headersSent: false }, 'x') === false && raisonNonRemboursement(), 'deja-rembourse');
+        });
+        await Credit.deleteOne({ userId: u }); await Remboursement.deleteMany({ userId: u });
+    }
+
+    // ── 7. LE PLAFOND ANTI-ABUS, EXERCÉ POUR LA PREMIÈRE FOIS ───────────
+    // ⚠️ IL N'AVAIT JAMAIS ÉTÉ TESTÉ, et il a pourtant mordu six fois sur le bac à sable
+    // sans que personne le voie — chaque cas ci-dessus prend un userId neuf, donc un
+    // compteur à zéro, donc le plafond ne pouvait pas se déclencher. C'est un angle mort
+    // par construction : les tests fabriquaient exactement les conditions où la règle ne
+    // s'applique pas. Ici on la déclenche exprès.
+    console.log('\n── 7. le plafond de 5 remboursements par jour ──');
+    {
+        const u = neuf('plafond');
+        await Credit.deleteOne({ userId: u }); await Remboursement.deleteMany({ userId: u });
+        await Credit.create({ userId: u, soldeGratuit: 0, soldePayant: 0 });
+        let rendus = 0;
+        for (let i = 1; i <= 5; i++) {
+            await dansUnScan(async () => {
+                if (await rembourserSiRienLivre({ credit: { userId: u, poche: 'accueil' } }, { headersSent: false }, 'x')) rendus++;
+            });
+        }
+        v('les 5 premiers sont rendus', rendus, 5);
+        const c5 = await Credit.findOne({ userId: u }).lean();
+        v('   solde 0 -> 5', c5.soldeGratuit, 5);
+        await dansUnScan(async () => {
+            v('le 6e est REFUSÉ',
+                await rembourserSiRienLivre({ credit: { userId: u, poche: 'accueil' } }, { headersSent: false }, 'x'), false);
+            v('   et il dit pourquoi : « plafond-jour »', raisonNonRemboursement(), 'plafond-jour');
+        });
+        const c6 = await Credit.findOne({ userId: u }).lean();
+        v('   le solde n\'a pas bougé (5, pas 6)', c6.soldeGratuit, 5);
+        const compteur = await Remboursement.findOne({ userId: u }).lean();
+        v('   le compteur reste à 5, le 6e n\'a pas consommé de jeton', compteur.count, 5);
+        await Credit.deleteOne({ userId: u }); await Remboursement.deleteMany({ userId: u });
+    }
+
+    // ── 8. L'ÉNUMÉRATION EST FERMÉE ─────────────────────────────────────
+    {
+        const { noterNonRemboursement } = require('./sources');
+        await dansUnScan(async () => {
+            noterNonRemboursement('une-valeur-inventee');
+            v('une valeur hors énumération est REFUSÉE', raisonNonRemboursement(), null);
+        });
+        v('l\'énumération compte 9 causes', RAISONS_NON_REMBOURSE.length, 9);
+    }
+
     // ── 5. `res` ABSENT -> ON NE SUPPOSE PAS QU'UNE RÉPONSE EST PARTIE ──
     // Un `res` manquant ne doit pas faire perdre le remboursement à l'utilisateur :
     // dans le doute, on rend. Le doute ne se paie pas par le client.
@@ -106,6 +185,16 @@ const v = (nom, obtenu, attendu) => {
         v('res absent -> remboursé quand même', await rembourserSiRienLivre(req, null, 'erreur-serveur'), true);
         await Credit.deleteOne({ userId: u });
     }
+
+    // ⚠️ TOUT OUTIL QUI FAIT ÉCRIRE UNE COLLECTION LA VIDE EN SORTANT. La règle est écrite
+    // en tête de verrou-avant-push.js, et elle ne vaut que si elle s'applique partout :
+    // ce fichier laissait derrière lui un document `remboursements` par cas remboursé. Ses
+    // userId étant uniques à chaque exécution, ça n'a jamais rien faussé — mais « ça ne
+    // fausse rien aujourd'hui » n'est pas une raison de laisser traîner l'état qui, chez
+    // le verrou, a fini par faire mentir une assertion.
+    const restes = await Remboursement.deleteMany({ userId: /^T-catch-/ });
+    const creditsRestes = await Credit.deleteMany({ userId: /^T-catch-/ });
+    console.log(`\n🧹 test_scratch : ${creditsRestes.deletedCount} crédit(s), ${restes.deletedCount} compteur(s) de remboursement supprimés.`);
 
     console.log(echecs ? `\n❌ ${echecs} échec(s).` : '\n🎉 Tous les tests passent.');
     await mongoose.connection.close();

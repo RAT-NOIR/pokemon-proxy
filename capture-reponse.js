@@ -113,8 +113,15 @@ const cible = process.argv[2] || 'Vileplume';
             }
             console.log(`   raisonReserve=${ligne.raisonReserve ?? '—'} · niveauReserve=${ligne.niveauReserve ?? '—'} · nbExAequo=${ligne.nbExAequo ?? '—'} · strategieReverse=${ligne.strategieReverse ?? '—'}`);
         }
+        // ⚠️ TOUT OUTIL QUI FAIT ÉCRIRE UNE COLLECTION LA VIDE EN SORTANT — la règle est
+        // écrite en tête de verrou-avant-push.js. `remboursements` manquait ici aussi, et
+        // le relevé le montrait : « capture-reponse 2026-08-10 count=5 », donc AU PLAFOND.
+        // Cet outil n'assertait rien sur le remboursement, il n'a donc rien faussé — mais
+        // il laissait un compteur saturé derrière lui, sur le même bac que le verrou.
+        const rb = await bac.collection('remboursements').deleteMany({ userId: 'capture-reponse' });
         await bac.collection('journal_scans').deleteMany({ userId: 'capture-reponse' });
         await bac.collection('credits').deleteMany({ userId: 'capture-reponse' });
+        if (rb.deletedCount) console.log(`   🧹 ${rb.deletedCount} compteur(s) de remboursement supprimé(s).`);
         await bac.close();
     } catch (e) { console.log(`\n   ⚠️ preuve impossible : ${e.message}`); }
 
