@@ -2,34 +2,34 @@
   "_lisezMoi": "Vérités du banc, saisies à la main. `source` dit COMMENT elles ont été obtenues.",
   "verites": {
     "H001": {
-      "idProduct": 549081,
-      "nom": "Pidgeotto",
+      "idProduct": 650617,
+      "nom": "Spearow",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Expansion-Pack/Spearow-EC1027",
+      "lu": {
+        "nom": "Spearow",
+        "numero": "027",
+        "total": "128",
+        "setCode": null
+      },
+      "saisiLe": "2026-08-19T09:58:26.895Z"
+    },
+    "H002": {
+      "idProduct": 548971,
+      "nom": "Growlithe",
       "codeSet": "EXS",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Pidgeotto",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Growlithe",
       "lu": {
-        "nom": "Pidgeotto",
-        "numero": "017",
+        "nom": "Growlithe",
+        "numero": "058",
         "total": null,
         "setCode": null
       },
-      "saisiLe": "2026-08-04T15:13:57.989Z"
-    },
-    "H002": {
-      "idProduct": 698502,
-      "nom": "Dragonite Lv.61",
-      "codeSet": "DP5c",
-      "source": "saisie-a-l-aveugle",
-      "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Cry-from-the-Mysterious/Dragonite-Lv61-DP5c",
-      "lu": {
-        "nom": "Dragonite",
-        "numero": "080",
-        "total": null,
-        "setCode": "DP5"
-      },
-      "saisiLe": "2026-08-04T15:15:40.366Z"
+      "saisiLe": "2026-08-19T09:59:52.631Z"
     },
     "H003": {
       "idProduct": 549051,

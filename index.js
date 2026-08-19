@@ -285,6 +285,24 @@ const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_ca
 // simple doublon réseau) : sans cette table, un même paiement créditerait plusieurs fois.
 // L'index unique sur eventId est le verrou — c'est l'insertion qui échoue (11000), pas
 // une lecture préalable qui pourrait passer entre deux appels concurrents.
+// ⚠️ TROU D'AUDIT CONNU, NOMMÉ LE 2026-08-19, DÉLIBÉRÉMENT NON RÉPARÉ.
+// Cette table dit QU'UN événement a été traité, jamais CE QU'IL A CRÉDITÉ. Conséquence :
+// un crédit double qui serait passé ne serait PAS détectable après coup. Le solde est un
+// NET — crédité moins consommé — et la consommation n'est traçable que sur les lignes de
+// journal qui portent un `userId` : 6 sur 172 au moment où c'est écrit. On ne peut donc
+// ni reconstruire le total crédité, ni le confronter à quoi que ce soit.
+//
+// CE QU'IL FAUDRAIT POUR QUE ÇA DEVIENNE AUDITABLE :
+//   · que ce document porte le PACK crédité (`scans`, et tant qu'à faire `userId`) ;
+//   · alors la somme des événements d'un utilisateur devient confrontable à
+//     « solde actuel + consommation », et un doublon se voit par simple soustraction.
+//
+// POURQUOI ON NE L'ÉCRIT PAS AUJOURD'HUI : cinq comptes, un seul avec un solde payant.
+// La valeur d'un audit est nulle à cette échelle et deviendra réelle avec des
+// utilisateurs. C'est écrit ici pour ne pas être oublié — pas pour être fait maintenant.
+// ⚠️ Et ça ne change RIEN à la garantie : la déduplication, elle, est prouvée
+// (index unique vérifié en base + test-webhook-stripe.js). Ce qui manque n'est pas la
+// protection, c'est la capacité à constater après coup qu'elle a tenu.
 const evenementStripeSchema = new mongoose.Schema({
     eventId: { type: String, required: true, unique: true },
     recuLe:  { type: Date, default: Date.now }
@@ -3048,8 +3066,13 @@ function champsDeRefus(motifRefus, rembourse) {
         //
         //   'plafond-jour'   -> PARLE. C'est la seule où l'utilisateur a perdu quelque
         //                       chose : il y avait un crédit à rendre et on a refusé.
-        //                       Dire quoi (« la limite de remboursements du jour est
-        //                       atteinte »), pas pourquoi techniquement.
+        //                       Dire quoi, pas pourquoi techniquement, et renvoyer vers
+        //                       l'adresse de contact DÉJÀ publiée dans les mentions
+        //                       légales et les CGV de rat-market.fr — surtout pas un
+        //                       canal nouveau, qui serait une seconde chose à surveiller.
+        //                       « Ce scan n'a pas été recrédité : la limite de
+        //                         remboursements automatiques du jour est atteinte.
+        //                         Écris-nous si tu penses qu'il y a une erreur. »
         //   'deja-livre'     -> SE TAIT. Un résultat A ÉTÉ livré, donc le scan est dû.
         //                       Afficher « non remboursé » ici serait un reproche à propos
         //                       d'un service rendu.

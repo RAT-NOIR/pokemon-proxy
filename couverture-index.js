@@ -47,7 +47,12 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
     'test-setcode-numero.js', 'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
     'test-journal-echecs.js', 'test-symbole-departage.js', 'test-banc-seaux.js',
-    'test-sources.js'];
+    // ⚠️ « HORS LIGNE » VEUT DIRE « NE LIT PAS LA PRODUCTION », PAS « SANS BASE ».
+    // test-acces, test-journal-echecs et celui-ci écrivent dans test_scratch — ce qui est
+    // interdit, c'est de faire dépendre une barrière avant push de la base de PROD ou d'un
+    // service tiers. test-webhook-stripe n'appelle jamais Stripe : `constructEvent` et
+    // `generateTestHeaderString` sont de la cryptographie locale.
+    'test-sources.js', 'test-webhook-stripe.js'];
 // Le banc est inclus dans la mesure COMPLÈTE : c'est lui qui affichait vert pendant que la
 // production était morte, et la question « que couvre l'instrument » n'a de sens que s'il
 // est dedans.
