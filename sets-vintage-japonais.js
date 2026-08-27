@@ -1,4 +1,38 @@
 // ════════════════════════════════════════════════════════════════════════════
+// ⚠️ CE FICHIER EST CANDIDAT À DEVENIR DU CODE MORT — 2026-08-19
+// ════════════════════════════════════════════════════════════════════════════
+// LA BASCULE D'ARCHITECTURE EST DÉCIDÉE : l'appariement d'images cesse d'être un
+// départage de dernier recours pour devenir le CHEMIN PRINCIPAL d'identification. Le
+// reste de la chaîne garde trois rôles et perd le premier :
+//   · l'ÉTAT de la carte vendue — aucune image ne le donne, et c'est lui qui fait le prix
+//   · la LANGUE, et le choix de l'IMPRESSION quand deux idProducts partagent un même scan
+//   · le garde-fou quand l'image doute
+//
+// CE QUI DEVIENDRA PROBABLEMENT INUTILE, ET IL FAUT L'ÉCRIRE MAINTENANT : la table close
+// ci-dessous, la règle du numéro de Pokédex (pokedex.js), le départage par le symbole, et
+// le périmètre vintage. Tous existent pour une seule raison — reconstituer par le TEXTE
+// une information que la carte ne porte pas. Une carte sans symbole dont le seul nombre
+// imprimé est « No. 100 » (le numéro de Pokédex) est indécidable par le texte : la preuve
+// par l'existence a été faite le 2026-08-19 sur un Voltorb japonais, qu'un scanner
+// concurrent a rendu « Expansion Pack n°037 » à 94,1 % depuis une photo d'annonce, en
+// 1,6 s. L'information n'est pas sur la carte ; elle est dans l'illustration.
+//
+//   ⚠️ ON NE SUPPRIME RIEN AUJOURD'HUI, ET CETTE NOTE EXISTE POUR QU'ON NE S'INTERDISE
+//   PAS DE LE FAIRE PLUS TARD PAR ATTACHEMENT. Ce fichier a coûté des jours : une table
+//   écrite à la main ligne par ligne, une règle d'admission sans exception, des symboles
+//   relevés un par un. Rien de tout ça ne le rend utile si l'image répond mieux. Un code
+//   qu'on garde parce qu'il a été cher à écrire est la définition du coût irrécupérable.
+//
+// LA CONDITION DE MISE À MORT, écrite d'avance comme les autres : le jour où le chemin
+// image tient les seuils de sa règle de décision ET couvre les sets que ces règles
+// servaient, on retire — table close, règle Pokédex, départage par symbole, périmètre —
+// et on mesure ce que ça coûte au banc. Si le banc ne bouge pas, le code était mort.
+// ⚠️ ET CE QUI NE CHANGE PAS : les références d'images du vintage japonais n'existent
+// nulle part (0 % chez TCGdex). Tant que ce goulot tient, ces règles restent le seul
+// chemin sur les sets non couverts — leur mort dépend de l'approvisionnement en images,
+// pas de la qualité de l'appariement.
+
+// ════════════════════════════════════════════════════════════════════════════
 // LA RÈGLE QUI PASSE AVANT TOUTES LES AUTRES DANS CE CHANTIER
 // ════════════════════════════════════════════════════════════════════════════
 // AUCUN SIGNAL NOUVEAU N'EST AJOUTÉ TANT QU'UN SIGNAL DÉJÀ CALCULÉ RESTE NON CONSULTÉ.
