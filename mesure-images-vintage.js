@@ -30,6 +30,63 @@
 // possède-t-il, et combien ont une image RÉELLEMENT SERVIE.
 // USAGE : node mesure-images-vintage.js  [--tout]
 //   --tout : mesure aussi les sets japonais NON appariés à la table close.
+//
+// ============================================================================
+// ⚠️⚠️ CE QUI RESTE À MESURER SUR LE CHANTIER IMAGE — 2026-08-28
+// ============================================================================
+// Le verdict du chantier est un GO, et il faut le lire avec sa portée exacte :
+// 10 requêtes sur 11 sortent au RANG 1 sur 449 références, 6 sur 6 dans la cellule
+// « japonaise vintage sans total ni setCode », où le scoring plaçait la vraie carte
+// aux rangs 15 à 23. C'est acquis. Ce qui suit ne l'est pas.
+//
+// ── 1. RIEN NE TESTE ENCORE L'OCCIDENTAL NI LE MODERNE ──────────────────────
+// Les 11 requêtes sont onze photos de cartes JAPONAISES VINTAGE, tirées de cinq sets
+// (EXP, EC1, EC2, N3, IPB). Elles ne disent rien de l'anglais, du français, ni d'aucune
+// carte postérieure à 2003 — c'est-à-dire de l'essentiel du catalogue.
+// ⚠️ BASCULER L'ARCHITECTURE SUR CE SEUL CHIFFRE REMPLACERAIT UN CHEMIN QUI MARCHE PAR
+// UN CHEMIN NON MESURÉ. Il faut LE MÊME chiffre sur du moderne avant toute bascule.
+//
+// Et deux choses changeront EN MÊME TEMPS le jour où on mesurera l'occidental, ce qui
+// doit être déclaré en tête de cette mesure-là :
+//   · l'ÈRE des cartes (1999-2003 -> 2010-2025) ;
+//   · la NATURE DE LA RÉFÉRENCE — les 449 du vintage sont des SCANS Cardmarket, avec
+//     grain et brillance ; l'occidental viendra de RENDUS TCGdex, propres et plats.
+// Un chiffre plus bas sur l'occidental serait donc indiscernable entre « la méthode ne
+// tient pas hors du vintage » et « les rendus ne s'apparient pas ». D'où le témoin
+// `pokemon-proxy-labo/temoin-rendu.js`, qui pose la seconde question seule.
+//
+// ⚠️ ET LA POPULATION À MESURER N'EST PAS « DES ANNONCES OCCIDENTALES AU HASARD ».
+// Mesuré ce jour sur les 44 lignes occidentales du journal : le total est lu sur 93,2 %
+// d'entre elles (contre 44,4 % en asiatique), le vivier journalisé vaut 1 candidat sur
+// 10 lignes sur 13, et il n'y a que 3 échecs — tous `egalite-parfaite`. Un vivier de 1
+// n'a RIEN à réordonner : y mesurer l'image mesurerait le néant et rendrait « l'image
+// n'apporte rien » là où c'est le PROBLÈME qui n'existe pas. La population qui a un sens
+// est celle où un départage existe : `egalite-parfaite`, `carteIncertaine`, ou vivier ≥ 2.
+//
+// ── 2. LES GROUPES V1/V2 NE SONT TOUJOURS PAS MESURÉS ───────────────────────
+// Trois cas serrés ont été rencontrés (Fearow, Machamp, Electrode) : à chaque fois, le
+// candidat qui talonne la vraie carte porte LE MÊME DESSIN dans une autre finition.
+// Trois cas ne sont pas une mesure. Les groupes durs — même set, même illustration,
+// seule la finition change — restent à construire et à passer, ET À DÉCLARER FABRIQUÉS.
+// C'est là, et seulement là, que se tranche pour de bon la clause écrite avant l'essai :
+//     inliers(bon) ≈ inliers(mauvais) ≈ 0   -> la TECHNIQUE échoue, on a le droit de réessayer
+//     inliers(bon) ≫ inliers(mauvais)       -> ça marche
+//     inliers(bon) ≈ inliers(mauvais) ≫ 0   -> la MÉTHODE échoue, aucune technique ne les
+//                                              séparera, et c'est au reste de la chaîne
+//                                              de trancher la finition, pas à l'image.
+//
+// ── 3. CE QUI EST DÉJÀ SU DU PONT, ET QUI CONTRAINT LA SUITE ────────────────
+// Mesuré ce jour sur les 750 codeSet de `numeros_cartes` :
+//   · 0 codeSet sur 750 pointe vers DEUX identifiants TCGdex — le pont, là où il existe,
+//     est UNIQUE. C'est la bonne nouvelle, et elle n'était pas acquise (côté japonais,
+//     EC4 et EC5 partagent `ecard3`).
+//   · mais il n'existe que pour 213 sets sur 750, soit 22 626 cartes sur 69 231 (32,7 %).
+//     Les 46 605 autres ne sont pas absentes DE TCGdex : elles sont absentes de NOTRE
+//     table de correspondance, qui s'apprend carte par carte.
+// ⚠️ CONSÉQUENCE POUR TOUTE MESURE D'IMAGE OCCIDENTALE : un candidat sans référence ne
+// peut jamais gagner. Mesurer sur un vivier à moitié ponté classerait la vraie carte
+// contre un vivier amputé EN NOTRE FAVEUR. Une ligne n'est recevable que si son vivier
+// est ponté à ≥ 80 %, et la proportion doit être rendue ligne par ligne.
 const axios = require('axios');
 const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 
