@@ -1,6 +1,45 @@
 // ════════════════════════════════════════════════════════════════════════════
+// ⚠️ CHANTIER DE SAISIE DES VÉRITÉS : PARQUÉ LE 2026-08-28, PAS ABANDONNÉ
+// ════════════════════════════════════════════════════════════════════════════
+// LA PRIORITÉ A BASCULÉ SUR LA RECONNAISSANCE PAR L'IMAGE, et pour une raison mesurée :
+// ORB + RANSAC place la vraie carte au RANG 1 sur 449 références 10 fois sur 11, et 6 fois
+// sur 6 dans la cellule « japonaise vintage · sans total · sans setCode » — là où le
+// scoring la laissait au rang 15 à 23. Continuer à saisir des vérités pour évaluer un
+// classement qu'on s'apprête à remplacer serait payer une mesure pour un objet qui change.
+//
+// L'ÉTAT EXACT AU MOMENT DE LA CLÔTURE :
+//   · 53 lignes de holdout (hors incidents techniques), dont 10 portent une vérité
+//     INDIVIDUELLE : H001 Spearow · H002 Growlithe · H003 The Rocket's Trap ·
+//     H004 Pikachu · H005 Slowpoke · H006 Dark Charizard · H007 Cool Porygon ·
+//     H008 Slowbro · H010 Dark Dragonite · H032 Gladion's Final Battle
+//   · 43 restent sans vérité individuelle. Elles sont donc validées EN BLOC, c'est-à-dire
+//     « attendu = ce que la production a retenu » : 100 % de justes PAR ARITHMÉTIQUE.
+//   · banc-verites.json porte 71 vérités au total, tous seaux confondus.
+//
+// ⚠️ RIEN N'EST SUPPRIMÉ, ET C'EST DÉLIBÉRÉ. Ni les 71 vérités, ni les fiches de saisie.
+// CES VÉRITÉS SONT LE SEUL MATÉRIEL D'ÉVALUATION NON BIAISÉ DU PROJET : la seule chose
+// dont on sache qu'elle ne vient pas du système mesuré. Elles serviront à évaluer la
+// NOUVELLE architecture exactement comme l'ancienne — « la bonne carte » ne dépend pas du
+// chemin qui l'a trouvée. Le banc ne meurt pas, il change d'objet.
+//
+// CE QUI EST PARQUÉ AVEC, NOMMÉMENT, parce que ces mesures dépendaient de la saisie et
+// qu'il ne faut pas les croire disponibles dans trois semaines :
+//   · LA RÈGLE DE BRANCHEMENT DU VETO PAR LE SYMBOLE (voir sets-vintage-japonais.js) —
+//     elle exige N ≥ 12 lignes DÉCIDABLES, c'est-à-dire portant une vérité individuelle.
+//     Il y en a 10 sur tout le holdout, et 1 seule dans la population du veto. La clause
+//     « aucune ligne cassée dans le holdout » reste satisfaite PAR VACUITÉ.
+//   · LA PROMOTION DE `perimetre-vintage-suggestion` — même cause : son évaluation
+//     demandait des vérités individuelles sur la cellule vintage, qui n'ont pas été
+//     saisies.
+// Les deux redeviendront mesurables le jour où la saisie reprendra, ou quand la mesure
+// par l'image aura fourni une référence indépendante.
+//
+// ════════════════════════════════════════════════════════════════════════════
 // ⚠️ AUCUNE MESURE NE SE RÉCLAME DU HOLDOUT AUJOURD'HUI — 2026-08-18
 // ════════════════════════════════════════════════════════════════════════════
+// ⚠️ CHIFFRES DU 2026-08-18, PÉRIMÉS PAR LA CROISSANCE DU HOLDOUT — il portait 29 lignes,
+// il en porte 53 au 2026-08-28. Le constat, lui, ne bouge pas : 10 vérités individuelles
+// sur 53, donc 43 lignes validées en bloc. Voir le bloc de clôture ci-dessus.
 // LE SEAU QUI EXISTE POUR DÉCIDER EST VIDE DE SENS. Sur ses 29 lignes :
 //     2 seulement portent une vérité INDIVIDUELLE — et l'une des deux n'est pas fraîche :
 //       elle est HÉRITÉE, par identité, d'une carte déjà saisie dans un lot de diagnostic
