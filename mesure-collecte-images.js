@@ -10,6 +10,20 @@
 // utile — on voit des fichiers se créer, la barre de progression avance, et rien n'a été
 // gagné. « Combien de fichiers » ne répond pas : c'est « combien de NOUVEAUX » qui compte.
 //
+// 🔴🔴 NE MÉLANGE PAS UN TEST DE COLLECTE ET UN IMPORT DE CATALOGUE.
+// Cet outil compare LES FICHIERS À LA BASE. Si `catalogue_produits` change entre le
+// `--marquer` et la lecture suivante, le compteur de « nouveaux » mêlera deux choses qui
+// n'ont rien à voir : les fichiers que tu viens d'enregistrer, et les produits que
+// l'import vient d'ajouter. Le nombre serait juste et la conclusion fausse.
+//   1. D'ABORD le test de collecte (marquer, enregistrer, relire). Une heure, et il ne
+//      dépend pas du catalogue.
+//   2. ENSUITE l'import, avec `mesure-diff-catalogue.js` avant, et un nouveau `--marquer`
+//      après — le repère d'avant l'import ne vaut plus rien une fois la base changée.
+//
+// ⚠️ EN VÉRITÉ SEUL LE BLOC « L'ÉTAT » dépend de la base ; le compteur de nouveaux, lui,
+// ne compare que des fichiers entre eux. Mais les deux sont lus dans le même écran, et
+// c'est l'écran qui trompe. On sépare les opérations plutôt que les colonnes.
+//
 // 🔴 RÈGLE DURE APPLIQUÉE ICI : LA CLÉ EST L'idProduct DU NOM DE FICHIER, JAMAIS LE NOM
 // DE DOSSIER. 41 dossiers portent un nom qui n'est pas le codeSet de leur contenu, CSDC
 // contient CS3DC, SV4A mêle deux galeries. Le nom de dossier ne sert ici QU'À rendre une

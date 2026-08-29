@@ -143,6 +143,46 @@
 //   · le déficit total : 151 expansions incomplètes, 3 610 produits manquants
 //     (le chiffre faux disait 97 sets et 2 720 manquants)
 //
+// ── RENONCEMENT ASSUMÉ : 111 CARTES MARQUÉES `non-collectee` LE 2026-08-29 ──
+// Six galeries plafonnées dont le reliquat ne vaut pas un rechargement complet. Ce n'est
+// pas un oubli, c'est une décision, et le chiffre est écrit pour qu'on sache ce qu'on a
+// renoncé à chercher :
+//     PAL     37 · CSM1DC 36 · SVI 15 · PAR 14 · XSV2A  6 · FST  3     -> 111 cartes
+// ⚠️ Le chiffre a doublé quand le dénominateur a été corrigé (39 -> 111) : la décision a
+// été reprise sur les bons nombres, pas reconduite par inertie. Si un jour un filtre
+// permet de reprendre ces galeries à moindres frais, ces 111 sont les premières à
+// repasser en `non-collectee` -> `indexee`.
+//
+// ── L'ANGLE MORT DE `numeros_cartes` — MESURÉ, ET PLUS PETIT QU'IL N'EN A L'AIR ──
+// 1 781 produits du catalogue n'ont aucune ligne dans `numeros_cartes`. Décomposés :
+//     566 Code Cards  ·  7 scellés  ·  🔑 1 208 cartes ordinaires
+// dont 487 ont une image sur le disque.
+//
+// ✅ CE N'EST PAS UN ANGLE MORT DE PÉRIMÈTRE. `trouverProduitsLocaux` interroge
+// `catalogue_produits` (index.js:1772), pas `numeros_cartes` : ces cartes ENTRENT dans les
+// viviers. Vérifié en appelant la vraie fonction — 120 sur 120 rendues sur leur propre nom.
+//
+// ⚠️ MAIS ELLES Y ENTRENT AVEUGLES. Sans ligne dans `numeros_cartes`, un candidat n'a ni
+// `numero`, ni `codeSet`, ni `slug` : le chemin du numéro ne l'atteint pas, le scoring ne
+// peut pas lui accorder le signal du numéro ni du setCode, et aucune URL Cardmarket n'est
+// constructible pour lui. 1 198 des 1 208 partagent leur nom avec un produit bien
+// renseigné, donc elles peuplent des viviers réels sans pouvoir y être notées.
+//
+// 🔑 L'EXPOSITION RÉELLE, PONDÉRÉE PAR LE TRAFIC et non par le catalogue — sur les 141
+// noms du journal, 133 viviers de 2 candidats ou plus, 6 587 candidats vus :
+//     viviers contenant au moins une carte sans numéro ....... 22 / 133  (16,5 %)
+//     candidats sans numéro .................................. 48 / 6 587 (0,7 %)
+//     candidats SANS NUMÉRO MAIS AVEC IMAGE .................. 21 / 6 587 (0,3 %)
+// Et sur les 71 vérités saisies à la main — le seul matériel non biaisé — ZÉRO est une
+// carte sans numéro. L'angle mort ne s'est jamais réalisé sur ce matériel.
+// ⚠️ 71 vérités ne peuvent pas exclure un événement à 0,3 % : ça borne l'importance de
+// l'angle mort, ça ne le nie pas. Ce n'est pas l'argument chiffré d'une bascule
+// d'architecture — la cellule japonaise vintage, elle, l'est.
+//
+// ✅ AU PASSAGE, UN CHIFFRE QUI COMPTE POUR LA SUITE : les 71 vérités ont TOUTES une image
+// sur le disque. Le banc peut donc être rejoué contre l'architecture image sans qu'une
+// seule référence manque.
+//
 // 🔴 BOMBE À RETARDEMENT POUR LE JOUR DU VRAI IMPORT — 26 LIGNES DIVERGENTES.
 // `numeros_cartes` porte SA PROPRE copie d'`idExpansion`, sur 69 231 lignes. Elle diverge
 // déjà de `catalogue_produits` sur 26 d'entre elles, et un réimport creusera l'écart en
