@@ -87,6 +87,90 @@
 // peut jamais gagner. Mesurer sur un vivier à moitié ponté classerait la vraie carte
 // contre un vivier amputé EN NOTRE FAVEUR. Une ligne n'est recevable que si son vivier
 // est ponté à ≥ 80 %, et la proportion doit être rendue ligne par ligne.
+//
+// ============================================================================
+// 🔴🔴 RÈGLE DURE — L'INDEX SE CONSTRUIT SUR L'idProduct DU NOM DE FICHIER,
+//      JAMAIS SUR LE NOM DE DOSSIER. 2026-08-29
+// ============================================================================
+// Le nom de dossier est de la DÉCORATION. La clé est dans le fichier.
+//
+// Ce que l'audit de la collecte a trouvé, et qui interdit de faire autrement :
+//   · 41 dossiers portent un nom qui n'est pas le codeSet de leur contenu ;
+//   · « CSDC » contient les 183 cartes de CS3DC — CS3DC a un dossier, et il est VIDE ;
+//   · « SV4A » mélange deux galeries Cardmarket, « Shiny Treasure ex » (expansion 5519)
+//     et « Pikachu Legendary Celebration » (expansion 6348, codeSet CSDC en base) ;
+//   · « WCD12 » contient WCD12 ET WCD13 ; « XY10 » contient aussi le MAudino EX Mega
+//     Battle Deck (codeSet XYH) ;
+//   · Windows interdit le « / » : SV-P/ID est rangé sous « SV-P ID », S-P/CS sous
+//     « SVP-P CS ». Ce n'est pas une faute de rangement, c'est le système de fichiers.
+//
+// ⚠️ ET ÇA A DÉJÀ COÛTÉ, DANS L'AUDIT LUI-MÊME. Mes deux premiers passages cherchaient,
+// pour chaque dossier, les produits de son codeSet absents DE CE DOSSIER. CS3DC est donc
+// sorti à « 183 manquants » alors que ses 183 fichiers sont sur le disque. Le rapport
+// aurait envoyé le testeur réenregistrer 183 pages qu'il possède. La présence se juge sur
+// L'ENSEMBLE du disque, par jointure sur l'identifiant, jamais dossier par dossier.
+// Même chose au comptage des galeries : par dossier, SV4A paraissait dépasser 300 et
+// renversait une hypothèse juste. Par galerie, il ne la dépassait pas.
+//
+// ============================================================================
+// LA COLLECTE DE RÉFÉRENCES — CE QUI EST SU AU 2026-08-29
+// ============================================================================
+// 69 016 idProducts distincts sur le disque, 67 104 appariés au catalogue, 1 912 fichiers
+// dont le produit nous est inconnu — TOUS d'idProduct supérieur à 895 905, notre maximum.
+// Ce ne sont pas des images en trop : c'est le catalogue qui est en retard.
+//
+// 🔴 LE PLAFOND À 300. Quinze galeries s'arrêtent à EXACTEMENT 300 fichiers et 10 pages.
+// Sur les 770 galeries du disque, AUCUNE ne dépasse 300, AUCUNE n'a de page 11. Les
+// produits manquants de ces quinze sets sont dispersés dans l'alphabet (rang moyen 0,44
+// à 0,53), donc ce n'est pas « il a pris le début de la liste ». Et cinq de ces galeries
+// s'arrêtent à 300 alors qu'il ne restait qu'entre 1 et 15 cartes à prendre.
+// L'explication qui tient est un PLAFOND DE LA GALERIE CARDMARKET, pas une lassitude du
+// testeur. Elle n'est pas prouvée — seul l'affichage de la pagination la prouvera.
+//
+// ============================================================================
+// `references_image` — LA COLLECTION QUI DIT CE QU'ON PEUT INDEXER. ADOPTÉE.
+// ============================================================================
+// Collection DÉDIÉE, clé `idProduct`. ⚠️ PAS un champ de `catalogue_produits` :
+// `import-catalogue.js` réécrit cette collection à chaque import et le constat serait
+// perdu sans que personne ne s'en aperçoive.
+//
+//   references_image : { idProduct, etat, constateLe, source }
+//      etat = 'indexee'        un vecteur existe
+//           | 'absente'        vérifié chez Cardmarket : il n'y a pas d'image.
+//                              PROPRIÉTÉ DU PRODUIT.
+//           | 'non-collectee'  le set n'a pas été enregistré. PROPRIÉTÉ DE NOTRE TRAVAIL.
+//
+// Un booléen mentirait : il confondrait « on a vérifié, il n'y en a pas » et « on n'a pas
+// regardé ». Ce sont deux choses différentes et une seule se répare.
+//
+// 🔴🔴 LE RACCOURCI QU'IL NE FAUT PAS PRENDRE, ÉCRIT EN TOUTES LETTRES.
+// Le départage par l'image ne se déclenche QUE SI TOUS les candidats du groupe sont
+// `indexee`. Un seul candidat en `absente` ou en `non-collectee` -> ABSTENTION.
+//
+// Il sera tentant, dans six mois, d'écrire ceci en croyant optimiser :
+//     « ce candidat n'a pas de vecteur, il ne peut pas gagner de toute façon,
+//       donc je le retire du groupe et je départage les autres. »
+// C'EST FAUX, ET C'EST FABRIQUER UNE VICTOIRE. Si la carte réelle est justement celle
+// qui n'a pas de référence, l'appariement ne peut pas la désigner : il désignera un
+// AUTRE candidat, et il le désignera AVEC ASSURANCE, puisque plus rien ne lui fait
+// concurrence. Retirer le candidat aveugle ne supprime pas l'incertitude, il supprime
+// la trace de l'incertitude. Le score monte, la justesse baisse, et rien dans les
+// chiffres ne le montre.
+// `absente` et `non-collectee` se valent donc DEVANT LA GARDE. Leur différence sert à la
+// liste de travail — retaper ou ne pas retaper — et à rien d'autre.
+//
+// ⚠️ ET « LE GROUPE » DOIT ÊTRE DÉFINI, SINON LA RÈGLE CHANGE DE PRIX. Mesuré ce jour :
+//     groupe = le VIVIER ENTIER du nom ....... 56,4 % des groupes touchés (trafic réel)
+//     groupe = (nom, codeSet) ................  7,6 %
+//     groupe = idMetacard (Cardmarket) .......  8,4 %
+// Le vivier n'est pas le groupe de départage : c'est la présélection, et 58 viviers sur
+// 133 y dépassent 50 candidats. Exiger une référence pour chacun des 80 « Arcanine » du
+// catalogue reviendrait à exiger la collecte complète pour séparer deux finitions.
+// LE GROUPE EST L'ENSEMBLE QUE LE SCORING LAISSE À ÉGALITÉ, au grain de `idMetacard` —
+// les tirages d'une même carte. À ce grain la règle stricte coûte moins d'un groupe sur
+// dix, et environ un cinquième de ce coût est définitif (produits sans numéro, scellés
+// et cartes-codes, qui n'auront jamais d'image). Le reste diminue à mesure que la
+// collecte se termine.
 const axios = require('axios');
 const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 
