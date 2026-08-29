@@ -39,7 +39,60 @@
 // « japonaise vintage sans total ni setCode », où le scoring plaçait la vraie carte
 // aux rangs 15 à 23. C'est acquis. Ce qui suit ne l'est pas.
 //
+// ============================================================================
+// ✅ 2026-08-29 — LA MESURE SUR LE BANC ENTIER. 66 VÉRITÉS, PLUS 11.
+// ============================================================================
+// Les 71 vérités saisies à la main ont TOUTES une image sur le disque : le banc a donc pu
+// être rejoué contre l'architecture image sans une collecte de plus. 70 rattachées à une
+// ligne de journal, 70 photos encore servies, 66 recevables après R1 (4 écartées : 3 pour
+// vivier d'un seul candidat, 1 parce que la vraie carte n'était pas au vivier — défaut de
+// périmètre, pas de classement).
+//
+// ⚠️ CE QUI SÉPARE CE JEU DES 11, ET QUI DOIT SE LIRE AVANT LES CHIFFRES :
+//   · LES 11 SONT DEDANS. Le jeu les absorbe, il ne les confirme pas.
+//   · L'INDEX EST LE VIVIER RÉEL (62 candidats en moyenne), pas les 449 du chantier. Le
+//     hasard passe de 1/449 à 1/62 : un rang 1 vaut MOINS ici.
+//   · le rang du scoring est celui d'AUJOURD'HUI, rejoué sur l'entrée enregistrée.
+//
+// LE RÉSULTAT — rang 1 par l'image contre rang 1 par le scoring, D+ = l'image sauve :
+//                            n     IMAGE      SCORING     D+    D−    test des signes
+//   tout le jeu ...........  66   60 (91 %)   31 (47 %)   33     4    p < 0,0001  ✅
+//   🔑 LA CELLULE .........  44   42 (95 %)   10 (23 %)   32     0    p < 0,0001  ✅
+//   asiatique hors cellule .  14   12 (86 %)   13 (93 %)    1     2    p = 1,00    🔴
+//   🔑 OCCIDENTAL .........   8    6 (75 %)    8 (100 %)    0     2    p = 0,50    🔴
+//
+// 🔑 LE GAIN EST ENTIÈREMENT DANS LA CELLULE : 32 des 33 lignes sauvées y sont, et l'image
+// n'y casse RIEN. Le scoring y tombe à 23 % de rang 1 — et seulement 18 % sans ex aequo,
+// c'est-à-dire qu'un « rang 1 » du scoring y est le plus souvent un tirage au sort entre
+// égaux. C'est exactement la population sans total ni setCode, celle qui n'a aucun signal
+// texte : l'image y remplace un signal absent, elle ne concurrence pas un signal existant.
+//
+// 🔴 ET SUR L'OCCIDENTAL, L'IMAGE N'APPORTE RIEN. Le scoring y fait 8/8 ; l'image 6/8, et
+// elle casse deux lignes. 8 lignes ne décident de rien statistiquement (p = 0,50), mais la
+// direction concorde avec trois mesures indépendantes : le total est lu sur 93,2 % des
+// lignes occidentales du journal contre 44,4 % en asiatique ; le vivier occidental
+// journalisé vaut 1 candidat 10 fois sur 13 ; et les inliers occidentaux sont à ras du
+// bruit, 9,5 médian contre 4,5 pour le premier faux — contre 49,5 contre 8 dans la cellule.
+// ⚠️ Et les références sont ici des SCANS Cardmarket, pas des rendus TCGdex : le confond du
+// témoin ne s'applique pas. Ce n'est donc pas la référence qui est en cause, c'est LA CARTE
+// — les cartes modernes et occidentales, brillantes et lisses, ne donnent pas de points
+// d'intérêt stables. C'est une découverte de cette mesure et elle disculpe TCGdex.
+//
+// ⚠️ LES 4 « CASSES », REGARDÉES UNE PAR UNE. Trois désignent LE MÊME DESSIN dans une autre
+// finition (rang de la CARTE = 1) : L017 Mega Gardevoir ex, L023 Mewtwo, H004 Pikachu.
+// Par la définition du chantier — « juste = la bonne CARTE quelle que soit la finition » —
+// D− ne vaut donc pas 4 mais 1. La seule vraie casse est L003 Gardevoir ex : rang 48/93 et
+// ZÉRO inlier sur la vraie carte, verdict TECHNIQUE. Un cas isolé, à regarder à l'œil.
+//
+// LA CONSÉQUENCE, ÉCRITE COMME UNE RÈGLE : le départage par l'image se déclenche là où le
+// texte n'a rien à dire — pas de total lu, ou égalité au sommet. Le brancher partout
+// dégraderait l'occidental sans rien gagner ailleurs.
+//
 // ── 1. RIEN NE TESTE ENCORE L'OCCIDENTAL NI LE MODERNE ──────────────────────
+// ⚠️ CE PARAGRAPHE EST DÉPASSÉ DEPUIS LE 2026-08-29 pour sa première moitié : l'occidental
+// EST testé, sur 8 lignes, et le verdict est ci-dessus. Il reste vrai pour le MODERNE
+// japonais et pour tout volume sérieux d'occidental. On le garde tel quel : une note qu'on
+// réécrit perd la trace de ce qu'on croyait avant de mesurer.
 // Les 11 requêtes sont onze photos de cartes JAPONAISES VINTAGE, tirées de cinq sets
 // (EXP, EC1, EC2, N3, IPB). Elles ne disent rien de l'anglais, du français, ni d'aucune
 // carte postérieure à 2003 — c'est-à-dire de l'essentiel du catalogue.
