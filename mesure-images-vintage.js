@@ -119,13 +119,47 @@
 // dont le produit nous est inconnu — TOUS d'idProduct supérieur à 895 905, notre maximum.
 // Ce ne sont pas des images en trop : c'est le catalogue qui est en retard.
 //
+// 🔴 BOMBE À RETARDEMENT POUR LE JOUR DU VRAI IMPORT — 26 LIGNES DIVERGENTES.
+// `numeros_cartes` porte SA PROPRE copie d'`idExpansion`, sur 69 231 lignes. Elle diverge
+// déjà de `catalogue_produits` sur 26 d'entre elles, et un réimport creusera l'écart en
+// silence : `import-catalogue.js` met à jour UNE collection, jamais l'autre.
+//   WCD18 = 21 lignes (numeros_cartes dit 1645, le catalogue dit 2396)
+//   SEA=1 (5834/5802) · MEP=1 (6232/6443) · M-P/ID=1 (6393/6392) · FL=1 (1544/1543)
+//   PR=1 (2107/6395)
+// ⚠️ AUCUNE DES 26 NE PORTE DE `setTcgdex` APPRIS : la divergence ne coûte rien
+// aujourd'hui, et c'est précisément pour ça qu'elle passera inaperçue jusqu'au jour où
+// elle coûtera. Le jour du vrai import : relever la liste AVANT, la relever APRÈS, et
+// traiter tout écart nouveau comme un défaut, pas comme une surprise.
+//
 // 🔴 LE PLAFOND À 300. Quinze galeries s'arrêtent à EXACTEMENT 300 fichiers et 10 pages.
 // Sur les 770 galeries du disque, AUCUNE ne dépasse 300, AUCUNE n'a de page 11. Les
 // produits manquants de ces quinze sets sont dispersés dans l'alphabet (rang moyen 0,44
 // à 0,53), donc ce n'est pas « il a pris le début de la liste ». Et cinq de ces galeries
 // s'arrêtent à 300 alors qu'il ne restait qu'entre 1 et 15 cartes à prendre.
 // L'explication qui tient est un PLAFOND DE LA GALERIE CARDMARKET, pas une lassitude du
-// testeur. Elle n'est pas prouvée — seul l'affichage de la pagination la prouvera.
+// testeur. CONFIRMÉ À L'ÉCRAN le 2026-08-29 : la galerie Singles de MC affiche
+// « Page 1 of 10 » quand l'expansion en annonce 774.
+//
+// ⚠️ MAIS LES 300 NE SONT PAS « LES 300 PREMIERS ». C'est la contradiction que le testeur
+// a relevée et elle tient : si la galerie servait un préfixe, les manquants seraient la
+// queue de l'ordre. Testé sur MC (le seul set assez déséquilibré pour que le test ait de
+// la puissance : 300 pris, 474 laissés), rang moyen normalisé des PRÉSENTS —
+//   préfixe parfait vaudrait 0,194 · une sélection sans ordre vaudrait 0,500
+//   idProduct 0,348 · dateAdded 0,348 · numéro 0,348 · idMetacard 0,490 · nom 0,504
+// Aucun ordre connu de la base ne produit ces 300. Ni le nom, ni le numéro, ni
+// l'identifiant, ni la date d'ajout, ni le regroupement des impressions.
+// ⚠️ ET CE N'EST PAS NON PLUS UN FILTRE SUR L'OFFRE : 100 % des présents ET 100 % des
+// manquants ont une entrée dans `guide_prix`. L'hypothèse « la galerie ne montre que ce
+// qui est en vente » est morte.
+//
+// ✅ EN REVANCHE LA SÉLECTION EST DÉTERMINISTE, et ça se prouve sans rien ouvrir : sur les
+// 15 galeries plafonnées, 10 pages de 30 rendent 300 idProducts DISTINCTS — 150
+// chargements de page, zéro doublon, zéro trou. Si l'ordre avait bougé entre deux pages,
+// un produit serait revenu et un autre serait passé à travers. Deux passages identiques
+// rendraient donc les mêmes 300 : réenregistrer ne sert à rien, CHANGER LE TRI est la
+// seule voie — et pour un set de plus de 600 cartes, le tri ne suffira pas non plus,
+// parce que le MILIEU de tous les ordres reste hors d'atteinte. Là, il faut un FILTRE
+// qui ramène la population sous 300.
 //
 // ============================================================================
 // `references_image` — LA COLLECTION QUI DIT CE QU'ON PEUT INDEXER. ADOPTÉE.
