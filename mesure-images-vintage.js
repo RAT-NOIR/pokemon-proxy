@@ -149,9 +149,22 @@
 //
 // Ce que l'audit de la collecte a trouvé, et qui interdit de faire autrement :
 //   · 41 dossiers portent un nom qui n'est pas le codeSet de leur contenu ;
-//   · « CSDC » contient les 183 cartes de CS3DC — CS3DC a un dossier, et il est VIDE ;
-//   · « SV4A » mélange deux galeries Cardmarket, « Shiny Treasure ex » (expansion 5519)
-//     et « Pikachu Legendary Celebration » (expansion 6348, codeSet CSDC en base) ;
+//     ✅ CORRIGÉ LE 2026-08-29 PAR LE TESTEUR, pour deux d'entre eux — il en reste 39.
+//     SV4A a été séparé : « Pikachu Legendary Celebration » est passé sous CSDC, et le
+//     contenu qui était sous CSDC a rejoint CS3DC, jusque-là vide. Constaté sur le
+//     disque : SV4A 300 fichiers, CSDC 25, CS3DC 183.
+//     ⚠️ ET AUCUN COMPTE DE CE FICHIER N'A BOUGÉ — c'est la règle dure qui le garantit,
+//     et ça a été vérifié plutôt que supposé : 69 146 idProducts distincts avant comme
+//     après le déplacement, aucune collision, aucun fichier perdu. Un renommage de
+//     dossier ne PEUT pas déplacer un chiffre ici ; le jour où il le fait, c'est que
+//     quelqu'un a rebranché un index sur le nom de dossier.
+//     ⚠️ En revanche le compte des GALERIES PLAFONNÉES, lui, passe de 15 à 14 : SV4A en
+//     portait deux, dont une seule était à 300. Le plafond n'a pas changé, la façon de
+//     compter les galeries si.
+//   · « CSDC » contenait les 183 cartes de CS3DC — corrigé le 2026-08-29, voir ci-dessus ;
+//   · « SV4A » mélangeait deux galeries Cardmarket, « Shiny Treasure ex » (expansion 5519)
+//     et « Pikachu Legendary Celebration » (expansion 6348, codeSet CSDC en base) —
+//     séparé le 2026-08-29 ;
 //   · « WCD12 » contient WCD12 ET WCD13 ; « XY10 » contient aussi le MAudino EX Mega
 //     Battle Deck (codeSet XYH) ;
 //   · Windows interdit le « / » : SV-P/ID est rangé sous « SV-P ID », S-P/CS sous
@@ -164,6 +177,86 @@
 // L'ENSEMBLE du disque, par jointure sur l'identifiant, jamais dossier par dossier.
 // Même chose au comptage des galeries : par dossier, SV4A paraissait dépasser 300 et
 // renversait une hypothèse juste. Par galerie, il ne la dépassait pas.
+//
+// ============================================================================
+// 🔑 LE TEST SI100 EST TOMBÉ — 2026-08-29. LE TRI S'APPLIQUE AVANT LE PLAFOND.
+// ============================================================================
+// Les trois issues étaient écrites AVANT de lancer, et c'est la troisième qui sort :
+//   0 nouveau         -> le tri s'applique après le plafond, le tri est mort
+//   quelques dizaines -> la fenêtre bouge partiellement, rendement décroissant
+//   ~130              -> LA SÉLECTION DÉPEND DE LA REQUÊTE          ← celle-là
+//
+// MESURÉ : SI100 portait 300 idProducts sur le disque, il en porte 430. Le catalogue en
+// compte 430 pour l'expansion 4388. COUVERTURE 100,0 %, zéro manquant.
+// Sur le disque entier : 69 016 -> 69 146 idProducts distincts, soit +130, et 322
+// idProducts apparaissent désormais dans deux dossiers de page — le recouvrement entre
+// l'ordre normal et l'ordre inversé. Ce recouvrement est la raison pour laquelle on ne
+// compte JAMAIS des fichiers ici, seulement des identifiants distincts : compter les
+// fichiers aurait annoncé un gain gonflé de tout ce que les deux passes ont en commun.
+//
+// CE QUE ÇA OUVRE : deux passes (ordre normal + ordre inversé) suffisent pour tout set
+// d'au plus 600 cartes, sans aucun paramètre d'URL — donc sans le risque Cloudflare.
+//
+// 🔴 CE QUE ÇA N'OUVRE PAS, ET C'ÉTAIT DÉJÀ ÉCRIT : deux tris plafonnés à 300 donnent AU
+// PLUS 600 cartes. MC (774 produits) ne sera pas couvert par le tri, quel qu'il soit. Il
+// faudra un filtre — et SI100, à 430, ne dit rien de ce cas. Une réussite sous le seuil
+// ne prouve rien au-dessus.
+//
+// ============================================================================
+// LE POIDS EN BASE, MESURÉ ET NON ESTIMÉ — 2026-08-29
+// ============================================================================
+// Trois chiffres ont décidé du réglage à 150 points, et aucun n'est une extrapolation.
+//
+//   1. LA BASE OCCUPE DÉJÀ 58,8 Mo FACTURÉS (Atlas gratuit = 512 Mo). Le détail est utile
+//      pour une raison inattendue : `catalogue_produits` pèse 6,7 Mo de données pour
+//      26,3 Mo D'INDEX. Ce n'est pas le sujet du jour, mais c'est le plus gros poste de la
+//      base et personne ne l'avait regardé.
+//
+//   2. LE SURCOÛT BSON EST ×1,012 (mesuré sur 1 000 documents réels échantillonnés dans
+//      toute l'arborescence), pas ×1,08 comme je l'avais estimé. Mon estimation était trop
+//      prudente de sept points.
+//
+//   3. 🔴 LA COMPRESSION AGRANDIT. C'est le chiffre qui élimine 200 points. 1 000
+//      documents écrits puis relus dans `test_scratch` : storageSize/BSON = ×1,022. Un
+//      descripteur ORB est une signature binaire construite pour maximiser l'entropie —
+//      gzip -9, plus fort que le snappy de WiredTiger, ne fait que ×0,997 dessus (×0,667
+//      sur les seules coordonnées, ×0,960 sur la charge entière). Le ratio ×0,545 du reste
+//      de la base vient de textes répétitifs et NE S'Y APPLIQUE PAS.
+//        200 points -> 577 Mo au total  🔴 au-dessus de 512
+//        150 points -> 455 Mo au total  ✅ 57 Mo de marge
+//
+//   ⚠️ ERREUR D'INSTRUMENT ATTRAPÉE AU PASSAGE, la dixième du catalogue. Premier essai :
+//   `fsync` + 3 s d'attente -> storageSize = 0,0 Mo, ratio ×0,001. Ce n'était pas une
+//   compression miraculeuse, c'était WiredTiger qui n'avait pas encore fait son point de
+//   reprise (60 s par défaut ; `fsync` n'est pas autorisé sur un cluster Atlas partagé).
+//   UN INSTRUMENT QUI REND « MILLE FOIS PLUS PETIT » N'A PAS TROUVÉ UN MIRACLE, IL N'A
+//   RIEN MESURÉ. Corrigé en attendant un checkpoint réel, et en refusant de conclure s'il
+//   ne vient pas.
+//
+// ============================================================================
+// L'INDEX RESTREINT EST MORT — 2026-08-29, et la raison est structurelle
+// ============================================================================
+// La question posée était bonne : pourquoi indexer 69 016 produits quand le départage ne
+// tire que sur la cellule ? Réponse mesurée, et elle est sans appel.
+//
+//   · L'union des viviers des 65 noms de cellule déjà vus = 2 854 produits (2 785 avec une
+//     image). 15 Mo à 150 points, contre 378 Mo pour l'index complet. La tentation est
+//     réelle.
+//   · 🔑 LAISSER-UN-DEHORS : 0 nom sur 65. Zéro. Pour chaque nom, l'index bâti sur tous
+//     les autres ne couvre AUCUN de ses candidats.
+//   · POURQUOI : `trouverProduitsLocaux` bâtit le vivier PAR LE NOM. Vérifié sur les
+//     2 080 paires de noms : 0 partagent le moindre produit. Les viviers PARTITIONNENT le
+//     catalogue. Un index restreint aux noms vus n'est donc pas « restreint au domaine
+//     utile », c'est un MÉMO DES NOMS DÉJÀ VUS — et pour un nom neuf c'est 0 %, jamais
+//     partiellement.
+//   · CE QUE ÇA COÛTERAIT : 76,7 % des scans de cellule portent un nom jamais vu (57,9 %
+//     sur le dernier quart du journal — ça ne décroît pas). Les 65 noms vus font 1,0 % des
+//     6 692 cœurs de nom du catalogue.
+//   · 🔴 ET ÇA NE SE RÉPARE PAS TOUT SEUL. Les 1,8 Go d'images sont sur le Bureau du
+//     testeur et n'iront jamais sur Render : le serveur ne PEUT PAS indexer un nom neuf à
+//     la volée. Chaque nom inconnu serait une abstention DÉFINITIVE jusqu'à un lot local
+//     et un téléversement. La restriction ne fait pas gagner de la place, elle crée une
+//     dette d'exploitation.
 //
 // ============================================================================
 // LA COLLECTE DE RÉFÉRENCES — CE QUI EST SU AU 2026-08-29

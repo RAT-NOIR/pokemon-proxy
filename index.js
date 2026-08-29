@@ -72,6 +72,10 @@ const { numeroEstUnDexId } = require('./pokedex');
 // Elle ne pilote PAS encore l'identification : elle sert à lever l'ambiguïté des
 // identifiants TCGdex partagés. Voir sets-vintage-japonais.js.
 const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = require('./sets-vintage-japonais');
+// Le départage par l'image. Renommé à l'import pour qu'aucune relecture ne le confonde
+// avec `departagerParSymbole` juste au-dessus : les deux tranchent une égalité, sur des
+// signaux sans rapport, et l'un est prioritaire sur l'autre (voir le branchement).
+const { departager: departagerParImage } = require('./departage-image');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -4229,6 +4233,63 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             }
         }
 
+        // ════════════════════════════════════════════════════════════════════
+        // LE DÉPARTAGE PAR L'IMAGE — branché le 2026-08-29
+        // ════════════════════════════════════════════════════════════════════
+        // La règle, la mesure qui l'autorise et la garde vivent dans departage-image.js.
+        // Ici, seulement le branchement — et il tient en trois faits :
+        //
+        //   1. IL EST APPELÉ À CHAQUE SCAN, MÊME QUAND IL NE TRANCHERA PAS. `champsImage`
+        //      part au journal dans tous les cas. C'est ce qui permettra de mesurer ce
+        //      qu'il AURAIT fait, exactement comme `symboleDepartage` journalise « aucun
+        //      ex aequo ne porte ce symbole » — une abstention est une mesure.
+        //   2. IL NE RETIRE JAMAIS UN CANDIDAT, il en remonte un. Le classement du scoring
+        //      reste derrière, intact : s'il se trompe, le repli existe encore.
+        //   3. IL EST INERTE TANT QUE `references_image` EST VIDE. Aucun vecteur -> la
+        //      garde ne passe pas -> abstention -> pas un verdict ne bouge. Le code peut
+        //      donc partir AVANT les descripteurs, et c'est la seule façon de savoir
+        //      laquelle des deux bascules aura cassé quoi.
+        //
+        // ⚠️⚠️ UNE CONDITION QUE JE N'AI PAS REÇUE ET QUE J'AJOUTE — DÉCLARÉE, PAS GLISSÉE.
+        // Le départage par le SYMBOLE est mesuré 12/12 sur sa classe. Le départage par
+        // l'image est mesuré 31 D+ / 0 D− sur la cellule, mais JAMAIS contre le symbole.
+        // Les deux peuvent se déclencher sur la même carte (une carte de cellule peut être
+        // dans le périmètre vintage avec un symbole lisible). Laisser l'image passer devant
+        // remplacerait une règle mesurée par une autre sur une population où la première
+        // n'a jamais échoué — une promotion sans mesure, exactement ce que la règle de
+        // rétrogradation interdit dans l'autre sens.
+        // L'image s'abstient donc quand le symbole a tranché, ET ON JOURNALISE LE
+        // DÉSACCORD : c'est la mesure qui manquera pour trancher plus tard.
+        let departageParImage = false;
+        let champsImage = {};
+        {
+            const avis = await departagerParImage({
+                imageUrl: photos[0], langue: cardInfo.language,
+                total: cardInfo.total, classement
+            });
+            champsImage = avis.champs;
+            if (departageParSymbole && avis.departage) {
+                champsImage.imageStatut = 'abstention-symbole-prioritaire';
+                champsImage.imageMotif = avis.gagnant === classement[0]?.idProduct
+                    ? 'le symbole et l\'image sont d\'accord' : 'DÉSACCORD symbole/image';
+                console.warn(`🔀 [image] symbole prioritaire — ${champsImage.imageMotif}` +
+                    ` (symbole ${classement[0]?.idProduct}, image ${avis.gagnant}).`);
+            } else if (avis.departage && avis.gagnant !== classement[0]?.idProduct) {
+                departageParImage = true;
+                const gagnant = classement.find(c => c.idProduct === avis.gagnant);
+                classement = [gagnant, ...classement.filter(c => c.idProduct !== avis.gagnant)];
+                console.warn(`🖼️ [image-departage] ${avis.champs.imageInliers} inliers contre` +
+                    ` ${avis.champs.imageInliersSecond} — ${avis.gagnant} passe devant.`);
+            } else if (avis.departage) {
+                // L'image confirme le scoring. Pas de réserve NEUVE : le scoring avait déjà
+                // raison, et étiqueter une confirmation comme un départage gonflerait la
+                // classe avec les cas les plus faciles — ce qui la ferait paraître meilleure
+                // qu'elle n'est. C'est la même erreur que le dénominateur pris dans la
+                // mauvaise table, dans l'autre sens.
+                champsImage.imageStatut = 'confirme-le-scoring';
+            }
+        }
+
         // Rang du gagnant retenu : 3 = le catalogue CONTREDIT le numéro lu pour lui.
         const gagnantContreditNumero = rangsScoring?.rangGagnant === 3;
 
@@ -4254,6 +4315,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // déclare parfaite, sur un signal lu juste 6 fois sur 7. Suggestion, jamais
             // verdict — c'est la condition à laquelle il a été écrit.
             || departageParSymbole
+            // Le départage par l'image : il vient de CHANGER le produit retenu, sur un
+            // signal que le texte n'a pas. Mesuré 31 D+ / 0 D− sur la cellule — excellent,
+            // et pas une preuve : l'intervalle de Wilson à 95 % sur 41 succès en 44 va de
+            // 80 % à 98 %. Suggestion, donc, jamais verdict, exactement comme le symbole
+            // l'a été à ses débuts.
+            || departageParImage
             // NEUTRALISER LE NUMÉRO, C'EST PERDRE UNE SOURCE — donc propager l'incertitude,
             // jamais la réduire (voir le principe dans scoring.js). Mesuré au banc : sans
             // cette ligne, la règle du numéro de Pokédex FAIT EMPIRER le critère de
@@ -4353,6 +4420,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // n'importe quelle raison portant sur le DÉPARTAGE à l'intérieur du vivier.
             : nomSeulVintage ? 'nom-seul-vintage'
             : departageParSymbole ? 'symbole-departage'
+            // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-08-29, ET IL EST ÉTROIT.
+            // `image-departage` s'insère ici, derrière le symbole (qui reste prioritaire,
+            // voir le branchement). Aucune ligne DÉJÀ au journal ne change d'étiquette :
+            // le drapeau n'a jamais pu être vrai avant aujourd'hui. Mais les lignes à
+            // venir où l'image tranche auraient porté `egalite-sans-enjeu` ou une raison
+            // plus basse sous l'ancien code. C'est donc cette classe-là, et elle seule,
+            // qui cesse d'être additivement comparable de part et d'autre de cette date.
+            // À écrire dans la note du lot, faute de quoi quelqu'un comparera les deux
+            // périodes de `egalite-sans-enjeu` comme si c'était le même instrument.
+            : departageParImage ? 'image-departage'
                 // ⚠️ RECOUVREMENT CORRIGÉ — 2026-08-16. `egaliteSansEnjeu` passe DEVANT
                 // `perimetreVintage`. Avant, une carte qui était les DEUX était rapportée
                 // comme « périmètre », et la classe la plus fréquente absorbait des lignes
@@ -4407,6 +4484,20 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // sur une mesure et non sur une impression.
         const NIVEAU_RESERVE = {
             'symbole-departage': 'forte',   // 12/12 justes — le symbole du set a désigné un seul ex aequo
+            // ⚠️ FAIBLE, ET C'EST UN ARBITRAGE, PAS UN OUBLI. Le départage par l'image est
+            // la réserve la MIEUX mesurée du projet avant même sa première ligne de
+            // production : 41/44 sur la cellule, contre 10/44 au scoring, D+ 31 / D− 0,
+            // p < 0,0001. Rien de tout ça n'autorise « forte ».
+            //   · La mesure est un REJEU DE LABORATOIRE sur des vérités saisies à la main,
+            //     pas du trafic. Zéro ligne de journal existe.
+            //   · Le contrat est « quand l'outil affirme, il a raison ». 41/44, c'est un
+            //     intervalle de Wilson de 80 % à 98 % : trois cartes sur quarante-quatre
+            //     seraient AFFIRMÉES À TORT.
+            //   · Le symbole, lui, a attendu 12/12 EN PRODUCTION avant d'être promu.
+            // Elle se promeut au premier lot réel qui tient, et pas avant. C'est justement
+            // pour ça que la table vit ici, côté serveur : la promotion ne demandera pas
+            // de republier l'extension.
+            'image-departage': 'faible',
             // Tout le reste est FAIBLE tant qu'aucune mesure ne justifie mieux :
             'perimetre-vintage-suggestion': 'faible',   // 10/16 justes — la classe la plus fréquente et la plus tiède
             'tcgdex-numero-incoherent': 'faible',       // 1/2 — deux lignes ne mesurent rien
@@ -4678,6 +4769,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // neuve s'est déclenchée une seule fois.
             raisonReserve,
             niveauReserve,
+            // Les onze champs du départage par l'image, à CHAQUE scan — y compris quand il
+            // s'abstient, et surtout quand il s'abstient. Voir journal-scans.js.
+            ...champsImage,
             concurrentIdProduct: concurrent?.idProduct ?? null,
             nbExAequo,
             // La phrase exacte rendue par le départage — y compris quand il N'A PAS

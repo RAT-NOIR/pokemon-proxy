@@ -107,7 +107,8 @@
 // choisit ou refuse un produit existe à DEUX endroits — la route dans index.js, et
 // `apres()` ici. Aujourd'hui : la règle du numéro de Pokédex, le périmètre vintage, le
 // chemin setCode+numéro, le veto par le nom, la règle d'égalité, le départage par le
-// symbole. Six. Si le compte diverge, la colonne APRÈS ment.
+// symbole, LE DÉPARTAGE PAR L'IMAGE (2026-08-29). Sept. Si le compte diverge, la colonne
+// APRÈS ment.
 //
 // ⚠️ CES 44 CARTES NE SONT PLUS UN JEU DE TEST. Une quinzaine de correctifs en ont été
 // dérivés — la règle du Pokédex, la table close, l'asymétrie Lv.N, la région de l'IPB,
@@ -133,6 +134,11 @@ const {
 } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
 const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = require('./sets-vintage-japonais');
+// RÈGLE DE SYMÉTRIE — la décision du 2026-08-29 entre ici AU MÊME COMMIT qu'en production.
+// La même fonction, jamais une réimplémentation : c'est exactement la leçon du départage
+// par le symbole, absent du banc pendant un commit, qui avait fait mentir la colonne APRÈS
+// de −7 justes et +10 refus.
+const { departager: departagerParImage } = require('./departage-image');
 const { trouverProduitsLocaux, setsPourTotal } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
@@ -414,6 +420,11 @@ function celluleDe(d) {
         motif: null, reverse: false, rareteElevee: false
     });
 
+    // Les lignes que le départage par l'image n'a PAS PU rejouer, faute d'avoir le vivier
+    // entier au journal (tronqué à 200). ⚠️ Compté et affiché, jamais silencieux : un
+    // échantillon qui rétrécit sans le dire est le défaut que ce banc traque partout.
+    let imageNonRejouables = 0;
+
     // L'état APRÈS : les décisions ajoutées, appliquées à la sortie enregistrée.
     async function apres(d) {
         const cardInfo = cardInfoDe(d);
@@ -518,6 +529,48 @@ function celluleDe(d) {
                 const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
                 if (r.scores.length && !eg) { retenu = r.scores[0].candidat.idProduct; voie = 'veto-nom-reclasse'; }
                 else { retenu = null; voie = 'REFUS-veto'; incertain = true; }
+            }
+        }
+
+        // 2 bis. LE DÉPARTAGE PAR L'IMAGE — branché en production le 2026-08-29, et ici le
+        //    même jour. Il est placé APRÈS le symbole, qui rend la main plus haut (ligne
+        //    479) : la priorité du symbole est donc la même des deux côtés, par construction
+        //    et non par recopie d'un ordre.
+        //
+        // ⚠️ CE QUE LE BANC PEUT REJOUER, ET CE QU'IL NE PEUT PAS — à lire avant de croire
+        // la colonne APRÈS sur ces lignes.
+        //   · ÉGALITÉ AU SOMMET : rejouable fidèlement. `exAequoIds` est journalisé entier.
+        //   · PAS DE TOTAL LU : le groupe est le vivier ENTIER, or `vivierIds` est tronqué
+        //     à 200 au journal (journal-scans.js). Au-delà, le banc n'a pas le groupe que
+        //     la production avait ; il s'abstient ET LE COMPTE, au lieu de départager sur
+        //     un groupe amputé — ce qui reviendrait à prendre le raccourci que
+        //     departage-image.js interdit en toutes lettres.
+        //   · Les lignes ANTÉRIEURES au 2026-08-11 n'ont pas d'`imageUrl` : rien à
+        //     télécharger, donc abstention. Ce n'est pas un défaut du banc, c'est l'âge
+        //     du journal.
+        // ⚠️ ET TANT QUE `references_image` EST VIDE, TOUT CECI S'ABSTIENT — des deux côtés.
+        // La colonne APRÈS ne doit donc PAS bouger tant que les descripteurs ne sont pas
+        // écrits. Si elle bouge, c'est le branchement qui est faux, pas la mesure.
+        if (voie === d.voieCatalogue) {
+            const totalLu = String(d.total ?? '').trim() !== '';
+            let groupe = null, tronque = false;
+            if (!totalLu) {
+                const ids = Array.isArray(d.vivierIds) ? d.vivierIds : [];
+                tronque = Number.isFinite(d.vivierTaille) && d.vivierTaille > ids.length;
+                if (ids.length && !tronque) groupe = ids.map(id => ({ idProduct: id, score: 0 }));
+            } else if (d.ecartScore === 0 && Array.isArray(d.exAequoIds) && d.exAequoIds.length > 1) {
+                // Scores égaux : c'est ce que `ecartScore === 0` CONSTATE au journal, et
+                // c'est ce qui fait que `sontExAequo` retiendra tout le groupe.
+                groupe = d.exAequoIds.map(id => ({ idProduct: id, score: 0 }));
+            }
+            if (tronque) imageNonRejouables++;
+            if (groupe && groupe.length > 1) {
+                const avis = await departagerParImage({
+                    imageUrl: d.imageUrl, langue: d.langue, total: d.total, classement: groupe
+                });
+                if (avis.departage && avis.gagnant !== retenu) {
+                    return { retenu: avis.gagnant, incertain: true, voie: 'image-departage' };
+                }
             }
         }
 
@@ -787,6 +840,13 @@ function celluleDe(d) {
             const v = verite(cle, d);
             return v.source !== 'inconnu' && v.source !== 'SANS-VERITE' && d.idProduct === v.valeur;
         });
+        // ⚠️ CE QUE LE DÉPARTAGE PAR L'IMAGE A REJOUÉ, ET CE QU'IL A DÛ LAISSER.
+        console.log(`\n   départage par l'image — lignes NON rejouables (vivier tronqué au journal) : ${imageNonRejouables}`);
+        if (imageNonRejouables) {
+            console.log(`   ⚠️ Sur ces lignes la colonne APRÈS ne prédit PAS la production : le banc`);
+            console.log(`      n'a pas le groupe entier, et il s'abstient plutôt que de départager`);
+            console.log(`      sur un groupe amputé (voir le raccourci interdit, departage-image.js).`);
+        }
         if (!temoin) { console.log('   aucune ligne juste disponible comme témoin'); }
         else {
             const vraie = verite(temoin.cle, temoin.d).valeur;

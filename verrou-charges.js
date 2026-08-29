@@ -189,6 +189,29 @@ const CELLULES = [
         profondeurExigee: 'perimetre-vintage',
         accepteEchec: true,
         test: d => d.resultat === 'echec' && d.motifEchec === 'egalite-parfaite'
+    },
+    {
+        // ⚠️ ELLE SERA VIDE AU DÉBUT — comme la 4ᵉ (symbole) et l'occidentale avant elle,
+        // et pour une raison encore plus nette : `references_image` est VIDE, donc la garde
+        // ne passe jamais et aucun scan ne peut produire cette raison. C'est voulu et c'est
+        // la propriété qui rend le déploiement sûr — le code part inerte.
+        //
+        // 🔑 CE QU'ELLE ATTRAPERA, ET QUI N'EST PAS CE QU'ON CROIT. Le jour où les
+        // descripteurs seront écrits, cette cellule passera de vide à pleine SANS QUE
+        // PERSONNE NE TOUCHE AU CODE. C'est exactement le signal qu'on veut : il rend
+        // visible, dans le verrou, une bascule qui n'aura eu lieu qu'en BASE. La 7ᵉ cellule
+        // avait rendu le même service pour la panne Mongo — une défaillance hors du code,
+        // qu'aucun test unitaire ne pouvait voir.
+        //
+        // ⚠️ ET LE JOUR OÙ ELLE SE REMPLIT, LA CHARGE DOIT ÊTRE RELUE À LA MAIN. Le
+        // départage par l'image est la seule décision de la chaîne qui dépende d'un ÉTAT
+        // EXTERNE volumineux (69 016 vecteurs). Une charge qui passe aujourd'hui peut
+        // échouer demain parce qu'un vecteur a changé, sans qu'aucune ligne de code ait
+        // bougé — c'est un verrou sur une cible mouvante, et il faut le savoir.
+        nom: 'départage par l\'image',
+        pourquoi: 'la décision du 2026-08-29, branchée inerte : la cellule prouvera qu\'elle s\'arme quand les vecteurs arrivent',
+        profondeurExigee: 'verdict',
+        test: d => d.raisonReserve === 'image-departage'
     }
 ];
 

@@ -636,6 +636,36 @@ const journalScanSchema = new mongoose.Schema({
     // sert vraiment ou s'il est inerte. null = aucune égalité à départager sur ce scan.
     symboleDepartage: String,
 
+    // ── LE DÉPARTAGE PAR L'IMAGE — ajouté le 2026-08-29 ──────────────────────
+    // Onze champs pour une seule décision, et ce n'est pas de la gloutonnerie : la moitié
+    // d'entre eux ne servent QUE quand la règle s'abstient. C'est la leçon de
+    // `strategieReverse` juste au-dessus — une branche dont on ne garde rien est une
+    // branche qu'on ne peut ni mesurer ni verrouiller, et on ne s'en aperçoit que le jour
+    // où on essaie, six semaines trop tard.
+    //
+    // `imageStatut` — l'énumération de ce qui s'est passé, et elle est FERMÉE :
+    //   'departage'                    l'image a changé le gagnant
+    //   'confirme-le-scoring'          elle a désigné le même produit — pas de réserve neuve
+    //   'hors-condition'               la condition ne s'appliquait pas (voir imageMotif)
+    //   'abstention-garde'             un candidat du groupe n'avait pas de vecteur
+    //   'abstention-signal'            aucun point d'intérêt, ou aucun inlier nulle part
+    //   'abstention-symbole-prioritaire' le symbole avait déjà tranché
+    //   'echec-technique'              photo injoignable, vecteurs illisibles, appariement
+    //   'non-calcule'                  le module n'a pas été appelé
+    // ⚠️ Une abstention et un échec technique ne se confondent JAMAIS : la première dit
+    // « je pouvais regarder et je me tais », le second « je n'ai pas pu regarder ». C'est
+    // la même distinction que `interrogerSource` protège partout ailleurs.
+    imageStatut: String,
+    imageMotif: String,
+    imageGagnant: Number,
+    imageInliers: Number,
+    imageInliersSecond: Number,
+    imageRangDuGagnantScoring: Number,
+    imageCandidatsAvecVecteur: Number,
+    imageCandidatsGroupe: Number,
+    imagePoints: Number,
+    imageMs: Number,
+
     // ⚠️ `parenteRetenue` A ÉTÉ SUPPRIMÉ LE 2026-08-18, ET SA RAISON N'EST PAS CELLE DES
     // DEUX AUTRES. Il devait porter la parenté retenue quand il y en avait une —
     // « MCD~MCDP », « xPRE=PRE » — pour rendre visible un rapprochement approximatif.
@@ -811,6 +841,36 @@ function enregistrerScan(d = {}) {
             setCodeResolution: d.setCodeResolution || null,
             raisonReserve: d.raisonReserve || null,
             niveauReserve: d.niveauReserve || null,
+            // ── LE DÉPARTAGE PAR L'IMAGE, À CHAQUE SCAN ─────────────────────
+            // ⚠️ ÉCRITS MÊME QUAND IL NE TRANCHE PAS, et c'est tout l'intérêt. `raisonReserve`
+            // ne dira `image-departage` que sur les scans où l'image a CHANGÉ le gagnant :
+            // compter ceux-là seuls reviendrait à mesurer la règle sur les cas où elle
+            // s'est déclarée compétente, et à ignorer ses abstentions. `imageStatut` porte
+            // les deux, et c'est la répartition entre eux qui dira si le signal sert.
+            // `Number.isFinite` partout : 0 inlier est une VALEUR (l'image n'a rien vu),
+            // pas une absence, et `0 || null` l'effacerait.
+            imageStatut: d.imageStatut || null,
+            imageMotif: d.imageMotif || null,
+            imageGagnant: Number.isFinite(d.imageGagnant) ? d.imageGagnant : null,
+            imageInliers: Number.isFinite(d.imageInliers) ? d.imageInliers : null,
+            // La MARGE. C'est elle, pas le rang, qui a décidé du réglage à 150 points, et
+            // c'est le signal à surveiller : un rang 1 gagné d'un inlier est un pile ou face.
+            imageInliersSecond: Number.isFinite(d.imageInliersSecond) ? d.imageInliersSecond : null,
+            // 🔑 LE CROISEMENT DES DEUX CLASSEMENTS — où l'image place le gagnant DU
+            // SCORING. Au moment du scan il n'existe aucune vérité : ni « rang de l'image »
+            // ni « rang du scoring » ne veulent dire quoi que ce soit isolément. Ce champ,
+            // lui, est calculable tout de suite ET suffit à recompter D+ et D− le jour où
+            // une vérité est saisie — sans rejouer un seul scan.
+            imageRangDuGagnantScoring: Number.isFinite(d.imageRangDuGagnantScoring) ? d.imageRangDuGagnantScoring : null,
+            // Le couple qui mesure le coût de la garde : combien de candidats avaient un
+            // vecteur, sur combien. Sans lui, une abstention ne dit pas s'il manquait un
+            // vecteur ou cinquante.
+            imageCandidatsAvecVecteur: Number.isFinite(d.imageCandidatsAvecVecteur) ? d.imageCandidatsAvecVecteur : null,
+            imageCandidatsGroupe: Number.isFinite(d.imageCandidatsGroupe) ? d.imageCandidatsGroupe : null,
+            // Le réglage AVEC LEQUEL la ligne a été produite. Sans lui, un changement de
+            // N_POINTS rendrait toutes les lignes passées incomparables SANS QUE ÇA SE VOIE.
+            imagePoints: Number.isFinite(d.imagePoints) ? d.imagePoints : null,
+            imageMs: Number.isFinite(d.imageMs) ? d.imageMs : null,
             concurrentIdProduct: Number.isFinite(d.concurrentIdProduct) ? d.concurrentIdProduct : null,
             nbExAequo: Number.isFinite(d.nbExAequo) ? d.nbExAequo : null,
             // La fourchette n'est écrite que si ses DEUX bornes sont des prix. Une borne
