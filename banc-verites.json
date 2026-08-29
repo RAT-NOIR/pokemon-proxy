@@ -32,79 +32,79 @@
       "saisiLe": "2026-08-19T09:59:52.631Z"
     },
     "H003": {
-      "idProduct": 549051,
-      "nom": "Mewtwo",
-      "codeSet": "EXS",
+      "idProduct": 585151,
+      "nom": "Imposter Oak's Revenge",
+      "codeSet": "ROG",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Expansion-Sheet/Mewtwo-V2?msockid=15effc596cac6d2b2782e82a6d006cf6",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Rocket-Gang/Imposter-Oaks-Revenge",
       "lu": {
-        "nom": "Mewtwo",
-        "numero": "150",
+        "nom": "The Rocket's Trap",
+        "numero": null,
         "total": null,
         "setCode": null
       },
-      "saisiLe": "2026-08-04T15:16:25.312Z"
+      "saisiLe": "2026-08-19T10:01:56.557Z"
     },
     "H004": {
-      "idProduct": 654099,
-      "nom": "Dragonite",
-      "codeSet": "UNP",
+      "idProduct": 570688,
+      "nom": "Pikachu",
+      "codeSet": "PCG-P",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Dragonite-V2-UNP",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/PCG-Promos/Pikachu-V6-PCG-P123",
       "lu": {
-        "nom": "Dragonite",
-        "numero": "149",
+        "nom": "Pikachu",
+        "numero": "123/PCG-P",
         "total": null,
-        "setCode": null
+        "setCode": "PCG-P"
       },
-      "saisiLe": "2026-08-04T15:17:41.290Z"
+      "saisiLe": "2026-08-21T19:39:33.532Z"
     },
     "H005": {
-      "idProduct": 606441,
-      "nom": "Flaaffy",
+      "idProduct": 606445,
+      "nom": "Slowpoke",
       "codeSet": "N1",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Flaaffy-GSNW",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Slowpoke-GSNW",
       "lu": {
-        "nom": "Flaaffy",
-        "numero": "180",
+        "nom": "Slowpoke",
+        "numero": "079",
         "total": null,
         "setCode": null
       },
-      "saisiLe": "2026-08-04T15:20:40.382Z"
+      "saisiLe": "2026-08-21T19:40:09.700Z"
     },
     "H006": {
-      "idProduct": 606563,
-      "nom": "Natu",
-      "codeSet": "N2",
+      "idProduct": 585047,
+      "nom": "Dark Charizard",
+      "codeSet": "ROG",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Crossing-the-Ruins/Natu-CTR",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Rocket-Gang/Dark-Charizard-ROG",
       "lu": {
-        "nom": "Natu",
-        "numero": "177",
+        "nom": "Dark Charizard",
+        "numero": "006",
         "total": null,
         "setCode": null
       },
-      "saisiLe": "2026-08-04T15:21:27.914Z"
+      "saisiLe": "2026-08-21T19:40:45.000Z"
     },
     "H007": {
-      "idProduct": 584681,
-      "nom": "Marowak",
-      "codeSet": "PJU",
+      "idProduct": 605998,
+      "nom": "Cool Porygon",
+      "codeSet": "UNP",
       "source": "saisie-a-l-aveugle",
       "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Marowak?msockid=15effc596cac6d2b2782e82a6d006cf6",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Unnumbered-Promos/Cool-Porygon-UNP",
       "lu": {
-        "nom": "Marowak",
-        "numero": "105",
+        "nom": "Cool Porygon",
+        "numero": "137",
         "total": null,
         "setCode": null
       },
-      "saisiLe": "2026-08-04T15:22:31.933Z"
+      "saisiLe": "2026-08-21T19:41:59.145Z"
     },
     "H008": {
       "idProduct": 606813,
