@@ -119,6 +119,30 @@
 // dont le produit nous est inconnu — TOUS d'idProduct supérieur à 895 905, notre maximum.
 // Ce ne sont pas des images en trop : c'est le catalogue qui est en retard.
 //
+// ⚠️⚠️ TOUT POURCENTAGE DE COUVERTURE CI-DESSOUS SE LIT « CONTRE NOTRE CATALOGUE DU
+// 12/07/2026 », JAMAIS « CONTRE CARDMARKET ». L'export a six semaines. Ce n'est pas une
+// précaution de style : les 1 912 fichiers orphelins prouvent que Cardmarket a publié des
+// produits que notre catalogue ignore, donc nos dénominateurs sont trop petits et nos
+// couvertures trop belles. Aucun de ces chiffres ne vaut après un nouvel export.
+//
+// 🔴 ET LE DÉNOMINATEUR A DÉJÀ ÉTÉ FAUX UNE FOIS — l'erreur mérite d'être écrite.
+// J'ai compté les cartes d'un set avec `numeros_cartes.codeSet`. Mais `numeros_cartes` est
+// la table de ce qu'on a APPRIS ; elle IGNORE 1 781 produits du catalogue, dont 884 ont
+// pourtant une image sur le disque. La liste de Cardmarket, c'est `catalogue_produits`, et
+// son découpage à lui est `idExpansion`.
+// Le cas qui l'a révélé : Cardmarket affiche 336 cartes pour CSM1DC ; `numeros_cartes` en
+// connaissait 301 et je rendais « 99,7 % de couverture ». `catalogue_produits` en compte
+// 336 — le vrai chiffre est 300/336 = 89,3 %. Deux galeries entières (PAL, SVP) étaient
+// même données à 100 % alors qu'il leur manque 37 et 4 produits.
+// ⚠️ RÈGLE : le compte des produits d'un set se prend dans `catalogue_produits` par
+// `idExpansion`. `numeros_cartes.codeSet` sert à NOMMER un set, jamais à le compter.
+//
+// Après correction, contre `catalogue_produits` du 12/07 :
+//   · 15 galeries plafonnées (et non 13) : 5 628 produits, 4 500 pris, 1 128 manquants,
+//     couverture 80,0 %
+//   · le déficit total : 151 expansions incomplètes, 3 610 produits manquants
+//     (le chiffre faux disait 97 sets et 2 720 manquants)
+//
 // 🔴 BOMBE À RETARDEMENT POUR LE JOUR DU VRAI IMPORT — 26 LIGNES DIVERGENTES.
 // `numeros_cartes` porte SA PROPRE copie d'`idExpansion`, sur 69 231 lignes. Elle diverge
 // déjà de `catalogue_produits` sur 26 d'entre elles, et un réimport creusera l'écart en
@@ -130,6 +154,34 @@
 // aujourd'hui, et c'est précisément pour ça qu'elle passera inaperçue jusqu'au jour où
 // elle coûtera. Le jour du vrai import : relever la liste AVANT, la relever APRÈS, et
 // traiter tout écart nouveau comme un défaut, pas comme une surprise.
+// `mesure-diff-catalogue.js` le fait, et prédit les divergences nouvelles avant l'import.
+//
+// ============================================================================
+// ⚠️ CE QUI DEVRA ÊTRE RECALCULÉ APRÈS UN NOUVEL EXPORT DU CATALOGUE
+// ============================================================================
+// À relire avant de raisonner sur un chiffre de ces deux journées.
+//
+// PÉRIMÉ DÈS L'IMPORT — tout ce qui a `catalogue_produits` au dénominateur :
+//   · A / B / C de l'audit (67 104 / 3 871 / 1 912). C tombera, A montera, et B MONTERA
+//     aussi : les produits nouveaux arrivent sans image.
+//   · la liste de travail (151 expansions, 3 610 manquants) et les 15 galeries plafonnées.
+//   · les 1 781 produits ignorés par `numeros_cartes`, et les 906 « sans numéro ».
+//   · 🔑 LE COÛT DE LA RÈGLE STRICTE — 7,6 % / 8,4 % de groupes touchés. C'est le chiffre
+//     qui a justifié d'adopter la garde d'abstention telle quelle. Des produits neufs et
+//     sans image le feront MONTER. Il doit être repris, et la règle rediscutée s'il passe
+//     le quart.
+//   · la couverture du pont TCGdex (213 sets, 22 626 cartes, 32,7 %) : les produits neufs
+//     arrivent sans `setTcgdex`, donc la part pontée baisse mécaniquement.
+//   · la liste des sets éligibles à la mesure occidentale, et ses colonnes « pontés/total ».
+//
+// PAS TOUCHÉ — ne pas le recalculer par excès de zèle :
+//   · le résultat du chantier image : 10/11 au rang 1 sur 449, 6/6 dans la cellule.
+//   · le témoin rendus TCGdex : 14/18 au rang 1, inliers médians 9 contre 7,5.
+//   · les statistiques du journal (total lu 93,2 % en occidental contre 44,4 % en
+//     asiatique, 3 échecs occidentaux tous `egalite-parfaite`) : elles portent sur des
+//     scans passés, pas sur le catalogue.
+//   · la démonstration que la sélection des 300 est déterministe : elle repose sur les
+//     fichiers, pas sur la base.
 //
 // 🔴 LE PLAFOND À 300. Quinze galeries s'arrêtent à EXACTEMENT 300 fichiers et 10 pages.
 // Sur les 770 galeries du disque, AUCUNE ne dépasse 300, AUCUNE n'a de page 11. Les
