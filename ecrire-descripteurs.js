@@ -280,6 +280,45 @@ process.on('SIGINT', () => {
         console.log(`      contient ce produit. Décision au testeur, avec le compte sous les yeux.`);
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // LE JOURNAL D'ÉCRITURE — une ligne par exécution, à côté des images
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ POURQUOI IL MANQUAIT, ET CE QUE SON ABSENCE A COÛTÉ. Le 2026-08-30, à la question
+    // « les 1 967 orphelins ont-ils bien reçu leur descripteur ? », je n'ai pu répondre
+    // qu'en DÉDUISANT : « 0 image du disque est sans vecteur, donc oui ». C'est une
+    // inférence, pas une vérification — et ces deux jours ont montré ce que valent les
+    // inférences quand la population change sous l'instrument.
+    // 🔑 UNE LIGNE PAR EXÉCUTION SUFFIT : quand, à quel réglage, combien écrits, ignorés,
+    // illisibles, et ce que le disque contenait de part et d'autre. On ne déduit plus.
+    //
+    // ⚠️ LE FICHIER VIT À CÔTÉ DES IMAGES, PAS DANS LE DÉPÔT. Il décrit l'état d'un disque
+    // de 1,8 Go qui n'y sera jamais ; le mettre sous git ferait diverger deux histoires —
+    // celle du code et celle de la collecte — dans le même dépôt. Même règle que les
+    // fichiers d'état de mesure-collecte-images.js.
+    const JOURNAL = path.join(RACINE, '_journal-descripteurs.jsonl');
+    try {
+        fs.appendFileSync(JOURNAL, JSON.stringify({
+            le: new Date().toISOString(),
+            base: BASE, pts: PTS,
+            imagesAuDemarrage: chemin.size,
+            imagesEnSortant: apres.size,
+            ecrits: faits,
+            codeCardMarquees: ccAFaire.length,
+            illisibles,
+            sansPoint,
+            indexeeEnBase: total,
+            sansVecteurEnSortant: orphelines.length,
+            vecteursFiges: figes.length,
+            interrompu: arret,
+            dureeMin: Number(((Date.now() - t0) / 60000).toFixed(1))
+        }) + '\n', 'utf8');
+        console.log(`\n📝 journal : ${JOURNAL}`);
+    } catch (e) {
+        // Un journal qui ne s'écrit pas ne doit pas faire échouer une écriture réussie —
+        // mais il ne doit pas non plus disparaître en silence.
+        console.error(`⚠️ journal NON écrit : ${e.message}`);
+    }
+
     console.log(`\n   ⚠️ Le branchement n'est plus inerte. Vérifie avec :`);
     console.log(`      node controle-departage-image.js`);
     await mongoose.disconnect();
