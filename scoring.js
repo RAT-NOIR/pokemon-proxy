@@ -1033,6 +1033,33 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      de s'en réjouir. Ici : attendre un checkpoint réel, et refuser de conclure s'il ne
 //      vient pas — ce que le script fait désormais.
 //
+//   12. UN CONTRÔLE DU STOCKAGE QUI NE LIT PAS LE STOCKAGE — 2026-08-30. La plus chère
+//      de la série : elle a rendu le départage par l'image INERTE sur 58 000 vecteurs, et
+//      le contrôle écrit exprès pour l'attraper l'a validé.
+//      L'INCIDENT. `controle-departage-image.js` section A existait pour vérifier un risque
+//      nommé : le labo appariait des coordonnées float32 vivantes, la production
+//      reconstruit depuis des uint16 relus de Mongo. Il comparait
+//      `decrire(photo)` à `decrire(fichierRéférence)` — LES DEUX CALCULÉS EN DIRECT dans
+//      le même processus. Il n'a jamais lu un vecteur depuis la base. Il prouvait que le
+//      CALCUL est bon, et rien de l'ALLER-RETOUR, qui était son objet.
+//      LE DÉFAUT QU'IL A LAISSÉ PASSER. `.lean()` ne recaste rien : le pilote rend un
+//      `Binary`, pas un `Buffer`, et sur un `Binary` `.length` est une MÉTHODE. Donc
+//      `Math.floor(desc.length / 32)` valait NaN, et `inliers` rendait 0 à son premier
+//      garde-fou. Symptôme : la garde PASSAIT (58 candidats sur 58 avaient un vecteur) et
+//      l'appariement rendait zéro inlier sur tout le groupe. Aucune erreur, aucun log.
+//      ⚠️ ET LE GARDE-FOU ÉCRIT POUR ÇA A AGGRAVÉ LE CAS : `if (!d.desc?.length) continue`
+//      laissait passer, parce qu'une FONCTION est truthy. Le filet posé pour attraper un
+//      tampon vide a validé un tampon intact mal typé. Un garde-fou doit tester la NATURE
+//      (un entier fini), jamais la VÉRITÉ d'une propriété.
+//      🔑 LE TEST QUI L'AURAIT ATTRAPÉ TIENT EN UNE LIGNE ET NE DEMANDE AUCUNE VÉRITÉ :
+//          UN VECTEUR APPARIÉ CONTRE LUI-MÊME DOIT RENDRE ~150 INLIERS.
+//      Une carte s'apparie parfaitement avec elle-même. 0 au lieu de 150 ne peut être ni
+//      les photos, ni les références, ni la méthode : c'est la mécanique. Ajouté en
+//      section « A bis », vu ROUGE (0/5, n=NaN) avant d'être réparé, puis vert (5/5, 150).
+//      LA PARADE GÉNÉRALE : un contrôle qui valide une FRONTIÈRE doit traverser cette
+//      frontière. Décrire les deux côtés dans le même processus ne teste pas la
+//      sérialisation, quel que soit le soin mis au reste.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

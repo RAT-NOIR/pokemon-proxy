@@ -316,8 +316,26 @@ async function chargerVecteurs(ids) {
     ).lean();
     const m = new Map();
     for (const d of docs) {
-        if (!d.desc?.length || !d.xy?.length) continue;
-        m.set(d.idProduct, { n: Math.floor(d.desc.length / 32), desc: d.desc, xy: d.xy });
+        // ⚠️⚠️ CETTE CONVERSION N'EST PAS UNE PRÉCAUTION, C'EST LE CORRECTIF D'UNE PANNE
+        // SILENCIEUSE QUI A RENDU LE DÉPARTAGE INERTE SUR 58 000 VECTEURS. 2026-08-30.
+        // `.lean()` ne recaste RIEN : le pilote rend un `Binary`, pas un `Buffer`. Or sur
+        // un `Binary`, `.length` est une MÉTHODE. Donc :
+        //     Math.floor(d.desc.length / 32)  ->  Math.floor(fonction / 32)  ->  NaN
+        // et dans `inliers`, `!ref.n` est VRAI pour NaN -> `return 0`, à chaque appel.
+        // Résultat observé : la garde PASSAIT (la Map était pleine, 58/58 candidats), et
+        // l'appariement rendait zéro inlier sur tout le groupe, systématiquement.
+        // Un vecteur apparié contre lui-même rendait 0 au lieu de 150.
+        const desc = Buffer.isBuffer(d.desc) ? d.desc : (d.desc?.buffer ? Buffer.from(d.desc.buffer) : null);
+        const xy = Buffer.isBuffer(d.xy) ? d.xy : (d.xy?.buffer ? Buffer.from(d.xy.buffer) : null);
+        if (!desc || !xy) continue;
+        // 🔑 LE GARDE-FOU TESTE LA NATURE, PLUS LA VÉRITÉ. L'ancien — `!d.desc?.length` —
+        // laissait passer un `Binary` parce qu'une FONCTION est truthy : le filet écrit
+        // pour attraper un buffer vide a validé un buffer intact mal typé. On exige
+        // désormais un entier fini, et cohérent entre les deux tampons.
+        const n = Math.floor(desc.length / 32);
+        if (!Number.isFinite(n) || n < 2) continue;
+        if (xy.length < n * 4) continue;   // coordonnées tronquées : RANSAC lirait hors bornes
+        m.set(d.idProduct, { n, desc, xy });
     }
     return m;
 }

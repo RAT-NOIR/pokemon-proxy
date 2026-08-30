@@ -155,11 +155,49 @@ const dire = (ok, texte) => { if (!ok) echecs++; console.log(`   ${ok ? '✅' : 
     await mongoose.connect(process.env.MONGODB_URI, { dbName: process.env.MONGODB_BASE });
     console.log(`   base : ${mongoose.connection.db.databaseName} (lecture seule)`);
     const vecteurs = await I.ReferenceImage.countDocuments({ etat: 'indexee', pts: I.N_POINTS });
-    console.log(`   vecteurs en base (references_image, ${I.N_POINTS} pts) : ${vecteurs}\n`);
+    console.log(`   vecteurs en base (references_image, ${I.N_POINTS} pts) : ${vecteurs}`);
+
+    // ── A bis. L'ALLER-RETOUR EN BASE ───────────────────────────────────────
+    // ⚠️ CE CONTRÔLE MANQUAIT, ET SON ABSENCE A COÛTÉ UNE SOIRÉE. Le contrôle A décrit les
+    // DEUX côtés en direct : il prouve que le CALCUL est bon, et absolument rien de ce
+    // qu'on relit de Mongo. Un contrôle écrit pour valider le stockage, et qui ne lit pas
+    // le stockage.
+    //
+    // LE TEST QUI L'AURAIT ATTRAPÉ TIENT EN UNE LIGNE, et il n'a besoin d'AUCUNE vérité :
+    //     UN VECTEUR APPARIÉ CONTRE LUI-MÊME DOIT RENDRE ~150 INLIERS.
+    // Une carte s'apparie parfaitement avec elle-même. Si ça rend 0, ce ne sont ni les
+    // photos, ni les références, ni la méthode : c'est la mécanique.
+    // LE DÉFAUT RÉEL, pour mémoire : `.lean()` rend un `Binary` du pilote et non un
+    // `Buffer` ; `.length` y est une MÉTHODE, donc `Math.floor(desc.length / 32)` valait
+    // NaN, et `inliers` rendait 0 à son premier garde-fou — silencieusement, sur tous les
+    // candidats, avec la garde qui passait puisque la Map était pleine.
+    console.log('\n' + '═'.repeat(94));
+    console.log('A bis. L\'ALLER-RETOUR EN BASE — un vecteur apparié CONTRE LUI-MÊME');
+    console.log('═'.repeat(94));
+    const echantillon = await I.ReferenceImage
+        .find({ etat: 'indexee', pts: I.N_POINTS }, { idProduct: 1 }).limit(5).lean();
+    if (!echantillon.length) {
+        console.log(`   ⚠️ aucun vecteur en base — NON EXÉCUTÉ (état normal avant la bascule).`);
+    } else {
+        const { cv: cvB } = await I.outils();
+        const vect = await I.chargerVecteurs(echantillon.map(d => d.idProduct));
+        let casses = 0;
+        for (const d of echantillon) {
+            const v = vect.get(d.idProduct);
+            const soi = v ? I.inliers(cvB, v, v) : null;
+            const ok = Number.isFinite(v?.n) && v.n >= 2 && soi >= 0.9 * v.n;
+            if (!ok) casses++;
+            console.log(`   ${String(d.idProduct).padEnd(9)} n=${String(v?.n).padStart(5)} · ` +
+                `contre lui-même ${String(soi).padStart(4)} inliers   ${ok ? '✅' : '🔴'}`);
+        }
+        dire(casses === 0, `${echantillon.length - casses}/${echantillon.length} vecteurs relus sont exploitables`);
+    }
+    console.log('');
 
     const lignes = await mongoose.connection.collection('journal_scans')
         .find({ vivierIds: { $exists: true } }).sort({ le: -1 }).limit(60).toArray();
     const statuts = new Map();
+    const lignesGarde = [];   // les lignes qui s'abstiennent sur la garde, pour les expliquer une par une
     let departages = 0;
     for (const d of lignes) {
         const classement = (d.vivierIds || []).map(id => ({ idProduct: id, score: 0 }));
@@ -168,6 +206,7 @@ const dire = (ok, texte) => { if (!ok) echecs++; console.log(`   ${ok ? '✅' : 
         });
         const s = avis.champs.imageStatut;
         statuts.set(s, (statuts.get(s) ?? 0) + 1);
+        if (s === 'abstention-garde') lignesGarde.push(d);
         if (avis.departage) departages++;
     }
     console.log(`   ${lignes.length} lignes de journal rejouées :`);
@@ -190,7 +229,31 @@ const dire = (ok, texte) => { if (!ok) echecs++; console.log(`   ${ok ? '✅' : 
         const vivants = departages + (statuts.get('confirme-le-scoring') ?? 0);
         console.log(`   ℹ️ ${vecteurs} vecteurs en base : la bascule a eu lieu. L'inertie n'est plus l'attendu.`);
         console.log(`\n   ── LECTURE CONTRE L'ATTENDU ÉCRIT D'AVANCE ──`);
-        dire(garde === 0, `abstention-garde à ${garde} (attendu 0) — LE SEUL CHIFFRE QUI DÉCIDE`);
+        // ⚠️ L'ATTENDU ÉCRIT D'AVANCE DISAIT « abstention-garde à 0 ». IL ÉTAIT TROP RAIDE,
+        // ET JE NE LE DESSERRE PAS À « 1 » EN VOYANT LE RÉSULTAT — ce serait choisir un
+        // seuil après coup, exactement ce que ce fichier existe pour empêcher.
+        // On le remplace par une RÈGLE qui ne dépend d'aucun nombre :
+        //     TOUTE abstention-garde DOIT s'expliquer par un candidat SANS AUCUNE IMAGE
+        //     COLLECTÉE. Une abstention causée par un candidat qui A une image en base est
+        //     une PANNE ; une abstention causée par une carte jamais collectée est le
+        //     comportement voulu, et il n'y a pas de raison qu'il y en ait zéro.
+        // Le cas connu au 2026-08-30 : N's Zekrom 870378 (set xASC), aucun fichier sur le
+        // disque, aucun document en base. La garde s'abstient — c'est ce qu'on lui demande.
+        let gardeInexpliquee = 0;
+        for (const d of lignesGarde) {
+            const ids = d.vivierIds || [];
+            const ont = new Set((await I.ReferenceImage.find({ idProduct: { $in: ids } }, { idProduct: 1 }).lean())
+                .map(x => x.idProduct));
+            const sans = ids.filter(i => !ont.has(i));
+            const aDocument = ids.filter(i => ont.has(i)).length;
+            const explique = sans.length > 0;
+            if (!explique) gardeInexpliquee++;
+            console.log(`      ${String(d.nom).padEnd(20)} ${sans.length} candidat(s) sans AUCUN document` +
+                ` (${aDocument}/${ids.length} en base)  ${explique ? '✅ légitime' : '🔴 INEXPLIQUÉE'}`);
+            if (sans.length) console.log(`         idProduct : ${sans.slice(0, 6).join(', ')}`);
+        }
+        dire(gardeInexpliquee === 0,
+            `les ${garde} abstention(s)-garde s'expliquent toutes par un candidat jamais collecté`);
         dire(hors === 20, `hors-condition à ${hors} (attendu 20, ne dépend pas des vecteurs)`);
         if (garde === 0 && vivants > 0) {
             console.log(`   ✅ ${vivants} ligne(s) ont franchi la garde et abouti — LE BRANCHEMENT EST VIVANT.`);
