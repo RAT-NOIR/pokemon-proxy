@@ -1001,6 +1001,38 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      8 tentatives sur un seul utilisateur. Ce qui était vrai est plus étroit : le
 //      fichier de la chaîne argent, lui, ne pouvait pas l'atteindre.
 //
+//   10. DEUX VARIABLES CHANGÉES POUR EN TESTER UNE — 2026-08-30, et c'est la plus
+//      instructive de la série parce qu'elle n'a produit AUCUN chiffre faux.
+//      Le plafond des galeries Cardmarket était réputé être de 300 articles. On a
+//      réenregistré SI100 en TRI INVERSÉ, il est passé de 300 à 430, et j'ai conclu :
+//      « le tri s'applique avant le plafond ». Le chiffre était juste. La conclusion,
+//      fausse. Entre les deux passages, la PRÉFÉRENCE DE COMPTE avait aussi changé la
+//      taille de page — de 30 à 80. Neuf pages à 80 laissaient 720 places pour 430
+//      cartes : le tri n'avait rien à lever.
+//      CE QUI L'A RÉVÉLÉ : MC, pris ensuite à 100 par page, a rendu 766 cartes EN UNE
+//      SEULE PASSE de 8 pages, sans aucun tri inversé. Une explication qui n'a plus
+//      besoin de la variable qu'on croyait décisive.
+//      LA VRAIE RÈGLE, mesurée ensuite sur 767 galeries : le plafond est de 10 PAGES,
+//      jamais de 300 articles. Le « 300 » était 10 × 30.
+//      ⚠️ LE MÉCANISME DE L'ERREUR, et c'est lui qu'il faut retenir : on n'attribue pas
+//      un effet à la variable qu'on a DÉCIDÉ de tester. On l'attribue à ce qui a changé —
+//      et il faut donc SAVOIR tout ce qui a changé. Ici, une préférence de compte
+//      modifiée hors du protocole ne figurait dans aucune note.
+//      LA PARADE : avant d'interpréter un changement, ÉNUMÉRER l'état complet des deux
+//      côtés — pas seulement la variable qu'on manipule. Et quand une explication plus
+//      simple suffit sans la variable testée, c'est elle qui gagne.
+//
+//   11. UN INSTRUMENT QUI REND « MILLE FOIS MIEUX » N'A RIEN MESURÉ — 2026-08-30.
+//      Pour savoir ce qu'Atlas facturerait des descripteurs image, on a écrit 1 000
+//      documents réels dans le bac et lu `storageSize` : 0,0 Mo, soit un ratio de
+//      compression de ×0,001. Un descripteur ORB est quasi incompressible ; le chiffre
+//      était absurde et il aurait autorisé un réglage qui ne rentre pas.
+//      LA CAUSE : WiredTiger n'écrit qu'au point de reprise (60 s), et `fsync` n'est pas
+//      autorisé sur un cluster Atlas partagé. On avait lu 3 secondes après l'écriture.
+//      LA PARADE : quand une mesure est spectaculairement favorable, la soupçonner AVANT
+//      de s'en réjouir. Ici : attendre un checkpoint réel, et refuser de conclure s'il ne
+//      vient pas — ce que le script fait désormais.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation
