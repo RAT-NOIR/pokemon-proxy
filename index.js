@@ -242,8 +242,20 @@ const catalogueProduitSchema = new mongoose.Schema({
 // serveur sont des regex insensibles à la casse (voir chercherPrixCatalogueLocal et
 // trouverProduitsLocaux), qu'un index classique n'accélère pas — l'ajouter coûterait
 // du stockage (Atlas peut être sur un palier limité) pour aucun gain de requête réel.
+//
+// ⚠️ `idMetacard` RETIRÉ LE 2026-08-30 — et la trace reste pour qu'il ne revienne pas.
+// L'index pesait 3 076 Ko et n'était interrogé par RIEN : `idMetacard` n'est jamais un
+// critère de requête, il est lu comme CHAMP de documents ramenés par un autre critère puis
+// groupé en mémoire (voir `chercherPrixCatalogueLocal`, plus bas). Un index ne sert pas à
+// lire un champ, il sert à le chercher.
+// 🔴 ET IL ÉTAIT DÉCLARÉ DEUX FOIS — ici et dans import-catalogue.js. Le retirer d'un seul
+// des deux n'aurait rien libéré : `autoIndex` est actif par défaut et rien ne le désactive
+// dans ce dépôt, donc cette ligne-ci le recréait À CHAQUE DÉMARRAGE DU SERVEUR — sur un
+// plan Render gratuit, à chaque réveil après 15 minutes d'inactivité. Pas « au prochain
+// import » : toutes les quinze minutes d'inactivité.
+// La suppression en base se fait par `maintenance-index.js`, qui refuse de tourner tant
+// qu'une de ces déclarations existe.
 catalogueProduitSchema.index({ idExpansion: 1 });
-catalogueProduitSchema.index({ idMetacard: 1 });
 catalogueProduitSchema.index({ idProduct: 1 });
 const CatalogueProduit = mongoose.model('CatalogueProduit', catalogueProduitSchema, 'catalogue_produits');
 

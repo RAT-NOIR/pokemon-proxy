@@ -25,9 +25,28 @@ const catalogueProduitSchema = new mongoose.Schema({
     idExpansion: { type: Number, required: true },
     idMetacard: { type: Number, required: true },
 });
-catalogueProduitSchema.index({ name: 'text' });
+// ⚠️ DEUX INDEX RETIRÉS LE 2026-08-30, ET LA TRACE RESTE ICI POUR QU'ILS NE REVIENNENT PAS.
+// Un index supprimé en base mais toujours déclaré ici serait recréé au prochain import :
+// on croirait la place libérée, et elle reviendrait — probablement le jour où la base est
+// au plus près de sa limite. La suppression en base se fait par `maintenance-index.js`,
+// qui REFUSE de tourner tant que ces lignes existent.
+//
+//   catalogueProduitSchema.index({ name: 'text' });     -> name_text, 14 384 Ko
+//     Interrogé par RIEN : zéro occurrence de `$text` dans tout le dépôt. Et il ne
+//     pouvait pas servir : les deux recherches par nom du serveur sont des regex
+//     INSENSIBLES À LA CASSE (`chercherPrixCatalogueLocal`, `trouverProduitsLocaux`), et
+//     un index texte ne répond qu'à l'opérateur `$text`. Mesuré : `{name: /^Pikachu/i}`
+//     fait un COLLSCAN de 70 975 documents en 70 ms, index présent ou non.
+//     Le commentaire d'index.js:241 disait déjà « pas d'index sur name » — c'est ce
+//     fichier-ci qui contredisait le serveur, depuis le début.
+//
+//   catalogueProduitSchema.index({ idMetacard: 1 });    -> idMetacard_1, 3 076 Ko
+//     `idMetacard` n'est JAMAIS un critère de requête. Il est lu comme CHAMP de documents
+//     ramenés par un autre critère, puis groupé en mémoire (index.js:739). Un index ne
+//     sert pas à lire un champ, il sert à le chercher.
+//
+// L'index sur `idExpansion` reste : il est utilisé, et mesuré à ×1 (360 lus, 360 rendus).
 catalogueProduitSchema.index({ idExpansion: 1 });
-catalogueProduitSchema.index({ idMetacard: 1 });
 
 const CatalogueProduit = mongoose.model('CatalogueProduit', catalogueProduitSchema, 'catalogue_produits');
 
