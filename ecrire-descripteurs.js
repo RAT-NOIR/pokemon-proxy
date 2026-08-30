@@ -243,6 +243,34 @@ process.on('SIGINT', () => {
         console.log(`        déjà faits (l'avancement est la collection elle-même) et ne`);
         console.log(`        traitera que les ${orphelines.length} restantes.`);
     }
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 LES VECTEURS FIGÉS — un état que rien ne surveillait, et qui ne peut que croître
+    // ════════════════════════════════════════════════════════════════════════
+    // Un vecteur dont l'image a disparu du disque : la page a été réenregistrée, l'ancien
+    // dossier supprimé, et le produit n'est pas revenu dans le nouveau.
+    // ⚠️ IL SERA UTILISÉ, ET IL NE SERA JAMAIS RECALCULÉ. Utilisé, parce que le vivier
+    // vient de `catalogue_produits` et NE REGARDE JAMAIS LE DISQUE — un produit y entre
+    // qu'il ait une image ou non. Jamais recalculé, parce que ce script part du disque.
+    // Ce n'est pas une erreur : le vecteur décrit une vraie image Cardmarket, et Cardmarket
+    // ne change pas le visuel d'un produit. Ce qui manque est la REPRODUCTIBILITÉ.
+    // On les COMPTE et on les NOMME, parce qu'un état que personne ne regarde grossit à
+    // chaque réenregistrement de page.
+    const tousDocs = await ReferenceImage.find({ etat: 'indexee' }, { idProduct: 1 }).lean();
+    const figes = tousDocs.map(d => d.idProduct).filter(id => !apres.has(id));
+    console.log(`\n   ── VECTEURS FIGÉS (indexés, mais l'image n'est plus sur le disque) ──`);
+    console.log(`   🔑 ${figes.length}`);
+    if (figes.length) {
+        const noms = await mongoose.connection.collection('catalogue_produits')
+            .find({ idProduct: { $in: figes.slice(0, 40) } }, { projection: { idProduct: 1, name: 1 } }).toArray();
+        const parId = new Map(noms.map(p => [p.idProduct, String(p.name).split('[')[0].trim()]));
+        for (const id of figes.slice(0, 20)) console.log(`      ${String(id).padEnd(9)} ${parId.get(id) ?? '(absent du catalogue)'}`);
+        if (figes.length > 20) console.log(`      … et ${figes.length - 20} autres`);
+        console.log(`   ⚠️ NE PAS LES SUPPRIMER PAR RÉFLEXE. Un vecteur figé vaut mieux qu'une`);
+        console.log(`      abstention : supprimer, c'est échanger une référence juste-mais-non-`);
+        console.log(`      reproductible contre une abstention CERTAINE sur tout groupe qui`);
+        console.log(`      contient ce produit. Décision au testeur, avec le compte sous les yeux.`);
+    }
+
     console.log(`\n   ⚠️ Le branchement n'est plus inerte. Vérifie avec :`);
     console.log(`      node controle-departage-image.js`);
     await mongoose.disconnect();

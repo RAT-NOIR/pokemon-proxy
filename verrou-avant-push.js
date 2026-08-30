@@ -1,6 +1,28 @@
 // ============================================================
 // LE VERROU AVANT PUSH — « est-ce que le code tourne ? »
 // ============================================================
+// 🔴🔴 IL TOURNE SUR LA BRANCHE DE TRAVAIL, AVANT LE MERGE. JAMAIS APRÈS UN PUSH SUR `main`.
+// ============================================================
+// POURQUOI CETTE LIGNE EXISTE, ET ELLE A COÛTÉ CHER À COMPRENDRE — 2026-08-30.
+// L'auto-déploiement Render est actif : POUSSER SUR `main` ET METTRE EN PRODUCTION SONT LE
+// MÊME GESTE. Ce fichier s'appelle « avant push » et tournait, en fait, toujours APRÈS la
+// mise en ligne. Il n'était pas faux — il mesurait exactement ce qu'il prétend mesurer —
+// mais il était placé là où il ne peut que CONSTATER, jamais REFUSER.
+//
+// L'OCCURRENCE : le départage par l'image, une décision qui choisit le produit tarifé, est
+// parti en production sur onze commits entre 05:17 et 06:35. Le verrou a été rendu vert le
+// lendemain à 03:35. Il a validé après coup ce qui était déjà en ligne, et il n'a protégé
+// personne. Zéro scan a tourné dans l'intervalle — par chance, pas par construction.
+//
+// LA RÈGLE, ADOPTÉE PAR LE TESTEUR LE 2026-08-30 :
+//     1. le travail se fait sur une BRANCHE, jamais sur `main` ;
+//     2. `verrou-charges.js` puis `verrou-avant-push.js` tournent SUR CETTE BRANCHE ;
+//     3. le merge vers `main` n'a lieu QUE si les deux sont verts ;
+//     4. `main` n'est plus une branche de travail : c'est la définition de ce qui est
+//        DÉPLOYABLE, et tout ce qui y arrive part en ligne dans la minute.
+// ⚠️ Le mode d'échec de cette règle est un merge oublié — du code prêt qui reste hors
+// ligne. C'est le bon sens du risque : mieux vaut ne pas déployer que déployer sans garde.
+// ============================================================
 // POURQUOI IL EXISTE. Deux déploiements consécutifs ont tué la production alors que TOUTES
 // les vérifications étaient vertes :
 //   - 83789c2 : le catalogue anglais interrogé avec un nom japonais ;

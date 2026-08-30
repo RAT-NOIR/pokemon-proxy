@@ -361,6 +361,38 @@
 // 🔑 AU PROCHAIN IMPORT : garder `dateAdded`. Trois lignes, et plus jamais d'estimation.
 //
 // ============================================================================
+// 🔴 UNE COLONNE RETIRÉE : « CAUSE » (PLAFOND / INCOMPLET). 2026-08-30
+// ============================================================================
+// Les listes de travail rendues pendant ce chantier portaient une colonne « cause », qui
+// disait si un set manquait des produits PARCE QUE Cardmarket avait plafonné la galerie, ou
+// PARCE QUE l'enregistrement s'était arrêté. Elle se déduisait du NOMBRE de dossiers de
+// page (`pages.length >= 10` -> plafond) et de la TAILLE DE PAGE lue comme le mode.
+//
+// ELLE EST FAUSSE DEPUIS QUE LES PAGES SONT RÉENREGISTRÉES EN DOUBLE. Le testeur garde les
+// anciens dossiers (« PAGE 1 » à 30) en ajoutant les nouveaux (« PAGE 1B » à 100). Mesuré
+// le 2026-08-30 : 3 galeries dépassent 10 dossiers (SIT 12, SV-P 13, XM2A 11) — ce qui est
+// IMPOSSIBLE puisque le plafond est de 10 pages — et 25 galeries mélangent du 30 et du ≥80,
+// ce qui rend le mode ininterprétable.
+//
+// 🔑 LA PARADE EST CELLE DE SV4A, ET ELLE S'ÉLARGIT :
+//     ON NE CONCLUT JAMAIS UNE CAUSE D'UN NOM NI D'UN COMPTE DE DOSSIER.
+// La règle dure disait « l'index se construit sur l'idProduct du nom de fichier ». Elle
+// vaut aussi pour les DIAGNOSTICS : seul le compte d'idProduct distincts contre
+// `catalogue_produits` dit si un set est complet. Le reste est de la décoration.
+//
+// CE QU'ON RENDAIT ET QU'ON NE REND PLUS : la colonne « cause ». Le risque n'était pas un
+// scan faux — ces outils ne servent qu'à piloter la collecte — c'était un « PLAFOND »
+// annoncé à tort, qui aurait envoyé retaper une galerie entière pour rien.
+// ⚠️ Et ça ne manque à personne : depuis que le plafond est compris (10 pages, pas 300
+// articles) et qu'aucun set ne dépasse 1 000 produits, LE GESTE EST LE MÊME dans les deux
+// cas — une passe à 100 par page. La cause n'avait plus de conséquence pratique.
+//
+// LA LISTE QUI VAUT est celle de `mesure-justesse-production.js` : les sets classés par
+// D+ DÉBLOQUÉS. Elle ne regarde aucun dossier, et elle a fait ses preuves — 12 cartes
+// visées, 12 D+ délivrés, là où une passe au hasard sur bien plus de volume en avait
+// délivré ZÉRO.
+//
+// ============================================================================
 // LA CROISSANCE DE LA BASE — 2026-08-30, mesurée avant d'en avoir besoin
 // ============================================================================
 //   par scan ........... 956 o aujourd'hui + 262 o des 11 champs image = 1 218 o
