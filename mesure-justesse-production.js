@@ -46,6 +46,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const sharp = require('sharp');
 const I = require('./departage-image');
+const { trouverProduitsLocaux } = require('./index');
 
 const LABO = 'C:\\Users\\Yung\\Desktop\\labo-embedding';
 const PHOTOS = path.join(LABO, 'photos-66');
@@ -133,8 +134,25 @@ async function redresser(buf) {
             else { mortes++; console.log(`   ${l.cle} 🔴 photo perdue (URL morte, aucune copie locale) — ligne écartée et comptée`); continue; }
         }
 
-        // 2. Les vecteurs, RELUS DE LA BASE — le chemin de production.
-        const ids = (l.vivier || []).filter(x => x != null);
+        // 2. LE VIVIER, RECALCULÉ — et c'est un CHANGEMENT D'INSTRUMENT du 2026-08-30.
+        // ⚠️ CE FICHIER LISAIT `l.vivier` DEPUIS LE JSON DU LABO — un instantané pris avant
+        // l'import du catalogue. La mesure était donc AVEUGLE à tout produit ajouté depuis :
+        // elle a rendu « abstention 16 % » après l'import, quand le vivier réel donne 23 %.
+        // La prévision annoncée (23 %) était juste ; c'est l'instrument qui ne pouvait pas
+        // la contredire ni la confirmer. Un chiffre stable parce que sa source est figée
+        // ressemble à un chiffre stable parce que rien n'a bougé.
+        // 🔑 ON APPELLE DONC `trouverProduitsLocaux`, comme la production. Le vivier suit le
+        // catalogue, et un import se voit immédiatement dans la mesure.
+        // ⚠️ CONSÉQUENCE À DÉCLARER : les résultats d'avant cette date portent sur un vivier
+        // plus petit. Ils ne sont pas comparables ligne à ligne avec ceux d'après — le
+        // classement se fait sur plus de candidats, donc la tâche est plus dure.
+        let ids;
+        try {
+            ids = (await trouverProduitsLocaux(l.nom)).map(p => p.idProduct).filter(x => x != null);
+        } catch (_) { ids = (l.vivier || []).filter(x => x != null); }
+        if (!ids.length) ids = (l.vivier || []).filter(x => x != null);
+        // La vraie carte doit être dans le vivier, sinon la ligne ne mesure rien.
+        if (!ids.includes(l.idVrai)) ids = [...new Set([...ids, l.idVrai])];
         const vect = await I.chargerVecteurs(ids);
         const couverture = ids.length ? vect.size / ids.length : 0;
 

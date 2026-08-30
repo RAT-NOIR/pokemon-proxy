@@ -94,7 +94,16 @@ process.on('SIGINT', () => {
 
     // 3. 🔑 L'AVANCEMENT EST LA COLLECTION ELLE-MÊME.
     const deja = new Set((await ReferenceImage.find({ pts: PTS }, { idProduct: 1 }).lean()).map(d => d.idProduct));
-    const autreReglage = await ReferenceImage.countDocuments({ pts: { $ne: PTS } });
+    // ⚠️ FILTRÉ SUR `etat: 'indexee'` — CORRIGÉ LE 2026-08-30, ET CE GARDE-FOU A BLOQUÉ
+    // L'ÉCRITURE POUR RIEN. Il comptait `{ pts: { $ne: PTS } }` sur TOUTE la collection.
+    // Or un document `absente` n'a pas de réglage : `pts` y vaut `null`, ce qui est juste —
+    // un produit sans image n'a été décrit à AUCUN réglage. Les 24 marquages de XM2A ont
+    // donc été pris pour un index à 200 points, et le script a refusé de tourner.
+    // 🔑 SEUL UN VECTEUR RÉEL PEUT ÊTRE À UN MAUVAIS RÉGLAGE. Le garde-fou était juste dans
+    // son intention — ne jamais mélanger deux réglages dans un index — et trop large dans
+    // sa portée. Un garde-fou trop large ne protège pas mieux : il bloque du travail
+    // légitime, et l'utilisateur apprend à passer outre.
+    const autreReglage = await ReferenceImage.countDocuments({ etat: 'indexee', pts: { $ne: PTS } });
 
     const aFaire = [...chemin.keys()].filter(id => !deja.has(id) && !cc.has(id)).sort((a, b) => a - b);
     const ccAFaire = [...cc].filter(id => !deja.has(id));
