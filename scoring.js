@@ -1124,6 +1124,29 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      n'existait pas encore. Un contrôle qui dépend d'un état futur est vide aujourd'hui,
 //      et personne ne le voit parce qu'il est vert.
 //
+//   15. LE VERROU NE PEUT PAS PROTÉGER UN DÉPLOIEMENT AUTOMATIQUE — 2026-08-30.
+//      La plus large de la série : elle ne porte sur AUCUN contrôle en particulier, mais
+//      sur l'articulation de tous.
+//      TOUT LE DISPOSITIF SUPPOSE « VERROU VERT, PUIS PUSH ». Le nom même du fichier le
+//      dit : `verrou-avant-push.js`. Or l'auto-déploiement de Render est actif : `git push`
+//      ET « mise en production » sont LE MÊME GESTE. Le verrou tourne donc toujours APRÈS
+//      la mise en ligne, quoi qu'on fasse et quel que soit son résultat.
+//      L'OCCURRENCE. Le départage par l'image — une décision qui choisit le produit tarifé
+//      — a été déployé sur onze commits entre 05:17 et 06:35, puis le verrou a été rendu
+//      vert à 03:35 le lendemain. Il a validé APRÈS COUP ce qui était déjà en ligne. Il n'a
+//      protégé personne. Par chance, zéro scan n'a tourné dans l'intervalle : la mesure de
+//      ce qu'il aurait laissé passer est donc VIDE, ce qui n'est pas la même chose que
+//      « il n'a rien laissé passer ».
+//      ⚠️ CE QUI REND CETTE ERREUR PARTICULIÈRE : aucun contrôle n'était faux. Le verrou
+//      mesure ce qu'il prétend mesurer, le cliquet aussi. C'est leur PLACE DANS LA CHAÎNE
+//      qui était fausse, et une place ne se teste pas — elle se dessine. Personne ne l'a
+//      vue parce que chaque pièce, prise seule, était juste.
+//      🔑 LA PARADE N'EST PAS UN CONTRÔLE DE PLUS. Un dispositif de garde doit être placé
+//      là où il peut REFUSER, pas seulement constater. Tant qu'un contrôle vit du côté du
+//      développeur et que le déclencheur du déploiement vit ailleurs, c'est un rapport, pas
+//      une barrière. Les options sont écrites dans PASSATION.md ; aucune n'est choisie ici,
+//      parce que ce n'est pas une décision d'outillage mais d'organisation.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation
