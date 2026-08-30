@@ -573,6 +573,35 @@ const CELLULES = [
     const nj = await bac.collection('journal_scans').deleteMany({ userId: USER_VERROU });
     const nc = await bac.collection('credits').deleteMany({ userId: USER_VERROU });
     console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s) supprimés.`);
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 ET LA TRANCHE, QUI NE L'ÉTAIT PAS — CORRIGÉ LE 2026-08-30
+    // ════════════════════════════════════════════════════════════════════════
+    // La tranche était vidée AVANT chaque copie, jamais APRÈS l'exécution. Le bac gardait
+    // donc entre deux lancements un catalogue, des numéros, des prix, des codes de set —
+    // et, depuis que j'y ai ajouté les vecteurs d'image, VINGT-HUIT MÉGAOCTETS.
+    // MESURÉ : `test_scratch` est passé de 6,5 à 34,2 Mo, dont 28,1 pour 1 688
+    // `references_image`. Sur un cluster Atlas gratuit où le plafond de 512 Mo est
+    // GLOBAL, ces 28 Mo ont mangé la marge de l'import — projection tombée à 0,8 Mo.
+    //
+    // ⚠️ LA RÈGLE EST ÉCRITE EN TÊTE DU DÉPÔT DEPUIS LE DÉBUT : « tout outil qui fait
+    // écrire une collection la vide en sortant ». Je l'ai CITÉE en ajoutant
+    // `references_image` à la boucle de vidage — celle du DÉBUT. Connaître la règle et la
+    // citer n'a pas suffi à l'appliquer au bon endroit.
+    // Les quatre autres collections avaient le même défaut depuis toujours ; personne ne
+    // l'avait vu parce qu'elles pèsent 4 Mo à elles toutes.
+    let libere = 0;
+    for (const nom of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'references_image']) {
+        try {
+            const st = await bac.db.command({ collStats: nom }).catch(() => null);
+            const r = await bac.collection(nom).deleteMany({});
+            if (st) libere += (st.storageSize ?? 0) + (st.totalIndexSize ?? 0);
+            if (r.deletedCount) console.log(`🧹 test_scratch : ${nom} vidée (${r.deletedCount} documents)`);
+        } catch (e) { console.error(`🔴 vidage de ${nom} : ${e.message}`); }
+    }
+    console.log(`🧹 environ ${(libere / 1e6).toFixed(1)} Mo rendus au cluster.`);
+    console.log(`   ⚠️ WiredTiger ne rend la place qu'au point de reprise suivant : un`);
+    console.log(`      \`dbStats\` immédiat peut encore les montrer.`);
     await bac.close();
     process.exit(0);
 })();
