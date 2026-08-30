@@ -1147,6 +1147,29 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      une barrière. Les options sont écrites dans PASSATION.md ; aucune n'est choisie ici,
 //      parce que ce n'est pas une décision d'outillage mais d'organisation.
 //
+//   16. CITER UNE RÈGLE N'EST PAS L'APPLIQUER — 2026-08-30.
+//      En ajoutant `references_image` à la tranche du verrou, j'ai écrit dans le
+//      commentaire : « ⚠️ ET `references_image` ENTRE DANS LA BOUCLE DE VIDAGE, dans le
+//      même geste. La règle est en tête de ce fichier et elle ne souffre pas d'exception :
+//      tout outil qui fait écrire une collection la vide en sortant. »
+//      Puis je l'ai ajoutée à la boucle du DÉBUT — celle qui vide avant de copier — et pas
+//      à celle de la SORTIE, qui n'existait que pour deux collections.
+//      LE COÛT : `test_scratch` est passé de 6,5 à 34,2 Mo, dont 28,1 pour 1 688 vecteurs.
+//      Sur un cluster Atlas gratuit où le plafond est GLOBAL, ces 28 Mo ont ramené la marge
+//      de l'import du catalogue à 0,8 Mo. L'import aurait saturé à mi-course.
+//      ⚠️ LES QUATRE AUTRES COLLECTIONS DE LA TRANCHE AVAIENT LE MÊME DÉFAUT DEPUIS
+//      TOUJOURS. Personne ne l'avait vu parce qu'elles pèsent 4 Mo à elles toutes : le
+//      défaut était là, il n'était simplement pas encore assez cher pour se voir.
+//      🔑 CE QUI REND CETTE ENTRÉE UTILE, et différente de « j'ai oublié » : le commentaire
+//      était JUSTE, complet, et au bon endroit. Il énonçait la règle, sa raison et sa
+//      conséquence. Il n'a rien empêché. Une règle citée dans un commentaire adjacent au
+//      code fautif donne l'impression d'avoir été appliquée — à l'auteur d'abord, au
+//      relecteur ensuite.
+//      LA PARADE : quand une règle porte sur un CYCLE (ouvrir/fermer, copier/vider,
+//      allouer/rendre), la vérifier depuis l'AUTRE bout. Ici : ne pas demander « ai-je vidé
+//      en copiant ? » mais « qu'est-ce que ce script laisse derrière lui quand il se
+//      termine ? ». La première question a une réponse rassurante et fausse.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

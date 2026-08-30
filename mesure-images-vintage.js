@@ -393,6 +393,44 @@
 // délivré ZÉRO.
 //
 // ============================================================================
+// 🔴 LA MOITIÉ DU PRODUIT N'A JAMAIS ÉTÉ MESURÉE — 2026-08-30
+// ============================================================================
+// Tout ce que ce chantier a mesuré depuis deux semaines porte sur l'IDENTIFICATION :
+// quelle carte est-ce. Le PRIX — l'écart, le verdict « bonne affaire » — n'a jamais été
+// évalué sur une seule ligne, et ce n'est pas faute d'avoir regardé : c'est faute de
+// données.
+//     prixVinted        0/197 lignes
+//     prixReference     0/197
+//     ratio             0/197
+//     prixLive          0/197
+//     prixGuideRetenu  46/197   ← le seul renseigné
+//
+// LE DÉFAUT EST DE DEUX NATURES, ET LES CONFONDRE FERAIT CHERCHER DU CÔTÉ DU SERVEUR :
+//   · `prixVinted` — LE SERVEUR EST PRÊT DEPUIS LE 2026-08-11. Il lit
+//     `req.body.prixVinted` (index.js:3158) et le passe au journal (index.js:4737).
+//     L'EXTENSION NE L'ENVOIE PAS. Une ligne à ajouter dans son corps de requête.
+//   · `prixReference` — NUL PAR CONSTRUCTION sur /api/identifier, et c'est écrit dans le
+//     code (index.js:4734) : le serveur ne connaît que le prix GUIDE, le prix final est lu
+//     par l'extension APRÈS la réponse. Ce n'est pas un oubli, c'est l'architecture.
+//   · `/api/retour-live` (index.js:5017) existe pour recevoir ce prix final. Il n'est
+//     appelé par personne.
+// 🔑 Faire porter son prix à une ligne demande donc DEUX gestes côté extension, pas un.
+//
+// ── LA PISTE `avg30`, ET SA CONDITION DE MESURABILITÉ ────────────────────────
+// Cardmarket calcule une moyenne 30 jours. Elle est DÉJÀ importée (import-price-guide.js:67)
+// et DÉJÀ en base : 59 873 entrées la portent. Rien n'est jeté — la croyance inverse était
+// fausse et elle est corrigée ici.
+// CE QUI MANQUE EST SON USAGE : `prixDeReference` (scoring.js) fait
+// `trend ?? avg ?? avg7 ?? avg30` — elle ne sert que de QUATRIÈME REPLI quand les trois
+// premiers manquent. Jamais à QUALIFIER la référence (« ce trend du jour est-il typique,
+// ou une anomalie ? »), qui est pourtant ce qu'un chineur veut savoir.
+// COÛT POUR L'EXPLOITER : ZÉRO. La donnée est là.
+// 🔴 CONDITION : ÇA NE VAUDRA RIEN TANT QUE LE POINT CI-DESSUS N'EST PAS RÉGLÉ. Un
+// raffinement du prix de référence qu'on ne peut mesurer sur aucune ligne ne se branche
+// pas — ce serait exactement le « signal ajouté avant qu'un signal existant soit consulté »
+// que ce dépôt s'interdit.
+//
+// ============================================================================
 // LA CROISSANCE DE LA BASE — 2026-08-30, mesurée avant d'en avoir besoin
 // ============================================================================
 //   par scan ........... 956 o aujourd'hui + 262 o des 11 champs image = 1 218 o
