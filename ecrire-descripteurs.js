@@ -179,14 +179,23 @@ process.on('SIGINT', () => {
             }
         });
         faits++;
-        if (tampon.length >= LOT) {
-            await vider();
+        // ⚠️ LA PROGRESSION EST DÉCOUPLÉE DE L'ÉCRITURE, ET C'EST VOLONTAIRE. Écrire par
+        // lots de 500 est efficace, mais n'afficher qu'à chaque lot laisserait 21 secondes
+        // d'écran muet — et 21 secondes de silence pendant 49 minutes, on ne sait pas
+        // distinguer « ça travaille » de « c'est bloqué ». On affiche donc tous les 200
+        // (≈ 8 s) et on écrit tous les 500.
+        if (faits % 200 === 0) {
             const parSec = faits / ((Date.now() - t0) / 1000);
-            const reste = (Math.min(aFaire.length, LIMITE) - faits) / parSec / 60;
-            console.log(`   ${String(faits).padStart(6)} / ${Math.min(aFaire.length, LIMITE)} · ` +
-                `${parSec.toFixed(1)}/s · reste ~${reste.toFixed(0)} min`);
+            const cible = Math.min(aFaire.length, LIMITE);
+            const reste = (cible - faits) / parSec / 60;
+            const pc = 100 * faits / cible;
+            const barre = '█'.repeat(Math.round(pc / 4)).padEnd(25, '·');
+            process.stdout.write(`\r   ${barre} ${String(faits).padStart(6)}/${cible} ` +
+                `${pc.toFixed(1).padStart(5)} % · ${parSec.toFixed(1)}/s · reste ~${reste.toFixed(0)} min   `);
         }
+        if (tampon.length >= LOT) await vider();
     }
+    process.stdout.write('\n');
     await vider();
 
     const total = await ReferenceImage.countDocuments({ pts: PTS, etat: 'indexee' });

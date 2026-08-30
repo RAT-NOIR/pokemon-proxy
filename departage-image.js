@@ -95,9 +95,36 @@ const VIVIER_MAX = 600;
 //   'non-collectee' -> une image existe, la page a été ratée. Propriété DU TRAVAIL.
 //                      Récupérable en une passe.
 //   'hors-perimetre'-> le produit ne peut JAMAIS être un candidat, image ou pas. Une
-//                      « Live Code Card » en est une : `ecarterNonCartes` (index.js:1583)
+//                      « Live Code Card » en est une : `ecarterNonCartes` (index.js:1615)
 //                      la retire du vivier avant tout scoring. Collecter son image serait
 //                      un travail inutile même s'il réussissait.
+//
+// ⚠️ CE QUI SÉPARE `absente` DE `hors-perimetre`, ET POURQUOI LES CONFONDRE COÛTERAIT CHER :
+//     `absente`        Cardmarket NE SERT PAS l'image.  -> propriété de LA SOURCE.
+//     `hors-perimetre` l'image existe, mais le produit  -> propriété de NOTRE CHAÎNE.
+//                      ne peut jamais être candidat.
+//   La conséquence est asymétrique et c'est elle qui compte : si `ecarterNonCartes` change
+//   un jour — la regex s'élargit, une catégorie est réintégrée — alors `hors-perimetre` SE
+//   RÉVISE, et les produits concernés redeviennent à collecter. `absente` ne se révise pas :
+//   Cardmarket ne se mettra pas à servir une image qu'il n'a pas.
+//   Étiqueter `absente` un produit qui n'était qu'`hors-perimetre` le condamne donc pour
+//   des raisons qui, elles, pouvaient changer.
+//
+// 🔑 ET À L'EXÉCUTION, LA SEULE DIFFÉRENCE QUI COMPTE — VÉRIFIÉE, PAS DÉDUITE :
+//   UN PRODUIT `hors-perimetre` EST ABSENT DU GROUPE, IL N'EST PAS UN CANDIDAT SANS
+//   VECTEUR. Il ne fait donc PAS abstenir.
+//   Pourquoi c'est vrai par construction : `ecarterNonCartes` est appelée par LES QUATRE
+//   fonctions qui produisent des candidats — `trouverProduitsLocaux` (index.js:1799 et
+//   1837), `trouverParSetCodeEtNumero` (1977), le repli par numéro (2211) — plus la
+//   substitution d'impression (4236). Une Code Card n'atteint donc jamais `classement`,
+//   donc jamais `cond.groupe`, donc `chargerVecteurs` ne la cherche jamais.
+//   Contrôlé sur le trafic réel le 2026-08-30 : 0 Code Card parmi 178 candidats de
+//   25 lignes de journal. ⚠️ L'échantillon est MINCE — c'est l'argument des quatre points
+//   d'appel qui porte, pas ces 178 candidats.
+//   ⚠️ ET LE FILET, SI JAMAIS L'UNE PASSAIT : `chargerVecteurs` filtre sur
+//   `{ etat: 'indexee' }`, donc un document `hors-perimetre` compte comme SANS vecteur et
+//   la garde s'abstient. C'est SÛR — aucune victoire fabriquée — mais ce n'est pas le
+//   comportement voulu. Le filet n'est pas la règle ; la règle est `ecarterNonCartes`.
 //
 // ════════════════════════════════════════════════════════════════════════════
 // 🔴 `absente` NE S'ÉCRIT QUE SUR CONSTAT POSITIF. TROIS CONDITIONS, TOUTES REQUISES :

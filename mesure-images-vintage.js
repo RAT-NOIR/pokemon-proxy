@@ -322,6 +322,44 @@
 //
 // RIEN N'EST SUPPRIMÉ : le relevé est rendu, le testeur tranche.
 //
+// ── `autoIndex` RESTE ACTIF — décidé le 2026-08-30, et voici pourquoi ───────
+// La pratique courante est de désactiver `autoIndex` en production. Ici, NON, et
+// l'argument tient en une observation : sur les 17 index déclarés dans des schémas,
+// QUATRE ne sont pas des accélérateurs mais des VERROUS D'UNICITÉ —
+// `credits.userId`, `quotas_semaine{userId,semaine}`, `remboursements{userId,jour}`,
+// `evenements_stripe.eventId`. Sans ce dernier, un webhook Stripe rejoué crédite DEUX
+// FOIS, et rien ne le signale.
+// `autoIndex` est aujourd'hui le seul mécanisme qui garantit leur existence sur une base
+// neuve. Le défaut du 2026-08-30 n'était pas le mécanisme, c'était DEUX DÉCLARATIONS EN
+// TROP (`idMetacard_1`, `name_text`). On corrige la déclaration, pas le mécanisme.
+//
+// 🔑 LA PARADE À ÉCRIRE, ET ELLE VAUT INDÉPENDAMMENT DE CETTE DÉCISION :
+//     UNE CELLULE DU VERROU QUI LISTE LES INDEX ATTENDUS ET ÉCHOUE S'IL EN MANQUE UN.
+//   Aujourd'hui RIEN ne le vérifie, et le jour où quelqu'un touchera à `autoIndex` — ou
+//   supprimera une déclaration par mégarde — un webhook Stripe rejoué créditerait deux
+//   fois sans que rien ne le signale.
+//   C'est le même motif que la 7e cellule pour la panne Mongo : une défaillance HORS du
+//   code, qu'aucun test unitaire ne peut voir. Non fait dans la fenêtre du 2026-08-30.
+//
+// ── LA REPRISE PAR LA BASE, PAS PAR UN FICHIER D'AVANCEMENT ─────────────────
+// `ecrire-descripteurs.js` ne tient aucun fichier d'avancement : il relit les `idProduct`
+// déjà écrits au réglage courant et les retire de sa liste.
+//     UN FICHIER SÉPARÉ POURRAIT MENTIR — il se désynchronise dès qu'une écriture échoue
+//     après avoir été comptée. LA BASE NE PEUT PAS MENTIR SUR CE QU'ELLE CONTIENT.
+// Le corollaire qui rend ça sûr : chaque document part d'un seul `$set` (`etat`, `pts`,
+// `desc`, `xy` ensemble). Une interruption laisse des documents ENTIERS ou rien — jamais
+// un demi-vecteur, donc jamais un `indexee` sans buffers.
+//
+// ── 🔴 `import-catalogue.js` JETTE `dateAdded`, ET ÇA SE PAIE ───────────────
+// L'export Cardmarket porte `dateAdded` par produit. L'importeur ne conserve que
+// `name`, `idExpansion`, `idMetacard` : l'année de sortie d'un set N'A JAMAIS ÉTÉ EN BASE.
+// Conséquence CONSTATÉE le 2026-08-30 : cinq sets de la liste de travail (SM2L, SVIBA,
+// SV-P/CS, SV-P/ID, M-P/CT) n'ont pas pu être datés autrement que par ENCADREMENT des
+// idProduct — une estimation, là où la donnée existait dans le fichier source. Seul TK10 a
+// pu être lu, via TCGdex.
+// `codes_set.apprisLe` ne remplace rien : c'est la date où NOUS avons appris le code.
+// 🔑 AU PROCHAIN IMPORT : garder `dateAdded`. Trois lignes, et plus jamais d'estimation.
+//
 // ============================================================================
 // LA CROISSANCE DE LA BASE — 2026-08-30, mesurée avant d'en avoir besoin
 // ============================================================================
