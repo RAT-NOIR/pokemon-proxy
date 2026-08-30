@@ -31,6 +31,49 @@
 // contrôle dont on attend qu'il change doit dire lequel des deux états il constate, pas
 // « passé / échoué ». Il le dit.
 //
+// ════════════════════════════════════════════════════════════════════════════
+// 🔑 CE QU'ON ATTEND DE B UNE FOIS L'INDEX PLEIN — ÉCRIT LE 2026-08-30,
+//    AVANT QUE LE PREMIER DESCRIPTEUR SOIT ÉCRIT.
+// ════════════════════════════════════════════════════════════════════════════
+// ÉTAT DE DÉPART, mesuré index vide, sur les 25 lignes de journal qui portent un vivier :
+//     hors-condition ....... 20      abstention-garde ....... 5      départages ....... 0
+//
+// LE SEUL CHIFFRE QUI DÉCIDE : `abstention-garde` DOIT TOMBER À 0.
+// C'est lui, et lui seul, qui dit que les vecteurs sont lus. Les 20 `hors-condition` ne
+// dépendent pas des vecteurs (périmètre non asiatique, candidat unique, ou le scoring
+// sépare) : ils DOIVENT rester 20. S'ils bougent, c'est la condition qui a changé, et ça
+// ne devait pas arriver.
+//
+// 🔴 ET LE NOMBRE DE DÉPARTAGES NE DÉCIDE DE RIEN. Cinq lignes ne mesurent pas une règle
+// mesurée sur 44. Ce contrôle est un TÉMOIN DE VIE, pas une mesure de justesse — celle-là
+// vit au banc. Écrire ici « on attend 3 ou 4 départages » serait fabriquer un seuil sur un
+// échantillon qui ne peut rien porter. On n'en attend AUCUN nombre précis.
+//
+// LA TABLE DE LECTURE, et elle est exhaustive :
+//   abstention-garde reste à 5      🔴 les vecteurs ne sont pas lus. Trois causes, dans
+//                                      l'ordre où les vérifier : mauvais `pts` (un index à
+//                                      150 ne répond pas à une requête à 200) · les
+//                                      idProduct de ces viviers n'ont pas d'image sur le
+//                                      disque · l'écriture s'est arrêtée avant eux.
+//   abstention-garde à 0,
+//     echec-technique monte         ⚠️ PAS UNE PANNE DU BRANCHEMENT. Les photos de ces
+//                                      lignes sont de vieilles URL Vinted qui expirent.
+//                                      Le contrôle a franchi la garde — c'est ce qu'on
+//                                      voulait savoir — et il bute plus loin, sur le
+//                                      réseau. À distinguer en rejouant sur des charges
+//                                      fraîches (verrou/charges.json).
+//   abstention-garde à 0,
+//     tout en abstention-signal     ⚠️ la garde passe et l'appariement ne trouve rien. À
+//                                      regarder : c'est le symptôme d'une reconstruction
+//                                      uint16 cassée — mais le contrôle A l'aurait déjà dit.
+//   abstention-garde à 0, et les 5
+//     réparties entre `departage`
+//     et `confirme-le-scoring`      ✅ LE BRANCHEMENT EST VIVANT. C'est tout ce que ce
+//                                      contrôle peut prouver, et c'est tout ce qu'on lui
+//                                      demande.
+//   hors-condition ≠ 20             🔴 la condition de déclenchement a changé. Rien dans
+//                                      l'écriture des descripteurs ne devait la toucher.
+//
 // LECTURE SEULE : aucune écriture en base, aucun fichier déplacé.
 // USAGE : node controle-departage-image.js [nbPaires]
 // ============================================================================
@@ -138,9 +181,32 @@ const dire = (ok, texte) => { if (!ok) echecs++; console.log(`   ${ok ? '✅' : 
         console.log(`   ℹ️ État constaté : les descripteurs ne sont PAS écrits. C'est l'état`);
         console.log(`      attendu avant la deuxième bascule, pas une panne.`);
     } else {
-        console.log(`   ℹ️ ${vecteurs} vecteurs en base : la bascule a eu lieu. L'inertie n'est`);
-        console.log(`      PLUS le comportement attendu — ${departages} départage(s) sur ${lignes.length} lignes.`);
-        console.log(`      À partir d'ici, c'est le banc et le verrou qui mesurent, pas ce contrôle.`);
+        // La lecture se fait contre l'attendu ÉCRIT EN TÊTE DE CE FICHIER LE 2026-08-30,
+        // avant que le premier descripteur existe. Aucun seuil n'est choisi ici.
+        const garde = statuts.get('abstention-garde') ?? 0;
+        const hors = statuts.get('hors-condition') ?? 0;
+        const echec = statuts.get('echec-technique') ?? 0;
+        const signal = statuts.get('abstention-signal') ?? 0;
+        const vivants = departages + (statuts.get('confirme-le-scoring') ?? 0);
+        console.log(`   ℹ️ ${vecteurs} vecteurs en base : la bascule a eu lieu. L'inertie n'est plus l'attendu.`);
+        console.log(`\n   ── LECTURE CONTRE L'ATTENDU ÉCRIT D'AVANCE ──`);
+        dire(garde === 0, `abstention-garde à ${garde} (attendu 0) — LE SEUL CHIFFRE QUI DÉCIDE`);
+        dire(hors === 20, `hors-condition à ${hors} (attendu 20, ne dépend pas des vecteurs)`);
+        if (garde === 0 && vivants > 0) {
+            console.log(`   ✅ ${vivants} ligne(s) ont franchi la garde et abouti — LE BRANCHEMENT EST VIVANT.`);
+        }
+        if (garde === 0 && vivants === 0 && echec > 0) {
+            console.log(`   ⚠️ ${echec} echec-technique : la garde est franchie, ça bute plus loin.`);
+            console.log(`      Ce sont de vieilles URL Vinted, qui expirent. PAS une panne du`);
+            console.log(`      branchement — rejoue sur verrou/charges.json pour le distinguer.`);
+        }
+        if (garde === 0 && vivants === 0 && signal > 0 && echec === 0) {
+            console.log(`   🔴 ${signal} abstention-signal et zéro aboutissement : la garde passe,`);
+            console.log(`      l'appariement ne trouve rien. Le contrôle A aurait dû le dire avant.`);
+        }
+        console.log(`\n   ⚠️ LE NOMBRE DE DÉPARTAGES NE DÉCIDE DE RIEN — ${departages} sur ${lignes.length} lignes.`);
+        console.log(`      Ce contrôle est un TÉMOIN DE VIE, pas une mesure de justesse.`);
+        console.log(`      La justesse se mesure au banc, sur 44 lignes de cellule.`);
     }
 
     await mongoose.disconnect();

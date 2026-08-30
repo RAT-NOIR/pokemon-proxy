@@ -206,6 +206,43 @@ process.on('SIGINT', () => {
     console.log(`   🔑 TOTAL 'indexee' EN BASE ........ ${total}`);
     console.log(`   durée ............................. ${((Date.now() - t0) / 60000).toFixed(1)} min`);
     if (arret) console.log(`\n   ⏸️  Arrêt demandé. Relance la même commande pour reprendre.`);
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 LE DISQUE EST RELU MAINTENANT, ET COMPARÉ. Sans cette ligne, l'outil ment.
+    // ════════════════════════════════════════════════════════════════════════
+    // LA LISTE DES IMAGES A ÉTÉ FIGÉE AU DÉMARRAGE. Le testeur collecte pendant que ça
+    // tourne — 69 146 images le matin, 70 728 le soir, dans la même journée. Les images
+    // arrivées APRÈS le démarrage ne sont pas dans la liste : elles ne seront pas décrites,
+    // et le script se terminerait « normalement » sur un index incomplet.
+    // Annoncer « 69 771 écrits » sans dire « sur 70 300 présents MAINTENANT » laisserait
+    // croire à un index complet. C'est la forme exacte du défaut qu'on traque partout
+    // ailleurs : un compte juste qui fait conclure faux.
+    const apres = new Set();
+    (function marche(d) {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            const p = path.join(d, e.name);
+            if (e.isDirectory()) marche(p);
+            else { const m = EST_CARTE.exec(e.name); if (m) apres.add(Number(m[1])); }
+        }
+    })(RACINE);
+    const couverts = new Set((await ReferenceImage.find({ pts: PTS }, { idProduct: 1 }).lean()).map(d => d.idProduct));
+    const orphelines = [...apres].filter(id => !couverts.has(id));
+    const nouvelles = apres.size - chemin.size;
+
+    console.log(`\n   ── L'INDEX EST-IL COMPLET, MAINTENANT ? ──`);
+    console.log(`   images au DÉMARRAGE ............... ${chemin.size}`);
+    console.log(`   images MAINTENANT ................. ${apres.size}` +
+        `${nouvelles > 0 ? `   (+${nouvelles} arrivées pendant l'exécution)` : ''}`);
+    console.log(`   🔑 IMAGES SANS VECTEUR ............ ${orphelines.length}`);
+    if (orphelines.length === 0) {
+        console.log(`   ✅ INDEX COMPLET — toute image du disque a son vecteur à ${PTS} points.`);
+    } else {
+        console.log(`   🔴 INDEX INCOMPLET. Ne le crois pas complet.`);
+        console.log(`      Cause probable : ${nouvelles > 0 ? `${nouvelles} image(s) collectée(s) pendant l'exécution` : 'interruption, fichiers illisibles, ou images sans point'}.`);
+        console.log(`      ➜ RELANCE LA MÊME COMMANDE : elle ne recalculera AUCUN des ${couverts.size}`);
+        console.log(`        déjà faits (l'avancement est la collection elle-même) et ne`);
+        console.log(`        traitera que les ${orphelines.length} restantes.`);
+    }
     console.log(`\n   ⚠️ Le branchement n'est plus inerte. Vérifie avec :`);
     console.log(`      node controle-departage-image.js`);
     await mongoose.disconnect();
