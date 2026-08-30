@@ -235,9 +235,36 @@ async function redresser(buf) {
     }
 
     // ── LA COUVERTURE DE LA GARDE, sur ce jeu ───────────────────────────────
-    const complets = lignes.filter(l => l.couverture >= 1).length;
-    console.log(`\n   couverture de la garde : ${complets}/${lignes.length} lignes ont TOUS leurs candidats en base`);
-    console.log(`   (les autres s'abstiendraient en production, quel que soit le résultat ci-dessus)`);
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 CE QUE LA GARDE COÛTE VRAIMENT — le chiffre qui gouverne ce que l'utilisateur voit
+    // ════════════════════════════════════════════════════════════════════════
+    // Les tableaux ci-dessus disent la justesse QUAND l'image tranche. Ils ne disent pas à
+    // QUELLE FRÉQUENCE elle tranche. La garde exige un vecteur pour TOUS les candidats du
+    // groupe : une seule carte non collectée dans un vivier de 60 fait abstenir.
+    // ⚠️ J'AVAIS ESTIMÉ CE COÛT À 7,6–8,4 % DES GROUPES, sur le trafic du journal. Ce jeu-ci
+    // le mesure sur les viviers RÉELS des 66 vérités, index quasi complet. Si les deux
+    // divergent, c'est l'estimation qui était fausse, pas la mesure.
+    console.log('\n' + '═'.repeat(104));
+    console.log('CE QUE LA GARDE COÛTE — combien de fois elle tranche, et non plus si elle a raison');
+    console.log('═'.repeat(104));
+    console.log(`   ${'population'.padEnd(24)} ${'n'.padStart(3)} ${'complets'.padStart(9)} ${'abstient'.padStart(9)}   dont rang 1 par l'image`);
+    for (const [titre, f] of groupes) {
+        const g = lignes.filter(f);
+        if (!g.length) continue;
+        const ok = g.filter(l => l.couverture >= 1);
+        const abst = g.length - ok.length;
+        // Ce qu'on PERD réellement : les lignes que l'image aurait gagnées et où elle se tait.
+        const perduesUtiles = g.filter(l => l.couverture < 1 && l.brut?.rang === 1 && l.s && l.s.rangScoring !== 1).length;
+        console.log(`   ${titre.padEnd(24)} ${String(g.length).padStart(3)} ${String(ok.length).padStart(9)} ` +
+            `${String(abst).padStart(9)}   ${ok.filter(l => l.brut?.rang === 1).length}/${ok.length}` +
+            `${perduesUtiles ? `   🔴 ${perduesUtiles} D+ perdu(s) par la garde` : ''}`);
+    }
+    const manquants = lignes.map(l => Math.round((1 - l.couverture) * (l.vivier?.length ?? 0)));
+    console.log(`\n   candidats sans vecteur, par vivier : médiane ${med(manquants.filter(x => x > 0))} ` +
+        `· maximum ${Math.max(...manquants)}`);
+    console.log(`   ⚠️ UN SEUL candidat non collecté dans un vivier de 60 suffit à faire abstenir.`);
+    console.log(`      C'est la règle voulue — retirer le candidat aveugle fabriquerait une victoire —`);
+    console.log(`      mais son COÛT se paie sur la collecte, pas sur le code.`);
 
     await mongoose.disconnect();
     process.exit(0);
