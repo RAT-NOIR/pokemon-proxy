@@ -88,17 +88,51 @@ const VIVIER_MAX = 600;
 // disparaîtrait EN SILENCE — et la seule trace serait une chute du taux de départage que
 // personne ne relierait à l'import.
 //
-// TROIS ÉTATS, et le troisième n'est pas un détail :
-//   'indexee'      -> un vecteur existe, le candidat peut concourir
-//   'absente'      -> Cardmarket ne sert PAS d'image pour ce produit. C'est une propriété
-//                     du produit, pas un défaut de collecte : la recollecter est inutile.
-//   'non-collectee'-> une image existe mais on ne l'a pas prise (111 cartes, arbitrage
-//                     assumé sur les petits sets). Recollectable, contrairement à 'absente'.
-// La distinction décide de ce qu'il faut RETOURNER CHERCHER. La confondre ferait
-// retourner 111 fois vers des pages qui n'ont rien de plus à donner.
+// QUATRE ÉTATS, et aucun n'est un détail :
+//   'indexee'       -> un vecteur existe, le candidat peut concourir
+//   'absente'       -> Cardmarket ne sert PAS d'image pour ce produit. Propriété DU
+//                      PRODUIT : y retourner ne rapportera jamais rien.
+//   'non-collectee' -> une image existe, la page a été ratée. Propriété DU TRAVAIL.
+//                      Récupérable en une passe.
+//   'hors-perimetre'-> le produit ne peut JAMAIS être un candidat, image ou pas. Une
+//                      « Live Code Card » en est une : `ecarterNonCartes` (index.js:1583)
+//                      la retire du vivier avant tout scoring. Collecter son image serait
+//                      un travail inutile même s'il réussissait.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// 🔴 `absente` NE S'ÉCRIT QUE SUR CONSTAT POSITIF. TROIS CONDITIONS, TOUTES REQUISES :
+//     1. la page de galerie qui contient ce produit a été enregistrée ;
+//     2. son compte de vignettes correspond à la taille de page de la galerie
+//        (une page à 44 sur 100 n'a rien constaté du tout) ;
+//     3. et le produit n'a TOUJOURS pas de fichier sur le disque.
+// Hors de ces trois-là, l'état est `non-collectee`. JAMAIS `absente` par défaut.
+// ════════════════════════════════════════════════════════════════════════════
+// POURQUOI SI STRICT : `absente` est le seul état IRRÉVERSIBLE en pratique. Il dit « ne
+// reviens jamais ». Un produit mal étiqueté `absente` sort de la liste de travail pour
+// toujours, sans trace, et personne ne le cherchera.
+//
+// ⚠️ LE CONTRE-EXEMPLE DU 2026-08-30, ET IL EST À MOI. J'ai diagnostiqué cinq sets
+// (S12A, SV-P/CS, SV-P, CRI, CSVE2C) sur la DISPERSION des idProduct manquants : éparpillés
+// parmi les présents, tous avec une fiche `numeros_cartes` et un prix `guide_prix`, zéro
+// Code Card. Mon script a conclu « probablement sans image chez Cardmarket ».
+// C'ÉTAIT FAUX POUR LES CINQ. Le comptage des vignettes PAR PAGE l'a renversé :
+//     S12A     pages 100, 44, 62      -> la page 2 s'est arrêtée à 44. Déficit 56 = les 56 manquants.
+//     CRI      pages 30, 30, 30, 2    -> pages pleines, mais 5 attendues et 4 présentes. Une page jamais ouverte.
+//     CSVE2C   idem                   -> une page jamais ouverte.
+//     SV-P     6 pages sur 9 trouées  -> vignettes chargées paresseusement + 1 page absente.
+// La dispersion en idProduct ne prouvait rien PARCE QUE L'ORDRE DE LA GALERIE N'EST PAS
+// L'ORDRE DES idProduct — une page entière manquante se projette en trous éparpillés.
+// Sur ces cinq sets, `absente` vaut ZÉRO. Tout était récupérable.
+//
+// ⚠️ ET LE CAS QUI SEMBLAIT ÉVIDENT NE L'ÉTAIT PAS NON PLUS. 274 des manquants sont des
+// « Code Card » — dont PKM (140/140) et PKMSV (122/122), les deux plus grosses lignes de
+// la liste. J'allais les classer `absente`. Le témoin l'interdit : 957 des 1 246 code cards
+// du catalogue ONT une image sur le disque (76,8 %). Cardmarket en sert donc bien.
+// Elles ne sont pas `absente`, elles sont `hors-perimetre` — inutiles, pas introuvables.
+// Deux fois le même réflexe dans le même message : conclure `absente` sans le constat.
 const referenceImageSchema = new mongoose.Schema({
     idProduct: { type: Number, required: true, unique: true, index: true },
-    etat: { type: String, enum: ['indexee', 'absente', 'non-collectee'], required: true },
+    etat: { type: String, enum: ['indexee', 'absente', 'non-collectee', 'hors-perimetre'], required: true },
     pts: { type: Number, default: null },     // le réglage AVEC LEQUEL le vecteur a été calculé
     desc: { type: Buffer, default: null },    // n × 32 octets, ORB binaire
     xy: { type: Buffer, default: null },      // n × 4 octets, coordonnées en uint16

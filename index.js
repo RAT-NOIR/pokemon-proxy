@@ -281,8 +281,36 @@ const numeroCarteSchema = new mongoose.Schema({
     slug: String,
     slugSet: String,
     source: String,      // 'cardmarket' (fait foi) ou 'tcgdex' (pré-rempli)
-    certitude: String    // 'exacte' ou 'heuristique'
+    certitude: String,   // 'exacte' ou 'heuristique'
+    // ⚠️ AJOUTÉ AU SCHÉMA LE 2026-08-30 — IL ÉTAIT DÉJÀ EN BASE ET DÉJÀ INTERROGÉ.
+    // `expansionsDuSetTCGdex` (ligne 2534) et `diagnosticLienTcgdex` (ligne 2115) lisent ce
+    // champ depuis toujours ; il est écrit par prefill-tcgdex.js et corriger-lien-base1.js.
+    // Il n'était simplement déclaré NULLE PART. Conséquence concrète découverte en voulant
+    // l'indexer : on allait poser un index sur un chemin que le schéma ignore.
+    // Un champ qui vit en base, qu'on lit dans une décision, et qu'aucun schéma ne nomme,
+    // est invisible à toute relecture du code — c'est la même dette que `strategieReverse`
+    // avant sa journalisation.
+    setTcgdex: String
 });
+// ⚠️ DEUX INDEX AJOUTÉS LE 2026-08-30, ET LA MESURE QUI LES JUSTIFIE EST ICI POUR QU'ON
+// NE LES SUPPRIME PAS « PARCE QU'ON NE VOIT PAS À QUOI ILS SERVENT ». Avant eux, mesuré
+// par `explain(executionStats)` sur la base de production :
+//     {idExpansion: …}  -> COLLSCAN, 69 598 documents lus pour 244 rendus, 71 ms
+//     {setTcgdex: …}    -> COLLSCAN, 69 598 documents lus pour 152 rendus, 42 ms
+// Soit 113 ms sur le CHEMIN D'IDENTIFICATION, à chaque scan qui passe par
+// `trouverProduitsParNumero` (ligne 1843) ou `expansionsDuSetTCGdex` (ligne 2534).
+// La collection ne portait que `_id_` et `idProduct_1` — 2,4 Mo pour 18,7 Mo de données,
+// un rapport de ×0,1 qui aurait dû alerter : c'est l'exact opposé du ×3,1 de
+// `catalogue_produits`, dont 17,9 Mo d'index n'étaient interrogés par rien.
+// Coût attendu de ces deux-là : environ 2 Mo. Le solde de l'opération reste −15 Mo.
+//
+// 🔑 DÉCLARÉS DANS LE SCHÉMA, ET PAS SEULEMENT CRÉÉS PAR `maintenance-index.js`. Un index
+// qui n'existe que dans un script de maintenance est invisible à la lecture du code, et
+// une base reconstruite ne l'aurait pas. Ici, `autoIndex` (actif par défaut) les recrée
+// au démarrage — c'est exactement ce qu'on veut pour CEUX-CI, et exactement ce qu'on ne
+// voulait pas pour `idMetacard_1`.
+numeroCarteSchema.index({ idExpansion: 1 });
+numeroCarteSchema.index({ setTcgdex: 1 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
 
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
