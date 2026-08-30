@@ -179,7 +179,47 @@
 // renversait une hypothèse juste. Par galerie, il ne la dépassait pas.
 //
 // ============================================================================
+// 🔴 CORRECTION DU 2026-08-30 — LE PLAFOND EST EN PAGES, PAS EN ARTICLES.
+//    ET CE QUI LE LÈVE EST LA TAILLE DE PAGE, PAS LE TRI.
+// ============================================================================
+// LA CONCLUSION ÉCRITE CI-DESSOUS LE 2026-08-29 EST FAUSSE, et elle est laissée en place
+// exprès, avec cette correction devant : une erreur se consigne, elle ne s'efface pas.
+//
+// CE QUE J'AI ÉCRIT : « le tri s'applique AVANT le plafond ». J'avais vu SI100 passer de
+// 300 à 430 après un passage en tri inversé, et j'ai attribué le gain à la SEULE variable
+// qu'on avait décidé de tester. C'est la faute classique : on ne teste jamais une
+// variable, on teste un changement — et le changement en portait deux.
+//
+// CE QUE LE DISQUE DIT, mesuré le 2026-08-30 :
+//   · MC a pris 766 cartes EN UNE SEULE PASSE de 8 pages, toutes datées entre 22:32 et
+//     22:34 le 2026-08-29. Pages de ~100 cartes. Aucun tri inversé n'a été nécessaire.
+//   · La seconde passe de SI100 utilisait des pages de 80, pas de 30. Neuf pages à 80
+//     donnent 720 places pour 430 cartes : le tri n'avait rien à lever.
+//   · 🔑 SUR 767 GALERIES DU DISQUE, ZÉRO NE DÉPASSE 10 PAGES. Aucune exception.
+//   · Les tailles de page rencontrées vont de 2 à 100. 510 galeries ont été prises à
+//     30/page — le réglage hérité — et 19 d'entre elles butent à 10 pages.
+//
+// LA RÈGLE, RÉÉCRITE : LE PLAFOND EST DE 10 PAGES. Le nombre d'articles récupérables vaut
+// 10 × la taille de page choisie. Le « 300 » n'a jamais été un plafond d'articles, c'était
+// 10 × 30. À 100 par page, le plafond est de 1 000.
+//
+// CE QUE ÇA CHANGE POUR LE CHANTIER, et c'est considérable :
+//   · aucun set du catalogue ne dépasse 1 000 produits (vérifié : 0). Tout set est donc
+//     récupérable EN UNE PASSE à 100 par page.
+//   · MC n'était pas un cas particulier, c'était la démonstration du cas général.
+//   · la conclusion « pour un set de plus de 600 cartes, le tri ne suffira pas, il faudra
+//     un filtre » tombe avec le reste. Aucun filtre n'est nécessaire, donc aucun paramètre
+//     d'URL maison, donc aucun risque Cloudflare.
+//   · les 19 galeries prises à 30/page et butant à 10 pages sont à refaire, une passe
+//     chacune. Ce n'est pas un rattrapage, c'est un changement de réglage.
+//
+// ⚠️ CE QUI RESTE VRAI DE LA MESURE D'HIER : SI100 est bien passé de 300 à 430, et il est
+// bien complet. Seule la CAUSE était mal attribuée. Le chiffre n'a pas menti, la lecture
+// du chiffre si.
+//
+// ============================================================================
 // 🔑 LE TEST SI100 EST TOMBÉ — 2026-08-29. LE TRI S'APPLIQUE AVANT LE PLAFOND.
+//    🔴 CONCLUSION FAUSSE — voir la correction du 2026-08-30 juste au-dessus.
 // ============================================================================
 // Les trois issues étaient écrites AVANT de lancer, et c'est la troisième qui sort :
 //   0 nouveau         -> le tri s'applique après le plafond, le tri est mort
@@ -232,6 +272,73 @@
 //   UN INSTRUMENT QUI REND « MILLE FOIS PLUS PETIT » N'A PAS TROUVÉ UN MIRACLE, IL N'A
 //   RIEN MESURÉ. Corrigé en attendant un checkpoint réel, et en refusant de conclure s'il
 //   ne vient pas.
+//
+// ============================================================================
+// 🔑 LES INDEX — 17,9 Mo QUE RIEN N'INTERROGE, ET DEUX QUI MANQUENT. 2026-08-30
+// ============================================================================
+// `catalogue_produits` porte 26,3 Mo d'index pour 8,5 Mo de données — un rapport de ×3,1
+// que personne n'avait regardé. Relevé, avec la preuve par `explain(executionStats)` et
+// non par lecture du schéma :
+//
+//   index              poids      interrogé par                        verdict
+//   name_text        14 384 Ko    RIEN — 0 occurrence de `$text` dans   🔴 INUTILE
+//                                 tout le dépôt. Créé par
+//                                 import-catalogue.js:28.
+//   idMetacard_1      3 076 Ko    RIEN — `idMetacard` n'est jamais un   🔴 INUTILE
+//                                 critère de requête ; il est lu comme
+//                                 CHAMP de documents ramenés autrement
+//                                 (index.js:739, groupement en mémoire).
+//                                 Déclaré deux fois : index.js:246 ET
+//                                 import-catalogue.js:30.
+//   idProduct_1       2 832 Ko    lireNumeros, getPrixGuideLocalLot,    ✅ utilisé
+//                                 le chemin le plus chaud. ×1 mesuré.
+//   idExpansion_1     2 364 Ko    couverture-index, /api/apprendre.     ✅ utilisé
+//                                 ×1 mesuré.
+//   _id_              2 984 Ko    obligatoire.                          ✅
+//
+// 🔴 ET LE PIÈGE DU `name_text` : il FONCTIONNE (802 résultats, 4 ms). Ce n'est pas un
+// index cassé, c'est un index que personne n'appelle. La distinction décide de tout —
+// « il ne marche pas » se corrige, « il marche et ne sert à rien » se supprime.
+// Les recherches par nom du serveur sont des regex INSENSIBLES À LA CASSE : mesuré,
+// `{name: /^Pikachu/i}` fait un COLLSCAN de 70 975 documents en 70 ms. Un index texte n'y
+// répond jamais, un btree classique non plus. Le commentaire d'index.js:242 avait raison
+// depuis le début ; c'est l'importeur qui contredit le serveur.
+//
+// ⚠️ ET LE RELEVÉ VA DANS LES DEUX SENS — `numeros_cartes` a le problème INVERSE :
+//   `{idExpansion: …}`  -> COLLSCAN, 69 598 lus pour 244 rendus, 71 ms  (trouverProduitsParNumero)
+//   `{setTcgdex: …}`    -> COLLSCAN, 69 598 lus pour 152 rendus, 42 ms  (expansionsDuSetTCGdex)
+// Deux requêtes du chemin d'identification lisent la collection ENTIÈRE à chaque scan.
+// La collection ne porte que `_id_` et `idProduct_1` (2,4 Mo au total, ×0,1 des données).
+// Ce n'est pas une marge à récupérer, c'est une latence à supprimer — et les deux index
+// manquants coûteraient environ 1 à 2 Mo, à comparer aux 17,9 Mo à rendre.
+//
+// `guide_prix` : rien à signaler, `idProduct_1` est utilisé, ×0,4 est normal.
+//
+// ⚠️ `$indexStats` N'A PAS SERVI À CE RELEVÉ, ET C'EST DÉLIBÉRÉ. Son compteur d'accès
+// repart à zéro à chaque redémarrage de mongod, qu'on ne contrôle pas sur un Atlas
+// partagé, et l'uptime n'est pas lisible depuis ce compte. Un index à « 0 accès » n'aurait
+// prouvé qu'une chose : que mongod a redémarré. C'est la lecture du CODE, plus `explain`,
+// qui décide — jamais un compteur dont on ne connaît pas la fenêtre.
+//
+// RIEN N'EST SUPPRIMÉ : le relevé est rendu, le testeur tranche.
+//
+// ============================================================================
+// LA CROISSANCE DE LA BASE — 2026-08-30, mesurée avant d'en avoir besoin
+// ============================================================================
+//   par scan ........... 956 o aujourd'hui + 262 o des 11 champs image = 1 218 o
+//                        -> 1,2 Mo pour 1 000 scans
+//   par produit ........ catalogue 464 o + numéros 158 o + guide 183 o = 805 o
+//                        + descripteur 5 734 o -> 6,5 Mo pour 1 000 produits
+//   🔑 LE DESCRIPTEUR PÈSE 7 FOIS TOUT LE RESTE RÉUNI. La croissance de cette base n'est
+//      plus pilotée par les scans ni par le catalogue, mais par les images.
+//
+//   après l'écriture des descripteurs : 455,3 Mo, marge 56,7 Mo
+//   la marge tombe à zéro après ~8 664 produits neufs, ou ~46 504 scans, ou un mélange.
+//   un import Cardmarket de 2 000 produits en consomme 13,1 Mo.
+//   ⚠️ Le rythme observé (6,9 scans/jour sur 29 jours) est celui d'un testeur seul. Il ne
+//   prédit RIEN d'un produit lancé et n'est rendu que comme repère.
+//   🔑 Supprimer les deux index inutiles rend 17,9 Mo — soit 2 733 produits neufs de plus,
+//      et ça ne coûte rien d'autre qu'une décision.
 //
 // ============================================================================
 // L'INDEX RESTREINT EST MORT — 2026-08-29, et la raison est structurelle
