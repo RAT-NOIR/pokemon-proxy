@@ -1096,6 +1096,34 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      idExpansion ». Un pourcentage sans dénominateur explicite est une affirmation, pas
 //      une mesure. Les outils de ce dépôt doivent l'imprimer, pas le sous-entendre.
 //
+//   14. UN CONTRÔLE QUI NE PEUT PAS ÉCHOUER PARCE QU'IL N'EXERCE RIEN — 2026-08-30.
+//      Trois occurrences en deux jours, toutes VERTES, toutes vides.
+//      a) Le test de panne OpenCV : il passait `[{idProduct:1},{idProduct:2}]`, deux
+//         identifiants sans vecteur. La GARDE tirait avant qu'OpenCV soit seulement
+//         sollicité. Le vert disait « la route ne plante pas », ce qui était vrai — et ne
+//         disait RIEN du chemin nommé. Refait avec deux candidats réels : la garde est
+//         franchie, `departager` rend `echec-technique`, et là seulement on sait.
+//      b) La cellule du verrou pour le départage par l'image : elle sélectionnait sur
+//         `raisonReserve === 'image-departage'`, un champ créé le jour même. AUCUNE ligne
+//         du journal ne pouvait le porter. La cellule était donc vide par construction, et
+//         « elle se remplira après le déploiement » revenait à déployer d'abord et
+//         exercer ensuite — l'inverse de ce que le verrou existe pour faire.
+//         Corrigé en sélectionnant sur ce que la chaîne FAIT quand on la rejoue.
+//      c) Le cliquet de couverture : il ne lisait QUE `index.js`. `departager` et
+//         `chargerVecteurs` vivent dans `departage-image.js` : ils ne pouvaient pas
+//         apparaître, quoi qu'exerce le verrou. Le compte de fonctions couvertes était
+//         juste, et il mesurait un périmètre qui n'était plus celui du produit.
+//      🔑 LA PARADE, ET ELLE EST OPÉRATOIRE, PAS MORALE :
+//         UN CONTRÔLE DOIT ÉCHOUER QUAND ON CASSE VOLONTAIREMENT CE QU'IL SURVEILLE.
+//      Si on ne sait pas décrire le geste qui le ferait rougir, il ne surveille rien.
+//      Les trois se sont laissé attraper par ce test : saboter le chargement d'OpenCV,
+//      vider `references_image`, retirer le fichier du filtre de couverture. Aucun des
+//      trois ne rougissait avant correction.
+//      ⚠️ Et le cas (b) porte l'aggravant le plus utile de la série : le vert ne venait
+//      pas d'un bug mais d'un CALENDRIER — le contrôle interrogeait une donnée qui
+//      n'existait pas encore. Un contrôle qui dépend d'un état futur est vide aujourd'hui,
+//      et personne ne le voit parce qu'il est vert.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

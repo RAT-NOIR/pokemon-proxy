@@ -1,5 +1,5 @@
 {
-  "poseLe": "2026-08-08T21:39:02.002Z",
+  "poseLe": "2026-08-30T16:37:46.591Z",
   "suites": [
     "test-chargement.js",
     "smoke-test.js",
@@ -9,13 +9,21 @@
     "test-pokedex.js",
     "test-acces.js",
     "test-journal-echecs.js",
-    "test-symbole-departage.js"
+    "test-symbole-departage.js",
+    "test-banc-seaux.js",
+    "test-sources.js",
+    "test-webhook-stripe.js"
   ],
   "avecVerrou": true,
   "couvertes": [
+    "champsDeRefus",
     "chargerSetsTCGdex",
+    "chargerVecteurs",
     "chercherCartesTCGdex",
     "chercherCartesTCGdexNomSeul",
+    "conditionDeclenchement",
+    "decrire",
+    "departager",
     "detailCarteTCGdex",
     "diagnosticLienTcgdex",
     "ecarterNonCartes",
@@ -24,8 +32,12 @@
     "etatVintedVersCardmarket",
     "expansionsDuSetTCGdex",
     "genererVariantesNom",
+    "gererWebhookStripe",
     "getCardIdFromAI",
+    "getPrixGuideLocal",
     "getPrixGuideLocalLot",
+    "getTCGdex",
+    "inliers",
     "langueDesSetsTCGdex",
     "langueVersTCGdex",
     "lireCodeSets",
@@ -36,9 +48,11 @@
     "nomPourLeCatalogue",
     "normaliserNom",
     "origin",
+    "outils",
     "pireEtat",
     "rangsDe",
     "regionAttendue",
+    "rien",
     "scorerCandidatsLocal",
     "setIdDeCarte",
     "setsPourTotal",
@@ -47,6 +61,7 @@
     "trouverProduitsLocaux",
     "variantesPour",
     "verifierJeton",
-    "viviersAvecRangs"
+    "viviersAvecRangs",
+    "viviersUnis"
   ]
 }

@@ -209,9 +209,17 @@ const CELLULES = [
         // échouer demain parce qu'un vecteur a changé, sans qu'aucune ligne de code ait
         // bougé — c'est un verrou sur une cible mouvante, et il faut le savoir.
         nom: 'départage par l\'image',
-        pourquoi: 'la décision du 2026-08-29, branchée inerte : la cellule prouvera qu\'elle s\'arme quand les vecteurs arrivent',
+        pourquoi: 'la décision du 2026-08-29 : la seule branche de production dont aucune charge n\'avait traversé le chemin',
         profondeurExigee: 'verdict',
-        test: d => d.raisonReserve === 'image-departage'
+        // 🔴 PAS `d.raisonReserve === 'image-departage'`, ET C'EST LA CORRECTION DU
+        // 2026-08-30. Ce champ n'existait pas quand les lignes du journal ont été scannées :
+        // aucune ne le portera JAMAIS. Sélectionner dessus rendait la cellule vide par
+        // construction, et « elle se remplira après le déploiement » revenait à déployer
+        // d'abord et à exercer ensuite — l'inverse de ce que le verrou fait.
+        // `__imageDepartage` est posé par la pré-passe, qui REJOUE le départage sur le
+        // vivier journalisé et retient les lignes qui empruntent le chemin AUJOURD'HUI.
+        // On sélectionne sur ce que la chaîne FAIT, jamais sur une étiquette d'époque.
+        test: d => d.__imageDepartage === true
     }
 ];
 
@@ -232,12 +240,72 @@ const CELLULES = [
     const abouties = avecPhoto.filter(d => d.idProduct != null);
     console.log(`${journal.length} lignes au journal · ${abouties.length} ont abouti ET portent une photo\n`);
 
+    // ════════════════════════════════════════════════════════════════════════
+    // PRÉ-PASSE — SÉLECTIONNER SUR CE QUE LA CHAÎNE FAIT, PAS SUR UNE ÉTIQUETTE
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 LA CELLULE DU DÉPARTAGE PAR L'IMAGE NE PEUT PAS SE SÉLECTIONNER SUR
+    // `raisonReserve === 'image-departage'` : le champ n'existait pas quand ces lignes ont
+    // été scannées, et AUCUNE ligne du journal ne le portera jamais. Attendre le
+    // déploiement pour remplir la cellule reviendrait à déployer d'abord et à exercer
+    // ensuite — exactement ce que ce fichier existe pour empêcher.
+    //
+    // ON REJOUE DONC LE DÉPARTAGE MAINTENANT, et on retient les lignes où il TRANCHE
+    // aujourd'hui. C'est déjà ce que font les autres cellules : elles sélectionnent sur des
+    // propriétés de l'ENTRÉE (langue, setCode) et vérifient la profondeur ATTEINTE, elles
+    // ne lisent pas une étiquette de sortie. La seule différence ici est que la propriété
+    // se calcule au lieu de se lire.
+    //
+    // ⚠️ CE N'EST PAS UNE SÉLECTION SUR LE RÉSULTAT DE LA CHARGE. On retient les lignes qui
+    // EMPRUNTENT le chemin, pas celles qui donnent une bonne réponse : la justesse du
+    // départage ne rentre nulle part dans ce choix, et elle n'est pas mesurée ici.
+    // ⚠️ Restreinte aux lignes qui portent `vivierIds` — sans le vivier, il n'y a pas de
+    // groupe à départager, et le rejeu porterait sur un ensemble inventé.
+    // ⚠️ `raisonVide` est déclarée ICI et non plus après « phase 1 » : la pré-passe peut
+    // échouer et doit pouvoir y écrire. Une cellule vide « parce que la pré-passe n'a pas
+    // tourné » et une cellule vide « parce qu'aucune ligne ne convient » ne se lisent pas
+    // de la même façon, et c'est cette carte-là que `raisonVide` porte.
+    const raisonVide = new Map();
+    let imageDispo = 0;
+    try {
+        const IMG = require('./departage-image');
+        // 🔴 IL FAUT LA CONNEXION mongoose PAR DÉFAUT, ET C'EST LE PIÈGE QUI A FAIT RENDRE
+        // « 0 ligne » AU PREMIER ESSAI. Ce fichier travaille avec `createConnection` pour
+        // garder la production en lecture seule et nommée ; `departage-image.js`, lui, lit
+        // via un modèle mongoose, donc via `mongoose.connection` — la connexion PAR DÉFAUT,
+        // que rien n'ouvrait ici. `chargerVecteurs` teste `readyState !== 1` et rend une
+        // Map VIDE : la garde s'abstenait sur toutes les lignes, et la pré-passe annonçait
+        // sereinement « 0 ligne n'emprunte le chemin ».
+        // C'est encore une absence lue comme une valeur — et le contrôle qui devait la voir
+        // rendait un nombre parfaitement plausible.
+        await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
+        // ⚠️ ET ON VÉRIFIE QUE LA LECTURE MARCHE AVANT DE COMPTER. Sans ce garde-fou, un
+        // « 0 » resterait indiscernable entre « aucune ligne ne convient » et « je n'ai
+        // rien pu lire ». Le premier est une mesure, le second une panne.
+        const dispo = await IMG.ReferenceImage.countDocuments({ etat: 'indexee', pts: IMG.N_POINTS });
+        if (dispo === 0) throw new Error(`aucun vecteur lisible en base "${BASE}" — la pré-passe ne mesurerait rien`);
+        console.log(`   pré-passe : ${dispo} vecteurs lisibles dans "${BASE}"`);
+        for (const d of abouties) {
+            if (!Array.isArray(d.vivierIds) || d.vivierIds.length < 2) continue;
+            const avis = await IMG.departager({
+                imageUrl: d.imageUrl, langue: d.langue, total: d.total,
+                classement: d.vivierIds.map(id => ({ idProduct: id, score: 0 }))
+            });
+            if (avis.departage) { d.__imageDepartage = true; imageDispo++; }
+        }
+        console.log(`   pré-passe départage par l'image : ${imageDispo} ligne(s) empruntent le chemin aujourd'hui`);
+    } catch (e) {
+        // Une pré-passe impossible ne doit pas faire croire à une cellule vide « parce
+        // qu'aucune ligne ne convient ». La distinction est écrite dans `raisonVide`.
+        console.log(`   ⚠️ pré-passe départage par l'image IMPOSSIBLE : ${e.message}`);
+        raisonVide.set('départage par l\'image', `PRÉ-PASSE IMPOSSIBLE : ${e.message}`);
+    }
+
     console.log('── phase 1 : les charges ──');
     const charges = [];
     const invalidees = [];
     // Pourquoi chaque cellule est restée vide, s'il y en a. TROIS raisons distinctes, et
     // elles ne se lisent pas de la même façon — voir `cellulesManquantes` plus bas.
-    const raisonVide = new Map();
+    // (déclarée plus haut : la pré-passe du départage par l'image doit pouvoir y écrire)
 
     // ════════════════════════════════════════════════════════════════════════
     // ÉTAPE 1 — LES RETRAITS, AVANT TOUTE SÉLECTION
@@ -380,11 +448,39 @@ const CELLULES = [
         console.error(`❌ ARRÊT : écriture visée sur "${bac.db.databaseName}" au lieu de ${SCRATCH}.`);
         process.exit(1);
     }
+    // ⚠️ LES VECTEURS D'IMAGE FONT PARTIE DE LA TRANCHE — ajoutés le 2026-08-30.
+    // Sans eux, la garde du départage par l'image s'abstient TOUJOURS dans le bac, et la
+    // cellule sortirait rouge sans que rien ne soit cassé — ou, pire, ferait conclure que
+    // le départage ne marche pas.
+    // 🔑 ON COPIE LES VECTEURS DU VIVIER ENTIER DE CHAQUE CHARGE, pas seulement ceux des
+    // produits de la tranche : la garde exige un vecteur pour TOUS les candidats du groupe,
+    // et il suffit d'un manquant pour qu'elle se taise. Copier « à peu près » le vivier
+    // produirait une abstention que personne ne saurait expliquer.
+    const idsVivier = [...new Set(charges.flatMap(c => c.source?.vivierIds ?? []))].filter(v => v != null);
+    const vecteurs = await prod.collection('references_image')
+        .find({ idProduct: { $in: [...new Set([...ids, ...idsVivier])] } }).toArray();
+
+    // ⚠️ ET `references_image` ENTRE DANS LA BOUCLE DE VIDAGE, dans le même geste.
+    // La règle est en tête de ce fichier et elle ne souffre pas d'exception : tout outil
+    // qui fait écrire une collection la vide en sortant. Une collection copiée mais jamais
+    // vidée rendrait le verrou non reproductible — son résultat dépendrait du nombre de
+    // fois qu'on l'a lancé, ce qui ne vaut pas mieux que pas de verrou du tout.
     for (const [nom, docs] of [['catalogue_produits', produits], ['numeros_cartes', numeros],
-    ['guide_prix', prix], ['codes_set', codes]]) {
+    ['guide_prix', prix], ['codes_set', codes], ['references_image', vecteurs]]) {
         await bac.collection(nom).deleteMany({});
         if (docs.length) await bac.collection(nom).insertMany(docs);
         console.log(`   ${nom.padEnd(20)} ${docs.length}`);
+    }
+    // La garde est-elle franchissable dans le bac ? Si un candidat manque, la cellule
+    // s'abstiendra — et il vaut mieux le savoir ici que dans un verrou rouge sans cause.
+    for (const c of charges) {
+        if (!Array.isArray(c.source?.vivierIds) || !c.source.vivierIds.length) continue;
+        const n = await bac.collection('references_image')
+            .countDocuments({ idProduct: { $in: c.source.vivierIds }, etat: 'indexee' });
+        if (n < c.source.vivierIds.length) {
+            console.log(`   ⚠️ ${c.lecture.name} : ${n}/${c.source.vivierIds.length} vecteurs dans le bac` +
+                ` -> la garde s'abstiendra sur cette charge.`);
+        }
     }
     // Chaque gagnant est-il bien dans la tranche ? Si non, la charge ne pourra pas aboutir
     // et il vaut mieux le savoir ici que dans un verrou rouge sans explication.

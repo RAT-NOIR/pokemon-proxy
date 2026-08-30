@@ -114,7 +114,19 @@ function mesurer(listeSuites, bavard) {
             // annonçait 688 fonctions et 82 % non couvertes, chiffres dénués de sens.
             const u = String(script.url);
             if (u.includes('node_modules')) continue;
-            if (!u.endsWith('/index.js') && !u.endsWith('\\index.js')) continue;
+            // ⚠️ ÉLARGI LE 2026-08-30 À `departage-image.js`, ET LA RAISON N'EST PAS
+            // COSMÉTIQUE. Ce cliquet mesurait UNIQUEMENT index.js. Or le départage par
+            // l'image est une DÉCISION DE PRODUCTION — elle choisit le produit tarifé — et
+            // elle vit dans son propre fichier. `departager` et `chargerVecteurs` ne
+            // pouvaient donc PAS apparaître au cliquet, quoi qu'exerce le verrou : leur
+            // absence ne prouvait rien, ni dans un sens ni dans l'autre.
+            // C'est exactement le motif de la journée : un contrôle qui ne peut pas
+            // échouer sur ce qu'il prétend surveiller.
+            // 🔑 RÈGLE : tout fichier qui porte une décision entre ici. Le jour où une
+            // décision part dans un troisième fichier, cette liste doit grandir avec elle,
+            // sinon le cliquet mesure un périmètre qui n'est plus celui du produit.
+            const DECIDEURS = ['index.js', 'departage-image.js'];
+            if (!DECIDEURS.some(f => u.endsWith('/' + f) || u.endsWith('\\' + f))) continue;
             for (const fn of script.functions || []) {
                 const nom = fn.functionName;
                 if (!nom || !fn.ranges?.length) continue;
