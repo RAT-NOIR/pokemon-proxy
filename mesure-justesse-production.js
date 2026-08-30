@@ -259,6 +259,59 @@ async function redresser(buf) {
             `${String(abst).padStart(9)}   ${ok.filter(l => l.brut?.rang === 1).length}/${ok.length}` +
             `${perduesUtiles ? `   🔴 ${perduesUtiles} D+ perdu(s) par la garde` : ''}`);
     }
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 LA LISTE DE COLLECTE QUI VAUT — les sets classés par D+ DÉBLOQUÉS
+    // ════════════════════════════════════════════════════════════════════════
+    // Ce n'est PAS la liste des sets par produits manquants. Un set de 140 trous qui
+    // n'apparaît dans aucun vivier de cellule ne débloque rien ; un set d'UN trou qui
+    // bloque quatre viviers vaut quatre D+.
+    //
+    // ⚠️ DEUX COLONNES, ET LA CONFUSION COÛTERAIT DU TRAVAIL POUR RIEN :
+    //   « participe » — le set bloque cette ligne, MAIS d'autres sets la bloquent aussi.
+    //                   La collecter seul ne débloque RIEN.
+    //   « débloque »  — le set est le SEUL à bloquer cette ligne. Le collecter la libère.
+    // On trie sur « débloque ». Additionner les « participe » ferait promettre des gains
+    // qui ne viendront qu'une fois TOUS les sets concernés terminés.
+    const perdues = lignes.filter(l => l.couverture < 1 && l.brut?.rang === 1 && l.s && l.s.rangScoring !== 1);
+    const parSet = new Map();
+    for (const l of perdues) {
+        const ids = (l.vivier || []).filter(x => x != null);
+        const vect = await I.chargerVecteurs(ids);
+        const sans = ids.filter(i => !vect.has(i));
+        const prods = await mongoose.connection.collection('catalogue_produits')
+            .find({ idProduct: { $in: sans } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
+        const exps = [...new Set(prods.map(p => Number(p.idExpansion)))];
+        const codes = new Set();
+        for (const e of exps) {
+            const c = await mongoose.connection.collection('codes_set').findOne({ idExpansion: e });
+            codes.add(c?.codeSet ?? `exp${e}`);
+        }
+        for (const c of codes) {
+            if (!parSet.has(c)) parSet.set(c, { participe: 0, debloque: 0, cartes: new Set() });
+            parSet.get(c).participe++;
+            if (codes.size === 1) parSet.get(c).debloque++;
+        }
+        for (const p of prods) {
+            const c = [...codes][0];
+            if (codes.size === 1) parSet.get(c).cartes.add(p.idProduct);
+        }
+    }
+    console.log('\n' + '═'.repeat(104));
+    console.log('LA LISTE DE COLLECTE QUI VAUT — sets classés par D+ DÉBLOQUÉS, pas par produits manquants');
+    console.log('═'.repeat(104));
+    if (!parSet.size) console.log('   (aucune ligne perdue par la garde — rien à débloquer)');
+    else {
+        console.log(`   ${'codeSet'.padEnd(12)} ${'débloque'.padStart(8)} ${'participe'.padStart(9)}   cartes à collecter pour ça`);
+        for (const [c, v] of [...parSet.entries()].sort((a, b) => b[1].debloque - a[1].debloque || b[1].participe - a[1].participe)) {
+            console.log(`   ${c.padEnd(12)} ${String(v.debloque).padStart(8)} ${String(v.participe).padStart(9)}   ` +
+                `${v.cartes.size ? [...v.cartes].slice(0, 8).join(', ') : '—'}`);
+        }
+        const seuls = [...parSet.values()].reduce((s, v) => s + v.debloque, 0);
+        console.log(`\n   🔑 ${seuls} D+ débloqués en collectant les sets ci-dessus SÉPARÉMENT.`);
+        console.log(`      Les ${perdues.length - seuls} autres lignes sont bloquées par PLUSIEURS sets à la fois :`);
+        console.log(`      elles ne se libèrent qu'une fois tous leurs bloqueurs terminés.`);
+    }
+
     const manquants = lignes.map(l => Math.round((1 - l.couverture) * (l.vivier?.length ?? 0)));
     console.log(`\n   candidats sans vecteur, par vivier : médiane ${med(manquants.filter(x => x > 0))} ` +
         `· maximum ${Math.max(...manquants)}`);

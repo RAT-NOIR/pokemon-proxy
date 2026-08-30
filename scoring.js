@@ -1060,6 +1060,42 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      frontière. Décrire les deux côtés dans le même processus ne teste pas la
 //      sérialisation, quel que soit le soin mis au reste.
 //
+//   13. LA MESURE ÉTAIT JUSTE, LA POPULATION ÉTAIT FAUSSE — 2026-08-30. Trois fois le
+//      même motif dans la même journée, ce qui lui vaut une entrée à part : dans les trois
+//      cas le calcul était exact, l'instrument fonctionnait, et le chiffre rendu ne
+//      répondait pas à la question posée parce qu'il portait sur le mauvais ENSEMBLE.
+//
+//      a) LE GRAIN DU GROUPE. Le coût de la garde du départage par l'image — « combien de
+//         groupes ont TOUS leurs candidats indexés » — a été estimé à 7,6–8,4 %. Mesuré
+//         sur le trafic réel : 45 % dans la cellule. L'estimation portait sur des groupes
+//         au grain `idMetacard` ou `(nom, codeSet)` ; le groupe RÉEL, quand aucun total
+//         n'est lu, est LE VIVIER ENTIER. Plus le groupe est grand, plus la probabilité
+//         que tous ses membres soient couverts s'effondre — et le facteur est 5.
+//         ⚠️ AGGRAVANT : « le grain du groupe décide du prix de la règle » était écrit,
+//         de ma main, dans les notes du chantier, AVANT l'estimation. Connaître le piège
+//         n'a pas suffi à l'éviter, parce que rien dans l'outil ne forçait à nommer la
+//         population.
+//
+//      b) LE QUOTA PAR CLUSTER. Toutes les marges de stockage du dossier image ont été
+//         calculées sur `dbStats` de la base « test ». Le plafond de 512 Mo d'Atlas M0 est
+//         par CLUSTER. Un `sample_mflix` de 148,4 Mo, chargé à la création et jamais
+//         regardé, occupait plus que la marge annoncée. L'écriture a saturé à 83 %.
+//         Le nom même de la commande le disait : `dbStats`, pas `clusterStats`.
+//
+//      c) LE DÉNOMINATEUR DANS LA MAUVAISE TABLE. Les couvertures de collecte ont été
+//         comptées avec `numeros_cartes.codeSet` — la table APPRISE, qui ignore 1 781
+//         produits du catalogue. Des sets incomplets sortaient à « 100 % ».
+//         `numeros_cartes.codeSet` NOMME un set, il ne le COMPTE pas.
+//
+//      LE MOTIF COMMUN : un instrument juste, appliqué à une population qu'on n'a pas
+//      nommée. Aucune de ces trois erreurs n'aurait été attrapée en relisant le calcul,
+//      parce que le calcul était bon.
+//      🔑 LA PARADE, la seule qui marche : TOUT CHIFFRE RENDU DIT SUR QUOI IL PORTE, dans
+//      la même phrase — « 45 % des groupes de cellule, groupe = vivier entier », « 512 Mo
+//      par cluster, toutes bases confondues », « dénominateur = catalogue_produits par
+//      idExpansion ». Un pourcentage sans dénominateur explicite est une affirmation, pas
+//      une mesure. Les outils de ce dépôt doivent l'imprimer, pas le sous-entendre.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

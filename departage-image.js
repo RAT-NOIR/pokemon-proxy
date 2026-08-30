@@ -16,6 +16,28 @@
 // l'occidental le scoring fait 8/8 et l'image 4/8 : brancher partout ne serait pas
 // « gagner un peu moins », ce serait CASSER ce qui marche.
 //
+// ────────────────────────────────────────────────────────────────────────────
+// LE REDRESSEMENT — écarté le 2026-08-30, ET À RESSORTIR DU TIROIR UN JOUR
+// ────────────────────────────────────────────────────────────────────────────
+// Le labo décrivait une photo RECADRÉE sur la carte ; la production décrit la photo Vinted
+// brute. L'écart a été mesuré sur les 66 vérités, même photos, une seule chose changée :
+//     LA CELLULE   rang 1 brut 42 · redressé 42 · gagnées 0 · perdues 0
+//     inliers médians de la vraie carte ...... 26 -> 33
+//     inliers médians du meilleur faux ....... 7 -> 8
+//     🔑 LA MARGE ............................ 3,7× -> 4,1×
+// ZÉRO RANG NE CHANGE. Le redressement achète de la MARGE, pas de la justesse — pour
+// 93 ms par scan (détection 26 ms + recadrage 31 ms + seconde description 36 ms, mesurés
+// sur 40 vraies photos) et un mode d'échec de plus, alors que la production n'a pas le
+// droit d'écarter une carte quand la détection rate. Il n'entre donc pas.
+//
+// 🔑 MAIS LA MARGE EST LE SIGNAL À SURVEILLER, ET C'EST ÉCRIT ICI POUR LE JOUR OÙ ELLE
+// BAISSERA. Ces 66 photos viennent d'annonces Vinted : cadrage serré, carte bien éclairée,
+// vendeurs habitués. Le jour où les photos seront moins favorables — une autre plateforme,
+// d'autres vendeurs, une carte photographiée de loin sur une table —, la marge de 3,7×
+// tombera avant le rang. LE REDRESSEMENT EST LA PREMIÈRE CHOSE À RESSORTIR, et il est déjà
+// mesuré : +27 % d'inliers sur la vraie carte, +14 % sur le meilleur faux.
+// La copie de travail vit dans mesure-justesse-production.js, marquée comme copie.
+//
 // ⚠️ ET LA CAUSE N'EST PAS LA QUALITÉ DES RÉFÉRENCES — c'est mesuré, pas supposé. La même
 // chute apparaît avec des scans Cardmarket et avec des rendus TCGdex. Les cartes modernes
 // et occidentales, brillantes et lisses, ne donnent presque pas de points d'intérêt
