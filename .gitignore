@@ -1,8 +1,13 @@
 .env
 node_modules/
 chrome-profil/
-products_singles_6.json
-price_guide_6.json
+# ⚠️ LES EXPORTS CARDMARKET, DATÉS OU NON — 27 Mo pour la paire du 30/08.
+# Les deux lignes nommées ne couvraient que les noms de juillet. Le testeur garde
+# désormais l'ancien fichier à côté du neuf pour pouvoir lancer `mesure-diff-catalogue.js`,
+# donc les noms portent une date et échappaient à l'ignore. Git les aurait gardés à vie et
+# Render les aurait déployés.
+products_singles*.json
+price_guide*.json
 *.json.backup
 backup-*/
 verrou/couverture/
