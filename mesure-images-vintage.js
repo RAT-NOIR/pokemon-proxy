@@ -393,6 +393,34 @@
 // délivré ZÉRO.
 //
 // ============================================================================
+// 🔴 LA MESURE DES 14 SCANS EST PÉRIMÉE POUR LA VOIE DU REFUS — 2026-09-01
+// ============================================================================
+// LE 2026-09-01, sur les 14 scans écoulés depuis le déploiement du départage par l'image,
+// j'ai rendu ceci : « departage 1 · abstention-garde 1 · hors-condition 9 · 3 sans champ ».
+// Conclusion tirée : l'image ne s'est déclenchée qu'une fois.
+//
+// 🔴 CETTE MESURE NE MESURAIT PAS L'IMAGE SUR LA VOIE DU REFUS. `departagerParImage` était
+// branché ~200 lignes APRÈS le `return` du refus par égalité parfaite : sur cette voie, il
+// n'était pas « mal journalisé », IL N'ÉTAIT JAMAIS APPELÉ. Les trois lignes sans champ
+// sont les trois refus, et ce sont des `egalite-parfaite` — c'est-à-dire EXACTEMENT la
+// population que l'image vise.
+// Une mesure qui rend « une seule fois » sur une voie où le mécanisme n'existe pas ne dit
+// rien de ce mécanisme. Elle décrit l'absence du branchement, pas le comportement.
+//
+// LE COMPTEUR REPART DE ZÉRO POUR CETTE CLASSE. Corrigé le 2026-09-01 : le départage est
+// consulté avant `enregistrerEchec`, ses onze champs partent au journal, et
+// ⚠️ `avis.gagnant` N'EST PAS LU — on mesure, on ne décide pas. Le refus reste un refus.
+// Relâcher cette ligne demandera des chiffres, et ce sont ceux qu'on commence à peine à
+// produire.
+//
+// ⚠️ ET LE DÉCOUPAGE DE 6613762 A ÉTÉ MANQUÉ. Ce commit porte trois changements — les
+// champs image sur les refus, la prose qui ne parle plus d'argent, et le point de
+// conversion des montants — alors que le testeur avait demandé un commit séparé pour le
+// dernier. Le message a été amendé pour décrire les trois ; le découpage, lui, reste
+// mauvais. Un message qui ment sur son contenu est plus dangereux qu'un commit gros et
+// honnête, et c'est le reproche que j'avais fait au testeur deux tours plus tôt.
+//
+// ============================================================================
 // 🔴 LA MOITIÉ DU PRODUIT N'A JAMAIS ÉTÉ MESURÉE — 2026-08-30
 // ============================================================================
 // Tout ce que ce chantier a mesuré depuis deux semaines porte sur l'IDENTIFICATION :

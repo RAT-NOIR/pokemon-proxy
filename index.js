@@ -4573,6 +4573,26 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // JUSTESSE MESURÉE, sur 65 scans réels avec vérités saisies à l'aveugle (2026-08-08).
         // Le chiffre est à côté de chaque entrée pour que la prochaine promotion se fasse
         // sur une mesure et non sur une impression.
+        // ════════════════════════════════════════════════════════════════════
+        // 🔑 LA RÈGLE DE PROMOTION — ADOPTÉE LE 2026-09-01, ÉCRITE AVANT LE CHIFFRE
+        // ════════════════════════════════════════════════════════════════════
+        // Une entrée passe de `faible` à `forte` SI ET SEULEMENT SI, toutes conditions réunies :
+        //   1. ≥ 12 LIGNES de cette classe EN PRODUCTION — pas au banc, pas au labo ;
+        //   2. 12/12 JUSTES sur des vérités saisies À L'AVEUGLE ;
+        //   3. son intervalle de Wilson à 95 % DISJOINT de celui de la classe faible la
+        //      mieux mesurée — aujourd'hui `perimetre-vintage-suggestion`, 10/16, soit
+        //      38 % à 81 %. Deux intervalles qui se chevauchent ne distinguent rien ;
+        //   4. ZÉRO CASSE AU HOLDOUT.
+        // C'est exactement le parcours qu'a fait `symbole-departage`, et rien d'autre ne
+        // l'a fait.
+        //
+        // ⚠️ ELLE S'APPLIQUE CONTRE LE TRAVAIL DE CELUI QUI L'ÉCRIT. `image-departage` est
+        // mesuré 42/44 sur la cellule avec D+ 32 / D− 0 — le meilleur résultat du projet —
+        // et il reste FAIBLE : il a UNE ligne en production. Wilson sur 1/1 va de 21 % à
+        // 100 %, il ne peut être disjoint de rien. Une mesure de laboratoire, si bonne
+        // soit-elle, ne franchit pas la condition 1.
+        // ⚠️ ET LA RÈGLE DE RÉTROGRADATION, PLUS BAS, RESTE PRIORITAIRE : une entrée forte
+        // redescend à la première mesure où elle rate, sans discussion.
         const NIVEAU_RESERVE = {
             'symbole-departage': 'forte',   // 12/12 justes — le symbole du set a désigné un seul ex aequo
             // ⚠️ FAIBLE, ET C'EST UN ARBITRAGE, PAS UN OUBLI. Le départage par l'image est
