@@ -1170,6 +1170,32 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      en copiant ? » mais « qu'est-ce que ce script laisse derrière lui quand il se
 //      termine ? ». La première question a une réponse rassurante et fausse.
 //
+//   17. UN DÉFAUT QUI SE CHERCHE PAR SON VOCABULAIRE NE SE TROUVE JAMAIS EN ENTIER
+//      — 2026-09-01. Ce n'est pas un instrument de MESURE qui s'est trompé, c'est
+//      l'instrument de RECENSEMENT, et le mécanisme est le même : il a rendu un inventaire
+//      incomplet avec l'assurance d'un inventaire complet.
+//      LE DÉFAUT RECENSÉ : une phrase de refus qui AFFIRME le remboursement, alors que
+//      `rembourserScan` est seulement TENTÉ et peut échouer (plafond du jour). Le serveur
+//      dit alors « scan remboursé » dans le même cadre où l'extension dit « débité et n'a
+//      pas pu être rendu ».
+//      LA SÉRIE : quatre exemplaires trouvés en quatre passages séparés, chacun corrigé
+//      seul, chacun cru le dernier. Le testeur a coupé net — « quatre exemplaires du même
+//      défaut trouvés en quatre passages, c'est le signe qu'il en reste » — et a exigé
+//      l'inventaire AVANT le correctif suivant.
+//      🔑 CE QUE L'INVENTAIRE A MONTRÉ, et c'est toute l'entrée : le cinquième exemplaire
+//      ne contenait AUCUNE occurrence de « rembours ». Il disait « votre crédit est rendu ».
+//      Cinq exemplaires, cinq formulations, aucun mot commun. Tout grep sur le vocabulaire
+//      du défaut — et c'est le premier réflexe — s'arrêtait à quatre en paraissant exhaustif.
+//      LA PARADE, OPÉRATOIRE : recenser par le CONTRAT, pas par les mots. Ici le contrat est
+//      `champsDeRefus(motif, rendu)` — l'appel obligatoire de toute sortie de refus. Grep sur
+//      lui : 7 sites, énumération close, et le statut de chacun se lit d'un coup. Une famille
+//      définie par un APPEL a des frontières ; une famille définie par une TOURNURE n'en a
+//      pas, parce que la prochaine sera écrite avec d'autres mots.
+//      ⚠️ COROLLAIRE, vu dans le même échange : un numéro de ligne cité d'un dépôt à l'autre
+//      est périmé au commit suivant. L'agent de l'extension signalait « index.js:3990-3991 » ;
+//      quatorze lignes de helper insérées plus haut avaient décalé le fichier, et le site
+//      désigné était celui qu'on venait de corriger. Le contrat, lui, ne se décale pas.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

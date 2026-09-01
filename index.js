@@ -3073,6 +3073,30 @@ const REFUS_D_ABSENCE = new Set(['carte-introuvable', 'aucun-candidat']);
 // ⚠️ ET C'EST POUR ÇA QUE LA REQUALIFICATION EST ICI ET NULLE PART AILLEURS. La clause
 // aurait pu être écrite à chacune des sorties d'absence ; elle aurait alors été oubliée
 // à la sixième, comme les trois champs l'auraient été sans cette fonction.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// 📌 CE QUI DEVRAIT ÊTRE ICI ET N'Y EST PAS — REPORTÉ LE 2026-09-01, PAS OUBLIÉ
+// ════════════════════════════════════════════════════════════════════════════
+// LA BONNE FORME EST CONNUE : cette fonction devrait construire AUSSI LA PHRASE, pas
+// seulement les trois champs machine. Le raisonnement est exactement celui du paragraphe
+// ci-dessus — « écrite à chacune des sorties, elle sera oubliée à la sixième » — et il
+// s'est vérifié : la clause d'argent a été écrite cinq fois à la main, et il a fallu cinq
+// passages pour la corriger cinq fois. La règle tiendrait en une ligne ici :
+//     la clause d'argent n'est ajoutée QUE si `raisonNonRembourse === 'plafond-jour'` ;
+//     toute autre valeur, Y COMPRIS INCONNUE, ⇒ silence.
+//
+// POURQUOI ON NE LE FAIT PAS AUJOURD'HUI, et c'est le testeur qui a tranché sur ce
+// chiffre-là : le refactor touche LES 7 SITES d'appel, dont CINQ SONT DÉJÀ CORRECTS et
+// muets sur l'argent. On paierait la réécriture de cinq phrases justes pour en réparer une.
+// Le risque n'est pas le mécanisme, il est dans le passage.
+//
+// 🔑 QUAND LE FAIRE : le jour où une AUTRE raison oblige déjà à toucher ces sites. Le
+// refactor devient alors gratuit — on relit les phrases de toute façon. Le faire seul,
+// aujourd'hui, c'est ouvrir sept sites pour un.
+//
+// Recensement des 7 sites : grep sur `champsDeRefus(` — PAS sur le vocabulaire du défaut.
+// Le cinquième exemplaire disait « votre crédit est rendu » et aucun grep sur « rembours »
+// ne l'a jamais vu. Voir l'erreur d'instrument #17 dans scoring.js.
 function champsDeRefus(motifRefus, rembourse) {
     // CLAUSE 3 — un refus d'absence prononcé alors qu'une source est tombée n'est pas un
     // refus délibéré, c'est un échec technique. Le MOTIF ne bouge pas (il dit par où on
@@ -3499,8 +3523,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // monde ; on ne la prononce que si on a effectivement cherché et rien
                     // trouvé. Sur panne, on dit ce qu'on sait — le service ne répond pas —
                     // et on invite à réessayer, ce qui est la bonne action de l'utilisateur.
+                    //
+                    // ⚠️ CETTE PHRASE NE PARLE PLUS D'ARGENT — 2026-09-01.
+                    // Elle disait « votre crédit est rendu », affirmation d'office alors que
+                    // `rembourserScan` est TENTÉ ligne 3474 et peut échouer (plafond du jour).
+                    // Le résultat vrai est dans `rendu` et part via `champsDeRefus`.
+                    // 🔑 MÊME RÈGLE QU'À `egalite-parfaite` ET `nom-contredit-*` : UNE SEULE
+                    // PHRASE PARLE D'ARGENT, celle de l'extension, qui lit `rembourse` et
+                    // `raisonNonRembourse`. Le serveur dit POURQUOI il refuse, pas ce qu'il
+                    // advient du crédit.
+                    // 🔴 CINQUIÈME EXEMPLAIRE DU MÊME DÉFAUT, ET LE SEUL QU'UN grep
+                    // « rembours » NE TROUVE PAS : il dit « crédit rendu ». Voir l'erreur
+                    // d'instrument #17 dans scoring.js — un défaut qui se cherche par son
+                    // vocabulaire ne se trouve jamais en entier.
                     error: tcgdexEnPanne
-                        ? `Le service de référence (TCGdex) n'a pas répondu, même après un nouvel essai. La carte n'a pas pu être cherchée — votre crédit est rendu, réessayez dans un instant.`
+                        ? `Le service de référence (TCGdex) n'a pas répondu, même après un nouvel essai. La carte n'a pas pu être cherchée — réessayez dans un instant.`
                         : cardInfo.numeroIllisible
                             ? `Numéro de collection illisible sur la photo — impossible d'identifier "${cardInfo.name}" de façon fiable`
                             : `Carte "${cardInfo.name}" #${cardInfo.number} introuvable, ni sur TCGdex ni dans le catalogue local`,
@@ -4631,6 +4668,30 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // de mesure, c'est une classe dont la faiblesse est constitutive.
             'nom-seul-vintage': 'faible'
         };
+        // ════════════════════════════════════════════════════════════════════
+        // 📌 NOTE — NON DEMANDÉE AUJOURD'HUI, ÉCRITE POUR NE PAS ÊTRE REDÉCOUVERTE
+        // ════════════════════════════════════════════════════════════════════
+        // EXPOSER LA LISTE DES `raisonReserve` COMME `Object.keys(NIVEAU_RESERVE)` —
+        // PRODUITE, ET JAMAIS RECOPIÉE.
+        //
+        // LE CONSTAT. L'extension porte une table de 9 entrées ; celle-ci en a 16. Sept
+        // causes rendent donc une phrase générique côté utilisateur, dont `image-departage`,
+        // qui est la mieux mesurée du projet.
+        //
+        // ⚠️ UN CONTRÔLE QUI COMPARERAIT LES DEUX TABLES A ÉTÉ ENVISAGÉ PUIS REFUSÉ, et la
+        // raison du refus est plus utile que le contrôle : la famille `motif-${raison}` est
+        // construite DYNAMIQUEMENT. Comparer deux ensembles finis repose donc sur une
+        // prémisse fausse — l'ensemble des raisons émises n'est pas fini. Et l'exempter par
+        // un `startsWith` rouvrirait exactement le trou qu'on venait de fermer.
+        //
+        // ⚠️ ET UNE LISTE TENUE À LA MAIN SERAIT UNE TROISIÈME SOURCE DE VÉRITÉ, créée pour
+        // surveiller l'écart entre les deux premières. D'où « produite, jamais recopiée » :
+        // la seule forme qui ne peut pas diverger est celle qui n'existe pas séparément.
+        //
+        // 🔑 LE TROU QU'AUCUNE DE CES FORMES N'ATTRAPE, et il faut l'écrire aussi : UNE CLÉ
+        // STABLE DONT LE SENS DÉRIVE. On réordonne la cascade — c'est arrivé DEUX FOIS en
+        // août — la clé ne bouge pas, et la phrase affichée par l'extension devient fausse.
+        // Aucune comparaison d'ensembles ne peut voir ça : les deux ensembles restent égaux.
         // Défaut FAIBLE pour toute raison non listée — y compris `motif-<raison>`, qui est
         // construite dynamiquement. Ici le défaut est sûr : c'est le serveur qui décide, et
         // une raison qu'il ne s'est pas encore donné la peine de mesurer n'a rien prouvé.
