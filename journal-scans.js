@@ -924,10 +924,20 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // EST un refus pour cause d'égalité, et jusqu'ici il ne disait pas ENTRE QUOI.
     // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
     // groupe était couvert par un index, ni de mesurer la clôture après coup.
-    exAequoIds, vivierIds, vivierTaille, messageErreur } = {}) {
+    exAequoIds, vivierIds, vivierTaille, messageErreur,
+    // ⚠️ LES ONZE CHAMPS DE L'IMAGE, SUR LES REFUS AUSSI — ajoutés le 2026-09-01.
+    // Ils manquaient, et c'était le trou le plus coûteux du lot : les refus
+    // `egalite-parfaite` sont EXACTEMENT la population que le départage par l'image vise.
+    // Sans ces champs, aucune mesure future ne pouvait dire si l'image aurait sauvé un
+    // refus — l'instrument était aveugle sur sa propre cible.
+    // Ils arrivent groupés, tels que `departager()` les rend, pour qu'il n'existe qu'un
+    // seul point de construction : deux assemblages « qui se ressemblent » divergeraient
+    // au premier champ ajouté.
+    champsImage } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
         route, userId, motifEchec, imageUrl, vintedUrl,
+        ...(champsImage || {}),
         rembourse: rembourse != null ? Boolean(rembourse) : null,
         // ⚠️ LES REFUS ÉTAIENT BEAUCOUP PLUS PAUVRES QUE LES SUCCÈS, alors que ce sont eux
         // qu'on cherche à comprendre. Mesuré le 2026-08-15 sur le refus « Dark Kadabra » :

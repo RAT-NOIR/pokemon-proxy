@@ -179,6 +179,20 @@ function verifierJeton(req, res, next) {
 // Durée pendant laquelle on fait confiance à un prix en cache avant de re-scraper
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24h
 
+// ════════════════════════════════════════════════════════════════════════════
+// LE POINT DE CONVERSION UNIQUE DES MONTANTS — 2026-09-01
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ `toFixed(2)` REND UN SÉPARATEUR ANGLAIS. Écrit dans une phrase française, il produit
+// « 1.62 € » — et c'est ce que le testeur lit dans son historique, parce que ces phrases
+// partent telles quelles à l'extension dans le champ `error`.
+// UN SEUL POINT DE CONVERSION, pas un `replace` à chaque site : un formatage recopié sur
+// six sites est un formatage oublié sur l'un des six, et celui-là ne se verra que dans
+// l'interface d'un utilisateur.
+// `toLocaleString('fr-FR')` fait la virgule ET l'espace insécable des milliers.
+const euros = n => Number.isFinite(n)
+    ? `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+    : '—';
+
 // Seuils pour le verdict "bonne affaire" (ratio prixVinted / prixCardmarket)
 const SEUIL_BONNE_AFFAIRE = 0.80; // 20% moins cher ou plus -> bonne affaire
 const SEUIL_PRIX_CORRECT  = 1.10; // jusqu'à 10% plus cher -> prix correct
@@ -3988,7 +4002,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                         // 'nom-contredit-egalite' ou 'nom-contredit-sans-repli' — les deux
                         // sont dans la table.
                         ...champsDeRefus(motifRefus, rendu),
-                        error: `Le produit retenu ne porte pas le nom lu sur la carte ("${cardInfo.name}"), et aucun candidat ne le départage — scan remboursé plutôt qu'un prix faux.`,
+                        // ⚠️ MÊME DÉFAUT QUE `egalite-parfaite`, TROUVÉ EN LE CORRIGEANT :
+                        // cette phrase affirmait elle aussi « scan remboursé » d'office.
+                        // Le testeur n'avait signalé que l'autre ; les corriger toutes les
+                        // deux évite de laisser vivre le même bug sous un autre motif.
+                        error: `Le produit retenu ne porte pas le nom lu sur la carte ("${cardInfo.name}"), et aucun candidat ne le départage — aucun prix ne peut être donné sans risquer d'être faux.`,
                         cardInfo
                     });
                 }
@@ -4085,10 +4103,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             if (avisSymbole.gagnant) {
                 // Départagé : on continue vers le verdict, avec réserve. Aucun refus.
             } else if (sansEnjeu) {
-                console.warn(`⚠️ [egalite-sans-enjeu] ${exAequo.length} candidats à ${classement[0].score} points, mais ${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} € : l'écart (${ecartPrix.toFixed(2)} €) ne change pas le verdict -> on affiche AVEC réserve.`);
+                console.warn(`⚠️ [egalite-sans-enjeu] ${exAequo.length} candidats à ${classement[0].score} points, mais ${euros(Math.min(...prix))} à ${euros(Math.max(...prix))} : l'écart (${euros(ecartPrix)}) ne change pas le verdict -> on affiche AVEC réserve.`);
                 egaliteSansEnjeu = true;
             } else {
-                const enjeu = ecartPrix != null ? `${Math.min(...prix).toFixed(2)} € à ${Math.max(...prix).toFixed(2)} €` : 'prix inconnus';
+                const enjeu = ecartPrix != null ? `${euros(Math.min(...prix))} à ${euros(Math.max(...prix))}` : 'prix inconnus';
                 console.warn(`🚫 [egalite-parfaite] ${exAequo.length} candidats à ${classement[0].score} points sur ${classement.length} (${enjeu}) : aucun critère ne les sépare et le choix décide du prix -> aucun verdict, scan remboursé.`);
                 const rendu = await rembourserScan(req, 'egalite-parfaite');
                 // ════════════════════════════════════════════════════════════
@@ -4121,11 +4139,32 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 const fourchette = (prix.length >= 2)
                     ? { min: Math.min(...prix), max: Math.max(...prix), n: exAequo.length }
                     : null;
+                // ════════════════════════════════════════════════════════════
+                // 🔑 CE QUE L'IMAGE AURAIT FAIT — MESURÉ, JAMAIS APPLIQUÉ ICI
+                // ════════════════════════════════════════════════════════════
+                // LE TROU QUE ÇA BOUCHE : le départage par l'image est branché ~200 lignes
+                // PLUS BAS, donc sur un refus il n'était jamais consulté. Les trois refus
+                // du 30-31 août sont tous des `egalite-parfaite` — la population que
+                // l'image vise précisément — et le journal n'en dit rien.
+                // ⚠️ ON MESURE, ON NE DÉCIDE PAS. `avis.gagnant` n'est PAS lu : le refus
+                // reste un refus, mot pour mot. Laisser l'image sauver un refus serait un
+                // changement de comportement, et il se déciderait sur des chiffres qu'on
+                // n'a justement pas encore — ceux que cette ligne va produire.
+                // ⚠️ ET ÇA COÛTE : un téléchargement de photo et un appariement sur un scan
+                // déjà perdu. C'est le prix de savoir, et il est assumé ici plutôt que
+                // découvert dans six semaines.
+                const avisImageRefus = await departagerParImage({
+                    imageUrl: photos[0], langue: cardInfo.language,
+                    total: cardInfo.total, classement
+                });
                 enregistrerEchec({
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
                     fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
                     reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                    // Les onze champs, tels que `departager()` les rend — même objet que
+                    // sur la voie du succès, même point de construction.
+                    champsImage: avisImageRefus.champs,
                     // Le refus par égalité est LE cas où ces champs manquaient le plus :
                     // il dit « je ne sais pas départager » sans dire entre quoi.
                     exAequoIds, vivierIds: produits.map(p => p.idProduct), vivierTaille: produits.length
@@ -4140,7 +4179,19 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // null quand moins de deux candidats ont un prix connu : on ne borne
                     // rien avec une seule borne.
                     fourchette,
-                    error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : scan remboursé plutôt qu'un prix tiré au sort.`,
+                    // ⚠️ CETTE PHRASE NE PARLE PLUS D'ARGENT — 2026-09-01.
+                    // Elle affirmait « scan remboursé » D'OFFICE, alors que le
+                    // remboursement est TENTÉ trois lignes plus haut et peut échouer
+                    // (plafond du jour). Le résultat vrai est dans `rendu`, et il part
+                    // dans la réponse via `champsDeRefus` — la prose, elle, ne le lisait
+                    // pas. Constaté dans le produit : sur un refus non remboursé, le
+                    // panneau affichait ensemble « scan remboursé » (cette phrase) et
+                    // « débité et n'a pas pu être rendu » (la ligne d'argent de
+                    // l'extension). Deux phrases contradictoires dans le même cadre.
+                    // 🔑 LA RÈGLE : UNE SEULE PHRASE PARLE D'ARGENT, et c'est celle de
+                    // l'extension, qui lit `rembourse` et `raisonNonRembourse`. Le serveur
+                    // dit POURQUOI il refuse ; il ne dit pas ce qu'il advient du crédit.
+                    error: `${exAequo.length} cartes correspondent aussi bien l'une que l'autre à ce qui a été lu, et leurs prix vont de ${enjeu}. Aucun critère ne les départage : aucun prix ne peut être donné sans le tirer au sort.`,
                     cardInfo
                 });
             }
