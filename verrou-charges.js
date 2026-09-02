@@ -87,6 +87,8 @@ const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 const SEAUX = require('./banc-seaux');
 const { empreintePrompt } = require('./verrou/empreinte');
 const { demarrer, appeler } = require('./verrou/serveur');
+// ⚠️ UNE SEULE DÉFINITION DE LA TRANCHE, partagée avec verrou-avant-push.js.
+const { copierTranche, viderTranche } = require('./verrou/tranche');
 
 const SCRATCH = 'test_scratch';
 const SORTIE = path.join(__dirname, 'verrou', 'charges.json');
@@ -420,57 +422,18 @@ const CELLULES = [
     // vrais codes. Élargie au GAGNANT de chaque charge et à toute son expansion — sans
     // ça, le produit que la production avait retenu peut manquer du vivier.
     console.log('\n── tranche de catalogue -> test_scratch ──');
-    const noms = [...new Set(charges.map(c => c.lecture.name).filter(Boolean))];
-    const gagnants = charges.map(c => c.source.idProduct).filter(v => v != null);
-    const numGagnants = await prod.collection('numeros_cartes')
-        .find({ idProduct: { $in: gagnants } }, { projection: { idExpansion: 1 } }).toArray();
-    const expansions = [...new Set(numGagnants.map(n => n.idExpansion).filter(v => v != null))];
-    const idsExpansion = (await prod.collection('numeros_cartes')
-        .find({ idExpansion: { $in: expansions } }, { projection: { idProduct: 1 } }).toArray())
-        .map(n => n.idProduct);
-
-    const produits = await prod.collection('catalogue_produits').find({
-        $or: [
-            ...noms.map(n => ({ name: new RegExp(echapper(n), 'i') })),
-            { idProduct: { $in: [...gagnants, ...idsExpansion] } }
-        ]
-    }).limit(6000).toArray();
-    const ids = produits.map(p => p.idProduct);
-    const numeros = await prod.collection('numeros_cartes').find({ idProduct: { $in: ids } }).toArray();
-    const prix = await prod.collection('guide_prix').find({ idProduct: { $in: ids } }).toArray();
-    // TOUS les codes de set : 747 lignes minuscules, et `lireTousLesCodesSet` les lit tous
-    // pour distinguer une contradiction d'un bruit d'OCR (quatrième principe). En donner
-    // une partie fausserait précisément cette distinction.
-    const codes = await prod.collection('codes_set').find({}).toArray();
-
     const bac = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: SCRATCH }).asPromise();
     if (bac.db.databaseName !== SCRATCH) {
         console.error(`❌ ARRÊT : écriture visée sur "${bac.db.databaseName}" au lieu de ${SCRATCH}.`);
         process.exit(1);
     }
-    // ⚠️ LES VECTEURS D'IMAGE FONT PARTIE DE LA TRANCHE — ajoutés le 2026-08-30.
-    // Sans eux, la garde du départage par l'image s'abstient TOUJOURS dans le bac, et la
-    // cellule sortirait rouge sans que rien ne soit cassé — ou, pire, ferait conclure que
-    // le départage ne marche pas.
-    // 🔑 ON COPIE LES VECTEURS DU VIVIER ENTIER DE CHAQUE CHARGE, pas seulement ceux des
-    // produits de la tranche : la garde exige un vecteur pour TOUS les candidats du groupe,
-    // et il suffit d'un manquant pour qu'elle se taise. Copier « à peu près » le vivier
-    // produirait une abstention que personne ne saurait expliquer.
-    const idsVivier = [...new Set(charges.flatMap(c => c.source?.vivierIds ?? []))].filter(v => v != null);
-    const vecteurs = await prod.collection('references_image')
-        .find({ idProduct: { $in: [...new Set([...ids, ...idsVivier])] } }).toArray();
-
-    // ⚠️ ET `references_image` ENTRE DANS LA BOUCLE DE VIDAGE, dans le même geste.
-    // La règle est en tête de ce fichier et elle ne souffre pas d'exception : tout outil
-    // qui fait écrire une collection la vide en sortant. Une collection copiée mais jamais
-    // vidée rendrait le verrou non reproductible — son résultat dépendrait du nombre de
-    // fois qu'on l'a lancé, ce qui ne vaut pas mieux que pas de verrou du tout.
-    for (const [nom, docs] of [['catalogue_produits', produits], ['numeros_cartes', numeros],
-    ['guide_prix', prix], ['codes_set', codes], ['references_image', vecteurs]]) {
-        await bac.collection(nom).deleteMany({});
-        if (docs.length) await bac.collection(nom).insertMany(docs);
-        console.log(`   ${nom.padEnd(20)} ${docs.length}`);
-    }
+    // ⚠️ LA COPIE VIT DANS verrou/tranche.js, PARTAGÉE AVEC verrou-avant-push.js.
+    // Elle était ici, et lui la consommait sans la construire : ce fichier la vidant en
+    // sortant (règle du dépôt, correctement appliquée), il détruisait ce que l'étape
+    // suivante attendait. Le verrou n'a pas pu passer au vert pendant trois jours pour
+    // cette raison. Voir l'en-tête de verrou/tranche.js — l'incident y est écrit en entier.
+    const comptes = await copierTranche(prod, bac, charges);
+    for (const [nom, n] of Object.entries(comptes)) console.log(`   ${nom.padEnd(20)} ${n}`);
     // La garde est-elle franchissable dans le bac ? Si un candidat manque, la cellule
     // s'abstiendra — et il vaut mieux le savoir ici que dans un verrou rouge sans cause.
     for (const c of charges) {
@@ -590,18 +553,11 @@ const CELLULES = [
     // citer n'a pas suffi à l'appliquer au bon endroit.
     // Les quatre autres collections avaient le même défaut depuis toujours ; personne ne
     // l'avait vu parce qu'elles pèsent 4 Mo à elles toutes.
-    let libere = 0;
-    for (const nom of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'references_image']) {
-        try {
-            const st = await bac.db.command({ collStats: nom }).catch(() => null);
-            const r = await bac.collection(nom).deleteMany({});
-            if (st) libere += (st.storageSize ?? 0) + (st.totalIndexSize ?? 0);
-            if (r.deletedCount) console.log(`🧹 test_scratch : ${nom} vidée (${r.deletedCount} documents)`);
-        } catch (e) { console.error(`🔴 vidage de ${nom} : ${e.message}`); }
-    }
-    console.log(`🧹 environ ${(libere / 1e6).toFixed(1)} Mo rendus au cluster.`);
-    console.log(`   ⚠️ WiredTiger ne rend la place qu'au point de reprise suivant : un`);
-    console.log(`      \`dbStats\` immédiat peut encore les montrer.`);
+    // ⚠️ LE VIDAGE VIT AUSSI DANS verrou/tranche.js, ET IL FAIT `drop`, PAS `deleteMany`.
+    // `deleteMany` vidait la collection en gardant le fichier : 36,2 Mo pour ZÉRO document,
+    // mesuré le 2026-09-02 sur un cluster à 2,5 Mo de marge. La règle du dépôt protège la
+    // REPRODUCTIBILITÉ ; elle ne protégeait pas le QUOTA. Il faut les deux.
+    await viderTranche(bac);
     await bac.close();
     process.exit(0);
 })();

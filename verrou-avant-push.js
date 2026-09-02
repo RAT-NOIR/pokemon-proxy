@@ -84,6 +84,10 @@ const fs = require('fs');
 const { empreintePrompt } = require('./verrou/empreinte');
 const { profondeurAtteinte, profondeurSuffisante, decrire } = require('./verrou/jalons');
 const { demarrer, appeler } = require('./verrou/serveur');
+// ⚠️ CE FICHIER CONSTRUIT DÉSORMAIS LA TRANCHE QU'IL CONSOMME. Il ne la construisait pas,
+// et `verrou-charges.js` la détruisait en sortant — le verrou était donc rouge par
+// construction depuis le 2026-08-30 19:17. Voir verrou/tranche.js.
+const { copierTranche, viderTranche } = require('./verrou/tranche');
 
 const JETON = process.env.JETON_API || 'jeton-verrou';
 const USER_VERROU = 'verrou-avant-push';
@@ -195,6 +199,39 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         console.log(`     journal au moment de l'extraction : ${donnees.lignesAuJournal} ligne(s)`
             + (e.avecPhoto != null ? ` · ${e.avecPhoto} avec photo · ${e.abouties} abouties` : ''));
         console.log(`     -> deux sorties ne se comparent ligne à ligne que si CES nombres sont identiques.`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LA TRANCHE — CONSTRUITE ICI, PAR CE FICHIER, AVANT DE DÉMARRER LE SERVEUR
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 ELLE NE L'ÉTAIT PAS, ET C'EST CE QUI A TENU LE VERROU AU ROUGE TROIS JOURS.
+    // Ce fichier attendait qu'un AUTRE outil l'ait laissée derrière lui, alors que cet
+    // autre outil la vide en sortant — correctement, c'est la règle du dépôt. Un outil
+    // qui dépend d'un résidu laissé par un autre n'est pas un outil, c'est une étape.
+    // 🔑 Il construit donc ce qu'il consomme, et il le videra à sa propre sortie.
+    // ⚠️ SANS ELLE, L'ÉCHEC EST TROMPEUR : les 7 charges sortent en « aucun-candidat »,
+    // les 7 remboursements font tomber le plafond de 5/jour, et la 7e cellule annonce
+    // « le crédit n'est pas rendu ». Quatre échecs en cascade, dont aucun ne désigne la
+    // cause — le vivier vide. C'est exactement ce qu'on a lu le 2026-09-02.
+    console.log('\n=== 1 bis. Tranche de catalogue -> test_scratch ===');
+    const mongooseT = require('mongoose');
+    let bacTranche = null;
+    try {
+        const prodT = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test' }).asPromise();
+        bacTranche = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
+        if (bacTranche.db.databaseName !== 'test_scratch') {
+            console.error(`❌ ARRÊT : écriture visée sur "${bacTranche.db.databaseName}" au lieu de test_scratch.`);
+            process.exit(1);
+        }
+        const comptes = await copierTranche(prodT, bacTranche, donnees.charges);
+        for (const [nom, n] of Object.entries(comptes)) console.log(`   ${nom.padEnd(20)} ${n}`);
+        verifier('tranche copiée (le vivier des charges est en base)',
+            (comptes.catalogue_produits ?? 0) > 0,
+            'sans elle les 7 charges sortent en « aucun-candidat » et l\'échec ne désigne pas sa cause');
+        await prodT.close();
+    } catch (e) {
+        console.error(`❌ copie de la tranche impossible : ${e.message}`);
+        verifier('tranche copiée', false, e.message);
     }
 
     console.log('\n=== 2. Serveur réel, réseau rejoué ===');
@@ -470,9 +507,24 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
             // rendu ». Un défaut du dispositif, pas de la production — et le pire genre :
             // il n'apparaît qu'après plusieurs passages, donc jamais quand on le cherche.
             const rb = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
+            // ⚠️ `quotas_semaine` AJOUTÉE LE 2026-09-02, ET ELLE N'ÉTAIT PAS ATTEIGNABLE.
+            // Ce n'est pas une correction de bug, c'est le retrait d'une GARANTIE PAR
+            // COÏNCIDENCE : `verifierAcces` n'y écrit que si la dotation d'accueil est
+            // épuisée, or elle vaut 25 et les charges sont 8. La collection reste donc
+            // vide — aujourd'hui. Elle cesserait de l'être à la 26e charge, ou si le
+            // nettoyage de `credits` échouait une fois, et la 7e cellule mentirait à
+            // nouveau exactement comme avec `remboursements` (voir ci-dessus).
+            // 🔑 Une collection qu'un chemin PEUT faire écrire entre dans la purge, même
+            // si ce chemin n'est pas emprunté : la règle porte sur ce que l'outil peut
+            // écrire, pas sur ce qu'on l'a vu écrire.
+            const q = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
             console.log(`\n🧹 test_scratch : ${n.deletedCount} crédit(s), ${j.deletedCount} ligne(s) de journal,` +
-                ` ${rb.deletedCount} compteur(s) de remboursement supprimés.`);
+                ` ${rb.deletedCount} compteur(s) de remboursement, ${q.deletedCount} quota(s) hebdo supprimés.`);
         }
+        // ⚠️ ET LA TRANCHE, PAR CE FICHIER, PARCE QUE C'EST LUI QUI L'A COPIÉE.
+        // Chaque outil range ce qu'il a construit : aucun des deux ne dépend de l'ordre
+        // d'exécution de l'autre, et aucun ne détruit ce que l'autre attend.
+        if (bacTranche) { await viderTranche(bacTranche); await bacTranche.close(); }
         await bac.close();
     } catch (e) { console.log(`\n⚠️ nettoyage impossible : ${e.message}`); }
 
