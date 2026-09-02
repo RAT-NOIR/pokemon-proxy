@@ -136,6 +136,38 @@ app.use(express.json());
 // Limite anti-abus par IP : backstop indépendant du quota par utilisateur (qui, lui,
 // se contourne en changeant d'identifiant). Ne s'applique QU'aux routes IA coûteuses —
 // surtout pas à /ping, sinon le keep-alive cron-job se ferait jeter.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// 🔴 LE MAGASIN EST EN MÉMOIRE — CE QUE « 60/H » VEUT DIRE EN VRAI
+// ════════════════════════════════════════════════════════════════════════════
+// MESURÉ LE 2026-09-02, en interrogeant Render pour de bon (16 requêtes 401, aucun appel
+// IA). Huit requêtes IDENTIQUES ont rendu `RateLimit-Remaining` :
+//     56, 56, 55, 54, 53, 52, 51, 50
+// et surtout des `RateLimit-Reset` DIFFÉRENTS — 3563 s sur la deuxième, 3374 s sur toutes
+// les autres. Deux origines de fenêtre = DEUX COMPTEURS INDÉPENDANTS pour la même IP.
+// ⚠️ CE N'EST DONC PAS SEULEMENT « ça repart à zéro au redémarrage » : plusieurs processus
+// servent en parallèle, chacun avec SON magasin mémoire, et le plafond réel vaut
+// 60 × (nombre de processus). Le multi-compteur est PERMANENT, la remise à zéro est
+// ponctuelle — c'est le premier qui coûte le plus cher.
+//
+// ✅ CE QUI EST SAIN, ET QUI A ÉTÉ VÉRIFIÉ PLUTÔT QUE SUPPOSÉ : `trust proxy` (voir
+// app.set plus haut). Trois requêtes portant un `X-Forwarded-For` FORGÉ identique ont
+// rendu 49, 48, 47 — elles CONTINUENT la série au lieu d'ouvrir un compteur neuf. Le XFF
+// du client est donc ignoré et `req.ip` est la vraie adresse : ni sur-blocage, ni
+// sous-blocage. La bonne forme de cette vérification est celle-là — forger l'en-tête et
+// regarder si un seau neuf apparaît, pas lire le code et conclure.
+//
+// LA DÉCISION PRISE : forcer UNE SEULE INSTANCE sur Render. Zéro code, zéro dépendance,
+// zéro mode d'échec nouveau, et ça supprime le multi-compteur, qui est le défaut permanent.
+//
+// 📌 LE REPLI, POUR PLUS TARD, ET LA FORMULATION EST À GARDER MOT POUR MOT :
+//     magasin Mongo avec repli mémoire quand Mongo est absent, jamais « ouvrir en grand »
+//     ni « fermer tout » — le comportement dégradé doit être le comportement actuel,
+//     jamais pire.
+// « Ouvrir en grand » supprimerait la seule borne de coût au moment le plus dangereux ;
+// « fermer tout » transformerait une panne Mongo en panne totale du service. Le repli
+// mémoire, lui, ramène exactement à l'état d'aujourd'hui : on perd le partage entre
+// instances, on ne perd jamais la borne.
 const limiteurIA = rateLimit({
     windowMs: 60 * 60 * 1000,   // fenêtre : 1 heure
     max: 60,                    // 60 requêtes/h/IP (large pour un usage normal, coupe le pilonnage)
@@ -4680,49 +4712,84 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Le chiffre est à côté de chaque entrée pour que la prochaine promotion se fasse
         // sur une mesure et non sur une impression.
         // ════════════════════════════════════════════════════════════════════
-        // 🔑 LA RÈGLE DE PROMOTION — ADOPTÉE LE 2026-09-01, ÉCRITE AVANT LE CHIFFRE
+        // 🔑 LA RÈGLE DE PROMOTION — v2, ADOPTÉE LE 2026-09-02
         // ════════════════════════════════════════════════════════════════════
-        // Une entrée passe de `faible` à `forte` SI ET SEULEMENT SI, toutes conditions réunies :
-        //   1. ≥ 12 LIGNES de cette classe EN PRODUCTION — pas au banc, pas au labo ;
-        //   2. 12/12 JUSTES sur des vérités saisies À L'AVEUGLE ;
-        //   3. son intervalle de Wilson à 95 % DISJOINT de celui de la classe faible la
-        //      mieux mesurée — aujourd'hui `perimetre-vintage-suggestion`, 10/16, soit
-        //      38 % à 81 %. Deux intervalles qui se chevauchent ne distinguent rien ;
-        //   4. ZÉRO CASSE AU HOLDOUT.
-        // C'est exactement le parcours qu'a fait `symbole-departage`, et rien d'autre ne
-        // l'a fait.
+        // ⚠️ LA v1 EXIGEAIT « ≥ 12 LIGNES » **ET** UN INTERVALLE DISJOINT. L'EFFECTIF A ÉTÉ
+        // RETIRÉ, ET VOICI POURQUOI — c'est le seul point qui compte pour comprendre v2 :
+        // un seuil en EFFECTIF et un seuil en INTERVALLE ne se traduisent pas l'un dans
+        // l'autre. Wilson sur 12/12 donne [75,8 – 100] ; le plancher était 81,5. La v1,
+        // appliquée à la lettre, REFUSAIT `symbole-departage` — la seule entrée forte, et
+        // celle qu'elle prétendait codifier. Écrire les deux seuils côte à côte comme s'ils
+        // disaient la même chose fabriquait une règle qui se contredit en silence.
+        // L'effectif n'était pas un critère : c'était un PROXY pour « assez de preuve ».
+        // Le critère est l'intervalle. On garde le critère, on jette le proxy.
         //
-        // ⚠️ ELLE S'APPLIQUE CONTRE LE TRAVAIL DE CELUI QUI L'ÉCRIT. `image-departage` est
-        // mesuré 42/44 sur la cellule avec D+ 32 / D− 0 — le meilleur résultat du projet —
-        // et il reste FAIBLE : il a UNE ligne en production. Wilson sur 1/1 va de 21 % à
-        // 100 %, il ne peut être disjoint de rien. Une mesure de laboratoire, si bonne
-        // soit-elle, ne franchit pas la condition 1.
+        // Une entrée passe de `faible` à `forte` SI ET SEULEMENT SI, toutes réunies :
+        //   1. sa BORNE BASSE de Wilson à 95 % dépasse la BORNE HAUTE de la classe faible
+        //      la mieux mesurée — aujourd'hui `perimetre-vintage-suggestion`, 10/16, dont
+        //      la borne haute est 81,5 %. Deux intervalles qui se chevauchent ne
+        //      distinguent rien. L'effectif nécessaire en DÉCOULE, il ne se décrète pas ;
+        //   2. mesurée sur une population où LE VIVIER N'A PAS ÉTÉ TRUQUÉ : aucune
+        //      injection de la vérité, le vivier est celui que la chaîne produit ;
+        //   3. sur des PHOTOS DE VENDEUR, pas des images de référence ;
+        //   4. ZÉRO CASSE AU HOLDOUT ;
+        //   5. ⚠️ ET LA CONDITION QUI NE SE CALCULE PAS : une erreur doit rester PIRE
+        //      qu'un refus. Là où l'utilisateur ne reçoit rien aujourd'hui, lui livrer un
+        //      prix faux est une régression, pas un progrès. La charge de la preuve est
+        //      entièrement du côté du signal qui veut parler.
+        //
+        // 🔴 CE QUE v2 DIT DE `symbole-departage`, ET IL FAUT QUE ÇA SE VOIE :
+        // il est classé FORTE, il est mesuré 12/12 en production, et Wilson sur 12/12 vaut
+        // [75,8 – 100]. 75,8 < 81,5 : **SA PROPRE PROMOTION NE SATISFAIT PAS LA CONDITION 1**.
+        // Il faudrait 20/20 pour la franchir. Il n'est PAS rétrogradé ici — ce serait une
+        // décision de produit, prise à la légère sur une entrée qui n'a jamais raté. Mais
+        // il n'est pas confortable non plus : une entrée forte dont la promotion ne tient
+        // pas la règle actuelle doit être VISIBLE. Elle l'est, ici, à côté de la table.
+        //
+        // ⚠️ ET LE PLANCHER LUI-MÊME EST MOU — mesuré le 2026-09-02, et c'est un défaut de
+        // la condition 1 qu'il faut connaître avant de s'y fier. 81,5 % est la borne HAUTE
+        // d'une classe de SEIZE lignes. Si `perimetre-vintage-suggestion` gagne dix lignes :
+        //     à taux constant (16/26) le plancher DESCEND à 77,6 — l'intervalle se resserre ;
+        //     si la classe s'améliore (18/26) il MONTE à 83,5 ;
+        //     à 22/26 il atteint 93,8 et l'image, à 84,9, NE PASSERAIT PLUS.
+        // 🔑 Autrement dit : la promotion d'un signal dépend de la performance d'une classe
+        // QUI N'A RIEN À VOIR AVEC LUI. C'est assumé faute de mieux — il faut bien un
+        // témoin — mais un plancher assis sur seize lignes n'est pas un socle, et tout
+        // seuil qui en dérive bouge avec lui. À reconsidérer quand cette classe aura n≥30.
+        //
         // ⚠️ ET LA RÈGLE DE RÉTROGRADATION, PLUS BAS, RESTE PRIORITAIRE : une entrée forte
         // redescend à la première mesure où elle rate, sans discussion.
         //
         // ════════════════════════════════════════════════════════════════════
-        // 🔴 LA RÈGLE CI-DESSUS EST INCOHÉRENTE AVEC SON PROPRE PRÉCÉDENT — 2026-09-02
+        // OÙ EN EST `image-departage` CONTRE LA v2 — mesuré le 2026-09-02
         // ════════════════════════════════════════════════════════════════════
-        // ⚠️ CONSIGNÉ, PAS RÉSOLU. Aucune entrée n'est promue ni rétrogradée par cette note.
-        // Elle existe pour qu'on ne s'appuie pas sur la règle en la croyant cohérente.
+        // ⚠️ IL RESTE `faible`. Ce bloc dit ce qui est satisfait et ce qui ne l'est pas ;
+        // il ne promeut rien.
+        //   1. BORNE BASSE > 81,5 % .......... ✅ 42/44 sur la cellule -> Wilson [84,9 – 98,7].
+        //   2. VIVIER NON TRUQUÉ ............. ✅ ET C'EST UNE SURPRISE. La mesure existait
+        //      pour lever un doute que j'avais soulevé moi-même : le banc COMPLÉTAIT le
+        //      vivier avec la vérité quand elle en était absente, garantie que la production
+        //      n'a jamais. Régime « vivier RÉEL » ajouté et relancé :
+        //          vérité ABSENTE du vivier réel = 0 sur 44.
+        //      L'injection ne s'est JAMAIS déclenchée sur ce jeu. Les deux régimes rendent
+        //      42/44 à l'identique. 🔑 Le doute était fondé sur la LECTURE du code et faux
+        //      sur les DONNÉES — une garantie inutilisée reste une garantie, mais elle ne
+        //      change aucun chiffre. Le 42/44 était déjà un chiffre de vivier réel.
+        //   3. PHOTOS DE VENDEUR ............. ✅ 66/66 téléchargées depuis l'annonce, 0 repli.
+        //   4. ZÉRO CASSE AU HOLDOUT ......... 🔴 NON VÉRIFIABLE, ET C'EST CE QUI BLOQUE.
+        //      Le holdout porte 10 vérités pour 67 lignes ; les 44 de la cellule viennent
+        //      à 94 % du seau « lot », une population CHOISIE et scannée exprès. On ne peut
+        //      donc pas dire qu'aucune casse n'a eu lieu — on peut dire qu'on n'a pas
+        //      regardé. Le premier principe interdit de compter ça comme un succès.
+        //   5. UNE ERREUR PIRE QU'UN REFUS ... ⚠️ 2 erreurs sur 44 = deux prix FAUX affirmés
+        //      là où l'utilisateur ne recevait rien. C'est le prix à accepter, explicitement.
         //
-        // LE CALCUL. La condition 3 exige un Wilson 95 % DISJOINT de celui de
-        // `perimetre-vintage-suggestion` — 10/16, dont la borne HAUTE est 81,5 %.
-        // Or la condition 1 exige « 12 lignes, 12/12 ». Wilson sur 12/12 = [75,8 – 100].
-        //     75,8 < 81,5  ->  LES DEUX INTERVALLES SE CHEVAUCHENT.
-        // 🔑 LA RÈGLE, APPLIQUÉE À LA LETTRE, REFUSERAIT `symbole-departage` — l'entrée
-        // qu'elle prétend précisément codifier, et la seule qui soit `forte`.
-        // Il faut 20/20 sans faute pour que la borne basse (83,9 %) dépasse 81,5.
-        //
-        // CE QUE ÇA VEUT DIRE, ET C'EST LE FOND : « 12 lignes » n'est pas un critère, c'est
-        // un PROXY pour « assez de preuve ». Le critère réel est l'intervalle. Les deux ont
-        // été écrits côte à côte comme s'ils disaient la même chose ; ils ne la disent pas.
-        // Un seuil en effectif et un seuil en intervalle ne se traduisent pas l'un dans
-        // l'autre, et écrire les deux fabrique une règle qui se contredit en silence.
-        //
-        // ⚠️ CE QUI N'EST PAS EN CAUSE : la condition 5, écrite pour l'image — une erreur y
-        // est pire qu'un refus, la charge de la preuve est entièrement du côté du signal.
-        // Elle ne dépend d'aucun effectif et reste vraie.
+        // 🔑 CE QUI BLOQUE N'EST PLUS UN CHIFFRE, C'EST UNE POPULATION. Attendre plus de
+        // trafic ne lèvera pas la condition 4 : il faut des vérités saisies À L'AVEUGLE sur
+        // le HOLDOUT. Trois bornes restent vraies quoi qu'il arrive et doivent accompagner
+        // toute citation du 42/44 : les 11 cartes du chantier sont dans les 44 (le jeu les
+        // absorbe), 64 des 68 vérités viennent du lot, et `departager` reçoit au banc un
+        // classement à `score: 0` là où la production lui passe les vrais scores.
         const NIVEAU_RESERVE = {
             'symbole-departage': 'forte',   // 12/12 justes — le symbole du set a désigné un seul ex aequo
             // ⚠️ FAIBLE, ET C'EST UN ARBITRAGE, PAS UN OUBLI. Le départage par l'image est

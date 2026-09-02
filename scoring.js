@@ -1218,6 +1218,38 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      🔑 LA RÈGLE GÉNÉRALE : ON NE RECOPIE PAS UN CHIFFRE QUI DÉCRIT UN AUTRE FICHIER. On
 //      y renvoie. Un renvoi vieillit bien, un compteur non.
 //
+//   18. UNE ASSERTION ABSENTE NE SE VOIT JAMAIS — 2026-09-02. La forme la plus discrète
+//      du « contrôle qui ne peut pas échouer » (#14), et elle mérite son entrée parce
+//      qu'aucune des parades de #14 ne l'attrape.
+//      L'OCCURRENCE. `enregistrerEchec` aplatit `cardInfo` vers la ligne de journal. Elle
+//      transportait `nom`, `numero`, `total`, `setCode`, `langue`, `rarete`, `nomBrut`,
+//      `nomConfiance` — HUIT champs, et `symboleSet` n'y était pas. Conséquence en
+//      production : « symbole non lu, 30 fois sur 30 » sur la voie du refus, lu pendant
+//      des semaines comme un taux de lecture. C'était un taux de TRANSPORT, et il valait 0.
+//      ⚠️ `test-journal-echecs.js` ÉTAIT VERT, ET LÉGITIMEMENT : il vérifiait sept champs
+//      sur huit. Aucune de ses assertions n'était fausse. Aucune ne pouvait l'être.
+//      🔑 CE QUI REND CETTE ENTRÉE DIFFÉRENTE DE #14 : là-bas, le contrôle EXISTAIT et
+//      n'exerçait rien — on pouvait donc le saboter et voir qu'il restait vert. Ici il n'y
+//      a rien à saboter. Une assertion FAUSSE finit par rougir ; une assertion ABSENTE n'a
+//      aucune surface. Elle ne laisse ni trace, ni échec, ni ligne à relire — elle se
+//      manifeste uniquement par un CHIFFRE TROP PROPRE ailleurs, des semaines plus tard.
+//      LA PARADE, ET ELLE EST MÉCANIQUE : quand un test vérifie l'APLATISSEMENT d'un objet,
+//      il doit couvrir TOUS les champs, pas un échantillon. Un échantillon prouve que
+//      l'aplatissement existe ; il ne prouve rien sur le champ qu'il ne nomme pas. Pour
+//      une liste de champs, la seule assertion honnête est celle qui compare des ENSEMBLES,
+//      pas celle qui pioche des exemples.
+//      ⚠️ ET LE SIGNAL D'ALARME, PARCE QUE C'EST LUI QU'ON AURA EN MAIN : un zéro parfait,
+//      ou un cent pour cent parfait, sur une population où l'on attendait de la variance.
+//      « 30 sur 30 » n'est pas un taux, c'est un instrument. Voir aussi #11, où une mesure
+//      spectaculairement favorable cachait un défaut : même réflexe, sens opposé.
+//      🔴 TROISIÈME OCCURRENCE EN DEUX JOURS DE LA MÊME FAMILLE, et c'est le vrai motif :
+//      `symboleSet` non transporté au journal, `vivierIds` absent de 32 refus sur 35, et
+//      TOUS les champs d'état (`etatEstime`, `etatConfiance`, `etatMin`, `etatRetenu`,
+//      `prixParEtat`) absents du schéma. Les trois ont la même cause : ils sont écrits
+//      dans la RÉPONSE à l'extension, jamais dans le JOURNAL. Ce sont deux puits distincts,
+//      et enrichir l'un n'enrichit pas l'autre. Trois questions du chantier ont été posées
+//      à un journal qui ne pouvait pas y répondre.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

@@ -24,6 +24,47 @@
 //   cellule < 35         -> le 41/44 était un chiffre de laboratoire, et la décision de
 //                           brancher se rediscute.
 //
+// ════════════════════════════════════════════════════════════════════════════
+// 🔑 DEUXIÈME RÉGIME, AJOUTÉ LE 2026-09-02 — « SANS INJECTION »
+//     L'ATTENDU EST ÉCRIT ICI, AVANT LE PREMIER LANCEMENT. Ne pas le relire après.
+// ════════════════════════════════════════════════════════════════════════════
+// CE QUI A ÉTÉ TROUVÉ. La ligne « si la vraie carte n'est pas dans le vivier, on l'y met »
+// (plus bas, dans la boucle) GARANTIT une condition que la production n'a jamais. Le
+// 42/44 répondait donc à :
+//     « LA VÉRITÉ ÉTANT DANS LE VIVIER, l'image la classe-t-elle première ? »
+// et la production pose une autre question :
+//     « un prix juste sort-il ? » — qui INCLUT le cas où le vivier ne contient pas la vérité.
+//
+// ⚠️ L'ANCIENNE MESURE NE DEVIENT PAS FAUSSE. Elle isole le DÉPARTAGE en neutralisant le
+// vivier, ce qui est exactement ce qu'on voulait quand on réglait ORB à 150 points : à ce
+// moment-là, mélanger les deux défauts aurait empêché de régler quoi que ce soit. Les deux
+// régimes sont donc gardés CÔTE À CÔTE et nommés distinctement :
+//     « vivier COMPLÉTÉ »  -> pouvoir de discrimination de l'image, vivier neutralisé ;
+//     « vivier RÉEL »      -> ce que la production peut livrer, tout compris.
+//
+// LES BORNES, sur la cellule, en « vivier RÉEL » :
+//   ≥ 40/44   -> l'injection ne portait presque rien. L'objection tombe, le 42/44 tient.
+//   35 – 39   -> l'injection portait un poids réel. L'image reste forte, mais SEULE la
+//                borne basse de Wilson décide (voir ci-dessous).
+//   30 – 34   -> défaut de vivier et défaut de départage sont du même ordre. La condition
+//                « vivier non truqué » devient décisive et l'image n'est pas prête.
+//   < 30      -> 🔑 LE DÉFAUT DE VIVIER DOMINE. Ce n'est pas un échec de l'image : c'est un
+//                RÉSULTAT, et il réoriente le chantier — collecter passe avant départager.
+//
+// 🔑 LE SEUL CHIFFRE QUI DÉCIDE DE LA PROMOTION, et il n'est pas un effectif :
+//     la BORNE BASSE de Wilson 95 % en « vivier RÉEL » doit dépasser 81,5 %,
+//     borne HAUTE de `perimetre-vintage-suggestion` (10/16), la classe faible la mieux
+//     mesurée. C'est la condition 1 de la règle de promotion (voir index.js, en tête de
+//     NIVEAU_RESERVE). « 12 lignes » a été RETIRÉ de cette règle : un seuil en effectif et
+//     un seuil en intervalle ne se traduisent pas l'un dans l'autre.
+//
+// ⚠️ CE QUE CE RÉGIME NE CORRIGE PAS, et il faut le dire avec le résultat :
+//   · les 11 cartes du chantier sont toujours dans les 44 — le jeu les absorbe ;
+//   · 64 des 68 vérités viennent du seau « lot », une population CHOISIE, pas le trafic ;
+//   · `departager` reçoit toujours un classement à `score: 0` partout, quand la production
+//     lui passe les vrais scores.
+// Aucun de ces trois ne se règle en neutralisant l'injection. Ils bornent la conclusion.
+//
 // ⚠️ ET LE CHIFFRE SEUL NE DÉCIDE DE RIEN SANS SON TÉMOIN. « L'image fait 41/44 » ne dit
 // pas qu'elle apporte quelque chose : il faut le rang 1 du SCORING sur LES MÊMES lignes.
 // Les deux sont rendus côte à côte, et c'est D+ / D− qui tranche — pas le taux brut.
@@ -151,25 +192,48 @@ async function redresser(buf) {
             ids = (await trouverProduitsLocaux(l.nom)).map(p => p.idProduct).filter(x => x != null);
         } catch (_) { ids = (l.vivier || []).filter(x => x != null); }
         if (!ids.length) ids = (l.vivier || []).filter(x => x != null);
+        // ════════════════════════════════════════════════════════════════════
+        // LE VIVIER RÉEL, GARDÉ À PART — 2026-09-02
+        // ════════════════════════════════════════════════════════════════════
+        // ⚠️ `idsReels` EST LE VIVIER TEL QUE LA CHAÎNE LE PRODUIT, sans retouche. Il est
+        // capturé AVANT la complétion ci-dessous, et c'est lui qui décrit la production.
+        // `veriteDansVivier` est la mesure que le journal ne pouvait pas rendre (`vivierIds`
+        // manquait sur 32 refus sur 35) : elle sépare le défaut de VIVIER du défaut de
+        // DÉPARTAGE, et aucun signal en aval ne rattrape le premier.
+        const idsReels = [...ids];
+        const veriteDansVivier = idsReels.includes(l.idVrai);
         // La vraie carte doit être dans le vivier, sinon la ligne ne mesure rien.
+        // ⚠️ CETTE LIGNE NE MESURE PLUS LA PRODUCTION, ET C'EST ASSUMÉ : elle neutralise le
+        // vivier pour isoler le pouvoir de discrimination de l'image. Le régime « vivier
+        // RÉEL », lui, ne la subit pas. Les deux sont rendus côte à côte.
         if (!ids.includes(l.idVrai)) ids = [...new Set([...ids, l.idVrai])];
         const vect = await I.chargerVecteurs(ids);
         const couverture = ids.length ? vect.size / ids.length : 0;
+        // La couverture de la garde sur le vivier RÉEL — c'est elle que la production voit.
+        const couvertureReelle = idsReels.length
+            ? idsReels.filter(id => vect.has(id)).length / idsReels.length : 0;
 
         // 3. Le classement, dans les deux régimes.
-        const classe = async (image) => {
+        // ⚠️ `surIds` EST LE PARAMÈTRE QUI SÉPARE LES DEUX RÉGIMES, et il n'y a qu'UNE
+        // fonction de classement : deux copies « qui se ressemblent » divergeraient au
+        // premier réglage changé, et la comparaison ne vaudrait plus rien.
+        const classe = async (image, surIds) => {
             if (!image) return null;
             const q = await I.decrire(image);
             if (!q.n) return null;
             const s = [];
-            for (const id of ids) { const v = vect.get(id); if (v) s.push({ id, n: I.inliers(cv, q, v) }); }
+            for (const id of surIds) { const v = vect.get(id); if (v) s.push({ id, n: I.inliers(cv, q, v) }); }
             s.sort((a, b) => b.n - a.n);
             const rang = s.findIndex(x => x.id === l.idVrai) + 1;
             const vrai = s.find(x => x.id === l.idVrai)?.n ?? 0;
             const faux = s.find(x => x.id !== l.idVrai)?.n ?? 0;
             return { rang: rang || null, vrai, faux, n: s.length };
         };
-        const brut = await classe(buf);
+        const brut = await classe(buf, ids);
+        // MÊME PHOTO, MÊMES VECTEURS, MÊME FONCTION — seul le vivier change. Une variable.
+        // Si la vérité n'est pas dans `idsReels`, `rang` vaut null : l'image ne PEUT PAS la
+        // désigner, et c'est exactement ce que la production subit.
+        const brutReel = await classe(buf, idsReels);
         let redr = null;
         if (AVEC_REDRESSEMENT) {
             const rb = await redresser(buf);
@@ -183,7 +247,11 @@ async function redresser(buf) {
             total: l.total, classement: ids.map(id => ({ idProduct: id, score: 0 }))
         });
 
-        lignes.push({ ...l, brut, redr, couverture, statut: avis.champs.imageStatut, s: scoring.get(l.cle) });
+        lignes.push({
+            ...l, brut, brutReel, redr, couverture, couvertureReelle,
+            idsReels, veriteDansVivier,
+            statut: avis.champs.imageStatut, s: scoring.get(l.cle)
+        });
     }
 
     console.log(`\n   photos téléchargées ${telecharge} · repli sur copie locale ${replis} · perdues ${mortes}` +
@@ -215,6 +283,53 @@ async function redresser(buf) {
         res[titre] = { n: g.length, i1, s1, dP, dM };
         console.log(`   ${titre.padEnd(24)} ${String(g.length).padStart(3)} ${String(i1).padStart(6)} ${String(s1).padStart(8)} ` +
             `${String(dP).padStart(3)} ${String(dM).padStart(3)} ${signes(dP, dM).toFixed(4).padStart(8)}   ${lo.toFixed(0)} – ${hi.toFixed(0)} %`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LES DEUX RÉGIMES CÔTE À CÔTE — vivier COMPLÉTÉ contre vivier RÉEL
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ Ils ne répondent pas à la même question, et les confondre ferait lire un pouvoir
+    // de discrimination comme une promesse de livraison :
+    //   COMPLÉTÉ -> « la vérité étant dans le vivier, l'image la classe-t-elle première ? »
+    //   RÉEL     -> « un prix juste sort-il ? », défaut de vivier COMPRIS.
+    console.log('\n' + '═'.repeat(104));
+    console.log('LES DEUX RÉGIMES — la vérité est-elle dans le vivier, ou l\'y a-t-on mise ?');
+    console.log('═'.repeat(104));
+    console.log(`   ${'population'.padEnd(24)} ${'n'.padStart(3)} ${'COMPLÉTÉ'.padStart(9)} ${'RÉEL'.padStart(9)} ` +
+        `${'vérité∉vivier'.padStart(14)}   Wilson 95 % (RÉEL)`);
+    const resReel = {};
+    for (const [titre, f] of groupes) {
+        const g = lignes.filter(f).filter(l => l.s);
+        if (!g.length) continue;
+        const i1 = g.filter(l => l.brut?.rang === 1).length;
+        const i1r = g.filter(l => l.brutReel?.rang === 1).length;
+        const hors = g.filter(l => !l.veriteDansVivier).length;
+        const [lo, hi] = wilson(i1r, g.length);
+        resReel[titre] = { n: g.length, i1, i1r, hors, lo, hi };
+        console.log(`   ${titre.padEnd(24)} ${String(g.length).padStart(3)} ${String(i1).padStart(9)} ${String(i1r).padStart(9)} ` +
+            `${String(hors).padStart(14)}   ${lo.toFixed(1)} – ${hi.toFixed(1)} %`);
+    }
+
+    // 🔑 LE CHIFFRE QUI DÉCIDE, comparé au plancher écrit dans la règle de promotion.
+    const PLANCHER = 81.5;   // borne HAUTE de Wilson sur perimetre-vintage-suggestion, 10/16
+    const cr = resReel['LA CELLULE'];
+    if (cr) {
+        console.log('\n   ── CONTRE LES BORNES ÉCRITES AVANT DE LANCER (régime RÉEL) ──');
+        const v = cr.i1r >= 40 ? '✅ ≥ 40/44 — l\'injection ne portait presque rien, l\'objection tombe'
+            : cr.i1r >= 35 ? '⚠️ 35–39 — l\'injection portait un poids réel ; seule la borne basse décide'
+                : cr.i1r >= 30 ? '🔴 30–34 — vivier et départage du même ordre ; l\'image n\'est pas prête'
+                    : '🔴🔴 < 30 — LE DÉFAUT DE VIVIER DOMINE. Résultat, pas échec : collecter passe avant départager.';
+        console.log(`   cellule, vivier RÉEL : ${cr.i1r}/${cr.n}   ${v}`);
+        console.log(`   vérité ABSENTE du vivier réel : ${cr.hors}/${cr.n} — aucun départage ne les rattrape.`);
+        console.log(`\n   🔑 LE SEUL CHIFFRE QUI DÉCIDE DE LA PROMOTION :`);
+        console.log(`      borne basse Wilson (RÉEL) = ${cr.lo.toFixed(1)} %   contre plancher ${PLANCHER} %`);
+        console.log(`      -> ${cr.lo > PLANCHER ? '✅ DISJOINT — la condition 1 de la règle est satisfaite'
+            : '❌ NON DISJOINT — la condition 1 n\'est PAS satisfaite. Aucune promotion.'}`);
+        console.log(`      ⚠️ Ce fichier ne promeut RIEN : il rend le chiffre. La table vit dans index.js.`);
+        // Combien de succès faudrait-il, à n constant, pour franchir le plancher ?
+        for (let k = cr.i1r; k <= cr.n; k++) {
+            if (wilson(k, cr.n)[0] > PLANCHER) { console.log(`      il faudrait ${k}/${cr.n} pour franchir le plancher à n constant.`); break; }
+        }
     }
 
     // ── LA LECTURE CONTRE LES BORNES ÉCRITES D'AVANCE ───────────────────────
