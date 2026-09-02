@@ -193,6 +193,40 @@ const journalScanSchema = new mongoose.Schema({
     prixParEtat: { type: Map, of: Number },
     nbOffresParEtat: { type: Map, of: Number },
 
+    // ════════════════════════════════════════════════════════════════════════
+    // TROIS ENTIERS — le seul endroit où le TEMPS et le COÛT d'un scan existent
+    // ════════════════════════════════════════════════════════════════════════
+    // Ajoutés le 2026-09-02, après quatre trous de la même famille en une semaine
+    // (`symboleSet`, `vivierIds`, les champs d'état, les durées) : une valeur produite,
+    // affichée dans un `console.log`, et jamais écrite. La réponse et le journal sont
+    // deux puits distincts, et enrichir l'un n'enrichit pas l'autre.
+    //
+    // 🔑 LE CRITÈRE QUI LES FAIT ENTRER — voir le SIXIÈME PRINCIPE dans scoring.js :
+    //     ON ÉCRIT CE QUI N'EST PAS RECALCULABLE DEPUIS LA LIGNE.
+    // C'est pour la même raison que `rang` et `setCodeAccord` en ont été RETIRÉS : eux se
+    // recalculent. Une durée, elle, ne se reconstitue par rien.
+    //
+    // ⚠️ POURQUOI CEUX-LÀ ET PAS D'AUTRES, sur un cluster qui vient de frôler son plafond :
+    // trois entiers = ~12 octets/ligne, soit 0,006 Mo à l'état stationnaire (rétention
+    // 90 jours, ~6 scans/jour). Ce qui a été ÉCARTÉ, et pourquoi :
+    //   · la MÉMOIRE par scan — `process.memoryUsage()` décrit le PROCESSUS, pas le scan ;
+    //     sous concurrence il est ininterprétable. Un chiffre par ligne qui décrit autre
+    //     chose que la ligne est pire que pas de chiffre ;
+    //   · la CONCURRENCE — un compteur de scans en vol appartient à une métrique de
+    //     processus, pas au journal d'un scan ;
+    //   · la latence TCGdex — elle se déduit de `msCatalogue`. Recalculable, donc écartée.
+    msIA: Number,          // durée de l'appel OpenRouter. ~3 000 ms d'ordinaire, 16 976 ms
+    // vus le 2026-09-02 sur la même carte — six fois le premier appel, dans la minute d'un
+    // ECONNABORTED TCGdex. Deux services indépendants lents au même instant : sans ce
+    // champ, ce rapprochement n'était visible que dans des logs qui ne se conservent pas.
+    msCatalogue: Number,   // catalogue local + scoring. La part de CALCUL, celle qui bloque
+    // Node — le reste du scan est de l'attente réseau, qu'il encaisse bien.
+    // 🔴 LE MULTIPLICATEUR DU COÛT OPENROUTER, ET IL N'ÉTAIT NULLE PART. L'appel embarque
+    // TOUTES les photos de l'annonce : le prix d'un scan n'est pas constant, il est
+    // proportionnel à ce nombre. Sans lui, « que coûte un scan » reste sans réponse même
+    // avec la facture sous les yeux, parce qu'on ne sait pas par quoi diviser.
+    nbPhotos: Number,
+
     // --- CE QUI A ÉTÉ RETENU (la sortie) ---
     idProduct: Number,
     codeSetGagnant: String,   // code de set réel du produit retenu
@@ -874,6 +908,13 @@ function enregistrerScan(d = {}) {
             // de l'inférer.
             prixParEtat: nettoyerGrille(d.prixParEtat, v => Number.isFinite(v) && v > 0),
             nbOffresParEtat: nettoyerGrille(d.nbOffresParEtat, v => Number.isInteger(v) && v > 0),
+            // ── LES TROIS ENTIERS ────────────────────────────────────────────
+            // `Number.isFinite` et non `|| null` : 0 est une VALEUR pour une durée
+            // (un cache qui répond instantanément), et `0 || null` l'effacerait en la
+            // confondant avec l'absence. Même règle que `variantsDetailedNb`.
+            msIA: Number.isFinite(d.msIA) ? Math.round(d.msIA) : null,
+            msCatalogue: Number.isFinite(d.msCatalogue) ? Math.round(d.msCatalogue) : null,
+            nbPhotos: Number.isFinite(d.nbPhotos) ? d.nbPhotos : null,
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
             // Tronqué à 200 : un titre Vinted tient largement dedans, et on ne veut pas
@@ -1020,6 +1061,10 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // mesurer autre chose que ce qui est affiché.
     etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
     prixParEtat, nbOffresParEtat,
+    // ⚠️ LES TROIS ENTIERS SUR LES REFUS AUSSI, ET C'EST LÀ QU'ILS COMPTENT LE PLUS :
+    // un scan refusé a DÉJÀ payé son appel IA. Sans `msIA` et `nbPhotos` sur ces lignes,
+    // le coût des refus — 17,6 % du flux — resterait invisible dans la facture.
+    msIA, msCatalogue, nbPhotos,
     // ⚠️ LES ONZE CHAMPS DE L'IMAGE, SUR LES REFUS AUSSI — ajoutés le 2026-09-01.
     // Ils manquaient, et c'était le trou le plus coûteux du lot : les refus
     // `egalite-parfaite` sont EXACTEMENT la population que le départage par l'image vise.
@@ -1053,6 +1098,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         symboleDepartage,
         etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
         prixParEtat, nbOffresParEtat,
+        msIA, msCatalogue, nbPhotos,
         exAequoIds, vivierIds, vivierTaille, messageErreur,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.

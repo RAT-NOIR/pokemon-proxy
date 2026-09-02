@@ -1260,6 +1260,59 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //     dans un rapport — voir l'en-tête de mesure-route-langue.js.
 
 // ============================================================================
+// LE SIXIÈME PRINCIPE — on écrit ce qui n'est pas RECALCULABLE depuis la ligne
+// ============================================================================
+// ADOPTÉ LE 2026-09-02, après QUATRE trous de la même famille en une semaine.
+//
+// LES QUATRE, ET ILS ONT LA MÊME CAUSE :
+//   · `symboleSet` — lu par l'IA, transporté sur la voie du succès, PAS sur celle du
+//     refus. Symptôme : « symbole non lu, 30 fois sur 30 », lu pendant des semaines
+//     comme un taux de lecture. C'était un taux de TRANSPORT, et il valait zéro.
+//   · `vivierIds` — absent de 32 refus sur 35. Sans lui, « la bonne carte était-elle
+//     dans le vivier ? » n'a pas de réponse, et c'est la question qui sépare un défaut
+//     de VIVIER d'un défaut de DÉPARTAGE : deux chantiers qui n'ont rien à voir.
+//   · les champs d'ÉTAT — `etatEstime`, `etatConfiance`, `etatMin`, `etatRetenu`,
+//     `prixParEtat` : le bloc était construit ENTIER depuis des semaines et partait dans
+//     la RÉPONSE HTTP. Zéro ligne sur 212 en base.
+//   · les DURÉES — `msIA`, `msCatalogue` : dans un `console.log`, jamais écrites.
+//
+// 🔑 LA CAUSE COMMUNE : LA RÉPONSE ET LE JOURNAL SONT DEUX PUITS DISTINCTS. Enrichir
+// l'un n'enrichit pas l'autre, et RIEN ne le signale — la réponse est relue tous les
+// jours par l'extension, le journal seulement le jour où l'on veut mesurer. L'écart se
+// découvre des semaines plus tard, sous la forme d'un chiffre trop propre.
+//
+// ⚠️ LE CRITÈRE QUI A ÉTÉ ESSAYÉ PUIS ÉCARTÉ, et sa critique vaut plus que lui :
+//     « écrire ce dont l'absence rend une question IMPOSSIBLE à poser plus tard,
+//       par opposition à difficile ».
+// Il est juste sur le fond, et il a UN ANGLE MORT qui le rend inapplicable : il suppose
+// qu'on sache d'avance QUELLE question on se posera. Les quatre trous ci-dessus étaient
+// tous « impossibles » selon ce critère, et aucun n'avait été anticipé. Un critère qui
+// demande de prévoir l'avenir ne se vérifie pas au moment d'écrire le champ.
+//
+// 🔑 LE CRITÈRE RETENU, plus étroit et MÉCANIQUE :
+//     ON ÉCRIT CE QUI N'EST PAS RECALCULABLE DEPUIS LA LIGNE.
+// Il se vérifie sur-le-champ, sans rien prévoir : ou bien la valeur se redérive des
+// champs déjà présents, ou bien elle est perdue pour toujours. C'est exactement le
+// raisonnement qui avait fait SUPPRIMER `rang` et `setCodeAccord` — eux se recalculent,
+// et leur formule est testée. Le principe fonctionne donc dans les deux sens : il ajoute
+// et il retire, avec la même règle.
+//
+// CE QU'IL A FAIT ENTRER : `msIA`, `msCatalogue`, `nbPhotos` — trois entiers, ~12 octets
+// par ligne. Une durée ne se reconstitue par rien ; `nbPhotos` est le MULTIPLICATEUR du
+// coût OpenRouter (l'appel embarque toutes les photos de l'annonce), donc sans lui « que
+// coûte un scan » reste sans réponse même la facture sous les yeux, faute de diviseur.
+//
+// CE QU'IL A LAISSÉ DEHORS, et c'est aussi important sur un cluster qui a frôlé son
+// plafond à 2,5 Mo de marge :
+//   · la MÉMOIRE par scan — `process.memoryUsage()` décrit le PROCESSUS, pas le scan.
+//     Sous concurrence il est ininterprétable. ⚠️ UN CHIFFRE PAR LIGNE QUI DÉCRIT AUTRE
+//     CHOSE QUE LA LIGNE EST PIRE QUE PAS DE CHIFFRE : il se lira comme une mesure.
+//   · la CONCURRENCE — appartient à une métrique de processus, pas au journal d'un scan.
+//   · la latence TCGdex — se déduit de `msCatalogue`. Recalculable, donc dehors.
+//   · `avisDex.raison`, `parenteJournal`, `avis.preuves.length` — tous redérivables des
+//     champs présents.
+
+// ============================================================================
 // LE QUATRIÈME PRINCIPE — contredire prouve, ne pas lire ne prouve rien
 // ============================================================================
 // C'est le MIROIR du premier, et il se trompe dans l'autre sens. Le premier dit qu'une

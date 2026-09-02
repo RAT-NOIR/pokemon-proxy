@@ -95,6 +95,9 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // échelle : les deux doivent être ÉCARTÉS, pas écrits.
         prixParEtat: { NM: 4.75, EX: 1.5, GD: 1.81, XX: 9.99 },
         nbOffresParEtat: { NM: 12, EX: 3, GD: 1, PO: 0 },
+        // Les trois entiers. Valeurs RÉELLES : 2 891 ms est la durée du premier des deux
+        // appels IA du 2026-09-02, relevée dans les logs Render.
+        msIA: 2891, msCatalogue: 412, nbPhotos: 4,
         // Les deux URL qui rendent la ligne revérifiable des mois plus tard.
         imageUrl: 'https://images1.vinted.net/t/00_01234_photo.jpeg',
         vintedUrl: 'https://www.vinted.fr/items/1234567890-carte-pokemon'
@@ -168,6 +171,12 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // repose sur UNE offre. C'est exactement ce qu'on ne pouvait pas vérifier avant.
         verifier('GD repose sur une offre unique (l\'échelle non monotone s\'explique)',
             echec.nbOffresParEtat?.GD, 1);
+        // ⚠️ LES TROIS ENTIERS SUR UN REFUS, et c'est là qu'ils comptent le plus : un scan
+        // refusé a DÉJÀ payé son appel IA. Sans eux, le coût des 17,6 % de refus reste
+        // invisible dans la facture OpenRouter, et rien ne le reconstitue après coup.
+        verifier('msIA écrit sur un refus', echec.msIA, 2891);
+        verifier('msCatalogue écrit sur un refus', echec.msCatalogue, 412);
+        verifier('nbPhotos — le multiplicateur du coût IA', echec.nbPhotos, 4);
         // total absent de la carte -> absent de la ligne. C'est une information, pas un trou.
         verifier('total (aucun imprimé sur la carte)', echec.total ?? null, null);
         // ⚠️ `rang` a été SUPPRIMÉ le 2026-08-18 (champ dérivé, jamais lu). Le point qui

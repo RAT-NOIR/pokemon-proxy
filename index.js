@@ -3303,7 +3303,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         const debutIA = Date.now();
         cardInfo = await getCardIdFromAI(photos, title);
         // ⚓ JALON DU VERROU (« ia-lue ») — voir verrou/jalons.js.
-        console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
+        // ⚠️ CAPTURÉ DANS UNE VARIABLE, PAS SEULEMENT AFFICHÉ. Cette durée n'existait que
+        // dans ce `console.log` : elle partait dans les logs Render et nulle part ailleurs.
+        // `msCatalogue` est renseignée plus bas, au même endroit que son propre log.
+        const msIA = Date.now() - debutIA;
+        let msCatalogue = null;
+        console.log(`⏱️ [identifier] appel IA : ${msIA} ms`);
+        // UN SEUL POINT DE CONSTRUCTION, comme `champsEtat` et `champsVivier`. Et une
+        // FONCTION pour la même raison : `msCatalogue` n'est renseignée que ~700 lignes
+        // plus bas, et les sorties de refus d'amont doivent quand même porter `msIA` et
+        // `nbPhotos`. Un objet figé ici rendrait `msCatalogue` toujours nulle.
+        const champsCout = () => ({ msIA, msCatalogue, nbPhotos: photos.length });
         if (!cardInfo) {
             const rendu = await rembourserScan(req, 'ia-echec');
             // ⚠️ `cardInfo` EST NUL ICI, ET LE BLOC RESTE UTILE : `etatVinted` et `etatMin`
@@ -3312,7 +3322,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // null-là est une information : la lecture a échoué, pas l'annonce.
             enregistrerEchec({
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null,
-                motifEchec: 'ia-echec', rembourse: rendu, ...champsEtat()
+                motifEchec: 'ia-echec', rembourse: rendu, ...champsEtat(), ...champsCout()
             });
             // ⚠️ REMBOURSÉ, ET POURTANT UNE PANNE. C'est précisément le cas qui rendait
             // `rembourse` inutilisable seul : voir la table NATURE_REFUS au-dessus.
@@ -3621,7 +3631,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: motif, rembourse: rendu,
                     reverseLu: cardInfo.reverse === true, motifIA: cardInfo.motif, estDex: avisDex.estDex,
-                    ...champsEtat()
+                    ...champsEtat(), ...champsCout()
                 });
                 return res.json({
                     success: false,
@@ -4047,7 +4057,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // produit Cardmarket » : l'atteindre PROUVE que la ligne qui a tué la production le
         // 4 août (« memeCodeParConventionX is not a function ») a bien été exécutée.
         // Ne pas reformuler, ne pas déplacer au-dessus de cet appel — voir verrou/jalons.js.
-        console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
+        msCatalogue = Date.now() - debutCatalogue;
+        console.log(`⏱️ [identifier] catalogue+scoring : ${msCatalogue} ms`);
 
         // ════════════════════════════════════════════════════════════════════
         // LE VIVIER, SUR TOUTE LIGNE DE REFUS — UN SEUL POINT DE CONSTRUCTION
@@ -4101,7 +4112,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
                 // L'état est connu dès la lecture IA : un refus n'empêche pas de savoir ce
                 // que le vendeur a déclaré ni ce que l'IA a vu de l'usure.
-                ...champsEtat(),
+                ...champsEtat(), ...champsCout(),
                 // ⚠️ ICI LE VIVIER EST SOUVENT VIDE, ET C'EST PRÉCISÉMENT L'INFORMATION.
                 // `aucun-candidat` peut vouloir dire deux choses très différentes : aucun
                 // produit trouvé au catalogue, ou des produits trouvés dont aucun n'a
@@ -4198,7 +4209,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                         route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                         motifEchec: motifRefus, rembourse: rendu,
                         reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
-                        ...champsEtat(),
+                        ...champsEtat(), ...champsCout(),
                         // ⚠️ LE VIVIER ICI EST CELUI DU SCORING (`produits`), PAS LE VIVIER
                         // DE PREUVE DU VETO (`r.scores`). Les deux existent à cette ligne et
                         // ils ne répondent pas à la même question : `produits` est la
@@ -4377,7 +4388,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
                     fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
                     reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
-                    ...champsEtat(),
+                    ...champsEtat(), ...champsCout(),
                     // Les onze champs, tels que `departager()` les rend — même objet que
                     // sur la voie du succès, même point de construction.
                     champsImage: avisImageRefus.champs,
@@ -5121,7 +5132,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             nomBrut: cardInfo.nomBrut,
             symboleSet: cardInfo.symboleSet,
             // Les six champs de l'état, tels que la RÉPONSE les rend — même construction.
-            ...champsEtat(),
+            ...champsEtat(), ...champsCout(),
             voieCatalogue,
             motifEtat: motifResolution.etat,
             // ⚠️ LES TROIS ENTRÉES DE LA RÉSOLUTION DE MOTIF — voir journal-scans.js.
