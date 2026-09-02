@@ -925,6 +925,11 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
     // groupe était couvert par un index, ni de mesurer la clôture après coup.
     exAequoIds, vivierIds, vivierTaille, messageErreur,
+    // ⚠️ LA PHRASE DU DÉPARTAGE PAR LE SYMBOLE — ajoutée le 2026-09-02, MÊME MOTIF QUE
+    // `champsImage` : elle n'existe que là où le départage a été consulté, donc elle passe
+    // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
+    // dire « le départage n'avait pas encore eu lieu » — pas « il n'a rien trouvé ».
+    symboleDepartage,
     // ⚠️ LES ONZE CHAMPS DE L'IMAGE, SUR LES REFUS AUSSI — ajoutés le 2026-09-01.
     // Ils manquaient, et c'était le trou le plus coûteux du lot : les refus
     // `egalite-parfaite` sont EXACTEMENT la population que le départage par l'image vise.
@@ -955,12 +960,30 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         reverseLu: reverseLu != null ? Boolean(reverseLu) : null,
         motifIA: motifIA ?? c.motif ?? null,
         estDex: estDex != null ? Boolean(estDex) : null,
+        symboleDepartage,
         exAequoIds, vivierIds, vivierTaille, messageErreur,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,
         setCode: c.setCode, langue: c.language, rarete: c.rarete,
         nomBrut: c.nomBrut, nomConfiance: c.nomConfiance,
+        // 🔴 `symboleSet` MANQUAIT DE CETTE LISTE, ET C'ÉTAIT UN TROU DE JOURNALISATION,
+        // PAS UN TAUX DE LECTURE — corrigé le 2026-09-02.
+        // LE CONSTAT QUI L'A RÉVÉLÉ : « symbole non lu, 30 fois sur 30 » sur la voie du
+        // refus. Un zéro parfait sur trente n'est pas un taux, c'est un instrument. Et il
+        // l'était : `enregistrerScan` écrit `symboleSet: d.symboleSet || null`, or
+        // `enregistrerEchec` ne le lui passait JAMAIS. Les trente `null` étaient produits
+        // par cette ligne-ci, pas par l'IA — qui, elle, lit le symbole et le rend dans
+        // `cardInfo.symboleSet` (107 lignes livrées en portent un, dont 37 « illisible »).
+        // ⚠️ C'EST LE MÊME DÉFAUT QUE `departagerParImage` BRANCHÉ APRÈS LE `return` :
+        // un signal qu'on croit mesurer nul alors qu'on ne le transporte pas. Il se
+        // reconnaît au même symptôme — une valeur trop propre pour être vraie.
+        // 🔑 ET IL EST RÉPARÉ ICI, PAS CHEZ LES APPELANTS : `symboleSet` appartient à
+        // `cardInfo`, exactement comme `nom`, `numero` ou `rarete`. Le tirer de `c` comme
+        // ses voisins le rend impossible à oublier — aucun site de refus n'a à y penser,
+        // et le prochain site créé l'aura sans rien faire. Un paramètre explicite, lui,
+        // aurait été oublié au sixième site, comme les trois champs de refus l'ont été.
+        symboleSet: c.symboleSet,
         // ⚠️ LES REFUS NE PORTAIENT PRESQUE RIEN, et personne ne l'avait vu parce qu'on ne
         // les mesurait jamais. Mesuré le 2026-08-11 sur les 17 refus par égalité parfaite :
         // nbCandidats 0/17 · nbExAequo 0/17 · concurrentIdProduct 0/17 · ecartScore 0/17.

@@ -77,9 +77,15 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         route: 'identifier', userId: MARQUEUR,
         cardInfo: {
             name: 'Dark Dragonite', number: '149', total: null, setCode: 'ROG',
-            language: 'JP', rarete: 'Holo Rare', nomBrut: 'わるいカイリュー', nomConfiance: 'haute'
+            language: 'JP', rarete: 'Holo Rare', nomBrut: 'わるいカイリュー', nomConfiance: 'haute',
+            // ⚠️ VALEUR RÉELLE, PAS UNE FIXTURE INVENTÉE : « R » est le symbole que l'IA
+            // rend sur les Rocket Gang, et le journal de production en porte 14.
+            symboleSet: 'R'
         },
         motifEchec: 'carte-introuvable', rembourse: true,
+        // Le vivier au moment du refus : deux produits vus par le scoring, aucun retenu.
+        vivierIds: [585151, 650617], vivierTaille: 2,
+        symboleDepartage: 'symbole « R » lu, mais aucun ex aequo ne le porte',
         // Les deux URL qui rendent la ligne revérifiable des mois plus tard.
         imageUrl: 'https://images1.vinted.net/t/00_01234_photo.jpeg',
         vintedUrl: 'https://www.vinted.fr/items/1234567890-carte-pokemon'
@@ -102,6 +108,31 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         verifier('rarete', echec.rarete, 'Holo Rare');
         verifier('nomBrut', echec.nomBrut, 'わるいカイリュー');
         verifier('nomConfiance', echec.nomConfiance, 'haute');
+        // ════════════════════════════════════════════════════════════════════
+        // 🔴 LES TROIS ASSERTIONS QUI AURAIENT ATTRAPÉ LE TROU — 2026-09-02
+        // ════════════════════════════════════════════════════════════════════
+        // `symboleSet` était le SEUL champ de `cardInfo` que `enregistrerEchec` n'aplatissait
+        // pas. Résultat en production : « symbole non lu, 30 fois sur 30 » sur la voie du
+        // refus — un zéro parfait, qui a été lu comme un taux de lecture pendant des
+        // semaines alors qu'il décrivait un transport manquant.
+        // ⚠️ CE FICHIER ÉTAIT VERT PENDANT TOUT CE TEMPS, et il l'était légitimement : il
+        // vérifiait sept champs de `cardInfo` sur huit. Le trou n'était pas dans une
+        // assertion fausse, il était dans une assertion ABSENTE — et une assertion absente
+        // ne se voit jamais, par construction. C'est le point 2 de l'en-tête (« c'est là
+        // qu'un champ se perd en silence ») qui s'est vérifié sur le champ non couvert.
+        // 🔑 LA RÈGLE QU'ON EN TIRE : quand un test aplatit un objet, il doit couvrir
+        // TOUS ses champs, pas un échantillon. Un échantillon prouve que l'aplatissement
+        // existe ; il ne prouve rien sur le champ qu'il ne nomme pas.
+        verifier('symboleSet aplati depuis cardInfo', echec.symboleSet, 'R');
+        // Le vivier sur une ligne de refus : sans lui, « la bonne carte y était-elle ? »
+        // n'a pas de réponse, et c'est la question qui sépare défaut de vivier et défaut
+        // de départage. Absent de 32 refus sur 35 au 2026-09-02.
+        verifier('vivierIds écrit sur un refus', echec.vivierIds, [585151, 650617]);
+        verifier('vivierTaille écrite sur un refus', echec.vivierTaille, 2);
+        // La phrase du symbole, MÊME quand il n'a rien tranché : c'est ce cas-là qu'on
+        // cherchait, et il était invisible.
+        verifier('symboleDepartage écrit sur un refus',
+            echec.symboleDepartage, 'symbole « R » lu, mais aucun ex aequo ne le porte');
         // total absent de la carte -> absent de la ligne. C'est une information, pas un trou.
         verifier('total (aucun imprimé sur la carte)', echec.total ?? null, null);
         // ⚠️ `rang` a été SUPPRIMÉ le 2026-08-18 (champ dérivé, jamais lu). Le point qui

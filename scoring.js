@@ -1191,10 +1191,32 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      lui : 7 sites, énumération close, et le statut de chacun se lit d'un coup. Une famille
 //      définie par un APPEL a des frontières ; une famille définie par une TOURNURE n'en a
 //      pas, parce que la prochaine sera écrite avec d'autres mots.
+//      🔑 ET LA DÉMONSTRATION EST VENUE DU CORRECTIF LUI-MÊME : après avoir réparé le
+//      cinquième site, un grep de contrôle sur `error:` — le champ, cette fois, pas le
+//      vocabulaire — NE L'A PAS FAIT APPARAÎTRE. Sa valeur commence par une ternaire
+//      (`error: tcgdexEnPanne ? ... : ...`), donc pas par un guillemet. Un recensement par
+//      le mot aurait manqué le cinquième exemplaire ET celui qu'on venait de corriger.
+//      ⚠️ LA PARADE NE TIENT DONC PAS PARCE QU'ELLE EST PLUS LARGE. Elle tient parce
+//      qu'elle passe par l'APPEL, qui a des frontières, et non par la tournure, qui n'en a
+//      pas. Un grep plus généreux reste un grep sur une forme d'écriture ; il élargit le
+//      filet sans lui donner de bord.
 //      ⚠️ COROLLAIRE, vu dans le même échange : un numéro de ligne cité d'un dépôt à l'autre
 //      est périmé au commit suivant. L'agent de l'extension signalait « index.js:3990-3991 » ;
 //      quatorze lignes de helper insérées plus haut avaient décalé le fichier, et le site
 //      désigné était celui qu'on venait de corriger. Le contrat, lui, ne se décale pas.
+//
+//      🔴 ET CE CATALOGUE PORTAIT LUI-MÊME, EN QUATRE ENDROITS, L'ERREUR DE SA PROPRE
+//      NOTE 2 — la seconde source de vérité. `mesure-images-vintage.js` annonçait « Huit
+//      erreurs recensées », `mesure-cloture-exaequo.js` et `mesure-sourcing-images.js`
+//      « Neuf », `PASSATION.md` « 9 entrées », alors que la liste ci-dessus en compte
+//      dix-sept. Quatre compteurs recopiés, quatre fois faux, dans les fichiers dont
+//      l'en-tête enseigne la discipline.
+//      LE REMÈDE N'EST PAS DE LES METTRE À JOUR — ce serait corriger une occurrence du
+//      défaut en réinstallant le défaut, puisque le prochain ajout les refait mentir.
+//      LE NOMBRE A ÉTÉ SUPPRIMÉ des quatre. Il ne vit qu'ici, dans la liste elle-même, où
+//      il n'est pas un compteur mais le décompte de ce qui est écrit.
+//      🔑 LA RÈGLE GÉNÉRALE : ON NE RECOPIE PAS UN CHIFFRE QUI DÉCRIT UN AUTRE FICHIER. On
+//      y renvoie. Un renvoi vieillit bien, un compteur non.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
@@ -1225,6 +1247,34 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 // LA RÈGLE : une lecture ne fait preuve QUE si elle désigne quelque chose de réel. Un code
 // qui résout vers un set existant contredit ; un code qui ne résout vers rien est du bruit,
 // et le bruit se traite comme l'absence — neutre.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// ⚰️ HYPOTHÈSE TUÉE PAR LA MESURE — 2026-09-02. « LE PÉRIMÈTRE PERD DES CARTES »
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ CECI N'EST PAS UN CHANTIER REPORTÉ. C'est une piste qu'on a suivie, mesurée, et
+// qui s'est révélée fausse. Elle est écrite ici pour qu'on ne la resuive pas.
+//
+// L'HYPOTHÈSE, plausible et étayée par le paragraphe ci-dessus : la table close ayant
+// déjà bloqué des sets réels (UNP, M-P, CLK…), elle devait continuer d'exclure la bonne
+// carte, et l'élargir devait récupérer des lignes. Le périmètre ne peut que RESTREINDRE :
+// s'il exclut la vérité, aucun signal en aval ne la rattrape.
+//
+// LA MESURE, sur les 211 lignes de production au 2026-09-02 :
+//   · 25 lignes sortent en réserve `perimetre-vintage-suggestion` ;
+//   · 🔴 23 D'ENTRE ELLES N'AVAIENT AUCUN setCode LU. Le périmètre n'a rien exclu : il
+//     s'est armé parce que RIEN ne lui a été présenté ;
+//   · les 2 seules qui portaient un setCode réellement lu ont trouvé le bon set —
+//     « e1 » -> EC1, « ROG » -> ROG. Aucune des deux n'est une perte.
+//
+// 🔑 CE QUE ÇA TUE : élargir la table close ne récupérerait RIEN sur 23 lignes de 25. Le
+// périmètre n'est pas ce qui perd ces cartes. Le vrai défaut de cette population est en
+// AMONT — le setCode n'est pas lu du tout — et c'est un problème de LECTURE, pas de
+// périmètre. Deux chantiers qu'on allait confondre.
+//
+// ⚠️ LA BORNE DE CETTE CONCLUSION, et elle compte : faute de `vivierIds` sur les lignes
+// anciennes, on ne peut pas PROUVER que le périmètre n'a jamais écarté la vérité — on
+// prouve seulement qu'aucune ligne ne montre un setCode lu puis contredit. La preuve
+// complète demandera le vivier journalisé sur les refus (index.js, `champsVivier`).
 // ⚠️ ET LE PIÈGE DE MÉTHODE QUI VA AVEC : cette garde avait été conçue en observant les cinq
 // lignes qu'elle devait bloquer, puis validée sur ces mêmes cinq lignes. Un garde-fou
 // mesuré sur les cas qui l'ont inspiré est toujours parfait. C'est en le passant sur les

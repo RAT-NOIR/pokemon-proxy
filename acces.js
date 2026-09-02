@@ -147,6 +147,39 @@ async function verifierAcces(req, res, next) {
     // 1) userId obligatoire, vérifié AVANT tout accès Mongo. Sans identifiant on ne
     // peut rien décompter : laisser passer offrirait des scans illimités à qui
     // omettrait simplement le champ.
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 L'IDENTITÉ EST DÉCLARATIVE — PROPRIÉTÉ ASSUMÉE, PAS DÉFAUT À CORRIGER
+    // ════════════════════════════════════════════════════════════════════════
+    // Constat écrit le 2026-09-02, après inventaire de ce qui peut être abusé.
+    //
+    // CE QUE FAIT CETTE LIGNE : elle accepte une chaîne fournie par le client, la tronque
+    // à 80 caractères, et n'en vérifie NI LA FORME NI L'ORIGINE. Le `userId` est fabriqué
+    // et stocké par l'extension ; le `JETON_API` qui garde la route est, de l'aveu du
+    // commentaire d'index.js, extractible du paquet distribué.
+    // CONSÉQUENCE, ET ELLE EST ENTIÈRE : toute identité produite par le client est
+    // FORGEABLE. Une identité neuve = une dotation d'accueil neuve. Il n'est même pas
+    // nécessaire de réinstaller l'extension — il suffit d'envoyer une autre chaîne.
+    //
+    // ⚠️ AUCUNE VALIDATION DE FORME N'Y CHANGE QUOI QUE CE SOIT, et c'est le point à
+    // retenir : exiger un UUID ne coûte rien à produire à celui qui abuse. Un contrôle de
+    // forme sur une valeur que l'attaquant choisit ne contrôle rien. Ce serait un
+    // contournement partiel qui donnerait l'impression d'une barrière — le pire des deux
+    // mondes, puisqu'il ferait cesser de chercher.
+    //
+    // CE QUI BORNE RÉELLEMENT LE COÛT — et ce n'est PAS ce qu'on croit :
+    //   ✅ les LIMITEURS PAR IP (60/h sur les routes IA) sont la seule vraie borne. Chaque
+    //      scan accepté dépense un appel OpenRouter AVANT tout refus, jamais remboursé ;
+    //      le limiteur plafonne donc la dépense par IP, quelle que soit la quantité
+    //      d'identifiants fabriqués.
+    //   ❌ le PLAFOND DE REMBOURSEMENT (5/userId/jour) ne borne RIEN de l'abus : sa clé est
+    //      le userId, donc elle se renouvelle avec lui. Il protège la caisse d'un
+    //      remboursement en boucle, pas la facture IA.
+    //   ❌ le quota hebdo non plus, même clé.
+    //
+    // POUR EN SORTIR IL FAUDRAIT UN COMPTE — donc un email, donc une vérification, donc
+    // une friction à l'inscription. C'est une DÉCISION PRODUIT, elle n'a pas été prise, et
+    // elle n'est pas du ressort de ce fichier. Tant qu'elle ne l'est pas, la dotation
+    // d'accueil est un coût d'acquisition assumé, pas une faille.
     const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
     if (!userId) {
         return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });

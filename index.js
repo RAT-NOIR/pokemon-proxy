@@ -3097,6 +3097,13 @@ const REFUS_D_ABSENCE = new Set(['carte-introuvable', 'aucun-candidat']);
 // Recensement des 7 sites : grep sur `champsDeRefus(` — PAS sur le vocabulaire du défaut.
 // Le cinquième exemplaire disait « votre crédit est rendu » et aucun grep sur « rembours »
 // ne l'a jamais vu. Voir l'erreur d'instrument #17 dans scoring.js.
+//
+// ⚠️ ANGLE MORT ASSUMÉ, DÉCLARÉ ICI PARCE QUE C'EST ICI QU'ON VIENDRA :
+// AUCUN TEST NE LIT LES PHRASES DE REFUS. `test-sources.js` couvre la NATURE des sorties
+// (`refus-delibere` / `echec-technique`, clause 3 comprise) et rien de leur PROSE. Les cinq
+// exemplaires de la clause d'argent ont donc tous été trouvés à l'œil, un par un, sur
+// signalement — jamais par une suite. Non comblé le 2026-09-01, sur décision du testeur, et
+// écrit pour que la prochaine relecture sache que le vert des suites ne couvre pas ce texte.
 function champsDeRefus(motifRefus, rembourse) {
     // CLAUSE 3 — un refus d'absence prononcé alors qu'une source est tombée n'est pas un
     // refus délibéré, c'est un échec technique. Le MOTIF ne bouge pas (il dit par où on
@@ -3930,6 +3937,47 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Ne pas reformuler, ne pas déplacer au-dessus de cet appel — voir verrou/jalons.js.
         console.log(`⏱️ [identifier] catalogue+scoring : ${Date.now() - debutCatalogue} ms`);
 
+        // ════════════════════════════════════════════════════════════════════
+        // LE VIVIER, SUR TOUTE LIGNE DE REFUS — UN SEUL POINT DE CONSTRUCTION
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI CE POINT EXISTE. `vivierIds` manquait sur 32 refus sur 35 (mesuré le
+        // 2026-09-02), et sans lui LA question du chantier n'a pas de réponse :
+        //     la bonne carte était-elle dans le vivier ?
+        // Elle sépare deux chantiers qui n'ont rien à voir — un défaut de VIVIER, qu'aucun
+        // départage ne rattrapera jamais, et un défaut de DÉPARTAGE, où un signal de plus
+        // peut sauver la ligne. Sur 76 lignes portant une vérité individuelle, UNE SEULE
+        // portait aussi `vivierIds` : la question était indécidable, quel que soit le
+        // nombre de vérités saisies ensuite. Ce n'est donc pas un levier de plus, c'est le
+        // PRÉALABLE aux deux autres.
+        //
+        // 🔑 POURQUOI UNE FONCTION ET NON UN OBJET FIGÉ ICI. Un instantané pris à cette
+        // ligne serait lu jusqu'à 300 lignes plus bas, et `produits` est RÉASSIGNÉ entre
+        // les deux (veto-nom, ligne ~4019). Il rendrait alors le vivier d'AVANT le
+        // re-classement en prétendant décrire celui du refus — c'est-à-dire l'erreur
+        // d'instrument #7, LE CHAMP LU TROP TÔT, réintroduite par le correctif censé
+        // fermer un trou de journalisation. La fonction lit `produits` AU MOMENT du refus,
+        // et c'est le seul moment qui décrit la décision.
+        //
+        // ⚠️ CE QU'IL ATTRAPE : tout refus en aval du scoring porte désormais le vivier
+        // que le scoring a réellement vu, y compris VIDE — et « vide constaté » n'est pas
+        // « inconnu », c'est exactement la distinction qui manquait.
+        // ⚠️ CE QU'IL N'ATTRAPE PAS, et il faut le savoir avant de s'y fier :
+        //   · les refus EN AMONT du catalogue — `ia-echec`, `tcgdex-injoignable`,
+        //     `carte-introuvable`, `numero-illisible` — n'ont pas de vivier du tout. Leur
+        //     `null` reste un null honnête : aucun vivier n'a été constitué. Ne pas le
+        //     lire comme « vivier vide ».
+        //   · `erreur-serveur` (le catch) : `produits` peut ne pas exister selon l'endroit
+        //     où l'exception est tombée. Le catch ne l'appelle donc pas.
+        //   · il ne dit RIEN de la justesse : savoir que la vérité était dans le vivier
+        //     demande une vérité saisie, et le banc en a 70 pour 181 lignes.
+        //   · les 32 lignes déjà écrites sans le champ ne seront jamais réparées — un
+        //     journal ne se réécrit pas. La mesure part de zéro à partir d'ici.
+        const champsVivier = () => ({
+            vivierIds: produits.map(p => p.idProduct),
+            vivierTaille: produits.length,
+            nbCandidats: produits.length
+        });
+
         // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
         // le scan. (Un classement même incertain, lui, EST un résultat livré.)
         if (classement.length === 0) {
@@ -3938,7 +3986,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             enregistrerEchec({
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                 motifEchec: 'aucun-candidat', rembourse: rendu,
-                reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                // ⚠️ ICI LE VIVIER EST SOUVENT VIDE, ET C'EST PRÉCISÉMENT L'INFORMATION.
+                // `aucun-candidat` peut vouloir dire deux choses très différentes : aucun
+                // produit trouvé au catalogue, ou des produits trouvés dont aucun n'a
+                // survécu au scoring. Le premier est un défaut de collecte, le second un
+                // défaut de scoring. Sans ce champ les deux étaient confondus.
+                ...champsVivier()
             });
             // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
             return res.json({ success: false, ...champsDeRefus('aucun-candidat', rendu), error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
@@ -4028,7 +4082,15 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     enregistrerEchec({
                         route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                         motifEchec: motifRefus, rembourse: rendu,
-                        reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                        reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                        // ⚠️ LE VIVIER ICI EST CELUI DU SCORING (`produits`), PAS LE VIVIER
+                        // DE PREUVE DU VETO (`r.scores`). Les deux existent à cette ligne et
+                        // ils ne répondent pas à la même question : `produits` est la
+                        // population que la chaîne a réellement considérée, donc la seule
+                        // dans laquelle « la vérité y était-elle ? » a un sens. `r.scores`
+                        // décrit pourquoi le veto a refusé, et son compte part déjà au
+                        // journal par `nbCandidats` ci-dessous — écrasé volontairement.
+                        ...champsVivier(), nbCandidats: r.scores.length
                     });
                     return res.json({
                         success: false,
@@ -4202,9 +4264,16 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // Les onze champs, tels que `departager()` les rend — même objet que
                     // sur la voie du succès, même point de construction.
                     champsImage: avisImageRefus.champs,
+                    // 🔑 LA PHRASE DU SYMBOLE, SUR LE REFUS AUSSI — ajoutée le 2026-09-02.
+                    // `symboleDepartageRaison` est renseignée à ce point (elle l'est ~75
+                    // lignes plus haut) et elle dit ce que le symbole a fait MÊME quand il
+                    // n'a rien tranché : « aucun symbole lu », ou « symbole lu, mais aucun
+                    // ex aequo ne le porte ». C'est exactement le cas qui manquait : un
+                    // refus par égalité où un symbole ÉTAIT lu sans pouvoir départager.
+                    symboleDepartage: symboleDepartageRaison,
                     // Le refus par égalité est LE cas où ces champs manquaient le plus :
                     // il dit « je ne sais pas départager » sans dire entre quoi.
-                    exAequoIds, vivierIds: produits.map(p => p.idProduct), vivierTaille: produits.length
+                    exAequoIds, ...champsVivier(), nbCandidats: produits.length
                 });
                 return res.json({
                     success: false,
@@ -4630,6 +4699,30 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // soit-elle, ne franchit pas la condition 1.
         // ⚠️ ET LA RÈGLE DE RÉTROGRADATION, PLUS BAS, RESTE PRIORITAIRE : une entrée forte
         // redescend à la première mesure où elle rate, sans discussion.
+        //
+        // ════════════════════════════════════════════════════════════════════
+        // 🔴 LA RÈGLE CI-DESSUS EST INCOHÉRENTE AVEC SON PROPRE PRÉCÉDENT — 2026-09-02
+        // ════════════════════════════════════════════════════════════════════
+        // ⚠️ CONSIGNÉ, PAS RÉSOLU. Aucune entrée n'est promue ni rétrogradée par cette note.
+        // Elle existe pour qu'on ne s'appuie pas sur la règle en la croyant cohérente.
+        //
+        // LE CALCUL. La condition 3 exige un Wilson 95 % DISJOINT de celui de
+        // `perimetre-vintage-suggestion` — 10/16, dont la borne HAUTE est 81,5 %.
+        // Or la condition 1 exige « 12 lignes, 12/12 ». Wilson sur 12/12 = [75,8 – 100].
+        //     75,8 < 81,5  ->  LES DEUX INTERVALLES SE CHEVAUCHENT.
+        // 🔑 LA RÈGLE, APPLIQUÉE À LA LETTRE, REFUSERAIT `symbole-departage` — l'entrée
+        // qu'elle prétend précisément codifier, et la seule qui soit `forte`.
+        // Il faut 20/20 sans faute pour que la borne basse (83,9 %) dépasse 81,5.
+        //
+        // CE QUE ÇA VEUT DIRE, ET C'EST LE FOND : « 12 lignes » n'est pas un critère, c'est
+        // un PROXY pour « assez de preuve ». Le critère réel est l'intervalle. Les deux ont
+        // été écrits côte à côte comme s'ils disaient la même chose ; ils ne la disent pas.
+        // Un seuil en effectif et un seuil en intervalle ne se traduisent pas l'un dans
+        // l'autre, et écrire les deux fabrique une règle qui se contredit en silence.
+        //
+        // ⚠️ CE QUI N'EST PAS EN CAUSE : la condition 5, écrite pour l'image — une erreur y
+        // est pire qu'un refus, la charge de la preuve est entièrement du côté du signal.
+        // Elle ne dépend d'aucun effectif et reste vraie.
         const NIVEAU_RESERVE = {
             'symbole-departage': 'forte',   // 12/12 justes — le symbole du set a désigné un seul ex aequo
             // ⚠️ FAIBLE, ET C'EST UN ARBITRAGE, PAS UN OUBLI. Le départage par l'image est
