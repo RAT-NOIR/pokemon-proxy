@@ -405,12 +405,29 @@ async function redresser(buf) {
     //   « débloque »  — le set est le SEUL à bloquer cette ligne. Le collecter la libère.
     // On trie sur « débloque ». Additionner les « participe » ferait promettre des gains
     // qui ne viendront qu'une fois TOUS les sets concernés terminés.
+    // 🔴 CORRIGÉ LE 2026-09-02 — CETTE SECTION LISAIT `l.vivier`, LE VIVIER FIGÉ DU LABO,
+    // alors que `couverture` (qui sélectionne `perdues`, juste au-dessus) est calculée sur
+    // le vivier RECALCULÉ. Deux populations différentes dans la même formule : on
+    // sélectionnait des lignes d'après le vivier réel, puis on cherchait leurs trous dans
+    // un instantané plus ancien et plus petit. C'est l'erreur d'instrument #13 — la mesure
+    // juste appliquée à la mauvaise population — SURVIVANTE dans ce bloc alors qu'elle
+    // avait été corrigée trente lignes plus haut, le 2026-08-30.
+    // ⚠️ ELLE SOUS-COMPTAIT LES BLOQUEURS : tout produit importé depuis l'instantané était
+    // invisible, donc absent de la liste de collecte. La liste promettait des déblocages
+    // qui ne seraient pas venus.
     const perdues = lignes.filter(l => l.couverture < 1 && l.brut?.rang === 1 && l.s && l.s.rangScoring !== 1);
     const parSet = new Map();
+    const parProduit = new Map();   // idProduct -> { debloque, participe }
     for (const l of perdues) {
-        const ids = (l.vivier || []).filter(x => x != null);
+        const ids = (l.idsReels || []).filter(x => x != null);
         const vect = await I.chargerVecteurs(ids);
         const sans = ids.filter(i => !vect.has(i));
+        for (const id of sans) {
+            if (!parProduit.has(id)) parProduit.set(id, { participe: 0, debloque: 0 });
+            parProduit.get(id).participe++;
+            // Un produit ne DÉBLOQUE une ligne que s'il est le seul à la bloquer.
+            if (sans.length === 1) parProduit.get(id).debloque++;
+        }
         const prods = await mongoose.connection.collection('catalogue_produits')
             .find({ idProduct: { $in: sans } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
         const exps = [...new Set(prods.map(p => Number(p.idExpansion)))];
@@ -445,7 +462,30 @@ async function redresser(buf) {
         console.log(`      elles ne se libèrent qu'une fois tous leurs bloqueurs terminés.`);
     }
 
-    const manquants = lignes.map(l => Math.round((1 - l.couverture) * (l.vivier?.length ?? 0)));
+    // ── LA LISTE PAR PRODUIT, pour la collecte ciblée ───────────────────────
+    // Le codeSet dit OÙ chercher ; le produit dit QUOI collecter. Une collecte ciblée de
+    // 12 cartes avait débloqué 12 D+ là où une passe au hasard bien plus grosse en avait
+    // débloqué 0 — d'où cette liste, triée sur « débloque » et jamais sur le volume.
+    if (parProduit.size) {
+        const idsP = [...parProduit.keys()];
+        const infos = await mongoose.connection.collection('catalogue_produits')
+            .find({ idProduct: { $in: idsP } }, { projection: { idProduct: 1, name: 1 } }).toArray();
+        const nomDe = new Map(infos.map(p => [p.idProduct, p.name]));
+        const classe = idsP.map(id => ({ id, ...parProduit.get(id), nom: nomDe.get(id) || '(hors catalogue)' }))
+            .sort((a, b) => b.debloque - a.debloque || b.participe - a.participe);
+        console.log(`\n   ── LES PRODUITS À COLLECTER, triés par D+ débloqués ──`);
+        console.log(`   ${'idProduct'.padStart(9)} ${'débloque'.padStart(8)} ${'participe'.padStart(9)}   nom`);
+        for (const c of classe.slice(0, 25)) {
+            console.log(`   ${String(c.id).padStart(9)} ${String(c.debloque).padStart(8)} ${String(c.participe).padStart(9)}   ${String(c.nom).slice(0, 46)}`);
+        }
+        console.log(`   ${classe.length} produit(s) distinct(s) en cause · ${classe.filter(c => c.debloque).length} débloquent à eux seuls.`);
+    }
+
+    // ⚠️ MÊME CORRECTION QUE CI-DESSUS : `couverture` porte sur le vivier RECALCULÉ, donc
+    // la longueur qui la multiplie doit être celle du MÊME vivier. Avec `l.vivier` (figé),
+    // ce produit mélangeait un taux d'aujourd'hui et une taille d'hier — un nombre de
+    // manquants qui ne correspondait à aucune population réelle.
+    const manquants = lignes.map(l => Math.round((1 - l.couverture) * (l.idsReels?.length ?? 0)));
     console.log(`\n   candidats sans vecteur, par vivier : médiane ${med(manquants.filter(x => x > 0))} ` +
         `· maximum ${Math.max(...manquants)}`);
     console.log(`   ⚠️ UN SEUL candidat non collecté dans un vivier de 60 suffit à faire abstenir.`);

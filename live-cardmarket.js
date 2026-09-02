@@ -381,6 +381,23 @@ async function scraperFiche(idProduct, langue = 'EN', etatMin = null) {
             };
 
             res.prixParEtat = {};
+            // ════════════════════════════════════════════════════════════════
+            // LE NOMBRE D'OFFRES PAR ÉTAT — ajouté le 2026-09-02
+            // ════════════════════════════════════════════════════════════════
+            // 🔑 IL ÉTAIT DÉJÀ DANS CETTE BOUCLE, ET ON LE JETAIT. Le sélecteur ci-dessous
+            // rend UNE ENTRÉE PAR OFFRE, pas par état : la ligne qui garde le minimum
+            // écrasait donc l'information du nombre. Le remonter coûte UN INCRÉMENT —
+            // aucune requête de plus, aucune page de plus, aucun sélecteur de plus.
+            //
+            // CE QU'IL PERMET, et c'est ce qui manquait pour lire la grille : `prixParEtat`
+            // est un MINIMUM SANS COMPTEUR. Un prix appuyé sur une offre et un prix appuyé
+            // sur quarante sortent aujourd'hui avec la même autorité. Une échelle NON
+            // MONOTONE — GD à 1,81 € au-dessus de EX à 1,50 € — est la signature d'une
+            // offre unique ; avec ce champ on le VÉRIFIE au lieu de l'inférer.
+            // ⚠️ IL NE DÉCIDE DE RIEN AUJOURD'HUI : il est lu, il est journalisé, et c'est
+            // tout. Aucune règle d'affichage n'en dépend — savoir sur quoi reposent nos
+            // prix vient avant de décider quoi en faire.
+            res.nbOffresParEtat = {};
             res.debugLignes = [];
             document.querySelectorAll('.article-condition, .badge').forEach(el => {
                 // L'état : depuis la classe "condition-xx" si dispo, sinon le texte du badge
@@ -404,6 +421,10 @@ async function scraperFiche(idProduct, langue = 'EN', etatMin = null) {
                 if (prix == null) return;
                 if (res.debugLignes.length < 3) res.debugLignes.push(`${etat}=${prix}€`);
                 if (res.prixParEtat[etat] == null || prix < res.prixParEtat[etat]) res.prixParEtat[etat] = prix;
+                // ⚠️ INCRÉMENTÉ POUR CHAQUE OFFRE, y compris celles dont le prix ne devient
+                // pas le minimum : c'est le NOMBRE D'OFFRES de l'état, pas le nombre de
+                // fois où le minimum a changé. Les deux diffèrent dès la deuxième offre.
+                res.nbOffresParEtat[etat] = (res.nbOffresParEtat[etat] || 0) + 1;
             });
 
             return res;
@@ -420,10 +441,17 @@ async function scraperFiche(idProduct, langue = 'EN', etatMin = null) {
                 console.log(`   ⚠️ Grille incohérente (min ${minGrille}€ vs De ${infos.prixDe}€) — grille ignorée.`);
                 if (infos.debugLignes?.length) console.log(`      (debug 3 premières lignes lues : ${infos.debugLignes.join(', ')})`);
                 infos.prixParEtat = {};
+                // ⚠️ LE COMPTEUR TOMBE AVEC LA GRILLE, ET C'EST LA MOITIÉ DU CORRECTIF.
+                // Les deux viennent de la MÊME extraction : si elle a déraillé, le nombre
+                // d'offres est faux exactement comme les prix. Garder le compteur seul
+                // laisserait « 12 offres en EX » sans aucun prix pour le porter — une
+                // donnée qui a l'air solide et qui décrit une lecture ratée.
+                infos.nbOffresParEtat = {};
             }
         }
 
-        const grille = Object.entries(infos.prixParEtat || {}).map(([e, p]) => `${e} ${p}€`).join(' · ');
+        const grille = Object.entries(infos.prixParEtat || {})
+            .map(([e, p]) => `${e} ${p}€${infos.nbOffresParEtat?.[e] ? ` (${infos.nbOffresParEtat[e]} offre${infos.nbOffresParEtat[e] > 1 ? 's' : ''})` : ''}`).join(' · ');
         console.log(`✅ [Live] idProduct ${idProduct} : tendance=${infos.prixTendance}€, De(${langue})=${infos.prixParLangue}€, codeSet=${infos.codeSet}, num=${infos.numero}`);
         if (grille) console.log(`   📊 Grille par état : ${grille}`);
         return infos;

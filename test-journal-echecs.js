@@ -86,6 +86,15 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // Le vivier au moment du refus : deux produits vus par le scoring, aucun retenu.
         vivierIds: [585151, 650617], vivierTaille: 2,
         symboleDepartage: 'symbole « R » lu, mais aucun ex aequo ne le porte',
+        // ── L'ÉTAT, sur un refus. Valeurs RÉELLES : « Très bon état » est un des quatre
+        // textes que `etatVintedVersCardmarket` reconnaît, et il transpose vers EX.
+        etatVinted: 'Très bon état', etatMin: 'EX',
+        etatEstimeIA: 'NM', etatConfianceIA: 'haute', etatRetenu: 'EX',
+        defautsVus: ['léger blanchiment sur le bord droit'],
+        // La grille et son compteur. `PO` est volontairement à 0 offre et `XX` hors
+        // échelle : les deux doivent être ÉCARTÉS, pas écrits.
+        prixParEtat: { NM: 4.75, EX: 1.5, GD: 1.81, XX: 9.99 },
+        nbOffresParEtat: { NM: 12, EX: 3, GD: 1, PO: 0 },
         // Les deux URL qui rendent la ligne revérifiable des mois plus tard.
         imageUrl: 'https://images1.vinted.net/t/00_01234_photo.jpeg',
         vintedUrl: 'https://www.vinted.fr/items/1234567890-carte-pokemon'
@@ -133,6 +142,32 @@ async function attendreLigne(filtre, limiteMs = 5000) {
         // cherchait, et il était invisible.
         verifier('symboleDepartage écrit sur un refus',
             echec.symboleDepartage, 'symbole « R » lu, mais aucun ex aequo ne le porte');
+        // ════════════════════════════════════════════════════════════════════
+        // L'ÉTAT SUR UN REFUS — le troisième signal qui ne franchissait pas
+        // ════════════════════════════════════════════════════════════════════
+        // Les six champs partaient dans la RÉPONSE HTTP et jamais au journal : 0 ligne
+        // sur 212 en portait un. Sans eux, « le verdict s'inverse-t-il selon l'état
+        // retenu ? » est sans réponse À TOUT VOLUME — ce n'est pas un manque de données,
+        // c'est un champ qui n'existe pas.
+        verifier('etatVinted (texte brut du vendeur)', echec.etatVinted, 'Très bon état');
+        verifier('etatMin (sa transposition Cardmarket)', echec.etatMin, 'EX');
+        verifier('etatEstimeIA', echec.etatEstimeIA, 'NM');
+        verifier('etatConfianceIA', echec.etatConfianceIA, 'haute');
+        // 🔑 LE CHAMP QUI DÉCIDE DU PRIX : l'IA dit NM avec une confiance haute, le vendeur
+        // dit EX — et c'est EX qui sort. L'avis de l'IA ne peut que DÉGRADER.
+        verifier('etatRetenu = le PIRE des deux avis', echec.etatRetenu, 'EX');
+        verifier('defautsVus', echec.defautsVus, ['léger blanchiment sur le bord droit']);
+        // La grille : clé hors échelle ÉCARTÉE, et 0 offre écarté aussi — un 0 dirait
+        // « aucune offre », ce qui est une affirmation, là où l'absence dit « on ne sait pas ».
+        verifier('prixParEtat, clé « XX » hors échelle écartée',
+            echec.prixParEtat, { NM: 4.75, EX: 1.5, GD: 1.81 });
+        verifier('nbOffresParEtat, le 0 de PO écarté',
+            echec.nbOffresParEtat, { NM: 12, EX: 3, GD: 1 });
+        // ⚠️ ET CE QUE LA GRILLE MONTRE, sur ces valeurs réelles : GD 1,81 € est AU-DESSUS
+        // de EX 1,50 €. L'échelle n'est pas monotone, et le compteur dit pourquoi — GD
+        // repose sur UNE offre. C'est exactement ce qu'on ne pouvait pas vérifier avant.
+        verifier('GD repose sur une offre unique (l\'échelle non monotone s\'explique)',
+            echec.nbOffresParEtat?.GD, 1);
         // total absent de la carte -> absent de la ligne. C'est une information, pas un trou.
         verifier('total (aucun imprimé sur la carte)', echec.total ?? null, null);
         // ⚠️ `rang` a été SUPPRIMÉ le 2026-08-18 (champ dérivé, jamais lu). Le point qui

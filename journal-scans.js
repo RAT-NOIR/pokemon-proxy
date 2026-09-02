@@ -160,6 +160,39 @@ const journalScanSchema = new mongoose.Schema({
     // rien d'autre ne sépare.
     symboleSet: String,
 
+    // ════════════════════════════════════════════════════════════════════════
+    // L'ÉTAT DE LA CARTE — six champs, ajoutés le 2026-09-02
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 AUCUN N'EXISTAIT, et le bloc `etat` était pourtant construit ENTIER depuis des
+    // semaines — il partait dans la réponse HTTP à l'extension et s'arrêtait là. Mesuré :
+    // 0 ligne sur 212. La réponse et le journal sont deux puits distincts.
+    //
+    // CE QU'ILS PERMETTENT DE MESURER, et qui était IMPOSSIBLE à tout volume :
+    // `etatRetenu` = pireEtat(avis IA si confiance ≥ moyenne, état déclaré par le vendeur).
+    // L'IA ne peut donc que DÉGRADER la base, jamais la relever, et c'est le texte du
+    // vendeur qui plafonne le prix de référence. Sur un cas réel — IA « NM » confiance
+    // haute, vendeur « Très bon état » -> EX — la base tombe de 4,75 € à 1,50 € et le
+    // verdict passe de « bonne affaire » à « 167 % au-dessus ». LE VERDICT S'INVERSE.
+    // Avec ces champs, on pourra compter sur combien de lignes ça arrive au lieu d'en
+    // discuter sur un exemple.
+    etatVinted: String,        // le texte BRUT du vendeur ('Très bon état'), tel que reçu
+    etatMin: String,           // sa transposition Cardmarket, ou null si le texte est inconnu
+    etatEstimeIA: String,      // MT|NM|EX|GD|LP|PL|PO — ce que l'IA a vu de l'usure
+    etatConfianceIA: String,   // 'haute'|'moyenne'|'basse' — une PORTE, pas un poids
+    etatRetenu: String,        // la sortie : celui qui plafonne réellement le prix
+    defautsVus: [String],      // ce que l'IA dit avoir vu — la justification de son avis
+
+    // La grille de prix par état, et LE NOMBRE D'OFFRES qui porte chaque prix.
+    // ⚠️ CREUSES : seuls les états renseignés sont écrits — voir `nettoyerGrille`.
+    // `prixParEtat` seul est un minimum SANS COMPTEUR : il ne dit pas si le prix repose
+    // sur une offre ou sur quarante. `nbOffresParEtat` est ce qui rend la grille lisible.
+    // 🔴 SUR /api/identifier ILS RESTENT NULS, ET CE N'EST PAS UN OUBLI : le serveur n'y
+    // lit aucune fiche Cardmarket — c'est le navigateur de l'utilisateur qui lit le live,
+    // et il le renvoie par /api/retour-live. Ils ne se remplissent donc que sur
+    // /api/analyser, ou par un retour live.
+    prixParEtat: { type: Map, of: Number },
+    nbOffresParEtat: { type: Map, of: Number },
+
     // --- CE QUI A ÉTÉ RETENU (la sortie) ---
     idProduct: Number,
     codeSetGagnant: String,   // code de set réel du produit retenu
@@ -729,6 +762,33 @@ function memeCode(a, b) {
  * à promettre. Un identifiant rendu pour une ligne qui n'existe pas ferait échouer tous
  * les retours, sans qu'on sache pourquoi.
  */
+// ════════════════════════════════════════════════════════════════════════════
+// LA GRILLE PAR ÉTAT, NORMALISÉE EN UN SEUL ENDROIT
+// ════════════════════════════════════════════════════════════════════════════
+// Deux grilles arrivent ici (`prixParEtat`, `nbOffresParEtat`), de deux sources
+// différentes, et elles doivent subir EXACTEMENT le même filtre — sinon un prix pourrait
+// exister sans son compteur, ou l'inverse, et la paire ne voudrait plus rien dire.
+//   · CLÉS VALIDÉES sur l'échelle Cardmarket. Une clé libre venue d'un client ferait de
+//     ce champ une porte d'écriture arbitraire : `grilleLive` a déjà cette garde, celle-ci
+//     est la même, au même endroit.
+//   · CREUSE : une valeur non conforme n'est PAS écrite à 0. Un 0 dirait « aucune offre »,
+//     ce qui est une AFFIRMATION ; l'absence dit « on ne sait pas ». Premier principe.
+//   · null si rien ne reste — jamais `{}`, qui se lirait comme « grille lue et vide ».
+const ETATS = ['MT', 'NM', 'EX', 'GD', 'LP', 'PL', 'PO'];
+function nettoyerGrille(grille, valide) {
+    if (!grille || typeof grille !== 'object') return null;
+    const source = grille instanceof Map ? Object.fromEntries(grille) : grille;
+    const out = {};
+    for (const [cle, v] of Object.entries(source)) {
+        const e = String(cle).toUpperCase();
+        if (!ETATS.includes(e)) continue;
+        const n = Number(v);
+        if (!valide(n)) continue;
+        out[e] = n;
+    }
+    return Object.keys(out).length ? out : null;
+}
+
 function enregistrerScan(d = {}) {
     // Pas de connexion : on sort en silence. Le scan, lui, a pu aboutir (guide en
     // cache, repli TCGdex) — ce n'est pas à la statistique de le faire échouer.
@@ -794,6 +854,26 @@ function enregistrerScan(d = {}) {
             nomConfiance: d.nomConfiance || null,
             nomBrut: d.nomBrut || null,
             symboleSet: d.symboleSet || null,
+            // ── L'ÉTAT ───────────────────────────────────────────────────────
+            etatVinted: d.etatVinted || null,
+            etatMin: d.etatMin || null,
+            etatEstimeIA: d.etatEstimeIA || null,
+            etatConfianceIA: d.etatConfianceIA || null,
+            etatRetenu: d.etatRetenu || null,
+            // Tableau ou null — jamais `[]`, qui ferait lire « l'IA n'a vu aucun défaut »
+            // là où elle n'a rien rendu du tout. Premier principe.
+            defautsVus: Array.isArray(d.defautsVus) && d.defautsVus.length ? d.defautsVus.map(String).slice(0, 12) : null,
+            // ── LA GRILLE PAR ÉTAT, et le nombre d'offres qui la porte ────────
+            // ⚠️ CREUSES PAR CONSTRUCTION : seuls les états RENSEIGNÉS sont écrits. Une
+            // grille pleine à sept états est rare ; réserver les sept coûterait des octets
+            // pour dire « inconnu », et un 0 y serait indiscernable de « aucune offre ».
+            // 🔑 `nbOffresParEtat` EST CE QUI DONNE SON POIDS AU PRIX. `prixParEtat` est un
+            // MINIMUM : un prix appuyé sur une offre et un prix appuyé sur quarante sortent
+            // aujourd'hui avec la même autorité. Une échelle non monotone (GD au-dessus de
+            // EX) est la signature d'une offre unique — avec ce champ on le VÉRIFIE au lieu
+            // de l'inférer.
+            prixParEtat: nettoyerGrille(d.prixParEtat, v => Number.isFinite(v) && v > 0),
+            nbOffresParEtat: nettoyerGrille(d.nbOffresParEtat, v => Number.isInteger(v) && v > 0),
             voieCatalogue: d.voieCatalogue || null,
             motifEtat: d.motifEtat || null,
             // Tronqué à 200 : un titre Vinted tient largement dedans, et on ne veut pas
@@ -930,6 +1010,16 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
     // dire « le départage n'avait pas encore eu lieu » — pas « il n'a rien trouvé ».
     symboleDepartage,
+    // ⚠️ LES SIX CHAMPS DE L'ÉTAT, SUR LES REFUS AUSSI — ajoutés le 2026-09-02.
+    // 🔴 TROIS SIGNAUX SUR TROIS N'AVAIENT PAS FRANCHI CETTE FONCTION : `symboleSet`,
+    // `vivierIds`, et maintenant l'état. Le testeur l'avait prévu — « je pars du principe
+    // que celui-ci non plus » — et il avait raison. La voie du refus est systématiquement
+    // plus pauvre que celle du succès, alors que c'est elle qu'on cherche à comprendre.
+    // ⚠️ ILS ARRIVENT GROUPÉS, tels que `champsEtat()` les rend, comme `champsImage` :
+    // un seul point de construction, partagé avec la RÉPONSE HTTP, donc impossible de
+    // mesurer autre chose que ce qui est affiché.
+    etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
+    prixParEtat, nbOffresParEtat,
     // ⚠️ LES ONZE CHAMPS DE L'IMAGE, SUR LES REFUS AUSSI — ajoutés le 2026-09-01.
     // Ils manquaient, et c'était le trou le plus coûteux du lot : les refus
     // `egalite-parfaite` sont EXACTEMENT la population que le départage par l'image vise.
@@ -961,6 +1051,8 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         motifIA: motifIA ?? c.motif ?? null,
         estDex: estDex != null ? Boolean(estDex) : null,
         symboleDepartage,
+        etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
+        prixParEtat, nbOffresParEtat,
         exAequoIds, vivierIds, vivierTaille, messageErreur,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.

@@ -3234,6 +3234,56 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // null. Un 0 n'est pas un prix, c'est une absence — même règle que le guide.
         const prixVintedBrut = Number(req.body?.prixVinted);
         const prixVinted = Number.isFinite(prixVintedBrut) && prixVintedBrut > 0 ? prixVintedBrut : null;
+
+        // ════════════════════════════════════════════════════════════════════
+        // L'ÉTAT — UN SEUL POINT DE CONSTRUCTION, POUR LA RÉPONSE ET POUR LE JOURNAL
+        // ════════════════════════════════════════════════════════════════════
+        // POURQUOI CE POINT EXISTE — mesuré le 2026-09-02, et c'est un trou plus large que
+        // les deux précédents. AUCUN champ d'état n'atteignait le journal :
+        //     etatEstime · etatConfiance · etatVinted · etatMin · etatRetenu · prixParEtat
+        // tous ABSENTS DU SCHÉMA, 0 ligne sur 212. Le bloc `etat` existait déjà, entier,
+        // mais il partait dans la RÉPONSE HTTP à l'extension et s'arrêtait là.
+        // 🔑 LA CAUSE COMMUNE AUX TROIS TROUS DU CHANTIER (`symboleSet`, `vivierIds`, et
+        // celui-ci) : LA RÉPONSE ET LE JOURNAL SONT DEUX PUITS DISTINCTS. Enrichir l'un
+        // n'enrichit pas l'autre, et rien ne le signale — la réponse est relue tous les
+        // jours par l'extension, le journal ne l'est que le jour où on veut mesurer.
+        //
+        // CE QUE ÇA RENDAIT IMPOSSIBLE, et pas seulement difficile : « combien de fois le
+        // verdict s'inverse selon l'état retenu ». `etatRetenu` vaut le PIRE de l'avis IA et
+        // de l'état déclaré par le vendeur — l'IA ne peut que DÉGRADER, jamais relever. Sur
+        // un cas réel : base EX+ à 1,50 € donne « 167 % au-dessus », base NM à 4,75 € donne
+        // une bonne affaire. LE VERDICT S'INVERSE. Sans ces champs la question n'attendait
+        // pas plus de volume : elle était sans réponse à tout volume.
+        //
+        // ⚠️ UNE FONCTION, PAS UN OBJET FIGÉ, pour la même raison que `champsVivier` :
+        // `cardInfo` n'existe pas encore à cette ligne (l'IA n'est pas appelée) et il est
+        // RÉÉCRIT plus bas par le validateur TCGdex. Un instantané pris ici serait vide ;
+        // pris plus bas, il manquerait à toutes les sorties de refus qui le précèdent. La
+        // fonction lit au MOMENT de l'appel, seul moment qui décrit la décision.
+        //
+        // ⚠️ ET LA RÉPONSE HTTP LIT CE MÊME BLOC (voir `etat:` plus bas). C'est le point :
+        // deux expressions « qui se ressemblent » — l'une pour l'extension, l'autre pour le
+        // journal — divergeraient au premier changement de la règle du pire état, et on
+        // mesurerait alors autre chose que ce qu'on affiche.
+        const champsEtat = () => {
+            const c = cardInfo || {};
+            const etatMin = etatVintedVersCardmarket(vintedEtat);
+            return {
+                etatVinted: vintedEtat || null,
+                etatMin,
+                etatEstimeIA: c.etatEstime || null,
+                etatConfianceIA: c.etatConfiance || null,
+                defautsVus: Array.isArray(c.defautsVus) ? c.defautsVus : null,
+                // ⚠️ `etatConfiance` EST UNE PORTE, PAS UN POIDS : sous « moyenne », l'avis
+                // de l'IA est ignoré EN BLOC, il n'est pas pondéré. C'est un choix, et il
+                // devient mesurable maintenant qu'il est journalisé.
+                etatRetenu: pireEtat(
+                    (c.etatConfiance === 'haute' || c.etatConfiance === 'moyenne') ? c.etatEstime : null,
+                    etatMin
+                )
+            };
+        };
+
         // `vintedUrl` ou `url` : l'extension n'en envoie encore AUCUN des deux. Les deux
         // noms sont acceptés pour que le champ se remplisse sans toucher au serveur.
         annonce = {
@@ -3256,7 +3306,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         console.log(`⏱️ [identifier] appel IA : ${Date.now() - debutIA} ms`);
         if (!cardInfo) {
             const rendu = await rembourserScan(req, 'ia-echec');
-            enregistrerEchec({ route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null, motifEchec: 'ia-echec', rembourse: rendu });
+            // ⚠️ `cardInfo` EST NUL ICI, ET LE BLOC RESTE UTILE : `etatVinted` et `etatMin`
+            // ne viennent pas de l'IA mais de l'annonce. Une panne de lecture n'efface pas
+            // ce que le vendeur a déclaré. Les trois champs d'origine IA seront nuls, et ce
+            // null-là est une information : la lecture a échoué, pas l'annonce.
+            enregistrerEchec({
+                route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo: null,
+                motifEchec: 'ia-echec', rembourse: rendu, ...champsEtat()
+            });
             // ⚠️ REMBOURSÉ, ET POURTANT UNE PANNE. C'est précisément le cas qui rendait
             // `rembourse` inutilisable seul : voir la table NATURE_REFUS au-dessus.
             return res.json({ success: false, ...champsDeRefus('ia-echec', rendu), error: "Analyse IA échouée" });
@@ -3290,6 +3347,28 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // retenu, sur `numeroBrutPourScoring`. Ce log dit ce qui EST neutralisé.
             console.warn(`🔢 [numero-pokedex] ${avisDex.raison} -> le numéro est NEUTRALISÉ (recherche, nomSuspect, rangs, région).`);
         }
+        // ════════════════════════════════════════════════════════════════════
+        // ⚰️ QUESTION FERMÉE — « que donner d'autre à TCGdex ? » — 2026-09-02
+        // ════════════════════════════════════════════════════════════════════
+        // Le numéro neutralisé, la requête TCGdex part avec LE NOM SEUL, sans `localId`.
+        // La question s'est posée pendant l'incident du 2026-09-02 (trois refus
+        // `tcgdex-injoignable` sur un Haunter ゴースト) : peut-on lui donner autre chose ?
+        // MESURÉ sur les 7 lignes à numéro neutralisé du journal :
+        //     total 0/7 · setCode 0/7 · symboleSet 2/7 · rarete 7/7
+        // `total` et `setCode` sont nuls PAR DÉFINITION — c'est ce qui définit la cellule.
+        // `symboleSet` n'est pas un filtre que l'API TCGdex accepte. `rarete` non plus.
+        // 🔑 RÉPONSE : NON, IL N'Y A RIEN D'AUTRE. La requête restera un nom seul.
+        //
+        // ⚠️ ET ELLE N'EST PAS LOURDE POUR AUTANT — c'est l'autre moitié de la conclusion,
+        // et elle interdit de rouvrir le sujet sous l'angle de la performance. Mesuré cinq
+        // fois sur l'URL exacte du log :
+        //     nom seul  -> 14 éléments, 0,9 Ko, médiane 74 ms
+        //     avec localId -> 1 élément, 0,1 Ko, médiane 48 ms
+        // 26 ms d'écart. TCGdex filtre côté serveur ; il ne rend pas un catalogue. Un
+        // ECONNABORTED à 15 000 ms sur une requête de 74 ms n'est donc PAS une lenteur
+        // structurelle de ce chemin — c'était un incident réseau d'au moins ~30 s (le
+        // réessai à 400 ms a échoué aussi). Les trois seuls `tcgdex-injoignable` de tout
+        // le journal sont ces trois-là, et ce sont trois tentatives sur LA MÊME carte.
         // ════════════════════════════════════════════════════════════════════
         // LE cardInfo EFFECTIF — « PARTOUT en aval » rendu vrai
         // ════════════════════════════════════════════════════════════════════
@@ -3541,7 +3620,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 enregistrerEchec({
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: motif, rembourse: rendu,
-                    reverseLu: cardInfo.reverse === true, motifIA: cardInfo.motif, estDex: avisDex.estDex
+                    reverseLu: cardInfo.reverse === true, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                    ...champsEtat()
                 });
                 return res.json({
                     success: false,
@@ -4019,6 +4099,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                 motifEchec: 'aucun-candidat', rembourse: rendu,
                 reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                // L'état est connu dès la lecture IA : un refus n'empêche pas de savoir ce
+                // que le vendeur a déclaré ni ce que l'IA a vu de l'usure.
+                ...champsEtat(),
                 // ⚠️ ICI LE VIVIER EST SOUVENT VIDE, ET C'EST PRÉCISÉMENT L'INFORMATION.
                 // `aucun-candidat` peut vouloir dire deux choses très différentes : aucun
                 // produit trouvé au catalogue, ou des produits trouvés dont aucun n'a
@@ -4115,6 +4198,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                         route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                         motifEchec: motifRefus, rembourse: rendu,
                         reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                        ...champsEtat(),
                         // ⚠️ LE VIVIER ICI EST CELUI DU SCORING (`produits`), PAS LE VIVIER
                         // DE PREUVE DU VETO (`r.scores`). Les deux existent à cette ligne et
                         // ils ne répondent pas à la même question : `produits` est la
@@ -4293,6 +4377,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
                     fourchette, nbExAequo: exAequo.length, nbCandidats: produits.length, prixVinted,
                     reverseLu, motifIA: cardInfo.motif, estDex: avisDex.estDex,
+                    ...champsEtat(),
                     // Les onze champs, tels que `departager()` les rend — même objet que
                     // sur la voie du succès, même point de construction.
                     champsImage: avisImageRefus.champs,
@@ -5035,6 +5120,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             nomConfiance: cardInfo.nomConfiance,
             nomBrut: cardInfo.nomBrut,
             symboleSet: cardInfo.symboleSet,
+            // Les six champs de l'état, tels que la RÉPONSE les rend — même construction.
+            ...champsEtat(),
             voieCatalogue,
             motifEtat: motifResolution.etat,
             // ⚠️ LES TROIS ENTRÉES DE LA RÉSOLUTION DE MOTIF — voir journal-scans.js.
@@ -5240,18 +5327,24 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // 3 = le catalogue le CONTREDIT. null = rien de lu, donc pas de rang.
                 rangGagnant: rangsScoring?.rangGagnant ?? null
             },
-            etat: {
-                estimeIA: cardInfo.etatEstime || null,
-                confianceIA: cardInfo.etatConfiance || null,
-                defautsVus: cardInfo.defautsVus || [],
-                declareVendeur: vintedEtat || null,
-                declareCardmarket: etatMin,
-                // L'état à retenir = le PIRE des deux avis (voir explication plus haut)
-                retenu: pireEtat(
-                    (cardInfo.etatConfiance === 'haute' || cardInfo.etatConfiance === 'moyenne') ? cardInfo.etatEstime : null,
-                    etatMin
-                )
-            },
+            // ⚠️ CE BLOC EST DÉRIVÉ DE `champsEtat()`, IL NE RECALCULE PLUS RIEN.
+            // Il portait sa propre copie de la règle du pire état ; le journal en aurait eu
+            // une seconde, et les deux auraient divergé au premier changement de règle — on
+            // aurait alors mesuré autre chose que ce qu'on affiche, sans que rien ne le
+            // dise. Les NOMS de la réponse sont conservés tels quels : l'extension déployée
+            // les lit, et les renommer casserait un contrat pour une raison interne.
+            etat: (() => {
+                const e = champsEtat();
+                return {
+                    estimeIA: e.etatEstimeIA,
+                    confianceIA: e.etatConfianceIA,
+                    defautsVus: e.defautsVus || [],
+                    declareVendeur: e.etatVinted,
+                    declareCardmarket: e.etatMin,
+                    // L'état à retenir = le PIRE des deux avis (voir explication plus haut)
+                    retenu: e.etatRetenu
+                };
+            })(),
             classement,
             // Champ ADDITIF (l'extension actuelle l'ignore, aucun champ existant ne
             // change) : dit à l'extension COMMENT lire le prix d'une reverse.
