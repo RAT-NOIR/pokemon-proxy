@@ -979,6 +979,20 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      La parade est mécanique : sur un journal qui a une HISTOIRE, ne jamais tester un
 //      champ par la négative. Tester la présence de ce qui prouve (`motifEchec != null`),
 //      jamais l'absence de ce qui infirme.
+//      🔴 TROISIÈME ET QUATRIÈME OCCURRENCES, LES 2026-09-01 ET 2026-09-02, DANS DES
+//      MESURES ÉCRITES PAR CELUI QUI VENAIT DE CITER CETTE ENTRÉE :
+//        · `(d.vivierTaille || 0) === 0` a rendu « vivier VIDE 91,4 % des refus » alors que
+//          le champ n'existe que sur 3 lignes sur 35. Attrapé avant publication.
+//        · « seuls 33,1 % des scans aboutis ont un prix guide » — annoncé au testeur, puis
+//          démenti par la vérification : `prixGuideRetenu` n'existe que depuis le
+//          2026-08-12, et sur les 59 lignes qui le portent il est rempli 59 FOIS SUR 59.
+//          Le « trou » de 66,9 % était l'âge du champ. Il avait servi à conclure que la
+//          lecture live Cardmarket était « la seule source » sur deux tiers des scans :
+//          faux, et cette conclusion allait orienter un chantier.
+//      🔑 CE QUE CES DEUX-LÀ AJOUTENT À L'ENTRÉE : connaître la parade ne suffit pas, et la
+//      citer non plus (c'est l'entrée 16). Ce qui marche est MÉCANIQUE — avant tout
+//      pourcentage sur le journal, imprimer d'abord SUR COMBIEN DE LIGNES LE CHAMP EXISTE.
+//      Un taux dont le dénominateur n'a pas été affiché n'est pas encore une mesure.
 //
 // ⚠️ ET UNE TROISIÈME FAMILLE, TROUVÉE LE 2026-08-19 : L'ISOLEMENT PARFAIT.
 //   9. UN TEST QUI FABRIQUE UNE IDENTITÉ NEUVE À CHAQUE CAS NE PEUT JAMAIS DÉCLENCHER
@@ -1249,6 +1263,35 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      dans la RÉPONSE à l'extension, jamais dans le JOURNAL. Ce sont deux puits distincts,
 //      et enrichir l'un n'enrichit pas l'autre. Trois questions du chantier ont été posées
 //      à un journal qui ne pouvait pas y répondre.
+//
+//   19. DEUX RÈGLES JUSTES QUI SE CONTREDISENT SUR UN ARTEFACT PARTAGÉ — 2026-09-02.
+//      Ce n'est pas une erreur de mesure : c'est une erreur d'ARCHITECTURE DES OUTILS, et
+//      elle a désarmé le garde principal du projet pendant trois jours.
+//      L'OCCURRENCE. `c439564`, le 2026-08-30 à 19:17, ajoute à `verrou-charges.js` la
+//      purge de sortie qui lui manquait — c'est la règle du dépôt, « tout outil qui fait
+//      écrire une collection la vide en sortant », et son application était JUSTE : 28 Mo
+//      restaient dans le bac (c'est l'entrée 16 ci-dessus). Mais `verrou-avant-push.js`
+//      CONSOMME cette tranche sans la construire. Le prérequis détruisait donc en sortant
+//      ce que l'étape suivante attendait.
+//      LE COÛT : le verrou était vert à 18:37 ce jour-là, cassé à 19:17 — QUARANTE MINUTES
+//      plus tard — et personne ne l'a relancé avant le 2026-09-02. Trois jours et douze
+//      commits écrits sans garde, et rien ne le signalait.
+//      ⚠️ AUCUNE DES DEUX RÈGLES N'EST FAUSSE. « Chaque outil range derrière lui » et
+//      « l'outil suivant trouve ce qu'il lui faut » sont toutes deux nécessaires ; elles
+//      se contredisent DÈS QU'UN ARTEFACT EST PARTAGÉ entre deux outils. C'est ce qui rend
+//      cette entrée différente de toutes les précédentes : il n'y a rien à corriger dans
+//      l'une ni dans l'autre.
+//      🔑 LA SORTIE N'EST PAS D'ARBITRER, C'EST DE SUPPRIMER LE PARTAGE :
+//          CHAQUE OUTIL CONSTRUIT CE QU'IL CONSOMME, ET VIDE CE QU'IL A CONSTRUIT.
+//      Il redevient autonome, la règle s'applique sans exception, et aucun ne dépend de
+//      l'ordre d'exécution de l'autre. Voir verrou/tranche.js — une seule définition,
+//      appelée par les deux.
+//      ⚠️ ET LE GAIN QUI COMPTE AUTANT QUE LE CORRECTIF : l'échec du 2026-09-02 rendait
+//      QUATRE rouges — trois profondeurs non atteintes et « le crédit n'est pas rendu » —
+//      dont AUCUN n'accusait la cause, le vivier vide. Une assertion a été ajoutée pour la
+//      NOMMER (« tranche copiée »). Un contrôle qui échoue sans désigner ce qui manque
+//      envoie chercher là où il n'y a rien : c'est le septième principe appliqué au
+//      MESSAGE d'échec, pas à la mesure.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;

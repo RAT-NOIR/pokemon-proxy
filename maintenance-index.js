@@ -12,6 +12,37 @@
 //
 //   SOLDE : environ −15 Mo de place ET −113 ms sur le chemin d'identification.
 //
+// ════════════════════════════════════════════════════════════════════════════
+// 📌 CE QU'IL FAUDRAIT LE JOUR OÙ ON VOUDRAIT DÉSACTIVER `autoIndex` — 2026-09-02
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ DÉCISION PRISE CE JOUR-LÀ : ON N'Y TOUCHE PAS. Écrit ici pour que la question ne se
+// rouvre pas sans ses chiffres.
+//
+// CE QUE ÇA COÛTE VRAIMENT AU DÉMARRAGE — mesuré, contre une affirmation que j'avais
+// avancée sans vérifier. J'avais fait d'`autoIndex` le meilleur candidat de l'incident du
+// 2026-09-02 (« un createIndex sur 69 598 et 73 188 documents au moment où le premier scan
+// arrive »). C'ÉTAIT FAUX, et la vérification tient en une ligne : TOUS LES INDEX DÉCLARÉS
+// EXISTENT DÉJÀ EN BASE — `numeros_cartes` porte bien `idProduct_1`, `idExpansion_1` et
+// `setTcgdex_1`. Un `createIndex` sur un index existant est une opération de MÉTADONNÉES :
+// MongoDB répond « existe déjà » sans balayer un document. Le coût est de l'ordre de
+// quelques dizaines de millisecondes, pas d'une reconstruction.
+//
+// CE QUI SE PASSERAIT SI ON LE DÉSACTIVAIT : rien aujourd'hui, puisque tout est en place.
+// 🔑 LE RISQUE EST À L'INVERSE, ET C'EST LUI QUI FAIT RENONCER : un index déclaré PLUS TARD
+// ne serait jamais créé. Et un index manquant NE CASSE RIEN — il ralentit tout. C'est la
+// dégradation qu'on ne voit pas : aucune erreur, aucun test rouge, juste des COLLSCAN.
+// (Mesuré une fois : 69 598 documents balayés là où l'index en rend 135.)
+//
+// LA GARANTIE À METTRE EN FACE, ET ELLE EST OBLIGATOIRE AVANT DE DÉSACTIVER :
+//     un contrôle qui compare les index DÉCLARÉS dans les schémas aux index PRÉSENTS en
+//     base, et qui ÉCHOUE — pas qui avertit.
+// Un avertissement sur un défaut invisible se lit une fois et s'oublie ; c'est exactement
+// le raisonnement des jalons du verrou. Sa place est dans `verrou-avant-push.js`, à côté
+// du cliquet de couverture, qui surveille la même chose pour les fonctions.
+// ⚠️ CE FICHIER EN EST DÉJÀ LA MOITIÉ : il sait lire les déclarations en source et les
+// index en base, et il REFUSE d'agir tant que les deux ne concordent pas. Il lui manque
+// le sens inverse — « déclaré mais absent » — et de s'exécuter dans le verrou.
+//
 // 🔴🔴 SUPPRIMER L'INDEX NE SUFFIT PAS, IL FAUT SUPPRIMER LA LIGNE QUI LE CRÉE.
 // Et c'est pire que « au prochain import » : mongoose a `autoIndex: true` PAR DÉFAUT, et
 // aucun endroit du dépôt ne le désactive. Les index déclarés dans index.js sont donc

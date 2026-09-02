@@ -95,6 +95,32 @@ const { interrogerSource } = require('./sources');
 // Le réglage, en un seul endroit. Changer un de ces nombres INVALIDE les mesures
 // ci-dessus : les descripteurs en base sont calculés avec, et un index à 150 points ne
 // s'apparie pas avec une requête décrite à 200.
+// ════════════════════════════════════════════════════════════════════════════
+// 📌 LE FORMAT DES DESCRIPTEURS EST LE VRAI LEVIER DU QUOTA — noté le 2026-09-02
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ RIEN N'EST DÉCIDÉ ICI. C'est une note, écrite pendant que la place pressait, pour
+// qu'on n'ait pas à refaire l'analyse le jour où on y reviendra.
+//
+// MESURÉ sur la base de production : `references_image` occupe 428,7 Mo sur les 473,2 Mo
+// de la base — 90,6 %. Tout le reste du projet (catalogue 73 188 produits, guide de prix
+// 78 225 lignes, numéros, journal, comptes) tient dans 44,5 Mo.
+//     71 489 vecteurs × 5 408 octets = 428,7 Mo
+//     5 408 = 150 points × (32 octets de descripteur + 4 octets de coordonnées uint16)
+// 🔑 LE QUOTA N'EST DONC PAS UN PROBLÈME DE BASE, C'EST UN PROBLÈME DE FORMAT, SUR UNE
+// SEULE COLLECTION. Un plan supérieur achète du temps ; il n'enlève pas ce fait.
+//
+// LES DEUX LEVIERS, et ce qu'ils coûtent :
+//   · MOINS DE POINTS — 100 au lieu de 150 rend −33 % (428,7 -> ~286 Mo). Mais 150 a été
+//     CHOISI SUR MESURE : c'est la marge d'inliers qui l'a fixé, pas une préférence.
+//     Descendre demande de refaire cette mesure, pas de raisonner sur le volume.
+//   · DESCRIPTEUR COMPACTÉ — ORB rend déjà du binaire ; le gain viendrait de la
+//     suppression du surcoût BSON par document, pas des données elles-mêmes.
+//
+// ⚠️ ET LA CONTRAINTE QUI COMMANDE LES DEUX : CHANGER LE FORMAT INVALIDE LES 71 489
+// VECTEURS EXISTANTS. `chargerVecteurs` filtre sur `pts: N_POINTS` — un changement de
+// N_POINTS rend l'index entier invisible, donc la garde s'abstient partout, en silence.
+// Il faut donc RÉINDEXER avant, pas après, et mesurer la justesse sur le nouveau format
+// AVANT de jeter l'ancien. C'est le seul ordre qui ne laisse pas le produit sans image.
 const N_POINTS = 150;
 const LARGEUR = 640;
 const RATIO_LOWE = 0.75;
