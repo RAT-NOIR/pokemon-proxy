@@ -64,8 +64,27 @@ miennes. Je ne les modifie que sur demande explicite, et jamais au passage.
   contrôle dont le résultat dépend du nombre de fois qu'on l'a lancé ne vaut pas mieux
   que pas de contrôle. (Le compteur `remboursements` a fait mentir une assertion du
   verrou pendant six jours pour cette raison.)
+- **🔑 TOUT OUTIL DE MESURE IMPRIME SON DÉNOMINATEUR, SANS EXCEPTION.** Avant tout
+  pourcentage sur le journal, on imprime **sur combien de lignes le champ existe**.
+  Un taux dont le dénominateur n'a pas été affiché n'est pas encore une mesure.
+
+  **L'erreur #8 a été commise QUATRE FOIS en une semaine**, dont deux par celui qui
+  venait de citer l'entrée du catalogue : « vivier vide 91,4 % des refus » (champ présent
+  sur 3 lignes sur 35) et « seuls 33,1 % des scans ont un prix guide » — celle-là
+  **annoncée au testeur**, puis démentie : `prixGuideRetenu` n'existe que depuis le
+  2026-08-12 et il est rempli **59 fois sur 59** sur les lignes qui le portent. Le
+  « trou » de 66,9 % était l'âge du champ, et cette conclusion allait orienter un chantier.
+
+  ⚠️ Connaître la parade ne suffit pas, et la citer non plus. Ce qui marche est
+  **mécanique** : le dénominateur s'imprime, il ne se sous-entend pas. Sur un journal qui
+  a une HISTOIRE, `undefined` n'est ni `0`, ni `false`, ni « absent du monde ».
+
 - **Aucune écriture en base sans accord explicite** — le testeur fait sa sauvegarde
   avec `backup-collections.js` avant, et il la lance lui-même.
+  ⚠️ **Par défaut il ne sauvegarde QUE `numeros_cartes,codes_set`** — deux collections
+  sur douze, ~11,7 Mo sur 473. C'est le bon défaut pour ce qu'il protégeait à l'origine
+  (les tables APPRISES, seules non régénérables), et un piège pour tout autre usage :
+  `--collections=` est obligatoire dès qu'on sauvegarde autre chose.
 - **Jamais `Get-Content -Raw` / `Set-Content` de PowerShell sur un fichier source** :
   double encodage UTF-8 garanti. Les outils d'édition, ou rien.
 - **Jamais `node -e` avec des guillemets sous PowerShell** : on écrit un `.js`.

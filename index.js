@@ -493,6 +493,42 @@ async function memoriserCodeSet(idExpansion, codeSetBrut) {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// 📌 CE CACHE EST BRANCHÉ SUR LA ROUTE QUE PERSONNE N'EMPRUNTE — 2026-09-02
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ RIEN N'EST DÉCIDÉ ICI, ET CE N'EST PAS URGENT : vérifié, `lireCache` n'est appelée
+// qu'à un seul endroit (dans /api/analyser), et `ecrireCache` de même. Le cache n'est donc
+// ni lu ni écrit par le trafic réel — il ne rend AUCUN prix faux aujourd'hui.
+//
+// LE CONSTAT. `cardprices` a 6 entrées, une expiration à 24 h, un index, et un contrat
+// complet. Le flux réel de l'extension est /api/identifier, qui ne l'appelle jamais :
+// 0 ligne de journal sur 216 porte `route: 'analyser'` (rétention 90 jours — « aucun appel
+// depuis 90 jours », pas « jamais »).
+// 🔑 ET IL N'A PAS ÉTÉ DÉBRANCHÉ, IL A ÉTÉ CONTOURNÉ — c'est la variante la plus discrète
+// de la famille (voir aussi `departagerParImage` appelé après le `return`, et `symboleSet`
+// absent de l'aplatissement) :
+//     ecrireCache        d545637   2026-07-11
+//     /api/identifier    b116723   2026-07-16   <- cinq jours PLUS TARD
+// Le cache était CORRECT quand il a été écrit : /api/analyser était la seule route. La
+// nouvelle route est née avec sa propre logique, sans reprendre le cache. Personne n'a
+// rien cassé, donc rien n'a crié — et c'est précisément pourquoi ça dure deux mois.
+//
+// SI ON LE BRANCHAIT UN JOUR SUR /identifier, TROIS CONDITIONS, ET AUCUNE N'EST OPTIONNELLE :
+//   1. 🔴 LA CLÉ CI-DESSOUS EST TROP GROSSIÈRE. `(name, number, language)` ignore
+//      l'idProduct (deux réimpressions partagent nom+numéro+langue), l'axe normal/reverse
+//      (dont `prixDeReference` dépend) et l'ÉTAT — or `etatRetenu` fait passer la base de
+//      4,75 € à 1,50 € sur le même produit. La clé correcte est
+//          (idProduct, estReverse, etatRetenu).
+//   2. LA DURÉE SE MESURE, elle ne s'hérite pas des 24 h actuelles, choisies pour un autre
+//      usage et jamais vérifiées.
+//   3. 🔑 SUR CACHE PÉRIMÉ PENDANT UNE PANNE CARDMARKET : ON REFUSE. Le prix est le seul
+//      champ dont on ait écrit qu'un faux est PIRE que rien. Un prix daté servi comme
+//      actuel EST un prix faux. La seule forme acceptable serait un prix explicitement
+//      horodaté et affiché comme tel — décision d'affichage, donc côté extension.
+//
+// ⚠️ ET CE N'EST PAS LE MEILLEUR LEVIER : le gain plafonne à 13,5 % (24 lectures
+// redondantes sur 178 scans aboutis). L'alarme d'entretien de l'extension, à 72 requêtes
+// par jour et par utilisateur, pèse bien davantage sur Cardmarket — et elle est hors serveur.
 function cleKey(name, number, language) {
     return {
         name: String(name).trim().toLowerCase(),
