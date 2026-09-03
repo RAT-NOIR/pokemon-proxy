@@ -28,10 +28,56 @@ donné avec son chiffre, ce qui ne l'est pas est nommé comme tel.
   tiers. **Une licence non commerciale est un refus** (appliqué à TCG Collector).
 - « On ne dit plus *c'est vert*. On dit ce qui a tourné et ce qui n'a pas tourné. »
 
+---
+
+## 🔴 CHANGER DE CLUSTER MONGO — vaut pour TOUTE migration future, pas seulement M0→M10
+
+**Le piège qui commande tout le reste : `MONGODB_URI` vit à DEUX endroits.**
+L'environnement **Render** (ce que la production lit) et le **`.env` local** (ce que lisent
+`verrou-charges.js`, `verrou-avant-push.js`, `backup-collections.js` et tous les outils de
+mesure). Ils sont indépendants et rien ne les compare.
+
+> ⚠️ **Si on ne met à jour que Render, le verrou tourne contre l'ANCIEN cluster et passe au
+> VERT** — sur des données périmées, sans une seule erreur. Un vert obtenu comme ça ne prouve
+> rien, et c'est le seul mode d'échec de cette opération qui soit entièrement silencieux.
+> Atlas garde l'ancien cluster **joignable** pendant et après la migration : l'URI périmée
+> ne provoque aucune panne, elle provoque une mesure fausse.
+
+**Dans l'ordre :**
+
+1. **Sauvegarde**, lancée par le testeur — périmètre NON RÉGÉNÉRABLE, pas le défaut (il n'y
+   en a plus, le script refuse) :
+   ```
+   node backup-collections.js --base=test --collections=numeros_cartes,codes_set,journal_scans,credits,evenements_stripe,remboursements,quotas_semaine,quotas
+   ```
+   ⚠️ **Ne pas y mettre `references_image`** : ses Buffers passent en tableaux d'entiers,
+   ~4× la taille binaire. Elle se régénère par `ecrire-descripteurs.js`.
+   ✅ Le script **relit** chaque fichier (`JSON.parse`) et compare les comptes ; il sort en
+   **exit 1** si un seul diverge. Une sauvegarde qui finit à 0 est vérifiée, pas supposée.
+2. **Fenêtre** : le trafic est de quelques scans par jour, n'importe quelle heure creuse.
+3. **Migration Atlas** (Edit Configuration). Coupure de quelques minutes.
+4. **Mettre `MONGODB_URI` à jour AUX DEUX ENDROITS**, avec la même chaîne.
+5. **Vérifier par le CONTENU, jamais par la confiance.** Trois contrôles, du plus faible au
+   plus fort :
+   - `GET /ping` → ⚠️ **insuffisant**. C'est un `readyState` : il dit que la socket est
+     ouverte, pas qu'on parle à la bonne base. Il répondait `true` avec le cluster à 99,5 %.
+   - `POST /api/solde` avec un userId connu → une vraie lecture Mongo, sans écriture, sans
+     appel IA, sans crédit consommé.
+   - 🔑 **`node verrou-avant-push.js`** → le seul qui traverse la frontière dans les deux
+     sens : il copie la tranche depuis `test`, démarre le serveur, fait passer 7 charges.
+6. **Les deux témoins qui distinguent l'ancien cluster du nouveau** — à vérifier avant de se
+   fier au vert :
+   - `references_image.countDocuments()` doit rendre **71 489** (valeur au 2026-09-02) ;
+   - **`test_scratch` ne doit plus exister** : ses onze collections ont été supprimées par
+     `drop` le 2026-09-02. Si un script y trouve encore des collections vides, **il parle à
+     l'ancien cluster**.
+
 **Style de travail attendu** : la règle de décision s'écrit AVANT de lancer la mesure ; un
 instrument se contrôle avant de servir ; une erreur d'instrument se consigne dans les notes
 plutôt que de se corriger en silence. Le dépôt tient un **catalogue d'erreurs d'instrument**
-en tête de `scoring.js` — 9 entrées. Plusieurs des notes ci-dessous y renvoient.
+en tête de `scoring.js`. Plusieurs des notes ci-dessous y renvoient. ⚠️ **Le nombre
+d'entrées ne se recopie nulle part** : il n'est juste que dans `scoring.js`, et un compteur
+copié ailleurs redevient faux au prochain ajout — voir l'entrée 17.
 
 ---
 
