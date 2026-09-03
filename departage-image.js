@@ -79,6 +79,29 @@
 // D'où la garde : TOUS les candidats du groupe, ou abstention. Coût mesuré sur le trafic
 // réel : 7,6 à 8,4 % des groupes. ⚠️ Ce chiffre MONTERA après l'import du catalogue (les
 // produits neufs arrivent sans image) ; s'il passe le quart, la règle est à rediscuter.
+// (Mesure ultérieure sur le banc : 10 abstentions sur 44 lignes de cellule, et 8 D+
+// perdus — voir mesure-justesse-production.js.)
+//
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ LA GARDE EST INATTEIGNABLE SUR UN GROS GROUPE — ET CE N'EST PAS LE PROBLÈME
+// ════════════════════════════════════════════════════════════════════════════
+// Noté le 2026-09-03, sur le scan Milotic δ 5/101 : 92 ex aequo dans un vivier de 720.
+// Exiger un vecteur pour les 92 est hors d'atteinte par construction — la probabilité que
+// 92 produits soient tous collectés est nulle en pratique.
+//
+// 🔑 MAIS CE N'EST PAS UN DÉFAUT DE LA GARDE, ET ASSOUPLIR SERAIT SOIGNER LE SYMPTÔME.
+// Ces 92 candidats ne sont pas la population que l'image doit sauver : ce sont des cartes
+// SANS RAPPORT ENTRE ELLES, réunies par le seul numéro 5 après que le repli a jeté le nom
+// (le gagnant retenu était « Hatenna », set M24, 2024). Départager un groupe qui n'aurait
+// jamais dû exister ne servirait à rien — au mieux on désignerait la bonne carte parmi des
+// intruses, au pire on en affirmerait une fausse avec l'autorité de l'image.
+//
+// LA RÈGLE QUI EN DÉCOULE, ET ELLE VAUT AU-DELÀ DE CE CAS : quand la garde s'abstient sur
+// un groupe ÉNORME, la question n'est pas « comment la franchir » mais « pourquoi le
+// groupe est-il énorme ». Un vivier de 720 est le symptôme d'un défaut EN AMONT — ici la
+// jointure de noms (voir index.js, la note sur le vivier REMPLACÉ). L'abstention est alors
+// la bonne réponse, et le compteur d'abstentions est un DÉTECTEUR de viviers malades
+// autant qu'une mesure de couverture d'index.
 //
 // ----------------------------------------------------------------------------
 // CE MODULE EST INERTE TANT QUE LA BASE EST VIDE, ET C'EST VOULU

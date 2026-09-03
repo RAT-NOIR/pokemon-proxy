@@ -219,6 +219,29 @@ const journalScanSchema = new mongoose.Schema({
     // vus le 2026-09-02 sur la même carte — six fois le premier appel, dans la minute d'un
     // ECONNABORTED TCGdex. Deux services indépendants lents au même instant : sans ce
     // champ, ce rapprochement n'était visible que dans des logs qui ne se conservent pas.
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 LE POSTE DOMINANT D'UN SCAN N'EST PLUS L'IA — mesuré le 2026-09-03
+    // ════════════════════════════════════════════════════════════════════════
+    // Sur le scan Milotic δ 5/101 (vivier de 720 après repli par numéro) :
+    //     appel IA          3 464 ms
+    //     catalogue+scoring 11 243 ms      <- TROIS FOIS PLUS
+    // Soit ~15,6 ms par candidat, et c'est PROPORTIONNEL AU VIVIER — donc au défaut de
+    // jointure de noms (voir index.js, la note sur le vivier REMPLACÉ). Le chantier de la
+    // jointure se justifiait par la JUSTESSE ; il a désormais un argument de COÛT.
+    //
+    // ⚠️ ET UNE MESURE À MOI QUE CE SCAN A DÉMENTIE : j'avais avancé « ~65 ms pour 50
+    // candidats » dans l'analyse de capacité. Ce chiffre portait sur l'APPARIEMENT
+    // D'IMAGE (1,3 ms × 50) et je l'ai présenté comme le coût CPU d'un scan. Le scoring
+    // est un poste distinct et douze fois plus lourd par candidat.
+    //
+    // 🔑 CE QUE `msCatalogue` DEVRA TRANCHER UNE FOIS DÉPLOYÉ, et qu'on ne peut PAS
+    // deviner : quelle part de ces 11 s est du CPU BLOQUANT et quelle part est de
+    // l'ATTENTE MONGO. `viviersUnis`, `getPrixGuideLocalLot`, la résolution de région et
+    // `lireTousLesCodesSet` sont des allers-retours base — awaités, donc NON bloquants
+    // pour les autres requêtes. La différence commande tout le dimensionnement : Node
+    // encaisse des attentes concurrentes, il encaisse mal du calcul.
+    // ⚠️ NE PAS RÉ-ESTIMER LE POINT DE RUPTURE AVANT D'AVOIR CETTE DÉCOMPOSITION. Le
+    // faire sur le seul chiffre agrégé serait une invention.
     msCatalogue: Number,   // catalogue local + scoring. La part de CALCUL, celle qui bloque
     // Node — le reste du scan est de l'attente réseau, qu'il encaisse bien.
     // 🔴 LE MULTIPLICATEUR DU COÛT OPENROUTER, ET IL N'ÉTAIT NULLE PART. L'appel embarque

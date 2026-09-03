@@ -1860,6 +1860,42 @@ async function viviersAvecRangs(vivierNom, numeroLu, idExpansionsAttendues, cont
         if (!parNumero.length) continue;
         const rangs2 = await rangsDe(parNumero);
         if (rangs2.rang1 > 0) {
+            // ════════════════════════════════════════════════════════════════
+            // 📌 REMPLACER PLUTÔT QU'ÉTENDRE — amélioration NON URGENTE, notée
+            //    le 2026-09-03 sur le cas Milotic δ 5/101
+            // ════════════════════════════════════════════════════════════════
+            // ⚠️ CE N'EST PAS LE CORRECTIF DE CE CAS-LÀ, et c'est important : sur Milotic,
+            // le vivier par nom (52 candidats) NE CONTENAIT PAS la bonne carte, et c'est
+            // le repli qui l'a ramenée (277210 est dans les 697 au n°5). Le remplacement a
+            // SAUVÉ ce scan. Il ne l'a pas cassé.
+            // L'objection reste vraie en général : rien ne garantit que le vivier de repli
+            // contienne ce que le premier avait. ÉTENDRE (52 + 697, dédoublonnés) est
+            // strictement plus sûr pour 52 candidats de plus — soit ~0,8 s au tarif mesuré
+            // de 15,6 ms par candidat. Non urgent, mais gratuit en justesse.
+            //
+            // 🔑 ET LA VRAIE CAUSE EST EN AMONT, elle : le vivier par nom était faux.
+            // Le catalogue nomme la carte « Milotic δ Delta Species » ; la carte porte
+            // « Milotic ». « Delta Species » N'EST PAS IMPRIMÉ — aucune lecture, humaine
+            // ou IA, ne peut le produire. La correspondance par nom EXACT l'exclut donc
+            // par construction. MESURÉ le 2026-09-03 :
+            //   · 355 produits portent la queue « δ Delta Species » (0,5 % du catalogue) —
+            //     c'est le défaut STRUCTUREL : le nom n'est pas lisible ;
+            //   · 11 852 produits (16,2 %) ont un nom « <nom existant> + suffixe », mais
+            //     ⚠️ LA PLUPART DE CES SUFFIXES SONT IMPRIMÉS (`ex` 4 821, `V/VMAX/VSTAR`
+            //     3 570, `Lv.X` 2 613, `X's Y` 4 159, `BREAK`, `Star`…). Pour ceux-là le
+            //     nom EST lisible : c'est une FRAGILITÉ de lecture, pas un défaut de
+            //     catalogue. Confondre les deux ferait chiffrer le problème à 16 % au lieu
+            //     de 0,5 %, et attaquer le mauvais bout.
+            //   · en production, la signature du repli (vivier ≥ 200) apparaît sur
+            //     4 lignes sur 188 — 2,1 %, dont deux sont le MÊME Milotic rescanné.
+            //     Trois cartes distinctes en cinq semaines : réel, structurel, et RARE.
+            //
+            // ⚠️ ET L'AUTRE BOUT NE SUFFIRAIT PAS NON PLUS. TCGdex avait donné `ex15-5`,
+            // la bonne réponse. Chercher le n°5 DANS ce set était impossible : le pont
+            // `ex15 -> DF` n'est pas appris. Mesuré : 139 `setTcgdex` distincts appris pour
+            // ~218 sets publiés par TCGdex, et seulement 25,6 % des lignes de
+            // `numeros_cartes` portent un `setTcgdex`. Réparer les noms sans réparer les
+            // ponts laisserait ce chemin muet.
             console.log(`   ↪️ vivier REMPLACÉ depuis ${ouCherche} : ${parNumero.length} candidat(s), ${rangs2.rang1} au rang 1.`);
             return { produits: parNumero, voie: 'numero-substitue', aucunCandidatAuNumero: false, rangs: rangs2 };
         }
