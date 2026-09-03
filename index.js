@@ -5535,6 +5535,40 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
         const codeLangueValide = Number.isInteger(codeLangue) && codeLangue >= 1 && codeLangue <= 10 ? codeLangue : null;
 
         // ════════════════════════════════════════════════════════════════════
+        // D'OÙ VIENT LE PRIX — ajouté le 2026-09-03, sur signalement de l'extension
+        // ════════════════════════════════════════════════════════════════════
+        // 🔑 SANS CE CHAMP, LA MESURE QU'ON ATTEND DE CETTE ROUTE SERAIT FAUSSE, ET
+        // SILENCIEUSEMENT. `resultat.price` a TROIS origines côté extension :
+        //   'grille'                  -> plancher lu sur les offres réelles. C'est un PRIX.
+        //   'plancher-toutes-langues' -> le « De » de la fiche, toutes langues confondues.
+        //                                Un prix, mais pas celui de la langue visée.
+        //   'tendance'                -> dernier recours. ⚠️ CE N'EST PAS UN PRIX D'OFFRE,
+        //                                c'est une moyenne calculée par Cardmarket.
+        // Comparer le guide à une TENDANCE, c'est comparer une moyenne à une moyenne : on
+        // mesurerait l'accord de deux estimations, pas l'écart au marché. Le rapport
+        // ressemblerait à ×1,00 et on en conclurait « le guide est juste ».
+        //
+        // ⚠️ ÉNUMÉRATION FERMÉE, comme `prixLiveEtat` : une valeur libre rendrait la
+        // stratification impossible au moment précis où elle servira.
+        // ⚠️ ET ON N'ÉCARTE RIEN À L'ÉCRITURE — décision du testeur, et elle est juste :
+        // écarter les tendances ici ferait perdre une classe entière avant de l'avoir
+        // regardée. On STOCKE tout, on TRIE à la lecture. C'est le même raisonnement que
+        // `sourcesEnPanne` : on enregistre le fait, on décide ensuite ce qu'on en fait.
+        const ORIGINES_PRIX = ['grille', 'plancher-toutes-langues', 'tendance'];
+        const originePrix = req.body?.originePrix ? String(req.body.originePrix).trim().toLowerCase() : null;
+        if (originePrix && !ORIGINES_PRIX.includes(originePrix)) {
+            return res.status(400).json({ success: false, error: `originePrix doit être l'un de ${ORIGINES_PRIX.join(', ')}` });
+        }
+        // ⚠️ `null` EST ACCEPTÉ, ET IL VEUT DIRE « ON NE SAIT PAS », JAMAIS « grille ».
+        // Les extensions déjà déployées ne l'envoient pas : leur donner un défaut ferait
+        // passer des tendances pour des planchers d'offres. Un défaut ici fabriquerait
+        // exactement l'erreur que ce champ existe pour empêcher.
+        if (!originePrix) {
+            console.warn(`⚠️ [retour-live] scan ${scanId} : \`originePrix\` absent — la ligne`
+                + ` entrera dans « origine inconnue », pas dans « grille ».`);
+        }
+
+        // ════════════════════════════════════════════════════════════════════
         // LA FORME DE L'OFFRE — tendance, prix NM, grille, et deux entiers
         // ════════════════════════════════════════════════════════════════════
         // `prixLive` est un PLANCHER : il ne dit rien de ce qu'il y a autour. Ces champs
@@ -5600,6 +5634,7 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
                     prixLive, prixLiveEtat: etat, prixLiveCodeLangue: codeLangueValide,
                     prixLiveTendance, prixLiveNM, grilleLive,
                     grilleNbEtats, grilleValeursDistinctes,
+                    originePrix,
                     retourLe: new Date()
                 }
             },
@@ -5624,6 +5659,7 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
 
         console.log(`💶 [retour-live] scan ${scanId} · idProduct ${maj.idProduct ?? '?'} · live ${prixLive} €` +
             ` · état ${etat || '?'} · langue ${codeLangueValide ?? '?'}` +
+            ` · origine ${originePrix ?? 'INCONNUE'}` +
             ` · tendance ${prixLiveTendance ?? '—'} · NM ${prixLiveNM ?? '—'}` +
             ` · grille ${grilleNbEtats ?? '—'} état(s)/${grilleValeursDistinctes ?? '—'} valeur(s)`);
         res.json({ success: true });

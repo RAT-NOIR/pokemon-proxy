@@ -591,6 +591,25 @@ const journalScanSchema = new mongoose.Schema({
     // principe, appliqué à une mesure.
     prixGuideRetenu: Number,
     prixLive: Number,
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔑 D'OÙ VIENT `prixLive` — sans ce champ, la mesure de l'écart est FAUSSE
+    // ════════════════════════════════════════════════════════════════════════
+    // Ajouté le 2026-09-03, signalé par l'agent de l'extension AVANT d'écrire l'appel —
+    // c'est-à-dire au seul moment où ça ne coûtait rien. Trois origines possibles :
+    //   'grille'                  -> plancher lu sur des OFFRES RÉELLES. C'est un prix.
+    //   'plancher-toutes-langues' -> le « De » de la fiche, toutes langues confondues.
+    //   'tendance'                -> ⚠️ PAS UN PRIX D'OFFRE : une moyenne calculée par
+    //                                Cardmarket, dernier recours quand rien d'autre.
+    // Comparer le guide à une TENDANCE compare une moyenne à une moyenne : le rapport
+    // sortirait proche de ×1,00 et on conclurait « le guide est juste » — sur une classe
+    // qui n'a jamais touché le marché.
+    // ⚠️ `null` = ORIGINE INCONNUE, jamais 'grille'. Les extensions déjà déployées ne
+    // l'envoient pas ; leur donner un défaut ferait passer des tendances pour des
+    // planchers, exactement ce que ce champ empêche.
+    // 🔑 ON STOCKE TOUT, ON TRIE À LA LECTURE. Écarter les tendances à l'écriture ferait
+    // perdre une classe entière avant de l'avoir regardée. Même règle que `sourcesEnPanne` :
+    // on enregistre le fait, on décide ensuite ce qu'on en fait.
+    originePrix: String,         // 'grille' | 'plancher-toutes-langues' | 'tendance' | null
     prixLiveEtat: String,        // l'état sur lequel l'offre a été lue (MT, NM, EX, GD, LP, PL, PO)
     prixLiveCodeLangue: Number,  // le code langue Cardmarket du filtre (1=EN, 2=FR, 7=JP…)
 

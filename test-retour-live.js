@@ -84,6 +84,10 @@ function verifier(libelle, obtenu, attendu) {
     verifier('prixLive à 0 -> 400 (un 0 n\'est pas un prix)', (await poster({ userId: MOI, scanId, prixLive: 0 })).status, 400);
     verifier('prixLive négatif -> 400', (await poster({ userId: MOI, scanId, prixLive: -3 })).status, 400);
     verifier('état hors énumération -> 400', (await poster({ userId: MOI, scanId, prixLive: 12, prixLiveEtat: 'PARFAIT' })).status, 400);
+    // ⚠️ `originePrix` EST UNE ÉNUMÉRATION FERMÉE, au même titre que l'état. Sans elle on
+    // comparerait le guide à une TENDANCE en croyant le comparer à un prix d'offre.
+    verifier('originePrix hors énumération -> 400',
+        (await poster({ userId: MOI, scanId, prixLive: 12, originePrix: 'au-pif' })).status, 400);
 
     console.log('\n=== GARDE 1 — le scanId doit exister ===');
     verifier('scanId inconnu -> 404', (await poster({ userId: MOI, scanId: inconnu, prixLive: 12 })).status, 404);
@@ -96,7 +100,7 @@ function verifier(libelle, obtenu, attendu) {
     console.log('\n=== Le retour légitime passe, et écrit ce qu\'on lui donne ===');
     verifier('retour valide -> 200', (await poster({
         userId: MOI, scanId, prixLive: 24.13, prixLiveEtat: 'ex', prixLiveCodeLangue: 7,
-        prixLiveTendance: 29.07, prixLiveNM: 31.5,
+        prixLiveTendance: 29.07, prixLiveNM: 31.5, originePrix: 'GRILLE',
         // ⚠️ « pastèque » n'est pas un état : la clé doit être ÉCARTÉE, pas stockée.
         grilleLive: { NM: 31.5, ex: 24.13, GD: 24.13, 'pastèque': 9 },
         // Compteurs VOLONTAIREMENT FAUX : la grille doit faire foi et le désaccord être tracé.
@@ -107,6 +111,10 @@ function verifier(libelle, obtenu, attendu) {
     verifier('   état normalisé en majuscules', ecrite.prixLiveEtat, 'EX');
     verifier('   code langue écrit', ecrite.prixLiveCodeLangue, 7);
     verifier('   retourLe horodaté', ecrite.retourLe instanceof Date, true);
+    // 🔑 CE CHAMP DÉCIDE SI LA LIGNE ENTRE DANS LA MESURE DE L'ÉCART GUIDE/LIVE.
+    // Normalisé en minuscules comme l'état l'est en majuscules : une seule forme en base,
+    // sinon 'GRILLE' et 'grille' feraient deux classes.
+    verifier('   originePrix normalisée en minuscules', ecrite.originePrix, 'grille');
     verifier('   tendance écrite', ecrite.prixLiveTendance, 29.07);
     verifier('   prix NM écrit', ecrite.prixLiveNM, 31.5);
     // La grille est une Map côté mongoose : on la relit en objet pour comparer.
