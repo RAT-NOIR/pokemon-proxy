@@ -9,6 +9,44 @@
 // CONTENU : si l'expansion 6096 contient les mêmes noms de cartes qu'un set
 // TCGdex, c'est le même set. Aucun nom d'expansion nécessaire.
 //
+// ════════════════════════════════════════════════════════════════════════════
+// 📌 L'ÉTAT DES PONTS AU 2026-09-03, ET POURQUOI CE SCRIPT EST À RELANCER
+// ════════════════════════════════════════════════════════════════════════════
+// ⚠️ MESURE, AUCUNE DÉCISION. Et elle corrige une affirmation que j'avais faite la
+// veille — « trois quarts du monde n'ont pas de pont » — qui mélangeait deux
+// dénominateurs. Les vrais chiffres :
+//   · 752 expansions sur 752 ont AU MOINS UN pont. 100 %. Aucune expansion orpheline.
+//   · 17 842 lignes de `numeros_cartes` sur 69 598 (25,6 %) portent un `setTcgdex`.
+//     Ce n'est PAS un trou : `expansionsDuSetTCGdex` fait un `distinct('idExpansion')`,
+//     une seule ligne par expansion suffit. Les 74,4 % restantes n'en ont pas BESOIN.
+//   · 🔑 LE VRAI TROU EST DE L'AUTRE CÔTÉ : 139 identifiants TCGdex distincts sont
+//     référencés, pour ~218 sets publiés. SOIXANTE-DIX-NEUF SETS TCGdex ne sont
+//     désignés par aucune ligne — dont `ex15` (Dragon Frontiers), celui du cas Milotic.
+//
+// D'OÙ VIENNENT LES PONTS EXISTANTS : source=cardmarket/exacte 17 475, tcgdex/exacte
+// 104, tcgdex/heuristique 263. Un seul mécanisme d'écriture, celui de ce fichier.
+//
+// 🔑 CE QUE ÇA VEUT DIRE : LES SETS MANQUANTS SONT LES RÉCENTS. Le journal montre
+// 22 scans où TCGdex a trouvé la carte sans qu'aucun pont existe, et ce sont
+// `me05`, `sv03`, `sv06`, `SV8a`, `swsh12`, `dc1` — des sets parus après le dernier
+// passage de ce script. Aucun trafic ne les fera apparaître : le champ n'est écrit
+// QUE par cet import.
+// -> LA RÉPONSE À « import à écrire ou chantier ? » N'EST NI L'UN NI L'AUTRE :
+//    C'EST CET IMPORT-CI À RELANCER. Le code existe et il a déjà fait le travail.
+//
+// ⚠️ ET CE QUI PRODUIRAIT UN FAUX PONT — la question qui décide, parce qu'un faux pont
+// envoie chercher dans le mauvais set EN SILENCE, ce qui est pire qu'un pont absent :
+// apparier par la TAILLE du set est TENTANT ET INSUFFISANT. Mesuré sur les 218 sets
+// publiés : 113 tailles distinctes, dont seulement 62 (54,9 %) portées par un seul set.
+// 156 sets sur 218 (71,6 %) sont pris dans une collision de taille. Les pires :
+//     30 cartes -> 18 sets  ·  12 cartes -> 11  ·  17 cartes -> 9
+//    101 cartes -> 5 sets : ex5, ex15, bwp, bw3, bw10
+// 🔑 CE « 101 -> 5 SETS » EST EXACTEMENT LE CAS MILOTIC : la carte est une 5/101, et
+// le log de production dit « Total 101 -> 5 résultats réduits à 1 ». La taille seule
+// laissait cinq candidats ; c'est le NOM qui a tranché.
+// C'est précisément ce que fait déjà l'appariement par Jaccard sur les noms de cartes
+// (ligne ~157) : il n'y a rien de mieux à inventer, il y a un import à rejouer.
+//
 // USAGE (la base doit être NOMMÉE, le script refuse de la deviner) :
 //         node prefill-tcgdex.js --base=test            (simulation, n'écrit rien)
 //         node prefill-tcgdex.js --base=test --ecrire   (écrit vraiment en base)
@@ -378,6 +416,11 @@ async function main() {
                                 nomFr: c.nomFr || null,
                                 source: 'tcgdex',
                                 certitude,
+                                // ⚠️ SEUL POINT D'ÉCRITURE DE `setTcgdex` DANS TOUT LE DÉPÔT.
+                                // Ce n'est PAS un apprentissage au scan : c'est un IMPORT,
+                                // rejouable. Conséquence directe, mesurée le 2026-09-03 :
+                                // les sets parus depuis le dernier passage n'ont AUCUN pont,
+                                // et aucun trafic ne les fera apparaître.
                                 setTcgdex: set.id,     // traçabilité : d'où vient ce numéro
                                 setPartage,            // ce set sert-il à plusieurs expansions ?
                                 apprisLe: new Date()
