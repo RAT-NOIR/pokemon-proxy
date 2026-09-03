@@ -91,3 +91,14 @@ miennes. Je ne les modifie que sur demande explicite, et jamais au passage.
 - **git n'est pas dans le PATH.** Il se trouve sous
   `AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe`. Je peux commiter,
   **je ne peux pas pousser** — c'est le testeur qui pousse, depuis GitHub Desktop.
+  ⚠️ **Ne JAMAIS écrire ce chemin en dur avec un numéro de version.** GitHub Desktop se
+  met à jour tout seul et le dossier change : `app-3.6.3` a disparu le 2026-09-03 au
+  profit de `app-3.6.5`, et deux commandes du dépôt ont cassé d'un coup. On le résout à
+  chaque fois, en prenant la version la plus récente :
+  ```powershell
+  $g = (Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Filter 'app-*' -Directory |
+        Sort-Object Name -Descending | Select-Object -First 1).FullName +
+        '\resources\app\git\cmd\git.exe'
+  ```
+  C'est la même faute que le compteur recopié : une valeur qui décrit un autre système
+  et qu'on fige. Un chemin résolu vieillit bien, un chemin écrit en dur non.

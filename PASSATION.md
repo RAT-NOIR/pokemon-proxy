@@ -22,7 +22,9 @@ donné avec son chiffre, ce qui ne l'est pas est nommé comme tel.
 - Jamais `Get-Content -Raw` / `Set-Content` PowerShell sur un fichier source (double
   encodage UTF-8 garanti). Jamais `node -e` avec des guillemets : on écrit un `.js`.
 - **git n'est pas dans le PATH** :
-  `C:\Users\Yung\AppData\Local\GitHubDesktop\app-3.6.3\resources\app\git\cmd\git.exe`.
+  `%LOCALAPPDATA%\GitHubDesktop\app-*\resources\app\git\cmd\git.exe` — ⚠️ **le numéro de
+  version ne se fige pas** : `app-3.6.3` a disparu le 2026-09-03 (→ `app-3.6.5`). On
+  résout le dossier le plus récent à chaque fois, voir CLAUDE.md.
   On peut commiter, **on ne peut pas pousser** — c'est le testeur qui pousse.
 - Pas de scraping Cardmarket, pas de Referer/User-Agent falsifié, pas de proxy d'images
   tiers. **Une licence non commerciale est un refus** (appliqué à TCG Collector).
