@@ -12,27 +12,51 @@
 // ════════════════════════════════════════════════════════════════════════════
 // 📌 L'ÉTAT DES PONTS AU 2026-09-03, ET POURQUOI CE SCRIPT EST À RELANCER
 // ════════════════════════════════════════════════════════════════════════════
-// ⚠️ MESURE, AUCUNE DÉCISION. Et elle corrige une affirmation que j'avais faite la
-// veille — « trois quarts du monde n'ont pas de pont » — qui mélangeait deux
-// dénominateurs. Les vrais chiffres :
-//   · 752 expansions sur 752 ont AU MOINS UN pont. 100 %. Aucune expansion orpheline.
-//   · 17 842 lignes de `numeros_cartes` sur 69 598 (25,6 %) portent un `setTcgdex`.
-//     Ce n'est PAS un trou : `expansionsDuSetTCGdex` fait un `distinct('idExpansion')`,
-//     une seule ligne par expansion suffit. Les 74,4 % restantes n'en ont pas BESOIN.
-//   · 🔑 LE VRAI TROU EST DE L'AUTRE CÔTÉ : 139 identifiants TCGdex distincts sont
-//     référencés, pour ~218 sets publiés. SOIXANTE-DIX-NEUF SETS TCGdex ne sont
-//     désignés par aucune ligne — dont `ex15` (Dragon Frontiers), celui du cas Milotic.
+// ⚠️ MESURE, AUCUNE DÉCISION.
 //
-// D'OÙ VIENNENT LES PONTS EXISTANTS : source=cardmarket/exacte 17 475, tcgdex/exacte
-// 104, tcgdex/heuristique 263. Un seul mécanisme d'écriture, celui de ce fichier.
+// 🔴 ET D'ABORD LA CORRECTION D'UNE CORRECTION : le 2026-09-03 j'ai écrit ici que
+// « 752 expansions sur 752 ont un pont, 100 % ». C'ÉTAIT FAUX, et c'était pire qu'une
+// erreur isolée — je « corrigeais » un chiffre juste (« trois quarts n'ont pas de
+// pont ») en un chiffre faux, sur lequel une décision de priorité a été prise.
+// LA CAUSE : mon agrégat comptait `{$cond: [{$ne: ['$setTcgdex', null]}, 1, 0]}`. En
+// langage d'AGRÉGATION, un champ ABSENT n'est pas null — `$ne` rend `true`, et les
+// 102 lignes de Dragon Frontiers, qui n'ont PAS le champ, ont été comptées comme
+// pontées. `countDocuments({setTcgdex: {$ne: null}})` en rendait 0 sur les mêmes
+// documents : les deux opérateurs ne voient pas l'absence pareil.
+// 🔑 C'EST L'ERREUR D'INSTRUMENT #8, CINQUIÈME OCCURRENCE, ET LA PREMIÈRE EN
+// AGRÉGATION. La parade « imprimer le dénominateur » ne suffisait pas ici : le
+// dénominateur était juste, c'est le NUMÉRATEUR qui mentait. Ce qui l'a attrapée est
+// une contradiction entre deux de mes propres mesures, et rien d'autre.
+// (Forme correcte : `{$ne: [{$ifNull: ['$setTcgdex', null]}, null]}`.)
 //
-// 🔑 CE QUE ÇA VEUT DIRE : LES SETS MANQUANTS SONT LES RÉCENTS. Le journal montre
-// 22 scans où TCGdex a trouvé la carte sans qu'aucun pont existe, et ce sont
-// `me05`, `sv03`, `sv06`, `SV8a`, `swsh12`, `dc1` — des sets parus après le dernier
-// passage de ce script. Aucun trafic ne les fera apparaître : le champ n'est écrit
-// QUE par cet import.
-// -> LA RÉPONSE À « import à écrire ou chantier ? » N'EST NI L'UN NI L'AUTRE :
-//    C'EST CET IMPORT-CI À RELANCER. Le code existe et il a déjà fait le travail.
+// LES VRAIS CHIFFRES, au 2026-09-03 :
+//   · 🔴 534 expansions sur 752 (71 %) n'ont AUCUNE ligne portant un `setTcgdex`.
+//   · 46 090 lignes sur 69 598 appartiennent à ces expansions-là.
+//   · 139 identifiants TCGdex référencés pour ~218 sets publiés.
+//   · Dragon Frontiers (exp 1553, codeSet DF), le set du cas Milotic : 102 lignes,
+//     toutes `source: cardmarket`, ZÉRO pont.
+//
+// ════════════════════════════════════════════════════════════════════════════
+// 🔴 ET RELANCER CE SCRIPT N'Y CHANGERAIT RIEN — SIMULATION À L'APPUI
+// ════════════════════════════════════════════════════════════════════════════
+// `node prefill-tcgdex.js --base=test` (mode simulation, par défaut) rend :
+//     « Cartes à écrire : 8 »
+// HUIT. Pas huit mille. La cause est la garde de la ligne ~232 :
+//     const dejaFiables = new Set(await NumeroCarte.distinct('idProduct'));
+// ⚠️ ELLE N'A AUCUN FILTRE SUR `source`, alors que le log dit « déjà apprises depuis
+// Cardmarket ». L'ensemble contient TOUTES les lignes. Or 69 598 produits sur 73 188
+// (95,1 %) en ont déjà une : ce script ne peut donc toucher que les 3 590 restants.
+// 🔑 UN PRODUIT QUI A UNE LIGNE SANS `setTcgdex` N'EN RECEVRA JAMAIS. C'est le cas de
+// Milotic δ (277210 : numero 5, codeSet DF, source cardmarket, setTcgdex null) et des
+// 46 090 autres. La garde protège de l'écrasement — ce qui est bien, et voulu — mais
+// elle interdit AUSSI l'enrichissement.
+//
+// -> LA RÉPONSE À « import à écrire ou chantier ? » EST DONC : UN IMPORT À ÉCRIRE.
+//    Pas celui-ci relancé. Un import qui ATTACHE `setTcgdex` aux produits ayant déjà
+//    une ligne, SANS toucher `numero`, `source` ni `certitude` — l'appariement
+//    d'expansion par Jaccard existe déjà ici et se réutilise tel quel.
+//    ⚠️ Et il devra dire ce qu'il fait d'un pont CONTREDIT plutôt que de l'écraser :
+//    voir corriger-lien-base1.js, qui a dû réparer `base1` à la main.
 //
 // ⚠️ ET CE QUI PRODUIRAIT UN FAUX PONT — la question qui décide, parce qu'un faux pont
 // envoie chercher dans le mauvais set EN SILENCE, ce qui est pire qu'un pont absent :

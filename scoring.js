@@ -993,6 +993,22 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      citer non plus (c'est l'entrée 16). Ce qui marche est MÉCANIQUE — avant tout
 //      pourcentage sur le journal, imprimer d'abord SUR COMBIEN DE LIGNES LE CHAMP EXISTE.
 //      Un taux dont le dénominateur n'a pas été affiché n'est pas encore une mesure.
+//      🔴 CINQUIÈME OCCURRENCE, LE 2026-09-04, ET ELLE ÉCHAPPE À LA PARADE CI-DESSUS.
+//      En AGRÉGATION MongoDB, un champ ABSENT n'est pas null : `{$ne: ['$setTcgdex', null]}`
+//      rend `true` sur un document qui n'a pas le champ. Les 102 lignes de Dragon Frontiers,
+//      toutes sans `setTcgdex`, ont donc été comptées comme PONTÉES — et j'ai publié
+//      « 752 expansions sur 752 ont un pont, 100 % ». Le vrai chiffre est 218 sur 752 :
+//      534 expansions n'en ont AUCUN. `countDocuments({setTcgdex: {$ne: null}})` rendait 0
+//      sur ces mêmes documents : LES DEUX OPÉRATEURS NE VOIENT PAS L'ABSENCE PAREIL.
+//      ⚠️ AGGRAVANT, ET C'EST LUI QUI COMPTE : je « corrigeais » un chiffre JUSTE en un
+//      chiffre FAUX, et le testeur avait fondé une inversion de priorité sur le premier.
+//      Une correction est une affirmation comme une autre — elle se mesure avant d'être
+//      annoncée, et surtout pas avec un opérateur qu'on n'a pas éprouvé sur l'absence.
+//      🔑 LE DÉNOMINATEUR NE SUFFISAIT PAS ICI : il était juste, c'est le NUMÉRATEUR qui
+//      mentait. Ce qui l'a attrapée est une CONTRADICTION ENTRE DEUX DE MES PROPRES
+//      MESURES — le comptage direct disait 0, l'agrégat disait 102. Quand deux mesures du
+//      même fait divergent, on ne choisit pas la plus commode : on les départage.
+//      Forme correcte : `{$ne: [{$ifNull: ['$champ', null]}, null]}`.
 //
 // ⚠️ ET UNE TROISIÈME FAMILLE, TROUVÉE LE 2026-08-19 : L'ISOLEMENT PARFAIT.
 //   9. UN TEST QUI FABRIQUE UNE IDENTITÉ NEUVE À CHAQUE CAS NE PEUT JAMAIS DÉCLENCHER
