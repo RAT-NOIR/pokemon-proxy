@@ -313,6 +313,230 @@ aveugle, et deux des questions ne sont pas des questions de graphe d'appel.
 (journal-scans.js:1120), et les 22 fichiers qui requièrent `./scoring` — un de plus que mon
 grep.
 
+## Mesures du 2026-09-04, troisième tour
+
+### 0. 🔴 CORRECTION — les 71 vérités n'ont JAMAIS été perdues, je les avais mal lues
+
+`verites` est un **OBJET** (clés `H001…H033`, `L026…L065`), pas un tableau. Mon script
+cherchait `Object.values(...).find(Array.isArray)` et retombait sur `|| []` : d'où le
+« 0 entrée » annoncé au tour précédent. **21e erreur d'instrument, et la plus coûteuse de la
+série** : elle a fait déclarer un instrument détruit alors qu'il était intact, et elle a
+conclu « invérifiable » sur une question qui ne l'était pas.
+Aucun commit n'a vidé le fichier : les quatre versions de l'historique
+(`f7c3183` 32 clés, puis `3a5bfc1`, `d7c5656`, `3ffdc1e` = HEAD, 71 clés chacune) sont
+cohérentes. **Rien à récupérer, rien à restaurer.**
+
+**Ce que le banc couvre vraiment.** Les vérités s'attachent par ce qui a été LU
+(`lu.nom` + `lu.numero`), pas par un identifiant de scan. Sur ce rattachement :
+**89 des 222 lignes du journal ont une vérité**, et les 71 servent toutes au moins une fois.
+Sur ces 89 : **57 justes · 17 faux · 15 refus**.
+
+**Et les 10 tirages ORB restent invérifiables — pour une raison corrigeable.** Aucun des 10
+scans à vivier vide n'a de vérité : ce sont des scans du 2026-08-02 au 08-15, le holdout a
+été saisi sur d'autres. Le seul quasi-appariement (`L044 Dark Dragonite/149`) est un AUTRE
+scan (2026-08-08, abouti) que le nôtre (2026-08-03, `aucun-candidat`). 🔑 **Il manque
+10 saisies, pas un instrument.**
+
+### 1. Retrait du terme `prix` : il coûte 6 refus et en rend 1
+
+Méthode : les deux bras partagent le **même vivier** (par le nom) ; la contribution du terme
+est **retranchée du score à partir de `detail.prix`**, le code n'est pas touché. Le départage
+« à score égal, le moins cher » n'est PAS retiré — c'est le TERME qu'on mesure, pas le tri.
+Sur **221 lignes scorables** (1 vivier vide) :
+
+| transition | n |
+|---|---|
+| même gagnant qu'avant | **219 / 221** — seulement **2** changent |
+| abouti → abouti | 133 |
+| **abouti → REFUS** | **6** 🔴 |
+| **refus → abouti** | **1** ✅ |
+| refus → refus | 81 |
+
+Taille du sommet : médiane **1 avant, 1 après** ; max **76 avant, 76 après**. Le retrait ne
+fabrique donc **pas** de grands groupes — les six nouvelles égalités sont minuscules :
+
+| ligne | groupe | l'image peut-elle trancher ? |
+|---|---|---|
+| Bayleef n°007 JP | 2 | **oui**, tous vectorisés |
+| Erika's Victreebel n°071 JP | 2 | **oui**, tous vectorisés |
+| Cynthia's Ambition n°236 KR | 2 | **oui**, tous vectorisés |
+| Azurill n°086 JP | 5 | **oui**, tous vectorisés |
+| Mewtwo n°51 FR | 2 | non — hors périmètre asiatique |
+| Zekrom n°TG05 FR | 2 | non — hors périmètre asiatique |
+
+**4 départageables · 0 bloquées par la garde · 2 hors condition.** Le solde brut est −5 ;
+si l'image tranchait ses 4, il serait **−1** (2 refus FR nouveaux contre 1 gain).
+
+🔴 **ET LE POINT QUI DÉCIDE : le retrait du prix NE RÉPARE PAS MILOBELLUS.** Sur le vivier
+par le nom, Milotic δ n'est pas candidate — c'est le défaut de vivier, pas celui du barème.
+Les deux défauts sont **indépendants** et le prix n'est la cause que du RANG de 277210 une
+fois le repli par le numéro déclenché.
+
+### 2. La garde d'abstention : elle ne bloque QUE les grands groupes
+
+Sur les 221 lignes, l'image ne se déclenche pas 119 fois (`le scoring sépare` 58 ·
+`hors périmètre asiatique` 53 · `un seul candidat` 8). Sur les **102 restantes** :
+
+| taille du groupe | groupes | bloqués | taux |
+|---|---|---|---|
+| 1-3 | 19 | 0 | **0 %** |
+| 4-10 | 12 | 0 | **0 %** |
+| 11-30 | 2 | 0 | **0 %** |
+| **31+** | **69** | **33** | **48 %** |
+
+🔑 La garde est **gratuite en dessous de 31 candidats et coûte la moitié au-dessus** — et
+**68 % des groupes déclenchés sont des 31+**. Le compteur d'abstentions mesure donc surtout
+des viviers malades, exactement ce qui était écrit dans `departage-image.js`.
+
+**Le 42/44 a-t-il été mesuré sur des groupes de la même taille ? OUI pour la taille, NON
+pour le régime.** Population du banc (89 lignes) contre le reste (132) :
+
+| | vivier (médiane / p90 / max) | groupe départagé (médiane / p90 / max) | garde sur les 31+ |
+|---|---|---|---|
+| **avec vérité** (le banc) | 50 / 132 / 455 | **46 / 98 / 455** | 15 bloqués sur 41 — **37 %** |
+| sans vérité | 56 / 103 / 455 | **56 / 455 / 455** | 18 bloqués sur 28 — **64 %** |
+
+Les tailles sont du même ordre. **L'écart est ailleurs, et il est entier** : le 42/44 vient
+du régime « vivier COMPLÉTÉ » — la vérité est **injectée** dans le vivier, tous les scores
+sont mis à 0, et le classement est calculé **sans passer par `departager`**. Dans ce régime
+**la garde ne s'exécute jamais**. Le 42/44 répond donc à « la vérité étant présente et la
+garde neutralisée, l'image la classe-t-elle première ? » ; la production pose « la garde
+laisse-t-elle l'image parler ? » — et la réponse mesurée est **non, une fois sur deux, sur
+les 68 % de groupes qui comptent**.
+
+### 4. graphify est désinstallé
+
+Retiré (`graphify uninstall` puis `uv tool uninstall graphifyy`, 2 exécutables supprimés).
+**Il n'avait rien écrit dans le dépôt** : aucune section dans `CLAUDE.md`, aucun hook git,
+aucun `graphify-out/` — l'extraction était sortie hors du dépôt. **`.claudeignore` n'existe
+pas dans ce dépôt**, il n'y avait donc rien à en retirer.
+
+> **Pourquoi il sort** : 0/5 sur les cinq défauts connus — 3 tombent dans l'angle mort mesuré
+> (les appels écrits dans un corps `app.post` ne sont pas des arêtes), et 2 sont hors de sa
+> portée par construction (un CHAMP, un lien HTTP).
+
+## Mesures du 2026-09-04, quatrième tour
+
+### 0. Catalogue des erreurs d'instrument — `|| []` sur une lecture est un `catch → []`
+
+> **`|| []` et `|| {}` sur une lecture de fichier sont le MÊME défaut que `catch → return []` :
+> « je n'ai pas su lire » rendu comme « il n'y a rien ». `sources.js` protège la ROUTE ; il ne
+> protège aucun script de mesure, et c'est là que le défaut est passé.**
+
+**Recensement des outils, sans correction.** Quatre lectures de fichier tenu à la main portent
+le motif :
+
+| fichier | ligne | ce qu'il lit | verdict |
+|---|---|---|---|
+| `mesure-cloture-pages.js` | 115 | `banc-verites.json .verites \|\| []` | **type menteur, sans dégât ici** : le consommateur (`banc-seaux.js:197`) fait `Object.entries(verites \|\| {})`, qui marche sur un objet |
+| `mesure-separation-illustration.js` | 80 | `banc-verites.json .verites \|\| []` | **type menteur**, même forme, à vérifier au consommateur |
+| `banc-japonais.js` | 265 | `.verites \|\| {}` dans `try {} catch (_) {}` | **type juste**, mais le `catch` VIDE transforme une lecture ratée en « aucune vérité » |
+| `banc-seaux.js` | 50, 69 | `banc-verification.json .cartes \|\| []` · `banc-lots.json .fenetres \|\| []` | mêmes fichiers tenus à la main, même motif |
+
+Les autres `|| []` du dépôt portent sur des **retours d'API ou de requête** (`r.data?.cards`,
+`brut.products`, `st.indexSizes`), où l'absence est une vraie information — ce n'est pas le
+même cas. `mesure-cloture-pages.js:115` est le seul à avoir un `catch` qui PARLE
+(« banc-verites.json illisible : on ne conclut pas ») : c'est la bonne forme.
+
+### 1. 🔴 LE PRIX SUR LE VIVIER PAR LE NUMÉRO : IL NE CHANGE **RIEN**, ET L'IMAGE COÛTE 12 FAUX
+
+Population : les **87 lignes** qui ont une vérité **et** un numéro lu, viviers reconstruits par
+`trouverProduitsParNumeroPartout` — le chemin de REPLI, celui où Milobellus a échoué.
+
+| transition | n |
+|---|---|
+| **même gagnant dans les deux bras** | **87 / 87** |
+| juste → juste | 18 |
+| faux → faux | 4 |
+| **juste → refus** | 1 |
+| refus → refus | 64 |
+| **« faux gagnant » → ÉGALITÉ PARFAITE** | **0** |
+
+🔑 **Le retrait du terme `prix` ne déplace aucun gagnant sur cette population.** Sur le vivier
+par le numéro, les candidats sont si nombreux que le sommet est déjà une égalité (64 refus sur
+87) : retirer 25 points à tout le monde ne réordonne rien.
+
+**Et le défaut qui domine tout le reste : la vérité est ABSENTE du vivier sur 59 des 87 lignes.**
+Aucun barème, aucune image ne rattrape ça.
+
+**Solde final, APRÈS l'image** (l'image appliquée aux égalités du bras sans prix) :
+
+| | justes | faux | refus |
+|---|---|---|---|
+| avant (barème actuel) | **19** | 4 | 64 |
+| après (prix retiré + image) | **19** | **16** | 52 |
+| delta | **0** | **+12** | −12 |
+
+**1 juste gagné** (`Fisherman n°079`, refus → juste), **1 juste perdu** (`Mewtwo n°51`,
+juste → refus), et **12 refus convertis en FAUX**. Sur cette population l'image ne trouve pas
+ce qui n'est pas là : elle transforme une abstention honnête en affirmation fausse.
+
+**🔴 MILOBELLUS N'EST PAS RÉPARÉ — IL EMPIRE.** Sur les deux lignes : avant, tête 120 et
+**92 ex aequo** ; après retrait du prix, tête 95 et **175 ex aequo**. 277210 est bien remonté
+au sommet — *avec 174 autres*. Le résultat reste un refus, sur un groupe deux fois plus gros.
+
+### 2. La justesse de l'image, enfin mesurée — 57 lignes du banc
+
+Rejeu ORB sur les lignes du banc où l'image se déclenche, code de production
+(`conditionDeclenchement`, `chargerVecteurs`, `decrire`, `inliers`), photos retéléchargées.
+
+| régime | justes | fausses | n |
+|---|---|---|---|
+| **garde PAR GROUPE** (production) — groupes non bloqués | **39** | **4** | 43 (**90,7 %**) |
+| *les groupes bloqués : la production s'abstient* | — | — | **14 lignes perdues** |
+| **garde PAR CANDIDAT** — toutes les lignes déclenchées | **49** | **8** | 57 (**86,0 %**) |
+| ↳ dont celles que la garde par GROUPE bloquait | **10** | **4** | 14 |
+
+### 3. La garde par CANDIDAT : +10 justes, +4 fausses, −14 abstentions
+
+Sur les **102 groupes** de la production, la garde par groupe en bloque **33** ; une garde par
+candidat les débloque tous (il reste au moins un vecteur). Sur les **14 lignes vérifiables**
+concernées, elle produit **10 justes et 4 fausses**. Le taux global passe de **90,7 % sur 43**
+à **86,0 % sur 57** : on perd 4,7 points de justesse pour gagner **14 lignes servies**.
+Chiffres seuls — la décision est un arbitrage produit, pas une mesure.
+
+### 3bis. 🔴 AUCUNE RÈGLE SUR L'ÉCART NE SÉPARE LES JUSTES DES FAUSSES
+
+Distributions, pas moyennes, sur les 57 lignes :
+
+| | n | min | p10 | médiane | p90 | max |
+|---|---|---|---|---|---|---|
+| **écart** · justes | 49 | 2 | 3 | **16** | 31 | 37 |
+| **écart** · fausses | 8 | 0 | 0 | **17** | 22 | 22 |
+| i1 · justes | 49 | 6 | 12 | 26 | 40 | 62 |
+| i1 · fausses | 8 | 4 | 4 | 25 | 39 | 39 |
+
+**La médiane des fausses (17) est AU-DESSUS de celle des justes (16).** Les deux populations
+se recouvrent presque entièrement, sur l'écart comme sur le niveau.
+
+| seuil | justes gardées | fausses gardées | justes perdues |
+|---|---|---|---|
+| écart ≥ 1 | 49 | 7 | 0 |
+| **écart ≥ 2** | **49** | **5** | **0** |
+| écart ≥ 3 | 46 | 5 | 3 |
+| écart ≥ 10 | 35 | 5 | 14 |
+| écart ≥ 20 | 21 | 2 | 28 |
+
+🔑 **Le seul seuil gratuit est `écart ≥ 2`** : il retire 3 des 8 fausses sans perdre une seule
+juste (ce sont les cas à écart 0 ou 1, dont Natu). **Au-delà, chaque fausse retirée coûte des
+justes.** Et il reste 5 fausses à fort écart (jusqu'à 22) qu'aucune règle d'écart n'atteint.
+Le ratio ne fait pas mieux (`ratio ≥ 2` : 37 justes / 4 fausses).
+**Réponse : non, il n'existe pas de règle sur l'écart qui sépare.**
+
+⚠️ Les 10 scans à vivier vide restent **NON MESURÉS** et ne sont pas dans ces chiffres.
+
+### 4. Ce que le 42/44 mesure vraiment — correction, pas suppression
+
+> **Le 42/44 n'est PAS un taux de justesse de production.** Il a été obtenu en régime « vivier
+> COMPLÉTÉ » : la vérité est **injectée** dans le vivier, tous les scores sont mis à 0, et le
+> classement est calculé **sans passer par `departager`** — donc **la garde d'abstention ne
+> s'exécute jamais**. Il répond à « la vérité étant présente et la garde neutralisée, l'image
+> la classe-t-elle première ? ».
+> **Le chiffre qui le remplace** : **39/43 (90,7 %) en garde par GROUPE**, ou **49/57 (86,0 %)
+> en garde par CANDIDAT**, mesurés le 2026-09-04 sur les lignes du banc, garde comprise et
+> vivier non truqué — avec, à côté, le chiffre que le 42/44 cachait : **la vérité est absente
+> du vivier sur 59 des 87 lignes du chemin par le numéro**.
+
 ## Où sont les détails
 
 - `CLAUDE.md` — les règles de travail dans ce dépôt.
