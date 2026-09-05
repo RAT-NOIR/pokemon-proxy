@@ -537,6 +537,143 @@ Le ratio ne fait pas mieux (`ratio ≥ 2` : 37 justes / 4 fausses).
 > vivier non truqué — avec, à côté, le chiffre que le 42/44 cachait : **la vérité est absente
 > du vivier sur 59 des 87 lignes du chemin par le numéro**.
 
+## Mesures du 2026-09-05
+
+### 0. Les 12 faux sortent SOUS RÉSERVE FAIBLE — et la vérité n'est dans AUCUN des 12 groupes
+
+État de sortie, **déterminé par le code, pas par une mesure** : `departageParImage = true` entre
+dans `carteAmbigue` (index.js L4695+) → `carteIncertaine = true` ; `raisonReserve` =
+`'image-departage'` (L4829) ; `niveauReserve` = `'faible'` (L4976). Les seules raisons
+prioritaires atteignables ici — `impression-corrigee`, `impression-contredite`,
+`nom-seul-vintage` — sont **toutes `'faible'`** aussi ; `symbole-departage` (`'forte'`) est
+exclu par construction, l'image **s'abstient** quand le symbole a tranché.
+**Aucune des 12 n'est affirmée.**
+
+⚠️ **Ce que l'utilisateur LIT n'est PAS dans ce dépôt.** Le serveur n'émet que
+`niveauReserve` + `raisonReserve` ; le texte est construit par l'extension, qui est un autre
+dépôt (« le NIVEAU pilote le comportement de l'extension, la RAISON alimente son texte »,
+index.js L5354). Je ne peux pas le donner mot pour mot d'ici.
+
+Les 12, toutes en `refus` avant, **vérité absente du groupe 12/12** :
+
+| carte | groupe | i1 | i2 | écart | l'image désigne |
+|---|---|---|---|---|---|
+| Hitmontop n°237 | 44 | 4 | 4 | 0 | Electivire ex |
+| Hitmontop n°237 | 44 | 4 | 4 | 0 | Quick Ball |
+| Blissey n°242 | 37 | 5 | 4 | 1 | Durant ex |
+| Porygon2 n°233 | 48 | 4 | 4 | 0 | Heatran |
+| Light Togetic n°176 | 110 | 6 | 4 | 2 | Unown V |
+| Larvitar n°246 | 33 | 4 | 0 | 4 | Noivern ex |
+| Girafarig n°203 | 67 | 4 | 0 | 4 | Poncho-wearing Pikachu |
+| Dark Dragonite n°149 (×2) | 145 | 4 | 4 | 0 | Giratina V |
+| Dark Dragonite n°149 | 145 | 5 | 4 | 1 | Varoom |
+| Remoraid n°223 | 52 | 0 | 0 | 0 | Vibrava |
+| Mew n°151 | 144 | 4 | 4 | 0 | Eternatus |
+
+🔑 **`i1` va de 0 à 6.** Sur les lignes JUSTES du banc, `i1` a pour médiane 26 et pour
+minimum 6. Un plancher absolu séparerait donc ici — **mais c'est une hypothèse trouvée après
+coup, sur une population différente (vivier par le NUMÉRO), et elle ne compte pas comme
+mesure.** Elle s'ajoute à `écart ≥ 2` dans la liste de ce qui reste à confirmer.
+
+### 2. 🔴 UNE SEULE CAUSE, ET CE N'EST NI LE NOM NI LE PONT : `numero` EST NULL
+
+Sur les **59 lignes** où la vérité est absente du vivier par le numéro :
+
+| classe | n |
+|---|---|
+| **B. la vérité A une ligne `numeros_cartes`, mais son `numero` y vaut `null`** | **58** |
+| G. autre | 1 |
+| A. pas de ligne du tout · C. suffixe δ · D. nom · E. set sans pont · F. région | **0** |
+
+**58 sur 58 de la classe B ont `numero: null`** — pas un autre numéro, pas un numéro mal lu :
+**aucun numéro**. Le chemin par le numéro ne peut structurellement pas atteindre ces produits.
+Exemples : `548556 Charmander`, `571770 Mew`, `584721 Raichu`, `606813 Light Arcanine`,
+`584720 Articuno`, `605356 Sabrina's Jynx`, `606579 Hitmontop`.
+
+🔑 **Un correctif de cette seule classe rendrait 58 lignes sur 59 candidates.** C'est un
+chantier de COLLECTE (apprendre les numéros manquants), pas de barème. Le nom, le pont TCGdex,
+la région et la variante n'expliquent **aucune** ligne ici.
+
+### 3. Le suffixe δ évite le repli par numéro — sur 2 lignes, et ce sont les deux Milobellus
+
+Sur les 222 lignes : **50 déclenchent le repli par numéro aujourd'hui**, **48 le
+déclencheraient encore** avec le suffixe retiré. **2 évitées : `Milotic n°5 (FR)` ×2.**
+Le suffixe n'est donc pas un correctif de masse — c'est un correctif **exactement ciblé sur le
+cas qui a ouvert le chantier**.
+
+**Les 4 lignes que le suffixe fait changer de gagnant** (vivier par le nom) :
+
+| ligne | avant | après | journal | vérité au banc |
+|---|---|---|---|---|
+| **Milotic n°5 FR** (×2) | 769224 — 70 pts, **11 ex aequo** | **277210 — 95 pts, 1 ex aequo** | refus | **aucune** |
+| Pikachu n°112 ZH | 784396 — 5 pts, **76 ex aequo** | 570663 — 10 pts, 1 ex aequo | refus | **aucune** |
+| **Altaria ex n°019 JP** | 787601 — 70 pts, 24 ex aequo | 761858 — 95 pts, 1 ex aequo | **784363** | **aucune** |
+
+⚠️ **Les quatre sont hors banc.** Altaria ex change un scan ABOUTI (le journal disait 784363,
+le suffixe donne 761858) et **rien ne dit lequel est juste**. Trois refus deviennent des
+identifications à candidat unique, une identification en remplace une autre — et aucune des
+quatre n'est vérifiable aujourd'hui.
+
+### 4. `écart ≥ 2` : HYPOTHÈSE, pas gain acquis
+
+> **`écart ≥ 2` a été choisi APRÈS avoir vu les données.** Les 3 fausses qu'il retire ne sont
+> **pas une mesure** : elles sont l'échantillon sur lequel le seuil a été ajusté. Il ne compte
+> comme gain que le jour où il tient sur des lignes NEUVES, saisies après sa formulation.
+> Même statut pour le plancher `i1` suggéré par les 12 faux du vivier par le numéro.
+
+### 5. La garde reste PAR GROUPE — décision
+
+> **DÉCISION : on garde la garde PAR GROUPE.** Mesuré le 2026-09-04 : le régime par candidat
+> rend **+14 lignes servies** contre **−4,7 points de justesse** (90,7 % sur 43 → 86,0 % sur
+> 57), et sur les 14 lignes débloquées il produit **4 fausses pour 10 justes**.
+> **Refusé au nom du critère de lancement** — « quand l'outil affirme, il a raison » : servir
+> quatorze lignes de plus ne vaut pas quatre affirmations fausses de plus. La mesure reste
+> écrite ; la décision se rouvrira si le critère change, pas avant.
+
+### 0 bis. Le suffixe δ : EN ATTENTE, PAS ENTERRÉ — et ce n'est PAS le chantier de la collecte
+
+> **Statut : dominé, pas invalidé.** Le suffixe évite le repli par numéro sur **2 lignes sur
+> 222**, et sur **0 des 59 lignes à vérité absente**. En face, `numero: null` explique
+> **58 de ces 59**. Il est donc dominé d'un facteur ~29 sur la population mesurable
+> aujourd'hui — ce qui ne dit rien de sa justesse, seulement de son EFFECTIF.
+> **Il repasse dès que les numéros manquants sont collectés** : la collecte fera entrer dans
+> les viviers des produits que le suffixe pourra alors départager, sur une population où il
+> aura enfin un effet mesurable. Ne pas le relire comme « refusé ».
+
+**Et la question qui décide s'ils sont le même chantier : NON.** Mesuré sur les
+**388 produits** dont le nom nu finit par « δ Delta Species » (0,53 % du catalogue) :
+
+| | n | % |
+|---|---|---|
+| `numero` renseigné | **323** | **83,2 %** |
+| `numero` nul mais `numeroUrl` présent | 9 | 2,3 % |
+| aucune ligne `numeros_cartes` | 56 | 14,4 % |
+| ligne présente avec `numero` ET `numeroUrl` nuls | **0** | — |
+| **atteignables par le chemin du numéro** | **332** | **85,6 %** |
+
+Repère, sans lequel ce chiffre ne veut rien dire : sur **tout** le catalogue, **86,4 %**
+des produits ont un `numero` non nul (63 231 / 73 188). **La classe δ est à 83,2 % — au
+niveau du catalogue, pas en dessous.** Et les trois produits du chantier ont tous leur
+numéro : `277210` (5), `761858` (019), `570663` (112).
+
+🔑 **Les deux chantiers sont DISTINCTS.** Le blocage δ est un défaut de **normalisation du
+NOM** ; les 58 lignes sont un défaut de **collecte du NUMÉRO**. Corriger l'un ne corrige pas
+l'autre, et ils ne se réordonnent pas l'un l'autre.
+(Note au passage : **0 des 332 lignes δ portant un numéro ne porte un `setTcgdex`** — elles
+sont sur 25 expansions, toutes du côté des 534 sans pont.)
+
+### Vérités à SAISIR — la liste, tenue ici parce que je n'écris pas dans `banc-verites.json`
+
+Aucune de ces lignes n'a de vérité au banc, et chacune bloque une décision en cours. Le
+testeur les saisit lui-même avec `saisir-verites.js` ; je ne le lance pas.
+
+| ligne du journal | pourquoi elle bloque |
+|---|---|
+| **`Altaria ex` n°019 JP** | le suffixe δ y remplace un scan ABOUTI (journal `784363`) par `761858` — **on ne peut pas dire lequel est juste**, et c'est le seul des 4 cas δ qui touche une ligne qui marchait |
+| `Milotic` n°5 FR (×2) | le suffixe les fait passer de refus à `277210`, 95 pts, 1 ex aequo — le cas qui a ouvert le chantier, jamais vérifié |
+| `Pikachu` n°112 ZH | refus à 76 ex aequo → `570663`, 1 ex aequo |
+| les **10 scans à vivier vide** (Mewtwo 150, Dragonite 149 et 180, Flaaffy 180, Marowak 105, Koga's Ditto 132, Dark Kadabra 064, Pidgeotto 017, Abra 063, Natu 177) | la recherche ORB globale les classe 10/10 sur le bon NOM, mais le TIRAGE n'est vérifié sur aucune |
+
 ## Où sont les détails
 
 - `CLAUDE.md` — les règles de travail dans ce dépôt.
