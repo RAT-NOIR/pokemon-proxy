@@ -669,6 +669,8 @@ testeur les saisit lui-même avec `saisir-verites.js` ; je ne le lance pas.
 
 | ligne du journal | pourquoi elle bloque |
 |---|---|
+| 🔴 **`Ho-Oh` n°250 JP — EN ATTENTE : DEUX DÉSIGNATIONS CONCURRENTES, NON TRANCHÉ. NE PAS SAISIR.** | **Deux sources externes désignent deux cartes DIFFÉRENTES**, et le prix (~15 €) ne les sépare pas. ① le concurrent dit « Neo Premium File 3 · n°007 » → chez nous `274593` (`NR`, n°7, `setTcgdex: neo3`, `setPartage: true`, idMetacard **212454**), carte *« Stoke \| Sacred Fire \| Dive Bomb »*, **ORB rang 12 / 0 inlier**. ② la fiche Cardmarket ouverte à la main dit « Ho-Oh (UNP) · Unnumbered Promos · From 15,00 € » → `654129` (idMetacard **266314**), carte *« Rainbow Burn »*, **ORB rang 1 / 29 inliers**. **Métacartes différentes, attaques différentes : ce ne sont pas deux impressions d'une même carte, ce sont deux cartes.** L'une des deux sources se trompe. ⚠️ **Une vérité fausse au banc contaminerait toutes les mesures futures — c'est pire que pas de vérité.** Ni `606685` ni `654000` (les deux survivants du périmètre) ne sont candidats. |
+| 🔴 **`Slowbro` n°090 ×3** | **les SEULES AFFIRMÉES mesurées** : la route les livre aujourd'hui sans aucune réserve (`carteIncertaine: false`, `raisonReserve: null`, `niveauReserve: null`), et le régime « image d'abord » les enverrait sur `888632` au lieu de la vérité `895874`, avec des écarts de **1, 2 et 0**. Ce sont elles qui interdisent le câblage. |
 | **`Altaria ex` n°019 JP** | le suffixe δ y remplace un scan ABOUTI (journal `784363`) par `761858` — **on ne peut pas dire lequel est juste**, et c'est le seul des 4 cas δ qui touche une ligne qui marchait |
 | `Milotic` n°5 FR (×2) | le suffixe les fait passer de refus à `277210`, 95 pts, 1 ex aequo — le cas qui a ouvert le chantier, jamais vérifié |
 | `Pikachu` n°112 ZH | refus à 76 ex aequo → `570663`, 1 ex aequo |
@@ -707,6 +709,352 @@ les cartes qui tombent dans ce cas.
 
 **Prochain sujet, non mesuré ce tour** : sur les 58 lignes, combien le symbole départagerait-il,
 et combien tombent dans le cas Vending ?
+
+## 2026-09-05 — `imageStatut` : ce qui est décidé, et le geste interdit
+
+**Décidé, à faire quand il y aura un dénominateur — RIEN N'EST ÉCRIT AUJOURD'HUI :**
+
+1. **Le raffinement du statut descend dans `departage-image.js`**, là où le statut est posé,
+   au lieu de vivre chez l'appelant de la voie du succès. `departager()` reçoit déjà
+   `classement` : il peut comparer `scores[0].idProduct` à `classement[0]?.idProduct` sans
+   paramètre neuf. Les deux voies — succès ET refus — seront alors servies par une seule
+   source, au lieu que le refus journalise `champs` brut et ne puisse jamais dire
+   `confirme-le-scoring`.
+
+2. > 🔴 **LE GESTE INTERDIT.** On ne touche **QUE** `champs.imageStatut`. Renvoyer
+   > `departage: false` sur une confirmation **changerait une décision** : le branchement de
+   > index.js:4674 teste `avis.departage` et `avis.gagnant`, jamais le statut. Tant qu'on
+   > n'écrit que la chaîne, le déplacement est **inerte** ; dès qu'on touche au booléen ou au
+   > gagnant, il ne l'est plus. Cette ligne est la limite, et elle ne se renégocie pas.
+
+3. **`egalite-inliers` sera une VALEUR DISTINCTE**, pas une extension d'`abstention-signal`.
+   « Je n'ai rien vu » et « j'ai vu autant des deux côtés » appellent des suites opposées —
+   collecter de meilleurs vecteurs d'un côté, resserrer le groupe de l'autre. Les confondre
+   effacerait la seule distinction utile.
+
+4. **`abstention-symbole-prioritaire` RESTE chez l'appelant.** Sa migration exigerait de
+   passer `departageParSymbole` à `departager()`, donc une signature neuve. Le gain ne le
+   justifie pas aujourd'hui.
+
+⚠️ **Et le coût, à payer les yeux ouverts** : `controle-departage-image.js:207` et
+`mesure-justesse-production.js:253` consomment la chaîne. Leur table attendue **se déplacera**
+— elle **se relit**, elle ne se corrige jamais en douce. C'est exactement la faute de
+l'entrée 19 : un changement juste chez l'un, qui casse l'autre en silence.
+
+## 🔴 Le scan Ho-Oh : le défaut est le **PÉRIMÈTRE**, pas l'image
+
+Ho-Oh n°250, JP, promo, aucun total, aucun setCode lu. Le vivier par le nom rend
+**39 candidats**, **tous les 39 ont un vecteur indexé**. La règle du périmètre
+(index.js:4040-4049) en garde **2** — `606685` (N3) et `654000` (EC4) — au seul motif de
+l'appartenance à la table close des 24 sets vintage. **Elle ne regarde ni le numéro, ni
+l'image, ni le prix. Le reste est jeté avant que quoi que ce soit ait pu le départager.**
+
+**ORB sur les 39, avec la photo du journal :**
+
+| rang | inliers | idProduct | codeSet | périmètre |
+|---|---|---|---|---|
+| **1** | **29** | **654129** | **UNP** | **ÉCARTÉ** |
+| 2 | 4 | 274604 | NR | écarté |
+| 4 | 4 | 606685 | N3 | *gardé* |
+| 5 | 4 | 654000 | EC4 | *gardé* |
+
+**Écart 1er-2e : 25.** Les deux survivants du périmètre sont à **4 inliers**, à égalité avec
+huit autres. 🔑 **L'image désigne franchement un candidat que le périmètre avait déjà jeté** —
+`654129`, « Ho-Oh [Rainbow Burn] », expansion 4170 `UNP` (*Unnumbered Promos*), ce qui est
+cohérent avec `rarete: promo` sur une carte sans numéro imprimé.
+Le départage 4 contre 4 de la production n'était donc pas un mauvais départage : c'était un
+départage entre deux cartes dont **aucune** n'était vraisemblablement la bonne.
+
+⚠️ **Ce que cette mesure N'ÉTABLIT PAS** : `654129` n'a **aucune vérité au banc**. « Le premier
+en inliers avec un écart de 25 » n'est pas « la bonne carte ». À saisir.
+⚠️ **Et ORB n'a tourné que sur UNE photo sur 5** : le journal ne stocke qu'une `imageUrl`.
+C'est une borne BASSE.
+
+**TCGdex n'aide pas ici** : 16 impressions proposées pour Ho-Oh #250, **zéro `idProduct`
+Cardmarket** — aucune jointure possible, la trouvaille sort `ambigu: true`.
+
+## L'IMAGE EN PREMIER, LE TEXTE ENSUITE — mesuré sur les 89 lignes du banc
+
+Deux bras sur **le même vivier par le NOM** (pas le périmètre), même photo, même vérité.
+Bras A : `scorerCandidatsLocal`, refus si égalité au sommet. Bras B : ORB sur tout le vivier.
+
+| régime | justes | faux | refus |
+|---|---|---|---|
+| **A. TEXTE** (régime actuel) | **37** | 7 | **45** |
+| **B. IMAGE D'ABORD** | **69** | **16** | **4** |
+
+Transitions : `refus → juste` **37** · `juste → juste` 29 · `juste → faux` **8** ·
+`refus → faux` **7** · `faux → juste` 3 · `faux → refus` 3 · `faux → faux` 1 · `refus → refus` 1.
+
+**L'image d'abord double presque les identifications justes (37 → 69) et fait fondre les
+abstentions (45 → 4) — au prix de 7 faux de plus (7 → 16).**
+
+**Et cette fois l'écart SÉPARE** — contrairement à la mesure du 2026-09-04, qui portait sur les
+groupes déjà restreints par le scoring :
+
+| | n | min | p10 | médiane | p90 | max |
+|---|---|---|---|---|---|---|
+| écart · vérité en TÊTE | 69 | 1 | 2 | **15** | 32 | 48 |
+| écart · vérité PERDUE | 16 | 0 | 0 | **2** | 21 | 22 |
+
+| seuil | justes gardées | fausses gardées |
+|---|---|---|
+| écart ≥ 1 | 69 | 13 |
+| écart ≥ 2 | 66 | 9 |
+| **écart ≥ 3** | **61** | **6** |
+| écart ≥ 8 | 47 | 5 |
+| écart ≥ 20 | 26 | 2 |
+
+À `écart ≥ 3` : **61 justes, 6 faux, 22 abstentions** — meilleur que le texte **sur les deux
+axes à la fois** (37 justes, 7 faux). ⚠️ Mais le seuil est encore choisi APRÈS avoir vu les
+données : même statut que `écart ≥ 2`, une hypothèse à confirmer sur des lignes neuves.
+
+### ⚠️ CE QUE CETTE MESURE NE DIT PAS — la population n'est pas le trafic
+
+- **Langue : JP 76, FR 13.** Zéro EN, zéro autre. C'est un banc **japonais vintage**, pas un
+  échantillon du trafic.
+- **Rareté lue : normale 67, promo 11, IR 4, SIR 4, AR 3.** Les cartes BRILLANTES —
+  holo, reverse, full art — sont quasi absentes, et ce sont précisément celles où le reflet
+  détruit les points ORB.
+- **Le moderne occidental n'est pas mesuré du tout**, et nos propres chiffres l'y donnent
+  PERDANTE : la note de `GARDE_PERIMETRE_ASIATIQUE` (departage-image.js) relève **4/8 pour
+  l'image contre 8/8 pour le scoring** sur ce chemin. La garde asiatique existe pour ça.
+- La vérité est absente du vivier par le nom sur **1 ligne sur 89** — ce défaut-là n'est pas
+  en cause ici.
+
+🔑 **Donc : « l'image d'abord » est mesurée gagnante LÀ OÙ LA GARDE ASIATIQUE S'APPLIQUE
+DÉJÀ, et nulle part ailleurs.** Ce n'est pas un argument pour inverser l'ordre partout ; c'en
+est un pour l'inverser **dans le périmètre asiatique**, et la mesure du chemin occidental
+reste entièrement à faire.
+
+## DOSSIER CONCURRENCE — les erreurs mesurées chez eux
+
+⚠️ **Ce dossier n'existait pas avant le 2026-09-05** ; il est ouvert ici. Chaque entrée dit sa
+PROVENANCE, parce qu'aucune n'est produite par notre chaîne.
+
+| # | date | ce qu'ils ont rendu | ce qui est vrai | provenance |
+|---|---|---|---|---|
+| 4 | 2026-09-05 | **« Neo Premium File 3 · n°007 · 15 € » annoncé à 94,9 %** sur le scan Ho-Oh n°250 JP — chez nous `274593`, idMetacard **212454**, attaque *« Stoke \| Sacred Fire \| Dive Bomb »* | la carte porte **レインボーバーン / Rainbow Burn**, donc l'idMetacard **266314** — une **AUTRE métacarte**, pas une autre impression | **lecture de l'attaque sur la photo par le testeur** + fiche Cardmarket « Ho-Oh (UNP) · From 15,00 € » ouverte à la main |
+
+🔑 **Ce qui rend cette erreur intéressante et pas anecdotique** : ils ne se sont pas trompés
+d'IMPRESSION (même carte, autre set) — ils se sont trompés de **CARTE**. Et ils l'ont affiché à
+**94,9 %**. C'est la démonstration en une ligne de l'entrée 23 du catalogue : *un pourcentage de
+confiance mesure la force d'un appariement, jamais la probabilité d'avoir raison.*
+Le prix ne les départageait pas non plus : ~15 € des deux côtés.
+
+⚠️ **Aucune capture n'est jointe** : je n'en ai pas reçu et je n'en fabrique pas. Le champ est
+laissé ouvert — la capture est à déposer par le testeur à côté de cette ligne.
+⚠️ Entrées 1 à 3 : non reprises ici, elles sont antérieures à ce dossier.
+
+## CE QUE L'ATTAQUE ACHÈTERAIT — mesuré, aucun prompt touché
+
+**Le catalogue s'y prête** : `idMetacard` est présent sur **73 188 / 73 188** produits (100 %).
+**55 307 noms (75,6 %)** finissent par `[...]`, dont **44 034 (60,2 %)** par `[... | ...]`.
+Sur **16 768** métacartes distinctes, `[...]` en couvre **14 168** et `[... | ...]` **11 113**.
+
+**Sur les 89 lignes du banc**, 45 produisent une égalité au sommet (groupe médian **3**, max 25) :
+
+| | n / 45 |
+|---|---|
+| 🎯 **métacartes DIFFÉRENTES dans le groupe** — ce que l'attaque trancherait | **16 (36 %)** |
+| 🔒 **toutes à la MÊME métacarte** — aucune lecture ne les sépare | **29 (64 %)** |
+
+Et là où c'est décisif : la vérité est dans le groupe **12 fois sur 45**, et **l'attaque
+isolerait un candidat unique 10 fois sur 12**.
+
+🔑 **Ce que ça dit** : l'attaque est un discriminant fort **là où elle s'applique** — mais elle
+ne s'applique qu'à un tiers des égalités. **Les deux tiers restants sont des impressions
+différentes de la MÊME carte** : même nom, mêmes attaques, et rien dans le texte ne pourra
+jamais les séparer. C'est la population de l'image et du symbole, pas celle de la lecture.
+
+## 2026-09-05 — LE DÉPARTAGE PAR L'ATTAQUE : écrit, symétrique, NON MESURABLE
+
+### La règle de symétrie est tenue — et le compte passe de SEPT à HUIT, pas de six à sept
+
+`departagerParAttaque` est dans `apres()` du banc (banc-japonais.js, derrière le symbole,
+devant l'écart de prix) **au même commit** qu'en production. L'en-tête de la règle est
+corrigé : les décisions présentes aux deux endroits étaient **déjà sept** — Pokédex,
+périmètre vintage, setCode+numéro, veto par le nom, règle d'égalité, symbole, image — elles
+sont maintenant **HUIT**.
+
+### 🔴 ET LE BANC NE PEUT PAS LA MESURER : elle est INERTE dessus
+
+`d.attaque` vient du prompt écrit aujourd'hui. **Aucune des 224 lignes du journal ne le
+porte.** `departagerParAttaque` sort donc systématiquement au verrou 1 (« aucune attaque
+lue »), et **aucune ligne du banc n'emprunte `voie=attaque-departage`**.
+C'est exactement l'état du départage par l'image le 2026-08-29, inerte tant que
+`references_image` était vide. La colonne APRÈS prouve que la décision **ne casse rien** ;
+elle ne prouve **rien de son gain**. Seul un scan réel le pourra.
+
+### Ce que le banc dit quand même, et qui n'est PAS de mon fait
+
+Sur les 11 lignes à vérité individuelle : `JUSTE 8 → 6`, `FAUX 1 → 3`, `REFUS 2 → 2`.
+Sur les 54 lignes validées en bloc : 51 inchangées, **3 déplacées, dont 2 deviennent fausses**.
+🔑 **`FAUX ET AFFIRMÉ : 0 → 0` — le seuil de lancement tient.**
+⚠️ Toutes les lignes qui bougent portent `voie=perimetre-vintage`,
+`REFUS-egalite-perimetre`, `perimetre-egalite-sans-enjeu`, `numero-pokedex-neutralise` ou
+`REFUS-egalite`. **Aucune ne porte `attaque-departage`.** Cette régression est antérieure et
+appartient à l'écart déjà connu entre `apres()` et la route — elle reste à traiter, elle
+n'est pas produite par ce commit.
+
+### Le scan de contrôle — PRÉPARÉ, PAS LANCÉ
+
+Comme pour le symbole le 2026-08-08 : le dispositif n'a **jamais tranché sur une vraie carte**.
+
+1. ⚠️ **D'ABORD** : ouvrir la fenêtre de lot dans `banc-lots.json` et **la commiter**. Sans
+   ça le scan tombe dans le holdout et brûle une ligne d'évaluation. C'est le fichier du
+   testeur, je n'y touche pas.
+2. Scanner le **Ho-Oh n°250 JP** (deux ex aequo, métacartes 266314 et 212454 — le cas type).
+3. Vérifier au journal, sur la ligne neuve :
+
+| champ | attendu |
+|---|---|
+| `attaqueLue` | le nom **anglais** rendu par l'IA, ou `null` |
+| `attaqueBrute` | les katakana tels qu'imprimés (レインボーバーン), ou `null` |
+| `attaqueConfiance` | `haute` / `moyenne` / `basse` |
+| `attaqueDepartage` | **une phrase, TOUJOURS** — même « aucune attaque lue » |
+| `raisonReserve` | `attaque-departage` **si et seulement si** il a tranché |
+| `niveauReserve` | `faible` — jamais d'affirmation |
+
+🔑 **Le contrôle qui compte n'est pas « a-t-il tranché »**, c'est : `attaqueDepartage`
+est-il **non nul** ? Un champ vide voudrait dire que le dispositif n'a pas été consulté du
+tout — la faute déjà payée trois fois (`symboleSet`, `vivierIds`, les champs d'état).
+
+## MESURE D'INTERVALLE — NON MESURABLE, et c'est l'âge des champs
+
+Définition appliquée telle quelle : un candidat = un des **deux entrants de `pireEtat`**
+(index.js L3380 : l'avis de l'IA *si* `etatConfianceIA` ≥ moyenne, et `etatMin`), jamais une
+pastille de grille ; ligne comptée seulement si les deux portent une cote **non nulle et
+distincte**.
+
+**Les noms du contrat sont ceux de la RÉPONSE, pas du journal** — les confondre rendrait 0
+en croyant mesurer :
+
+| contrat | journal | présent | non nul |
+|---|---|---|---|
+| `grilleEtats` | `prixParEtat` | **2 / 224** | **0 / 224** |
+| `etatCardmarket` | `etatMin` | 2 / 224 | 2 / 224 |
+| `etatEstimeIA` | `etatEstimeIA` | 2 / 224 | 2 / 224 |
+| `etatVinted` | `etatVinted` | 2 / 224 | 2 / 224 |
+| `vintedPrice` | `prixVinted` | 224 / 224 | **0 / 224** |
+
+Sur les **89 lignes du banc** : grille non vide **0**, deux entrants renseignés **0**, deux
+cotes non nulles **0**, **deux cotes distinctes : 0**.
+**Largeur médiane : aucune ligne à mesurer. Dedans 0, dehors 0.**
+
+🔑 **Ce n'est pas « l'intervalle est étroit », c'est « l'intervalle n'existe pas encore ».**
+Les quatre champs d'état ont été déployés **aujourd'hui** (2 lignes les portent), et
+`prixVinted` est **non nul zéro fois sur 224** — l'extension n'a jamais envoyé de prix.
+L'intervalle sera mesurable quand ces deux conditions seront réunies, pas avant. Aucun
+chiffre n'est produit ici, et c'est la seule réponse honnête.
+
+## La mesure d'intervalle : POSSIBLE, mais VIDE — et c'est l'âge du champ
+
+**Le code est là, la mesure ne l'est pas.** `pireEtat` existe, `prixParEtat` existe, le
+script de mesure tourne et rend ses dénominateurs. Ce qui manque, ce sont les **lignes**.
+
+| champ du contrat | au journal | présent | non nul |
+|---|---|---|---|
+| `grilleEtats` | `prixParEtat` | 2/224 | **0/224** |
+| `etatCardmarket` | `etatMin` | 2/224 | 2/224 |
+| `etatEstimeIA` | `etatEstimeIA` | 2/224 | 2/224 |
+| `etatVinted` | `etatVinted` | 2/224 | 2/224 |
+| `vintedPrice` | `prixVinted` | **224/224** | **0/224** |
+
+Sur les 89 lignes du banc : deux entrants de `pireEtat` renseignés **0**, deux cotes non
+nulles **0**, deux cotes **distinctes 0**. Largeur médiane : rien à mesurer. Dedans 0,
+dehors 0.
+
+🔑 **`prixVinted` présent 224/224 et non nul 0/224 : le champ existe depuis toujours, il
+n'a jamais été rempli.** Il arrive par `/api/retour-live`, et **il n'y avait pas de serveur
+pour l'écouter avant ce matin** — la route est dans les 24 commits qui dormaient sur
+`chantier-image`. Ce n'est pas un défaut de l'instrument ni une propriété du monde :
+c'est l'âge du champ, exactement l'erreur #8 du catalogue prise à l'envers.
+
+**À relancer** — `ad-intervalle.js`, tel quel — **quand des scans auront porté un prix.**
+Avant, tout chiffre produit sur cette population serait une mesure sur zéro ligne
+déguisée en résultat.
+
+## DETTE OUVERTE — `apres()` du banc ne dit pas ce que dit la route
+
+**Origine : 2026-08-08.** Depuis cette date, la fonction `apres()` de `banc-japonais.js`
+**réimplémente** l'enchaînement de décisions de la route au lieu de l'appeler. Les deux
+ont divergé : la colonne APRÈS a montré, au commit du départage par l'attaque, des lignes
+qui se déplacent (`perimetre-vintage`, `REFUS-egalite-perimetre`,
+`perimetre-egalite-sans-enjeu`, `numero-pokedex-neutralise`) **sans qu'aucune décision de
+ce commit ne les touche**. 8 justes → 6, 1 faux → 3, sur les 11 lignes à vérité
+individuelle. Ces mouvements sont **antérieurs au commit**, ils ne sont pas produits par lui.
+
+⚠️ **Conséquence, à tenir jusqu'à correction : toute colonne APRÈS lue d'ici là est
+suspecte.** Le seul chiffre du banc qui reste lisible est **FAUX ET AFFIRMÉ** — il vaut 0
+avant comme après, et c'est à ce titre seul que le commit est parti. Un delta de justesse
+lu sur cette colonne ne prouve rien tant que la dette n'est pas soldée.
+
+**Non corrigée volontairement ce tour** : la corriger déplace les chiffres du banc dans le
+même commit qu'une décision de production, et on ne saurait plus lequel des deux a bougé.
+
+## L'IMAGE DE REPLI — de combien nos mesures ORB sont-elles bornées
+
+Trouvaille de l'agent extension : `extraireImage` peut rendre **« la plus grande image de
+la page »** en repli, **sans marquer sa provenance**. Mesuré ici, côté serveur.
+
+**1. Le journal ne permet pas de distinguer un repli d'un sélecteur. Franchement : non.**
+Le seul champ de provenance possible serait un drapeau, et il n'y en a aucun — la liste
+exhaustive des champs du journal commençant par `image` **au moment de l'écriture de
+l'URL** se réduit à `imageUrl`. Aucun `imageSource`, aucun `imageSelecteur`.
+
+**Le seul indice indirect est la forme de l'URL**, et il est faible : **175/175** des URL
+sont `images1.vinted.net` avec le gabarit `/f800/`. Cela **exclut** les bannières et les
+avatars, qui portent d'autres gabarits de taille — cela **n'exclut pas** la photo d'une
+**autre annonce** du carrousel « articles similaires », qui porte exactement le même.
+
+**2. Les images sont toutes chargeables : 175/175, zéro illisible.** Le journal ne porte
+aucune ligne à 0 inlier : `imageInliers` est **non nul 5/224** (valeurs 4, 4, 12, 22, 23) —
+les « 0 inlier » de nos mesures viennent des passes ORB **hors ligne**, sur ces mêmes URL.
+
+⚠️ **Le ratio attendu n'est PAS 63/88.** Le fichier porte le ratio de la **photo**, pas de
+la carte : une photo de téléphone tenu en portrait rend 3:4 (0,750) avec la carte au milieu
+et des marges. 137/175 valent exactement 600×800. Le ratio ne peut donc **pas** dire « c'est
+une carte » ; il ne peut flaguer que les formes qu'aucune photo de carte tenue en main n'a :
+le **paysage** (> 1,00) et l'**ultra-étroit** (< 0,60).
+
+**3. Ce que ça borne : 14 / 175 = 8,0 %, dont 7 AU BANC.**
+
+| forme | dimensions | carte | sort |
+|---|---|---|---|
+| ÉTROIT | 451×800 | Raichu n°026 | REFUS `egalite-parfaite` · 🎯 banc |
+| ÉTROIT | 450×800 | Pichu n°172 | succès · 🎯 banc |
+| ÉTROIT | 360×800 | Lapras n°131 | REFUS `egalite-parfaite` · 🎯 banc |
+| ÉTROIT | 451×800 | Entei n°244 | succès · 🎯 banc |
+| ÉTROIT | 370×800 | Erika's Victreebel n°071 | succès · 🎯 banc |
+| PAYSAGE | 800×755 | **Slowbro n°090** | succès · 🎯 banc |
+| PAYSAGE | 800×600 | Gladion's Final n°118 | succès · 🎯 banc |
+| PAYSAGE | 800×790 | Cinccino ex n°119 | succès |
+| ÉTROIT | 451×800 | N's Zekrom n°210 | succès |
+| PAYSAGE | 800×600 | Altaria n°087 | succès |
+| PAYSAGE | 800×600 | Azurill n°086 | succès |
+| ÉTROIT | 369×800 | Froslass n°275 | succès |
+| ÉTROIT | 451×800 | Pikachu n°020/M-P | succès |
+| PAYSAGE | 800×600 | Dwebble n°135 | succès |
+
+🔴 **`Slowbro n°090` est dans cette liste** — c'est l'une des trois lignes que la mesure
+« image d'abord » a rendues **fausses ET AFFIRMÉES**, les trois qui bloquent le câblage. Sa
+photo est en **paysage 800×755**. On ne sait pas si c'est un repli ou un lot posé à plat,
+mais on sait maintenant que la ligne qui bloque le chantier porte une image hors forme.
+
+**Ce que cette mesure NE dit pas** : que ces 14 sont des replis. Une photo en paysage peut
+être un lot de cartes posé à plat, un ultra-étroit peut être une capture d'écran recadrée.
+**8,0 % est un MAJORANT du soupçon**, et le vrai taux de repli est quelque part entre 0 et
+lui — indéterminable côté serveur, parce que l'information a été **perdue à la source**.
+
+**La borne, dite en une phrase : toute mesure d'image produite jusqu'ici — 39/43 (90,7 %),
+49/57 (86,0 %), le « image d'abord » 69/16/4 — a un dénominateur dont jusqu'à 8 % des
+lignes pourraient ne pas être la carte annoncée, et 7 de ces lignes sont au banc.**
+Les taux restent les meilleurs disponibles ; ils ne sont pas plus précis que ça.
+
+**Pas de correctif, pas de câblage.** La parade est côté extension et tient en un champ :
+que `extraireImage` rende sa provenance, et que le journal l'écrive. Tant qu'elle n'existe
+pas, aucune mesure d'image ne peut être resserrée au-delà de cette borne.
 
 ## Où sont les détails
 

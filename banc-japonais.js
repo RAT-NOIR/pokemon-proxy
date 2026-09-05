@@ -107,7 +107,8 @@
 // choisit ou refuse un produit existe à DEUX endroits — la route dans index.js, et
 // `apres()` ici. Aujourd'hui : la règle du numéro de Pokédex, le périmètre vintage, le
 // chemin setCode+numéro, le veto par le nom, la règle d'égalité, le départage par le
-// symbole, LE DÉPARTAGE PAR L'IMAGE (2026-08-29). Sept. Si le compte diverge, la colonne
+// symbole, LE DÉPARTAGE PAR L'IMAGE (2026-08-29), LE DÉPARTAGE PAR L'ATTAQUE (2026-09-05).
+// HUIT. Si le compte diverge, la colonne
 // APRÈS ment.
 //
 // ⚠️ CES 44 CARTES NE SONT PLUS UN JEU DE TEST. Une quinzaine de correctifs en ont été
@@ -139,6 +140,9 @@ const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = r
 // par le symbole, absent du banc pendant un commit, qui avait fait mentir la colonne APRÈS
 // de −7 justes et +10 refus.
 const { departager: departagerParImage } = require('./departage-image');
+// RÈGLE DE SYMÉTRIE — la décision du 2026-09-05 entre ici AU MÊME COMMIT qu'en
+// production. La MÊME fonction que la route, jamais une réimplémentation.
+const { departagerParAttaque } = require('./departage-attaque');
 const { trouverProduitsLocaux, setsPourTotal } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
@@ -488,6 +492,29 @@ function celluleDe(d) {
                     );
                     if (avisSym.gagnant) {
                         return { retenu: avisSym.gagnant.idProduct, incertain: true, voie: 'symbole-departage' };
+                    }
+                    // ⚠️ LE DÉPARTAGE PAR L'ATTAQUE, DANS LE MÊME ORDRE QU'EN PRODUCTION :
+                    // derrière le symbole (mesuré 12/12), devant l'écart de prix. Il entre
+                    // ici AU MÊME COMMIT qu'en production — c'est précisément la faute que
+                    // la règle de symétrie existe pour attraper.
+                    //
+                    // 🔴 ET IL EST INERTE SUR CE BANC AUJOURD'HUI, IL FAUT LE DIRE ICI :
+                    // `d.attaque` vient du prompt du 2026-09-05, et AUCUNE ligne de journal
+                    // ne le porte encore. La colonne APRÈS ne mesurera donc RIEN de cette
+                    // décision — elle prouve seulement qu'elle ne casse rien. C'est le même
+                    // état que le départage par l'image le 2026-08-29, inerte tant que
+                    // `references_image` était vide : le banc ne pourra la mesurer qu'une
+                    // fois des lectures d'attaque au journal.
+                    const avisAtt = departagerParAttaque(
+                        d.attaque, d.attaqueConfiance,
+                        exAequo.map(s => ({
+                            idProduct: s.candidat.idProduct,
+                            name: catById.get(s.candidat.idProduct)?.name ?? null,
+                            idMetacard: catById.get(s.candidat.idProduct)?.idMetacard ?? null
+                        }))
+                    );
+                    if (avisAtt.gagnant) {
+                        return { retenu: avisAtt.gagnant.idProduct, incertain: true, voie: 'attaque-departage' };
                     }
                     const prix = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
                     const ecart = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;

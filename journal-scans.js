@@ -745,6 +745,18 @@ const journalScanSchema = new mongoose.Schema({
     // sert vraiment ou s'il est inerte. null = aucune égalité à départager sur ce scan.
     symboleDepartage: String,
 
+    // LA PHRASE EXACTE RENDUE PAR LE DÉPARTAGE PAR L'ATTAQUE — 2026-09-05, MÊME MOTIF.
+    // « attaque "Rainbow Burn" lue, mais les 4 ex aequo sont la MÊME carte » est une mesure
+    // autant qu'un départage : c'est la répartition entre ces cas qui dira si le signal sert.
+    // ⚠️ Sans cette phrase, "l'attaque n'a pas départagé" et "il n'y avait pas d'égalité"
+    // seraient indistinguables — la faute déjà payée sur symboleSet et sur ivierIds.
+    attaqueDepartage: String,
+    // Ce que l'IA a LU, gardé même quand ça n'a rien tranché : sans le champ lu, on ne peut
+    // pas séparer "le modèle ne lit pas les attaques" de "le catalogue ne les porte pas".
+    attaqueLue: String,       // le nom ANGLAIS rendu par l'IA, ou null
+    attaqueBrute: String,     // tel qu'imprimé (katakana...), ou null
+    attaqueConfiance: String, // 'haute' | 'moyenne' | 'basse' | null
+
     // ── LE DÉPARTAGE PAR L'IMAGE — ajouté le 2026-08-29 ──────────────────────
     // Onze champs pour une seule décision, et ce n'est pas de la gloutonnerie : la moitié
     // d'entre eux ne servent QUE quand la règle s'abstient. C'est la leçon de
@@ -1045,7 +1057,11 @@ function enregistrerScan(d = {}) {
             prixLive: Number.isFinite(d.prixLive) ? d.prixLive : null,
             prixLiveEtat: d.prixLiveEtat || null,
             prixLiveCodeLangue: Number.isFinite(d.prixLiveCodeLangue) ? d.prixLiveCodeLangue : null,
-            symboleDepartage: d.symboleDepartage || null
+            symboleDepartage: d.symboleDepartage || null,
+            attaqueDepartage: d.attaqueDepartage || null,
+            attaqueLue: d.attaqueLue || null,
+            attaqueBrute: d.attaqueBrute || null,
+            attaqueConfiance: d.attaqueConfiance || null
         });
     })().catch(e => {
         // Trace, jamais de propagation. Un journal muet vaut mieux qu'un scan cassé.
@@ -1093,6 +1109,9 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
     // dire « le départage n'avait pas encore eu lieu » — pas « il n'a rien trouvé ».
     symboleDepartage,
+    // La phrase du départage par l'ATTAQUE — 2026-09-05, même motif et même raison :
+    // elle n'existe que là où le départage a été consulté, donc elle passe par l'appelant.
+    attaqueDepartage,
     // ⚠️ LES SIX CHAMPS DE L'ÉTAT, SUR LES REFUS AUSSI — ajoutés le 2026-09-02.
     // 🔴 TROIS SIGNAUX SUR TROIS N'AVAIENT PAS FRANCHI CETTE FONCTION : `symboleSet`,
     // `vivierIds`, et maintenant l'état. Le testeur l'avait prévu — « je pars du principe
@@ -1138,6 +1157,12 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         motifIA: motifIA ?? c.motif ?? null,
         estDex: estDex != null ? Boolean(estDex) : null,
         symboleDepartage,
+        attaqueDepartage,
+        // Ce que l'IA a lu, aplati depuis cardInfo comme symboleSet juste plus bas — c'est
+        // la voie du REFUS qui les oubliait systématiquement, trois fois sur trois.
+        attaqueLue: c.attaque ?? null,
+        attaqueBrute: c.attaqueBrute ?? null,
+        attaqueConfiance: c.attaqueConfiance ?? null,
         etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,

@@ -1337,6 +1337,75 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      hook qui prend une minute finit contourné par `--no-verify`, et un garde contourné
 //      est pire qu'un garde absent : il donne le sentiment d'être protégé.
 //
+//   22. UN STATUT QUI NOMME UNE ACTION SANS EXIGER LA PREUVE DE CETTE ACTION — 2026-09-05.
+//      L'OCCURRENCE. `imageStatut: 'departage'` est posé à departage-image.js:503. La seule
+//      garde qui le précède est la ligne 501 : `if (!scores[0].inliers) return rien(...)`.
+//      Il n'existe AUCUNE comparaison entre le 1er et le 2e. Le statut affirme donc
+//      « le premier a au moins un inlier », alors que son nom dit « l'image a départagé ».
+//      🔴 ET LE CONTRAT ÉCRIT DIT LA SECONDE CHOSE : journal-scans.js, en tête de
+//      l'énumération FERMÉE, documente `'departage'` par « l'image a changé le gagnant ».
+//      Le code et sa propre documentation ne décrivent pas le même événement.
+//      LE CONSTAT QUI L'A RÉVÉLÉ : le scan Ho-Oh n°250 du 2026-09-05 sort
+//      `imageStatut: 'departage'` avec `imageInliers 4` CONTRE `imageInliersSecond 4` —
+//      un écart de ZÉRO — et `imageRangDuGagnantScoring 1`, c'est-à-dire que l'image a
+//      rendu exactement le gagnant du scoring. Elle n'a rien départagé : à égalité, le tri
+//      de JavaScript étant STABLE, `scores.sort` RECOPIE l'ordre d'entrée, qui est celui du
+//      scoring. Le statut nomme une action que le code n'a pas faite.
+//      ⚠️ MÊME FAMILLE QUE L'ENTRÉE 8 (`|| []`, l'absence lue comme une valeur) ET QUE LA
+//      RECHERCHE QUI NE TROUVE PAS : un instrument qui rend LE MÊME RÉSULTAT dans deux
+//      situations différentes. Ici, « 4 contre 4 » est indistinguable de « 23 contre 4 ».
+//      Ce qui distingue cette entrée des précédentes : le défaut n'est pas dans un calcul,
+//      il est dans le NOM. Rien n'est faux dans les nombres — `imageInliers` et
+//      `imageInliersSecond` sont justes et journalisés tous les deux. C'est l'étiquette qui
+//      affirme plus que ce qu'elle a mesuré, et c'est elle qu'on lira dans six semaines.
+//      ⚠️ ET LE DÉFAUT EST ASYMÉTRIQUE ENTRE LES DEUX VOIES. Les deux raffinements
+//      (`confirme-le-scoring`, `abstention-symbole-prioritaire`) vivent chez l'APPELANT de
+//      la voie du succès (index.js). Le site d'appel du REFUS journalise `champs` brut :
+//      une ligne de refus ne pourra JAMAIS porter `confirme-le-scoring`, même quand c'est
+//      exactement ce qui s'est passé. Un raffinement écrit chez l'appelant ne protège que
+//      l'appelant qui l'a écrit — c'est la leçon de l'entrée 19, appliquée à un LIBELLÉ.
+//      🔑 LA PARADE, NOMMÉE, PAS ÉCRITE : UN STATUT QUI NOMME UNE ACTION DOIT EXIGER LA
+//      PREUVE DE CETTE ACTION, ET LA PREUVE SE CONSTRUIT LÀ OÙ LE STATUT EST POSÉ —
+//      jamais chez l'appelant, sinon le deuxième appelant l'oubliera.
+//      ⚠️ Ce qu'il ne faut PAS en déduire : qu'il suffit d'ajouter une garde. Le nombre de
+//      lignes qui portent ce statut est de QUATRE. Aucun seuil ne se pose sur quatre points,
+//      et poser une garde reviendrait à choisir un seuil sur l'échantillon qui devrait le
+//      valider — la faute déjà consignée pour `écart ≥ 2`. On NOMME le défaut, on attend
+//      le dénominateur.
+//
+//   23. L'ASSURANCE D'UN INSTRUMENT N'EST PAS CORRÉLÉE À SA JUSTESSE — 2026-09-05.
+//      🔴🔴 SON CONTRE-EXEMPLE A ÉTÉ RETIRÉ LE SOIR MÊME. LA LEÇON RESTE, L'EXEMPLE NON.
+//      CE QUI AVAIT ÉTÉ ÉCRIT : « Ho-Oh n°250, ORB désigne 654129 (UNP) à 29 inliers contre
+//      4 — écart de 25 — alors que la vérité est 274593 (Neo Revelation n°7), 12e à zéro
+//      inlier. » C'était donné pour un écart de 25 sur une réponse FAUSSE.
+//      POURQUOI IL EST RETIRÉ : « la vérité est 274593 » venait d'UNE SEULE source externe
+//      (le concurrent : « Neo Premium File 3 · n°007 »). La fiche Cardmarket ouverte à la
+//      main désigne l'autre carte — « Ho-Oh (UNP) », idMetacard 266314, attaque
+//      « Rainbow Burn » — et le testeur lit レインボーバーン SUR LA PHOTO. 654129 est donc
+//      cohérent avec l'image, et c'est le CONCURRENT qui a rendu la mauvaise métacarte.
+//      L'écart de 25 portait sur une réponse vraisemblablement JUSTE.
+//      🔑 ET C'EST UNE ERREUR D'INSTRUMENT DE PLUS, LA MIENNE : j'ai inscrit au catalogue
+//      une vérité tirée d'une source unique non recoupée, et j'en ai fait le contre-exemple
+//      d'une règle. Une vérité fausse au banc contamine toutes les mesures futures ; une
+//      vérité fausse dans le CATALOGUE contamine tous les raisonnements futurs. La carte
+//      reste EN ATTENTE, deux désignations concurrentes, non tranché.
+//      ⚠️ LA LEÇON, ELLE, NE DÉPEND PAS DE L'EXEMPLE et reste vraie : un écart d'inliers
+//      mesure la NETTETÉ D'UN APPARIEMENT, jamais la PROBABILITÉ D'AVOIR RAISON. Elle est
+//      simplement redevenue une leçon SANS PREUVE mesurée dans ce dépôt — et il faut le
+//      dire, plutôt que de garder un exemple commode qui ne tient plus.
+//      🔑 MÊME FAMILLE QUE LE « 94,9 % » DU CONCURRENT QUI SE TROMPE À 75 % : un nombre qui
+//      dit la FORCE D'UN APPARIEMENT, pas la PROBABILITÉ D'AVOIR RAISON. Les deux se
+//      ressemblent, ils ne se déduisent pas l'un de l'autre, et rien dans le calcul ne les
+//      relie. Une confiance affichée est une affirmation sur le MONDE ; un écart d'inliers
+//      est une observation sur DEUX IMAGES.
+//      ⚠️ LA RÈGLE QUI EN DÉCOULE, ET ELLE EST OPÉRATOIRE : toute règle d'écart proposée à
+//      l'avenir se teste D'ABORD contre ce cas. Si elle laisse passer Ho-Oh/654129, elle
+//      n'est pas une règle de justesse — c'est une règle de netteté d'appariement, et il
+//      faut le dire dans son nom.
+//      ⚠️ ET C'EST POURQUOI UN POURCENTAGE DE CONFIANCE DÉRIVÉ DE L'ÉCART NE PEUT PAS ÊTRE
+//      EXPOSÉ AUJOURD'HUI. Le dérivé serait faux sur ce cas-là et l'utilisateur n'aurait
+//      aucun moyen de le savoir. Un chiffre affiché ne se retire plus.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

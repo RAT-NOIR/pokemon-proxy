@@ -76,6 +76,10 @@ const { EXPANSIONS_VINTAGE, setCodeCompatibleVintage, departagerParSymbole } = r
 // avec `departagerParSymbole` juste au-dessus : les deux tranchent une égalité, sur des
 // signaux sans rapport, et l'un est prioritaire sur l'autre (voir le branchement).
 const { departager: departagerParImage } = require('./departage-image');
+// Le troisième départage d'égalité, écrit le 2026-09-05 sur la forme EXACTE du symbole.
+// Il ne touche aucun score : il choisit dans une égalité que le scoring déclare parfaite.
+// Voir departage-attaque.js — les quatre verrous et le traitement du non-latin y sont écrits.
+const { departagerParAttaque } = require('./departage-attaque');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -576,7 +580,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "attaqueBrute": "le nom de la PREMIÈRE attaque, TEL QU'IMPRIMÉ sur la carte (katakana, français...), ou null si illisible", "attaque": "son nom ANGLAIS officiel (ex: Rainbow Burn), ou null si tu n'es pas sûr de la correspondance", "attaqueConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
 Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
@@ -595,6 +599,25 @@ vers une carte qui existe vraiment, ailleurs, et le prix rendu est celui d'une a
 ⚠️ NE DEVINE JAMAIS un Pokémon célèbre par défaut. Si l'illustration ne te dit rien de sûr,
 "nomConfiance" doit être "basse" — c'est une information UTILE, pas un aveu d'échec. Un nom en
 confiance basse est traité autrement en aval ; un nom faux en confiance haute produit un faux prix.
+
+L'ATTAQUE — elle distingue deux cartes qui portent le MÊME nom de Pokémon.
+Un même Pokémon a des dizaines de cartes différentes ; le nom seul ne les sépare pas, l'attaque si.
+Lis le nom de la PREMIÈRE attaque, celle du haut du bloc d'attaques, en gros caractères à gauche
+du coût en énergies. Ne lis PAS le texte descriptif en dessous, ni le nom du talent s'il y en a un.
+- "attaqueBrute" : recopie ce qui est IMPRIMÉ, sans traduire, exactement comme pour "nomBrut".
+  Sur une carte japonaise ce sont des katakana (ex: "レインボーバーン"). null si illisible.
+- "attaque" : son nom ANGLAIS officiel (レインボーバーン = "Rainbow Burn"). Même exercice que
+  pour "name" : translittérer PUIS traduire. ⚠️ SI TU N'ES PAS SÛR DE LA CORRESPONDANCE
+  ANGLAISE, METS null — ne propose pas une traduction littérale approchée. Une attaque
+  anglaise inventée peut tomber sur celle d'une AUTRE carte et désigner la mauvaise.
+- "attaqueConfiance" :
+  * "haute"   : tu lis l'attaque distinctement ET tu es sûr de son nom anglais officiel.
+  * "moyenne" : tu la lis mais hésites sur la traduction.
+  * "basse"   : texte peu lisible (flou, reflet, sleeve, angle), ou tu déduis du contexte.
+⚠️ N'INVENTE JAMAIS une attaque plausible. Sur une carte dont le bloc d'attaques n'est pas
+lisible, "attaqueBrute" et "attaque" valent null : c'est une réponse propre, traitée en aval.
+Ce champ ne sert QUE de départage entre candidats déjà à égalité — un null ne coûte rien,
+une invention désigne une autre carte.
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
@@ -755,7 +778,12 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         // On nettoie donc À L'ENTRÉE, une seule fois, plutôt que de s'en défendre à chaque
         // usage en aval.
         const MOTS_VIDES = new Set(['null', 'none', 'undefined', 'aucun', 'n/a', 'na', '-', '?', '']);
-        for (const champ of ['setCode', 'name', 'nomBrut', 'number', 'total', 'rarete', 'symboleSet']) {
+        // `attaque` et `attaqueBrute` entrent dans cette liste pour la même raison que
+        // `setCode` : le modèle rend parfois le MOT « aucun » là où il veut dire « rien lu ».
+        // Sur un champ qui sert de clé de jointure, la chaîne « aucun » irait chercher une
+        // attaque nommée « aucun » — elle n'existe pas, donc le départage s'abstiendrait
+        // silencieusement au lieu de dire qu'il n'a rien lu. Deux causes sous une seule sortie.
+        for (const champ of ['setCode', 'name', 'nomBrut', 'number', 'total', 'rarete', 'symboleSet', 'attaque', 'attaqueBrute']) {
             const v = parsed[champ];
             if (typeof v === 'string' && MOTS_VIDES.has(v.trim().toLowerCase())) {
                 if (champ === 'setCode') console.warn(`⚠️ IA : setCode rendu comme le MOT "${v}" -> traité comme absent (voir le quatrième principe).`);
@@ -4233,6 +4261,17 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // différentes, et c'est cette différence qu'on veut pouvoir compter.
         let departageParSymbole = false;
         let symboleDepartageRaison = null;
+        // Le départage par l'attaque — son drapeau et sa phrase, SÉPARÉS de ceux du symbole.
+        // Réutiliser `departageParSymbole` rendrait les deux mécanismes indiscernables au
+        // journal : deux causes sous un seul nom, c'est une mesure qu'on ne peut plus faire.
+        // (La même faute a déjà été corrigée entre le symbole et `perimetreVintage`.)
+        let departageParAttaqueFait = false;
+        let attaqueDepartageRaison = null;
+        // Le `name` et la métacarte de chaque candidat, pris dans les documents catalogue
+        // qu'on a DÉJÀ en main : aucun aller-retour Mongo de plus. `idMetacard` est présent
+        // sur 100 % du catalogue (mesuré), `name` porte les attaques entre crochets.
+        const nomsCatalogue = new Map(produits.map(p => [Number(p.idProduct), p.name]));
+        const metacartes = new Map(produits.map(p => [Number(p.idProduct), p.idMetacard]));
         {
             const gagnantProduit = produits.find(p => p.idProduct === classement[0].idProduct);
             // `numeroCarte` et non `cardInfo.number` : la preuve du veto ET le troisième
@@ -4398,7 +4437,50 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.log(`🔣 [symbole-departage] ${avisSymbole.raison}`);
             }
 
-            if (avisSymbole.gagnant) {
+            // ════════════════════════════════════════════════════════════
+            // LE DÉPARTAGE PAR L'ATTAQUE — 2026-09-05, MÊME FORME, DERRIÈRE LE SYMBOLE
+            // ════════════════════════════════════════════════════════════
+            // ⚠️ L'ORDRE EST UNE DÉCISION, PAS UN HASARD. Le symbole est mesuré 12/12 EN
+            // PRODUCTION ; l'attaque n'est mesurée nulle part. Laisser la neuve passer devant
+            // l'ancienne remplacerait une règle prouvée par une règle supposée — exactement
+            // ce que la règle de promotion interdit (voir NIVEAU_RESERVE). L'attaque ne parle
+            // donc QUE si le symbole s'est tu, et sa phrase est journalisée dans tous les cas.
+            //
+            // ⚠️ ELLE NE TOUCHE NI LES SCORES NI L'ORDRE. Comme le symbole : elle remonte un
+            // désigné en tête d'une égalité, et rien d'autre. Aucun point n'est ajouté nulle
+            // part — un départage qui modifierait le barème ne serait plus un départage, il
+            // serait un critère, et il faudrait le mesurer comme tel.
+            //
+            // ⚠️ SORTIE EN SUGGESTION AVERTIE, TOUJOURS, via son propre drapeau. Le signal
+            // n'a AUCUNE mesure de justesse : il transforme un refus en suggestion, jamais en
+            // affirmation. Sa `raisonReserve` lui est propre (`attaque-departage`) pour que
+            // sa classe reste comptable séparément de celle du symbole.
+            if (!avisSymbole.gagnant) {
+                const avisAttaque = departagerParAttaque(
+                    cardInfo.attaque, cardInfo.attaqueConfiance,
+                    exAequo.map(c => ({
+                        idProduct: c.idProduct,
+                        name: nomsCatalogue.get(Number(c.idProduct)) ?? null,
+                        idMetacard: metacartes.get(Number(c.idProduct)) ?? null
+                    }))
+                );
+                // 🔑 LA PHRASE EST GARDÉE MÊME QUAND IL NE TRANCHE PAS. Sans elle, « l'attaque
+                // n'a pas départagé » et « il n'y avait pas d'égalité » sont indistinguables au
+                // journal — c'est la leçon de `symboleDepartage`, appliquée le même jour.
+                attaqueDepartageRaison = avisAttaque.raison;
+                if (avisAttaque.gagnant) {
+                    console.log(`⚔️ [attaque-departage] ${avisAttaque.raison} -> ${avisAttaque.gagnant.idProduct} retenu, EN SUGGESTION AVERTIE.`);
+                    classement = [
+                        classement.find(c => c.idProduct === avisAttaque.gagnant.idProduct),
+                        ...classement.filter(c => c.idProduct !== avisAttaque.gagnant.idProduct)
+                    ];
+                    departageParAttaqueFait = true;
+                } else if (cardInfo.attaque) {
+                    console.log(`⚔️ [attaque-departage] ${avisAttaque.raison}`);
+                }
+            }
+
+            if (avisSymbole.gagnant || departageParAttaqueFait) {
                 // Départagé : on continue vers le verdict, avec réserve. Aucun refus.
             } else if (sansEnjeu) {
                 console.warn(`⚠️ [egalite-sans-enjeu] ${exAequo.length} candidats à ${classement[0].score} points, mais ${euros(Math.min(...prix))} à ${euros(Math.max(...prix))} : l'écart (${euros(ecartPrix)}) ne change pas le verdict -> on affiche AVEC réserve.`);
@@ -4471,8 +4553,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // ex aequo ne le porte ». C'est exactement le cas qui manquait : un
                     // refus par égalité où un symbole ÉTAIT lu sans pouvoir départager.
                     symboleDepartage: symboleDepartageRaison,
-                    // Le refus par égalité est LE cas où ces champs manquaient le plus :
-                    // il dit « je ne sais pas départager » sans dire entre quoi.
+                    // La phrase du departage par l'ATTAQUE, sur le REFUS aussi, et pour la
+                    // meme raison que celle du symbole : « attaque lue, mais les 4 ex aequo
+                    // sont la MEME carte » est une mesure autant qu'un departage.
+                    // attaqueLue / attaqueBrute / attaqueConfiance sont aplatis depuis
+                    // cardInfo par enregistrerEchec — voir journal-scans.js.
+                    attaqueDepartage: attaqueDepartageRaison,
                     exAequoIds, ...champsVivier(), nbCandidats: produits.length
                 });
                 return res.json({
@@ -4712,6 +4798,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // déclare parfaite, sur un signal lu juste 6 fois sur 7. Suggestion, jamais
             // verdict — c'est la condition à laquelle il a été écrit.
             || departageParSymbole
+            // Le départage par l'attaque : il choisit dans une égalité que le scoring
+            // déclare parfaite, sur un signal dont la justesse n'est mesurée NULLE PART.
+            // Suggestion, jamais verdict — c'est la condition à laquelle il a été écrit.
+            || departageParAttaqueFait
             // Le départage par l'image : il vient de CHANGER le produit retenu, sur un
             // signal que le texte n'a pas. Mesuré 31 D+ / 0 D− sur la cellule — excellent,
             // et pas une preuve : l'intervalle de Wilson à 95 % sur 41 succès en 44 va de
@@ -4817,6 +4907,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // n'importe quelle raison portant sur le DÉPARTAGE à l'intérieur du vivier.
             : nomSeulVintage ? 'nom-seul-vintage'
             : departageParSymbole ? 'symbole-departage'
+            // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-09-05, et il est ÉTROIT.
+            // `attaque-departage` s'insère derrière le symbole (qui garde la priorité dans le
+            // code, voir le branchement). Aucune ligne DÉJÀ au journal ne change d'étiquette :
+            // le drapeau n'a jamais pu être vrai avant aujourd'hui. Mais les lignes à venir où
+            // l'attaque tranche auraient porté `egalite-sans-enjeu` — ou n'auraient pas existé
+            // du tout, le scan finissant en refus. C'est donc cette classe-là, et elle seule,
+            // qui cesse d'être additivement comparable de part et d'autre de cette date.
+            : departageParAttaqueFait ? 'attaque-departage'
             // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-08-29, ET IL EST ÉTROIT.
             // `image-departage` s'insère ici, derrière le symbole (qui reste prioritaire,
             // voir le branchement). Aucune ligne DÉJÀ au journal ne change d'étiquette :
@@ -4974,6 +5072,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // pour ça que la table vit ici, côté serveur : la promotion ne demandera pas
             // de republier l'extension.
             'image-departage': 'faible',
+            // ⚠️ FAIBLE, ET IL N'Y A MÊME PAS D'ARBITRAGE À FAIRE. Le départage par l'attaque
+            // n'a AUCUNE mesure de justesse : zéro ligne de journal, zéro rejeu contre une
+            // vérité. Ce qui est mesuré, c'est sa PORTÉE (16 groupes sur 45 réunissent des
+            // métacartes différentes ; il isolerait un candidat unique 10 fois sur les 12 où
+            // la vérité est dans le groupe), et la portée n'est pas la justesse. Il se
+            // promeut au premier lot réel qui tient, comme le symbole a dû le faire — 12/12
+            // EN PRODUCTION — et pas avant.
+            'attaque-departage': 'faible',
             // Tout le reste est FAIBLE tant qu'aucune mesure ne justifie mieux :
             'perimetre-vintage-suggestion': 'faible',   // 10/16 justes — la classe la plus fréquente et la plus tiède
             'tcgdex-numero-incoherent': 'faible',       // 1/2 — deux lignes ne mesurent rien
@@ -5280,6 +5386,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // tranché. « aucun ex aequo ne porte ce symbole » est une mesure autant que
             // « il a tranché » : c'est elle qui dira si le signal sert ou s'il est inerte.
             symboleDepartage: symboleDepartageRaison,
+            // Le departage par l'ATTAQUE : sa phrase, et ce que l'IA a lu.
+            // La phrase part MEME quand il n'a pas tranche — sans elle, « l'attaque n'a
+            // pas departage » et « il n'y avait pas d'egalite » sont indistinguables au
+            // journal. C'est la lecon de `symboleDepartage`, appliquee le meme jour.
+            attaqueDepartage: attaqueDepartageRaison,
+            attaqueLue: cardInfo.attaque ?? null,
+            attaqueBrute: cardInfo.attaqueBrute ?? null,
+            attaqueConfiance: cardInfo.attaqueConfiance ?? null,
             // ⚠️ `parenteRetenue` n'est plus journalisé — supprimé le 2026-08-18 après
             // 0 occurrence sur 117 lignes. `parenteJournal` reste, il alimente la trace
             // `[setcode-diagnostic]` à la console. Voir journal-scans.js pour la raison.

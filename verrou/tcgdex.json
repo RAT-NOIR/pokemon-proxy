@@ -1,12 +1,12 @@
 {
-  "enregistreLe": "2026-09-05T06:18:01.175Z",
-  "nb": 25,
+  "enregistreLe": "2026-09-05T07:30:49.686Z",
+  "nb": 24,
   "chargesCouvertes": [
     "6a9938822d1b97d8f5f9f73d",
     "6a9058b9e8a3767d791bd5cd",
     "6a99b33d2299c8c4d466c373",
     "6a9055c6e8a3767d791bd542",
-    "6a9939352d1b97d8f5f9f777",
+    "6a9bb95ec42f77333734173e",
     "6a99b3092299c8c4d466c35d",
     "6a97e8e31ad2139e3029f440"
   ],
@@ -276,7 +276,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-04T10:05:09.426Z",
+                "updated": "2026-09-04T10:05:09.376Z",
                 "unit": "EUR",
                 "idProduct": 773756,
                 "avg": 0.11,
@@ -340,7 +340,7 @@
         "updated": "2026-09-03T15:29:10.857Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-04T10:05:09.426Z",
+            "updated": "2026-09-04T10:05:09.376Z",
             "unit": "EUR",
             "idProduct": 773756,
             "avg": 0.11,
@@ -2311,6 +2311,462 @@
         }
       }
     },
+    "https://api.tcgdex.net/v2/ja/sets/PCG6": {
+      "statut": 200,
+      "data": {
+        "cardCount": {
+          "firstEd": 0,
+          "holo": 20,
+          "normal": 152,
+          "official": 86,
+          "reverse": 0,
+          "total": 86
+        },
+        "cards": [
+          {
+            "id": "PCG6-001",
+            "localId": "001",
+            "name": "雑草"
+          },
+          {
+            "id": "PCG6-002",
+            "localId": "002",
+            "name": "カクナ"
+          },
+          {
+            "id": "PCG6-003",
+            "localId": "003",
+            "name": "Zubat"
+          },
+          {
+            "id": "PCG6-004",
+            "localId": "004",
+            "name": "ゴルバット"
+          },
+          {
+            "id": "PCG6-005",
+            "localId": "005",
+            "name": "Koffing"
+          },
+          {
+            "id": "PCG6-006",
+            "localId": "006",
+            "name": "おしっこ"
+          },
+          {
+            "id": "PCG6-007",
+            "localId": "007",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-008",
+            "localId": "008",
+            "name": "volbeat"
+          },
+          {
+            "id": "PCG6-009",
+            "localId": "009",
+            "name": "照らされます"
+          },
+          {
+            "id": "PCG6-010",
+            "localId": "010",
+            "name": "beedrill（デルタ種）"
+          },
+          {
+            "id": "PCG6-011",
+            "localId": "011",
+            "name": "クロバット（デルタ種）"
+          },
+          {
+            "id": "PCG6-012",
+            "localId": "012",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-013",
+            "localId": "013",
+            "name": "larvitar（デルタ種）"
+          },
+          {
+            "id": "PCG6-014",
+            "localId": "014",
+            "name": "Pupitar（デルタ種）"
+          },
+          {
+            "id": "PCG6-015",
+            "localId": "015",
+            "name": "日当たりの良いキャストフォーム"
+          },
+          {
+            "id": "PCG6-016",
+            "localId": "016",
+            "name": "バゴン（デルタ種）"
+          },
+          {
+            "id": "PCG6-017",
+            "localId": "017",
+            "name": "シェルゴン（デルタ種）"
+          },
+          {
+            "id": "PCG6-018",
+            "localId": "018",
+            "name": "フレレオン（デルタ種）"
+          },
+          {
+            "id": "PCG6-019",
+            "localId": "019",
+            "name": "mewtwo（デルタ種）"
+          },
+          {
+            "id": "PCG6-020",
+            "localId": "020",
+            "name": "ティラニター（デルタ種）"
+          },
+          {
+            "id": "PCG6-021",
+            "localId": "021",
+            "name": "サラメンス（デルタ種）"
+          },
+          {
+            "id": "PCG6-022",
+            "localId": "022",
+            "name": "slowpoke"
+          },
+          {
+            "id": "PCG6-023",
+            "localId": "023",
+            "name": "staryu"
+          },
+          {
+            "id": "PCG6-024",
+            "localId": "024",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-025",
+            "localId": "025",
+            "name": "スローキング"
+          },
+          {
+            "id": "PCG6-026",
+            "localId": "026",
+            "name": "雨のキャストフォーム"
+          },
+          {
+            "id": "PCG6-027",
+            "localId": "027",
+            "name": "スノークラウドキャストフォーム"
+          },
+          {
+            "id": "PCG6-028",
+            "localId": "028",
+            "name": "Kyogre Star"
+          },
+          {
+            "id": "PCG6-029",
+            "localId": "029",
+            "name": "スターミー（デルタ種）"
+          },
+          {
+            "id": "PCG6-030",
+            "localId": "030",
+            "name": "Vaporeon（デルタ種）"
+          },
+          {
+            "id": "PCG6-031",
+            "localId": "031",
+            "name": "ホロンのヴォルトーブ"
+          },
+          {
+            "id": "PCG6-032",
+            "localId": "032",
+            "name": "ホロンの電極"
+          },
+          {
+            "id": "PCG6-033",
+            "localId": "033",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-034",
+            "localId": "034",
+            "name": "ドラチーニ（デルタ種）"
+          },
+          {
+            "id": "PCG6-035",
+            "localId": "035",
+            "name": "ドラゴンエア（デルタ種）"
+          },
+          {
+            "id": "PCG6-036",
+            "localId": "036",
+            "name": "ベルダム（デルタ種）"
+          },
+          {
+            "id": "PCG6-037",
+            "localId": "037",
+            "name": "メタン（デルタ種）"
+          },
+          {
+            "id": "PCG6-038",
+            "localId": "038",
+            "name": "ジョルテオン（デルタ種）"
+          },
+          {
+            "id": "PCG6-039",
+            "localId": "039",
+            "name": "ドラゴナイト（デルタ種）"
+          },
+          {
+            "id": "PCG6-040",
+            "localId": "040",
+            "name": "メタグロス（デルタ種）"
+          },
+          {
+            "id": "PCG6-041",
+            "localId": "041",
+            "name": "ラティアス（デルタ種）"
+          },
+          {
+            "id": "PCG6-042",
+            "localId": "042",
+            "name": "ラティオス（デルタ種）"
+          },
+          {
+            "id": "PCG6-043",
+            "localId": "043",
+            "name": "レイカザ（デルタ種）"
+          },
+          {
+            "id": "PCG6-044",
+            "localId": "044",
+            "name": "ドロージー"
+          },
+          {
+            "id": "PCG6-045",
+            "localId": "045",
+            "name": "催眠"
+          },
+          {
+            "id": "PCG6-046",
+            "localId": "046",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-047",
+            "localId": "047",
+            "name": "ラルト"
+          },
+          {
+            "id": "PCG6-048",
+            "localId": "048",
+            "name": "キルリア"
+          },
+          {
+            "id": "PCG6-049",
+            "localId": "049",
+            "name": "エスペオン（デルタ種）"
+          },
+          {
+            "id": "PCG6-050",
+            "localId": "050",
+            "name": "gardevoir（デルタ種）"
+          },
+          {
+            "id": "PCG6-051",
+            "localId": "051",
+            "name": "サンドシュー"
+          },
+          {
+            "id": "PCG6-052",
+            "localId": "052",
+            "name": "キューボン"
+          },
+          {
+            "id": "PCG6-053",
+            "localId": "053",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-054",
+            "localId": "054",
+            "name": "マクヒタ"
+          },
+          {
+            "id": "PCG6-055",
+            "localId": "055",
+            "name": "麻山"
+          },
+          {
+            "id": "PCG6-056",
+            "localId": "056",
+            "name": "グルードンスター"
+          },
+          {
+            "id": "PCG6-057",
+            "localId": "057",
+            "name": "サンドスラッシュ（デルタ種）"
+          },
+          {
+            "id": "PCG6-058",
+            "localId": "058",
+            "name": "マロワク（デルタ種）"
+          },
+          {
+            "id": "PCG6-059",
+            "localId": "059",
+            "name": "meowth"
+          },
+          {
+            "id": "PCG6-060",
+            "localId": "060",
+            "name": "ペルシャ語"
+          },
+          {
+            "id": "PCG6-061",
+            "localId": "061",
+            "name": "同上"
+          },
+          {
+            "id": "PCG6-062",
+            "localId": "062",
+            "name": "ポリゴン"
+          },
+          {
+            "id": "PCG6-063",
+            "localId": "063",
+            "name": "Porygon2"
+          },
+          {
+            "id": "PCG6-064",
+            "localId": "064",
+            "name": "テイロウ"
+          },
+          {
+            "id": "PCG6-065",
+            "localId": "065",
+            "name": "スウラー"
+          },
+          {
+            "id": "PCG6-066",
+            "localId": "066",
+            "name": "アズリル"
+          },
+          {
+            "id": "PCG6-067",
+            "localId": "067",
+            "name": "castform"
+          },
+          {
+            "id": "PCG6-068",
+            "localId": "068",
+            "name": "プーチエナ"
+          },
+          {
+            "id": "PCG6-069",
+            "localId": "069",
+            "name": "Umbreon（デルタ種）"
+          },
+          {
+            "id": "PCG6-070",
+            "localId": "070",
+            "name": "マイティエナ（デルタ種）"
+          },
+          {
+            "id": "PCG6-071",
+            "localId": "071",
+            "name": "ホロンのマグナイト"
+          },
+          {
+            "id": "PCG6-072",
+            "localId": "072",
+            "name": "ホロンのマグネトン"
+          },
+          {
+            "id": "PCG6-073",
+            "localId": "073",
+            "name": "Eevee（デルタ種）"
+          },
+          {
+            "id": "PCG6-074",
+            "localId": "074",
+            "name": "スカルモリー"
+          },
+          {
+            "id": "PCG6-075",
+            "localId": "075",
+            "name": "メタグロススター"
+          },
+          {
+            "id": "PCG6-076",
+            "localId": "076",
+            "name": "ホロントランシーバー"
+          },
+          {
+            "id": "PCG6-077",
+            "localId": "077",
+            "name": "ホロン科学者"
+          },
+          {
+            "id": "PCG6-078",
+            "localId": "078",
+            "name": "ホロン研究者"
+          },
+          {
+            "id": "PCG6-079",
+            "localId": "079",
+            "name": "ホロンメンター"
+          },
+          {
+            "id": "PCG6-080",
+            "localId": "080",
+            "name": "ホロン農家"
+          },
+          {
+            "id": "PCG6-081",
+            "localId": "081",
+            "name": "ホロン・ラス"
+          },
+          {
+            "id": "PCG6-082",
+            "localId": "082",
+            "name": "ホロン研究塔"
+          },
+          {
+            "id": "PCG6-083",
+            "localId": "083",
+            "name": "ホロン遺跡"
+          },
+          {
+            "id": "PCG6-084",
+            "localId": "084",
+            "name": "ホロンエネルギーGL"
+          },
+          {
+            "id": "PCG6-085",
+            "localId": "085",
+            "name": "ホロンエネルギーff"
+          },
+          {
+            "id": "PCG6-086",
+            "localId": "086",
+            "name": "ホロンエネルギーwp"
+          }
+        ],
+        "id": "PCG6",
+        "legal": {
+          "expanded": false,
+          "standard": false
+        },
+        "name": "ホロンの研究塔",
+        "releaseDate": "2005-10-28",
+        "serie": {
+          "id": "PCG",
+          "name": "PCG"
+        }
+      }
+    },
     "https://api.tcgdex.net/v2/ja/sets/SV11W": {
       "statut": 200,
       "data": {
@@ -3207,462 +3663,6 @@
         }
       }
     },
-    "https://api.tcgdex.net/v2/ja/sets/PCG6": {
-      "statut": 200,
-      "data": {
-        "cardCount": {
-          "firstEd": 0,
-          "holo": 20,
-          "normal": 152,
-          "official": 86,
-          "reverse": 0,
-          "total": 86
-        },
-        "cards": [
-          {
-            "id": "PCG6-001",
-            "localId": "001",
-            "name": "雑草"
-          },
-          {
-            "id": "PCG6-002",
-            "localId": "002",
-            "name": "カクナ"
-          },
-          {
-            "id": "PCG6-003",
-            "localId": "003",
-            "name": "Zubat"
-          },
-          {
-            "id": "PCG6-004",
-            "localId": "004",
-            "name": "ゴルバット"
-          },
-          {
-            "id": "PCG6-005",
-            "localId": "005",
-            "name": "Koffing"
-          },
-          {
-            "id": "PCG6-006",
-            "localId": "006",
-            "name": "おしっこ"
-          },
-          {
-            "id": "PCG6-007",
-            "localId": "007",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-008",
-            "localId": "008",
-            "name": "volbeat"
-          },
-          {
-            "id": "PCG6-009",
-            "localId": "009",
-            "name": "照らされます"
-          },
-          {
-            "id": "PCG6-010",
-            "localId": "010",
-            "name": "beedrill（デルタ種）"
-          },
-          {
-            "id": "PCG6-011",
-            "localId": "011",
-            "name": "クロバット（デルタ種）"
-          },
-          {
-            "id": "PCG6-012",
-            "localId": "012",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-013",
-            "localId": "013",
-            "name": "larvitar（デルタ種）"
-          },
-          {
-            "id": "PCG6-014",
-            "localId": "014",
-            "name": "Pupitar（デルタ種）"
-          },
-          {
-            "id": "PCG6-015",
-            "localId": "015",
-            "name": "日当たりの良いキャストフォーム"
-          },
-          {
-            "id": "PCG6-016",
-            "localId": "016",
-            "name": "バゴン（デルタ種）"
-          },
-          {
-            "id": "PCG6-017",
-            "localId": "017",
-            "name": "シェルゴン（デルタ種）"
-          },
-          {
-            "id": "PCG6-018",
-            "localId": "018",
-            "name": "フレレオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-019",
-            "localId": "019",
-            "name": "mewtwo（デルタ種）"
-          },
-          {
-            "id": "PCG6-020",
-            "localId": "020",
-            "name": "ティラニター（デルタ種）"
-          },
-          {
-            "id": "PCG6-021",
-            "localId": "021",
-            "name": "サラメンス（デルタ種）"
-          },
-          {
-            "id": "PCG6-022",
-            "localId": "022",
-            "name": "slowpoke"
-          },
-          {
-            "id": "PCG6-023",
-            "localId": "023",
-            "name": "staryu"
-          },
-          {
-            "id": "PCG6-024",
-            "localId": "024",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-025",
-            "localId": "025",
-            "name": "スローキング"
-          },
-          {
-            "id": "PCG6-026",
-            "localId": "026",
-            "name": "雨のキャストフォーム"
-          },
-          {
-            "id": "PCG6-027",
-            "localId": "027",
-            "name": "スノークラウドキャストフォーム"
-          },
-          {
-            "id": "PCG6-028",
-            "localId": "028",
-            "name": "Kyogre Star"
-          },
-          {
-            "id": "PCG6-029",
-            "localId": "029",
-            "name": "スターミー（デルタ種）"
-          },
-          {
-            "id": "PCG6-030",
-            "localId": "030",
-            "name": "Vaporeon（デルタ種）"
-          },
-          {
-            "id": "PCG6-031",
-            "localId": "031",
-            "name": "ホロンのヴォルトーブ"
-          },
-          {
-            "id": "PCG6-032",
-            "localId": "032",
-            "name": "ホロンの電極"
-          },
-          {
-            "id": "PCG6-033",
-            "localId": "033",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-034",
-            "localId": "034",
-            "name": "ドラチーニ（デルタ種）"
-          },
-          {
-            "id": "PCG6-035",
-            "localId": "035",
-            "name": "ドラゴンエア（デルタ種）"
-          },
-          {
-            "id": "PCG6-036",
-            "localId": "036",
-            "name": "ベルダム（デルタ種）"
-          },
-          {
-            "id": "PCG6-037",
-            "localId": "037",
-            "name": "メタン（デルタ種）"
-          },
-          {
-            "id": "PCG6-038",
-            "localId": "038",
-            "name": "ジョルテオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-039",
-            "localId": "039",
-            "name": "ドラゴナイト（デルタ種）"
-          },
-          {
-            "id": "PCG6-040",
-            "localId": "040",
-            "name": "メタグロス（デルタ種）"
-          },
-          {
-            "id": "PCG6-041",
-            "localId": "041",
-            "name": "ラティアス（デルタ種）"
-          },
-          {
-            "id": "PCG6-042",
-            "localId": "042",
-            "name": "ラティオス（デルタ種）"
-          },
-          {
-            "id": "PCG6-043",
-            "localId": "043",
-            "name": "レイカザ（デルタ種）"
-          },
-          {
-            "id": "PCG6-044",
-            "localId": "044",
-            "name": "ドロージー"
-          },
-          {
-            "id": "PCG6-045",
-            "localId": "045",
-            "name": "催眠"
-          },
-          {
-            "id": "PCG6-046",
-            "localId": "046",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-047",
-            "localId": "047",
-            "name": "ラルト"
-          },
-          {
-            "id": "PCG6-048",
-            "localId": "048",
-            "name": "キルリア"
-          },
-          {
-            "id": "PCG6-049",
-            "localId": "049",
-            "name": "エスペオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-050",
-            "localId": "050",
-            "name": "gardevoir（デルタ種）"
-          },
-          {
-            "id": "PCG6-051",
-            "localId": "051",
-            "name": "サンドシュー"
-          },
-          {
-            "id": "PCG6-052",
-            "localId": "052",
-            "name": "キューボン"
-          },
-          {
-            "id": "PCG6-053",
-            "localId": "053",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-054",
-            "localId": "054",
-            "name": "マクヒタ"
-          },
-          {
-            "id": "PCG6-055",
-            "localId": "055",
-            "name": "麻山"
-          },
-          {
-            "id": "PCG6-056",
-            "localId": "056",
-            "name": "グルードンスター"
-          },
-          {
-            "id": "PCG6-057",
-            "localId": "057",
-            "name": "サンドスラッシュ（デルタ種）"
-          },
-          {
-            "id": "PCG6-058",
-            "localId": "058",
-            "name": "マロワク（デルタ種）"
-          },
-          {
-            "id": "PCG6-059",
-            "localId": "059",
-            "name": "meowth"
-          },
-          {
-            "id": "PCG6-060",
-            "localId": "060",
-            "name": "ペルシャ語"
-          },
-          {
-            "id": "PCG6-061",
-            "localId": "061",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-062",
-            "localId": "062",
-            "name": "ポリゴン"
-          },
-          {
-            "id": "PCG6-063",
-            "localId": "063",
-            "name": "Porygon2"
-          },
-          {
-            "id": "PCG6-064",
-            "localId": "064",
-            "name": "テイロウ"
-          },
-          {
-            "id": "PCG6-065",
-            "localId": "065",
-            "name": "スウラー"
-          },
-          {
-            "id": "PCG6-066",
-            "localId": "066",
-            "name": "アズリル"
-          },
-          {
-            "id": "PCG6-067",
-            "localId": "067",
-            "name": "castform"
-          },
-          {
-            "id": "PCG6-068",
-            "localId": "068",
-            "name": "プーチエナ"
-          },
-          {
-            "id": "PCG6-069",
-            "localId": "069",
-            "name": "Umbreon（デルタ種）"
-          },
-          {
-            "id": "PCG6-070",
-            "localId": "070",
-            "name": "マイティエナ（デルタ種）"
-          },
-          {
-            "id": "PCG6-071",
-            "localId": "071",
-            "name": "ホロンのマグナイト"
-          },
-          {
-            "id": "PCG6-072",
-            "localId": "072",
-            "name": "ホロンのマグネトン"
-          },
-          {
-            "id": "PCG6-073",
-            "localId": "073",
-            "name": "Eevee（デルタ種）"
-          },
-          {
-            "id": "PCG6-074",
-            "localId": "074",
-            "name": "スカルモリー"
-          },
-          {
-            "id": "PCG6-075",
-            "localId": "075",
-            "name": "メタグロススター"
-          },
-          {
-            "id": "PCG6-076",
-            "localId": "076",
-            "name": "ホロントランシーバー"
-          },
-          {
-            "id": "PCG6-077",
-            "localId": "077",
-            "name": "ホロン科学者"
-          },
-          {
-            "id": "PCG6-078",
-            "localId": "078",
-            "name": "ホロン研究者"
-          },
-          {
-            "id": "PCG6-079",
-            "localId": "079",
-            "name": "ホロンメンター"
-          },
-          {
-            "id": "PCG6-080",
-            "localId": "080",
-            "name": "ホロン農家"
-          },
-          {
-            "id": "PCG6-081",
-            "localId": "081",
-            "name": "ホロン・ラス"
-          },
-          {
-            "id": "PCG6-082",
-            "localId": "082",
-            "name": "ホロン研究塔"
-          },
-          {
-            "id": "PCG6-083",
-            "localId": "083",
-            "name": "ホロン遺跡"
-          },
-          {
-            "id": "PCG6-084",
-            "localId": "084",
-            "name": "ホロンエネルギーGL"
-          },
-          {
-            "id": "PCG6-085",
-            "localId": "085",
-            "name": "ホロンエネルギーff"
-          },
-          {
-            "id": "PCG6-086",
-            "localId": "086",
-            "name": "ホロンエネルギーwp"
-          }
-        ],
-        "id": "PCG6",
-        "legal": {
-          "expanded": false,
-          "standard": false
-        },
-        "name": "ホロンの研究塔",
-        "releaseDate": "2005-10-28",
-        "serie": {
-          "id": "PCG",
-          "name": "PCG"
-        }
-      }
-    },
     "https://api.tcgdex.net/v2/ja/cards/SV11W-135": {
       "statut": 200,
       "data": {
@@ -3733,7 +3733,7 @@
         },
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-04T10:05:09.376Z",
+            "updated": "2026-09-04T10:05:09.367Z",
             "unit": "EUR",
             "idProduct": 829494,
             "avg": 10.39,
@@ -3847,6 +3847,183 @@
           "expanded": false
         },
         "updated": "2026-09-03T15:29:12.724Z",
+        "pricing": {
+          "cardmarket": null,
+          "tcgplayer": null
+        }
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%9B%E3%82%A6%E3%82%AA%E3%82%A6": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "SVLS-003",
+          "localId": "003",
+          "name": "ホウオウ",
+          "image": "https://assets.tcgdex.net/ja/SV/SVLS/003"
+        },
+        {
+          "id": "M4-010",
+          "localId": "010",
+          "name": "ホウオウ"
+        },
+        {
+          "id": "SM3H-012",
+          "localId": "012",
+          "name": "ホウオウGX"
+        },
+        {
+          "id": "SM4p-013",
+          "localId": "013",
+          "name": "ホウオウGX"
+        },
+        {
+          "id": "SV9a-020",
+          "localId": "020",
+          "name": "ヒビキのホウオウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV9a/020"
+        },
+        {
+          "id": "M2a-021",
+          "localId": "021",
+          "name": "ヒビキのホウオウex"
+        },
+        {
+          "id": "SM6b-048",
+          "localId": "048",
+          "name": "ホウオウ"
+        },
+        {
+          "id": "SM3H-053",
+          "localId": "053",
+          "name": "ホウオウGX"
+        },
+        {
+          "id": "S11a-055",
+          "localId": "055",
+          "name": "ホウオウV",
+          "image": "https://assets.tcgdex.net/ja/S/S11a/055"
+        },
+        {
+          "id": "SM3H-059",
+          "localId": "059",
+          "name": "ホウオウGX"
+        },
+        {
+          "id": "SV9a-077",
+          "localId": "077",
+          "name": "ヒビキのホウオウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV9a/077"
+        },
+        {
+          "id": "S11a-080",
+          "localId": "080",
+          "name": "ホウオウV",
+          "image": "https://assets.tcgdex.net/ja/S/S11a/080"
+        },
+        {
+          "id": "SV9a-086",
+          "localId": "086",
+          "name": "ヒビキのホウオウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV9a/086"
+        },
+        {
+          "id": "SV9a-090",
+          "localId": "090",
+          "name": "ヒビキのホウオウex",
+          "image": "https://assets.tcgdex.net/ja/SV/SV9a/090"
+        },
+        {
+          "id": "SM8b-210",
+          "localId": "210",
+          "name": "ホウオウGX"
+        },
+        {
+          "id": "SV-P-254",
+          "localId": "254",
+          "name": "ヒビキのホウオウex"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/ja/cards/SVLS-003": {
+      "statut": 200,
+      "data": {
+        "category": "Pokemon",
+        "id": "SVLS-003",
+        "illustrator": "kodama",
+        "image": "https://assets.tcgdex.net/ja/SV/SVLS/003",
+        "localId": "003",
+        "name": "ホウオウ",
+        "rarity": "None",
+        "set": {
+          "cardCount": {
+            "official": 22,
+            "total": 22
+          },
+          "id": "SVLS",
+          "name": "スターターセット テラスタイプ：ステラ ソウブレイズex"
+        },
+        "variants": {
+          "firstEdition": false,
+          "holo": false,
+          "normal": true,
+          "reverse": false,
+          "wPromo": false
+        },
+        "variants_detailed": [
+          {
+            "type": "normal",
+            "size": "standard",
+            "variantId": "generated"
+          }
+        ],
+        "dexId": [
+          250
+        ],
+        "hp": 130,
+        "types": [
+          "Fire"
+        ],
+        "description": "体は 七色に 輝き 飛んだあとは 虹が できると 神話に 残されている ポケモン。",
+        "stage": "Basic",
+        "attacks": [
+          {
+            "cost": [
+              "Fire",
+              "Colorless"
+            ],
+            "name": "はばたく",
+            "damage": 50
+          },
+          {
+            "cost": [
+              "Fire",
+              "Fire",
+              "Colorless"
+            ],
+            "name": "シャインブレイズ",
+            "effect": "自分のベンチに「テラスタル」のポケモンがいるなら、100ダメージ追加。",
+            "damage": "100＋"
+          }
+        ],
+        "weaknesses": [
+          {
+            "type": "Lightning",
+            "value": "×2"
+          }
+        ],
+        "resistances": [
+          {
+            "type": "Fighting",
+            "value": "－30"
+          }
+        ],
+        "retreat": 2,
+        "legal": {
+          "standard": false,
+          "expanded": false
+        },
+        "updated": "2026-09-03T15:29:09.899Z",
         "pricing": {
           "cardmarket": null,
           "tcgplayer": null
@@ -5928,150 +6105,6 @@
         }
       ]
     },
-    "https://api.tcgdex.net/v2/fr/cards?name=Milobellus&localId=eq:5": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/fr/cards?name=Milobellus&localId=5": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "ex15-5",
-          "localId": "5",
-          "name": "Milobellus δ",
-          "image": "https://assets.tcgdex.net/fr/ex/ex15/5"
-        },
-        {
-          "id": "dp4-25",
-          "localId": "25",
-          "name": "Milobellus"
-        },
-        {
-          "id": "pl3-35",
-          "localId": "35",
-          "name": "Milobellus C",
-          "image": "https://assets.tcgdex.net/fr/pl/pl3/35"
-        },
-        {
-          "id": "sv06-050",
-          "localId": "050",
-          "name": "Milobellus",
-          "image": "https://assets.tcgdex.net/fr/sv/sv06/050"
-        },
-        {
-          "id": "sv10-053",
-          "localId": "053",
-          "name": "Milobellus de Cynthia",
-          "image": "https://assets.tcgdex.net/fr/sv/sv10/053"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/fr/cards/ex15-5": {
-      "statut": 200,
-      "data": {
-        "category": "Pokémon",
-        "id": "ex15-5",
-        "illustrator": "Midori Harada",
-        "image": "https://assets.tcgdex.net/fr/ex/ex15/5",
-        "localId": "5",
-        "name": "Milobellus δ",
-        "rarity": "Rare",
-        "set": {
-          "cardCount": {
-            "official": 101,
-            "total": 101
-          },
-          "id": "ex15",
-          "logo": "https://assets.tcgdex.net/fr/ex/ex15/logo",
-          "name": "EX Île des Dragons",
-          "symbol": "https://assets.tcgdex.net/univ/ex/ex15/symbol"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": true,
-          "normal": false,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "Holo",
-            "size": "Standard",
-            "variantId": "jr7oetx1mqug9"
-          },
-          {
-            "type": "Holo",
-            "size": "Standard",
-            "stamp": [
-              "Logo de la série"
-            ],
-            "variantId": "555jb0efopmyclvkikic41"
-          }
-        ],
-        "dexId": [
-          350
-        ],
-        "hp": 90,
-        "types": [
-          "Feu"
-        ],
-        "evolveFrom": "Barpau",
-        "stage": "Niveau 1",
-        "abilities": [
-          {
-            "type": "Poké-POWER",
-            "name": "Partage",
-            "effect": "Une seule fois lors de votre tour (avant votre attaque), vous pouvez regarder la main de votre adversaire. Vous pouvez utiliser l'effet d'une carte Supporter s'y trouvant comme l'effet de ce pouvoir. (La carte Supporter reste dans la main de votre adversaire.) Vous ne pouvez pas utiliser plus d'1 Poké-Power Partage par tour. Ce pouvoir ne peut pas être utilisé si Milobellus est affecté par un État Spécial."
-          }
-        ],
-        "attacks": [
-          {
-            "cost": [
-              "Feu",
-              "Feu",
-              "Incolore"
-            ],
-            "name": "Intimidation",
-            "damage": 60
-          }
-        ],
-        "weaknesses": [
-          {
-            "type": "Électrique",
-            "value": "×2"
-          }
-        ],
-        "retreat": 2,
-        "legal": {
-          "standard": false,
-          "expanded": false
-        },
-        "updated": "2026-08-15T23:34:34+01:00",
-        "thirdParty": {
-          "cardmarket": 277210
-        },
-        "pricing": {
-          "cardmarket": {
-            "updated": "2026-09-04T10:05:09.426Z",
-            "unit": "EUR",
-            "idProduct": 277210,
-            "avg": 11.51,
-            "low": 4.49,
-            "trend": 4.42,
-            "avg1": 9.99,
-            "avg7": 12.32,
-            "avg30": 17.34,
-            "avg-holo": 60.63,
-            "low-holo": 7.8,
-            "trend-holo": 59.74,
-            "avg1-holo": 109.95,
-            "avg7-holo": 54.97,
-            "avg30-holo": 44.41
-          },
-          "tcgplayer": null
-        }
-      }
-    },
     "https://api.tcgdex.net/v2/fr/cards?name=Crabicoque&localId=eq:129": {
       "statut": 200,
       "data": []
@@ -6125,7 +6158,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-04T10:05:09.376Z",
+                "updated": "2026-09-04T10:05:09.379Z",
                 "unit": "EUR",
                 "idProduct": 836174,
                 "avg": 36.92,
@@ -6191,7 +6224,7 @@
         "updated": "2026-04-14T17:41:47Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-04T10:05:09.376Z",
+            "updated": "2026-09-04T10:05:09.379Z",
             "unit": "EUR",
             "idProduct": 836174,
             "avg": 36.92,
@@ -6305,7 +6338,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-04T10:05:09.376Z",
+                "updated": "2026-09-04T10:05:09.367Z",
                 "unit": "EUR",
                 "idProduct": 752767,
                 "avg": 0.06,
@@ -6360,7 +6393,7 @@
         "updated": "2026-09-03T15:29:11.583Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-04T10:05:09.376Z",
+            "updated": "2026-09-04T10:05:09.367Z",
             "unit": "EUR",
             "idProduct": 752767,
             "avg": 0.06,
