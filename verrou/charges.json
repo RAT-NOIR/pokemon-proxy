@@ -1,10 +1,10 @@
 {
-  "extraitLe": "2026-08-30T20:56:40.934Z",
+  "extraitLe": "2026-09-05T06:17:51.090Z",
   "extraitDe": "test",
-  "lignesAuJournal": 197,
+  "lignesAuJournal": 222,
   "lignesEligibles": {
-    "avecPhoto": 148,
-    "abouties": 116
+    "avecPhoto": 173,
+    "abouties": 133
   },
   "cellulesVoulues": 7,
   "cellulesManquantes": [],
@@ -19,6 +19,42 @@
     {
       "cellule": "départage par l'image",
       "pourquoi": "la décision du 2026-08-29 : la seule branche de production dont aucune charge n'avait traversé le chemin",
+      "profondeurExigee": "verdict",
+      "source": {
+        "_id": "6a9938822d1b97d8f5f9f73d",
+        "le": "2026-09-03T09:06:10.807Z",
+        "version": "144517812f61",
+        "idProduct": 585035
+      },
+      "imageUrl": "https://images1.vinted.net/t/03_01125_4Er8UCSaPZZmGJTkwirDBL13/f800/4b8134fa.webp?s=9e42cbe46a412a6d5dc24777938d732d9492a5f6",
+      "lecture": {
+        "name": "Grimer",
+        "number": "088",
+        "total": null,
+        "setCode": null,
+        "language": "JP",
+        "rarete": "normale",
+        "nomBrut": "ベトベター",
+        "nomConfiance": "haute",
+        "symboleSet": "R",
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
+      "cellule": "égalité parfaite départagée par le symbole",
+      "pourquoi": "la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte",
       "profondeurExigee": "verdict",
       "source": {
         "_id": "6a9058b9e8a3767d791bd5cd",
@@ -57,94 +93,22 @@
       "pourquoi": "le chemin exact du plantage memeCodeParConventionX du 4 août",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a90581de8a3767d791bd5a8",
-        "le": "2026-08-27T15:30:37.913Z",
-        "version": "fa96c0190897",
-        "idProduct": 821466
+        "_id": "6a99b33d2299c8c4d466c373",
+        "le": "2026-09-03T17:49:49.351Z",
+        "version": "144517812f61",
+        "idProduct": 829381
       },
-      "imageUrl": "https://images1.vinted.net/t/04_00c95_9a8tGYvYaW7oG6gKzy52WK9H/f800/bb47d9c4.webp?s=807f17570bc9ed35bc7a501c8ac913e8c443337a",
+      "imageUrl": "https://images1.vinted.net/t/04_004ff_65xTXCqpwDLWRDx7S7vdWGSb/f800/751730e5.webp?s=875c393c95f468b6ebde92c7be0ae9c566b7779e",
       "lecture": {
-        "name": "Pikachu",
-        "number": "171",
-        "total": "151",
-        "setCode": "MEW",
-        "language": "ZH",
-        "rarete": "AR",
-        "nomBrut": "皮卡丘",
-        "nomConfiance": "haute",
-        "symboleSet": "cercle-chiffre",
-        "motif": null,
-        "reverse": null,
-        "rareteElevee": null,
-        "etatEstime": null,
-        "etatConfiance": null
-      },
-      "champsAbsentsDuJournal": [
-        "motif",
-        "reverse",
-        "rareteElevee",
-        "etatEstime",
-        "etatConfiance",
-        "title"
-      ]
-    },
-    {
-      "cellule": "égalité parfaite départagée par le symbole",
-      "pourquoi": "la seule branche du chantier écrite sans jamais avoir tourné sur une vraie carte",
-      "profondeurExigee": "verdict",
-      "source": {
-        "_id": "6a905888e8a3767d791bd5b9",
-        "le": "2026-08-27T15:32:24.919Z",
-        "version": "fa96c0190897",
-        "idProduct": 584740
-      },
-      "imageUrl": "https://images1.vinted.net/t/01_01e56_BdSDNDZn6npm8UkLjXqYTNTM/f800/0da5c319.webp?s=0de034491dd925627a5847a41f2ce3c5b29d3a98",
-      "lecture": {
-        "name": "Dragonite",
-        "number": "149",
-        "total": null,
-        "setCode": null,
+        "name": "Dwebble",
+        "number": "135",
+        "total": "086",
+        "setCode": "sv11B",
         "language": "JP",
-        "rarete": "normale",
-        "nomBrut": "カイリュー",
+        "rarete": "AR",
+        "nomBrut": "イシズマイ",
         "nomConfiance": "haute",
-        "symboleSet": "fossile",
-        "motif": null,
-        "reverse": null,
-        "rareteElevee": null,
-        "etatEstime": null,
-        "etatConfiance": null
-      },
-      "champsAbsentsDuJournal": [
-        "motif",
-        "reverse",
-        "rareteElevee",
-        "etatEstime",
-        "etatConfiance",
-        "title"
-      ]
-    },
-    {
-      "cellule": "aucun prix (refus remboursé)",
-      "pourquoi": "la troisième issue vue par l'utilisateur, jamais exercée jusqu'ici",
-      "profondeurExigee": "perimetre-vintage",
-      "source": {
-        "_id": "6a83620ffffe578757b84f22",
-        "le": "2026-08-17T19:33:35.515Z",
-        "version": "83b77702e078",
-        "idProduct": null
-      },
-      "imageUrl": "https://images1.vinted.net/t/03_00e82_mjvnSeVMtfh2ASe6uzk8M9V1/f800/1786994562.webp?s=6f12f984df7da4731bf885e877136fcfda3aa031",
-      "lecture": {
-        "name": "Koraidon",
-        "number": "014",
-        "total": null,
-        "setCode": "SVP",
-        "language": "FR",
-        "rarete": "promo",
-        "nomBrut": "Koraidon",
-        "nomConfiance": "haute",
-        "symboleSet": null,
+        "symboleSet": "illisible",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
@@ -197,26 +161,62 @@
       ]
     },
     {
+      "cellule": "aucun prix (refus remboursé)",
+      "pourquoi": "la troisième issue vue par l'utilisateur, jamais exercée jusqu'ici",
+      "profondeurExigee": "perimetre-vintage",
+      "source": {
+        "_id": "6a9939352d1b97d8f5f9f777",
+        "le": "2026-09-03T09:09:09.206Z",
+        "version": "144517812f61",
+        "idProduct": null
+      },
+      "imageUrl": "https://images1.vinted.net/t/02_02515_h9kzBbzDjU8Hx5MgiKs4GXwz/f800/41d7c2fe.webp?s=ea418be3f11ae9bd57088128ac258d1f5b5b3ef4",
+      "lecture": {
+        "name": "Milotic",
+        "number": "5",
+        "total": "101",
+        "setCode": null,
+        "language": "FR",
+        "rarete": "normale",
+        "nomBrut": "Milobellus",
+        "nomConfiance": "haute",
+        "symboleSet": null,
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ]
+    },
+    {
       "cellule": "occidentale",
       "pourquoi": "toutes les gardes du chantier sont conditionnées à LANGUES_ASIATIQUES : sans elle, une régression occidentale est invisible",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a9057fde8a3767d791bd58a",
-        "le": "2026-08-27T15:30:05.167Z",
-        "version": "fa96c0190897",
-        "idProduct": 279080
+        "_id": "6a99b3092299c8c4d466c35d",
+        "le": "2026-09-03T17:48:57.934Z",
+        "version": "144517812f61",
+        "idProduct": 836174
       },
-      "imageUrl": "https://images1.vinted.net/t/02_0251e_RMy3ZfiKK2wxks2FxthUNJHa/f800/6cc5dfec.webp?s=16076aa9fe101fa77cf95cec380b102d7140e84b",
+      "imageUrl": "https://images1.vinted.net/t/03_003e3_trQpqRr3JQYkRMZWFXLsRiHW/f800/d56f8f21.webp?s=dc2504a28b713e325e9ccea5715162c410780283",
       "lecture": {
-        "name": "Feraligatr",
-        "number": "108",
-        "total": "123",
-        "setCode": "HS",
+        "name": "Dwebble",
+        "number": "129",
+        "total": "086",
+        "setCode": "BLK",
         "language": "FR",
-        "rarete": "SR",
-        "nomBrut": "Aligatueur",
+        "rarete": "IR",
+        "nomBrut": "Crabicoque",
         "nomConfiance": "haute",
-        "symboleSet": "illisible",
+        "symboleSet": null,
         "motif": null,
         "reverse": null,
         "rareteElevee": null,
@@ -237,22 +237,22 @@
       "pourquoi": "sortie anticipée de la table close : la branche qui NE plantait pas",
       "profondeurExigee": "perimetre-vintage",
       "source": {
-        "_id": "6a7ccb844079b583bb4e883b",
-        "le": "2026-08-12T19:37:40.727Z",
-        "version": "a3d345e783d5",
-        "idProduct": 585047
+        "_id": "6a97e8e31ad2139e3029f440",
+        "le": "2026-09-02T09:14:11.953Z",
+        "version": "144517812f61",
+        "idProduct": 606820
       },
-      "imageUrl": "https://images1.vinted.net/t/04_02280_QYZcuy1LeMUb3jBWmnZN4YM2/f800/1786003666.webp?s=823df65436f5ada867c0e3c7fecf8b4b9f49a6e3",
+      "imageUrl": "https://images1.vinted.net/t/06_00209_qJApRnz7LUGQZb2xR79m8gLU/f800/b0cbbd94.webp?s=88b319b4038e5e9c16932af2d0ad7ebb040b422c",
       "lecture": {
-        "name": "Dark Charizard",
-        "number": "006",
+        "name": "Totodile",
+        "number": "158",
         "total": null,
         "setCode": null,
         "language": "JP",
         "rarete": "normale",
-        "nomBrut": "わるいリザードン",
+        "nomBrut": "ワニノコ",
         "nomConfiance": "haute",
-        "symboleSet": "R",
+        "symboleSet": "illisible",
         "motif": null,
         "reverse": null,
         "rareteElevee": null,

@@ -1309,6 +1309,34 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      envoie chercher là où il n'y a rien : c'est le septième principe appliqué au
 //      MESSAGE d'échec, pas à la mesure.
 //
+//   20. UN OUTIL QU'ON NE LANCE PAS NE PROTÈGE RIEN — 2026-09-05. C'est la RÉCIDIVE de
+//      l'entrée 19, par la même porte, et à trois jours d'intervalle.
+//      L'OCCURRENCE. `74d9486` (2026-09-02) applique la sortie de l'entrée 19 — « chaque
+//      outil construit ce qu'il consomme » — et déplace la construction de la tranche dans
+//      `verrou/tranche.js`. Le déplacement supprime treize variables locales de
+//      `verrou-charges.js`, dont `const ids`. Une seule ligne s'en servait encore, la 457 :
+//      `ids.includes(c.source.idProduct)`. `ReferenceError`, l'outil meurt AVANT d'écrire
+//      son empreinte.
+//      LE COÛT : le verrou n'a plus tourné du 2026-09-02 au 2026-09-05. Trois jours de
+//      mesures et trois commits sans garde, et la panne n'a été découverte qu'en préparant
+//      la fusion vers `main` — c'est-à-dire par accident, au pire moment.
+//      ⚠️ CE QUI REND CETTE ENTRÉE DISTINCTE DE LA 19 : là-bas, deux règles justes se
+//      contredisaient et il n'y avait rien à corriger dans l'une ni dans l'autre. Ici le
+//      correctif était trivial — une variable à rétablir. Ce qui a coûté trois jours n'est
+//      pas la difficulté du défaut, c'est que RIEN NE L'A SIGNALÉ. Le verrou est le seul
+//      outil du dépôt dont l'absence de résultat ne se voit nulle part : un test qui échoue
+//      crie, un test qu'on ne lance pas se tait exactement comme un test qui passe.
+//      ⚠️ ET `node --check` NE L'AURAIT PAS VU. La syntaxe est valable ; c'est la RÉSOLUTION
+//      d'un nom à l'exécution qui manque. Un contrôle de syntaxe sur les 51 fichiers rend
+//      vert sur un fichier qui ne peut pas tourner.
+//      🔑 LA PARADE, EN UNE LIGNE, ET ELLE N'EST PAS ÉCRITE — À TRANCHER PAR LE TESTEUR :
+//          faire du verrou un PRÉREQUIS DE COMMIT (hook `pre-commit` sur les fichiers du
+//          chemin de scan), pour que « pas lancé » devienne impossible au lieu d'invisible.
+//      ⚠️ Son coût est réel et doit être pesé avant d'écrire quoi que ce soit : le verrou
+//      démarre un serveur, écrit dans `test_scratch` et ouvre le réseau vers TCGdex. Un
+//      hook qui prend une minute finit contourné par `--no-verify`, et un garde contourné
+//      est pire qu'un garde absent : il donne le sentiment d'être protégé.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

@@ -677,6 +677,6 @@ testeur les saisit lui-même avec `saisir-verites.js` ; je ne le lance pas.
 ## Où sont les détails
 
 - `CLAUDE.md` — les règles de travail dans ce dépôt.
-- `scoring.js`, en tête — **le catalogue des erreurs d'instrument** (19 entrées). À lire avant
+- `scoring.js`, en tête — **le catalogue des erreurs d'instrument** (20 entrées). À lire avant
   toute mesure, et à alimenter après chaque erreur.
 - `PASSATION.md` — la procédure de changement de cluster Mongo.

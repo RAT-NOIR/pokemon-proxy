@@ -447,6 +447,13 @@ const CELLULES = [
     }
     // Chaque gagnant est-il bien dans la tranche ? Si non, la charge ne pourra pas aboutir
     // et il vaut mieux le savoir ici que dans un verrou rouge sans explication.
+    // ⚠️ ON RELIT LA TRANCHE DANS LE BAC, on ne la reconstruit pas. `copierTranche` rend
+    // des COMPTES, pas des identifiants ; et refabriquer ici la liste des produits serait
+    // exactement la seconde construction que 74d9486 a supprimée — celle qui avait fait
+    // diverger l'outil et son consommateur. La question posée est « ce gagnant est-il dans
+    // la tranche », donc la source de vérité est la tranche elle-même, pas la production.
+    const ids = (await bac.collection('catalogue_produits')
+        .find({}, { projection: { idProduct: 1 } }).toArray()).map(p => p.idProduct);
     for (const c of charges) {
         // Une charge d'ÉCHEC n'a pas de gagnant : il n'y a rien à vérifier, et annoncer
         // « ABSENT » y serait faux.
