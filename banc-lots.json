@@ -67,6 +67,12 @@
       "fermeeLe": "2026-08-12T19:27:33Z",
       "pourquoi": "Produire les trois captures qui manquent à l'agent de l'extension pour finir la v1.0.4 : une REVERSE OCCIDENTALE (aucune ligne du journal n'a jamais porté `strategieReverse` — la branche reverse n'a jamais été vue vivante, c'est la plus vieille dette du projet), une RÉSERVE FORTE, et un VERDICT NORMAL sans réserve. Ces cartes sont scannées pour fabriquer un contrat d'affichage et remplir une cellule de verrou, donc elles servent à construire l'outil : ce sont de l'entraînement par nature et elles n'ont rien à faire dans le holdout — même raisonnement que les trois lots précédents.",
       "resultat": "3 scans attrapés. Rayquaza #153 FR -> 869764 (voie setcode-numero, verdict SANS réserve, guide 0,12 €) et Slowbro #090 FR -> 895874 (setcode-numero, verdict sans réserve, guide 16,63 €) : les deux captures « verdict normal » sont faites. Dark Dragonite #149 JP -> 585145 (perimetre-vintage, réserve FAIBLE, guide 62,77 €). ⚠️ AUCUNE RÉSERVE FORTE et AUCUNE REVERSE : les trois lignes ont `strategieReverse` à null, donc la septième cellule du verrou (filtre-url) reste inexerçable et la dette de la branche reverse reste OUVERTE. Les deux cartes occidentales ont pourtant `motifEtat: resolu` — le journal n'enregistre pas la CIBLE du motif, donc on ne peut pas dire depuis lui si la résolution a conclu « aucun motif de reverse » ou autre chose. C'est le prochain champ à journaliser si on veut chasser ce cas."
+    },
+    {
+      "lot": "attaque-controle",
+      "debut": "2026-09-05T11:30:09Z",
+      "fin": null,
+      "declareLe": "2026-09-05T11:30:09Z"
     }
   ]
 }
