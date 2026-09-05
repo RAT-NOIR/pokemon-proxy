@@ -56,7 +56,7 @@ const {
 // `JournalScan` : le modèle lui-même, pour /api/retour-live qui COMPLÈTE une ligne déjà
 // écrite. C'est la seule route qui touche au journal autrement qu'en y ajoutant — d'où
 // les trois gardes qui l'entourent, et l'écriture conditionnelle plutôt qu'un update sec.
-const { enregistrerScan, enregistrerEchec, JournalScan } = require('./journal-scans');
+const { enregistrerScan, enregistrerEchec, JournalScan, VERSION } = require('./journal-scans');
 
 // « Rien trouvé » et « pas pu chercher » sont deux états, jamais un seul. Voir sources.js :
 // six requêtes catalogue rendaient `[]` dans les deux cas, et l'aval lisait ce vide comme
@@ -6188,7 +6188,20 @@ app.post('/api/solde', verifierJeton, async (req, res) => {
 // que le serveur (endormi sur le plan gratuit Render après 15 min d'inactivité)
 // soit déjà chaud quand l'utilisateur clique sur "Analyser". Volontairement
 // minimale : aucun accès base, aucun calcul.
-app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1 }));
+//
+// ⚠️ ELLE REND AUSSI `version` — DEPUIS LE 2026-09-05, ET POUR UNE RAISON PRÉCISE.
+// Ce jour-là, après un push, il était impossible de savoir si Render avait fini de
+// déployer : `/ping` ne rendait que { ok, mongo }, et Render laisse l'ANCIENNE instance
+// servir pendant que la neuve build — une réponse rapide ne distingue donc pas
+// « déployé » de « pas encore ». La seule façon de lire la version en ligne était de
+// LANCER UN SCAN et de regarder la ligne au journal : consommer une mesure pour dater
+// l'instrument qui allait la produire, et risquer de mesurer l'ancien code dans une
+// fenêtre de lot ouverte pour le nouveau.
+//
+// `version` est la MÊME constante que celle écrite au journal (`VERSION`, exportée par
+// `journal-scans.js`), jamais un second calcul : sinon les deux dériveraient et on
+// croirait dater une ligne alors qu'on daterait une route.
+app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION }));
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
 

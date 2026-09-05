@@ -1202,4 +1202,10 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
 // réutilisée ailleurs. Avant de supprimer un champ dérivé, il faut PROUVER qu'il se
 // recalcule depuis ses sources — et le prouver avec la fonction qui l'a écrit, jamais
 // avec une réimplémentation, qui ne démontrerait que sa propre cohérence.
-module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCode };
+// ⚠️ `VERSION` est EXPORTÉE, elle n'est pas recalculée ailleurs. `/ping` la rend pour
+// qu'on puisse savoir quel commit est en ligne SANS avoir à scanner — le 2026-09-05, la
+// seule façon de lire la version déployée était de consommer un scan, donc de mesurer
+// avec l'instrument qu'on cherchait justement à dater. Deux `String(process.env.
+// RENDER_GIT_COMMIT || …).slice(0, 12)` dans deux fichiers créeraient deux versions du
+// même fait, qui divergeraient au premier changement : une seule définition, exportée.
+module.exports = { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCode, VERSION };

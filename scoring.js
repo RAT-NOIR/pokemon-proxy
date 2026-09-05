@@ -1406,6 +1406,32 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      EXPOSÉ AUJOURD'HUI. Le dérivé serait faux sur ce cas-là et l'utilisateur n'aurait
 //      aucun moyen de le savoir. Un chiffre affiché ne se retire plus.
 //
+//   24. UN 404 QUI RESSEMBLE À UNE SUPPRESSION — 2026-09-05.
+//      LES FAITS. Une `imageUrl` du journal, ouverte à la main par le testeur, rend
+//      `{"result":"not-found"}`. Conclusion immédiate et parfaitement raisonnable : la
+//      photo a été supprimée chez Vinted, donc les URL du journal EXPIRENT, donc toute
+//      mesure d'image rejouée à froid a une borne qui grandit toute seule avec le temps.
+//      CE QUE LA MESURE A DIT. Les 175 URL du journal rendent HTTP 200 `image/webp`,
+//      175 sur 175, la plus ancienne datant du 2026-08-02. ZÉRO morte. Et la même URL,
+//      complète, rend 800×755 et 152 666 octets.
+//      LA CAUSE, ISOLÉE PAR VARIANTES : ces URL sont SIGNÉES (`?s=<40 hex>`). Tronquer
+//      la signature — ou la retirer — fait rendre exactement `{"result":"not-found"}`
+//      avec un 404. Le message ne dit pas « cette image n'existe plus », il dit
+//      « cette signature ne vaut pas ». Une URL coupée en la copiant depuis un tableau,
+//      un terminal ou une bulle de chat produit donc le symptôme d'une suppression.
+//      🔑 LA LEÇON, ET ELLE N'EST PAS « VÉRIFIE TES COPIER-COLLER » : un message d'erreur
+//      d'un service tiers décrit ce que CE SERVICE a refusé de faire, jamais l'état du
+//      monde. `not-found` est une réponse sur une REQUÊTE, pas sur une RESSOURCE. Les
+//      confondre, c'est la même faute que lire `undefined` comme `0` (erreur #8) : on
+//      prend l'absence d'une réponse pour la présence d'un fait.
+//      ⚠️ ET LA CONCLUSION ÉTAIT COÛTEUSE : « les URL expirent » aurait borné toutes les
+//      mesures ORB passées ET justifié de ne plus rejouer les anciennes lignes. Une borne
+//      inventée retire des données exactement comme une donnée fausse en ajoute.
+//      LA PARADE, MÉCANIQUE : avant de conclure d'une URL morte, on la refait passer par
+//      le MÊME client que la mesure, et on compare — pas deux clients différents dont on
+//      croit qu'ils font la même chose. Deux lectures qui divergent ne se départagent pas
+//      à l'intuition : elles se départagent en instrumentant celle qu'on croit vraie.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

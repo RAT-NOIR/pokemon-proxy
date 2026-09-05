@@ -1037,10 +1037,127 @@ le **paysage** (> 1,00) et l'**ultra-étroit** (< 0,60).
 | ÉTROIT | 451×800 | Pikachu n°020/M-P | succès |
 | PAYSAGE | 800×600 | Dwebble n°135 | succès |
 
-🔴 **`Slowbro n°090` est dans cette liste** — c'est l'une des trois lignes que la mesure
-« image d'abord » a rendues **fausses ET AFFIRMÉES**, les trois qui bloquent le câblage. Sa
-photo est en **paysage 800×755**. On ne sait pas si c'est un repli ou un lot posé à plat,
-mais on sait maintenant que la ligne qui bloque le chantier porte une image hors forme.
+**Le verdict du banc en face des 14 — et il dément l'intuition.**
+
+| | hors forme (14) | témoin, dans la forme (161) |
+|---|---|---|
+| JUSTE | 5 | 52 (32,3 %) |
+| **FAUX** | **0** | **13 (8,1 %)** |
+| REFUS | 2 | 40 (24,8 %) |
+| hors banc | 7 | 56 (34,8 %) |
+
+🔑 **Zéro faux parmi les 14.** Les fausses ne sont donc **pas** surreprésentées chez les
+images hors forme — c'est l'inverse. ⚠️ Mais le dénominateur au banc n'est que de **7**
+lignes : 0/7 ne réfute pas un taux de 12,4 % (13/105 au témoin), il ne le mesure pas. La
+conclusion honnête est **« aucun biais mesurable, faute de lignes »**, ni un biais, ni son
+absence.
+
+**Et `Slowbro n°090` : correction de ce qui était écrit plus haut.** Le journal en porte
+**5 lignes, toutes JUSTES par la route** (895874 = vérité H027, voie `setcode-numero`), et
+**une seule** a une photo hors forme (800×755, le 2026-08-12). Les faux-et-affirmés Slowbro
+ne sont donc **pas** des faux de la route : ce sont des faux du **régime « image d'abord »**,
+qui classe mal une carte que le texte identifie correctement. L'image de repli **ne les
+explique pas** — au mieux elle explique une des lignes sur les cinq.
+
+### 🔒 PISTE FERMÉE — Slowbro n°090 n'est pas une image de repli
+
+**Close le 2026-09-05, sur données, pas sur avis.** Le journal porte **5 lignes** Slowbro
+n°090, **toutes JUSTES par la route** (idProduct 895874 = vérité H027, voie
+`setcode-numero`), et **une seule** des cinq photos est hors forme (800×755, le 12/08).
+
+**Donc : les trois faux-et-affirmés qui bloquent « image d'abord » sont un défaut du
+RÉGIME, pas un artefact de sourcing.** Le régime classe mal une carte que le texte
+identifie correctement. Une image de repli n'expliquerait, au mieux, qu'une ligne sur cinq.
+
+⛔ **Ne pas rouvrir cette piste.** Elle a été ouverte par une hypothèse plausible et fermée
+par le compte. La rouvrir demanderait une donnée NOUVELLE — pas une relecture des mêmes
+lignes sous un autre angle.
+
+### Vérification à l'œil du 2026-09-05 : **aucun repli constaté**
+
+Le testeur a ouvert les images hors forme. **Lapras n°131 (360×800) et Raichu n°026
+(451×800) sont bien des cartes.** Aucune bannière, aucun avatar, aucune photo d'une autre
+annonce sur les lignes vérifiées. L'hypothèse du repli n'est donc **pas confirmée** — elle
+n'est pas non plus réfutée sur les 12 lignes non ouvertes, et le majorant de 8,0 % reste
+ce qu'il est : un majorant.
+
+### Les `imageUrl` expirent-elles ? **Non. 0 morte sur 175.**
+
+**L'alerte.** La photo Slowbro 800×755 (12/08), ouverte à la main, rendait
+`{"result":"not-found"}`. Lecture naturelle : l'image a été supprimée, donc les URL du
+journal **expirent**, donc toute mesure d'image rejouée à froid porte une borne qui
+**grandit silencieusement avec le temps**. C'eût été grave : ça bornait toutes les mesures
+ORB passées et interdisait de rejouer les anciennes lignes.
+
+**La mesure — les 175 URL, une par une, statut + content-type + SHA-256 du corps :**
+
+| | |
+|---|---|
+| HTTP 200 `image/webp` | **175 / 175** |
+| corps JSON `not-found` | **0** |
+| **MORTES** | **0 / 175 (0,0 %)** |
+| plus ancienne encore vivante | **2026-08-02T08:14:31Z** (Raichu n°026) |
+| mortalité août 2026 | 0 / 161 |
+| mortalité septembre 2026 | 0 / 14 |
+
+**Et le test du placeholder, qui aurait pu me piéger** : 175 URL distinctes → **163 corps
+distincts**. Les 12 doublons ne sont pas une image de remplacement servie plusieurs fois,
+ce sont des **re-scans de la même annonce** (Dragonite ×3, Rayquaza ×3, Haunter ×3,
+Ho-Oh ×2 aujourd'hui). Aucun corps partagé entre deux cartes différentes.
+
+**🔑 LA CAUSE DU `not-found`, isolée par variantes sur la MÊME URL :**
+
+| requête | réponse |
+|---|---|
+| URL complète, `node fetch` nu | **200** `image/webp` · 800×755 · 152 666 o |
+| URL complète, en-têtes de navigateur | **200**, octet pour octet identique |
+| **signature `?s=` tronquée** | **404** `{"result":"not-found"}` |
+| **sans signature du tout** | **404** `{"result":"not-found"}` |
+
+Ces URL sont **signées** (`?s=<40 hexa>`). `not-found` ne dit pas « cette image n'existe
+plus », il dit **« cette signature ne vaut pas »**. Une URL coupée en la copiant — d'un
+tableau, d'un terminal, d'une bulle de chat — produit exactement le symptôme d'une
+suppression. **L'annonce Vinted elle-même répond 200.** L'image est vivante.
+
+⚠️ **La photo Slowbro 800×755 n'est donc ni un repli, ni une image supprimée.** Elle est
+en ligne, et c'est une photo en paysage. Ce qui ne change rien à la conclusion du dessus :
+les 5 lignes Slowbro sont justes par la route, la piste reste fermée.
+
+**Ce que ça laisse ouvert, honnêtement** : ces signatures pourraient expirer plus tard.
+Aujourd'hui, à 34 jours de recul, **aucune n'a expiré**. La mesure est à refaire de temps
+en temps — `ad-expiration.js` — pas à supposer.
+
+→ **Catalogue des erreurs d'instrument, entrée 24** : « UN 404 QUI RESSEMBLE À UNE
+SUPPRESSION ». Un message d'erreur d'un service tiers décrit ce que **ce service a refusé
+de faire**, jamais l'état du monde.
+
+### Parade retenue : `/ping` rend la version
+
+**Écrite, non poussée** (elle partira avec ce fichier, après le scan de contrôle — la
+pousser maintenant redéclencherait un déploiement et changerait la version sous le scan).
+
+```js
+app.get('/ping', (req, res) => res.json({ ok: true, mongo: …, version: VERSION }));
+```
+
+`VERSION` est **exportée par `journal-scans.js`**, pas recalculée dans `index.js` : deux
+`String(process.env.RENDER_GIT_COMMIT || …).slice(0, 12)` dans deux fichiers créeraient
+deux versions du même fait, qui divergeraient au premier changement.
+
+**Pourquoi elle existe.** Le 2026-09-05, après un push, il était impossible de savoir si
+Render avait fini de déployer : Render laisse l'**ancienne** instance servir pendant que la
+neuve build, donc une réponse rapide de `/ping` ne distingue pas « déployé » de « pas
+encore ». La seule façon de lire la version en ligne était de **lancer un scan** — consommer
+une mesure pour dater l'instrument qui allait la produire, et risquer de mesurer l'ancien
+code dans une fenêtre de lot ouverte pour le nouveau.
+
+### ⛔ ET LE 0/7 N'EST PAS UN RÉSULTAT — à ne pas citer plus tard comme s'il l'était
+
+Le tableau ci-dessus dit **0 faux sur 14 hors forme, contre 8,1 % au témoin**. C'est
+tentant, et **ça ne mesure rien** : le banc n'a que **7** de ces lignes, et `0/7` est
+compatible avec un taux de 12,4 % comme avec un taux de zéro. Aucune conclusion n'en sort,
+**dans aucun sens**. Le jour où quelqu'un écrira « les images hors forme ne sont pas plus
+fausses », il citera ce tableau : c'est précisément ce qu'il ne dit pas.
 
 **Ce que cette mesure NE dit pas** : que ces 14 sont des replis. Une photo en paysage peut
 être un lot de cartes posé à plat, un ultra-étroit peut être une capture d'écran recadrée.
@@ -1055,6 +1172,91 @@ Les taux restent les meilleurs disponibles ; ils ne sont pas plus précis que ç
 **Pas de correctif, pas de câblage.** La parade est côté extension et tient en un champ :
 que `extraireImage` rende sa provenance, et que le journal l'écrive. Tant qu'elle n'existe
 pas, aucune mesure d'image ne peut être resserrée au-delà de cette borne.
+
+## Le scan de contrôle du 2026-09-05 — le dispositif lit, dit, et s'abstient
+
+Fenêtre `attaque-controle` `[11:30:09Z, 11:45:03Z[`, **1 scan attrapé**, Ho-Oh n°250 JP,
+version **`f08757ec4a27`**.
+
+| champ | valeur |
+|---|---|
+| `attaqueBrute` | `レインボーバーン` |
+| `attaqueLue` | `Rainbow Burn` |
+| `attaqueConfiance` | `haute` |
+| `attaqueDepartage` | *« attaque « Rainbow Burn » lue, mais aucun des 2 ex aequo ne la porte — elle ne prouve rien ici »* |
+| `raisonReserve` | `null` (la ligne sort en REFUS `egalite-parfaite`) |
+
+🔑 **Le champ est NON NUL alors que le départage n'a PAS tranché.** C'était le critère, et
+il est rempli : la lecture non latine passe (katakana → anglais officiel, confiance haute),
+le verrou 2 refuse de désigner faute de correspondant, et **la phrase est écrite quand
+même**. Un instrument muet qui note pourquoi il s'est tu est mesurable ; un instrument muet
+qui n'écrit rien ne l'est pas.
+
+## 🔑 TROIS DISPOSITIFS INDÉPENDANTS DÉSIGNENT LA MÊME CAUSE
+
+« Rainbow Burn » est l'attaque de **654129**, qui est **hors périmètre**. Le départage a
+donc cherché parmi **2 candidats dont aucun ne pouvait la porter**. Ce n'est pas un échec
+du départage : c'est un vivier amputé avant qu'il n'ouvre les yeux.
+
+| dispositif | ce qu'il a dit sur Ho-Oh n°250 |
+|---|---|
+| **image** | désigne 654129, **29 inliers contre 4** |
+| **attaque** | lit `Rainbow Burn` en confiance haute — **absente des 2 ex aequo** |
+| **symbole** | *« aucun symbole lu — rien à départager »* (illisible) |
+
+Trois instruments qui ne partagent **ni entrée, ni code, ni méthode** — un appariement de
+points ORB, une lecture de texte par l'IA, une lecture de pictogramme — et deux d'entre eux
+pointent **la même carte hors périmètre**, le troisième ne dit rien. **Le filtre des 24 sets
+écarte la vérité AVANT tout départage.** Aucun départage ne peut réparer un vivier dont la
+bonne réponse a déjà été retirée.
+
+⚠️ **Ce que ça ne dit pas** : que 654129 est la vérité. La carte reste **EN ATTENTE**, deux
+désignations concurrentes, non tranché (voir catalogue, entrée 23). Ce qui est établi, c'est
+la **CAUSE du refus**, pas l'identité de la carte.
+
+## La mesure du régime « périmètre désactivé » — `banc-japonais.js --sans-perimetre`
+
+**Régime mesuré** : périmètre retiré (vivier = le NOM ENTIER), puis **attaque → image →
+symbole**, toute sortie `incertain: true` donc **SOUS RÉSERVE**.
+⚠️ **L'ordre demandé n'est pas celui de la production** (symbole d'abord, mesuré 12/12) :
+toute promotion devra rejouer la mesure dans l'ordre de la route.
+
+**Sur les 88 lignes à vérité individuelle, colonne APRÈS des deux régimes :**
+
+| | référence | sans périmètre |
+|---|---|---|
+| JUSTE | **63** | **56** |
+| FAUX | **8** | **25** |
+| REFUS | **17** | **7** |
+| **FAUX ET AFFIRMÉS** | **0** | **0** |
+
+Détail par cellule (individuelles) — réf. → sans périmètre :
+· 13 lignes : 11 / 0 / 2 → 10 / 1 / 2 · 64 lignes : 46 / 5 / 13 → 39 / 21 / 4
+· **holdout, 11 lignes : 6 / 3 / 2 → 7 / 3 / 1**
+Bloc du holdout (54) : 51 inchangées / 2 fausses → **45 inchangées / 6 fausses**.
+
+### 🔴 FAUX ET AFFIRMÉS = 0, ET CE ZÉRO NE PROUVE RIEN
+
+**Il est vrai PAR CONSTRUCTION.** Toute sortie de ce bloc pose `incertain: true` — le
+régime ne PEUT PAS produire un faux affirmé, quel que soit son comportement. Le critère de
+lancement est donc **satisfait sans discriminer**. Un critère qu'un régime satisfait par sa
+définition ne mesure pas ce régime : il mesure sa définition.
+
+### Ce que les chiffres disent, eux
+
+**Les refus tombent : 17 → 7.** C'était l'objectif, et il est atteint.
+**Mais 17 faux apparaissent et 7 justes disparaissent.** Le régime ne convertit pas des
+refus en bonnes réponses : il convertit **des refus ET des justes** en suggestions fausses
+sous réserve. Sur le holdout seul le solde est meilleur (un refus de moins, un juste de
+plus), mais le bloc de 54 passe de 2 à **6** régressions.
+
+⚠️ **Et une suggestion fausse sous réserve reste fausse.** Le contrat du projet est
+« quand l'outil AFFIRME, il a raison » — il ne dit pas que ce qui est réservé peut être
+n'importe quoi. Multiplier les faux par trois pour retirer dix refus n'est pas gratuit,
+même sous réserve.
+
+**Rien n'est câblé.** `--sans-perimetre` est un MODE DE MESURE, hors service par défaut,
+qui appelle les mêmes fonctions que la route plutôt que d'en refaire une version.
 
 ## Où sont les détails
 

@@ -370,6 +370,13 @@ function celluleDe(d) {
 
     const { lignes: toutesLignes, horsService } = numeroter(docsUtiles);
     const seulementHoldout = process.argv.includes('--holdout');
+    // ⚠️ MODE DE MESURE, HORS SERVICE PAR DÉFAUT — il ne câble rien.
+    // `--sans-perimetre` répond à UNE question posée le 2026-09-05 : le filtre des 24 sets
+    // écarte-t-il la vérité avant tout départage ? Trois dispositifs indépendants
+    // (image, attaque, symbole) ont désigné cette cause sur Ho-Oh n°250. Le mode retire le
+    // filtre, ouvre le vivier au NOM ENTIER, et laisse les trois départages travailler.
+    // TOUTE sortie de ce bloc reste `incertain: true` — donc SOUS RÉSERVE, jamais affirmée.
+    const SANS_PERIMETRE = process.argv.includes('--sans-perimetre');
     const bancs = toutesLignes.filter(l => !seulementHoldout || l.seau === 'holdout');
     const tous = toutesLignes.map(l => l.d);
     const n = s => toutesLignes.filter(l => l.seau === s).length;
@@ -456,12 +463,14 @@ function celluleDe(d) {
             for (const s of sets) for (const e of await Num.distinct('idExpansion', { setTcgdex: s.id })) if (e != null) exps.add(Number(e));
             sansExpansion = exps.size === 0;
         }
-        if ((numeroCarte == null || sansExpansion) && compat.compatible && ['JP', 'ZH', 'KR'].includes(d.langue)) {
+        if ((numeroCarte == null || sansExpansion) && (SANS_PERIMETRE || compat.compatible) && ['JP', 'ZH', 'KR'].includes(d.langue)) {
             const parNom = await trouverProduitsLocaux(d.nom);
             const dedans = parNom.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
-            if (parNom.length > 1 && dedans.length) {
-                const cs = await lireCodeSets(dedans.map(p => p.idExpansion));
-                const r = await scorerCandidatsLocal(dedans, cardInfoNeutre, null, [], cs, {});
+            // LE VIVIER DU RÉGIME MESURÉ : le nom ENTIER, sans le filtre des 24 sets.
+            const vivier = SANS_PERIMETRE ? parNom : dedans;
+            if (parNom.length > 1 && vivier.length) {
+                const cs = await lireCodeSets(vivier.map(p => p.idExpansion));
+                const r = await scorerCandidatsLocal(vivier, cardInfoNeutre, null, [], cs, {});
                 // ⚠️ `sontExAequo`, JAMAIS un `===` en ligne. Elle a été extraite dans
                 // scoring.js pour qu'il n'existe pas un second seuil d'égalité ailleurs —
                 // et le banc en portait TROIS. Aujourd'hui les deux se comportent pareil
@@ -473,13 +482,38 @@ function celluleDe(d) {
                 const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
                 if (r.scores.length && !eg) {
                     retenu = r.scores[0].candidat.idProduct;
-                    voie = 'perimetre-vintage';
+                    voie = SANS_PERIMETRE ? 'SP-vivier-nom' : 'perimetre-vintage';
                     incertain = true;   // suggestion avertie, arbitrage F
                     return { retenu, incertain, voie };
                 }
                 // Égalité dans le périmètre : le SYMBOLE d'abord, l'écart de prix ensuite.
                 if (eg) {
                     const exAequo = r.scores.filter(s => S.sontExAequo(s.score, r.scores[0].score));
+                    // ── MODE DE MESURE : l'ordre demandé est ATTAQUE -> IMAGE -> SYMBOLE.
+                    // ⚠️ CE N'EST PAS L'ORDRE DE LA PRODUCTION (symbole d'abord, mesuré
+                    // 12/12). On mesure ici l'ordre qui a été demandé ; toute promotion
+                    // devrait rejouer la mesure dans l'ordre de la route.
+                    if (SANS_PERIMETRE) {
+                        const cand = exAequo.map(s => ({
+                            idProduct: s.candidat.idProduct,
+                            name: catById.get(s.candidat.idProduct)?.name ?? null,
+                            idMetacard: catById.get(s.candidat.idProduct)?.idMetacard ?? null,
+                            codeSet: cs.get(Number(s.candidat.idExpansion)) ?? null
+                        }));
+                        const aAtt = departagerParAttaque(d.attaque, d.attaqueConfiance, cand);
+                        if (aAtt.gagnant) return { retenu: aAtt.gagnant.idProduct, incertain: true, voie: 'SP-attaque' };
+                        const aImg = await departagerParImage({
+                            imageUrl: d.imageUrl, langue: d.langue, total: d.total,
+                            classement: exAequo.map(s => ({ idProduct: s.candidat.idProduct, score: 0 }))
+                        });
+                        if (aImg.departage) return { retenu: aImg.gagnant, incertain: true, voie: 'SP-image' };
+                        const aSym = departagerParSymbole(d.symboleSet, cand, S);
+                        if (aSym.gagnant) return { retenu: aSym.gagnant.idProduct, incertain: true, voie: 'SP-symbole' };
+                        const px = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
+                        const ec = px.length >= 2 ? Math.max(...px) - Math.min(...px) : null;
+                        if (ec == null || ec >= 1.00) return { retenu: null, incertain: true, voie: 'SP-REFUS-egalite' };
+                        return { retenu: r.scores[0].candidat.idProduct, incertain: true, voie: 'SP-egalite-sans-enjeu' };
+                    }
                     // ⚠️ LE DÉPARTAGE PAR LE SYMBOLE, DANS LE MÊME ORDRE QU'EN PRODUCTION.
                     // Il manquait ici pendant un commit, et la colonne APRÈS a menti de
                     // -7 justes et +10 refus sur le lot « symbole-40 » : le banc refusait
