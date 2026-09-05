@@ -674,6 +674,40 @@ testeur les saisit lui-même avec `saisir-verites.js` ; je ne le lance pas.
 | `Pikachu` n°112 ZH | refus à 76 ex aequo → `570663`, 1 ex aequo |
 | les **10 scans à vivier vide** (Mewtwo 150, Dragonite 149 et 180, Flaaffy 180, Marowak 105, Koga's Ditto 132, Dark Kadabra 064, Pidgeotto 017, Abra 063, Natu 177) | la recherche ORB globale les classe 10/10 sur le bon NOM, mais le TIRAGE n'est vérifié sur aucune |
 
+## 🔴 2026-09-05 — `numero: null` EST FIDÈLE. Le chantier de collecte est ABANDONNÉ
+
+**Vérifié à la main par le testeur, sur 4 fiches Cardmarket** — pas déduit d'une mesure :
+
+> **Ces cartes ne portent pas de numéro de carte imprimé.** Elles ne portent que le numéro
+> **Pokédex de l'espèce**. `numero: null` n'est donc **pas un trou de collecte : c'est la
+> valeur juste.** Cardmarket lui-même n'a pas d'autre discriminant et les désigne **par leurs
+> attaques** — `Charmander [Growl | Flame Tail]`, `Light Arcanine [Drive Off | Gentle Flames]`.
+
+**⇒ Le chantier de collecte des numéros est abandonné AVANT d'être ouvert.** Aucune passe
+Tampermonkey, aucun import, aucun scraping ne ramènera **ce qui n'est pas imprimé sur la
+carte**. C'était la conclusion du tour précédent (« 58 lignes sur 59 tiennent à `numero:
+null` ») ; elle était juste sur le CONSTAT et fausse sur la CAUSE.
+
+🔑 **La 21e erreur d'instrument, et elle est de forme neuve** : j'ai lu une absence en base
+comme une donnée manquante, alors qu'elle décrivait fidèlement une absence **dans le monde**.
+Le dénominateur était imprimé, la population était la bonne, la requête était juste — et la
+conclusion inversait le sens du champ. Ce que la parade « imprimer le dénominateur » n'attrape
+pas : **elle dit combien de documents portent le champ, jamais ce que le champ VEUT DIRE.**
+Seules quatre fiches ouvertes à la main l'ont attrapée.
+
+**⇒ Le discriminant est le SYMBOLE**, dispositif **déjà écrit et déjà mesuré** :
+**28/28 prononcées** au banc, **12/12 en production** (`symbole-departage`, la seule
+`raisonReserve` classée `'forte'`). Il n'y a rien à construire, seulement à mesurer sa portée
+sur cette population.
+
+⚠️ **LE CONTRE-EXEMPLE À GARDER, il borne la sortie** : **Charmander Expansion Sheet** porte
+une **Pokéball commune à toute la série Vending**. Le symbole n'y départage **rien**. Une
+solution par le symbole ne peut donc pas être annoncée comme générale avant d'avoir compté
+les cartes qui tombent dans ce cas.
+
+**Prochain sujet, non mesuré ce tour** : sur les 58 lignes, combien le symbole départagerait-il,
+et combien tombent dans le cas Vending ?
+
 ## Où sont les détails
 
 - `CLAUDE.md` — les règles de travail dans ce dépôt.
