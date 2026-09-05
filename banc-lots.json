@@ -71,8 +71,9 @@
     {
       "lot": "attaque-controle",
       "debut": "2026-09-05T11:30:09Z",
-      "fin": null,
-      "declareLe": "2026-09-05T11:30:09Z"
+      "fin": "2026-09-05T11:45:03Z",
+      "declareLe": "2026-09-05T11:30:09Z",
+      "fermeeLe": "2026-09-05T11:45:03Z"
     }
   ]
 }
