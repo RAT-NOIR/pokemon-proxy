@@ -2,38 +2,76 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
-## L'état, en trois lignes
+## 🔑 CE QU'IL FAUT POUR DÉBLOQUER CE CHANTIER — et rien d'autre
 
-- **Ce qui tourne** : la production (Render, base Mongo nommée `test`) sert `/api/identifier`
-  depuis le code de `main`. Le verrou est **vert**, cliquet à 52 assertions.
-- **En attente de déploiement** : **24 commits sur `chantier-image`**, jamais fusionnés dans
-  `main`. Tout ce qui suit — champs du journal, `originePrix`, règle de promotion v2, sites de
-  refus corrigés — **n'est pas en production**. Le déploiement se fait par un push sur `main`,
-  et c'est le testeur qui pousse.
-- **Ce qui est cassé** : rien en production. Ce qui est **bloqué**, c'est l'enrichissement des
-  ponts TCGdex — voir « ce qui attend », point 1.
+1. **Des scans qui portent `attaqueLue`.** Le champ est né le 2026-09-05 : **1 ligne sur 225**
+   en porte une, et ce n'est pas une ligne du banc. Tant qu'il n'y en a pas, toute règle
+   fondée sur l'attaque est **inerte** et aucun juste/faux/refus n'est calculable.
+2. **La vérité du Ho-Oh n°250, saisie.** Deux désignations concurrentes, non tranché. Sans
+   elle, le seul cas d'école du départage par l'attaque ne peut ni le valider ni l'infirmer.
+
+Aucun raisonnement, aucune relecture des mêmes lignes sous un autre angle ne remplace ces
+deux données. Le chantier attend des MESURES, pas des idées.
+
+## L'état, au soir du 2026-09-05
+
+**EN PRODUCTION** (poussé aujourd'hui, `main` = `a94f193`, Render déployé) :
+- La fusion `chantier-image` → `main` : les 24 commits qui dormaient sont **en ligne**.
+- **Le départage par l'attaque** — `departage-attaque.js`, quatre verrous, décide sur
+  `idMetacard`. Prompt : `attaqueBrute` + `attaque` + `attaqueConfiance`.
+  Réserve `attaque-departage`, niveau **faible**. ✅ Contrôlé en vrai le 2026-09-05 :
+  katakana lus, rendus en anglais officiel, confiance haute, **phrase écrite alors qu'il n'a
+  pas tranché**. C'était le critère.
+- **`/ping` rend `version`** — `VERSION` exportée par `journal-scans.js`, jamais recalculée.
+  On peut enfin dater le déploiement **sans consommer un scan**.
+- Verrou vert (7 cellules + injection de panne), cliquet **52 couvertes, plancher 47**.
+
+**ÉCARTÉ, AVEC SON CHIFFRE** — ne pas rouvrir sans donnée nouvelle :
+- **Régime « sans périmètre »** : JUSTE 63 → **56** (−7), FAUX 8 → **25** (+17), REFUS 17 → 7.
+  *Il retire 10 refus et crée 17 faux.* Son zéro de faux-et-affirmés est **tautologique**
+  (toute sortie pose `incertain: true`). Mode `--sans-perimetre` gardé HORS SERVICE, pour
+  que le chiffre soit rejouable.
+- **Règle « attaque sur le vivier complet », niveau produit** : sur son propre cas d'école,
+  **6 porteurs**, pas un. Au niveau métacarte elle s'active et rend un **groupe de six
+  réimpressions** — elle déplace le problème d'un cran.
+- **Piste « image de repli »** : 5 lignes Slowbro n°090 **justes par la route**, une seule
+  photo hors forme. Les 3 faux-et-affirmés d'« image d'abord » sont un défaut du **régime**.
+- **Piste « les `imageUrl` expirent »** : **0 morte sur 175**, la plus ancienne du 2026-08-02.
+  Le `not-found` venait d'une **signature `?s=` tronquée** (catalogue, entrée 24).
+- **Retrait du terme `prix`**, **dérivation des ponts par la taille du set**, **alarme
+  Cardmarket**, **suffixe δ** (en attente d'une population où il ait un effet mesurable).
+
+**EN ATTENTE DE DONNÉES** — rien à décider, seulement à mesurer :
+- Les deux points en tête de ce fichier.
+- **La mesure d'intervalle** : possible, **vide**. `prixVinted` non nul **0/224** —
+  `/api/retour-live` n'avait pas de serveur pour l'écouter avant ce matin. Relancer
+  `ad-intervalle.js` quand des scans auront porté un prix.
+- **`écart ≥ 2`** et le plancher `i1` : hypothèses choisies APRÈS avoir vu les données, à
+  confirmer sur des lignes fraîches.
+- **Le raffinement de `imageStatut`** dans `departage-image.js` : seulement quand un
+  dénominateur existera.
+
+**DETTES OUVERTES** :
+- 🔴 **`apres()` du banc ≠ la route, depuis le 2026-08-08.** Toute colonne APRÈS lue d'ici
+  sa correction est **suspecte** ; le seul chiffre lisible est FAUX ET AFFIRMÉ.
+- **La branche reverse n'a jamais été vue vivante** — aucune ligne n'a jamais porté
+  `strategieReverse` ; la 7e cellule du verrou reste inexerçable.
+- **L'import des ponts est à ÉCRIRE, pas à relancer** : `prefill-tcgdex.js` saute tout
+  produit ayant déjà une ligne, une relance écrirait **8 lignes**.
+- **`vivierDeRepli`** — drapeau à poser, rouge avant vert.
+- **Inventaire des valeurs d'un système externe figées chez nous** (chemins, versions, URLs).
+- **Sauvegarde puis migration Atlas M10** — le testeur la lance lui-même.
 
 ## Décisions tranchées — ne pas les rouvrir
 
 - **Lecture live conservée** — le cache servait une réponse périmée sur une route qui décide
   d'un prix.
-- **Dérivation des ponts par la taille du set : refusée** — mesurée, 71,6 % des sets sont en
-  collision de taille ; elle aurait donné un faux pont une fois sur cinq, en silence.
 - **Départage par l'image maintenu en « faible »** — l'effectif observé ne soutient pas la
-  promotion ; la règle v2 est dans le code, à `NIVEAU_RESERVE`.
-- **Point unique de `champsDeRefus` : reporté** — huit sites, cinq corrects ; le refactor est
-  décrit dans le chantier avec sa raison.
-- **Alarme Cardmarket : supprimée** — elle mesurait un seuil qui n'existait plus.
-
-## Ce qui attend, dans l'ordre
-
-1. **L'import des ponts est à ÉCRIRE, pas à relancer.** `prefill-tcgdex.js` saute tout produit
-   ayant déjà une ligne (`dejaFiables`, sans filtre sur `source`) : une relance écrirait
-   **8 lignes**. Il faut un import qui attache `setTcgdex` aux produits déjà connus.
-2. **`vivierDeRepli`** — drapeau à poser, rouge avant vert.
-3. **Inventaire des valeurs d'un système externe figées chez nous** (chemins, versions, URLs).
-4. **graphify** — cartographie du code, avec les prédictions écrites AVANT la mesure.
-5. **Sauvegarde puis migration Atlas M10** — le testeur la lance lui-même.
+  promotion.
+- **`numero: null` est FIDÈLE** — ces cartes ne portent pas de numéro imprimé ; le chantier
+  de collecte est abandonné.
+- **Point unique de `champsDeRefus` : reporté** — huit sites, cinq corrects.
+- **graphify : désinstallé** — 0 point sur 5 contre les défauts connus.
 
 ## Trois chiffres à ne pas reperdre
 
@@ -1257,6 +1295,86 @@ même sous réserve.
 
 **Rien n'est câblé.** `--sans-perimetre` est un MODE DE MESURE, hors service par défaut,
 qui appelle les mêmes fonctions que la route plutôt que d'en refaire une version.
+
+## 🔒 ÉCARTÉ LE 2026-09-05 — le régime « sans périmètre »
+
+**Écarté sur son chiffre, pas sur une impression.** Sur les 88 lignes à vérité
+individuelle, colonne APRÈS, référence → régime :
+
+| | référence | sans périmètre | delta |
+|---|---|---|---|
+| JUSTE | 63 | **56** | **−7** |
+| FAUX | 8 | **25** | **+17** |
+| REFUS | 17 | **7** | −10 |
+| FAUX ET AFFIRMÉS | 0 | 0 | — |
+
+**Le motif du rejet, en une phrase : il retire 10 refus et crée 17 faux.** Il ne convertit
+pas des refus en bonnes réponses, il convertit des refus **et sept justes** en suggestions
+fausses. Et son zéro de faux-et-affirmés est **tautologique** — toute sortie du bloc pose
+`incertain: true`, donc le critère de lancement est satisfait par la DÉFINITION du régime,
+pas par son comportement.
+
+⛔ **Ne pas rouvrir sans une donnée nouvelle.** Le mode `--sans-perimetre` reste dans
+`banc-japonais.js`, hors service, pour que le chiffre soit rejouable — pas pour être promu.
+
+## La règle « attaque sur le vivier COMPLET » — mesurée, et le cas d'école la dément
+
+**Règle proposée** : le périmètre reste ; si **exactement UN** candidat du vivier par le nom
+porte l'attaque lue, il est retenu même hors des 24 sets, sous réserve. Sinon rien ne change.
+
+### 🔴 Elle touche 0 ligne sur 89, et ce n'est pas discutable
+
+| champ | présent | non nul |
+|---|---|---|
+| `attaqueLue` | 1/225 | **1/225** |
+| `attaqueBrute` · `attaqueConfiance` · `attaqueDepartage` | 1/225 | 1/225 |
+
+**Lignes du banc portant une attaque lue : 0 sur 89.** La seule ligne qui en porte une est
+le scan de contrôle du Ho-Oh, **qui n'est pas au banc** (aucune vérité, carte EN ATTENTE).
+**Justes / faux / refus ne sont donc pas calculables** — la règle est inerte exactement comme
+le départage par l'attaque l'était ce matin. Le champ a l'âge d'une journée.
+
+### Le cas d'école la dément au niveau où elle est écrite
+
+`trouverProduitsLocaux("Ho-Oh")` — **la fonction de la route**, pas une requête de
+circonstance — rend **39 produits, 12 métacartes**. Et « Rainbow Burn » y est portée par :
+
+| niveau | porteurs | la règle |
+|---|---|---|
+| **idProduct** | **6** (274604, 365796, 559198, **654129**, 853200, 888918) | **NE DÉSIGNE RIEN** |
+| **idMetacard** | **1** (266314) | désigne 266314 |
+
+🔴 **LA RÈGLE, TELLE QU'ÉNONCÉE, EST FAUSSE — et il faut le dire avant de la garder comme
+piste.** « Un seul candidat porte l'attaque » et « une seule métacarte porte l'attaque » ne
+sont pas la même phrase, et sur son propre cas d'école les deux ne donnent pas le même
+résultat : **six produits**, **une métacarte**. Au niveau du PRODUIT — le niveau où la règle
+est écrite — elle **ne s'active pas**. Sur le cas qui l'a inspirée.
+
+**Au niveau MÉTACARTE elle s'active** — et c'est le bon niveau, celui où
+`departagerParAttaque` décide déjà. Elle désigne 266314, qui **contient 654129**. Mais
+266314 compte **6 produits** : la règle ne rend pas une carte, elle rend un **groupe de six
+réimpressions**, et il faut encore en choisir une — par le set, par l'image, par le prix,
+c'est-à-dire par les instruments qui ont déjà échoué ici.
+**Elle déplace le problème d'un cran, elle ne le résout pas.**
+⛔ **Ne pas garder cette piste sans cette correction attachée.** Écrite « un seul candidat »,
+elle promet une carte et rend un groupe ; celui qui la relira dans un mois croira qu'elle
+tranche.
+
+⚠️ **Et rien ici ne dit que c'est juste.** Ho-Oh n°250 reste **EN ATTENTE**, deux
+désignations concurrentes (voir catalogue, entrée 23). Le cas d'école montre que la règle
+**tire**, il ne montre pas qu'elle **vise bien** — et il ne peut pas le montrer tant que la
+vérité n'est pas tranchée.
+
+### Le majorant de portée, si l'attaque était lue à chaque fois
+
+Sur 86 lignes du banc au vivier ≥ 2 : **81** ont au moins une attaque qui ne désigne qu'une
+seule métacarte, **5** n'en ont aucune. ⚠️ **Ce n'est pas la portée de la règle** : c'est le
+pouvoir discriminant du CATALOGUE, à supposer que l'IA lise justement, à chaque fois,
+l'attaque qui discrimine. Sur ce point on a **une** lecture, en confiance haute, et elle
+était juste. Une.
+
+**Ce qu'il faut pour trancher, et rien d'autre** : des scans qui portent `attaqueLue`, et
+une vérité saisie pour Ho-Oh n°250.
 
 ## Où sont les détails
 
