@@ -38,6 +38,17 @@ deux données. Le chantier attend des MESURES, pas des idées.
   photo hors forme. Les 3 faux-et-affirmés d'« image d'abord » sont un défaut du **régime**.
 - **Piste « les `imageUrl` expirent »** : **0 morte sur 175**, la plus ancienne du 2026-08-02.
   Le `not-found` venait d'une **signature `?s=` tronquée** (catalogue, entrée 24).
+- **Famille « l'image lit le physique »** : contrôle sec référence contre référence,
+  `inliers(A,A)` médiane **150**, `inliers(A,B)` médiane **50**, contre **4 à 48** pour une
+  vraie photo. Cas 3 de la clause : la **MÉTHODE** échoue, aucune technique ne séparera deux
+  impressions par l'image. 157/157 paires mesurées, aucune vérité, aucune photo, aucun appel IA.
+- **Test de lecture holo/mat** : **annulé sans être lancé, 0 € dépensé** — sans direction de
+  vérité il mesurait la discrimination, pas la justesse, et la jointure le rendait sans objet.
+- **`departagerParNumero` sur le vintage** : la jointure sépare **156/157 paires au
+  CATALOGUE**, et ne peut **pas** s'appliquer aux SCANS — sur **0 clé sur 15**, le numéro lu
+  correspond à un `numero` catalogue de la paire. Ces cartes n'impriment pas de numéro de
+  collection ; c'est `numero: null` est FIDÈLE, vu du côté de l'usage.
+- **Rareté comme discriminant** : `catalogue_produits` n'a aucune colonne de rareté.
 - **Retrait du terme `prix`**, **dérivation des ponts par la taille du set**, **alarme
   Cardmarket**, **suffixe δ** (en attente d'une population où il ait un effet mesurable).
 
@@ -50,6 +61,28 @@ deux données. Le chantier attend des MESURES, pas des idées.
   confirmer sur des lignes fraîches.
 - **Le raffinement de `imageStatut`** dans `departage-image.js` : seulement quand un
   dénominateur existera.
+- 🔑 **Généraliser `egalite-sans-enjeu`** — verdict FERME quand tous les membres du groupe
+  donnent le même verdict contre le prix de l'annonce. **La meilleure voie connue vers un
+  verdict ferme**, bloquée par `prixVinted` non nul **0/225**. Même cause que l'intervalle.
+- **Le régime « l'image propose la métacarte »** : 68 justes / 5 faux / 16 refus contre
+  37/7/45 pour le texte, faux-et-affirmés 0 (tautologique). **73 % des sorties deviennent
+  des fourchettes**, médiane 3 produits, 71 % sous 5. La décision n'est pas technique :
+  c'est **« accepte-t-on de rendre une fourchette au lieu d'un produit »**, côté extension.
+
+**DÉFAUTS CONFIRMÉS, correctif écrit mais NON APPLIQUÉ** :
+- 🔴 **`MOTS_VIDES` détruit le « aucun » de `symboleSet`** — le prompt le déclare vraie
+  réponse ([index.js:678](index.js)), la boucle de [index.js:786](index.js) le met à `null`.
+  Journal : `"aucun"` **0/225**. ⚠️ Le correctif fabrique **deux instruments**, pas une
+  correction : les mesures de symbole futures ne seront pas comparables aux anciennes.
+- 🔴 **`rarete` affirme dans le doute** — *« Si tu n'es pas sûr, réponds "normale" »*
+  ([:681](index.js)) plus le forçage serveur ([:813](index.js)). Journal : 157/225 `"normale"`,
+  `null` jamais.
+- ⚠️ **Trous en amont sur `number` et `total`** : le prompt n'offre aucune façon de dire
+  « rien d'imprimé », alors que `numero: null` est FIDÈLE.
+- ⚠️ **Un futur champ `finition` doit valoir `mat`, JAMAIS `aucun`** — `MOTS_VIDES`
+  l'écraserait et on referait le défaut de `symboleSet` sur un champ neuf.
+- **holo/mat est INEXPRIMABLE** : `reverse` défini contre l'holo, `motif:"aucun"` couvre
+  mate ET holo, [:833](index.js) re-force `reverse:false`, `raretesElevees` sans holo.
 
 **DETTES OUVERTES** :
 - 🔴 **`apres()` du banc ≠ la route, depuis le 2026-08-08.** Toute colonne APRÈS lue d'ici
@@ -1375,6 +1408,272 @@ l'attaque qui discrimine. Sur ce point on a **une** lecture, en confiance haute,
 
 **Ce qu'il faut pour trancher, et rien d'autre** : des scans qui portent `attaqueLue`, et
 une vérité saisie pour Ho-Oh n°250.
+
+## 🔴 DÉFAUT CONFIRMÉ — `MOTS_VIDES` détruit le « aucun » de `symboleSet`
+
+**Ce n'est pas une piste, c'est un défaut, et il est localisé.**
+
+| | |
+|---|---|
+| [index.js:678](index.js) | `"aucun"` : *« rien à cet emplacement. C'est une VRAIE réponse, pas une absence de réponse »* |
+| [index.js:679](index.js) | `"illisible"` : *« C'est la bonne réponse dans le doute »* |
+| [index.js:780](index.js) | `MOTS_VIDES` contient `'aucun'` |
+| [index.js:786](index.js) | la boucle applique `MOTS_VIDES` à `symboleSet` |
+
+**Le prompt construit la distinction sur deux lignes ; le parseur la détruit cent lignes
+plus bas.** Au journal : `"aucun"` **0 fois sur 225**, `null` 111, `"illisible"` 43.
+
+**Ce que ça coûte : non mesurable, et l'information n'est pas récupérable.** Le journal ne
+garde aucune réponse IA brute (seulement `nomBrut` et `nomConfiance`), et le `console.warn`
+de [index.js:789](index.js) ne se déclenche que pour `setCode`. Sur les 111 `null`, **rien**
+ne distingue un « aucun » écrasé d'un champ jamais rendu. Détruite à la source.
+
+### ⚠️ LE CORRECTIF FABRIQUE DEUX INSTRUMENTS, PAS UNE CORRECTION
+
+Retirer `'aucun'` de `MOTS_VIDES` pour `symboleSet` **change ce que le champ signifie**.
+Les mesures de symbole antérieures gardent leur sens ; **les futures ne leur seront pas
+comparables** — exactement comme au changement de prompt du lot `symbole-40`, où il avait
+fallu écrire « ne pas additionner aux 7 lignes lues sous l'ancien prompt : deux instruments ».
+**À écrire dans le commit du correctif, pas après.**
+
+### Les neuf champs que la liste traverse — `'aucun'` est-il une vraie réponse ?
+
+| champ | verdict |
+|---|---|
+| `setCode` | **NON** — le prompt dit *« réponds null, n'invente rien »* ([:656](index.js)). Écrasement correct. |
+| `name` | **NON** — une carte porte toujours un nom ; « aucun » = lecture ratée. |
+| `nomBrut` | **NON** — même raison, c'est le nom tel qu'imprimé. |
+| `number` | **NON tel quel** — mais ⚠️ le prompt ([:645](index.js)) n'offre **aucune** façon de dire « rien d'imprimé », alors qu'on a établi que `numero: null` est **FIDÈLE**. Le manque est en amont. |
+| `total` | **NON tel quel** — même trou : la cellule « SANS total » existe (55 lignes du banc), le prompt ne prévoit pas de la déclarer. |
+| `rarete` | **sans objet** — le prompt force `"normale"` dans le doute, « aucun » n'arrive jamais. |
+| `symboleSet` | 🔴 **OUI** — déclaré vraie réponse à [:678](index.js). **C'est le défaut.** |
+| `attaque` | **OUI en droit** (Dresseur/Énergie n'ont pas d'attaque) — mais l'écrasement est **correct** : c'est une clé de jointure, « aucun » irait chercher une attaque nommée « aucun ». L'information « pas d'attaque » est perdue, et elle discriminerait Dresseur/Pokémon. |
+| `attaqueBrute` | idem `attaque`. |
+
+**Bilan : un champ à corriger (`symboleSet`), deux trous en amont (`number`, `total`), un
+champ où la perte est assumée mais non écrite (`attaque`).**
+
+## 🔒 ÉCARTÉ — la rareté comme discriminant
+
+**Correctif du champ : noté, à faire.** Le prompt dit *« Si tu n'es pas sûr, réponds
+"normale" »* ([index.js:681](index.js)) et [index.js:813](index.js) refait le forçage
+serveur (`parsed.rarete = parsed.rarete || 'normale'`). Journal : **157/225 `"normale"`**,
+`null` **0 fois**. Le doute devient une affirmation sur la carte.
+
+🔴 **Mais le DISCRIMINANT est écarté, et voici pourquoi : il n'y a rien à joindre.**
+`catalogue_produits` ne porte que `idProduct · idExpansion · idMetacard · name`.
+**Aucune colonne de rareté.** `numeros_cartes` porte `variante`, pas la rareté non plus.
+Une lecture honnête de la rareté — « aucune marque », donc premier tirage japonais — n'aurait
+**aucune contrepartie** au catalogue à comparer. Il faudrait d'abord importer une colonne de
+rareté par produit, c'est-à-dire un chantier d'import, pas un correctif de prompt.
+
+⛔ **Ne pas reproposer « la rareté départage les tirages » sans cette colonne.** Le correctif
+du champ reste utile pour lui-même (ne plus affirmer dans le doute), il ne débloque pas le
+départage.
+
+## 🔑 LA JOINTURE QU'ON NE FAIT PAS — recalculé sur `catalogue_produits` EN BASE
+
+⚠️ **Recalculé en base, pas sur un export.** L'œil extérieur avait mesuré sur l'export local
+du 12/07. Les chiffres tombent identiques, mais ils sont désormais vérifiés à la source.
+
+| | |
+|---|---|
+| produits dans les 24 expansions closes | **1 835** (0 sans `idMetacard`) |
+| métacartes distinctes | 1 645 |
+| métacartes à ≥ 2 produits | **151** |
+| **métacartes à ≥ 2 produits dans la MÊME expansion** | **103** |
+| dont dans les cinq e-Card (5021-5025) | **96** (32+16+16+16+16) |
+| le reste | 5059 : 6 · 4507 : 1 |
+
+**Sur les 219 produits de ces 103 groupes :**
+
+| | |
+|---|---|
+| présents dans `numeros_cartes` | **219 / 219 — 100 %** |
+| paires | 157 |
+| **paires à `numero` DISTINCTS** | **156 / 157 — 99,4 %** |
+| paires au même numéro | **1** (Ruin Wall, méta 212446 : les deux `numero` sont **vides**) |
+
+### 🔴 CE QUE ÇA ÉTABLIT : ce n'est pas un problème de perception
+
+**Dans le périmètre vintage, 156 paires sur 157 sont déjà séparables par un numéro que nous
+avons en base.** Désigner l'impression n'y demande ni une meilleure photo, ni un meilleur
+prompt, ni un seuil : **c'est une jointure `numeros_cartes` qu'on ne fait pas.** Le correctif
+est dans le code.
+
+⚠️ **ET LA LIMITE, QUI EST GRANDE : cette population n'est PAS celle du problème Slowbro.**
+Les 103 groupes sont **dans les 24 expansions closes** ; la métacarte 463324 (Slowbro n°090)
+vit en expansions **6556/6569**, modernes, hors table. Les deux mesures ne se recouvrent pas.
+Ce résultat débloque le **vintage**, il ne dit rien du cas qui a ouvert le dossier.
+⚠️ Et les exemples sont dominés par des **Énergies** (`Psychic Energy`, `Lightning Energy`) :
+des cartes qui partagent une métacarte sans être « la même carte en deux finitions ».
+
+## 🔒 LE CONTRÔLE SEC — la famille « lire le physique » est FERMÉE
+
+Référence contre référence. **Aucune photo, aucune vérité, aucun appel IA.** La clause écrite
+à [mesure-images-vintage.js:126-130](mesure-images-vintage.js) et jamais exercée, enfin exercée.
+
+**Dénominateur : 219/219 produits `indexee`, 157/157 paires exploitables.**
+
+| | |
+|---|---|
+| `inliers(A,A)` — auto-appariement | min 131 · **médiane 150** · max 150 |
+| `inliers(A,B)` — croisé | min **14** · p25 39 · **médiane 50** · p75 62 · max 95 |
+| ratio A→B / A→A | min 0,093 · **médiane 0,333** · max 0,633 |
+| paires à `inliers(A,B) == 0` | **0 / 157** |
+| paires à ≥ 20 | **149 / 157** |
+
+**VERDICT : cas 3 de la clause — `inliers(bon) ≈ inliers(mauvais) ≫ 0`, la MÉTHODE échoue.**
+Aucune technique ne séparera deux impressions d'une même métacarte par l'image : **c'est au
+reste de la chaîne de trancher la finition, pas à l'image.** Et le chiffre qui le rend
+concret : la médiane croisée vaut **50 inliers**, alors que les scores gagnants observés
+contre de vraies photos vont de **4 à 48**. Deux références de la même métacarte se
+ressemblent **plus** que ne ressemble une photo à sa propre référence.
+
+**Prédictions écrites avant la mesure — trois justes, une fausse, et la fausse est dite :**
+P1 (auto ≈ nombre de points) ✅ · P2 (médiane croisée ≥ 20) ✅ **50** · P3 (cas 3) ✅ ·
+🔴 **P4 FAUSSE** : j'attendais peu de paires exploitables, il y en a **157 sur 157**.
+
+⛔ **Ne pas rouvrir « et si l'image lisait le physique / la finition ».** La question est
+tranchée par une mesure qui ne dépend d'aucune vérité et d'aucune photo.
+
+## ⚠️ LE CHAMP ABSENT — holo/mat est INEXPRIMABLE, et le piège du futur `finition`
+
+**Constat, pas correctif.** Trois champs décrivent la finition et **aucun ne peut dire
+« holo »** :
+
+| lieu | ce qu'il fait |
+|---|---|
+| [index.js:684](index.js) | `reverse` est défini **contre** l'holo — *« sur une holo normale c'est l'ILLUSTRATION qui brille »*. L'holo n'est décrite que pour être **exclue**, jamais demandée. |
+| [index.js:687](index.js) | `motif: "aucun"` = *« la carte est mate/normale, aucun fond brillant »*. Une holo n'a **pas** de fond brillant : elle répond `"aucun"`, **comme une mate**. |
+| [index.js:833](index.js) | `parsed.reverse = parsed.motif !== 'aucun'` — l'holo est donc **re-forcée** à `reverse: false`, indiscernable d'une mate. |
+| [index.js:839](index.js) | `raretesElevees` = IR, SR, SIR, UR, AR, SAR, CHR, CSR — **pas d'holo**. |
+
+**Une carte holo et une carte mate rendent exactement la même réponse sur les trois champs.**
+
+### 🔴 À ÉCRIRE MAINTENANT, AVANT QUE LE CHAMP N'EXISTE
+
+Si un champ `finition` naît un jour, **sa valeur « pas de brillance » doit s'appeler `mat`,
+JAMAIS `aucun`.** `MOTS_VIDES` ([index.js:780](index.js)) contient `'aucun'` : le jour où
+quelqu'un ajoutera `finition` à la boucle de [index.js:786](index.js) — et il l'ajoutera, la
+liste s'allonge à chaque champ neuf — la valeur **vraie** « la carte est mate » deviendrait
+`null`, fusionnée avec « pas lu ». **On referait sur un champ neuf le défaut de
+`symboleSet`**, dix lignes plus bas, en croyant faire une hygiène.
+
+**Le nom du champ est la parade.** Un mot qui n'est pas dans `MOTS_VIDES` ne peut pas être
+écrasé par elle.
+
+## NON RETENUES CE TOUR — nommées pour ne pas les reperdre
+
+- **`departagerParFinition`** — c'est du **câblage**, et il est **sans objet** tant que la
+  jointure `numeros_cartes` et le contrôle sec n'ont pas répondu. **Ne pas l'écrire.**
+- **Généraliser `egalite-sans-enjeu`** — rendre un verdict **FERME** quand tous les membres
+  du groupe donnent le même verdict contre le prix de l'annonce. 🔑 **C'est la meilleure voie
+  connue vers un verdict ferme**, et elle est **non mesurable aujourd'hui** : `prixVinted`
+  est non nul **0 fois sur 225**. **À rouvrir dès que des scans porteront un prix**, pas
+  avant — voir la mesure d'intervalle, même cause, même blocage.
+- **Les 7 métacartes hors e-Card** — expansion **5059 : 6 groupes**, expansion **4507 : 1**.
+  Aucune piste à ce jour. **Nommées plutôt qu'absorbées dans un taux** : « 103 groupes »
+  cacherait qu'ils ne sont pas de la même famille que les 96 e-Card.
+
+## 🔒 ANNULÉ — le test de lecture holo/mat (2026-09-05, jamais lancé, 0 € dépensé)
+
+**La dépense, chiffrée avant d'être engagée** : **219 images** distinctes (un appel par
+image), **7,5 Mo**, moyenne 35 Ko. **219/219 scans sont sur le disque**, **157/157 paires
+complètes**, **103/103 groupes exploitables**. Rien ne manque.
+
+🔴 **MAIS LA VÉRITÉ DE LA PAIRE N'A PAS DE DIRECTION, et il faut le dire avant de dépenser.**
+Vérifié : sur les 219 produits, `numero` vaut **217 fois « chiffres seuls »** et 2 fois vide
+— **aucun préfixe H**. `numeros_cartes.variante` porte **V1/V2/V3…**, une étiquette de
+position, **pas une finition**. Sur les 100 groupes de taille 2 : **100 « deux du même
+genre »**, zéro couple orienté.
+
+**Conséquence sur ce que le test peut mesurer** : il mesure la **DISCRIMINATION** — « le
+modèle donne-t-il deux réponses différentes aux deux membres ? » — **pas la JUSTESSE**. On ne
+sait pas laquelle des deux est l'holo.
+
+⚠️ **L'écart de numéro est constant (+32 sur l'expansion 5021 : 065↔097, 066↔098, 067↔099…),
+ce qui SUGGÈRE que le second bloc est le bloc holo. C'est une inférence, pas une mesure.**
+La transformer en vérité serait exactement l'erreur de l'entrée 23 du catalogue : inscrire
+une vérité tirée d'une source unique non recoupée.
+
+### La raison de l'annulation, en deux points
+
+1. **Sans direction de vérité, le test mesure la DISCRIMINATION, pas la JUSTESSE.** Un
+   résultat « le modèle donne deux réponses différentes » ne dirait pas laquelle est juste.
+   On aurait dépensé 219 appels pour un demi-résultat.
+2. **Et il est devenu SANS OBJET** : si la jointure par le numéro fonctionne, on n'a plus
+   besoin de lire la finition — le numéro imprimé sépare les impressions sans regarder la
+   brillance. On ne paie pas pour un signal dont on n'a plus l'usage.
+
+⛔ **Ne pas le relancer sans (a) une vérité orientée — quel produit est l'holo — et (b) une
+raison de vouloir la finition alors que le numéro suffirait.**
+
+## 🔴 LA PORTÉE DE LA JOINTURE PAR LE NUMÉRO — elle ne peut pas s'appliquer
+
+**Mesuré avant tout câblage, sur les 89 lignes du banc.**
+
+| | |
+|---|---|
+| lignes sans groupe d'ex aequo (≥ 2) | 42 |
+| lignes AVEC un groupe d'ex aequo | **47** |
+| dont aucune paire même-métacarte/même-expansion | 29 |
+| **dont ≥ 1 paire départageable par le numéro** | **18** |
+
+**18 lignes sur 89. Et parmi elles, 15 clés distinctes — donc sous le seuil de 12 en
+vérités individuelles utiles. On connaîtra la portée, jamais la justesse, sans scans neufs.**
+
+### 🔑 D'OÙ VIENDRAIT LE NUMÉRO ? De la lecture IA. Et il ne correspond à RIEN.
+
+| | |
+|---|---|
+| numéro lu et EXPLOITABLE | **6 / 18** |
+| numéro lu mais **NEUTRALISÉ par la règle du Pokédex** | **12 / 18** |
+| aucun numéro lu | 0 |
+| couverture `numeros_cartes` des membres appariés | **44 / 44 — 100 %** |
+
+**Le catalogue est complet ; c'est la LECTURE qui manque.** Et pire que « elle manque » :
+
+🔴 **SUR 15 CLÉS SUR 15, LE NUMÉRO LU NE CORRESPOND À AUCUN `numero` CATALOGUE DES MEMBRES
+APPARIÉS.**
+
+| clé | lu | numéros catalogue de la paire |
+|---|---|---|
+| L049 Mew | 151 | 087 / 119 |
+| L046 Raichu | 026 | 081 / 113 / 034 / 035 |
+| H009 Ninetales | 110 | 072 / 104 / 022 / 023 |
+| H010 Tyranitar | 079 | 095 / 127 / 070 / 071 |
+| H013 · H026 Articuno | 144 · 17 | 030 / 031 |
+| H030 Vaporeon | 20 | 026 / 027 |
+| H031 Mewtwo | 51 | 086 / 118 |
+| L026 Pichu | 172 | 082 / 114 |
+| L034 Beedrill | 015 | 004 / 005 |
+| L040 Hypno | 097 | 041 / 042 |
+| L050 Pidgeot | 018 | 091 / 123 |
+| L051 Charmander | 004 | **S09 / S10** |
+| L052 Entei | 244 | 026 / 027 |
+| H004 Pikachu | 123/PCG-P | 13 / 40 |
+
+**Correspondance : 0 / 15.** Ce que l'IA lit sur ces cartes est un **numéro de Pokédex**
+(Mew 151, Articuno 144, Entei 244, Charmander 004…), pas un numéro de collection. La règle
+du Pokédex le neutralise à juste titre sur 12 des 18 — et sur les 6 restantes, où il n'est
+pas neutralisé, **il ne correspond pas davantage**.
+
+### Ce que ça veut dire, sans détour
+
+**La jointure fonctionne sur le CATALOGUE (156/157 paires séparables) et ne peut PAS
+s'appliquer sur les SCANS**, parce que la carte ne porte pas le numéro qui sépare. C'est
+exactement le résultat « `numero: null` est FIDÈLE », vu du côté de l'usage : ces cartes
+n'impriment pas de numéro de collection, donc aucune lecture, si bonne soit-elle, ne le
+rendra.
+
+⛔ **Ne pas câbler `departagerParNumero` sur cette population.** Le correctif est dans le
+code pour les cartes QUI PORTENT un numéro ; sur les 24 expansions closes, la donnée
+d'entrée n'existe pas sur la carte.
+
+**Ce qu'il faudrait pour rouvrir** : une source du numéro de collection qui ne soit pas la
+photo — un pont TCGdex par expansion, ou le titre de l'annonce. Les deux sont hors de ce
+tour et hors de l'image.
 
 ## Où sont les détails
 

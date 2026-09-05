@@ -2,7 +2,8 @@
 // ⚠️⚠️ DISCIPLINE DES OUTILS DE MESURE — LIRE AVANT D'AJOUTER UNE LIGNE
 // ============================================================================
 // Septième principe (scoring.js) : un instrument qui se trompe coûte plus cher qu'un bug.
-// Huit erreurs d'instrument sont recensées à ce jour, en deux familles :
+// Le catalogue des erreurs d'instrument est en tête de scoring.js. ⚠️ AUCUN CHIFFRE ICI :
+// un compteur recopié redevient faux au prochain ajout. Deux familles y dominent :
 //   - FABRIQUER UNE ENTRÉE que le système n'a jamais produite (clé positionnelle,
 //     endpoint, identifiant reconstruit, champ lu hors de son moment) ;
 //   - LIRE UNE ABSENCE COMME UNE VALEUR CONTRAIRE (`resultat !== 'succes'` sur un journal

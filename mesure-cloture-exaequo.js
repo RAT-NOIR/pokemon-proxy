@@ -1,7 +1,8 @@
 // ============================================================================
 // ⚠️⚠️ DISCIPLINE DES OUTILS DE MESURE — LIRE AVANT D'AJOUTER UNE LIGNE
 // ============================================================================
-// Neuf erreurs d'instrument recensées (voir le septième principe, scoring.js), deux
+// Le catalogue des erreurs d'instrument (septième principe, scoring.js) — sans le compter
+// ici : un nombre recopié redevient faux au prochain ajout. Deux
 // familles : FABRIQUER une entrée que le système n'a jamais produite, et LIRE UNE ABSENCE
 // COMME UNE VALEUR CONTRAIRE. Règles appliquées ici :
 //   1. ON APPELLE LA CHAÎNE, ON NE LA RÉIMPLÉMENTE PAS. Le vivier vient de

@@ -1,7 +1,8 @@
 // ============================================================================
 // ⚠️⚠️ DISCIPLINE DES OUTILS DE MESURE — LIRE AVANT D'AJOUTER UNE LIGNE
 // ============================================================================
-// Septième principe (scoring.js). Neuf erreurs d'instrument recensées, deux familles :
+// Septième principe (scoring.js) : le catalogue des erreurs d'instrument y vit, et on ne
+// le compte pas ici — un nombre recopié redevient faux au prochain ajout. Deux familles :
 // FABRIQUER une entrée que le système n'a jamais produite, et LIRE UNE ABSENCE COMME UNE
 // VALEUR CONTRAIRE. Règles appliquées ici :
 //   1. On ne reconstruit AUCUNE clé : `idProduct` du journal est joint à
