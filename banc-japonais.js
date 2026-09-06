@@ -563,6 +563,19 @@ function celluleDe(d) {
         if (piste.length === 1) {
             const a = await nomOpposeUnVeto(cardInfoNeutre, piste[0]);
             if (!a.veto) { retenu = piste[0].idProduct; voie = 'setcode-numero'; }
+        } else if (piste.length > 1) {
+            // ⚠️ RÈGLE DE SYMÉTRIE — 2026-09-06, MÊME COMMIT QUE LA ROUTE. La clé rend
+            // plusieurs produits depuis que la convention X s'y applique toujours (ASC+153 :
+            // un ASC et trois xASC). La route sort alors SOUS RÉSERVE, `raisonReserve
+            // 'cle-non-unique'`, sans changer de gagnant : le scoring choisit, de 25 points.
+            // Ici on garde donc le retenu de production et on pose l'incertitude. C'est ce
+            // qui manquait au premier essai de B1 : la clé changeait, `apres()` non, et la
+            // colonne APRÈS ne voyait rien.
+            // ⚠️ CE QUE LE BANC NE REJOUE PAS : sur une ligne où la clé tranchait AVANT (un
+            // seul produit, vivier imposé), la production passe désormais par le vivier par
+            // nom et le scoring, dont le gagnant peut différer. Voir la mesure du 2026-09-06
+            // dans PASSATION-SERVEUR.md ; `retenu` reste celui du journal.
+            incertain = true;
         }
 
         // 2. Le veto par le nom sur le gagnant, et son re-classement.

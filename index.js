@@ -2121,7 +2121,25 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // de toute façon. Pas de cache : codes_set s'enrichit en continu via /api/apprendre,
         // et un cache périmé rendrait un code introuvable sans le moindre signe.
         const lignes = await CodeSet.find({}, { idExpansion: 1, codeSet: 1, region: 1 }).lean();
-        let exps = lignes.filter(l => normaliserCodeSet(l.codeSet) === code);
+        // ════════════════════════════════════════════════════════════════════
+        // LA CONVENTION X S'APPLIQUE TOUJOURS, PAS SEULEMENT EN REPLI — 2026-09-06
+        // ════════════════════════════════════════════════════════════════════
+        // Elle n'était lue que derrière `if (!exps.length)` : dès que le code exact
+        // existait, les « Additionals » (xASC pour ASC) étaient inatteignables, et « un seul
+        // produit » voulait dire « un seul dans ce que j'ai regardé » — un verdict FERME sur
+        // la mauvaise impression (Rayquaza ASC+153, entrée #25 du catalogue des erreurs
+        // d'instrument dans scoring.js). Le scoring, lui, l'applique à chaque candidat
+        // (scoring.js, critère set) : la clé ne peut pas être plus étroite que lui.
+        // Mesuré en base : 16 paires de jumeaux X, 1 422 numéros portés par les deux côtés.
+        // ⛔ LA PARENTÉ DE PRÉFIXE (`codesApparentes`) RESTE EN REPLI : mesurée comme du bruit
+        // sur la population qui décide — « sv8a » ~ « sv8 » rapproche un Sylveon d'un Koraidon.
+        // ⚠️ ET QUAND LA CLÉ REND PLUSIEURS PRODUITS, LA ROUTE SORT SOUS RÉSERVE : voir
+        // `cleNonUnique` dans /api/identifier. Le scoring seul les départage de 25 points
+        // (+40 code exact contre +15 jumeau X), ce qui n'est pas une preuve d'impression.
+        let exps = lignes.filter(l => {
+            const c = normaliserCodeSet(l.codeSet);
+            return c === code || memeCodeParConventionX(code, c);
+        });
 
         // CODE APPARENTÉ, EN REPLI SEULEMENT. L'IA lit ce qui est IMPRIMÉ sur la carte, et
         // l'imprimé n'est pas toujours le code Cardmarket : « MCD » lu pour l'expansion
@@ -2133,7 +2151,8 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // raffinement, c'est ce qui rend le repli utilisable.
         let parParente = false, parenteRetenue = null;
         if (!exps.length) {
-            const cousins = lignes.filter(l => { const c = normaliserCodeSet(l.codeSet); return memeCodeParConventionX(code, c) || codesApparentes(code, c); });
+            // La convention X est déjà dans `exps` ci-dessus : ici, la seule parenté de préfixe.
+            const cousins = lignes.filter(l => codesApparentes(code, normaliserCodeSet(l.codeSet)));
             if (cousins.length) {
                 // ── LA BORNE DE RÉGION, ET SES DEUX ÉTATS ────────────────────────────
                 // Un cousin dont la région est CONNUE et DIFFÉRENTE de celle attendue est
@@ -3600,6 +3619,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
         // gain d'identification se paierait en erreurs de prix.
         let produitsImposes = null, voieImposee = null;
+        // ⚠️ LA CLÉ A RENDU PLUSIEURS PRODUITS — 2026-09-06. Depuis que la convention X
+        // s'applique toujours dans `trouverParSetCodeEtNumero`, une clé (code + numéro) peut
+        // désigner un produit ET ses « Additionals » (ASC+153 : 869764 et trois xASC). Le
+        // scoring les sépare de 25 points seulement (+40 code exact, +15 jumeau X), sans
+        // rien savoir de l'IMPRESSION photographiée : un tel écart n'autorise pas un
+        // verdict ferme. La sortie passe SOUS RÉSERVE, jamais en refus — la vérité est au
+        // vivier et le classement la place bien. Compte des produits, 0 = clé unique ou muette.
+        let cleNonUnique = 0;
         // ⚠️ ENVELOPPÉ, et c'est le site le plus sournois des six : une panne ici n'efface
         // pas un candidat, elle efface un CHEMIN ENTIER — le scan continue par une autre
         // voie et peut réussir, sans que rien ne dise que le chemin en tête n'a pas été
@@ -3616,7 +3643,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode[0].idProduct} "${String(pisteCode[0].name).split('[')[0].trim()}" (${avis.raison})`);
             }
         } else if (pisteCode.length > 1) {
-            console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire.`);
+            cleNonUnique = pisteCode.length;
+            console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire, SOUS RÉSERVE (cle-non-unique).`);
         }
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
@@ -4829,6 +4857,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
+            // La clé code+numéro a rendu PLUSIEURS produits (convention X) : le scoring les
+            // sépare de 25 points sans rien savoir de l'impression. Voir `cleNonUnique`.
+            || cleNonUnique > 0
             // Les deux sorties de la contradiction A. `impression-corrigee` est incertaine
             // parce qu'on vient de CHANGER de produit sur la foi d'une table ;
             // `impression-contredite` parce qu'on sait afficher probablement la mauvaise
@@ -4972,6 +5003,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // À écrire dans la note du lot, faute de quoi quelqu'un comparera les deux
             // périodes de `egalite-sans-enjeu` comme si c'était le même instrument.
             : departageParImage ? 'image-departage'
+            // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-09-06, ÉTROIT. `cle-non-unique` :
+            // la clé code+numéro a rendu plusieurs produits (Additionals, convention X). Le
+            // drapeau n'a jamais pu être vrai avant ce jour ; aucune ligne déjà au journal ne
+            // change d'étiquette. Placée derrière les trois départages (règle 2 : ils disent
+            // ce qui a tranché) et devant `egalite-sans-enjeu` et le périmètre (elle décrit
+            // une clé, plus étroite qu'un vivier).
+            : cleNonUnique > 0 ? 'cle-non-unique'
                 // ⚠️ RECOUVREMENT CORRIGÉ — 2026-08-16. `egaliteSansEnjeu` passe DEVANT
                 // `perimetreVintage`. Avant, une carte qui était les DEUX était rapportée
                 // comme « périmètre », et la classe la plus fréquente absorbait des lignes
@@ -5127,6 +5165,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // promeut au premier lot réel qui tient, comme le symbole a dû le faire — 12/12
             // EN PRODUCTION — et pas avant.
             'attaque-departage': 'faible',
+            // La clé code+numéro n'a pas tranché entre un produit et ses Additionals — le
+            // scoring a choisi de 25 points. FAIBLE : deux lignes du banc étaient FAUSSES ET
+            // AFFIRMÉES par cette voie le 2026-09-06 (Rayquaza ASC+153), c'est ce qui l'a créée.
+            'cle-non-unique': 'faible',
             // Tout le reste est FAIBLE tant qu'aucune mesure ne justifie mieux :
             'perimetre-vintage-suggestion': 'faible',   // 10/16 justes — la classe la plus fréquente et la plus tiède
             'tcgdex-numero-incoherent': 'faible',       // 1/2 — deux lignes ne mesurent rien
