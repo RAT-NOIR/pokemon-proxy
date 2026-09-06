@@ -423,7 +423,16 @@ const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_ca
 // protection, c'est la capacité à constater après coup qu'elle a tenu.
 const evenementStripeSchema = new mongoose.Schema({
     eventId: { type: String, required: true, unique: true },
-    recuLe:  { type: Date, default: Date.now }
+    recuLe:  { type: Date, default: Date.now },
+    // ⚠️ AJOUTÉS LE 2026-09-06 — le trou d'audit ci-dessus se ferme : chaque marque porte
+    // désormais CE QU'ELLE A FAIT. `scans` est SIGNÉ : positif pour un crédit, négatif pour
+    // un débit (remboursement Stripe, litige). `dette` : la part d'un débit qui n'a pas pu
+    // être retirée parce que le solde était déjà consommé — le solde reste à 0, la dette
+    // est écrite ici et hurlée au log. Les marques antérieures n'ont pas ces champs.
+    type: String,
+    userId: String,
+    scans: Number,
+    dette: Number
 });
 const EvenementStripe = mongoose.model('EvenementStripe', evenementStripeSchema, 'evenements_stripe');
 
@@ -6117,6 +6126,11 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
             // metadata : c'est ce que le webhook relira pour savoir QUI créditer et de
             // COMBIEN. Écrit ici par le serveur à partir de PACKS, donc non falsifiable.
             metadata: { userId, scans: String(pack.scans) },
+            // Les MÊMES métadonnées sur le PaymentIntent, donc sur la charge : c'est ce que
+            // relisent `charge.refunded` et `charge.dispute.created` pour savoir QUI débiter
+            // et de COMBIEN, sans appel à l'API. Les sessions antérieures à ce commit n'en
+            // ont pas : le webhook remonte alors au PaymentIntent puis à la session.
+            payment_intent_data: { metadata: { userId, scans: String(pack.scans) } },
             // ⚠️ ACCEPTATION EXPLICITE DES CONDITIONS DE VENTE. Vente à des consommateurs
             // dans l'UE : le consentement doit être un acte positif, et il doit être
             // PROUVABLE. Stripe horodate l'acceptation et la conserve sur la session, ce
@@ -6137,7 +6151,51 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
     }
 });
 
-// Webhook Stripe — SEUL endroit où des scans payants sont crédités.
+// ════════════════════════════════════════════════════════════════════════════
+// RETROUVER (userId, scans) DEPUIS UNE CHARGE OU UN LITIGE — 2026-09-06
+// ════════════════════════════════════════════════════════════════════════════
+// Trois sources, de la moins chère à la plus chère, et on s'arrête à la première :
+//   1. `metadata` de l'objet lui-même — posé par `payment_intent_data.metadata` à la
+//      création de la session (sessions postérieures à ce commit), copié sur la charge ;
+//   2. le PaymentIntent (un appel API) ;
+//   3. la session Checkout qui porte ce PaymentIntent (un appel API) — la seule source
+//      pour les sessions antérieures, dont seule `metadata` de session porte le pack.
+// Rend null si rien n'est retrouvable : l'appelant acquitte et crie, il n'invente pas.
+async function metadonneesDuPaiement(objet) {
+    const lire = m => {
+        const userId = m?.userId ? String(m.userId).slice(0, 80) : null;
+        const scans = parseInt(m?.scans || '0', 10);
+        return userId && Number.isFinite(scans) && scans > 0 ? { userId, scans } : null;
+    };
+    const direct = lire(objet?.metadata);
+    if (direct) return direct;
+    const pi = objet?.payment_intent ? (typeof objet.payment_intent === 'string' ? objet.payment_intent : objet.payment_intent.id) : null;
+    if (!pi || !stripe) return null;
+    try {
+        const intent = await stripe.paymentIntents.retrieve(pi);
+        const parIntent = lire(intent?.metadata);
+        if (parIntent) return parIntent;
+    } catch (e) { console.warn(`⚠️ [webhook] PaymentIntent ${pi} illisible : ${e.message}`); }
+    try {
+        const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+        return lire(sessions?.data?.[0]?.metadata);
+    } catch (e) { console.warn(`⚠️ [webhook] session du PaymentIntent ${pi} illisible : ${e.message}`); }
+    return null;
+}
+
+// Le montant d'une charge, pour proportionner le débit d'un litige. null si illisible :
+// l'appelant ne débite alors rien et le dit, plutôt que de retirer un pack entier sur
+// une hypothèse.
+async function montantDeLaCharge(idCharge) {
+    if (!idCharge || !stripe) return null;
+    try {
+        const ch = await stripe.charges.retrieve(typeof idCharge === 'string' ? idCharge : idCharge.id);
+        return Number.isFinite(Number(ch?.amount)) ? Number(ch.amount) : null;
+    } catch (e) { console.warn(`⚠️ [webhook] charge ${idCharge} illisible : ${e.message}`); return null; }
+}
+
+// Webhook Stripe — SEUL endroit où des scans payants sont crédités, et depuis le
+// 2026-09-06 le seul endroit où ils sont DÉBITÉS sur remboursement ou litige.
 // Pas de verifierJeton : l'appelant est Stripe, pas l'extension ; c'est la SIGNATURE
 // cryptographique qui authentifie. Le corps arrive BRUT (Buffer) grâce au express.raw()
 // monté tout en haut du fichier, avant express.json().
@@ -6162,15 +6220,62 @@ async function gererWebhookStripe(req, res) {
         return res.status(400).send(`Webhook Error: ${e.message}`);
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    // ════════════════════════════════════════════════════════════════════════
+    // DEUX SENS — 2026-09-06 : le crédit d'un paiement, et le DÉBIT d'un remboursement
+    // ════════════════════════════════════════════════════════════════════════
+    // Jusqu'ici seul `checkout.session.completed` était lu : un remboursement Stripe ou un
+    // litige laissait les scans crédités. Et le crédit partait sans lire `payment_status`,
+    // alors qu'un moyen à paiement différé émet `completed` en `unpaid` — la garde coûte
+    // une ligne, elle est posée même si ces moyens sont désactivés aujourd'hui.
+    const TYPES_CREDIT = new Set(['checkout.session.completed', 'checkout.session.async_payment_succeeded']);
+    const TYPES_DEBIT = new Set(['charge.refunded', 'charge.dispute.created']);
+    if (!TYPES_CREDIT.has(event.type) && !TYPES_DEBIT.has(event.type)) {
         return res.json({ recu: true }); // event non concerné : accusé de réception, rien à faire
     }
 
-    const session = event.data.object;
-    const userId = session.metadata?.userId || session.client_reference_id || null;
-    const scans = parseInt(session.metadata?.scans || '0', 10);
+    let userId = null, scans = 0, email = null;
+    if (TYPES_CREDIT.has(event.type)) {
+        const session = event.data.object;
+        // LA GARDE : on ne crédite qu'un paiement ENCAISSÉ. `unpaid` (paiement différé en
+        // attente) sera suivi d'un `async_payment_succeeded`, lu ici aussi ; on acquitte sans
+        // rien écrire, pour que ce second événement puisse créditer avec sa propre marque.
+        if (session.payment_status !== 'paid') {
+            console.warn(`⏳ [webhook] ${event.type} en payment_status=${session.payment_status ?? 'absent'} — aucun crédit (event ${event.id})`);
+            return res.json({ recu: true });
+        }
+        userId = session.metadata?.userId || session.client_reference_id || null;
+        scans = parseInt(session.metadata?.scans || '0', 10);
+        email = session.customer_details?.email || null;
+    } else {
+        // Un remboursement ou un litige : le débit est PROPORTIONNEL au montant. Sur un
+        // `charge.refunded`, `amount_refunded` est CUMULÉ : la part de CET événement est la
+        // différence avec `previous_attributes`, sinon un second remboursement partiel
+        // débiterait deux fois le premier.
+        const objet = event.data.object;
+        const meta = await metadonneesDuPaiement(objet);
+        if (!meta) {
+            console.error(`❌ [webhook] ${event.type} sans métadonnées retrouvables (payment_intent=${objet.payment_intent ?? '?'}) — event ${event.id} acquitté, À TRAITER À LA MAIN`);
+            return res.json({ recu: true });
+        }
+        userId = meta.userId;
+        const scansPack = meta.scans;
+        let montant = null, part = null;
+        if (event.type === 'charge.refunded') {
+            montant = Number(objet.amount);
+            const avant = Number(event.data.previous_attributes?.amount_refunded ?? 0);
+            part = Number(objet.amount_refunded) - (Number.isFinite(avant) ? avant : 0);
+        } else {
+            part = Number(objet.amount);
+            montant = await montantDeLaCharge(objet.charge);
+        }
+        if (!Number.isFinite(montant) || montant <= 0 || !Number.isFinite(part) || part <= 0) {
+            console.warn(`ℹ️ [webhook] ${event.type} sans montant exploitable (montant=${montant}, part=${part}) — rien à débiter (event ${event.id})`);
+            return res.json({ recu: true });
+        }
+        scans = -Math.min(scansPack, Math.max(1, Math.round(scansPack * part / montant)));
+    }
 
-    if (!userId || !Number.isFinite(scans) || scans <= 0) {
+    if (!userId || !Number.isFinite(scans) || scans === 0) {
         // Rien d'exploitable : on ACQUITTE quand même (200), sinon Stripe rejouerait
         // indéfiniment un event que le rejeu ne réparera pas.
         console.error(`❌ [webhook] metadata inutilisable (userId=${userId}, scans=${scans}) — event ${event.id}`);
@@ -6185,34 +6290,62 @@ async function gererWebhookStripe(req, res) {
     // Atlas est un replica set -> transactions disponibles.
     const sessionMongo = await mongoose.startSession();
     let dejaTraite = false;
+    let dette = 0;
     try {
         await sessionMongo.withTransaction(async () => {
+            dette = 0;
+            // Un DÉBIT ne descend JAMAIS sous zéro : on lit le solde, on retire ce qui
+            // reste, et la différence est une DETTE écrite sur la marque. Le retrait est
+            // conditionnel (`$gte`) : un scan concurrent qui aurait consommé entre la
+            // lecture et l'écriture fait échouer la transaction, que Stripe rejouera.
+            let retire = scans;
+            if (scans < 0) {
+                const compte = await Credit.findOne({ userId }, { soldeScans: 1 }).session(sessionMongo).lean();
+                const solde = Math.max(0, compte?.soldeScans ?? 0);
+                retire = -Math.min(solde, -scans);
+                dette = -scans + retire;
+            }
             // Idempotence : l'insertion EST le verrou. Si l'event a déjà été traité,
             // l'index unique renvoie 11000 -> on avorte la transaction, donc aucun crédit.
             try {
                 // create([doc], {session}) — la forme tableau est obligatoire pour que
                 // Mongoose lise bien le 2e argument comme des options et non comme un
                 // second document à insérer.
-                await EvenementStripe.create([{ eventId: event.id }], { session: sessionMongo });
+                await EvenementStripe.create([{
+                    eventId: event.id, type: event.type, userId, scans, dette: dette || null
+                }], { session: sessionMongo });
             } catch (e) {
                 if (e.code === 11000) dejaTraite = true;
                 throw e;   // dans les deux cas on sort : la transaction est annulée
             }
 
-            // Crédit. `scans` vient de metadata, écrit par NOTRE serveur à la création
-            // de la session — jamais d'une valeur envoyée par le client.
-            await Credit.updateOne(
-                { userId },
-                {
-                    $inc: { soldeScans: scans },
-                    $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL },
-                    $set: { email: session.customer_details?.email || null }
-                },
-                { upsert: true, session: sessionMongo }
-            );
+            if (scans > 0) {
+                // Crédit. `scans` vient de metadata, écrit par NOTRE serveur à la création
+                // de la session — jamais d'une valeur envoyée par le client.
+                await Credit.updateOne(
+                    { userId },
+                    {
+                        $inc: { soldeScans: scans },
+                        $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL },
+                        $set: { email }
+                    },
+                    { upsert: true, session: sessionMongo }
+                );
+            } else if (retire < 0) {
+                const r = await Credit.updateOne(
+                    { userId, soldeScans: { $gte: -retire } },
+                    { $inc: { soldeScans: retire } },
+                    { session: sessionMongo }
+                );
+                if ((r.modifiedCount ?? 0) === 0) throw new Error('solde modifié pendant le débit : transaction annulée, Stripe rejouera');
+            }
         });
 
-        console.log(`✅ [webhook] +${scans} scans crédités à ${userId} (event ${event.id})`);
+        if (scans > 0) console.log(`✅ [webhook] +${scans} scans crédités à ${userId} (event ${event.id})`);
+        else console.warn(`↩️ [webhook] ${event.type} : ${scans} scans pour ${userId}, retirés ${-scans - dette} (event ${event.id})`);
+        if (dette > 0) {
+            console.error(`🔥 [webhook] DETTE ${dette} scan(s) pour ${userId} : le solde était déjà consommé, laissé à 0 (event ${event.id}, ${event.type}). Écrite sur la marque d'événement.`);
+        }
     } catch (e) {
         if (dejaTraite) {
             // Rejeu Stripe d'un event déjà encaissé : rien n'a été réécrit, on acquitte.
