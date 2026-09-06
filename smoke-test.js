@@ -210,8 +210,11 @@ async function testerLesRoutes() {
     // On envoie une carte RÉALISTE pour que le chemin numeroDepuisSlug s'exécute
     // vraiment. C'est exactement ce qui manquait : l'import oublié n'a été découvert
     // qu'en production parce qu'aucun test n'appelait cette ligne.
+    // ⚠️ `userId` OBLIGATOIRE depuis le 2026-09-06 sur les deux routes d'apprentissage :
+    // elles écrivent les tables non régénérables, et n'avaient ni identité ni limiteur.
     r = await appeler(port, 'POST', '/api/apprendre-lot', {
         corps: {
+            userId: 'SMOKE-TEST-USER',
             cartes: [{
                 idProduct: 999000001, numero: '248', codeSet: 'mC',
                 nomFr: 'Motisma', slug: 'Rotom-mC248?language=2', slugSet: 'Smoke-Test'
@@ -222,11 +225,18 @@ async function testerLesRoutes() {
     verifier('   ... success:true (le recalcul du numeroUrl s\'exécute)', r.json?.success, true);
     verifier('   ... une carte reçue', r.json?.recus, 1);
 
-    r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { cartes: [] } });
+    r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { userId: 'SMOKE-TEST-USER', cartes: [] } });
     verifier('POST /api/apprendre-lot lot vide -> success:false', r.json?.success, false);
 
+    r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { cartes: [] } });
+    verifier('POST /api/apprendre-lot sans userId -> 400', r.status, 400);
+
     r = await appeler(port, 'POST', '/api/apprendre', { corps: {} });
-    verifier('POST /api/apprendre corps vide -> 200 + success:false', r.status, 200);
+    verifier('POST /api/apprendre sans userId -> 400', r.status, 400);
+
+    r = await appeler(port, 'POST', '/api/apprendre', { corps: { userId: 'SMOKE-TEST-USER' } });
+    verifier('POST /api/apprendre sans idProduct -> 200 + success:false', r.status, 200);
+    verifier('   ... success:false', r.json?.success, false);
 
     // --- Solde ---
     r = await appeler(port, 'POST', '/api/solde', { corps: {} });

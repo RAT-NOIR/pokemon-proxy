@@ -193,6 +193,30 @@ const limiteurPaiement = rateLimit({
     message: { success: false, error: 'Trop de tentatives de paiement, réessaie plus tard.' }
 });
 
+// Limiteur dédié aux routes d'APPRENTISSAGE (/api/apprendre, /api/apprendre-lot), qui
+// ÉCRIVENT les deux seules tables non régénérables du projet (numeros_cartes, codes_set).
+// Elles n'avaient AUCUN limiteur, et le jeton partagé est extractible de l'extension.
+// Distinct du limiteur IA : un lot de galerie ne doit pas consommer le quota de scans,
+// et inversement. 120/h/IP couvre une galerie entière tournée page par page.
+const limiteurApprentissage = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Trop de requêtes d\'apprentissage, réessaie plus tard.' }
+});
+
+// Limiteur dédié à /api/retour-live. Il partageait l'INSTANCE `limiteurIA` : chaque prix
+// live renvoyé consommait une unité du quota de 60 scans/h de la même IP. Deux comptes
+// séparés pour deux usages qui n'ont pas le même coût — le retour ne dépense aucun appel IA.
+const limiteurRetourLive = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Trop de retours de prix, réessaie plus tard.' }
+});
+
 // Jeton partagé entre l'extension et le serveur. Empêche une page web d'utiliser
 // ton serveur même si elle contournait le CORS. À définir dans le .env :
 //   JETON_API=une_chaine_longue_et_aleatoire
@@ -486,6 +510,16 @@ async function memoriserCodeSet(idExpansion, codeSetBrut) {
     const codeSet = decoderCodeSet(codeSetBrut);
     try {
         if (mongoose.connection.readyState !== 1 || !idExpansion || !codeSet) return;
+        // ⚠️ UNE LIGNE APPRISE NE S'ÉCRASE PAS — 2026-09-06. `codes_set` est l'une des deux
+        // tables non régénérables, et cet upsert remplaçait sans condition le code d'une
+        // expansion déjà connue, sur la seule foi d'un appel porteur du jeton partagé. Un
+        // code DIFFÉRENT pour une expansion déjà apprise est refusé et tracé ; le même code
+        // est réécrit comme avant (apprisLe se rafraîchit, rien ne change).
+        const existant = await CodeSet.findOne({ idExpansion }, { codeSet: 1 }).lean();
+        if (existant && existant.codeSet && existant.codeSet !== codeSet) {
+            console.warn(`🚫 [codes_set] idExpansion ${idExpansion} porte déjà « ${existant.codeSet} » : « ${codeSet} » n'écrase pas une ligne apprise.`);
+            return;
+        }
         await CodeSet.findOneAndUpdate(
             { idExpansion },
             { idExpansion, codeSet, apprisLe: new Date() },
@@ -5787,16 +5821,43 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
 // Enregistre ce que l'extension a lu en live : le code set et le numéro réel d'un
 // idProduct. C'est ainsi que la base s'enrichit — depuis les navigateurs des
 // utilisateurs, une carte à la fois, sans jamais scraper en masse.
-app.post('/api/apprendre', verifierJeton, async (req, res) => {
+// ════════════════════════════════════════════════════════════════════════════
+// LES DEUX ROUTES D'APPRENTISSAGE ÉCRIVENT LES TABLES NON RÉGÉNÉRABLES — 2026-09-06
+// ════════════════════════════════════════════════════════════════════════════
+// Elles étaient gardées par le seul jeton partagé, extractible de l'extension, sans
+// userId ni limiteur, et `/api/apprendre` écrasait sans condition une ligne déjà exacte.
+// Trois gardes, dans l'ordre : le limiteur dédié, le jeton, puis un `userId` OBLIGATOIRE
+// comme sur les routes de scan (400 sans lui — ⚠️ CONTRAT MODIFIÉ, l'extension doit
+// l'envoyer). Aucun crédit n'est débité : c'est une identité, pas un décompte.
+app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res) => {
     try {
-        const { idProduct, idExpansion, numero } = req.body;
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+        const { idExpansion, numero } = req.body;
+        // `Number()` : un objet passé ici ferait lever un CastError dans le filtre, et la
+        // route sortirait en 500 pour une faute d'entrée.
+        const idProduct = Number(req.body.idProduct);
         // Décodé à l'entrée : le userscript l'extrait d'une URL d'image (voir decoderCodeSet).
         const codeSet = decoderCodeSet(req.body.codeSet);
-        if (!idProduct) return res.json({ success: false });
+        if (!Number.isFinite(idProduct) || idProduct <= 0) return res.json({ success: false });
 
         if (codeSet && idExpansion) await memoriserCodeSet(idExpansion, codeSet);
 
         if (numero) {
+            // ⚠️ UNE LIGNE EXACTE NE S'ÉCRASE PAS. Le `$set` ci-dessous remplaçait numéro,
+            // code et expansion quelle que soit la source existante. Une ligne déjà
+            // `source: 'cardmarket'` est la vérité apprise : on la CONFIRME si l'appel dit
+            // la même chose (le cas ordinaire, l'extension relit les mêmes fiches), on
+            // REFUSE s'il dit autre chose — refus tracé avec le userId, jamais fusion.
+            const existant = await NumeroCarte.findOne({ idProduct }, { source: 1, numero: 1, codeSet: 1, idExpansion: 1 }).lean();
+            if (existant && existant.source === 'cardmarket') {
+                const identique = String(existant.numero ?? '') === String(numero)
+                    && String(existant.codeSet ?? '') === String(codeSet ?? '')
+                    && (idExpansion == null || existant.idExpansion == null || Number(existant.idExpansion) === Number(idExpansion));
+                if (identique) return res.json({ success: true, dejaExacte: true });
+                console.warn(`🚫 [apprendre] userId=${userId} idProduct ${idProduct} : ligne EXACTE existante (n°${existant.numero}, ${existant.codeSet || '?'}) — refus d'écraser par n°${numero} (${codeSet || '?'}).`);
+                return res.json({ success: false, refuse: 'ligne-exacte-existante', error: "Ce produit porte déjà un numéro exact appris de Cardmarket : il ne s'écrase pas." });
+            }
             await NumeroCarte.findOneAndUpdate(
                 { idProduct },
                 {
@@ -5824,8 +5885,11 @@ app.post('/api/apprendre', verifierJeton, async (req, res) => {
 //    -> ÉCRASÉ par la lecture exacte Cardmarket (nomFr/variante/slug en bonus)
 //  - absent -> inséré
 // On ignore les cartes sans numéro lisible (elles n'aident pas le scoring).
-app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
+app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req, res) => {
     try {
+        // Même garde que /api/apprendre : ⚠️ CONTRAT MODIFIÉ, `userId` obligatoire (400).
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
         const { cartes } = req.body;
         if (!Array.isArray(cartes) || cartes.length === 0) {
             return res.json({ success: false, error: "Aucune carte reçue" });
@@ -5863,11 +5927,25 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             return res.json({ success: true, recus: cartes.length, nouvelles: 0, ameliorees: 0, dejaExactes: 0, sansNumero });
         }
 
-        // idExpansion déduit du catalogue (comme apprendreUnSet)
-        let idExpansion = null;
+        // ════════════════════════════════════════════════════════════════════
+        // L'idExpansion EST LU PAR CARTE — 2026-09-06
+        // ════════════════════════════════════════════════════════════════════
+        // L'ancienne version prenait l'expansion du PREMIER produit trouvé au catalogue et
+        // l'appliquait à TOUT le lot : un lot mêlant deux galeries étiquetait toutes ses
+        // cartes de la première, et une table apprise portait une expansion fausse sans
+        // qu'aucune ligne ne le dise. Chaque entrée porte désormais la sienne ; un
+        // idProduct inconnu du catalogue garde `null`, comme avant.
+        const expParId = new Map();
         if (mongoose.connection.readyState === 1) {
-            const ref = await CatalogueProduit.findOne({ idProduct: { $in: ids } }).lean();
-            idExpansion = ref?.idExpansion ?? null;
+            const refs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, idExpansion: 1 }).lean();
+            for (const r of refs) if (r.idExpansion != null) expParId.set(Number(r.idProduct), Number(r.idExpansion));
+        }
+        const expansionsDuLot = [...new Set(expParId.values())];
+        // `idExpansion` unique quand le lot n'en a qu'une (le cas ordinaire : une page de
+        // galerie) — c'est ce que le client lit déjà. null dès qu'il y en a plusieurs.
+        const idExpansion = expansionsDuLot.length === 1 ? expansionsDuLot[0] : null;
+        if (expansionsDuLot.length > 1) {
+            console.warn(`⚠️ [apprendre-lot] userId=${userId} : lot sur ${expansionsDuLot.length} expansions (${expansionsDuLot.join(', ')}) — chaque carte garde la sienne.`);
         }
 
         // Source actuelle de chaque idProduct déjà en base
@@ -5893,7 +5971,7 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
                     update: {
                         $set: {
                             idProduct:   Number(c.idProduct),
-                            idExpansion: idExpansion != null ? Number(idExpansion) : null,
+                            idExpansion: expParId.get(Number(c.idProduct)) ?? null,
                             numero:      c.numero    != null ? String(c.numero)    : null,
                             numeroUrl:   c.numeroUrl != null ? String(c.numeroUrl) : null,
                             // Décodé à l'entrée : le lot vient d'URLs d'images (voir decoderCodeSet)
@@ -5911,8 +5989,14 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             }));
             await NumeroCarte.bulkWrite(ops, { ordered: false });
 
-            const cs = aEcrire.find(c => c.codeSet)?.codeSet || null;
-            if (cs && idExpansion != null) await memoriserCodeSet(Number(idExpansion), cs);
+            // Le code de set, PAR EXPANSION : le premier code porté par une carte de chaque
+            // expansion du lot. `memoriserCodeSet` refuse d'écraser un code déjà appris.
+            const codeParExp = new Map();
+            for (const c of aEcrire) {
+                const e = expParId.get(Number(c.idProduct));
+                if (e != null && c.codeSet && !codeParExp.has(e)) codeParExp.set(e, c.codeSet);
+            }
+            for (const [e, cs] of codeParExp) await memoriserCodeSet(e, cs);
         }
 
         // COUVERTURE DE L'EXPANSION, renvoyée au client. Sans elle, l'utilisateur qui
@@ -5933,9 +6017,11 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             };
         }
 
-        console.log(`🧠 [apprendre-lot] ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes (exp ${idExpansion ?? '?'})`
+        console.log(`🧠 [apprendre-lot] userId=${userId} ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes (exp ${idExpansion ?? (expansionsDuLot.length ? expansionsDuLot.join('/') : '?')})`
             + (couverture ? ` — couverture ${couverture.avecNumero}/${couverture.produits} (${couverture.pourcent} %)` : ''));
-        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, couverture });
+        // `idExpansions` : ADDITIF. Les expansions réellement vues dans le lot, pour que le
+        // client sache pourquoi `idExpansion` et `couverture` sont nuls sur un lot mixte.
+        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, idExpansions: expansionsDuLot, couverture });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
         // Message brut au log, jamais dans la réponse — voir /api/identifier.
