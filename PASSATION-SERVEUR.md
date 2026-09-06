@@ -1675,6 +1675,1236 @@ d'entrée n'existe pas sur la carte.
 photo — un pont TCGdex par expansion, ou le titre de l'annonce. Les deux sont hors de ce
 tour et hors de l'image.
 
+## 🔴 PIÈGE — DEUX CLÉS POUR LE MÊME CHAMP, ET UNE ROUTE MORTE
+
+**Pour qui lira ce code plus tard.** Le prix de l'annonce entre par **deux noms différents
+selon la route**, et l'une des deux routes ne reçoit **rien** :
+
+| route | clé lue | trafic réel |
+|---|---|---|
+| `/api/identifier` | **`req.body?.prixVinted`** ([index.js:3335](index.js)) | **225 / 225** |
+| `/api/analyser` | `vintedPrice` ([index.js:2806](index.js)) | **0 / 225 — TRAFIC MORT** |
+| `/api/retour-live` | `prixLive` / `prixLiveEtat` ([index.js:5638](index.js)) | autre canal, autre champ |
+
+**La clé attendue par la route réellement empruntée est `prixVinted`.** Un client qui
+poste `vintedPrice` à `/api/identifier` **ne déclenche aucune erreur** : le champ est
+simplement absent, et `prixVinted` reste non nul **0 fois sur 225**.
+
+⚠️ **Ce que le serveur NE peut PAS prouver** : que l'extension envoie bien la mauvaise clé.
+D'ici on ne voit qu'une **absence**, compatible avec « mauvaise clé » comme avec « aucun prix
+envoyé ». Transmis à l'agent extension le 2026-09-05 ; c'est lui qui tranche en regardant ce
+qu'il poste. **La divergence des deux clés, elle, est un fait du code.**
+
+## 🔒 LA PISTE 2 (e-Card) NE TOUCHE AUCUNE LIGNE DU BANC — 0 sur 55
+
+**Dénominateur : 55 lignes de cellule portant une vérité individuelle** (les 71 vérités de
+`banc-verites.json` sont toutes des saisies à l'aveugle ; toute ligne de cellule appariée en
+porte donc une).
+
+| | |
+|---|---|
+| vérités en expansion **e-Card (5021-5025)** | **0 / 55** |
+| vérités dans les 24 sets, **hors** e-Card | **41** |
+| vérités hors des 24 sets | 14 |
+
+Expansions réellement représentées : 4465 (8), 4170 (7), 4463 (6), 3781 (6), 4464 (5),
+4508/4509 (4 chacune)… **La partition e-Card et le banc ne se recouvrent pas.** Les 96 groupes
+e-Card du chantier « jointure » ne peuvent donc être vérifiés sur aucune ligne existante.
+
+## 🎯 LE PLAFOND DE L'ATTAQUE — 66,7 % sur la cellule, et ma prédiction était INVERSE
+
+Mesuré au **catalogue seul** : aucune lecture, aucune vérité de lecture, aucun appel IA.
+**C'est un PLAFOND — il suppose une lecture parfaite — jamais une performance.**
+
+| | tout le banc (89) | **la cellule (55)** |
+|---|---|---|
+| vérité AVEC attaque | 81 | **42** |
+| vérité SANS attaque (Énergie, Dresseur) | 5 | 1 |
+| vivier partiellement sans attaque *(population séparée)* | 5 | 1 |
+| isole un sous-ensemble **strict** | 71/81 — 87,7 % | **34/42 — 81,0 %** |
+| **isole UNE SEULE métacarte** | 24/81 — **29,6 %** | **28/42 — 66,7 %** |
+| fraction du vivier retenue, médiane | 13,2 % | 28,6 % |
+
+⚠️ **Rappel du contexte, sans quoi le chiffre ment** : **17 881 produits sur 73 188 (24,4 %)**
+n'ont aucun crochet dans `name`. **Une absence d'attaque n'est pas une non-correspondance** —
+c'est pourquoi les trois populations sont comptées séparément et jamais additionnées.
+
+🔴 **PRÉDICTION P3 FAUSSE, et c'est le résultat.** J'avais prédit un plafond **plus bas** sur
+la cellule (« vivier déjà réduit, beaucoup de candidats sont la même carte »). Il est **plus
+du double** : **66,7 % contre 29,6 % hors cellule**, prédiction exactement inverse.
+**Le test de mise à mort n'est pas déclenché : c'est le meilleur signal mesuré sur cette
+population.**
+
+## LA RELECTURE — le seul chemin qui rende l'attaque mesurable sans vérité nouvelle
+
+**Le problème n'est pas les vérités (55 existent), ce sont les LECTURES** : `attaqueLue` est
+non nul **1 fois sur 225**, et **0 fois sur les 89 lignes du banc**.
+
+**Test de mise à mort passé, zéro appel IA** — un HEAD par URL :
+
+| | |
+|---|---|
+| lignes de cellule portant une `imageUrl` | **54 / 55** *(1 non relisable par aucun moyen)* |
+| **photos VIVANTES** | **54 / 54 — 100 %** |
+| la plus ancienne | 2026-08-02, **35 jours** |
+
+*(Le « mort à trois semaines » du 12/08 était une signature `?s=` tronquée, pas une
+suppression — catalogue, entrée 24.)*
+
+**Coût, chiffré avant d'être engagé : 54 appels** au modèle de production, un par image.
+
+### ⚠️ GARDE D'INSTRUMENT, NON NÉGOCIABLE
+
+**La relecture est une COLONNE À PART, déclarée. Elle ne remplace JAMAIS la lecture d'origine
+au journal, et ne s'écrit pas dans `journal_scans`.** Substituer l'une à l'autre referait
+« la simulation dit 12, la production dit 0 » : on croirait mesurer la production alors qu'on
+mesurerait un prompt d'aujourd'hui rejoué sur des photos d'hier.
+
+### ⚠️ ET LA MESURE QUI COMPTE N'EST PAS LE PLAFOND
+
+Le plafond (66,7 %) suppose que l'IA lit **l'attaque qui discrimine**. La relecture mesure
+autre chose, et c'est la vraie question : **combien de fois, sur une vraie photo d'annonce,
+l'IA lit-elle celle-là ?** Un plafond haut avec une lecture faible ne vaut rien.
+
+## Le troisième état de l'attaque — DÉCRIT, NON ÉCRIT
+
+`departagerParAttaque` rend aujourd'hui **une seule sortie muette pour deux causes
+distinctes**. Sur le modèle exact du troisième état de `nomOpposeUnVeto`
+([index.js:2214-2242](index.js)) :
+
+| cas | ce que ça prouve | sortie |
+|---|---|---|
+| l'attaque lue n'existe **nulle part** dans le vivier | rien — *« la preuve est impossible »* | bruit, on se tait |
+| elle est portée par **≥ 1 produit du vivier** mais par **zéro ex aequo** | **preuve positive** que le groupe ne contient pas la carte lue | `incoherent: true`, verdict supprimé, **aucun candidat accusé** |
+
+⚠️ **Désarmé si `attaqueConfiance !== 'haute'`**, comme le veto par le nom.
+
+### Le contrôle qui le validerait
+
+**Le régime doit rester INVARIANT : 37 justes / 7 faux / 45 refus, à l'unité près. Seule la
+COLONNE DES MOTIFS bouge** — des refus aujourd'hui étiquetés « rien lu » deviennent
+« groupe contredit par l'attaque ». **Si un seul juste, faux ou refus se déplace, l'état a
+été écrit trop large et il faut s'arrêter.** Il ne désigne rien, il ne change aucun verdict :
+il sépare deux causes de refus confondues.
+
+## LA RELECTURE DU 2026-09-05 — 54 appels, colonne à part
+
+**54 photos, 54 réponses exploitables, 0 échec.** Résultats persistés dans
+`aj-relecture.json`. **RIEN n'a été écrit en base.**
+
+🔴 **COLONNE À PART, ET DEUX ÉCARTS DÉCLARÉS AVEC LA PRODUCTION** : la relecture n'a **pas
+le titre de l'annonce** et ne voit **qu'une seule photo** au lieu de toutes. Elle voit donc
+**moins** que la production — elle ne peut pas la flatter, et elle ne mesure pas sa justesse.
+Le prompt n'est pas recopié : il est **extrait de `index.js`** à l'exécution (13 325
+caractères), pour qu'il n'en existe pas une seconde version qui divergerait.
+
+### 1. L'attaque — 55,8 % réel contre 66,7 % de plafond
+
+| | 54 lignes |
+|---|---|
+| `attaque` rendue | **52 — 96,3 %** |
+| non rendue | 2, **toutes deux en confiance `basse`** → désarmées par le verrou 1 |
+| confiance | haute **52** · basse 2 — rien entre les deux |
+| c'est l'attaque du produit-**VÉRITÉ** | **37 / 52 — 71,2 %** |
+| **isole une seule métacarte** du vivier | **29 / 52 — 55,8 %** |
+| **et c'est la BONNE métacarte** | **27 / 52 — 51,9 %** |
+| isole une métacarte **fausse** | **2** |
+
+**La lecture réelle perd 11 points sur le plafond, pas la moitié.** Une carte sur deux serait
+ramenée à la bonne métacarte.
+
+### 2. 🔴 LES 2 FAUSSES NE SONT SÉPARABLES PAR AUCUN CRITÈRE QU'ON AIT DÉJÀ
+
+| | L046 Raichu | H019 Jynx |
+|---|---|---|
+| attaque lue | « Quick Attack » (でんこうせっか) | « Ice Punch » (れいとうパンチ) |
+| attaque de la vérité | `gigashock` | `icepunch | coldbreath` |
+| métacarte désignée | 407388 (produit 654243) | 212819 (produit 650627) |
+| métacarte de la vérité | 211736 (584721) | 335761 (571895) |
+| `attaqueConfiance` | **haute** | **haute** |
+| taille du vivier | 9 | 5 |
+| porteurs de l'attaque | 1 | 1 |
+
+**Comparé aux 27 justes** : confiance **haute des deux côtés** · taille du vivier des justes
+**min 1 · médiane 2 · max 9** — les deux fausses (9 et 5) sont **dedans** · porteurs des
+justes **min 1 · médiane 1 · max 2** — les deux fausses valent **1**, comme la médiane.
+
+**Aucun des trois critères ne sépare. Il n'y a pas de verrou supplémentaire à poser avec ce
+qu'on a.** La règle coûte donc **2 erreurs pour 27 justes**, et c'est ainsi qu'il faut
+l'écrire — pas « 2 erreurs qu'un verrou écartera ».
+
+⚠️ **Et le cas Jynx est instructif** : l'attaque lue **EST** celle de la vérité
+(`icepunch`), mais elle est aussi portée par un autre produit du vivier, seul de sa
+métacarte. **Lire juste ne suffit pas** : c'est le catalogue qui décide si la lecture isole.
+
+⚠️ **Tout critère trouvé APRÈS avoir vu ces deux lignes serait une HYPOTHÈSE, pas un gain**
+— même statut que `écart ≥ 2` : à confirmer sur des lignes fraîches, jamais à câbler sur
+les lignes qui l'ont suggéré.
+
+### 3. Les échecs sans porteur : **20, pas 4** — et trois causes distinctes
+
+⚠️ **Correction** : j'avais nommé 4 échecs, c'était ce que ma sortie tronquée montrait. Il y
+en a **20** sur les 52 (les 3 restants portent l'attaque sur plusieurs métacartes).
+
+Test : l'attaque lue existe-t-elle ailleurs dans les 73 188 produits ?
+⚠️ **C'est une recherche par SOUS-CHAÎNE, elle sur-compte** (« Zzap » attrape « Buzzap »).
+
+| cause | exemple | ce que ça dit |
+|---|---|---|
+| **quasi-lecture, à une lettre** | L026 Pichu : lu **« Zzap »**, la vérité porte **« Zzzap »** | la jointure exacte échoue sur **un caractère** |
+| **nom anglais plausible mais faux** | H015 Farfetch'd : lu « Leek Strike », la vérité porte **« Leek Slap »** ; « Leek Strike » existe, sur *Galarian Sirfetch'd* | le modèle produit un nom qui EXISTE, appartenant à une autre carte |
+| **lecture JUSTE, vivier amputé** | L029 Rattata : lu « Scratch », qui **EST** l'attaque de la vérité — 0 porteur au vivier | ce n'est pas la lecture qui échoue, c'est le **vivier** |
+| **orthographe inconnue** | H016 Sabrina's Jynx : « Good Manners », **0 produit** au catalogue | translittération probablement fausse |
+
+🔑 **Les quatre tombent aujourd'hui dans le MÊME silence.** C'est exactement ce que le
+troisième état (décrit plus haut) sépare — et la cause « vivier amputé » n'est pas une cause
+de lecture du tout.
+
+### 4. Le symbole : **9 sur 54 — 16,7 %, une carte sur six**
+
+Lu **en BRUT**, hors du parseur de production. `R` 9 · **`aucun` 9** · `gym` 6 ·
+`feuilles` 5 · `pokeball` 5 · `etoile` 4 · `couronne` 4 · `fossile` 3 ·
+**`illisible` 3** · `ruines` 2 · `e1`/`e3`/`palmier`/`promo-etoile` 1 chacun.
+
+🔴 **`MOTS_VIDES` détruit 9 lectures sur 54 — une carte sur six.** Ces 9 « j'ai vu
+l'emplacement et il est VIDE » deviennent `null`, indiscernables de « je n'ai pas lu ».
+C'est le compte que le journal ne pouvait pas donner : au journal, `"aucun"` vaut **0/225**.
+
+**Ce qu'une règle d'élimination par l'absence de symbole écarterait — le chiffre :**
+**0 set sur 24** porte `symbole: 'aucun'` dans la table close. Les 24 se répartissent en
+22 sets À symbole (`logo-tcg` EXP/WEB, `gym` G1/G2, `feuilles` PJU, `fossile` MFO,
+`R` ROG, `palmier` SI-JP, `etoile` N1, `ruines` N2, `couronne` N3, `eclair` N4,
+`vs` VS, `e1`-`e5`, `empreintes` ADV2, `croix` ADV3, `cercle-chiffre` IPB,
+`mcdo` MCDP) et **2 sets non relevés** (ADVex1, DP5c — `symbole: null`).
+
+**Donc : une lecture « aucun » honnête écarterait AU MIEUX les candidats des 22 sets à
+symbole — la quasi-totalité du vivier vintage.** La règle serait **très forte**, et elle est
+**aujourd'hui inapplicable** : il n'existe aucune contrepartie `'aucun'` dans la table. Elle
+ne le deviendrait qu'après un relevé de terrain set par set. *(Les 9 lignes concernées
+portent 35 candidats au total, médiane 4 par ligne.)*
+
+### 5. Numéro et total : non mesurable, dénominateur **0**
+
+`number` rendu **51/54 (94,4 %)** · `total` rendu **0/54** (la cellule est *sans total*).
+🔴 Les **47 produits-vérité distincts** ont tous un document `numeros_cartes` avec
+`numero: null` **ET** `numeroUrl: null` (source cardmarket, codeSet EXS/EXP/N3…).
+**La justesse du numéro a un dénominateur de 0.** La partition « e-Card mal lue » contre
+« carte sans numéro » se tranche entièrement du second côté : **Cardmarket ne publie aucun
+numéro pour ces cartes.** C'est `numero: null` est FIDÈLE, une troisième fois.
+
+### 6. Stabilité — le modèle ne bouge presque pas
+
+`name` **54/54 — 100 %** · `number` **50/51 — 98 %** · `symboleSet` 32/36.
+Un écart mesure la **variance du modèle** et les deux différences déclarées, jamais un
+progrès. Il est faible : **nos mesures de lecture ne sont pas bornées par l'instabilité.**
+
+### 🔴 MES DEUX PRÉDICTIONS FAUSSES, NOMMÉES
+
+- **P-b FAUSSE** : je prédisais `"aucun"` **< 10 %** et `illisible` dominant. C'est
+  **16,7 %**, et `illisible` ne fait que 3 sur 54. Je sous-estimais à quel point ces cartes
+  portent un emplacement vide, et donc à quel point `MOTS_VIDES` coûte cher.
+- **P-d FAUSSE** : je prédisais le `number` identique **~70 %** entre journal et relecture.
+  C'est **98 %**. Je surestimais la variance du modèle — et cette erreur-là aurait borné à
+  tort toutes nos mesures de lecture.
+
+*(Deux prédictions justes au passage : `attaque` rendue ≥ 85 % → 96,3 % ; `number` rendu
+> 80 % → 94,4 %. Et une largement sous-estimée : je donnais « la moitié du plafond » pour
+l'isolement, c'est **84 % du plafond**.)*
+
+## LA QUASI-LECTURE — les deux colonnes, jamais la première seule
+
+**Tolérance de distance d'édition ≤ 2 sur la clé de jointure, mesurée sur la relecture.**
+⚠️ Une tolérance orthographique sur une clé de jointure peut transformer un **silence
+honnête** en **désignation fausse**. Les deux colonnes sont rendues ensemble ou pas du tout.
+
+| COLONNE A — ce qu'elle rattrape | dénominateur : **20** échecs sans porteur |
+|---|---|
+| à distance ≤ 2 d'une attaque **du vivier** | **2 / 20** |
+| dont elle désigne la **BONNE** métacarte | **2** |
+| dont elle désigne une **FAUSSE** métacarte | **0** |
+| dont elle reste ambiguë (> 1 métacarte) | **0** |
+
+Les deux : **Pichu** « Zzap » → « zzzap » (**d = 1**) · **Cool Porygon** « Texture Magic » →
+« textures magic » (**d = 1**). Les deux sont des **quasi-lectures à un caractère**.
+
+| COLONNE B — ce qu'elle casse | dénominateur : **27** justes |
+|---|---|
+| justes **conservées** | **27 / 27** |
+| justes **détruites** | **0 / 27** |
+
+**BILAN NET : +2 rattrapées, −0 perdues, 0 nouvelle désignation fausse.**
+
+⚠️ **ET CE QUE CE BILAN NE PROUVE PAS.** 27 justes est un dénominateur **trop petit pour
+certifier une tolérance**. L'absence de collision ici n'est pas une preuve d'innocuité à
+l'échelle du catalogue : sur 73 188 produits, des noms d'attaque à un caractère l'un de
+l'autre existent forcément. **Le gain est de 2 lignes ; le risque n'est pas mesuré.** À ce
+titre, la tolérance est une **hypothèse**, au même statut que `écart ≥ 2` — jamais un gain
+acquis, et surtout pas à câbler sur les lignes qui l'ont suggérée.
+
+## « VIVIER AMPUTÉ » — 7 des 20 ne sont PAS des échecs de lecture
+
+| | |
+|---|---|
+| échecs sans porteur | **20** |
+| dont l'attaque lue est **JUSTE** (celle de la vérité) et le vivier n'a **aucun** porteur | **7** |
+| **vrais échecs de LECTURE** | **13** |
+
+Les sept : **Rattata** « Scratch » · **Brock's Rhyhorn** « Horn Toss » · **Mew** « Pound » ·
+**Charmander** « Growl » · **Caterpie** « Tackle » · **Growlithe** « Errand-Running » (×2).
+Sur les sept, **la vérité est ABSENTE du vivier**.
+
+🔑 **Ces 7 lignes doivent être comptées avec le défaut de VIVIER, pas avec l'attaque.**
+L'IA a lu juste ; c'est le vivier qui ne contenait pas la carte. Les additionner aux échecs
+de lecture ferait porter à l'attaque un défaut qui n'est pas le sien.
+
+**Le compte du défaut de vivier, sur la même population** : **11 des 52** lignes à attaque
+rendue ont leur vérité **absente du vivier** — aucun départage, quel qu'il soit, ne peut les
+rattraper.
+
+## LE TROISIÈME ÉTAT — sa portée réelle : 19 lignes
+
+Mesuré sur des **lectures vraies**, pas sur une hypothèse.
+
+| | |
+|---|---|
+| lignes à attaque rendue | 52 |
+| sans groupe d'ex aequo (≥ 2), écartées | 20 |
+| **examinées** | **32** |
+| 🎯 **CONTRADICTION POSITIVE** — ≥ 1 porteur au vivier, **0 dans les ex aequo** | **19** |
+| BRUIT — aucun porteur nulle part, on se tait | 13 |
+
+**19 lignes sur 32 (59 %) porteraient la contradiction positive** : Raichu, Grimer, Articuno,
+Hitmontop, Porygon2, Cyndaquil, Dratini, Beedrill, Spearow, Lapras, Paras, Larvitar,
+Girafarig, Pidgeot, Snorlax, Dark Charizard… Sur chacune, l'attaque lue **existe dans le
+vivier** mais **aucun ex aequo ne la porte** — preuve que le groupe ne contient pas la carte
+lue.
+
+**Aujourd'hui ces 19 lignes rendent le MÊME silence que les 13 lignes de bruit.** Le
+troisième état sépare deux causes que rien ne distingue en sortie. Il ne désigne rien et ne
+change aucun verdict : **le contrôle reste que 37/7/45 doit rester invariant à l'unité près,
+seule la colonne des motifs bouge.**
+
+## LA RÈGLE, ÉCRITE TELLE QU'ELLE EST
+
+**27 justes pour 2 fausses.** Aucun verrou supplémentaire n'est posable :
+les deux fausses (L046 Raichu, H019 Jynx) sont **indiscernables a priori** des 27 justes sur
+les trois critères qu'on possède —
+
+| critère | les 2 fausses | les 27 justes |
+|---|---|---|
+| `attaqueConfiance` | **haute**, haute | **haute** |
+| taille du vivier | 9, 5 | min 1 · médiane 2 · **max 9** |
+| nombre de porteurs | 1, 1 | min 1 · **médiane 1** · max 2 |
+
+**Pas d'adoucissement : la règle coûte 2 erreurs pour 27 justes, et rien de ce qu'on mesure
+aujourd'hui ne permet de les éviter.**
+
+## 🔑 LA DISTRIBUTION DES RANGS — le classement n'est PAS le problème
+
+> 🔴 **CHIFFRES CORRIGÉS LE 2026-09-06 — lire d'abord « CORRECTION MAJEURE — LE VIVIER DE LA
+> ROUTE » plus bas.** Trois chiffres de cette section sont FAUX et restent écrits pour que la
+> correction soit relisible : **29 absences → 14**, **67,4 % → 84,3 %**, **52,9 % hors cellule
+> → 100 %**, **15 fermes sans vérité au vivier → 1**. Ils venaient d'un vivier de MA
+> construction, pas de celui de la route.
+> 🔑 **CE QUI LES A RATTRAPÉS EST LA RÉSERVE ÉCRITE DANS CETTE SECTION MÊME** (« le 52,9 %
+> hors cellule est un minorant », « à reprendre avec le vivier exact de la route »). Elle a
+> été posée AVANT qu'on demande la vérification, et elle désignait la bonne cause. **Une
+> réserve écrite au moment de la mesure vaut plus qu'une correction écrite après coup** :
+> c'est elle qui a empêché ces chiffres de servir de base à une décision.
+> ⚠️ **Ce qui reste VRAI dans cette section** : la distribution des rangs elle-même — quand la
+> vérité est au vivier, elle est dans le top 3. C'est l'instrument « vivier par le nom », et il
+> reste valable **contre lui-même** (avant/après un changement de périmètre).
+
+**Nouvelle règle d'affichage** : verdict FERME → une seule carte · SOUS RÉSERVE → les
+**3 meilleurs candidats avec leur photo**. L'objectif devient « la vérité dans le TOP 3 »,
+un problème de **CLASSEMENT**, pas d'identification. Rien n'est affirmé, le critère de
+lancement n'est pas en jeu.
+
+⚠️ **VIVIER DÉCLARÉ** : vivier par le NOM, restreint aux 24 sets quand la restriction est
+non vide, sinon le nom entier — le même que `apres()` sur la cellule, et le même que toutes
+les mesures d'aujourd'hui.
+
+### Le résultat, et il est net
+
+| dénominateur **89** lignes à vérité individuelle | tout le banc | **cellule (55)** | hors cellule (34) |
+|---|---|---|---|
+| **ABSENTE DU VIVIER** *(pas un rang — le plafond)* | **29** | **13** | **16** |
+| rang 1 | 54 | 36 | 18 |
+| rang 2-3 | 6 | 6 | 0 |
+| rang 4-10 | **0** | **0** | **0** |
+| rang 11+ | **0** | **0** | **0** |
+| 🎯 **TOP 3 parmi les PRÉSENTES** | **60/60 — 100 %** | **42/42 — 100 %** | **18/18 — 100 %** |
+| top 3 sur toutes les lignes | 67,4 % | **76,4 %** | 52,9 % |
+
+🔴 **QUAND LA VÉRITÉ EST DANS LE VIVIER, ELLE EST TOUJOURS DANS LE TOP 3. Zéro exception sur
+60 lignes.** Le classement ne perd jamais la carte au-delà du rang 3. **Le seul obstacle à
+la nouvelle règle d'affichage est le VIVIER**, et c'est le plafond de tout le reste : 29
+vérités sur 89 n'y sont pas.
+
+⚠️ **RÉSERVE SUR LES 16 ABSENCES HORS CELLULE.** Sur la cellule, le vivier mesuré **est**
+celui de la route (`apres()`), donc les 13 absences y sont réelles. Hors cellule, la route
+emprunte aussi `trouverParSetCodeEtNumero` : une partie des 16 absences peut venir de **ma**
+construction de vivier, pas de la production. **Le 76,4 % de la cellule est solide ; le
+52,9 % hors cellule est un minorant.**
+
+### Par régime d'affichage
+
+| | n | absente du vivier | rang 1 | rang 2-3 | top 3 sur n |
+|---|---|---|---|---|---|
+| **SOUS RÉSERVE** (les 3 s'y affichent) | 48 | 7 | 35 | **6** | **85,4 %** |
+| REFUS (aucun verdict aujourd'hui) | 15 | 7 | 8 | 0 | 53,3 % |
+| **FERME** (une seule carte) | 26 | **15** | 11 | 0 | 42,3 % |
+
+**Sur les lignes SOUS RÉSERVE — celles où les 3 candidats s'afficheront — le top 3 vaut
+85,4 %, et 100 % des présentes.** Les 6 lignes de rang 2-3 sont **exactement** celles que la
+nouvelle règle rattrape : aujourd'hui invisibles, demain affichées.
+
+### 🔴 LE SEUL CAS GRAVE, ET IL N'EST PAS CELUI QU'ON ATTENDAIT
+
+| | |
+|---|---|
+| FERMES où la vérité est présente mais **pas au rang 1** | **0 / 11** |
+| **FERMES dont la vérité est ABSENTE DU VIVIER** | **15 / 26** |
+
+**Aucun verdict ferme ne se trompe de rang.** Quand la carte est là, le ferme la met
+première, 11 fois sur 11. **Le danger est ailleurs : 15 fermes sur 26 portent sur une ligne
+où la vérité n'est même pas candidate.** Aucune règle d'affichage — top 3 ou non — ne peut
+rattraper ça. ⚠️ Sous la réserve ci-dessus : une partie de ces 15 relève de mon vivier hors
+cellule, pas de la route. **À reprendre avec le vivier exact de la route avant d'en tirer une
+décision.**
+
+### Le terme PRIX ne coûte AUCUNE place de top 3
+
+**0 ligne au-delà du rang 3** — il n'y a donc **rien** à récupérer, et l'écart au 3e n'a pas
+de population à mesurer. Neutralisé par la voie de production (`rarete: 'promo'`,
+[scoring.js:1861](scoring.js)) : **top 3 avec le terme 60, sans lui 60, net +0.** Aucune
+ligne n'entre, aucune ne sort.
+
+🔑 **Ce que ça règle** : on savait que le terme `prix` déclasse à tort sur le **rang 1**.
+**Sur l'objectif TOP 3, il ne coûte rien.** Le corriger reste utile pour le verdict ferme ;
+ce n'est **pas** un levier pour la nouvelle règle d'affichage.
+
+## Statut des deux pistes de l'attaque — HYPOTHÈSES, pas acquis
+
+- **Tolérance orthographique (distance ≤ 2)** : +2 rattrapées, −0 perdues, 0 nouvelle fausse
+  désignation. **Le gain est mesuré, le risque ne l'est pas** — 27 justes est un dénominateur
+  trop petit pour certifier une tolérance sur une clé de jointure. ⛔ **Ne jamais la câbler
+  sur les lignes qui l'ont suggérée** ; elle se confirme sur des lignes fraîches ou pas du tout.
+- **Troisième état (contradiction positive)** : **19 / 32** lignes à groupe d'ex aequo.
+  Portée réelle mesurée sur des lectures vraies, mais **la même population que celle qui l'a
+  suggéré**. ⛔ Même règle : hypothèse jusqu'à confirmation ailleurs. Son contrôle reste
+  **37/7/45 invariant à l'unité près, seule la colonne des motifs bouge**.
+
+## 🔴 CORRECTION MAJEURE — LE VIVIER DE LA ROUTE, MESURÉ AVEC SON PROPRE CODE
+
+**Mon chiffre précédent était faux, et de beaucoup.** J'avais rendu « 29 absences sur 89 »
+et « 52,9 % hors cellule » avec un vivier de MA construction. Rejoué avec les fonctions
+**exportées de production** — `trouverParSetCodeEtNumero` + `nomOpposeUnVeto`,
+`trouverCarteTCGdex` → union des deux `trouverProduitsLocaux` (ce que fait `viviersUnis`),
+puis `trouverProduitsParNumero` :
+
+| | ancien (mon vivier) | **route** |
+|---|---|---|
+| vérité présente, tout le banc | 60 / 89 | **75 / 89 — 84,3 %** |
+| **hors cellule** | 18 / 34 — 52,9 % | **34 / 34 — 100 %** |
+| cellule | 42 / 55 | **41 / 55 — 74,5 %** |
+| **absences** | 29 | **14** |
+
+**Hors cellule, la route ne perd JAMAIS la vérité. 34 sur 34.** Les voies : `nom` 15,
+`setcode-numero` 17, `nom-uni` 2.
+
+🔴 **ET LE « CAS GRAVE » S'EFFONDRE AVEC** : fermes dont la vérité est absente du vivier —
+**1, pas 15**. C'est **L049 Mew** (rendu 819217, vérité 571770), et elle sort **FAUSSE**.
+Les 14 autres étaient un artefact de ma construction. **La réserve que j'avais écrite était
+la bonne, et elle a servi.**
+
+⚠️ **CE QUI MANQUE ENCORE** : `viviersAvecRangs` n'est pas exportée et peut REMPLACER le
+vivier par nom. Je ne la réimplémente pas. **84,3 % reste un minorant**, mais serré.
+
+### Les 14 absences, par cause — une seule classe domine
+
+| | |
+|---|---|
+| **SET HORS PÉRIMÈTRE** — la vérité EST au vivier par le nom, le filtre des 24 sets la retire | **13 / 14** |
+| NOM — le nom lu ne ramène pas la vérité (H003 « The Rocket's Trap » → *Imposter Oak's Revenge*) | 1 / 14 |
+| langue · variante · autre | **0** |
+
+Les treize : Mew (exp 4170) ×2, Farfetch'd (4170), Jynx (4170) ×2, Rattata (3781),
+Paras (3781), Brock's Rhyhorn (**5681**), Charmander (3781), Caterpie (3781),
+Growlithe (3781) ×2, Cool Porygon (4170).
+
+🔑 **UNE SEULE CLASSE, UN SEUL CORRECTIF : le périmètre. Il rendrait candidates 13 des 14
+absences.** Les expansions en cause sont **3781, 4170, 5681** — toutes hors de la table
+close des 24. C'est le même verdict que le scan Ho-Oh, sur une population de 89 lignes au
+lieu d'une.
+
+⚠️ **Et le régime « sans périmètre » a déjà été mesuré et ÉCARTÉ** (JUSTE 63 → 56, FAUX
+8 → 25). Le correctif n'est donc **pas** « retirer le périmètre » : c'est **l'élargir aux
+bonnes expansions**, ce qui demande de savoir lesquelles — et c'est un travail de table,
+pas de code.
+
+## LE TITRE DE L'ANNONCE — INERTE là où il déciderait
+
+**DÉNOMINATEUR D'ABORD**, et il tranche seul :
+
+| | |
+|---|---|
+| `titreAnnonce` au journal | présent **73 / 227** · **NON NUL 57 / 227** |
+| premier titre journalisé | **2026-08-13** |
+| lignes du **BANC** portant un titre | **4 / 89** |
+| 🔴 lignes à **VÉRITÉ ABSENTE DU VIVIER** portant un titre | **0 / 17** |
+
+🔴 **LA POPULATION QUI DÉCIDE EST VIDE.** Aucune des lignes que le titre aurait dû rattraper
+n'en porte un : elles datent toutes d'**avant le 2026-08-13**. **Le test de mise à mort ne
+peut pas se déclencher** — la piste n'est pas réfutée, elle est **INERTE**, exactement comme
+le départage par l'attaque ce matin. Écrire « le titre n'aurait rien rattrapé » serait
+inventer un résultat sur zéro ligne.
+
+**Ce que contiennent les 4 titres du banc** (comptes séparés, jamais additionnés) :
+set/expansion **1** · année **0** · numéro `NNN/NNN` **3** · mention d'édition **0** ·
+langue explicite **1**.
+
+### Ce que les 57 titres montrent quand même — un INDICE, pas une mesure
+
+**27 des 57 sont en langue asiatique**, et plusieurs portent exactement l'information de
+périmètre qui manque : *« Dragonite Holo 149 **Mystère des Fossiles** JAP Vintage »*,
+*« Tadmorv **Banned Rocket Gang** 088/065 JAP »*, *« Kaiminus **Neo** Jap »*,
+*« Carte Pikachu **Expansion pack** »*, *« Pokémon **e séries 2** jap »*,
+*« Altaria ex – 019/068 – **Espèce Delta** »*.
+
+⚠️ **C'est un indice sur 57 lignes hors banc, pas une mesure.** Et le risque est visible à
+l'œil sur la même liste : *« Pikachu non officiel »*, *« Lisez bien l'annonce ! »*,
+*« Carte pokemon »* (titre vide de sens), *« Grolem/Golem Holo »* (deux noms). **Un vendeur
+n'est pas une source fiable** — le titre ne pourrait être qu'un **indice d'élargissement du
+vivier**, jamais un filtre.
+
+⚠️ **ET IL AGIRAIT SUR LE VIVIER, PAS SUR LE DÉPARTAGE.** Le branchant ailleurs, il ne
+pourrait jamais tirer : les 13 absences sont des exclusions de périmètre, décidées **avant**
+tout classement.
+
+### 🔴 CE QU'IL FAUDRA POUR LE MESURER : DES SCANS NEUFS, ET RIEN D'AUTRE
+
+Pas une requête, pas un rejeu : **des scans neufs**. La population qui décide est « lignes du
+banc dont la vérité est absente du vivier ET portant un `titreAnnonce` » ; elle vaut **0**
+aujourd'hui parce que les deux conditions ne se recouvrent pas dans le temps — le champ naît
+le **2026-08-13**, les lignes concernées sont toutes antérieures. Aucun traitement a
+posteriori ne peut fabriquer un titre sur un scan qui n'en portait pas.
+
+⚠️ **ET LE PÉRIMÈTRE ÉLARGI VIDERAIT CETTE POPULATION PLUS VITE QUE LES SCANS NEUFS NE LA
+REMPLIRAIENT** : mesuré ci-dessus, les 14 absences tombent à **1**. Le titre était censé
+servir là où le vivier perd la vérité ; si le périmètre règle 13 des 14 cas, **il ne reste
+presque plus rien à rattraper**. La piste ne meurt pas de ses chiffres — elle peut mourir de
+ce que l'autre piste corrige avant elle. **On la garde INERTE, on ne la relance pas avant que
+le périmètre soit tranché.**
+
+**À rouvrir quand des lignes du banc porteront un titre** — même condition que l'attaque,
+l'intervalle et `egalite-sans-enjeu`. Quatre pistes, un seul blocage : **le journal est
+plus jeune que les champs qu'on veut mesurer.**
+
+## 🔑 LES TROIS EXPANSIONS — ce que l'admission exigerait, et ce qu'elle coûterait
+
+**2026-09-06.** 3781, 4170 et 5681 portent **13 des 14 absences** du vivier de la route.
+Réparties : **3781 → 6 lignes · 4170 → 6 · 5681 → 1**. La 14e (H003) est un problème de nom,
+pas de périmètre. ⚠️ **RIEN N'A ÉTÉ AJOUTÉ. La table n'est pas touchée.**
+
+### La fiche des trois, lue en base
+
+| | **3781** | **4170** | **5681** |
+|---|---|---|---|
+| `codes_set.codeSet` | **EXS** | **UNP** | **CGN** |
+| `slugSet` | `Expansion-Sheet` | `Unnumbered-Promos` | `Nivi-City-Gym` |
+| nom | Expansion Sheet (feuilles distributeur) | « Unnumbered Promos » | Nivi City Gym |
+| produits au catalogue | **125** | **207** | **25** |
+| lignes `numeros_cartes` | 125 | 205 | **9** (sur 25) |
+| **région** (`codes_set.region`) | **japonais** | 🔴 **absente** | 🔴 **absente** |
+| source de la région | `place-internationale-prise-par-MEW` | `nom-hors-catalogue` | `nom-hors-catalogue` |
+| symbole de set attesté | 🔴 **aucun relevé** | 🔴 aucun relevé | 🔴 aucun relevé |
+| période | 🔴 **inconnue en base** | 🔴 inconnue | 🔴 inconnue |
+
+⚠️ **LA PÉRIODE N'EST PAS UN OUBLI, ELLE EST ABSENTE DU MONDE MESURABLE ICI.** Mesuré sur les
+**73 188** produits du catalogue : `dateSortie` **0**, `releaseDate` **0**, `annee` **0**,
+`year` **0** — et `langue` / `idLanguage` / `language` **0** aussi. Le catalogue ne porte
+que `idProduct`, `idExpansion`, `idMetacard`, `name`. **Une année pour ces trois sets
+viendrait forcément d'une source EXTERNE**, par le même chemin que l'Intro Pack — attestation
+rapportée, provenance écrite, vérification impossible de mon côté.
+
+### La règle d'admission, appliquée telle qu'elle est écrite
+
+Les trois critères de `sets-vintage-japonais.js` : (1) le `slugSet` existe exactement dans
+`numeros_cartes` ; (2) il ne désigne qu'UNE expansion ; (3) la région lue dans `codes_set`
+est « japonais » — **pas inconnue**, pas occidentale.
+
+| | crit. 1 | crit. 2 | crit. 3 | verdict |
+|---|---|---|---|---|
+| **3781 EXS** | ✅ | ✅ (slug → `[3781]`) | ✅ **japonais** | ✅ **LES TROIS SONT REMPLIS** |
+| **4170 UNP** | ✅ | ✅ (slug → `[4170]`) | 🔴 **absente** | ❌ **il manque le 3** |
+| **5681 CGN** | ✅ | ✅ (slug → `[5681]`) | 🔴 **absente** | ❌ **il manque le 3** |
+
+🔴 **DEUX SUR TROIS ÉCHOUENT SUR LE MÊME CRITÈRE, ET C'EST LE TROISIÈME.** `regionSource:
+'nom-hors-catalogue'` veut dire que la dérivation **n'a rien conclu** — « je ne sais pas », pas
+« occidental ». La règle exige « japonais », donc **l'admission de 4170 et 5681 demande une
+attestation de région venue d'ailleurs**, avec sa provenance écrite. C'est exactement le
+précédent de l'Intro Pack, et le fichier dit déjà de cette ligne-là que la provenance est
+écrite « pour que ce soit relisible, pas pour faire croire à une vérification ».
+
+### 🔴 ET 3781 EST DÉJÀ DANS `SETS_NON_PROUVES` — refusée pour une raison HORS RÈGLE
+
+Elle remplit les trois critères et elle est pourtant en bas du fichier, avec :
+`preuveManquante: 'trois séries chez pokesymbols, un seul slug en base'`. **La règle écrite
+l'admettrait ; c'est un quatrième critère, non écrit, qui la bloque — que DÉSIGNE ce slug
+unique quand la source en liste trois (bleue, rouge, verte, 1998) ?** Il faut le dire comme
+ça : soit ce critère entre dans la règle, soit il n'a pas à décider seul.
+
+⚠️ **UN SECOND SIGNAL, MESURÉ, VA DANS LE MÊME SENS** : le `setTcgdex` de 3781 est **`sv03.5`**,
+partagé avec les expansions **5328, 5402, 6099**. `sv03.5` est un set de 2023. C'est
+littéralement le pont « FAUX PAR CONSTRUCTION » que la table close existe pour contourner,
+et il est branché sur cette expansion. Ce n'est pas un critère d'admission — c'est un avertissement.
+
+⚠️ **ET 4170 N'EST PAS UN SET.** « Unnumbered Promos » est un **seau**, pas une expansion
+identifiée : 207 produits sans numéro. Le fichier note déjà que « toutes les lignes promo
+japonaises partagent la même étoile PROMO — le symbole ne les séparera jamais entre elles ».
+Admise, elle entrerait avec `symbole: null` et **le verrou 4 la rendrait inerte** pour
+`departagerParSymbole`. Elle élargit le vivier ; elle n'aide aucun départage.
+
+### 🔑 LE COÛT, MESURÉ AVANT TOUTE DÉCISION — banc rejoué, périmètre élargi en mémoire
+
+⚠️ **AUCUN FICHIER TOUCHÉ.** `EXPANSIONS_VINTAGE` est un `Set` partagé par tous les modules :
+un script du bac l'élargit **en mémoire** avant de charger `banc-japonais.js`, qui tourne
+ensuite tel quel. Rien ne survit au process. Deux variantes mesurées — **`+3 expansions`**
+(le vivier s'ouvre) et **`+3 lignes de table`** (les codes EXS/UNP/CGN cessent aussi d'être
+« un set réel hors table » pour `setCodeCompatibleVintage`).
+
+| colonne APRÈS, les 4 seaux cumulés | **JUSTE** | **FAUX** | 🔑 **FAUX ET AFFIRMÉ** | REFUS |
+|---|---|---|---|---|
+| référence — 24 sets | 63 | 8 | **0** | 17 |
+| **+3 expansions** | **64** | **8** | **0** | **16** |
+| +3 lignes de table | 64 | 8 | **0** | 16 |
+| *(rappel — « sans périmètre », ÉCARTÉ)* | *56* | *25* | *0* | *—* |
+
+🔑 **ZÉRO FAUX ET AFFIRMÉ. ZÉRO RÉGRESSION. Le bloc de contrôle ne bouge pas** (80 justes,
+2 faux, 3 refus, identique aux trois régimes). **Une seule ligne change d'issue sur tout le
+banc** — et elle est dans le **HOLDOUT**, le seul seau qui décide :
+
+    H007  « Cool Porygon » n°137   REFUS ⛔  ->  605998 ✅ JUSTE   voie=perimetre-vintage
+    (référence : voie=numero-pokedex-neutralise, aucun candidat retenu)
+
+**Holdout : JUSTE 6 → 7, REFUS 2 → 1, FAUX inchangé à 3.** Les deux variantes donnent le même
+résultat : **ajouter les trois CODES à la table ne change rien de plus** que d'ajouter les
+trois expansions au périmètre. Le levier est le périmètre, pas la garde du `setCode`.
+
+**Ce n'est pas le même effet réduit que « sans périmètre » — c'est un gain net, petit.**
+
+### ⚠️ MAIS LE VRAI EFFET N'EST PAS DANS LE VERDICT, IL EST DANS LA CANDIDATURE
+
+Rejoué avec le **vivier exact de la route** (mêmes fonctions exportées que la correction
+ci-dessus), périmètre élargi :
+
+| vivier de la route | référence | **+3 expansions** |
+|---|---|---|
+| vérité présente, tout le banc | 75 / 89 — 84,3 % | **88 / 89 — 98,9 %** |
+| cellule | 41 / 55 | **54 / 55** |
+| hors cellule | 34 / 34 | 34 / 34 |
+| **absences** | **14** | **1** |
+| **fermes dont la vérité est absente du vivier** | **1** | **0** |
+
+🔑 **LES 13 ABSENCES DEVIENNENT CANDIDATES. UNE SEULE DEVIENT UN VERDICT.** Le périmètre est
+une condition **nécessaire et pas suffisante** : la vérité entre au vivier, puis le départage
+ne va pas la chercher — la plupart de ces lignes finissent en `REFUS-egalite-perimetre`, et
+un vivier plus large rend l'égalité **plus** probable, pas moins.
+**Il ne reste qu'une absence : H003, un problème de NOM** (« The Rocket's Trap » →
+*Imposter Oak's Revenge*, exp 4465 — déjà dans la table).
+
+### Ce que ça coûte au CLASSEMENT — l'instrument « vivier par le nom », contre lui-même
+
+| dénominateur 89 · vivier par le nom | référence | **+3 expansions** |
+|---|---|---|
+| absente du vivier | 29 | **14** |
+| rang 1 | 54 | 55 |
+| rang 2-3 | 6 | 13 |
+| 🔴 **rang 4-10** | **0** | **7** |
+| top 3 parmi les présentes | 60/60 — **100 %** | 68/75 — **90,7 %** |
+| **top 3 sur les 89 lignes** | 67,4 % | **76,4 %** |
+| FERMES où la vérité n'est pas au rang 1 | **0 / 11** | **4 / 15** *(dont 3 lignes de la même carte, L051)* |
+
+⚠️ **LE CLASSEMENT SE DÉGRADE, ET IL FAUT L'ÉCRIRE : 100 % → 90,7 % de top 3 parmi les
+présentes.** Sept lignes tombent au-delà du rang 3 — elles n'existaient pas avant parce que
+leur vérité n'était pas candidate. **Le solde reste largement positif** (top 3 sur les 89 :
+67,4 % → 76,4 %), mais « la vérité est toujours dans le top 3 » **cesse d'être vrai** dès que
+le périmètre s'élargit. Ce n'était pas une propriété du classement, c'était une propriété
+d'un vivier étroit.
+
+🔑 **ET LE TERME PRIX SE RÉVEILLE.** Il ne coûtait **rien** au top 3 avec 24 sets (0 ligne
+au-delà du rang 3). Élargi, il en coûte **2** : `L029 Rattata` rang 4 → **1** et
+`L037 Paras` rang 4 → **1** quand on le neutralise par la voie de production
+(`rarete: 'promo'`, [scoring.js:1861](scoring.js)) — **0 ligne n'en sort**. Top 3 : 68 → 70.
+**Le défaut du terme prix redevient un levier dès que le vivier s'ouvre. Les deux chantiers
+sont liés.**
+
+### Ce que l'admission exigerait — la liste, sans rien y ajouter
+
+1. **4170 et 5681 : une attestation de RÉGION**, source nommée, comme l'Intro Pack. Sans elle
+   la règle les refuse, et la refuser est le comportement correct.
+2. **3781 : trancher le quatrième critère non écrit** — ce que désigne un slug unique quand la
+   source liste trois séries. Soit on l'écrit dans la règle, soit on ne s'en sert pas.
+3. **Un symbole relevé, ou `symbole: null` assumé.** Les trois entreraient inertes pour
+   `departagerParSymbole` (verrou 4). Aucun risque ajouté de ce côté, aucun gain non plus.
+4. **Rejouer `test-table-vintage.js` et le verrou** : la table passerait de 24 à 27 lignes et
+   plusieurs assertions comptent les lignes.
+5. ⚠️ **4170 reste discutable même avec une région** : un seau de 207 promos sans numéro n'est
+   pas « un set japonais vintage identifié », qui est ce que cette table prétend contenir.
+   L'admettre changerait la NATURE de la table, pas seulement sa taille.
+
+**RIEN N'EST CÂBLÉ. La table est intacte. Le chiffre qui décide est écrit : +1 juste, −1 refus,
+0 faux et affirmé, 0 régression, et +13 vérités rendues candidates.**
+
+## 🔴 DÉCISION 2026-09-06 — LES TROIS EXPANSIONS RESTENT DEHORS
+
+**La table n'est pas touchée.** 4170 et 5681 échouent sur le critère 3 — `codes_set.region`
+est **absente**, `regionSource: 'nom-hors-catalogue'`, c'est-à-dire **« je ne sais pas »**, pas
+« occidental ». 3781 remplit les trois critères écrits et reste bloquée par un critère **NON
+ÉCRIT**. Le gain mesuré est réel et il est consigné ici pour ne pas être reperdu ; il ne suffit
+pas à faire entrer une ligne sans preuve.
+
+### Le gain, mesuré (périmètre élargi EN MÉMOIRE, aucun fichier modifié)
+
+| | référence — 24 sets | **+3 expansions** |
+|---|---|---|
+| banc, colonne APRÈS | 63 justes · 8 faux · **0 F&A** · 17 refus | **64** · 8 · **0** · **16** |
+| ligne qui bouge | — | **H007 « Cool Porygon » REFUS → JUSTE, dans le HOLDOUT** |
+| vivier de la route — vérité présente | 75 / 89 — **84,3 %** | **88 / 89 — 98,9 %** |
+| absences | **14** | **1** (H003, un problème de NOM) |
+| fermes sans vérité au vivier | 1 | **0** |
+| 🔴 **top 3 parmi les PRÉSENTES** | **60/60 — 100 %** | **68/75 — 90,7 %** |
+
+### 🔑 L'ÉCHANGE, NOMMÉ EN TOUTES LETTRES
+
+**ON TROQUE UN PROBLÈME DE VIVIER CONTRE UN PROBLÈME DE CLASSEMENT.** Le vivier cesse d'être le
+plafond (98,9 % de vérités candidates) et le classement cesse d'être parfait (90,7 % de top 3).
+⚠️ **Et la règle d'affichage repose ENTIÈREMENT sur le top 3** : FERME → une carte, SOUS RÉSERVE
+→ les 3 meilleurs. Déplacer le défaut du vivier vers le classement, c'est le déplacer **de là
+où il est invisible vers là où il décide de ce qui s'affiche.**
+
+🔴 **ET « la vérité est toujours dans le top 3 » N'ÉTAIT PAS UNE PROPRIÉTÉ DU CLASSEMENT.**
+C'était une propriété d'un vivier étroit : quand le vivier ne contient presque que des candidats
+plausibles, le premier est souvent le bon. Le 100 % tombe dès qu'on l'ouvre. **Un taux mesuré
+sous une contrainte disparaît avec la contrainte** — c'est la même forme d'erreur que le zéro
+tautologique de « sans périmètre ».
+
+### 🔑 MAIS L'ÉCHANGE N'EST PAS FORCÉ — mesuré avec 3781 SEULE
+
+3781 est la seule des trois qui remplit les trois critères écrits. Rejoué avec **elle seule** :
+
+| | référence | **+3781 seule** | +3 expansions |
+|---|---|---|---|
+| banc, colonne APRÈS | 63 · 8 · 0 · 17 | **63 · 8 · 0 · 17 — IDENTIQUE** | 64 · 8 · 0 · 16 |
+| vivier de la route | 75 / 89 — 84,3 % | **81 / 89 — 91,0 %** | 88 / 89 |
+| absences | 14 | **8** | 1 |
+| top 3 parmi les présentes | 100 % | **97,1 %** | 90,7 % |
+| 🔑 **SOUS RÉSERVE — top 3 des présentes** | **100 %** | **100 % (43/43)** | 97,8 % |
+| lignes au-delà du rang 3 | 0 | **2** | 7 |
+
+⚠️ Le banc est **strictement identique** : 60 lignes de sortie diffèrent, toutes des comptes de
+candidats et des logs, **zéro verdict changé**. 3781 seule n'achète aucun juste — elle achète
+**6 candidatures** et ne coûte rien au verdict.
+
+🔑 **TOUTE LA DÉGRADATION DU CLASSEMENT VIENT DE 4170** — celle qui échoue au critère 3 de toute
+façon. **L'échange vivier ↔ classement est causé par la ligne qu'on refuse déjà.**
+
+## 🔑 LE CRITÈRE NON ÉCRIT — la formulation exacte, et ce qu'elle coûterait rétroactivement
+
+3781 remplit les trois critères et reste dans `SETS_NON_PROUVES` avec
+`preuveManquante: 'trois séries chez pokesymbols, un seul slug en base'`. **Ce motif n'est nulle
+part dans la règle.** Les trois critères écrits vérifient tous le côté BASE — le slug existe, le
+slug ne désigne qu'une expansion, la région est japonaise. **Aucun ne vérifie que le slug désigne
+UN SEUL SET RÉEL DANS LE MONDE.** C'est le trou par lequel 3781 passe.
+
+### La formulation qu'il faudrait — un 4e critère, pas un veto au cas par cas
+
+> **4. Le `slugSet` doit désigner UN SEUL set attesté chez la source qui le date.** Si la source
+> en liste plusieurs pour ce slug — séries, tirages, rééditions — la ligne part dans
+> `SETS_NON_PROUVES` en NOMMANT le nombre de sets listés et la source. ⚠️ L'ABSENCE de source
+> n'est pas un échec de ce critère : c'est un échec du critère 3. Les deux ne se confondent pas.
+
+### Combien des 24 l'auraient échoué
+
+🔴 **NON MESURABLE DIRECTEMENT, ET IL FAUT LE DIRE** : pokesymbols n'est pas en base. Je ne peux
+pas rejouer « la source liste-t-elle plusieurs sets ? » sur les 24. **Ce que je peux mesurer,
+ce sont les symptômes que ce défaut laisse DANS LA BASE**, et les trois sont propres :
+
+| sur les 24 admises | |
+|---|---|
+| expansions portant **plusieurs `slugSet`** | **0 / 24** |
+| expansions portant **plusieurs `setTcgdex`** | **0 / 24** |
+| lignes dont `prod` ne colle plus au catalogue | **0 / 24** *(24/24 exactes, au produit près)* |
+
+**Sur tout ce qui est mesurable, le 4e critère ne serait PAS une exception rétroactive : les 24
+le passeraient.** ⚠️ Ce n'est pas une preuve qu'aucune ne l'échouerait chez la source — c'est
+une preuve qu'aucune ne porte le symptôme. Et les `prod` exactes 24 fois sur 24 disent que ces
+lignes ont bien été vérifiées une par une.
+
+### 🔑 ET LE CRITÈRE 3, LUI, EST TENU — 24 / 24, sans exception
+
+Vérifié dans `codes_set` : **les 24 admises portent `region: 'japonais'`.** Aucune exception
+rétroactive. Refuser 4170 et 5681 pour « région absente » est donc **cohérent avec tout ce qui
+est déjà entré**, pas un durcissement improvisé.
+
+🔑 **ET LE CHEMIN DE SORTIE EXISTE DÉJÀ, IL A DÉJÀ SERVI.** Le commentaire de `IPB` dit encore
+« codes_set dit INCONNUE (regionSource 'nom-hors-catalogue') ». **C'est périmé** : `codes_set`
+porte aujourd'hui `region: 'japonais'`,
+`regionSource: 'sources-multiples-concordantes-rapportees-par-testeur'`. **Quelqu'un a attesté,
+la provenance a été écrite, la base l'a enregistrée.** C'est exactement ce qui manque à 4170 et
+5681 — et ça s'est déjà fait proprement une fois.
+⚠️ **PETITE DETTE** : le commentaire de `sets-vintage-japonais.js` sur IPB décrit un état de la
+base qui n'existe plus. À corriger quand on rouvrira le fichier, pas ce tour.
+
+### La seule exception rétroactive trouvée, et ce n'est pas un critère
+
+**`DP5c` « Cry from the Mysterious » est de 2007**, alors que l'en-tête de la table annonce
+« LA TABLE CLOSE DES SETS JAPONAIS VINTAGE (1996-2003) ». Elle remplit les trois critères ; c'est
+le **titre** qui promet une période que la table ne tient pas. Aucune décision là-dessus — c'est
+noté pour que personne ne s'appuie sur « 1996-2003 » comme sur une garantie.
+
+## 🔴 LE PONT `setTcgdex` — ce qui est mesurable, et ce qui ne l'est pas
+
+**La question posée** : combien d'expansions portent un `setTcgdex` dont la période est
+incompatible avec la leur ? **RÉPONSE : LITTÉRALEMENT NON MESURABLE.** Mesuré sur les **73 188**
+produits du catalogue — `dateSortie` **0**, `releaseDate` **0**, `annee` **0**, `year` **0**,
+et `langue` / `idLanguage` / `language` **0**. **La période n'existe nulle part en base.**
+Le catalogue ne porte que `idProduct`, `idExpansion`, `idMetacard`, `name`.
+
+### Alors on mesure le PARTAGE, qui majore le soupçon
+
+| dénominateurs d'abord | |
+|---|---|
+| expansions distinctes au catalogue | **773** |
+| expansions portant au moins un `setTcgdex` | **218** *(28,2 %)* |
+| identifiants `setTcgdex` distincts | **139** |
+| partagés par **plus d'UNE** expansion | **69 / 139 — 49,6 %** |
+| 🔴 partagés par **plus de DEUX** expansions | **6 / 139 — 4,3 %** ← le majorant |
+| expansions touchées par ces 6 | **22 / 218** |
+
+Les six : `sv10.5w` (5 exp) · **`sv03.5` (4 : 3781, 5328, 5402, 6099)** · `sv10.5b` (4) ·
+`ecard3` (3 : 1538, **5024**, **5025**) · `sv08.5` (3) · `xy11` (3).
+
+🔑 **ET LE PLUS IMPORTANT : 16 DES 24 ADMISES PORTENT DÉJÀ UN `setTcgdex` PARTAGÉ.** `base2`,
+`base3`, `base5`, `gym1`, `gym2`, `si1`, `neo1..neo4`, `ecard1`, `ecard2`, `ex2`, `ex3` sont
+tous à 2 expansions ; **EC4 et EC5 partagent `ecard3` à trois**. Le pont faux n'est pas une
+anomalie de 3781 : **c'est le régime normal du vintage japonais, et c'est précisément pourquoi
+cette table existe.** `sv03.5` sur 3781 est le même défaut, un degré plus grave (4 expansions,
+et l'identifiant désigne un set de 2023).
+
+⚠️ **CE QUE ÇA NE PROUVE PAS** : qu'un partage soit une erreur. `ecard3 → EC4 + EC5 + SK` est
+un partage **attendu et documenté** (le jumeau occidental). Le majorant est **6 identifiants /
+22 expansions**, pas 6 fautes.
+
+## 🔑 LES 7 LIGNES HORS TOP 3 — deux familles, et une seule est un problème de classement
+
+Ce sont **5 cartes distinctes** (Mew ×2, Jynx ×2, Farfetch'd, Rattata, Paras — deux d'entre elles
+portent deux lignes de journal). Écarts au 3e, triés : **25 · 25 · 45 · 45 · 45 · 45 · 45**.
+
+| famille | n | écart | vérité | ce que c'est |
+|---|---|---|---|---|
+| **écart 25 — exp 3781** | **2** | **25** *(= `POIDS.prix`)* | score **45** vs 3e **70** | 🔑 **le terme PRIX, seul** |
+| **écart 45 — exp 4170** | **5** | 45 | score **0** | 🔴 **la vérité ne marque RIEN** |
+
+🔑 **LES DEUX À ÉCART 25 SONT ENTIÈREMENT RATTRAPABLES, ET LE DÉFAUT EST DÉJÀ DIAGNOSTIQUÉ.**
+`L029 Rattata` et `L037 Paras` : écart **exactement 25**, la valeur de `POIDS.prix`. Neutralisé
+par la voie de production (`rarete: 'promo'`, [scoring.js:1861](scoring.js)), **les deux passent
+au RANG 1**, et **aucune ligne n'en sort**. Top 3 : 67 → 69.
+
+🔴 **LES CINQ À ÉCART 45 NE SONT PAS UN PROBLÈME DE CLASSEMENT.** Leur vérité score **ZÉRO** —
+pas « un peu derrière » : rien. Elles viennent toutes de **4170**, le seau « Unnumbered Promos »,
+dont les produits ne portent **ni numéro ni code de set** : aucun terme du scoring ne peut
+s'accrocher. **Aucun réglage de classement ne les rattrape** ; il faudrait leur donner de la
+matière à noter. Et 4170 est refusée au critère 3 de toute façon.
+
+### Ce que ça change pour la question « l'élargissement est-il jouable »
+
+**OUI, et il l'est déjà — avec 3781 seule, une fois le terme prix corrigé.** Les 2 lignes
+au-delà du rang 3 sont exactement la paire à écart 25 : **top 3 des présentes 97,1 % → 100 %**,
+et **SOUS RÉSERVE reste à 100 % (43/43)** dans les deux cas. Ce qui reste à payer d'avance :
+**le critère 4, écrit**, et **le terme prix, corrigé**. Ni l'un ni l'autre n'est fait.
+
+**RIEN N'EST CÂBLÉ. LA TABLE EST INTACTE.**
+
+## ✅ 2026-09-06 — LE 4e CRITÈRE EST ÉCRIT DANS `sets-vintage-japonais.js`
+
+**Un critère non écrit qui refuse une ligne n'est pas une règle, c'est une décision au cas par
+cas — et une décision au cas par cas ne se relit pas.** Il était déjà appliqué (c'est lui qui
+tient 3781 dehors), il n'était nulle part. Il l'est maintenant :
+
+> **4. Le `slugSet` doit désigner UN SEUL SET ATTESTÉ chez la source qui le date.** Si la
+> source en liste PLUSIEURS pour ce slug — séries, tirages, rééditions — la ligne part dans
+> `SETS_NON_PROUVES` en NOMMANT le nombre de sets listés et la source.
+> ⚠️ **L'ABSENCE de source n'est pas un échec de ce critère : c'est un échec du 3.** « Je ne
+> sais pas d'où elle vient » et « je sais qu'elle en désigne trois » sont deux refus
+> différents, et **seul le second peut être levé en choisissant laquelle des trois.**
+
+**Écrits avec** : les trois symptômes vérifiables en base — `slugSet` multiples **0/24**,
+`setTcgdex` multiples **0/24**, `prod` divergent **0/24** (les 24 comptes exacts au produit
+près : ces lignes ont bien été vérifiées une par une, et le fichier ne le dit plus seulement,
+il le prouve). **C'est ce qui permet de dire que le critère 4 n'est PAS une exception
+rétroactive** — aucune des 24 n'en porte le symptôme. Et le critère 3 non plus : **24/24**
+portent `region: 'japonais'`.
+
+**Les deux dettes sont consignées dans le fichier**, non corrigées : le commentaire d'`IPB` est
+**périmé** (codes_set porte aujourd'hui `japonais` /
+`sources-multiples-concordantes-rapportees-par-testeur`) — laissé tel quel pour garder la trace
+du moment où on ne savait pas, mais il ne doit plus servir d'exemple ; et **`DP5c` est de 2007**
+alors que l'en-tête promet « 1996-2003 » — **la période n'est pas un critère d'admission, et
+personne ne doit s'appuyer sur ce titre comme sur une garantie.**
+
+⚠️ **AUCUNE DÉCISION DE PRODUCTION NE CHANGE — la règle de symétrie ne s'applique pas.** Rien
+n'est ajouté à la table, `EXPANSIONS_VINTAGE` est inchangée. Contrôle : `test-table-vintage.js`
+**52/52**, banc inchangé.
+
+## 🔑 CE QUE LE TESTEUR DOIT VÉRIFIER À LA MAIN — 3781, et rien d'autre
+
+**3781 est le seul gain sans contrepartie mesurée** : banc **strictement identique** (63 · 8 ·
+**0 faux et affirmé** · 17 — zéro verdict changé), vivier de la route **84,3 % → 91,0 %**,
+absences **14 → 8**, **top 3 des lignes SOUS RÉSERVE 100 % (43/43)**. ⚠️ **Et ce n'est PAS une
+raison de l'admettre.** Une mesure ne remplace pas une attestation — c'est exactement l'échange
+que la règle refuse depuis le premier jour. **L'entrée exige une ATTESTATION.**
+
+### 🔴 Le test que j'espérais est INAPPLICABLE, et il faut le dire avant de demander le travail
+
+Je comptais trancher en base : *si plusieurs produits de 3781 portent le MÊME numéro,
+l'expansion fusionne des séries.* **Impossible — sur les 125 lignes `numeros_cartes` de 3781,
+`numero` est non nul 0 fois, `numeroUrl` 0 fois.** Il n'y a aucun numéro à comparer. *(Idem
+4170 : 0/205, et 5681 : 0/9.)* **La base ne peut ni confirmer ni infirmer la fusion.** Et 125
+produits pour trois séries de sheets est compatible avec la fusion **comme** avec une série
+unique : un compte n'est pas une preuve.
+
+### Les trois vérifications, dans l'ordre — la première réponse décide
+
+| | où | ce qui décide |
+|---|---|---|
+| **a)** | **Cardmarket**, la page « Expansion Sheet » japonaise | **UNE expansion, ou TROIS** (bleue / rouge / verte) ? C'est la seule source qui parle le même langage que `idExpansion 3781`. **Si Cardmarket n'en a qu'une et qu'elle contient les trois séries → le slug FUSIONNE → elle reste dehors**, et le critère aura fait son travail. |
+| **b)** | **pokesymbols.com/tcg/japanese-sets** | combien de lignes « Expansion Sheet ». **C'est la source du refus d'origine, elle dit TROIS.** À **reconfirmer**, pas à croire sur parole d'un commentaire écrit ici il y a des semaines. |
+| **c)** | *(si a et b se contredisent)* | **c'est (a) qui décide POUR NOTRE TABLE.** Nos expansions sont des identifiants **Cardmarket**, pas des sets du monde. |
+
+**Contre-source recherchée** : aucune source ne dit aujourd'hui que `Expansion-Sheet` désigne
+un set unique. Le seul élément en sa faveur est **négatif** — Cardmarket n'a qu'un slug — et un
+slug unique côté catalogue **ne prouve pas** un set unique côté monde : c'est précisément la
+confusion que le critère 4 existe pour empêcher.
+
+## 🔴 4170 — CE N'EST PAS UN DÉFAUT DE PÉRIMÈTRE, C'EST UNE ABSENCE DE SIGNAL
+
+Les 5 lignes hors top 3 dont la vérité est en 4170 ne scorent pas « un peu moins » : elles
+scorent **ZÉRO**, et le détail de production le dit terme par terme. Mesuré sur `L049 Mew` :
+
+    🎯 VÉRITÉ 571770 exp 4170  région (absente)  prix 109.64  SCORE 0
+       numero 0 · set 0 · variante 0 · motif 0 · image 0 · prix 0 · RÉGION 0 · secret 0
+          584730 exp 4464  région japonais       prix 136.22  SCORE 45
+          … tous les autres candidats : 45, et le 45 est la RÉGION, seule.
+
+🔑 **LE TERME QUI SÉPARE EST `POIDS.region` = 45, ET IL VAUT 0 PARCE QUE `codes_set.region` EST
+ABSENTE POUR 4170.** [scoring.js:1876](scoring.js) — `else detail.region = '0 (région
+indéterminée)'` : le scoring **ne pénalise pas une donnée absente**, il ne la récompense pas non
+plus. **La même donnée manquante produit les deux refus** : le critère 3 refuse l'admission, le
+scoring refuse les points. **Deux dispositifs indépendants, une seule cause — l'absence
+d'attestation de région.** Ce n'est pas un défaut de périmètre : le périmètre l'a laissée entrer
+au vivier, et elle n'avait **rien à faire valoir une fois dedans**.
+
+⚠️ **AUCUN RÉGLAGE DE CLASSEMENT NE LES RATTRAPE.** Il n'y a pas de pondération à ajuster quand
+tous les termes valent zéro ; il faudrait leur **donner de la matière à noter**. Sur cette ligne,
+même les candidats en tête ne marquent que sur **un seul terme** — numéro, set, variante, motif,
+image, prix, secret sont tous à 0 pour **tout le monde**. **Une ligne décidée par un terme unique
+n'est pas classée, elle est tirée au sort entre égaux.**
+
+## 🔴 TROISIÈME OCCURRENCE — LE TERME PRIX DÉCLASSE LA BONNE CARTE
+
+Les 2 lignes à écart 25 (`L029 Rattata`, `L037 Paras`, vérités en 3781). Détail de production :
+
+    🎯 VÉRITÉ 548611 exp 3781  prix 23.08 €  ->  prix "0 (incohérent avec rareté lue)"  SCORE 45
+             557711 exp 4169  prix  0.69 €  ->  prix "+25 (carte normale, prix bas)"    SCORE 70
+
+🔑 **LA VÉRITÉ EST DÉCLASSÉE PARCE QU'ELLE EST CHÈRE.** Le Rattata des vending sheets cote
+**23,08 €**, celui de l'Expansion Pack **0,69 €**. Le terme applique « carte normale ⇒ prix bas »
+et **récompense de 25 points le candidat bon marché**, exactement quand la carte rare est la
+bonne réponse. L'écart au 3e vaut **25**, la valeur de `POIDS.prix` — **au point près**.
+Neutralisé par la voie de production (`rarete: 'promo'`, [scoring.js:1861](scoring.js)) : les
+deux passent au **RANG 1**, **0 ligne n'en sort**.
+
+**C'est la TROISIÈME fois que ce terme est pris en flagrant délit** — après le Magikarp promo
+chinois (114,80 € contre 0,29 €, qui a fait écrire la neutralisation promo) et le déclassement
+mesuré au rang 1 sur le banc. ⛔ **NON CORRIGÉ CE TOUR, et c'est délibéré** : il n'est pas dans
+le périmètre de ce chantier, et le corriger sous le coup d'une troisième occurrence, c'est le
+corriger sur les lignes qui l'ont suggéré. **Il est consigné, daté, et il attend son propre tour
+de mesure.**
+
+🔑 **CE QUE ÇA LIE** : le terme prix ne coûtait **rien** au top 3 tant que le périmètre était
+étroit (0 ligne au-delà du rang 3). Il en coûte **2 sur 2** dès que 3781 entre. **Les deux
+chantiers ne sont pas indépendants : élargir le périmètre réveille le défaut du prix.**
+
+## 🔑 2026-09-06 — LES DEUX SOURCES SE CONTREDISENT SUR 3781, ET CE QUE J'EN RETIENS
+
+**Constat rapporté par le testeur** : Cardmarket expose **UNE** expansion « Expansion Sheet »
+(fil d'Ariane unique, `Charmander (EXS)`, tous les produits sous EXS) ; pokesymbols en liste
+**TROIS** (Expansion Sheet 1 blue, 2 red, 3 green). **3781 fusionne donc trois séries réelles —
+et Cardmarket ne les distingue pas non plus.** Il n'y a rien à résoudre de son côté.
+
+### La question posée : contre QUOI le critère 4 protège-t-il ?
+
+**LECTURE A — « le slug désigne plusieurs sets DU MONDE ».** La table est une table de SETS.
+Chaque ligne déclare `nom`, `annee`, `symbole` : ce sont des affirmations sur **un** set. Une
+ligne fusionnée ferait dire au fichier « Expansion Sheet, 1998, symbole X » d'une chose qui en
+est trois. La discipline fondatrice — vingt lignes vérifiées valent mieux que 177 devinées —
+tombe si une ligne peut recouvrir un ensemble non résolu.
+
+**LECTURE B — « le catalogue ne sait pas résoudre le slug ».** La table sert à mapper **NOS**
+expansions vers région + époque + symbole. Cardmarket n'expose qu'un ensemble, tous nos produits
+y sont, **aucun scan ne peut jamais tomber « entre » les trois séries** : la distinction n'existe
+pas dans nos données. Un critère qui refuse une ligne pour une ambiguïté **qui ne peut pas se
+manifester** ne protège rien.
+
+### 🔴 CE QUE JE RETIENS : LA LECTURE A — ET LA RAISON EST DÉCISIVE
+
+**LA LECTURE B RÉCOMPENSERAIT L'IGNORANCE.** « Cardmarket ne les sépare pas » est une **absence
+de donnée dans notre source**, pas une preuve qu'il n'y a rien à séparer. Sous la lecture B, un
+slug devient admissible **parce qu'on en sait moins** : plus notre catalogue est grossier, plus
+la ligne passe. C'est exactement le renversement que ce projet passe son temps à fermer —
+« je ne sais pas » n'est pas « je sais que non ». **Le critère 4 reste écrit comme il l'est.**
+
+### ⚠️ MAIS LE CRITÈRE, BIEN LU, NE DEVRAIT PAS REFUSER LA LIGNE ENTIÈRE — mesuré
+
+**Quels champs de `SETS_VINTAGE_JAPONAIS` le CODE lit-il réellement ?** Relevé sur tout le
+dépôt :
+
+| champ | lu par | portée |
+|---|---|---|
+| `exp` | `EXPANSIONS_VINTAGE` (le périmètre) | **par EXPANSION** |
+| `code` | `CODES_VINTAGE`, `setCodeCompatibleVintage`, `departagerParSymbole`, verrous | **par EXPANSION** |
+| `symbole`, `symboleFiable` | `departagerParSymbole` (verrous 2 et 4) | 🔴 **par SET** |
+| `nom` | une chaîne de `raison`, jamais une décision | affichage |
+| `annee`, `slug`, `prod`, `regionSource` | **RIEN** | documentation |
+
+🔑 **LA FUSION NE PEUT ENDOMMAGER QU'UNE SEULE COLONNE LUE : `symbole`.** `exp` et `code` sont
+des attributs de l'EXPANSION, et ils sont **exacts** sur une ligne fusionnée — les trois séries
+sont japonaises, vintage, 1998, sous un seul code Cardmarket. **Et la table a déjà DEUX
+mécanismes pour un symbole qui ne désigne pas** : `symbole: null` (verrou 4, « non relevé n'est
+pas une correspondance ») et `symboleFiable: false` (verrou 2, « porté par plusieurs sets »).
+
+**CE QUE JE PROPOSE, ET JE NE LE FAIS PAS** : une **clause bornée**, écrite comme clause
+générale et non comme dérogation au cas par cas —
+
+> *Un `slugSet` dont la source atteste qu'il recouvre PLUSIEURS sets peut entrer **à condition
+> que la ligne ne déclare AUCUN attribut par-set** : `symbole: null`, `symboleFiable: null`,
+> `annee` en intervalle ou nulle, et la fusion NOMMÉE sur la ligne (« recouvre N séries selon
+> <source> »). La ligne sert alors le périmètre et la garde du `setCode`, et **jamais** le
+> départage par le symbole.*
+
+⚠️ **TROIS GARDE-FOUS SANS LESQUELS CETTE CLAUSE EST UNE RENÉGOCIATION** :
+1. **Elle s'écrit AVANT la réponse de pokesymbols sur les symboles**, sinon c'est le résultat
+   qui choisit la règle. Elle est d'ailleurs **robuste à cette réponse** : les champs par-set
+   sont nuls dans tous les cas.
+2. **Son coût se mesure sur les 24 AVANT de s'appliquer** : aucune ligne existante ne doit
+   devenir éligible ou inéligible par son effet.
+3. ⛔ **Elle ne rend pas 4170 admissible pour autant** — 4170 échoue au critère **3**, pas au 4,
+   et aucune clause sur la fusion ne fabrique une attestation de région.
+
+**Tant qu'elle n'est pas écrite et mesurée, 3781 reste dehors. La table n'est pas touchée.**
+
+## LE TEST DES SYMBOLES — ce qu'il tranche vraiment, et ce qu'il ne tranche pas
+
+⚠️ **CORRECTION DE CADRAGE : ce test NE DÉCIDE PAS L'ADMISSION.** Sous la clause bornée, EXS
+entrerait avec `symbole: null` **quelle que soit** la réponse. Ce que le test décide, c'est si
+la colonne `symbole` pourra **un jour** être remplie pour EXS — et si un symbole lu sur une
+carte de vending sheet pourrait **mal désigner**. Ça vaut un coup d'œil, pas un blocage.
+
+### Ce qu'il faut regarder sur pokesymbols.com/tcg/japanese-sets
+
+Les **trois lignes « Expansion Sheet »** portent chacune une vignette de symbole. **Comparer les
+trois dessins**, et rapporter lequel des trois cas :
+
+| ce qu'on voit | ce que ça veut dire | déclaration |
+|---|---|---|
+| **trois dessins DIFFÉRENTS** | la fusion est visible : une ligne EXS unique ne peut porter qu'un des trois | `symbole: null` — verrou 4, inerte. **La colonne restera vide.** |
+| **un seul dessin partagé** | la fusion est sans conséquence pour nous | déclarable — ⚠️ **puis vérifier la collision** avec les 24 déjà déclarés (`logo-tcg`, `feuilles`, `fossile`, `R`, `gym`, `palmier`, `etoile`, `ruines`, `couronne`, `eclair`, `vs`, `e1`–`e5`, `empreintes`, `croix`, `mcdo`, `cercle-chiffre`). Collision -> `symboleFiable: false`. |
+| **aucun symbole** sur les sheets | c'est `symbole: 'aucun'`, **une VALEUR**, pas `null` | 🔴 **inutilisable aujourd'hui** : `MOTS_VIDES` ([index.js:780](index.js), appliqué [index.js:786](index.js)) détruit le `'aucun'` lu — DÉFAUT CONFIRMÉ déjà au chantier. |
+
+## 🔴 QUATRIÈME SIGNE — NOS REFUS SE CONCENTRENT SUR LA VALEUR. MESURÉ.
+
+Le testeur a nommé le cas : **`Charmander` EXS — plancher 49,93 € · tendance 222,01 €**. Ce
+n'est pas une impression, et voici le chiffre. *(Dénominateur : `guide_prix.trend` non nul sur
+**68 936 / 73 188** produits — 94,2 %. Une expansion sans guide n'est pas « sans valeur », elle
+est sans donnée.)*
+
+| `trend` en € | n | p25 | **MÉDIANE** | p75 | p90 |
+|---|---|---|---|---|---|
+| **3 expansions ÉCARTÉES** | 315 / 357 | 14,10 | **36,32** | 122,32 | 354,72 |
+| 24 ADMISES (table close) | 1 835 | 1,80 | **6,39** | 26,19 | 99,03 |
+| catalogue entier | 68 936 | 0,12 | **0,92** | 5,99 | 37,09 |
+
+**Les écartées valent 5,7× la médiane de la table close et 39× celle du catalogue.** Et les
+**10 vérités** que le périmètre écarte : **médiane 67,34 €**, max **222,01 €** (le Charmander),
+contre **0,92 €** au catalogue. *(Mew 109,64 · Jynx 82,12 · Growlithe 83,51 · Farfetch'd 67,34 ·
+Caterpie 23,51 · Rattata 23,08 · Cool Porygon 22,76 · Paras 7,38 · Brock's Rhyhorn 1,24.)*
+
+⚠️ **CE QUE ÇA N'EST PAS : une causalité.** Le périmètre ne regarde jamais le prix. Ce qui est
+mesuré, c'est que **rareté et absence de documentation ont la même cause** — les sheets de
+distributeur et les promos non numérotées sont chères **parce qu'**elles sont rares et mal
+répertoriées, et mal répertoriées **parce que** rares. Nos refus ne visent pas la valeur : ils
+tombent là où elle est.
+⚠️ **Et ce n'est pas uniforme** : **5681 est BON MARCHÉ** (médiane **1,14 €**). La concentration
+est dans 3781 (28,73 €) et 4170 (67,34 €). Deux sur trois, pas trois sur trois.
+
+🔑 **LE LIEN QUI COMPTE, ET IL EST NOUVEAU** : le terme `POIDS.prix` récompense de 25 points le
+candidat **bon marché**. Il frappe donc **exactement cette population** — les vérités écartées
+sont les plus chères de la base. **Les deux défauts se composent sur les mêmes cartes** : le
+périmètre les retire du vivier, et si on les y remet, le terme prix les déclasse. `Rattata` en
+est la démonstration : 23,08 € contre 0,69 €, écart de rang causé par 25 points **au point près**.
+
+## ✅ 2026-09-06 — LA CLAUSE BORNÉE EST ÉCRITE (critère 4 bis), APRÈS MESURE
+
+**Le coût a été mesuré AVANT l'écriture, et les quatre chiffres attendus tiennent au point près.**
+Rejeu du banc avec **3781 admise SOUS LA CLAUSE** — ligne de table complète, code `EXS` versé
+dans `CODES_VINTAGE` et dans `setCodeCompatibleVintage`, **attributs par-set tous nuls** :
+
+| | référence | **3781 sous clause** |
+|---|---|---|
+| banc, colonne APRÈS | 63 · 8 · **0 F&A** · 17 | **63 · 8 · 0 F&A · 17 — IDENTIQUE** |
+| bloc de contrôle | 80 justes · 2 faux · 3 refus | **identique** |
+| vivier de la route | 75 / 89 — 84,3 % | **81 / 89 — 91,0 %** |
+| absences | 14 | **8** |
+| top 3 des PRÉSENTES | 60/60 — 100 % | **67/69 — 97,1 %** |
+| 🔑 **top 3 SOUS RÉSERVE** | 100 % (41/41) | **100 % (43/43)** |
+
+⚠️ **Contrôle d'identité du banc : 60 lignes de sortie diffèrent, ZÉRO hors bruit** (comptes de
+candidats, logs de vivier). **Aucun verdict n'a changé.** Verser le CODE `EXS` dans la garde
+`setCodeCompatibleVintage` — ce que l'ajout au seul périmètre ne faisait pas — **ne change rien
+non plus**. `test-table-vintage.js` : **52/52**.
+
+**La clause est écrite dans `sets-vintage-japonais.js` avec ses trois garde-fous nommés** :
+(a) **écrite AVANT la réponse de pokesymbols**, et robuste à elle — les attributs par-set sont
+nuls dans les trois cas de figure ; (b) **coût mesuré sur les 24** : la clause est **strictement
+additive**, aucune des 24 ne déclare de fusion, aucune ne peut devenir inéligible ; (c) **sans
+effet sur 4170**, qui échoue au critère **3** — aucune clause sur la fusion ne fabrique une
+attestation de région.
+
+⚠️ **ET 3781 N'EST TOUJOURS PAS DANS LA TABLE.** La clause dit à quelle condition une ligne
+fusionnée peut entrer ; **elle ne l'y met pas**. `EXPANSIONS_VINTAGE` reste à 24. Rien n'est
+poussé.
+
+## 🔑 LA COMPOSITION DE DEUX DÉFAUTS — le fait le plus utile du 2026-09-06
+
+**Deux défauts indépendants frappent la MÊME population : les cartes qui ont de la valeur.**
+
+| | |
+|---|---|
+| **défaut 1 — le PÉRIMÈTRE** écarte du vivier les sets non attestés | médiane `trend` des 3 expansions écartées **36,32 €** contre **6,39 €** pour les 24 admises et **0,92 €** au catalogue entier |
+| **défaut 2 — `POIDS.prix`** récompense de +25 le candidat BON MARCHÉ | `Rattata` : vérité **23,08 €** -> `0 (incohérent)`, concurrent **0,69 €** -> `+25`. Écart de rang = 25, **au point près** |
+| **la population commune** | les **10 vérités** écartées par le périmètre : médiane **67,34 €**, max **222,01 €** (`Charmander` EXS, plancher 49,93 €) |
+
+*(Dénominateur : `guide_prix.trend` non nul sur **68 936 / 73 188** produits — 94,2 %. Une
+expansion sans guide n'est pas « sans valeur », elle est **sans donnée**.)*
+
+### 🔴 C'EST UNE COMPOSITION, PAS UNE CAUSALITÉ — et la distinction n'est pas un détail
+
+**Le périmètre ne regarde jamais le prix, et le terme prix ne regarde jamais le périmètre.**
+Aucun des deux ne cause l'autre. Ce qui est mesuré, c'est qu'ils **atterrissent au même endroit**,
+pour une raison qui leur est extérieure : **rareté et absence de documentation ont la même
+origine.** Les sheets de distributeur et les promos non numérotées sont chères **parce qu'elles**
+sont rares, et mal répertoriées **parce que** rares. Deux instruments aveugles l'un à l'autre
+tombent sur la même population parce que le monde l'a construite ainsi.
+
+⚠️ **ET LE CONTRE-EXEMPLE EXISTE, IL EST DANS NOS PROPRES CHIFFRES : `5681` (Nivi City Gym) est
+BON MARCHÉ — médiane 1,14 €.** Écartée comme les deux autres, sans valeur particulière. La
+concentration est dans **3781** (28,73 €) et **4170** (67,34 €) : **deux sur trois, pas trois sur
+trois.** Écrire « nos refus visent la valeur » serait faux ; **« nos refus tombent là où elle
+est, deux fois sur trois »** est ce que la mesure autorise.
+
+### 🔑 CE QUE ÇA COÛTE VRAIMENT, ET POURQUOI ÇA REMONTE EN TÊTE DU CHANTIER
+
+**Le produit existe pour repérer les cartes qui valent quelque chose.** Une erreur sur un
+Caterpie à 0,20 € et une erreur sur un Charmander à 222 € ne coûtent pas la même chose à
+l'utilisateur, et **le banc les compte pareil** — une ligne juste, une ligne fausse. **Nos deux
+défauts se composent précisément là où l'erreur coûte le plus cher, et aucun de nos instruments
+ne le voit**, parce qu'aucun ne pondère par la valeur.
+
+⛔ **RIEN N'EST DÉCIDÉ ICI, ET SURTOUT PAS UNE PONDÉRATION PAR LE PRIX.** Noter que l'erreur
+coûte plus cher sur les cartes chères **n'autorise pas** à faire entrer le prix dans le
+classement — c'est le défaut n°2 qu'on essaierait de soigner avec lui-même. Ce qui est consigné
+est un **fait de mesure** : les deux défauts partagent une population, et cette population est
+celle qui compte. La conséquence, s'il y en a une, est un **critère d'évaluation** (mesurer le
+banc pondéré par la valeur), pas un terme de scoring.
+
+## ✅ 2026-09-06 — 3781 EST ADMISE, SOUS LE CRITÈRE 4 bis. LA TABLE PASSE À 25.
+
+### La collision, vérifiée AVANT tout le reste
+
+**Vignettes relevées à la main par le testeur** : les trois séries « Expansion Sheet » portent
+**LE MÊME symbole, une pokéball**. La fusion n'abîmerait donc pas la colonne — un symbole lu
+désignerait l'expansion entière, pas une série.
+
+| | |
+|---|---|
+| lignes admises portant un `symbole` non nul | **22 / 24** *(ADVex1 et DP5c sont déjà à null)* |
+| symboles distincts déclarés | **20** |
+| déjà partagés | `gym` (G1+G2) et `logo-tcg` (EXP+WEB) — les deux `symboleFiable: false` |
+| 🔑 **`pokeball` chez les 24 admises** | ✅ **AUCUNE collision — la valeur est libre** |
+| `pokeball` chez les non prouvées | ✅ aucune : le champ `symbole` **n'existe pas** dans `SETS_NON_PROUVES` |
+
+⚠️ **ET LE FAIT QUI COMPTE PLUS QUE LA COLLISION, RAPPORTÉ PAR LE TESTEUR : la pokéball est
+commune à TOUTE la série Vending.** Elle ne départage donc **jamais** à l'intérieur d'EXS.
+Déclarée, elle serait au mieux `symboleFiable: false` — le statut de `gym` et `logo-tcg`.
+
+🔑 **ELLE N'EST PAS DÉCLARÉE POUR AUTANT, ET C'EST LE POINT.** La clause 4 bis interdit tout
+attribut par-set sur une ligne fusionnée, et la réponse est **favorable**. On s'y tient quand
+même. **Une règle qu'on suspend quand le résultat arrange n'a jamais protégé personne** — c'est
+la même discipline que le veto par le symbole refusé sur un 4 contre 1, et que la promotion de
+`perimetre-vintage-suggestion` refusée sur un 4/4.
+
+### La ligne, telle qu'elle entre
+
+    { nom: 'Expansion Sheet', annee: null, slug: 'Expansion-Sheet', exp: 3781, code: 'EXS',
+      prod: 125, regionSource: 'place-internationale-prise-par-MEW',
+      symbole: null, symboleFiable: null,
+      fusion: 'recouvre 3 séries — Expansion Sheet 1 (blue) / 2 (red) / 3 (green) —
+               Cardmarket n'expose qu'UNE expansion (code EXS, 125 produits), pokesymbols
+               en liste TROIS ; les trois portent le MÊME symbole (pokéball, commune à
+               toute la série Vending). Admise sous le critère 4 bis, attributs par-set nuls.' }
+
+**Le champ `fusion` n'est lu par aucun code.** Il existe pour qu'on ne redécouvre pas dans six
+mois que cette ligne n'est pas atomique. L'entrée de `SETS_NON_PROUVES` est **conservée en
+commentaire** : un refus levé sans trace se relit comme s'il n'avait jamais existé.
+
+### LES QUATRE CONTRÔLES — les quatre sont verts, et les chiffres ne bougent pas d'un point
+
+| | |
+|---|---|
+| **1. `test-table-vintage.js`** | ✅ **54 / 54** *(52 avant : +2 assertions pour EXS — région écrite dans `codes_set`, slug unique)* |
+| **2. banc complet** | ✅ **63 justes · 8 faux · 0 FAUX ET AFFIRMÉ · 17 refus** — **identique**. 60 lignes de sortie diffèrent, **ZÉRO hors bruit**. Bloc de contrôle 80 · 2 · 3, identique. |
+| **3. `verrou-avant-push.js`** | ✅ **exit 0** — 7 cellules + 7e cellule (panne du catalogue) |
+| **4. cliquet de couverture** | ✅ **52 couvertes · 17 jamais exécutées · plancher 47** — il tient, +5 nouvelles fonctions couvertes |
+
+**Et les trois chiffres du rejeu, reconfirmés sur la table réelle** : vivier de la route
+**81/89 = 91,0 %** (absences **8**), top 3 des présentes **97,1 %**, 🔑 **top 3 des lignes SOUS
+RÉSERVE 100 % (43/43)**. **Aucun ne diverge du rejeu en mémoire.**
+
+⚠️ **UN FAUX ÉCHEC, ET IL VIENT DE MOI, PAS DU CHANGEMENT.** Le premier passage du verrou a
+échoué sur `test-journal-echecs.js` (code 1). Cause : j'avais laissé `MONGODB_BASE=test` dans
+l'environnement du shell, et les processus fils en héritent — ce test ÉCRIT et n'accepte que
+`test_scratch`. **Le refus était correct, c'est la garde qui a fonctionné.** Relancé dans un
+environnement propre : vert. 🔑 **À retenir : ne jamais lancer le verrou avec `MONGODB_BASE`
+posé dans le shell.** Il lance des suites qui écrivent, et elles doivent choisir leur base
+elles-mêmes.
+
+### La règle de symétrie, et pourquoi elle est tenue sans geste
+
+**Aucune décision nouvelle n'est ajoutée.** Le périmètre existe déjà des deux côtés —
+[index.js:4072](index.js) et `apres()` de `banc-japonais.js` lisent **le même objet**
+`EXPANSIONS_VINTAGE`, importé du même module. Une ligne ajoutée à la table se propage aux deux
+**par construction**, et le banc mesure donc exactement ce que la route fera. C'est le cas
+favorable : la symétrie n'a pas à être écrite parce qu'il n'y a pas deux copies.
+
+### Ce qui reste vrai, et ne doit pas être relu comme un gain
+
+⚠️ **3781 N'ACHÈTE AUCUN JUSTE.** Elle rend **6 vérités CANDIDATES** (absences 14 → 8) et ne
+change **aucun verdict**. Le bénéfice est un **plafond relevé**, pas un résultat : il ne se
+réalisera que si le départage sait ensuite trancher — et sur ces lignes il finit aujourd'hui en
+`REFUS-egalite-perimetre`. **Le vivier n'était pas le seul obstacle ; il était le premier.**
+
 ## Où sont les détails
 
 - `CLAUDE.md` — les règles de travail dans ce dépôt.
