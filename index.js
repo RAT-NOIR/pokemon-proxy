@@ -2032,7 +2032,21 @@ async function trouverProduitsLocaux(nomExact) {
             // mention qu'elle ne reprend pas : même Pokémon, pas autre carte. δ et
             // Prime/LEGEND/BREAK restent dehors pour la même raison qu'« ex ».
             const sansNiveau = nomProduit.replace(/[\s-]*Lv\.?\s?(X|\d+)\b/i, '').trim();
-            return sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau));
+            if (sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau))) return true;
+            // ── LA QUEUE « δ Delta Species » — 2026-09-06, MÊME RÈGLE QUE LE NIVEAU ──
+            // 388 produits du catalogue portent cette queue, et AUCUN n'était atteignable
+            // par le nom : « Milotic » lu ne trouvait pas « Milotic δ Delta Species », et
+            // « Meganium δ » lu (l'IA recopie le δ) ne normalise vers rien non plus. Le
+            // critère de la ligne ci-dessus tient : le δ n'est pas une AUTRE carte au sens
+            // où « ex » l'est — c'est la même espèce, dans un set que numéro, code et région
+            // départagent ensuite. Mesuré avant câblage (mesure du 2026-09-04, 222 lignes de
+            // journal, 149 noms) : +110 candidats au total, médiane 0, pire cas 8 ; 3 refus
+            // deviennent des identifications à un seul candidat (Milotic FR ×2, Pikachu ZH),
+            // 1 ligne change de gagnant sans vérité (Altaria ex JP, 784363 -> 761858).
+            // ⚠️ Côté PRODUIT seulement. Le nom LU n'est pas touché : « Meganium δ » rejoint
+            // « Meganium » par le premier mot que genererVariantesNom ajoute déjà.
+            const sansDelta = nomProduit.replace(/\s*δ\s*Delta\s*Species\s*$/i, '').trim();
+            return sansDelta !== nomProduit && cibles.has(normaliserNom(sansDelta));
         });
 
         if (resultats.length > 0) {
