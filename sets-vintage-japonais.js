@@ -166,9 +166,102 @@
 //   1. son `slugSet` existe EXACTEMENT dans numeros_cartes ;
 //   2. il ne désigne qu'UNE expansion ;
 //   3. la région lue dans codes_set est « japonais » — pas inconnue, pas occidentale.
+//   4. son `slugSet` désigne UN SEUL SET ATTESTÉ chez la source qui le date. Si la source
+//      en liste PLUSIEURS pour ce slug — séries, tirages, rééditions — la ligne part dans
+//      SETS_NON_PROUVES en NOMMANT le nombre de sets listés et la source.
+//      ⚠️ L'ABSENCE de source n'est pas un échec de ce critère : c'est un échec du 3.
+//         Les deux ne se confondent pas. « Je ne sais pas d'où elle vient » et « je sais
+//         qu'elle en désigne trois » sont deux refus différents, et seul le second peut
+//         être levé en choisissant laquelle des trois.
+//
+//   4 bis. LA CLAUSE BORNÉE — un slug FUSIONNÉ peut entrer, à une condition stricte.
+//         Un `slugSet` dont la source atteste qu'il recouvre PLUSIEURS sets entre À
+//         CONDITION DE NE DÉCLARER AUCUN ATTRIBUT PAR-SET, et la fusion est NOMMÉE sur
+//         la ligne :
+//              symbole: null · symboleFiable: null · annee: null
+//              fusion: 'recouvre N séries (…) selon <source>'
+//         La ligne sert alors le PÉRIMÈTRE (`EXPANSIONS_VINTAGE`) et la GARDE DU setCode
+//         (`setCodeCompatibleVintage`), et JAMAIS le départage par le symbole.
+//
+//         POURQUOI C'EST BORNÉ AINSI, ET PAS AUTREMENT. Relevé sur tout le dépôt : le
+//         CODE ne lit que quatre champs de cette table. `exp` et `code` sont des attributs
+//         de l'EXPANSION — ils restent EXACTS sur une ligne fusionnée (les trois séries
+//         d'EXS sont japonaises, vintage, sous un seul code Cardmarket). `symbole` et
+//         `symboleFiable` sont les seuls attributs PAR-SET, et ce sont les seuls que la
+//         fusion abîme. `nom` n'apparaît que dans une chaîne de `raison` ; `annee`,
+//         `slug`, `prod` et `regionSource` ne sont lus par AUCUNE décision. La clause
+//         neutralise donc exactement la colonne endommagée, et rien de plus.
+//         Les verrous 2 et 4 de `departagerParSymbole` la rendent inerte sans code neuf :
+//         `symbole: null` n'est jamais une correspondance.
+//
+//         ⚠️ CE QUE LA CLAUSE NE FAIT PAS. Elle ne dit PAS qu'une fusion est sans
+//         importance : elle dit que son dommage est LOCALISÉ et qu'on refuse de le
+//         déclarer. Une ligne fusionnée est une ligne AMPUTÉE, pas une ligne normale.
+//
+//         LES TROIS GARDE-FOUS, sans lesquels cette clause serait une renégociation :
+//         (a) ÉCRITE AVANT LA RÉPONSE DE LA SOURCE. Au 2026-09-06, on ne sait pas encore
+//             si les trois séries d'Expansion Sheet portent des symboles différents. La
+//             clause est écrite AVANT de le savoir, et elle est ROBUSTE à la réponse :
+//             les attributs par-set sont nuls dans tous les cas. Une règle écrite après
+//             le résultat se renégocie ; celle-ci ne le peut pas.
+//         (b) COÛT MESURÉ SUR LES 24 AVANT APPLICATION. Fait le 2026-09-06 : la clause
+//             est STRICTEMENT ADDITIVE — elle admet un cas jusque-là refusé, elle ne
+//             retire rien. Aucune des 24 ne déclare de fusion, donc aucune n'entre dans
+//             son champ, et aucune ne peut devenir inéligible par son effet.
+//             Rejeu du banc avec 3781 admise SOUS CETTE CLAUSE (ligne complète, code EXS
+//             dans CODES_VINTAGE, attributs par-set nuls) : 63 justes · 8 faux · 0 FAUX
+//             ET AFFIRMÉ · 17 refus — IDENTIQUE à la référence, zéro verdict changé.
+//             Vivier de la route 75/89 -> 81/89 (84,3 % -> 91,0 %), absences 14 -> 8,
+//             top 3 des présentes 97,1 %, TOP 3 DES LIGNES SOUS RÉSERVE 100 % (43/43).
+//         (c) ELLE NE REND PAS 4170 ADMISSIBLE. « Unnumbered Promos » échoue au critère
+//             3 — `codes_set.region` est ABSENTE — et aucune clause sur la fusion ne
+//             fabrique une attestation de région. Une clause qui lève un critère ne lève
+//             que celui-là.
 // Tout le reste part dans SETS_NON_PROUVES, en bas de ce fichier. Le plausible-et-faux
 // est le mode d'échec de ce projet depuis le début ; une table de 23 lignes sûres vaut
 // mieux qu'une de 27 dont 4 sont vraisemblables.
+//
+// ── POURQUOI LE CRITÈRE 4 EST ÉCRIT LE 2026-09-06, ET PAS AVANT ─────────────────────
+// Il était DÉJÀ APPLIQUÉ, mais nulle part. `Expansion-Sheet` (exp 3781, code EXS) remplit
+// les critères 1, 2 et 3 — slug unique, une seule expansion, `codes_set.region` = japonais
+// — et elle est pourtant en bas de ce fichier avec « trois séries chez pokesymbols, un
+// seul slug en base ». Ce motif n'était écrit dans aucune règle. Les trois premiers
+// critères vérifient tous le côté BASE ; AUCUN ne vérifiait que le slug désigne un seul
+// set RÉEL. Un critère non écrit qui refuse une ligne n'est pas une règle, c'est une
+// décision au cas par cas — et une décision au cas par cas ne se relit pas.
+//
+// CE QUE ÇA COÛTE RÉTROACTIVEMENT AUX 24 : rien de mesurable. La question « la source
+// liste-t-elle plusieurs sets ? » ne se rejoue pas en base (pokesymbols n'y est pas), mais
+// les TROIS SYMPTÔMES que ce défaut y laisse ont été mesurés le 2026-09-06, et ils sont
+// propres :
+//   · expansions portant PLUSIEURS `slugSet` ..................... 0 / 24
+//   · expansions portant PLUSIEURS `setTcgdex` ................... 0 / 24
+//   · lignes dont `prod` ne colle plus au catalogue ............... 0 / 24
+//     (les 24 comptes de produits sont exacts AU PRODUIT PRÈS — ces lignes ont bien été
+//      vérifiées une par une, et le fichier ne le dit pas seulement, il le prouve)
+// ⚠️ Ce n'est pas la preuve qu'aucune des 24 n'échouerait chez la source : c'est la preuve
+// qu'aucune n'en porte le symptôme. Le critère 4 n'est donc PAS une exception rétroactive.
+// Et le critère 3 non plus : vérifié le 2026-09-06, les 24 portent `region: 'japonais'`
+// dans codes_set, 24 sur 24, sans exception.
+//
+// ── DEUX DETTES, CONSTATÉES LE 2026-09-06, NON CORRIGÉES CE JOUR ────────────────────
+// 1. LE COMMENTAIRE D'`IPB` CI-DESSOUS EST PÉRIMÉ. Il dit « codes_set dit INCONNUE
+//    (regionSource 'nom-hors-catalogue') ». C'est faux aujourd'hui : codes_set porte
+//    `region: 'japonais'`, `regionSource:
+//    'sources-multiples-concordantes-rapportees-par-testeur'`. Quelqu'un a attesté, la
+//    provenance a été écrite, la base l'a enregistrée. ⚠️ Le commentaire est laissé tel
+//    quel pour l'instant PARCE QUE le corriger effacerait la trace du moment où on ne
+//    savait pas — mais il ne doit plus servir d'exemple d'un état de la base.
+//    🔑 ET C'EST LE CHEMIN DE SORTIE POUR LES LIGNES REFUSÉES AU CRITÈRE 3 : il existe,
+//    il a déjà servi proprement une fois.
+// 2. L'EN-TÊTE DE LA TABLE PROMET « (1996-2003) » ET LA TABLE NE LE TIENT PAS.
+//    `DP5c` « Cry from the Mysterious » est de 2007. Elle remplit les quatre critères ;
+//    c'est le TITRE qui annonce une période qui n'est pas un critère d'admission. Nul ne
+//    doit s'appuyer sur « 1996-2003 » comme sur une garantie : ce n'en est pas une.
+//
+// ⚠️ AUCUNE DÉCISION DE PRODUCTION NE CHANGE ICI, DONC LA RÈGLE DE SYMÉTRIE NE S'APPLIQUE
+// PAS : ce bloc est une règle écrite, pas un branchement. Aucune ligne n'est ajoutée à la
+// table, `EXPANSIONS_VINTAGE` est inchangée, le banc rend exactement les mêmes chiffres.
 //
 // SOURCES, une par colonne :
 //   nom + année : pokesymbols.com/tcg/japanese-sets (liste datée, noms anglais canoniques)
@@ -240,7 +333,50 @@ const SETS_VINTAGE_JAPONAIS = [
     // Hors de la liste pokesymbols mais exigés par le banc : promo et sets dérivés japonais
     // dont la région est établie et le slug unique.
     { nom: "McDonald's Original Minimum Pack", annee: 2002, slug: 'McDonalds-Original-Minimum-Pack', exp: 4178, code: 'MCDP', prod: 24, regionSource: 'liste-verifiee', symbole: 'mcdo', symboleFiable: true },
-    { nom: 'Cry from the Mysterious', annee: 2007, slug: 'Cry-from-the-Mysterious', exp: 4305, code: 'DP5c', prod: 65, regionSource: 'code-minuscule', symbole: null, symboleFiable: null }
+    { nom: 'Cry from the Mysterious', annee: 2007, slug: 'Cry-from-the-Mysterious', exp: 4305, code: 'DP5c', prod: 65, regionSource: 'code-minuscule', symbole: null, symboleFiable: null },
+    // ════════════════════════════════════════════════════════════════════════
+    // LA SEULE LIGNE FUSIONNÉE — admise le 2026-09-06 sous le CRITÈRE 4 bis
+    // ════════════════════════════════════════════════════════════════════════
+    // ⚠️ ELLE N'EST PAS UNE LIGNE COMME LES AUTRES : c'est une ligne AMPUTÉE. Les deux
+    // sources se contredisent, et les deux ont raison de leur côté —
+    //   · CARDMARKET (la source de nos idExpansion) : UNE expansion « Expansion Sheet »,
+    //     fil d'Ariane unique, tous les produits sous le code EXS. Rien à résoudre.
+    //   · POKESYMBOLS : TROIS séries réelles — Expansion Sheet 1 (blue), 2 (red),
+    //     3 (green). Le slug en recouvre donc trois.
+    // Le critère 4 la refusait entière ; le critère 4 bis la fait entrer SANS AUCUN
+    // attribut par-set. `exp` et `code` sont des attributs de l'EXPANSION et restent
+    // exacts ; `symbole`, `symboleFiable` et `annee` sont NULS ET LE RESTENT.
+    //
+    // 🔑 ET C'EST DÉLIBÉRÉ MÊME AVEC UNE RÉPONSE FAVORABLE. Vignettes relevées à la main
+    // par le testeur le 2026-09-06 : LES TROIS SÉRIES PORTENT LE MÊME SYMBOLE, une
+    // pokéball. La fusion n'abîmerait donc PAS la colonne — un symbole lu désignerait
+    // l'expansion entière. On ne le déclare pas pour autant : la clause interdit tout
+    // attribut par-set sur une ligne fusionnée, et c'est la RÈGLE qui protège, pas le
+    // fait qu'elle tombe bien cette fois-ci. Une règle qu'on suspend quand le résultat
+    // arrange n'a jamais protégé personne.
+    // ⚠️ ET LE SYMBOLE NE DÉPARTAGERAIT RIEN À L'INTÉRIEUR D'EXS DE TOUTE FAÇON : la
+    // pokéball est commune à TOUTE la série Vending (fait connu du testeur). Déclarée,
+    // elle serait au mieux `symboleFiable: false` — même statut que `gym` et `logo-tcg`.
+    // Vérifié le 2026-09-06 : « pokeball » n'entre en collision avec AUCUN des 20 symboles
+    // déjà déclarés, et aucune ligne de SETS_NON_PROUVES ne déclare de symbole. La valeur
+    // est libre — elle reste libre.
+    //
+    // CE QUE SON ADMISSION A COÛTÉ, mesuré AVANT (rejeu du banc, clause simulée en
+    // mémoire) : banc 63 justes · 8 faux · 0 FAUX ET AFFIRMÉ · 17 refus — IDENTIQUE à la
+    // référence, zéro verdict changé. Vivier de la route 75/89 -> 81/89 (84,3 % -> 91,0 %),
+    // absences 14 -> 8, top 3 des présentes 97,1 %, TOP 3 DES LIGNES SOUS RÉSERVE 100 %.
+    // Elle n'achète aucun juste : elle rend 6 vérités CANDIDATES, et ne coûte rien.
+    {
+        nom: 'Expansion Sheet', annee: null, slug: 'Expansion-Sheet', exp: 3781, code: 'EXS',
+        prod: 125, regionSource: 'place-internationale-prise-par-MEW',
+        symbole: null, symboleFiable: null,
+        // ⚠️ LE CHAMP QUI REND LA LIGNE RELISIBLE. Aucun code ne le lit ; il existe pour
+        // qu'on ne redécouvre pas dans six mois que cette ligne n'est pas atomique.
+        fusion: 'recouvre 3 séries — Expansion Sheet 1 (blue) / 2 (red) / 3 (green) — '
+            + 'Cardmarket n\'expose qu\'UNE expansion (code EXS, 125 produits), pokesymbols '
+            + 'en liste TROIS ; les trois portent le MÊME symbole (pokéball, commune à toute '
+            + 'la série Vending). Admise sous le critère 4 bis, attributs par-set nuls.'
+    }
 ];
 
 // ============================================================
@@ -260,12 +396,54 @@ const SETS_NON_PROUVES = [
         // zéro candidat.
         preuveManquante: 'aucune expansion ADV1 en base — IMPASSE, pas ambiguïté'
     },
+    // ✅ SORTIE DE CETTE LISTE LE 2026-09-06 — `Expansion Sheet` (EXS, exp 3781) est
+    // ADMISE, sous le critère 4 bis, avec tous ses attributs par-set nuls. Sa ligne est
+    // en bas de SETS_VINTAGE_JAPONAIS et porte le champ `fusion`. L'entrée ci-dessous est
+    // CONSERVÉE, commentée, parce qu'elle porte l'histoire du refus — et qu'un refus levé
+    // sans trace se relit comme s'il n'avait jamais existé.
+    /*
     {
         nom: 'Expansion Sheet (Vending Machine, séries 1 à 3)', slug: 'Expansion-Sheet', code: 'EXS', prod: null,
         // pokesymbols en liste TROIS (bleue 1998, rouge 1998, verte 1998), la base n'a
         // qu'un slug. On ne sait pas lequel des trois il désigne, ni s'il les fusionne.
-        preuveManquante: 'trois séries chez pokesymbols, un seul slug en base'
+        //
+        // ⚠️ 2026-09-06 — ELLE ÉCHOUE AU CRITÈRE 4, ET À LUI SEUL. Mesuré : critère 1 ✅
+        // (slug exact), 2 ✅ (`Expansion-Sheet` -> [3781] et rien d'autre), 3 ✅
+        // (`codes_set.region` = japonais, source 'place-internationale-prise-par-MEW').
+        // C'est le premier refus qui repose sur le critère 4 depuis qu'il est écrit, et
+        // c'est lui qui a fait l'écrire.
+        //
+        // CE QUE LA BASE PEUT DIRE, ET CE QU'ELLE NE PEUT PAS. Le test décisif espéré —
+        // « plusieurs produits portent le MÊME numéro, donc l'expansion fusionne des
+        // séries » — EST INAPPLICABLE ICI : sur les 125 lignes de numeros_cartes de 3781,
+        // `numero` est non nul 0 FOIS, `numeroUrl` 0 fois. Il n'y a aucun numéro à
+        // comparer. La base ne peut ni confirmer ni infirmer la fusion : SEULE UNE
+        // ATTESTATION TRANCHE. (125 produits pour trois séries de sheets est compatible
+        // avec la fusion comme avec une série unique ; un compte n'est pas une preuve.)
+        //
+        // 🔑 CE QU'IL FAUT VÉRIFIER, ET OÙ — dans cet ordre, la première réponse décide :
+        //   a) CARDMARKET, la source de nos idExpansion : la page « Expansion Sheet »
+        //      japonaise est-elle UNE expansion, ou Cardmarket en liste-t-il trois
+        //      (bleue / rouge / verte) ? C'est la seule source qui parle le même langage
+        //      que 3781. Si Cardmarket n'en a qu'une ET qu'elle contient les trois séries,
+        //      le slug FUSIONNE -> elle reste dehors, le critère a fait son travail.
+        //   b) pokesymbols.com/tcg/japanese-sets : combien de lignes « Expansion Sheet ».
+        //      C'est la source du refus d'origine, elle dit TROIS. À reconfirmer, pas à
+        //      croire sur parole d'un commentaire écrit ici il y a des semaines.
+        //   c) Si (a) et (b) se contredisent, c'est (a) qui décide POUR NOTRE TABLE : nos
+        //      expansions sont des identifiants Cardmarket, pas des sets du monde.
+        //
+        // ⚠️ ET SI ELLE ENTRAIT : mesuré le 2026-09-06, périmètre élargi EN MÉMOIRE, banc
+        // rejoué. 3781 SEULE ne change AUCUN verdict (63 justes · 8 faux · 0 faux et
+        // affirmé · 17 refus, identiques à la référence ; 60 lignes de sortie diffèrent,
+        // toutes des comptes de candidats). Elle rend 6 vérités CANDIDATES : vivier de la
+        // route 75/89 -> 81/89, absences 14 -> 8, et le top 3 des lignes SOUS RÉSERVE
+        // reste à 100 % (43/43). Gain sans contrepartie mesurée — ET CE N'EST PAS UNE
+        // RAISON DE L'ADMETTRE. Une mesure ne remplace pas une attestation ; c'est
+        // exactement l'échange que la règle d'admission refuse depuis le premier jour.
+        preuveManquante: 'CRITÈRE 4 : trois séries chez pokesymbols, un seul slug en base — attestation Cardmarket requise'
     },
+    */
     {
         nom: 'Gym Booster 1 (Grass Deck) et 2 (Psychic Deck)', slug: null, code: null, prod: null,
         // IMPASSE CONNUE, et c'est une information utile : aucune expansion cible
