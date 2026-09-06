@@ -105,7 +105,9 @@ app.use(cors({
         if (!origin) return callback(null, true);
         if (ORIGINES_AUTORISEES.some(re => re.test(origin))) return callback(null, true);
         console.warn(`🚫 Requête refusée depuis une origine non autorisée : ${origin}`);
-        return callback(new Error('Origine non autorisée'));
+        // `status: 403` : c'est ce que lit le gestionnaire d'erreurs final, en bas du
+        // fichier, pour répondre un JSON court au lieu de la page HTML par défaut d'Express.
+        return callback(Object.assign(new Error('Origine non autorisée'), { status: 403 }));
     }
 }));
 // ════════════════════════════════════════════════════════════════════════════
@@ -6423,6 +6425,33 @@ app.post('/api/solde', verifierJeton, async (req, res) => {
 app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION }));
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
+
+// ════════════════════════════════════════════════════════════════════════════
+// LE GESTIONNAIRE D'ERREURS FINAL — 2026-09-06, réponse générique, jamais de pile
+// ════════════════════════════════════════════════════════════════════════════
+// Sans lui, une erreur qui n'est attrapée par aucune route — l'origine refusée par CORS,
+// un JSON malformé rejeté par express.json(), un corps trop gros — tombait dans le
+// gestionnaire PAR DÉFAUT d'Express, qui renvoie la pile et les chemins de fichiers dans
+// un corps HTML tant que NODE_ENV ne vaut pas 'production'. La variable n'est posée nulle
+// part dans ce dépôt (voir README.md). Les routes, elles, masquaient déjà leurs messages ;
+// ce gestionnaire ferme ce qui passait à côté d'elles.
+//   · 4xx (origine refusée 403, corps illisible 400, corps trop gros 413) : JSON court ;
+//   · tout le reste : 500 « Erreur serveur interne », et le message brut AU LOG seulement.
+// Déclaré APRÈS toutes les routes : Express n'appelle un gestionnaire à quatre
+// paramètres que pour les erreurs, et seulement s'il est monté en dernier.
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const statut = Number.isInteger(err?.status) ? err.status : (Number.isInteger(err?.statusCode) ? err.statusCode : 500);
+    if (statut >= 400 && statut < 500) {
+        console.warn(`⚠️ [http ${statut}] ${req.method} ${req.originalUrl} : ${err?.type || err?.message || 'requête refusée'}`);
+        return res.status(statut).json({
+            success: false,
+            error: statut === 403 ? 'Origine non autorisée' : 'Requête illisible'
+        });
+    }
+    console.error(`❌ [http 500] ${req.method} ${req.originalUrl} : ${err?.message ?? err}`);
+    return res.status(500).json({ success: false, error: 'Erreur serveur interne' });
+});
 
 // `require.main === module` : vrai quand on lance `node index.js` — ce que fait Render, et
 // ce que fait le smoke test qui démarre un processus séparé. Faux quand un TEST require ce
