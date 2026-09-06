@@ -2855,7 +2855,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         };
 
         if (!imageUrl) {
-            console.error("⚠️ Requête reçue sans imageUrl. Body reçu:", req.body);
+            // ⚠️ LES CLÉS SEULEMENT, jamais le corps — 2026-09-06. Ce log déversait `req.body`
+            // entier dans les logs Render, `codeIllimite` compris, ce qu'acces.js interdit.
+            console.error(`⚠️ Requête reçue sans imageUrl. Clés du corps : ${Object.keys(req.body || {}).join(', ') || '(aucune)'}`);
             return res.json({ success: false, error: "Aucune image reçue" });
         }
 
