@@ -74,6 +74,13 @@
       "fin": "2026-09-05T11:45:03Z",
       "declareLe": "2026-09-05T11:30:09Z",
       "fermeeLe": "2026-09-05T11:45:03Z"
+    },
+    {
+      "lot": "attaque-vintage",
+      "debut": "2026-09-06T10:12:00Z",
+      "fin": null,
+      "declareLe": "2026-09-06T10:12:00Z",
+      "pourquoi": "Rendre MESURABLE le départage par l'attaque. Le champ `attaqueLue` est né le 2026-09-05 : non nul sur 1 ligne sur 225, et ce n'est pas une ligne du banc — la règle est donc INERTE, ni juste ni faux ni refus n'est calculable sur elle. 20 scans de la classe dure : japonaises vintage SANS total et SANS code de set, celles où la règle du numéro de Pokédex neutralise le numéro et où le vivier se réduit au nom dans le périmètre fermé. C'est la seule cellule où l'attaque a quelque chose à trancher. Ces cartes servent à réparer un instrument, elles sont donc de l'entraînement par nature et n'ont rien à faire dans le holdout — même raisonnement que les cinq lots précédents. ⚠️ DEUX INSTRUMENTS, À NE JAMAIS ADDITIONNER : les chiffres qui motivent ce lot (plafond 66,7 % de l'attaque sur la cellule, isolement RÉEL 29/52 = 55,8 %) viennent de la RELECTURE du 2026-09-05 — 54 appels en colonne à part, jamais écrits dans `journal_scans`. Ce lot mesure la PRODUCTION. Aucun de ses résultats ne confirme ni n'infirme la relecture, et réciproquement. ⚠️ COMPOSITION CONTRE-INTUITIVE EXIGÉE, comme les 10 occidentales du lot du 04/08 : sur les 1061 noms distincts du périmètre (25 sets, 1960 produits), 754 — SOIT 71,1 % — n'ont QU'UN SEUL produit et ne mesurent donc RIEN, l'attaque n'ayant aucun groupe à départager. 170 (16,0 %) ont plusieurs produits aux attaques toutes distinctes : l'attaque PEUT y trancher. Et 105 (9,9 %) ont au moins deux produits partageant une MÊME attaque : là elle DOIT s'abstenir. Un lot composé uniquement du cas favorable rendrait un taux qui ne peut pas se tromper. Viser environ 12 noms du cas favorable, 6 du cas d'abstention (Magneton, Pikachu, Raichu, Bulbasaur, Poliwrath, Voltorb, Vulpix, Arcanine, Ninetales, Machamp, Gengar, Umbreon…), 2 à produit unique."
     }
   ]
 }
