@@ -5665,7 +5665,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 //      autoriserait à pousser une valeur jusqu'à ce qu'elle arrange.
 // Les trois rendent un code HTTP distinct, pour que l'extension puisse les distinguer
 // sans lire le texte.
-app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
+// ⚠️ `limiteurRetourLive`, PAS `limiteurIA` — 2026-09-06. La même instance partagée avec
+// les routes IA faisait consommer à chaque retour de prix une unité du quota de scans.
+app.post('/api/retour-live', limiteurRetourLive, verifierJeton, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
