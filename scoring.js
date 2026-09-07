@@ -1859,7 +1859,22 @@ function scorerCandidat(candidat, lu) {
     //    activement le mauvais produit de 25 points. On ne juge pas sur une hypothèse
     //    qu'on sait fausse — même principe que « on ne pénalise pas une donnée absente ».
     const estPromo = String(lu.rarete || '').toLowerCase() === 'promo';
-    if (estPromo) {
+    //    ⚠️ ET LA RARETÉ NON LUE — 2026-09-08. Depuis f188a0c, `rarete` vaut null quand le
+    //    modèle a répondu « illisible » ou rien. Avant ce jour, la branche « incohérent avec
+    //    rareté lue » tombait sur une rareté FORCÉE à « normale » (176 lignes sur 246) : elle
+    //    pénalisait la carte chère sur une donnée inventée. Mesuré sur 107 vérités avec
+    //    rarete=null : 0 candidat ne changeait de branche, la vérité tombait « incohérent »
+    //    83 fois au lieu de 72. Une rareté non lue ne prouve rien dans AUCUN sens : le terme
+    //    est neutre sur toute la ligne, la forme exacte de la branche promo.
+    //    `=== null`, PAS `== null` : null est la valeur que getCardIdFromAI et le chemin local
+    //    produisent quand la lecture est absente ; un `lu` qui ne porte pas le champ du tout
+    //    (les tests isolés ci-dessous) ne dit rien de la lecture, et garde l'ancien barème.
+    //    `rareteElevee` peut rester vrai sans rareté lue (numéro > total) : c'est une LECTURE
+    //    du numéro, pas une rareté — le terme garde alors son sens et n'est pas neutralisé.
+    const rareteNonLue = lu.rarete === null && !lu.rareteElevee;
+    if (rareteNonLue) {
+        detail.prix = '0 (rareté non lue : le prix ne prouve rien)';
+    } else if (estPromo) {
         detail.prix = '0 (promo : le prix ne dit rien de la rareté)';
     } else if (typeof candidat.prix === 'number') {
         const estCher = candidat.prix >= 3; // seuil simple : au-dessus de 3€ = probablement une carte "à valeur"
@@ -1930,8 +1945,44 @@ function choisirMeilleur(candidats, lu) {
     // prix "< 3 € -> +25". Il est désormais explicite, commenté et testé.)
     // Un prix nul ou négatif = pas de cotation, PAS une aubaine : il passe en dernier
     // comme un prix inconnu, sinon il raflerait tous les départages.
+    //
+    // ⚠️ UN COMPARATEUR CACHAIT DEUX TRIS — séparés le 2026-09-08, mesurés avant câblage.
+    // La décision B ci-dessus parle de VARIANTES D'UNE MÊME CARTE, et là elle protège : la
+    // borne basse évite de surpayer. Mais le même « moins cher d'abord » s'appliquait aussi
+    // entre CARTES DIFFÉRENTES à égalité, où le prix ne prouve rien (voir « LE PRIX N'EST
+    // JAMAIS UNE PREUVE ») — et là il ENTERRAIT la vérité chère derrière un peloton de cartes
+    // à 0,02 € : sur 107 vérités, la bonne carte était dans les 3 affichées 58 fois, et sur 34
+    // lignes perdues le 1er affiché était une carte d'un autre set à moins de 0,10 €.
+    //
+    // LA FORME : une clé LEXICOGRAPHIQUE, pas un comparateur à deux têtes (« si même carte :
+    // prix, sinon : vivier » n'est pas transitif et peut cycler). Ordre total, déterministe :
+    //   1. score décroissant ;
+    //   2. rang du GROUPE « même carte » dans le vivier (la plus petite position de ses
+    //      membres) — entre cartes différentes, l'ordre du vivier, AUCUN tri monétaire ;
+    //   3. prix croissant, inconnu dernier — la décision B, intacte, ENTRE variantes ;
+    //   4. idProduct croissant, pour que deux variantes au même prix aient un ordre fixe.
+    // « MÊME CARTE » = même expansion ET même numéro Cardmarket — le cas littéral de la
+    // décision B (xASC 153 V1/V2, test 16). Un candidat sans numéro est seul dans son groupe :
+    // « même carte » ne se présume pas d'une donnée absente. `idMetacard` a été mesuré et
+    // ÉCARTÉ comme critère : il regroupe les réimpressions à travers les sets et remonterait la
+    // vérité avec elles — une décision d'affichage par métacarte (C7), pas un départage.
+    // « Plus cher d'abord » est ÉCARTÉ DÉFINITIVEMENT : 43 premiers faux ET plus chers sur 107.
+    //
+    // MESURÉ AVANT CÂBLAGE (mesure-terme-prix.js, 107 vérités) : vérité dans les 3 affichées
+    // 58 -> 59 avec la rareté lue (les variantes ne sont jamais à égalité sur ce corpus, donc
+    // le critère y est presque inerte), 58 -> 68 avec la rareté non lue ; 1er faux ET plus
+    // cher 1 -> 4 (resp. 6), tous des cartes DIFFÉRENTES. Aucun verdict ne dépend de l'ordre.
     const prixTri = c => (typeof c.prix === 'number' && c.prix > 0) ? c.prix : Infinity;
-    scores.sort((a, b) => (b.score - a.score) || (prixTri(a.candidat) - prixTri(b.candidat)));
+    const cleMemeCarte = c => {
+        const num = c.numeroCardmarket == null ? '' : String(c.numeroCardmarket).trim().toUpperCase();
+        return (c.idExpansion != null && num) ? `${Number(c.idExpansion)}#${num}` : `seul:${c.idProduct}`;
+    };
+    const rangGroupe = new Map();
+    candidats.forEach((c, i) => { const k = cleMemeCarte(c); if (!rangGroupe.has(k)) rangGroupe.set(k, i); });
+    scores.sort((a, b) => (b.score - a.score)
+        || (rangGroupe.get(cleMemeCarte(a.candidat)) - rangGroupe.get(cleMemeCarte(b.candidat)))
+        || (prixTri(a.candidat) - prixTri(b.candidat))
+        || ((Number(a.candidat.idProduct) || 0) - (Number(b.candidat.idProduct) || 0)));
 
     const meilleur = scores[0];
     const second = scores[1];
@@ -2865,6 +2916,58 @@ if (require.main === module) {
         verifier('MCD ~ MCDP n\'est PAS une convention X', memeCodeParConventionX('MCD', 'MCDP'), false);
         verifier('DP5 ~ DP5C reste une parenté', codesApparentes('DP5', 'DP5C'), true);
         verifier('ADVE ~ ADVEX1 reste une parenté', codesApparentes('ADVE', 'ADVEX1'), true);
+    }
+
+    // ---- 28. Les deux tris séparés, et la rareté non lue — 2026-09-08 ----------
+    // Valeurs réelles : xASC 153 (test 16) et le cas Rattata L029 du banc (vérité 548611 à
+    // 23,08 €, peloton de cartes à 0,03 €). Rien d'inventé.
+    {
+        console.log('\n--- 28. tri mixte : variantes -> moins cher ; cartes différentes -> ordre du vivier ---');
+        const lu = { numero: 153, rareteElevee: false, regionAttendue: 'occidental' };
+        // (i) Variantes d'une même carte : la décision B, intacte — le moins cher en tête.
+        {
+            const { scores } = choisirMeilleur([
+                { idProduct: 870373, idExpansion: 6455, numeroCardmarket: '153', codeSet: 'xASC', variante: 'V1', prix: 1.53, region: 'occidental' },
+                { idProduct: 870374, idExpansion: 6455, numeroCardmarket: '153', codeSet: 'xASC', variante: 'V2', prix: 0.35, region: 'occidental' },
+            ], lu);
+            verifier('variantes : le moins cher en tête (décision B)', scores[0].candidat.idProduct, 870374);
+        }
+        // (ii) Cartes DIFFÉRENTES à égalité : l'ordre du vivier, pas le prix. La chère, placée
+        //      première dans le vivier, reste première ; hier elle passait dernière.
+        {
+            const { scores } = choisirMeilleur([
+                { idProduct: 548611, idExpansion: 4507, numeroCardmarket: null, prix: 23.08, region: 'japonais' },
+                { idProduct: 606600, idExpansion: 4509, numeroCardmarket: null, prix: 0.03, region: 'japonais' },
+                { idProduct: 650700, idExpansion: 5021, numeroCardmarket: '019', prix: 0.05, region: 'japonais' },
+            ], { numero: null, rarete: null, rareteElevee: false, regionAttendue: 'japonais' });
+            // `rarete: null` : sans lui, le terme prix donnerait +25 aux deux cartes à 0,03 € et
+            // 0 à la chère — c'est PRÉCISÉMENT le défaut mesuré, et ce test porte sur le tri.
+            verifier('cartes différentes : scores égaux', scores[0].score === scores[1].score && scores[1].score === scores[2].score, true);
+            verifier('cartes différentes : l\'ordre du vivier tient, la chère reste première', scores.map(s => s.candidat.idProduct).join(','), '548611,606600,650700');
+        }
+        // (iii) Mixte : deux variantes d'une carte ET une carte différente, dans un seul vivier.
+        //       Le groupe des variantes garde la place de son premier membre ; dedans, le moins
+        //       cher ; la carte différente reste à sa place — un ordre total, pas un cycle.
+        {
+            const { scores } = choisirMeilleur([
+                { idProduct: 870373, idExpansion: 6455, numeroCardmarket: '153', codeSet: 'xASC', prix: 1.53, region: 'occidental' },
+                { idProduct: 999001, idExpansion: 6455, numeroCardmarket: '154', codeSet: 'xASC', prix: 0.10, region: 'occidental' },
+                { idProduct: 870374, idExpansion: 6455, numeroCardmarket: '153', codeSet: 'xASC', prix: 0.35, region: 'occidental' },
+            ], { numero: null, rareteElevee: false, regionAttendue: 'occidental' });
+            verifier('mixte : groupe des variantes d\'abord (place du 1er membre), moins cher dedans, puis l\'autre carte',
+                scores.map(s => s.candidat.idProduct).join(','), '870374,870373,999001');
+        }
+        // (iv) La rareté NON LUE : le terme prix est neutre sur toute la ligne.
+        {
+            const cher = scorerCandidat({ idProduct: 1, prix: 23.08 }, { numero: null, rarete: null, rareteElevee: false });
+            const pasCher = scorerCandidat({ idProduct: 2, prix: 0.05 }, { numero: null, rarete: null, rareteElevee: false });
+            verifier('rareté null : le candidat cher n\'est plus « incohérent »', cher.detail.prix, '0 (rareté non lue : le prix ne prouve rien)');
+            verifier('rareté null : le candidat bon marché ne prend plus +25', pasCher.detail.prix, '0 (rareté non lue : le prix ne prouve rien)');
+            const secret = scorerCandidat({ idProduct: 3, prix: 23.08 }, { numero: 184, total: 182, rarete: null, rareteElevee: true });
+            verifier('rareté null MAIS numéro > total : le terme garde son sens', secret.detail.prix, '+25 (IR attendue, prix élevé 23.08€)');
+            const sansChamp = scorerCandidat({ idProduct: 4, prix: 0.05 }, { numero: null, rareteElevee: false });
+            verifier('lu sans le champ rarete (tests isolés) : ancien barème', sansChamp.detail.prix, '+25 (carte normale, prix bas 0.05€)');
+        }
     }
 
     console.log(`\n${echecs === 0 ? '🎉 Tous les tests passent.' : `⚠️ ${echecs} test(s) en échec.`}`);

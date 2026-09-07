@@ -224,6 +224,9 @@ function rejouerRegime(scores, attendu, regime) {
         // `cardInfoDe` du banc — et comme en production, où null ne peut pas la lever.
         const rNull = await scorerCandidatsLocal(vivier, { ...cardInfo, rarete: null }, null, [], cs, {});
         x.branchesNull = new Map(rNull.scores.map(s => [s.candidat.idProduct, brancheDe(s.detail)]));
+        // L'ordre RENDU par la production dans les deux cas (mesure 7) : c'est ce que l'écran montre.
+        x.ordreProd = scores.map(s => ({ id: s.candidat.idProduct, prix: s.candidat.prix, nom: String(vivier.find(p => p.idProduct === s.candidat.idProduct)?.name ?? '').split('[')[0].trim(), score: s.score }));
+        x.ordreNull = rNull.scores.map(s => ({ id: s.candidat.idProduct, prix: s.candidat.prix, nom: String(vivier.find(p => p.idProduct === s.candidat.idProduct)?.name ?? '').split('[')[0].trim(), score: s.score }));
         x.rejeu = {
             vide: false, taille: scores.length, presente: iv >= 0, rang, egalite,
             issue: !sv ? 'absente' : (rang === 1 ? (egalite ? 'refus' : 'juste') : 'faux'),
@@ -501,5 +504,25 @@ function rejouerRegime(scores, attendu, regime) {
         }
     }
     console.log('   Les verdicts juste / faux / refus ne dépendent pas du tri (voir mesure 5) ; ils sont ceux de la mesure 3.');
+
+    // ══ MESURE 7 — L'ORDRE RÉELLEMENT RENDU PAR LA PRODUCTION (après câblage, ce que l'écran montre) ══
+    // Aucun re-tri ici : `r.scores` tel que choisirMeilleur le rend, avec la rareté du journal, puis
+    // avec la rareté ABSENTE (la projection post-déploiement : le terme y est neutre depuis le câblage).
+    console.log('\n══ MESURE 7 — l\'ordre rendu par choisirMeilleur, tel quel (rien de re-trié ici) ══');
+    for (const [etiquette, champ] of [['rareté du journal (aujourd\'hui)', 'ordreProd'], ['rareté ABSENTE (projection post-déploiement)', 'ordreNull']]) {
+        let pos1 = 0, top3 = 0; const fautifs = [];
+        for (const x of presentes) {
+            const o = x[champ];
+            const iv = o.findIndex(s => s.id === x.attendu);
+            if (iv === 0) pos1++;
+            if (iv >= 0 && iv < 3) top3++;
+            const premier = o[0];
+            if (premier.id !== x.attendu && typeof premier.prix === 'number' && premier.prix > 0 && x.prixVerite != null && premier.prix > x.prixVerite) {
+                fautifs.push(`${x.cle} ${x.d.nom} : 1er ${premier.id} « ${premier.nom} » ${eur(premier.prix)} · vérité ${x.attendu} ${eur(x.prixVerite)} (position ${iv + 1}, écart de score ${premier.score - o[iv].score})`);
+            }
+        }
+        console.log(`   ${etiquette.padEnd(46)} pos.1 ${pos1} · vérité dans le TOP 3 affiché ${top3} / ${presentes.length} · 1er faux ET plus cher ${fautifs.length}`);
+        for (const f of fautifs) console.log(`      ${f}`);
+    }
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
