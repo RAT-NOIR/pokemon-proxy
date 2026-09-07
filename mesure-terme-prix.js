@@ -45,7 +45,7 @@ const { trouverProduitsLocaux, scorerCandidatsLocal, lireCodeSets } = require('.
 const { numeroEstUnDexId } = require('./pokedex');
 const { seauDe, numeroter, identiteDe, rattacherVerites } = require('./banc-seaux');
 // Pour le tri « table vintage d'abord » (mesure 5) : la table close, celle du périmètre.
-const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
+const { EXPANSIONS_VINTAGE, SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 
 const J = mongoose.model('Jm', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pm', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -208,8 +208,12 @@ function rejouerRegime(scores, attendu, regime) {
         const ip = scores.findIndex(s => s.candidat.idProduct === d.idProduct);
         // Les scores compacts, pour les régimes — et la branche de chaque candidat.
         const ordreVivier = new Map(vivier.map((p, i) => [p.idProduct, i]));
+        x.numeroUtile = cardInfo.number;   // le numéro tel que le scoring l'a vu (Pokédex neutralisé)
         x.scores = scores.map(s => ({
             id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail),
+            // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif).
+            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
+            codeSet: s.candidat.codeSet ?? null, region: s.candidat.region ?? null,
             // Pour les tris de la mesure 5 : la place dans le vivier tel que rendu par Mongo
             // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.
             ordreVivier: ordreVivier.get(s.candidat.idProduct) ?? Infinity,
@@ -595,5 +599,177 @@ function rejouerRegime(scores, attendu, regime) {
     const groupesTousPontes = groupes.filter(g => g.every(id => numMembres.get(id)?.setTcgdex)).length;
     console.log(`\n   pont TCGdex dans les groupes d'égalité des lignes manquées : ${groupes.length} groupes, ${membres.length} membres distincts, ${pontes.length} avec \`setTcgdex\` (${pct(pontes.length, membres.length)}) · groupes ENTIÈREMENT pontés : ${groupesTousPontes} / ${groupes.length}`);
     console.log(`   (sans pont, ni illustrateur, ni HP, ni dégâts ne peuvent être joints par TCGdex — c'est le dénominateur de tout angle qui passe par lui)`);
+
+    // ══ MESURE 9 — POURQUOI ON RÉUSSIT : le signal décisif des lignes JUSTES et FERMES ══
+    // « Décisif » = ce qui sépare le gagnant du 2e. Trois sources, dans l'ordre : la CLÉ (voie
+    // `setcode-numero`), le CANDIDAT UNIQUE (vivier réduit à 1 par nom + expansions attendues),
+    // sinon le REJEU : les critères où le gagnant de production a une contribution strictement
+    // supérieure à celle du 2e. ⚠️ Rejeu = vivier par le nom ; si le gagnant de production n'y
+    // est pas 1er, la ligne est comptée « non reproduite », pas devinée.
+    console.log('\n══ MESURE 9 — le signal décisif des lignes justes et fermes ══');
+    const justes = V.filter(x => x.issueProd === 'juste');
+    const fermes = justes.filter(x => !x.d.carteIncertaine);
+    console.log(`   justes ${justes.length} sur ${V.length} · dont FERMES ${fermes.length} · sous réserve ${justes.length - fermes.length}`);
+    const signaux = {}; const compter = (k, x) => { (signaux[k] ||= []).push(x.cle); };
+    for (const x of fermes) {
+        const d = x.d;
+        if (d.voieCatalogue === 'setcode-numero') { compter('clé setCode+numéro (voie setcode-numero)', x); continue; }
+        if ((d.vivierTaille ?? d.nbCandidats) === 1) { compter(`candidat unique — vivier de 1 (source ${d.sourceIdentification ?? '?'}, voie ${d.voieCatalogue ?? '?'})`, x); continue; }
+        if (x.rejeu.vide || !x.rejeu.presente) { compter('non reproduit au rejeu (vérité absente du vivier par le nom)', x); continue; }
+        const o = x.scores;
+        if (o[0].id !== x.attendu) { compter('non reproduit au rejeu (le gagnant de production n\'y est pas 1er)', x); continue; }
+        if (o.length === 1) { compter('candidat unique au rejeu', x); continue; }
+        const g = o[0].contribs, s = o[1].contribs;
+        const decisifs = Object.keys(g).filter(k => (g[k] ?? 0) > (s[k] ?? 0));
+        if (o[0].score === o[1].score) { compter('égalité au rejeu — départagée en production (symbole/image/attaque/sans-enjeu)', x); continue; }
+        compter(decisifs.length ? `rejeu : ${decisifs.join(' + ')}` : 'rejeu : aucun critère ne diffère (?)', x);
+    }
+    for (const [k, l] of Object.entries(signaux).sort((a, b) => b[1].length - a[1].length)) console.log(`   ${String(l.length).padStart(3)}  ${k}   [${l.join(' ')}]`);
+    // Et pour les justes SOUS RÉSERVE, la raison de la réserve (ce qui a manqué pour être ferme).
+    const reserves = {}; for (const x of justes.filter(x => x.d.carteIncertaine)) reserves[x.d.raisonReserve ?? 'sans raison journalisée'] = (reserves[x.d.raisonReserve ?? 'sans raison journalisée'] || 0) + 1;
+    console.log(`   justes sous réserve, par raison : ${JSON.stringify(reserves)}`);
+
+    // ══ MESURE 10 — RECONSTRUIRE UN SIGNAL NON LU : la donnée est-elle en base, et sur quelle colonne ? ══
+    console.log('\n══ MESURE 10 — reconstruire ce qui n\'a pas été lu ══');
+    // (a) LE TOTAL depuis la taille de l'expansion. Jointure : numeros_cartes.idExpansion (EXISTE).
+    //     Vérité de contrôle : les lignes JUSTES où un total a été LU — l'expansion de la vérité
+    //     doit avoir « total » cartes. Deux tailles locales : nombre de lignes, et max du numéro.
+    const avecTotal = justes.filter(x => /^\d+$/.test(String(x.d.total ?? '')));
+    const expVerites = new Map((await Num.find({ idProduct: { $in: avecTotal.map(x => x.attendu) } }, { idProduct: 1, idExpansion: 1 }).lean()).map(n => [Number(n.idProduct), Number(n.idExpansion)]));
+    const exps = [...new Set([...expVerites.values()])];
+    const tailles = new Map();
+    for (const e of exps) {
+        const rows = await Num.find({ idExpansion: e }, { numero: 1, numeroUrl: 1 }).lean();
+        const nums = rows.map(r => parseInt(String(r.numero || r.numeroUrl || '').replace(/\D/g, ''), 10)).filter(Number.isFinite);
+        tailles.set(e, { lignes: rows.length, max: nums.length ? Math.max(...nums) : null });
+    }
+    let egalLignes = 0, egalMax = 0, maxSup = 0, loin = 0, sansExp = 0;
+    for (const x of avecTotal) {
+        const e = expVerites.get(x.attendu); const t = e != null ? tailles.get(e) : null; const total = Number(x.d.total);
+        if (!t) { sansExp++; continue; }
+        if (t.lignes === total) egalLignes++;
+        if (t.max === total) egalMax++; else if (t.max != null && t.max > total && t.max <= total * 1.25) maxSup++; else loin++;
+    }
+    console.log(`   (a) total depuis la taille de l'expansion — jointure numeros_cartes.idExpansion : EXISTE.`);
+    console.log(`       dénominateur : ${avecTotal.length} lignes justes avec un total lu, ${avecTotal.length - sansExp} avec l'expansion de la vérité en base`);
+    console.log(`       nombre de lignes == total : ${egalLignes} · max du numéro == total : ${egalMax} · max > total (secrètes, ≤ +25 %) : ${maxSup} · loin : ${loin}`);
+    // (b) UNE BORNE D'ANNÉES depuis l'ordre des idExpansion. La seule colonne d'année locale est
+    //     `annee` de la table close (25 sets). Jointure : idExpansion (EXISTE, sur 25 sets).
+    const vint = SETS_VINTAGE_JAPONAIS.map(s => s.exp).filter(Number.isFinite).sort((a, b) => a - b);
+    const csJap = await mongoose.connection.collection('codes_set').find({ region: 'japonais' }, { projection: { idExpansion: 1 } }).toArray();
+    const japIds = csJap.map(c => Number(c.idExpansion)).filter(Number.isFinite);
+    const dansBande = japIds.filter(id => id >= vint[0] && id <= vint[vint.length - 1] && !EXPANSIONS_VINTAGE.has(id)).length;
+    // Bandes : on coupe quand deux idExpansion vintage consécutifs sont séparés de plus de 50.
+    const bandes = []; for (const id of vint) { const b = bandes[bandes.length - 1]; if (b && id - b[b.length - 1] <= 50) b.push(id); else bandes.push([id]); }
+    console.log(`   (b) années depuis l'ordre des idExpansion — colonne d'année : \`annee\` de SETS_VINTAGE_JAPONAIS seulement (25 sets), rien au catalogue.`);
+    console.log(`       les 25 idExpansion vintage : ${vint[0]}..${vint[vint.length - 1]}, en ${bandes.length} bande(s) [${bandes.map(b => `${b[0]}-${b[b.length - 1]}(${b.length})`).join(', ')}] ; expansions japonaises NON vintage dans l'intervalle : ${dansBande} sur ${japIds.length}`);
+    console.log(`       -> l'ordre des idExpansion n'est pas un ordre d'années : la piste « borne d'années » est MORTE hors des 25 sets déjà datés.`);
+    console.log(`   (c) expansion depuis nom + HP + illustrateur : aucune colonne HP ni illustrateur en base (catalogue_produits, numeros_cartes, codes_set, guide_prix) ; seul TCGdex les porte, pont sur 31 % des membres — MORTE tant que le pont n'est pas importé.`);
+    console.log(`   (d) rareté depuis le catalogue : aucune colonne de rareté (mesuré le 09-05) — MORTE localement.`);
+    console.log(`   (e) setCode depuis nom + numéro : jointure numeros_cartes (numero) × catalogue (name) EXISTE — c'est déjà le chemin local (identifierEnLocal) et l'arbitre total+numéro.`);
+
+    // ══ MESURE 11 — INVERSER : ÉLIMINER les mauvais candidats avec certitude ══
+    // Sur chaque groupe d'égalité de tête (journal si `exAequoIds`, sinon rejeu), cinq éliminations
+    // par CONTRADICTION d'une donnée lue avec une donnée en base :
+    //   E1 numéro lu ≠ numéro catalogue du candidat (numéro connu)        — comparerNumeros
+    //   E2 setCode lu ≠ code du candidat, ni parent, ni convention X         — codes_set
+    //   E3 région attendue (langue) ≠ région du candidat                    — codes_set.region
+    //   E4 symbole lu (ni illisible ni aucun) ≠ symbole DÉCLARÉ FIABLE du set — table close
+    //   E5 total lu > taille de l'expansion du candidat (lignes < 80 % du total) — heuristique, à part
+    // ⚠️ Le test qui tue : une VÉRITÉ éliminée. Comptée en premier.
+    console.log('\n══ MESURE 11 — l\'élimination sur les groupes d\'égalité ══');
+    const groupesE = [];
+    for (const x of presentes) {
+        const ids = (Array.isArray(x.d.exAequoIds) && x.d.exAequoIds.length > 1) ? { src: 'journal', ids: x.d.exAequoIds.map(Number) }
+            : { src: 'rejeu', ids: x.scores.filter(s => s.score === x.scores[0].score).map(s => s.id) };
+        if (ids.ids.length > 1) groupesE.push({ x, ...ids });
+    }
+    const tousIds = [...new Set(groupesE.flatMap(g => g.ids))];
+    const numTous = new Map((await Num.find({ idProduct: { $in: tousIds } }).lean()).map(n => [Number(n.idProduct), n]));
+    const expTous = [...new Set([...numTous.values()].map(n => Number(n.idExpansion)).filter(Number.isFinite))];
+    const csTous = new Map((await mongoose.connection.collection('codes_set').find({ idExpansion: { $in: expTous } }).toArray()).map(c => [Number(c.idExpansion), c]));
+    const tailleExp = new Map();
+    for (const e of expTous) tailleExp.set(e, await Num.countDocuments({ idExpansion: e }));
+    const parCodeVintage = new Map(SETS_VINTAGE_JAPONAIS.map(s => [s.exp, s]));
+    const regionDe = langue => ['JP', 'ZH', 'KR', 'ZH-CN', 'ZH-TW', 'CN', 'TW'].includes(String(langue || '').toUpperCase()) ? 'japonais'
+        : ['FR', 'EN', 'DE', 'ES', 'IT', 'PT'].includes(String(langue || '').toUpperCase()) ? 'occidental' : null;
+    const compteE = { E1: 0, E2: 0, E3: 0, E4: 0, E5: 0 };
+    let reduitsAUn = 0, survivantVerite = 0, veriteEliminee = 0, reduitsAUnSansE5 = 0, survivantVeriteSansE5 = 0, veriteElimineeSansE5 = 0, groupesTouches = 0;
+    const exemples = [];
+    for (const g of groupesE) {
+        const d = g.x.d, lu = g.x.numeroUtile, code = d.setCode ? S.normaliserCodeSet(d.setCode) : null, reg = regionDe(d.langue);
+        const sym = (d.symboleSet && !['illisible', 'aucun'].includes(String(d.symboleSet).toLowerCase())) ? String(d.symboleSet) : null;
+        const total = /^\d+$/.test(String(d.total ?? '')) ? Number(d.total) : null;
+        const verdicts = g.ids.map(id => {
+            const n = numTous.get(id); const e = n ? Number(n.idExpansion) : null; const cs = e != null ? csTous.get(e) : null;
+            const numC = n ? (n.numero || n.numeroUrl) : null; const codeC = cs?.codeSet ? S.normaliserCodeSet(cs.codeSet) : (n?.codeSet ? S.normaliserCodeSet(n.codeSet) : null);
+            const regC = cs?.region ?? (codeC ? S.regionDuCodeSet(cs?.codeSet ?? n?.codeSet, null) : null);
+            const motifs = [];
+            if (lu && numC && !S.comparerNumeros(lu, numC)) motifs.push('E1');
+            if (code && codeC && code !== codeC && !S.codesApparentes(code, codeC) && !S.memeCodeParConventionX(code, codeC)) motifs.push('E2');
+            if (reg && regC && reg !== regC) motifs.push('E3');
+            const v = e != null ? parCodeVintage.get(e) : null;
+            if (sym && v && v.symboleFiable === true && v.symbole && v.symbole !== sym) motifs.push('E4');
+            if (total && e != null && tailleExp.has(e) && tailleExp.get(e) < total * 0.8) motifs.push('E5');
+            return { id, motifs };
+        });
+        for (const v of verdicts) for (const m of v.motifs) compteE[m]++;
+        const survivants = verdicts.filter(v => v.motifs.length === 0).map(v => v.id);
+        const survivantsSansE5 = verdicts.filter(v => v.motifs.filter(m => m !== 'E5').length === 0).map(v => v.id);
+        if (survivants.length < g.ids.length) groupesTouches++;
+        const vElim = verdicts.find(v => v.id === g.x.attendu);
+        if (vElim && vElim.motifs.length) { veriteEliminee++; exemples.push(`   🔴 vérité éliminée : ${g.x.cle} ${d.nom} par ${vElim.motifs.join('+')} (${g.src})`); }
+        if (vElim && vElim.motifs.filter(m => m !== 'E5').length) veriteElimineeSansE5++;
+        if (survivants.length === 1) { reduitsAUn++; if (survivants[0] === g.x.attendu) survivantVerite++; }
+        if (survivantsSansE5.length === 1) { reduitsAUnSansE5++; if (survivantsSansE5[0] === g.x.attendu) survivantVeriteSansE5++; }
+    }
+    console.log(`   groupes : ${groupesE.length} (${groupesE.filter(g => g.src === 'journal').length} du journal, ${groupesE.filter(g => g.src === 'rejeu').length} du rejeu) · membres distincts ${tousIds.length}`);
+    console.log(`   🔴 VÉRITÉ ÉLIMINÉE : ${veriteEliminee} (sans E5 : ${veriteElimineeSansE5})   <- le test qui tue`);
+    for (const e of exemples) console.log(e);
+    console.log(`   éliminations par règle : ${JSON.stringify(compteE)} · groupes touchés : ${groupesTouches}`);
+    console.log(`   groupes réduits à UN candidat : ${reduitsAUn}, survivant = vérité ${survivantVerite}   (sans l'heuristique E5 : ${reduitsAUnSansE5}, vérité ${survivantVeriteSansE5})`);
+    console.log(`   ⚠️ un groupe de tête réduit à un survivant FAUX = la vérité était SOUS le groupe : éliminer sur l'égalité certifie alors une erreur.`);
+    // 11 bis — la même élimination sur le VIVIER ENTIER du rejeu, puis re-classement des survivants.
+    // C'est la seule forme qui ne peut pas certifier une erreur quand la vérité est sous le groupe.
+    const idsViv = [...new Set(presentes.flatMap(x => x.scores.map(s => s.id)))];
+    const numViv = new Map((await Num.find({ idProduct: { $in: idsViv } }, { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1, codeSet: 1 }).lean()).map(n => [Number(n.idProduct), n]));
+    const expViv = [...new Set([...numViv.values()].map(n => Number(n.idExpansion)).filter(Number.isFinite))];
+    const csViv = new Map((await mongoose.connection.collection('codes_set').find({ idExpansion: { $in: expViv } }).toArray()).map(c => [Number(c.idExpansion), c]));
+    let vivReduitAUn = 0, vivSurvVerite = 0, vivVeriteElim = 0, vivTouches = 0, vivTeteVerite = 0, vivTeteAvant = 0;
+    const cE = { E1: 0, E2: 0, E3: 0, E4: 0 };
+    for (const x of presentes) {
+        const d = x.d, lu = x.numeroUtile, code = d.setCode ? S.normaliserCodeSet(d.setCode) : null, reg = regionDe(d.langue);
+        const sym = (d.symboleSet && !['illisible', 'aucun'].includes(String(d.symboleSet).toLowerCase())) ? String(d.symboleSet) : null;
+        const restes = x.scores.filter(s => {
+            const n = numViv.get(s.id); const e = n ? Number(n.idExpansion) : null; const cs = e != null ? csViv.get(e) : null;
+            const numC = n ? (n.numero || n.numeroUrl) : null; const codeC = cs?.codeSet ? S.normaliserCodeSet(cs.codeSet) : (n?.codeSet ? S.normaliserCodeSet(n.codeSet) : null);
+            const regC = cs?.region ?? null; const v = e != null ? parCodeVintage.get(e) : null;
+            if (lu && numC && !S.comparerNumeros(lu, numC)) { cE.E1++; return false; }
+            if (code && codeC && code !== codeC && !S.codesApparentes(code, codeC) && !S.memeCodeParConventionX(code, codeC)) { cE.E2++; return false; }
+            if (reg && regC && reg !== regC) { cE.E3++; return false; }
+            if (sym && v && v.symboleFiable === true && v.symbole && v.symbole !== sym) { cE.E4++; return false; }
+            return true;
+        });
+        if (restes.length < x.scores.length) vivTouches++;
+        if (!restes.some(s => s.id === x.attendu)) {
+            vivVeriteElim++;
+            // PAR QUELLE RÈGLE : une règle qui élimine une vérité n'est pas une élimination sûre.
+            const n = numViv.get(x.attendu); const e = n ? Number(n.idExpansion) : null; const cs = e != null ? csViv.get(e) : null;
+            const numC = n ? (n.numero || n.numeroUrl) : null; const codeC = cs?.codeSet ? S.normaliserCodeSet(cs.codeSet) : (n?.codeSet ? S.normaliserCodeSet(n.codeSet) : null);
+            const v = e != null ? parCodeVintage.get(e) : null;
+            const regle = (lu && numC && !S.comparerNumeros(lu, numC)) ? `E1 (lu ${lu}, catalogue ${numC})`
+                : (code && codeC && code !== codeC && !S.codesApparentes(code, codeC) && !S.memeCodeParConventionX(code, codeC)) ? `E2 (lu ${code}, catalogue ${codeC})`
+                : (reg && cs?.region && reg !== cs.region) ? `E3 (langue ${d.langue}, catalogue ${cs.region})`
+                : (sym && v && v.symboleFiable === true && v.symbole && v.symbole !== sym) ? `E4 (lu ${sym}, table ${v.symbole})` : '?';
+            console.log(`   🔴 vérité éliminée sur le vivier entier : ${x.cle} ${d.nom} — ${regle}`);
+        }
+        if (restes.length === 1) { vivReduitAUn++; if (restes[0].id === x.attendu) vivSurvVerite++; }
+        // La vérité seule en tête après élimination (scores inchangés, survivants seulement) ?
+        if (x.scores[0].id === x.attendu && !(x.scores.length > 1 && x.scores[1].score === x.scores[0].score)) vivTeteAvant++;
+        if (restes.length && restes[0].id === x.attendu && !(restes.length > 1 && restes[1].score === restes[0].score)) vivTeteVerite++;
+    }
+    console.log(`\n   11 bis — sur le VIVIER ENTIER du rejeu (${presentes.length} lignes, ${idsViv.length} candidats distincts), règles E1-E4 :`);
+    console.log(`   🔴 VÉRITÉ ÉLIMINÉE : ${vivVeriteElim}   · éliminations ${JSON.stringify(cE)} · lignes touchées ${vivTouches}`);
+    console.log(`   vivier réduit à UN candidat : ${vivReduitAUn}, = vérité ${vivSurvVerite} · vérité SEULE en tête (hors égalité) : avant ${vivTeteAvant} -> après élimination ${vivTeteVerite}`);
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
