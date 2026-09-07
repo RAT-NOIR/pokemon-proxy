@@ -1970,7 +1970,9 @@ function choisirMeilleur(candidats, lu) {
     //
     // MESURÉ AVANT CÂBLAGE (mesure-terme-prix.js, 107 vérités) : vérité dans les 3 affichées
     // 58 -> 59 avec la rareté lue (les variantes ne sont jamais à égalité sur ce corpus, donc
-    // le critère y est presque inerte), 58 -> 68 avec la rareté non lue ; 1er faux ET plus
+    // le critère y est presque inerte), 58 -> 68 avec la rareté non lue — ⚠️ une PROJECTION :
+    // au 2026-09-08 le journal ne porte AUCUN `rarete: null` (0 sur 248), ce chiffre n'existera
+    // qu'avec des scans postérieurs au déploiement de f188a0c, et dotés d'une vérité ; 1er faux ET plus
     // cher 1 -> 4 (resp. 6), tous des cartes DIFFÉRENTES. Aucun verdict ne dépend de l'ordre.
     const prixTri = c => (typeof c.prix === 'number' && c.prix > 0) ? c.prix : Infinity;
     const cleMemeCarte = c => {
