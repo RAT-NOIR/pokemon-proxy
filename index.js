@@ -649,7 +649,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "attaqueBrute": "le nom de la PREMIÈRE attaque, TEL QU'IMPRIMÉ sur la carte (katakana, français...), ou null si illisible", "attaque": "son nom ANGLAIS officiel (ex: Rainbow Burn), ou null si tu n'es pas sûr de la correspondance", "attaqueConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale/illisible — la RARETÉ D'IMPRESSION, voir plus bas", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "attaqueBrute": "le nom de la PREMIÈRE attaque, TEL QU'IMPRIMÉ sur la carte (katakana, français...), ou null si illisible", "attaque": "son nom ANGLAIS officiel (ex: Rainbow Burn), ou null si tu n'es pas sûr de la correspondance", "attaqueConfiance": "haute/moyenne/basse — voir les règles plus bas", "illustrateur": "le nom de l'illustrateur TEL QU'IMPRIMÉ sur la carte (la ligne « Illus. »), ou null", "illustrateurConfiance": "haute/basse — voir plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale/illisible — la RARETÉ D'IMPRESSION, voir plus bas", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
 Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
@@ -687,6 +687,17 @@ du coût en énergies. Ne lis PAS le texte descriptif en dessous, ni le nom du t
 lisible, "attaqueBrute" et "attaque" valent null : c'est une réponse propre, traitée en aval.
 Ce champ ne sert QUE de départage entre candidats déjà à égalité — un null ne coûte rien,
 une invention désigne une autre carte.
+
+L'ILLUSTRATEUR — son nom est imprimé en petites lettres LATINES sur toutes les cartes, japonaises
+comprises, précédé de « Illus. » (au bord de l'illustration sur les cartes anciennes, en bas de la
+carte sur les récentes).
+- "illustrateur" : recopie le nom TEL QU'IMPRIMÉ, sans traduire ni corriger (ex: "Ken Sugimori",
+  "Mitsuhiro Arita"). null si la ligne « Illus. » est illisible ou n'existe pas (cartes Énergie).
+  Ne complète JAMAIS un nom à moitié lu par un nom d'illustrateur connu : un nom deviné vaut moins
+  qu'un null.
+- "illustrateurConfiance" : "haute" si tu lis chaque lettre nettement ; "basse" si la ligne est
+  petite, floue ou en partie masquée.
+Ce champ ne sert à AUCUNE décision aujourd'hui : il est seulement enregistré.
 
 ÉVALUATION DE L'ÉTAT (etatEstime) — barème Cardmarket, du meilleur au pire : MT > NM > EX > GD > LP > PL > PO.
 - NM (Near Mint) : aucun défaut visible, bords nets, coins pointus.
@@ -902,6 +913,20 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
             if (typeof v === 'string' && v.trim().toLowerCase() !== 'aucun' && MOTS_VIDES.has(v.trim().toLowerCase())) {
                 parsed.symboleSet = null;
             }
+        }
+        // `illustrateur` / `illustrateurConfiance` — LECTURE SEULE, 2026-09-08. Énumération
+        // OUVERTE comme `attaqueBrute` : le nom tel qu'imprimé, en lettres latines même sur les
+        // japonaises. Il ne traverse PAS la boucle MOTS_VIDES ci-dessus (la leçon de symboleSet :
+        // collecter puis effacer) — seule la CHAÎNE « null »/« none »/« n/a » devient null ;
+        // « aucun » est gardé, c'est une réponse possible sur une carte sans ligne « Illus. ».
+        // ⛔ AUCUNE décision ne le lit : il est journalisé sur les deux voies, et c'est tout.
+        // Mesuré avant (mesure 13) : plafond 9 rangs 1 sûrs sur 55 égalités, jointure TCGdex sur
+        // 30 % des membres seulement. Ce champ est un INSTRUMENT, pas un signal.
+        {
+            const v = typeof parsed.illustrateur === 'string' ? parsed.illustrateur.trim() : null;
+            parsed.illustrateur = (v && !(MOTS_VIDES.has(v.toLowerCase()) && v.toLowerCase() !== 'aucun')) ? v : null;
+            const c = String(parsed.illustrateurConfiance ?? '').trim().toLowerCase();
+            parsed.illustrateurConfiance = ['haute', 'basse'].includes(c) ? c : null;
         }
 
         // Normalisation des nouveaux champs pour le scoring.
@@ -5628,6 +5653,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             attaqueLue: cardInfo.attaque ?? null,
             attaqueBrute: cardInfo.attaqueBrute ?? null,
             attaqueConfiance: cardInfo.attaqueConfiance ?? null,
+            // L'illustrateur, LECTURE SEULE (2026-09-08) : journalisé ici sur le succès, et par
+            // `enregistrerEchec` sur le refus. Aucune décision ne le lit.
+            illustrateur: cardInfo.illustrateur ?? null,
+            illustrateurConfiance: cardInfo.illustrateurConfiance ?? null,
             // ⚠️ `parenteRetenue` n'est plus journalisé — supprimé le 2026-08-18 après
             // 0 occurrence sur 117 lignes. `parenteJournal` reste, il alimente la trace
             // `[setcode-diagnostic]` à la console. Voir journal-scans.js pour la raison.

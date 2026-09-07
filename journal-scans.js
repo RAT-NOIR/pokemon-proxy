@@ -756,6 +756,13 @@ const journalScanSchema = new mongoose.Schema({
     attaqueLue: String,       // le nom ANGLAIS rendu par l'IA, ou null
     attaqueBrute: String,     // tel qu'imprimé (katakana...), ou null
     attaqueConfiance: String, // 'haute' | 'moyenne' | 'basse' | null
+    // L'illustrateur, LECTURE SEULE — né le 2026-09-08. Énumération ouverte, tel qu'imprimé
+    // (lettres latines même sur les japonaises). Aucune décision ne le lit : il existe pour
+    // mesurer, d'abord son taux de lecture, ensuite ce qu'il séparerait (mesure 13 : plafond
+    // 9 rangs 1 sûrs sur 55 égalités, jointure TCGdex sur 30 % des membres). Sur les lignes
+    // antérieures à cette date, le champ est ABSENT — pas null : dénominateur à imprimer.
+    illustrateur: String,          // ou null (illisible / carte sans ligne « Illus. »)
+    illustrateurConfiance: String, // 'haute' | 'basse' | null
 
     // ── LE DÉPARTAGE PAR L'IMAGE — ajouté le 2026-08-29 ──────────────────────
     // Onze champs pour une seule décision, et ce n'est pas de la gloutonnerie : la moitié
@@ -1061,7 +1068,9 @@ function enregistrerScan(d = {}) {
             attaqueDepartage: d.attaqueDepartage || null,
             attaqueLue: d.attaqueLue || null,
             attaqueBrute: d.attaqueBrute || null,
-            attaqueConfiance: d.attaqueConfiance || null
+            attaqueConfiance: d.attaqueConfiance || null,
+            illustrateur: d.illustrateur || null,
+            illustrateurConfiance: d.illustrateurConfiance || null
         });
     })().catch(e => {
         // Trace, jamais de propagation. Un journal muet vaut mieux qu'un scan cassé.
@@ -1163,6 +1172,11 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         attaqueLue: c.attaque ?? null,
         attaqueBrute: c.attaqueBrute ?? null,
         attaqueConfiance: c.attaqueConfiance ?? null,
+        // La voie du REFUS journalise l'illustrateur comme la voie du succès — la même
+        // leçon que symboleSet : un champ absent sur les refus est un champ qu'on ne peut
+        // pas mesurer là où il compte.
+        illustrateur: c.illustrateur ?? null,
+        illustrateurConfiance: c.illustrateurConfiance ?? null,
         etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,
