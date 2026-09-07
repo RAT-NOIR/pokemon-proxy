@@ -771,5 +771,118 @@ function rejouerRegime(scores, attendu, regime) {
     console.log(`\n   11 bis — sur le VIVIER ENTIER du rejeu (${presentes.length} lignes, ${idsViv.length} candidats distincts), règles E1-E4 :`);
     console.log(`   🔴 VÉRITÉ ÉLIMINÉE : ${vivVeriteElim}   · éliminations ${JSON.stringify(cE)} · lignes touchées ${vivTouches}`);
     console.log(`   vivier réduit à UN candidat : ${vivReduitAUn}, = vérité ${vivSurvVerite} · vérité SEULE en tête (hors égalité) : avant ${vivTeteAvant} -> après élimination ${vivTeteVerite}`);
+
+    // ══ MESURE 12 — LA TAILLE LOCALE D'EXPANSION, COMME CLÉ « NOM + TOTAL » ══
+    // Vérité de contrôle : `cardCount.official` des listes /v2/en/sets et /v2/ja/sets — la source
+    // que la route charge déjà (index.js, chargerSetsTCGdex) — jointe par numeros_cartes.setTcgdex.
+    // Taille locale = max numérique des numéros (secrètes comprises), et nombre de numéros distincts.
+    console.log('\n══ MESURE 12 — la taille locale d\'expansion comme clé « nom + total » ══');
+    const axios = require('axios');
+    const setsTcgdex = new Map();
+    for (const lg of ['en', 'ja']) {
+        try {
+            const r = await axios.get(`https://api.tcgdex.net/v2/${lg}/sets`, { timeout: 20000 });
+            for (const s of r.data || []) setsTcgdex.set(String(s.id), { lg, officiel: s.cardCount?.official ?? null, total: s.cardCount?.total ?? null, nom: s.name });
+        } catch (e) { console.log(`   ⚠️ liste des sets TCGdex [${lg}] indisponible : ${e.message} — la partie (a) ne conclut pas sur cette langue`); }
+    }
+    console.log(`   sets TCGdex chargés : ${setsTcgdex.size} (en + ja)`);
+    const numAll = await Num.find({}, { idProduct: 1, idExpansion: 1, numero: 1, numeroUrl: 1, setTcgdex: 1 }).lean();
+    const parExp = new Map();
+    for (const n of numAll) {
+        const e = Number(n.idExpansion); if (!Number.isFinite(e)) continue;
+        const st = parExp.get(e) || { lignes: 0, nums: new Set(), max: null, ponts: new Set() };
+        st.lignes++;
+        const k = parseInt(String(n.numero || n.numeroUrl || '').replace(/\D/g, ''), 10);
+        if (Number.isFinite(k) && k > 0) { st.nums.add(k); st.max = st.max == null ? k : Math.max(st.max, k); }
+        if (n.setTcgdex) st.ponts.add(String(n.setTcgdex));
+        parExp.set(e, st);
+    }
+    // (a) L'erreur du max, par expansion pontée à UN set connu.
+    const err = { exact: 0, dessus25: 0, dessusPlus: 0, dessous: 0, sansOfficiel: 0 }; let pontees = 0, multiPont = 0; const distinctExact = { oui: 0, non: 0 };
+    for (const [e, st] of parExp) {
+        if (st.ponts.size === 0) continue;
+        if (st.ponts.size > 1) { multiPont++; continue; }
+        const s = setsTcgdex.get([...st.ponts][0]); pontees++;
+        if (!s || s.officiel == null) { err.sansOfficiel++; continue; }
+        if (st.max == null) { err.dessous++; continue; }
+        if (st.max === s.officiel) err.exact++; else if (st.max > s.officiel && st.max <= s.officiel * 1.25) err.dessus25++; else if (st.max > s.officiel) err.dessusPlus++; else err.dessous++;
+        if (st.nums.size === s.officiel) distinctExact.oui++; else distinctExact.non++;
+    }
+    console.log(`   (a) expansions pontées à un set : ${pontees} (+ ${multiPont} à plusieurs sets, écartées) sur ${parExp.size} expansions avec numéros`);
+    console.log(`       max des numéros contre cardCount.official : exact ${err.exact} · au-dessus ≤ 25 % (secrètes) ${err.dessus25} · au-dessus > 25 % ${err.dessusPlus} · EN DESSOUS (apprentissage incomplet) ${err.dessous} · set sans official ${err.sansOfficiel}`);
+    console.log(`       numéros distincts == official : ${distinctExact.oui} / ${distinctExact.oui + distinctExact.non}`);
+    // (b) La clé : sur les vérités à total lu, combien d'expansions du vivier survivent à « max ∈ [total, total × 1,25] » ?
+    const { setsPourTotal } = require('./index');
+    const aTotal = V.filter(x => /^\d+$/.test(String(x.d.total ?? '')) && !x.rejeu.vide);
+    const expDeProduit = new Map(numAll.map(n => [Number(n.idProduct), Number(n.idExpansion)]));
+    let unSeul = 0, unSeulVerite = 0, veriteElim = 0, tcgMuet = 0, tcgMuetLocalRepond = 0, tcgMuetLocalVerite = 0, sansStat = 0; const avantApres = [];
+    for (const x of aTotal) {
+        const total = Number(x.d.total);
+        const expsVivier = [...new Set(x.scores.map(s => s.idExpansion).filter(Number.isFinite))];
+        const compatibles = expsVivier.filter(e => { const st = parExp.get(e); return st && st.max != null && st.max >= total && st.max <= total * 1.25; });
+        const expVer = expDeProduit.get(x.attendu);
+        if (expVer == null || !parExp.get(expVer)) { sansStat++; }
+        const verSurvit = expVer != null && compatibles.includes(expVer);
+        if (expVer != null && expsVivier.includes(expVer) && !verSurvit) veriteElim++;
+        if (compatibles.length === 1) { unSeul++; if (verSurvit) unSeulVerite++; }
+        avantApres.push(`${expsVivier.length}->${compatibles.length}`);
+        const tcg = await setsPourTotal(total, x.d.langue);
+        if (!tcg.length) { tcgMuet++; if (compatibles.length) { tcgMuetLocalRepond++; if (verSurvit) tcgMuetLocalVerite++; } }
+    }
+    console.log(`   (b) vérités à total lu : ${aTotal.length} · expansions du vivier avant -> après filtre local [${avantApres.join(' ')}]`);
+    console.log(`       exactement UNE expansion : ${unSeul}, et c'est celle de la vérité ${unSeulVerite} · 🔴 vérité ÉLIMINÉE par le filtre : ${veriteElim} · vérité sans statistique locale ${sansStat}`);
+    console.log(`       TCGdex MUET (setsPourTotal vide) : ${tcgMuet} lignes ; la taille locale y répond ${tcgMuetLocalRepond} fois, vérité conservée ${tcgMuetLocalVerite}`);
+
+    // ══ MESURE 13 — L'ILLUSTRATEUR : plafond et jointure ══
+    // Jointure disponible : expansion -> setTcgdex (numeros_cartes) -> /v2/{lg}/sets/{id} (liste des
+    // cartes : localId, name) -> carte par NUMÉRO (localId) ou, faute de numéro, par NOM unique dans
+    // le set (nom anglais du catalogue en `en`, `nomBrut` katakana en `ja`) -> /v2/{lg}/cards/{id}.illustrator.
+    console.log('\n══ MESURE 13 — l\'illustrateur sur les 55 égalités ══');
+    const setCache = new Map(), cardCache = new Map();
+    const chargerSet = async (id) => {
+        if (setCache.has(id)) return setCache.get(id);
+        let res = null;
+        for (const lg of ['en', 'ja']) {
+            try { const r = await axios.get(`https://api.tcgdex.net/v2/${lg}/sets/${encodeURIComponent(id)}`, { timeout: 12000 }); if (r.data?.cards) { res = { lg, cards: r.data.cards }; break; } } catch (_) { }
+        }
+        setCache.set(id, res); return res;
+    };
+    const illustrateurDe = async (lg, cardId) => {
+        if (cardCache.has(cardId)) return cardCache.get(cardId);
+        let ill = null;
+        try { const r = await axios.get(`https://api.tcgdex.net/v2/${lg}/cards/${encodeURIComponent(cardId)}`, { timeout: 12000 }); ill = r.data?.illustrator ?? null; } catch (_) { }
+        cardCache.set(cardId, ill); return ill;
+    };
+    const normNom = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9぀-ヿ一-龯]/g, '');
+    let membresTot = 0, membresPontes = 0, membresJoints = 0, gJoign2 = 0, gToutJoint = 0, gDistincts = 0, gVeriteUnique = 0;
+    for (const g of groupesE) {
+        const d = g.x.d; const nomEn = normNom(String(catById.get(g.x.attendu)?.name ?? d.nom).split('[')[0]); const nomJa = normNom(d.nomBrut);
+        const ills = [];
+        for (const id of g.ids) {
+            membresTot++;
+            const n = numTous.get(id) ?? numViv.get(id); const e = n ? Number(n.idExpansion) : null; const st = e != null ? parExp.get(e) : null;
+            if (!st || st.ponts.size !== 1) continue;
+            membresPontes++;
+            const set = await chargerSet([...st.ponts][0]); if (!set) continue;
+            const num = String(n.numero || n.numeroUrl || '').replace(/\D/g, '');
+            let carte = num ? set.cards.find(c => String(c.localId ?? '').replace(/\D/g, '') === num) : null;
+            if (!carte) { const parNom = set.cards.filter(c => normNom(c.name) === (set.lg === 'ja' ? nomJa : nomEn)); if (parNom.length === 1) carte = parNom[0]; }
+            if (!carte) continue;
+            const ill = await illustrateurDe(set.lg, carte.id);
+            if (!ill) continue;
+            membresJoints++; ills.push({ id, ill });
+        }
+        if (ills.length >= 2) {
+            gJoign2++;
+            if (ills.length === g.ids.length) gToutJoint++;
+            const distincts = new Set(ills.map(i => i.ill));
+            if (distincts.size === ills.length) gDistincts++;
+            const v = ills.find(i => i.id === g.x.attendu);
+            if (v && ills.filter(i => i.ill === v.ill).length === 1) gVeriteUnique++;
+        }
+    }
+    console.log(`   membres : ${membresTot} · expansion pontée à un set ${membresPontes} (${pct(membresPontes, membresTot)}) · carte JOINTE avec illustrateur ${membresJoints} (${pct(membresJoints, membresTot)})`);
+    console.log(`   groupes (${groupesE.length}) : ≥ 2 membres joints ${gJoign2} · ENTIÈREMENT joints ${gToutJoint} · illustrateurs tous distincts parmi les joints ${gDistincts} · vérité jointe ET seule de son illustrateur ${gVeriteUnique}`);
+    console.log(`   -> le plafond d'une clé « nom + illustrateur » sur ces égalités est ${gVeriteUnique} / ${groupesE.length}, borné par la jointure TCGdex, pas par l'illustrateur.`);
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
