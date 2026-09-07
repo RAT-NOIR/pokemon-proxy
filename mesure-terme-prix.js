@@ -510,7 +510,7 @@ function rejouerRegime(scores, attendu, regime) {
     // avec la rareté ABSENTE (la projection post-déploiement : le terme y est neutre depuis le câblage).
     console.log('\n══ MESURE 7 — l\'ordre rendu par choisirMeilleur, tel quel (rien de re-trié ici) ══');
     for (const [etiquette, champ] of [['rareté du journal (aujourd\'hui)', 'ordreProd'], ['rareté ABSENTE (projection post-déploiement)', 'ordreNull']]) {
-        let pos1 = 0, top3 = 0; const fautifs = [];
+        let pos1 = 0, top3 = 0, dusAuTri = 0; const fautifs = [];
         for (const x of presentes) {
             const o = x[champ];
             const iv = o.findIndex(s => s.id === x.attendu);
@@ -518,10 +518,17 @@ function rejouerRegime(scores, attendu, regime) {
             if (iv >= 0 && iv < 3) top3++;
             const premier = o[0];
             if (premier.id !== x.attendu && typeof premier.prix === 'number' && premier.prix > 0 && x.prixVerite != null && premier.prix > x.prixVerite) {
-                fautifs.push(`${x.cle} ${x.d.nom} : 1er ${premier.id} « ${premier.nom} » ${eur(premier.prix)} · vérité ${x.attendu} ${eur(x.prixVerite)} (position ${iv + 1}, écart de score ${premier.score - o[iv].score})`);
+                // Le premier sous l'ANCIEN tri (score, puis le moins cher), recalculé sur les mêmes
+                // scores : c'est lui qui dit si ce premier faux est DÛ au nouveau tri ou s'il était
+                // déjà là. Un premier qui mène de 45 points ne doit rien au tri ; un premier choisi
+                // dans une égalité peut en changer.
+                const ancien = [...o].sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix)))[0];
+                const change = ancien.id !== premier.id;
+                if (change) dusAuTri++;
+                fautifs.push(`${x.cle} ${x.d.nom} : 1er ${premier.id} « ${premier.nom} » ${eur(premier.prix)} · vérité ${x.attendu} ${eur(x.prixVerite)} (position ${iv + 1}, écart de score ${premier.score - o[iv].score}) · ancien tri : 1er ${ancien.id} ${eur(ancien.prix)} -> ${change ? 'CHANGÉ PAR LE TRI' : 'déjà premier, pas dû au tri'}`);
             }
         }
-        console.log(`   ${etiquette.padEnd(46)} pos.1 ${pos1} · vérité dans le TOP 3 affiché ${top3} / ${presentes.length} · 1er faux ET plus cher ${fautifs.length}`);
+        console.log(`   ${etiquette.padEnd(46)} pos.1 ${pos1} · vérité dans le TOP 3 affiché ${top3} / ${presentes.length} · 1er faux ET plus cher ${fautifs.length}, dont dus au nouveau tri ${dusAuTri}`);
         for (const f of fautifs) console.log(`      ${f}`);
     }
     await mongoose.disconnect();
