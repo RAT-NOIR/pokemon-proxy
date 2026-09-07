@@ -1,13 +1,44 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage manuel Cardmarket
 // @namespace    rat-market
-// @version      1.3
+// @version      1.4
 // @description  Bouton "Apprendre cette page" sur les galeries Singles. Lit UNIQUEMENT la page ouverte — ne navigue jamais.
 // @match        https://www.cardmarket.com/*/Pokemon/Products/Singles*
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @connect      pokemon-proxy-ratnoir666.onrender.com
 // @run-at       document-idle
 // ==/UserScript==
+
+// ============================================================
+// CE QUI A CHANGÉ EN 1.4 — 2026-09-07, LE CONTRAT A BOUGÉ CÔTÉ SERVEUR
+// ============================================================
+// 1. `userId` EST OBLIGATOIRE. `/api/apprendre-lot` répond 400 sans lui depuis le commit
+//    707692a (durcissement : ces routes écrivent `numeros_cartes` et `codes_set`, les deux
+//    seules tables non régénérables du projet, et n'étaient gardées que par un jeton
+//    partagé extractible du script). On génère un identifiant UNE fois et on le persiste
+//    par `GM_setValue` : c'est une IDENTITÉ, pas un décompte — aucun crédit n'est débité.
+//    ⚠️ Il doit être STABLE. Un identifiant régénéré à chaque chargement rendrait les
+//    refus du serveur intraçables, ce qui est exactement ce que la garde cherche à offrir.
+//
+// 2. UN LOT MIXTE NE PASSE PLUS POUR UN SUCCÈS SILENCIEUX. Le serveur lit désormais
+//    l'`idExpansion` PAR CARTE ; quand un lot en touche plusieurs, il rend
+//    `idExpansion: null` ET `couverture: null`, avec la liste dans `idExpansions`.
+//    L'ancien script affichait alors « ✅ n nouvelles » sans couverture et sans un mot —
+//    l'utilisateur ne pouvait pas distinguer « galerie finie » de « lot mêlé ». La
+//    couverture manquante est maintenant EXPLIQUÉE, jamais tue.
+//
+// 3. LE CODE HTTP EST LU. `onload` résolvait la réponse quel que soit le statut : un 400
+//    ou un 429 (limiteur d'apprentissage, 120/h/IP) arrivait comme un objet sans `success`
+//    et sortait en « refus serveur » sans son code. On le rend maintenant.
+//
+// ⚠️ CE QUI N'EST PAS AJOUTÉ, ET POURQUOI. `/api/apprendre` (au singulier) peut désormais
+// répondre `success:false, refuse:'ligne-exacte-existante'`. CE SCRIPT NE L'APPELLE PAS —
+// il n'emprunte que `/api/apprendre-lot`. Écrire ici un traitement pour une réponse qu'on
+// ne peut pas recevoir fabriquerait du code mort qui a l'air d'une garde : c'est
+// exactement ce que la règle « soit on le branche, soit on le supprime » interdit. Le cas
+// est consigné au chantier, à traiter par le client qui appelle réellement cette route.
 
 // ============================================================
 // CE QUI A CHANGÉ EN 1.3, ET POURQUOI
@@ -45,6 +76,28 @@
   const URL_API    = 'https://pokemon-proxy-ratnoir666.onrender.com';
   const JETON      = 'K10-Sr7izvo-CG3bSRfCbhSnw8KTNrbJ';
   const TAILLE_LOT = 25;
+
+  // ===== L'identifiant utilisateur, généré UNE fois et persisté ============
+  // Le serveur exige `userId` (400 sans lui) et le tronque à 80 caractères. Aucun format
+  // n'est imposé : ce qui compte est qu'il soit STABLE d'une session à l'autre, pour que
+  // les refus tracés côté serveur désignent toujours le même poste.
+  // ⚠️ `GM_getValue`/`GM_setValue` et non `localStorage` : le userscript tourne sur les
+  // pages Cardmarket, et un `localStorage` y serait partagé avec le site — effaçable par
+  // lui, et visible de lui. Le stockage Tampermonkey appartient au script.
+  function identifiantUtilisateur() {
+    let id = null;
+    try { id = GM_getValue('rm_userId', null); } catch (_) { /* API indisponible */ }
+    if (typeof id === 'string' && id.length > 0) return id;
+    // `crypto.randomUUID` existe partout où Tampermonkey tourne aujourd'hui ; le repli
+    // n'est pas une élégance, c'est la garantie qu'un navigateur ancien n'envoie pas une
+    // chaîne vide — qui vaudrait 400 à chaque appel, sans que le panneau dise pourquoi.
+    const neuf = 'rm-' + ((self.crypto && self.crypto.randomUUID)
+      ? self.crypto.randomUUID()
+      : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10));
+    try { GM_setValue('rm_userId', neuf); } catch (_) { /* non persisté : on l'envoie quand même */ }
+    return neuf;
+  }
+  const ID_UTILISATEUR = identifiantUtilisateur();
 
   // ===== Lecture de la page ================================================
   // ⚠️ MÊME logique que scraperListeExpansion (live-cardmarket.js), à une exception
@@ -131,9 +184,18 @@
         method: 'POST',
         url: URL_API + '/api/apprendre-lot',
         headers: { 'Content-Type': 'application/json', 'x-jeton': JETON },
-        data: JSON.stringify({ cartes: lot }),
+        // ⚠️ `userId` OBLIGATOIRE depuis le 2026-09-06 : 400 sans lui.
+        data: JSON.stringify({ userId: ID_UTILISATEUR, cartes: lot }),
         timeout: 30000,
-        onload:  r => { try { resolve(JSON.parse(r.responseText)); } catch { reject(new Error('réponse illisible')); } },
+        // Le STATUT est remonté avec le corps. Sans lui, un 400 (userId manquant) et un 429
+        // (limiteur d'apprentissage, 120/h/IP) sortaient tous deux en « refus serveur »
+        // sans qu'on puisse les distinguer — deux causes opposées sous un même message.
+        onload:  r => {
+          let corps = null;
+          try { corps = JSON.parse(r.responseText); } catch { /* corps illisible : le statut reste utile */ }
+          if (!corps) return reject(new Error(`réponse illisible (HTTP ${r.status})`));
+          resolve(Object.assign({ _status: r.status }, corps));
+        },
         onerror: () => reject(new Error('requête échouée')),
         ontimeout: () => reject(new Error('délai dépassé'))
       });
@@ -184,6 +246,10 @@
     if (avecNumeroTitre > 0) msg.textContent = prefixe;
 
     let nouv = 0, amel = 0, exact = 0, sansNum = 0, erreur = false, couverture = null;
+    // Les expansions vues sur TOUS les lots. Un lot mixte rend `couverture: null` : sans
+    // cette trace, l'absence de couverture serait indiscernable d'une galerie non finie.
+    const expansionsVues = new Set();
+    let lotMixte = false;
     for (let i = 0; i < cartes.length; i += TAILLE_LOT) {
       const lot = cartes.slice(i, i + TAILLE_LOT);
       try {
@@ -191,7 +257,22 @@
         if (r && r.success) {
           nouv += r.nouvelles; amel += r.ameliorees; exact += r.dejaExactes; sansNum += (r.sansNumero || 0);
           if (r.couverture) couverture = r.couverture;   // la dernière renvoyée est la plus à jour
-        } else { erreur = true; msg.textContent = '❌ ' + ((r && r.error) || 'refus serveur'); break; }
+          // `idExpansions` est ADDITIF : le serveur le rend pour que le client sache
+          // POURQUOI `idExpansion` et `couverture` sont nuls. On ne le lit pas comme un
+          // détail d'affichage — c'est ce qui empêche un lot mêlé de passer pour un succès.
+          if (Array.isArray(r.idExpansions)) { for (const e of r.idExpansions) expansionsVues.add(e); if (r.idExpansions.length > 1) lotMixte = true; }
+          else if (r.idExpansion != null) expansionsVues.add(r.idExpansion);
+        } else {
+          erreur = true;
+          // Le statut d'abord : un 400 dit « le script est à corriger », un 429 dit
+          // « attends ». Les confondre ferait chercher un bug là où il n'y en a pas.
+          const st = r && r._status ? ` (HTTP ${r._status})` : '';
+          const aide = r && r._status === 400 ? ' — identifiant manquant côté script, version à mettre à jour'
+            : r && r._status === 429 ? ' — limite d\'apprentissage atteinte (120/h), réessaie plus tard'
+              : '';
+          msg.textContent = '❌ ' + ((r && r.error) || 'refus serveur') + st + aide;
+          break;
+        }
       } catch (e) { erreur = true; msg.textContent = '❌ ' + e.message; break; }
       bar.style.width = Math.round(((i + lot.length) / cartes.length) * 100) + '%';
     }
@@ -201,6 +282,17 @@
       let html =
         `✅ <b>${nouv}</b> nouvelles · <b>${amel}</b> améliorées · ${exact} déjà exactes` +
         (sansNum ? `<br><span style="color:#888">${sansNum} sans numéro ignorées</span>` : '');
+
+      // ⚠️ UNE COUVERTURE ABSENTE N'EST PAS UNE COUVERTURE À ZÉRO, et ne se tait plus.
+      // Le serveur ne la calcule que sur un lot d'UNE seule expansion ; sur un lot mêlé il
+      // rend `idExpansion: null` et `couverture: null`. Avant la 1.4, l'utilisateur voyait
+      // « ✅ n nouvelles » sans un mot et ne pouvait pas savoir si la galerie était finie.
+      if (!couverture && (lotMixte || expansionsVues.size > 1)) {
+        html += `<br><span style="color:#e6a23c">⚠️ lot sur ${expansionsVues.size} expansions ` +
+                `(${[...expansionsVues].join(', ')}) — le serveur ne calcule pas de couverture dans ce cas.` +
+                `<br><span style="color:#888">Les cartes sont bien apprises, chacune avec SA propre expansion. ` +
+                `Pour suivre l'avancement d'une galerie, apprends une page à la fois.</span></span>`;
+      }
 
       // La couverture dit si la galerie est finie. C'est elle qui compte : une expansion
       // à 0 % de numéros est invisible pour l'identification locale.
