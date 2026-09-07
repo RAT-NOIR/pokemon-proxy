@@ -2,6 +2,69 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-08 — `illustrateur` entre au prompt, LECTURE SEULE. Un commit, NON POUSSÉ
+
+**Câblé** : deux champs de prompt, `illustrateur` (tel qu'imprimé, énumération ouverte comme
+`attaqueBrute`) et `illustrateurConfiance` (haute/basse). Nettoyage à part de `MOTS_VIDES` :
+seule la chaîne « null »/« none »/« n/a » devient null, « aucun » est gardé. Journalisé sur les
+DEUX voies (`enregistrerScan`, `enregistrerEchec`) et au schéma. ⛔ Aucune décision ne le lit.
+Exercé par le vrai serveur : succès, refus, chaîne « null » → null, 0 erreur grave. Instrument
+neuf : le verrou avertit sur l'empreinte, charges NON réenregistrées. Banc identique.
+
+**Combien de scans avant que le champ dise quelque chose.** Trois paliers, chacun avec son
+dénominateur : (1) *taux de lecture* — lignes portant le champ (version ≥ ce commit) et
+non-null ; à 4,6 scans/jour, **30 scans ≈ une semaine** donnent le taux à ±15 points ; en
+dessous de 40 % de non-null, la ligne « Illus. » n'est pas lisible sur des photos d'annonce et
+le champ meurt là. (2) *justesse* — lignes avec vérité où l'illustrateur de la vérité est joint
+via TCGdex (30 % des membres, mesure 13) : il faut **≈ 100 scans, trois semaines**, pour ~10
+lignes comparables. (3) *valeur* — ce qu'il éliminerait sur les égalités : plafond 9/55, donc
+**rien à décider avant ~200 scans** ou l'import des ponts, qui multiplie la jointure. Ne pas
+lire un taux avant d'avoir imprimé « lignes portant le champ ».
+
+## 2026-09-08, deux clés candidates — TAILLE LOCALE D'EXPANSION et ILLUSTRATEUR. PRÉDICTIONS AVANT MESURE
+
+1. *Taille locale.* Erreur du max des numéros contre le `cardCount.official` TCGdex, sur les
+   expansions pontées : exact **≈ 45 %**, au-dessus de ≤ 25 % (secrètes) **≈ 35 %**, loin (apprentissage
+   incomplet) **≈ 20 %**. Clé « nom + total » sur les vérités à total lu (≈ 40 lignes) : reste
+   exactement UNE expansion **≈ 10** fois, vérité éliminée **≈ 3**. TCGdex muet (0 set compatible) sur
+   **≈ la moitié** des lignes JP ; la taille locale répond sur **≈ 60 %** de celles-là.
+2. *Illustrateur.* Membres joignables à TCGdex (pont + numéro, ou recherche ja par `nomBrut`) :
+   **≈ 25 %** des 733 ; groupes avec ≥ 2 membres joignables **≈ 12** sur 55 ; entièrement joignables
+   **0** ; groupes à illustrateurs distincts parmi les joignables **≈ 8**. Plafond **≈ 8 / 55**, et
+   la jointure meurt sur le vintage JP sans numéro.
+3. Survivante : la taille locale, comme FILTRE (±25 %) ; aucune des deux n'est une clé exacte.
+
+### Mesuré (mesures 12-13, `node mesure-terme-prix.js`, lectures TCGdex) — la survivante n'est pas celle prédite
+
+**1. Taille locale : MORTE comme clé, et pas pour la raison attendue.** Vérité de contrôle :
+`cardCount.official` des listes `/v2/en/sets` + `/v2/ja/sets` (398 sets), jointes par
+`numeros_cartes.setTcgdex` : **218 expansions pontées** sur 752. Max des numéros contre
+l'officiel : exact **68** (31 %, prédit 45), secrètes ≤ +25 % **60**, au-dessus > 25 % **24**,
+**EN DESSOUS 65** (30 %). Numéros distincts = officiel : 60/206. Et ce n'est PAS un trou
+d'apprentissage : 92,6 % des 71 933 produits ont un numéro (559 expansions complètes, 158
+partielles, 53 vides). Le « dessous » vient de la convention Cardmarket (numéro absent sur
+le vintage, variantes sous un même numéro) ou d'un pont vers un autre set. Clé « nom + total »
+sur **35 vérités à total lu** (filtre max ∈ [total, +25 %]) : exactement une expansion **6**
+fois (prédit 10), c'est la vérité **4** ; 🔴 **vérité ÉLIMINÉE 13 sur 35** (prédit 3). Là où
+TCGdex est muet (**5** lignes, pas la moitié) la taille locale répond 5 fois, vérité gardée 3.
+Un filtre qui tue 37 % des vérités n'est ni une clé ni un filtre.
+
+**2. Illustrateur : VIVANT comme filtre, borné par la jointure.** Chemin de jointure existant :
+expansion → `setTcgdex` → liste du set → carte par numéro, sinon par nom unique (`nomBrut`
+katakana sur `ja`) → `illustrator`. Sur les 55 égalités : membres **818**, pontés 284 (34,7 %),
+**joints avec illustrateur 245 (30 %)** ; groupes à ≥ 2 membres joints **42** (prédit 12),
+**entièrement joints 2**, illustrateurs tous distincts parmi les joints **10**, vérité jointe ET
+seule de son illustrateur **9 / 55** (prédit 8). ⚠️ La donnée n'est joignable que pour les
+produits que TCGdex couvre, jamais depuis le catalogue Cardmarket : sur 70 % des membres elle
+est muette, donc elle ne peut ÉLIMINER que les membres joints, et ne DÉSIGNER que dans les 2
+groupes entièrement joints.
+
+**3. Verdict.** Ni l'une ni l'autre n'est une clé exacte. La taille locale est morte. L'illustrateur
+est un filtre d'ÉLIMINATION de qualité (un fait imprimé, lisible en lettres latines même sur
+les JP) qui vaudrait 9 rangs 1 sûrs sur 55 aujourd'hui, et davantage avec l'import des ponts —
+mais il demande un champ de prompt neuf (`illustrateur`), donc des scans : à ranger avec
+l'attaque et le titre, pas à câbler demain. Aucun code touché, banc intact.
+
 ## 2026-09-08, tout dernier tour — POURQUOI ON RÉUSSIT. PRÉDICTIONS ÉCRITES AVANT LA MESURE
 
 Population : les vérités JUSTES en production (59 sur 109), et parmi elles les FERMES
