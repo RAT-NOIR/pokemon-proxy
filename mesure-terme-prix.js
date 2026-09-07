@@ -71,6 +71,49 @@ const pct = (a, b) => b ? `${(100 * a / b).toFixed(1)} %` : '—';
 /** La contribution du critère 5, lue dans `detail.prix` (« +25 (...) » ou « 0 (...) »). */
 const contributionPrix = detail => { const m = String(detail?.prix ?? '').match(/^([+-]?\d+)/); return m ? Number(m[1]) : 0; };
 
+// ── LA TABLE EXACTE DU TERME (scoring.js, critère 5), relue dans le code le 2026-09-08 ──
+//   entrée : lu.rarete (promo ?), lu.rareteElevee (IR/SR/SIR/UR/AR/SAR/CHR/CSR lue, OU
+//   numéro > total), candidat.prix (≥ 3 € = « cher »). Sortie :
+//     lu.rarete = 'promo'                         -> 0   « promo : le prix ne dit rien »   (toute la ligne)
+//     prix absent                                 -> 0   « pas de prix »
+//     rareteElevee ET cher                        -> +25 « IR attendue, prix élevé »
+//     rareteElevee ET pas cher                    -> 0   « incohérent avec rareté lue »
+//     PAS rareteElevee ET cher                    -> 0   « incohérent avec rareté lue »     <- la vérité, 32 fois
+//     PAS rareteElevee ET pas cher                -> +25 « carte normale, prix bas »
+//   Il n'existe AUCUNE valeur négative : la « pénalité » est un +25 refusé, et elle ne se
+//   distingue du bonus que par rapport aux candidats SANS prix ou aux lignes promo, qui
+//   restent à 0 dans tous les cas. C'est ce qui rend (a) et (b) presque confondus avec (c).
+const BRANCHES = [
+    ['coh-elevee', /^\+\d+ \(IR attendue/], ['coh-basse', /^\+\d+ \(carte normale/],
+    ['incoherent', /^0 \(prix .*incohérent/], ['promo', /^0 \(promo/], ['sans-prix', /^0 \(pas de prix\)/]
+];
+const brancheDe = detail => { const s = String(detail?.prix ?? ''); const b = BRANCHES.find(([, re]) => re.test(s)); return b ? b[0] : 'autre'; };
+// Ce que chaque régime DONNE à une branche, à la place de la contribution de référence.
+const REGIMES = {
+    'référence': b => ({ 'coh-elevee': 25, 'coh-basse': 25 }[b] ?? 0),
+    '(a) sans bonus, pénalité gardée': b => (b === 'incoherent' ? -25 : 0),
+    '(b) sans pénalité, bonus gardé': b => (['coh-elevee', 'coh-basse', 'incoherent'].includes(b) ? 25 : 0),
+    '(c) terme entier neutralisé': () => 0
+};
+const SEUIL_MARGE = 30;   // SEUIL_MARGE_CONFORTABLE de choisirMeilleur — pour un PROXY, voir plus bas
+const prixTri = p => (typeof p === 'number' && p > 0) ? p : Infinity;
+
+/** Rejoue un régime sur les scores d'une ligne : même tri que choisirMeilleur (score desc, puis le moins cher). */
+function rejouerRegime(scores, attendu, regime) {
+    const re = scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + regime(s.branche) }))
+        .sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix)));
+    const top = re[0], second = re[1];
+    const tailleSommet = re.filter(s => s.score === top.score).length;
+    const iv = re.findIndex(s => s.id === attendu);
+    if (iv < 0) return { issue: 'absente', rang: null, position: null, tailleSommet, dansSommet: false };
+    const rang = 1 + re.filter(s => s.score > re[iv].score).length;
+    const issue = tailleSommet > 1 ? 'refus' : (top.id === attendu ? 'juste' : 'faux');
+    // PROXY de « faux et affirmé » : faux ET marge ≥ 30 sur le 2e. Ce n'est PAS la réserve de
+    // la route (dix drapeaux y entrent) ; c'est le seul signal de confiance que le scoring porte.
+    const fauxMargeLarge = issue === 'faux' && second && (top.score - second.score) >= SEUIL_MARGE;
+    return { issue, rang, position: iv + 1, tailleSommet, dansSommet: rang === 1, fauxMargeLarge, tailleEgaliteVerite: re.filter(s => s.score === re[iv].score).length };
+}
+
 (async () => {
     const t0 = Date.now();
     while (mongoose.connection.readyState !== 1 && Date.now() - t0 < 30000) await new Promise(r => setTimeout(r, 100));
@@ -160,6 +203,12 @@ const contributionPrix = detail => { const m = String(detail?.prix ?? '').match(
         const sv = iv >= 0 ? scores[iv] : null;
         const rang = sv ? 1 + scores.filter(s => s.score > sv.score).length : null;
         const ip = scores.findIndex(s => s.candidat.idProduct === d.idProduct);
+        // Les scores compacts, pour les régimes — et la branche de chaque candidat.
+        x.scores = scores.map(s => ({ id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail) }));
+        // PARTIE 2 : la même ligne, rareté ABSENTE. `rareteElevee` reste false, comme dans
+        // `cardInfoDe` du banc — et comme en production, où null ne peut pas la lever.
+        const rNull = await scorerCandidatsLocal(vivier, { ...cardInfo, rarete: null }, null, [], cs, {});
+        x.branchesNull = new Map(rNull.scores.map(s => [s.candidat.idProduct, brancheDe(s.detail)]));
         x.rejeu = {
             vide: false, taille: scores.length, presente: iv >= 0, rang, egalite,
             issue: !sv ? 'absente' : (rang === 1 ? (egalite ? 'refus' : 'juste') : 'faux'),
@@ -254,5 +303,65 @@ const contributionPrix = detail => { const m = String(detail?.prix ?? '').match(
     for (const x of exact25) {
         console.log(`     ${x.cle.padEnd(6)} ${String(x.d.nom).padEnd(18)} vérité ${x.attendu} ${eur(x.prixVerite).padStart(9)} rang ${x.rejeu.rang}/${x.rejeu.taille} · prod:${x.issueProd.padEnd(5)} · 1er « ${x.rejeu.detailTop} » · vérité « ${x.rejeu.detailVer} »`);
     }
+
+    // ══ MESURE 3 — LE TERME DÉCOMPOSÉ, TROIS RÉGIMES ══
+    console.log('\n══ MESURE 3 — le terme décomposé : bonus, pénalité, et les trois régimes ══');
+    const presentes = V.filter(x => !x.rejeu.vide && x.rejeu.presente);
+    const parBranche = {}; let nCand = 0;
+    for (const x of presentes) for (const s of x.scores) { nCand++; parBranche[s.branche] = (parBranche[s.branche] || 0) + 1; }
+    const brancheVerite = {}; for (const x of presentes) { const b = x.scores.find(s => s.id === x.attendu)?.branche; brancheVerite[b] = (brancheVerite[b] || 0) + 1; }
+    console.log(`   branches OBSERVÉES sur ${nCand} candidats des ${presentes.length} lignes (vérité présente) : ${JSON.stringify(parBranche)}`);
+    console.log(`   branche de la VÉRITÉ : ${JSON.stringify(brancheVerite)}`);
+    console.log('   (table exacte du terme : voir l\'en-tête BRANCHES — aucune valeur négative, la pénalité est un +25 refusé)');
+    console.log('   ⚠️ témoin externe pour (c) : 2026-09-04, 221 lignes de journal, même vivier — 6 refus pour 1 gain, 219 gagnants inchangés.\n');
+    const entete = `   ${'régime'.padEnd(34)} juste  faux  faux·marge≥30(proxy)  refus(égalité)  absente | rang strict 1 / 2 / 3 / 4-10 / >10 | position affichée ≤ 3 | vérité au sommet : n, taille médiane`;
+    console.log(entete);
+    for (const [nom, regime] of Object.entries(REGIMES)) {
+        const res = presentes.map(x => rejouerRegime(x.scores, x.attendu, regime));
+        const c = { juste: 0, faux: 0, refus: 0, absente: 0 }; let fml = 0;
+        const rb = { 1: 0, 2: 0, 3: 0, '4-10': 0, '>10': 0 }; let pos3 = 0; const sommets = [];
+        for (const r of res) {
+            c[r.issue]++; if (r.fauxMargeLarge) fml++;
+            if (r.rang != null) rb[r.rang === 1 ? 1 : r.rang === 2 ? 2 : r.rang === 3 ? 3 : r.rang <= 10 ? '4-10' : '>10']++;
+            if (r.position != null && r.position <= 3) pos3++;
+            if (r.dansSommet) sommets.push(r.tailleSommet);
+        }
+        console.log(`   ${nom.padEnd(34)} ${String(c.juste).padStart(5)} ${String(c.faux).padStart(5)} ${String(fml).padStart(21)} ${String(c.refus).padStart(15)} ${String(c.absente).padStart(8)} | ${rb[1]} / ${rb[2]} / ${rb[3]} / ${rb['4-10']} / ${rb['>10']} | ${String(pos3).padStart(3)} | ${sommets.length}, ${med(sommets) ?? '—'}`);
+    }
+    console.log('   « position affichée » = rang après le tri de production : score, puis le MOINS CHER. C\'est');
+    console.log('   ce que voit l\'utilisateur quand la route montre les 3 premiers. Une vérité chère à égalité passe DERRIÈRE.');
+    console.log('\n   Les lignes à écart 25 (mesure 2), position AFFICHÉE de la vérité par régime — référence / (a) / (b) / (c) :');
+    for (const x of exact25) {
+        const pos = Object.values(REGIMES).map(r => { const q = rejouerRegime(x.scores, x.attendu, r); return `${q.position}${q.dansSommet ? `(sommet de ${q.tailleSommet})` : ''}`; });
+        console.log(`     ${x.cle.padEnd(6)} ${String(x.d.nom).padEnd(18)} ${eur(x.prixVerite).padStart(9)}  ${pos.join('  /  ')}`);
+    }
+
+    // ══ MESURE 4 — LA BRANCHE QUAND LA RARETÉ EST ABSENTE ══
+    console.log('\n══ MESURE 4 — « incohérent avec rareté lue » quand la rareté n\'a PAS été lue ══');
+    // 4a. Le code, à nu : deux candidats, une lecture sans rareté.
+    const luSans = { numero: null, rarete: null, rareteElevee: false, regionAttendue: null };
+    const luNormale = { ...luSans, rarete: 'normale' };
+    for (const [etiquette, lu] of [['rarete = null', luSans], ['rarete = \'normale\'', luNormale]]) {
+        const cher = S.scorerCandidat({ idProduct: 1, prix: 23.08 }, lu), pasCher = S.scorerCandidat({ idProduct: 2, prix: 0.05 }, lu);
+        console.log(`   ${etiquette.padEnd(20)} candidat 23,08 € -> « ${cher.detail.prix} » · candidat 0,05 € -> « ${pasCher.detail.prix} »`);
+    }
+    // 4b. Sur les 109 lignes, rejouées avec rarete = null : la branche de chaque candidat change-t-elle ?
+    const parRarete = {};
+    let lignesChangees = 0, veriteIncoherenteNull = 0, veriteIncoherenteRef = 0;
+    for (const x of presentes) {
+        const r = x.d.rarete ?? 'null';
+        parRarete[r] = parRarete[r] || { lignes: 0, changees: 0 };
+        parRarete[r].lignes++;
+        const change = x.scores.some(s => x.branchesNull.get(s.id) !== s.branche);
+        if (change) { lignesChangees++; parRarete[r].changees++; }
+        if (x.branchesNull.get(x.attendu) === 'incoherent') veriteIncoherenteNull++;
+        if (x.scores.find(s => s.id === x.attendu)?.branche === 'incoherent') veriteIncoherenteRef++;
+    }
+    console.log(`   lignes dont AU MOINS un candidat change de branche quand rarete passe à null : ${lignesChangees} sur ${presentes.length}`);
+    for (const [r, v] of Object.entries(parRarete)) console.log(`      rareté journal « ${r} » : ${v.changees} changée(s) sur ${v.lignes}`);
+    console.log(`   vérité en branche « incohérent avec rareté lue » : référence ${veriteIncoherenteRef} · rarete=null ${veriteIncoherenteNull} (sur ${presentes.length})`);
+    console.log('   -> avec rarete=null, `rareteElevee` est false et le terme prend la branche « carte normale » : il pénalise');
+    console.log('      le candidat cher exactement comme si « normale » avait été LUE. Seule la ligne promo change (le');
+    console.log('      terme cesse d\'être neutralisé). Rien n\'est câblé ici : c\'est le comportement actuel, mesuré.');
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
