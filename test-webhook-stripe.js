@@ -237,6 +237,73 @@ function poster(port, corps, signature) {
         v('   la dette (100 - 45 = 55) est sur la marque', [m?.scans, m?.dette], [-100, 55]);
     }
 
+    // ══════════════════════════════════════════════════════════════════════
+    // 9. MONGO PAS PRÊT -> 503, PUIS LE REJEU CRÉDITE — 2026-09-07
+    // ══════════════════════════════════════════════════════════════════════
+    // POURQUOI CE CAS EXISTE, ET POURQUOI ICI. `gererWebhookStripe` a gagné une garde
+    // `readyState !== 1 -> 503` : sur une instance qui se réveille, le port écoute avant
+    // que Mongo soit connecté, et un webhook acquitté sans marque ni crédit est un
+    // PAIEMENT PERDU — Stripe ne rejoue que ce qu'il n'a pas vu acquitter. C'est la seule
+    // garde du serveur dont l'échec se paie en euros, et elle n'était pas exercée.
+    //
+    // ⚠️ COMMENT ON OUVRE LA FENÊTRE, ET CE QUE ÇA TESTE. On ne peut pas rendre
+    // `readyState` ≠ 1 dans CE processus : la connexion est réelle et partagée par tout le
+    // fichier. On lance donc un SECOND serveur, enfant, avec un `MONGODB_URI` pointant un
+    // hôte injoignable — `readyState` y reste 0 à vie, la fenêtre est ouverte de façon
+    // DÉTERMINISTE. Le secret de signature est le même, donc l'événement est authentique
+    // des deux côtés.
+    // 🔑 CE QUE ÇA PROUVE : la GARDE (refuser plutôt qu'acquitter à vide) et le fait que le
+    // REJEU crédite ensuite exactement une fois. Ça ne prouve PAS la course elle-même, qui
+    // est transitoire par nature. Un test déterministe d'une garde vaut mieux qu'un test
+    // intermittent d'une course — mais il ne faut pas lire l'un pour l'autre.
+    console.log('\n--- 9. Mongo pas prêt : 503, puis le rejeu crédite ---');
+    {
+        const { spawn } = require('child_process');
+        const net = require('net');
+        const portFroid = await new Promise((r, j) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); s.on('error', j); });
+        const froid = spawn(process.execPath, [require('path').join(__dirname, 'index.js')], {
+            env: {
+                ...process.env, PORT: String(portFroid), MONGODB_BASE: 'test_scratch',
+                // Hôte injoignable : la connexion n'aboutira jamais, `readyState` reste 0.
+                MONGODB_URI: 'mongodb://127.0.0.1:1/froid?serverSelectionTimeoutMS=200000'
+            },
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+        let journalFroid = '';
+        froid.stdout.on('data', d => { journalFroid += d; }); froid.stderr.on('data', d => { journalFroid += d; });
+        try {
+            // On attend que le port ÉCOUTE — c'est exactement la fenêtre qu'on veut.
+            const t0 = Date.now();
+            let ouvert = false;
+            while (!ouvert && Date.now() - t0 < 40000) {
+                await new Promise(r => { const s = net.connect(portFroid, '127.0.0.1'); s.on('connect', () => { s.destroy(); ouvert = true; r(); }); s.on('error', () => { s.destroy(); setTimeout(r, 200); }); });
+            }
+            v('le port écoute alors que Mongo n\'est pas connecté', ouvert, true);
+            const p = await (await fetch(`http://127.0.0.1:${portFroid}/ping`)).json();
+            v('   /ping confirme la fenêtre (mongo:false)', p.mongo, false);
+
+            const corps = evenement(`${marque}-evt9`, U, 30);
+            const sig = signer(corps);
+            const rFroid = await poster(portFroid, corps, sig);
+            // ⚠️ 503 ET NON 200 : un 2xx dirait à Stripe « c'est traité », et il ne
+            // rejouerait jamais un paiement qui n'a laissé aucune trace.
+            v('webhook sur serveur froid -> 503 (Stripe rejouera)', rFroid.status, 503);
+            v('   AUCUNE marque posée', await EvenementStripe.countDocuments({ eventId: `${marque}-evt9` }), 0);
+            v('   AUCUN crédit', await solde(), 0);
+
+            // LE REJEU, sur le serveur chaud : c'est ce que Stripe fera de lui-même.
+            const rChaud = await poster(port, corps, sig);
+            v('rejeu sur serveur chaud -> 2xx', rChaud.status, 200);
+            v('   +30 scans crédités, une seule fois', await solde(), 30);
+            v('   une marque, et une seule', await EvenementStripe.countDocuments({ eventId: `${marque}-evt9` }), 1);
+
+            // Et un SECOND rejeu ne double pas : la garde froide n'a pas cassé l'idempotence.
+            const rTriple = await poster(port, corps, sig);
+            v('   un troisième envoi n\'ajoute rien (30, pas 60)', [rTriple.status, await solde()], [200, 30]);
+            v('   le refus froid est tracé côté serveur', /Mongo indisponible/.test(journalFroid), true);
+        } finally { froid.kill(); }
+    }
+
     // ── NETTOYAGE — tout outil qui fait écrire une collection la vide ───
     const dc = await Credit.deleteMany({ userId: /^T-webhook-/ });
     const de = await EvenementStripe.deleteMany({ eventId: /^T-webhook-/ });
