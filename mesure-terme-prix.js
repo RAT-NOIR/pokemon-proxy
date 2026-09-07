@@ -44,6 +44,8 @@ const S = require('./scoring.js');
 const { trouverProduitsLocaux, scorerCandidatsLocal, lireCodeSets } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
 const { seauDe, numeroter, identiteDe, rattacherVerites } = require('./banc-seaux');
+// Pour le tri « table vintage d'abord » (mesure 5) : la table close, celle du périmètre.
+const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
 
 const J = mongoose.model('Jm', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pm', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -204,7 +206,15 @@ function rejouerRegime(scores, attendu, regime) {
         const rang = sv ? 1 + scores.filter(s => s.score > sv.score).length : null;
         const ip = scores.findIndex(s => s.candidat.idProduct === d.idProduct);
         // Les scores compacts, pour les régimes — et la branche de chaque candidat.
-        x.scores = scores.map(s => ({ id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail) }));
+        const ordreVivier = new Map(vivier.map((p, i) => [p.idProduct, i]));
+        x.scores = scores.map(s => ({
+            id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail),
+            // Pour les tris de la mesure 5 : la place dans le vivier tel que rendu par Mongo
+            // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.
+            ordreVivier: ordreVivier.get(s.candidat.idProduct) ?? Infinity,
+            idExpansion: Number(s.candidat.idExpansion),
+            vintage: EXPANSIONS_VINTAGE.has(Number(s.candidat.idExpansion))
+        }));
         // PARTIE 2 : la même ligne, rareté ABSENTE. `rareteElevee` reste false, comme dans
         // `cardInfoDe` du banc — et comme en production, où null ne peut pas la lever.
         const rNull = await scorerCandidatsLocal(vivier, { ...cardInfo, rarete: null }, null, [], cs, {});
@@ -363,5 +373,54 @@ function rejouerRegime(scores, attendu, regime) {
     console.log('   -> avec rarete=null, `rareteElevee` est false et le terme prend la branche « carte normale » : il pénalise');
     console.log('      le candidat cher exactement comme si « normale » avait été LUE. Seule la ligne promo change (le');
     console.log('      terme cesse d\'être neutralisé). Rien n\'est câblé ici : c\'est le comportement actuel, mesuré.');
+
+    // ══ MESURE 5 — LE TRI D'ÉGALITÉ, PAS LE TERME ══
+    // D'OÙ VIENT LE TRI (scoring.js, choisirMeilleur) : « À SCORE ÉGAL, on prend le MOINS CHER —
+    // décision produit assumée » : quand plusieurs variantes V d'un même numéro coexistent et
+    // que rien ne dit laquelle porte le motif spécial, on choisit la BORNE BASSE parce que
+    // surestimer fait SURPAYER (xASC 153 : V1 1,53 € / V2 0,35 €, test 16). Un prix inconnu
+    // ou nul passe en dernier. Et, dans le même fichier (« LE PRIX N'EST JAMAIS UNE PREUVE »),
+    // la règle qui borne sa portée : le prix ne désigne jamais un candidat ; sur une égalité à
+    // enjeu (écart ≥ 1 €) la route REFUSE. Le tri ne décide donc que : l'ordre de `classement`
+    // et de `candidats` (ce que l'utilisateur VOIT), et le gagnant des égalités sans enjeu.
+    console.log('\n══ MESURE 5 — le TRI d\'égalité : « moins cher d\'abord » contre quatre autres, combiné aux deux termes ══');
+    console.log('   Le verdict de ligne (juste / faux / refus) ne dépend PAS du tri : une égalité au sommet est un refus quel');
+    console.log('   que soit l\'ordre. Ce qui en dépend : la POSITION AFFICHÉE de la vérité, et QUI est montré en premier.');
+    const TRIS = {
+        'moins cher d\'abord (production)': (a, b) => prixTri(a.prix) - prixTri(b.prix),
+        '(a) ordre stable du vivier (Mongo)': (a, b) => a.ordreVivier - b.ordreVivier,
+        '(b) plus cher d\'abord': (a, b) => (b.prix > 0 ? b.prix : -1) - (a.prix > 0 ? a.prix : -1),
+        '(c1) idProduct croissant (entrée au catalogue)': (a, b) => a.id - b.id,
+        '(c2) table vintage d\'abord, puis vivier': (a, b) => (Number(b.vintage) - Number(a.vintage)) || (a.ordreVivier - b.ordreVivier)
+    };
+    const TERMES = { 'terme de référence': REGIMES['référence'], 'terme (c) neutralisé': REGIMES['(c) terme entier neutralisé'] };
+    console.log('   (c) critère NON MONÉTAIRE disponible : `idProduct` (toujours présent, ordre total ; `dateAdded` porte la même');
+    console.log('   information à 88 %, à partir de 2015) et la table close EXPANSIONS_VINTAGE (JP seulement — c\'est le périmètre).');
+    console.log('   Le rang 1 par le numéro, la région, le code : déjà dans le score, donc identiques entre ex aequo.\n');
+    for (const [nomTerme, terme] of Object.entries(TERMES)) {
+        console.log(`   ── ${nomTerme} ──`);
+        console.log(`   ${'tri'.padEnd(48)} pos.1  top3  | 1er ≠ vérité : plus cher / moins cher / sans prix | prix médian du 1er affiché | vérité au sommet`);
+        for (const [nomTri, tri] of Object.entries(TRIS)) {
+            let pos1 = 0, top3 = 0, plusCher = 0, moinsCher = 0, sansPrix = 0, sommet = 0; const prix1 = [];
+            for (const x of presentes) {
+                const re = x.scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + terme(s.branche) }))
+                    .sort((a, b) => (b.score - a.score) || tri(a, b));
+                const iv = re.findIndex(s => s.id === x.attendu);
+                if (iv === 0) pos1++;
+                if (iv >= 0 && iv < 3) top3++;
+                if (re[0].score === re[iv].score) sommet++;
+                const premier = re[0];
+                if (typeof premier.prix === 'number' && premier.prix > 0) prix1.push(premier.prix);
+                if (premier.id !== x.attendu) {
+                    if (!(typeof premier.prix === 'number' && premier.prix > 0) || x.prixVerite == null) sansPrix++;
+                    else if (premier.prix > x.prixVerite) plusCher++; else moinsCher++;
+                }
+            }
+            console.log(`   ${nomTri.padEnd(48)} ${String(pos1).padStart(4)}  ${String(top3).padStart(4)}  | ${String(plusCher).padStart(11)} / ${String(moinsCher).padStart(10)} / ${String(sansPrix).padStart(9)} | ${eur(med(prix1)).padStart(12)} | ${sommet}`);
+        }
+        console.log('');
+    }
+    console.log('   « 1er ≠ vérité, plus cher » = ce que « plus cher d\'abord » risque : montrer en tête une carte fausse ET plus');
+    console.log('   chère que la vraie (surpayer). « moins cher » = l\'erreur du tri actuel (sous-estimer, rater la bonne affaire).');
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
