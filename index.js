@@ -105,7 +105,9 @@ app.use(cors({
         if (!origin) return callback(null, true);
         if (ORIGINES_AUTORISEES.some(re => re.test(origin))) return callback(null, true);
         console.warn(`🚫 Requête refusée depuis une origine non autorisée : ${origin}`);
-        return callback(new Error('Origine non autorisée'));
+        // `status: 403` : c'est ce que lit le gestionnaire d'erreurs final, en bas du
+        // fichier, pour répondre un JSON court au lieu de la page HTML par défaut d'Express.
+        return callback(Object.assign(new Error('Origine non autorisée'), { status: 403 }));
     }
 }));
 // ════════════════════════════════════════════════════════════════════════════
@@ -191,6 +193,30 @@ const limiteurPaiement = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: 'Trop de tentatives de paiement, réessaie plus tard.' }
+});
+
+// Limiteur dédié aux routes d'APPRENTISSAGE (/api/apprendre, /api/apprendre-lot), qui
+// ÉCRIVENT les deux seules tables non régénérables du projet (numeros_cartes, codes_set).
+// Elles n'avaient AUCUN limiteur, et le jeton partagé est extractible de l'extension.
+// Distinct du limiteur IA : un lot de galerie ne doit pas consommer le quota de scans,
+// et inversement. 120/h/IP couvre une galerie entière tournée page par page.
+const limiteurApprentissage = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Trop de requêtes d\'apprentissage, réessaie plus tard.' }
+});
+
+// Limiteur dédié à /api/retour-live. Il partageait l'INSTANCE `limiteurIA` : chaque prix
+// live renvoyé consommait une unité du quota de 60 scans/h de la même IP. Deux comptes
+// séparés pour deux usages qui n'ont pas le même coût — le retour ne dépense aucun appel IA.
+const limiteurRetourLive = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Trop de retours de prix, réessaie plus tard.' }
 });
 
 // Jeton partagé entre l'extension et le serveur. Empêche une page web d'utiliser
@@ -399,7 +425,16 @@ const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_ca
 // protection, c'est la capacité à constater après coup qu'elle a tenu.
 const evenementStripeSchema = new mongoose.Schema({
     eventId: { type: String, required: true, unique: true },
-    recuLe:  { type: Date, default: Date.now }
+    recuLe:  { type: Date, default: Date.now },
+    // ⚠️ AJOUTÉS LE 2026-09-06 — le trou d'audit ci-dessus se ferme : chaque marque porte
+    // désormais CE QU'ELLE A FAIT. `scans` est SIGNÉ : positif pour un crédit, négatif pour
+    // un débit (remboursement Stripe, litige). `dette` : la part d'un débit qui n'a pas pu
+    // être retirée parce que le solde était déjà consommé — le solde reste à 0, la dette
+    // est écrite ici et hurlée au log. Les marques antérieures n'ont pas ces champs.
+    type: String,
+    userId: String,
+    scans: Number,
+    dette: Number
 });
 const EvenementStripe = mongoose.model('EvenementStripe', evenementStripeSchema, 'evenements_stripe');
 
@@ -486,6 +521,16 @@ async function memoriserCodeSet(idExpansion, codeSetBrut) {
     const codeSet = decoderCodeSet(codeSetBrut);
     try {
         if (mongoose.connection.readyState !== 1 || !idExpansion || !codeSet) return;
+        // ⚠️ UNE LIGNE APPRISE NE S'ÉCRASE PAS — 2026-09-06. `codes_set` est l'une des deux
+        // tables non régénérables, et cet upsert remplaçait sans condition le code d'une
+        // expansion déjà connue, sur la seule foi d'un appel porteur du jeton partagé. Un
+        // code DIFFÉRENT pour une expansion déjà apprise est refusé et tracé ; le même code
+        // est réécrit comme avant (apprisLe se rafraîchit, rien ne change).
+        const existant = await CodeSet.findOne({ idExpansion }, { codeSet: 1 }).lean();
+        if (existant && existant.codeSet && existant.codeSet !== codeSet) {
+            console.warn(`🚫 [codes_set] idExpansion ${idExpansion} porte déjà « ${existant.codeSet} » : « ${codeSet} » n'écrase pas une ligne apprise.`);
+            return;
+        }
         await CodeSet.findOneAndUpdate(
             { idExpansion },
             { idExpansion, codeSet, apprisLe: new Date() },
@@ -1987,7 +2032,21 @@ async function trouverProduitsLocaux(nomExact) {
             // mention qu'elle ne reprend pas : même Pokémon, pas autre carte. δ et
             // Prime/LEGEND/BREAK restent dehors pour la même raison qu'« ex ».
             const sansNiveau = nomProduit.replace(/[\s-]*Lv\.?\s?(X|\d+)\b/i, '').trim();
-            return sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau));
+            if (sansNiveau !== nomProduit && cibles.has(normaliserNom(sansNiveau))) return true;
+            // ── LA QUEUE « δ Delta Species » — 2026-09-06, MÊME RÈGLE QUE LE NIVEAU ──
+            // 388 produits du catalogue portent cette queue, et AUCUN n'était atteignable
+            // par le nom : « Milotic » lu ne trouvait pas « Milotic δ Delta Species », et
+            // « Meganium δ » lu (l'IA recopie le δ) ne normalise vers rien non plus. Le
+            // critère de la ligne ci-dessus tient : le δ n'est pas une AUTRE carte au sens
+            // où « ex » l'est — c'est la même espèce, dans un set que numéro, code et région
+            // départagent ensuite. Mesuré avant câblage (mesure du 2026-09-04, 222 lignes de
+            // journal, 149 noms) : +110 candidats au total, médiane 0, pire cas 8 ; 3 refus
+            // deviennent des identifications à un seul candidat (Milotic FR ×2, Pikachu ZH),
+            // 1 ligne change de gagnant sans vérité (Altaria ex JP, 784363 -> 761858).
+            // ⚠️ Côté PRODUIT seulement. Le nom LU n'est pas touché : « Meganium δ » rejoint
+            // « Meganium » par le premier mot que genererVariantesNom ajoute déjà.
+            const sansDelta = nomProduit.replace(/\s*δ\s*Delta\s*Species\s*$/i, '').trim();
+            return sansDelta !== nomProduit && cibles.has(normaliserNom(sansDelta));
         });
 
         if (resultats.length > 0) {
@@ -2076,7 +2135,25 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // de toute façon. Pas de cache : codes_set s'enrichit en continu via /api/apprendre,
         // et un cache périmé rendrait un code introuvable sans le moindre signe.
         const lignes = await CodeSet.find({}, { idExpansion: 1, codeSet: 1, region: 1 }).lean();
-        let exps = lignes.filter(l => normaliserCodeSet(l.codeSet) === code);
+        // ════════════════════════════════════════════════════════════════════
+        // LA CONVENTION X S'APPLIQUE TOUJOURS, PAS SEULEMENT EN REPLI — 2026-09-06
+        // ════════════════════════════════════════════════════════════════════
+        // Elle n'était lue que derrière `if (!exps.length)` : dès que le code exact
+        // existait, les « Additionals » (xASC pour ASC) étaient inatteignables, et « un seul
+        // produit » voulait dire « un seul dans ce que j'ai regardé » — un verdict FERME sur
+        // la mauvaise impression (Rayquaza ASC+153, entrée #25 du catalogue des erreurs
+        // d'instrument dans scoring.js). Le scoring, lui, l'applique à chaque candidat
+        // (scoring.js, critère set) : la clé ne peut pas être plus étroite que lui.
+        // Mesuré en base : 16 paires de jumeaux X, 1 422 numéros portés par les deux côtés.
+        // ⛔ LA PARENTÉ DE PRÉFIXE (`codesApparentes`) RESTE EN REPLI : mesurée comme du bruit
+        // sur la population qui décide — « sv8a » ~ « sv8 » rapproche un Sylveon d'un Koraidon.
+        // ⚠️ ET QUAND LA CLÉ REND PLUSIEURS PRODUITS, LA ROUTE SORT SOUS RÉSERVE : voir
+        // `cleNonUnique` dans /api/identifier. Le scoring seul les départage de 25 points
+        // (+40 code exact contre +15 jumeau X), ce qui n'est pas une preuve d'impression.
+        let exps = lignes.filter(l => {
+            const c = normaliserCodeSet(l.codeSet);
+            return c === code || memeCodeParConventionX(code, c);
+        });
 
         // CODE APPARENTÉ, EN REPLI SEULEMENT. L'IA lit ce qui est IMPRIMÉ sur la carte, et
         // l'imprimé n'est pas toujours le code Cardmarket : « MCD » lu pour l'expansion
@@ -2088,7 +2165,8 @@ async function trouverParSetCodeEtNumero(setCodeLu, numeroLu, langue = null) {
         // raffinement, c'est ce qui rend le repli utilisable.
         let parParente = false, parenteRetenue = null;
         if (!exps.length) {
-            const cousins = lignes.filter(l => { const c = normaliserCodeSet(l.codeSet); return memeCodeParConventionX(code, c) || codesApparentes(code, c); });
+            // La convention X est déjà dans `exps` ci-dessus : ici, la seule parenté de préfixe.
+            const cousins = lignes.filter(l => codesApparentes(code, normaliserCodeSet(l.codeSet)));
             if (cousins.length) {
                 // ── LA BORNE DE RÉGION, ET SES DEUX ÉTATS ────────────────────────────
                 // Un cousin dont la région est CONNUE et DIFFÉRENTE de celle attendue est
@@ -2810,7 +2888,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         };
 
         if (!imageUrl) {
-            console.error("⚠️ Requête reçue sans imageUrl. Body reçu:", req.body);
+            // ⚠️ LES CLÉS SEULEMENT, jamais le corps — 2026-09-06. Ce log déversait `req.body`
+            // entier dans les logs Render, `codeIllimite` compris, ce qu'acces.js interdit.
+            console.error(`⚠️ Requête reçue sans imageUrl. Clés du corps : ${Object.keys(req.body || {}).join(', ') || '(aucune)'}`);
             return res.json({ success: false, error: "Aucune image reçue" });
         }
 
@@ -3553,6 +3633,14 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Court-circuiter TCGdex ici ferait perdre ce routage sur ~47 % des scans : le
         // gain d'identification se paierait en erreurs de prix.
         let produitsImposes = null, voieImposee = null;
+        // ⚠️ LA CLÉ A RENDU PLUSIEURS PRODUITS — 2026-09-06. Depuis que la convention X
+        // s'applique toujours dans `trouverParSetCodeEtNumero`, une clé (code + numéro) peut
+        // désigner un produit ET ses « Additionals » (ASC+153 : 869764 et trois xASC). Le
+        // scoring les sépare de 25 points seulement (+40 code exact, +15 jumeau X), sans
+        // rien savoir de l'IMPRESSION photographiée : un tel écart n'autorise pas un
+        // verdict ferme. La sortie passe SOUS RÉSERVE, jamais en refus — la vérité est au
+        // vivier et le classement la place bien. Compte des produits, 0 = clé unique ou muette.
+        let cleNonUnique = 0;
         // ⚠️ ENVELOPPÉ, et c'est le site le plus sournois des six : une panne ici n'efface
         // pas un candidat, elle efface un CHEMIN ENTIER — le scan continue par une autre
         // voie et peut réussir, sans que rien ne dise que le chemin en tête n'a pas été
@@ -3569,7 +3657,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode[0].idProduct} "${String(pisteCode[0].name).split('[')[0].trim()}" (${avis.raison})`);
             }
         } else if (pisteCode.length > 1) {
-            console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire.`);
+            cleNonUnique = pisteCode.length;
+            console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire, SOUS RÉSERVE (cle-non-unique).`);
         }
 
         // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
@@ -4782,6 +4871,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
+            // La clé code+numéro a rendu PLUSIEURS produits (convention X) : le scoring les
+            // sépare de 25 points sans rien savoir de l'impression. Voir `cleNonUnique`.
+            || cleNonUnique > 0
             // Les deux sorties de la contradiction A. `impression-corrigee` est incertaine
             // parce qu'on vient de CHANGER de produit sur la foi d'une table ;
             // `impression-contredite` parce qu'on sait afficher probablement la mauvaise
@@ -4925,6 +5017,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // À écrire dans la note du lot, faute de quoi quelqu'un comparera les deux
             // périodes de `egalite-sans-enjeu` comme si c'était le même instrument.
             : departageParImage ? 'image-departage'
+            // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-09-06, ÉTROIT. `cle-non-unique` :
+            // la clé code+numéro a rendu plusieurs produits (Additionals, convention X). Le
+            // drapeau n'a jamais pu être vrai avant ce jour ; aucune ligne déjà au journal ne
+            // change d'étiquette. Placée derrière les trois départages (règle 2 : ils disent
+            // ce qui a tranché) et devant `egalite-sans-enjeu` et le périmètre (elle décrit
+            // une clé, plus étroite qu'un vivier).
+            : cleNonUnique > 0 ? 'cle-non-unique'
                 // ⚠️ RECOUVREMENT CORRIGÉ — 2026-08-16. `egaliteSansEnjeu` passe DEVANT
                 // `perimetreVintage`. Avant, une carte qui était les DEUX était rapportée
                 // comme « périmètre », et la classe la plus fréquente absorbait des lignes
@@ -5080,6 +5179,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // promeut au premier lot réel qui tient, comme le symbole a dû le faire — 12/12
             // EN PRODUCTION — et pas avant.
             'attaque-departage': 'faible',
+            // La clé code+numéro n'a pas tranché entre un produit et ses Additionals — le
+            // scoring a choisi de 25 points. FAIBLE : deux lignes du banc étaient FAUSSES ET
+            // AFFIRMÉES par cette voie le 2026-09-06 (Rayquaza ASC+153), c'est ce qui l'a créée.
+            'cle-non-unique': 'faible',
             // Tout le reste est FAIBLE tant qu'aucune mesure ne justifie mieux :
             'perimetre-vintage-suggestion': 'faible',   // 10/16 justes — la classe la plus fréquente et la plus tiède
             'tcgdex-numero-incoherent': 'faible',       // 1/2 — deux lignes ne mesurent rien
@@ -5618,7 +5721,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 //      autoriserait à pousser une valeur jusqu'à ce qu'elle arrange.
 // Les trois rendent un code HTTP distinct, pour que l'extension puisse les distinguer
 // sans lire le texte.
-app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
+// ⚠️ `limiteurRetourLive`, PAS `limiteurIA` — 2026-09-06. La même instance partagée avec
+// les routes IA faisait consommer à chaque retour de prix une unité du quota de scans.
+app.post('/api/retour-live', limiteurRetourLive, verifierJeton, async (req, res) => {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
@@ -5787,16 +5892,43 @@ app.post('/api/retour-live', limiteurIA, verifierJeton, async (req, res) => {
 // Enregistre ce que l'extension a lu en live : le code set et le numéro réel d'un
 // idProduct. C'est ainsi que la base s'enrichit — depuis les navigateurs des
 // utilisateurs, une carte à la fois, sans jamais scraper en masse.
-app.post('/api/apprendre', verifierJeton, async (req, res) => {
+// ════════════════════════════════════════════════════════════════════════════
+// LES DEUX ROUTES D'APPRENTISSAGE ÉCRIVENT LES TABLES NON RÉGÉNÉRABLES — 2026-09-06
+// ════════════════════════════════════════════════════════════════════════════
+// Elles étaient gardées par le seul jeton partagé, extractible de l'extension, sans
+// userId ni limiteur, et `/api/apprendre` écrasait sans condition une ligne déjà exacte.
+// Trois gardes, dans l'ordre : le limiteur dédié, le jeton, puis un `userId` OBLIGATOIRE
+// comme sur les routes de scan (400 sans lui — ⚠️ CONTRAT MODIFIÉ, l'extension doit
+// l'envoyer). Aucun crédit n'est débité : c'est une identité, pas un décompte.
+app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res) => {
     try {
-        const { idProduct, idExpansion, numero } = req.body;
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+        const { idExpansion, numero } = req.body;
+        // `Number()` : un objet passé ici ferait lever un CastError dans le filtre, et la
+        // route sortirait en 500 pour une faute d'entrée.
+        const idProduct = Number(req.body.idProduct);
         // Décodé à l'entrée : le userscript l'extrait d'une URL d'image (voir decoderCodeSet).
         const codeSet = decoderCodeSet(req.body.codeSet);
-        if (!idProduct) return res.json({ success: false });
+        if (!Number.isFinite(idProduct) || idProduct <= 0) return res.json({ success: false });
 
         if (codeSet && idExpansion) await memoriserCodeSet(idExpansion, codeSet);
 
         if (numero) {
+            // ⚠️ UNE LIGNE EXACTE NE S'ÉCRASE PAS. Le `$set` ci-dessous remplaçait numéro,
+            // code et expansion quelle que soit la source existante. Une ligne déjà
+            // `source: 'cardmarket'` est la vérité apprise : on la CONFIRME si l'appel dit
+            // la même chose (le cas ordinaire, l'extension relit les mêmes fiches), on
+            // REFUSE s'il dit autre chose — refus tracé avec le userId, jamais fusion.
+            const existant = await NumeroCarte.findOne({ idProduct }, { source: 1, numero: 1, codeSet: 1, idExpansion: 1 }).lean();
+            if (existant && existant.source === 'cardmarket') {
+                const identique = String(existant.numero ?? '') === String(numero)
+                    && String(existant.codeSet ?? '') === String(codeSet ?? '')
+                    && (idExpansion == null || existant.idExpansion == null || Number(existant.idExpansion) === Number(idExpansion));
+                if (identique) return res.json({ success: true, dejaExacte: true });
+                console.warn(`🚫 [apprendre] userId=${userId} idProduct ${idProduct} : ligne EXACTE existante (n°${existant.numero}, ${existant.codeSet || '?'}) — refus d'écraser par n°${numero} (${codeSet || '?'}).`);
+                return res.json({ success: false, refuse: 'ligne-exacte-existante', error: "Ce produit porte déjà un numéro exact appris de Cardmarket : il ne s'écrase pas." });
+            }
             await NumeroCarte.findOneAndUpdate(
                 { idProduct },
                 {
@@ -5824,8 +5956,11 @@ app.post('/api/apprendre', verifierJeton, async (req, res) => {
 //    -> ÉCRASÉ par la lecture exacte Cardmarket (nomFr/variante/slug en bonus)
 //  - absent -> inséré
 // On ignore les cartes sans numéro lisible (elles n'aident pas le scoring).
-app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
+app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req, res) => {
     try {
+        // Même garde que /api/apprendre : ⚠️ CONTRAT MODIFIÉ, `userId` obligatoire (400).
+        const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
+        if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
         const { cartes } = req.body;
         if (!Array.isArray(cartes) || cartes.length === 0) {
             return res.json({ success: false, error: "Aucune carte reçue" });
@@ -5863,11 +5998,25 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             return res.json({ success: true, recus: cartes.length, nouvelles: 0, ameliorees: 0, dejaExactes: 0, sansNumero });
         }
 
-        // idExpansion déduit du catalogue (comme apprendreUnSet)
-        let idExpansion = null;
+        // ════════════════════════════════════════════════════════════════════
+        // L'idExpansion EST LU PAR CARTE — 2026-09-06
+        // ════════════════════════════════════════════════════════════════════
+        // L'ancienne version prenait l'expansion du PREMIER produit trouvé au catalogue et
+        // l'appliquait à TOUT le lot : un lot mêlant deux galeries étiquetait toutes ses
+        // cartes de la première, et une table apprise portait une expansion fausse sans
+        // qu'aucune ligne ne le dise. Chaque entrée porte désormais la sienne ; un
+        // idProduct inconnu du catalogue garde `null`, comme avant.
+        const expParId = new Map();
         if (mongoose.connection.readyState === 1) {
-            const ref = await CatalogueProduit.findOne({ idProduct: { $in: ids } }).lean();
-            idExpansion = ref?.idExpansion ?? null;
+            const refs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, idExpansion: 1 }).lean();
+            for (const r of refs) if (r.idExpansion != null) expParId.set(Number(r.idProduct), Number(r.idExpansion));
+        }
+        const expansionsDuLot = [...new Set(expParId.values())];
+        // `idExpansion` unique quand le lot n'en a qu'une (le cas ordinaire : une page de
+        // galerie) — c'est ce que le client lit déjà. null dès qu'il y en a plusieurs.
+        const idExpansion = expansionsDuLot.length === 1 ? expansionsDuLot[0] : null;
+        if (expansionsDuLot.length > 1) {
+            console.warn(`⚠️ [apprendre-lot] userId=${userId} : lot sur ${expansionsDuLot.length} expansions (${expansionsDuLot.join(', ')}) — chaque carte garde la sienne.`);
         }
 
         // Source actuelle de chaque idProduct déjà en base
@@ -5893,7 +6042,7 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
                     update: {
                         $set: {
                             idProduct:   Number(c.idProduct),
-                            idExpansion: idExpansion != null ? Number(idExpansion) : null,
+                            idExpansion: expParId.get(Number(c.idProduct)) ?? null,
                             numero:      c.numero    != null ? String(c.numero)    : null,
                             numeroUrl:   c.numeroUrl != null ? String(c.numeroUrl) : null,
                             // Décodé à l'entrée : le lot vient d'URLs d'images (voir decoderCodeSet)
@@ -5911,8 +6060,14 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             }));
             await NumeroCarte.bulkWrite(ops, { ordered: false });
 
-            const cs = aEcrire.find(c => c.codeSet)?.codeSet || null;
-            if (cs && idExpansion != null) await memoriserCodeSet(Number(idExpansion), cs);
+            // Le code de set, PAR EXPANSION : le premier code porté par une carte de chaque
+            // expansion du lot. `memoriserCodeSet` refuse d'écraser un code déjà appris.
+            const codeParExp = new Map();
+            for (const c of aEcrire) {
+                const e = expParId.get(Number(c.idProduct));
+                if (e != null && c.codeSet && !codeParExp.has(e)) codeParExp.set(e, c.codeSet);
+            }
+            for (const [e, cs] of codeParExp) await memoriserCodeSet(e, cs);
         }
 
         // COUVERTURE DE L'EXPANSION, renvoyée au client. Sans elle, l'utilisateur qui
@@ -5933,9 +6088,11 @@ app.post('/api/apprendre-lot', verifierJeton, async (req, res) => {
             };
         }
 
-        console.log(`🧠 [apprendre-lot] ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes (exp ${idExpansion ?? '?'})`
+        console.log(`🧠 [apprendre-lot] userId=${userId} ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes (exp ${idExpansion ?? (expansionsDuLot.length ? expansionsDuLot.join('/') : '?')})`
             + (couverture ? ` — couverture ${couverture.avecNumero}/${couverture.produits} (${couverture.pourcent} %)` : ''));
-        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, couverture });
+        // `idExpansions` : ADDITIF. Les expansions réellement vues dans le lot, pour que le
+        // client sache pourquoi `idExpansion` et `couverture` sont nuls sur un lot mixte.
+        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, idExpansions: expansionsDuLot, couverture });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
         // Message brut au log, jamais dans la réponse — voir /api/identifier.
@@ -6031,6 +6188,11 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
             // metadata : c'est ce que le webhook relira pour savoir QUI créditer et de
             // COMBIEN. Écrit ici par le serveur à partir de PACKS, donc non falsifiable.
             metadata: { userId, scans: String(pack.scans) },
+            // Les MÊMES métadonnées sur le PaymentIntent, donc sur la charge : c'est ce que
+            // relisent `charge.refunded` et `charge.dispute.created` pour savoir QUI débiter
+            // et de COMBIEN, sans appel à l'API. Les sessions antérieures à ce commit n'en
+            // ont pas : le webhook remonte alors au PaymentIntent puis à la session.
+            payment_intent_data: { metadata: { userId, scans: String(pack.scans) } },
             // ⚠️ ACCEPTATION EXPLICITE DES CONDITIONS DE VENTE. Vente à des consommateurs
             // dans l'UE : le consentement doit être un acte positif, et il doit être
             // PROUVABLE. Stripe horodate l'acceptation et la conserve sur la session, ce
@@ -6051,7 +6213,51 @@ app.post('/api/creer-recharge', limiteurPaiement, verifierJeton, async (req, res
     }
 });
 
-// Webhook Stripe — SEUL endroit où des scans payants sont crédités.
+// ════════════════════════════════════════════════════════════════════════════
+// RETROUVER (userId, scans) DEPUIS UNE CHARGE OU UN LITIGE — 2026-09-06
+// ════════════════════════════════════════════════════════════════════════════
+// Trois sources, de la moins chère à la plus chère, et on s'arrête à la première :
+//   1. `metadata` de l'objet lui-même — posé par `payment_intent_data.metadata` à la
+//      création de la session (sessions postérieures à ce commit), copié sur la charge ;
+//   2. le PaymentIntent (un appel API) ;
+//   3. la session Checkout qui porte ce PaymentIntent (un appel API) — la seule source
+//      pour les sessions antérieures, dont seule `metadata` de session porte le pack.
+// Rend null si rien n'est retrouvable : l'appelant acquitte et crie, il n'invente pas.
+async function metadonneesDuPaiement(objet) {
+    const lire = m => {
+        const userId = m?.userId ? String(m.userId).slice(0, 80) : null;
+        const scans = parseInt(m?.scans || '0', 10);
+        return userId && Number.isFinite(scans) && scans > 0 ? { userId, scans } : null;
+    };
+    const direct = lire(objet?.metadata);
+    if (direct) return direct;
+    const pi = objet?.payment_intent ? (typeof objet.payment_intent === 'string' ? objet.payment_intent : objet.payment_intent.id) : null;
+    if (!pi || !stripe) return null;
+    try {
+        const intent = await stripe.paymentIntents.retrieve(pi);
+        const parIntent = lire(intent?.metadata);
+        if (parIntent) return parIntent;
+    } catch (e) { console.warn(`⚠️ [webhook] PaymentIntent ${pi} illisible : ${e.message}`); }
+    try {
+        const sessions = await stripe.checkout.sessions.list({ payment_intent: pi, limit: 1 });
+        return lire(sessions?.data?.[0]?.metadata);
+    } catch (e) { console.warn(`⚠️ [webhook] session du PaymentIntent ${pi} illisible : ${e.message}`); }
+    return null;
+}
+
+// Le montant d'une charge, pour proportionner le débit d'un litige. null si illisible :
+// l'appelant ne débite alors rien et le dit, plutôt que de retirer un pack entier sur
+// une hypothèse.
+async function montantDeLaCharge(idCharge) {
+    if (!idCharge || !stripe) return null;
+    try {
+        const ch = await stripe.charges.retrieve(typeof idCharge === 'string' ? idCharge : idCharge.id);
+        return Number.isFinite(Number(ch?.amount)) ? Number(ch.amount) : null;
+    } catch (e) { console.warn(`⚠️ [webhook] charge ${idCharge} illisible : ${e.message}`); return null; }
+}
+
+// Webhook Stripe — SEUL endroit où des scans payants sont crédités, et depuis le
+// 2026-09-06 le seul endroit où ils sont DÉBITÉS sur remboursement ou litige.
 // Pas de verifierJeton : l'appelant est Stripe, pas l'extension ; c'est la SIGNATURE
 // cryptographique qui authentifie. Le corps arrive BRUT (Buffer) grâce au express.raw()
 // monté tout en haut du fichier, avant express.json().
@@ -6076,15 +6282,62 @@ async function gererWebhookStripe(req, res) {
         return res.status(400).send(`Webhook Error: ${e.message}`);
     }
 
-    if (event.type !== 'checkout.session.completed') {
+    // ════════════════════════════════════════════════════════════════════════
+    // DEUX SENS — 2026-09-06 : le crédit d'un paiement, et le DÉBIT d'un remboursement
+    // ════════════════════════════════════════════════════════════════════════
+    // Jusqu'ici seul `checkout.session.completed` était lu : un remboursement Stripe ou un
+    // litige laissait les scans crédités. Et le crédit partait sans lire `payment_status`,
+    // alors qu'un moyen à paiement différé émet `completed` en `unpaid` — la garde coûte
+    // une ligne, elle est posée même si ces moyens sont désactivés aujourd'hui.
+    const TYPES_CREDIT = new Set(['checkout.session.completed', 'checkout.session.async_payment_succeeded']);
+    const TYPES_DEBIT = new Set(['charge.refunded', 'charge.dispute.created']);
+    if (!TYPES_CREDIT.has(event.type) && !TYPES_DEBIT.has(event.type)) {
         return res.json({ recu: true }); // event non concerné : accusé de réception, rien à faire
     }
 
-    const session = event.data.object;
-    const userId = session.metadata?.userId || session.client_reference_id || null;
-    const scans = parseInt(session.metadata?.scans || '0', 10);
+    let userId = null, scans = 0, email = null;
+    if (TYPES_CREDIT.has(event.type)) {
+        const session = event.data.object;
+        // LA GARDE : on ne crédite qu'un paiement ENCAISSÉ. `unpaid` (paiement différé en
+        // attente) sera suivi d'un `async_payment_succeeded`, lu ici aussi ; on acquitte sans
+        // rien écrire, pour que ce second événement puisse créditer avec sa propre marque.
+        if (session.payment_status !== 'paid') {
+            console.warn(`⏳ [webhook] ${event.type} en payment_status=${session.payment_status ?? 'absent'} — aucun crédit (event ${event.id})`);
+            return res.json({ recu: true });
+        }
+        userId = session.metadata?.userId || session.client_reference_id || null;
+        scans = parseInt(session.metadata?.scans || '0', 10);
+        email = session.customer_details?.email || null;
+    } else {
+        // Un remboursement ou un litige : le débit est PROPORTIONNEL au montant. Sur un
+        // `charge.refunded`, `amount_refunded` est CUMULÉ : la part de CET événement est la
+        // différence avec `previous_attributes`, sinon un second remboursement partiel
+        // débiterait deux fois le premier.
+        const objet = event.data.object;
+        const meta = await metadonneesDuPaiement(objet);
+        if (!meta) {
+            console.error(`❌ [webhook] ${event.type} sans métadonnées retrouvables (payment_intent=${objet.payment_intent ?? '?'}) — event ${event.id} acquitté, À TRAITER À LA MAIN`);
+            return res.json({ recu: true });
+        }
+        userId = meta.userId;
+        const scansPack = meta.scans;
+        let montant = null, part = null;
+        if (event.type === 'charge.refunded') {
+            montant = Number(objet.amount);
+            const avant = Number(event.data.previous_attributes?.amount_refunded ?? 0);
+            part = Number(objet.amount_refunded) - (Number.isFinite(avant) ? avant : 0);
+        } else {
+            part = Number(objet.amount);
+            montant = await montantDeLaCharge(objet.charge);
+        }
+        if (!Number.isFinite(montant) || montant <= 0 || !Number.isFinite(part) || part <= 0) {
+            console.warn(`ℹ️ [webhook] ${event.type} sans montant exploitable (montant=${montant}, part=${part}) — rien à débiter (event ${event.id})`);
+            return res.json({ recu: true });
+        }
+        scans = -Math.min(scansPack, Math.max(1, Math.round(scansPack * part / montant)));
+    }
 
-    if (!userId || !Number.isFinite(scans) || scans <= 0) {
+    if (!userId || !Number.isFinite(scans) || scans === 0) {
         // Rien d'exploitable : on ACQUITTE quand même (200), sinon Stripe rejouerait
         // indéfiniment un event que le rejeu ne réparera pas.
         console.error(`❌ [webhook] metadata inutilisable (userId=${userId}, scans=${scans}) — event ${event.id}`);
@@ -6099,34 +6352,62 @@ async function gererWebhookStripe(req, res) {
     // Atlas est un replica set -> transactions disponibles.
     const sessionMongo = await mongoose.startSession();
     let dejaTraite = false;
+    let dette = 0;
     try {
         await sessionMongo.withTransaction(async () => {
+            dette = 0;
+            // Un DÉBIT ne descend JAMAIS sous zéro : on lit le solde, on retire ce qui
+            // reste, et la différence est une DETTE écrite sur la marque. Le retrait est
+            // conditionnel (`$gte`) : un scan concurrent qui aurait consommé entre la
+            // lecture et l'écriture fait échouer la transaction, que Stripe rejouera.
+            let retire = scans;
+            if (scans < 0) {
+                const compte = await Credit.findOne({ userId }, { soldeScans: 1 }).session(sessionMongo).lean();
+                const solde = Math.max(0, compte?.soldeScans ?? 0);
+                retire = -Math.min(solde, -scans);
+                dette = -scans + retire;
+            }
             // Idempotence : l'insertion EST le verrou. Si l'event a déjà été traité,
             // l'index unique renvoie 11000 -> on avorte la transaction, donc aucun crédit.
             try {
                 // create([doc], {session}) — la forme tableau est obligatoire pour que
                 // Mongoose lise bien le 2e argument comme des options et non comme un
                 // second document à insérer.
-                await EvenementStripe.create([{ eventId: event.id }], { session: sessionMongo });
+                await EvenementStripe.create([{
+                    eventId: event.id, type: event.type, userId, scans, dette: dette || null
+                }], { session: sessionMongo });
             } catch (e) {
                 if (e.code === 11000) dejaTraite = true;
                 throw e;   // dans les deux cas on sort : la transaction est annulée
             }
 
-            // Crédit. `scans` vient de metadata, écrit par NOTRE serveur à la création
-            // de la session — jamais d'une valeur envoyée par le client.
-            await Credit.updateOne(
-                { userId },
-                {
-                    $inc: { soldeScans: scans },
-                    $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL },
-                    $set: { email: session.customer_details?.email || null }
-                },
-                { upsert: true, session: sessionMongo }
-            );
+            if (scans > 0) {
+                // Crédit. `scans` vient de metadata, écrit par NOTRE serveur à la création
+                // de la session — jamais d'une valeur envoyée par le client.
+                await Credit.updateOne(
+                    { userId },
+                    {
+                        $inc: { soldeScans: scans },
+                        $setOnInsert: { userId, soldeGratuit: SCANS_ACCUEIL },
+                        $set: { email }
+                    },
+                    { upsert: true, session: sessionMongo }
+                );
+            } else if (retire < 0) {
+                const r = await Credit.updateOne(
+                    { userId, soldeScans: { $gte: -retire } },
+                    { $inc: { soldeScans: retire } },
+                    { session: sessionMongo }
+                );
+                if ((r.modifiedCount ?? 0) === 0) throw new Error('solde modifié pendant le débit : transaction annulée, Stripe rejouera');
+            }
         });
 
-        console.log(`✅ [webhook] +${scans} scans crédités à ${userId} (event ${event.id})`);
+        if (scans > 0) console.log(`✅ [webhook] +${scans} scans crédités à ${userId} (event ${event.id})`);
+        else console.warn(`↩️ [webhook] ${event.type} : ${scans} scans pour ${userId}, retirés ${-scans - dette} (event ${event.id})`);
+        if (dette > 0) {
+            console.error(`🔥 [webhook] DETTE ${dette} scan(s) pour ${userId} : le solde était déjà consommé, laissé à 0 (event ${event.id}, ${event.type}). Écrite sur la marque d'événement.`);
+        }
     } catch (e) {
         if (dejaTraite) {
             // Rejeu Stripe d'un event déjà encaissé : rien n'a été réécrit, on acquitte.
@@ -6204,6 +6485,33 @@ app.post('/api/solde', verifierJeton, async (req, res) => {
 app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION }));
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
+
+// ════════════════════════════════════════════════════════════════════════════
+// LE GESTIONNAIRE D'ERREURS FINAL — 2026-09-06, réponse générique, jamais de pile
+// ════════════════════════════════════════════════════════════════════════════
+// Sans lui, une erreur qui n'est attrapée par aucune route — l'origine refusée par CORS,
+// un JSON malformé rejeté par express.json(), un corps trop gros — tombait dans le
+// gestionnaire PAR DÉFAUT d'Express, qui renvoie la pile et les chemins de fichiers dans
+// un corps HTML tant que NODE_ENV ne vaut pas 'production'. La variable n'est posée nulle
+// part dans ce dépôt (voir README.md). Les routes, elles, masquaient déjà leurs messages ;
+// ce gestionnaire ferme ce qui passait à côté d'elles.
+//   · 4xx (origine refusée 403, corps illisible 400, corps trop gros 413) : JSON court ;
+//   · tout le reste : 500 « Erreur serveur interne », et le message brut AU LOG seulement.
+// Déclaré APRÈS toutes les routes : Express n'appelle un gestionnaire à quatre
+// paramètres que pour les erreurs, et seulement s'il est monté en dernier.
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    const statut = Number.isInteger(err?.status) ? err.status : (Number.isInteger(err?.statusCode) ? err.statusCode : 500);
+    if (statut >= 400 && statut < 500) {
+        console.warn(`⚠️ [http ${statut}] ${req.method} ${req.originalUrl} : ${err?.type || err?.message || 'requête refusée'}`);
+        return res.status(statut).json({
+            success: false,
+            error: statut === 403 ? 'Origine non autorisée' : 'Requête illisible'
+        });
+    }
+    console.error(`❌ [http 500] ${req.method} ${req.originalUrl} : ${err?.message ?? err}`);
+    return res.status(500).json({ success: false, error: 'Erreur serveur interne' });
+});
 
 // `require.main === module` : vrai quand on lance `node index.js` — ce que fait Render, et
 // ce que fait le smoke test qui démarre un processus séparé. Faux quand un TEST require ce

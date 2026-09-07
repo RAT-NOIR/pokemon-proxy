@@ -151,6 +151,17 @@ const SEUIL_RANSAC = 5.0;
 // Au-delà, on ne télécharge même pas : un vivier de cette taille coûterait plus que
 // l'appel IA lui-même. Mesuré : 1,32 ms par appariement.
 const VIVIER_MAX = 600;
+// ⚠️ LA PHOTO VIENT DU CORPS DE LA REQUÊTE — 2026-09-06. `imageUrl` est une chaîne que
+// le client choisit, et ce module la TÉLÉCHARGE depuis Render : sans liste blanche, c'est
+// une requête sortante vers n'importe quel hôte, réseau interne compris ; sans borne,
+// c'est une lecture intégrale en mémoire sur un plan à 512 Mo.
+//   · les annonces Vinted servent leurs photos depuis *.vinted.net — 184 imageUrl distinctes
+//     au journal, 184 sur images1.vinted.net ; un autre hôte n'est pas une photo d'annonce ;
+//   · une photo d'annonce pèse 56 à 187 ko (mesuré) : 15 Mo est un plafond, pas une gêne.
+// Un hôte hors liste ou une taille au-delà du plafond est une ABSTENTION tracée, jamais
+// une panne : le classement du scoring sort intact, comme pour toute abstention.
+const HOTES_PHOTO_AUTORISES = [/(^|\.)vinted\.net$/i];
+const TAILLE_PHOTO_MAX = 15 * 1024 * 1024;
 
 // ── LA COLLECTION ───────────────────────────────────────────────────────────
 // ⚠️ COLLECTION DÉDIÉE, PAS UN CHAMP DE `catalogue_produits`. C'est délibéré et ça a été
@@ -411,6 +422,34 @@ async function chargerVecteurs(ids) {
     return m;
 }
 
+// Lit le corps d'une réponse SANS jamais dépasser `max` octets : le Content-Length annoncé
+// est refusé d'emblée s'il dépasse, et le flux est coupé au premier octet de trop — un
+// serveur qui ment sur sa taille ne peut pas contourner la borne. Lève, donc panne pour
+// `interrogerSource`, qui la nomme.
+async function lireBorne(r, max) {
+    const annonce = Number(r.headers?.get?.('content-length'));
+    if (Number.isFinite(annonce) && annonce > max) throw new Error(`photo de ${annonce} octets, plafond ${max}`);
+    if (!r.body || typeof r.body.getReader !== 'function') {
+        const b = Buffer.from(await r.arrayBuffer());
+        if (b.length > max) throw new Error(`photo de ${b.length} octets, plafond ${max}`);
+        return b;
+    }
+    const lecteur = r.body.getReader();
+    const morceaux = [];
+    let total = 0;
+    for (;;) {
+        const { done, value } = await lecteur.read();
+        if (done) break;
+        total += value.length;
+        if (total > max) {
+            try { await lecteur.cancel(); } catch (_) { /* déjà fermé */ }
+            throw new Error(`photo au-delà de ${max} octets, téléchargement interrompu`);
+        }
+        morceaux.push(Buffer.from(value));
+    }
+    return Buffer.concat(morceaux);
+}
+
 // ============================================================================
 // LE POINT D'ENTRÉE — une seule fonction, et elle ne LÈVE JAMAIS
 // ============================================================================
@@ -462,10 +501,17 @@ async function departager({ imageUrl, langue, total, classement }) {
     if (!imageUrl) return rien('abstention-garde', 'aucune URL de photo');
 
     // Le téléchargement — le seul appel réseau que ce module fait.
+    // Liste blanche AVANT tout appel : voir HOTES_PHOTO_AUTORISES.
+    let hote = null;
+    try { hote = new URL(String(imageUrl)).hostname; } catch (_) { hote = null; }
+    if (!hote || !HOTES_PHOTO_AUTORISES.some(re => re.test(hote))) {
+        console.warn(`🚫 [image] hôte « ${hote ?? 'URL invalide'} » hors liste blanche — photo NON téléchargée.`);
+        return rien('abstention-garde', `hôte hors liste blanche : ${hote ?? 'URL invalide'}`);
+    }
     const { valeur: buffer, panne } = await interrogerSource('photo/annonce', async () => {
         const r = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return Buffer.from(await r.arrayBuffer());
+        return lireBorne(r, TAILLE_PHOTO_MAX);
     });
     if (panne || !buffer) return rien('echec-technique', 'photo-injoignable');
 

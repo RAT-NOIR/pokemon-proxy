@@ -52,9 +52,17 @@ const v = (nom, obtenu, attendu) => {
 };
 
 /** Un corps d'événement Stripe, dans la forme EXACTE que le handler déstructure. */
-const evenement = (id, userId, scans, type = 'checkout.session.completed') => JSON.stringify({
+const evenement = (id, userId, scans, type = 'checkout.session.completed', payment_status = 'paid') => JSON.stringify({
     id, type,
-    data: { object: { metadata: { userId, scans: String(scans) }, customer_details: { email: 'x@example.test' } } }
+    data: { object: { payment_status, metadata: { userId, scans: String(scans) }, customer_details: { email: 'x@example.test' } } }
+});
+/** Un `charge.refunded` : montants en centimes, `amount_refunded` CUMULÉ comme chez Stripe. */
+const remboursement = (id, userId, scans, amount, amountRefunded, avant = 0) => JSON.stringify({
+    id, type: 'charge.refunded',
+    data: {
+        object: { id: 'ch_test', amount, amount_refunded: amountRefunded, metadata: { userId, scans: String(scans) }, payment_intent: 'pi_test' },
+        previous_attributes: { amount_refunded: avant }
+    }
 });
 
 /** POST brut sur /api/webhook-stripe, avec une signature Stripe VALIDE. */
@@ -185,6 +193,48 @@ function poster(port, corps, signature) {
         v('   aucun crédit', await solde(), 70);
         v('   aucune marque (l\'événement n\'est pas le nôtre)',
             await EvenementStripe.countDocuments({ eventId: `${marque}-evt4` }), 0);
+    }
+
+    // ── 6. UN PAIEMENT NON ENCAISSÉ NE CRÉDITE PAS — 2026-09-06 ──────────
+    console.log('\n--- 6. payment_status=unpaid ---');
+    {
+        const corps = evenement(`${marque}-evt5`, U, 200, 'checkout.session.completed', 'unpaid');
+        const r = await poster(port, corps, signer(corps));
+        v('acquitté en 2xx', r.status, 200);
+        v('   aucun crédit', await solde(), 70);
+        v('   aucune marque (l\'événement encaissé viendra avec son propre id)',
+            await EvenementStripe.countDocuments({ eventId: `${marque}-evt5` }), 0);
+    }
+
+    // ── 7. UN REMBOURSEMENT DÉBITE, PROPORTIONNELLEMENT ──────────────────
+    console.log('\n--- 7. charge.refunded ---');
+    {
+        // Pack de 20 scans à 5,00 €, remboursé en entier : -20.
+        const corps = remboursement(`${marque}-evt6`, U, 20, 500, 500);
+        const r = await poster(port, corps, signer(corps));
+        v('acquitté en 2xx', r.status, 200);
+        v('   -20 scans (70 -> 50)', await solde(), 50);
+        const m = await EvenementStripe.findOne({ eventId: `${marque}-evt6` }).lean();
+        v('   la marque porte le débit signé', [m?.type, m?.userId, m?.scans, m?.dette ?? null], ['charge.refunded', U, -20, null]);
+        // Rejeu du même remboursement : rien ne bouge.
+        const r2 = await poster(port, corps, signer(corps));
+        v('   rejeu acquitté, solde inchangé', [r2.status, await solde()], [200, 50]);
+        // Second remboursement PARTIEL sur la même charge : amount_refunded cumulé 750 sur
+        // 1000, previous 500 -> la part de cet événement est 250/1000 d'un pack de 20 = 5.
+        const c3 = remboursement(`${marque}-evt7`, U, 20, 1000, 750, 500);
+        await poster(port, c3, signer(c3));
+        v('   remboursement partiel : -5 (50 -> 45)', await solde(), 45);
+    }
+
+    // ── 8. LE SOLDE NE DESCEND JAMAIS SOUS ZÉRO : LA DETTE EST ÉCRITE ─────
+    console.log('\n--- 8. remboursement d\'un solde déjà consommé ---');
+    {
+        const corps = remboursement(`${marque}-evt8`, U, 100, 2000, 2000);
+        const r = await poster(port, corps, signer(corps));
+        v('acquitté en 2xx', r.status, 200);
+        v('   solde laissé à 0, jamais négatif', await solde(), 0);
+        const m = await EvenementStripe.findOne({ eventId: `${marque}-evt8` }).lean();
+        v('   la dette (100 - 45 = 55) est sur la marque', [m?.scans, m?.dette], [-100, 55]);
     }
 
     // ── NETTOYAGE — tout outil qui fait écrire une collection la vide ───
