@@ -213,7 +213,12 @@ function rejouerRegime(scores, attendu, regime) {
             // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.
             ordreVivier: ordreVivier.get(s.candidat.idProduct) ?? Infinity,
             idExpansion: Number(s.candidat.idExpansion),
-            vintage: EXPANSIONS_VINTAGE.has(Number(s.candidat.idExpansion))
+            vintage: EXPANSIONS_VINTAGE.has(Number(s.candidat.idExpansion)),
+            // Pour la mesure 6 (« même carte ? ») : le numéro Cardmarket du candidat enrichi, et
+            // l'idMetacard lu sur le PRODUIT du vivier — il n'est pas recopié dans le candidat
+            // enrichi par scorerCandidatsLocal (à savoir avant tout câblage).
+            numeroCardmarket: s.candidat.numeroCardmarket ?? null,
+            idMetacard: vivier.find(p => p.idProduct === s.candidat.idProduct)?.idMetacard ?? null
         }));
         // PARTIE 2 : la même ligne, rareté ABSENTE. `rareteElevee` reste false, comme dans
         // `cardInfoDe` du banc — et comme en production, où null ne peut pas la lever.
@@ -422,5 +427,79 @@ function rejouerRegime(scores, attendu, regime) {
     }
     console.log('   « 1er ≠ vérité, plus cher » = ce que « plus cher d\'abord » risque : montrer en tête une carte fausse ET plus');
     console.log('   chère que la vraie (surpayer). « moins cher » = l\'erreur du tri actuel (sous-estimer, rater la bonne affaire).');
+    console.log('   ⛔ « PLUS CHER D\'ABORD » EST ÉCARTÉ DÉFINITIVEMENT (2026-09-08) : 43 premiers faux ET plus chers sur 107. Ne pas reproposer.');
+
+    // ══ MESURE 6 — LES DEUX TRIS SÉPARÉS : « même carte » -> moins cher ; cartes différentes -> vivier ══
+    // ⚠️ UN ORDRE TOTAL, PAS UN COMPARATEUR À DEUX TÊTES. « si même carte : prix, sinon : vivier »
+    // écrit comme un comparateur n'est PAS transitif (a~b même carte, c différent : a<c et c<b par
+    // le vivier, b<a par le prix -> cycle). La forme sûre est une clé LEXICOGRAPHIQUE :
+    //   (score desc, rang du GROUPE dans le vivier asc, prix asc — inconnu dernier, idProduct asc)
+    // où le groupe est la classe d'équivalence « même carte » et son rang la plus petite position
+    // de ses membres dans le vivier. Chaque candidat appartient à UN groupe : l'ordre est total et
+    // déterministe par construction, quel que soit le point de comparaison.
+    // DEUX CRITÈRES DE « MÊME CARTE » sont mesurés : (E+N) même expansion ET même numéro Cardmarket
+    // — c'est LITTÉRALEMENT le cas de la décision B (variantes V d'un même numéro) ; (M) même
+    // idMetacard — plus large (les 4 Rayquaza ASC/xASC partagent 456957 à travers deux expansions).
+    // Un candidat sans numéro (E+N) ou sans idMetacard (M) est SEUL dans son groupe : « même carte »
+    // ne se présume pas d'une donnée absente.
+    console.log('\n══ MESURE 6 — les deux tris séparés : « même carte » -> moins cher (inchangé) ; sinon -> ordre du vivier ══');
+    const cleEN = s => (s.numeroCardmarket != null && String(s.numeroCardmarket).trim() !== '') ? `E${s.idExpansion}#${String(s.numeroCardmarket).trim().toUpperCase()}` : `seul:${s.id}`;
+    const cleM = s => (s.idMetacard != null) ? `M${s.idMetacard}` : `seul:${s.id}`;
+    // Couverture des deux critères, sur tous les candidats des 107 lignes.
+    let nEN = 0, nM = 0, nTot = 0;
+    for (const x of presentes) for (const s of x.scores) { nTot++; if (!cleEN(s).startsWith('seul:')) nEN++; if (!cleM(s).startsWith('seul:')) nM++; }
+    console.log(`   couverture : numéro Cardmarket présent ${nEN}/${nTot} candidats · idMetacard présent ${nM}/${nTot}`);
+    // Les deux critères s'accordent-ils sur les paires à ÉGALITÉ DE SCORE AU SOMMET ?
+    let pairesSommet = 0, memeEN = 0, memeM = 0, ENpasM = 0, MpasEN = 0;
+    for (const x of presentes) {
+        const top = x.scores.filter(s => s.score === x.scores[0].score);
+        for (let i = 0; i < top.length; i++) for (let j = i + 1; j < top.length; j++) {
+            pairesSommet++;
+            const en = cleEN(top[i]) === cleEN(top[j]), m = cleM(top[i]) === cleM(top[j]);
+            if (en) memeEN++; if (m) memeM++; if (en && !m) ENpasM++; if (m && !en) MpasEN++;
+        }
+    }
+    console.log(`   paires d'ex aequo au sommet (terme de référence) : ${pairesSommet} · même carte selon E+N : ${memeEN} · selon M : ${memeM} · E+N sans M : ${ENpasM} · M sans E+N : ${MpasEN}`);
+    const trierMixte = (liste, cle) => {
+        const rangGroupe = new Map();
+        for (const s of liste) { const k = cle(s); rangGroupe.set(k, Math.min(rangGroupe.get(k) ?? Infinity, s.ordreVivier)); }
+        return [...liste].sort((a, b) => (b.score - a.score) || (rangGroupe.get(cle(a)) - rangGroupe.get(cle(b))) || (prixTri(a.prix) - prixTri(b.prix)) || (a.id - b.id));
+    };
+    // Le test 16, rejoué sur le tri mixte : les deux xASC 153 (même expansion, même numéro, même
+    // métacarte) doivent rester « le moins cher en tête ».
+    {
+        const t16 = [
+            { id: 870373, score: 100, prix: 1.53, ordreVivier: 0, idExpansion: 6455, numeroCardmarket: '153', idMetacard: 456957 },
+            { id: 870374, score: 100, prix: 0.35, ordreVivier: 1, idExpansion: 6455, numeroCardmarket: '153', idMetacard: 456957 }
+        ];
+        console.log(`   test 16 sur le tri mixte : E+N -> ${trierMixte(t16, cleEN)[0].id} · M -> ${trierMixte(t16, cleM)[0].id}   (attendu 870374 : ${trierMixte(t16, cleEN)[0].id === 870374 && trierMixte(t16, cleM)[0].id === 870374 ? '✅' : '❌ ANNULER'})`);
+    }
+    for (const [nomTerme, terme] of Object.entries(TERMES)) {
+        console.log(`\n   ── ${nomTerme} ──`);
+        console.log(`   ${'tri'.padEnd(44)} pos.1  top3  | 1er faux ET plus cher : total / dont MÊME carte que la vérité (variante) / carte différente | prix médian du 1er`);
+        const tris = {
+            'moins cher d\'abord (production)': l => [...l].sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix))),
+            'mixte E+N : même exp.+numéro -> prix, sinon vivier': l => trierMixte(l, cleEN),
+            'mixte M : même idMetacard -> prix, sinon vivier': l => trierMixte(l, cleM)
+        };
+        for (const [nomTri, tri] of Object.entries(tris)) {
+            let pos1 = 0, top3 = 0, fauxCher = 0, fauxCherVariante = 0; const prix1 = [];
+            const cle = nomTri.startsWith('mixte M') ? cleM : cleEN;
+            for (const x of presentes) {
+                const re = tri(x.scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + terme(s.branche) })));
+                const iv = re.findIndex(s => s.id === x.attendu);
+                if (iv === 0) pos1++;
+                if (iv >= 0 && iv < 3) top3++;
+                const premier = re[0];
+                if (typeof premier.prix === 'number' && premier.prix > 0) prix1.push(premier.prix);
+                if (premier.id !== x.attendu && typeof premier.prix === 'number' && premier.prix > 0 && x.prixVerite != null && premier.prix > x.prixVerite) {
+                    fauxCher++;
+                    if (cle(premier) === cle(re[iv])) fauxCherVariante++;
+                }
+            }
+            console.log(`   ${nomTri.padEnd(44)} ${String(pos1).padStart(4)}  ${String(top3).padStart(4)}  | ${String(fauxCher).padStart(5)} / ${String(fauxCherVariante).padStart(38)} / ${String(fauxCher - fauxCherVariante).padStart(16)} | ${eur(med(prix1))}`);
+        }
+    }
+    console.log('   Les verdicts juste / faux / refus ne dépendent pas du tri (voir mesure 5) ; ils sont ceux de la mesure 3.');
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
