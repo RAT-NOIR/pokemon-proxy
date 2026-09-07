@@ -35,8 +35,11 @@ function urlCardmarket(num) {
     return `https://www.cardmarket.com/fr/Pokemon/Products/Singles/${num.slugSet}/${num.slug}`;
 }
 
-/** « Base-Expansion-Pack » -> « Base Expansion Pack ». Le slug EST le nom lisible. */
-const nomDeSet = num => (num && num.slugSet) ? String(num.slugSet).replace(/-/g, ' ') : null;
+// « Base-Expansion-Pack » -> « Base Expansion Pack ». La définition a déménagé dans
+// nom-de-set.js (feuille sans effet de bord) le 2026-09-07, parce que /api/identifier en a
+// besoin et que ce fichier-ci requiert `./index` : voir l'en-tête de nom-de-set.js. Elle
+// reste exportée d'ici, à l'identique, pour les consommateurs existants.
+const { nomDeSet } = require('./nom-de-set');
 
 /**
  * Un produit lu DIRECTEMENT au catalogue, hors de tout vivier.

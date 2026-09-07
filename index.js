@@ -80,6 +80,10 @@ const { departager: departagerParImage } = require('./departage-image');
 // Il ne touche aucun score : il choisit dans une égalité que le scoring déclare parfaite.
 // Voir departage-attaque.js — les quatre verrous et le traitement du non-latin y sont écrits.
 const { departagerParAttaque } = require('./departage-attaque');
+// Le nom LISIBLE d'un set, pour les candidats montrés à l'utilisateur. Feuille sans effet
+// de bord, exprès : voir nom-de-set.js pour la raison (cycle avec candidats-fiche.js, et
+// le smoke test qui a vu une connexion s'ouvrir sur `test` à cause d'un require paresseux).
+const { nomDeSet } = require('./nom-de-set');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -5389,6 +5393,53 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     impressionEstReverse(motifResolution.cible, cardInfo.reverse))
                 : null);
 
+        // ════════════════════════════════════════════════════════════════════
+        // LES CANDIDATS À MONTRER — UN si le verdict est ferme, TROIS sous réserve
+        // ════════════════════════════════════════════════════════════════════
+        // RÈGLE PRODUIT. Verdict FERME -> une carte. SOUS RÉSERVE (`carteIncertaine`) ->
+        // les trois meilleurs du classement, que l'extension affiche côte à côte pour que
+        // l'utilisateur RECONNAISSE la sienne. On n'affirme rien : on montre.
+        // MESURÉ (2026-09-06, 43 lignes sous réserve dont la vérité est au vivier) : la
+        // vérité est dans le TOP 3 sur 43/43. Le classement ne perd pas la carte ; ce qui
+        // manquait, c'est de la MONTRER au lieu de la jeter à l'envoi.
+        //
+        // ⛔ AUCUN SCORE, AUCUN ÉCART, AUCUN POURCENTAGE ICI. L'écart de points entre deux
+        // candidats n'est pas corrélé à la justesse (mesuré) ; l'afficher ferait passer un
+        // ordre de tri pour une probabilité. La raison de l'hésitation est `raisonReserve`,
+        // énumération fermée, déjà dans `carte`. `classement` plus bas garde ses scores
+        // pour l'usage existant (l'extension y teste les offres dans l'ordre).
+        //
+        // `numero` et `set` viennent de `numeros_cartes` — le numéro CATALOGUE du produit,
+        // pas celui lu sur la photo (`carte.numero`). `set` est le slug rendu lisible par
+        // `nomDeSet` (nom-de-set.js, la définition que candidats-fiche.js réexporte), la
+        // seule forme lisible qu'on possède : `codes_set` ne porte qu'un code. `prix` est
+        // le prix GUIDE local, en euros, sur le même axe que `prixGuideRetenu` pour le
+        // gagnant.
+        //
+        // 🔴 `photoUrl` VAUT `null`, TOUJOURS, ET C'EST UN ÉTAT PLEINEMENT SUPPORTÉ — pas un
+        // cas dégradé. `references_image` ne porte que des vecteurs ORB (desc, pts, xy) :
+        // aucune image, aucune URL, et les scans du disque ne coïncident pas avec cette
+        // base. `null` est la seule valeur que le serveur sait produire honnêtement ; le
+        // champ existe dans le contrat pour que l'extension l'affiche sans image sans avoir
+        // à deviner. Voir la note de passation avant de tenter de le remplir.
+        const tetesDuClassement = classement.slice(0, carteAmbigue ? 3 : 1).filter(Boolean);
+        const numerosDesTetes = await lireNumeros(tetesDuClassement.map(c => c.idProduct));
+        const candidats = tetesDuClassement.map((c, i) => {
+            const p = produits.find(x => x.idProduct === c.idProduct);
+            const num = numerosDesTetes.get(c.idProduct);
+            // Le gagnant porte le prix RÉELLEMENT retenu — sur le chemin à candidat
+            // unique, `classement[0]` n'en a pas et seul `prixGuideRetenu` l'a lu.
+            const prix = i === 0 ? prixGuideRetenu : c.prix;
+            return {
+                idProduct: c.idProduct,
+                nom: p ? String(p.name).split('[')[0].trim() : null,
+                numero: num?.numero ?? num?.numeroUrl ?? null,
+                set: nomDeSet(num),
+                prix: Number.isFinite(prix) ? prix : null,
+                photoUrl: null
+            };
+        });
+
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
         // C'est ICI que se joue la mesure qui compte : /api/identifier est le flux RÉEL,
         // celui de l'extension. Les prix restent vides sur cette route (c'est le
@@ -5665,6 +5716,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     retenu: e.etatRetenu
                 };
             })(),
+            // ⚠️ CE QUE L'EXTENSION MONTRE : `carte.ambigu` faux -> UN candidat, le gagnant ;
+            // vrai -> les TROIS meilleurs, dans l'ordre du classement, pour que l'utilisateur
+            // reconnaisse la sienne. Chaque entrée : { idProduct, nom, numero, set, prix,
+            // photoUrl }. `photoUrl` vaut `null` et l'extension affiche sans image — ce n'est
+            // pas une panne. Aucun score : voir le bloc de construction, au-dessus du journal.
+            candidats,
             classement,
             // Champ ADDITIF (l'extension actuelle l'ignore, aucun champ existant ne
             // change) : dit à l'extension COMMENT lire le prix d'une reverse.
