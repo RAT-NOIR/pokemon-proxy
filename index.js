@@ -520,7 +520,19 @@ function decoderCodeSet(codeSet) {
 async function memoriserCodeSet(idExpansion, codeSetBrut) {
     const codeSet = decoderCodeSet(codeSetBrut);
     try {
-        if (mongoose.connection.readyState !== 1 || !idExpansion || !codeSet) return;
+        // ⚠️ MONGO PAS PRÊT : ON LÈVE, ON NE SAUTE PLUS — 2026-09-07. Cette fonction ÉCRIT
+        // `codes_set`, l'une des deux tables non régénérables. Un `return` muet ici faisait
+        // croire à l'appelant que le code avait été mémorisé : il n'y avait ni écriture, ni
+        // erreur, ni trace. Les deux appelants (`/api/apprendre` et `/api/apprendre-lot`)
+        // portent désormais leur propre garde 503 en tête, donc ce chemin ne devrait jamais
+        // se déclencher — et s'il se déclenche, c'est qu'un TROISIÈME appelant est apparu
+        // sans garde, ce qu'on veut savoir bruyamment plutôt que découvrir dans les données.
+        // 🔑 `idExpansion`/`codeSet` absents restent un `return` muet : ce n'est pas une
+        // panne, c'est une carte sans code — le cas ordinaire, et il n'a rien à signaler.
+        if (mongoose.connection.readyState !== 1) {
+            throw new Error('memoriserCodeSet appelée sans connexion Mongo — l\'appelant doit refuser en amont (503)');
+        }
+        if (!idExpansion || !codeSet) return;
         // ⚠️ UNE LIGNE APPRISE NE S'ÉCRASE PAS — 2026-09-06. `codes_set` est l'une des deux
         // tables non régénérables, et cet upsert remplaçait sans condition le code d'une
         // expansion déjà connue, sur la seule foi d'un appel porteur du jeton partagé. Un
@@ -604,6 +616,14 @@ async function lireCache(name, number, language) {
 
 async function ecrireCache(name, number, language, price, url) {
     try {
+        // ⚠️ ICI, SAUTER EST UN CHOIX ASSUMÉ — écrit en clair le 2026-09-07 pour qu'on ne le
+        // relise pas comme un oubli. `cardprices` est un CACHE : entièrement régénérable, à
+        // durée de vie bornée (CACHE_DURATION_MS), et son absence ne coûte qu'un scrape de
+        // plus. Une ligne de cache perdue ne se distingue pas d'une ligne expirée.
+        // 🔑 CE QUI SÉPARE CE CAS DES AUTRES : `memoriserCodeSet` et `/api/apprendre-lot`
+        // écrivent des tables NON RÉGÉNÉRABLES et lèvent ou refusent désormais. Une garde
+        // qui dégrade doit s'écrire comme une décision, et la décision se prend sur ce que
+        // coûte la perte — pas sur la commodité d'un `return`.
         if (mongoose.connection.readyState !== 1) return;
         const key = cleKey(name, number, language);
         await CardPrice.findOneAndUpdate(
@@ -5904,6 +5924,13 @@ app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res
     try {
         const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
         if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+        // ⚠️ MONGO PAS PRÊT -> 503, ON N'ÉCRIT PAS À MOITIÉ — 2026-09-07. Voir le bloc de
+        // `/api/apprendre-lot` : même cause, même refus. Ces deux routes écrivent les deux
+        // seules tables non régénérables du projet.
+        if (mongoose.connection.readyState !== 1) {
+            console.warn(`🚫 [apprendre] Mongo indisponible -> 503 (userId=${userId})`);
+            return res.status(503).json({ success: false, error: "Le serveur se réveille, réessaie dans un instant." });
+        }
         const { idExpansion, numero } = req.body;
         // `Number()` : un objet passé ici ferait lever un CastError dans le filtre, et la
         // route sortirait en 500 pour une faute d'entrée.
@@ -5961,6 +5988,25 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         // Même garde que /api/apprendre : ⚠️ CONTRAT MODIFIÉ, `userId` obligatoire (400).
         const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
         if (!userId) return res.status(400).json({ success: false, error: "Identifiant utilisateur manquant" });
+        // ════════════════════════════════════════════════════════════════════
+        // MONGO PAS PRÊT -> 503. ON REFUSE LE LOT, ON NE L'ÉCRIT PAS AMPUTÉ — 2026-09-07
+        // ════════════════════════════════════════════════════════════════════
+        // MESURÉ, PAS SUPPOSÉ. Contrôle de bout en bout du 2026-09-07 sur `test_scratch` :
+        // le port TCP écoute AVANT que Mongo soit connecté. Le rattachement d'expansion
+        // plus bas est derrière `if (readyState === 1)` — à froid il est SAUTÉ, tandis que
+        // `bulkWrite` part quand même (mongoose met les commandes en tampon et les rejoue
+        // à la connexion). Résultat observé : le premier lot écrit ses cartes avec
+        // `idExpansion: null`, `idExpansions: []` et `couverture: null`, en silence. En
+        // attendant `/ping mongo:true` avant le même appel : `idExpansion` correct, 15/15.
+        // ⚠️ CE N'EST PAS THÉORIQUE : une instance Render gratuite s'endort, et le premier
+        // lot d'apprentissage après un réveil tombe exactement dans cette fenêtre.
+        // 🔑 LA GARDE NE DISPARAÎT PAS, ELLE REMONTE. Sauter en silence est le défaut ; ce
+        // qu'il faut n'est pas d'écrire quand même, c'est de REFUSER — un lot refusé se
+        // rejoue d'un clic, une table non régénérable polluée ne se répare pas.
+        if (mongoose.connection.readyState !== 1) {
+            console.warn(`🚫 [apprendre-lot] Mongo indisponible -> 503 (userId=${userId}, ${Array.isArray(req.body?.cartes) ? req.body.cartes.length : 0} carte(s) NON écrites)`);
+            return res.status(503).json({ success: false, error: "Le serveur se réveille, réessaie dans un instant." });
+        }
         const { cartes } = req.body;
         if (!Array.isArray(cartes) || cartes.length === 0) {
             return res.json({ success: false, error: "Aucune carte reçue" });
@@ -6006,8 +6052,14 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         // cartes de la première, et une table apprise portait une expansion fausse sans
         // qu'aucune ligne ne le dise. Chaque entrée porte désormais la sienne ; un
         // idProduct inconnu du catalogue garde `null`, comme avant.
+        // ⚠️ LA CONDITION `readyState === 1` EST RETIRÉE ICI — 2026-09-07. C'était elle, le
+        // défaut : une LECTURE qui se saute en silence, mais dont l'absence CORROMPT une
+        // écriture (chaque carte partait avec `idExpansion: null`). La route refuse
+        // maintenant en 503 avant d'arriver ici ; laisser la condition en place ferait
+        // survivre le chemin muet derrière une garde qui, elle, est bruyante — et masquerait
+        // le jour où quelqu'un retire la garde du dessus.
         const expParId = new Map();
-        if (mongoose.connection.readyState === 1) {
+        {
             const refs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, idExpansion: 1 }).lean();
             for (const r of refs) if (r.idExpansion != null) expParId.set(Number(r.idProduct), Number(r.idExpansion));
         }
@@ -6280,6 +6332,25 @@ async function gererWebhookStripe(req, res) {
     } catch (e) {
         console.warn(`🚫 [webhook] signature invalide : ${e.message}`);
         return res.status(400).send(`Webhook Error: ${e.message}`);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // MONGO PAS PRÊT -> 503, ET STRIPE REJOUERA — 2026-09-07
+    // ════════════════════════════════════════════════════════════════════════
+    // La signature est vérifiée AVANT : on ne rend un 503 qu'à Stripe, jamais à un inconnu.
+    // POURQUOI ICI, ET POURQUOI UN 503 PLUTÔT QU'UN ACQUITTEMENT. Ce gestionnaire ÉCRIT
+    // deux collections (`evenements_stripe`, la marque d'idempotence, et `credits`). Sur une
+    // instance qui se réveille, le port écoute avant que Mongo soit connecté : les écritures
+    // partiraient en tampon et pourraient expirer, pendant que la route, elle, aurait déjà
+    // répondu. Un webhook acquitté sans marque et sans crédit est un PAIEMENT PERDU — Stripe
+    // ne rejoue que ce qu'il n'a pas vu acquitter.
+    // ⚠️ ET C'EST LE SEUL ENDROIT DU SERVEUR OÙ « DÉGRADER » COÛTE DE L'ARGENT RÉEL à
+    // l'utilisateur : il a payé, il n'a rien reçu, et aucune ligne ne le dit. Le 503 est donc
+    // le comportement CORRECT, pas une précaution : Stripe réessaie en différé (jusqu'à
+    // 3 jours), et l'idempotence par `evenements_stripe` empêche le double crédit au retour.
+    if (mongoose.connection.readyState !== 1) {
+        console.warn(`🚫 [webhook] Mongo indisponible -> 503 sur ${event.type} (event ${event.id}) — Stripe rejouera.`);
+        return res.status(503).send('Base indisponible, rejouer plus tard');
     }
 
     // ════════════════════════════════════════════════════════════════════════
