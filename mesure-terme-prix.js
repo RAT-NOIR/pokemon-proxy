@@ -50,6 +50,7 @@ const { EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
 const J = mongoose.model('Jm', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pm', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
 const G = mongoose.model('Gm', new mongoose.Schema({}, { strict: false }), 'guide_prix');
+const Num = mongoose.model('Nm', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
 const EST_CODE_CARD = /code\s*card/i;
 const SEAUX_VERITES_CODEES = new Set(['entrainement', 'verification']);
 const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
@@ -531,5 +532,68 @@ function rejouerRegime(scores, attendu, regime) {
         console.log(`   ${etiquette.padEnd(46)} pos.1 ${pos1} · vérité dans le TOP 3 affiché ${top3} / ${presentes.length} · 1er faux ET plus cher ${fautifs.length}, dont dus au nouveau tri ${dusAuTri}`);
         for (const f of fautifs) console.log(`      ${f}`);
     }
+
+    // ══ MESURE 8 — LES LIGNES MANQUÉES, PAR CAUSE RACINE (pas par symptôme) ══
+    // Une ligne manquée = vérité individuelle ET production ≠ vérité (faux ou refus). La cause
+    // est cherchée dans l'ordre où la chaîne échoue : la LECTURE (nom/numéro contredits par la
+    // vérité), puis le VIVIER de production (`vivierIds` du journal, tronqué à 200 : on le dit),
+    // puis l'ÉGALITÉ de tête (`exAequoIds`), puis le SCORING (déclassée), puis le reste.
+    // ⚠️ Les prédictions sont écrites en passation AVANT ce bloc ; on ne les relit pas ici.
+    console.log('\n══ MESURE 8 — les lignes manquées par cause racine ══');
+    const manquees = V.filter(x => x.issueProd !== 'juste');
+    const numTruth = new Map((await Num.find({ idProduct: { $in: manquees.map(x => x.attendu) } }).lean()).map(n => [Number(n.idProduct), n]));
+    const classes = {}; const ranger = (x, c, detail) => { (classes[c] ||= []).push(`${x.cle} ${x.d.nom}${detail ? ` (${detail})` : ''}`); };
+    for (const x of manquees) {
+        const d = x.d, p = catById.get(x.attendu), n = numTruth.get(x.attendu);
+        // 1. LECTURE contredite par la vérité — mêmes fonctions que `lecture()` du banc.
+        const nomOk = p ? S.nomConcorde([d.nom, d.nomBrut].filter(Boolean), [String(p.name).split('[')[0].trim(), n?.nomFr].filter(Boolean)) : true;
+        const numBase = n ? (n.numero || n.numeroUrl) : null;
+        if (!nomOk) { ranger(x, 'LECTURE — nom contredit', `lu « ${d.nom} », vérité « ${String(p?.name).split('[')[0].trim()} »`); continue; }
+        if (numBase && d.numero && !S.comparerNumeros(d.numero, numBase)) { ranger(x, 'LECTURE — numéro contredit', `lu ${d.numero}, vérité ${numBase}`); continue; }
+        // 2. VIVIER de production.
+        const ids = Array.isArray(d.vivierIds) ? d.vivierIds.map(Number) : null;
+        const tronque = ids && Number.isFinite(d.vivierTaille) && d.vivierTaille > ids.length;
+        if (['aucun-candidat', 'carte-introuvable'].includes(d.motifEchec)) { ranger(x, 'VIVIER — vide en production', d.motifEchec); continue; }
+        if (ids && !ids.includes(x.attendu)) { ranger(x, tronque ? 'VIVIER — absente des 200 journalisés (tronqué, indéterminé)' : 'VIVIER — absente du vivier de production', `voie ${d.voieCatalogue ?? '?'}, ${d.vivierTaille ?? ids.length} candidats`); continue; }
+        if (!ids && !x.rejeu.presente) { ranger(x, 'VIVIER — absente (journal sans vivierIds, jugé au rejeu par le nom)', d.voieCatalogue ?? '?'); continue; }
+        // 3. ÉGALITÉ de tête, la vérité dedans -> indiscernable par ce qui a été lu.
+        // ⚠️ `exAequoIds` est PLUS JEUNE que la plupart des lignes du lot : absent, on ne sait
+        // pas au journal si la vérité était dans le groupe. On tranche alors au REJEU (vivier
+        // par le nom), et on le DIT dans l'étiquette — journal et rejeu ne sont pas le même instrument.
+        const exJournal = Array.isArray(d.exAequoIds) && d.exAequoIds.length > 0;
+        const ex = exJournal ? d.exAequoIds.map(Number) : [];
+        const sansRien = !d.total && !d.setCode;
+        const dansGroupe = exJournal ? ex.includes(x.attendu) : (x.rejeu.presente && x.rejeu.rang === 1);
+        const source = exJournal ? 'journal' : 'REJEU';
+        if (dansGroupe) { ranger(x, `INDISCERNABLE — vérité DANS l'égalité de tête (${source})${sansRien ? ', ni total ni code lus' : ''}`, `${exJournal ? ex.length + ' ex aequo' : 'rang 1 au rejeu'}, ${d.raisonReserve ?? d.motifEchec ?? '?'}`); continue; }
+        // 4. DÉCLASSÉE : au vivier, SOUS l'égalité de tête. Le critère, lu au rejeu.
+        const parLePrix = x.rejeu.presente && x.rejeu.prixTop === 25 && x.rejeu.prixVer === 0;
+        if (x.issueProd === 'refus') {
+            ranger(x, parLePrix ? `DÉCLASSÉE SOUS LE GROUPE — terme prix (refus egalite-parfaite, ${source})` : `DÉCLASSÉE SOUS LE GROUPE — autre critère (refus, ${source})`,
+                `rang ${x.rejeu.rang ?? '?'} au rejeu, écart ${x.rejeu.ecartTop ?? '?'}`); continue;
+        }
+        let critere = 'critère non identifié au rejeu';
+        if (x.rejeu.ecartGagnantProd != null) {
+            critere = x.rejeu.prixTop === 25 && x.rejeu.prixVer === 0 ? 'terme prix' : `écart ${x.rejeu.ecartGagnantProd} au rejeu`;
+        }
+        ranger(x, `DÉCLASSÉE — ${critere}`, `${d.raisonReserve ?? 'ferme'}${d.carteIncertaine ? '' : ' ⚠️ AFFIRMÉ'}`);
+    }
+    console.log(`   lignes manquées : ${manquees.length} sur ${V.length} (faux ${manquees.filter(x => x.issueProd === 'faux').length}, refus ${manquees.filter(x => x.issueProd === 'refus').length})`);
+    for (const [c, l] of Object.entries(classes).sort((a, b) => b[1].length - a[1].length)) {
+        console.log(`   ${String(l.length).padStart(3)}  ${c}`);
+        for (const s of l) console.log(`          ${s}`);
+    }
+    // LE TEST QUI TUE VITE les angles neufs sur la plus grosse classe : un signal joint via TCGdex
+    // (illustrateur, HP, dégâts) n'existe que si les membres du groupe d'égalité ont un pont.
+    // Le groupe = `exAequoIds` du journal quand il existe, sinon l'égalité de tête du rejeu (dit).
+    const groupes = manquees.map(x => (Array.isArray(x.d.exAequoIds) && x.d.exAequoIds.length > 1) ? x.d.exAequoIds.map(Number)
+        : (x.rejeu.vide ? [] : x.scores.filter(s => s.score === x.scores[0].score).map(s => s.id))).filter(g => g.length > 1);
+    console.log(`   (groupes : ${manquees.filter(x => Array.isArray(x.d.exAequoIds) && x.d.exAequoIds.length > 1).length} du journal, le reste du rejeu)`);
+    const membres = [...new Set(groupes.flat())];
+    const numMembres = new Map((await Num.find({ idProduct: { $in: membres } }).lean()).map(n => [Number(n.idProduct), n]));
+    const pontes = membres.filter(id => numMembres.get(id)?.setTcgdex);
+    const groupesTousPontes = groupes.filter(g => g.every(id => numMembres.get(id)?.setTcgdex)).length;
+    console.log(`\n   pont TCGdex dans les groupes d'égalité des lignes manquées : ${groupes.length} groupes, ${membres.length} membres distincts, ${pontes.length} avec \`setTcgdex\` (${pct(pontes.length, membres.length)}) · groupes ENTIÈREMENT pontés : ${groupesTousPontes} / ${groupes.length}`);
+    console.log(`   (sans pont, ni illustrateur, ni HP, ni dégâts ne peuvent être joints par TCGdex — c'est le dénominateur de tout angle qui passe par lui)`);
     await mongoose.disconnect();
 })().catch(e => { console.error('❌', e); process.exit(1); });
