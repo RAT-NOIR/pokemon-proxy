@@ -2,16 +2,665 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-08, tout dernier tour — POURQUOI ON RÉUSSIT. PRÉDICTIONS ÉCRITES AVANT LA MESURE
+
+Population : les vérités JUSTES en production (59 sur 109), et parmi elles les FERMES
+(`carteIncertaine` faux). Prédictions, avant `mesure-terme-prix.js` (mesures 9 à 11) :
+1. Fermes et justes : **≈ 30** sur 59. Signal décisif : clé setCode+numéro **≈ 12**, numéro seul
+   (+50 contre des homonymes sans ce numéro) **≈ 10**, candidat unique (nom + expansions
+   attendues par le total) **≈ 5**, région **≈ 2**, prix **≈ 1**.
+2. Reconstructions : « total depuis la taille de l'expansion » : jointure `numeros_cartes.
+   idExpansion` EXISTE, mais taille locale ≠ total imprimé sur > 30 % des sets pontés (secrètes,
+   sets incomplets). « expansion depuis nom+HP+illustrateur » : MORTE localement, aucune colonne.
+   « années depuis l'ordre des idExpansion » : les 25 sets vintage forment 2 à 3 bandes, pas un
+   intervalle ; MORTE comme borne, vivante comme prior grossier.
+3. Élimination sur les groupes d'égalité (≈ 60 groupes rejoués) : réduits à UN candidat par
+   élimination seule **≈ 5**, vérité éliminée **0**.
+
+### Mesuré (mesures 9 à 11, `node mesure-terme-prix.js`) — deux prédictions sur trois contredites
+
+**1. Une désignation SÛRE est une CLÉ, jamais un score.** Justes 59/109, dont FERMES **20** (prédit
+30). Signal décisif des 20 : clé setCode+numéro **12** (prédit 12), candidat unique — vivier
+réduit à 1 par le chemin local nom+numéro **5** (prédit 5), région 1, prix 1, départage 1.
+**Numéro seul : 0** (prédit 10). Le barème ne produit aucun verdict ferme par lui-même sur
+cette population ; il produit des réserves : 39 justes sous réserve, par raison : symbole 15,
+périmètre 13, image 3, attaque 2, tcgdex-numero-incoherent 2, Pokédex 1, sans raison 3.
+Réussir = avoir une jointure exacte (code+numéro) ou un vivier de un.
+
+**2. Reconstruire ce qui n'est pas lu — colonne de jointure ou mort.**
+(a) *Total depuis la taille de l'expansion* : jointure `numeros_cartes.idExpansion` EXISTE.
+Contrôle sur 24 lignes justes à total lu : max du numéro = total **8**, secrètes ≤ +25 % **7**,
+loin **9**, nombre de lignes = total **2**. Utilisable comme FILTRE grossier (±25 %), pas comme
+clé. (b) *Années depuis l'ordre des idExpansion* : seule colonne d'année = `annee` de la table
+close (25 sets). Les 25 idExpansion vintage font **6 bandes** de 3781 à 5873 et **247 expansions
+japonaises non vintage sur 351** tombent dans l'intervalle : **MORTE**. (c) *Expansion depuis
+nom+HP+illustrateur* : aucune colonne locale, TCGdex seul, pont sur 31 % : **MORTE** sans l'import
+des ponts. (d) *Rareté* : aucune colonne : MORTE. (e) *setCode depuis nom+numéro* : EXISTE, c'est
+déjà `identifierEnLocal` — les 5 « candidat unique » viennent de là.
+
+**3. Éliminer au lieu de désigner — le test qui tue a parlé.** Sur les 55 égalités de tête
+(9 journal, 46 rejeu) : E1 numéro, E2 setCode, E3 région n'éliminent **0** candidat — rien
+n'est lu dans ces groupes ; E4 symbole (table close, fiable) en élimine 31 sur 15 groupes ;
+réduits à UN : **2**, survivant vérité **0** — la vérité était SOUS le groupe (terme prix) :
+éliminer sur l'égalité de tête CERTIFIE une erreur. Sur le VIVIER ENTIER (107 lignes, 4 582
+candidats) : réduits à un **21**, vérité **20**, mais **5 vérités éliminées** — 4 par E2 sur des
+alias connus (lu « e1 », catalogue EC1 ; « VS » / TLVS — B5, `ALIAS_CODES_LUS` non appliqué
+par la règle) et 1 par E4 (Light Togetic, « etoile » lu, table « eclair »). Seuls E1 et E3
+n'ont tué aucune vérité, et le barème les porte déjà (+50, ±45). **Le symbole est un signal de
+DÉPARTAGE (6/7), pas d'élimination ; l'élimination sûre n'existe pas là où rien n'est lu.**
+
+**4. Jamais regardé, et décidable.** (i) La TAILLE LOCALE d'une expansion — `count`/`max` sur
+`numeros_cartes.idExpansion` — jamais calculée : la route demande `cardCount` à TCGdex
+(index.js:1674-1731) alors que la colonne est en base. (ii) `guide_prix.low` et `avg1`
+(index.js:344-345) : jamais lus, `prixDeReference` s'arrête à trend/avg/avg7/avg30
+(scoring.js:353) ; l'écart low↔trend dit si une cote est disputée. (iii) TCGdex `illustrator`,
+`hp`, `dexId`, `rarity` : présents dans verrou/tcgdex.json, jamais consommés — index.js ne lit
+que id/nomExact/source/variants/variantsDetailed/langueRoute/localId (3960, 4053, 4274, 4841).
+
+**Pour demain.** Les 17 fermes sur 20 viennent d'une jointure exacte : la voie qui augmente
+les fermes est d'AUGMENTER LES CLÉS (apprendre les codes/numéros des expansions manquantes,
+importer les ponts), pas d'affiner le barème. Sur le vintage JP sans numéro, aucune donnée lue
+ne permet ni de désigner ni d'éliminer : montrer 3 candidats est la seule sortie honnête.
+
+## 2026-09-08, dernier tour — CE QU'ON N'A PAS VU. PRÉDICTIONS ÉCRITES AVANT LA MESURE
+
+Population : les 50 vérités MANQUÉES en production (27 faux + 23 refus) sur 109. Classes par
+cause racine, prédites avant de lancer `mesure-terme-prix.js` (mesure 8) :
+1. INDISCERNABLE — la vérité est au vivier, dans l'égalité de tête, et rien de lu ne la
+   sépare de ses homonymes (JP sans total, sans code, numéro non imprimé) : **≈ 20**.
+2. VIVIER — la vérité n'est PAS dans le vivier de production (nom, périmètre, pont) : **≈ 12**.
+3. DÉCLASSÉE — au vivier, hors égalité, le scoring la met derrière (prix, région, code) : **≈ 10**.
+4. LECTURE — nom ou numéro lu contredit par la vérité : **≈ 6**.
+5. AUTRE (veto, motif rare) : **≈ 2**.
+La plus grosse sera 1. Test qui tue les angles neufs sur 1 : la part des membres des groupes
+d'égalité qui ont un pont TCGdex (`setTcgdex`) — prédit **< 30 %** sur le vintage JP.
+
+### Mesuré (mesure 8, `node mesure-terme-prix.js`) — LA PRÉDICTION EST CONTREDITE
+
+**La plus grosse classe n'est pas l'indiscernabilité, c'est le TERME PRIX : 18 lignes sur 50.**
+9 faux (vérité au vivier, hors égalité, 1er « +25 prix bas », vérité « 0 incohérent ») + 9 refus
+`egalite-parfaite` où la vérité est SOUS le groupe de tête — rang 15 à 30 au rejeu, écart 25
+(Rattata, Articuno, Lapras, Growlithe ×2…). ⚠️ Ces 9 refus sont jugés au REJEU : `exAequoIds`
+est plus jeune que ces lignes, le journal ne dit pas où était la vérité. Le premier jet de
+l'outil les avait rangés « égalité sans la vérité » par défaut d'un champ absent — corrigé,
+et l'étiquette dit désormais journal ou rejeu. Puis : INDISCERNABLE (vérité DANS l'égalité)
+**13** (prédit 20) ; VIVIER **9** = 6 absentes + 3 vides (prédit 12) ; DÉCLASSÉE autre critère
+(écart 45, Rayquaza cle-non-unique, Mew) **7** ; LECTURE **3** (prédit 6). 13 des 50 sont
+l'entraînement d'août, justes en APRÈS depuis le périmètre.
+
+🔴 **Ce que ça change à la projection 68.** Le terme neutre (câblé, actif quand `rarete` est
+null) fait passer ces 18 vérités de « dessous » à « dans l'égalité ». Or une égalité à ENJEU
+(écart ≥ 1 €, index.js `ECART_PRIX_TOLERABLE`) est un REFUS : la route ne montre rien, et le
+bloc `candidats` ne sort que sur un succès sous réserve (index.js, au-dessus de `enregistrerScan`).
+**Le 68 compte des positions que l'écran n'affiche pas encore.** Le levier de la plus grosse
+classe est une décision PRODUIT : sur égalité à enjeu, rendre les 3 candidats sous réserve au
+lieu de refuser (la « fourchette » déjà discutée, décision jamais prise).
+
+**Trois angles sur la classe TERME PRIX.**
+1. *Égalité à enjeu → 3 candidats sous réserve* (envisagé, jamais tranché). Coût : 0, la mesure
+   7 le donne. Dénominateur : lignes où la vérité entre dans l'égalité sous terme neutre (96 au
+   rejeu). Test qui tue : vérité hors des 3 premiers de l'égalité (tri vivier) sur > 50 % → mort ;
+   mesuré 68/107 dedans → vivant.
+2. **JAMAIS ENVISAGÉ — les cartes VOISINES sur la photo.** Le prompt ne les voit que comme un
+   danger (index.js:718 « ne recopie pas celui d'une autre carte visible »). Une annonce vintage
+   est souvent un lot posé à plat : les voisines portent le symbole ou le nom d'un set commun.
+   Coût : 30 photos regardées à la main (`imageUrl`, 175 vivantes). Dénominateur : photos à ≥ 2
+   cartes parmi les 18. Test qui tue : < 20 % de photos multi-cartes → mort.
+3. **JAMAIS ENVISAGÉ — l'empreinte de gabarit : HP, dégâts d'attaque, illustrateur.** Imprimés
+   en chiffres et en lettres latines même sur les JP, portés par TCGdex (`hp`, `attacks[].damage`,
+   `illustrator` sont dans verrou/tcgdex.json et jamais lus). **Tué aujourd'hui** : dans les 31
+   groupes d'égalité des lignes manquées, 149 membres sur 478 ont un pont `setTcgdex` (31,2 %,
+   prédit < 30 %), **0 groupe sur 31 entièrement ponté**. Revit avec l'import des ponts (« à
+   ÉCRIRE », passation du 09-05). Coût après pont : ~480 lectures TCGdex, en cache. Test qui tue :
+   HP + dégâts ne séparent pas la vérité de ses homonymes dans ≥ 50 % des groupes pontés.
+
+**Angles morts, fichier:ligne.** TCGdex : `illustrator`, `hp`, `dexId`, `rarity` jamais lus —
+index.js ne consomme que `id/nomExact/source/variants/variantsDetailed/langueRoute/localId`
+(3960, 4053, 4274, 4841). `numeros_cartes.nomFr` (index.js:371) : veto (2353) et arbitre
+total+numéro (3977) seulement, JAMAIS dans `trouverProduitsLocaux` (2091-2096, `name` seul).
+Les attaques entre crochets du `name` Cardmarket : departage-attaque.js:71-79 seulement.
+`guide_prix.low`, `avg1` (index.js:344) : jamais lus (scoring.js:353). `idMetacard` (315) : chemin
+local (1018) et attaque (4447) seulement. Et la coupure produit : le refus `egalite-parfaite`
+(index.js:4566-4660) jette l'ordre que `candidats` montrerait.
+
+**Trois jours, dans l'ordre.** J1 : push, `/ping`, ligne de base ; journaliser les 3 `idProduct`
+montrés (une ligne dans `enregistrerScan`) pour LIRE la position au lieu de la rejouer ; 30
+photos à la main (angle 2). J2 : table d'arbitrage pour l'angle 1 sur les 96 égalités rejouées —
+ce que l'écran montrerait, écart de prix par groupe — sans câbler. J3 : import des ponts sur
+les 25 sets vintage, puis distinctness HP/dégâts/illustrateur par groupe (angle 3). Chaque
+étape débloque la suivante ; aucune ne touche scoring, prompt ni périmètre.
+
+## 2026-09-08, push et ligne de base — À LIRE AVANT DE POUSSER
+
+**Le push emporte NEUF commits, pas deux.** `origin/main` = `5d8f99b` ; `main` local porte
+`ea3b725` (webhook 503, autre agent), `4997580` (`candidats` dans la réponse), `f188a0c`
+(prompt : `symboleSet` garde « aucun », `rarete` nullable — INSTRUMENT NEUF, le verrou avertit
+sur l'empreinte), quatre commits d'outil de mesure, `b799c13` (tri + terme neutre) et `f7b9b89`.
+Render déploie `main` : les neuf partent ensemble. Le push est le geste du testeur (GitHub
+Desktop, règle du dépôt), il n'a pas été fait ici.
+
+**Version déployée AVANT le push, lue par `/ping` sans consommer un scan : `5d8f99b95cfb`.**
+Après le push, `/ping` doit rendre `f7b9b89…` ; tant qu'il rend `5d8f99b…`, rien de ce qui
+précède n'est en ligne et aucune ligne de journal ne peut porter `rarete: null`.
+
+**LIGNE DE BASE à surveiller** (instrument : `node mesure-terme-prix.js`, lecture seule) :
+- lignes de journal portant `rarete: null` : **0 sur 248** au 2026-09-08 (dénominateur : lignes
+  avec `version` ≥ f188a0c, à imprimer avant tout taux) ;
+- vérité dans le TOP 3 affiché, mesure 7, ordre rendu par la production : **59 / 107** avec la
+  rareté du journal ; **68 / 107 = PROJECTION** rareté absente. Les dix vérités projetées
+  n'apparaîtront qu'avec des scans POSTÉRIEURS, dotés d'une vérité ET d'une rareté null.
+- ⚠️ limite de l'instrument : le journal ne conserve pas l'ordre AFFICHÉ (`candidats`), la
+  position est REJOUÉE sur le vivier par le nom. Journaliser les trois `idProduct` montrés
+  serait une ligne dans `enregistrerScan` — non faite, à décider.
+
+## 2026-09-08, cinquième tour — CÂBLÉ : tri mixte (critère étroit) + terme prix neutre sans rareté lue. Un commit sur `main`, NON POUSSÉ
+
+**Ce qui est câblé (scoring.js seul).** (1) `choisirMeilleur` : clé lexicographique score ↓,
+rang du groupe « même carte » dans le vivier ↑, prix ↑ (inconnu dernier) DANS le groupe,
+idProduct ↑. « Même carte » = même expansion ET même numéro Cardmarket ; sans numéro, seul
+dans son groupe. Décision B intacte entre variantes (test 16 vert), ordre total et
+déterministe. Métacarte dehors (C7), « plus cher d'abord » écarté définitivement, écrit dans
+le code. (2) Critère 5 : `lu.rarete === null` et numéro non secret → « 0 (rareté non lue : le
+prix ne prouve rien) » sur toute la ligne ; un `lu` sans le champ garde l'ancien barème (les
+tests isolés). Rien d'autre retiré. Test 28 ajouté (variantes, cartes différentes, mixte,
+quatre cas de rareté). **Symétrie** : `apres()` passe par la même fonction, rien à changer.
+**Commit propre** : seuls mes 4 hunks de scoring.js sont entrés (patch appliqué à l'index) ;
+le hunk de l'autre agent à `rangDuNumero` (+75) reste non commité, à lui.
+
+**Banc complet, par seau.** ⚠️ ORIGINE DES DEUX COLONNES, à lire avant les chiffres : dans
+banc-japonais.js (l. 787/797) AVANT = `d.idProduct`, ce que la production a RETENU au moment
+du scan, sous le build de l'époque ; APRÈS = `apres(d)`, la chaîne d'aujourd'hui rejouée sur la
+même ligne. Même exécution, mêmes vérités, même provenance — mais AVANT est de l'HISTOIRE
+(l'entraînement a été scanné en août, avant le périmètre : 0 juste), pas l'état d'avant ce
+câblage. Le « 0 → 11 justes » est donc août → aujourd'hui, et il était identique hier.
+Ce que ce câblage change au banc : **RIEN** — banc d'avant et d'après câblage identiques sur
+toutes les lignes de verdict. État final, colonne APRÈS : entraînement 11 justes · 0 faux ·
+**0 faux affirmé** · 2 refus ; lots 51 · 13 · **0** · 19 ; holdout 6 · 4 · **0** · 3. Quatre logs de
+diagnostic nomment un autre membre d'une égalité, c'est tout.
+
+**Vérité dans le TOP 3 affiché, ordre rendu par la production, 107 vérités** : **58 → 59** avec
+la rareté du journal — elle est LUE sur les 107 (176 « normale » forcées), donc le terme reste
+tel quel et seul le tri agit ; **68** en projection rareté absente, celle des scans à venir.
+Les +10 attendus ne se voient qu'à ce moment-là, et c'est écrit ici pour qu'on ne les cherche
+pas au banc d'aujourd'hui.
+
+**Premiers affichés faux ET plus chers, nommés** — aujourd'hui **4**, dont **3 DUS AU TRI**
+(premier sous l'ancien tri recalculé sur les mêmes scores, pas déduit) :
+- L010 Blissey : 1er 558706 0,50 € · vérité 606726 0,02 € (position 7) — ancien tri : la
+  VÉRITÉ était première (la moins chère de l'égalité). **Dû au tri.** Écart 0,48 € < 1 € :
+  c'est une égalité SANS enjeu, la seule des quatre où la route affiche un premier.
+- H006 Dark Charizard : 1er 571492 1 122,02 € · vérité 585047 293,40 € (position 2) — ancien
+  tri : la vérité première. **Dû au tri.** Égalité à enjeu : la route REFUSE, rien n'est affiché.
+- L076 Surfing Pikachu : 1er 571474 293,66 € · vérité 654094 134,38 € (position 6, écart 45) —
+  ancien tri : 678169 à 41,70 €, faux aussi. **Dû au tri**, mais faux contre faux.
+- L043 Brock's Rhyhorn : 1er 605160 1,50 € · vérité 760242 1,24 € (écart 45) — déjà premier
+  sous l'ancien tri. **Pas dû au tri.**
+Le coût réel est donc **3**, et un seul (Blissey, 0,48 € d'écart) change ce que l'écran montre.
+Projection rareté absente : 6 dont 5 dus au tri (+ Tangela, Hypno). Jamais des variantes.
+
+**Limite du critère étroit** : presque inerte ici — sur 8 590 paires d'ex aequo au sommet, 2
+seulement sont des variantes d'une même carte. Le gain vient de ne PLUS trier les cartes
+différentes par le prix, pas du critère lui-même ; le jour où des variantes seront à égalité,
+c'est lui qui les gardera « moins cher d'abord ».
+
+Contrôles : verrou 7 cellules vert (empreinte avertie, attendu), cliquet 55/47, scoring.js
+tous tests verts, banc identique sur les verdicts.
+
+## 2026-09-08, quatrième tour — LES DEUX TRIS SÉPARÉS, en mesure. RIEN N'EST CÂBLÉ, un commit (l'outil), NON POUSSÉ
+
+⛔ **« Plus cher d'abord » est ÉCARTÉ DÉFINITIVEMENT** : 43 premiers faux ET plus chers sur 107,
+médiane du 1er affiché 37,31 €. Ne pas le reproposer, sous aucun terme.
+
+**La forme, d'abord.** « Si même carte → prix, sinon → vivier » écrit comme un comparateur
+n'est PAS transitif (a~b même carte, c différente : a<c et c<b par le vivier, b<a par le prix
+→ cycle). La forme sûre est une clé LEXICOGRAPHIQUE : (score ↓, rang du GROUPE dans le vivier
+↑ = plus petite position de ses membres, prix ↑ inconnu dernier, idProduct ↑). Chaque candidat
+est dans UN groupe : ordre total, déterministe, quel que soit le point de comparaison.
+
+**Le critère de « même carte », et sa limite.** Deux mesurés. **(E+N)** même expansion ET même
+numéro Cardmarket : c'est LITTÉRALEMENT le cas de la décision B (variantes V d'un même
+numéro) ; numéro présent sur 5 649 candidats sur 6 259, un candidat sans numéro est seul dans
+son groupe. **(M)** même `idMetacard` : présent 6 259/6 259, mais plus large — les 4 Rayquaza
+ASC/xASC partagent 456957 à travers deux expansions. Sur les 8 590 paires d'ex aequo au sommet,
+E+N n'en groupe que **2**, M en groupe **439**. Test 16 rejoué sur les deux : 870374 en tête ✅.
+**Retenu : E+N** — il sépare exactement ce que la décision B protège, et rien d'autre. Sa limite :
+il est quasi inerte sur ce corpus (les égalités sont entre SETS différents, pas entre
+variantes), donc « mixte E+N » ≈ « ordre stable du vivier ». M gagne plus (85 dans le top 3
+avec le terme neutralisé) mais par un autre mécanisme : il remonte la vérité AVEC ses
+réimpressions moins chères d'autres sets — c'est une décision d'affichage par métacarte
+(C7), pas un départage de variantes, et elle ne doit pas passer en contrebande dans un tri.
+
+**Chiffres, 107 vérités** (verdicts juste/faux/refus inchangés par construction) :
+
+| tri | terme de référence : pos.1 / top3 / 1er faux et plus cher | terme neutralisé = PROJECTION rareté absente (0 null au journal au 09-08) : pos.1 / top3 / 1er faux et plus cher |
+|---|---|---|
+| moins cher d'abord (production) | 50 / 58 / 1 | 50 / 58 / 1 |
+| **mixte E+N** | 50 / 59 / 4 | 55 / **68 (projection)** / 6 |
+| mixte M | 60 / 69 / 4 | 72 / 85 / 7 |
+
+**Attendu confirmé** : 68 contre 58 dans le top 3, avec le terme neutralisé — ⚠️ 68 est une
+PROJECTION tant que `rarete` n'est pas réellement null au journal (0 sur 248 au 09-08). **Infirmé sur un
+point** : les surestimations ne sont PAS bornées aux variantes — sous E+N, les 6 premiers faux
+et plus chers sont tous des cartes DIFFÉRENTES (0 variante ; les variantes ne sont jamais à
+égalité ici). C'est le prix de retirer le tri monétaire entre cartes différentes : 6 lignes
+sur 107, médiane du 1er 3,46 € contre 0,94 €, à peser contre 10 vérités de plus à l'écran.
+
+**À savoir avant tout câblage** : `idMetacard` n'est pas recopié dans le candidat enrichi par
+`scorerCandidatsLocal` (E+N n'en a pas besoin) ; le tri vit dans `choisirMeilleur`, et test 16
+doit rester tel quel. Contrôles : verrou 7 cellules, cliquet 55/47, banc identique (11/51/6,
+0 faux affirmé).
+
+## 2026-09-08, troisième tour — LE TRI D'ÉGALITÉ mesuré, pas le terme. RIEN N'EST CÂBLÉ, un commit (l'outil), NON POUSSÉ
+
+**D'où vient le tri, et ce qu'il protégeait.** `choisirMeilleur` (scoring.js) : « à score égal,
+le MOINS CHER — décision produit assumée ». Raison écrite : plusieurs variantes V d'un MÊME
+numéro coexistent (xASC 153 : V1 1,53 €, V2 0,35 €) sans que le catalogue dise laquelle porte
+le motif ; on prend la borne basse parce que surestimer fait SURPAYER. Test 16 le fige. Sa
+portée est déjà bornée par « LE PRIX N'EST JAMAIS UNE PREUVE » (même fichier) : sur une égalité
+à enjeu la route refuse. Le tri ne décide donc que l'ordre AFFICHÉ (`classement`, `candidats`)
+et les égalités sans enjeu. **À peser avant de le remplacer** : l'ordre entre variantes d'une
+même carte doit rester « la moins chère », c'est un cas distinct de l'ordre entre cartes
+DIFFÉRENTES — le nouveau tri doit garder test 16.
+
+**Mesure, 107 vérités présentes au vivier par le nom** (verdicts juste/faux/refus inchangés par
+construction : une égalité au sommet reste un refus). Colonne qui compte : vérité dans le TOP 3.
+
+| tri | terme de référence : pos.1 / top3 / 1er faux ET plus cher | terme neutralisé (c) : pos.1 / top3 / 1er faux ET plus cher |
+|---|---|---|
+| moins cher d'abord (production) | 50 / **58** / 1 | 50 / **58** / 1 |
+| (a) ordre stable du vivier = idProduct croissant | 50 / 59 / 4 | 55 / 68 (projection, voir ci-dessus) / 6 |
+| (b) plus cher d'abord | 52 / 59 / 16 | 59 / 72 / **43** |
+| (c2) table vintage d'abord, puis vivier | 62 / 69 / 5 | **74 / 95 / 23** |
+
+Lecture. Neutraliser le terme ne paie RIEN sous le tri actuel (58 → 58) et paie sous tout tri
+non monétaire : c'est le tri qui range la vérité derrière. (b) confirme le danger annoncé :
+avec le terme neutralisé, le 1er affiché est faux ET plus cher que la vérité sur 43 lignes,
+prix médian du 1er 37,31 € contre 0,94 € aujourd'hui. Le critère non monétaire disponible :
+`idProduct` (toujours présent, = ordre naturel Mongo ; `dateAdded` dit la même chose à 88 %,
+depuis 2015) et la table close `EXPANSIONS_VINTAGE`. ⚠️ (c2) recrée en partie le PÉRIMÈTRE que
+la route applique déjà sur JP sans total : son 95 ne s'ajoute pas à la production, il se
+compare au 69 de la même colonne. Et il porte 23 « faux plus chers » : un tri qui remonte
+le vintage remonte aussi ses homonymes chers quand il a tort.
+
+**Le correctif de la pénalité sur donnée non lue, décrit sans l'écrire.** Dans le critère 5,
+AVANT la branche `rareteElevee` : si `lu.rarete` est null ET que le numéro n'est pas secret
+(numéro > total est une lecture, pas une rareté), `detail.prix = '0 (rareté non lue : le prix
+ne prouve rien)'` pour TOUS les candidats de la ligne — la forme exacte de la branche promo.
+Ce qu'il change au rang : sur une ligne à rareté null, c'est le régime (c) : la vérité chère
+monte DANS l'égalité de tête (rang strict 1) mais sa position affichée ne bouge pas d'un cran
+sous le tri actuel (Rattata : 23 → 23). Il ne vaut qu'avec un tri non monétaire. Population
+aujourd'hui : 0 ligne (0 null sur 248).
+
+**Contrôles** : verrou 7 cellules, cliquet 55/47, banc identique ligne à ligne au tour
+précédent (11/51/6, 0 faux affirmé).
+
+**Piège** : deux tris cachés dans un seul comparateur — variantes d'une même carte (borne basse,
+légitime) et cartes différentes (prix = tirage au sort, mesuré pire que le hasard). Les séparer
+est la décision ; les confondre dans un « plus cher d'abord » fabrique 43 surpaiements.
+
+## 2026-09-08, second tour — le terme prix DÉCOMPOSÉ : trois régimes, et la branche « rareté absente ». RIEN N'EST CÂBLÉ, un commit (l'outil), NON POUSSÉ
+
+**La table exacte** (scoring.js, critère 5) : promo → 0 sur toute la ligne · sans prix → 0 ·
+`rareteElevee` ET ≥ 3 € → +25 « IR attendue » · `rareteElevee` ET < 3 € → 0 « incohérent » ·
+PAS `rareteElevee` ET ≥ 3 € → 0 « incohérent » (la vérité, 72 fois sur 107) · PAS
+`rareteElevee` ET < 3 € → +25 « prix bas ». **Aucune valeur négative** : la pénalité est un +25
+refusé, et elle ne se distingue du bonus que face aux candidats sans prix (306 sur 6 259) et
+aux lignes promo. C'est pourquoi (a) et (b) ne peuvent pas différer beaucoup de (c).
+
+**Les trois régimes**, 107 vérités présentes au vivier par le nom, tri de production (score puis
+le moins cher), « affiché ≤ 3 » = la vérité est dans les 3 que la route montre :
+
+| régime | juste | faux | faux marge≥30 (proxy) | refus (égalité au sommet) | rang strict 1 | affiché ≤ 3 |
+|---|---|---|---|---|---|---|
+| référence | 48 | 6 | 2 | 53 | 64 | **58** |
+| (a) sans bonus, pénalité gardée | 48 | 6 | 2 | 53 | 63 | **58** |
+| (b) sans pénalité, bonus gardé | 47 | 4 | 2 | 56 | 96 | **58** |
+| (c) neutralisé (témoin journal : 6 refus pour 1 gain) | 47 | 4 | 2 | 56 | 96 | **58** |
+
+🔴 **Les trois échouent de la même façon.** (b) et (c) portent la vérité au sommet sur 96
+lignes au lieu de 64 — mais DANS UNE ÉGALITÉ, et le tri par prix la place derrière : Rattata
+passe de « position 23 » à « position 23, sommet de 23 ». Sur les 34 lignes à écart 25, la
+position affichée est identique dans les quatre régimes, ligne par ligne. Un régime qui
+élargit l'égalité sans remonter la vérité ne vaut rien ; c'est le cas des trois. Le
+« faux et affirmé » du rejeu est un PROXY (faux avec marge ≥ 30), pas la réserve de la route.
+
+**La branche quand la rareté n'a pas été lue.** Code à nu : `rarete = null` → `rareteElevee`
+false → 23,08 € rend « 0 incohérent avec rareté lue », 0,05 € rend « +25 prix bas » —
+**à l'identique de « normale »**. Sur les 107 lignes rejouées avec null : 0 candidat ne change
+de branche sur les 96 lignes normale/AR/SIR/IR ; seules les 11 lignes promo changent (le terme
+cesse d'y être neutralisé). La vérité tombe en « incohérent » **83 fois au lieu de 72**. La
+branche pénalise sur une donnée NON LUE : c'est un défaut, pas un réglage — et la mesure 1
+(« null → pas de +25 ») reste à population vide, 0 null sur 248.
+
+**Contrôles** : verrou 7 cellules vert (avertissement d'empreinte attendu), cliquet 55/47.
+Banc : les trois chiffres identiques (11/51/6, 0 faux affirmé) ; deux lignes de journal
+neuves (246 → 248) entrées en bloc dans le holdout, inchangées. Piège d'instrument : une
+chaîne de log contenant « choisirMeilleur ( » a fait échouer `test-chargement.js` (appel sans
+import détecté par regex) — reformulée.
+
+**Piège pour le suivant** : le défaut n'est PAS un bonus de 25 à corriger par −25 ou par un
+retrait ; c'est que le terme classe la vérité chère DERRIÈRE un peloton de cartes à 0,02 € qui,
+elles, restent à égalité entre elles. Tant que l'égalité au sommet se départage par le prix
+croissant, aucun réglage du terme ne remonte une carte chère à l'écran.
+
+## 2026-09-08 — C3, la mesure avant le câblage : le terme prix, RIEN N'EST CÂBLÉ, un commit (l'outil seul), NON POUSSÉ
+
+**Outil** : `mesure-terme-prix.js`, lecture seule sur `test`. Il rattache les vérités avec les
+règles du banc (banc-seaux.js, tables VERITE lues dans la source de banc-japonais.js, qui
+s'exécute au require) et rejoue `scorerCandidatsLocal` sur le vivier par le nom. Il compte
+**109** vérités individuelles (13 entraînement · 83 lots · 13 holdout), pas 98 : c'est le
+compte du banc à provenance égale. Piège d'instrument corrigé avant de lire un chiffre : la
+table codée porte la CHAÎNE `'inconnu'`, un filtre sur null la laissait passer (3 NaN).
+
+**Mesure 1 — « rareté non lue → pas de +25 » : POPULATION VIDE.** `rarete` existe sur 246
+lignes sur 246 et vaut null **0** fois ; sur les 109 vérités, 0 (normale 90, promo 11, SIR 4,
+AR 2, IR 2). Le forçage `|| 'normale'` datait d'avant le journal. La règle ne toucherait
+aucune ligne, le rejeu neutralisé est identique par construction, et il n'est PAS présenté
+comme un résultat. Elle attend des scans postérieurs au déploiement de f188a0c, avec vérité.
+
+**Mesure 2 — le biais, indépendant de tout correctif.** Prix guide de la vérité, verdict de
+production : JUSTES n=59 médiane **15,69 €** ; MANQUÉES n=50 **26,71 €** (faux 27 : 18,21 € ;
+refus 23 : **45,47 €**). Au rejeu : rang 1 n=48 médiane 23,87 € ; perdantes n=43 **29,01 €**,
+93 % au-dessus de 3 € ; égalités au sommet n=16 médiane **1,26 €** — les cartes à 0,02 € se
+disputent le +25. Sur les 43 lignes où la vérité perd, l'écart au 1er vaut **exactement 25
+sur 34 (79 %)**, et sur **32** le terme prix seul l'explique (1er « +25 prix bas », vérité
+« 0 incohérent avec rareté lue »). Les deux autres sont les Rayquaza xASC (25 de `setPartiel`).
+Rattata L029 reproduit : 23,08 €, rang 20/45, écart 25. Sur les lignes FAUSSES en production
+dont gagnant et vérité sont au vivier (18), l'écart vaut 25 huit fois.
+
+**Limite** : le rejeu est le vivier par le nom, sans périmètre ni `nomExact` — 12 des 34
+lignes à écart 25 sont JUSTES en production, par d'autres chemins. La colonne production n'a
+pas cette limite. Banc identique (11/51/6, 0 faux affirmé), verrou et cliquet verts.
+
+**Piège** : « écart 25 » ne veut pas dire « rang 2 » — la vérité est souvent au rang 15 à 30,
+derrière un PELOTON de cartes bon marché à égalité. Neutraliser le terme ne la ferait pas
+gagner, il ferait une égalité plus large ; c'est ce que le retrait mesuré (6 refus pour 1 gain)
+avait déjà montré. La conditionner sur la rareté NON LUE reste la seule piste étroite, et
+elle n'est mesurable qu'après déploiement.
+
+## 2026-09-07, nuit — B8 + C3 : `symboleSet` garde « aucun », `rarete` devient nullable, un commit sur `main`, NON POUSSÉ
+
+**Fait.** `symboleSet` sort de la boucle `MOTS_VIDES` (index.js, `getCardIdFromAI`) : « aucun »
+survit, la CHAÎNE « null » devient toujours null. `rarete` : le prompt offre « illisible » avec
+sa définition, « normale » exige d'avoir VU le symbole, le forçage `|| 'normale'` est supprimé ;
+« illisible » et absent deviennent null, tracés séparément au log. Les sept autres champs de la
+boucle y restent, verdict écrit en commentaire un par un ; `number`/`total` sont le chantier C4.
+**Aucune règle câblée** : `departagerParSymbole` reçoit « aucun » et s'abstient (« aucun ex aequo
+ne le porte »), `rareteElevee` lit null comme il lisait « normale ». Le +25 du terme prix se
+déclenche donc EXACTEMENT comme avant sur un candidat bon marché — ce commit rend le champ
+honnête, il ne le fait pas agir. Exercé par le vrai serveur sur trois lectures modifiées
+(Grimer, Houndour, Totodile), 0 erreur grave. Verrou 7 cellules vert avec l'avertissement
+d'empreinte attendu, cliquet 55/47, banc identique ligne à ligne : 11/51/6, 0 faux affirmé.
+
+**Dénominateurs, avant le changement** (journal, 246 lignes) : `symboleSet` existe sur 191,
+« aucun » 0, « illisible » 47, null 65 — les 55 autres lignes n'ont pas le champ. `rarete`
+existe sur 246, « normale » 176, null 0. Rythme : 64 scans sur 14 jours (4,6/j), par semaine
+18 à 76.
+
+**Combien de scans.** Rien ne compte avant le déploiement : le dénominateur est « lignes dont
+`version` ≥ ce commit ET le champ existe ». Si la relecture (9 « aucun » sur 54) dit vrai, un
+premier « aucun » arrive avec 95 % de chances sous 17 scans ; le taux à ±5 points demande ~215
+scans, soit six à sept semaines au rythme actuel. Pour `rarete` il n'existe AUCUNE estimation
+du taux de doute : le premier test est « null apparaît-il ? ». Zéro null après 30 scans
+(une semaine) voudrait dire que le prompt n'a pas pris, pas que le modèle ne doute jamais.
+
+**Le piège.** (1) Les 176 « normale » d'avant mélangent lectures et doutes : ne jamais
+additionner les deux périodes, la frontière est `version`. (2) Le verrou avertit sur
+l'empreinte parce que les charges portent des lectures de l'ANCIEN prompt ; relancer
+`verrou-charges.js` maintenant ré-extrairait les mêmes lignes et tairait l'avertissement sans
+information nouvelle — attendre des scans post-déploiement. (3) Ne pas déclarer `symbole:
+'aucun'` dans la table close sur la foi du journal : la classe « aucun » y a déjà été essayée et
+réfutée (sets-vintage-japonais.js, bloc « je supposais aucun symbole »). (4) Sur les trois
+lectures modifiées, deux verdicts ont changé (succès → refus) : c'est l'ENTRÉE qui a changé,
+pas une règle — ne pas lire ces captures comme une régression.
+
+## 2026-09-07, soir — `/api/identifier` rend les candidats montrés, un commit sur `main`, NON POUSSÉ
+
+**Ce que la réponse porte maintenant.** Un tableau `candidats`, additif, frère de `classement` :
+UN élément quand `carte.ambigu` est faux, les TROIS premiers du classement quand il est vrai,
+dans l'ordre du classement. Par entrée : `idProduct` · `nom` (nom catalogue, coupé avant `[`) ·
+`numero` (numéro CATALOGUE de `numeros_cartes`, pas celui lu ; `null` est fidèle sur le
+vintage) · `set` (slug rendu lisible par `nomDeSet`) · `prix` (guide local, euros ; le gagnant
+porte `prixGuideRetenu`, seul lu sur le chemin à candidat unique) · `photoUrl` (`null`,
+toujours). Aucun score, aucun écart. `nomDeSet` a déménagé dans `nom-de-set.js`, feuille sans
+effet de bord ; `candidats-fiche.js` la réexporte à l'identique.
+
+Contrôles : verrou 7 cellules vert, cliquet 55 couvertes pour 47, banc **IDENTIQUE ligne à
+ligne** (815 lignes) à la référence prise AVANT l'édition sur le même arbre — `scoring.js` +75
+non commité d'un autre agent est des deux côtés : justes 11 / 51 / 6, faux affirmés 0 / 0 / 0.
+`apres()` inchangé : aucune décision ne change. Coût JSON sur 5 captures : 189 o à un candidat,
+512 à 530 o à trois.
+
+**Ce qui manque.** `photoUrl` : `references_image` ne porte que des vecteurs ORB ; le remplir
+demande une source d'images par `idProduct`, et les scans du disque ne coïncident pas avec cette
+base. Aucune charge du verrou n'est un verdict FERME : la branche « un candidat parce que
+`ambigu` est faux » n'a été vue par aucune capture ; Altaria ex et Dwebble sortent à un candidat
+parce que `classement` n'en avait qu'un. L'extension ne lit pas encore `candidats`.
+
+**Le piège.** Le premier jet requérait `candidats-fiche` PARESSEUSEMENT dans la route.
+Production juste, verrou ROUGE : `verifier-sources.js:117` charge chaque module qu'index.js
+mentionne pour lister ses exports — donc candidats-fiche, donc `./index`, donc une connexion
+Mongo sur `test` DANS le processus du smoke test : « base de nettoyage inattendue : test »,
+à trois fichiers de la cause. Tout `require('./x')` écrit dans index.js est chargé par ce
+contrôle, où qu'il soit placé : n'y requérir jamais un module qui requiert `./index`. Et ne pas
+« corriger » en rendant paresseux le require d'index dans candidats-fiche — `saisir-verites.js`
+attend la connexion que ce require ouvre (ligne 132).
+
+## 2026-09-06, soir — correctifs de sécurité, branche `securite-2026-09-06`, NON POUSSÉE
+
+Six commits sur la branche, `main` intact. Le banc est resté **IDENTIQUE** à la référence
+après chacun (comparaison ligne à ligne des blocs de synthèse et des lignes AVANT/APRÈS) :
+entraînement 11·0·2, lots 51·13·19 avec 1 faux affirmé, holdout 6·4·3 avec 1 faux affirmé.
+Verrou 7 cellules vert, cliquet 55 couvertes pour un plancher de 47, à chaque commit.
+
+### Corrigé
+
+| commit | quoi | où |
+|---|---|---|
+| `707692a` | **A2** apprentissage : `userId` obligatoire (400), `limiteurApprentissage` 120/h/IP, `/api/apprendre` n'écrase plus une ligne `source:'cardmarket'` (identique → `dejaExacte:true`, différente → `success:false, refuse:'ligne-exacte-existante'`), `memoriserCodeSet` refuse un code différent sur une expansion déjà apprise, `/api/apprendre-lot` lit l'`idExpansion` **par carte** au catalogue, `idExpansions` additif dans la réponse | index.js, `/api/apprendre`, `/api/apprendre-lot`, `memoriserCodeSet` ; smoke-test.js |
+| `e0df899` | **A1** Stripe : crédit seulement si `payment_status === 'paid'`, `async_payment_succeeded` écouté, `charge.refunded` et `charge.dispute.created` débitent au prorata du montant, jamais sous zéro, dette écrite sur la marque (`evenements_stripe` porte désormais `type/userId/scans signé/dette`), `payment_intent_data.metadata` posé à la création | index.js, `gererWebhookStripe`, `metadonneesDuPaiement`, `montantDeLaCharge` ; test-webhook-stripe.js 8 cas |
+| `1fddb6d` | **A4** photo : liste blanche `*.vinted.net` et plafond 15 Mo en flux, hors liste = abstention tracée | departage-image.js, `lireBorne` |
+| `70b837c` | **A5** gestionnaire d'erreurs final, 403/400/500 en JSON, pile jamais rendue ; README.md avec `NODE_ENV=production` à poser sur Render | index.js fin de fichier, README.md |
+| `ea05772` | **A6** `/api/analyser` ne logge plus `req.body` | index.js |
+| `d76a7c4` | **A7** `/api/retour-live` sur `limiteurRetourLive`, plus l'instance des routes IA | index.js |
+
+**A8** : `.claude/settings.local.json` est ignoré par git (`~/.config/git/ignore`) — la ligne
+`git add -A` a été retirée localement, rien à commiter.
+
+⚠️ **CONTRAT D'API MODIFIÉ, l'agent extension doit suivre** : `/api/apprendre` et
+`/api/apprendre-lot` exigent `userId` (400 sans lui). Le userscript
+(`userscript-apprentissage.js:134`) envoie `{ cartes }` seul : à compléter. `/api/apprendre`
+peut rendre `success:false, refuse:'ligne-exacte-existante'` ; `/api/apprendre-lot` rend
+`idExpansion: null` sur un lot mixte, avec `idExpansions`.
+
+### B1, en deux temps : annulé une première fois, puis fait avec la réserve `cle-non-unique`
+
+**Premier essai, annulé.** Élargir `trouverParSetCodeEtNumero` à la convention X seule :
+banc **identique**, les deux Rayquaza restaient faux et affirmés. La fonction faisait ce
+qu'on voulait, `ASC+153` rend 4 produits, mais quand la clé rend plusieurs produits la
+route « laisse le scoring faire » et le scoring donne +40 au code exact contre +15 au
+jumeau X : 869764 gagne de 25 points, sans ex aequo, ferme. Et `apres()` du banc gardait
+le verdict du journal. Retiré par `git checkout -- index.js`.
+
+**Second essai, commité** (dernier commit de la branche, « Clé code+numéro : convention X
+toujours appliquée, et réserve cle-non-unique ») :
+- la convention X entre dans le périmètre de premier rang de la clé ; `codesApparentes`
+  reste en repli, borné par la région ;
+- quand la clé rend **plusieurs** produits, `/api/identifier` sort **sous réserve**, jamais en
+  refus : drapeau `cleNonUnique`, `raisonReserve: 'cle-non-unique'` (valeur neuve, placée
+  derrière les trois départages et devant `egalite-sans-enjeu`), niveau `faible`. Le scoring
+  garde le choix du gagnant ;
+- `apres()` de banc-japonais.js, **même commit** : `piste.length > 1` pose `incertain`, le
+  retenu de production est conservé.
+
+**Mesuré sur le journal** (246 lignes, 114 avec setCode et numéro lus) : 26 codes lus ont un
+jumeau X en base ; la clé rend plusieurs produits sur **10** lignes, dont **8 fermes avant** ;
+**3** lignes cessaient de trancher (les trois Rayquaza), rejouées au scoring sur le vivier par
+nom : même gagnant 3, autre gagnant 0, égalité 0. **Coût assumé : 8 fermes deviennent des
+réserves.** Limite de la mesure : le vivier rejoué est `trouverProduitsLocaux(nom)` ∪ produits
+de la clé, sans le nom TCGdex ni les expansions attendues de la route.
+
+**Banc** : FAUX ET AFFIRMÉ **2 → 0** (lots 1 → 0, holdout 1 → 0) ; justes 51 / 6 / 11, faux et
+refus inchangés dans les trois seaux ; seules L068 et H011 passent `incertain=true`. Le banc
+ne compte pas les justes fermes devenus justes réservés : ce chiffre est celui du journal, 8.
+Verrou 7 cellules vert, cliquet 55 couvertes, plancher 47.
+
+**Piège pour la suite** : sur une ligne où la clé tranchait avant, la production passe
+désormais par le vivier par nom et le scoring, que le banc ne rejoue pas — `apres()` garde
+le retenu du journal. Une ligne neuve de ce type se lit au journal (`raisonReserve
+'cle-non-unique'`), pas au banc.
+
+### 2026-09-07 — la queue « δ Delta Species », côté produit (dernier commit de la branche)
+
+**Le sujet, et pourquoi lui.** Le vivier est le goulot ; 388 produits portent la queue et
+aucun n'était atteignable par le nom lu. Trois vérités du banc sont des δ (L082 Meganium δ,
+faux réservé ; L083 Ampharos, refus ; L084 Blastoise δ, refus), et le cas Milotic δ 5/101 est
+le cas d'école de la passation. Coût : une règle de trois lignes dans `trouverProduitsLocaux`,
+même forme que l'élargissement `Lv.`, `normaliserNom` intact, aucun prompt touché, aucun
+champ neuf.
+
+**Prédiction, écrite avant la mesure** : banc identique, 0 faux affirmé — les trois vérités
+δ du banc sont JP sans code, donc sous le périmètre des 25 sets, et leurs expansions (5693,
+5700) n'y sont pas ; le gain est sur le journal hors périmètre.
+
+**Mesure.** Vivier par le nom, fonction de production : « Milotic » 54 produits dont 2 δ
+(277210 inclus), « Meganium δ » 41 dont 2, « Ampharos » 60 dont 2, « Pikachu » 463 dont 8,
+« Altaria ex » 96 dont 2. Les cinq expansions des vérités δ sont HORS périmètre vintage,
+vérifié. Banc complet : **identique** à la référence B1, faux affirmés 0, justes 51/6/11.
+Verrou vert, cliquet 55 pour 47. Effet journal, mesuré le 2026-09-04 sur 149 noms : +110
+candidats, médiane 0, pire cas 8 ; 3 refus deviennent des candidats uniques (Milotic FR ×2,
+Pikachu ZH), Altaria ex JP change de gagnant 784363 → 761858 **sans vérité**.
+
+**Ce que ça n'achète pas, et le piège.** Zéro juste au banc : L082, L083 et L084 ont maintenant
+leur vérité au vivier, et le périmètre la jette avant le scoring. Le gain réel se lira au
+journal, sur des lignes FR/ZH/EN, pas au banc JP. Piège : quelqu'un verra « δ câblé, banc
+inchangé » et conclura à l'inutilité. La bonne mesure est `vivierIds` contient-il la vérité
+sur les prochaines lignes δ, et Altaria ex demande une saisie avant toute conclusion.
+
+### Non corrigé, dans l'ordre où je le traiterais
+
+1. **B2** trois normalisations de nom (index.js `normaliserNom`, identification-locale.js
+   copie, scoring.js `normaliserNomPourComparaison`) et `nomConcorde` accepte le **préfixe** :
+   « Mew » concorde avec « Mewtwo », « Pidgeot » avec « Pidgeotto », « Kabuto » avec
+   « Kabutops », le veto se désarme. Test : rejouer les lignes livrées où le nom lu est un
+   préfixe strict du produit, 5 sur 199 au journal, dont une ferme « Mew » → « Mew ex ».
+   Piège : le préfixe est aussi ce qui accepte « Misty's » / « Mistys » ; passer à l'égalité
+   stricte casse ces cas, il faut une liste de queues tolérées, pas un `startsWith`.
+2. **B8 + C3** `MOTS_VIDES` efface `aucun` sur `symboleSet` (index.js, boucle des champs
+   vides ; journal `aucun` 0/246) et `rarete` forcée `'normale'` (176/246, jamais null)
+   arme le +25 prix. Test : après correction du prompt, dénominateur des lignes où
+   `symboleSet==='aucun'` et où `rarete` est null, avant tout taux. Piège : aucune ligne de
+   `SETS_VINTAGE_JAPONAIS` ne déclare `symbole:'aucun'`, le départage restera inerte tant que
+   la table ne le porte pas ; et c'est un instrument neuf, les mesures repartent de zéro.
+3. **B5** `expansionsDuSetTCGdex` ignore `ALIAS_CODES_LUS` et la convention X : « e4 » lu
+   abandonne EC4, « PRE » abandonne xPRE. Test : rejouer les lignes `setCode` ∈ {e1..e5} du
+   journal. Piège : c'est un périmètre, l'élargir peut ramener des intrus, mesurer avant.
+4. **B7** « 24 sets » en prose alors que `EXPANSIONS_VINTAGE` en dérive 25 (index.js:3706,
+   4001, 4074 ; banc-japonais.js:374, 454, 469). Prose seulement, aucun comportement.
+5. **C1** unicité par jumeaux X : FAIT par B1 (voir ci-dessus). Reste l'unicité par
+   **métacarte** : les 4 Rayquaza sont la métacarte 456957, une fourchette par métacarte
+   serait plus juste qu'une réserve sur le seul scoring. Décision produit.
+6. **C2** « δ Delta Species » : FAIT le 2026-09-07, voir ci-dessus. Reste la saisie de la
+   vérité d'Altaria ex JP n°019, qui change de gagnant.
+7. **C3** rendre `rarete` nullable puis conditionner le +25, sans le retirer (retrait
+   mesuré : 6 refus pour 1 gain).
+8. **C4** prompt : `aucun` sur `symboleSet`, « absent » distinct d'« illisible » pour
+   `number`/`total`, année de copyright, regulation mark, `Lv.`, HP. Piège : aucune colonne
+   de jointure dans `codes_set` (ni année ni taille) ; un champ lu sans colonne ne sert qu'en
+   départage.
+9. **C5** taille de set locale (max des numéros par expansion) contre le total lu.
+10. **C6** le dos de la carte pour la région : le verso est déjà envoyé, la langue lue est
+    la porte de tout le périmètre asiatique.
+11. **C7** `idMetacard` pour « identité sûre, impression ambiguë » : 29 des 45 groupes
+    d'égalité sont mono-métacarte. Décision produit sur la fourchette.
+
+Fichiers laissés NON commités, ils ne sont pas à moi : `banc-verites.json`, `scoring.js`
+(entrée #25 du catalogue des erreurs, autre agent), `AGENTS.md`, et ce fichier.
+
 ## 🔑 CE QU'IL FAUT POUR DÉBLOQUER CE CHANTIER — et rien d'autre
 
-1. **Des scans qui portent `attaqueLue`.** Le champ est né le 2026-09-05 : **1 ligne sur 225**
-   en porte une, et ce n'est pas une ligne du banc. Tant qu'il n'y en a pas, toute règle
-   fondée sur l'attaque est **inerte** et aucun juste/faux/refus n'est calculable.
-2. **La vérité du Ho-Oh n°250, saisie.** Deux désignations concurrentes, non tranché. Sans
-   elle, le seul cas d'école du départage par l'attaque ne peut ni le valider ni l'infirmer.
+**Le chantier n'attend plus d'idées. Il attend QUATRE DONNÉES, et aucune ne s'obtient en
+relisant les mêmes lignes sous un autre angle.**
 
-Aucun raisonnement, aucune relecture des mêmes lignes sous un autre angle ne remplace ces
-deux données. Le chantier attend des MESURES, pas des idées.
+1. **Des scans qui portent `attaqueLue`.** Champ né le 2026-09-05 : **1 ligne sur 225**, et ce
+   n'est pas une ligne du banc. Toute règle fondée sur l'attaque est **inerte** — ni juste, ni
+   faux, ni refus n'est calculable.
+2. **Des scans qui portent `titreAnnonce`.** Le champ **naît le 2026-08-13** : non nul
+   **57/227**, mais **4/89** au banc et 🔴 **0 sur les lignes dont la vérité est absente du
+   vivier** — la population qui déciderait est **VIDE**. La piste est **INERTE, pas réfutée** :
+   le test de mise à mort ne peut pas se déclencher.
+3. **Des scans qui portent `prixVinted`.** ✅ **La cause est trouvée et corrigée côté
+   extension, PAS ENCORE DÉPLOYÉE** : l'extension envoyait **la mauvaise clé** (`vintedPrice`,
+   que seule `/api/analyser` lit — 0/225 de trafic) **ET une chaîne au lieu d'un nombre**.
+   Deux défauts sur le même champ. Il débloque **deux** mesures : l'**intervalle**, et surtout
+   🔑 **`egalite-sans-enjeu` généralisé** — la meilleure voie connue vers un verdict FERME.
+4. **La vérité du Ho-Oh n°250, saisie.** Deux désignations concurrentes, non tranché. Sans elle
+   le seul cas d'école du départage par l'attaque ne peut ni le valider ni l'infirmer.
+
+## L'état, au 2026-09-06
+
+**EN PRODUCTION** — `main` = `7e2152f`, Render déployé, `/ping` confirme `7e2152f30c40`
+*(lu sans consommer un scan : c'est la parade `/ping VERSION` du 09-05 qui sert pour la
+première fois)*.
+
+### 🔑 LES TROIS CHIFFRES QUI COMMANDENT TOUT LE RESTE
+
+1. 🎯 **LE CLASSEMENT NE PERD JAMAIS UNE CARTE. Sur les lignes SOUS RÉSERVE — celles où les 3
+   meilleurs candidats s'affichent — la vérité est dans le TOP 3 dans 100 % des cas, 43/43.**
+   Zéro exception. **Le classement n'est pas le problème et n'a jamais été le problème.**
+2. **LE VIVIER EST LE PREMIER OBSTACLE, PAS LE SEUL.** Vivier de la route : **91,0 % (81/89)**
+   après l'admission d'EXS, **8 absences**. *(C'était 84,3 % et 14 absences avant ; et
+   **67,4 % / 29 absences** était FAUX — vivier de ma construction, corrigé le 06/09.)*
+3. **3781 RELÈVE UN PLAFOND, ELLE N'ACHÈTE AUCUN JUSTE.** Banc **63 · 8 · 0 faux-et-affirmé ·
+   17**, strictement identique. 🔴 **Les 6 lignes rendues candidates finissent en
+   `REFUS-egalite-perimetre`** : la vérité entre au vivier, et le départage ne va pas la
+   chercher. **Un vivier plus large rend l'égalité PLUS probable, pas moins.**
+
+🔑 **CE QUE CES TROIS DISENT ENSEMBLE** : ce qui manque n'est ni un meilleur classement ni un
+vivier plus large — **c'est de quoi TRANCHER une égalité**. Et les trois voies pour ça
+(attaque, titre, prix) sont exactement les trois données qui manquent en tête de ce fichier.
+
+### Ce qui est entré aujourd'hui
+
+- **Le critère 4** de la règle d'admission, **écrit** : *le `slugSet` doit désigner un seul set
+  attesté chez la source qui le date* — il était appliqué depuis toujours et n'était nulle part.
+  L'absence de source relève du **critère 3**, pas de lui.
+- **La clause 4 bis** : un slug **fusionné** entre **sans aucun attribut par-set**, fusion
+  nommée sur la ligne. Bornée ainsi parce que le code ne lit que quatre champs de la table :
+  `exp` et `code` sont par-EXPANSION et restent exacts ; `symbole`/`symboleFiable` sont les
+  seuls par-SET, et les seuls que la fusion abîme.
+- **EXS (3781) admise** — la table passe à **25**. Cardmarket expose UNE expansion, pokesymbols
+  TROIS séries. Vignettes relevées à la main : **les trois portent le même symbole (pokéball)**,
+  donc la fusion n'abîmerait rien — **et on ne le déclare pas quand même.** *Une règle qu'on
+  suspend quand le résultat arrange n'a jamais protégé personne.*
+- Contrôles : `test-table-vintage.js` **54/54**, banc identique, verrou **vert**, cliquet
+  **52 couvertes / plancher 47**.
+
+### 🔴 LA COMPOSITION DE DEUX DÉFAUTS — le fait le plus utile du 06/09
+
+Le périmètre écarte une population dont la médiane de `trend` vaut **36,32 €** contre
+**6,39 €** pour les 24 admises et **0,92 €** au catalogue ; les 10 vérités écartées valent
+**67,34 €** de médiane. Et `POIDS.prix` **récompense de +25 le candidat bon marché**.
+**Deux défauts aveugles l'un à l'autre frappent la même population : les cartes qui ont de la
+valeur — celles que le produit existe pour repérer.** Ce n'est **pas** une causalité (rareté et
+absence de documentation ont la même origine), et le contre-exemple est gardé : **5681 est bon
+marché, médiane 1,14 €**. Deux sur trois.
+⛔ **La conséquence n'est PAS une pondération par le prix** — ce serait soigner le défaut n°2
+avec lui-même. C'est un critère d'**évaluation** : mesurer le banc pondéré par la valeur.
+
+### 🔴 LES DETTES, au complet
+
+| | depuis |
+|---|---|
+| **`apres()` du banc ≠ la route** — toute colonne APRÈS est suspecte, seul FAUX ET AFFIRMÉ est lisible | **2026-08-08** |
+| **`MOTS_VIDES` écrase le `'aucun'` de `symboleSet`** — le prompt le déclare vraie réponse ([index.js:678](index.js)), [index.js:786](index.js) le met à `null`. Journal : `"aucun"` **0/225**. Relecture (colonne à part, 54 appels) : **9 lectures sur 54 — une carte sur six** | 2026-08 |
+| **`rarete` forcée à « normale »** — *« si tu n'es pas sûr, réponds normale »* ([:681](index.js)) + forçage serveur ([:813](index.js)). Journal : 157/225 `"normale"`, `null` **jamais** | 2026-08 |
+| 🔴 **le terme prix déclasse les cartes chères — TROISIÈME occurrence** (Magikarp promo · rang 1 au banc · Rattata 23,08 € contre 0,69 €, écart de rang = `POIDS.prix` au point près) | 2026-09-06 |
+| **commentaire d'`IPB` périmé** — il dit « codes_set dit INCONNUE », c'est faux depuis qu'une attestation a été écrite | 2026-09-06 |
+| **`DP5c` est de 2007** alors que l'en-tête de la table promet « 1996-2003 » — la période n'est pas un critère d'admission | 2026-09-06 |
+
+⚠️ **Aucune n'est corrigée, et c'est délibéré** : corriger le terme prix au moment de sa
+troisième occurrence, ce serait le corriger **sur les lignes qui l'ont suggéré**.
 
 ## L'état, au soir du 2026-09-05
 
@@ -2904,6 +3553,501 @@ favorable : la symétrie n'a pas à être écrite parce qu'il n'y a pas deux cop
 change **aucun verdict**. Le bénéfice est un **plafond relevé**, pas un résultat : il ne se
 réalisera que si le départage sait ensuite trancher — et sur ces lignes il finit aujourd'hui en
 `REFUS-egalite-perimetre`. **Le vivier n'était pas le seul obstacle ; il était le premier.**
+
+## 🔴 2026-09-06 — L'UNICITÉ DE `setcode-numero` EST FAUSSE, ET ELLE AUTORISE LE FERME
+
+**Le premier FAUX ET AFFIRMÉ du holdout.** `Rayquaza` n°153, setCode « ASC », total 217,
+confiance haute — **la lecture est juste**. Rendu **869764**, vérité **870374**
+(« Rayquaza [Breakthrough Assault] », code **xASC**, *Ascended Heroes Additionals*, n°153).
+
+### Ce n'est ni la lecture ni le scoring
+
+`trouverParSetCodeEtNumero('ASC','153','FR')` rend **UN** produit → `nomOpposeUnVeto` :
+`veto false` → **plus aucun ex aequo → aucune réserve → FERME**.
+🔑 **Le catalogue en porte QUATRE au n°153 : 1 en `ASC`, 3 en `xASC`.**
+Et le **scoring, lui, connaît la convention** — sur le vivier par le nom il donne
+`+40 (code ASC = stamp lu)` à 869764 (**160**) contre `+15 (code xASC = ASC par la
+convention X des Additionals)` à 870374 (**135**). **Vingt-cinq points d'écart, et la
+requête n'a jamais vu le second.**
+
+### 🔴 LE DÉFAUT EXACT : UNE SOURCE UNIQUE, APPELÉE DANS LA MAUVAISE BRANCHE
+
+⚠️ **Il n'y a PAS de seconde copie de la convention, et c'est PIRE.**
+`memeCodeParConventionX` et `codesApparentes` sont les fonctions **du scoring, importées**.
+Elles sont placées derrière `if (!exps.length)` — [index.js:2090](index.js), **un REPLI**.
+**Dès que le code exact existe, les cousins sont inatteignables.** Une seconde source finit
+par diverger et ça se voit ; **une source unique appelée au mauvais endroit ne diverge
+jamais — elle se tait.**
+
+| convention connue du scoring | appliquée par la requête ? |
+|---|---|
+| `normaliserCodeSet` | ✅ toujours ([:2069](index.js)) |
+| `ALIAS_CODES_LUS` (E1→EC1) | ✅ toujours ([:2071](index.js)) |
+| 🔴 `memeCodeParConventionX` | **en repli seulement** ([:2090](index.js)) |
+| 🔴 `codesApparentes` (préfixe ≥3) | **en repli seulement** |
+
+**2 sur 4 toujours, 2 sur 4 jamais quand le code exact existe.** Sur les **745** codes
+normalisés du catalogue : **16 paires** par la convention X, **81** par la parenté.
+
+### 🔑 LES DEUX COLONNES — mesurées, sans correctif
+
+**Dénominateur : 36 lignes FERMES par `setcode-numero`** (sur 51 lignes de cette voie,
+246 au journal). **36/36 sont uniques par l'égalité exacte.**
+
+| convention ajoutée | unicité qui TOMBE | RECUL de verdict | GAIN de justesse |
+|---|---|---|---|
+| **convention X seule** | **3 / 36** | 3 fermes → groupe (réserve ou refus) | **3 vérités sont le COUSIN — les 3 lignes Rayquaza, aujourd'hui FAUSSES ET AFFIRMÉES.** 0 juste cassée |
+| X **+ parenté de préfixe** | 6 / 36 | 6 fermes → groupe | les mêmes 3 gains, **+3 sans vérité** |
+
+🔴 **ET LES TROIS QUE LA PARENTÉ AJOUTE SONT DU BRUIT** : « sv8a » ~ « sv8 » rapproche
+*Sylveon ex* d'un **Koraidon** ; « SV-P » ~ « SV-P/ID », « SV-P/TH », « SV-P/CS »
+rapprochent un *Pikachu* d'un **« N's PP Up »**, d'une **« Pokémon Center Lady »** et d'un
+**Larvitar**. **Les deux conventions n'ont pas la même qualité : l'une DÉCODE, l'autre
+RESSEMBLE.** Le fichier le disait déjà ([scoring.js:123](scoring.js)) ; la mesure le
+confirme sur la population qui décide.
+
+⚠️ **JE NE CONCLUS PAS.** Les deux colonnes sont là : **3 verdicts fermes perdus contre
+3 faux affirmés supprimés**, à convention X seule, **sans aucune juste cassée**. C'est un
+échange, pas un gain gratuit, et le choix n'est pas le mien.
+⚠️ **LIMITE DE LA MESURE** : j'ai mesuré le fait CATALOGUE (produits au numéro lu dans les
+expansions du code exact et de ses cousins), **pas la sortie complète de la route** —
+`numeroAmbiguDansPerimetre` et la suite ne sont pas rejoués. Les réimplémenter fabriquerait
+exactement la seconde source qu'on cherche à éviter.
+
+**Entrée 25 du catalogue écrite** : *« une unicité obtenue par une requête incomplète n'est
+pas une unicité »* — même famille que `|| []` et que le départage sur groupe amputé.
+
+## 🔒 ÉCARTÉ — le second FAUX ET AFFIRMÉ (Mew n°151, JP037) n'est pas de la même classe
+
+**Ne pas le recompter.** Voie **`nom`**, pas `setcode-numero`. Build **`undefined`**
+(2026-07-30, avant le versionnage), `ecartScore 0`, rendu **819217 « Mew ex »** — une carte
+différente (*ex*), de *Collect 151*. La vérité 571770 est au vivier mais score **0**
+(exp 4170, région absente — le trou déjà catalogué).
+🔑 **ET LA MÊME CARTE, RESCANNÉE LE 2026-08-08, REFUSE EN `egalite-parfaite`.** Le défaut
+qui l'a produite n'existe plus. C'est une ligne périmée d'un vieux build, conservée au banc
+parce qu'on n'efface pas — **pas un défaut vivant, et pas une seconde occurrence.**
+
+## 🔴 MEGANIUM δ — DEUX DÉFAUTS, UN SEUL SYMPTÔME
+
+Le symbole a tranché (**606414**, « etoile » → N1) là où l'attaque se taisait **correctement**.
+La question posée était : le **troisième état** ne devrait-il pas servir de **veto** ?
+
+**Mesuré sur tout le journal** — 246 lignes, `attaqueLue` non nul **20**, `symboleSet`
+lisible **79** :
+
+| | |
+|---|---|
+| lignes à groupe ex aequo (vivier reconstruit) | **110** |
+| l'attaque tranche | 5 |
+| le symbole tranche | 25 |
+| le **troisième état** est vrai (attaque lue portée **ailleurs dans le vivier**, par aucun ex aequo) | **2** |
+| 🔑 **le symbole tranche MALGRÉ le troisième état** | **0** |
+
+🔴 **ET MEGANIUM δ N'EST PAS DANS CETTE POPULATION.** Le troisième état exige une preuve
+**POSITIVE** : que l'attaque lue soit portée par un produit **DU VIVIER**. Or
+`Delta Reduction` n'est portée que par **761884 « Meganium δ Delta Species »** — le produit
+δ, **exclu du vivier par le trou du nom** ([index.js:1707](index.js), δ n'est pas dans la
+classe de `normaliserNom`). L'attaque lue n'existe donc **nulle part** dans le vivier : c'est
+du **bruit**, pas une contradiction, et le dispositif se tait — correctement.
+
+🔑 **L'ENCHAÎNEMENT, ET C'EST LE FAIT À RETENIR : le trou δ rend le veto INAPPLICABLE
+exactement là où il aurait servi.** Deux défauts indépendants — la queue δ inatteignable par
+le nom, et le symbole qui tranche sur un groupe amputé — produisent **un seul symptôme
+visible** : un faux sous réserve sur Meganium δ. Corriger le veto seul ne changerait rien
+ici ; corriger le trou δ le rendrait applicable. **L'ordre des correctifs n'est donc pas
+libre.**
+
+## ✅ 2026-09-07 — MEGANIUM δ REJOUÉE : LE VETO REDEVIENT APPLICABLE, ET C'EST LA VÉRIFICATION
+
+**J'avais écrit le 2026-09-06** : *« le trou δ rend le veto inapplicable exactement là où il
+aurait servi — deux défauts, un seul symptôme, et l'ordre des correctifs n'est pas libre. »*
+Fable a corrigé le premier. **La prédiction se vérifie, et à une nuance près qui compte.**
+
+**Rejeu de L082 après `c63d794`** (fonctions de production, lecture seule) :
+
+| | |
+|---|---|
+| vérité **761884** « Meganium δ Delta Species », exp **5693** | dans le périmètre : 🔴 **non** |
+| (a) vivier par le **NOM** | **41 produits** · la vérité y est ✅ **OUI — le correctif δ a marché** |
+| (b) après le filtre des **25 sets** | **4 produits** · la vérité 🔴 **non — le périmètre la jette juste après** |
+| groupe ex aequo | **4** : 650660 [EC1], 654770 [EC1], **606414 [N1]**, 650692 [EC1] |
+
+### 🔑 LE TROISIÈME ÉTAT — la réponse dépend de QUEL vivier, et c'est une décision, pas du code
+
+`Delta Reduction` est portée par **2 produits du vivier par le nom** (277209 et **761884**) et
+par **AUCUN des 4 ex aequo**.
+
+| définition du « vivier » dans le troisième état | verdict |
+|---|---|
+| **(a) le vivier par le NOM**, avant le périmètre | ✅ **VRAI — preuve positive d'incohérence, le veto serait applicable** |
+| (b) le vivier EFFECTIF, après le périmètre | 🔴 faux — le porteur est hors périmètre |
+
+**Avant le correctif δ, les deux étaient faux** : le porteur n'existait dans aucun des deux.
+🔑 **Le correctif δ a donc bien débloqué le veto — mais seulement sous la définition (a).**
+C'est le point à trancher avant tout câblage : **le troisième état lit-il le vivier par le nom
+ou le vivier effectif ?** Sous (b) il reste inerte ici, et Meganium δ resterait fausse.
+
+⚠️ **Et le symptôme est intact tant que rien n'est câblé** : `departagerParSymbole` tranche
+toujours **606414** (« etoile » → N1) sur ce groupe où la vérité n'est pas, pendant que
+l'attaque se tait correctement. **Le veto n'existe pas encore ; seule sa condition d'existence
+a été rétablie.**
+
+⚠️ **Ce que ça ne dit pas** : rien sur la fréquence. Mesuré le 2026-09-06 sur 110 lignes à
+groupe ex aequo, le symbole tranchait malgré le troisième état **0 fois**. Cette ligne serait la
+première. **Un veto justifié par un seul cas n'est pas mesuré** — même règle que le veto par le
+symbole, refusé sur un échange de 4 contre 1.
+
+## Fusion locale du 2026-09-07 — les trois contrôles sur le résultat
+
+`main` = **`0f2a858`**, fusion `--no-ff` des 8 commits de `securite-2026-09-06`.
+**NON POUSSÉE.** `banc-verites.json`, `scoring.js`, `AGENTS.md` et ce fichier laissés hors
+fusion, non commités.
+
+| contrôle | résultat |
+|---|---|
+| **verrou** (7 cellules + injection de panne) | ✅ **exit 0** |
+| **cliquet** | ✅ **55 couvertes · 18 jamais exécutées · plancher 47** — il tient, **+8 fonctions neuves** couvertes (dont `lireBorne`, `metadonneesDuPaiement` : les correctifs de sécurité sont exercés) |
+| **banc complet** | 🔑 **FAUX ET AFFIRMÉ 2 → 0** (lots 1→0, holdout 1→0) · justes **11 / 51 / 6** inchangés · faux **0 / 13 / 4** inchangés · refus **2 / 19 / 3** inchangés |
+
+**Diff du banc contre la référence d'hier : 82 lignes, et seules 6 hors bruit** — les deux
+lignes Rayquaza passant `incertain=false` → `incertain=true`, et les compteurs qui suivent.
+**Aucun autre verdict ne bouge.** Les chiffres de Fable sont reproduits à l'identique.
+
+### Relecture des 8 commits — rien hors du périmètre annoncé
+
+Tous les hunks tombent dans leur zone. Deux méritaient un regard et sont justifiés :
+- `70b837c` touche aussi le `cors()` de la ligne 108 — il attache `status: 403` à l'erreur
+  d'origine pour que le nouveau gestionnaire final rende un JSON court au lieu de la page HTML
+  d'Express. C'est **dans** le périmètre annoncé (« 403/400/500 en JSON »).
+- `d76a7c4` apparaît sous l'en-tête `/api/identifier` dans le diff : c'est un artefact de
+  contexte de `git diff`, la ligne modifiée est bien `app.post('/api/retour-live', …)`.
+- `e050c0a` change `index.js` **et** `banc-japonais.js` dans le même commit : **règle de
+  symétrie tenue**.
+
+## ✅ 2026-09-07 — DÉPLOYÉ, LE USERSCRIPT 1.4, ET UN DÉFAUT TROUVÉ EN LE CONTRÔLANT
+
+`main` = **`0f2a858`**, poussé. `/ping` confirme **`0f2a858c3555`** — lu sans consommer de scan.
+
+### Le userscript : `/api/apprendre-lot` N'EST PAS une route morte
+
+⚠️ **À vérifier avant de croire le contraire, et je l'ai vérifié** :
+`userscript-apprentissage.js:132` l'appelle. Fable n'a **pas** durci une route morte.
+🔑 **C'est `/api/apprendre` (au SINGULIER) qui n'a aucun appelant dans ce dépôt** — seul
+`smoke-test.js` la touche. Elle est peut-être empruntée par l'extension Vinted, qui vit
+ailleurs : **je ne peux pas le vérifier d'ici, donc je ne la déclare pas morte.**
+**C'est là que vit `refuse: 'ligne-exacte-existante'`**, et c'est pourquoi le userscript ne
+la traite pas : écrire un traitement pour une réponse qu'on ne peut pas recevoir fabriquerait
+du code mort qui a l'air d'une garde. **À traiter par le client qui appelle réellement cette
+route.**
+
+### Ce que la 1.4 change
+
+| | |
+|---|---|
+| `userId` | généré une fois, persisté par **`GM_setValue`** (pas `localStorage` : sur une page Cardmarket il serait partagé avec le site). `crypto.randomUUID` avec repli — une chaîne vide vaudrait 400 à chaque appel |
+| lot **mixte** | `idExpansions` est lu : l'absence de couverture est **expliquée**, plus jamais tue. Avant, « ✅ n nouvelles » sans un mot — indiscernable d'une galerie finie |
+| **statut HTTP** | remonté avec le corps : **400** (« script à mettre à jour ») et **429** (« limite 120/h ») ne sortent plus tous deux en « refus serveur » |
+
+### 🔴 LE CONTRÔLE DE BOUT EN BOUT A TROUVÉ AUTRE CHOSE — un défaut de DÉMARRAGE À FROID
+
+Serveur démarré sur **`test_scratch`**, charge **extraite du userscript** (jamais recopiée),
+trois appels, vérification en base, nettoyage complet. **15/15.** Mais il a fallu **deux
+corrections de l'instrument avant d'y arriver, et la seconde est un vrai défaut du serveur** :
+
+1. *Premier passage* : `idExpansion: null` partout. **Ce n'était pas la route** —
+   `test_scratch` n'a pas de `catalogue_produits`, donc `expParId` reste vide. L'instrument
+   mesurait le bac. Corrigé en semant 3 fiches (retirées en sortant).
+2. 🔴 *Deuxième passage* : le **premier** lot rendait **encore** `idExpansion: null`,
+   `idExpansions: []`, `couverture: null` — pendant que le lot suivant, lui, rattachait
+   correctement. **Cause isolée : le port TCP écoute AVANT que Mongo soit connecté.**
+   Le rattachement d'expansion est derrière `if (mongoose.connection.readyState === 1)`
+   ([index.js:6010](index.js)) : à froid, la condition est fausse, la route **SAUTE** le
+   rattachement — mais l'écriture, elle, part quand même (mongoose met les commandes en
+   tampon). **Les cartes sont écrites avec `idExpansion: null`, en silence.**
+   Confirmé par variante : en attendant `/ping` `mongo:true` avant le premier appel,
+   **15/15** et `idExpansion: 4463` rendu.
+
+⚠️ **CE N'EST PAS THÉORIQUE SUR RENDER** : une instance gratuite s'endort. **Le premier lot
+d'apprentissage après un réveil écrit des lignes sans expansion**, dans l'une des deux tables
+non régénérables, sans qu'aucune ligne ne le dise. C'est la même famille que `|| []` : une
+garde qui **dégrade en silence** au lieu d'attendre ou de refuser.
+⛔ **NON CORRIGÉ** — trouvé en contrôlant autre chose, il n'est pas dans le périmètre de ce
+tour. **Le correctif n'est pas « retirer la garde »** (elle protège d'un crash) : c'est
+**refuser le lot** (503, comme les autres routes le font déjà) plutôt que de l'écrire amputé.
+
+### La ligne de base, posée AVANT toute observation
+
+`raisonReserve: 'cle-non-unique'` : **0 ligne** · voie `setcode-numero` **51**, dont **36
+fermes** · lignes sur le build déployé : **0** · journal **246 lignes**, la dernière du
+2026-09-06 sur `21a809855af4`.
+🔑 **À surveiller** : le nombre de lignes `cle-non-unique`, et **si le gagnant retenu diffère
+de celui que la clé aurait rendu seule**. C'est l'angle mort que le banc ne rejoue pas —
+`apres()` garde le retenu du journal, donc une ligne où la clé tranchait avant ne se lit
+QU'ICI.
+
+## 🔑 LE VETO PAR LE TROISIÈME ÉTAT — LA QUESTION À TRANCHER, ET ELLE N'EST PAS TECHNIQUE
+
+**Rien n'est câblé.** Ce qui suit est une décision, pas un correctif.
+
+Le troisième état dit : *l'attaque lue existe, elle est portée par un produit du VIVIER, et
+par AUCUN ex aequo → le groupe est incohérent, preuve POSITIVE.* Sur Meganium δ, rejouée
+après le correctif δ :
+
+| définition du « vivier » | troisième état | conséquence |
+|---|---|---|
+| **(a) le vivier par le NOM** (41 produits) | ✅ **VRAI** — 761884 y est et porte `Delta Reduction` | le veto ferait taire le symbole, la ligne sortirait en refus au lieu d'un faux |
+| **(b) le vivier EFFECTIF** (4, après le périmètre) | 🔴 faux — le porteur est hors périmètre | le symbole tranche, 606414, **faux** |
+
+🔴 **LE VETO PORTERAIT DONC SUR UN VIVIER PLUS LARGE QUE CELUI QUI DÉCIDE.** C'est l'objection
+sérieuse, et elle n'a pas de réponse technique : on ferait taire un départage au nom d'un
+candidat que le périmètre a **délibérément** écarté. Soit ce candidat n'aurait pas dû être
+écarté — et le défaut est le périmètre, pas le départage — soit il devait l'être, et une
+preuve tirée de lui n'en est pas une.
+
+⚠️ **ET ELLE ATTEND PLUS D'UN CAS.** Mesuré le 2026-09-06 sur **110 lignes à groupe ex aequo** :
+le symbole tranche malgré le troisième état **0 fois**. Meganium δ serait **la première**.
+Un veto justifié par un seul cas n'est pas mesuré — **même règle que le veto par le symbole,
+refusé sur un échange de 4 contre 1**, et que la promotion de `perimetre-vintage-suggestion`,
+refusée sur un 4/4. La discipline ne dépend pas de qui propose la règle.
+
+**Ce qu'il faut pour trancher** : des lignes où le symbole tranche pendant que le troisième
+état est vrai. Il en existe **zéro** aujourd'hui. **La question est posée, datée, et elle
+attend des données — pas un arbitrage.**
+
+## 🔑 2026-09-07 — LE DÉGÂT EST DE DEUX LIGNES, PAS DE 367. Le recensement des gardes.
+
+### D'abord le compte, parce que c'est lui qui décide de l'urgence
+
+`numeros_cartes` : **69 598** lignes · **367** sans `idExpansion` (0,53 %), **toutes**
+`source: 'cardmarket'`, **toutes** `certitude: 'exacte'`, et **0/367** portent `apprisLe`
+*(contre 33 415/69 598 au total — premier indice qu'elles sont anciennes)*.
+Et **0/367** ont un produit inconnu du catalogue : le `null` n'est légitime sur aucune.
+
+⚠️ **MAIS « SANS EXPANSION » A DEUX CAUSES, ET LES CONFONDRE GONFLERAIT LE CHIFFRE DE 180×.**
+Le test qui les sépare : *un démarrage à froid ne touche que le PREMIER lot d'une session*,
+donc il laisse une **minorité** dans une expansion dont le reste est correct. Un catalogue
+enrichi **après** l'apprentissage laisse, lui, **100 %** de l'expansion sans.
+
+| expansion | sans | apprises | part | cause |
+|---|---|---|---|---|
+| 6633 | 287 | 287 | **100 %** | 🔵 catalogue enrichi après coup — `null` **juste** à l'écriture |
+| 6634 | 78 | 78 | **100 %** | 🔵 idem |
+| **6514** | **2** | 27 | **7,4 %** | 🔴 **signature du démarrage à froid** |
+
+🔑 **LE DÉGÂT AVÉRÉ EST DE 2 LIGNES, et c'est un MAJORANT** — 2 sur 27 est compatible avec le
+démarrage à froid sans le prouver (deux produits ajoutés au catalogue plus tard donneraient la
+même trace). **365 des 367 s'expliquent autrement et ne sont pas à corriger.**
+⚠️ **L'urgence tombe donc, le défaut reste.** Il n'a quasiment pas frappé — **par chance, pas
+par construction** : le userscript n'a pas tourné juste après un réveil d'instance. C'est
+exactement la raison de le corriger avant qu'il frappe, pas de le classer.
+
+### Le recensement des gardes — **26 occurrences, 8 routes qui écrivent, 2 protégées**
+
+| | |
+|---|---|
+| occurrences de `readyState` dans le serveur | **26** (index.js 22, departage-image 1, identification-locale 1, journal-scans 1, /ping 1) |
+| **routes qui ÉCRIVENT** | **8** |
+| dont **garde 503** déjà posée | **2** — `/api/retour-live` ([:5728](index.js)) et `/api/solde` ([:6438](index.js)) |
+| 🔴 dont **AUCUNE garde** | **6** — `/api/webhook-stripe`, `/api/analyser`, `/api/identifier`, `/api/apprendre`, `/api/apprendre-lot`, `/api/creer-recharge` |
+
+**Trois aides d'écriture dégradent en silence** plutôt que de refuser :
+`memoriserCodeSet` ([:523](index.js), `return;` — écrit `codes_set`), `ecrireCache`
+([:607](index.js), `return;` — `cardprices`, régénérable), et le rattachement d'expansion de
+`/api/apprendre-lot` ([:6010](index.js)) qui est une LECTURE dont l'absence **corrompt une
+écriture**. C'est ce dernier qui a produit les 2 lignes.
+
+⚠️ **ET LA CORRECTION N'EST PAS PETITE : elle touche `/api/analyser` et `/api/identifier`.**
+Y poser un 503 change le comportement des DEUX routes de scan à froid — un refus au lieu
+d'une identification dégradée. C'est probablement le bon geste (un scan refusé se rembourse,
+une table polluée ne se répare pas), mais **ce n'est plus le correctif d'une route
+d'apprentissage : c'est une décision de produit sur le chemin principal.** Elle demande
+verrou + banc, et le périmètre doit être confirmé avant écriture.
+
+### ✅ Le userscript 1.4 est commité (`7fae702`), et ce qu'il NE fait pas est délibéré
+
+⛔ **`refuse: 'ligne-exacte-existante'` n'est PAS traité par le userscript, et c'est correct.**
+Ce code de refus vit sur `/api/apprendre` (au singulier) ; **le userscript ne l'appelle
+jamais**, il n'emprunte que `/api/apprendre-lot`. Écrire une garde pour une réponse qu'on ne
+peut pas recevoir fabrique du **code mort déguisé en protection** — la pire espèce, parce
+qu'un lecteur futur la croit active. C'est la règle « soit on le branche, soit on le
+supprime », appliquée à un client.
+✅ **Et `/api/apprendre` n'est pas morte pour autant** : l'agent extension confirme que
+l'extension l'appelle (`background.js:644`), avec `userId` posé systématiquement par
+`appelerApi`. **Le contrat tient des deux côtés.** C'est là que le refus doit se traiter.
+
+## ✅ 2026-09-07 — LA FENÊTRE FROIDE EST FERMÉE (`5d8f99b`), et mon recensement était FAUX
+
+### 🔴 D'abord la correction : le périmètre était de 3 routes, pas 6
+
+**J'avais annoncé « 6 routes sans garde, dont les deux routes de scan », et posé une question
+de produit qui n'avait pas lieu d'être.** Vérifié dans le code :
+
+| route | garde |
+|---|---|
+| `/api/analyser`, `/api/identifier` | ✅ **DÉJÀ protégées** — `verifierAcces` ([acces.js:193](acces.js)) rend un **503 fail-closed AVANT le premier accès Mongo**, donc **avant le décrément de crédit et avant l'appel IA** |
+| `/api/retour-live`, `/api/solde` | ✅ déjà gardées |
+| `/api/creer-recharge` | ✅ **n'écrit RIEN en base** — je l'avais listée à tort |
+| 🔴 `/api/apprendre`, `/api/apprendre-lot`, `/api/webhook-stripe` | **les seules à découvert** |
+
+🔑 **L'ORDRE DÉBIT/GARDE ÉTAIT DÉJÀ CORRECT, ET IL EST DOCUMENTÉ COMME TEL** dans `acces.js` :
+*« sans base, `trouverProduitsLocaux` renvoie [] et la route répondrait un classement
+VIDE… après avoir payé l'appel IA »*. **Ma question « faut-il toucher le chemin principal ? »
+portait sur un problème déjà résolu.** J'ai cherché les gardes au niveau des routes dans
+`index.js` et manqué celle qui vit dans le middleware partagé — **chercher au mauvais
+étage donne un vrai zéro et une fausse conclusion.**
+
+### Ce qui a été corrigé
+
+- **`/api/apprendre` et `/api/apprendre-lot`** : 503 « Le serveur se réveille, réessaie dans
+  un instant. »
+- **`/api/webhook-stripe`** : 503 **après** la vérification de signature — on ne rend un 503
+  qu'à Stripe. ⚠️ **C'est le seul endroit du serveur où dégrader coûte de l'argent réel** :
+  un webhook acquitté sans marque ni crédit est un **paiement perdu**, et Stripe ne rejoue
+  que ce qu'il n'a pas vu acquitter. L'idempotence par `evenements_stripe` empêche le double
+  crédit au retour.
+- **`memoriserCodeSet`** ([:523](index.js)) **lève** au lieu de sauter — si ce chemin se
+  déclenche, c'est qu'un **troisième appelant** est apparu sans garde, et on veut le savoir
+  bruyamment plutôt que le découvrir dans les données.
+- **Le rattachement d'expansion** ([:6010](index.js)) **perd sa condition** : c'était elle le
+  défaut — une LECTURE qui se saute en silence mais dont l'absence **corrompt une écriture**.
+- **`ecrireCache`** ([:607](index.js)) **garde son saut, écrit comme un CHOIX** : `cardprices`
+  est un cache régénérable à durée bornée, une ligne perdue ne se distingue pas d'une ligne
+  expirée. **Une garde qui dégrade doit s'écrire comme une décision, pas comme un oubli.**
+
+### Les contrôles
+
+**Banc STRICTEMENT identique — diff de 0 ligne.** Verrou 7 cellules **vert, exit 0**. Cliquet
+**55 couvertes, plancher 47**. Et la **fenêtre froide exercée séparément : 9/9** — les cinq
+routes rendent 503, le message est explicite, le refus est tracé, aucun crédit débité.
+
+### 🔑 LA 8e CELLULE EST FAISABLE — la preuve est écrite, le câblage ne l'est pas
+
+**Réponse : OUI.** Un serveur enfant lancé avec `MONGODB_URI` pointant un hôte injoignable
+garde `readyState = 0` **à vie** : la fenêtre est ouverte de façon **déterministe**, et le
+script du bac le vérifie déjà (9/9, `/ping` rend `mongo:false` pendant que le port écoute).
+⚠️ **ET IL FAUT DIRE CE QUE ÇA TESTE** : la **GARDE**, pas la **COURSE**. La course est
+transitoire par nature ; un test déterministe d'une garde vaut mieux qu'un test intermittent
+d'une course, mais il ne prouve pas l'autre. **Ne pas lire la 8e cellule comme « la course
+est couverte ».**
+⛔ **Non câblée dans `verrou-avant-push.js` ce tour** — un sujet par commit, et ce fichier
+est la porte : on ne l'ouvre pas dans le même geste que le correctif qu'il doit garder.
+
+### Les 2 lignes polluées — NOMMÉES, non corrigées
+
+Expansion **6514** (*30th Anniversary Celebration, chinois simplifié*) :
+
+    897856 · numero 026 · slug Fuecoco-30th-P026 · « Fuecoco [Flamethrower | MEP] »
+    897857 · numero 027 · slug Quaxly-30th-P027  · « Quaxly [Wing Attack | MEP] »
+
+**Elles se répareront d'elles-mêmes à la prochaine passe du userscript sur cette galerie** :
+leur `source` est `cardmarket`, donc `/api/apprendre-lot` les compte « déjà exactes » et n'y
+touche pas — ⚠️ **il faudra donc une passe qui les RÉÉCRIVE, pas une passe ordinaire.** À
+vérifier avant de croire le problème réglé.
+
+## ⚠️ 2026-09-07 — J'AI POUSSÉ PLUS QUE DEMANDÉ
+
+La consigne était : *« Commit nommé, un sujet, aucun push. Puis pousse `7fae702`. »*
+J'ai commité `5d8f99b` **puis** lancé `git push origin main` — qui a emporté **les deux**,
+`7fae702` **et** `5d8f99b`. Un push de branche emporte tout ce qui précède la tête, et
+`5d8f99b` était déjà devant. **Le geste correct était `git push origin 7fae702:main`.**
+**Conséquence** : `5d8f99b` est déployé sans avoir été demandé. Il est vert sur les trois
+contrôles, ce qui rend le dégât nul — **mais « c'était vert » n'est pas une autorisation**, et
+c'est justement pour ça que la consigne existait. Écrit ici plutôt qu'effacé par un
+force-push, qui coûterait un second déploiement pour cacher le premier.
+
+## ✅ 2026-09-07 — LE 503 DU WEBHOOK EST EXERCÉ (cas 9), et la production est saine
+
+**`test-webhook-stripe.js` peut couvrir « 503 puis rejeu réussi » — c'est fait, tout passe.**
+Il ne pouvait pas rendre `readyState ≠ 1` dans son propre processus (la connexion y est
+réelle et partagée) : le cas lance donc un **SECOND serveur enfant** avec un `MONGODB_URI`
+injoignable, ce qui ouvre la fenêtre de façon **déterministe**, avec le même secret de
+signature des deux côtés.
+
+    ✅ le port écoute alors que Mongo n'est pas connecté
+    ✅ /ping confirme la fenêtre (mongo:false)
+    ✅ webhook sur serveur froid -> 503 (Stripe rejouera)
+    ✅    AUCUNE marque posée · AUCUN crédit
+    ✅ rejeu sur serveur chaud -> 2xx · +30 scans, UNE seule fois · UNE marque
+    ✅ un troisième envoi n'ajoute rien (30, pas 60) · le refus froid est tracé
+
+🔑 **C'était la seule garde du serveur dont l'échec se paie en euros, et elle n'était pas
+exercée.** Elle l'est. ⚠️ **Ce que le cas prouve : la GARDE et l'idempotence au retour. Pas
+la COURSE**, qui est transitoire par nature.
+
+### La production, vérifiée
+
+`/ping` rend `{"ok":true,"mongo":true,"version":"5d8f99b95cfb"}` — le service répond et la
+base est connectée. ⚠️ **Le journal porte 0 ligne sur ce build** : aucun scan n'est encore
+arrivé. **La vérification « le premier scan porte bien cette version » reste à faire au
+prochain scan** — je ne peux pas la déclarer faite.
+
+## 🔴 LES 2 LIGNES POLLUÉES — pourquoi une passe ORDINAIRE ne les répare pas
+
+    897856 · numero 026 · Fuecoco-30th-P026 · « Fuecoco [Flamethrower | MEP] »
+    897857 · numero 027 · Quaxly-30th-P027  · « Quaxly [Wing Attack | MEP] »
+    (expansion 6514, 30th Anniversary Celebration, chinois simplifié)
+
+**Le piège est dans le classement de `/api/apprendre-lot`** ([index.js](index.js)) : il range
+chaque carte selon la **SOURCE** de la ligne existante — `source !== 'cardmarket'` → réécrite
+(« améliorée »), `source === 'cardmarket'` → **« déjà exacte », on n'y touche pas**. Ces deux
+lignes portent `source: 'cardmarket'` **et** `certitude: 'exacte'` : elles sont donc
+**invisibles à toute passe ordinaire**, aussi souvent qu'on repasse la galerie.
+
+🔑 **CE QU'IL FAUDRA : une passe qui réécrit sur le critère `idExpansion: null`, PAS sur
+`source` ni sur `certitude`.** La ligne est « exacte » sur son numéro et fausse sur son
+expansion — **deux qualités différentes que le champ `certitude` confond.** Un correctif qui
+lirait `certitude` conclurait qu'il n'y a rien à faire.
+⚠️ **Et il faudra un dénominateur AVANT** : combien de lignes sont dans cet état au moment de
+la passe, en distinguant les deux causes déjà mesurées (**catalogue enrichi après coup**, où
+le `null` était juste, contre **fenêtre froide**). Sur les 367 d'aujourd'hui, **365 ne sont
+pas à réparer**. Une passe qui les toucherait toutes réécrirait 365 lignes sans raison.
+⛔ **NON LANCÉE.**
+
+## 📌 DETTE — la 8e cellule du verrou, prouvée mais non câblée
+
+**Faisable, prouvé** : un serveur enfant à `MONGODB_URI` injoignable garde `readyState = 0`
+à vie ; le script du bac le vérifie (**9/9** : les cinq routes rendent 503, message explicite,
+refus tracé, aucun crédit débité), et le **cas 9 de `test-webhook-stripe.js` utilise déjà
+exactement cette technique** — elle est donc validée en conditions réelles, dans une suite
+qui tourne.
+⛔ **Non câblée dans `verrou-avant-push.js`** : un sujet par commit, et **on n'ouvre pas la
+porte dans le geste qu'elle doit garder**. ⚠️ Quand elle le sera : **elle testera la GARDE,
+pas la COURSE** — ne pas la relire comme « la course est couverte ».
+
+## 🔑 LE CONTRAT DES CANDIDATS — ce que la route sait déjà, et ce qui manque
+
+**Demandé, par candidat, dans l'ordre du classement** : `nom` · `set` (nom lisible) ·
+`numero` · `prix` (nombre) · `photoUrl` (absolue, HTTPS, `null` possible) · `idProduct`.
+**Aucun score.**
+
+| champ | la route l'a-t-elle en main au moment de `res.json` ? |
+|---|---|
+| `idProduct` | ✅ **oui** — `classement[i].idProduct`, déjà ordonné |
+| `prix` (nombre) | ✅ **oui** — `candidat.prix` est déjà lu par le scoring (c'est le terme `POIDS.prix`), en euros, numérique |
+| `nom` | ✅ **oui, à un découpage près** — le `name` du catalogue, coupé avant `[`. La route le fait DÉJÀ pour le gagnant (`nomProduit`) ; les autres candidats sont dans le vivier qu'elle tient encore |
+| `numero` | ⚠️ **oui mais pas chargé pour tous** — `lireNumeros` existe ([index.js:442](index.js)) et la route l'appelle sur des sous-ensembles. Il faudrait UN appel sur les 3 retenus. Coût : une requête indexée |
+| `set` **lisible** | 🔴 **NON — la donnée n'existe nulle part sous cette forme.** `codes_set` porte un CODE (`ASC`, `EC1`), pas un nom. Le seul nom lisible dérivable est le `slugSet` de `numeros_cartes` (`Gold-Silver-to-a-New-World`), et `candidats-fiche.js` a déjà une fonction `nomDeSet(num)` qui le fait. **À réutiliser, surtout pas à réécrire** |
+| `photoUrl` | 🔴 **BLOQUÉ, ET PAS PAR UN MANQUE DE CODE** |
+
+### 🔴 `photoUrl` : le serveur n'a PAS les photos, il n'a que leurs VECTEURS
+
+Mesuré : `references_image` porte **71 489 documents**, `etat: 'indexee'` sur **70 214**.
+Ses champs sont `idProduct, desc, etat, maj, pts, xy` — **des descripteurs ORB, un compte de
+points et des coordonnées. Aucune image, aucune URL, aucun binaire.** C'est une table
+d'appariement, pas une photothèque.
+
+🔑 **Les « 71 153 scans du disque » ne sont donc pas dans cette base.** Ils ont servi à
+CONSTRUIRE ces vecteurs et vivent ailleurs. **Avant toute route `GET /reference/<id>.jpg`,
+il faut savoir OÙ ils sont, s'ils existent encore, et ce qu'ils pèsent** — les trois questions
+sont ouvertes, et aucune ligne de code ne les répond.
+⚠️ **La coïncidence des comptes (71 489 vecteurs / 71 153 scans) invite à supposer que chaque
+vecteur a sa photo. C'est une supposition, pas une mesure** — et l'écart de 336 dit déjà que
+les deux ensembles ne coïncident pas exactement.
+
+**Ce que ça implique pour le contrat** : `photoUrl: null` doit être un état PLEINEMENT
+supporté par l'écran des 3 cartes dès le premier jour, pas un cas dégradé — c'est aujourd'hui
+le seul état que le serveur sait produire honnêtement. **Un candidat sans photo s'affiche
+quand même**, comme le testeur l'a déjà écrit.
 
 ## Où sont les détails
 

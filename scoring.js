@@ -1432,6 +1432,81 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      croit qu'ils font la même chose. Deux lectures qui divergent ne se départagent pas
 //      à l'intuition : elles se départagent en instrumentant celle qu'on croit vraie.
 //
+//   25. UNE UNICITÉ OBTENUE PAR UNE REQUÊTE INCOMPLÈTE N'EST PAS UNE UNICITÉ — 2026-09-06.
+//      LES FAITS. `trouverParSetCodeEtNumero` cherche les expansions dont le code égale
+//      EXACTEMENT le code lu, puis les produits qui y portent le numéro lu. Quand il n'en
+//      reste qu'UN, l'appelant conclut qu'il n'y a plus d'ambiguïté : plus d'ex aequo,
+//      donc plus de réserve, donc VERDICT FERME. C'est la voie la plus sûre du dispositif.
+//      LE CAS. Rayquaza n°153, setCode « ASC » lu, total 217, confiance haute — tout est
+//      juste. `trouverParSetCodeEtNumero('ASC','153','FR')` rend UN produit, 869764. Le
+//      testeur a saisi 870374, « Rayquaza [Breakthrough Assault] », code **xASC**, set
+//      « Ascended Heroes Additionals », n°153 lui aussi. Sortie FERME et FAUSSE — le
+//      premier FAUX ET AFFIRMÉ du holdout depuis que le seuil existe.
+//      LA CAUSE, ET ELLE N'EST NI LA LECTURE NI LE SCORING. Le catalogue porte QUATRE
+//      produits au n°153 sur ce set : 1 en ASC, 3 en xASC. Le scoring, lui, CONNAÎT la
+//      convention — il donne `+15 (code xASC = ASC par la convention X des Additionals)`
+//      contre `+40` à l'exact, et classe donc 869764 devant 870374 de 25 points seulement.
+//      La requête, elle, n'a jamais regardé xASC : `memeCodeParConventionX` et
+//      `codesApparentes` y sont placées derrière `if (!exps.length)` (index.js:2090) —
+//      un REPLI. Dès que le code exact existe, les cousins deviennent inatteignables.
+//      ⚠️ IL N'Y A PAS DEUX COPIES DE LA CONVENTION, ET C'EST PIRE : c'est la MÊME
+//      fonction, importée du scoring, mise dans une branche qui ne s'exécute pas. Une
+//      seconde source finit par diverger et ça se voit ; une source unique appelée au
+//      mauvais endroit ne diverge jamais — elle se tait.
+//      🔑 LA LEÇON. « Un seul résultat » ne veut pas dire « un seul existe ». Ça veut dire
+//      « un seul dans ce que j'ai regardé ». Les confondre, c'est la même faute que `|| []`
+//      (l'absence rendue comme un vide légitime) et que le départage sur groupe amputé :
+//      un résultat qui ne distingue pas « unique » de « je n'ai pas cherché partout ».
+//      ⚠️ ET ICI ELLE AUTORISAIT UN VERDICT FERME, c'est-à-dire un prix affiché sans
+//      réserve. Le coût d'une unicité fausse n'est pas une mesure biaisée : c'est un
+//      utilisateur qui vend au mauvais prix. La parade est mécanique : TOUTE requête dont
+//      le résultat sert de preuve d'unicité doit appliquer les mêmes conventions que le
+//      composant qui, plus loin, saura les lire. Une garde ne peut pas être plus étroite
+//      que le scoring qu'elle court-circuite.
+//      MESURÉ, avant tout correctif : sur les 36 lignes fermes par cette voie, 36 sont
+//      uniques par l'égalité exacte ; 3 cessent de l'être avec la seule convention X, et
+//      les TROIS sont les lignes Rayquaza, les trois aujourd'hui FAUSSES ET AFFIRMÉES —
+//      0 ligne juste cassée. En ajoutant la parenté de préfixe, 3 de plus tombent, et les
+//      trois sont du BRUIT (« sv8a » ~ « sv8 » rapproche Sylveon ex d'un Koraidon ;
+//      « SV-P » ~ « SV-P/ID » d'un « N's PP Up »). Les deux conventions n'ont pas la même
+//      qualité : l'une décode, l'autre ressemble. Le fichier le disait déjà ; la mesure le
+//      confirme sur la population qui décide.
+//
+//   26. CHERCHER AU MAUVAIS ÉTAGE REND UN VRAI ZÉRO ET UNE FAUSSE CONCLUSION — 2026-09-07.
+//      LES FAITS. Question posée : quelles routes qui ÉCRIVENT n'ont pas de garde
+//      « Mongo pas prêt » ? J'ai cherché `readyState` dans `index.js`, trouvé la garde sur
+//      deux routes, et annoncé « 6 routes à découvert, dont les DEUX routes de scan ».
+//      Le testeur a tranché sur cette base : périmètre confirmé, routes de scan comprises,
+//      avec un argument de produit (un scan refusé se rembourse, une table polluée non).
+//      CE QUE LE CODE DIT. `/api/analyser` et `/api/identifier` étaient DÉJÀ protégées —
+//      par `verifierAcces` (acces.js:193), un middleware PARTAGÉ, qui rend un 503
+//      fail-closed AVANT le premier accès Mongo, donc avant le décrément de crédit et
+//      avant l'appel IA. C'était même documenté sur place. Et `/api/creer-recharge`, que
+//      j'avais listée, n'écrit rien en base. Le périmètre réel : TROIS routes.
+//      🔑 LA LEÇON. Un grep sur le fichier des routes trouve les gardes ÉCRITES DANS LES
+//      ROUTES. Il ne trouve pas celles qui vivent dans la chaîne de middlewares — et une
+//      garde déplacée dans un middleware est le SIGNE d'une bonne conception, pas d'une
+//      absence. J'ai donc lu un vrai zéro (aucune garde à cet étage) comme une absence de
+//      garde (aucune garde du tout). Même famille que l'erreur #8 : `undefined` n'est pas
+//      `0`. Ici : « pas trouvé ICI » n'est pas « pas trouvé ».
+//      ⚠️ ET C'EST LA PREMIÈRE DE LA FAMILLE QUI A FAIT PRENDRE UNE DÉCISION SANS OBJET.
+//      Les précédentes coûtaient une mesure fausse ; celle-ci a fait arbitrer un risque
+//      produit sur le chemin principal — un arbitrage réel, sur un problème inexistant.
+//      Le coût d'une fausse absence n'est pas le temps perdu : c'est qu'on décide dessus.
+//      LA PARADE, MÉCANIQUE, EN DEUX TEMPS :
+//        1. avant de conclure à l'ABSENCE d'une garde, chercher aussi dans les MIDDLEWARES
+//           partagés (la chaîne `app.post(route, a, b, c, handler)` — chaque maillon peut
+//           refuser) et dans les modules qu'ils importent ;
+//        2. VALIDER PAR UN CAS TÉMOIN qu'on sait gardé. Si le recensement dit « cette
+//           route-là n'est pas protégée » alors qu'on SAIT qu'elle l'est, c'est la méthode
+//           qui est fausse, pas le code. Un recensement sans témoin ne se réfute jamais
+//           lui-même — il ne peut que confirmer ce qu'il regarde.
+//      ⚠️ Le témoin doit être choisi AVANT de lire le résultat, sinon il devient une
+//      justification. Ici, `/api/solde` et `/api/retour-live` étaient les témoins naturels :
+//      leur garde était visible au bon étage, et rien n'expliquait que les routes de scan,
+//      plus critiques, en soient dépourvues. L'anomalie était lisible dans mon propre
+//      tableau, et je ne l'ai pas interrogée.
+//
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
 //   - il doit APPELER le code de production, jamais le réimplémenter — une simulation

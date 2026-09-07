@@ -1065,6 +1065,276 @@
         "setCode": null
       },
       "saisiLe": "2026-08-08T21:11:23.474Z"
+    },
+    "L030": {
+      "idProduct": 557764,
+      "nom": "Pokémon Trader",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Pokemon-Trader-EXP",
+      "lu": {
+        "nom": "Pokémon Trader",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:37:58.625Z"
+    },
+    "L066": {
+      "idProduct": 549026,
+      "nom": "Slowbro",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Slowbro",
+      "lu": {
+        "nom": "Slowbro",
+        "numero": "080",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:38:35.054Z"
+    },
+    "L068": {
+      "idProduct": 870374,
+      "nom": "Rayquaza",
+      "codeSet": "xASC",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Ascended-Heroes-Additionals/Rayquaza-V2-xASC153",
+      "lu": {
+        "nom": "Rayquaza",
+        "numero": "153",
+        "total": "217",
+        "setCode": "ASC"
+      },
+      "saisiLe": "2026-09-06T19:39:47.456Z"
+    },
+    "L069": {
+      "idProduct": 654129,
+      "nom": "Ho-Oh",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos/Ho-Oh-UNP",
+      "lu": {
+        "nom": "Ho-Oh",
+        "numero": "250",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:40:23.796Z"
+    },
+    "L071": {
+      "idProduct": 882098,
+      "nom": "Flying Pikachu",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos/Flying-Pikachu-V3-UNP",
+      "lu": {
+        "nom": "Flying Pikachu",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:41:39.928Z"
+    },
+    "L072": {
+      "idProduct": 584669,
+      "nom": "Flareon",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Flareon",
+      "lu": {
+        "nom": "Flareon",
+        "numero": "136",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:42:11.712Z"
+    },
+    "L073": {
+      "idProduct": 654097,
+      "nom": "Electabuzz",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos/Electabuzz-UNP",
+      "lu": {
+        "nom": "Electabuzz",
+        "numero": "125",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:43:22.254Z"
+    },
+    "L074": {
+      "idProduct": 549086,
+      "nom": "Kangaskhan",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Kangaskhan",
+      "lu": {
+        "nom": "Kangaskhan",
+        "numero": "115",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:44:09.532Z"
+    },
+    "L075": {
+      "idProduct": 557644,
+      "nom": "Koffing",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Koffing",
+      "lu": {
+        "nom": "Koffing",
+        "numero": "109",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:44:46.469Z"
+    },
+    "L076": {
+      "idProduct": 654094,
+      "nom": "Surfing Pikachu",
+      "codeSet": "UNP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos/Surfing-Pikachu-V2-UNP",
+      "lu": {
+        "nom": "Surfing Pikachu",
+        "numero": "025",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:48:17.993Z"
+    },
+    "L077": {
+      "idProduct": 698770,
+      "nom": "Ivysaur Lv.24",
+      "codeSet": "DP3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Shining-Darkness/Ivysaur-Lv24-DP3",
+      "lu": {
+        "nom": "Ivysaur",
+        "numero": "002",
+        "total": null,
+        "setCode": "DP3"
+      },
+      "saisiLe": "2026-09-06T19:48:58.208Z"
+    },
+    "L078": {
+      "idProduct": 548841,
+      "nom": "Sandshrew",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Sandshrew",
+      "lu": {
+        "nom": "Sandshrew",
+        "numero": "027",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:49:55.585Z"
+    },
+    "L079": {
+      "idProduct": 606477,
+      "nom": "Pokémon March",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Pokemon-March-GSNW",
+      "lu": {
+        "nom": "Pokémon March",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:51:05.869Z"
+    },
+    "L080": {
+      "idProduct": 606477,
+      "nom": "Pokémon March",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Pokemon-March-GSNW",
+      "lu": {
+        "nom": "Berry",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:52:33.435Z"
+    },
+    "L081": {
+      "idProduct": 557709,
+      "nom": "Hitmonchan",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Hitmonchan",
+      "lu": {
+        "nom": "Hitmonchan",
+        "numero": "107",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:53:27.099Z"
+    },
+    "L082": {
+      "idProduct": 761884,
+      "nom": "Meganium δ Delta Species",
+      "codeSet": "PCG9",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Offense-and-Defense-of-the-Furthest-Ends/Meganium-Delta-Species-PCG9045",
+      "lu": {
+        "nom": "Meganium δ",
+        "numero": "045",
+        "total": "068",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:53:52.386Z"
+    },
+    "L083": {
+      "idProduct": 761890,
+      "nom": "Ampharos δ Delta Species",
+      "codeSet": "PCG9",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Offense-and-Defense-of-the-Furthest-Ends/Ampharos-Delta-Species-PCG9051",
+      "lu": {
+        "nom": "Ampharos",
+        "numero": "051",
+        "total": "068",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:54:23.492Z"
+    },
+    "L084": {
+      "idProduct": 762613,
+      "nom": "Blastoise δ Delta Species",
+      "codeSet": "PCG8",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Miracle-Crystal/Blastoise-Delta-Species-PCG8049",
+      "lu": {
+        "nom": "Blastoise δ",
+        "numero": "049",
+        "total": "075",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-06T19:54:48.669Z"
     }
   }
 }
