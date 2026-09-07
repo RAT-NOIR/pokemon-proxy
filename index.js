@@ -649,7 +649,7 @@ async function getCardIdFromAI(imageUrls, title) {
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
     const prompt = `Identifie cette carte Pokémon à partir de l'image (le titre de l'annonce est un complément d'info, en français). Réponds UNIQUEMENT en JSON strict, sans texte ni markdown autour, format exact :
-{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "attaqueBrute": "le nom de la PREMIÈRE attaque, TEL QU'IMPRIMÉ sur la carte (katakana, français...), ou null si illisible", "attaque": "son nom ANGLAIS officiel (ex: Rainbow Burn), ou null si tu n'es pas sûr de la correspondance", "attaqueConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale selon ce que tu vois", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
+{"name": "Nom anglais de la carte", "nomBrut": "le nom TEL QU'IMPRIMÉ sur la carte, dans sa langue d'origine (katakana japonais, français...), ou null si illisible", "nomConfiance": "haute/moyenne/basse — voir les règles plus bas", "attaqueBrute": "le nom de la PREMIÈRE attaque, TEL QU'IMPRIMÉ sur la carte (katakana, français...), ou null si illisible", "attaque": "son nom ANGLAIS officiel (ex: Rainbow Burn), ou null si tu n'es pas sûr de la correspondance", "attaqueConfiance": "haute/moyenne/basse — voir les règles plus bas", "number": "numéro de collection SEUL sans le total (ex: 184)", "total": "le nombre APRÈS le slash (ex: 182 pour 184/182), ou null si absent", "setCode": "code du set (ex: BLK, PAL, OBF) si visible, sinon null", "symboleSet": "logo-tcg/R/fossile/feuilles/pokeball/gym/palmier/etoile/ruines/couronne/eclair/vs/e1/e2/e3/e4/e5/mcdo/empreintes/croix/cercle-chiffre/promo-etoile/aucun/illisible — le LOGO DU SET, voir plus bas", "rarete": "IR/SR/SIR/UR/AR/promo/normale/illisible — la RARETÉ D'IMPRESSION, voir plus bas", "reverse": "true/false/null — true SEULEMENT si c'est une REVERSE HOLO, false si tu es sûr que non, null si tu n'arrives pas à juger", "motif": "aucun/reverse-classique/ball/masterball/indetermine — le MOTIF du fond brillant, voir la description détaillée plus bas", "language": "EN", "etatEstime": "NM/EX/GD/LP/PL/PO", "etatConfiance": "haute/moyenne/basse", "defautsVus": ["liste courte des défauts visibles, [] si aucun"]}
 
 LE NOM — c'est le champ le plus lourd de conséquences, et celui où l'erreur est la plus coûteuse.
 Un nom faux mais PLAUSIBLE est bien pire qu'un nom avoué illisible : il envoie la recherche
@@ -747,7 +747,14 @@ Pour "symboleSet" — LE LOGO DU SET, petit pictogramme imprimé à côté du nu
 - "aucun" : rien à cet emplacement. C'est une VRAIE réponse, pas une absence de réponse — mais ne la donne que si tu vois clairement l'emplacement et qu'il est vide.
 - "illisible" : reflet, sleeve, cadrage ou résolution insuffisante. C'est la bonne réponse dans le doute.
 
-Pour "rarete" : regarde le symbole de rareté et le style de la carte. "IR" = Illustration Rare (illustration pleine, personnage humain souvent), "SIR"/"SR" = Special/Super Rare, "AR" = Art Rare, "promo" = carte promotionnelle, "normale" = carte de jeu standard. Si tu n'es pas sûr, réponds "normale".
+Pour "rarete" — LA RARETÉ D'IMPRESSION, lue au SYMBOLE DE RARETÉ (petit cercle, losange ou étoile imprimé en bas de la carte, près du numéro) et au style de la carte. Réponds par UNE de ces valeurs, jamais autre chose :
+- "IR" : Illustration Rare — illustration pleine, personnage humain souvent.
+- "SIR" / "SR" : Special Illustration Rare / Super Rare.
+- "UR" : Ultra Rare.
+- "AR" : Art Rare.
+- "promo" : carte promotionnelle.
+- "normale" : carte de jeu standard — tu VOIS son symbole de rareté (cercle, losange ou étoile) et rien de ce qui précède. C'est une LECTURE : ne la donne que si tu as vu le symbole.
+- "illisible" : tu ne distingues pas le symbole de rareté et le style ne permet pas de trancher (reflet, sleeve, cadrage, résolution). C'est la bonne réponse dans le doute. Ne réponds JAMAIS "normale" faute de mieux : "normale" affirme quelque chose sur la carte, "illisible" non.
 ⚠️ NE CONFONDS PAS "rarete" et "etatEstime" : la rareté est une propriété d'IMPRESSION de la carte (IR, SR, promo, normale...), l'état est son USURE physique (NM, EX, GD...). N'écris JAMAIS un code d'état (EX, GD, NM...) dans le champ "rarete".
 
 Pour "reverse" : une REVERSE HOLO est une carte de jeu normale dont le motif holographique/brillant recouvre le FOND et les BORDURES (toute la carte scintille SAUF l'illustration), alors que sur une holo normale c'est l'ILLUSTRATION qui brille. Le numéro d'une reverse est IDENTIQUE à celui de la version normale. Réponds true UNIQUEMENT si tu distingues clairement ce scintillement de fond ; false si la carte est visiblement mate/normale ; null si reflets, sleeve ou photo ne permettent pas d'en être sûr. Ne devine pas.
@@ -852,11 +859,48 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         // Sur un champ qui sert de clé de jointure, la chaîne « aucun » irait chercher une
         // attaque nommée « aucun » — elle n'existe pas, donc le départage s'abstiendrait
         // silencieusement au lieu de dire qu'il n'a rien lu. Deux causes sous une seule sortie.
-        for (const champ of ['setCode', 'name', 'nomBrut', 'number', 'total', 'rarete', 'symboleSet', 'attaque', 'attaqueBrute']) {
+        //
+        // 🔴 `symboleSet` EST SORTI DE CETTE BOUCLE — 2026-09-07 (B8 de l'audit). Le prompt
+        // déclare « aucun » comme une VRAIE réponse (« rien à cet emplacement ») et cette
+        // boucle l'écrasait en null : « emplacement vide » et « pas lu » devenaient
+        // indistinguables. Journal au 2026-09-07 : le champ existe sur 191 lignes sur 246,
+        // « aucun » 0 fois, « illisible » 47, null 65 — alors qu'une relecture brute de 54
+        // photos rend « aucun » 9 fois, une carte sur six. Le mot était lu, puis effacé ici.
+        // Il garde le reste du nettoyage (la CHAÎNE "null", "none", "n/a"...) : voir plus bas.
+        //
+        // CHAMP PAR CHAMP, « aucun » y est-il une vraie réponse ? (relu le 2026-09-07)
+        //   setCode      NON — clé de jointure ; « aucun » = rien lu -> null, et le warn.
+        //   attaque      NON — clé du départage ; aucune attaque ne s'appelle « aucun ».
+        //   attaqueBrute NON — recopie de l'imprimé ; « aucun » n'est jamais imprimé.
+        //   name         NON — nom anglais ; aucun Pokémon ne s'appelle « Aucun » ; sans nom
+        //                la lecture est rejetée juste au-dessus, c'est le bon sort.
+        //   nomBrut      NON — recopie de l'imprimé, même raison qu'attaqueBrute.
+        //   number       PAS ENCORE — ce SERAIT une vraie réponse (les JP vintage n'impriment
+        //                pas de numéro, `numero: null` est FIDÈLE), mais le prompt ne l'offre
+        //                pas (il dit null), et `number` est une clé. Distinguer « absent »
+        //                d'« illisible » est le chantier C4, pas celui-ci.
+        //   total        PAS ENCORE — même cas que number ; le prompt dit déjà « null si
+        //                absent », donc « aucun » -> null y est cohérent.
+        //   rarete       NON — « aucun » n'est pas dans l'énumération (une carte a toujours
+        //                une rareté) ; la vraie réponse de doute est « illisible », voir plus bas.
+        //   symboleSet   OUI — sorti, ci-dessous.
+        for (const champ of ['setCode', 'name', 'nomBrut', 'number', 'total', 'rarete', 'attaque', 'attaqueBrute']) {
             const v = parsed[champ];
             if (typeof v === 'string' && MOTS_VIDES.has(v.trim().toLowerCase())) {
                 if (champ === 'setCode') console.warn(`⚠️ IA : setCode rendu comme le MOT "${v}" -> traité comme absent (voir le quatrième principe).`);
                 parsed[champ] = null;
+            }
+        }
+        // `symboleSet` : même nettoyage, SAUF « aucun », qui est une valeur de l'énumération.
+        // ⚠️ INSTRUMENT NEUF : à partir de ce commit, « aucun » peut apparaître au journal.
+        // Les taux de symbole antérieurs (où « aucun » valait null) ne se comparent pas aux
+        // suivants. Aucune règle n'est câblée dessus : `departagerParSymbole` ne trouve aucun
+        // set déclarant `symbole: 'aucun'` dans la table close, donc il s'abstient avec sa
+        // phrase — c'est voulu, on lit et on journalise, rien de plus.
+        {
+            const v = parsed.symboleSet;
+            if (typeof v === 'string' && v.trim().toLowerCase() !== 'aucun' && MOTS_VIDES.has(v.trim().toLowerCase())) {
+                parsed.symboleSet = null;
             }
         }
 
@@ -879,7 +923,23 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
                 console.warn(`   ↪️ "${brutIgnore}" repêché comme setCode (le champ était vide).`);
             }
         }
-        parsed.rarete = parsed.rarete || 'normale';
+        // 🔴 `rarete` EST NULLABLE — 2026-09-07 (C3 de l'audit). Avant : le prompt disait
+        // « si tu n'es pas sûr, réponds normale » ET cette ligne forçait `|| 'normale'`. Le
+        // doute devenait une AFFIRMATION sur la carte — journal au 2026-09-07 : « normale »
+        // 176 fois sur 246, null jamais — et c'est ce champ qui arme le +25 du terme prix
+        // (scoring.js, critère 5, via `rareteElevee`). Désormais « illisible » est une
+        // réponse du prompt, et elle devient null ici ; absent devient null aussi.
+        // ⚠️ AUCUNE RÈGLE N'EST CÂBLÉE : un null passe dans `rareteElevee` comme « pas de
+        // rareté élevée lue », exactement comme « normale » avant. Le terme prix n'est pas
+        // touché — le corriger sous le coup d'une occurrence serait le corriger sur les
+        // lignes qui l'ont suggéré. Ce commit rend le champ HONNÊTE, il ne le fait pas agir.
+        // ⚠️ INSTRUMENT NEUF : les 176 « normale » antérieurs mélangent lectures et doutes ;
+        // les « normale » à venir sont des lectures. Ne pas additionner les deux périodes.
+        {
+            const brute = (typeof parsed.rarete === 'string' && parsed.rarete.trim()) ? parsed.rarete.trim() : null;
+            parsed.rarete = (brute && brute.toLowerCase() !== 'illisible') ? brute : null;
+            if (!parsed.rarete) console.log(`ℹ️ IA : rareté ${brute ? 'ILLISIBLE' : 'absente'} -> null (plus jamais « normale » par défaut).`);
+        }
         // reverse : on ne garde QUE true ou false explicites ; tout le reste ("null",
         // absent, chaîne "null") devient null -> le scoring restera neutre dans le doute.
         parsed.reverse = (parsed.reverse === true || parsed.reverse === 'true') ? true
@@ -907,7 +967,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
         const totN = parsed.total ? parseInt(parsed.total, 10) : null;
         const raretesElevees = ['IR', 'SR', 'SIR', 'UR', 'AR', 'SAR', 'CHR', 'CSR'];
         parsed.rareteElevee = (totN != null && numN > totN)
-            || raretesElevees.includes(String(parsed.rarete).toUpperCase());
+            || raretesElevees.includes(String(parsed.rarete ?? '').toUpperCase());
         // `reverse` est loggé explicitement : sans lui, la ligne laissait croire que
         // "élevée=false" concernait la reverse, alors qu'elle décrit la RARETÉ
         // (secret/IR). On avait donc "élevée=false" suivi d'une décision reverse juste
