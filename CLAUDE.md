@@ -207,3 +207,39 @@ vérité d'une ligne peut viser un autre produit que le gagnant.
 la sortie fait retaper la même chose plusieurs soirs. Un outil qui refuse doit dire **ce
 qu'on peut faire à la place** — sinon il transforme une donnée manquante en boucle
 silencieuse, et une vérité insaisissable est une mesure impossible que rien ne signale.
+
+---
+
+## 7. La tentation nommée : un écart de prix n'atteste jamais une étiquette
+
+**Le 2026-09-08, chantier du vintage occidental.** Base Set porte **102 numéros sur 102** où
+plusieurs produits Cardmarket partagent le même numéro — `V1`…`V6` dans le slug, **même nom,
+même `idMetacard`**. Rien chez nous ne dit lequel est la 1re édition, la shadowless ou
+l'unlimited : ni `numeros_cartes` (13 champs), ni `catalogue_produits` (4 champs), ni
+`guide_prix` (17 champs, tous des prix). TCGdex expose `variants.firstEdition`, mais c'est un
+booléen **par carte** : il dit qu'une 1re édition existe, jamais **laquelle** des variantes
+Cardmarket c'est.
+
+**LA TENTATION.** L'écart de prix médian entre variantes du même numéro est **×7,15**, et
+tout le monde sait que la 1re édition vaut plus cher. Il est donc très facile d'écrire
+« la variante la plus chère est la 1re édition » et d'obtenir une table qui *a l'air* juste.
+
+🔴 **C'EST DEVINER L'ÉTIQUETTE DEPUIS CE QU'ON VEUT PRÉDIRE.** La table servirait à estimer
+un prix ; la dériver du prix la rend vraie par construction et invérifiable pour toujours.
+Toute mesure faite ensuite confirmerait la règle qui l'a produite. **Une corrélation de prix
+ne pourra JAMAIS attester ce lien** — pas mieux avec plus de données, pas mieux avec un
+seuil, pas mieux « juste pour commencer ».
+
+**La seule voie est une source externe qui NOMME l'impression**, avec sa question de licence.
+Et l'ordre ne s'inverse pas : la source d'abord, le champ de prompt ensuite. Lire le tampon
+« Edition 1 » sur la photo donne l'étiquette du côté de la CARTE ; il faut aussi celle du
+côté du PRODUIT. **Deux étiquettes sont nécessaires, nous en avons zéro** — et un signal sans
+colonne de jointure est mort, on l'a déjà mesuré trois fois.
+
+⚠️ **Dette de documentation relevée au passage** : trois endroits disent que `variante`
+signifie « V1/V2/V3 = normale/reverse/illustration » (`apprentissage-commun.js:28`,
+`diagnostic-carte.js:37`, `index.js:2678`), alors que `scoring.js:200-202` établit l'inverse
+et fait autorité — **« le n° de variante V1/V2/V3 n'a pas de sémantique stable »**, et
+`POIDS.variante` est un override manuel que plus rien ne dérive. Sur Base Set, où il n'existe
+aucune reverse holo, la lecture « V2 = reverse » est fausse. Rien n'en dépend aujourd'hui ;
+les commentaires, eux, sont périmés.
