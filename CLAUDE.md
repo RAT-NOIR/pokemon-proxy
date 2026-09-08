@@ -170,3 +170,40 @@ Mais les deux usages ne demandent pas la même chose :
 Aucune proposition ici. Le fait est posé : **on ne touche pas à cette clé sans avoir dit ce
 qu'on fait des 89 vérités déjà saisies**, et sans mesurer d'abord ce que la nouvelle clé
 rattache encore.
+
+---
+
+## 6. L'angle mort de la saisie : 1 787 produits qu'aucune URL ne désigne
+
+**L'occurrence, le 2026-09-08.** Le testeur a retapé **plusieurs soirs de suite** l'URL
+Cardmarket de Palafin ex (`Prismatic-Evolutions/Palafin-ex-PRE151`). Chaque fois :
+*« aucun produit ne porte le slug — rien n'est enregistré »*, `continue`, et la carte revient
+au lancement suivant. **Le message était exact et inutilisable** : il ne disait pas qu'un
+autre chemin existait.
+
+**Le produit existe pourtant** : `idProduct 805545`, exp 5944, `codeSet PRE`, `numero 151`,
+`nomFr "Superdofin-ex"`, apprise le 2026-07-16. **Sa ligne `numeros_cartes` ne porte aucun
+champ `slug`** — contrairement aux 14 autres Palafin ex, qui ont `slug` + `slugSet` +
+`variante`. Ce n'est pas une absence de catalogue : c'est une ligne apprise par un chemin qui
+n'enregistre pas le slug.
+
+**LA MESURE, dénominateur d'abord** : sur **69 598** lignes de `numeros_cartes`,
+**67 811 (97,4 %) portent un `slug`** et **1 787 (2,6 %) n'en portent pas** — 1 174 sans
+`source`, 367 `tcgdex`, 246 `cardmarket`. `resoudreSaisie` ne cherche que par `slug`
+(deux requêtes, exacte puis insensible à la casse) : **aucune URL ne peut désigner ces
+1 787 produits.**
+
+**CE QUE ÇA COÛTE AU BANC** : 12 lignes sur 236 (5,1 %) ont pour gagnant de production un
+produit sans slug — 11 au holdout (Charizard ex, Gengar, Tangela, Zekrom, Banette, Raichu,
+Cleffa, A.Z.'s Peace of Mind, Lillie's Clefairy ex, Venusaur ex, Ampharos) et `L024` au lot.
+Sur les vérités déjà écrites, **1 sur 117** vise un tel produit. C'est un **plancher** : la
+vérité d'une ligne peut viser un autre produit que le gagnant.
+
+⚠️ **Le contournement existe et n'était écrit nulle part** : `resoudreSaisie` accepte un
+**idProduct nu** (`/^\d+$/`, `moyen: 'idProduct'`) avant toute recherche par slug. Taper
+`805545` résout ce que l'URL ne résoudra jamais.
+
+🔑 **LA LEÇON N'EST PAS LE SLUG MANQUANT, C'EST LE MESSAGE.** Un refus exact qui ne nomme pas
+la sortie fait retaper la même chose plusieurs soirs. Un outil qui refuse doit dire **ce
+qu'on peut faire à la place** — sinon il transforme une donnée manquante en boucle
+silencieuse, et une vérité insaisissable est une mesure impossible que rien ne signale.
