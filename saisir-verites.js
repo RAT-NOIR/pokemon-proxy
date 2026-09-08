@@ -267,11 +267,59 @@ async function resoudreSaisie(saisie, Cat) {
             }
             const p = await Cat.findOne({ idProduct: r.idProduct }).lean();
             if (!p) { console.log(`  ⚠️ aucun produit ${r.idProduct} au catalogue — rien n'a été enregistré.`); continue; }
+
+            // ════════════════════════════════════════════════════════════════════
+            // LES DEUX CONTRÔLES DE COLLAGE — une URL tapée pour la mauvaise carte
+            // ════════════════════════════════════════════════════════════════════
+            // L'OCCURRENCE, LE 2026-09-08. Deux vérités ont reçu l'URL de la carte
+            // précédente : « Berry » a pris celle de Pokémon March (06/09), « Tyranitar »
+            // celle de Rocket's Minefield Gym (08/09). Rien ne l'a signalé. Une vérité
+            // fausse ne se voit pas — elle compte, en silence, dans toutes les mesures qui
+            // suivent, et celle de Berry a transformé un juste en FAUX pendant deux jours.
+            //
+            // ⚠️ AUCUN DES DEUX NE REFUSE : ils DEMANDENT. Un nom lu peut légitimement ne
+            // pas recouper le nom catalogue — l'IA lit « The Rocket's Trap » sur ce qui est
+            // « Imposter Oak's Revenge », et cette vérité-là est bonne. Refuser
+            // fabriquerait des trous ; c'est le testeur qui tranche, on lui montre.
+            const nomCatalogue = String(p.name).split('[')[0].trim();
+            const motsDe = s => new Set(String(s).toLowerCase()
+                .replace(/[^\p{L}\p{N}]+/gu, ' ').split(' ').filter(m => m.length > 2));
+            const motsLus = motsDe(d.nom), motsCat = motsDe(nomCatalogue);
+            const recoupe = [...motsLus].some(m => motsCat.has(m));
+
+            // 1. COLLISION — cet idProduct est-il DÉJÀ la vérité d'une autre carte ? C'est
+            //    le contrôle le moins cher : le fichier est relu à chaque entrée de toute
+            //    façon. Il attrape les deux cas du 08/09.
+            const identiteIci = identiteDe(d);
+            const collision = Object.entries(V2.verites).find(([, v]) =>
+                v && v.idProduct === r.idProduct && v.lu && identiteDe(v.lu) !== identiteIci);
+
+            // 2. LE NOM — plus fort que la collision : il attrape aussi la mauvaise URL
+            //    d'une carte que personne d'autre n'a saisie, cas que la collision ne voit
+            //    pas. `d.nom` est le nom NORMALISÉ de la chaîne, pas le brut de l'IA.
+            if (collision || (motsLus.size && motsCat.size && !recoupe)) {
+                console.log('');
+                if (collision) {
+                    console.log(`  🔴 COLLISION : ${r.idProduct} est DÉJÀ la vérité de « ${collision[1].lu.nom} » (clé ${collision[0]}).`);
+                    console.log(`     Deux cartes différentes ne peuvent pas être le même produit.`);
+                }
+                if (motsLus.size && motsCat.size && !recoupe) {
+                    console.log(`  🔴 NOMS SANS AUCUN MOT COMMUN :`);
+                    console.log(`     la chaîne a lu ... « ${d.nom} »`);
+                    console.log(`     ce produit est ... « ${nomCatalogue} »`);
+                }
+                const ok = (await demander('  Garder quand même cette vérité ? (oui / autre = rien enregistré) : ')).toLowerCase();
+                if (ok !== 'oui' && ok !== 'o') {
+                    console.log('  -> RIEN n\'a été enregistré, on repassera sur cette carte.');
+                    continue;
+                }
+            }
+
             const cs = parExp.get(Number(p.idExpansion));
-            console.log(`  -> ${p.idProduct} « ${String(p.name).split('[')[0].trim()} » [${cs?.codeSet ?? '?'} / ${cs?.region ?? 'INCONNUE'}]   (désigné par ${r.moyen})`);
+            console.log(`  -> ${p.idProduct} « ${nomCatalogue} » [${cs?.codeSet ?? '?'} / ${cs?.region ?? 'INCONNUE'}]   (désigné par ${r.moyen})`);
             V2.verites[cle] = {
                 idProduct: r.idProduct,
-                nom: String(p.name).split('[')[0].trim(),
+                nom: nomCatalogue,
                 codeSet: cs?.codeSet ?? null,
                 // DEUX PROVENANCES DISTINCTES, parce qu'elles répondent à deux questions
                 // différentes le jour où une vérité se révèle fausse : ai-je été influencé
