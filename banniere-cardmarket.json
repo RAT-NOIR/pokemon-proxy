@@ -1,0 +1,2139 @@
+{
+  "titre": "Bannière apposée par Cardmarket sur la vignette de ses produits — vintage occidental, numéros multi-produits",
+  "construitLe": "2026-09-09",
+  "source": "images du disque (C:\\Users\\Yung\\Desktop\\CARDMARKET IMAGE), vignettes ~255×361 téléchargées avec les pages de listing Cardmarket ; aucun appel à Cardmarket pour cette table",
+  "lecture": "détecteur « rouge pur » (r ≥ 150, g < 40, b < 40, ≥ 12 % d'une ligne, ≥ 6 lignes contiguës dans la moitié basse) pour les bannières rouges ; lecture à l'œil des quatre planches des bandes basses pour toutes les lignes, étiquettes blanches comprises. Piège connu : un seuil r-max(g,b) ≥ 60 prend le cadre des cartes Feu pour une bannière.",
+  "perimetre": {
+    "slugSets": [
+      "Base-Set",
+      "Jungle",
+      "Fossil",
+      "Base-Set-2",
+      "Team-Rocket",
+      "Gym-Heroes",
+      "Gym-Challenge",
+      "Neo-Genesis",
+      "Neo-Discovery",
+      "Neo-Revelation",
+      "Neo-Destiny",
+      "Southern-Islands",
+      "Legendary-Collection",
+      "Wizards-Black-Star-Promos"
+    ],
+    "regle": "numéros portant ≥ 2 produits dans un même set",
+    "produits": 233,
+    "couples": 113
+  },
+  "semantique": {
+    "libelle": "le TEXTE EXACT de la bannière, tel qu'apposé par Cardmarket ; il atteste ce qu'il dit et rien d'autre",
+    "null": "⛔ AUCUNE BANNIÈRE LUE SUR L'IMAGE. Ce n'est PAS « Unlimited » : Cardmarket n'apposé jamais ce mot, ni « 1st Edition ». Le membre nu d'un couple est l'impression de référence PAR ÉLIMINATION, et cette table ne le comble pas."
+  },
+  "distribution": {
+    "null": 115,
+    "Shadowless": 103,
+    "Attention: Oversized Card / Not Tournament Legal": 7,
+    "Prerelease Stamp": 4,
+    "Golden Border": 1,
+    "Non-Holo / Lava Theme Deck": 1,
+    "Non-Holo": 2
+  },
+  "produits": [
+    {
+      "idProduct": 273696,
+      "slugSet": "Base-Set",
+      "numero": "1",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273696.jpg"
+    },
+    {
+      "idProduct": 660227,
+      "slugSet": "Base-Set",
+      "numero": "1",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660227.jpg"
+    },
+    {
+      "idProduct": 273697,
+      "slugSet": "Base-Set",
+      "numero": "2",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273697.jpg"
+    },
+    {
+      "idProduct": 660226,
+      "slugSet": "Base-Set",
+      "numero": "2",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660226.jpg"
+    },
+    {
+      "idProduct": 273698,
+      "slugSet": "Base-Set",
+      "numero": "3",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273698.jpg"
+    },
+    {
+      "idProduct": 660225,
+      "slugSet": "Base-Set",
+      "numero": "3",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660225.jpg"
+    },
+    {
+      "idProduct": 273699,
+      "slugSet": "Base-Set",
+      "numero": "4",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273699.jpg"
+    },
+    {
+      "idProduct": 660224,
+      "slugSet": "Base-Set",
+      "numero": "4",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660224.jpg"
+    },
+    {
+      "idProduct": 273700,
+      "slugSet": "Base-Set",
+      "numero": "5",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273700.jpg"
+    },
+    {
+      "idProduct": 660223,
+      "slugSet": "Base-Set",
+      "numero": "5",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660223.jpg"
+    },
+    {
+      "idProduct": 273701,
+      "slugSet": "Base-Set",
+      "numero": "6",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273701.jpg"
+    },
+    {
+      "idProduct": 660222,
+      "slugSet": "Base-Set",
+      "numero": "6",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660222.jpg"
+    },
+    {
+      "idProduct": 273702,
+      "slugSet": "Base-Set",
+      "numero": "7",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273702.jpg"
+    },
+    {
+      "idProduct": 660221,
+      "slugSet": "Base-Set",
+      "numero": "7",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660221.jpg"
+    },
+    {
+      "idProduct": 273703,
+      "slugSet": "Base-Set",
+      "numero": "8",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273703.jpg"
+    },
+    {
+      "idProduct": 660220,
+      "slugSet": "Base-Set",
+      "numero": "8",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660220.jpg"
+    },
+    {
+      "idProduct": 273704,
+      "slugSet": "Base-Set",
+      "numero": "9",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273704.jpg"
+    },
+    {
+      "idProduct": 660219,
+      "slugSet": "Base-Set",
+      "numero": "9",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660219.jpg"
+    },
+    {
+      "idProduct": 273705,
+      "slugSet": "Base-Set",
+      "numero": "10",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273705.jpg"
+    },
+    {
+      "idProduct": 660218,
+      "slugSet": "Base-Set",
+      "numero": "10",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660218.jpg"
+    },
+    {
+      "idProduct": 273706,
+      "slugSet": "Base-Set",
+      "numero": "11",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273706.jpg"
+    },
+    {
+      "idProduct": 660217,
+      "slugSet": "Base-Set",
+      "numero": "11",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660217.jpg"
+    },
+    {
+      "idProduct": 273707,
+      "slugSet": "Base-Set",
+      "numero": "12",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273707.jpg"
+    },
+    {
+      "idProduct": 660216,
+      "slugSet": "Base-Set",
+      "numero": "12",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660216.jpg"
+    },
+    {
+      "idProduct": 273708,
+      "slugSet": "Base-Set",
+      "numero": "13",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273708.jpg"
+    },
+    {
+      "idProduct": 660215,
+      "slugSet": "Base-Set",
+      "numero": "13",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660215.jpg"
+    },
+    {
+      "idProduct": 273709,
+      "slugSet": "Base-Set",
+      "numero": "14",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273709.jpg"
+    },
+    {
+      "idProduct": 660214,
+      "slugSet": "Base-Set",
+      "numero": "14",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660214.jpg"
+    },
+    {
+      "idProduct": 273710,
+      "slugSet": "Base-Set",
+      "numero": "15",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273710.jpg"
+    },
+    {
+      "idProduct": 660213,
+      "slugSet": "Base-Set",
+      "numero": "15",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660213.jpg"
+    },
+    {
+      "idProduct": 273711,
+      "slugSet": "Base-Set",
+      "numero": "16",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273711.jpg"
+    },
+    {
+      "idProduct": 660212,
+      "slugSet": "Base-Set",
+      "numero": "16",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660212.jpg"
+    },
+    {
+      "idProduct": 273712,
+      "slugSet": "Base-Set",
+      "numero": "17",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273712.jpg"
+    },
+    {
+      "idProduct": 660211,
+      "slugSet": "Base-Set",
+      "numero": "17",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660211.jpg"
+    },
+    {
+      "idProduct": 273713,
+      "slugSet": "Base-Set",
+      "numero": "18",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273713.jpg"
+    },
+    {
+      "idProduct": 660210,
+      "slugSet": "Base-Set",
+      "numero": "18",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660210.jpg"
+    },
+    {
+      "idProduct": 273714,
+      "slugSet": "Base-Set",
+      "numero": "19",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273714.jpg"
+    },
+    {
+      "idProduct": 660209,
+      "slugSet": "Base-Set",
+      "numero": "19",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660209.jpg"
+    },
+    {
+      "idProduct": 273715,
+      "slugSet": "Base-Set",
+      "numero": "20",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273715.jpg"
+    },
+    {
+      "idProduct": 660208,
+      "slugSet": "Base-Set",
+      "numero": "20",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660208.jpg"
+    },
+    {
+      "idProduct": 273716,
+      "slugSet": "Base-Set",
+      "numero": "21",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273716.jpg"
+    },
+    {
+      "idProduct": 660207,
+      "slugSet": "Base-Set",
+      "numero": "21",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660207.jpg"
+    },
+    {
+      "idProduct": 273717,
+      "slugSet": "Base-Set",
+      "numero": "22",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273717.jpg"
+    },
+    {
+      "idProduct": 660206,
+      "slugSet": "Base-Set",
+      "numero": "22",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660206.jpg"
+    },
+    {
+      "idProduct": 273718,
+      "slugSet": "Base-Set",
+      "numero": "23",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273718.jpg"
+    },
+    {
+      "idProduct": 660205,
+      "slugSet": "Base-Set",
+      "numero": "23",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660205.jpg"
+    },
+    {
+      "idProduct": 273719,
+      "slugSet": "Base-Set",
+      "numero": "24",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273719.jpg"
+    },
+    {
+      "idProduct": 660204,
+      "slugSet": "Base-Set",
+      "numero": "24",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660204.jpg"
+    },
+    {
+      "idProduct": 273720,
+      "slugSet": "Base-Set",
+      "numero": "25",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273720.jpg"
+    },
+    {
+      "idProduct": 660203,
+      "slugSet": "Base-Set",
+      "numero": "25",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660203.jpg"
+    },
+    {
+      "idProduct": 273721,
+      "slugSet": "Base-Set",
+      "numero": "26",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273721.jpg"
+    },
+    {
+      "idProduct": 660202,
+      "slugSet": "Base-Set",
+      "numero": "26",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660202.jpg"
+    },
+    {
+      "idProduct": 273722,
+      "slugSet": "Base-Set",
+      "numero": "27",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273722.jpg"
+    },
+    {
+      "idProduct": 660201,
+      "slugSet": "Base-Set",
+      "numero": "27",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660201.jpg"
+    },
+    {
+      "idProduct": 273723,
+      "slugSet": "Base-Set",
+      "numero": "28",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273723.jpg"
+    },
+    {
+      "idProduct": 660200,
+      "slugSet": "Base-Set",
+      "numero": "28",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660200.jpg"
+    },
+    {
+      "idProduct": 273724,
+      "slugSet": "Base-Set",
+      "numero": "29",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273724.jpg"
+    },
+    {
+      "idProduct": 660199,
+      "slugSet": "Base-Set",
+      "numero": "29",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660199.jpg"
+    },
+    {
+      "idProduct": 273725,
+      "slugSet": "Base-Set",
+      "numero": "30",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273725.jpg"
+    },
+    {
+      "idProduct": 660198,
+      "slugSet": "Base-Set",
+      "numero": "30",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660198.jpg"
+    },
+    {
+      "idProduct": 273726,
+      "slugSet": "Base-Set",
+      "numero": "31",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273726.jpg"
+    },
+    {
+      "idProduct": 660197,
+      "slugSet": "Base-Set",
+      "numero": "31",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660197.jpg"
+    },
+    {
+      "idProduct": 273727,
+      "slugSet": "Base-Set",
+      "numero": "32",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273727.jpg"
+    },
+    {
+      "idProduct": 660196,
+      "slugSet": "Base-Set",
+      "numero": "32",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660196.jpg"
+    },
+    {
+      "idProduct": 273728,
+      "slugSet": "Base-Set",
+      "numero": "33",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273728.jpg"
+    },
+    {
+      "idProduct": 660195,
+      "slugSet": "Base-Set",
+      "numero": "33",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660195.jpg"
+    },
+    {
+      "idProduct": 273729,
+      "slugSet": "Base-Set",
+      "numero": "34",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273729.jpg"
+    },
+    {
+      "idProduct": 660194,
+      "slugSet": "Base-Set",
+      "numero": "34",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660194.jpg"
+    },
+    {
+      "idProduct": 273730,
+      "slugSet": "Base-Set",
+      "numero": "35",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273730.jpg"
+    },
+    {
+      "idProduct": 660193,
+      "slugSet": "Base-Set",
+      "numero": "35",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660193.jpg"
+    },
+    {
+      "idProduct": 273731,
+      "slugSet": "Base-Set",
+      "numero": "36",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273731.jpg"
+    },
+    {
+      "idProduct": 660192,
+      "slugSet": "Base-Set",
+      "numero": "36",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660192.jpg"
+    },
+    {
+      "idProduct": 273732,
+      "slugSet": "Base-Set",
+      "numero": "37",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273732.jpg"
+    },
+    {
+      "idProduct": 660191,
+      "slugSet": "Base-Set",
+      "numero": "37",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660191.jpg"
+    },
+    {
+      "idProduct": 273733,
+      "slugSet": "Base-Set",
+      "numero": "38",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273733.jpg"
+    },
+    {
+      "idProduct": 660190,
+      "slugSet": "Base-Set",
+      "numero": "38",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660190.jpg"
+    },
+    {
+      "idProduct": 273734,
+      "slugSet": "Base-Set",
+      "numero": "39",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273734.jpg"
+    },
+    {
+      "idProduct": 660189,
+      "slugSet": "Base-Set",
+      "numero": "39",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660189.jpg"
+    },
+    {
+      "idProduct": 273735,
+      "slugSet": "Base-Set",
+      "numero": "40",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273735.jpg"
+    },
+    {
+      "idProduct": 660188,
+      "slugSet": "Base-Set",
+      "numero": "40",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660188.jpg"
+    },
+    {
+      "idProduct": 273736,
+      "slugSet": "Base-Set",
+      "numero": "41",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273736.jpg"
+    },
+    {
+      "idProduct": 660187,
+      "slugSet": "Base-Set",
+      "numero": "41",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660187.jpg"
+    },
+    {
+      "idProduct": 273737,
+      "slugSet": "Base-Set",
+      "numero": "42",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273737.jpg"
+    },
+    {
+      "idProduct": 660186,
+      "slugSet": "Base-Set",
+      "numero": "42",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660186.jpg"
+    },
+    {
+      "idProduct": 273738,
+      "slugSet": "Base-Set",
+      "numero": "43",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273738.jpg"
+    },
+    {
+      "idProduct": 660185,
+      "slugSet": "Base-Set",
+      "numero": "43",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660185.jpg"
+    },
+    {
+      "idProduct": 273739,
+      "slugSet": "Base-Set",
+      "numero": "44",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273739.jpg"
+    },
+    {
+      "idProduct": 660184,
+      "slugSet": "Base-Set",
+      "numero": "44",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660184.jpg"
+    },
+    {
+      "idProduct": 547236,
+      "slugSet": "Base-Set",
+      "numero": "44",
+      "variante": "V3",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\547236.jpg"
+    },
+    {
+      "idProduct": 273740,
+      "slugSet": "Base-Set",
+      "numero": "45",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273740.jpg"
+    },
+    {
+      "idProduct": 660183,
+      "slugSet": "Base-Set",
+      "numero": "45",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660183.jpg"
+    },
+    {
+      "idProduct": 273741,
+      "slugSet": "Base-Set",
+      "numero": "46",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273741.jpg"
+    },
+    {
+      "idProduct": 660182,
+      "slugSet": "Base-Set",
+      "numero": "46",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660182.jpg"
+    },
+    {
+      "idProduct": 547241,
+      "slugSet": "Base-Set",
+      "numero": "46",
+      "variante": "V3",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\547241.jpg"
+    },
+    {
+      "idProduct": 273742,
+      "slugSet": "Base-Set",
+      "numero": "47",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273742.jpg"
+    },
+    {
+      "idProduct": 660181,
+      "slugSet": "Base-Set",
+      "numero": "47",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660181.jpg"
+    },
+    {
+      "idProduct": 273743,
+      "slugSet": "Base-Set",
+      "numero": "48",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273743.jpg"
+    },
+    {
+      "idProduct": 660180,
+      "slugSet": "Base-Set",
+      "numero": "48",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660180.jpg"
+    },
+    {
+      "idProduct": 273744,
+      "slugSet": "Base-Set",
+      "numero": "49",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273744.jpg"
+    },
+    {
+      "idProduct": 660179,
+      "slugSet": "Base-Set",
+      "numero": "49",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660179.jpg"
+    },
+    {
+      "idProduct": 273745,
+      "slugSet": "Base-Set",
+      "numero": "50",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273745.jpg"
+    },
+    {
+      "idProduct": 660178,
+      "slugSet": "Base-Set",
+      "numero": "50",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660178.jpg"
+    },
+    {
+      "idProduct": 273746,
+      "slugSet": "Base-Set",
+      "numero": "51",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273746.jpg"
+    },
+    {
+      "idProduct": 660177,
+      "slugSet": "Base-Set",
+      "numero": "51",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660177.jpg"
+    },
+    {
+      "idProduct": 273747,
+      "slugSet": "Base-Set",
+      "numero": "52",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273747.jpg"
+    },
+    {
+      "idProduct": 660176,
+      "slugSet": "Base-Set",
+      "numero": "52",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660176.jpg"
+    },
+    {
+      "idProduct": 273748,
+      "slugSet": "Base-Set",
+      "numero": "53",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273748.jpg"
+    },
+    {
+      "idProduct": 660175,
+      "slugSet": "Base-Set",
+      "numero": "53",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660175.jpg"
+    },
+    {
+      "idProduct": 273749,
+      "slugSet": "Base-Set",
+      "numero": "54",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273749.jpg"
+    },
+    {
+      "idProduct": 660174,
+      "slugSet": "Base-Set",
+      "numero": "54",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660174.jpg"
+    },
+    {
+      "idProduct": 273750,
+      "slugSet": "Base-Set",
+      "numero": "55",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273750.jpg"
+    },
+    {
+      "idProduct": 660173,
+      "slugSet": "Base-Set",
+      "numero": "55",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660173.jpg"
+    },
+    {
+      "idProduct": 273751,
+      "slugSet": "Base-Set",
+      "numero": "56",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273751.jpg"
+    },
+    {
+      "idProduct": 660172,
+      "slugSet": "Base-Set",
+      "numero": "56",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660172.jpg"
+    },
+    {
+      "idProduct": 273752,
+      "slugSet": "Base-Set",
+      "numero": "57",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273752.jpg"
+    },
+    {
+      "idProduct": 660171,
+      "slugSet": "Base-Set",
+      "numero": "57",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660171.jpg"
+    },
+    {
+      "idProduct": 273753,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273753.jpg"
+    },
+    {
+      "idProduct": 660169,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660169.jpg"
+    },
+    {
+      "idProduct": 660170,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V3",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660170.jpg"
+    },
+    {
+      "idProduct": 275568,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V4",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\275568.jpg"
+    },
+    {
+      "idProduct": 275586,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V5",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\275586.jpg"
+    },
+    {
+      "idProduct": 362859,
+      "slugSet": "Base-Set",
+      "numero": "58",
+      "variante": "V6",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\362859.jpg"
+    },
+    {
+      "idProduct": 273754,
+      "slugSet": "Base-Set",
+      "numero": "59",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273754.jpg"
+    },
+    {
+      "idProduct": 660168,
+      "slugSet": "Base-Set",
+      "numero": "59",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660168.jpg"
+    },
+    {
+      "idProduct": 273755,
+      "slugSet": "Base-Set",
+      "numero": "60",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273755.jpg"
+    },
+    {
+      "idProduct": 660167,
+      "slugSet": "Base-Set",
+      "numero": "60",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660167.jpg"
+    },
+    {
+      "idProduct": 273756,
+      "slugSet": "Base-Set",
+      "numero": "61",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273756.jpg"
+    },
+    {
+      "idProduct": 660166,
+      "slugSet": "Base-Set",
+      "numero": "61",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660166.jpg"
+    },
+    {
+      "idProduct": 273757,
+      "slugSet": "Base-Set",
+      "numero": "62",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273757.jpg"
+    },
+    {
+      "idProduct": 660165,
+      "slugSet": "Base-Set",
+      "numero": "62",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660165.jpg"
+    },
+    {
+      "idProduct": 273758,
+      "slugSet": "Base-Set",
+      "numero": "63",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273758.jpg"
+    },
+    {
+      "idProduct": 660164,
+      "slugSet": "Base-Set",
+      "numero": "63",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660164.jpg"
+    },
+    {
+      "idProduct": 547246,
+      "slugSet": "Base-Set",
+      "numero": "63",
+      "variante": "V3",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\547246.jpg"
+    },
+    {
+      "idProduct": 273759,
+      "slugSet": "Base-Set",
+      "numero": "64",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273759.jpg"
+    },
+    {
+      "idProduct": 660163,
+      "slugSet": "Base-Set",
+      "numero": "64",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660163.jpg"
+    },
+    {
+      "idProduct": 273760,
+      "slugSet": "Base-Set",
+      "numero": "65",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273760.jpg"
+    },
+    {
+      "idProduct": 660162,
+      "slugSet": "Base-Set",
+      "numero": "65",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660162.jpg"
+    },
+    {
+      "idProduct": 273761,
+      "slugSet": "Base-Set",
+      "numero": "66",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273761.jpg"
+    },
+    {
+      "idProduct": 660161,
+      "slugSet": "Base-Set",
+      "numero": "66",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660161.jpg"
+    },
+    {
+      "idProduct": 273762,
+      "slugSet": "Base-Set",
+      "numero": "67",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273762.jpg"
+    },
+    {
+      "idProduct": 660160,
+      "slugSet": "Base-Set",
+      "numero": "67",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660160.jpg"
+    },
+    {
+      "idProduct": 273763,
+      "slugSet": "Base-Set",
+      "numero": "68",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273763.jpg"
+    },
+    {
+      "idProduct": 660159,
+      "slugSet": "Base-Set",
+      "numero": "68",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660159.jpg"
+    },
+    {
+      "idProduct": 273764,
+      "slugSet": "Base-Set",
+      "numero": "69",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273764.jpg"
+    },
+    {
+      "idProduct": 660158,
+      "slugSet": "Base-Set",
+      "numero": "69",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660158.jpg"
+    },
+    {
+      "idProduct": 273765,
+      "slugSet": "Base-Set",
+      "numero": "70",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273765.jpg"
+    },
+    {
+      "idProduct": 660150,
+      "slugSet": "Base-Set",
+      "numero": "70",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660150.jpg"
+    },
+    {
+      "idProduct": 273766,
+      "slugSet": "Base-Set",
+      "numero": "71",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273766.jpg"
+    },
+    {
+      "idProduct": 660149,
+      "slugSet": "Base-Set",
+      "numero": "71",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660149.jpg"
+    },
+    {
+      "idProduct": 273767,
+      "slugSet": "Base-Set",
+      "numero": "72",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273767.jpg"
+    },
+    {
+      "idProduct": 660147,
+      "slugSet": "Base-Set",
+      "numero": "72",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660147.jpg"
+    },
+    {
+      "idProduct": 273768,
+      "slugSet": "Base-Set",
+      "numero": "73",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273768.jpg"
+    },
+    {
+      "idProduct": 660146,
+      "slugSet": "Base-Set",
+      "numero": "73",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660146.jpg"
+    },
+    {
+      "idProduct": 273769,
+      "slugSet": "Base-Set",
+      "numero": "74",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273769.jpg"
+    },
+    {
+      "idProduct": 660144,
+      "slugSet": "Base-Set",
+      "numero": "74",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660144.jpg"
+    },
+    {
+      "idProduct": 273770,
+      "slugSet": "Base-Set",
+      "numero": "75",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273770.jpg"
+    },
+    {
+      "idProduct": 660143,
+      "slugSet": "Base-Set",
+      "numero": "75",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660143.jpg"
+    },
+    {
+      "idProduct": 273771,
+      "slugSet": "Base-Set",
+      "numero": "76",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273771.jpg"
+    },
+    {
+      "idProduct": 660142,
+      "slugSet": "Base-Set",
+      "numero": "76",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660142.jpg"
+    },
+    {
+      "idProduct": 273772,
+      "slugSet": "Base-Set",
+      "numero": "77",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273772.jpg"
+    },
+    {
+      "idProduct": 660140,
+      "slugSet": "Base-Set",
+      "numero": "77",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660140.jpg"
+    },
+    {
+      "idProduct": 273773,
+      "slugSet": "Base-Set",
+      "numero": "78",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273773.jpg"
+    },
+    {
+      "idProduct": 660138,
+      "slugSet": "Base-Set",
+      "numero": "78",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660138.jpg"
+    },
+    {
+      "idProduct": 273774,
+      "slugSet": "Base-Set",
+      "numero": "79",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273774.jpg"
+    },
+    {
+      "idProduct": 660137,
+      "slugSet": "Base-Set",
+      "numero": "79",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660137.jpg"
+    },
+    {
+      "idProduct": 273775,
+      "slugSet": "Base-Set",
+      "numero": "80",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273775.jpg"
+    },
+    {
+      "idProduct": 660135,
+      "slugSet": "Base-Set",
+      "numero": "80",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660135.jpg"
+    },
+    {
+      "idProduct": 273776,
+      "slugSet": "Base-Set",
+      "numero": "81",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273776.jpg"
+    },
+    {
+      "idProduct": 660134,
+      "slugSet": "Base-Set",
+      "numero": "81",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660134.jpg"
+    },
+    {
+      "idProduct": 273777,
+      "slugSet": "Base-Set",
+      "numero": "82",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273777.jpg"
+    },
+    {
+      "idProduct": 660132,
+      "slugSet": "Base-Set",
+      "numero": "82",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660132.jpg"
+    },
+    {
+      "idProduct": 273778,
+      "slugSet": "Base-Set",
+      "numero": "83",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273778.jpg"
+    },
+    {
+      "idProduct": 660123,
+      "slugSet": "Base-Set",
+      "numero": "83",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 8  Cartes Set de Base _ Cardmarket_files\\660123.jpg"
+    },
+    {
+      "idProduct": 273779,
+      "slugSet": "Base-Set",
+      "numero": "84",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273779.jpg"
+    },
+    {
+      "idProduct": 660122,
+      "slugSet": "Base-Set",
+      "numero": "84",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660122.jpg"
+    },
+    {
+      "idProduct": 273780,
+      "slugSet": "Base-Set",
+      "numero": "85",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273780.jpg"
+    },
+    {
+      "idProduct": 660121,
+      "slugSet": "Base-Set",
+      "numero": "85",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660121.jpg"
+    },
+    {
+      "idProduct": 273781,
+      "slugSet": "Base-Set",
+      "numero": "86",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273781.jpg"
+    },
+    {
+      "idProduct": 660120,
+      "slugSet": "Base-Set",
+      "numero": "86",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660120.jpg"
+    },
+    {
+      "idProduct": 273782,
+      "slugSet": "Base-Set",
+      "numero": "87",
+      "variante": null,
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273782.jpg"
+    },
+    {
+      "idProduct": 660119,
+      "slugSet": "Base-Set",
+      "numero": "87",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660119.jpg"
+    },
+    {
+      "idProduct": 273783,
+      "slugSet": "Base-Set",
+      "numero": "88",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273783.jpg"
+    },
+    {
+      "idProduct": 660118,
+      "slugSet": "Base-Set",
+      "numero": "88",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660118.jpg"
+    },
+    {
+      "idProduct": 273784,
+      "slugSet": "Base-Set",
+      "numero": "89",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\273784.jpg"
+    },
+    {
+      "idProduct": 660116,
+      "slugSet": "Base-Set",
+      "numero": "89",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660116.jpg"
+    },
+    {
+      "idProduct": 273785,
+      "slugSet": "Base-Set",
+      "numero": "90",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273785.jpg"
+    },
+    {
+      "idProduct": 660115,
+      "slugSet": "Base-Set",
+      "numero": "90",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660115.jpg"
+    },
+    {
+      "idProduct": 273786,
+      "slugSet": "Base-Set",
+      "numero": "91",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273786.jpg"
+    },
+    {
+      "idProduct": 660113,
+      "slugSet": "Base-Set",
+      "numero": "91",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660113.jpg"
+    },
+    {
+      "idProduct": 273787,
+      "slugSet": "Base-Set",
+      "numero": "92",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273787.jpg"
+    },
+    {
+      "idProduct": 660112,
+      "slugSet": "Base-Set",
+      "numero": "92",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 4  Cartes Set de Base _ Cardmarket_files\\660112.jpg"
+    },
+    {
+      "idProduct": 273788,
+      "slugSet": "Base-Set",
+      "numero": "93",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273788.jpg"
+    },
+    {
+      "idProduct": 660110,
+      "slugSet": "Base-Set",
+      "numero": "93",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660110.jpg"
+    },
+    {
+      "idProduct": 273789,
+      "slugSet": "Base-Set",
+      "numero": "94",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273789.jpg"
+    },
+    {
+      "idProduct": 660109,
+      "slugSet": "Base-Set",
+      "numero": "94",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660109.jpg"
+    },
+    {
+      "idProduct": 273790,
+      "slugSet": "Base-Set",
+      "numero": "95",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273790.jpg"
+    },
+    {
+      "idProduct": 660107,
+      "slugSet": "Base-Set",
+      "numero": "95",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660107.jpg"
+    },
+    {
+      "idProduct": 273791,
+      "slugSet": "Base-Set",
+      "numero": "96",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 3  Cartes Set de Base _ Cardmarket_files\\273791.jpg"
+    },
+    {
+      "idProduct": 660106,
+      "slugSet": "Base-Set",
+      "numero": "96",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660106.jpg"
+    },
+    {
+      "idProduct": 273792,
+      "slugSet": "Base-Set",
+      "numero": "97",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273792.jpg"
+    },
+    {
+      "idProduct": 660105,
+      "slugSet": "Base-Set",
+      "numero": "97",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660105.jpg"
+    },
+    {
+      "idProduct": 273793,
+      "slugSet": "Base-Set",
+      "numero": "98",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273793.jpg"
+    },
+    {
+      "idProduct": 660103,
+      "slugSet": "Base-Set",
+      "numero": "98",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660103.jpg"
+    },
+    {
+      "idProduct": 273794,
+      "slugSet": "Base-Set",
+      "numero": "99",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273794.jpg"
+    },
+    {
+      "idProduct": 660102,
+      "slugSet": "Base-Set",
+      "numero": "99",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 7  Cartes Set de Base _ Cardmarket_files\\660102.jpg"
+    },
+    {
+      "idProduct": 273795,
+      "slugSet": "Base-Set",
+      "numero": "100",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 2  Cartes Set de Base _ Cardmarket_files\\273795.jpg"
+    },
+    {
+      "idProduct": 660101,
+      "slugSet": "Base-Set",
+      "numero": "100",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660101.jpg"
+    },
+    {
+      "idProduct": 273796,
+      "slugSet": "Base-Set",
+      "numero": "101",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273796.jpg"
+    },
+    {
+      "idProduct": 660098,
+      "slugSet": "Base-Set",
+      "numero": "101",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 5  Cartes Set de Base _ Cardmarket_files\\660098.jpg"
+    },
+    {
+      "idProduct": 273797,
+      "slugSet": "Base-Set",
+      "numero": "102",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\BS\\PAGE 1  Cartes Set de Base _ Cardmarket_files\\273797.jpg"
+    },
+    {
+      "idProduct": 660096,
+      "slugSet": "Base-Set",
+      "numero": "102",
+      "variante": "V2",
+      "libelle": "Shadowless",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "1999\\BS\\PAGE 6  Cartes Set de Base _ Cardmarket_files\\660096.jpg"
+    },
+    {
+      "idProduct": 273862,
+      "slugSet": "Fossil",
+      "numero": "1",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\FO\\PAGE 2  Cartes Fossile _ Cardmarket_files\\273862.jpg"
+    },
+    {
+      "idProduct": 275573,
+      "slugSet": "Fossil",
+      "numero": "1",
+      "variante": "V3",
+      "libelle": "Prerelease Stamp",
+      "lecture": "oeil (planche)",
+      "image": "1999\\FO\\PAGE 3  Cartes Fossile _ Cardmarket_files\\275573.jpg"
+    },
+    {
+      "idProduct": 274145,
+      "slugSet": "Gym-Heroes",
+      "numero": "9",
+      "variante": null,
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2000\\GH\\PAGE 3  Cartes Gym Heroes _ Cardmarket_files\\274145.jpg"
+    },
+    {
+      "idProduct": 275575,
+      "slugSet": "Gym-Heroes",
+      "numero": "9",
+      "variante": "V2",
+      "libelle": "Prerelease Stamp",
+      "lecture": "oeil (planche)",
+      "image": "2000\\GH\\PAGE 5  Cartes Gym Heroes _ Cardmarket_files\\275575.jpg"
+    },
+    {
+      "idProduct": 273798,
+      "slugSet": "Jungle",
+      "numero": "1",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\JU\\PAGE 2  Cartes Jungle _ Cardmarket_files\\273798.jpg"
+    },
+    {
+      "idProduct": 275572,
+      "slugSet": "Jungle",
+      "numero": "1",
+      "variante": "V3",
+      "libelle": "Prerelease Stamp",
+      "lecture": "oeil (planche)",
+      "image": "1999\\JU\\PAGE 3  Cartes Jungle _ Cardmarket_files\\275572.jpg"
+    },
+    {
+      "idProduct": 273853,
+      "slugSet": "Jungle",
+      "numero": "56",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\JU\\PAGE 1  Cartes Jungle _ Cardmarket_files\\273853.jpg"
+    },
+    {
+      "idProduct": 275571,
+      "slugSet": "Jungle",
+      "numero": "56",
+      "variante": "V2",
+      "libelle": "Golden Border",
+      "lecture": "oeil (planche)",
+      "image": "1999\\JU\\PAGE 3  Cartes Jungle _ Cardmarket_files\\275571.jpg"
+    },
+    {
+      "idProduct": 274768,
+      "slugSet": "Legendary-Collection",
+      "numero": "3",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2002\\LC\\PAGE 4  Cartes Legendary Collection _ Cardmarket_files\\274768.jpg"
+    },
+    {
+      "idProduct": 855023,
+      "slugSet": "Legendary-Collection",
+      "numero": "3",
+      "variante": "V3",
+      "libelle": "Non-Holo / Lava Theme Deck",
+      "lecture": "oeil (planche)",
+      "image": "2002\\LC\\PAGE 4  Cartes Legendary Collection _ Cardmarket_files\\855023.jpg"
+    },
+    {
+      "idProduct": 274454,
+      "slugSet": "Neo-Genesis",
+      "numero": "54",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2000\\NG\\PAGE 1  Cartes Neo Genesis _ Cardmarket_files\\274454.jpg"
+    },
+    {
+      "idProduct": 547251,
+      "slugSet": "Neo-Genesis",
+      "numero": "54",
+      "variante": "V2",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "2000\\NG\\PAGE 4  Cartes Neo Genesis _ Cardmarket_files\\547251.jpg"
+    },
+    {
+      "idProduct": 274457,
+      "slugSet": "Neo-Genesis",
+      "numero": "57",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2000\\NG\\PAGE 1  Cartes Neo Genesis _ Cardmarket_files\\274457.jpg"
+    },
+    {
+      "idProduct": 547256,
+      "slugSet": "Neo-Genesis",
+      "numero": "57",
+      "variante": "V2",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "2000\\NG\\PAGE 4  Cartes Neo Genesis _ Cardmarket_files\\547256.jpg"
+    },
+    {
+      "idProduct": 274481,
+      "slugSet": "Neo-Genesis",
+      "numero": "81",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2000\\NG\\PAGE 1  Cartes Neo Genesis _ Cardmarket_files\\274481.jpg"
+    },
+    {
+      "idProduct": 547261,
+      "slugSet": "Neo-Genesis",
+      "numero": "81",
+      "variante": "V2",
+      "libelle": "Attention: Oversized Card / Not Tournament Legal",
+      "lecture": "detecteur rouge pur + oeil (planche)",
+      "image": "2000\\NG\\PAGE 4  Cartes Neo Genesis _ Cardmarket_files\\547261.jpg"
+    },
+    {
+      "idProduct": 274061,
+      "slugSet": "Team-Rocket",
+      "numero": "8",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "2000\\TR\\PAGE 3  Cartes Team Rocket _ Cardmarket_files\\274061.jpg"
+    },
+    {
+      "idProduct": 275574,
+      "slugSet": "Team-Rocket",
+      "numero": "8",
+      "variante": "V2",
+      "libelle": "Prerelease Stamp",
+      "lecture": "oeil (planche)",
+      "image": "2000\\TR\\PAGE 3  Cartes Team Rocket _ Cardmarket_files\\275574.jpg"
+    },
+    {
+      "idProduct": 576707,
+      "slugSet": "Wizards-Black-Star-Promos",
+      "numero": "10",
+      "variante": null,
+      "libelle": "Non-Holo",
+      "lecture": "oeil (planche)",
+      "image": "1999\\WP\\PAGE 2  Cartes Wizards Black Star Promos _ Cardmarket_files\\576707.jpg"
+    },
+    {
+      "idProduct": 275429,
+      "slugSet": "Wizards-Black-Star-Promos",
+      "numero": "10",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\WP\\PAGE 1  Cartes Wizards Black Star Promos _ Cardmarket_files\\275429.jpg"
+    },
+    {
+      "idProduct": 576708,
+      "slugSet": "Wizards-Black-Star-Promos",
+      "numero": "11",
+      "variante": null,
+      "libelle": "Non-Holo",
+      "lecture": "oeil (planche)",
+      "image": "1999\\WP\\PAGE 2  Cartes Wizards Black Star Promos _ Cardmarket_files\\576708.jpg"
+    },
+    {
+      "idProduct": 275430,
+      "slugSet": "Wizards-Black-Star-Promos",
+      "numero": "11",
+      "variante": "V1",
+      "libelle": null,
+      "lecture": "aucune banniere (detecteur rouge pur + oeil)",
+      "image": "1999\\WP\\PAGE 1  Cartes Wizards Black Star Promos _ Cardmarket_files\\275430.jpg"
+    }
+  ]
+}
