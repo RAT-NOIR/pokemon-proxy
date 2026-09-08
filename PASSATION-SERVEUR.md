@@ -2,6 +2,58 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-08, nuit — L'IMAGE CÈDE À L'ATTAQUE (câblé), le pont mesuré, la jointure katakana enterrée. Deux commits, NON POUSSÉS
+
+### 1. Câblé : l'image s'abstient derrière l'attaque comme derrière le symbole (index.js, garde de l'image)
+
+**L'ordre retenu : symbole, puis attaque, puis image.** Pourquoi l'attaque devant l'image, et
+pourquoi ce n'est pas une promotion : `apres()` du banc (banc-japonais.js:551) rend déjà
+`attaque-departage` avant d'atteindre son bloc image (:628) — production et banc divergeaient,
+et c'est la production qui rejoint le banc. Ensuite, l'intention écrite au branchement de
+l'attaque (« elle remonte un désigné en tête, et rien d'autre ») n'a jamais prévu qu'un
+signal la renverse ; l'écrasement était le non-déclaré. Enfin l'image, mesurée 90,7 % sur ses
+lignes, n'a jamais été mesurée CONTRE l'attaque : sur les 11 désignations par l'attaque au
+journal, 10 accords (`confirme-le-scoring`), 1 désaccord (Larvitar) où les deux sont faux.
+Rien ne dit que l'image bat l'attaque, et la règle du dépôt refuse de promouvoir sans mesure.
+Le désaccord est journalisé (`imageStatut: abstention-attaque-prioritaire`, `imageMotif`
+accord/DÉSACCORD) : c'est cette mesure qui pourra un jour inverser l'ordre.
+
+**Attendu, tenu.** Larvitar reste faux (vérité 765002 absente du vivier de 5) mais la réserve
+nommera le départage qui a décidé. Le banc ne bouge pas : sortie identique ligne à ligne avec
+et sans le changement (926 lignes, 0 différence, `git stash` limité aux deux fichiers). Le
+banc n'exécute pas la route, `apres()` est sa propre cascade ; aucun changement de banc requis
+par la règle de symétrie. Verrou 7 cellules vert, cliquet 55 / plancher 47. Instrument : les
+lignes DÉJÀ au journal où l'image a écrasé l'attaque gardent leur étiquette (1 ligne, Larvitar).
+
+### 2. Mesuré, non câblé : refuser une jointure TCGdex dont l'ère contredit l'expansion
+
+Population : 90 lignes du journal avec `carteTcgdexId` et un produit retenu, dont **40** en
+table vintage (les 50 autres n'ont aucune année locale). Deux règles :
+
+| règle | fiches modernes (23) | fiches d'époque (17) |
+|---|---|---|
+| **A** : année de sortie du set TCGdex (`releaseDate`) contre `annee` de la table, ±2 ans | **refuse 18**, muette 5 (EXS, `annee` null) | garde 16, muette 1, **perd 0** |
+| B : set de la fiche ∉ pont `setTcgdex` de l'expansion | refuse 14, muette 9 | **refuse 10**, garde 6 |
+
+**A est la règle.** B perd 10 justes parce que le pont vise le set ANGLAIS (base2, gym2) alors
+que la fiche juste est le set japonais d'époque (PMCG4, PMCG6) : le pont dit « une autre
+édition », pas « une autre carte ». A est muette hors table (50 lignes) et sur EXS (5) : elle
+ne rend l'illustrateur mesurable que sur les 16 fiches gardées, et c'est déjà 16 de plus que 0.
+Colonne de jointure : `releaseDate` de `/v2/{lg}/sets/{id}` contre `SETS_VINTAGE_JAPONAIS.annee`.
+Aparté : sur Larvitar, la fiche jointe PCG6-013 EST la vérité (Larvitar δ) — TCGdex avait la
+bonne carte quand le vivier ne l'avait pas.
+
+### ⛔ 3. LA JOINTURE KATAKANA EST MORTE — TCGdex traduit aussi le japonais. Ne jamais la reproposer.
+
+La colonne existe (`attacks[].name` sur `/v2/ja/cards/{id}`) et elle ne porte pas le texte
+imprimé. Deux preuves, une par ère : Raikou neo3-029, imprimé « ライトニングタックル » (lu par
+l'IA en `attaqueBrute`), TCGdex ja « 稲妻タックル » ; Grimer PMCG3-003 (fiche enregistrée dans
+`verrou/tcgdex.json`), TCGdex ja « 厄介なグー | 最小化します » — une forme verbale polie que
+personne n'imprime sur une carte. Ce sont des traductions automatiques de l'anglais. La clé
+« katakana contre attaque japonaise » a donc le même défaut que « anglais lu contre anglais
+Cardmarket » : deux traductions indépendantes du même texte. Couverture, pour mémoire : 35
+vérités à `attaqueBrute`, 16 pontées, 1 comparable, 0 égale.
+
 ## 2026-09-08, soir — LES CLÉS EXACTES : ce qui en reste, et un instrument qui ment. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
 
 **Banc du soir** : 118 vérités saisies (29 ce soir, 2 corrigées), 139 vérités individuelles avec
