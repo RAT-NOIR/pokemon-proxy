@@ -2,6 +2,83 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 🔴 2026-09-09 — LE CANAL DU PRIX LIVE N'A JAMAIS RENDU UN SEUL RETOUR, toutes langues ; puis la chaîne « prix de 1re édition », décrite sans l'écrire. Un commit (ce fichier), NON POUSSÉ
+
+### 1. La dette qui bloque tout : `retourLe` 0 sur 280, `prixLive` 0 sur 280
+
+Ce n'est pas un défaut FR. **Aucun retour n'est JAMAIS arrivé sur `/api/retour-live`.** Dénominateur
+honnête (la route n'existe en production que depuis le 2026-09-05, fusion de `chantier-image`) :
+**48 scans réussis** sur `/api/identifier` depuis, 4 utilisateurs, JP 42 · FR 5 · IT 1, six versions
+serveur vues ; `retourLe` **0/48**, `prixVinted` non nul 1/48, `titreAnnonce` 48/48 (l'extension
+POSTE bien ce qu'elle envoie AU SCAN). Le champ `prixLive` existe sur 138 lignes et n'est rempli
+sur aucune.
+
+**Le côté serveur, tracé, est sain** : `scanId` est un `ObjectId` créé AVANT l'insertion et rendu
+tel quel (journal-scans.js:896 et :1083, index.js:5560 et :5707) ; la route exige `userId`,
+`scanId` valide, `prixLive` > 0, un état de `ORDRE_ETATS`, une origine de l'énumération ; elle
+refuse un second retour (409) ; `test-retour-live.js` exerce les trois gardes et le cas nominal
+en écrivant `prixLive`, `prixLiveEtat`, `prixLiveCodeLangue`. Un retour qui arrive s'écrit.
+
+**Ce que le serveur ne peut PAS voir, et c'est là que ça s'arrête** : la réponse de
+`/api/identifier` rend `scanId` et `codeLangue`, mais **AUCUNE URL de fiche** — le bloc
+`carte` (index.js:5708-5811) ne porte ni `url` ni `cardmarketUrl` ; seule la route morte
+`/api/analyser` rend `cardmarketUrl` (index.js:3256, 0 trafic). L'extension doit donc construire
+`Products?idProduct=<id>&language=<codeLangue>` elle-même, ouvrir la page dans le navigateur de
+l'utilisateur, lire la grille, puis POSTer. Entre « réponse reçue » et « POST reçu », **quatre
+pas dont trois sont côté extension**, et le serveur n'observe que le dernier : 0 POST. Les
+hypothèses, à trancher DANS le dépôt de l'extension, pas ici : l'appel n'est pas implémenté dans
+la version déployée (c'est ce que dit l'historique : « il n'y avait pas de serveur pour
+l'écouter avant ce matin », 05/09 — le serveur a été écrit avant le client) ; ou il vise
+`/api/analyser` avec `vintedPrice`, la mauvaise route, comme `prixVinted` l'a fait (0/225 puis
+1/280) ; ou le POST part sans `scanId`/jeton et meurt en 400/401, ce que le journal ne voit
+pas. ⚠️ Même famille que `prixVinted` : une jointure extension↔serveur, un côté écrit, l'autre
+pas. **Une seule mesure tranche** : un scan de contrôle avec l'extension déployée, l'onglet
+réseau ouvert — le POST part-il, vers quelle route, avec quel corps, quel code retour.
+
+### 2. Le paramètre d'URL, et la chaîne complète (décrite, non écrite)
+
+**Où le lire** : sur la fiche produit (`Pikachu-V3-BS58`, déjà ouverte), cocher « First
+Edition? » dans le bloc « Extra » des filtres d'annonces : l'URL de la page se réécrit avec le
+paramètre et sa valeur (`…&<nom>=Y` ou `=1`). Le relever tel quel, comme le nom du filtre l'a
+été. Même famille que `language=`, `minCondition=`, `isReverseHolo=Y` que le code emploie déjà.
+
+**La chaîne**, calquée sur `reverse.strategie = 'filtre-url'` (index.js:5844-5851) :
+1. réponse de `/api/identifier` : un bloc `edition1: { attendue, strategie: 'filtre-url',
+   parametre }` — `attendue` vient du signal lu sur la carte (point 3), `parametre` le nom
+   relevé ; jamais sans `strategie`, jamais de remplacement du prix normal ;
+2. l'extension ouvre la fiche DEUX fois (ou une fois avec et une fois sans le filtre) : le prix
+   live normal comme aujourd'hui, ET le prix live avec le paramètre ;
+3. `/api/retour-live` reçoit **deux champs, pas un** : `prixLive` (inchangé) et
+   `prixLiveEdition1` (+ son état, sa langue, son origine — la même énumération) ;
+4. journal : `prixLiveEdition1`, `prixLiveEdition1Etat`, `prixLiveEdition1Origine`, `retourLe`
+   commun ; la garde « second retour = 409 » reste, les deux prix voyagent dans le même POST.
+
+**Coexistence dans la réponse** : deux prix, deux libellés. Le prix normal est celui du
+produit (composite, et on le dit) ; le prix 1re édition est celui des ANNONCES filtrées, dans la
+langue de l'utilisateur. L'extension montre les deux quand `edition1.attendue` est vrai, le
+second seul n'est jamais rendu : si le filtre ne rend aucune annonce, `prixLiveEdition1` est
+absent, pas 0 (« un 0 n'est pas un prix », déjà la règle de la route).
+
+### 3. Les deux champs de prompt — décrits, non écrits
+
+`edition1` : « le tampon rond noir "EDITION 1" (ou "ÉDITION 1") sous le coin inférieur gauche
+du cadre de l'illustration » — valeurs `oui` | `non` | `illisible`, ⛔ jamais `aucun`
+(`MOTS_VIDES`). `edition1Confiance` : `haute` | `basse`. Journalisés sur les DEUX voies et au
+schéma, comme `illustrateur`. **Ils n'entrent ni au vivier, ni au scoring, ni dans aucun
+départage** : ils pilotent `edition1.attendue` (axe PRIX), exactement comme `etatEstimeIA`
+pilote `minCondition`. Instrument neuf : le verrou avertira sur l'empreinte du prompt.
+
+### 4. Ce qu'il faut pour MESURER un prix de 1re édition — un instrument neuf, pas une extension du banc
+
+Le banc juge un `idProduct` ; ici il n'y a pas d'`idProduct` à juger, il y a un ARTICLE.
+Trois choses manquent, aucune n'existe : (a) une vérité à l'article — pour une ligne, « la carte
+scannée est-elle 1re édition ? », lue sur la photo par le testeur, saisie AVANT le scan comme
+une cellule de lot (règle du §4 de CLAUDE.md : le marqueur se pose au moment du scan, jamais
+après) ; (b) le retour live avec les deux prix, donc le point 1 réparé d'abord ; (c) un outil
+qui compare `prixLiveEdition1` à `prixLive` et au guide sur les lignes à vérité, avec son
+dénominateur imprimé — la mesure d'intervalle, mais par article. Sans (a), la lecture du tampon
+resterait enregistrée et jamais jugée ; sans (b), il n'y a rien à comparer.
+
 ## 🔑 2026-09-09 — PRIORITÉ RÉORIENTÉE : clientèle francophone, la 1re édition est un discriminant COMMERCIAL. Le périmètre FR, et la voie du filtre d'annonce. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
 
 ### 1. Le périmètre français, chiffré : il n'y a PAS de produit FR — la langue est un filtre d'annonce, comme la 1re édition
