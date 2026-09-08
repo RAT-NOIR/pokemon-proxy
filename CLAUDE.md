@@ -128,3 +128,45 @@ sont donc jamais arrivés au banc, dont un Pikachu n°025 *Expansion Pack* masqu
 Pikachu n°025 *Jungle* scanné deux minutes plus tôt — deux cartes différentes, deux
 `idProduct` différents, une seule identité. **Scanner deux cartes de même nom et même numéro
 dans un lot, c'est en perdre une.** À vérifier en composant le lot, pas en le dépouillant.
+
+---
+
+## 5. Ce que le dédoublonnage coûte — mesuré le 2026-09-08, rien de proposé
+
+**Les dénominateurs d'abord** : 279 lignes au journal, 9 écartées « hors service » AVANT le
+dédoublonnage, **270 exploitables**, 235 identités de lecture distinctes.
+
+| | n |
+|---|---|
+| **lignes masquées** | **35 / 270 — 13,0 %** |
+| dont même produit gagnant (rescan : rien perdu) | 20 |
+| dont **produit gagnant DIFFÉRENT — une carte réellement perdue** | **5** |
+| dont indécidable (la masquée est un refus, pas de gagnant) | 10 |
+
+Par seau : **lot** 12 masquées derrière 112 retenues (dont 3 de produit différent) ·
+**holdout** 13 derrière 77 (dont 0) · **entraînement** 10 derrière 45 (dont 2).
+
+🔑 **La perte n'est pas diffuse, elle vise le chantier.** Les 5 cartes perdues :
+Charmander MCDP←smP2 · Flareon EC4←m3 · **Grimer EXS←MFO** · **Hypno EXS←MFO** ·
+**Pikachu EXP←PJU**. **Trois sur cinq sont EXS ou EXP** — les deux sets sur lesquels porte
+la lecture du symbole.
+
+**Ce qui séparerait les paires** : `vintedUrl` sépare **16/35** ; il manque d'un côté sur 11
+(lignes antérieures au champ), et sur les 8 restantes c'est **la même annonce**, donc
+masquée à juste titre. `setCode` sépare **0/35**.
+
+🔴 **LE CONFLIT, POSÉ POUR CELUI QUI S'Y ATTAQUERA — deux besoins opposés dans une clé qu'on
+vient d'unifier.** `cleDeDedoublonnage` **dérive de** `identiteDe`
+(`COMPOSANTES_IDENTITE = nom, numero, total`), et `test-banc-seaux.js` échoue si on les fait
+diverger — c'était la bonne correction, deux définitions de la même règle divergent toujours.
+Mais les deux usages ne demandent pas la même chose :
+
+- **ancrer une vérité** veut une clé STABLE, qui ne bouge pas quand la règle des seaux
+  change. Les vérités s'ancrent sur `v.lu` = `{nom, numero, setCode, total}`, **qui ne porte
+  pas `vintedUrl`** : l'ajouter à l'identité **détacherait les 89 vérités** — la faute
+  d'ancre du 04/08, refaite.
+- **dédoublonner** veut une clé DISCRIMINANTE, qui sépare deux annonces distinctes.
+
+Aucune proposition ici. Le fait est posé : **on ne touche pas à cette clé sans avoir dit ce
+qu'on fait des 89 vérités déjà saisies**, et sans mesurer d'abord ce que la nouvelle clé
+rattache encore.
