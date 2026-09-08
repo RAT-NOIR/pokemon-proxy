@@ -2,6 +2,69 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-09 — LA TABLE `banniere-cardmarket.json` EST ÉCRITE, et la limite du chantier est chiffrée : moins de produits que d'impressions. Deux commits, NON POUSSÉS
+
+### 🔴 La limite d'abord : 110 couples sur 113 ont MOINS de produits Cardmarket que d'impressions connues
+
+Impressions connues des sets WotC (connaissance générale des tirages, pas une colonne) : Base
+Set porte Unlimited, Shadowless ET 1re édition ; Jungle, Fossil, Team Rocket, Gym, Neo portent
+1re édition et Unlimited ; Base Set 2, Legendary Collection, promos n'ont pas de 1re édition.
+Cardmarket, lui, n'a JAMAIS de produit « 1st Edition » (0 bannière sur 233, 0 produit séparé :
+Charizard n°4 a deux produits pour trois impressions). Donc, si la 1re édition est un attribut
+d'ANNONCE chez Cardmarket et non de produit : les **102** couples de Base Set et **8** des 11
+autres (Fossil 1, Gym Heroes 9, Jungle 1 et 56, Neo Genesis 54/57/81, Team Rocket 8) ont une
+impression de plus que de produits ; seuls Legendary Collection 3 et les promos 10/11 sont
+complets. **110 / 113.** Et hors couples c'est pire : les ~1 050 produits des dix sets à 1re
+édition n'ont qu'UN produit par numéro pour DEUX impressions. Aucune table par `idProduct` ne
+séparera jamais ce que le fournisseur ne sépare pas.
+
+**⚠️ L'hypothèse « attribut d'annonce » n'est PAS vérifiée par moi** : la fiche
+`Pikachu-V3-BS58` est toujours derrière « Vérification de sécurité en cours » dans l'onglet
+resté ouvert, je ne contourne pas. Le testeur regarde les FILTRES des annonces sur la fiche :
+si « First Edition » y est une case à cocher comme « Reverse Holo » ou « Signed », c'est
+tranché, et c'est ce qui borne définitivement le chantier — le guide de prix d'un produit
+Shadowless mélange alors 1re édition et non.
+
+### La table : `banniere-cardmarket.json`, 233 lignes, lecture d'images seulement
+
+Une ligne par produit : `idProduct`, `slugSet`, `numero`, `variante`, `libelle` (texte exact
+ou `null`), `lecture` (détecteur rouge pur + œil, ou œil seul pour les six blanches), `image`
+(chemin relatif sous `CARDMARKET IMAGE`). ⛔ **`null` = aucune bannière lue, JAMAIS
+« Unlimited »** — c'est écrit dans la table (`semantique.null`) : le membre nu est la référence
+PAR ÉLIMINATION, la table ne comble pas. Distribution : null 115 · Shadowless 103 · Oversized
+7 · Prerelease Stamp 4 · Non-Holo 2 · Non-Holo / Lava Theme Deck 1 · Golden Border 1.
+Membres `null` par couple : **exactement un sur 112 couples ; trois sur Pikachu n°58** (V1,
+V4 « E3 », V5 « Poké Tour 1999 » : des tampons IMPRIMÉS sur la carte, pas des bannières).
+Zéro appel à Cardmarket. Aucune règle ne la lit.
+
+### Ce que ça changerait, chiffré AVANT tout câblage — et la question de lisibilité d'abord
+
+**La bannière est sur la vignette de Cardmarket, pas sur la carte.** Sur une vraie carte,
+« shadowless » se lit à l'ABSENCE de l'ombre portée sous le cadre de l'illustration (vue au
+zoom ×4 sur V1 contre V2 : un liseré sombre de 1-2 px à droite et en bas du cadre sur 255 px de
+large), plus une police plus fine des PV et de la ligne de copyright. Sur une photo Vinted
+(téléphone, reflet, sleeve, angle), c'est un signal FIN, et **sa lisibilité n'est mesurée nulle
+part** : le journal porte 0 scan de Base Set, la population de mesure est vide. Tant qu'elle
+l'est, « shadowless lu sur la photo » est un quatrième signal mort (après numéro absent,
+holo/mat, illustrateur non joint) et **aucun champ de prompt ne s'écrit**. Le test le moins
+cher : dix photos d'annonces Base Set (Vinted, à la main), V1 et V2 connus, et compter.
+
+**Plafond, SI c'était lisible**, par couple : Base Set 102 → ombre/absence sépare V1 de V2 sur
+**101** (Pikachu n°58 garde V2/V3 indécidables, deux « Shadowless ») ; Oversized 7 (taille,
+lisible) ; Prerelease Stamp 4 (tampon doré sur l'illustration, probablement lisible) ; Golden
+Border 1 (lisible) ; Non-Holo 3 (holo/mat : INEXPRIMABLE au prompt, voir « holo/mat est
+inexprimable »). **≤ 109 / 113 départageables**, dont 101 suspendus à la lisibilité de l'ombre.
+Ce que ça vaut en production aujourd'hui : **0 ligne**, aucun scan de ces sets au journal.
+
+### Le piège du détecteur, écrit (scoring.js, catalogue des erreurs, entrée 27)
+
+Seuil r − max(g,b) ≥ 60 calibré sur un positif et un négatif : 146 bannières sur 233, dont
+Charizard V1 et l'Énergie Feu sur 165 lignes — le cadre des cartes Feu est rouge, et mon seul
+témoin Feu, je l'avais lu comme un vrai positif. Recalibré sur six images des deux classes
+(rouge PUR g < 40, b < 40) : 112, les 8 témoins justes. Puis 6 étiquettes BLANCHES trouvées à
+l'œil sur les planches, invisibles à tout seuil de rouge. Un compteur d'images se valide sur une
+planche regardée, pas sur le chiffre qu'il rend.
+
 ## 2026-09-09 — 🔑 LA BANNIÈRE CARDMARKET EST SUR NOS IMAGES : « Shadowless » attesté sur 103 produits, « 1st Edition » jamais. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
 
 **Ce que le testeur a lu sur la fiche `Pikachu-V3-BS58`** : titre, rareté, numéro, « Printed in »

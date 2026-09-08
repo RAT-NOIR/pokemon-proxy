@@ -1506,6 +1506,26 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      leur garde était visible au bon étage, et rien n'expliquait que les routes de scan,
 //      plus critiques, en soient dépourvues. L'anomalie était lisible dans mon propre
 //      tableau, et je ne l'ai pas interrogée.
+//   27. UN DÉTECTEUR CALIBRÉ SUR UN SEUL EXEMPLE MESURE L'EXEMPLE, PAS LE SIGNAL — 2026-09-09.
+//      LES FAITS. Pour compter la bannière rouge que Cardmarket appose sur ses vignettes
+//      (« Shadowless », « Oversized »…), j'ai posé un seuil de rouge — r − max(g,b) ≥ 60 sur
+//      ≥ 15 % d'une ligne — calibré sur UNE image à bannière (Pikachu V2) et UNE sans
+//      (Pikachu V1). Il rendait 146 bannières sur 233, dont Charizard V1 (« dense, h=52 »),
+//      Ninetales, Growlithe, Ponyta, Vulpix, et l'Énergie Feu sur 165 lignes : le CADRE des
+//      cartes Feu est rouge. Le contrôle sur les 8 vus à l'œil passait POURTANT sur 7 —
+//      Charizard V1 était le seul témoin Feu, et je l'avais lu comme un vrai positif.
+//      CE QUE LA COULEUR DIT. La bannière est un rouge PUR (g < 40, b < 40 : 562 pixels dans
+//      la bande basse du Pikachu V2) ; le cadre Feu est orange-saumon (g ≥ 80 : 0 pixel pur
+//      sur Charizard V1). Recalibré sur six images des DEUX classes, le détecteur rend 112,
+//      et les 8 témoins sont justes. Puis les quatre planches lues à l'œil ont trouvé 6
+//      étiquettes BLANCHES (« Prerelease Stamp », « Golden Border », « Non-Holo / Lava
+//      Theme Deck ») qu'aucun seuil de rouge ne verra jamais.
+//      🔑 LA LEÇON. Un seuil calibré sur un positif et un négatif sépare CES DEUX images ;
+//      il ne sait rien des autres façons d'être rouge. Et un jeu de témoins qui ne contient
+//      pas le cas qui ressemble au signal (une carte Feu) ne peut pas réfuter le seuil — c'est
+//      l'entrée 26 côté image : le témoin doit être choisi pour ressembler au faux positif
+//      probable, avant de lire le résultat. Un compteur d'images se valide sur une PLANCHE
+//      regardée, pas sur le chiffre qu'il rend.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
