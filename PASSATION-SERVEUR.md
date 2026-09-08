@@ -43,6 +43,39 @@ Colonne de jointure : `releaseDate` de `/v2/{lg}/sets/{id}` contre `SETS_VINTAGE
 Aparté : sur Larvitar, la fiche jointe PCG6-013 EST la vérité (Larvitar δ) — TCGdex avait la
 bonne carte quand le vivier ne l'avait pas.
 
+**Règle A, RETENUE, non câblée ce tour** : refuser la jointure TCGdex quand l'année de sortie
+du set de la fiche s'écarte de plus de 2 ans de `annee` de la table vintage. Chiffres : 18 des
+23 fiches modernes refusées, 0 des 17 justes perdue, muette sur 5 (EXS) et hors table (50).
+⚠️ **Son angle mort est voulu par une autre règle** : EXS porte `annee: null` par la clause
+4 bis (commit d1884cf, « annee null sur EXS n'est pas un oubli », trois séries fusionnées sous
+une expansion). Une garde muette exactement là où une autre règle impose l'absence : à
+surveiller, pas à corriger — les 5 fiches modernes d'EXS passent sans que rien ne les arrête.
+Elle ne se câble pas avant que le point suivant soit lu, les deux touchent le même endroit.
+
+### 2 bis. TCGdex peut-il ALIMENTER le vivier ? Mesuré : pas aujourd'hui, et la colonne qui manquait existe
+
+Dénominateurs : 139 vérités ; `vivierIds` journalisé sur **50** (89 lignes antérieures au
+champ, exclues) ; vérité ABSENTE du vivier de production **16** (0 indéterminée) ; fiche
+TCGdex retenue sur **6** de ces 16. **Aucune des 6 n'est en table vintage** : la règle A ne
+classe rien ici, elles sont « hors table » (Electabuzz 4170, Surfing Pikachu 4170, Berry 5061,
+Alakazam 4317, Larvitar 5709, Pokémon Reversal 4263).
+
+| | n |
+|---|---|
+| la fiche EST la vérité, par un chemin (`setTcgdex` + numéro, ou id Cardmarket) | **0** |
+| la fiche EST la vérité, à la main, sans chemin | **1** (Larvitar PCG6-013 : aucun pont sur 5709) |
+| la fiche porte un `idProduct` Cardmarket, et c'est un AUTRE produit | **4** |
+| autre carte, sans chemin | 1 |
+
+🔑 **La colonne existe** : `variants_detailed[].thirdParty.cardmarket` et
+`pricing.cardmarket.idProduct` portent l'`idProduct` Cardmarket sur les fiches modernes (dans
+`verrou/tcgdex.json` : SV6a-007 → 773756, SV5K-013 → 752767, sv10.5b-129 → 836174 ; absente sur
+PMCG3-003 et PCG9-019). C'est une jointure fiche → produit sans passer par `numeros_cartes`
+(qui n'en couvre que 17 215 sur 69 598 par `setTcgdex` + numéro). **Mais elle désigne le
+produit de la fiche, et la fiche est la mauvaise carte 5 fois sur 6** : la résolution TCGdex par
+le nom prend une carte moderne. Alimenter le vivier demande d'abord une résolution d'ÉPOQUE,
+ce que la règle A ferait sur la table vintage et rien ne fait hors table. Rien à câbler.
+
 ### ⛔ 3. LA JOINTURE KATAKANA EST MORTE — TCGdex traduit aussi le japonais. Ne jamais la reproposer.
 
 La colonne existe (`attacks[].name` sur `/v2/ja/cards/{id}`) et elle ne porte pas le texte
