@@ -2,6 +2,73 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 🔑 2026-09-09 — PRIORITÉ RÉORIENTÉE : clientèle francophone, la 1re édition est un discriminant COMMERCIAL. Le périmètre FR, et la voie du filtre d'annonce. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
+
+### 1. Le périmètre français, chiffré : il n'y a PAS de produit FR — la langue est un filtre d'annonce, comme la 1re édition
+
+| | |
+|---|---|
+| `catalogue_produits` | 73 188 · `numeros_cartes` 69 598 |
+| `codes_set.region` | japonais 351 · occidental 168 · null 229 — **jamais une langue** |
+| `numeros_cartes.nomFr` non vide | **68 231** : le nom FRANÇAIS est porté par le MÊME `idProduct` que l'anglais |
+| expansions ou slugs propres au français | **0** |
+| produits des 10 sets WotC à 1re édition | **1 054** (Base Set, Jungle, Fossil, Team Rocket, Gym ×2, Neo ×4) — ces mêmes ids servent les articles FR |
+| journal par langue lue | JP 217 · **FR 58** · ZH 2 · EN 1 · IT 1 · KR 1 |
+| lignes FR : produit retenu / dans un set à 1re édition / `prixLive` présent | 51 / **2** / **0** (`prixLiveCodeLangue` null sur 58) |
+
+Un produit Cardmarket est multilingue ; l'article porte la langue (`?language=2` = FR, codes
+déjà dans live-cardmarket.js:251 et index.js:5853). Donc **la table `banniere-cardmarket.json`
+ne couvre AUCUN cas français** : ses 103 « Shadowless » sont des impressions ANGLAISES de Base
+Set. Édition 1 anglaise et française ne concernent pas les mêmes tirages (connaissance des
+tirages, pas une colonne) : **EN** Base Set = 1st Edition (shadowless), Shadowless, Unlimited ;
+**FR** Set de Base (fin 1999) = Édition 1 et Unlimited, **jamais de shadowless**. Jungle,
+Fossile, Team Rocket, Gym, Neo : Édition 1 + Unlimited dans les deux langues. **Pour la clientèle
+FR, le seul discriminant est Édition 1, et il n'est JAMAIS un produit** : sur les 1 054
+produits, l'identification ne peut rien, tout se joue à l'article.
+
+### 2. 🔑 La voie non explorée : le filtre « First Edition? » est un filtre d'ANNONCE, et le prix live lit des annonces filtrées
+
+**Ce que le code construit aujourd'hui.** live-cardmarket.js:273 :
+`https://www.cardmarket.com/en/Pokemon/Products?idProduct=<id>&language=<1-10>[&minCondition=<1-7>]`.
+index.js:3245 ajoute `language=` à l'URL rendue ; index.js:5853 rend `codeLangue` à l'extension,
+qui construit l'URL du live dans le navigateur de l'utilisateur ; et **la chaîne s'appuie DÉJÀ
+sur un filtre d'article de la même famille** : `reverse.strategie = 'filtre-url'` demande à
+l'extension d'ajouter `isReverseHolo=Y` (index.js:2608, :5841 ; scoring.js:270) parce que la
+reverse partage l'`idProduct` de la normale — exactement la situation de la 1re édition.
+`/api/retour-live` reçoit ensuite `prixLive`, `prixLiveEtat`, `prixLiveCodeLangue` (index.js:5941)
+et les journalise.
+
+**Ce qu'il pourrait construire.** Le même mécanisme avec le filtre « First Edition? » du bloc
+« Extra » : `edition1: { attendue, strategie: 'filtre-url' }` dans la réponse, le paramètre
+ajouté par l'extension, `prixLiveEdition1` au retour et au journal. ⚠️ **Le NOM du paramètre
+d'URL n'est pas vérifié ici** (aucune requête vers Cardmarket) : il se lit en cochant le filtre
+sur la fiche, l'URL le montre — même geste que pour `isReverseHolo`, même famille (`isSigned`,
+`isAltered`). Ce que ça rend : **un prix DE 1re ÉDITION, dans la langue de l'utilisateur, que
+notre catalogue ne porte pas et qu'un prix de catalogue (MapTCG, Kaorine) ne portera jamais**,
+puisque le guide est composite (voir la conclusion ci-dessous). C'est l'avantage structurel du
+prix live, et il vaut autant pour l'EN que pour le FR.
+
+**La dette qui précède** : `prixLive` est présent sur **0 des 58 lignes FR**. Le canal existe
+(`/api/retour-live`) et ne rend rien sur cette population ; avant d'y ajouter un filtre, savoir
+pourquoi il est vide — même famille que `prixVinted` 1/280.
+
+### 3. Ce qui manquerait pour dire « 1re édition » sans se tromper
+
+**Le signal sur la carte** : le tampon rond noir « EDITION 1 » (« ÉDITION 1 » en FR), sous le
+coin inférieur gauche du cadre de l'illustration, en lettres latines, à fort contraste, ~4 mm —
+un fait imprimé de la famille de l'attaque et de l'illustrateur, PAS de la famille de l'ombre
+(le tampon est fait pour être vu ; l'ombre non). Sa lisibilité sur photo d'annonce n'est pas
+mesurée : 0 scan de ces sets au journal.
+
+**Où il se journaliserait** : deux champs de prompt, `edition1` (`oui` | `non` | `illisible` —
+⛔ jamais `aucun`, `MOTS_VIDES` l'écraserait) et `edition1Confiance`, écrits sur les DEUX voies
+(`enregistrerScan`, `enregistrerEchec`) et au schéma, comme `illustrateur` le 08/09.
+**Il ne désigne aucun `idProduct`** : il n'entre ni dans le vivier ni dans le scoring, il
+alimente l'axe PRIX, avec l'état et la langue — le filtre live, et un drapeau « guide composite,
+prix live requis » sur les 1 054 produits. **Ce qui manque pour le MESURER** : une vérité à
+l'article — `banc-verites.json` porte un `idProduct`, jamais une édition ; `saisir-verites.js`
+devrait la demander. Sans elle, « 1re édition » resterait un signal enregistré, jamais jugé.
+
 ## 🔴 2026-09-09 — CONCLUSION DU CHANTIER VINTAGE OCCIDENTAL, en trois étages. Un commit (ce fichier), NON POUSSÉ
 
 **Tranché par le testeur sur la fiche `Pikachu-V3-BS58`** : « First Edition? » est un FILTRE
