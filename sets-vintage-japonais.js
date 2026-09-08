@@ -367,6 +367,16 @@ const SETS_VINTAGE_JAPONAIS = [
     // absences 14 -> 8, top 3 des présentes 97,1 %, TOP 3 DES LIGNES SOUS RÉSERVE 100 %.
     // Elle n'achète aucun juste : elle rend 6 vérités CANDIDATES, et ne coûte rien.
     {
+        // ⚠️ `annee: null` N'EST PAS UN OUBLI, ET ON NE LE COMBLE PAS. Il DÉCOULE de la
+        // clause 4 bis : cette ligne recouvre TROIS séries, donc toute année écrite ici
+        // serait fausse par construction, pour deux des trois au moins. Une valeur comblée
+        // ferait taire la question au lieu de la poser.
+        // 🔴 CE QUI DOIT CHANGER, C'EST L'ARITHMÉTIQUE, PAS LA VALEUR. Tout calcul sur
+        // `annee` (écart, âge, min/max, tri) doit LEVER sur un null, jamais le traiter comme
+        // un nombre : c'est ce qui a sorti « 1999 an » et « 2001 an » dans un comptage
+        // d'écarts. Une garde qui lève dit où est le trou ; un calcul qui rend n'importe
+        // quoi le propage. SEULE LIGNE CONCERNÉE AUJOURD'HUI : 1 sur 25 — mais la clause
+        // 4 bis en produira d'autres, donc la garde vaut pour la règle, pas pour ce cas.
         nom: 'Expansion Sheet', annee: null, slug: 'Expansion-Sheet', exp: 3781, code: 'EXS',
         prod: 125, regionSource: 'place-internationale-prise-par-MEW',
         symbole: null, symboleFiable: null,
