@@ -2,6 +2,53 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-08, tard — `thirdParty.cardmarket` mesuré par ère ; le vintage occidental : l'étiquette n'est attestée nulle part chez nous. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
+
+### 1. La colonne `variants_detailed[].thirdParty.cardmarket` : occidentale à toutes les ères, JAMAIS japonaise vintage
+
+Échantillon, pas recensement : les 4 premières cartes de chaque set, fiches lues sur TCGdex.
+
+| ère | sets | fiches | avec `idProduct` Cardmarket |
+|---|---|---|---|
+| époque EN 1999-2003 (base1…ex1) | 16/16 | 64 | **64 (100 %)** |
+| époque JA 1996-2001 (PMCG1…6 ; PMCG7-9 et VS absents de TCGdex) | 6/10 | 24 | **0** |
+| intermédiaire 2004-2010 (ex3, dp1, pl1, hgss1 ; PCG6, PCG9) | 6/7 | 24 | 16 (les EN) |
+| moderne 2011-2026 | 12/12 | 48 | 47 |
+
+**Le chemin existe sur le vintage OCCIDENTAL et n'existera jamais sur le vintage japonais** : la
+table des 25 sets n'en tirera rien. Chaîne « règle A puis `thirdParty.cardmarket` pour alimenter
+le vivier », sur les 16 lignes à vérité absente : 6 portent une fiche, **0 en table vintage**,
+donc aucune année locale, la règle A ne classe rien et **le dénominateur ne permet pas de
+conclure**. Ce qu'on sait quand même : 4 des 6 fiches portent un id Cardmarket, les 4 désignent
+un autre produit (la fiche est la mauvaise carte) ; la seule fiche juste (Larvitar PCG6-013)
+est japonaise, sans id. Plafond ≤ 1/16, et ce 1 n'a pas de chemin. **Point arrêté là.**
+
+### 2. Vintage occidental — ce que TCGdex dit des impressions de Base Set, et ce que la fiche Cardmarket n'a pas pu dire
+
+**La fiche `Pikachu-V3-BS58` n'a pas été lue** : Cardmarket répond 403 en lecture directe et
+sert « Vérification de sécurité en cours » dans le navigateur. Le contrôle anti-bot n'est pas
+contourné ; c'est au testeur d'ouvrir la page (le `chrome-profil` du dépôt existe pour ça) et
+de dire si elle NOMME l'impression. Tant qu'elle n'est pas lue, rien n'est attesté.
+
+**Ce que nos colonnes disent** : Base Set, 211 lignes `numeros_cartes`, `variante` non vide
+210. Pikachu n°58 : 6 produits, `name` IDENTIQUE sur les 6 (« Pikachu [Gnaw | Thunder Jolt] »),
+seul le slug diffère (V1 à V6). Charizard n°4 : 2 produits, même `name`. Rien ne nomme.
+
+**Ce que TCGdex dit, lu sur `base1-58` et `base1-4`** — il NOMME un tampon, et se contredit :
+`variants_detailed[].stamp` vaut `1st-edition` ou vide, `size` vaut `jumbo`, `stamp` vaut
+`poketour-99`. Correspondances : 273753 (V1) ↔ normal ; **660169 (V2) ↔ `1st-edition` ET vide,
+660170 (V3) ↔ vide ET `1st-edition`** — deux produits différents, tous deux étiquetés à la fois
+1re édition et non ; 275586 (V5) ↔ `poketour-99` ; 362859 (V6) ↔ `jumbo` ; 275568 (V4) absent.
+Charizard : 660224 (V2) ↔ `1st-edition` ET vide. **Shadowless n'apparaît nulle part.** TCGdex
+sait qu'il existe une 1re édition et ne sait pas laquelle des V2/V3 elle est : ce n'est pas une
+attestation, c'est une seconde source qui hésite. ⛔ Et un écart de prix n'atteste jamais une
+étiquette (178 € contre 129 € entre V2 et V3 ne dit pas laquelle est shadowless).
+
+**Sources externes qui PORTENT l'étiquette, non consultées** : les titres produits TCGplayer
+(« 1st Edition », « Shadowless » dans le nom ; TCGdex donne l'id TCGplayer par variante :
+42402, 107055, 147229 sur le Pikachu), Bulbapedia (liste Base Set par impression), pkmncards,
+PSA. Aucune n'est chez nous ; la table ne se construit qu'à partir d'une d'elles, attestée.
+
 ## 2026-09-08, nuit — L'IMAGE CÈDE À L'ATTAQUE (câblé), le pont mesuré, la jointure katakana enterrée. Deux commits, NON POUSSÉS
 
 ### 1. Câblé : l'image s'abstient derrière l'attaque comme derrière le symbole (index.js, garde de l'image)
