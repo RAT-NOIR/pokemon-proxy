@@ -2,6 +2,82 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-08, soir — LES CLÉS EXACTES : ce qui en reste, et un instrument qui ment. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
+
+**Banc du soir** : 118 vérités saisies (29 ce soir, 2 corrigées), 139 vérités individuelles avec
+les tables du banc, 137 présentes au vivier par le nom. Contrôle de nom à la saisie : 1 fausse
+alerte sur 118, utilisable. Tous les chiffres ci-dessous sont mesurés sur CE banc, scripts de
+scratchpad en lecture seule (`test`), aucun fichier du dépôt touché hors celui-ci.
+
+### 🔴 1. LARVITAR — la raison journalisée et le verdict ne parlent pas du même produit
+
+Ligne du 2026-09-08 08:50 : `attaqueDepartage` = « attaque « Bite » lue, et **606575** est le
+SEUL ex aequo à la porter », `raisonReserve: attaque-departage`, mais `idProduct` rendu
+**606865**, `imageStatut: departage`, `imageGagnant: 606865`, `imageMotif: egalite-au-sommet`.
+Vérité : **765002**, Larvitar δ (PCG6 n°013/086, le total lu 086 le dit) — absente du vivier
+`perimetre-vintage` de 5 candidats (le suffixe δ, dossier connu). Les deux départages sont faux.
+
+**Le mécanisme, lu dans le code.** L'attaque remonte 606575 en tête sans toucher aux scores
+(index.js:4671). L'image se déclenche ensuite sur `egalite-au-sommet` — les scores sont toujours
+égaux — et **ne s'abstient que derrière le SYMBOLE** (index.js:4952, `departageParSymbole &&
+avis.departage`) : la garde a été écrite le 08-29 pour le symbole, l'attaque est arrivée le
+09-05 sans y entrer. L'image remonte 606865. Puis la priorité des raisons (index.js:5118 avant
+5128) met `attaque-departage` DEVANT `image-departage` : la réserve nomme un départage qui a été
+écrasé. **Deux défauts, un symptôme** : l'image ne cède pas à l'attaque comme elle cède au
+symbole, et l'étiquette dit celui qui a parlé en premier, pas celui qui a décidé.
+
+**Portée, dénominateur d'abord** : `attaqueDepartage` non null sur 18 lignes ; l'attaque a
+DÉSIGNÉ un ex aequo sur **11** ; rendu = désigné **10**, écrasé **1** (Larvitar). Contrôle
+symétrique : le symbole a désigné 19 fois, écrasé par l'image **0**, `abstention-symbole-
+prioritaire` 2. Le compte « 5 justes, 1 faux, 1 refus sur 7 » du départage par l'attaque en
+production reste lisible : sur 10 des 11 lignes le rendu EST le désigné ; sur Larvitar les deux
+sont faux, le « 1 faux » ne change pas de camp. Aucun câblage : la garde de 4952 et l'ordre de
+5118/5128 sont à décider ensemble, et l'ordre est une règle de promotion, pas une correction.
+
+### 🔴 2. L'ATTAQUE COMME CLÉ DE VIVIER EST MORTE — comme départage elle reste
+
+Vivier par le nom filtré par l'attaque lue, 35 lignes à vérité et `attaqueLue` : vérité
+**ÉLIMINÉE 5 sur 35**, toutes en confiance HAUTE, katakana juste, traduction anglaise autre que
+celle de Cardmarket : もえひろがる « Spreading Flames » contre Blaze, あんじをかける « Suggest »
+contre Suggestion, てつだうふり « Fake Help » contre False Charity, せんこうだん « Flash Shot »
+contre Dazzle Blast ; sur ces 4 le vivier tombe à 0. La cinquième, Slowpoke ずつき « Headbutt »
+contre [psyshock, watergun], garde 33 candidats sans la vérité. ⛔ Ne pas la reproposer : une
+clé exacte sur un anglais traduit par l'IA perd 14 % des vérités, et la confiance ne protège
+pas. Le plafond (lecture parfaite, 124 lignes à crochets) était : liste entière + région réduit
+à un 79/124, première attaque + région 49/124 ; il ne se réalise pas. Comme DÉPARTAGE d'une
+égalité (elle n'élimine personne, un « aucun ex aequo ne la porte » est une abstention) : 5/7 en
+production, 21/24 en plafond sur les groupes contenant la vérité, 9/9 sur les 9 lignes lues.
+
+⛔ **`codeSet` est une clé MORTE.** Elle sépare la vérité dans 23 des 24 groupes en base et
+elle est imprimée sur 0 de ces 23 cartes (table vintage, codes PJU/EXP/ROG/N1-N4/EXS/SI-JP :
+conventions Cardmarket) ; `setCode` lu vaut null sur les 24 lignes. Ne pas la reproposer.
+
+### 3. La jointure « katakana contre attaque japonaise » : la colonne existe, elle porte une TRADUCTION
+
+`/v2/ja/cards/{id}` de TCGdex rend `attacks[].name` en japonais. Chemin : `numeros_cartes.
+setTcgdex` (expansion) + `numero = localId`, sinon `nomBrut = name` unique dans le set. Aucune
+colonne locale ne porte l'attaque japonaise. Couverture : 35 vérités à `attaqueBrute` →
+expansion pontée à un set **16** → set chargé en `ja` **4** → carte trouvée **1** → comparable
+**1**, différente : L107 Raikou, imprimé « ライトニングタックル », TCGdex neo3-029
+« 稲妻タックル ». Et la fiche vintage du verrou (`verrou/tcgdex.json`, PMCG3-003 Grimer) donne
+« 厄介なグー | 最小化します » — une forme verbale que personne n'imprime : **les noms japonais
+de TCGdex sont des traductions automatiques, pas le texte imprimé.** Même défaut que l'anglais,
+de l'autre côté. Produits japonais sous une expansion pontée : 8 006 / 27 989 (28,6 %), table
+vintage pontée 17/25, vers des sets EN. **La piste meurt ; on arrête d'y penser.**
+
+### 4. L'illustrateur : la justesse N'EST PAS mesurée, c'est un défaut de PONT
+
+Mesure de l'autre agent : 7 justes sur 8 quand la fiche TCGdex jointe est d'époque, 0 sur 8
+quand elle est moderne — ces 8 comparent l'illustrateur lu sur une carte vintage à celui d'une
+AUTRE carte. Étendu au journal : `carteTcgdexId` non null **90** lignes avec produit retenu ;
+fiche dans le set ponté de l'expansion retenue 20, dans un autre set 31, expansion retenue sans
+pont 39. Sur les **40** lignes dont le produit retenu est dans la table vintage : fiche d'époque
+(PMCG3/4/6, neo1/3/4) **17**, fiche d'une autre ère (SV, SM, S, PCG, cel25, M6) **23**. Sur ces
+23, une lecture juste et une jointure juste donnent une comparaison fausse par construction :
+rien n'est dit de la lecture. La cause est `numeros_cartes.setTcgdex` absent (218/752
+expansions) et la résolution par nom de la route qui prend une carte moderne. Import des ponts
+d'abord, mesure ensuite.
+
 ## 2026-09-08 — `illustrateur` entre au prompt, LECTURE SEULE. Un commit, NON POUSSÉ
 
 **Câblé** : deux champs de prompt, `illustrateur` (tel qu'imprimé, énumération ouverte comme
