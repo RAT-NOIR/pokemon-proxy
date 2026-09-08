@@ -778,6 +778,9 @@ const journalScanSchema = new mongoose.Schema({
     //   'abstention-garde'             un candidat du groupe n'avait pas de vecteur
     //   'abstention-signal'            aucun point d'intérêt, ou aucun inlier nulle part
     //   'abstention-symbole-prioritaire' le symbole avait déjà tranché
+    //   'abstention-attaque-prioritaire' l'attaque avait déjà tranché (2026-09-08 : avant
+    //                                  cette date l'image ÉCRASAIT la désignation par
+    //                                  l'attaque et la réserve nommait quand même l'attaque)
     //   'echec-technique'              photo injoignable, vecteurs illisibles, appariement
     //   'non-calcule'                  le module n'a pas été appelé
     // ⚠️ Une abstention et un échec technique ne se confondent JAMAIS : la première dit

@@ -4941,6 +4941,21 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // rétrogradation interdit dans l'autre sens.
         // L'image s'abstient donc quand le symbole a tranché, ET ON JOURNALISE LE
         // DÉSACCORD : c'est la mesure qui manquera pour trancher plus tard.
+        //
+        // ⚠️ ET DERRIÈRE L'ATTAQUE AUSSI — 2026-09-08, OUBLI DE BRANCHEMENT RÉPARÉ. Le
+        // départage par l'attaque est entré le 09-05 « de la même forme » que le symbole,
+        // mais cette garde n'a pas été mise à jour : l'attaque remontait un désigné en tête
+        // sans toucher aux scores, l'égalité restait donc parfaite, et l'image se déclenchait
+        // sur `egalite-au-sommet` et ÉCRASAIT la désignation. Puis la priorité des raisons
+        // (plus bas) nommait `attaque-departage` : le journal disait que l'attaque avait
+        // décidé alors que l'image l'avait fait. Cas réel : Larvitar du 08/09, attaque
+        // -> 606575, rendu 606865, réserve « attaque-departage ». Mesuré au journal : 11
+        // désignations par l'attaque, 10 respectées, 1 écrasée ; symbole 19, 0 écrasée.
+        // L'ORDRE RETENU — attaque devant image — n'est pas une promotion : `apres()` du
+        // banc (banc-japonais.js) rend déjà `attaque-departage` avant d'atteindre son bloc
+        // image, donc production et banc divergeaient et c'est la production qui rejoint
+        // le banc. Et le désaccord est journalisé, comme pour le symbole : c'est ce
+        // désaccord, compté, qui permettra un jour d'inverser l'ordre sur une mesure.
         let departageParImage = false;
         let champsImage = {};
         {
@@ -4949,12 +4964,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 total: cardInfo.total, classement
             });
             champsImage = avis.champs;
-            if (departageParSymbole && avis.departage) {
-                champsImage.imageStatut = 'abstention-symbole-prioritaire';
+            if ((departageParSymbole || departageParAttaqueFait) && avis.departage) {
+                const prioritaire = departageParSymbole ? 'symbole' : 'attaque';
+                champsImage.imageStatut = `abstention-${prioritaire}-prioritaire`;
                 champsImage.imageMotif = avis.gagnant === classement[0]?.idProduct
-                    ? 'le symbole et l\'image sont d\'accord' : 'DÉSACCORD symbole/image';
-                console.warn(`🔀 [image] symbole prioritaire — ${champsImage.imageMotif}` +
-                    ` (symbole ${classement[0]?.idProduct}, image ${avis.gagnant}).`);
+                    ? `le ${prioritaire} et l'image sont d'accord` : `DÉSACCORD ${prioritaire}/image`;
+                console.warn(`🔀 [image] ${prioritaire} prioritaire — ${champsImage.imageMotif}` +
+                    ` (${prioritaire} ${classement[0]?.idProduct}, image ${avis.gagnant}).`);
             } else if (avis.departage && avis.gagnant !== classement[0]?.idProduct) {
                 departageParImage = true;
                 const gagnant = classement.find(c => c.idProduct === avis.gagnant);
