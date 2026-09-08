@@ -34,6 +34,14 @@ const CatalogueProduit = mongoose.model('CatalogueProduit', new mongoose.Schema(
 // Même normalisation que index.js (ignore espaces, tirets, casse, ponctuation)
 const normaliser = n => n.toLowerCase().replace(/[\s\-'.&]/g, '');
 
+// ⚠️ CES LIBELLÉS SONT UNE CONVENTION D'AFFICHAGE, PAS LE SENS DE `variante`. Le suffixe
+// V1…V6 du slug Cardmarket n'a PAS de sémantique stable — scoring.js:200-202 fait autorité,
+// et POIDS.variante y est un override manuel que plus rien ne dérive. La correspondance
+// ci-dessous vaut sur les sets récents à motifs ; elle est FAUSSE ailleurs, et notamment sur
+// le vintage occidental : Base Set 1999 porte V1 à V6 alors qu'aucune reverse holo n'existe,
+// et ces suffixes y distinguent des IMPRESSIONS que rien chez nous ne nomme (voir CLAUDE.md §7).
+// 🔴 CE MAP EST DU COMPORTEMENT, PAS DE LA PROSE : il étiquette ce que le diagnostic affiche.
+// Le corriger demande de décider ce qu'on montre quand le sens est inconnu — pas fait ici.
 const NOM_VARIANTE = { V1: 'normale', V2: 'REVERSE', V3: 'illustration' };
 
 async function main() {

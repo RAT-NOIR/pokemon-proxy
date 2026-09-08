@@ -2675,8 +2675,14 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
             idExpansion: p.idExpansion,
             numeroCardmarket: infoNum ? (infoNum.numero || infoNum.numeroUrl) : null,
             certitudeNumero: infoNum ? (infoNum.certitude || 'exacte') : null,
-            // V1/V2/V3 = normale/reverse/illustration, présente seulement sur les
-            // sets appris AVEC les nouveaux champs (--maj). Absente = null -> neutre.
+            // ⚠️ SUFFIXE DU SLUG CARDMARKET (V1…V6), SANS SÉMANTIQUE STABLE. Ce commentaire
+            // disait « V1/V2/V3 = normale/reverse/illustration » : scoring.js:200-202 fait
+            // autorité et dit l'inverse, et POIDS.variante y est un override manuel que plus
+            // rien ne dérive. Sur le vintage occidental, ces suffixes distinguent des
+            // IMPRESSIONS (1re édition / shadowless / unlimited) que rien chez nous ne nomme
+            // — Base Set porte V1 à V6 sans qu'aucune reverse holo n'ait jamais existé.
+            // Présente seulement sur les sets appris AVEC les nouveaux champs (--maj).
+            // Absente = null -> neutre.
             variante: infoNum ? (infoNum.variante || null) : null,
             prix: prixGuide.get(Number(p.idProduct)) ?? null,
             // code de set appris (ex: "PAL", "EXP", "PGO") : sert à confronter ce que

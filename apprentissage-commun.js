@@ -25,7 +25,12 @@ const numeroCarteSchema = new mongoose.Schema({
     numeroUrl: String,   // depuis l'URL, en secours
     codeSet: String,
     nomFr: String,       // nom français (pour matcher ce que l'IA lit sur une carte FR)
-    variante: String,    // V1/V2/V3 : normale / reverse / illustration rare
+    // ⚠️ SUFFIXE DU SLUG CARDMARKET (V1…V6), SANS SÉMANTIQUE STABLE. Il a longtemps été
+    // documenté ici comme « normale / reverse / illustration rare » : c'est faux en général,
+    // et faux tout court sur les sets où cette lecture n'a aucun sens — Base Set 1999 porte
+    // V1 à V6 alors qu'aucune reverse holo n'existait. Voir scoring.js:200-202, qui fait
+    // autorité, et POIDS.variante, qui est un override manuel que plus rien ne dérive.
+    variante: String,
     slug: String,        // fiche directe, ex "Team-Rockets-Petrel-V1-DRI176"
     slugSet: String,     // ex "Destined-Rivals"
     apprisLe: { type: Date, default: Date.now }
