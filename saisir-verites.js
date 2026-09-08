@@ -90,7 +90,7 @@ const NumeroCarte = mongoose.model('Nvs', new mongoose.Schema({}, { strict: fals
  *
  * @returns {Promise<{ok: boolean, idProduct?: number, moyen: string, message?: string, choix?: object[]}>}
  */
-async function resoudreSaisie(saisie, Cat) {
+async function resoudreSaisie(saisie, Cat, nomLu = null) {
     const brut = String(saisie).trim();
     if (/^\d+$/.test(brut)) return { ok: true, idProduct: Number(brut), moyen: 'idProduct' };
 
@@ -110,7 +110,58 @@ async function resoudreSaisie(saisie, Cat) {
     let docs = await NumeroCarte.find({ slug }).lean();
     if (!docs.length) docs = await NumeroCarte.find({ slug: new RegExp(`^${echapper(slug)}$`, 'i') }).lean();
     if (!docs.length) {
-        return { ok: false, moyen, message: `aucun produit ne porte le slug « ${slug} » — rien n'est enregistré` };
+        // ════════════════════════════════════════════════════════════════════
+        // UN REFUS QUI NOMME LA SORTIE — sinon on retape la même URL des soirs
+        // ════════════════════════════════════════════════════════════════════
+        // L'OCCURRENCE, LE 2026-09-08. Le testeur a retapé plusieurs soirs de suite l'URL
+        // de Palafin ex (`Prismatic-Evolutions/Palafin-ex-PRE151`). Le message était EXACT
+        // — aucun produit ne porte ce slug — et INUTILISABLE : il ne disait pas qu'un autre
+        // chemin existait. Le produit était pourtant là (idProduct 805545), sur une ligne
+        // `numeros_cartes` apprise sans champ `slug`. MESURÉ : 1 787 lignes sur 69 598
+        // (2,6 %) sont dans ce cas, et AUCUNE URL ne peut les désigner.
+        //
+        // 🔑 UN OUTIL QUI REFUSE DOIT DIRE CE QU'ON PEUT FAIRE À LA PLACE. Un refus muet
+        // transforme une donnée manquante en boucle silencieuse.
+        //
+        // ⛔ ET IL NE CHOISIT TOUJOURS PAS, MÊME QUAND UN SEUL CANDIDAT SORT. C'est le
+        // principe écrit plus haut : trancher à la place du testeur remettrait le jugement
+        // de la chaîne dans la vérité censée la juger. On AFFICHE, on redemande.
+        const PLAFOND = 12;
+        let candidats = [], totalNom = 0;
+        if (nomLu) {
+            // Le nom CATALOGUE porte les attaques entre crochets : « Palafin ex [Hero's… ] ».
+            // On ancre au début pour ne pas ramener « Dark Palafin » ou « Palafin ex Box ».
+            const rx = new RegExp(`^${echapper(String(nomLu).trim())}(\\s*\\[|$)`, 'i');
+            totalNom = await Cat.countDocuments({ name: rx });
+            // ⚠️ TRI PAR idProduct, ET C'EST VOULU : aucun classement par plausibilité.
+            // Trier « du plus probable au moins probable » serait déjà choisir.
+            const docsNom = await Cat.find({ name: rx }).sort({ idProduct: 1 }).limit(PLAFOND).lean();
+            for (const p of docsNom) {
+                const n = await NumeroCarte.findOne({ idProduct: p.idProduct }).lean();
+                candidats.push({
+                    idProduct: p.idProduct,
+                    nom: String(p.name).split('[')[0].trim(),
+                    numero: n?.numero || n?.numeroUrl || null,
+                    variante: n?.variante || null,
+                    slugSet: n?.slugSet || (n?.codeSet ? `code ${n.codeSet}` : null)
+                });
+            }
+        }
+        return {
+            ok: false, moyen,
+            message: `aucun produit ne porte le slug « ${slug} » — rien n'est enregistré`,
+            choix: candidats.length ? candidats : undefined,
+            indice: `Tu peux répondre par un idProduct NU (le nombre seul) : c'est accepté avant toute recherche par slug.`
+                + (nomLu
+                    ? (totalNom
+                        ? `\n     ${totalNom} produit(s) au catalogue portent le nom lu « ${nomLu} »`
+                        + (totalNom > PLAFOND
+                            ? `, dont les ${PLAFOND} premiers ci-dessous (tri par idProduct, AUCUN classement par plausibilité).\n`
+                            + `     Au-delà du plafond : affine avec le code de set de la carte, ou tape directement l'idProduct.`
+                            : ` :`)
+                        : `\n     et AUCUN produit du catalogue ne porte le nom lu « ${nomLu} » — vérifie le nom avant l'idProduct.`)
+                    : '')
+        };
     }
     // Le slug du set, quand l'URL le fournit, lève une éventuelle ambiguïté.
     if (docs.length > 1 && slugSet) {
@@ -252,13 +303,16 @@ async function resoudreSaisie(saisie, Cat) {
             };
             console.log('  -> marqué « inconnu ». Cette ligne sera EXCLUE du calcul, jamais comptée juste.');
         } else {
-            const r = await resoudreSaisie(reponse, Cat);
+            const r = await resoudreSaisie(reponse, Cat, d.nom);
             if (!r.ok) {
                 console.log(`  ⚠️ ${r.message} — RIEN n'a été enregistré, on repassera sur cette carte.`);
+                // Le refus NOMME LA SORTIE quand il en connaît une (slug introuvable) ; sinon
+                // c'est l'ambiguïté de variante, qui a sa propre phrase.
+                if (r.indice) console.log(`     ${r.indice}`);
                 if (r.choix) {
                     // On MONTRE les variantes et on ne choisit pas : trancher à la place du
                     // testeur remettrait le jugement de la chaîne dans la vérité censée la juger.
-                    console.log('     Retape la réponse avec l\'idProduct de la bonne variante :');
+                    if (!r.indice) console.log('     Retape la réponse avec l\'idProduct de la bonne variante :');
                     for (const c of r.choix) {
                         console.log(`       ${String(c.idProduct).padEnd(8)} n°${String(c.numero ?? '—').padEnd(6)} variante ${String(c.variante ?? '—').padEnd(4)} [${c.slugSet ?? '?'}]  ${c.nom}`);
                     }
