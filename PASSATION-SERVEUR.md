@@ -2,6 +2,65 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 🔴 2026-09-09 — CONCLUSION DU CHANTIER VINTAGE OCCIDENTAL, en trois étages. Un commit (ce fichier), NON POUSSÉ
+
+**Tranché par le testeur sur la fiche `Pikachu-V3-BS58`** : « First Edition? » est un FILTRE
+D'ANNONCE, dans le bloc « Extra », à côté de « Signed? » et « Altered? ». Ce n'est pas un
+attribut de produit. Prédiction du 08/09 confirmée.
+
+### 1. ACQUIS
+
+La bannière que Cardmarket appose sur SA vignette est sur NOS images du disque : 233/233 lues.
+`banniere-cardmarket.json` existe (commit b90e114) et distingue **Shadowless** (103),
+**Oversized** (7), **Prerelease Stamp** (4), **Non-Holo** (2), **Non-Holo / Lava Theme Deck**
+(1), **Golden Border** (1), `null` (115 : aucune bannière, jamais « Unlimited », la référence
+par élimination). Aucune règle ne la lit ; rien n'est câblé.
+
+### 2. IMPOSSIBLE
+
+**La 1re édition.** Attribut d'annonce, jamais de produit : Cardmarket ne la sépare pas par
+`idProduct`, donc aucune table par `idProduct`, la nôtre comprise, ne le pourra. **110 couples
+sur 113** ont moins de produits que d'impressions connues (Base Set 102, Fossil 1, Gym Heroes
+9, Jungle 1 et 56, Neo Genesis 54/57/81, Team Rocket 8) ; et hors couples, les dix sets à 1re
+édition n'ont qu'un produit par numéro pour deux impressions. ⛔ Ne pas rouvrir « une source
+externe nommerait la 1re édition » : elle nommerait une carte, pas un produit Cardmarket, et
+c'est le produit qu'on tarife.
+
+### 3. CE QUI EN DÉCOULE SUR LE PRIX — la limite structurelle, et elle ne vient pas de nous
+
+Sur ces produits, `guide_prix` (avg, low, trend) agrège des annonces 1re édition ET unlimited
+sous un même `idProduct` : **c'est une valeur COMPOSITE**, pas un défaut d'identification. Sur
+le Pikachu shadowless filtré, le testeur lit de 325 € à 4 000 € selon l'annonce. Une chaîne qui
+désigne le bon produit rend quand même un prix qui décrit deux populations. Aucun terme de
+scoring, aucun départage, aucune lecture de tampon « Edition 1 » sur la photo ne corrigera une
+colonne que le fournisseur remplit ainsi ; la seule chose honnête est de le DIRE avec le prix
+sur ces produits. Décision produit, pas de code.
+
+### La seule question restée ouverte, MESURÉE : Shadowless contre nu, l'écart est-il grave ?
+
+Base Set, 101 numéros avec un V1 nu ET un produit « Shadowless », prix = `prixDeReference`
+(celui du scoring), 0 sans prix :
+
+| | |
+|---|---|
+| écart absolu Shadowless − nu : q25 / médiane / q75 / max | 7,55 € / **14,58 €** / 31,51 € / **2 894,57 €** (Charizard n°4) |
+| rapport : médiane / q75 / max | ×7,16 / ×12,84 / ×309 |
+| écart ≥ 1 € (le seuil de refus de la route) | **100 / 101** |
+| écart ≥ 10 € · ≥ 30 € · ≥ 100 € | 62 · 26 · 12 |
+| Shadowless moins cher que le nu | 1 (n°49, 0,82 €) |
+
+**Oui, grave** : sur 100 numéros sur 101, confondre le nu et le Shadowless change le verdict,
+et 12 fois de plus de 100 €. Ces deux produits sont distincts chez Cardmarket et la bannière
+les sépare : **le chantier garde un objet réduit mais réel — distinguer shadowless d'unlimited,
+sans jamais prétendre à la 1re édition.** Aujourd'hui la chaîne y répond par un refus
+`egalite-parfaite` remboursé (écart ≥ 1 € sur 100/101), donc elle ne se trompe pas, elle ne
+répond pas ; et 0 scan de Base Set au journal.
+
+**Dette, gardée, NON LANCÉE** : le test des dix photos d'annonces Base Set, à la main, V1 et V2
+connus : « l'absence d'ombre sous le cadre est-elle lisible sur une photo d'annonce ? » Il ne
+vaut que pour ce périmètre réduit, et il précède tout champ de prompt. Si l'ombre n'est pas
+lisible, le chantier se ferme sur les trois étages ci-dessus.
+
 ## 2026-09-09 — LA TABLE `banniere-cardmarket.json` EST ÉCRITE, et la limite du chantier est chiffrée : moins de produits que d'impressions. Deux commits, NON POUSSÉS
 
 ### 🔴 La limite d'abord : 110 couples sur 113 ont MOINS de produits Cardmarket que d'impressions connues
