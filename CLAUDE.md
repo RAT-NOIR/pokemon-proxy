@@ -102,3 +102,29 @@ miennes. Je ne les modifie que sur demande explicite, et jamais au passage.
   ```
   C'est la même faute que le compteur recopié : une valeur qui décrit un autre système
   et qu'on fige. Un chemin résolu vieillit bien, un chemin écrit en dur non.
+
+---
+
+## 4. La cellule d'un lot se déclare AVANT le scan, jamais après
+
+**L'occurrence, le 2026-09-08.** Le lot `quatre-champs-30` était composé de trois cellules
+décidées d'avance — A (japonaises ordinaires), B (symbole illisible sur photo), C
+(abstention). Les 31 scans sont tombés dans la fenêtre, les quatre champs se sont réveillés,
+et **les cellules A et B sont perdues** : rien au journal ne dit à laquelle une ligne
+appartenait.
+
+⚠️ **Et le critère de repli ne marche pas.** `estDex: false` semblait pouvoir séparer les
+cartes sans attaque : il attrape **15 lignes sur 31, dont 8 sont de vrais Pokémon** dont le
+nom japonais n'a simplement pas été apparié. Un critère dérivé APRÈS coup n'attrape pas la
+population qu'on visait — il attrape celle qu'il décrit, et ce n'est pas la même.
+
+**La règle.** Un lot à cellules pose un marqueur **au moment du scan** — un champ écrit par
+l'outil qui scanne, pas une reconstruction. Sans marqueur, un lot à cellules ne rend qu'un
+chiffre global, et fusionner ses cellules est exactement ce que sa fenêtre interdisait.
+
+⚠️ **Corollaire mesuré le même jour** : le banc **dédoublonne sur `(nom, numero, total)` et
+garde la PREMIÈRE ligne vue** (`banc-seaux.js`, `cleDeDedoublonnage`). Trois des 31 scans ne
+sont donc jamais arrivés au banc, dont un Pikachu n°025 *Expansion Pack* masqué par un
+Pikachu n°025 *Jungle* scanné deux minutes plus tôt — deux cartes différentes, deux
+`idProduct` différents, une seule identité. **Scanner deux cartes de même nom et même numéro
+dans un lot, c'est en perdre une.** À vérifier en composant le lot, pas en le dépouillant.
