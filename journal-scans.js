@@ -86,6 +86,30 @@ const journalScanSchema = new mongoose.Schema({
     // RENDER_GIT_COMMIT) ; 'local' à défaut.
     version: String,
 
+    // QUELLE VERSION DE L'EXTENSION A ENVOYÉ CE SCAN. Envoyée par le client depuis son
+    // manifeste (`versionExtension`, ex. "1.0.5"). `version` ci-dessus dit ce que TOURNE le
+    // serveur ; celui-ci dit ce qui l'APPELLE — les deux bougent séparément.
+    //
+    // 🔑 `null` VEUT DIRE « CLIENT ANTÉRIEUR À LA 1.0.5 », PAS « INCONNU ». Le champ est lu
+    // sur toute requête : s'il est absent, c'est que le client ne l'envoie pas, et le seul
+    // client qui ne l'envoie pas est une extension d'avant la 1.0.5. C'est exactement la
+    // distinction qui a manqué le 2026-09-08, quand on a cherché un défaut dans du code qui
+    // n'était pas déployé : « pas de valeur » et « valeur inconnue » ne se lisent pas pareil.
+    //
+    // ⚠️ POURQUOI ÇA COMPTE MAINTENANT. Le déploiement du Store est PROGRESSIF : 1.0.4 et
+    // 1.0.5 coexistent dans le même journal au moment précis où trois instruments démarrent
+    // — canal live, `prixVinted`, écran des candidats. Sans ce champ, on attribuerait à un
+    // défaut ce qui n'est qu'une répartition de versions.
+    //
+    // ⚠️ À LIRE PAR ROUTE. Sur `route: 'analyser'`, un null peut aussi vouloir dire que le
+    // client n'envoie pas le champ SUR CETTE ROUTE. Ne pas agréger les deux routes pour en
+    // déduire une part de clients 1.0.4.
+    //
+    // ⛔ AUCUNE RÈGLE NE S'APPUIE DESSUS. Il est lu et journalisé, rien de plus : ni le
+    // scoring, ni le banc, ni une garde ne le consultent. Un champ neuf qui change un
+    // comportement le jour de sa naissance ne peut plus servir à mesurer ce comportement.
+    versionExtension: String,
+
     // --- SUCCÈS OU ÉCHEC ------------------------------------------------------
     // Le trou le plus grave du dispositif jusqu'ici : `enregistrerScan` n'était appelée
     // qu'APRÈS l'identification, donc tout scan qui échouait sortait par un `return`
@@ -932,6 +956,9 @@ function enregistrerScan(d = {}) {
             imageUrl: d.imageUrl ? String(d.imageUrl).slice(0, 500) : null,
             vintedUrl: d.vintedUrl ? String(d.vintedUrl).slice(0, 500) : null,
             version: VERSION,
+            // Borné : c'est une valeur de manifeste, pas un champ libre. Un client peut
+            // envoyer n'importe quoi ; on garde ce qu'il dit, tronqué.
+            versionExtension: d.versionExtension ? String(d.versionExtension).slice(0, 32) : null,
             nom: d.nom || null,
             numero: d.numero != null ? String(d.numero) : null,
             total: d.total != null ? String(d.total) : null,
@@ -1101,6 +1128,11 @@ function enregistrerScan(d = {}) {
  * @returns {void}
  */
 function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imageUrl, vintedUrl,
+    // ⚠️ EXPLICITE, SINON IL SE PERD. Cette fonction déstructure ses paramètres : un champ
+    // que les appelants passent par `...annonce` mais qui n'est pas nommé ici n'atteint
+    // jamais le journal. C'est le même piège que `symboleSet`, `vivierIds` et l'état — la
+    // voie du refus est systématiquement plus pauvre que celle du succès si on l'oublie.
+    versionExtension,
     fourchette, nbExAequo, nbCandidats, prixVinted,
     // ⚠️ `reverseLu` EST UN PARAMÈTRE EXPLICITE, ET SURTOUT PAS `cardInfo.reverse`.
     // Le validateur TCGdex ÉCRASE `cardInfo.reverse` en cours de route. Trois des cinq
@@ -1149,7 +1181,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     champsImage } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
-        route, userId, motifEchec, imageUrl, vintedUrl,
+        route, userId, motifEchec, imageUrl, vintedUrl, versionExtension,
         ...(champsImage || {}),
         rembourse: rembourse != null ? Boolean(rembourse) : null,
         // ⚠️ LES REFUS ÉTAIENT BEAUCOUP PLUS PAUVRES QUE LES SUCCÈS, alors que ce sont eux

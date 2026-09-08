@@ -2994,12 +2994,19 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
     // CE QUE L'IA AVAIT LU ne sert à rien pour diagnostiquer. Déclarée ici plutôt que
     // dans le try, où elle serait hors de portée du bloc qui en a le plus besoin.
     let cardInfo = null;
-    let annonce = { imageUrl: null, vintedUrl: null };
+    // ⚠️ `versionExtension` EST DANS L'INITIALISEUR AUSSI : une exception levée AVANT la
+    // lecture du corps sort par `erreur-serveur` avec cet objet-là. Sans le champ ici, ces
+    // lignes-là seules n'auraient pas la clé — un trou qui ne ressemble à rien d'autre.
+    let annonce = { imageUrl: null, vintedUrl: null, versionExtension: null };
     try {
         const { imageUrl, imageUrls, title, vintedPrice, vintedEtat, debug } = req.body;
         annonce = {
             imageUrl: (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls[0] : imageUrl,
-            vintedUrl: req.body.vintedUrl || req.body.url || null
+            vintedUrl: req.body.vintedUrl || req.body.url || null,
+            // La version de l'extension qui appelle — voir journal-scans.js. Elle voyage
+            // dans `annonce` pour atteindre les DEUX voies, succès et refus, sans être
+            // recopiée à chaque sortie. `null` = client antérieur à la 1.0.5.
+            versionExtension: req.body.versionExtension || null
         };
 
         if (!imageUrl) {
@@ -3514,7 +3521,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
     let cardInfo = null;
     // De quoi revérifier ce scan des mois plus tard, y compris depuis le catch. Voir
     // journal-scans.js : les annonces Vinted disparaissent en quelques jours.
-    let annonce = { imageUrl: null, vintedUrl: null };
+    // ⚠️ `versionExtension` EST DANS L'INITIALISEUR AUSSI : une exception levée AVANT la
+    // lecture du corps sort par `erreur-serveur` avec cet objet-là. Sans le champ ici, ces
+    // lignes-là seules n'auraient pas la clé — un trou qui ne ressemble à rien d'autre.
+    let annonce = { imageUrl: null, vintedUrl: null, versionExtension: null };
     try {
         const { imageUrl, imageUrls, title, vintedEtat } = req.body;
         // ⚠️ LE PRIX DEMANDÉ SUR L'ANNONCE — accepté à l'entrée depuis le 2026-08-11.
@@ -3583,7 +3593,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // noms sont acceptés pour que le champ se remplisse sans toucher au serveur.
         annonce = {
             imageUrl: (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls[0] : imageUrl,
-            vintedUrl: req.body.vintedUrl || req.body.url || null
+            vintedUrl: req.body.vintedUrl || req.body.url || null,
+            // ⚠️ ICI QUE ÇA COMPTE : c'est la route de l'extension. Elle voyage dans
+            // `annonce`, donc elle atteint les DEUX voies — le succès (`enregistrerScan`,
+            // qui reçoit `...annonce`) et les six sorties de refus (`enregistrerEchec`,
+            // qui la nomme explicitement dans ses paramètres). `null` = client antérieur
+            // à la 1.0.5, pas « inconnu ». Rien ne s'appuie dessus : lu et journalisé.
+            versionExtension: req.body.versionExtension || null
         };
         const photos = (Array.isArray(imageUrls) && imageUrls.length) ? imageUrls : [imageUrl];
         // exigerImage a déjà refusé les requêtes sans photo, AVANT tout décompte.
