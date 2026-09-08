@@ -2,6 +2,79 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 2026-09-09 — 🔑 LA BANNIÈRE CARDMARKET EST SUR NOS IMAGES : « Shadowless » attesté sur 103 produits, « 1st Edition » jamais. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
+
+**Ce que le testeur a lu sur la fiche `Pikachu-V3-BS58`** : titre, rareté, numéro, « Printed in »
+ne disent rien ; une bannière rouge « Shadowless » est apposée sur l'IMAGE du produit. C'est
+une attestation du fournisseur, pas une inférence de prix.
+
+### 1. La bannière est sur les images du disque, pas seulement sur le site
+
+Les 8 vus à l'œil (`CARDMARKET IMAGE\1999\BS\…\<idProduct>.jpg`, vignettes 255×361) : Pikachu
+n°58 V1 273753 **rien** · V2 660169 **« Shadowless »** · V3 660170 **« Shadowless »** · V4 275568
+rien (le « E3 » est un tampon IMPRIMÉ sur la carte) · V5 275586 rien (« Poké Tour 1999 »
+imprimé) · V6 362859 **« Attention: Oversized Card / Not Tournament Legal »** · Charizard n°4
+V1 273699 rien · V2 660224 **« Shadowless »**. Un produit sans bannière est l'impression de
+RÉFÉRENCE du numéro (V1 : le cadre porte son ombre, vu au zoom ×4), et on ne le sait que
+par élimination dans le couple, pas par une étiquette.
+
+### 2. Couverture : 233 produits des 113 numéros multi-produits (14 sets WotC 1999-2002, hors e-Card ; 1 372 produits — la définition qui rend 113/233)
+
+233 images sur 233. Comptées à l'œil sur quatre planches des bandes basses, avec un détecteur
+en contrôle (rouge PUR r ≥ 150, g < 40, b < 40, ≥ 12 % d'une ligne, ≥ 6 lignes contiguës dans la
+moitié basse ; ⚠️ un premier seuil r-max(g,b) ≥ 60 prenait le cadre des cartes Feu pour une
+bannière, Charizard V1 et Énergie Feu compris — recalibré sur 6 images) : détecteur 112 rouges,
+œil 112 rouges + 6 étiquettes BLANCHES que le détecteur ne voit pas.
+
+| libellé (texte exact de la bannière) | produits |
+|---|---|
+| **Shadowless** | **103** (Base Set : les 102 V2 + V3 du n°58) |
+| Attention: Oversized Card / Not Tournament Legal | 7 (Base Set V3 n°44/46/63, V6 n°58 ; Neo Genesis V2 n°54/57/81) |
+| Prerelease Stamp (blanche) | 4 (Fossil 1 V3, Gym Heroes 9 V2, Jungle 1 V3, Team Rocket 8 V2) |
+| Non-Holo | 2 (Wizards Promos 10, 11) |
+| Non-Holo / Lava Theme Deck (blanche) | 1 (Legendary Collection 3 V3) |
+| Golden Border (blanche) | 1 (Jungle 56 V2) |
+| **aucune** | **115** |
+
+Six valeurs distinctes, **jamais « 1st Edition », jamais « Unlimited »**. Structure des 113
+couples : **113/113 ont exactement UN membre sans bannière et tous les autres étiquetés** —
+Base Set : 102 V1 nus, 102 V2 « Shadowless ». Le couple est donc résolu par « étiquette ou
+référence » sur 113/113, sans lire un prix.
+
+🔴 **Ce que la bannière n'attesté PAS, et c'est structurel** : la 1re édition. Pikachu 58 a DEUX
+« Shadowless » (V2, V3) que rien ne sépare sur nos images (tampon « Edition 1 » illisible à 255
+px, zoom ×4 fait) ; Charizard n'a que V1 et V2 alors que trois impressions existent. Chez
+Cardmarket, « First Edition » est très probablement un attribut d'ARTICLE (par annonce, comme
+Reverse Holo ou Signed), pas de produit : **à vérifier sur la fiche, dans les filtres des
+annonces** — si c'est le cas, aucune table par `idProduct` ne le portera jamais, et le guide de
+prix d'un produit Shadowless mélange les deux.
+
+**La table est constructible** pour ce que la bannière porte : `idProduct → libellé` par lecture
+des images du disque, coût nul côté Cardmarket (0 appel), 233 images déjà classées ci-dessus, le
+détecteur ne couvrant que le rouge (les blanches se comptent à l'œil : 6 sur 233). Elle ne
+s'écrit pas avant la décision produit ; ce qui est attesté est le libellé, pas sa sémantique
+(« Shadowless » veut dire shadowless ; « aucune » veut dire « la référence du couple »).
+
+### 3. « Reprints: Show Versions (22) » — ce sont les réimpressions, on les a
+
+Métacarte 211614 (Pikachu 273753) : **23 produits** au catalogue, dans 18 expansions (Base Set
+×6, Base Set 2, POP 2, Evolutions, Expansion Pack, Celebrations ×3, Classic ×2…). Les 22
+« versions » de Cardmarket sont les autres produits de la métacarte, pas d'autres impressions
+de Base Set : on voit tout. Rien n'implique une impression cachée.
+
+### 4. TCGdex, pour mémoire (écrit ci-dessous au 08/09 « tard ») : nomme un `stamp` et se contredit (V2 « 1st-edition » ET vide, V3 vide ET « 1st-edition », `shadowless` absent) — une source qui hésite n'atteste pas. `thirdParty.cardmarket` : 64/64 fiches d'époque EN, 0/24 PMCG japonaises — occidental seulement, la table des 25 sets n'en tirera jamais rien.
+
+### 5. Le chemin occidental complet, mesuré : il DÉSIGNE le produit, il ne NOMME pas l'impression
+
+Toutes les fiches des 15 sets d'époque EN (base1…ecard3) : **1 621** lues, 1 615 avec ≥ 1 id
+Cardmarket, **109 avec PLUSIEURS ids** (la fiche distingue des impressions). Ids distincts
+1 551 ; chez nous (17 slugSets, e-Card compris) **1 374 / 1 672** ; dans un numéro multi-produits
+**221 / 245**. Couples (119 avec e-Card) : tous les membres atteints **102** ; tampons distincts
+sans contradiction **0**. Libellés attachés aux 221 : « (vide) » 106, « (vide)+1st-edition » 104,
+le reste marginal. **La jointure désigne bien un V1…V6 précis (plusieurs ids par fiche), mais
+l'étiquette qu'elle y accroche est incohérente sur 104 des 221 : elle ne résout pas le problème
+d'impression.** Ce qui le résout, c'est la bannière de Cardmarket, déjà sur le disque.
+
 ## 2026-09-08, tard — `thirdParty.cardmarket` mesuré par ère ; le vintage occidental : l'étiquette n'est attestée nulle part chez nous. RIEN N'EST CÂBLÉ, un commit (ce fichier), NON POUSSÉ
 
 ### 1. La colonne `variants_detailed[].thirdParty.cardmarket` : occidentale à toutes les ères, JAMAIS japonaise vintage
