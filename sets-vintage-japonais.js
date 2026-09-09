@@ -217,6 +217,63 @@
 //             3 — `codes_set.region` est ABSENTE — et aucune clause sur la fusion ne
 //             fabrique une attestation de région. Une clause qui lève un critère ne lève
 //             que celui-là.
+//
+//   4 ter. LA POKÉBALL D'EXS — un attribut par-set peut être déclaré sur une ligne
+//         FUSIONNÉE, à une condition et une seule : que la source atteste la MÊME valeur
+//         pour TOUS les sets recouverts. Tranchée le 2026-09-09, relevé de vignettes fait.
+//
+//         POURQUOI CE N'EST PAS UNE RENÉGOCIATION DE 4 BIS. La clause 4 bis annule les
+//         attributs par-set parce qu'une fusion rend AMBIGU « quel set porte quoi ». Quand
+//         les N sets portent la MÊME valeur, l'ambiguïté n'existe pas : le symbole de la
+//         ligne fusionnée est le symbole de chacune des séries, et le déclarer n'affirme
+//         rien de plus que ce que la source dit. Ce qui reste nul reste nul — `annee` est
+//         AMBIGUË (les trois séries ont des dates propres), `symboleFiable` aussi tant que
+//         rien n'atteste la distinctivité du dessin. La clause ne libère QUE la colonne
+//         dont l'ambiguïté a disparu.
+//
+//         LE CAS : les trois séries « Expansion Sheet » (1 blue, 2 red, 3 green) portent
+//         une POKÉBALL, commune à toute la série Vending — vignettes relevées à la main par
+//         le testeur. `symbole: 'pokeball'` est donc déclarable ; `symboleFiable` reste
+//         `null` : une pokéball est aussi le symbole d'autres séries, et rien n'atteste
+//         qu'elle DISTINGUE EXS. La fusion reste NOMMÉE sur la ligne.
+//
+//         LES GARDE-FOUS, comme pour 4 bis :
+//         (a) LE RELEVÉ EST ANTÉRIEUR À LA CLAUSE, ET LA CLAUSE A ÉTÉ REFUSÉE UN JOUR
+//             DURANT. Le 2026-09-06, le testeur a explicitement dit « ne le déclare PAS
+//             aujourd'hui, même si la réponse est favorable ». La valeur est entrée après
+//             une décision séparée, pas dans le mouvement du relevé.
+//         (b) COÛT MESURÉ AVANT APPLICATION — voir le rejeu au niveau de la ligne EXS.
+//         (c) ELLE NE S'ÉTEND À AUCUNE AUTRE COLONNE NI À AUCUNE AUTRE LIGNE. Une valeur
+//             par-set ne se déclare que si la source la donne IDENTIQUE pour tous les sets
+//             recouverts ; « probablement la même » n'est pas « attestée la même ».
+//
+//   5. L'ÉPOQUE — la table s'appelle « vintage », et rien ne le garantissait.
+//         La source qui atteste le set (critère 4) doit aussi le DATER, et la date relevée
+//         doit être ≤ 2007. Pour une ligne fusionnée (4 bis), TOUS les sets recouverts
+//         doivent être ≤ 2007.
+//
+//         🔴 LA BORNE VIT DANS LE RELEVÉ, PAS DANS LE CHAMP `annee`, et c'est le coeur du
+//         critère. Les deux formes naïves sont fausses :
+//              s.annee <= 2007                      -> `null <= 2007` vaut TRUE en
+//                                                      JavaScript (null se coerce en 0) :
+//                                                      EXS passerait PAR ACCIDENT.
+//              s.annee != null && s.annee <= 2007   -> REFUSE EXS, c'est-à-dire la seule
+//                                                      ligne que 4 bis a fait entrer.
+//         Une borne qui s'appuie sur une donnée absente refuse les bonnes lignes autant que
+//         les mauvaises. La date est une donnée de L'ADMISSION ; `annee` n'en est que la
+//         trace, et elle est nulle par construction sur les fusionnées.
+//
+//         POURQUOI 2007, ET PAS UNE ANNÉE PLUS BASSE. Coût rétroactif mesuré le 2026-09-09
+//         sur les 25 lignes admises : la table va de 1996 (EXP) à 2007 (DP5c).
+//              ≤ 2003 -> 1 refusée (DP5c)   ≤ 2006 -> 1 refusée (DP5c)   ≤ 2007 -> 0
+//         2007 est la SEULE borne à coût nul. Une borne qui refuse une ligne déjà admise
+//         n'est pas un critère, c'est une exception écrite après coup.
+//
+//         CE QU'ELLE EXCLUT, ET POURQUOI ON L'A ÉCRITE. `Super-Burst-Impact` (exp 3866,
+//         code sm8, 2018) remplit les critères 1, 2 et 3 : slug unique, une expansion,
+//         `region: 'japonais'`. Rien dans la règle ne la refusait — la seule défense de la
+//         table contre un set de 2018 était que personne n'avait essayé. Onze ans hors
+//         période, exclue SANS RELEVÉ.
 // Tout le reste part dans SETS_NON_PROUVES, en bas de ce fichier. Le plausible-et-faux
 // est le mode d'échec de ce projet depuis le début ; une table de 23 lignes sûres vaut
 // mieux qu'une de 27 dont 4 sont vraisemblables.
@@ -379,7 +436,15 @@ const SETS_VINTAGE_JAPONAIS = [
         // 4 bis en produira d'autres, donc la garde vaut pour la règle, pas pour ce cas.
         nom: 'Expansion Sheet', annee: null, slug: 'Expansion-Sheet', exp: 3781, code: 'EXS',
         prod: 125, regionSource: 'place-internationale-prise-par-MEW',
-        symbole: null, symboleFiable: null,
+        // ⚠️ `symbole` DÉCLARÉ SUR UNE LIGNE FUSIONNÉE — c'est la clause 4 ter, et c'est
+        // la SEULE colonne qu'elle libère. Les trois séries portent la MÊME pokéball
+        // (vignettes relevées à la main, série Vending) : l'ambiguïté que 4 bis neutralisait
+        // n'existe pas sur cette colonne-là. `annee` reste NUL — les trois séries ont des
+        // dates propres, l'ambiguïté y est entière. `symboleFiable` reste NUL : une pokéball
+        // est aussi le symbole d'autres séries, et rien n'atteste qu'elle DISTINGUE EXS.
+        // COÛT MESURÉ AVANT ÉCRITURE (rejeu du banc, valeur posée en mémoire, 2026-09-09) :
+        // sortie IDENTIQUE à la référence, ligne pour ligne — zéro verdict changé.
+        symbole: 'pokeball', symboleFiable: null,
         // ⚠️ LE CHAMP QUI REND LA LIGNE RELISIBLE. Aucun code ne le lit ; il existe pour
         // qu'on ne redécouvre pas dans six mois que cette ligne n'est pas atomique.
         fusion: 'recouvre 3 séries — Expansion Sheet 1 (blue) / 2 (red) / 3 (green) — '
