@@ -5,6 +5,45 @@ renégocie pas en cours de route.
 
 ---
 
+## 0. Ce qu'il faut savoir avant de citer un taux d'avancement — 2026-09-09
+
+**🔴 UN TAUX DE VERDICTS FERMES AGRÉGÉ SUR TOUS LES BUILDS EST UN ARTEFACT.** Les lignes
+anciennes sont fermes parce que les réserves n'existaient pas encore, pas parce que la chaîne
+était meilleure. Mesuré sur les 128 lignes jugeables :
+
+| build | date | lignes | fermes |
+|---|---|---|---|
+| `b3cb941af7a1` | 04/08 | 25 | **14** |
+| `7ba621d7c737` | 08/08 | 39 | 4 |
+| `21a809855af4` | 06/09 | 14 | **0** |
+| `93c19645143d` | 08/09 | 28 | 3 |
+
+Le journal dit **ce que le build du jour a rendu** ; le banc rejoue **les règles
+d'aujourd'hui**. Quand les deux divergent, aucun des deux n'a tort — ils ne parlent pas du
+même code. **Seul le build courant compte pour un taux d'avancement, et il est aujourd'hui
+trop petit pour en porter un** (3 fermes sur 28).
+
+**LE PLAFOND DE LA VOIE « PLUS DE CLÉS » EST 62,5 %.** Production, 128 jugeables : 26 fermes
+dont **23 justes (18,0 %)**, 79 sous réserve dont 57 justes, 23 refus. Même si TOUTE réserve
+juste devenait ferme, on plafonne à 80/128 = **62,5 %**. **Les 80 % ne s'atteignent pas en
+ajoutant des clés** — il faut soit rendre justes des lignes qui ne le sont pas, soit rouvrir
+un arbitrage.
+
+**ET LE PLUS GROS BLOC DE RÉSERVE N'EST PAS UN DÉFAUT.** `perimetre-vintage-suggestion` tient
+**32 lignes sur 128 (25 %), dont 21 justes**. C'est un ARBITRAGE ÉCRIT (index.js:5094) : « le
+périmètre restreint sans prouver, sa sortie est une suggestion, pas un verdict ». Il ne se
+corrige pas, **il se rouvre par décision** — et le prix de cette décision est mesuré au §9.
+
+⚠️ **Avant de comparer un taux avec quelqu'un d'autre, comparez les DÉNOMINATEURS.** Le
+2026-09-09, deux agents annonçaient 118, 128 et 139 pour « les vérités ». Trois filtres les
+séparent, et ils ne se devinent pas : les lignes HORS SERVICE sont-elles exclues ? le
+DÉDOUBLONNAGE est-il appliqué (17 lignes masquées portent l'identité d'une ligne gardée, donc
+« ont » une vérité si on ne dédoublonne pas : 128 avec, 145 sans) ? les vérités non
+numériques (`inconnu`, `hors-perimetre`) sont-elles comptées ? **Un taux dont on ne sait pas
+lequel des trois filtres il applique n'est comparable à rien.**
+
+---
+
 ## 1. Plus jamais `git add -A`
 
 Les fichiers sont **nommés, un par un**, à chaque commit.
@@ -285,6 +324,34 @@ mettrait 27 lignes du mauvais côté de la garde, et c'est la famille d'erreurs 
 
 **L109 RESTE DONC UN FAUX AFFIRMÉ NON RÉPARÉ**, et c'est écrit tel quel : la réparation
 évidente est mesurée fausse, on ne le corrige pas par convenance.
+
+---
+
+## 9. Le prix de la promotion de `perimetre-vintage-suggestion` — mesuré, non câblé
+
+**La question est légitime et le contexte a changé.** L'arbitrage a été posé quand une sortie
+sous réserve était un refus muet ; depuis le 2026-09-08, elle affiche **trois candidats avec
+leur set et leur prix**. Une suggestion n'est donc plus un trou. **Mesuré le 2026-09-09 sur
+les 128 lignes jugeables, ce que coûterait la promotion en verdict ferme :**
+
+| | aujourd'hui | promu |
+|---|---|---|
+| verdicts FERMES | 26 | **58** |
+| dont JUSTES | 23 | **44** |
+| 🔴 dont FAUX ET AFFIRMÉS | **3** | **14** |
+| fermes et justes, sur 128 | 18,0 % | **34,4 %** |
+| **faux DANS les fermes** | **11,5 %** | **24,1 %** |
+
+**+21 justes, +11 faux affirmés.** Le seuil de lancement est multiplié par **4,7**, et **une
+affirmation ferme sur quatre serait fausse**.
+
+⚠️ **CE N'EST PAS UN ARBITRAGE ENTRE DEUX BIENS.** Les 11 nouvelles erreurs affirmées sont
+des cartes japonaises vintage dont la vérité est souvent HORS VIVIER (Ponyta, Charmander,
+Victreebel, Caterpie, Slowbro, Surfing Pikachu, Berry…) : ce sont des « restes » au sens du
+§8, pas des choix serrés. Les promouvoir, c'est affirmer des restes.
+
+**La décision appartient au testeur.** Ce qui est écrit ici, c'est le prix, pas la
+recommandation — et le fait que le prix se relit sans refaire la mesure.
 
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
