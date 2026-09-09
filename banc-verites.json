@@ -1261,21 +1261,6 @@
       },
       "saisiLe": "2026-09-06T19:51:05.869Z"
     },
-    "L080": {
-      "idProduct": 606477,
-      "nom": "Pokémon March",
-      "codeSet": "N1",
-      "source": "saisie-a-l-aveugle",
-      "moyen": "url",
-      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Pokemon-March-GSNW",
-      "lu": {
-        "nom": "Berry",
-        "numero": null,
-        "total": null,
-        "setCode": null
-      },
-      "saisiLe": "2026-09-06T19:52:33.435Z"
-    },
     "L081": {
       "idProduct": 557709,
       "nom": "Hitmonchan",
@@ -1335,6 +1320,458 @@
         "setCode": null
       },
       "saisiLe": "2026-09-06T19:54:48.669Z"
+    },
+    "L085": {
+      "idProduct": 605326,
+      "nom": "Blaine's Growlithe",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Blaines-Growlithe-CFTD",
+      "lu": {
+        "nom": "Blaine's Growlithe",
+        "numero": "058",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:19:32.840Z"
+    },
+    "L086": {
+      "idProduct": 650716,
+      "nom": "Dragonite",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Expansion-Pack/Dragonite-V2-EC1126",
+      "lu": {
+        "nom": "Dragonite",
+        "numero": "126",
+        "total": "128",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:20:12.140Z"
+    },
+    "L087": {
+      "idProduct": 584673,
+      "nom": "Pikachu",
+      "codeSet": "PJU",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Jungle/Pikachu",
+      "lu": {
+        "nom": "Pikachu",
+        "numero": "025",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:21:07.675Z"
+    },
+    "L088": {
+      "idProduct": 605396,
+      "nom": "Trash Exchange",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Trash-Exchange-CFTD",
+      "lu": {
+        "nom": "Trash Exchange",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:21:32.133Z"
+    },
+    "L089": {
+      "idProduct": 605425,
+      "nom": "Rocket's Minefield Gym",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Rockets-Minefield-Gym-CFTD",
+      "lu": {
+        "nom": "Rocket's Minefield Gym",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:21:58.183Z"
+    },
+    "L090": {
+      "idProduct": 699098,
+      "nom": "Tyranitar Lv.57",
+      "codeSet": "DP2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Secret-of-the-Lakes/Tyranitar-Lv57-DP2",
+      "lu": {
+        "nom": "Tyranitar",
+        "numero": "DPBP#298",
+        "total": null,
+        "setCode": "DP2"
+      },
+      "saisiLe": "2026-09-08T18:24:34.829Z",
+      "corrigeLe": "2026-09-08T20:52:00Z",
+      "corrigeQuoi": "l'URL de Rocket's Minefield Gym (idProduct 605425) avait été saisie ici par erreur — deux vérités pointaient le même produit pour deux cartes différentes. Corrigé avec l'URL Secret-of-the-Lakes/Tyranitar-Lv57-DP2, résolue par la règle de resoudreSaisie (slug + slugSet, un seul produit). L'erreur est nommée plutôt qu'effacée."
+    },
+    "L091": {
+      "idProduct": 557700,
+      "nom": "Alakazam",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Alakazam-EXP",
+      "lu": {
+        "nom": "Alakazam",
+        "numero": "065",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:27:20.556Z"
+    },
+    "L092": {
+      "idProduct": 699055,
+      "nom": "Alakazam Lv.47",
+      "codeSet": "DP2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Secret-of-the-Lakes/Alakazam-Lv47-DP2",
+      "lu": {
+        "nom": "Alakazam",
+        "numero": "DPBP#071",
+        "total": null,
+        "setCode": "DP2"
+      },
+      "saisiLe": "2026-09-08T18:27:54.996Z"
+    },
+    "L093": {
+      "idProduct": 765002,
+      "nom": "Larvitar δ Delta Species",
+      "codeSet": "PCG6",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Holon-Research-Tower/Larvitar-Delta-Species-PCG6013",
+      "lu": {
+        "nom": "Larvitar",
+        "numero": "013",
+        "total": "086",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:29:39.917Z"
+    },
+    "L094": {
+      "idProduct": 605347,
+      "nom": "Sabrina's Drowzee",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Sabrinas-Drowzee-CFTD",
+      "lu": {
+        "nom": "Sabrina's Drowzee",
+        "numero": "096",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:30:04.892Z"
+    },
+    "L095": {
+      "idProduct": 743166,
+      "nom": "Ivysaur",
+      "codeSet": "CLF",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pokemon-Card-Game-Classic-Venusaur-Lugia-ex-Deck/Ivysaur-CLF002",
+      "lu": {
+        "nom": "Ivysaur",
+        "numero": "002",
+        "total": "032",
+        "setCode": "CLF"
+      },
+      "saisiLe": "2026-09-08T18:30:41.548Z"
+    },
+    "L096": {
+      "idProduct": 678475,
+      "nom": "Empoleon Lv.47",
+      "codeSet": "DPtP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Palkia-DPt-Half-Deck/Empoleon-Lv47-DPtP004",
+      "lu": {
+        "nom": "Empoleon",
+        "numero": "004",
+        "total": "013",
+        "setCode": "DptP"
+      },
+      "saisiLe": "2026-09-08T18:31:26.109Z"
+    },
+    "L097": {
+      "idProduct": 606897,
+      "nom": "Pokémon Personality Test",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Darkness-and-to-Light/Pokemon-Personality-Test-DL",
+      "lu": {
+        "nom": "Personality Test",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:31:43.175Z"
+    },
+    "L098": {
+      "idProduct": 606829,
+      "nom": "Dark Octillery",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Darkness-and-to-Light/Dark-Octillery-DL",
+      "lu": {
+        "nom": "Dark Octillery",
+        "numero": "224",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:31:59.911Z"
+    },
+    "L099": {
+      "idProduct": 557639,
+      "nom": "Bulbasaur",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Bulbasaur",
+      "lu": {
+        "nom": "Bulbasaur",
+        "numero": "001",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:32:31.979Z"
+    },
+    "L100": {
+      "idProduct": 606489,
+      "nom": "Focus Band",
+      "codeSet": "N1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Gold-Silver-to-a-New-World/Focus-Band-GSNW",
+      "lu": {
+        "nom": "Focus Band",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:32:52.401Z"
+    },
+    "L101": {
+      "idProduct": 650649,
+      "nom": "Pokémon Reversal",
+      "codeSet": "EC1",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Base-Expansion-Pack/Pokemon-Reversal-EC1059",
+      "lu": {
+        "nom": "Pokémon Reversal",
+        "numero": "059",
+        "total": "128",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:33:13.145Z"
+    },
+    "L102": {
+      "idProduct": 585061,
+      "nom": "Squirtle",
+      "codeSet": "ROG",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Rocket-Gang/Squirtle",
+      "lu": {
+        "nom": "Squirtle",
+        "numero": "007",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:33:42.667Z"
+    },
+    "L103": {
+      "idProduct": 605383,
+      "nom": "Giovanni's Meowth",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Giovannis-Meowth-V2-CFTD",
+      "lu": {
+        "nom": "Giovanni's Meowth",
+        "numero": "052",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:34:00.393Z"
+    },
+    "L104": {
+      "idProduct": 669096,
+      "nom": "Pokémon Reversal",
+      "codeSet": "L2t",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Tyranitar-Constructed-Standard-Deck/Pokemon-Reversal-L2t013",
+      "lu": {
+        "nom": "Pokémon Reversal",
+        "numero": "065",
+        "total": "070",
+        "setCode": "L1"
+      },
+      "saisiLe": "2026-09-08T18:34:29.097Z"
+    },
+    "L105": {
+      "idProduct": 548651,
+      "nom": "Porygon",
+      "codeSet": "EXS",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Sheet/Porygon",
+      "lu": {
+        "nom": "Porygon",
+        "numero": "137",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:34:55.237Z"
+    },
+    "L106": {
+      "idProduct": 606853,
+      "nom": "Dark Slowking",
+      "codeSet": "N4",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Darkness-and-to-Light/Dark-Slowking-DL",
+      "lu": {
+        "nom": "Dark Slowking",
+        "numero": "199",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:35:15.104Z"
+    },
+    "L107": {
+      "idProduct": 606703,
+      "nom": "Raikou",
+      "codeSet": "N3",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Awakening-Legends/Raikou-AL",
+      "lu": {
+        "nom": "Raikou",
+        "numero": "243",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:35:38.896Z"
+    },
+    "L108": {
+      "idProduct": 605430,
+      "nom": "Giovanni",
+      "codeSet": "G2",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Challenge-from-the-Darkness/Giovanni-CFTD",
+      "lu": {
+        "nom": "Giovanni",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:36:00.034Z"
+    },
+    "L109": {
+      "idProduct": 558663,
+      "nom": "Slowpoke",
+      "codeSet": "sm8",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Super-Burst-Impact/Slowpoke",
+      "lu": {
+        "nom": "Slowpoke",
+        "numero": "14",
+        "total": "40",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:36:36.670Z"
+    },
+    "L110": {
+      "idProduct": 557675,
+      "nom": "Poliwag",
+      "codeSet": "EXP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Expansion-Pack/Poliwag",
+      "lu": {
+        "nom": "Poliwag",
+        "numero": "060",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:37:22.832Z"
+    },
+    "L111": {
+      "idProduct": 784150,
+      "nom": "Raikou ex",
+      "codeSet": "advG",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Aqua-Deck-Kit/Raikou-ex-advG014",
+      "lu": {
+        "nom": "Raikou ex",
+        "numero": "014",
+        "total": "033",
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:37:52.816Z"
+    },
+    "L112": {
+      "idProduct": 571750,
+      "nom": "Wartortle",
+      "codeSet": "SI-JP",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Southern-Islands-JP/Wartortle",
+      "lu": {
+        "nom": "Wartortle",
+        "numero": "008",
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:38:21.362Z"
+    },
+    "L024": {
+      "idProduct": 805545,
+      "nom": "Palafin ex",
+      "codeSet": "PRE",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "idProduct",
+      "saisieBrute": "805545",
+      "lu": {
+        "nom": "Palafin ex",
+        "numero": "151",
+        "total": "131",
+        "setCode": "TWM"
+      },
+      "saisiLe": "2026-09-08T18:54:38.709Z"
+    },
+    "L080": {
+      "idProduct": 832368,
+      "nom": "Berry",
+      "codeSet": "IPNC",
+      "source": "saisie-a-l-aveugle",
+      "moyen": "url",
+      "saisieBrute": "https://www.cardmarket.com/en/Pokemon/Products/Singles/Intro-Pack-Neo-Chikorita/Berry-IPNC",
+      "lu": {
+        "nom": "Berry",
+        "numero": null,
+        "total": null,
+        "setCode": null
+      },
+      "saisiLe": "2026-09-08T18:55:08.310Z"
     }
   }
 }
