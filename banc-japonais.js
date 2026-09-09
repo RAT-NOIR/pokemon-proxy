@@ -665,6 +665,42 @@ function celluleDe(d) {
             }
         }
 
+        // 0 quater. LE REPLI SUR NOM SUSPECT — MÊME COMMIT QUE LA ROUTE (règle de symétrie).
+        //    La route vide le vivier quand TCGdex contredit le nom lu (index.js, `nomSuspect`),
+        //    et sort en `aucun-candidat` sans avoir jamais interrogé le catalogue par ce nom.
+        //    Elle se replie désormais dessus, sous réserve. On rejoue le même geste ici.
+        //
+        // ⚠️ PLACÉ APRÈS LE PÉRIMÈTRE, ET C'EST LA POSITION DE LA ROUTE. Dans la route, le
+        // repli neutralise `expansionsAttendues`, ce qui ROUVRE le périmètre : le vivier de
+        // repli traverse donc le bloc vintage avant tout scoring. Ici le bloc du périmètre
+        // est au-dessus et rend la main quand il retient — L090 Tyranitar y est déjà juste
+        // aujourd'hui, sans ce repli. Le placer plus haut la ferait passer par un chemin que
+        // la route ne lui fait pas prendre.
+        //
+        // 🔴 ET LA CONDITION EST RECONSTRUITE, PAS LUE — il faut le dire ici. `nomSuspect`
+        // n'est journalisé que depuis le 2026-09-10 : AUCUNE des lignes existantes ne le
+        // porte. Le banc l'infère de `motifEchec === 'aucun-candidat'` + un vivier par nom
+        // NON VIDE, ce qui ne peut arriver que par ce veto — la route n'atteint cette sortie
+        // qu'avec `produits` vide, et un nom qui rend 44 produits au catalogue n'a pas donné
+        // un vivier vide tout seul. C'est une reconstruction saine, et elle a une date de
+        // péremption : dès que les lignes porteront le champ, on le LIRA.
+        if (retenu == null && d.motifEchec === 'aucun-candidat' && d.nomConfiance === 'haute'
+            && !(Array.isArray(d.sourcesEnPanne) ? d.sourcesEnPanne : []).some(s => String(s).startsWith('tcgdex'))) {
+            // Le nom LU. `viviersUnis(nom, nom)` de la route retombe sur ce seul appel.
+            const vivierRepli = await trouverProduitsLocaux(d.nom);
+            if (vivierRepli.length) {
+                const cs = await lireCodeSets(vivierRepli.map(p => p.idExpansion));
+                const r = await scorerCandidatsLocal(vivierRepli, cardInfoNeutre, null, [], cs, {});
+                const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
+                const classe = () => r.scores.map(s => s.candidat.idProduct);
+                // TOUJOURS `incertain: true` — la route ne rend jamais ce repli ferme.
+                if (r.scores.length && !eg) return rendre(r.scores[0].candidat.idProduct, true, 'nom-repli-suspect', classe());
+                // Égalité au sommet du vivier de repli : rien ne départage, et le repli
+                // n'invente pas de clé. La ligne reste le refus qu'elle était.
+                return rendre(null, true, 'REFUS-repli-egalite');
+            }
+        }
+
         // 1. Le chemin par le code, en tête.
         const piste = await trouverParSetCodeEtNumero(d.setCode, numeroCarte, d.langue);
         if (piste.length === 1) {

@@ -4184,7 +4184,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Le set TCGdex nous dit dans quelle(s) expansion(s) Cardmarket chercher. Calculé
         // AVANT les produits : quand le nom est suspect, c'est l'expansion + le numéro
         // qui désignent la carte, et le nom ne sert plus du tout.
-        const { liste: expansionsAttendues } = await interrogerSource('tcgdex/expansions',
+        // ⚠️ `let` ET NON `const` — le repli sur nom suspect (plus bas) la NEUTRALISE. Quand
+        // TCGdex a contredit le nom, les expansions qu'il a rendues décrivent la carte qu'il
+        // a cru voir, pas celle qu'on scanne : les garder filtrerait le vivier de repli avec
+        // la source même qui vient d'être écartée.
+        let { liste: expansionsAttendues } = await interrogerSource('tcgdex/expansions',
             () => expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo), cardInfo.setCode));
 
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
@@ -4255,6 +4259,59 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 console.log(`🗃️ [identifier] ni le nom ni l'expansion attendue -> IDENTIFICATION LOCALE : ${produits.length} candidat(s), gagnant ${local.gagnant?.candidat?.idProduct} code=${local.gagnant?.candidat?.codeSet} motifARouter=${local.motifARouter} incertain=${local.incertain}`);
             }
         }
+        // ════════════════════════════════════════════════════════════════════
+        // LE REPLI SUR NOM SUSPECT — la garde qui vide le vivier rend la main
+        // ════════════════════════════════════════════════════════════════════
+        // CE QU'ON RÉPARE, MESURÉ AVANT D'ÊTRE ÉCRIT. Sur les 236 lignes numérotées du
+        // journal, `aucun-candidat` en compte 5 — 3 au lot (L084 Blastoise δ, L090
+        // Tyranitar, L096 Empoleon), 2 à l'entraînement. LES CINQ portent
+        // `nomConfiance: 'haute'`, et leur nom rend 44, 45, 50, 58 et 2 produits au
+        // catalogue. Le vivier n'était pas vide : il n'a jamais été constitué.
+        //
+        // LE CHEMIN EXACT. `trouverCarteTCGdex` rend une carte dont le numéro contredit
+        // celui, parfaitement lisible, de la photo -> `nomSuspect` (ligne 4152) -> le vivier
+        // par nom n'est même pas interrogé (4221) -> le repli par l'expansion attendue
+        // cherche dans les expansions de la MAUVAISE carte (4224) -> l'identification locale
+        // ne trouve rien (4233) -> refus. Une garde délibérée, déclenchée par une source qui
+        // s'est trompée, contre un nom que l'IA donnait pour SÛR.
+        //
+        // 🔑 POURQUOI CE N'EST PAS DÉFAIRE LA GARDE. `nomSuspect` reste vrai, et le vivier
+        // reste écarté PAR DÉFAUT. Ce bloc ne s'ouvre qu'une fois TOUT le reste épuisé —
+        // c'est le dernier recours, pas le premier. Et il ne rend JAMAIS un verdict ferme :
+        // le nom sur lequel on se replie est celui que la chaîne vient de déclarer suspect,
+        // donc la sortie est une suggestion, `raisonReserve: 'nom-repli-suspect'`.
+        //
+        // ⚠️ `nomConfiance === 'haute'` EXCLUT LA TROISIÈME CAUSE DE `nomSuspect`. Le veto a
+        // trois entrées : TCGdex trouvé par `total+numero`, un numéro contredit, et
+        // `nomConfiance: 'basse'`. Se replier sur un nom que l'IA DIT elle-même peu fiable
+        // serait contredire la lecture, pas la source. On ne se replie que quand le désaccord
+        // vient de TCGdex — c'est-à-dire quand deux sources se contredisent et qu'on choisit
+        // celle qui a lu la carte.
+        //
+        // ⚠️ `!tcgdexEnPanne` : une panne n'est pas un désaccord. Si TCGdex n'a pas répondu,
+        // il n'a rien contredit — se replier reviendrait à échanger une absence contre une
+        // affirmation, exactement ce que la clause 1 du bloc `carte-introuvable` interdit.
+        let nomRepliSuspect = false;
+        if (produits.length === 0 && nomSuspect && cardInfo.nomConfiance === 'haute' && !tcgdexEnPanne) {
+            // Le nom LU, et lui seul : `nomPourCatalogue` vient du pont TCGdex, c'est-à-dire
+            // de la source qu'on vient d'écarter. `viviersUnis` avec deux fois le même nom
+            // n'interroge Mongo qu'une fois (voir `memeNom`) et garde l'enveloppe de panne.
+            const repli = await viviersUnis(cardInfo.name, cardInfo.name);
+            if (repli.length) {
+                produits = repli;
+                nomRepliSuspect = true;
+                // 🔑 ET LES EXPANSIONS ATTENDUES TOMBENT AVEC. Elles décrivent la carte que
+                // TCGdex a cru reconnaître ; filtrer le vivier de repli avec elles le
+                // reviderait par la source même qu'on écarte. Les neutraliser rouvre aussi
+                // le périmètre vintage (`sansPerimetreTCGdex`, plus bas) — ce n'est pas un
+                // effet de bord, c'est le seul chemin qui restait à ces cartes.
+                expansionsAttendues = [];
+                console.warn(`↩️ [nom-repli-suspect] le vivier était VIDE par veto du nom, et l'IA donnait "${cardInfo.name}" pour SÛR -> repli sur le nom lu : ${produits.length} candidat(s). Sortie SOUS RÉSERVE, jamais ferme.`);
+            } else {
+                console.warn(`↩️ [nom-repli-suspect] veto du nom sur "${cardInfo.name}" (confiance haute), mais le catalogue ne connaît pas ce nom non plus -> rien à replier.`);
+            }
+        }
+
         if (produits.length > 0 && !identificationLocale && !produitsImposes) {
             // `!produitsImposes` : viviersAvecRangs REMPLACE un vivier par nom qui ne peut
             // pas contenir la bonne carte. Un produit désigné par (code + numéro) n'est pas
@@ -5189,6 +5246,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // perdues d'un coup — c'est le vivier le moins étayé que la chaîne produise,
             // et il ne sort jamais autrement qu'en suggestion avertie.
             || nomSeulVintage
+            // Le repli sur nom suspect : le vivier est construit sur un nom que la chaîne
+            // vient elle-même de déclarer suspect, parce que TCGdex l'a contredit. On choisit
+            // la lecture contre la source, faute de mieux — ça ne s'affirme pas.
+            || nomRepliSuspect
             // Le périmètre restreint sans prouver : sa sortie est une suggestion, pas un
             // verdict. Arbitrage explicite, à ne pas lever avant que le banc le justifie.
             || perimetreVintage
@@ -5306,6 +5367,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Devant tout le reste par la RÈGLE 1 : ce repli dit que le vivier lui-même
             // n'existe que par défaut de tout le reste. C'est une prémisse plus faible que
             // n'importe quelle raison portant sur le DÉPARTAGE à l'intérieur du vivier.
+            // DEVANT `nom-seul-vintage` PAR LA RÈGLE 1, et c'est la prémisse la plus faible
+            // de toute la table : les autres raisons décrivent un vivier mal départagé,
+            // celle-ci décrit un vivier qu'on a rouvert CONTRE une source qui le refusait.
+            // Le vivier n'existe pas par défaut de mieux, il existe malgré un veto.
+            : nomRepliSuspect ? 'nom-repli-suspect'
             : nomSeulVintage ? 'nom-seul-vintage'
             : departageParSymbole ? 'symbole-departage'
             // ⚠️ CHANGEMENT D'INSTRUMENT DÉCLARÉ — 2026-09-05, et il est ÉTROIT.
@@ -5512,7 +5578,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Ni numéro, ni TCGdex, ni variantes : le vivier le moins étayé de la chaîne.
             // Il ne pourra JAMAIS passer en « forte » — ce n'est pas une classe en attente
             // de mesure, c'est une classe dont la faiblesse est constitutive.
-            'nom-seul-vintage': 'faible'
+            'nom-seul-vintage': 'faible',
+            // Le repli sur nom suspect. FAIBLE, et comme `nom-seul-vintage` sa faiblesse est
+            // CONSTITUTIVE, pas en attente de mesure : le vivier est construit sur un nom
+            // qu'une source a contredit. Même si la justesse se mesurait haute demain, une
+            // sortie « forte » dirait « j'affirme sur un nom que je viens de déclarer
+            // suspect » — une phrase qui ne peut pas être vraie.
+            'nom-repli-suspect': 'faible'
         };
         // ════════════════════════════════════════════════════════════════════
         // 📌 NOTE — NON DEMANDÉE AUJOURD'HUI, ÉCRITE POUR NE PAS ÊTRE REDÉCOUVERTE
