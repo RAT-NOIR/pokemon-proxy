@@ -265,10 +265,26 @@ Le champ existe, il est journalisé, et il n'est pas parmi les disjonctions de `
 (index.js:5078).
 
 ⚠️ **ET LA RÉPARATION ÉVIDENTE A ÉTÉ MESURÉE PUIS REFUSÉE.** Sur les 50 lignes jugeables,
-`margeConfortable` prédit l'erreur **à l'envers** : 66,7 % de justes quand elle est VRAIE,
-**73,9 % quand elle est FAUSSE**. Il n'y a pas de signal à câbler — la corriger n'aurait été
-justifié que par L109, c'est-à-dire par une ligne. **Un correctif justifié par un cas est une
-hypothèse.** La garde reste absente, et c'est une décision, pas un oubli.
+`margeConfortable` prédit l'erreur **à l'envers** : 66,7 % de justes quand elle est VRAIE
+(18/27), **73,9 % quand elle est FAUSSE** (17/23). Écart **−7,2 points**. Il n'y a pas de
+signal à câbler — la corriger n'aurait été justifié que par L109, c'est-à-dire par une ligne.
+**Un correctif justifié par un cas est une hypothèse.** La garde reste absente, et c'est une
+décision, pas un oubli.
+
+🔴 **NE PAS LA REPROPOSER SANS REFAIRE CETTE MESURE.** Le coût avait l'air gratuit — 1 faux
+affirmé supprimé, 0 juste ferme perdu, 5 verdicts fermes sur 68 (7,4 %) passant en
+suggestion. C'est précisément ce qui rend l'idée récurrente : elle a l'air propre et son
+prédicteur est vide.
+
+⚠️ **ET LE CHAMP A TROIS ÉTATS, PAS DEUX.** Sur 280 lignes du journal, 149 le portent :
+**84 `true`, 38 `false`, et 27 NI L'UN NI L'AUTRE**. Un `margeConfortable` absent n'est pas
+`false` — c'est « la marge n'a pas été évaluée sur ce chemin ». Le lire comme un booléen
+mettrait 27 lignes du mauvais côté de la garde, et c'est la famille d'erreurs du catalogue
+(erreur #8 : sur un journal qui a une HISTOIRE, `undefined` n'est ni `0`, ni `false`, ni
+« absent du monde »).
+
+**L109 RESTE DONC UN FAUX AFFIRMÉ NON RÉPARÉ**, et c'est écrit tel quel : la réparation
+évidente est mesurée fausse, on ne le corrige pas par convenance.
 
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
