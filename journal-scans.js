@@ -372,6 +372,35 @@ const journalScanSchema = new mongoose.Schema({
     // les auront JAMAIS. La clôture, le coût de collecte et le taux de départage devront
     // être remesurés sur un lot neuf — les anciens chiffres ne s'y ajoutent pas.
     exAequoIds: [Number],     // les idProduct à égalité au sommet, AU MOMENT DU SCAN
+    // ════════════════════════════════════════════════════════════════════════
+    // CE QUE L'UTILISATEUR A RÉELLEMENT VU — les candidats RENDUS, dans l'ordre
+    // ════════════════════════════════════════════════════════════════════════
+    // Les `idProduct` du tableau `candidats` de la réponse (index.js), DANS L'ORDRE DU
+    // CLASSEMENT : un seul quand le verdict est ferme, les trois premiers sous réserve.
+    //
+    // 🔑 POURQUOI IL EXISTE. La règle d'affichage repose sur « la vérité est dans les
+    // trois » — mesuré une fois, le 2026-09-06, sur 43 lignes hors ligne — et RIEN ne le
+    // vérifiait en production. Le 2026-09-09, la question « l'utilisateur voit-il sa
+    // carte ? » n'a pas pu être répondue : `candidats` vivait dans la RÉPONSE HTTP et
+    // n'allait nulle part. Le proxy disponible (la vérité est-elle dans `vivierIds`) ne
+    // portait que sur 36 des 79 lignes sous réserve.
+    //
+    // ⚠️ LES IDENTIFIANTS SEULS. Pas le tableau complet : `nom`, `set` et `prix` sont
+    // re-dérivables depuis l'`idProduct`, et un journal qui recopie une donnée dérivable
+    // crée deux versions du même fait, qui divergeront.
+    //
+    // 🔴 RIEN N'EST RÉCUPÉRABLE AVANT LE 2026-09-09. Les lignes antérieures n'ont PAS ce
+    // champ et ne l'auront jamais : ce que la réponse a rendu ce jour-là n'existe plus.
+    // C'est le sixième principe, et c'est la DEUXIÈME fois cette semaine — après
+    // `prixVinted` et le canal du prix live. Une donnée non journalisée le jour où elle
+    // est rendue est perdue pour toujours, quel que soit le soin qu'on y mette ensuite.
+    //
+    // ⚠️ NULL SUR LES REFUS, PAR CONSTRUCTION : un refus ne rend aucun candidat (il rend
+    // une `fourchette`). Le champ traverse quand même la voie du refus, pour que le jour
+    // où un refus montrera des candidats, la plomberie existe et rien ne soit à ajouter.
+    //
+    // ⛔ AUCUNE RÈGLE NE S'APPUIE DESSUS. Lu, journalisé, rien de plus.
+    candidatsRendus: [Number],
     vivierIds: [Number],      // le vivier retenu, celui que le scoring a réellement vu
     // ⚠️ CE QUE `vivierIds` RÉPARE, SUR UN CAS RÉEL PLUTÔT QU'EN PRINCIPE.
     // Bayleef, 2026-08-08 : retenu 670000 (L1SS, n°007), vrai 654769 (EC1, n°S07), écart
@@ -1020,6 +1049,9 @@ function enregistrerScan(d = {}) {
             // couple, une borne silencieuse ferait lire « vivier de 200 » là où il y en
             // avait 431. Le plafond est haut : il ne coupe que les viviers pathologiques.
             exAequoIds: Array.isArray(d.exAequoIds) ? d.exAequoIds.map(Number).filter(Number.isFinite) : null,
+            // Borné à 3 : c'est le maximum que la règle d'affichage rend. Un tableau plus
+            // long dirait que la règle a changé sans que ce champ le sache.
+            candidatsRendus: Array.isArray(d.candidatsRendus) ? d.candidatsRendus.map(Number).filter(Number.isFinite).slice(0, 3) : null,
             vivierIds: Array.isArray(d.vivierIds) ? d.vivierIds.map(Number).filter(Number.isFinite).slice(0, 200) : null,
             vivierTaille: Number.isFinite(d.vivierTaille) ? d.vivierTaille : (Array.isArray(d.vivierIds) ? d.vivierIds.length : null),
             // Tronqué ICI, une seule fois, pour que tous les appelants soient bornés de la
@@ -1147,7 +1179,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // EST un refus pour cause d'égalité, et jusqu'ici il ne disait pas ENTRE QUOI.
     // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
     // groupe était couvert par un index, ni de mesurer la clôture après coup.
-    exAequoIds, vivierIds, vivierTaille, messageErreur,
+    exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
     // ⚠️ LA PHRASE DU DÉPARTAGE PAR LE SYMBOLE — ajoutée le 2026-09-02, MÊME MOTIF QUE
     // `champsImage` : elle n'existe que là où le départage a été consulté, donc elle passe
     // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
@@ -1215,7 +1247,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         etatVinted, etatMin, etatEstimeIA, etatConfianceIA, etatRetenu, defautsVus,
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,
-        exAequoIds, vivierIds, vivierTaille, messageErreur,
+        exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,
