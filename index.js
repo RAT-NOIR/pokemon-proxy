@@ -5638,6 +5638,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // c'est-à-dire par une jointure approximative sur la seule donnée qui doit rester
         // exacte. Vaut null si Mongo n'est pas connecté — il n'y aura alors pas de ligne.
         const scanId = enregistrerScan({
+            // CE QUE L'UTILISATEUR VOIT, et rien d'autre : les `idProduct` du tableau
+            // `candidats` construit juste au-dessus, DANS SON ORDRE. Un seul si le verdict
+            // est ferme, trois sous réserve. Voir journal-scans.js pour pourquoi ce champ
+            // existe et pourquoi il ne porte que des identifiants.
+            candidatsRendus: candidats.map(c => c.idProduct),
             route: 'identifier',
             userId: req.credit?.userId,
             // Ce qui rend cette ligne revérifiable dans six mois — voir journal-scans.js.
@@ -6862,6 +6867,12 @@ module.exports = {
     setsPourTotal, identifierParTotalEtNumero,
     // RÈGLE DE SYMÉTRIE : la clé V est rejouée par `apres()` du banc avec CETTE fonction.
     designerParPokedexSansNumero,
+    // RÈGLE DE SYMÉTRIE, troisième occurrence (2026-09-09) : le banc RECONSTRUISAIT les
+    // expansions attendues (total -> sets TCGdex -> pont local) là où la route les tient de la
+    // carte TCGdex trouvée. Sur 20 lignes JP à numéro et total lus, le banc entrait dans le
+    // périmètre que la route n'appliquait pas, et forçait une réserve que la production n'avait
+    // pas. Exportées pour être APPELÉES par `apres()`, jamais recopiées.
+    expansionsDuSetTCGdex, regionAttendue,
     // ⚠️ EXPORTÉE POUR ÊTRE TESTÉE, PAS POUR ÊTRE RÉUTILISÉE AILLEURS. La chaîne argent
     // ne part jamais sans preuve : test-remboursement-catch.js exerce cette fonction
     // exacte, celle que les deux `catch` appellent — pas une copie de sa logique.

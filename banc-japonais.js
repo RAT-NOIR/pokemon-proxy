@@ -149,6 +149,14 @@ const { trouverProduitsLocaux, setsPourTotal } = require('./index');
 // affirmé sur le nom entier ; et 2 FAUX AFFIRMÉS quand elle était posée APRÈS le périmètre
 // (entrée 30 du catalogue). Sa place ici, avant le bloc 0 bis, reproduit celle de la route.
 const { designerParPokedexSansNumero } = require('./index');
+// RÈGLE DE SYMÉTRIE, TROISIÈME OCCURRENCE — 2026-09-09. Le banc reconstruisait les expansions
+// attendues par `setsPourTotal` + pont local ; la route les tient de la carte TCGdex trouvée
+// (`carteTcgdexId` au journal) par `expansionsDuSetTCGdex`. Mesuré : 20 lignes JP à numéro et
+// total lus (e-series, Neo) entraient au périmètre ici et pas dans la route — 20 verdicts fermes
+// en production comptés « sous réserve » par le banc. On appelle désormais la fonction de la
+// route avec l'entrée de la route ; la reconstruction ne survit que pour les lignes antérieures
+// au champ, et elle est COMPTÉE (voir `perimetreReconstruit`).
+const { expansionsDuSetTCGdex, regionAttendue, trouverCarteTCGdex } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -440,6 +448,14 @@ function celluleDe(d) {
     // entier au journal (tronqué à 200). ⚠️ Compté et affiché, jamais silencieux : un
     // échantillon qui rétrécit sans le dire est le défaut que ce banc traque partout.
     let imageNonRejouables = 0;
+    // Les lignes dont la carte TCGdex n'a pu être ni lue au journal ni retrouvée (panne) : le
+    // périmètre y est décidé sans l'entrée de la route. Compté et affiché : asymétrie résiduelle.
+    let perimetreReconstruit = 0;
+    // Le lendemain du commit 809d027 (2026-08-03) qui câble le périmètre : les lignes du jour
+    // même ne savent pas de quel côté du déploiement elles sont, elles sont simulées.
+    const DATE_PERIMETRE = new Date('2026-08-04T00:00:00Z');
+    // `--asymetrie` : lister les lignes dont le FERME diffère entre AVANT (journal) et APRÈS.
+    const TRACER_ASYMETRIE = process.argv.includes('--asymetrie');
 
     // L'état APRÈS : les décisions ajoutées, appliquées à la sortie enregistrée.
     async function apres(d) {
@@ -471,14 +487,43 @@ function celluleDe(d) {
         // Deux portes : aucun numéro exploitable, OU un numéro mais aucune expansion
         // attendue — gardé par la compatibilité du setCode lu avec la table close.
         const compat = setCodeCompatibleVintage(d.setCode, S, codesReels);
+        // ════════════════════════════════════════════════════════════════════
+        // LE PÉRIMÈTRE : RELU AU JOURNAL QUAND LA ROUTE L'A ÉVALUÉ, SIMULÉ SINON
+        // ════════════════════════════════════════════════════════════════════
+        // La route pose `voieCatalogue = 'perimetre-vintage'` quand elle restreint, et
+        // laisse la voie d'origine sinon (index.js, bloc [perimetre-vintage]). Sur toute ligne
+        // postérieure au câblage du périmètre (commit 809d027, 2026-08-03), le journal dit
+        // donc si la route est entrée dans le bloc : on le RELIT. Avant cette date, la route
+        // n'a jamais évalué la règle : le banc la SIMULE, avec les fonctions de la route.
+        // Mesuré avant ce correctif : 20 lignes fermes en production comptées « sous
+        // réserve » ici — 13 dont la voie journalisée était `local-nom-numero` (vivier
+        // imposé, jamais entré au bloc) et 7 antérieures au périmètre. Les 7 restent sous
+        // réserve APRÈS : c'est le coût de la règle sur un journal plus vieux qu'elle, pas
+        // une asymétrie. Même classe que L023/H059 (`cle-non-unique`, règle du 09-06).
+        const routeAEvaluePerimetre = d.le >= DATE_PERIMETRE && d.voieCatalogue != null;
         let sansExpansion = false;
-        if (numeroCarte != null) {
-            const sets = await setsPourTotal(d.total, d.langue);
-            const exps = new Set();
-            for (const s of sets) for (const e of await Num.distinct('idExpansion', { setTcgdex: s.id })) if (e != null) exps.add(Number(e));
-            sansExpansion = exps.size === 0;
+        if (!routeAEvaluePerimetre && numeroCarte != null) {
+            // L'ENTRÉE DE LA ROUTE : la carte TCGdex trouvée. Au journal quand le champ existe ;
+            // sinon on la RETROUVE avec la fonction de la route (le même appel qu'index.js:3836,
+            // comme mesure-vivier-union.js), jamais par reconstruction depuis le total.
+            let carteId = null;
+            if ('carteTcgdexId' in d) carteId = d.carteTcgdexId;
+            else {
+                try {
+                    const t = await trouverCarteTCGdex(d.nom, numeroCarte, d.setCode, null, d.langue, d.total, d.nomBrut);
+                    carteId = t ? t.id : null;
+                } catch (e) {
+                    // Panne TCGdex : on ne sait pas ce que la route aurait vu. Compté, jamais deviné.
+                    perimetreReconstruit++;
+                }
+            }
+            const liste = await expansionsDuSetTCGdex(carteId, regionAttendue(cardInfoNeutre), d.setCode);
+            sansExpansion = liste.length === 0;
         }
-        if ((numeroCarte == null || sansExpansion) && (SANS_PERIMETRE || compat.compatible) && ['JP', 'ZH', 'KR'].includes(d.langue)) {
+        const entrerAuPerimetre = routeAEvaluePerimetre
+            ? d.voieCatalogue === 'perimetre-vintage'
+            : (numeroCarte == null || sansExpansion) && (SANS_PERIMETRE || compat.compatible) && ['JP', 'ZH', 'KR'].includes(d.langue);
+        if (entrerAuPerimetre) {
             const parNom = await trouverProduitsLocaux(d.nom);
             const dedans = parNom.filter(p => EXPANSIONS_VINTAGE.has(Number(p.idExpansion)));
             // LE VIVIER DU RÉGIME MESURÉ : le nom ENTIER, sans le filtre des 24 sets.
@@ -773,7 +818,10 @@ function celluleDe(d) {
     //     retenu : ces lignes détectent une RÉGRESSION, jamais une réussite.
     // `issuesVides` et non `compteurs` : ce dernier nomme déjà les compteurs de seaux plus
     // haut, et deux définitions du même nom dans un fichier est exactement ce qu'on évite.
-    const issuesVides = () => ({ juste: 0, faux: 0, refus: 0, signale: 0 });
+    // `ferme` : juste ET sans réserve — l'unité de mesure de l'objectif « 80 % de verdicts
+    // fermes et justes » (2026-09-09). AVANT lit `carteIncertaine === false` au journal, APRÈS
+    // lit `incertain === false` de apres(). Un `undefined` n'est ni l'un ni l'autre.
+    const issuesVides = () => ({ juste: 0, faux: 0, refus: 0, signale: 0, ferme: 0 });
     const vide = () => ({
         ind: { avant: issuesVides(), apres: issuesVides(), retenus: 0 },
         blocs: { avant: issuesVides(), apres: issuesVides(), retenus: 0, bouge: 0 },
@@ -817,6 +865,14 @@ function celluleDe(d) {
         G.avant[iAvant]++; G.apres[iApres]++;
         if (iAvant === 'faux' && d.carteIncertaine) G.avant.signale++;
         if (iApres === 'faux' && a.incertain) G.apres.signale++;
+        if (iAvant === 'juste' && d.carteIncertaine === false) G.avant.ferme++;
+        if (iApres === 'juste' && a.incertain === false) G.apres.ferme++;
+        if (TRACER_ASYMETRIE) {
+            const fAvant = iAvant === 'juste' && d.carteIncertaine === false, fApres = iApres === 'juste' && a.incertain === false;
+            // ⚠️ Les lignes EN BLOC sont tracées aussi, et nommées : leur AVANT est tautologique
+            // (attendu = retenu), donc un « FERME -> réserve » y mesure la règle ajoutée, pas l'instrument.
+            if (fAvant !== fApres) console.log(`   ${fAvant ? 'FERME -> réserve' : 'réserve -> FERME'}  ${cle.padEnd(6)} ${String(d.nom).padEnd(22)} ${v.source === 'bloc' ? '[BLOC] ' : ''}le ${d.le.toISOString().slice(0, 10)} voieProd ${d.voieCatalogue ?? '—'} raisonProd ${d.raisonReserve ?? 'null'} -> banc ${a.voie} (${iAvant} -> ${iApres})`);
+        }
         if (v.source === 'bloc' && iAvant !== iApres) R.blocs.bouge++;
         if (iAvant !== 'juste' || iApres !== 'juste') detail.push({ cle, d, attendu, a, l, iAvant, iApres, source: v.source });
     }
@@ -881,6 +937,7 @@ function celluleDe(d) {
             console.log(`     dont signalé  ${String(I.avant.signale).padStart(3)}              ${String(I.apres.signale).padStart(3)}`);
             console.log(`     FAUX ET AFFIRMÉ ${String(I.avant.faux - I.avant.signale).padStart(2)}              ${String(I.apres.faux - I.apres.signale).padStart(3)}   ← le seuil de lancement`);
             console.log(`   REFUS ......... ${String(I.avant.refus).padStart(3)}  ${pi(I.avant.refus).padStart(7)}   ${String(I.apres.refus).padStart(3)}  ${pi(I.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
+            console.log(`   JUSTE ET FERME  ${String(I.avant.ferme).padStart(3)}  ${pi(I.avant.ferme).padStart(7)}   ${String(I.apres.ferme).padStart(3)}  ${pi(I.apres.ferme).padStart(7)}   ← l'unité de l'objectif 80 %`);
         }
 
         // ---- LES LIGNES EN BLOC, à part, avec ce qu'elles peuvent et ne peuvent pas dire ----
@@ -916,6 +973,7 @@ function celluleDe(d) {
         rapporter('LOTS DÉCLARÉS — scans de diagnostic, fenêtre ouverte AVANT le scan. NE DÉCIDE DE RIEN.', LOTS.lot);
     }
     rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
+    console.log(`\n⚠️ ASYMÉTRIE RÉSIDUELLE : carte TCGdex ni au journal ni retrouvée (panne) sur ${perimetreReconstruit} ligne(s). Sur elles, le périmètre est décidé sans l'entrée de la route.`);
 
     // ════════════════════════════════════════════════════════════════════════
     // AUTO-CONTRÔLE : le banc sait-il se tromper ?

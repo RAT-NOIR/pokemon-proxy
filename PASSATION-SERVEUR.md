@@ -2,6 +2,28 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 🔴 2026-09-09 — L'ASYMÉTRIE DU BANC SUR LE PÉRIMÈTRE, corrigée : `apres()` relit la route au lieu de la réimplémenter. Un commit, NON POUSSÉ
+
+**Le défaut.** `apres()` reconstruisait les expansions attendues (`setsPourTotal` → pont local) là
+où la route les tient de la carte TCGdex trouvée, et testait `produits.length > 1` sur le vivier
+par le NOM là où la route le teste sur SON vivier, parfois imposé par une clé. Mesuré avec
+`--asymetrie` : **22 lignes fermes en production comptées « sous réserve »**, dont 13 en voie
+`local-nom-numero`. Troisième occurrence de la règle de symétrie.
+
+**Le correctif.** Sur toute ligne postérieure au câblage du périmètre (809d027, 2026-08-03), le
+journal dit si la route est entrée dans le bloc (`voieCatalogue === 'perimetre-vintage'`) : le banc
+le RELIT. Avant cette date, il simule avec les fonctions de la route : `trouverCarteTCGdex` puis
+`expansionsDuSetTCGdex`, exportées pour ça. Asymétrie résiduelle (panne TCGdex) : **0 ligne**.
+
+**Ce qui reste « FERME → réserve », et ce n'est pas une asymétrie.** 12 lignes d'entraînement du
+30/07 au 02/08, toutes EN BLOC, antérieures au périmètre ; L023 Mewtwo EVO et H059 Pikachu SV-P,
+`cle-non-unique` du 09-06. **Le journal est plus vieux que la règle : ne pas les recompter.**
+
+**Le banc compte désormais JUSTE ET FERME**, l'unité de l'objectif 80 %. Sur les 139 vérités
+individuelles : AVANT 23 · APRÈS **35** (entraînement 3, lot 26, holdout 6). Les 13 gains sont
+tous `cle-pokedex-sans-numero` ; la seule perte individuelle est L023. Verrou 7 charges vert,
+cliquet 56/47.
+
 ## 🔑 2026-09-09 — LA CLÉ V EST CÂBLÉE : un numéro de Pokédex lu sans total désigne un produit sans numéro. Un commit, NON POUSSÉ
 
 **La clé.** `designerParPokedexSansNumero` (index.js, exportée) : quand `numeroEstUnDexId` est vrai,
