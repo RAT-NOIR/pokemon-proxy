@@ -236,10 +236,43 @@ Et l'ordre ne s'inverse pas : la source d'abord, le champ de prompt ensuite. Lir
 côté du PRODUIT. **Deux étiquettes sont nécessaires, nous en avons zéro** — et un signal sans
 colonne de jointure est mort, on l'a déjà mesuré trois fois.
 
-⚠️ **Dette de documentation relevée au passage** : trois endroits disent que `variante`
+⚠️ **Dette de documentation, 2026-09-09** : trois endroits disaient que `variante`
 signifie « V1/V2/V3 = normale/reverse/illustration » (`apprentissage-commun.js:28`,
 `diagnostic-carte.js:37`, `index.js:2678`), alors que `scoring.js:200-202` établit l'inverse
 et fait autorité — **« le n° de variante V1/V2/V3 n'a pas de sémantique stable »**, et
 `POIDS.variante` est un override manuel que plus rien ne dérive. Sur Base Set, où il n'existe
 aucune reverse holo, la lecture « V2 = reverse » est fausse. Rien n'en dépend aujourd'hui ;
 les commentaires, eux, sont périmés.
+
+---
+
+## 8. Deux faux affirmés, deux natures — impasse structurelle ou garde manquante
+
+**Mesuré le 2026-09-09.** Le seau « lot » en portait deux. Ils se ressemblent — un prix
+affirmé sur la mauvaise carte, aucune réserve — et ils ne se réparent pas pareil.
+
+**HO-OH (et Rayquaza) — L'IMPASSE STRUCTURELLE.** La vérité n'est **pas dans le vivier**, et
+elle ne pouvait pas y être : le périmètre l'avait exclue avant tout classement. La chaîne
+choisit alors le seul survivant d'un ensemble déjà amputé et le prend pour une désignation.
+🔑 **Un survivant unique après restriction n'est pas une désignation, c'est un RESTE.**
+Aucune garde en aval ne répare ça : il n'y a rien à départager, la bonne réponse est absente.
+Seul le périmètre — ou une clé qui le contourne — peut le lever.
+
+**L109 SLOWPOKE — LA GARDE MANQUANTE.** La vérité est hors vivier elle aussi, mais la
+différence est ailleurs : **la chaîne avait déjà le signal de son propre doute et ne l'a pas
+utilisé.** `margeConfortable: false`, `ecartScore: 25`, et pourtant `carteIncertaine: false`.
+Le champ existe, il est journalisé, et il n'est pas parmi les disjonctions de `carteAmbigue`
+(index.js:5078).
+
+⚠️ **ET LA RÉPARATION ÉVIDENTE A ÉTÉ MESURÉE PUIS REFUSÉE.** Sur les 50 lignes jugeables,
+`margeConfortable` prédit l'erreur **à l'envers** : 66,7 % de justes quand elle est VRAIE,
+**73,9 % quand elle est FAUSSE**. Il n'y a pas de signal à câbler — la corriger n'aurait été
+justifié que par L109, c'est-à-dire par une ligne. **Un correctif justifié par un cas est une
+hypothèse.** La garde reste absente, et c'est une décision, pas un oubli.
+
+**L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
+la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
+`raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
+aussi (« l'expansion X » / « tout le catalogue »). C'est ce qui permet, six mois plus tard,
+de relire une désignation sans la confondre avec une unicité. Une clé dont la raison ne dit
+pas dans quel ensemble elle a cherché fabriquera des restes qu'on lira comme des choix.
