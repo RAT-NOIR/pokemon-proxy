@@ -26,6 +26,8 @@
 //   node saisir-verites.js              les scans du holdout non encore saisis
 //   node saisir-verites.js --tout       y compris ceux déjà saisis (pour corriger)
 //   node saisir-verites.js --seau=verification
+//   node saisir-verites.js --cle=H078   UNE carte, par sa clé de banc (filtre d'affichage :
+//                                       le compte complet du seau reste imprimé au-dessus)
 
 require('dotenv').config();
 const fs = require('fs');
@@ -52,6 +54,15 @@ const CS = mongoose.model('Cv', new mongoose.Schema({}, { strict: false }), 'cod
 const argSeau = process.argv.find(a => a.startsWith('--seau='));
 const seauVoulu = argSeau ? argSeau.split('=')[1] : null;   // null = tous
 const tout = process.argv.includes('--tout');
+// ⚠️ FILTRE D'AFFICHAGE, PAS DE SÉLECTION. `--cle=H078` restreint la liste À SAISIR à une
+// seule clé, pour ne pas parcourir 63 cartes quand une seule manque. Il s'applique APRÈS
+// `numeroter` et APRÈS le calcul de `aFaire` : la numérotation reste globale, l'ancrage
+// reste l'identité, et le comportement par défaut (aucun `--cle`) est inchangé.
+// 🔴 UNE CLÉ INCONNUE LE DIT. Rendre une liste vide en silence ferait croire « rien à
+// saisir » sur une faute de frappe — exactement le mensonge que l'ancien défaut
+// `--seau=holdout` produisait (« 0 à saisir » pendant que 41 cartes attendaient).
+const argCle = process.argv.find(a => a.startsWith('--cle='));
+const cleVoulue = argCle ? argCle.split('=')[1] : null;
 
 // ⚠️ SEAUX ET NUMÉROTATION : UNE SEULE SOURCE, partagée avec le banc. Ce fichier avait sa
 // PROPRE copie de `seauDe` — trois seaux au lieu de quatre — et n'excluait pas les lignes
@@ -205,9 +216,28 @@ async function resoudreSaisie(saisie, Cat, nomLu = null) {
     const dejaSaisies = new Set(Object.values(V.verites)
         .map(v => v && v.lu ? identiteDe({ nom: v.lu.nom, numero: v.lu.numero, setCode: v.lu.setCode, total: v.lu.total }) : null)
         .filter(Boolean));
-    const aFaire = cartes.filter(c => tout || !dejaSaisies.has(identiteDe(c.d)));
-    const deja = cartes.length - aFaire.length;
-    console.log(`\n${cartes.length} carte(s) ${seauVoulu ? `dans le seau « ${seauVoulu} »` : 'tous seaux confondus'}, ${deja} déjà saisie(s), ${aFaire.length} à saisir.`);
+    const aFaireComplet = cartes.filter(c => tout || !dejaSaisies.has(identiteDe(c.d)));
+    const deja = cartes.length - aFaireComplet.length;
+    console.log(`\n${cartes.length} carte(s) ${seauVoulu ? `dans le seau « ${seauVoulu} »` : 'tous seaux confondus'}, ${deja} déjà saisie(s), ${aFaireComplet.length} à saisir.`);
+
+    // Le filtre par clé, APRÈS le compte complet — qui est imprimé ci-dessus quoi qu'il
+    // arrive, pour qu'on ne prenne jamais « 1 à saisir » pour l'état réel du seau.
+    let aFaire = aFaireComplet;
+    if (cleVoulue) {
+        aFaire = aFaireComplet.filter(c => c.cle === cleVoulue);
+        if (!aFaire.length) {
+            // La clé existe-t-elle AILLEURS ? Distinguer « inconnue » de « déjà saisie »
+            // est la différence entre une faute de frappe et un travail déjà fait.
+            const ailleurs = cartes.find(c => c.cle === cleVoulue);
+            const toutesLesCles = lignesNumerotees.find(l => l.cle === cleVoulue);
+            console.log(`🔴 --cle=${cleVoulue} ne désigne AUCUNE carte à saisir ici.`);
+            if (ailleurs) console.log(`   Elle existe dans ce seau, mais sa vérité est DÉJÀ SAISIE (relance avec --tout pour la corriger).`);
+            else if (toutesLesCles) console.log(`   Elle existe, mais dans le seau « ${toutesLesCles.seau} »${seauVoulu ? ` et non « ${seauVoulu} »` : ''}.`);
+            else console.log(`   Aucune ligne du banc ne porte cette clé — vérifie la casse et le préfixe (JP / H / V / L).`);
+            rl.close(); await mongoose.disconnect(); return;
+        }
+        console.log(`   -> filtré par --cle=${cleVoulue} : ${aFaire.length} carte(s) demandée(s).`);
+    }
     // OÙ elles sont, pour qu'un seau vide ne passe pas pour « rien à faire ».
     const parSeau = new Map();
     for (const c of aFaire) parSeau.set(c.seau, (parSeau.get(c.seau) || 0) + 1);
