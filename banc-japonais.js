@@ -451,6 +451,15 @@ function celluleDe(d) {
     // Les lignes dont la carte TCGdex n'a pu être ni lue au journal ni retrouvée (panne) : le
     // périmètre y est décidé sans l'entrée de la route. Compté et affiché : asymétrie résiduelle.
     let perimetreReconstruit = 0;
+    // 🔑 LE DÉPARTAGE PAR L'ATTAQUE, COMPTÉ — et il l'est parce qu'il a été INERTE pendant
+    // quatre jours sans que rien ne le dise. Le banc lisait `d.attaque`, le journal écrit
+    // `attaqueLue` : la clé était branchée, appelée, et nourrie de `undefined` à chaque
+    // appel. Un départage qui ne départage jamais est indiscernable d'un départage qui
+    // n'a rien à départager — sauf si on imprime les trois nombres.
+    // ⚠️ TROIS NOMBRES, PAS UN TAUX : combien de fois la clé est CONSULTÉE, sur combien
+    // d'appels elle avait une attaque à lire, et combien de fois elle a tranché. C'est la
+    // règle du dénominateur du chantier, appliquée à une clé plutôt qu'à un journal.
+    let attaqueAppels = 0, attaqueNourrie = 0, attaqueGagnant = 0;
     // Le lendemain du commit 809d027 (2026-08-03) qui câble le périmètre : les lignes du jour
     // même ne savent pas de quel côté du déploiement elles sont, elles sont simulées.
     const DATE_PERIMETRE = new Date('2026-08-04T00:00:00Z');
@@ -582,7 +591,11 @@ function celluleDe(d) {
                             idMetacard: catById.get(s.candidat.idProduct)?.idMetacard ?? null,
                             codeSet: cs.get(Number(s.candidat.idExpansion)) ?? null
                         }));
-                        const aAtt = departagerParAttaque(d.attaque, d.attaqueConfiance, cand);
+                        // ⚠️ `attaqueLue` — LE NOM DU JOURNAL. Voir le bloc du compteur.
+                        attaqueAppels++;
+                        if (d.attaqueLue) attaqueNourrie++;
+                        const aAtt = departagerParAttaque(d.attaqueLue, d.attaqueConfiance, cand);
+                        if (aAtt.gagnant) attaqueGagnant++;
                         if (aAtt.gagnant) return rendre(aAtt.gagnant.idProduct, true, 'SP-attaque', classeAvecTete(aAtt.gagnant.idProduct));
                         const aImg = await departagerParImage({
                             imageUrl: d.imageUrl, langue: d.langue, total: d.total,
@@ -614,15 +627,26 @@ function celluleDe(d) {
                     // ici AU MÊME COMMIT qu'en production — c'est précisément la faute que
                     // la règle de symétrie existe pour attraper.
                     //
-                    // 🔴 ET IL EST INERTE SUR CE BANC AUJOURD'HUI, IL FAUT LE DIRE ICI :
-                    // `d.attaque` vient du prompt du 2026-09-05, et AUCUNE ligne de journal
-                    // ne le porte encore. La colonne APRÈS ne mesurera donc RIEN de cette
-                    // décision — elle prouve seulement qu'elle ne casse rien. C'est le même
-                    // état que le départage par l'image le 2026-08-29, inerte tant que
-                    // `references_image` était vide : le banc ne pourra la mesurer qu'une
-                    // fois des lectures d'attaque au journal.
+                    // 🔴 ET IL A ÉTÉ INERTE QUATRE JOURS, PAR FAUTE DE JOINTURE — corrigé le
+                    // 2026-09-10. Le commentaire qui tenait ici disait « aucune ligne de
+                    // journal ne porte l'attaque », et c'était FAUX : le journal écrit
+                    // `attaqueLue` (journal-scans.js), 47 lignes sur 280 la portent, et ce
+                    // banc lisait `d.attaque` — un champ qui n'existe sur AUCUNE ligne.
+                    // La clé était branchée, appelée, et nourrie de `undefined` à chaque
+                    // appel.
+                    //
+                    // 🔑 LA LEÇON N'EST PAS LA FAUTE DE FRAPPE, C'EST QU'ELLE ÉTAIT
+                    // INVISIBLE. Un départage inerte rend exactement ce que rend un
+                    // départage qui n'a rien à trancher : aucun gagnant, zéro verdict
+                    // déplacé, aucune alarme. Et le commentaire, lui, EXPLIQUAIT le zéro —
+                    // il donnait à un défaut d'instrument l'apparence d'un fait mesuré.
+                    // C'est pour ça que les trois compteurs existent maintenant : ils
+                    // séparent « jamais consultée » de « consultée à vide » de « consultée
+                    // et sans effet ».
+                    attaqueAppels++;
+                    if (d.attaqueLue) attaqueNourrie++;
                     const avisAtt = departagerParAttaque(
-                        d.attaque, d.attaqueConfiance,
+                        d.attaqueLue, d.attaqueConfiance,
                         exAequo.map(s => ({
                             idProduct: s.candidat.idProduct,
                             name: catById.get(s.candidat.idProduct)?.name ?? null,
@@ -630,6 +654,7 @@ function celluleDe(d) {
                         }))
                     );
                     if (avisAtt.gagnant) {
+                        attaqueGagnant++;
                         return rendre(avisAtt.gagnant.idProduct, true, 'attaque-departage', classeAvecTete(avisAtt.gagnant.idProduct));
                     }
                     const prix = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
@@ -1043,6 +1068,16 @@ function celluleDe(d) {
     }
     rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
     console.log(`\n⚠️ ASYMÉTRIE RÉSIDUELLE : carte TCGdex ni au journal ni retrouvée (panne) sur ${perimetreReconstruit} ligne(s). Sur elles, le périmètre est décidé sans l'entrée de la route.`);
+
+    // ⚠️ LES TROIS NOMBRES DU DÉPARTAGE PAR L'ATTAQUE — jamais un taux seul. Ils séparent
+    // trois états qu'un « 0 gagnant » confond : la clé n'est pas consultée, elle est
+    // consultée sans attaque à lire, ou elle est consultée et ne tranche rien. C'est la
+    // faute de jointure du 2026-09-06 au 2026-09-10 qui les fait exister : quatre jours
+    // durant, la deuxième colonne valait 0 par construction et personne ne pouvait le voir.
+    console.log(`\n🔑 DÉPARTAGE PAR L'ATTAQUE — consulté ${attaqueAppels} fois · attaque LUE sur ${attaqueNourrie} de ces appels · a tranché ${attaqueGagnant} fois.`);
+    if (attaqueAppels && !attaqueNourrie) {
+        console.log(`   🔴 CONSULTÉ ${attaqueAppels} FOIS SANS JAMAIS RIEN LIRE : c'est une jointure morte, pas une absence de données.`);
+    }
 
     // ════════════════════════════════════════════════════════════════════════
     // AUTO-CONTRÔLE : le banc sait-il se tromper ?
