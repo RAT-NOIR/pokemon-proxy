@@ -4516,6 +4516,29 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             nbCandidats: produits.length
         });
 
+        // 🔑 PAR OÙ LA CHAÎNE EST PASSÉE — quatre champs que seule la voie du SUCCÈS portait.
+        // Un refus disait ce qu'il rendait, jamais comment il y était arrivé. Sur un
+        // `aucun-candidat`, `vivierIds: []` ne distingue pas « le catalogue ne contient
+        // rien » de « le veto du nom a vidé le vivier avant toute recherche » (ligne 4221) —
+        // deux causes opposées, la même ligne au journal.
+        //
+        // ⚠️ UNE FONCTION, PAS UN OBJET FIGÉ, et pour la raison écrite au-dessus de
+        // `champsVivier` : `voieCatalogue` est RÉASSIGNÉE quatre fois après cette ligne
+        // (périmètre vintage 4391, clé Pokédex 4375, veto-nom 4619). Un instantané pris ici
+        // décrirait la voie d'AVANT en prétendant décrire celle du refus — l'erreur
+        // d'instrument #7, le champ lu trop tôt.
+        //
+        // ⚠️ IL N'EST PAS APPELÉ DANS LE `catch` : `voieCatalogue` et `nomSuspect` sont des
+        // `let`/`const` de bloc, et une exception tombée en amont les laisse dans leur zone
+        // morte — l'appel lèverait une ReferenceError DANS le gestionnaire d'erreur. Même
+        // raison que `champsVivier`, qui s'en abstient déjà.
+        const champsIdentification = () => ({
+            voieCatalogue,
+            sourceIdentification: trouvaille.source || 'nom',
+            carteTcgdexId: trouvaille.id ?? null,
+            nomSuspect
+        });
+
         // Échec DUR : aucun candidat à tester, l'extension n'a rien à lire -> on rend
         // le scan. (Un classement même incertain, lui, EST un résultat livré.)
         if (classement.length === 0) {
@@ -4533,7 +4556,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 // produit trouvé au catalogue, ou des produits trouvés dont aucun n'a
                 // survécu au scoring. Le premier est un défaut de collecte, le second un
                 // défaut de scoring. Sans ce champ les deux étaient confondus.
-                ...champsVivier()
+                // 🔑 ET `champsIdentification()` TRANCHE ENTRE LES DEUX : sur cette sortie,
+                // `nomSuspect: true` avec un vivier vide dit que le veto du nom a vidé le
+                // vivier AVANT toute recherche — ce n'est ni un défaut de collecte ni un
+                // défaut de scoring, c'est une garde délibérée qui s'est déclenchée.
+                ...champsVivier(), ...champsIdentification()
             });
             // ⚠️ Les trois champs de refus — voir NATURE_REFUS, au-dessus de la route.
             return res.json({ success: false, ...champsDeRefus('aucun-candidat', rendu), error: `Aucun produit Cardmarket pour "${nomPourCatalogue}"`, cardInfo });
@@ -4643,7 +4670,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                         // dans laquelle « la vérité y était-elle ? » a un sens. `r.scores`
                         // décrit pourquoi le veto a refusé, et son compte part déjà au
                         // journal par `nbCandidats` ci-dessous — écrasé volontairement.
-                        ...champsVivier(), nbCandidats: r.scores.length
+                        ...champsVivier(), ...champsIdentification(), nbCandidats: r.scores.length
                     });
                     return res.json({
                         success: false,
@@ -4877,7 +4904,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // attaqueLue / attaqueBrute / attaqueConfiance sont aplatis depuis
                     // cardInfo par enregistrerEchec — voir journal-scans.js.
                     attaqueDepartage: attaqueDepartageRaison,
-                    exAequoIds, ...champsVivier(), nbCandidats: produits.length
+                    exAequoIds, ...champsVivier(), ...champsIdentification(),
+                    nbCandidats: produits.length
                 });
                 return res.json({
                     success: false,
@@ -5744,6 +5772,13 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             identifieeEnLocal: identificationLocale,
             nomConfiance: cardInfo.nomConfiance,
             nomBrut: cardInfo.nomBrut,
+            // ⚠️ SUR LE SUCCÈS AUSSI, ET CE N'EST PAS DE LA SYMÉTRIE DÉCORATIVE. Un veto du
+            // nom qui se déclenche ne mène pas toujours à un refus : le repli par
+            // l'expansion (4224) ou l'identification locale (4233) peuvent le rattraper. Ces
+            // lignes-là SONT des succès, et ce sont justement celles qu'on voudra relire
+            // pour savoir ce que le veto a coûté. Le champ n'existerait que sur les refus
+            // qu'il ne mesurerait que la moitié perdante de sa propre population.
+            nomSuspect,
             symboleSet: cardInfo.symboleSet,
             // Les six champs de l'état, tels que la RÉPONSE les rend — même construction.
             ...champsEtat(), ...champsCout(),

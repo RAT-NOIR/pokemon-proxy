@@ -172,6 +172,15 @@ const journalScanSchema = new mongoose.Schema({
     // les candidats (voir nomSuspect dans index.js).
     nomConfiance: String, // 'haute' | 'moyenne' | 'basse'
     nomBrut: String,
+    // 🔴 LE VETO LUI-MÊME, ET PAS SEULEMENT SES ENTRÉES — ajouté le 2026-09-10.
+    // `nomSuspect` (index.js) est la DÉCISION : true = le nom ne sert plus à choisir les
+    // candidats. Elle se prend sur trois entrées distinctes — TCGdex trouvé par
+    // `total+numero`, un numéro contredit, ou `nomConfiance: 'basse'` — dont une seule
+    // (`nomConfiance`) était journalisée. Sur un refus `aucun-candidat`, impossible donc de
+    // dire si le vivier était vide parce que le catalogue ne contient rien, ou parce que ce
+    // veto avait vidé le vivier AVANT toute recherche (index.js:4221). Deux causes
+    // opposées, une seule ligne au journal, aucun moyen de les séparer après coup.
+    nomSuspect: Boolean,
 
     // LE LOGO DU SET, en ÉNUMÉRATION FERMÉE — journalisé, sans aucun effet.
     // ⚠️ IL NE MARQUE AUCUN POINT ET N'ENTRE DANS AUCUNE DÉCISION. C'est la discipline
@@ -1007,6 +1016,12 @@ function enregistrerScan(d = {}) {
             identifieeEnLocal: d.identifieeEnLocal != null ? Boolean(d.identifieeEnLocal) : null,
             nomConfiance: d.nomConfiance || null,
             nomBrut: d.nomBrut || null,
+            // ⚠️ `!= null` ET PAS `||` : `false` est une VALEUR ici — « le veto ne s'est pas
+            // déclenché » — et `false || null` l'effacerait en le confondant avec « on ne
+            // sait pas ». C'est la règle du §8 du chantier : sur un journal qui a une
+            // HISTOIRE, `undefined` n'est ni `0`, ni `false`, ni « absent du monde », et un
+            // champ jeune passe par les trois états.
+            nomSuspect: d.nomSuspect != null ? Boolean(d.nomSuspect) : null,
             symboleSet: d.symboleSet || null,
             // ── L'ÉTAT ───────────────────────────────────────────────────────
             etatVinted: d.etatVinted || null,
@@ -1175,6 +1190,19 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // qui seul sait où il en est ; absent, il reste null, et null veut dire « on ne sait
     // pas », pas « false ».
     reverseLu, motifIA, estDex,
+    // 🔴 COMMENT LA CHAÎNE EST ARRIVÉE LÀ — quatre champs ajoutés le 2026-09-10, et ils
+    // n'existaient QUE sur la voie du succès. Un refus disait ce qu'il rendait, jamais par
+    // quel chemin il y était venu : `voieCatalogue` (nom / numéro / local / substitué),
+    // `sourceIdentification` (ce sur quoi TCGdex a répondu), `carteTcgdexId` (LAQUELLE il a
+    // rendue) et `nomSuspect` (le veto qui vide le vivier avant toute recherche).
+    // ⚠️ C'est la MÊME faute que `symboleSet`, `vivierIds`, l'état et `candidatsRendus` :
+    // cinq fois de suite, la voie du refus est plus pauvre que celle du succès, alors que
+    // c'est elle qu'on cherche à comprendre. Ces quatre-là ne changent aucun verdict.
+    // ⚠️ ILS N'ARRIVENT PAS DE `cardInfo` : ils décrivent la DÉCISION, pas la lecture, donc
+    // ils passent par l'appelant — qui seul sait où il en est. Sur les refus en amont du
+    // catalogue (`ia-echec`, `tcgdex-injoignable`) ils restent null, et ce null est honnête :
+    // aucune voie n'avait encore été choisie.
+    voieCatalogue, sourceIdentification, carteTcgdexId, nomSuspect,
     // ⚠️ LES REFUS EN ONT AUTANT BESOIN QUE LES SUCCÈS — plus, même : `egalite-parfaite`
     // EST un refus pour cause d'égalité, et jusqu'ici il ne disait pas ENTRE QUOI.
     // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
@@ -1232,6 +1260,9 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         reverseLu: reverseLu != null ? Boolean(reverseLu) : null,
         motifIA: motifIA ?? c.motif ?? null,
         estDex: estDex != null ? Boolean(estDex) : null,
+        // Le chemin parcouru — `enregistrerScan` les normalise lui-même (`|| null` pour les
+        // trois chaînes, `!= null` pour le booléen), on ne le refait pas ici.
+        voieCatalogue, sourceIdentification, carteTcgdexId, nomSuspect,
         symboleDepartage,
         attaqueDepartage,
         // Ce que l'IA a lu, aplati depuis cardInfo comme symboleSet juste plus bas — c'est
