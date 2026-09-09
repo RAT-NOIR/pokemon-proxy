@@ -1526,6 +1526,35 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      l'entrée 26 côté image : le témoin doit être choisi pour ressembler au faux positif
 //      probable, avant de lire le résultat. Un compteur d'images se valide sur une PLANCHE
 //      regardée, pas sur le chiffre qu'il rend.
+//   28. UN CONTRÔLE DE DISPONIBILITÉ QUI INTERROGE LA MAUVAISE ADRESSE REND UN VERDICT QUI
+//      A L'AIR D'UN DIAGNOSTIC — 2026-09-09.
+//      LES FAITS. Vérification d'usage : « quelle version tourne ? ». J'ai interrogé
+//      `pokemon-proxy.onrender.com/ping` — 502, puis deux expirations à 90 s et 120 s. J'ai
+//      rapporté « le serveur ne répond pas, le déploiement a peut-être échoué », le testeur a
+//      fait de la panne sa PRIORITÉ ABSOLUE et a suspendu tout le reste. Il n'y avait pas de
+//      panne : `pokemon-proxy` est le nom du DOSSIER, pas celui du service. La vraie adresse
+//      est `pokemon-proxy-ratnoir666.onrender.com`, écrite dans le dépôt
+//      (userscript-apprentissage.js:76 et sa directive `@connect`). Interrogée, elle rend
+//      `{"ok":true,"mongo":true,"version":"ddc32efad6ea"}` — le commit attendu, Mongo
+//      connecté. Ce que j'avais sondé était une AUTRE application : la dernière tentative sur
+//      ce mauvais hôte a fini par rendre HTTP 200 avec un dump PokéAPI.
+//      🔑 LA LEÇON. Je n'ai pas mesuré la disponibilité du service : j'ai mesuré celle d'un
+//      nom que j'avais déduit. Un 502 et deux expirations RESSEMBLENT à un diagnostic — ils
+//      ont une forme, une répétition, une progression — alors qu'ils ne disent rien de nous.
+//      Même famille que l'entrée 26 : « pas de réponse ICI » n'est pas « pas de réponse ». La
+//      différence est qu'ici la fausse absence a fait suspendre un chantier entier.
+//      ⚠️ ET LA RÉFUTATION ÉTAIT DÉJÀ AU DOSSIER, AVANT L'HYPOTHÈSE. Le testeur a proposé la
+//      bonne classe de cause (une erreur au chargement de `journal-scans.js` tuerait le boot
+//      sans qu'aucun test hors ligne ne la voie). Mais `verrou-avant-push.js` avait DÉMARRÉ UN
+//      SERVEUR ENFANT sur ce code exact une heure plus tôt — 7 charges traversées, aucune
+//      exception. Un module qui casse au chargement ne passe pas ça. **Un contrôle déjà passé
+//      réfute une hypothèse neuve** : avant de chercher une cause, on regarde ce qu'on a déjà
+//      fait tourner sur le même code.
+//      LA PARADE, MÉCANIQUE : une adresse de service ne se DÉDUIT pas d'un nom de dossier,
+//      elle se LIT dans le dépôt (ici deux endroits la portent). Et un contrôle de
+//      disponibilité qui échoue doit d'abord prouver qu'il vise la bonne cible — un 200 sur
+//      un contenu étranger l'aurait montré tout de suite, si je l'avais regardé au lieu de
+//      compter les expirations.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;
