@@ -23,6 +23,28 @@ d'aujourd'hui**. Quand les deux divergent, aucun des deux n'a tort — ils ne pa
 même code. **Seul le build courant compte pour un taux d'avancement, et il est aujourd'hui
 trop petit pour en porter un** (3 fermes sur 28).
 
+**🔑 L'UNITÉ DU PRODUIT EST 67,0 %, PAS 18,0 %.** Ce sont deux mesures différentes et il ne
+faut jamais citer l'une pour l'autre. **18,0 %** = verdicts fermes ET justes. **67,0 %** = la
+vérité est MONTRÉE à l'utilisateur — parce que sous réserve la route affiche **trois**
+candidats. Sur le seau lot, 112 lignes à vérité (banc, bloc « où tombe la vérité ») :
+
+| | n | % |
+|---|---|---|
+| position 1, le gagnant | 68 | 60,7 % |
+| **position 2 ou 3 — montrée quand même** | **7** | **6,3 %** |
+| **hors des trois** | 14 | 12,5 % |
+| refus, rien montré | 23 | 20,5 % |
+
+**L'affichage des trois candidats rattrape 7 lignes** que le verdict seul perdait.
+
+⚠️ **LES 14 HORS DES TROIS SE COUPENT EN DEUX, ET SEULE UNE MOITIÉ EST ATTEIGNABLE** : **7
+hors vivier** — aucun classement ne les sauvera, il faut le périmètre — et 7 dans le vivier
+mais mal classées.
+
+🔴 **ET C'EST UN REJEU, PAS UNE OBSERVATION.** `candidatsRendus` n'existe au journal que
+depuis le 2026-09-09 : le bloc dit ce que le code d'AUJOURD'HUI montrerait, pas ce que
+l'utilisateur a vu. Le bloc l'imprime lui-même à chaque exécution.
+
 **LE PLAFOND DE LA VOIE « PLUS DE CLÉS » EST 62,5 %.** Production, 128 jugeables : 26 fermes
 dont **23 justes (18,0 %)**, 79 sous réserve dont 57 justes, 23 refus. Même si TOUTE réserve
 juste devenait ferme, on plafonne à 80/128 = **62,5 %**. **Les 80 % ne s'atteignent pas en
