@@ -392,6 +392,29 @@ const SETS_VINTAGE_JAPONAIS = [
     { nom: "McDonald's Original Minimum Pack", annee: 2002, slug: 'McDonalds-Original-Minimum-Pack', exp: 4178, code: 'MCDP', prod: 24, regionSource: 'liste-verifiee', symbole: 'mcdo', symboleFiable: true },
     { nom: 'Cry from the Mysterious', annee: 2007, slug: 'Cry-from-the-Mysterious', exp: 4305, code: 'DP5c', prod: 65, regionSource: 'code-minuscule', symbole: null, symboleFiable: null },
     // ════════════════════════════════════════════════════════════════════════
+    // TROIS LIGNES ADMISES LE 2026-09-09 — les premières sous le CRITÈRE 5
+    // ════════════════════════════════════════════════════════════════════════
+    // Elles viennent des ABSENCES DE VIVIER mesurées le même jour : 11 absences sur 45
+    // lignes à vérité ET à `vivierIds`, toutes hors table close, sur 7 expansions. Deux de
+    // ces 7 (UNP, IPNC) échouent au critère 3 — `codes_set.region` est VIDE — et une
+    // (sm8, 2018) au critère 5. Restent ces trois.
+    //
+    // LE RELEVÉ, fait à la main sur pokesymbols.com/tcg/japanese-sets avec TÉMOIN DE
+    // VALIDATION : « Expansion Sheet » y ressort bien à 3 lignes, donc la page sait
+    // distinguer les séries d'un même slug et une réponse « 1 ligne » n'est pas un défaut
+    // de lecture. C'est le contrôle qui manquait à l'entrée 26 du catalogue — un témoin
+    // choisi pour ressembler au cas problématique, et lu avant de conclure.
+    //
+    // ⚠️ `symbole: null` SUR LES TROIS, ET C'EST « NON RELEVÉ », PAS « AUCUN ». Les images
+    // ne sont pas chargées sur la page : le dessin n'a pas été lu. Un nom de fichier n'est
+    // pas une attestation. La colonne reste ouverte, et `departagerParSymbole` les ignore.
+    //
+    // ⚠️ `attestation` EST UN CHAMP NEUF, LU PAR AUCUN CODE. Il porte la source et la date
+    // exigées par le critère 5, pour que la borne soit relisible sans rouvrir la page.
+    { nom: 'Holon Research Tower', annee: 2005, slug: 'Holon-Research-Tower', exp: 5709, code: 'PCG6', prod: 86, regionSource: 'liste-verifiee', symbole: null, symboleFiable: null, attestation: 'pokesymbols.com/tcg/japanese-sets, 1 ligne, octobre 2005' },
+    { nom: 'Offense and Defense of the Furthest Ends', annee: 2006, slug: 'Offense-and-Defense-of-the-Furthest-Ends', exp: 5693, code: 'PCG9', prod: 68, regionSource: 'liste-verifiee', symbole: null, symboleFiable: null, attestation: 'pokesymbols.com/tcg/japanese-sets, 1 ligne, juin 2006' },
+    { nom: 'Secret of the Lakes', annee: 2007, slug: 'Secret-of-the-Lakes', exp: 4317, code: 'DP2', prod: 123, regionSource: 'liste-verifiee', symbole: null, symboleFiable: null, attestation: 'pokesymbols.com/tcg/japanese-sets, 1 ligne, mars 2007' },
+    // ════════════════════════════════════════════════════════════════════════
     // LA SEULE LIGNE FUSIONNÉE — admise le 2026-09-06 sous le CRITÈRE 4 bis
     // ════════════════════════════════════════════════════════════════════════
     // ⚠️ ELLE N'EST PAS UNE LIGNE COMME LES AUTRES : c'est une ligne AMPUTÉE. Les deux
@@ -407,10 +430,13 @@ const SETS_VINTAGE_JAPONAIS = [
     // 🔑 ET C'EST DÉLIBÉRÉ MÊME AVEC UNE RÉPONSE FAVORABLE. Vignettes relevées à la main
     // par le testeur le 2026-09-06 : LES TROIS SÉRIES PORTENT LE MÊME SYMBOLE, une
     // pokéball. La fusion n'abîmerait donc PAS la colonne — un symbole lu désignerait
-    // l'expansion entière. On ne le déclare pas pour autant : la clause interdit tout
-    // attribut par-set sur une ligne fusionnée, et c'est la RÈGLE qui protège, pas le
-    // fait qu'elle tombe bien cette fois-ci. Une règle qu'on suspend quand le résultat
-    // arrange n'a jamais protégé personne.
+    // l'expansion entière. ⚠️ CE PARAGRAPHE DISAIT « ON NE LE DÉCLARE PAS POUR AUTANT »,
+    // ET CE N'EST PLUS VRAI DEPUIS LE 2026-09-09 : la valeur est déclarée sous la CLAUSE
+    // 4 ter, écrite pour ce cas exact. La règle n'a pas été suspendue parce que le
+    // résultat arrangeait — elle a été ÉTENDUE par une clause qui nomme sa condition (même
+    // valeur attestée pour TOUS les sets recouverts) et qui a été refusée un jour durant
+    // avant d'être tranchée. La différence entre étendre et suspendre est là : une clause
+    // écrite tient pour les cas suivants, une exception ne tient que pour celui-ci.
     // ⚠️ ET LE SYMBOLE NE DÉPARTAGERAIT RIEN À L'INTÉRIEUR D'EXS DE TOUTE FAÇON : la
     // pokéball est commune à TOUTE la série Vending (fait connu du testeur). Déclarée,
     // elle serait au mieux `symboleFiable: false` — même statut que `gym` et `logo-tcg`.
@@ -470,6 +496,35 @@ const SETS_NON_PROUVES = [
         // correspond à l'ADV Expansion Pack de 2003. Une date n'aide pas à choisir entre
         // zéro candidat.
         preuveManquante: 'aucune expansion ADV1 en base — IMPASSE, pas ambiguïté'
+    },
+    // ════════════════════════════════════════════════════════════════════════
+    // L2t — EN ATTENTE, PAS REFUSÉE. La distinction est la règle, pas une nuance.
+    // ════════════════════════════════════════════════════════════════════════
+    // Relevé du 2026-09-09 sur pokesymbols.com/tcg/japanese-sets : « Tyranitar Constructed
+    // Standard Deck » y est ABSENT — 0 ligne. La page ne recense que des EXPANSIONS ; un
+    // deck de construction n'y a pas sa place, et son absence ne dit rien de son existence.
+    //
+    // 🔑 C'EST LA PREMIÈRE BRANCHE DU CRITÈRE 4, PAS LA SECONDE, ET ELLES NE SE LISENT PAS
+    // PAREIL. La seconde — « la source en liste PLUSIEURS » — est un refus par
+    // CONTRADICTION : on sait que le slug recouvre N sets, et seul un choix entre les N
+    // peut le lever. La première — « aucune attestation » — est un refus par SILENCE :
+    // personne n'a rien dit. Il se lève avec UNE AUTRE SOURCE qui date les decks, sans
+    // que rien de ce qu'on sait ne change. Relire ce silence comme un rejet fermerait un
+    // dossier que personne n'a jamais ouvert.
+    //
+    // Ce que la base dit par ailleurs, et qui n'est PAS une attestation : exp 4263,
+    // codeSet L2t, `region: 'japonais'` (regionSource `code-minuscule`), 19 produits, slug
+    // unique. Les critères 1, 2 et 3 sont remplis. Il ne manque que la source datée —
+    // donc aussi le critère 5, qui s'appuie sur elle.
+    // UNE absence de vivier mesurée dépend de cette ligne (L104, Pokémon Reversal n°065).
+    {
+        nom: 'Tyranitar Constructed Standard Deck', slug: 'Tyranitar-Constructed-Standard-Deck',
+        code: 'L2t', exp: 4263, prod: 19,
+        preuveManquante: 'AUCUNE ATTESTATION (critère 4, première branche) — absent de '
+            + 'pokesymbols.com/tcg/japanese-sets, qui ne recense que des expansions. '
+            + '⚠️ CE N\'EST PAS UN REJET : aucune source ne le CONTREDIT, aucune ne le '
+            + 'date. Levable par une source qui date les decks de construction japonais ; '
+            + 'la date obtenue devra alors passer le critère 5 (≤ 2007).'
     },
     // ✅ SORTIE DE CETTE LISTE LE 2026-09-06 — `Expansion Sheet` (EXS, exp 3781) est
     // ADMISE, sous le critère 4 bis, avec tous ses attributs par-set nuls. Sa ligne est
