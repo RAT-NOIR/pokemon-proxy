@@ -1555,7 +1555,28 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      disponibilité qui échoue doit d'abord prouver qu'il vise la bonne cible — un 200 sur
 //      un contenu étranger l'aurait montré tout de suite, si je l'avais regardé au lieu de
 //      compter les expirations.
-//   29. UN SURVIVANT UNIQUE APRÈS RESTRICTION N'EST PAS UNE DÉSIGNATION, C'EST UN RESTE — 2026-09-09.
+//   29. UN GAIN MESURÉ SUR UN ENSEMBLE N'EST PAS LE GAIN D'UN SOUS-ENSEMBLE — 2026-09-09.
+//      LES FAITS. Quatre expansions étaient candidates au périmètre vintage. J'ai rejoué le
+//      banc avec LES QUATRE admises en mémoire : +2 justes, aucun faux affirmé nouveau. J'ai
+//      annoncé ce chiffre au testeur comme le gain attendu. Le relevé de la source n'en a
+//      finalement validé que TROIS (la quatrième, un DECK, est absente de la liste des
+//      expansions). Rejeu à trois : **+4 justes**. Autrement dit la quatrième, incluse dans
+//      ma mesure, COÛTAIT 2 justes — et l'agrégat cachait un effet de signe opposé.
+//      🔑 LA LEÇON. Un banc rejoué sur un ensemble rend UNE somme, pas la contribution de
+//      chaque membre. Retirer un membre ne retire pas « sa part » : il peut élargir un
+//      vivier, créer des ex aequo, déplacer un gagnant. Annoncer le total comme la
+//      prédiction d'un sous-ensemble, c'est supposer l'additivité — et ces effets ne sont
+//      pas additifs, ils sont d'ordre supérieur. Même famille que l'entrée 25 (« une
+//      unicité obtenue par une requête incomplète n'est pas une unicité ») : dans les deux
+//      cas, un résultat vrai POUR SON PÉRIMÈTRE est relu comme s'il valait pour un autre.
+//      ⚠️ ET LE SIGNE COMPTE PLUS QUE L'AMPLEUR. Se tromper de 2 sur 66 n'est rien ; avoir
+//      annoncé un gain là où un membre était NUISIBLE en est une autre. Si le relevé avait
+//      validé les quatre, on aurait admis une ligne qui dégrade, en croyant mesurer.
+//      LA PARADE, MÉCANIQUE : rejouer sur EXACTEMENT le périmètre qu'on propose. Si le
+//      périmètre peut se réduire (une source qui n'atteste que N-1), mesurer le sous-
+//      ensemble AVANT de l'annoncer — ou dire explicitement que le chiffre vaut pour
+//      l'ensemble entier et pour lui seul.
+//   30. UN SURVIVANT UNIQUE APRÈS RESTRICTION N'EST PAS UNE DÉSIGNATION, C'EST UN RESTE — 2026-09-09.
 //      LES FAITS. La clé V — « la carte ne porte qu'un numéro de Pokédex, sans total, donc
 //      seuls les produits SANS numéro de carte en base sont compatibles » — élimine la vérité
 //      1 fois sur 80 (JP038 Raichu, Intro Pack, un set que Cardmarket numérote), contre 5 sur
@@ -1581,28 +1602,9 @@ function rangDuNumero(numeroLu, numeroCandidat) {
 //      restriction, sur le vivier par le nom entier ; et « produits.length === 1 » après un
 //      filtre n'est jamais une preuve, seulement un survivant. Rejouée sur le nom entier, la
 //      même clé rend 13 désignations, 13 justes, 0 faux affirmé — la clé n'était pas fausse,
-//      c'est l'étage qui l'était (entrée 26 : le bon étage).
-//   29. UN GAIN MESURÉ SUR UN ENSEMBLE N'EST PAS LE GAIN D'UN SOUS-ENSEMBLE — 2026-09-09.
-//      LES FAITS. Quatre expansions étaient candidates au périmètre vintage. J'ai rejoué le
-//      banc avec LES QUATRE admises en mémoire : +2 justes, aucun faux affirmé nouveau. J'ai
-//      annoncé ce chiffre au testeur comme le gain attendu. Le relevé de la source n'en a
-//      finalement validé que TROIS (la quatrième, un DECK, est absente de la liste des
-//      expansions). Rejeu à trois : **+4 justes**. Autrement dit la quatrième, incluse dans
-//      ma mesure, COÛTAIT 2 justes — et l'agrégat cachait un effet de signe opposé.
-//      🔑 LA LEÇON. Un banc rejoué sur un ensemble rend UNE somme, pas la contribution de
-//      chaque membre. Retirer un membre ne retire pas « sa part » : il peut élargir un
-//      vivier, créer des ex aequo, déplacer un gagnant. Annoncer le total comme la
-//      prédiction d'un sous-ensemble, c'est supposer l'additivité — et ces effets ne sont
-//      pas additifs, ils sont d'ordre supérieur. Même famille que l'entrée 25 (« une
-//      unicité obtenue par une requête incomplète n'est pas une unicité ») : dans les deux
-//      cas, un résultat vrai POUR SON PÉRIMÈTRE est relu comme s'il valait pour un autre.
-//      ⚠️ ET LE SIGNE COMPTE PLUS QUE L'AMPLEUR. Se tromper de 2 sur 66 n'est rien ; avoir
-//      annoncé un gain là où un membre était NUISIBLE en est une autre. Si le relevé avait
-//      validé les quatre, on aurait admis une ligne qui dégrade, en croyant mesurer.
-//      LA PARADE, MÉCANIQUE : rejouer sur EXACTEMENT le périmètre qu'on propose. Si le
-//      périmètre peut se réduire (une source qui n'atteste que N-1), mesurer le sous-
-//      ensemble AVANT de l'annoncer — ou dire explicitement que le chiffre vaut pour
-//      l'ensemble entier et pour lui seul.
+//      c'est l'étage qui l'était (entrée 26 : le bon étage). Câblée le même jour :
+//      `designerParPokedexSansNumero` (index.js), appelée AVANT le périmètre par la route et
+//      par `apres()` du banc.
 //
 // CE QU'IL FAUT EN FAIRE. Les outils méritent la même discipline que le produit :
 //   - un instrument ne doit JAMAIS tirer sa vérité du système qu'il mesure ;

@@ -144,6 +144,11 @@ const { departager: departagerParImage } = require('./departage-image');
 // production. La MÊME fonction que la route, jamais une réimplémentation.
 const { departagerParAttaque } = require('./departage-attaque');
 const { trouverProduitsLocaux, setsPourTotal } = require('./index');
+// RÈGLE DE SYMÉTRIE — la clé V (2026-09-09) entre ici AU MÊME COMMIT qu'en production, par
+// la MÊME fonction. Mesurée en mémoire avant câblage : 13 désignations, 13 justes, 0 faux
+// affirmé sur le nom entier ; et 2 FAUX AFFIRMÉS quand elle était posée APRÈS le périmètre
+// (entrée 30 du catalogue). Sa place ici, avant le bloc 0 bis, reproduit celle de la route.
+const { designerParPokedexSansNumero } = require('./index');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -449,6 +454,16 @@ function celluleDe(d) {
         // Perdre une source propage l'incertitude : sans le numéro, l'identification ne
         // tient plus qu'au nom, et sur ces cartes vintage le nom ne suffit pas.
         if (avisDex.estDex) { voie = 'numero-pokedex-neutralise'; incertain = true; }
+
+        // 0 ter. LA CLÉ V — même fonction que la route, même place : AVANT le périmètre, sur
+        //    le vivier par le nom ENTIER. Un seul produit sans numéro -> désigné, verdict FERME.
+        //    ⚠️ Le banc cherche avec le nom LU ; la route avec l'union des deux noms (un vivier
+        //    plus large ne peut que désigner MOINS, jamais affirmer plus).
+        if (avisDex.estDex) {
+            const parNomV = await trouverProduitsLocaux(d.nom);
+            const avisV = await designerParPokedexSansNumero(parNomV);
+            if (avisV.designe) return { retenu: avisV.designe.idProduct, incertain: false, voie: 'cle-pokedex-sans-numero' };
+        }
 
         // 0 bis. LE PÉRIMÈTRE FERMÉ. Sans numéro exploitable et en langue asiatique, le
         //    vivier par le nom est restreint aux 24 sets japonais vintage. Sortie en

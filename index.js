@@ -2173,6 +2173,46 @@ async function trouverProduitsLocaux(nomExact) {
     }
 }
 
+// ============================================================
+// LA CLÉ V : un numéro de Pokédex lu SANS total désigne un produit SANS numéro de carte
+// ============================================================
+// LE FAIT. Une carte japonaise vintage n'imprime que le numéro de Pokédex de l'espèce, jamais
+// de numéro de collection ni de total. Quand `numeroEstUnDexId` le constate, le nombre lu
+// n'est plus une clé de numéro — mais il reste une PREUVE : cette carte ne peut pas être un
+// produit que Cardmarket numérote. Les produits numérotés du vivier sont donc incompatibles ;
+// s'il ne reste qu'UN produit sans numéro, il est désigné, et le verdict peut être FERME.
+//
+// MESURÉ AVANT CÂBLAGE (2026-09-09, 139 vérités individuelles du banc) :
+//   · la clé s'applique à 80 lignes ; elle élimine la vérité 1 fois (JP038 Raichu, Intro Pack,
+//     un set que Cardmarket numérote), soit 1,3 % — contre 14,3 % pour l'attaque, tuée pour ça ;
+//   · rejeu du banc, clé en mémoire sur le vivier par le NOM ENTIER : 13 désignations,
+//     13 justes fermes, 0 faux affirmé. Fermes 16 -> 29 en colonne APRÈS.
+//
+// 🔴 SUR LE VIVIER ENTIER, JAMAIS SUR UN VIVIER RESTREINT — entrée 30 du catalogue (scoring.js).
+// Le premier essai l'appliquait DANS le bloc du périmètre, sur les 24 sets : 10 justes et DEUX
+// FAUX AFFIRMÉS (Ho-Oh, vérité « Unnumbered Promos » hors des 24 sets, rendu N3). Un survivant
+// unique d'un vivier amputé n'est pas une désignation, c'est un reste. D'où la place de l'appel
+// dans la route : AVANT le périmètre, sur l'union des deux noms, et jamais sur un vivier imposé.
+//
+// UN PRODUIT ABSENT DE `numeros_cartes` EST GARDÉ : inconnu n'est pas contradiction (premier
+// principe). Il peut donc rester deux survivants là où la clé aurait tranché — c'est un trou
+// d'apprentissage, jamais un faux.
+//
+// RÈGLE DE SYMÉTRIE : `apres()` du banc appelle CETTE fonction, au même commit. Pas de copie.
+async function designerParPokedexSansNumero(produits) {
+    const ids = (produits || []).map(p => p.idProduct);
+    if (ids.length < 2) return { designe: null, sansNumero: ids.length, numerotes: 0 };
+    const numeros = await lireNumeros(ids);
+    const sansNumero = produits.filter(p => {
+        const n = numeros.get(p.idProduct);
+        return !String(n?.numero || n?.numeroUrl || '').trim();
+    });
+    return {
+        designe: sansNumero.length === 1 ? sansNumero[0] : null,
+        sansNumero: sansNumero.length, numerotes: produits.length - sansNumero.length
+    };
+}
+
 /**
  * Retrouve des produits Cardmarket par (expansion, NUMÉRO) — sans jamais passer par le
  * nom. C'est le pendant catalogue de identifierParTotalEtNumero : une fois le SET connu
@@ -4232,6 +4272,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         //      justes, 5 justes basculaient — d'où la garde ci-dessous, qui ramène les
         //      risques à zéro sans perdre un seul gain.
         let perimetreVintage = false;
+        // La clé V a désigné UN produit sans numéro (voir designerParPokedexSansNumero) : le
+        // numéro de Pokédex neutralisé cesse alors d'être une source PERDUE, il est la preuve.
+        let clePokedexDesigne = false;
         // Les codes RÉELS du catalogue : ils permettent de distinguer une contradiction
         // (« CLK », un vrai set moderne) d'un bruit d'OCR (un code qui ne résout vers rien).
         // Quatrième principe — sans cette liste, le bruit ferait preuve.
@@ -4284,6 +4327,24 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 }
             }
         }
+        // ════════════════════════════════════════════════════════════════════
+        // LA CLÉ V — AVANT le périmètre, sur le vivier ENTIER, jamais sur un vivier imposé
+        // ════════════════════════════════════════════════════════════════════
+        // Voir designerParPokedexSansNumero et l'entrée 30 du catalogue : appliquée après le
+        // périmètre, cette même clé a affirmé faux deux fois (Ho-Oh). Ici le vivier est l'union
+        // des deux noms, avant toute restriction.
+        if (avisDex.estDex && !produitsImposes && produits.length > 1) {
+            const avisV = await designerParPokedexSansNumero(produits);
+            if (avisV.designe) {
+                console.log(`🔑 [cle-pokedex-sans-numero] n°${cardInfo.number} = Pokédex, sans total : ${produits.length} candidat(s), ${avisV.numerotes} numéroté(s) écartés -> ${avisV.designe.idProduct} "${String(avisV.designe.name).split('[')[0].trim()}" désigné SEUL.`);
+                produits = [avisV.designe];
+                voieCatalogue = 'cle-pokedex-sans-numero';
+                clePokedexDesigne = true;
+            } else {
+                console.log(`🔑 [cle-pokedex-sans-numero] n°${cardInfo.number} = Pokédex, sans total : ${avisV.sansNumero} produit(s) sans numéro sur ${produits.length} -> pas de désignation, vivier inchangé.`);
+            }
+        }
+
         const sansPerimetreTCGdex = numeroCarte != null && expansionsAttendues.length === 0;
         if ((numeroCarte == null || sansPerimetreTCGdex)
             && compat.compatible
@@ -5055,7 +5116,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // fournir le chemin d'identification qui le remplace. Tant que ce chemin
             // n'existe pas, l'identification repose sur le seul nom, et sur ces cartes
             // vintage le nom ne suffit pas : « Mew » ramène 75 candidats.
-            || avisDex.estDex
+            // ⚠️ SAUF quand la clé V a désigné : le chemin d'identification qui remplace le
+            // numéro existe alors (designerParPokedexSansNumero), mesuré 13/13 justes, 0 faux
+            // affirmé sur le banc du 2026-09-09. Le drapeau reste levé partout ailleurs.
+            || (avisDex.estDex && !clePokedexDesigne)
         );
         // ════════════════════════════════════════════════════════════════════
         // LA RAISON DE LA RÉSERVE — calculée UNE FOIS, donnée à ses DEUX consommateurs
@@ -6796,6 +6860,8 @@ module.exports = {
     trouverCarteTCGdex,
     // Le pont total -> set, exporté pour être DIAGNOSTIQUÉ sur pièces plutôt que déduit.
     setsPourTotal, identifierParTotalEtNumero,
+    // RÈGLE DE SYMÉTRIE : la clé V est rejouée par `apres()` du banc avec CETTE fonction.
+    designerParPokedexSansNumero,
     // ⚠️ EXPORTÉE POUR ÊTRE TESTÉE, PAS POUR ÊTRE RÉUTILISÉE AILLEURS. La chaîne argent
     // ne part jamais sans preuve : test-remboursement-catch.js exerce cette fonction
     // exacte, celle que les deux `catch` appellent — pas une copie de sa logique.

@@ -2,6 +2,33 @@
 
 Pour quelqu'un qui n'a rien lu. Les détails ne sont pas ici, ils sont référencés.
 
+## 🔑 2026-09-09 — LA CLÉ V EST CÂBLÉE : un numéro de Pokédex lu sans total désigne un produit sans numéro. Un commit, NON POUSSÉ
+
+**La clé.** `designerParPokedexSansNumero` (index.js, exportée) : quand `numeroEstUnDexId` est vrai,
+les produits que Cardmarket numérote sont incompatibles ; s'il reste UN produit sans numéro, il est
+désigné, `voieCatalogue = cle-pokedex-sans-numero`, et `carteAmbigue` ne lève plus le drapeau
+`estDex` — verdict FERME. Un produit absent de `numeros_cartes` est gardé (inconnu ≠ contradiction).
+`apres()` du banc appelle la même fonction, au même commit.
+
+**Où elle s'applique, et c'est le point.** AVANT le périmètre, sur l'union des deux noms, jamais
+sur un vivier imposé. Le premier essai la posait DANS le bloc du périmètre : 10 justes et **2 FAUX
+AFFIRMÉS** (Ho-Oh H075 et L069, vérité 654129 Unnumbered Promos, rendu 606685 N3). Entrée 30 du
+catalogue : un survivant unique d'un vivier amputé est un reste, pas une désignation.
+
+**Mesuré, dénominateurs d'abord.** 139 vérités individuelles, 80 lignes où la clé s'applique.
+Élimination de la vérité **1 / 80** (JP038 Raichu, Intro Pack, set numéroté par Cardmarket) contre
+5 / 35 pour l'attaque. Rejeu du banc sur le nom entier : **13 désignations, 13 justes fermes, 0 faux
+affirmé**. Fermes en colonne APRÈS : 16 sans la clé → **29** avec (la production en comptait 23 ;
+le banc force la réserve sur 7 lignes Pokédex/périmètre que la production tenait fermes : asymétrie
+d'instrument, pas de verdict). Faux affirmés : holdout 1 → 0, lot 2 → 1, entraînement 6 → 0.
+
+**Contrôles.** Verrou 7 charges vert, cliquet 56 couvertes sur plancher 47 (la fonction neuve est
+couverte), banc réel identique au rejeu en mémoire ligne à ligne.
+
+⚠️ **Le banc signale 27 vérités sous une clé changée et 1 orpheline.** Les 27 sont RATTACHÉES par
+identité (H002→L067, H005→L070, H009→L001… : la fenêtre de lot a renuméroté). L'orpheline est
+**H008 Light Arcanine n°059**, saisie sur une ligne que le banc n'ouvre plus : une vérité détachée.
+
 ## 🔴 2026-09-09 — LE CANAL DU PRIX LIVE N'A JAMAIS RENDU UN SEUL RETOUR, toutes langues ; puis la chaîne « prix de 1re édition », décrite sans l'écrire. Un commit (ce fichier), NON POUSSÉ
 
 ### 1. La dette qui bloque tout : `retourLe` 0 sur 280, `prixLive` 0 sur 280
