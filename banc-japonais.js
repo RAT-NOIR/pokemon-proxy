@@ -462,6 +462,24 @@ function celluleDe(d) {
         const cardInfo = cardInfoDe(d);
         let retenu = d.idProduct, incertain = Boolean(d.carteIncertaine), voie = d.voieCatalogue;
 
+        // ════════════════════════════════════════════════════════════════════
+        // CE QUE LA ROUTE AURAIT MONTRÉ — la règle d'affichage, écrite UNE fois
+        // ════════════════════════════════════════════════════════════════════
+        // La route rend `classement.slice(0, carteAmbigue ? 3 : 1)` (index.js). On applique
+        // ICI la même borne, à partir du classement que la branche a sous la main. Quand
+        // aucun classement n'existe (clé directe, chemin par le code), le seul candidat
+        // montré est le retenu lui-même — c'est ce que la route fait aussi.
+        // ⚠️ SYMÉTRIE : borné à 3, et UN SEUL identifiant quand le verdict est FERME.
+        // ⚠️ ET C'EST UN REJEU, PAS UNE OBSERVATION. `candidatsRendus` n'existe au journal
+        // que depuis le 2026-09-09 ; ce que cette fonction rend est ce que le code
+        // d'AUJOURD'HUI montrerait, pas ce que l'utilisateur a vu ce jour-là.
+        const rendre = (retenu, incertain, voie, classement) => ({
+            retenu, incertain, voie,
+            candidatsRendus: (Array.isArray(classement) && classement.length
+                ? classement
+                : (retenu != null ? [retenu] : [])).slice(0, incertain ? 3 : 1)
+        });
+
         // 0. LA RÈGLE DU NUMÉRO DE POKÉDEX. Quand elle se déclenche, le nombre lu n'est
         //    pas un numéro de carte : il ne sert plus ni de clé, ni de preuve, ni de rang.
         const avisDex = numeroEstUnDexId({ nom: d.nom, numero: d.numero, total: d.total, langue: d.langue });
@@ -478,7 +496,7 @@ function celluleDe(d) {
         if (avisDex.estDex) {
             const parNomV = await trouverProduitsLocaux(d.nom);
             const avisV = await designerParPokedexSansNumero(parNomV);
-            if (avisV.designe) return { retenu: avisV.designe.idProduct, incertain: false, voie: 'cle-pokedex-sans-numero' };
+            if (avisV.designe) return rendre(avisV.designe.idProduct, false, 'cle-pokedex-sans-numero');
         }
 
         // 0 bis. LE PÉRIMÈTRE FERMÉ. Sans numéro exploitable et en langue asiatique, le
@@ -540,11 +558,15 @@ function celluleDe(d) {
                 // existe pour attraper, et elle ne couvrait que les DÉCISIONS, pas les
                 // SEUILS qu'elles utilisent.
                 const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
+                // L'ordre du classement, et l'ordre que la route applique quand une clé
+                // départage : le gagnant remonte en tête, le reste garde son rang.
+                const classe = () => r.scores.map(s => s.candidat.idProduct);
+                const classeAvecTete = g => [g, ...classe().filter(x => x !== g)];
                 if (r.scores.length && !eg) {
                     retenu = r.scores[0].candidat.idProduct;
                     voie = SANS_PERIMETRE ? 'SP-vivier-nom' : 'perimetre-vintage';
                     incertain = true;   // suggestion avertie, arbitrage F
-                    return { retenu, incertain, voie };
+                    return rendre(retenu, incertain, voie, classe());
                 }
                 // Égalité dans le périmètre : le SYMBOLE d'abord, l'écart de prix ensuite.
                 if (eg) {
@@ -561,18 +583,18 @@ function celluleDe(d) {
                             codeSet: cs.get(Number(s.candidat.idExpansion)) ?? null
                         }));
                         const aAtt = departagerParAttaque(d.attaque, d.attaqueConfiance, cand);
-                        if (aAtt.gagnant) return { retenu: aAtt.gagnant.idProduct, incertain: true, voie: 'SP-attaque' };
+                        if (aAtt.gagnant) return rendre(aAtt.gagnant.idProduct, true, 'SP-attaque', classeAvecTete(aAtt.gagnant.idProduct));
                         const aImg = await departagerParImage({
                             imageUrl: d.imageUrl, langue: d.langue, total: d.total,
                             classement: exAequo.map(s => ({ idProduct: s.candidat.idProduct, score: 0 }))
                         });
-                        if (aImg.departage) return { retenu: aImg.gagnant, incertain: true, voie: 'SP-image' };
+                        if (aImg.departage) return rendre(aImg.gagnant, true, 'SP-image', classeAvecTete(aImg.gagnant));
                         const aSym = departagerParSymbole(d.symboleSet, cand, S);
-                        if (aSym.gagnant) return { retenu: aSym.gagnant.idProduct, incertain: true, voie: 'SP-symbole' };
+                        if (aSym.gagnant) return rendre(aSym.gagnant.idProduct, true, 'SP-symbole', classeAvecTete(aSym.gagnant.idProduct));
                         const px = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
                         const ec = px.length >= 2 ? Math.max(...px) - Math.min(...px) : null;
-                        if (ec == null || ec >= 1.00) return { retenu: null, incertain: true, voie: 'SP-REFUS-egalite' };
-                        return { retenu: r.scores[0].candidat.idProduct, incertain: true, voie: 'SP-egalite-sans-enjeu' };
+                        if (ec == null || ec >= 1.00) return rendre(null, true, 'SP-REFUS-egalite');
+                        return rendre(r.scores[0].candidat.idProduct, true, 'SP-egalite-sans-enjeu', classe());
                     }
                     // ⚠️ LE DÉPARTAGE PAR LE SYMBOLE, DANS LE MÊME ORDRE QU'EN PRODUCTION.
                     // Il manquait ici pendant un commit, et la colonne APRÈS a menti de
@@ -585,7 +607,7 @@ function celluleDe(d) {
                         S
                     );
                     if (avisSym.gagnant) {
-                        return { retenu: avisSym.gagnant.idProduct, incertain: true, voie: 'symbole-departage' };
+                        return rendre(avisSym.gagnant.idProduct, true, 'symbole-departage', classeAvecTete(avisSym.gagnant.idProduct));
                     }
                     // ⚠️ LE DÉPARTAGE PAR L'ATTAQUE, DANS LE MÊME ORDRE QU'EN PRODUCTION :
                     // derrière le symbole (mesuré 12/12), devant l'écart de prix. Il entre
@@ -608,12 +630,12 @@ function celluleDe(d) {
                         }))
                     );
                     if (avisAtt.gagnant) {
-                        return { retenu: avisAtt.gagnant.idProduct, incertain: true, voie: 'attaque-departage' };
+                        return rendre(avisAtt.gagnant.idProduct, true, 'attaque-departage', classeAvecTete(avisAtt.gagnant.idProduct));
                     }
                     const prix = exAequo.map(s => s.candidat.prix).filter(p => Number.isFinite(p) && p > 0);
                     const ecart = prix.length >= 2 ? Math.max(...prix) - Math.min(...prix) : null;
-                    if (ecart == null || ecart >= 1.00) return { retenu: null, incertain: true, voie: 'REFUS-egalite-perimetre' };
-                    return { retenu: r.scores[0].candidat.idProduct, incertain: true, voie: 'perimetre-egalite-sans-enjeu' };
+                    if (ecart == null || ecart >= 1.00) return rendre(null, true, 'REFUS-egalite-perimetre');
+                    return rendre(r.scores[0].candidat.idProduct, true, 'perimetre-egalite-sans-enjeu', classe());
                 }
             }
         }
@@ -703,7 +725,7 @@ function celluleDe(d) {
                     imageUrl: d.imageUrl, langue: d.langue, total: d.total, classement: groupe
                 });
                 if (avis.departage && avis.gagnant !== retenu) {
-                    return { retenu: avis.gagnant, incertain: true, voie: 'image-departage' };
+                    return rendre(avis.gagnant, true, 'image-departage');
                 }
             }
         }
@@ -715,7 +737,11 @@ function celluleDe(d) {
         if (voie === d.voieCatalogue && d.ecartScore === 0) {
             retenu = null; voie = 'REFUS-egalite'; incertain = true;
         }
-        return { retenu, incertain, voie };
+        // ⚠️ AUCUN CLASSEMENT SUR CETTE SORTIE : ces lignes n'ont pas été re-scorées ici (le
+        // banc reprend le gagnant du journal). `rendre` montre donc le seul retenu, ce que
+        // la route ferait aussi faute de classement. Ne PAS lire ce cas comme « la vérité
+        // n'était pas dans les trois » : elle n'a pas été cherchée dans trois.
+        return rendre(retenu, incertain, voie);
     }
 
     // Lecture jugée par CONTRADICTION POSITIVE seulement — même principe que partout
@@ -833,6 +859,9 @@ function celluleDe(d) {
     for (const { cle, d, seau } of bancs) {
         const L = LOTS[seau];
         const R = L, lec = L.lec, provenance = L.provenance, detail = L.detail, sansVerite = L.sansVerite;
+        // Le compteur de POSITION vit sur le seau, comme les autres : un seau qui n'a pas
+        // encore été mesuré doit rendre des zéros, pas hériter du seau précédent.
+        const POS = (L.positions ||= { premier: 0, deuxTrois: 0, horsTrois: 0, horsVivier: 0, refus: 0, total: 0 });
         L.cellules.set(celluleDe(d), (L.cellules.get(celluleDe(d)) || 0) + 1);
         const v = verite(cle, d);
         provenance[v.source] = (provenance[v.source] || 0) + 1;
@@ -867,6 +896,30 @@ function celluleDe(d) {
         if (iApres === 'faux' && a.incertain) G.apres.signale++;
         if (iAvant === 'juste' && d.carteIncertaine === false) G.avant.ferme++;
         if (iApres === 'juste' && a.incertain === false) G.apres.ferme++;
+        // ════════════════════════════════════════════════════════════════════
+        // OÙ LA VÉRITÉ TOMBE DANS CE QUI EST MONTRÉ — la promesse du produit
+        // ════════════════════════════════════════════════════════════════════
+        // « L'utilisateur voit-il sa carte ? » ne se répond pas par le verdict : sous
+        // réserve, la route montre TROIS candidats. La question est donc la POSITION de la
+        // vérité dans ce qui est montré, pas seulement si le gagnant est juste.
+        // ⚠️ C'EST UN REJEU, PAS UNE OBSERVATION. `candidatsRendus` n'existe au journal que
+        // depuis le 2026-09-09 : ce compteur dit ce que le code d'AUJOURD'HUI montrerait,
+        // pas ce que l'utilisateur a vu. Le jour où le champ sera peuplé, la même mesure
+        // se refera sur la donnée observée et les deux colonnes seront comparables.
+        if (a.retenu != null || (a.candidatsRendus && a.candidatsRendus.length)) {
+            const trois = a.candidatsRendus || [];
+            const pos = trois.indexOf(attendu);
+            if (pos === 0) POS.premier++;
+            else if (pos > 0) POS.deuxTrois++;
+            else {
+                POS.horsTrois++;
+                // Le sous-cas qui n'est PAS rattrapable par un meilleur classement : la
+                // vérité n'était pas dans le vivier. `vivierIds` est un champ jeune —
+                // absent, on ne compte rien plutôt que de supposer.
+                if (Array.isArray(d.vivierIds) && !d.vivierIds.map(Number).includes(Number(attendu))) POS.horsVivier++;
+            }
+            POS.total++;
+        } else POS.refus++;
         if (TRACER_ASYMETRIE) {
             const fAvant = iAvant === 'juste' && d.carteIncertaine === false, fApres = iApres === 'juste' && a.incertain === false;
             // ⚠️ Les lignes EN BLOC sont tracées aussi, et nommées : leur AVANT est tautologique
@@ -938,6 +991,22 @@ function celluleDe(d) {
             console.log(`     FAUX ET AFFIRMÉ ${String(I.avant.faux - I.avant.signale).padStart(2)}              ${String(I.apres.faux - I.apres.signale).padStart(3)}   ← le seuil de lancement`);
             console.log(`   REFUS ......... ${String(I.avant.refus).padStart(3)}  ${pi(I.avant.refus).padStart(7)}   ${String(I.apres.refus).padStart(3)}  ${pi(I.apres.refus).padStart(7)}   (remboursés, aucun prix montré)`);
             console.log(`   JUSTE ET FERME  ${String(I.avant.ferme).padStart(3)}  ${pi(I.avant.ferme).padStart(7)}   ${String(I.apres.ferme).padStart(3)}  ${pi(I.apres.ferme).padStart(7)}   ← l'unité de l'objectif 80 %`);
+    // ── OÙ TOMBE LA VÉRITÉ DANS CE QUI EST MONTRÉ ──
+    const P = L.positions;
+    if (P && P.total + P.refus) {
+        const d0 = P.total + P.refus;
+        const pp = n => `${(n / d0 * 100).toFixed(1)} %`;
+        console.log(`\n── OÙ TOMBE LA VÉRITÉ DANS CE QUE LA ROUTE MONTRERAIT (rejeu, pas observation) ──`);
+        console.log(`   dénominateur : ${d0} ligne(s) à vérité de ce seau`);
+        console.log(`   position 1 (le gagnant) ....... ${String(P.premier).padStart(3)}  ${pp(P.premier)}`);
+        console.log(`   position 2 ou 3 (montrée) ..... ${String(P.deuxTrois).padStart(3)}  ${pp(P.deuxTrois)}   ← l'utilisateur la voit quand même`);
+        console.log(`   HORS des trois ................ ${String(P.horsTrois).padStart(3)}  ${pp(P.horsTrois)}`);
+        console.log(`      dont HORS VIVIER ........... ${String(P.horsVivier).padStart(3)}          (irrattrapable par un meilleur classement ;`);
+        console.log(`                                              compté sur les seules lignes portant \`vivierIds\`)`);
+        console.log(`   REFUS (rien montré) ........... ${String(P.refus).padStart(3)}  ${pp(P.refus)}`);
+        console.log(`   ⚠️ REJEU : \`candidatsRendus\` n'existe au journal que depuis le 2026-09-09.`);
+        console.log(`      Ce bloc dit ce que le code d'AUJOURD'HUI montrerait, pas ce qui a été vu.`);
+    }
         }
 
         // ---- LES LIGNES EN BLOC, à part, avec ce qu'elles peuvent et ne peuvent pas dire ----
