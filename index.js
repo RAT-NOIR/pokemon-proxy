@@ -3406,6 +3406,35 @@ async function rembourserSiRienLivre(req, res, motif) {
     return await rembourserScan(req, motif);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// LA PHRASE DE CHAQUE REFUS — validée par le testeur le 2026-09-09
+// ════════════════════════════════════════════════════════════════════════════
+// `natureRefus` décide de la COULEUR (deux valeurs) ; celle-ci décide du GESTE que
+// l'utilisateur doit faire, et il y en a trois, pas deux.
+//
+// 🔑 UN ÉCHEC TEMPORAIRE ET UN ÉCHEC DE LECTURE N'APPELLENT PAS LE MÊME GESTE : dans un
+// cas rescanner sert, dans l'autre non. Les regrouper sous « je n'ai pas pu lire » ferait
+// rescanner pour rien la moitié du temps, et abandonner à tort l'autre moitié.
+//
+// ⚠️ « aucun-candidat » NE DIT PAS QUE LA CARTE N'EXISTE PAS. « Aucune carte
+// correspondante » laisse croire à une absence du monde ; la vérité est une absence de
+// NOTRE catalogue. La phrase le dit.
+//
+// ⛔ AUCUNE DE CES PHRASES NE PARLE D'ARGENT. La règle est déjà écrite plus bas : une
+// seule phrase parle du crédit, c'est celle de l'extension, qui lit `rembourse`.
+const PHRASE_REFUS = {
+    'egalite-parfaite': 'Je ne peux pas trancher : plusieurs cartes portent exactement les mêmes indices. Voici ce que ça pourrait être.',
+    'nom-contredit-egalite': 'Je ne peux pas trancher : plusieurs cartes portent exactement les mêmes indices. Voici ce que ça pourrait être.',
+    'nom-contredit-sans-repli': 'Je ne peux pas trancher : plusieurs cartes portent exactement les mêmes indices. Voici ce que ça pourrait être.',
+    'aucun-candidat': 'Cette carte n\'est pas dans mon catalogue.',
+    'aucun-prix': 'Cette carte n\'est pas dans mon catalogue.',
+    'numero-illisible': 'Je n\'ai pas pu lire cette carte.',
+    'carte-introuvable': 'Je n\'ai pas pu lire cette carte.',
+    'ia-echec': 'Je n\'ai pas pu lire cette carte.',
+    'tcgdex-injoignable': 'Une source n\'a pas répondu. Réessaie dans un instant.',
+    'erreur-serveur': 'Une source n\'a pas répondu. Réessaie dans un instant.'
+};
+
 const NATURE_REFUS = {
     // ── REFUS DÉLIBÉRÉS : la chaîne a fonctionné, et elle refuse de livrer un prix
     //    qu'elle sait ou soupçonne faux. Le crédit est rendu. C'est le service rendu,
@@ -3551,7 +3580,12 @@ function champsDeRefus(motifRefus, rembourse) {
         // `rembourse` », c'est « montrer `raisonNonRembourse === 'plafond-jour'` ».
         raisonNonRembourse: rembourse ? null : raisonNonRemboursement(),
         motifRefus,
-        natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique')
+        natureRefus: absenceNonConstatee ? 'echec-technique' : (NATURE_REFUS[motifRefus] ?? 'echec-technique'),
+        // La phrase du GESTE — voir PHRASE_REFUS. Une absence requalifiée en panne prend la
+        // phrase de la panne : rescanner sert alors, alors qu'il ne servait pas avant.
+        phraseRefus: absenceNonConstatee
+            ? PHRASE_REFUS['tcgdex-injoignable']
+            : (PHRASE_REFUS[motifRefus] ?? PHRASE_REFUS['erreur-serveur'])
     };
 }
 
@@ -4818,6 +4852,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     imageUrl: photos[0], langue: cardInfo.language,
                     total: cardInfo.total, classement
                 });
+                // Les numéros des candidats montrés — même lecture que sur la voie du
+                // succès (`lireNumeros`), pas une seconde façon de les obtenir.
+                const numerosDesExAequo = await lireNumeros(exAequo.slice(0, 3).map(c => c.idProduct));
                 enregistrerEchec({
                     route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
                     motifEchec: 'egalite-parfaite', rembourse: rendu,
@@ -4852,6 +4889,39 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                     // null quand moins de deux candidats ont un prix connu : on ne borne
                     // rien avec une seule borne.
                     fourchette,
+                    // ════════════════════════════════════════════════════════════
+                    // LES CANDIDATS SUR UN REFUS — 2026-09-09, décision du testeur
+                    // ════════════════════════════════════════════════════════════
+                    // MESURÉ AVANT : sur les 18 refus du seau lot, la vérité est dans le
+                    // vivier 13 fois et dans les TROIS premiers 9 fois. Ne rien montrer
+                    // perdait donc la moitié des refus alors qu'on avait la réponse sous
+                    // la main. Avec ces trois lignes, la vérité passe de 75 à 84 lignes
+                    // montrées sur 112 — 67,0 % à 75,0 %.
+                    //
+                    // 🔑 UN REFUS NE DEVIENT PAS UNE SUGGESTION. `phraseRefus` dit d'abord
+                    // « je ne peux pas trancher », la liste vient après, et AUCUN candidat
+                    // n'est désigné : pas de gagnant, pas d'ordre de préférence affiché.
+                    //
+                    // ⚠️ LE PRIX NE PEUT PAS SE CONTREDIRE AVEC LA FOURCHETTE, parce que
+                    // c'est LE MÊME NOMBRE : `fourchette` est le min/max de ces prix-là,
+                    // calculé dix lignes plus haut sur les mêmes ex aequo. Une seule
+                    // source, deux lectures.
+                    //
+                    // ⛔ LE REMBOURSEMENT NE BOUGE PAS. `rembourserScan` s'exécute avant, et
+                    // `rembourse` le dit. Montrer des candidats SANS rembourser serait un
+                    // autre produit, et il n'a pas été décidé.
+                    candidats: exAequo.slice(0, 3).map(c => {
+                        const p = produits.find(x => x.idProduct === c.idProduct);
+                        const num = numerosDesExAequo.get(c.idProduct);
+                        return {
+                            idProduct: c.idProduct,
+                            nom: p ? String(p.name).split('[')[0].trim() : null,
+                            numero: num?.numero ?? num?.numeroUrl ?? null,
+                            set: nomDeSet(num),
+                            prix: Number.isFinite(c.prix) ? c.prix : null,
+                            photoUrl: null
+                        };
+                    }),
                     // ⚠️ CETTE PHRASE NE PARLE PLUS D'ARGENT — 2026-09-01.
                     // Elle affirmait « scan remboursé » D'OFFICE, alors que le
                     // remboursement est TENTÉ trois lignes plus haut et peut échouer
