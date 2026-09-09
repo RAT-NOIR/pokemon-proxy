@@ -417,6 +417,56 @@ serait close dès le lot suivant. ⚠️ **Rétroactivement, rien n'est récupé
 sixième principe (on écrit ce qui n'est pas RECALCULABLE depuis la ligne), et cette colonne
 est le prochain trou de cette famille.
 
+---
+
+## 11. L'égalité est la NORME — et aucune n'est structurellement incassable
+
+**Mesuré le 2026-09-09, seau lot, 84 lignes classables** (le classement est recalculé en
+appelant `scorerCandidatsLocal`, la fonction de la route) :
+
+**51 lignes sur 84 — 60,7 % — portent une ÉGALITÉ STRICTE en tête de classement.**
+L'égalité n'est pas un cas limite, c'est le régime ordinaire du vintage japonais.
+
+🔑 **ET LE CHIFFRE QUI CHANGE LE PROBLÈME : `0 / 51` opposent des produits de la MÊME
+MÉTACARTE.** Les 51 opposent des **cartes différentes**. Ce ne sont donc PAS des impressions
+du même dessin — cas contre lequel aucun signal de carte ne peut rien (même illustrateur,
+même attaque, même symbole). **Aucune de ces 51 égalités n'est structurellement incassable.**
+
+Ce que ces lignes portent déjà :
+
+| signal | présent | joint ? |
+|---|---|---|
+| `symboleSet` exploitable | **28 / 51** | oui — `departagerParSymbole` |
+| `attaqueLue` | 16 / 51 | oui — `departagerParAttaque` |
+| **`illustrateur`** | **8 / 51** | 🔴 **non — lu, journalisé, jamais joint** |
+
+⚠️ **`illustrateur` n'a pas de colonne de jointure** : notre catalogue ne porte aucun
+illustrateur, seul TCGdex l'a. C'est le motif du §7 — un signal sans colonne — pour la
+quatrième fois. Le brancher demande une source, pas une règle.
+
+**LE LEVIER N'EST DONC NI LE CLASSEMENT NI LE TRI : c'est ce qui CASSE l'égalité.**
+
+### Le tri entre égaux est FERMÉ — mesuré, pas supposé
+
+L'ordre appliqué aujourd'hui est écrit et décidé (`scoring.js`) : score décroissant, puis
+**le moins cher**, prix inconnu ou nul en dernier. Les alternatives, sur les mêmes 84 lignes,
+comptées en « vérité dans le top 3 » :
+
+| ordre à score égal | top 3 | monte | **descend** |
+|---|---|---|---|
+| actuel (moins cher) | **54 / 84** | — | — |
+| région concordante d'abord | **54 / 84** | 0 | 0 |
+| dans le périmètre d'abord | **54 / 84** | 0 | 0 |
+| numéro connu d'abord | 36 / 84 | 0 | **18** |
+
+🔴 **Région et périmètre sont INERTES PAR CONSTRUCTION** : dans un vivier déjà restreint au
+périmètre, tous les candidats sont dans le périmètre et partagent la région. Le critère « non
+arbitraire » qu'on cherchait n'existe pas dans ces données. **« Numéro connu d'abord » fait
+DESCENDRE 18 vérités.** ⚠️ « plus cher d'abord » avait déjà été écarté (43 premiers faux et
+plus chers) et « moins cher d'abord » est l'ordre en place : **ne pas les reproposer.**
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
