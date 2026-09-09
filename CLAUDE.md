@@ -350,8 +350,50 @@ des cartes japonaises vintage dont la vérité est souvent HORS VIVIER (Ponyta, 
 Victreebel, Caterpie, Slowbro, Surfing Pikachu, Berry…) : ce sont des « restes » au sens du
 §8, pas des choix serrés. Les promouvoir, c'est affirmer des restes.
 
-**La décision appartient au testeur.** Ce qui est écrit ici, c'est le prix, pas la
-recommandation — et le fait que le prix se relit sans refaire la mesure.
+**🔴 DÉCISION DU 2026-09-09 : NON PROMU.** Prise par le testeur, sur ce chiffre.
+
+**LA RAISON QUI DÉCIDE N'EST PAS LE TAUX, C'EST LA NATURE DES 11.** Leur vérité est **hors
+vivier** : la chaîne n'a jamais eu la bonne carte sous la main. Les promouvoir reviendrait à
+affirmer des **restes** — le motif Ho-Oh du §8, appliqué en connaissance de cause et à
+l'échelle. Un faux affirmé qu'on fabrique volontairement est pire qu'un faux affirmé qu'on
+découvre.
+
+⚠️ **ET LA QUESTION ÉTAIT LÉGITIME — elle est refermée par la mesure, pas par principe.**
+L'arbitrage datait d'un temps où une sortie sous réserve était un refus muet ; depuis le
+2026-09-08, elle affiche trois candidats avec leur set et leur prix. **Le contexte avait
+réellement changé, et il fallait donc rouvrir.** Ce qui a tranché, c'est le chiffre. Si un
+jour le vivier ramenait ces 11 vérités, la question se rouvrira d'elle-même — et il faudra
+alors la remesurer, pas relire cette ligne.
+
+---
+
+## 10. La table du produit — cinq états, jamais un taux unique
+
+**« L'utilisateur voit-il sa carte ? » ne se répond pas par un pourcentage.** Sur les 128
+lignes jugeables, 2026-09-09 :
+
+| état | n | % |
+|---|---|---|
+| **ferme et JUSTE** | 23 | 18,0 % |
+| 🔴 **faux et AFFIRMÉ** | 3 | 2,3 % |
+| **sous réserve, gagnant juste** | 57 | 44,5 % |
+| **sous réserve, gagnant faux** | 22 | 17,2 % |
+| **refus remboursé** | 23 | 18,0 % |
+
+🔴 **ET LA COLONNE QUI DÉCIDERAIT VRAIMENT MANQUE.** « La vérité est-elle dans les TROIS
+candidats affichés ? » n'est **pas mesurable** : le tableau `candidats` vit dans la RÉPONSE
+HTTP (index.js:5813) et **n'est pas journalisé** ; `classement` non plus. **Aucune ligne du
+journal ne dit ce que l'utilisateur a vu.**
+
+Le proxy disponible, avec son dénominateur : sur les 79 lignes sous réserve, **36 portent
+`vivierIds`** (champ jeune) ; la vérité est dans le vivier sur **29/36 (80,6 %)**, hors
+vivier sur 7. Parmi les 29, **15 ont un vivier de 3 ou moins — la vérité y est forcément
+affichée** ; les 14 autres dépendent d'un classement non journalisé.
+
+**CE QU'IL FAUDRAIT, ET C'EST PETIT** : journaliser les trois `idProduct` rendus. La question
+serait close dès le lot suivant. ⚠️ **Rétroactivement, rien n'est récupérable** — c'est le
+sixième principe (on écrit ce qui n'est pas RECALCULABLE depuis la ligne), et cette colonne
+est le prochain trou de cette famille.
 
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
