@@ -350,7 +350,21 @@ function celluleDe(d) {
     }
     console.log('');
 
-    const produits = (await Cat.find({}, { idProduct: 1, idExpansion: 1, name: 1 }).lean())
+    // 🔴 `idMetacard` EST DANS LA PROJECTION, ET SON ABSENCE A COÛTÉ UNE MESURE ENTIÈRE.
+    // `departagerParAttaque` s'en sert pour son VERROU 3 : « tous les ex aequo sont la même
+    // carte -> l'attaque ne dit rien ». Sans le champ, `catById` le rendait `undefined`, le
+    // banc passait `idMetacard: null` sur tous les candidats, le Set des métacartes connues
+    // était VIDE, et `metacartes.size <= 1` fermait la clé sur les 33 appels — avec la phrase
+    // « les N ex aequo sont la MÊME carte (métacarte inconnue) », qui EXPLIQUAIT le zéro.
+    // Mesuré sur les 45 produits concernés : 0 `idMetacard` nul, et 11 groupes sur 11
+    // opposent PLUSIEURS métacartes. Le verrou 3 n'aurait jamais dû se fermer.
+    // 🔑 C'EST LA MÊME FAUTE QUE `d.attaque` -> `attaqueLue`, DEUX JOURS PLUS TARD ET DANS LA
+    // MÊME CLÉ : une jointure morte rend exactement ce que rend un signal sans pouvoir. Le
+    // commit qui a réparé la première a laissé la seconde et a présenté « 0 gagnant » comme
+    // un résultat. Une clé à deux entrées ne se vérifie pas par une seule.
+    // ⚠️ LA ROUTE N'A JAMAIS EU CE DÉFAUT : elle lit `p.idMetacard` sur des documents non
+    // projetés (index.js, `metacartes`). L'asymétrie était du seul côté du banc.
+    const produits = (await Cat.find({}, { idProduct: 1, idExpansion: 1, name: 1, idMetacard: 1 }).lean())
         .filter(p => !EST_CODE_CARD.test(String(p.name || '')));
     const catById = new Map(produits.map(p => [p.idProduct, p]));
     const numDocs = await Num.find({}, { idProduct: 1, numero: 1, numeroUrl: 1, nomFr: 1 }).lean();
