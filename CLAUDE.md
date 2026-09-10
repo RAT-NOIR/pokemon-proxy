@@ -546,6 +546,134 @@ dans le mauvais ordre — on obtient un excellent chiffre sur une question qui n
 
 ---
 
+## 14. Une saisie ne se rattache jamais à une ligne scannée APRÈS elle — 2026-09-10
+
+**L'occurrence.** La vérité `606445` (Slowpoke N1) a été saisie le **2026-08-21** pour **H005**,
+un vrai N1 du holdout scanné le 11/08 — la saisie est **juste**, vérifiée sur sa photo. Le
+2026-09-06, **L070** est scannée : même nom, même n°079, pas de total, donc **même identité**
+`(nom, numero, total)`. `rattacherVerites` ancre la vérité sur l'identité, pas sur la ligne :
+L070 a hérité de `606445`. Or l'annonce de L070 est « Slowpoke [Headbutt | Amnesia] », le promo
+**UNP `571765`** — l'IA avait lu l'attaque « Headbutt », le titre disait « Promo UNP », et la
+photo rend 18 inliers contre le vecteur de 571765, **0** contre celui de 606445. C'est le conflit
+du §5, réalisé : **une saisie juste, une ligne fausse**, et rien au banc ne le disait.
+
+**Le compte, dénominateur d'abord** — lot de 112 lignes, 112 à vérité, 111 saisies par URL :
+
+| | n |
+|---|---|
+| lignes du lot dont l'identité existe aussi dans un autre seau | **11** |
+| dont la vérité rattachée a été saisie **AVANT** le scan de la ligne | **1** — L070 |
+
+Les 11 : L004 Grimer, L019 Slowbro, L020 Gladion's Final Battle, L044 Dark Dragonite, L046
+Raichu, L049 Mew, L067 Growlithe, L068 Rayquaza, L069 Ho-Oh, L070 Slowpoke, L087 Pikachu.
+Sur les 10 autres, la saisie est postérieure au scan du lot : elle a pu être faite pour lui.
+
+**La règle qui en sort.** Une saisie ne doit **jamais** se rattacher à une ligne scannée
+**après** elle : une vérité saisie le 21/08 ne peut rien dire d'une photo prise le 06/09. Le
+critère est mécanique — `saisiLe < le` de la ligne — et il ne demande aucune nouvelle colonne.
+⚠️ **Rien n'est corrigé ici, et la correction n'est pas triviale** : avec l'ancre actuelle, une
+entrée `L070 → 571765` écraserait aussi la vérité de H005 (`rattacherVerites` garde la dernière
+entrée vue pour l'identité, pour TOUTES les lignes qui la portent). Corriger L070 dans le fichier
+sans toucher à l'ancre casserait H005. C'est le prix du §5, désormais chiffré : **1 ligne sur
+112**, et elle était dans les 43 planches. L'étalon du 2026-09-10 n'en bouge pas — 571765 est
+hors du groupe de L070 comme l'était 606445.
+
+---
+
+## 15. La recherche par l'image sur l'index ENTIER : le signal tient, et ce qui le borne — 2026-09-10
+
+**L'ÉTALON D'ABORD.** 43 planches à l'aveugle (égalités strictes de la recette A, seau lot, 26 à
+vérité dans le groupe, 17 hors), sans prix, set, score ni rang : le testeur rend **42/43** — 25
+lettres justes sur 26 et 16 « aucune » justes sur 17, une lettre fausse (L034, réimpression CP6 au
+même dessin), un « aucune » à tort (L021, bord e-Reader lu comme une autre série alors que c'est
+l'impression française du même produit). Sa raison sur 12 des 14 lignes hors groupe : « illustration
+complètement différente ». Le départage image de la route, sur les mêmes 43 : 24 justes dedans,
+**0 dehors** — il désigne toujours le moins mauvais, à 4 inliers s'il le faut.
+
+**LA RECHERCHE RÉELLE** — 43 photos d'annonce contre les **70 214** vecteurs de l'index, sans aucun
+vivier textuel, 3 019 202 appariements, fonctions de la route intactes :
+
+| | rang 1 | rang ≤ 5 | absente |
+|---|---|---|---|
+| toutes, 43 | **37** (35 stricts, 2 ex aequo L009 et L011) | 41 | 0 |
+| vérité DANS le groupe, 26 (départage : 24) | 22 | 25 | 0 |
+| vérité HORS groupe, 17 (départage : 0) | **15** | 16 | 0 |
+
+Les 2 perdues dedans (L026 Pichu 8 contre 9, L110 Poliwag 12 contre 16) sont des réimpressions du
+même dessin : **c'est le texte qui doit les trancher, pas l'image.** Faux qui battent la vérité : même
+métacarte sur 2 lignes (L005, L110), carte différente sur 4 (L021 occidental à 5 inliers, L024
+moderne à 4, L026, L102 Squirtle 14 contre 26). Écart premier−second : justes [0…34], non rang 1
+[0…2] — descriptif, **aucun seuil**. L070 sous ses deux vérités : 571765 rang 1 à 18 ; 606445
+absente, 3 552 devant.
+
+🔴 **DETTE MESURÉE, NON CORRIGÉE : `inliers()` (departage-image.js:356) fuit.** Les objets rendus par
+`mm.get(i)` et `m.get(0|1)` ne sont jamais libérés : RSS 163 → 1 215 Mo en 120 000 appels
+(≈ 8,8 Ko par appel), abandon du tas WASM vers 130 000 appels à 1 Gio. Un processus seul ne peut
+pas parcourir l'index ; la mesure a tourné par lots de 500 dans des processus neufs. Sur 512 Mo,
+le plafond arrive vers 40 000 appariements.
+
+**LA FORCE BRUTE EST HORS DE PORTÉE EN LIGNE, C'EST ACQUIS** : 0,69 ms par appariement ici (1,32 dans
+la note du module), 48 à 93 s par photo, 362 Mo de vecteurs contre 512 Mo sur Render. Trois mesures
+sur ce qu'on perdrait à l'approcher, rendues séparément, jamais additionnées :
+
+**Mesure 1 — l'index approché.** Arbre de vocabulaire binaire (k-majority, 16 branches × 4
+niveaux, 63 946 mots, entraîné sur l'index, jamais sur les photos), tf-idf par index inversé de
+79 Mo, pré-filtre en 13 à 15 ms par photo, puis re-classement des N survivants par les inliers réels.
+
+| N | rang 1 (dur / souple) | perdues au pré-filtre (souple) | temps en ligne | mémoire |
+|---|---|---|---|---|
+| 50 | 22 / 24 sur 43 | 19 lignes | 66 ms | 81 Mo |
+| 200 | 28 / 30 | 13 lignes | 217 ms | 82 Mo |
+| 1 000 | 30 / 33 | L004, L009, L021, L024, L050, L107 | 1 023 ms | 86 Mo |
+| force brute | **37** | — | 48 000 ms | 362 Mo |
+
+**Le plus petit N sans perte est 12 935 (souple) ou 36 102 (dur) : ce n'est plus un pré-filtre.** Les
+pertes commencent dès N = 1 pour des lignes que la force brute met au rang 1 à 10–25 inliers
+(L009 Hitmontop rang 7 211 au pré-filtre, L050 Pidgeot 6 502, L107 Raikou 6 585) : le sac de mots
+ne voit pas ce que la géométrie RANSAC voit. ⚠️ Lu sur ces 43 lignes, donc ajusté à elles.
+
+**Mesure 2 — détection et redressement.** Détection géométrique simple avec l'OpenCV du dépôt
+(gris, flou, Canny, dilatation, contours, plus grand quadrilatère convexe, sinon enveloppe convexe),
+redressement perspectif 640×894, puis la même force brute sur l'index entier.
+
+| détection, 43 photos | n |
+|---|---|
+| quadrilatère trouvé | 25 |
+| enveloppe convexe à 4 sommets | 9 |
+| échec (aucun contour ≥ 12 % de la photo) ou rapport hors borne | 7 + 2, photo brute conservée |
+| **rectangle FAUX à l'œil** (l'illustration au lieu de la carte : L027, L034, L047, L049, L053, L067) | **6** |
+
+| | rang 1 | rang ≤ 5 |
+|---|---|---|
+| photo brute | 37 | 41 |
+| photo redressée | **35** | 40 |
+
+Gagnées 2 (L026 Pichu 3 → 1, L110 Poliwag 4 → 1 — les deux réimpressions que le texte doit
+trancher, pas cherchées, constatées), perdues 4 : L011 (ex aequo brut, 14 → 9, rang 2) et **les
+trois rectangles faux L027, L053, L067** (rang 2, 143, 17). Sur les **27 rectangles justes** : rang 1
+22 → 23, **inliers de la vérité en médiane 26 → 39, écart premier−second 10 → 18** — la séparation
+s'élargit nettement quand la détection est juste. Sur les 9 photos brutes conservées (témoin) :
+rien ne bouge, 8 → 8. 🔑 **Le redressement rend ce que la détection lui donne : +50 % d'inliers sur
+un rectangle juste, une ligne cassée sur un rectangle faux.** Ce qui manque n'est pas le
+redressement, c'est un détecteur qui trouve la CARTE et non son cadre d'illustration — 6 fois sur
+34 le plus grand contour est le cadre intérieur, et 9 fois sur 43 rien n'est trouvé (fond clair,
+sleeve, carte tenue en main).
+
+**Mesure 3 — la source des images.** **70 017 des 70 214 vecteurs (99,7 %) viennent d'une vignette
+de 270 px de large ou moins**, agrandie 2,5 fois en gris. (a) Décrite à sa taille NATIVE, la vignette
+donne MOINS : inliers de la vérité en baisse sur 32 lignes sur 43, moyenne 25,0 → 15,7 —
+l'agrandissement aide ORB, il n'est pas la perte. (b) Une image pleine résolution d'un AUTRE tirage
+du même dessin (jumeau occidental chez TCGdex, 40 appels d'API et 36 images ce tour, pont setTcgdex)
+est PIRE : 20 vérités jointes, 19 descendent, moyenne 23,6 → 5,0 ; sur les 14 jumeaux au vrai même
+dessin, 21,5 → 6,8 ; 6 jointures passent par un pont faux (`sv03.5` « 151 » pour EXS, PJU…).
+🔑 **L'appariement porte sur toute la carte, texte compris : seule une image pleine résolution du
+MÊME tirage aiderait, et TCGdex n'en a aucune pour le vintage japonais.** Il reste la page produit
+Cardmarket, en image plus grande, à collecter comme les galeries. **Aucune des 4 lignes où l'image
+se trompe de carte n'est rattrapée** par une image disponible : L021 5 contre 10, L024 4 contre 8,
+L026 8 contre 9, L102 14 contre 26.
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
