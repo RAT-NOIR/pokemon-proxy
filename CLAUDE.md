@@ -150,8 +150,22 @@ miennes. Je ne les modifie que sur demande explicite, et jamais au passage.
   double encodage UTF-8 garanti. Les outils d'édition, ou rien.
 - **Jamais `node -e` avec des guillemets sous PowerShell** : on écrit un `.js`.
 - **git n'est pas dans le PATH.** Il se trouve sous
-  `AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe`. Je peux commiter,
-  **je ne peux pas pousser** — c'est le testeur qui pousse, depuis GitHub Desktop.
+  `AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe`.
+  🔑 **LE PUSH N'EST JAMAIS UN GESTE DE FIN DE TOUR.** Il se fait **sur demande explicite,
+  qui NOMME le commit** — jamais parce que le travail est fini, jamais « pendant qu'on y
+  est », jamais par lot.
+  ⚠️ **ET LA RAISON N'EST PAS UNE LIMITE D'ACCÈS — c'est le RAYON D'ACTION.** Les
+  identifiants sont là et `git push` fonctionne : ce texte disait « je ne peux pas pousser »
+  et c'était faux, corrigé le 2026-09-10 après un push réussi. Ce qui tient, c'est la règle,
+  et elle tient pour une raison mesurable : **un lot poussé sans décision rend le diagnostic
+  lent quand quelque chose casse.** Quatre commits partis ensemble, c'est quatre suspects et
+  aucun ordre entre eux ; un commit nommé et poussé seul se défait en une ligne. Le coût
+  d'attendre une demande est nul, le coût de ne pas l'avoir attendue se paie le jour où la
+  production tombe.
+  🔑 **CE QUI EST ATTENDU, ÉCRIT PARCE QUE ÇA A ÉTÉ FAIT** : le 2026-09-10, trois commits
+  étaient prêts et les identifiants disponibles ; rien n'est parti avant que le testeur
+  nomme `dbff46f`. **C'est exactement le comportement voulu** — la capacité ne déclenche pas
+  le geste, la demande le déclenche.
   ⚠️ **Ne JAMAIS écrire ce chemin en dur avec un numéro de version.** GitHub Desktop se
   met à jour tout seul et le dossier change : `app-3.6.3` a disparu le 2026-09-03 au
   profit de `app-3.6.5`, et deux commandes du dépôt ont cassé d'un coup. On le résout à
@@ -501,6 +515,10 @@ population, son plafond est **7/11**, et les 4 restants ne se gagnent ni par un 
 par un ordre, ni par un seuil — **seul le périmètre ou une clé qui le contourne les
 ramènera**. Avant de chiffrer le gain d'une clé nouvelle, mesurer d'abord **combien de fois
 la vérité est dans le groupe** : c'est ce nombre-là qui borne, pas la qualité du signal.
+
+🔑 **ET LA CONSÉQUENCE, EN UNE LIGNE : un signal peut être PARFAIT et SANS EFFET.** Mesurer
+la qualité d'un signal avant de mesurer la présence de la vérité au vivier, c'est mesurer
+dans le mauvais ordre — on obtient un excellent chiffre sur une question qui ne décide rien.
 
 ---
 
