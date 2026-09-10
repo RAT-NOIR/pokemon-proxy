@@ -467,6 +467,67 @@ plus chers) et « moins cher d'abord » est l'ordre en place : **ne pas les repr
 
 ---
 
+## 12. Le plafond d'un départage est le VIVIER, mesuré sur une ligne vivante — 2026-09-10
+
+**L084 BLASTOISE δ, LE CAS QUI BORNE LA FAMILLE ENTIÈRE.** Le repli sur nom suspect s'ouvre
+et rend **45 candidats** ; `viviersAvecRangs` les garde (un produit porte le n°049 lu, donc
+pas de repli « tout le catalogue ») ; le périmètre restreint **45 → 4**. **Et la vérité
+saisie, `762613`, n'est dans aucun des 4.** Le refus est donc **le bon résultat**, et
+**aucun signal de départage n'aurait sauvé cette ligne** — il n'y avait rien à départager.
+
+🔑 **CE N'EST PAS UN CAS ISOLÉ, C'EST LA MOITIÉ DE LA POPULATION.** Sur les **11** appels au
+départage par l'attaque où une attaque était réellement LUE (seau lot, dénominateur 33
+appels au total) :
+
+| | n | ce que ça dit |
+|---|---|---|
+| l'attaque désigne, **et désigne la VÉRITÉ** | **7 / 11** | la clé n'a jamais eu tort |
+| **la vérité est HORS du groupe** | **4 / 11** | aucune clé ne pouvait la trouver |
+| l'attaque se trompe, ou ne concorde pas | **0 / 11** | — |
+
+Les quatre : **L069 Ho-Oh** n°250 (« Rainbow Burn », 2 ex aequo) · **L070 Slowpoke** n°079
+(« Headbutt », 2) · **L078 Sandshrew** n°027 (« Poison Sting », 3) · **L084 Blastoise δ**
+n°049 (« Enraged Linear Attack », 4). **Dans les quatre, la vérité n'est pas dans le
+groupe.**
+
+🔴 **ET LE CAS FONDATEUR DE LA CLÉ EST L'UN DES QUATRE.** `departage-attaque.js` a été écrit
+sur Ho-Oh n°250, dont la vérité est `654129` = « Ho-Oh **[Rainbow Burn]** ». L'IA a lu
+« Rainbow Burn » — **la lecture est exactement juste** — et `654129` **n'est pas dans le
+vivier**. La clé aurait désigné la bonne carte si elle l'avait eue sous la main. C'est le
+motif Ho-Oh du §8, retrouvé sur la ligne qui a fait naître la clé censée le résoudre.
+
+**LA RÈGLE QUI EN SORT.** Un départage ne peut jamais faire mieux que son vivier : sur cette
+population, son plafond est **7/11**, et les 4 restants ne se gagnent ni par un signal, ni
+par un ordre, ni par un seuil — **seul le périmètre ou une clé qui le contourne les
+ramènera**. Avant de chiffrer le gain d'une clé nouvelle, mesurer d'abord **combien de fois
+la vérité est dans le groupe** : c'est ce nombre-là qui borne, pas la qualité du signal.
+
+---
+
+## 13. Trois dettes ouvertes, nommées et non corrigées — 2026-09-10
+
+- **Le `catch` de `/api/identifier` écrit au journal, mais sa trace n'est pas
+  diagnostique.** **2 lignes** `erreur-serveur` sur 280 (2026-08-03, « Dragonite ») : elles
+  portent route, userId, l'annonce, `cardInfo`, `motifEchec` et `rembourse` — **ni vivier,
+  ni état, ni coût, ni identification**, et `messageErreur` y est **absent** (le champ est
+  postérieur). Un incident laisse donc une trace qui ne permet pas de le comprendre. Ce
+  n'est pas réparable par `champsIdentification()` : les variables sont déclarées **dans le
+  `try`**, donc hors de portée dans le `catch`.
+- **7 sorties de refus sur 10 ne portent aucun des quatre champs de chemin**
+  (`voieCatalogue`, `sourceIdentification`, `carteTcgdexId`, `nomSuspect`) — dont **4 de
+  `/analyser`**, où le veto du nom n'existe pas et dont les succès les journalisent déjà.
+  **Choix assumé** : les mesures en cours portent sur `/identifier`. **À rouvrir seulement
+  si une mesure porte sur `/analyser`.**
+- **Le mot « cellule » désigne QUATRE choses dans ce dépôt.** `CELLULES`
+  (`verrou-charges.js`) en a **7** — c'est ce que compte le « 7/7 » ; `verrou-cellules.js`
+  imprime **3/3** ; l'en-tête de `verrou-charges.js` dit encore « LES TROIS CELLULES »
+  au-dessus d'un tableau de 7 ; et `verrou-avant-push.js` appelle « **7e CELLULE** » le test
+  de panne de source, dont le commentaire dit « les six autres » — écrit quand `CELLULES` en
+  avait 6, c'est aujourd'hui la 8e chose. **Les JALONS, eux, sont bien 5** : `route`,
+  `ia-lue`, `vivier`, `perimetre-vintage`, `verdict`.
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
