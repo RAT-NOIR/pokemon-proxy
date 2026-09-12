@@ -146,6 +146,7 @@ async function collecterSet(code, M, dossierRapport) {
         { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
     const liberer = async () => { clearInterval(battement); await M.EtatImages.updateOne({ _id: idEtat }, { $unset: { verrou: 1 } }); };
 
+    const requetesAuDebut = src.compteRequetes();
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
     const etat = await M.EtatImages.findById(idEtat).lean();
     const entrees = { ...(etat.entrees || {}) };
@@ -212,8 +213,12 @@ async function collecterSet(code, M, dossierRapport) {
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
     const complet = await joindreImages(M, L, slug, S, entrees, mesures, dossierRapport);
-    await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: src.compteRequetes() } });
-    console.log(`   requêtes ${SOURCE} : ${src.compteRequetes()}`);
+    await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: src.compteRequetes(), requetesDuSet: src.compteRequetes() - requetesAuDebut } });
+    // ⚠️ DEUX NOMBRES, ET ILS NE DISENT PAS LA MÊME CHOSE. Le compteur du module est CUMULÉ depuis le
+    // démarrage du processus : l'afficher seul dans un bloc de complétude de set a fait lire « 974
+    // requêtes pour 96 cartes » là où le set en avait coûté 204. Un compteur sans sa portée est un
+    // dénominateur manquant (CLAUDE.md §21).
+    console.log(`   requêtes ${SOURCE} : ${src.compteRequetes() - requetesAuDebut} pour CE set (2 par carte + 4) · ${src.compteRequetes()} cumulées depuis le démarrage du processus`);
     await liberer();
     return { code, etat: 'verifie', complet };
 }
@@ -229,12 +234,18 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // ---- 4. jointure image -> carte --------------------------------------------------------
     const cartes = await M.Carte.find({ sets: slug }).lean();
     const nomsCibles = [].concat(L.bulba.expansion);
-    const impDe = c => (c.impressions || []).find(i => i.tirage === 'jp' && nomsCibles.includes(i.expansion) && (!L.bulba.deck || i.deck === L.bulba.deck));
+    // ⚠️ TOUS LES NUMÉROS DE LA CARTE, PAS LE PREMIER. Une carte e-Card porte DEUX numéros dans son
+    // set (holo et non-holo : Pidgeot est « 123/091 » dans Base Expansion Pack) ; n'indexer que le
+    // premier rendait l'image du 091 orpheline, sans que rien ne dise pourquoi. C'est le même défaut
+    // que la jointure du TEXTE avait déjà corrigé — corrigé à un endroit, laissé à l'autre.
+    const TIRAGE = L.bulba.tirage || 'jp';
+    const impsDe = c => (c.impressions || []).filter(i => i.tirage === TIRAGE && nomsCibles.includes(i.expansion) && (!L.bulba.deck || i.deck === L.bulba.deck));
     const parNumero = new Map(), parNom = new Map();
     for (const c of cartes) {
-        const imp = impDe(c);
-        const num = imp ? chiffresDuNumero(imp.numero) : null;
-        if (num) { if (!parNumero.has(num)) parNumero.set(num, []); parNumero.get(num).push(c); }
+        for (const num of [...new Set(impsDe(c).map(i => chiffresDuNumero(i.numero)).filter(Boolean))]) {
+            if (!parNumero.has(num)) parNumero.set(num, []);
+            if (!parNumero.get(num).includes(c)) parNumero.get(num).push(c);
+        }
         const k = normaliserNom(c.nomEn);
         if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(c);
     }
@@ -284,16 +295,30 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // Les cartes sans image sont un état attendu, imprimé avec son dénominateur.
     const nEntrees = S.ids.reduce((a, id) => a + entrees[id].length, 0);
     const restesParType = restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {});
+    // ⚠️ UN SET À EMPLACEMENTS N'EST PAS UN SET À CARTES. Un deck (Intro Pack : 41 emplacements pour
+    // 22 cartes) place la MÊME carte à plusieurs rangs : `jointes` compte alors des RATTACHEMENTS,
+    // pas des images conservées — 80 rattachements pour 22 cartes, une seule entrée survivant par
+    // (carte, set). Exiger `jointes === images` y crie sur un cas normal, et deux compteurs justes
+    // se lisent comme une contradiction (CLAUDE.md §21 : c'est la portée qui manquait, pas le chiffre).
+    // Le deck se reconnaît au rapport emplacements/cartes, il ne se déclare pas à la main.
+    const emplacements = cartes.length > 0 && nEntrees / cartes.length >= 1.5;
     const complet = {
-        entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length, imagesJointes: jointes, preuves,
+        entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length,
+        rattachements: jointes, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
         cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
-        concordance: nEntrees === images.length && jointes === images.length && !restesParType['image-vers-plusieurs-cartes'],
+        // Sur un set à cartes : chaque original joint UNE carte. Sur un set à emplacements : toutes
+        // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
+        concordance: nEntrees === images.length
+            && (emplacements ? cartesAvecImage.size === cartes.length : jointes === images.length)
+            && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };
     await M.Set.updateOne({ _id: slug }, { $set: { completImages: complet, cartesSansImage } });
     dire(`\n════ COMPLÉTUDE IMAGES ${code} — dénominateur : ${nEntrees} entrées source, ${cartes.length} cartes du set ════`);
-    dire(`   originaux = entrées source   : ${images.length} = ${nEntrees}`);
-    dire(`   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
+    dire(`   originaux = entrées source   : ${images.length} = ${nEntrees}${emplacements ? `   (set à EMPLACEMENTS : ${(nEntrees / cartes.length).toFixed(2)} par carte)` : ''}`);
+    dire(emplacements
+        ? `   cartes couvertes = cartes    : ${cartesAvecImage.size} = ${cartes.length}  ·  ${jointes} rattachements pour ${cartesAvecImage.size} cartes (une entrée survit par carte)  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`
+        : `   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
     dire(`   cartes sans image (attendu)  : ${cartesSansImage.length} / ${cartes.length}${cartesSansImage.length ? ' — ' + cartesSansImage.map(c => c.nomEn).join(', ') : ''}`);
     dire(`   restes par type              : ${JSON.stringify(restesParType)}`);
     for (const r of restes.slice(0, 40)) dire(`      · ${r.type} : ${r.detail}`);
