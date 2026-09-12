@@ -715,11 +715,17 @@ donc reçu deux requêtes toutes les 5 secondes, sur 58 requêtes.** La file d'a
 fonctionné exactement comme écrit — elle donne un set à chaque demandeur — et c'est elle qui a
 rendu la faute possible.
 
-🔑 **LE VERROU PROTÉGEAIT NOS DONNÉES, PAS LEUR BANDE PASSANTE.** `collecte_images_etat` portait un
-verrou PAR SET : deux collecteurs sur deux sets différents ne se voyaient pas. Or la promesse
-« 1 requête / 5 s, jamais en parallèle » est un engagement pris **par écrit dans la demande à
-PKMJP**, et il se compte **chez la source**, pas chez nous. Un verrou par unité de travail et un
-verrou par hôte distant sont deux choses différentes ; il fallait les deux, il n'y en avait qu'un.
+🔑 **LA RÈGLE, ET ELLE VAUT AU-DELÀ DE CE CAS : UNE LIMITE DE DÉBIT PROMISE À UNE SOURCE EXTERNE SE
+COMPTE CHEZ ELLE, JAMAIS CHEZ NOUS.** Notre cadence de 5 s était parfaite dans chaque processus, et
+fausse chez le destinataire, qui est le seul endroit où elle veut dire quelque chose. **Un verrou par
+unité de travail protège NOS DONNÉES ; seul un verrou global protège une PROMESSE.** Il fallait les
+deux, il n'y en avait qu'un. `collecte_images_etat` portait un verrou PAR SET, donc deux collecteurs
+sur deux sets différents ne se voyaient pas.
+
+⚠️ **C'est la famille de « la donnée produite puis jetée » : une garantie MESURÉE DU MAUVAIS CÔTÉ.**
+Le chiffre qu'on surveillait (5 s entre deux de MES requêtes) n'était pas le chiffre promis (5 s
+entre deux requêtes REÇUES). Avant d'écrire un compteur ou un verrou pour tenir un engagement, dire
+**où** l'engagement se mesure — et s'il se mesure chez un tiers, tout ce qui est local est un proxy.
 
 **La correction** : `artofpkm/__collecteur__`, un verrou GLOBAL pris avant toute collecte ; un second
 collecteur refuse de démarrer et nomme celui qui tient. Et un set interrompu retourne en `attente`,

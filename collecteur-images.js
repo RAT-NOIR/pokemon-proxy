@@ -249,6 +249,23 @@ async function collecterSet(code, M, dossierRapport) {
     const { cartes: cx, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_IMAGES'], production: false });
     const M = modeles(cx);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
+    // `--verrou` : QUI tient le verrou global, et depuis quand. Lecture seule, ne prend rien —
+    // c'est LA commande à lancer avant tout collecteur, et pour vérifier qu'un seul tourne.
+    if (process.argv.includes('--verrou')) {
+        const g = await M.EtatImages.findById(VERROU_GLOBAL).lean();
+        const frais = g?.verrou && (Date.now() - new Date(g.verrou.depuis).getTime()) < VERROU_MS;
+        console.log(frais
+            ? `🔒 verrou global ${SOURCE} TENU par pid ${g.verrou.pid} sur ${g.verrou.hote}, battement ${new Date(g.verrou.depuis).toISOString()} (il y a ${Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000)} s)`
+            : `🔓 verrou global ${SOURCE} LIBRE${g?.verrou ? ` (dernier détenteur pid ${g.verrou.pid} sur ${g.verrou.hote}, battement périmé)` : ''}`);
+        const parSet = await M.EtatImages.find({ _id: { $ne: VERROU_GLOBAL }, verrou: { $exists: true } }).lean();
+        for (const e of parSet) {
+            const f = (Date.now() - new Date(e.verrou.depuis).getTime()) < VERROU_MS;
+            console.log(`   ${f ? '🔒' : '🔓 périmé'} ${e._id} : pid ${e.verrou.pid} sur ${e.verrou.hote}, phase ${e.phase}, ${e.requetes ?? '?'} requêtes`);
+        }
+        if (!parSet.length) console.log('   aucun verrou de set.');
+        await fermer(); return;
+    }
+
     // L'effacement ne frappe pas la source : il n'a pas besoin du verrou global.
     if (process.argv.includes('--arreter-et-effacer')) { await effacerTout(M, process.argv.includes('--confirmer')); await fermer(); return; }
     const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
