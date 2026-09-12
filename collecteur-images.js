@@ -343,7 +343,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             const e = await M.EtatImages.findById(`${SOURCE}/${L.slugSet}`).lean();
             if (!e?.entrees) { console.log(`  ${code} : jamais collecté, rien à rejouer`); continue; }
             const r = await joindreImages(M, L, L.slugSet, sourceDe(code, SOURCE), e.entrees, e.mesures || {}, dossierRapport, { silencieux: true });
-            console.log(`  ${code.padEnd(7)} ${r.imagesOk} images · ${r.imagesJointes} jointes · ${r.cartesSansImage} carte(s) sans image / ${r.cartesDuSet} · ${JSON.stringify(r.restes)}`);
+            console.log(`  ${code.padEnd(7)} ${r.imagesOk} images · ${r.cartesCouvertes} carte(s) couverte(s) / ${r.cartesDuSet}${r.emplacements ? ` (deck : ${r.rattachements} rattachements)` : ''} · ${r.cartesSansImage} sans image · ${JSON.stringify(r.restes)} ${r.concordance ? '✅' : '❌'}`);
         }
         await fermer(); return;
     }
