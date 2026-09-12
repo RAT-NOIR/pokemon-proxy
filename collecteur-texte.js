@@ -66,10 +66,11 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     finirGlobal = finir;
 
     console.log(`\n══ ${L.code} « ${L.nom} » — exp ${L.exp}, ${L.prod} produits, page « ${L.bulba.titre} », attendu ${L.attendu} ══`);
-    // L'impression qui rattache une page au set cible : tirage japonais, nom(s) d'expansion de la
-    // table, et le deck quand la table en nomme un (kits).
+    // L'impression qui rattache une page au set cible : le TIRAGE de la table (japonais par défaut,
+    // `intl` pour les sets occidentaux), nom(s) d'expansion, et le deck quand la table en nomme un.
+    const TIRAGE = L.bulba.tirage || 'jp';
     const nomsCibles = [].concat(L.bulba.expansion);
-    const impressionCible = faits => faits.impressions.find(x => x.tirage === 'jp' && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
+    const impressionCible = faits => faits.impressions.find(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
 
     // ---- 1. la page du set -------------------------------------------------------------
     // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
@@ -90,8 +91,9 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     await M.Set.updateOne({ _id: slug }, {
         $set: {
             code: L.code, idExpansion: [L.exp], nomEn: faitsSet?.nomEn ?? null, nomJa: faitsSet?.nomJa ?? null, nomJaTraduit: faitsSet?.nomJaTraduit ?? null,
-            region: 'jp', dateSortieJa: faitsSet?.sortieJa ?? null, dateSortieEn: faitsSet?.sortieEn ?? null,
-            totalImprime: faitsSet?.cartesJa ?? null, cartesEnInfobox: faitsSet?.cartesEn ?? null,
+            region: TIRAGE === 'jp' ? 'jp' : 'intl', dateSortieJa: faitsSet?.sortieJa ?? null, dateSortieEn: faitsSet?.sortieEn ?? null,
+            // Le total imprimé est celui du TIRAGE collecté : `jacards` pour un set japonais, `encards` pour un occidental.
+            totalImprime: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, cartesEnInfobox: faitsSet?.cartesEn ?? null,
             bulba: { titre: pSet.title, pageid: pSet.pageid, revid: pSet.revid, motifTitres: L.bulba.motifTitres, expansion: L.bulba.expansion, cleR2: cleSet },
             collecteLe: new Date()
         }, $setOnInsert: { version: 1 }
@@ -224,7 +226,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     // ---- 4. la jointure ---------------------------------------------------------------------
     const cartesDuSet = await M.Carte.find({ sets: slug }).lean();
     const produits = await produitsDeLExpansion(prod, L.exp);
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: 'jp' });
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE });
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
     if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
@@ -237,9 +239,11 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         const metas = [...new Set(ids.map(id => metaDe.get(id)).filter(m => m != null))];
         await M.Carte.updateOne({ _id: carteId }, { $addToSet: { 'liens.idProduct': { $each: ids }, 'liens.idMetacards': { $each: metas } }, $unset: { 'liens.idMetacard': 1 } });
     }
-    // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la complétude)
+    // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la
+    // complétude). ⚠️ Seulement depuis un set JAPONAIS : sur un set occidental, le « jumeau » serait
+    // le japonais, et il est déjà collecté par sa propre ligne de table.
     let intlLignes = 0;
-    for (const [nomIntl, idExpIntl] of Object.entries(EXPANSIONS_INTL)) {
+    for (const [nomIntl, idExpIntl] of (TIRAGE === 'jp' ? Object.entries(EXPANSIONS_INTL) : [])) {
         if (!cartesDuSet.some(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === nomIntl))) continue;
         const prodIntl = await produitsDeLExpansion(prod, idExpIntl);
         const Ji = joindre(cartesDuSet, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
@@ -267,11 +271,11 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     // s'imprime à côté, avec le compte des IMPRESSIONS du set portées par les pages, qui doit
     // retrouver les entrées de la Setlist (128 = 128) — c'est lui qui vérifie l'énumération.
     const impressionsDuSet = cartesDuSet.reduce((a, c) => {
-        const imps = (c.impressions || []).filter(x => x.tirage === 'jp' && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
+        const imps = (c.impressions || []).filter(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
         return a + Math.max(1, new Set(imps.map(i => i.numero ?? '')).size);
     }, 0);
     const complet = {
-        setlist: entreesSetlist.length, impressions: impressionsDuSet, infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, titresManquants: manquants, pagesDistinctes, cartesEcrites,
+        setlist: entreesSetlist.length, impressions: impressionsDuSet, infobox: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, titresLies: titres.length, titresManquants: manquants, pagesDistinctes, cartesEcrites,
         produits: produits.length, produitsJoints: J.compte.produitsJoints, lignesJointure: J.lignes.length, restes: restesParType,
         preuves: J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}),
         concordance: manquants === 0 && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
@@ -285,11 +289,11 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const c of cartesDuSet) for (const k of c.champsNuls || []) nuls[k] = (nuls[k] || 0) + 1;
 
     console.log(`\n════ COMPLÉTUDE ${L.code} — dénominateur : ${produits.length} produits Cardmarket, ${titres.length} titres de Setlist ════`);
-    console.log(`   entrées de la Setlist (tirages) : ${entreesSetlist.length}  ·  impressions du set sur les pages : ${impressionsDuSet}${impressionsDuSet !== entreesSetlist.length ? '  ⚠️ diffèrent' : ''}  (infobox jacards : ${complet.infobox ?? '—'})`);
+    console.log(`   entrées de la Setlist (tirages) : ${entreesSetlist.length}  ·  impressions du set sur les pages : ${impressionsDuSet}${impressionsDuSet !== entreesSetlist.length ? '  ⚠️ diffèrent' : ''}  (infobox ${TIRAGE === 'jp' ? 'jacards' : 'encards'} : ${complet.infobox ?? '—'})`);
     console.log(`   pages distinctes = cartes    : ${pagesDistinctes} = ${cartesEcrites}${entreesSetlist.length !== pagesDistinctes ? `   (${complet.tiragesParCarte} tirage(s) par carte : normal quand une carte porte plusieurs numéros)` : ''}`);
     console.log(`   titres manquants             : ${manquants}`);
     console.log(`   produits = joints + restes   : ${produits.length} = ${J.compte.produitsJoints} + ${produitsRestes}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
-    console.log(`   lignes de jointure (jp)      : ${J.lignes.length}  ·  preuves : ${JSON.stringify(J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}))}  ·  bonus intl : ${intlLignes}`);
+    console.log(`   lignes de jointure (${TIRAGE})    : ${J.lignes.length}  ·  preuves : ${JSON.stringify(J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}))}  ·  bonus intl : ${intlLignes}`);
     console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);
     for (const r of J.restes) console.log(`      · ${r.type} : ${r.detail}`);
     console.log(`   champs nuls (sur ${cartesDuSet.length} cartes) : ${JSON.stringify(nuls)}`);

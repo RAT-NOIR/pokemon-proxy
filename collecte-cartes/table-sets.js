@@ -63,11 +63,34 @@ const TABLE = [
     { code: 'PCG6', bulba: { titre: 'Holon Research Tower (TCG)', expansion: 'Holon Research Tower' }, attendu: 86, verifie: V('EX Delta Species (TCG)', { 'Holon Research Tower': 83 }, '83 entrées pour jacards 86 et 86 produits') },
     { code: 'PCG9', bulba: { titre: 'Offense and Defense of the Furthest Ends (TCG)', expansion: 'Offense and Defense of the Furthest Ends' }, attendu: 68, verifie: V('EX Dragon Frontiers (TCG)', { 'Offense and Defense of the Furthest Ends': 66 }, '66 entrées pour 68') },
     { code: 'DP2', bulba: { titre: 'Secret of the Lakes (TCG)', expansion: 'Secret of the Lakes' }, attendu: 123, verifie: V('Mysterious Treasures (TCG)', { 'Secret of the Lakes': 123 }) },
-    { code: 'EXS', bulba: { titre: 'Vending Machine cards (TCG)', setlistMotif: '^Vending S[123]( \\d+)?$', expansion: ['Expansion Sheet 1', 'Expansion Sheet 2', 'Expansion Sheet 3'], titresSupplementaires: ['Snorlax (Wizards Promo 49)'] }, attendu: 125, verifie: V('Vending Machine cards (TCG)', { 'Vending S1/S2/S3': 125 }, 'trois feuilles pour une expansion Cardmarket ; entrées « (Vending S1) » … « (Vending S3 n) », les promos Wizards/CoroCoro de la même page sont exclues par le motif') }
+    { code: 'EXS', bulba: { titre: 'Vending Machine cards (TCG)', setlistMotif: '^Vending S[123]( \\d+)?$', expansion: ['Expansion Sheet 1', 'Expansion Sheet 2', 'Expansion Sheet 3'], titresSupplementaires: ['Snorlax (Wizards Promo 49)'] }, attendu: 125, verifie: V('Vending Machine cards (TCG)', { 'Vending S1/S2/S3': 125 }, 'trois feuilles pour une expansion Cardmarket ; entrées « (Vending S1) » … « (Vending S3 n) », les promos Wizards/CoroCoro de la même page sont exclues par le motif') },
+    // ════════════════════════════════════════════════════════════════════════
+    // LES DIX OCCIDENTALES — 2026-09-12, relevé fait, `tirage: 'intl'`
+    // ════════════════════════════════════════════════════════════════════════
+    // Elles portent 35 des 51 lignes que la base ne sert pas (SPEC-PONT §5 : le gisement est
+    // occidental). Leur page Bulbapedia a la MÊME structure que les japonaises : une section de
+    // Setlist au nom du set, et `expansion=` sur la page de carte qui donne ce nom.
+    // ⚠️ ELLES NE SONT PAS DÉRIVÉES DE sets-vintage-japonais.js : elles portent leur `exp`, `prod`,
+    // `nom` et `slugSet` en propre. `attendu` reste NOTRE compte de produits Cardmarket ; les
+    // sections comptent moins (les secrètes et alternatives sont des produits chez nous, des
+    // « Additional cards » ou rien chez eux) — l'écart se lit en restes, comme au japonais.
+    // 🔑 DEUX PAGES SONT DÉJÀ ARCHIVÉES : « Team Rocket (TCG) » est la page de ROG, et ASC/xASC
+    // partagent la leur. Une page, deux sets : c'est la relation n-n, déjà prévue.
+    { code: 'PBL', exp: 6569, prod: 120, nom: 'Pitch Black', slugSet: 'Pitch-Black', region: 'occidental', bulba: { titre: 'Pitch Black (TCG)', tirage: 'intl', setlist: ['Pitch Black'], expansion: 'Pitch Black' }, attendu: 120, verifie: V('Pitch Black (TCG)', { 'Pitch Black': 95, 'Additional Cards': 9 }, 'section 95 pour 120 produits') },
+    { code: 'ASC', exp: 6395, prod: 296, nom: 'Ascended Heroes', slugSet: 'Ascended-Heroes', region: 'occidental', bulba: { titre: 'Ascended Heroes (TCG)', tirage: 'intl', setlist: ['Ascended Heroes'], expansion: 'Ascended Heroes' }, attendu: 296, verifie: V('Ascended Heroes (TCG)', { 'Ascended Heroes': 225, 'Additional Cards': 11 }, 'partage sa page avec xASC') },
+    { code: 'xASC', exp: 6455, prod: 296, nom: 'Ascended Heroes Additionals', slugSet: 'Ascended-Heroes-Additionals', region: 'occidental', bulba: { titre: 'Ascended Heroes (TCG)', tirage: 'intl', setlist: ['Additional Cards'], expansion: 'Ascended Heroes' }, attendu: 296, verifie: V('Ascended Heroes (TCG)', { 'Additional Cards': 11 }, 'même page qu\'ASC, section des additionnelles') },
+    { code: 'JTG', exp: 6006, prod: 190, nom: 'Journey Together', slugSet: 'Journey-Together', region: 'occidental', bulba: { titre: 'Journey Together (TCG)', tirage: 'intl', setlist: ['Journey Together'], expansion: 'Journey Together' }, attendu: 190, verifie: V('Journey Together (TCG)', { 'Journey Together': 158, 'Additional Cards': 21 }) },
+    { code: 'BRS', exp: 4434, prod: 253, nom: 'Brilliant Stars', slugSet: 'Brilliant-Stars', region: 'occidental', bulba: { titre: 'Brilliant Stars (TCG)', tirage: 'intl', setlist: ['Brilliant Stars', 'Trainer Gallery'], expansion: 'Brilliant Stars' }, attendu: 253, verifie: V('Brilliant Stars (TCG)', { 'Brilliant Stars': 136, 'Trainer Gallery': 17 }, 'la Trainer Gallery est une section à part, et ce sont nos produits') },
+    { code: 'TR', exp: 1528, prod: 84, nom: 'Team Rocket', slugSet: 'Team-Rocket', region: 'occidental', bulba: { titre: 'Team Rocket (TCG)', tirage: 'intl', setlist: ['Team Rocket'], expansion: 'Team Rocket' }, attendu: 84, verifie: V('Team Rocket (TCG)', { 'Team Rocket': 83 }, 'la page de ROG, déjà archivée sur R2') },
+    { code: 'MEW', exp: 5402, prod: 242, nom: '151', slugSet: '151', region: 'occidental', bulba: { titre: '151 (TCG)', tirage: 'intl', setlist: ['151'], expansion: '151' }, attendu: 242, verifie: V('151 (TCG)', { '151': 177, 'Additional Cards': 29 }) },
+    { code: 'CRI', exp: 6517, prod: 122, nom: 'Chaos Rising', slugSet: 'Chaos-Rising', region: 'occidental', bulba: { titre: 'Chaos Rising (TCG)', tirage: 'intl', setlist: ['Chaos Rising'], expansion: 'Chaos Rising' }, attendu: 122, verifie: V('Chaos Rising (TCG)', { 'Chaos Rising': 96, 'Additional Cards': 8 }) },
+    { code: 'PAL', exp: 5318, prod: 337, nom: 'Paldea Evolved', slugSet: 'Paldea-Evolved', region: 'occidental', bulba: { titre: 'Paldea Evolved (TCG)', tirage: 'intl', setlist: ['Paldea Evolved'], expansion: 'Paldea Evolved' }, attendu: 337, verifie: V('Paldea Evolved (TCG)', { 'Paldea Evolved': 230, 'Additional Cards': 92 }) },
+    { code: 'EVO', exp: 1742, prod: 132, nom: 'Evolutions', slugSet: 'Evolutions', region: 'occidental', bulba: { titre: 'Evolutions (TCG)', tirage: 'intl', setlist: ['Evolutions'], expansion: 'Evolutions' }, attendu: 132, verifie: V('Evolutions (TCG)', { 'Evolutions': 90, 'Additional cards': 40 }) }
 ].map(l => {
+    if (l.region === 'occidental') return l;          // elles portent leurs propres colonnes
     const s = parCode[l.code];
     if (!s) throw new Error(`table-sets : code ${l.code} absent de sets-vintage-japonais.js`);
-    return { ...l, exp: s.exp, prod: s.prod, nom: s.nom, slugSet: s.slug };
+    return { ...l, exp: s.exp, prod: s.prod, nom: s.nom, slugSet: s.slug, region: 'japonais' };
 });
 
 // Expansions OCCIDENTALES nommées par les pages des 28 sets (jumelles), pour la jointure `intl` en
