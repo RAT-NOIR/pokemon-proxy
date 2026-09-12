@@ -82,6 +82,20 @@ mesuré le 15/08). Le canal prix ne change pas.
 
 ## 5. La trajectoire : TCGdex disparaît, code supprimé, pas désactivé
 
+🔑 **LE GISEMENT EST OCCIDENTAL — résultat du 2026-09-12, et il renverse l'ordre de collecte.**
+Sur les 86 lignes que la base ne sert pas, **51 visent une expansion occidentale**, contre 28
+japonaises ou de région inconnue, éparpillées sur 21 expansions dont aucune ne pèse plus de 3 lignes.
+**Collecter le japonais moderne ne fera PAS monter le pont.** Les 51 occidentales viennent de 26
+expansions ; les dix premières en portent 35, et la première, PBL (120 produits), en porte 11 à elle
+seule. ⚠️ **Et le bonus occidental déjà acquis n'en couvre AUCUNE : 0 sur 51.** Les 341 produits
+occidentaux joints gratuitement par les pages japonaises sont ceux des jumeaux vintage (Base Set,
+Base Set 2) ; les lignes non servies sont modernes, et aucune page vintage ne les nomme.
+**Ce qui rend la collecte occidentale MOINS chère que la japonaise, en revanche, c'est la table** :
+sur les 128 noms d'expansion occidentale que nos pages citent, **103 se retrouvent par slugification
+exacte de notre `slugSet` (80 %)**, contre 2 sur 177 côté japonais — les deux côtés sont en anglais.
+Les 25 restants sont des noms à esperluette ou à article (« HeartGold & SoulSilver », « Sun & Moon »,
+« Diamond & Pearl »), une correspondance à la main, pas une devinette.
+
 🔑 **LE COMPTEUR, PREMIÈRE LECTURE (2026-09-12, `node compteur-pont.js --n=500 --par-set`, 280 lignes
 du journal, toutes antérieures au câblage).** La base aurait servi **194 lignes sur 280 (69,3 %)**.
 Les 86 autres : **71 hors garde amont** (50 de région non japonaise, TCGdex les sert comme avant ;

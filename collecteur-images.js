@@ -50,20 +50,46 @@ const SOURCE = arg('source') || 'artofpkm';
 // Un verrou par set protège nos données d'une double écriture ; il ne protège pas sa bande passante.
 // Les deux sont nécessaires, et ce sont deux verrous différents.
 const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
+// ⚠️ LA DURÉE DE VALIDITÉ EST CELLE DU BATTEMENT, PAS CELLE D'UN SET. Le battement est de 60 s :
+// trois battements manqués valent mort. Dix minutes (la borne des verrous de set) transformerait
+// chaque redéploiement Render en dix minutes d'arrêt — le verrou deviendrait lui-même la panne.
+// 🔴 ET UN PROCESSUS TUÉ NE LIBÈRE RIEN. Sur Render, un pod est remplacé sans préavis : c'est le
+// cas NORMAL, pas l'exception. Un verrou qui n'expire pas est un verrou qui finit par tout bloquer.
+const VERROU_GLOBAL_MS = 3 * 60 * 1000;
+const ATTENTE_VERROU_MS = 30 * 1000;
 
+/** @returns {Promise<null|{pid,hote,depuis,ageS}>} null si pris, sinon le détenteur VIVANT. */
 async function prendreVerrouGlobal(M) {
-    const perime = new Date(Date.now() - VERROU_MS);
+    const perime = new Date(Date.now() - VERROU_GLOBAL_MS);
     try {
         const r = await M.EtatImages.findOneAndUpdate(
             { _id: VERROU_GLOBAL, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }] },
             { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() }, phase: 'collecteur' } },
             { upsert: true, new: true }
         ).lean();
-        return r ? null : 'refus';
+        if (r) return null;
     } catch (e) {
-        if (e.code !== 11000) throw e;
-        const tenu = await M.EtatImages.findById(VERROU_GLOBAL).lean();
-        return `pid ${tenu?.verrou?.pid} sur ${tenu?.verrou?.hote}, depuis ${tenu?.verrou?.depuis}`;
+        if (e.code !== 11000) throw e;   // 11000 : le doc existe et le filtre n'a pas matché = tenu par un vivant
+    }
+    const t = (await M.EtatImages.findById(VERROU_GLOBAL).lean())?.verrou;
+    if (!t) return null;                  // libéré entre-temps : l'appelant réessaiera
+    return { ...t, ageS: Math.round((Date.now() - new Date(t.depuis).getTime()) / 1000) };
+}
+
+/**
+ * Attend que le verrou global se libère, au lieu de mourir. Un redéploiement Render laisse
+ * l'ancien pod tenir le verrou quelques secondes : sortir en erreur transforme ce chevauchement
+ * NORMAL en boucle de redémarrage. On attend, on dit qui tient, et on reprend.
+ */
+async function attendreVerrouGlobal(M, { patienter = true } = {}) {
+    for (let essai = 0; ; essai++) {
+        const tenu = await prendreVerrouGlobal(M);
+        if (!tenu) return true;
+        const msg = `verrou global ${SOURCE} tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s ; mort à ${VERROU_GLOBAL_MS / 1000} s)`;
+        if (!patienter) { console.error(`❌ ARRÊT : ${msg}. « 1 requête / 5 s, jamais en parallèle » se compte chez la SOURCE.`); return false; }
+        if (essai === 0) console.log(`⏳ ${msg} — j'attends qu'il expire ou se libère, ${ATTENTE_VERROU_MS / 1000} s entre deux essais. Je ne meurs pas : un redéploiement ne doit pas devenir une panne.`);
+        if (arretDemande) return false;
+        await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
     }
 }
 
@@ -253,7 +279,7 @@ async function collecterSet(code, M, dossierRapport) {
     // c'est LA commande à lancer avant tout collecteur, et pour vérifier qu'un seul tourne.
     if (process.argv.includes('--verrou')) {
         const g = await M.EtatImages.findById(VERROU_GLOBAL).lean();
-        const frais = g?.verrou && (Date.now() - new Date(g.verrou.depuis).getTime()) < VERROU_MS;
+        const frais = g?.verrou && (Date.now() - new Date(g.verrou.depuis).getTime()) < VERROU_GLOBAL_MS;
         console.log(frais
             ? `🔒 verrou global ${SOURCE} TENU par pid ${g.verrou.pid} sur ${g.verrou.hote}, battement ${new Date(g.verrou.depuis).toISOString()} (il y a ${Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000)} s)`
             : `🔓 verrou global ${SOURCE} LIBRE${g?.verrou ? ` (dernier détenteur pid ${g.verrou.pid} sur ${g.verrou.hote}, battement périmé)` : ''}`);
@@ -263,6 +289,25 @@ async function collecterSet(code, M, dossierRapport) {
             console.log(`   ${f ? '🔒' : '🔓 périmé'} ${e._id} : pid ${e.verrou.pid} sur ${e.verrou.hote}, phase ${e.phase}, ${e.requetes ?? '?'} requêtes`);
         }
         if (!parSet.length) console.log('   aucun verrou de set.');
+        await fermer(); return;
+    }
+
+    // `--liberer-verrou` : la sortie de secours, et elle REFUSE si le détenteur est vivant.
+    // Un verrou dont le battement a moins de 3 minutes appartient à un processus qui collecte :
+    // le libérer remettrait deux collecteurs sur la source. `--force` passe outre, et le dit.
+    if (process.argv.includes('--liberer-verrou')) {
+        const g = await M.EtatImages.findById(VERROU_GLOBAL).lean();
+        if (!g?.verrou) console.log('🔓 déjà libre, rien à faire.');
+        else {
+            const ageS = Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000);
+            const vivant = ageS * 1000 < VERROU_GLOBAL_MS;
+            if (vivant && !process.argv.includes('--force')) {
+                console.error(`⛔ REFUS : pid ${g.verrou.pid} sur ${g.verrou.hote} bat depuis ${ageS} s — il COLLECTE. Le libérer remettrait deux collecteurs sur ${SOURCE}. Attends ${Math.ceil((VERROU_GLOBAL_MS / 1000 - ageS))} s, ou --force si tu sais ce processus mort.`);
+                await fermer(); process.exit(1);
+            }
+            await M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $unset: { verrou: 1 } });
+            console.log(`🔓 verrou global libéré (détenteur pid ${g.verrou.pid} sur ${g.verrou.hote}, battement il y a ${ageS} s${vivant ? ' — LIBÉRÉ EN FORCE' : ', mort'}).`);
+        }
         await fermer(); return;
     }
 
@@ -285,11 +330,8 @@ async function collecterSet(code, M, dossierRapport) {
     }
     // LE VERROU GLOBAL, pris AVANT toute collecte : un seul collecteur frappe la source à la fois,
     // quelle que soit la machine et quel que soit le set. Voir son bloc en tête de fichier.
-    const tenuPar = await prendreVerrouGlobal(M);
-    if (tenuPar) {
-        console.error(`❌ ARRÊT : un autre collecteur ${SOURCE} tient le verrou global (${tenuPar}). « 1 requête / 5 s, jamais en parallèle » se compte chez la SOURCE : on ne double pas la cadence.`);
-        await fermer(); process.exit(1);
-    }
+    // En BOUCLE (worker) on ATTEND ; en lancement manuel on refuse tout de suite.
+    if (!await attendreVerrouGlobal(M, { patienter: process.argv.includes('--boucle') })) { await fermer(); process.exit(1); }
     const battementGlobal = setInterval(() => M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
     const rendreVerrouGlobal = async () => { clearInterval(battementGlobal); await M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $unset: { verrou: 1 } }).catch(() => { }); };
     process.on('SIGTERM', async () => { await rendreVerrouGlobal(); });

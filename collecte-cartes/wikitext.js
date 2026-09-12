@@ -222,9 +222,15 @@ function faitsDeSet(texte) {
     if (!g) return null;
     const p = g.params;
     const entier = v => { const s = plat(v); const n = parseInt(s, 10); return Number.isFinite(n) ? n : null; };
+    // UN SET JAPONAIS SANS JUMEAU OCCIDENTAL N'A PAS DE `jasetname` : son nom japonais est dans
+    // `setname`, parce que c'est le seul nom qu'il ait. Mesuré le 2026-09-12 sur Pokémon VS
+    // (« ポケモンカード★VS ») et Pokémon Web (« ポケモンカード★web »), qui sortaient avec `nomJa`
+    // nul et le japonais rangé dans `nomEn`. `alt` porte alors l'abréviation latine s'il y en a une.
+    const japonais = s => /[぀-ヿ一-鿿]/.test(String(s || ''));
+    const setnameEstJa = !plat(p.jasetname) && japonais(plat(p.setname));
     return {
-        nomEn: plat(p.setname) || null,
-        nomJa: plat(p.jasetname) || null,
+        nomEn: setnameEstJa ? (plat(p.alt) || null) : (plat(p.setname) || null),
+        nomJa: plat(p.jasetname) || (setnameEstJa ? plat(p.setname) : null),
         nomJaTraduit: plat(p.transsetname) || null,
         cartesEn: entier(p.encards),
         cartesJa: entier(p.jacards) ?? entier(p.cards),

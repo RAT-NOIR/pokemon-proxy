@@ -706,6 +706,16 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 18. Trois qui poussent dans le même dépôt, sans coordination — 2026-09-12
+
+Le testeur et deux agents poussent sur `main`. Le 2026-09-12, trois commits sont apparus sur
+`origin/main` entre deux de mes lectures (`46dbfa4` 18:22, `ccfd688` 18:30, `57d9dba` 18:47) ;
+demander QUI avait poussé était le bon réflexe, et la réponse a évité d'en tirer une fausse alarme.
+**Ce qui protégerait d'un push qui écrase un travail en cours : `git pull --rebase` avant tout push,
+et jamais de `--force`** — `git push` refuse déjà un non-fast-forward, donc le seul vrai danger est
+celui qu'on ajoute soi-même en le forçant. Et `git log origin/main..main` avant de pousser, pour
+savoir ce qu'on emporte.
+
 ## 17. Un verrou par unité de travail ne protège pas un tiers — 2026-09-12
 
 **L'occurrence, 16:34 → 16:41.** Deux collecteurs d'images ont tourné en même temps : le local
@@ -728,8 +738,26 @@ entre deux requêtes REÇUES). Avant d'écrire un compteur ou un verrou pour ten
 **où** l'engagement se mesure — et s'il se mesure chez un tiers, tout ce qui est local est un proxy.
 
 **La correction** : `artofpkm/__collecteur__`, un verrou GLOBAL pris avant toute collecte ; un second
-collecteur refuse de démarrer et nomme celui qui tient. Et un set interrompu retourne en `attente`,
-jamais en `refuse` — il était sinon sorti de la file pour toujours.
+collecteur nomme celui qui tient. Et un set interrompu retourne en `attente`, jamais en `refuse` —
+il était sinon sorti de la file pour toujours.
+
+🔴 **ET LE VERROU EST DEVENU LA PANNE DANS L'HEURE QUI A SUIVI.** Écrit avec une expiration de dix
+minutes (celle des verrous de set) et un `process.exit(1)` quand il est tenu, il a mis le worker
+Render en boucle de redémarrage au redéploiement suivant : l'ancien pod tenait encore le verrou, le
+nouveau mourait, Render le relançait, et ainsi de suite. **Un processus tué ne libère rien, et sur
+Render un pod est remplacé sans préavis — c'est le cas NORMAL, pas l'exception.**
+
+🔑 **TROIS PROPRIÉTÉS, ET IL EN MANQUAIT DEUX. Un verrou qui protège une promesse envers un tiers
+doit : (1) BATTRE — un détenteur vivant le rafraîchit ; (2) EXPIRER sur le rythme de ce battement,
+pas sur une durée empruntée à un autre verrou (trois battements manqués, 3 min, pas 10) ; (3) FAIRE
+ATTENDRE son concurrent, jamais le tuer.** Sans (2) et (3), la garantie devient l'incident : on n'a
+pas protégé la source, on s'est bloqué soi-même. `--verrou` dit qui tient, `--liberer-verrou` est la
+sortie de secours et REFUSE tant que le battement est frais.
+
+⚠️ **Corollaire pour l'exploitation** : un verrou tenu par un pod qu'on ne reconnaît plus n'est pas
+une anomalie à forcer — c'est peut-être son successeur qui travaille. On lit le BATTEMENT avant de
+conclure. Le 2026-09-12, le « pod fantôme » qui bloquait tout était en fait un pod vivant qui
+collectait depuis 20 secondes : le libérer aurait refait la faute du matin.
 
 ⚠️ **ELLE EST INERTE TANT QUE LE WORKER RENDER N'EST PAS REDÉPLOYÉ** : il tourne sur `46dbfa4`, qui
 ne connaît pas ce verrou. Un correctif qui vit dans le dépôt et pas dans le processus ne protège
