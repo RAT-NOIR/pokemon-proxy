@@ -80,6 +80,41 @@ mesuré le 15/08). Le canal prix ne change pas.
   `MONGODB_CARTES_URI`, lecture seule, utilisateur `lecteur`) tant que l'API privée de rat-market.fr
   n'existe pas ; le jour où elle existe, `pont-cartes.js` change de transport, pas de contrat.
 
+## 5. La trajectoire : TCGdex disparaît, code supprimé, pas désactivé
+
+**Le critère de bascule, posé d'avance, sur les lignes du journal** (ce que les gens scannent),
+pas sur les 752 expansions :
+
+> Sur les **N = 500 derniers scans**, la part des lignes où TCGdex a été appelé ET a rendu quelque
+> chose que la base ne rend pas — une carte identifiée hors périmètre, ou des motifs routables
+> (`variantsDetailedNb > 0`) — est **< 5 %**, sur **deux lots fermés consécutifs**. Et zéro faux
+> affirmé au banc sur ces lots.
+
+Tant que la base ne couvre que 28 sets, ce seuil ne sera pas atteint : c'est voulu. Il se rapproche
+à mesure que la base s'étend (japonais moderne, puis occidental) — la bascule est une conséquence
+de la couverture, pas une date.
+
+**Le compteur, une commande** : `node compteur-pont.js --n=500`. Il rend : lignes après câblage
+(base / TCGdex), lignes avant (la base AURAIT servi / TCGdex, dont hors garde amont), TCGdex utile,
+part servie par la base, part d'appels TCGdex. Aucune requête réseau : la base seule.
+
+**Ce qui se supprime le jour venu** (index.js sauf mention) : `getTCGdex`, `chercherCartesTCGdex`,
+`chercherCartesTCGdexNomSeul`, `genererVariantesNom`, `chargerSetsTCGdex`, `setsPourTotal`,
+`langueDesSetsTCGdex`, `detailCarteTCGdex`, `identifierParTotalEtNumero`, `trouverCarteTCGdex`,
+`getPrixDepuisTCGdex`, `TCGDEX_EN_PANNE` et la distinction panne/absence qui en dépend, le cache
+`_setsTCGdex`, `totalHorsTailleDeSet` ; `prefill-tcgdex.js` ; `verrou/tcgdex.json`,
+`verrou/faux-reseau.js` et les cellules du verrou qui simulent TCGdex ; la clé d'API si elle
+existe. Ce qui se REMPLACE : `expansionsDuSetTCGdex` (lit `numeros_cartes.setTcgdex`) par les
+expansions du pont ; `setsCompatiblesAvecTotal` (scoring.js) par `sets.totalImprime` de la base ;
+le routage des reverses (`variants_detailed`) par une table d'impressions dans la base — c'est le
+seul champ que la base ne porte pas encore, et il bloque la bascule sur le moderne.
+
+**Ce qui ne PEUT PAS se supprimer** : les champs du journal `carteTcgdexId`, `setTcgdex`,
+`langueRoute`, `variantsDetailedPresent/Nb` — le banc les RELIT sur les lignes anciennes
+(`apres()`, périmètre relu au journal). Ils restent déclarés dans journal-scans.js, plus jamais
+écrits, avec la date de leur dernière écriture. Même sort pour `numeros_cartes.setTcgdex` : une
+colonne apprise, lue par le banc sur l'historique, jamais réécrite.
+
 ## 4. Critère de lancement, inchangé
 
 Zéro faux affirmé sur le banc, mesuré par `apres()` sur la chaîne câblée, holdout compris. Les 3

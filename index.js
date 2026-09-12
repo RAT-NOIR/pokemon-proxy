@@ -80,6 +80,10 @@ const { departager: departagerParImage } = require('./departage-image');
 // Il ne touche aucun score : il choisit dans une égalité que le scoring déclare parfaite.
 // Voir departage-attaque.js — les quatre verrous et le traitement du non-latin y sont écrits.
 const { departagerParAttaque } = require('./departage-attaque');
+// LE PONT (SPEC-PONT.md, câblé le 2026-09-12) : notre base `cartes` répond D'ABORD sur les 28 sets
+// qu'elle couvre ; TCGdex n'est appelé que si elle rend zéro carte. Jamais deux réponses. La MÊME
+// fonction est appelée par `apres()` du banc, dans le même commit (règle de symétrie).
+const { interrogerPont } = require('./pont-cartes');
 // Le nom LISIBLE d'un set, pour les candidats montrés à l'utilisateur. Feuille sans effet
 // de bord, exprès : voir nom-de-set.js pour la raison (cycle avec candidats-fiche.js, et
 // le smoke test qui a vu une connexion s'ouvrir sur `test` à cause d'un require paresseux).
@@ -3866,8 +3870,50 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             console.log(`🎯 [setcode-numero] ${cardInfo.setCode}+${cardInfo.number} -> ${pisteCode.length} produits, le chemin ne tranche pas : on laisse le scoring faire, SOUS RÉSERVE (cle-non-unique).`);
         }
 
-        // 2. Identification précise via TCGdex (+ variantes de nom, multilingue)
-        let trouvaille = await trouverCarteTCGdex(cardInfo.name, numeroCarte, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
+        // ════════════════════════════════════════════════════════════════════
+        // 1 bis. LE PONT — notre base d'abord, TCGdex seulement si elle rend zéro carte
+        // ════════════════════════════════════════════════════════════════════
+        // SPEC-PONT.md. Sur les 28 sets couverts, le pont TCGdex est faux par construction
+        // (neo4 -> N4 + NDE, base5 -> ROG + TR, ecard3 -> EC4 + EC5 + SK) ou muet : une réponse
+        // TCGdex n'y est pas une seconde opinion, c'est l'erreur qu'on remplace. Les deux
+        // sources sont donc DISJOINTES, jamais arbitrées. Mesuré avant câblage (proxy du vivier,
+        // 103 vérités couvertes sur 140) : fermes justes 7 -> 49, faux affirmés 6 -> 1 (une
+        // vérité fausse), refus 18 -> 0.
+        // LA GARDE AMONT, EXPLICITE : région japonaise ET setCode compatible vintage — la base ne
+        // porte que 28 sets, elle ne doit pas répondre sur le reste (« Pikachu » moderne).
+        // Le numéro passé est le numéro LU (pas `numeroCarte`) : sur un set sans numéros c'est un
+        // numéro de Pokédex, et c'est le pont qui le sait (clé V, dans interrogerPont).
+        let pont = { source: 'aucune', cartes: [], produits: [], expansions: [], raison: 'clé code+numéro déjà tranchée' };
+        let pontBase = false;
+        if (!produitsImposes) {
+            const compatPont = setCodeCompatibleVintage(cardInfo.setCode, SCORING, [...(await lireTousLesCodesSet())]);
+            pont = await interrogerPont(
+                { nom: cardInfo.name, nomBrut: cardInfo.nomBrut, numero: cardInfo.number, total: cardInfo.total, setCode: cardInfo.setCode, attaqueLue: cardInfo.attaque ?? null, langue: cardInfo.language },
+                { regionJaponaise: regionAttendue(cardInfo) === 'japonais', setCodeCompatible: compatPont.compatible === true }
+            );
+            if (pont.source === 'base-cartes' && pont.produits.length) {
+                const docs = ecarterNonCartes(await CatalogueProduit.find({ idProduct: { $in: pont.produits } }).lean(), '[pont]');
+                if (docs.length) {
+                    produitsImposes = docs;
+                    voieImposee = 'base-cartes';
+                    pontBase = true;
+                    console.log(`🌉 [pont] base cartes : ${pont.raison} -> vivier imposé de ${docs.length} produit(s), TCGdex non appelé.`);
+                }
+            } else console.log(`🌉 [pont] ${pont.raison} -> TCGdex.`);
+        }
+
+        // 2. Identification précise via TCGdex (+ variantes de nom, multilingue) — SEULEMENT si le pont n'a rien rendu
+        let trouvaille = pontBase
+            ? {
+                id: null, localId: null, variants: null, variantsDetailed: null,
+                nomExact: cardInfo.name, source: 'base-cartes',
+                // Un seul produit ET une réponse exhaustive (aucun homonyme japonais hors des 28
+                // sets) : la base désigne, verdict ferme. Sinon : suggestion, le scoring et les
+                // départages classent, la sortie reste sous réserve. SPEC-PONT.md §2, §8/§12 des notes.
+                ambigu: produitsImposes.length > 1 || pont.exhaustif !== true,
+                langueRoute: null
+            }
+            : await trouverCarteTCGdex(cardInfo.name, numeroCarte, cardInfo.setCode, photos[0], cardInfo.language, cardInfo.total, cardInfo.nomBrut);
         // ⚠️ PANNE ET ABSENCE SE SÉPARENT ICI, ET NULLE PART AILLEURS. `trouvaille` reprend
         // sa valeur `null` habituelle pour que tout l'aval soit inchangé ; le drapeau, lui,
         // survit et commande deux choses, une par étape :
@@ -4190,6 +4236,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // la source même qui vient d'être écartée.
         let { liste: expansionsAttendues } = await interrogerSource('tcgdex/expansions',
             () => expansionsDuSetTCGdex(trouvaille.id, regionAttendue(cardInfo), cardInfo.setCode));
+        // Le pont a répondu : les expansions attendues sont celles de ses cartes, pas celles d'une
+        // carte TCGdex qui n'a pas été demandée.
+        if (pontBase) expansionsAttendues = pont.expansions;
 
         // 3. Candidats Cardmarket. Par le NOM tant qu'il est fiable ; sinon par le
         //    NUMÉRO dans l'expansion identifiée, ce qui contourne complètement un nom
@@ -4437,7 +4486,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         }
 
         const sansPerimetreTCGdex = numeroCarte != null && expansionsAttendues.length === 0;
+        // `!pontBase` : un vivier rendu par la base est DÉJÀ dans les 28 sets, et il est prouvé
+        // (nom, numéro ou Pokédex, attaque) — le périmètre « restreint sans prouver » n'a rien à
+        // y restreindre, et sa réserve automatique n'a pas lieu d'être. SPEC-PONT.md §2.
         if ((numeroCarte == null || sansPerimetreTCGdex)
+            && !pontBase
             && compat.compatible
             && LANGUES_ASIATIQUES.includes(String(cardInfo.language || '').toUpperCase())
             && produits.length > 1) {
@@ -4593,6 +4646,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             voieCatalogue,
             sourceIdentification: trouvaille.source || 'nom',
             carteTcgdexId: trouvaille.id ?? null,
+            // LE PONT (2026-09-12) : trois états, jamais un booléen — 'base-cartes' (la base a
+            // répondu, TCGdex non appelé), 'aucune' (garde amont ou zéro carte : TCGdex), et
+            // absent sur les lignes antérieures au câblage.
+            sourcePont: pont.source,
+            cartesPontIds: (pont.cartes || []).slice(0, 20).map(c => c._id),
+            raisonPont: pont.raison,
             nomSuspect
         });
 
@@ -5894,6 +5953,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // celui-ci est l'identifiant que TCGdex a réellement rendu. Sans lui, aucune
             // route n'est rejouable — voir la note du champ dans journal-scans.js.
             carteTcgdexId: trouvaille.id ?? null,
+            // LE PONT (2026-09-12) : trois états, jamais un booléen — 'base-cartes' (la base a
+            // répondu, TCGdex non appelé), 'aucune' (garde amont ou zéro carte : TCGdex), et
+            // absent sur les lignes antérieures au câblage.
+            sourcePont: pont.source,
+            cartesPontIds: (pont.cartes || []).slice(0, 20).map(c => c._id),
+            raisonPont: pont.raison,
             // Présence = le champ est revenu sous forme de tableau. Vacuité = il est revenu
             // VIDE, ce qui n'est pas la même chose et ne se déduit pas de la présence :
             // un tableau vide dit « cette carte n'a aucune impression routable », un champ

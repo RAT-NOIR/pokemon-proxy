@@ -1,12 +1,37 @@
 # Spécification de collecte — texte Bulbapedia, 28 sets vintage d'abord (2026-09-12)
 
-> 🔑 **LE CHANTIER A PAYÉ — mesuré le 2026-09-12, rien câblé.** Sur les vérités du banc, **103 sur
-> 140 (73,6 %)** ont leur produit dans les 28 sets collectés. Sur ces 103 lignes, si le pont
-> interrogeait notre base au lieu de TCGdex : fermes justes **7 → 45**, faux affirmés **6 → 3**,
-> refus **18 → 0**. C'est le plus gros gain mesuré depuis le début du projet.
-> ⚠️ **Réserve : proxy du vivier, pas la chaîne.** Un candidat unique compte comme ferme ; le
-> scoring, le périmètre et les départages ne sont pas rejoués. Le chiffre réel se mesure sur la
-> chaîne câblée, par `apres()` du banc (SPEC-PONT.md). Les 37 vérités hors des 28 sets ne bougent pas.
+> 🔑 **LE CHANTIER A PAYÉ — câblé et mesuré sur la CHAÎNE, banc complet, 2026-09-12.** Sur les
+> 134 vérités individuelles du banc, **99 sont couvertes par les 28 sets**. Sur ces 99 lignes, avec
+> le pont (notre base répond d'abord, TCGdex seulement si elle rend zéro carte) :
+>
+> | 99 couvertes | fermes justes | faux affirmés | réserve juste | réserve faux | refus |
+> |---|---|---|---|---|---|
+> | avant (journal) | 7 | 6 | 51 | 18 | 17 |
+> | après (banc, chaîne réelle) | **15** | **0** | **68** | 16 | **0** |
+>
+> Sur les 134 : un seul faux affirmé restant, L109, chemin local, connu depuis le §8 des notes —
+> il n'est pas du pont. **Zéro faux affirmé et zéro refus : le meilleur état du produit depuis le
+> début.**
+>
+> ⚠️ **LA CORRECTION DU 49.** Le proxy du 2026-09-12 annonçait 45 puis 49 fermes justes. C'était un
+> ARTEFACT : il comptait comme désignation tout produit unique par nom et numéro de Pokédex, sur une
+> base qui ne porte que 28 sets. Rejoué sur la chaîne sans garde, il faisait 8 faux affirmés sur les
+> couvertes, et Ho-Oh, Berry, Brock's Rhyhorn sur les autres — toutes des cartes dont la vraie est
+> HORS des 28 sets. **Un survivant unique d'un ensemble amputé est un reste, pas une désignation :
+> c'est la leçon du Ho-Oh (§8, §12), une fois de plus, et cette fois dans notre propre mesure.**
+>
+> 🔑 **LA GARDE D'EXHAUSTIVITÉ, nommée** (`pont-cartes.js`, `exhaustif`) : la base ne peut AFFIRMER
+> que si le catalogue Cardmarket ne connaît AUCUN homonyme du nom rendu dans une expansion japonaise
+> ou de région inconnue hors des 28 sets. Sinon la réponse est rendue sous réserve
+> (`base-cartes-non-exhaustif`, 32 lignes sur 99). C'est ce qui permet d'utiliser une base INCOMPLÈTE
+> sans mentir, et c'est réutilisable partout : **toute clé posée sur un référentiel partiel doit
+> porter sa garde d'exhaustivité** — dire dans quel ensemble elle a cherché, et refuser d'affirmer
+> quand l'ensemble ne contient pas tout ce qu'il pourrait.
+>
+> 📅 **La troisième vérité fausse, trouvée par un autre chemin que le contrôle de saisie** (L070,
+> §16 des notes, après Berry et l'ancre du 04/08). Trois fois, c'est un motif : ce qui trouve une
+> vérité fausse n'est jamais un contrôle interne, c'est une seconde source qui ne partage pas nos
+> hypothèses. Le pont en est une ; il reste aussi un instrument de mesure du banc.
 
 > 🔴 **AGENT SERVEUR, AVANT TOUT — deux règles qui priment sur le reste du fichier.**
 > 1. **PREMIER JET SUR EXP SEUL** : `--set=EXP`, 102 pages, puis ARRÊT après l'impression des quatre

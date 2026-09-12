@@ -157,6 +157,9 @@ const { designerParPokedexSansNumero } = require('./index');
 // route avec l'entrée de la route ; la reconstruction ne survit que pour les lignes antérieures
 // au champ, et elle est COMPTÉE (voir `perimetreReconstruit`).
 const { expansionsDuSetTCGdex, regionAttendue, trouverCarteTCGdex } = require('./index');
+// RÈGLE DE SYMÉTRIE, QUATRIÈME OCCURRENCE — 2026-09-12. LE PONT entre ici AU MÊME COMMIT qu'en
+// production, par la MÊME fonction, à la même place : avant TCGdex, avant la clé V et le périmètre.
+const { interrogerPont } = require('./pont-cartes');
 
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
@@ -479,9 +482,17 @@ function celluleDe(d) {
     const DATE_PERIMETRE = new Date('2026-08-04T00:00:00Z');
     // `--asymetrie` : lister les lignes dont le FERME diffère entre AVANT (journal) et APRÈS.
     const TRACER_ASYMETRIE = process.argv.includes('--asymetrie');
+    // Le pont : combien de lignes la base a servies au rejeu, et combien en verdict ferme.
+    let pontServi = 0, pontFerme = 0;
+    // --json=<chemin> : une ligne par carte mesurée (clé, seau, vérité, avant, après), pour
+    // toute mesure faite APRÈS le banc sans le réimplémenter.
+    const cheminJson = (process.argv.find(a => a.startsWith('--json=')) || '').slice(7) || null;
+    const LIGNES_JSON = [];
 
     // L'état APRÈS : les décisions ajoutées, appliquées à la sortie enregistrée.
+    let derniereRaisonPont = null;
     async function apres(d) {
+        derniereRaisonPont = null;
         const cardInfo = cardInfoDe(d);
         let retenu = d.idProduct, incertain = Boolean(d.carteIncertaine), voie = d.voieCatalogue;
 
@@ -511,6 +522,54 @@ function celluleDe(d) {
         // Perdre une source propage l'incertitude : sans le numéro, l'identification ne
         // tient plus qu'au nom, et sur ces cartes vintage le nom ne suffit pas.
         if (avisDex.estDex) { voie = 'numero-pokedex-neutralise'; incertain = true; }
+
+        // 0 bis-A. LE PONT — même fonction que la route, même place : avant TCGdex, avant la clé V
+        //    et le périmètre, et JAMAIS quand la clé code+numéro a tranché (la route ne l'interroge
+        //    pas non plus dans ce cas : `voieCatalogue` le dit au journal). Quand la base répond, le
+        //    vivier est le sien : un produit -> désigné, FERME ; plusieurs -> scoring, puis les
+        //    départages dans l'ordre de la route (symbole, attaque, image), sous réserve.
+        if (d.voieCatalogue !== 'setcode-numero') {
+            const compatPont = setCodeCompatibleVintage(d.setCode, S, codesReels);
+            const pont = await interrogerPont(
+                { nom: d.nom, nomBrut: d.nomBrut, numero: d.numero, total: d.total, setCode: d.setCode, attaqueLue: d.attaqueLue ?? null, langue: d.langue },
+                { regionJaponaise: regionAttendue(cardInfoNeutre) === 'japonais', setCodeCompatible: compatPont.compatible === true }
+            );
+            if (pont.source === 'base-cartes' && pont.produits.length) {
+                pontServi++;
+                derniereRaisonPont = pont.raison;
+                const vivier = pont.produits.map(id => catById.get(id)).filter(Boolean);
+                // MÊME RÈGLE QUE LA ROUTE (`trouvaille.ambigu`) : ferme SEULEMENT si un seul produit ET
+                // réponse exhaustive ; sinon suggestion. Le premier rejeu affirmait sur un vivier à
+                // plusieurs produits séparés par le scoring — 8 faux affirmés que la route n'aurait
+                // pas commis. Asymétrie attrapée par le banc lui-même, le 2026-09-12.
+                const ferme = vivier.length === 1 && pont.exhaustif === true;
+                if (vivier.length === 1) { if (ferme) pontFerme++; return rendre(vivier[0].idProduct, !ferme, ferme ? 'base-cartes' : 'base-cartes-non-exhaustif'); }
+                if (vivier.length > 1) {
+                    const cs = await lireCodeSets(vivier.map(p => p.idExpansion));
+                    const r = await scorerCandidatsLocal(vivier, cardInfoNeutre, null, pont.expansions, cs, {});
+                    const classe = () => r.scores.map(s => s.candidat.idProduct);
+                    const classeAvecTete = g => [g, ...classe().filter(x => x !== g)];
+                    const eg = r.scores.length > 1 && S.sontExAequo(r.scores[0].score, r.scores[1].score);
+                    if (r.scores.length && !eg) return rendre(r.scores[0].candidat.idProduct, true, 'base-cartes-plusieurs', classe());
+                    if (eg) {
+                        const exAequo = r.scores.filter(s => S.sontExAequo(s.score, r.scores[0].score));
+                        const cand = exAequo.map(s => ({
+                            idProduct: s.candidat.idProduct,
+                            name: catById.get(s.candidat.idProduct)?.name ?? null,
+                            idMetacard: catById.get(s.candidat.idProduct)?.idMetacard ?? null,
+                            codeSet: cs.get(Number(s.candidat.idExpansion)) ?? null
+                        }));
+                        const aSym = departagerParSymbole(d.symboleSet, cand, S);
+                        if (aSym.gagnant) return rendre(aSym.gagnant.idProduct, true, 'base-cartes-symbole', classeAvecTete(aSym.gagnant.idProduct));
+                        const aAtt = departagerParAttaque(d.attaqueLue, d.attaqueConfiance, cand);
+                        if (aAtt.gagnant) return rendre(aAtt.gagnant.idProduct, true, 'base-cartes-attaque', classeAvecTete(aAtt.gagnant.idProduct));
+                        const aImg = await departagerParImage({ imageUrl: d.imageUrl, langue: d.langue, total: d.total, classement: exAequo.map(s => ({ idProduct: s.candidat.idProduct, score: 0 })) });
+                        if (aImg.departage) return rendre(aImg.gagnant, true, 'base-cartes-image', classeAvecTete(aImg.gagnant));
+                        return rendre(r.scores[0].candidat.idProduct, true, 'base-cartes-egalite', classe());
+                    }
+                }
+            }
+        }
 
         // 0 ter. LA CLÉ V — même fonction que la route, même place : AVANT le périmètre, sur
         //    le vivier par le nom ENTIER. Un seul produit sans numéro -> désigné, verdict FERME.
@@ -877,8 +936,10 @@ function celluleDe(d) {
             const parNom = VERITE_PAR_NOM.find(v => identiteDe({ ...v.lu }) === ident);
             if (parNom) return { valeur: parNom.idProduct, source: 'nom' };
         }
-        // Rattachement PAR IDENTITÉ de la carte lue, jamais par la clé positionnelle.
-        const vs = rattachement.parIdentite.get(identiteDe(d));
+        // Rattachement PAR IDENTITÉ de la carte lue, jamais par la clé positionnelle — et PAR
+        // LIGNE : une saisie ne se rattache jamais à une ligne scannée après elle (règle du §14,
+        // banc-seaux.js). `parCle` porte ce rattachement ; `parIdentite` ne sait pas dire non.
+        const vs = rattachement.parCle.get(cle);
         if (vs !== undefined) {
             // ⚠️ TROIS VALEURS SPÉCIALES, ET ELLES NE DISENT PAS LA MÊME CHOSE.
             //   'inconnu'        -> le testeur n'a pas su reconnaître la carte. Limite de
@@ -952,6 +1013,7 @@ function celluleDe(d) {
         lec[l.verdict]++;
         const a = await apres(d);
         const okAvant = d.idProduct === attendu, okApres = a.retenu === attendu;
+        LIGNES_JSON.push({ cle, seau, attendu, source: v.source, nom: d.nom, numero: d.numero ?? null, total: d.total ?? null, attaqueLue: d.attaqueLue ?? null, avant: d.idProduct ?? null, avantIncertain: d.carteIncertaine ?? null, avantRefus: d.motifEchec ?? null, apres: a.retenu ?? null, apresIncertain: a.incertain, voie: a.voie, raisonPont: derniereRaisonPont });
         // ⚠️ UN REFUS N'AFFIRME RIEN. Un scan qui ne rend aucun produit (`retenu === null`)
         // est un échec, pas un mensonge : l'utilisateur est remboursé et n'a vu aucun prix.
         // Le compter parmi les « faux et affirmés » gonflait le seul chiffre qui décide du
@@ -1118,6 +1180,11 @@ function celluleDe(d) {
     }
     rapporter('HOLDOUT — lot frais, jamais vu par aucun correctif. C\'EST LUI QUI DÉCIDE.', LOTS.holdout);
     console.log(`\n⚠️ ASYMÉTRIE RÉSIDUELLE : carte TCGdex ni au journal ni retrouvée (panne) sur ${perimetreReconstruit} ligne(s). Sur elles, le périmètre est décidé sans l'entrée de la route.`);
+    console.log(`🌉 LE PONT au rejeu : la base a servi ${pontServi} ligne(s), dont ${pontFerme} en verdict ferme.`);
+    if (rattachement.exclusParDate?.length) {
+        console.log(`📅 RÈGLE DU §14 : ${rattachement.exclusParDate.length} ligne(s) scannée(s) APRÈS la saisie de leur vérité, non rattachée(s) : ${rattachement.exclusParDate.map(x => `${x.cle} (saisie ${String(x.saisiLe).slice(0, 10)} pour « ${x.enregistree} », scan ${new Date(x.le).toISOString().slice(0, 10)})`).join(' · ')}`);
+    }
+    if (cheminJson) { require('fs').writeFileSync(cheminJson, JSON.stringify(LIGNES_JSON, null, 1)); console.log(`📄 ${LIGNES_JSON.length} lignes écrites dans ${cheminJson}`); }
 
     // ⚠️ LES TROIS NOMBRES DU DÉPARTAGE PAR L'ATTAQUE — jamais un taux seul. Ils séparent
     // trois états qu'un « 0 gagnant » confond : la clé n'est pas consultée, elle est

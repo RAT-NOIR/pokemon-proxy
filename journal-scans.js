@@ -451,6 +451,13 @@ const journalScanSchema = new mongoose.Schema({
     // réellement servi — septième principe, un instrument qui se trompe coûte plus cher
     // qu'un bug.
     carteTcgdexId: String,
+    // LE PONT (2026-09-12, SPEC-PONT.md) : quelle source a rendu le vivier. 'base-cartes' = notre
+    // base a répondu et TCGdex n'a PAS été appelé ; 'aucune' = garde amont ou zéro carte, TCGdex
+    // a été appelé comme avant ; absent = ligne antérieure au câblage. `cartesPontIds` = les pages
+    // Bulbapedia rendues (≤ 20), la seule façon de rejouer une réponse du pont.
+    sourcePont: String,
+    cartesPontIds: [Number],
+    raisonPont: String,
     // Le champ `variants_detailed` est-il revenu, et avec combien d'impressions ?
     // Présence et vacuité sont DEUX faits distincts : un tableau vide dit « aucune
     // impression routable pour cette carte », un champ absent dit « je n'ai pas pu
@@ -1079,6 +1086,9 @@ function enregistrerScan(d = {}) {
             // ferait passer une identification 100 % locale pour une identification anglaise.
             langueRoute: d.langueRoute || null,
             carteTcgdexId: d.carteTcgdexId || null,
+            sourcePont: d.sourcePont || null,
+            cartesPontIds: Array.isArray(d.cartesPontIds) ? d.cartesPontIds.map(Number).filter(Number.isFinite).slice(0, 20) : null,
+            raisonPont: d.raisonPont || null,
             variantsDetailedPresent: d.variantsDetailedPresent != null ? Boolean(d.variantsDetailedPresent) : null,
             // Number.isFinite et non `|| null` : 0 est une valeur SIGNIFIANTE ici (le champ
             // est revenu vide), et `0 || null` l'effacerait en la confondant avec l'absence.
