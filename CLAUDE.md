@@ -900,6 +900,43 @@ rien — c'est la même famille que le signal calculé et jamais branché (§0 d
 
 ---
 
+## 24. PKMJP n'est pas plus complet que Bulbapedia — 9 cartes sur 1 865 — 2026-09-12
+
+**La question posée était bonne** : deux restes de PCG9 sont `Mew ☆` et `Charizard ☆`, des Gold Star.
+Si la source d'images listait des cartes que Bulbapedia n'a pas, elle deviendrait une source de
+**TEXTE**, et peut-être la réponse aux 693 restes occidentaux. **Les deux documents ont été
+ouverts** : les deux cartes sont **absentes de `cartes`** pour ce set, et **aucune carte portant `☆`
+n'existe dans TOUTE la base**. Ce n'est donc pas une jointure à réparer ni un caractère à normaliser
+— c'est le trou de texte déjà connu.
+
+**LE COMPTE QUI DÉCIDE, dénominateur d'abord** — 1 865 entrées source collectées, **52 sans carte
+(2,8 %)**, départagées en ouvrant chaque cas :
+
+| | n | ce que c'est |
+|---|---|---|
+| la carte est **dans le set**, en base | **41** | 🔧 jointure d'images ratée, rien ne manque au texte |
+| la page existe, rattachée à un autre set | 2 | 🔧 idem |
+| **aucune page Bulbapedia** | **9** | 🕳️ le seul vrai trou |
+
+**Les 9 : 5 Gold Star** (Kyogre ☆, Groudon ☆, Metagross ☆ sur PCG6 ; Mew ☆, Charizard ☆ sur PCG9),
+**2 « Pi »** (Jungle, Southern Islands), **Team Rocket's Hitmonchan**, **Blaine's Quiz #3**.
+
+🔑 **LA RÉPONSE EST NON, ET C'EST UN CHIFFRE, PAS UN AVIS.** PKMJP apporte **9 cartes sur 1 865
+(0,5 %)** que Bulbapedia n'a pas. Ce n'est pas une source de texte alternative, et ce n'est pas la
+réponse aux restes occidentaux — que PKMJP ne couvre de toute façon pas.
+
+⚠️ **ET LE GROS DU BLOC EST CHEZ NOUS.** Les 41 jointures ratées sont réparables : **20 sur 41 sont
+Expansion Sheet** (entrées source sans numéro, la carte est bien dans le set), 10 Gym, 1 Base
+Expansion Pack. Lire « 52 entrées sans carte » comme « 52 cartes manquantes » aurait envoyé chercher
+une source externe pour un défaut de jointure interne. ⚠️ **Chiffre pris pendant que la file
+d'images tournait** : il était 44 quelques minutes plus tôt. Le dénominateur bouge, pas le rapport.
+
+🔴 **NOTRE TROU DE TEXTE EST DEVENU UN TROU D'IMAGE.** Les 9 cartes ont une image chez PKMJP et
+aucune page chez Bulbapedia : sans page, pas de `carteId`, donc l'image ne s'attache à rien et le
+site ne l'affichera jamais. **Une image orpheline ne comble pas un trou de texte, elle le double.**
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
