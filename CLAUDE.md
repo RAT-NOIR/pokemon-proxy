@@ -909,31 +909,77 @@ ouverts** : les deux cartes sont **absentes de `cartes`** pour ce set, et **aucu
 n'existe dans TOUTE la base**. Ce n'est donc pas une jointure à réparer ni un caractère à normaliser
 — c'est le trou de texte déjà connu.
 
-**LE COMPTE QUI DÉCIDE, dénominateur d'abord** — 1 865 entrées source collectées, **52 sans carte
-(2,8 %)**, départagées en ouvrant chaque cas :
+🔴 **LE PREMIER COMPTE ÉTAIT FAUX, ET IL FAUT LIRE POURQUOI AVANT LE BON.** J'ai annoncé
+« 52 sans carte, dont 41 jointures ratées, dont 20 Expansion Sheet ». **La file d'images tournait
+pendant la mesure** : elle joignait au fur et à mesure. Trois lectures successives ont donné 44, 52
+puis 24 orphelines, sur 1 857, 1 865 puis 1 946 entrées. **Expansion Sheet est à ZÉRO** — le set ne
+concentrait rien, j'avais photographié un travail en cours. ⚠️ **Un dénominateur qui BOUGE pendant
+qu'on le lit n'est pas un dénominateur, c'est un instantané.** Avant de conclure d'un compte, dire
+si ce qui le produit est à l'arrêt — c'est le §22 (compte contre constat) avec une cause de plus.
 
-| | n | ce que c'est |
+**LE COMPTE, MESURÉ FILE À L'ARRÊT** — 1 946 entrées source, **18 sans carte (0,9 %)**, chaque cas
+ouvert :
+
+| cause | n | mécanique ? |
 |---|---|---|
-| la carte est **dans le set**, en base | **41** | 🔧 jointure d'images ratée, rien ne manque au texte |
-| la page existe, rattachée à un autre set | 2 | 🔧 idem |
-| **aucune page Bulbapedia** | **9** | 🕳️ le seul vrai trou |
+| **homonymes du set, source sans numéro, même rareté** (Gym) | 6 | non — rien ne les sépare |
+| **deux cartes portent le MÊME numéro sur la page du set** (EC1 n°059 : Energy Restore et Pokémon Reversal) | 1 | non — conflit dans la source |
+| **nom divergent sans désambiguïsateur** (« Unown » sans lettre, « Blastoise » hors du deck collecté) | 2 | non |
+| **aucune page Bulbapedia** | **9** | 🕳️ jamais |
 
-**Les 9 : 5 Gold Star** (Kyogre ☆, Groudon ☆, Metagross ☆ sur PCG6 ; Mew ☆, Charizard ☆ sur PCG9),
-**2 « Pi »** (Jungle, Southern Islands), **Team Rocket's Hitmonchan**, **Blaine's Quiz #3**.
+✅ **CE QUI ÉTAIT MÉCANIQUE A ÉTÉ CORRIGÉ : le départage par la RARETÉ, 24 → 18.** Les sets Gym
+japonais fusionnent Gym Heroes et Gym Challenge sur une page : deux cartes y portent le même nom, le
+même illustrateur (Ken Sugimori partout) et **aucun numéro**. La rareté est le seul champ qui
+diffère, et la source la porte **14 fois sur 14** (« Uncommon (Old Back) » — la parenthèse est une
+mention de dos, normalisée comme les apostrophes). Il ne s'exécute que sur des EX AEQUO, donc il ne
+peut déplacer aucune jointure qui marche : **+6 gagnées, 0 dérangée**, le coût nul du §20. Sa preuve
+nomme son périmètre : « seul ex aequo à porter cette rareté ».
 
-🔑 **LA RÉPONSE EST NON, ET C'EST UN CHIFFRE, PAS UN AVIS.** PKMJP apporte **9 cartes sur 1 865
-(0,5 %)** que Bulbapedia n'a pas. Ce n'est pas une source de texte alternative, et ce n'est pas la
-réponse aux restes occidentaux — que PKMJP ne couvre de toute façon pas.
+## LES 9 IRRÉDUCTIBLES — limite définitive, nommée
 
-⚠️ **ET LE GROS DU BLOC EST CHEZ NOUS.** Les 41 jointures ratées sont réparables : **20 sur 41 sont
-Expansion Sheet** (entrées source sans numéro, la carte est bien dans le set), 10 Gym, 1 Base
-Expansion Pack. Lire « 52 entrées sans carte » comme « 52 cartes manquantes » aurait envoyé chercher
-une source externe pour un défaut de jointure interne. ⚠️ **Chiffre pris pendant que la file
-d'images tournait** : il était 44 quelques minutes plus tôt. Le dénominateur bouge, pas le rapport.
+**Ces neuf cartes n'auront ni texte ni image, jamais**, tant que Bulbapedia ne crée pas leur page :
 
-🔴 **NOTRE TROU DE TEXTE EST DEVENU UN TROU D'IMAGE.** Les 9 cartes ont une image chez PKMJP et
-aucune page chez Bulbapedia : sans page, pas de `carteId`, donc l'image ne s'attache à rien et le
-site ne l'affichera jamais. **Une image orpheline ne comble pas un trou de texte, elle le double.**
+| carte | set |
+|---|---|
+| **Kyogre ☆**, **Groudon ☆**, **Metagross ☆** | PCG6 Holon Research Tower |
+| **Mew ☆**, **Charizard ☆** | PCG9 Offense and Defense of the Furthest Ends |
+| **Pi** | Jungle |
+| **Pi** | Southern Islands |
+| **Team Rocket's Hitmonchan** | G1 Leaders' Stadium |
+| **Blaine's Quiz #3** | G2 Challenge from the Darkness |
+
+Les cinq Gold Star et les quatre autres ont une image chez PKMJP et **aucune page** chez Bulbapedia.
+Sans page, pas de `carteId` : l'image ne s'attache à rien et le site ne l'affichera jamais.
+🔴 **Une image orpheline ne comble pas un trou de texte, elle le DOUBLE.**
+
+**DÉCISION SUR LES 18 OBJETS R2 : GARDÉS, et le motif est porté par la ligne**
+(`marquer-orphelines.js` écrit `orpheline`, `orphelineMotif` = `irreductible` ou `ambigue`,
+`decision: 'garder'`). Les deux coûts, comparés : garder, c'est ~0,6 Mo sur un bucket qui en prévoit
+6 600 ; effacer, c'est devoir les **redemander à artofpkm.com** le jour où une clé arrive — une
+requête de plus chez un tiers à qui on promet 1 requête / 5 s, pour un octet qu'on avait déjà.
+⚠️ **Le marqueur se RETIRE quand l'image finit par joindre** : un marqueur qu'on ne nettoie pas
+vieillit en mensonge.
+
+## PKMJP COMME SOURCE DE TEXTE : FERMÉE, NE PAS LA REPROPOSER
+
+🔑 **PKMJP apporte 9 cartes sur 1 946 — 0,5 % — que Bulbapedia n'a pas.** Ce n'est pas une source de
+texte alternative, et ce n'est **pas** la réponse aux 693 restes occidentaux : ceux-là sont des
+produits Cardmarket sans carte, une autre population, et PKMJP ne couvre pas l'occidental. La
+question se rouvrira seulement si quelqu'un mesure un taux différent sur une population différente
+— pas sur une intuition de complétude.
+
+✅ **EXS N'A PAS LE DÉFAUT CRAINT.** L'`idExpansion` unique (3781) pour trois séries Bulbapedia :
+Cardmarket **n'a qu'une seule expansion**, un seul `slugSet` (`Expansion-Sheet`), 125 produits, tous
+sans numéro. **125 produits, 126 lignes de jointure, 125 produits distincts attachés, 0 attaché à
+rien.** Les 125 cartes portent les impressions des trois séries (36 + 36 + 52). La fusion est du côté
+de Cardmarket, pas du nôtre : il n'existe pas deux séries de produits orphelines.
+
+🔑 **ET LE DÉNOMINATEUR DOIT ÊTRE CONFRONTÉ À SA PROMESSE, PAS SEULEMENT IMPRIMÉ.** `--reparser`
+annonçait « 0 requête Bulbapedia » et en faisait 3 (102 pages refetchées sur EXP) : les titres
+ajoutés par la table sont des alias qui redirigent vers des pages déjà archivées, donc absents de
+`pages`, donc « à faire ». **Le compteur était juste et personne ne le lisait en face de la phrase
+imprimée deux lignes plus haut.** Un compteur qui n'est comparé à rien ne vaut pas mieux qu'un
+compteur absent.
 
 ---
 
