@@ -58,12 +58,20 @@ const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
 const VERROU_GLOBAL_MS = 3 * 60 * 1000;
 const ATTENTE_VERROU_MS = 30 * 1000;
 
-/** @returns {Promise<null|{pid,hote,depuis,ageS}>} null si pris, sinon le détenteur VIVANT. */
+/**
+ * @returns {Promise<null|{pid,hote,depuis,ageS}>} null si pris, sinon le détenteur VIVANT.
+ * ⚠️ TROIS FAÇONS D'ÊTRE LIBRE, et la troisième a coûté un incident : pas de verrou du tout ;
+ * un verrou dont le battement est mort ; **un verrou SANS PROPRIÉTAIRE**. Ce dernier naît quand un
+ * battement arrive après la libération (`$set: {'verrou.depuis'}` recrée le sous-document avec la
+ * seule date) : il est frais, il n'appartient à personne, et il bloquait tout le monde pendant
+ * trois minutes en s'affichant « pid undefined ». Le battement est désormais CONDITIONNEL à la
+ * possession — c'est la vraie correction ; celle-ci ramasse les zombies déjà en base.
+ */
 async function prendreVerrouGlobal(M) {
     const perime = new Date(Date.now() - VERROU_GLOBAL_MS);
     try {
         const r = await M.EtatImages.findOneAndUpdate(
-            { _id: VERROU_GLOBAL, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }] },
+            { _id: VERROU_GLOBAL, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }, { 'verrou.pid': { $exists: false } }] },
             { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() }, phase: 'collecteur' } },
             { upsert: true, new: true }
         ).lean();
@@ -130,7 +138,10 @@ async function collecterSet(code, M, dossierRapport) {
         console.error(`❌ ${code} : un collecteur d'images tient déjà ${slug} (pid ${existant.verrou.pid} sur ${existant.verrou.hote}).`); return { code, etat: 'refuse-verrou' };
     }
     await M.EtatImages.updateOne({ _id: idEtat }, { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() } }, $setOnInsert: { debute: new Date(), phase: 'liste', entrees: {}, mesures: {} } }, { upsert: true });
-    const battement = setInterval(() => M.EtatImages.updateOne({ _id: idEtat }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
+    // Conditionnel à la possession, comme le verrou global : voir son bloc.
+    const battement = setInterval(() => M.EtatImages.updateOne(
+        { _id: idEtat, 'verrou.pid': process.pid, 'verrou.hote': os.hostname() },
+        { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
     const liberer = async () => { clearInterval(battement); await M.EtatImages.updateOne({ _id: idEtat }, { $unset: { verrou: 1 } }); };
 
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
@@ -279,10 +290,14 @@ async function collecterSet(code, M, dossierRapport) {
     // c'est LA commande à lancer avant tout collecteur, et pour vérifier qu'un seul tourne.
     if (process.argv.includes('--verrou')) {
         const g = await M.EtatImages.findById(VERROU_GLOBAL).lean();
-        const frais = g?.verrou && (Date.now() - new Date(g.verrou.depuis).getTime()) < VERROU_GLOBAL_MS;
+        const ageS = g?.verrou ? Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000) : null;
+        const frais = g?.verrou && ageS * 1000 < VERROU_GLOBAL_MS && g.verrou.pid != null;
+        const zombie = g?.verrou && g.verrou.pid == null;
         console.log(frais
-            ? `🔒 verrou global ${SOURCE} TENU par pid ${g.verrou.pid} sur ${g.verrou.hote}, battement ${new Date(g.verrou.depuis).toISOString()} (il y a ${Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000)} s)`
-            : `🔓 verrou global ${SOURCE} LIBRE${g?.verrou ? ` (dernier détenteur pid ${g.verrou.pid} sur ${g.verrou.hote}, battement périmé)` : ''}`);
+            ? `🔒 verrou global ${SOURCE} TENU par pid ${g.verrou.pid} sur ${g.verrou.hote}, battement ${new Date(g.verrou.depuis).toISOString()} (il y a ${ageS} s)`
+            : zombie
+                ? `🧟 verrou global ${SOURCE} ZOMBIE : aucun propriétaire, battement il y a ${ageS} s — il sera repris tel quel par le prochain collecteur.`
+                : `🔓 verrou global ${SOURCE} LIBRE${g?.verrou ? ` (dernier détenteur pid ${g.verrou.pid} sur ${g.verrou.hote}, battement périmé il y a ${ageS} s)` : ''}`);
         const parSet = await M.EtatImages.find({ _id: { $ne: VERROU_GLOBAL }, verrou: { $exists: true } }).lean();
         for (const e of parSet) {
             const f = (Date.now() - new Date(e.verrou.depuis).getTime()) < VERROU_MS;
@@ -300,7 +315,8 @@ async function collecterSet(code, M, dossierRapport) {
         if (!g?.verrou) console.log('🔓 déjà libre, rien à faire.');
         else {
             const ageS = Math.round((Date.now() - new Date(g.verrou.depuis).getTime()) / 1000);
-            const vivant = ageS * 1000 < VERROU_GLOBAL_MS;
+            // Un verrou SANS PROPRIÉTAIRE est un zombie, jamais un vivant : il se libère sans --force.
+            const vivant = ageS * 1000 < VERROU_GLOBAL_MS && g.verrou.pid != null;
             if (vivant && !process.argv.includes('--force')) {
                 console.error(`⛔ REFUS : pid ${g.verrou.pid} sur ${g.verrou.hote} bat depuis ${ageS} s — il COLLECTE. Le libérer remettrait deux collecteurs sur ${SOURCE}. Attends ${Math.ceil((VERROU_GLOBAL_MS / 1000 - ageS))} s, ou --force si tu sais ce processus mort.`);
                 await fermer(); process.exit(1);
@@ -332,7 +348,12 @@ async function collecterSet(code, M, dossierRapport) {
     // quelle que soit la machine et quel que soit le set. Voir son bloc en tête de fichier.
     // En BOUCLE (worker) on ATTEND ; en lancement manuel on refuse tout de suite.
     if (!await attendreVerrouGlobal(M, { patienter: process.argv.includes('--boucle') })) { await fermer(); process.exit(1); }
-    const battementGlobal = setInterval(() => M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
+    // ⚠️ CONDITIONNEL À LA POSSESSION. Un battement inconditionnel qui arrive après la libération
+    // RECRÉE le verrou avec la seule date : un zombie frais et sans propriétaire, qui bloque son
+    // successeur trois minutes. Mesuré le 2026-09-12 sur un redéploiement Render.
+    const battementGlobal = setInterval(() => M.EtatImages.updateOne(
+        { _id: VERROU_GLOBAL, 'verrou.pid': process.pid, 'verrou.hote': os.hostname() },
+        { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
     const rendreVerrouGlobal = async () => { clearInterval(battementGlobal); await M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $unset: { verrou: 1 } }).catch(() => { }); };
     process.on('SIGTERM', async () => { await rendreVerrouGlobal(); });
 
