@@ -129,3 +129,39 @@ sur une fiche japonaise, ni l'inverse** — un visuel faux vaut moins que pas de
 
 Même schéma, même bucket, même empreinte, mêmes trois comptes pour toutes les sources : on ne
 collecte qu'une fois. Clé d'objet par source : `bulba/{pageid}/{fichier}` pour Bulbapedia.
+
+## 6. Où tournent les 70 heures — Render Background Worker, à créer par le testeur (préparé, pas décidé)
+
+Render gratuit endort un service web et n'a pas de disque : un collecteur n'y survit pas. L'hôte
+n'a besoin de rien de local — état dans Mongo, archive dans R2 — donc il est jetable.
+
+| quoi | valeur |
+|---|---|
+| type de service | **Background Worker** (pas Web Service : aucun port à écouter) |
+| nom | `rat-market-collecteur` |
+| dépôt, branche | `pokemon-proxy`, `main` ; racine du dépôt |
+| région | **Frankfurt** (EU), la plus proche du cluster Paris et des buckets EU |
+| runtime | Node, `NODE_VERSION=22` |
+| instance | Starter, 512 Mo — un original fait 100 Ko, la mémoire n'est pas le sujet, l'attente l'est |
+| build | `npm ci` |
+| start | `node collecteur-images.js --sets=EXP,PJU,MFO,ROG,G1,G2,SI-JP,N1,N2,N3,N4,VS,WEB,EC1,EC2,EC3,EC4,EC5,ADV2,ADV3,ADVex1,IPB,MCDP,DP5c,PCG6,PCG9,DP2,EXS --attendre-a-la-fin` |
+| auto-deploy | **désactivé** : un déploiement tue l'unité en cours ; on redéploie à la main entre deux sets |
+
+`--attendre-a-la-fin` garde le processus vivant quand la séquence est finie : un worker qui sort
+est relancé par Render, et relancer une séquence finie coûterait une requête de liste par set.
+
+Variables d'environnement du worker, exactement celles-ci :
+
+| variable | valeur |
+|---|---|
+| `MONGODB_CARTES_URI` | la chaîne `collecteur` du projet `rat-market-cartes` |
+| `MONGODB_CARTES_BASE` | `cartes` |
+| `MONGODB_URI` | **absente** pour les images (le collecteur d'images ne lit pas la production) ; requise seulement si le collecteur de TEXTE y tourne |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | le jeton limité aux deux buckets |
+| `R2_BUCKET_BRUT` | `rat-market-cartes-brut` |
+| `R2_BUCKET_IMAGES` | `rat-market-cartes-images` |
+| `R2_ENDPOINT` | `https://3a48dc7a79ef7c447137b9e839519e02.eu.r2.cloudflarestorage.com` (juridiction UE : le générique répond 403) |
+
+Réseau : Render publie des plages d'IP sortantes fixes par région ; on peut alors remplacer le
+`0.0.0.0/0` d'Atlas par ces plages plus l'IP du testeur. À faire au moment de créer le worker, pas
+avant. Le verrou par set empêche deux instances (worker + machine) de collecter le même set.

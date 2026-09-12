@@ -24,14 +24,14 @@ function arret(message) {
 /**
  * Vérifie les variables AVANT d'ouvrir quoi que ce soit. Deux des quatre arrêts sont ici.
  */
-function verifierEnvironnement() {
+function verifierEnvironnement({ buckets = ['R2_BUCKET_BRUT'], production = true } = {}) {
     const uri = process.env.MONGODB_CARTES_URI;
     const base = process.env.MONGODB_CARTES_BASE;
     if (base !== BASE_CIBLE) arret(`MONGODB_CARTES_BASE doit valoir "${BASE_CIBLE}" (lu : ${JSON.stringify(base ?? null)}).`);
     if (!uri) arret('MONGODB_CARTES_URI absent du .env.');
     if (uri === process.env.MONGODB_URI) arret('MONGODB_CARTES_URI est ÉGAL à MONGODB_URI — c\'est le cluster de PRODUCTION. Refus.');
-    if (!process.env.MONGODB_URI) arret('MONGODB_URI absent : la jointure lit la production en lecture seule, elle en a besoin.');
-    for (const v of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_BRUT']) {
+    if (production && !process.env.MONGODB_URI) arret('MONGODB_URI absent : la jointure lit la production en lecture seule, elle en a besoin.');
+    for (const v of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', ...buckets]) {
         if (!process.env[v]) arret(`${v} absent du .env.`);
     }
 }
@@ -39,10 +39,11 @@ function verifierEnvironnement() {
 /**
  * Ouvre les deux connexions : `cartes` (écriture) et production (lecture seule).
  * Les deux autres arrêts sont ici, APRÈS connexion, sur ce qu'on constate et non sur ce qu'on a demandé.
- * @returns {Promise<{cartes: mongoose.Connection, prod: mongoose.Connection, fermer: () => Promise<void>}>}
+ * @param {object} [options]  buckets requis dans l'environnement ; `production: false` n'ouvre pas la production
+ * @returns {Promise<{cartes: mongoose.Connection, prod: mongoose.Connection|null, fermer: () => Promise<void>}>}
  */
-async function ouvrirConnexions() {
-    verifierEnvironnement();
+async function ouvrirConnexions(options = {}) {
+    verifierEnvironnement(options);
     const cartes = await mongoose.createConnection(process.env.MONGODB_CARTES_URI, { dbName: BASE_CIBLE }).asPromise();
     const reelle = cartes.db.databaseName;
     if (reelle !== BASE_CIBLE) {
@@ -62,11 +63,11 @@ async function ouvrirConnexions() {
         await cartes.close();
         arret(`le cluster connecté porte ${bases.filter(b => b === BASE_PRODUCTION || b === 'test_scratch').join(' et ')} : c'est la PRODUCTION.`);
     }
-    const prod = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE_PRODUCTION }).asPromise();
-    console.log(`🗄️  cible : "${reelle}" sur ${cartes.host} (écriture)  ·  production : "${prod.db.databaseName}" sur ${prod.host} (LECTURE SEULE)`);
+    const prod = options.production === false ? null : await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE_PRODUCTION }).asPromise();
+    console.log(`🗄️  cible : "${reelle}" sur ${cartes.host} (écriture)${prod ? `  ·  production : "${prod.db.databaseName}" sur ${prod.host} (LECTURE SEULE)` : ''}`);
     return {
         cartes, prod,
-        fermer: async () => { await Promise.allSettled([cartes.close(), prod.close()]); }
+        fermer: async () => { await Promise.allSettled([cartes.close(), prod ? prod.close() : Promise.resolve()]); }
     };
 }
 

@@ -8,7 +8,7 @@
 // Idempotence : la clé porte `pageid/revid`, donc un objet existant est le même contenu — on ne le
 // réécrit pas. `deposerTexte` rend `{ ecrit: true|false }` pour que l'appelant compte.
 
-const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
 
 // ⚠️ JURIDICTION. Un bucket créé avec la restriction « EU » n'est joignable QUE par l'endpoint
 // `<compte>.eu.r2.cloudflarestorage.com` ; l'endpoint générique répond AccessDenied (403), ce qui
@@ -74,6 +74,29 @@ async function lireTexte(bucket, cle) {
     return await r.Body.transformToString('utf8');
 }
 
+/** Toutes les clés sous un préfixe (pour l'effacement demandé, jamais pour autre chose). */
+async function listerPrefixe(bucket, prefixe) {
+    const cles = [];
+    let token;
+    do {
+        const r = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefixe, ContinuationToken: token }));
+        for (const o of r.Contents || []) cles.push(o.Key);
+        token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return cles;
+}
+
+/** Supprime des clés, par lots de 1 000. Réservé à `--arreter-et-effacer --confirmer`. */
+async function supprimer(bucket, cles) {
+    let n = 0;
+    for (let i = 0; i < cles.length; i += 1000) {
+        const lot = cles.slice(i, i + 1000);
+        await client().send(new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: lot.map(Key => ({ Key })), Quiet: true } }));
+        n += lot.length;
+    }
+    return n;
+}
+
 const cleWikitext = (pageid, revid) => `bulba/${pageid}/${revid}.wikitext`;
 
-module.exports = { verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, cleWikitext };
+module.exports = { verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, listerPrefixe, supprimer, cleWikitext };

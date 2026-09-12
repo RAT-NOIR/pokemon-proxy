@@ -64,13 +64,41 @@ const etatSchema = new mongoose.Schema({
     requetes: Number, debute: Date, fini: Date, derniereRequete: Date
 }, { strict: false, collection: 'collecte_etat' });
 
+// ---- images (collecteur-images.js) -------------------------------------------------------
+// Une ligne par ORIGINAL collecté, clé stable dérivée de la source. La ligne s'écrit APRÈS l'objet
+// R2, jamais avant ; `sha256` présent = unité finie (c'est le point de reprise).
+const imageSchema = new mongoose.Schema({
+    _id: String,                          // `${source}/${sourceSetId}/${n}`
+    source: String, sourceSetId: Number, n: Number, titre: String,
+    urlOriginal: String, cleCdn: String, cleR2: String,
+    sha256: String, octets: Number, w: Number, h: Number, fmt: String,
+    numero: String, total: String, nomEn: String, nomJa: String, illustrateur: String, rarete: String,
+    setNomSource: String, setNomJa: String,
+    carteId: Number, set: String, preuve: String,
+    telechargeLe: Date, etat: String
+}, { strict: false, collection: 'images' });
+imageSchema.index({ set: 1 });
+imageSchema.index({ carteId: 1 });
+imageSchema.index({ cleCdn: 1 });
+
+const etatImagesSchema = new mongoose.Schema({
+    _id: String,                          // `${source}/${slug}`
+    phase: String,                        // 'liste' | 'mesure' | 'originaux' | 'jointure' | 'verifie' | 'refuse-resolution'
+    entrees: mongoose.Schema.Types.Mixed, // sourceSetId -> [{n, titre, original, cleCdn, vignette}]
+    mesures: mongoose.Schema.Types.Mixed, // sourceSetId -> [{url, w, h, octets}]
+    verrou: { pid: Number, hote: String, depuis: Date },
+    requetes: Number, debute: Date, fini: Date, derniereRequete: Date
+}, { strict: false, collection: 'collecte_images_etat' });
+
 function modeles(connexion) {
     return {
         Set: connexion.model('Set', setSchema),
         Carte: connexion.model('Carte', carteSchema),
         CarteProduit: connexion.model('CarteProduit', carteProduitSchema),
         Reste: connexion.model('Reste', resteSchema),
-        Etat: connexion.model('Etat', etatSchema)
+        Etat: connexion.model('Etat', etatSchema),
+        Image: connexion.model('Image', imageSchema),
+        EtatImages: connexion.model('EtatImages', etatImagesSchema)
     };
 }
 
