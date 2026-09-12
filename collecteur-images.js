@@ -237,6 +237,10 @@ async function collecterSet(code, M, dossierRapport) {
  * toucher à la source (`--rejouer-jointure`) : corriger un schéma ne doit pas coûter 400
  * téléchargements. Une seule définition, appelée par les deux chemins.
  */
+// « Uncommon (Old Back) » chez la source, « Uncommon » chez Bulbapedia : la parenthèse est une
+// mention de dos de carte, pas un degré de rareté. Même famille que les apostrophes typographiques.
+const normaliserRarete = v => String(v ?? '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+
 async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false } = {}) {
     const code = L.code;
     const dire = (...a) => { if (!silencieux) console.log(...a); };
@@ -273,6 +277,19 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             if (cands.length > 1 && im.illustrateur) {
                 const ill = cands.filter(c => normaliserNom(c.illustrateur) === normaliserNom(im.illustrateur));
                 if (ill.length) { cands = ill; preuve = 'nom+illustrateur'; }
+            }
+            // LA RARETÉ, DERNIER DÉPARTAGE — et il NOMME SON PÉRIMÈTRE, comme l'exige le dépôt :
+            // « seul EX AEQUO à porter cette rareté », jamais « le seul ». Les sets Gym japonais
+            // fusionnent Gym Heroes et Gym Challenge sur une page : deux cartes y portent le même
+            // nom, le même illustrateur (Ken Sugimori partout) et AUCUN numéro. La rareté est le
+            // seul champ qui diffère, et la source la porte sur 14 entrées sur 14.
+            // ⚠️ STRICTEMENT ADDITIF : il ne s'exécute que sur `cands.length > 1`, donc il ne peut
+            // déplacer aucune jointure qui marche déjà. C'est ce qui le rend câblable sans mesure
+            // d'effet préalable (CLAUDE.md §20, le coût nul) — et son compte s'imprime quand même.
+            if (cands.length > 1 && im.rarete) {
+                const r = normaliserRarete(im.rarete);
+                const parRarete = r ? cands.filter(c => impsDe(c).some(i => normaliserRarete(i.rarete) === r)) : [];
+                if (parRarete.length === 1) { cands = parRarete; preuve = 'nom+rarete'; }
             }
         }
         if (cands.length === 1) {
