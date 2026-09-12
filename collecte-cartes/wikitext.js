@@ -108,12 +108,25 @@ function nomDePage(valeur) {
 function plat(valeur) {
     if (valeur == null) return '';
     let s = String(valeur);
-    s = s.replace(/\{\{\s*(?:rar|e|ct|tt)\s*\|([^|}]+)(?:\|[^}]*)?\}\}/g, '$1');
+    // `j` : le gabarit d'insertion de japonais — `{{j|151}}` dans « ポケモンカード{{j|151}} ».
+    s = s.replace(/\{\{\s*(?:rar|e|ct|tt|j)\s*\|([^|}]+)(?:\|[^}]*)?\}\}/g, '$1');
     s = s.replace(/\{\{\s*TCG\s*\|([^|}]+)(?:\|([^}]*))?\}\}/g, (_, a, b) => (b || a).trim());
     s = s.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2').replace(/\[\[([^\]]+)\]\]/g, '$1');
     s = s.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').replace(/'''|''/g, '');
+    // 🔴 LE FILET, ET IL EXISTE PARCE QU'UN GABARIT A FUI JUSQU'AU HTML DU SITE (2026-09-12).
+    // `{{j|151}}` est sorti de la collecte, s'est écrit en base et s'est affiché tel quel sur une
+    // fiche : aucune étape ne regardait le CONTENU de ce qu'elle comptait (CLAUDE.md §22). Tout
+    // gabarit d'affichage inconnu est désormais réduit à son dernier argument — la convention des
+    // modèles de présentation — et `contientGabarit` permet de les COMPTER avant de les servir.
+    s = s.replace(/\{\{([^{}]*)\}\}/g, (_, dedans) => {
+        const args = String(dedans).split('|').map(x => x.trim()).filter(Boolean);
+        return args.length > 1 ? args[args.length - 1] : '';
+    });
     return s.replace(/\s+/g, ' ').trim();
 }
+
+/** Un champ porte-t-il encore un gabarit non développé ? À vérifier AVANT de servir une donnée. */
+const contientGabarit = v => /\{\{|\}\}/.test(String(v ?? ''));
 
 /** Coût d'attaque `{{e|Lightning}}{{e|Colorless}}` -> ['Lightning', 'Colorless']. */
 function coutEnergie(valeur) {
@@ -270,4 +283,4 @@ function sectionsSetlist(texte) {
     return sections;
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, PARAMS_TEXTE };
+module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, contientGabarit, PARAMS_TEXTE };

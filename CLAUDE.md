@@ -706,6 +706,35 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 23. Un seuil posé sur une supposition coûte dans l'AUTRE sens — 2026-09-12
+
+Le seuil de résolution des images était **560 px**, posé d'avance et jamais revu. Il a fait REFUSER
+`DP5c`, dont les originaux sont à **500×700** — l'ère DP n'a pas la résolution du vintage japonais.
+Mesure faite avant de le toucher : à **157 px de vignette**, une source de 500 px et une de 593 px
+sont **indiscernables à l'œil** (bandes basses superposées, symbole illisible dans les deux). Le seuil
+ne protégeait que la vue pleine carte, **qui n'existe pas encore sur le site**. Abaissé à 480 par
+décision du testeur, sur cette mesure.
+
+🔑 **LA LEÇON EST LE PENDANT DU PIÈGE HABITUEL.** On se méfie du seuil qu'on assouplit pour sauver un
+chiffre ; celui-ci était l'inverse — un seuil JAMAIS RÉEXAMINÉ qui refusait du bon travail. Et il
+coûtait **silencieusement** : un set refusé ne réclame rien, il disparaît de la file avec une raison
+plausible. ⚠️ Un seuil doit porter **ce qu'il protège** (ici : la vue pleine carte) et non un nombre
+seul, sinon personne ne peut dire quand il est devenu faux. La résolution réelle de chaque set est
+conservée dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels
+sont bas sans recollecter.
+
+## 21 bis. Corrigé d'un côté, laissé de l'autre — le même défaut, deux fois
+
+Deux fois dans la journée, un défaut réparé à un endroit est resté intact à son jumeau :
+- **le double numéro** — une carte e-Card porte deux numéros dans son set (« 123/091 ») ; la jointure
+  du TEXTE a été corrigée pour les prendre tous, celle des IMAGES est restée sur le premier. L'image
+  du 091 restait orpheline, sans que rien ne le dise.
+- **le `$unset` du champ image** — `images[]` a remplacé `image` dans la jointure, mais l'effacement
+  (`--arreter-et-effacer`) visait encore `image.source`.
+🔑 **Quand on corrige une règle qui existe en deux exemplaires, on corrige les deux dans le même
+commit, ou on n'en corrige aucun.** C'est la règle de symétrie du banc (§9), appliquée aux jointures :
+deux définitions de la même règle divergent toujours, et la seconde ne se découvre que par accident.
+
 ## 21. Le motif du 2026-09-12 : QUATRE échecs silencieux en un jour, tous de la même famille
 
 Quelque chose ne se fait pas, et **rien ne le signale**. Quatre fois dans la même journée, sur quatre

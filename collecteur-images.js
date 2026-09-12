@@ -36,7 +36,16 @@ const { normaliserNom, chiffresDuNumero } = require('./collecte-cartes/jointure'
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
-const LARGEUR_MIN = 560;
+// 🔑 SEUIL ABAISSÉ DE 560 À 480 LE 2026-09-12, SUR MESURE ET PAR DÉCISION DU TESTEUR. 560 venait
+// d'une supposition — « il faut au moins la taille d'affichage pleine carte » — et il a fait REFUSER
+// DP5c, dont les originaux sont à 500×700. Comparaison faite : à 157 px de vignette, une source de
+// 500 px et une de 593 px sont INDISCERNABLES à l'œil (bandes basses superposées). Le seuil ne
+// protégeait que la vue pleine carte, qui n'existe pas encore sur le site.
+// ⚠️ LA LEÇON EST LE PENDANT DU PIÈGE HABITUEL : un seuil posé d'avance est bon, un seuil posé sur
+// une SUPPOSITION et jamais revu fait refuser du bon travail. Il coûte dans l'autre sens, et
+// silencieusement — un set refusé ne réclame rien. La résolution réelle de chaque set est conservée
+// dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
+const LARGEUR_MIN = 480;
 const SOURCE = arg('source') || 'artofpkm';
 
 // ════════════════════════════════════════════════════════════════════════════
