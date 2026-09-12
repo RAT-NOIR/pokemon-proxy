@@ -983,6 +983,79 @@ compteur absent.
 
 ---
 
+## 25. UN COMPTE PRIS PENDANT QU'UN PROCESSUS ÉCRIT NE MESURE RIEN — 2026-09-12
+
+**C'est la sixième fois en un jour qu'un chiffre trompe, et la PREMIÈRE où ce n'est ni le champ, ni
+le dénominateur, ni la population : c'est le MOMENT DE LA LECTURE.**
+
+**L'occurrence.** Trois lectures du même compte, à quelques minutes d'intervalle, pendant que la file
+d'images joignait :
+
+| lecture | entrées source | orphelines |
+|---|---|---|
+| 1 | 1 857 | 44 |
+| 2 | 1 865 | **52** |
+| 3 (file arrêtée) | 1 946 | **24**, puis 18 après correction |
+
+J'ai rendu la deuxième comme un fait, avec une répartition détaillée — « 41 jointures ratées, dont
+**20 Expansion Sheet** ». **Expansion Sheet était à zéro.** Le testeur a construit une demande entière
+sur ces 41, et sur l'hypothèse que la fusion des trois séries d'EXS en était la cause. Rien de tout
+cela n'existait : je photographiais un travail en cours et je l'ai décrit comme un état.
+
+🔑 **CE QUI REND CETTE ERREUR PARTICULIÈRE : TOUS LES GARDE-FOUS ÉTAIENT RESPECTÉS.** Le dénominateur
+était imprimé. La population était nommée. Chaque cas avait été ouvert (§22). Le chiffre était exact
+**à l'instant où il a été lu** — et faux dès la seconde suivante. Un dénominateur imprimé ne protège
+de rien si ce qui le produit bouge encore.
+
+**LA RÈGLE, MÉCANIQUE.** Avant toute mesure sur `cartes`, `cartes_produits` ou `images` :
+`node file-a-l-arret.js` — il rend 0 si la file est à l'arrêt, 1 sinon, et il regarde **trois**
+signaux, parce qu'un seul mentirait : les unités `en-cours`, le verrou global, et l'âge de la
+dernière écriture. **Et le rapport DIT que la vérification a été faite** — « file à l'arrêt, verrou
+libre, aucune écriture depuis 25 min » est une phrase du rapport, pas une précaution privée. Une
+mesure dont on ne sait pas si la source bougeait n'est pas comparable à la suivante.
+
+⚠️ **ET L'OUTIL LUI-MÊME A FAILLI NAÎTRE FAUX.** Écrit avec les états terminaux en liste
+(`$nin: [attente, fini, refuse]`), il a crié sur 26 unités `fait` — un état terminal que la liste
+ignorait. **On énumère l'état ACTIF, jamais les états terminaux** : la liste des façons de finir
+s'allonge avec le temps, celle des façons de travailler non. Un contrôle qui crie sur un cas normal
+est contourné le jour où il a raison (§21).
+
+---
+
+## 26. Le nom d'une expansion japonaise pour un lecteur francophone — 2026-09-12
+
+**Le problème.** `/fr/sets` affichait les kana. `sets.nomEn` est écarté à juste titre : c'est le set
+international **homologue**, un autre produit — « Base Set » n'est pas le nom d'*Expansion Pack*.
+
+✅ **LA SOURCE EXISTE ET ELLE EST CHEZ NOUS : `numeros_cartes.slugSet`**, le nom que **Cardmarket**
+donne à l'expansion japonaise. En anglais, et il désigne **cette** expansion : « Rocket Gang »,
+« Gold Silver to a New World », « Cry from the Mysterious », « Offense and Defense of the Furthest
+Ends ». **38 expansions sur 38 en portent un.** Rapatrié dans `sets.nomCardmarket` +
+`sets.nomAffichage` + `sets.nomAffichageSource` par `rapatrier-noms-sets.js` — même geste que
+`slug`/`slugSet`, pour que le site n'ouvre pas une seconde connexion vers la production.
+
+**L'ordre de préférence dépend de la RÉGION, et ce n'est pas un détail** : sur un set japonais
+`nomEn` est le jumeau occidental, donc **exclu** ; sur un set occidental il désigne le set lui-même,
+donc **préféré**. Résultat : 28 noms Cardmarket, 8 `nomEn`, 2 départages. Aucun set ne retombe sur
+son code.
+
+🔴 **ET LE CONTRÔLE QUI A SERVI : DEUX SETS NE PEUVENT PAS PORTER LE MÊME NOM À L'ÉCRAN.** `ASC` et
+`xASC` ont le même `nomEn` (« Ascended Heroes ») ; la liste en aurait affiché deux identiques, et
+rien ne les aurait distingués. Cardmarket les sépare (« Ascended Heroes Additionals »). **Un nom
+d'affichage doit être LISIBLE et DISCRIMINANT** — un nom qui ne désigne plus qu'un ensemble est le
+motif du « reste » (§8), transposé à l'interface. 38 noms distincts sur 38.
+
+⚠️ **LA PONCTUATION EST PERDUE ET NE SE DEVINE PAS.** « Gold-Silver-to-a-New-World » rend « Gold
+Silver to a New World » ; le « & » et la virgule du nom Cardmarket réel ne sont pas dans le slug. On
+rend le slug lisible, **on ne reconstruit pas une ponctuation qu'on n'a pas** — ce serait deviner.
+
+🕳️ **CE QUI RESTE MANQUANT : LA DATE, sur 11 sets de 38** — SI-JP, VS, WEB, IPB, MCDP, EXS (japonais)
+et PBL, ASC, xASC, JTG, CRI (occidentaux). Le nom est réglé, la date ne l'est pas : elle n'est ni
+chez Cardmarket, ni dans l'infobox de ces pages. Il faudra une autre source ou onze lignes à la
+main. **Non corrigé, nommé.**
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
