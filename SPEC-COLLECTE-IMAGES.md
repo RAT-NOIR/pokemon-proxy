@@ -15,16 +15,26 @@ ce fichier-là), mêmes quatre arrêts durs, même base `cartes`. Rien ici n'est
 >    (artofpkm.com), © ayants droit Pokémon » avec lien, sous chaque image, plus la page Sources.
 >    Aucune image n'est servie publiquement avant que ce gabarit existe.
 
-## 0 bis. Décision du 2026-09-12 : collecter les 27 sets suivants SANS attendre la réponse de PKMJP
+## 0 bis. Décision du 2026-09-12 : la collecte a démarré AVANT la réponse de PKMJP
 
-Le formulaire est envoyé le 2026-09-12 au soir. EXP (96 originaux, 11,0 Mo) a été collecté par
-décision du testeur avant toute réponse. **Décision assumée, pas un oubli** : la suite se collecte
-sans attendre, parce que le débit est respecté (1 requête / 5 s, 196 requêtes pour EXP), que
-l'effacement est prêt (`--arreter-et-effacer --confirmer`) et promis dans la demande, et que rien
-n'est SERVI publiquement avant l'accord et l'attribution. Réserve écrite de l'agent : 2 300 images
-prises avant une réponse ne pèsent pas comme 96, et un refus reçu après coup transforme une demande
-en régularisation ; la réversibilité tient tant que l'effacement est exécuté le jour même du refus.
-Le testeur tranche : on continue.
+**Décision de l'utilisateur, prise contre l'avis de l'agent, et notée comme telle.** Le formulaire
+est envoyé le 2026-09-12 au soir. EXP (96 originaux, 11,0 Mo) a été collecté le même jour, puis les
+27 sets restants ont été mis en file, sans attendre la réponse.
+
+L'avis de l'agent, conservé mot pour mot : « j'attendrais sept jours ou la réponse. Le texte est
+fini, le catalogue vit sans image, et **2 300 images prises avant réponse transforment une demande en
+régularisation**. »
+
+Ce qui rend la collecte défendable, et qui NE BOUGE PAS :
+- 1 requête / 5 s, jamais en parallèle, User-Agent nommant rat-market.fr ;
+- l'attribution « The Art of Pokémon (artofpkm.com) » avec lien, sous chaque image, dès la première
+  fiche affichée — pas après, pas plus tard ;
+- `--arreter-et-effacer --confirmer` **exercé avant** de lancer les 27 sets : testé le 2026-09-12 sur
+  les 96 originaux d'EXP (objets R2, lignes `images`, `cartes.image`, état, file), vérifié à zéro,
+  puis EXP recollecté. Une promesse d'effacement qu'on n'a jamais exercée n'est pas une promesse.
+- Si PKMJP répond non, l'effacement s'exécute le jour même.
+
+On n'efface pas un désaccord daté.
 
 ## 1. Source A — The Art of Pokémon (artofpkm.com) : le JAPONAIS, toutes ères
 
