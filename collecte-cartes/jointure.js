@@ -28,6 +28,11 @@ const normaliserNom = n => String(n || '').normalize('NFC').toLowerCase()
     .replace(/♂/g, 'm').replace(/♀/g, 'f').replace(/[\s\-'.&:!?,]/g, '');
 const { ALIAS_CARDMARKET_VERS_BULBAPEDIA } = require('./alias-noms');
 const chiffresDuNumero = n => { const m = String(n ?? '').match(/\d+/); return m ? String(parseInt(m[0], 10)) : null; };
+// LA CLÉ DE NUMÉRO GARDE SON PRÉFIXE ALPHABÉTIQUE. `chiffresDuNumero` (« S04 » -> « 4 ») joignait les
+// 29 produits de la sous-série S d'EC1 aux cartes 001…029 du set principal (Venusaur S04 -> Ekans
+// 004), mesuré le 2026-09-12 : 29 jointures fausses, preuve « set+numero ». C'est la classe des
+// 1 936 produits à préfixe alphabétique (S, TG, SV, GG, H…) déjà nommée dans sets-vintage-japonais.js.
+const cleNumero = n => { const m = String(n ?? '').trim().toUpperCase().match(/^([A-Z-]*)0*(\d+)([A-Z]*)$/); return m ? `${m[1]}${m[2]}${m[3]}` : (String(n ?? '').trim().toUpperCase() || null); };
 
 /**
  * « Alakazam [Damage Swap | Confuse Ray] » -> { nom: 'Alakazam', attaques: ['Damage Swap', 'Confuse Ray'] }
@@ -84,7 +89,7 @@ function joindre(cartes, produits, cible) {
     const produitsJoints = new Map();     // idProduct -> [carteId]
     const parNumero = new Map(), parNom = new Map();
     for (const p of produits) {
-        const num = chiffresDuNumero(p.numero);
+        const num = p.numero != null && String(p.numero).trim() !== '' ? cleNumero(p.numero) : null;
         if (num) { if (!parNumero.has(num)) parNumero.set(num, []); parNumero.get(num).push(p); }
         const nom = normaliserNom(p.nom);
         if (!parNom.has(nom)) parNom.set(nom, []); parNom.get(nom).push(p);
@@ -113,7 +118,7 @@ function joindre(cartes, produits, cible) {
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;
-        const numeros = [...new Set(imps.map(i => chiffresDuNumero(i.numero)).filter(Boolean))];
+        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').map(i => cleNumero(i.numero)).filter(Boolean))];
         if (numeros.length && parNumero.size) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
             preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}`;
@@ -150,4 +155,4 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero };
+module.exports = { joindre, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };

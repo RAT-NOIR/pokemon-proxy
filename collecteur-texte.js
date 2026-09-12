@@ -171,8 +171,17 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
             await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
             textesEpures.set(c._id, epure);
         }
-        await M.CarteProduit.deleteMany({ carteId: { $in: deja.map(c => c._id) } });
-        await M.Carte.updateMany({ sets: slug }, { $set: { 'liens.idProduct': [] } });
+        // ⚠️ SEULEMENT les lignes de CE set (et de ses jumelles occidentales) : une carte partagée
+        // entre deux sets (Dark Charizard, Rocket Gang ET Pokémon Web) perdait ses lignes de l'autre
+        // set à chaque rejeu — H006 est sorti « faux affirmé » de la mesure du pont pour ça, 2026-09-12.
+        const expsDeCeSet = [L.exp, ...Object.values(EXPANSIONS_INTL)];
+        const idsCartes = deja.map(c => c._id);
+        await M.CarteProduit.deleteMany({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet } });
+        // les liens dénormalisés se recomposent depuis ce qui RESTE en cartes_produits
+        for (const id of idsCartes) {
+            const restants = (await M.CarteProduit.find({ carteId: id }).select('idProduct').lean()).map(x => x.idProduct);
+            await M.Carte.updateOne({ _id: id }, { $set: { 'liens.idProduct': restants } });
+        }
     }
     for (let i = 0; i < aFaire.length && !arretDemande; i += 50) {
         const lot = aFaire.slice(i, i + 50);

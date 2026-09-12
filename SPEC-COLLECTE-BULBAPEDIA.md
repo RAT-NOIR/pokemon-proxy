@@ -1,5 +1,13 @@
 # Spécification de collecte — texte Bulbapedia, 28 sets vintage d'abord (2026-09-12)
 
+> 🔑 **LE CHANTIER A PAYÉ — mesuré le 2026-09-12, rien câblé.** Sur les vérités du banc, **103 sur
+> 140 (73,6 %)** ont leur produit dans les 28 sets collectés. Sur ces 103 lignes, si le pont
+> interrogeait notre base au lieu de TCGdex : fermes justes **7 → 45**, faux affirmés **6 → 3**,
+> refus **18 → 0**. C'est le plus gros gain mesuré depuis le début du projet.
+> ⚠️ **Réserve : proxy du vivier, pas la chaîne.** Un candidat unique compte comme ferme ; le
+> scoring, le périmètre et les départages ne sont pas rejoués. Le chiffre réel se mesure sur la
+> chaîne câblée, par `apres()` du banc (SPEC-PONT.md). Les 37 vérités hors des 28 sets ne bougent pas.
+
 > 🔴 **AGENT SERVEUR, AVANT TOUT — deux règles qui priment sur le reste du fichier.**
 > 1. **PREMIER JET SUR EXP SEUL** : `--set=EXP`, 102 pages, puis ARRÊT après l'impression des quatre
 >    nombres de complétude (§8 bis). Aucun autre set ne tourne avant relecture du testeur.
