@@ -1020,6 +1020,35 @@ ignorait. **On énumère l'état ACTIF, jamais les états terminaux** : la liste
 s'allonge avec le temps, celle des façons de travailler non. Un contrôle qui crie sur un cas normal
 est contourné le jour où il a raison (§21).
 
+🔑 **ET C'EST LA MÊME FAMILLE QUE LES SETS MARQUÉS « REFUSÉ » ALORS QU'ILS ÉTAIENT INTERROMPUS**
+(§21, défaut n°3) : dans les deux cas, un état réel tombe dans une catégorie qui ne le décrit pas,
+parce que l'énumération a été écrite depuis les cas qu'on avait en tête ce jour-là. **Une
+énumération d'états vieillit mal par construction** — on y ajoute des états, on ne revient jamais
+mettre à jour les listes qui les excluent. Énumérer le petit ensemble stable (ce qui TRAVAILLE) au
+lieu du grand ensemble ouvert (ce qui a FINI) n'est pas une préférence de style, c'est la seule
+forme qui survit à l'ajout d'un état.
+
+---
+
+## 27. DETTE NOMMÉE : la date de sortie manque sur 11 sets de 38 — 2026-09-12
+
+**Aucune source disponible ne la porte.** Cardmarket ne donne pas de date d'expansion, et l'infobox
+Bulbapedia de ces onze pages n'en porte pas non plus (vérifié sur les documents, pas supposé).
+
+| région | sets |
+|---|---|
+| japonais | **SI-JP**, **VS**, **WEB**, **IPB**, **MCDP**, **EXS** |
+| occidental | **PBL**, **ASC**, **xASC**, **JTG**, **CRI** |
+
+**La résolution est onze lignes à la main**, et le testeur a décidé le 2026-09-12 que ce n'est **pas
+maintenant**. En attendant, le catalogue affiche le set **sans date**, jamais « date inconnue » :
+une mention d'absence occupe la place d'une information et n'en apporte aucune.
+
+⚠️ **Onze, pas dix.** Le premier compte n'avait retenu que les sets sans `nomJa` ET sans date, ce
+qui masquait VS et WEB — ils ont un nom japonais et pas de date. **Un filtre à deux conditions
+répond à une autre question que celle qu'on pose** : « combien n'ont pas de date » n'est pas
+« combien n'ont ni nom ni date ».
+
 ---
 
 ## 26. Le nom d'une expansion japonaise pour un lecteur francophone — 2026-09-12
