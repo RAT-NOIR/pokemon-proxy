@@ -39,7 +39,10 @@ Règles de la requête sur notre base, dans cet ordre, chacune journalisée dans
    `jointure.js` : apostrophes, tirets, ♂♀, « Basic », LV.X depuis `level=X`) ;
 2. **numéro, clé V** : sur un set numéroté, `cleNumero(numero)` contre les impressions du set
    (préfixe alphabétique gardé : S04 ≠ 004) ; sur un set SANS numéros, le numéro lu est un numéro
-   de POKÉDEX et se compare à `ndex` ;
+   de POKÉDEX et se compare à `ndex` — un `ndex` nul garde la carte (non lu ≠ différent). ⚠️ Le
+   caractère « numéroté » se juge sur les impressions du set COUVERT, jamais sur la page entière :
+   l'Articuno de MFO porte aussi une réimpression Classic numérotée 009, qui le faisait passer pour
+   numéroté et l'écartait (mesuré le 2026-09-12) ;
 3. **total** : si lu, préférer les sets dont `totalImprime` = total ; jamais un veto ;
 4. **attaque lue** : si plusieurs produits, garder ceux dont le nom Cardmarket porte l'attaque
    (`departerParAttaque`, déjà en place, sur les crochets) ;
