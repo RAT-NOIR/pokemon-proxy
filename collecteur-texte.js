@@ -160,11 +160,41 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
 
     // ---- 3. le texte, par lots de 50, reprise par titre ------------------------------------
     const dejaFaits = new Set((etat.pages || []).map(p => p.titre));
-    const aFaire = titres.filter(t => !dejaFaits.has(t));
+    let aFaire = titres.filter(t => !dejaFaits.has(t));
     console.log(`3. texte : ${aFaire.length} titres à traiter, ${dejaFaits.size} déjà faits.`);
+    // 🔴 `--reparser` PROMET ZÉRO REQUÊTE, ET IL EN FAISAIT 3 (102 pages refetchées sur EXP,
+    // 2026-09-12). Les titres ajoutés par la table sont des ALIAS qui redirigent vers des pages déjà
+    // archivées : ils n'étaient pas dans `pages`, donc « à faire ». Un rejeu qui refetche n'est plus
+    // un rejeu, et une promesse imprimée qui diffère du comportement est la faute du dépôt.
+    // Le nombre écarté s'IMPRIME — on ne remplace pas une requête par un silence.
+    if (reparser && aFaire.length) {
+        console.log(`   --reparser : ${aFaire.length} titre(s) non archivés sont ÉCARTÉS (zéro requête). Les collecter demande un lancement sans --reparser.`);
+        aFaire = [];
+    }
     const textesEpures = new Map();       // pageid -> épuré (pour le rapport)
     let ecrites = 0, r2Ecrits = 0, manquants = 0;
     const redirigeDepuisTout = new Map(); // cible -> [sources]
+
+    // ---- LES DÉNOMINATEURS APPARIÉS -------------------------------------------------------
+    // 🔑 « Un dénominateur n'est utile que s'il est CONFRONTÉ. » Chacun de ces compteurs n'a de sens
+    // qu'en FACE d'un autre, et chaque paire porte son verdict imprimé. Un nombre seul ne dit rien :
+    // « 128 impressions » est rassurant, « 128 impressions pour 133 entrées vues » est un défaut.
+    const D = {
+        entreesExp: 0, impressionsRendues: 0, pagesSansEntree: 0,       // paire 1 — faitsDeCarte()
+        jeuVideo: 0, nonRendues: new Map(),
+        epure: {},                                                       // paire 2 — epurer()
+        champsAGabarit: new Map(), cartesAGabarit: 0                     // paire 3 — le parse rendu
+    };
+    const compter = faits => {
+        D.pagesComptees = (D.pagesComptees || 0) + 1;
+        D.entreesExp += faits.entreesVues || 0;
+        D.impressionsRendues += (faits.impressions || []).length;
+        D.jeuVideo += faits.entreesJeuVideo || 0;
+        for (const c of faits.entreesNonRendues || []) D.nonRendues.set(c, (D.nonRendues.get(c) || 0) + 1);
+        if (!faits.entreesVues) D.pagesSansEntree++;
+        if ((faits.champsAGabarit || []).length) D.cartesAGabarit++;
+        for (const c of faits.champsAGabarit || []) D.champsAGabarit.set(c, (D.champsAGabarit.get(c) || 0) + 1);
+    };
 
     // ---- 3 bis. --reparser : rejouer le parseur sur l'archive R2, SANS refetcher ------------
     // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
@@ -175,6 +205,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
             const faits = faitsDeCarte(epure);
+            compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
             await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
@@ -202,11 +233,12 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
             await M.Etat.updateOne({ _id: slug }, { $push: { pages: { titre: t, pageid: null, revid: null, etat: 'manquant' } } });
         }
         for (const pg of pages) {
-            const epure = epurer(pg.content);
+            const epure = epurer(pg.content, D.epure);
             const cle = r2.cleWikitext(pg.pageid, pg.revid);
             const depot = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, cle, epure);   // R2 AVANT la ligne
             if (depot.ecrit) r2Ecrits++;
             const faits = faitsDeCarte(pg.content);
+            compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
             await M.Carte.updateOne({ _id: pg.pageid }, {
@@ -305,6 +337,41 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const r of J.restes) console.log(`      · ${r.type} : ${r.detail}`);
     console.log(`   champs nuls (sur ${cartesDuSet.length} cartes) : ${JSON.stringify(nuls)}`);
     console.log(`   requêtes Bulbapedia : ${bulba.compteRequetes()} · R2 écrits : ${r2Ecrits + (depotSet.ecrit ? 1 : 0)}`);
+
+    // ---- LES CINQ DÉNOMINATEURS APPARIÉS, chacun avec son VERDICT -----------------------------
+    // Aucun de ces nombres ne se lit seul. Chaque ligne dit ce qui est ENTRÉ, ce qui est SORTI, et
+    // si l'écart est normal ou non — c'est la seule forme qui aurait attrapé les quatre défauts
+    // silencieux du 2026-09-12 (33 cartes muettes, `{{j|151}}`, S04, slug absent).
+    const pagesParsees = (D.pagesComptees || 0) > 0;
+    const avecDeuxSlugs = J.lignes.filter(l => l.slug && l.slugSet).length;
+    const avecAucunSlug = J.lignes.filter(l => !l.slug && !l.slugSet).length;
+    const produitsAvecSlug = produits.filter(p => p.slug && p.slugSet).length;
+    const verdict = (ok, bon, mauvais) => ok ? `✅ ${bon}` : `❌ ${mauvais}`;
+    console.log(`\n──── DÉNOMINATEURS APPARIÉS ${L.code} ────`);
+    if (pagesParsees) {
+        const nonRendues = [...D.nonRendues.values()].reduce((a, b) => a + b, 0);
+        console.log(`   1. faitsDeCarte()  entrées /Expansion vues : ${D.entreesExp}  ·  impressions rendues : ${D.impressionsRendues}  ·  écartées jeu vidéo (gbset) : ${D.jeuVideo}  ·  NON RENDUES : ${nonRendues}`);
+        console.log(`      ${verdict(D.pagesSansEntree === 0, `toute page parsée porte au moins une entrée d'expansion`, `${D.pagesSansEntree} page(s) parsée(s) SANS aucune entrée d'expansion — elles n'appartiendront à aucun set`)}`);
+        console.log(`      ${verdict(nonRendues === 0, `aucune impression physique perdue par le parseur`, `${nonRendues} entrée(s) d'impression PHYSIQUE non rendues : ${[...D.nonRendues].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `×${n} {${k}}`).join(' · ')}`)}`);
+    } else console.log(`   1. faitsDeCarte()  — aucune page parsée ce tour (tout était déjà fait) : rien à confronter.`);
+    if (D.epure.pages) {
+        console.log(`   2. epurer()        ${D.epure.pages} pages · ${D.epure.gabarits} gabarits vus · ${D.epure.paramsVides} paramètres de PROSE vidés · ${D.epure.octetsAvant} → ${D.epure.octetsApres} octets (${(100 * D.epure.octetsApres / D.epure.octetsAvant).toFixed(1)} %)`);
+        console.log(`      ⚠️ ce compteur porte sur la PROSE retirée, pas sur les gabarits restants : il n'aurait PAS vu {{j|151}}. C'est la paire 3 qui le voit.`);
+    } else console.log(`   2. epurer()        — non exercé ce tour (lecture depuis R2, texte déjà épuré).`);
+    console.log(`   3. gabarits restants  cartes portant un champ à « {{ }} » : ${D.cartesAGabarit} / ${D.pagesComptees || 0} parsées  ·  par chemin : ${JSON.stringify(Object.fromEntries(D.champsAGabarit))}`);
+    console.log(`      ${verdict(D.cartesAGabarit === 0, 'aucun gabarit non développé ne part en base', `${D.cartesAGabarit} carte(s) porteraient un gabarit brut jusqu'au HTML du site`)}`);
+    console.log(`   4. clé de numéro   produits du catalogue : ${produits.length}  ·  portant un numéro : ${produits.filter(p => p.numero != null && String(p.numero).trim() !== '').length}  ·  lignes prouvées « set+numero » : ${complet.preuves['set+numero'] || 0}`);
+    console.log(`      ${verdict(produits.length === J.compte.produitsJoints + produitsRestes, 'produits = joints + restes', 'un produit est compté deux fois ou perdu')}`);
+    console.log(`   5. lien Cardmarket lignes de jointure : ${J.lignes.length}  ·  portant slug ET slugSet : ${avecDeuxSlugs}  ·  n'en portant AUCUN : ${avecAucunSlug}  (le catalogue en a ${produitsAvecSlug} / ${produits.length})`);
+    console.log(`      ${verdict(avecAucunSlug === 0, 'toute ligne peut fabriquer son URL Cardmarket', `${avecAucunSlug} ligne(s) sans lien — produits appris par un chemin qui n'enregistre pas le slug (CLAUDE.md §6)`)}`);
+    await M.Set.updateOne({ _id: slug }, { $set: { denominateurs: {
+        pagesParsees: D.pagesComptees || 0, entreesExpansionVues: D.entreesExp, impressionsRendues: D.impressionsRendues,
+        pagesSansEntree: D.pagesSansEntree, entreesJeuVideo: D.jeuVideo, entreesNonRendues: Object.fromEntries(D.nonRendues),
+        epure: D.epure, cartesAGabarit: D.cartesAGabarit,
+        champsAGabarit: Object.fromEntries(D.champsAGabarit),
+        lignes: J.lignes.length, lignesAvecSlug: avecDeuxSlugs, lignesSansSlug: avecAucunSlug,
+        produitsAvecSlug, produits: produits.length, le: new Date()
+    } } });
 
     // ---- rapport : cinq cartes au hasard, champs à côté du wikitext épuré ---------------------
     fs.mkdirSync(dossierRapport, { recursive: true });

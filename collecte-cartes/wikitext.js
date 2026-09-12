@@ -84,14 +84,29 @@ function recomposer(g) {
  * ÉPURATION : ne garde que les gabarits de premier niveau, avec les paramètres de TEXTE vidés.
  * Toute prose hors gabarits disparaît. Idempotente : épurer(épurer(x)) === épurer(x).
  */
-function epurer(texte) {
-    return gabarits(texte).map(g => {
+/**
+ * @param {object} [stats] rempli si fourni : ce que l'épuration a VU et ce qu'elle a FAIT.
+ * ⚠️ SANS CE COMPTE, UN GABARIT A FUI JUSQU'AU HTML DU SITE (`{{j|151}}`, 2026-09-12). Une étape qui
+ * transforme doit dire ce qu'elle a transformé, sinon personne ne voit ce qu'elle laisse passer.
+ */
+function epurer(texte, stats = null) {
+    const gs = gabarits(texte);
+    let vides = 0;
+    const sortie = gs.map(g => {
         const copie = { ...g, params: { ...g.params } };
         for (const k of Object.keys(copie.params)) {
-            if (PARAMS_TEXTE.has(k.toLowerCase())) copie.params[k] = '';
+            if (PARAMS_TEXTE.has(k.toLowerCase()) && String(copie.params[k]).trim() !== '') { copie.params[k] = ''; vides++; }
         }
         return recomposer(copie);
     }).join('\n');
+    if (stats) {
+        stats.gabarits = (stats.gabarits || 0) + gs.length;
+        stats.paramsVides = (stats.paramsVides || 0) + vides;
+        stats.octetsAvant = (stats.octetsAvant || 0) + texte.length;
+        stats.octetsApres = (stats.octetsApres || 0) + sortie.length;
+        stats.pages = (stats.pages || 0) + 1;
+    }
+    return sortie;
 }
 
 // ---- aides de lecture des valeurs ------------------------------------------
@@ -169,13 +184,33 @@ function entreesExpansion(gs) {
     return out;
 }
 
+/** Chemins (`impressions.expansion`, `attaques.nom`…) dont la valeur porte encore `{{ }}`. */
+function cheminsAGabarit(valeur, prefixe = '', vus = new Set()) {
+    if (typeof valeur === 'string') return contientGabarit(valeur) ? [prefixe] : [];
+    if (Array.isArray(valeur)) return valeur.flatMap(v => cheminsAGabarit(v, prefixe, vus));
+    if (valeur && typeof valeur === 'object') {
+        return Object.entries(valeur).flatMap(([k, v]) => cheminsAGabarit(v, prefixe ? `${prefixe}.${k}` : k, vus));
+    }
+    return [];
+}
+
 /**
  * Les FAITS d'une page de carte. Rend aussi `champsNuls` pour le compte de la relecture.
  */
 function faitsDeCarte(texte) {
     const gs = gabarits(texte);
     const infobox = gs.find(g => CATEGORIE_PAR_INFOBOX[g.nom]);
-    const impressions = entreesExpansion(gs).flatMap(g => {
+    // LE DÉNOMINATEUR DE CETTE FONCTION : combien d'entrées d'expansion la page PORTE, contre
+    // combien d'impressions on en TIRE. Les 33 cartes muettes du premier jet (dresseurs et énergies,
+    // dont les entrées sont imbriquées dans un `/ReleaseInfo`) se seraient vues à ce seul rapport.
+    const entreesVues = entreesExpansion(gs);
+    // Une entrée qui ne rend rien n'est pas forcément une entrée PERDUE, et confondre les deux rend
+    // le contrôle inutilisable. Deux familles, comptées SÉPARÉMENT :
+    //   · jeu vidéo (`gbset`, `gb2set`) — le TCG Game Boy de 1998. Ce ne sont pas des impressions
+    //     physiques, on ne les veut pas, et elles sont majoritaires (17 sur 21 sur EXP).
+    //   · tout le reste — une impression physique que le parseur ne rend PAS. Celle-là est un manque.
+    const entreesJeuVideo = [], entreesNonRendues = [];
+    const impressions = entreesVues.flatMap(g => {
         const out = [];
         if (g.params.expansion) {
             const { numero, total } = numeroTotal(g.params.cardno);
@@ -187,6 +222,10 @@ function faitsDeCarte(texte) {
                 tirage: 'jp', expansion: nomDePage(g.params.jpexpansion || g.params.jpdeckkit),
                 deck: plat(g.params.jpdeck || g.params.jphalfdeck) || null, numero, total, rarete: plat(g.params.jprarity) || null
             });
+        }
+        if (!out.length) {
+            const cles = Object.keys(g.params).filter(k => String(g.params[k]).trim() !== '');
+            (cles.some(k => /^gb2?set/.test(k)) ? entreesJeuVideo : entreesNonRendues).push(cles.sort().join(','));
         }
         return out;
     });
@@ -220,12 +259,20 @@ function faitsDeCarte(texte) {
         // « ? » ou un texte sur une carte de vending : un non-nombre est un null, pas un NaN (même faute que ndex).
         retraite: (() => { const n = Number(plat(p.retreatcost)); return plat(p.retreatcost) !== '' && Number.isFinite(n) ? n : null; })(),
         attaques,
-        impressions
+        impressions,
+        // à CONFRONTER à impressions.length, jamais à lire seuls
+        entreesVues: entreesVues.length, entreesJeuVideo: entreesJeuVideo.length, entreesNonRendues
     };
     const attendus = carte.categorie === 'pokemon'
         ? ['nomEn', 'nomJa', 'type', 'pv', 'stade', 'ndex', 'illustrateur', 'attaques']
         : ['nomEn', 'nomJa', 'illustrateur'];
     carte.champsNuls = attendus.filter(k => carte[k] == null || (Array.isArray(carte[k]) && carte[k].length === 0));
+    // Un champ qui porte encore un gabarit non développé est une donnée INVALIDE, pas une donnée
+    // manquante : elle passerait tous les contrôles de présence, et `champsNuls` ne la voit pas.
+    // 🔴 LE PARCOURS EST RÉCURSIF, ET C'EST LE POINT. Le 2026-09-12, `{{j|151}}` est arrivé jusqu'au
+    // HTML du site dans `impressions[].expansion` — un champ IMBRIQUÉ. Un contrôle qui ne regarde
+    // que le premier niveau aurait dit « aucun gabarit » et aurait eu tort sur le seul cas réel.
+    carte.champsAGabarit = cheminsAGabarit(carte);
     return carte;
 }
 
@@ -283,4 +330,4 @@ function sectionsSetlist(texte) {
     return sections;
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, contientGabarit, PARAMS_TEXTE };
+module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
