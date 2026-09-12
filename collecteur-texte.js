@@ -237,14 +237,24 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
     if (manquants) restesParType['titre-manquant'] = manquants;
     const produitsRestes = (restesParType['produit-sans-carte'] || 0);
-    // Les QUATRE nombres : entrées de la Setlist (l'autorité) · pages distinctes · cartes écrites ·
-    // produits = joints + restes. `jacards` s'imprime à côté, pour information : sur une page à deux
-    // sets japonais il ne décrit que l'un des deux.
+    // LA DÉFINITION DU CONTRÔLE, corrigée le 2026-09-12 après six faux ❌. La Setlist compte des
+    // TIRAGES ; une page compte une CARTE. Sur les e-Card, une carte porte deux numéros (holo 033,
+    // non-holo 065) : 128 entrées pour 96 pages est NORMAL, et un contrôle qui crie sur un cas normal
+    // sera contourné. La concordance porte donc sur trois égalités qui, elles, n'ont pas de raison
+    // d'être fausses : (1) toutes les entrées de la Setlist ont résolu vers une page ; (2) pages
+    // distinctes = cartes écrites ; (3) produits = joints + restes. Le rapport tirages / cartes
+    // s'imprime à côté, avec le compte des IMPRESSIONS du set portées par les pages, qui doit
+    // retrouver les entrées de la Setlist (128 = 128) — c'est lui qui vérifie l'énumération.
+    const impressionsDuSet = cartesDuSet.reduce((a, c) => {
+        const imps = (c.impressions || []).filter(x => x.tirage === 'jp' && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
+        return a + Math.max(1, new Set(imps.map(i => i.numero ?? '')).size);
+    }, 0);
     const complet = {
-        setlist: entreesSetlist.length, infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, pagesDistinctes, cartesEcrites,
+        setlist: entreesSetlist.length, impressions: impressionsDuSet, infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, titresManquants: manquants, pagesDistinctes, cartesEcrites,
         produits: produits.length, produitsJoints: J.compte.produitsJoints, lignesJointure: J.lignes.length, restes: restesParType,
         preuves: J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}),
-        concordance: entreesSetlist.length === pagesDistinctes && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
+        concordance: manquants === 0 && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
+        tiragesParCarte: pagesDistinctes ? +(entreesSetlist.length / pagesDistinctes).toFixed(2) : null,
         verifieLe: new Date()
     };
     await M.Set.updateOne({ _id: slug }, { $set: { complet, entreesSetlist: entreesSetlist.length } });
@@ -254,9 +264,9 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const c of cartesDuSet) for (const k of c.champsNuls || []) nuls[k] = (nuls[k] || 0) + 1;
 
     console.log(`\n════ COMPLÉTUDE ${L.code} — dénominateur : ${produits.length} produits Cardmarket, ${titres.length} titres de Setlist ════`);
-    console.log(`   entrées de la Setlist        : ${entreesSetlist.length}   (infobox jacards : ${complet.infobox ?? '—'})`);
-    console.log(`   pages distinctes (redir. fusionnées) : ${pagesDistinctes}`);
-    console.log(`   cartes écrites               : ${cartesEcrites}`);
+    console.log(`   entrées de la Setlist (tirages) : ${entreesSetlist.length}  ·  impressions du set sur les pages : ${impressionsDuSet}${impressionsDuSet !== entreesSetlist.length ? '  ⚠️ diffèrent' : ''}  (infobox jacards : ${complet.infobox ?? '—'})`);
+    console.log(`   pages distinctes = cartes    : ${pagesDistinctes} = ${cartesEcrites}${entreesSetlist.length !== pagesDistinctes ? `   (${complet.tiragesParCarte} tirage(s) par carte : normal quand une carte porte plusieurs numéros)` : ''}`);
+    console.log(`   titres manquants             : ${manquants}`);
     console.log(`   produits = joints + restes   : ${produits.length} = ${J.compte.produitsJoints} + ${produitsRestes}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
     console.log(`   lignes de jointure (jp)      : ${J.lignes.length}  ·  preuves : ${JSON.stringify(J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}))}  ·  bonus intl : ${intlLignes}`);
     console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);

@@ -17,19 +17,24 @@ const { TABLE } = require('./table-sets');
     const nLignes = await cx.db.collection('cartes_produits').countDocuments({ tirage: 'jp' });
     const nIntl = await cx.db.collection('cartes_produits').countDocuments({ tirage: 'intl' });
     console.log(`dénominateur : ${TABLE.length} sets dans la table, ${sets.size} collectés, ${nCartes} cartes en base, ${nLignes} lignes de jointure japonaises, ${nIntl} occidentales en bonus\n`);
-    console.log('| set | Setlist | pages | cartes | produits = joints + restes | concordance | preuves | restes |');
-    console.log('|---|---|---|---|---|---|---|---|');
+    // Concordance recalculée ICI avec la définition corrigée le 2026-09-12 (voir collecteur-texte.js) :
+    // titres manquants = 0 · pages = cartes · produits = joints + restes. Les tirages (Setlist) et les
+    // impressions portées par les pages s'affichent, ils ne décident pas.
+    console.log('| set | tirages Setlist / impressions | pages = cartes | produits = joints + restes | concordance | preuves | restes |');
+    console.log('|---|---|---|---|---|---|---|');
     let concordants = 0, totalProduits = 0, totalJoints = 0;
     for (const L of TABLE) {
         const s = sets.get(L.slugSet);
         const c = s?.complet;
-        if (!c) { console.log(`| ${L.code} | — | — | — | ${L.prod} = — | non collecté | | |`); continue; }
+        if (!c) { console.log(`| ${L.code} | — | — | ${L.prod} = — | non collecté | | |`); continue; }
         const produitsRestes = c.restes?.['produit-sans-carte'] || 0;
-        if (c.concordance) concordants++;
+        const concordance = (c.titresManquants ?? c.restes?.['titre-manquant'] ?? 0) === 0 && c.pagesDistinctes === c.cartesEcrites && c.produits === c.produitsJoints + produitsRestes;
+        if (concordance) concordants++;
         totalProduits += c.produits; totalJoints += c.produitsJoints;
         const preuves = Object.entries(c.preuves || {}).map(([k, v]) => `${k} ${v}`).join(', ');
         const r = Object.entries(c.restes || {}).map(([k, v]) => `${k} ${v}`).join(', ') || '—';
-        console.log(`| ${L.code} | ${c.setlist ?? c.titresLies} (jacards ${c.infobox ?? '—'}) | ${c.pagesDistinctes} | ${c.cartesEcrites} | ${c.produits} = ${c.produitsJoints} + ${produitsRestes} | ${c.concordance ? '✅' : '❌'} | ${preuves} | ${r} |`);
+        const tirages = `${c.setlist ?? c.titresLies}${c.impressions != null ? ' / ' + c.impressions : ''}${c.setlist !== c.pagesDistinctes ? ` (${(c.setlist / c.pagesDistinctes).toFixed(2)} par carte)` : ''}`;
+        console.log(`| ${L.code} | ${tirages} | ${c.pagesDistinctes} = ${c.cartesEcrites} | ${c.produits} = ${c.produitsJoints} + ${produitsRestes} | ${concordance ? '✅' : '❌'} | ${preuves} | ${r} |`);
     }
     console.log(`\n${concordants} sets concordants sur ${sets.size} collectés ; produits joints ${totalJoints} / ${totalProduits}\n`);
     const parSetType = {};
