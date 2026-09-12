@@ -706,6 +706,31 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 17. Un verrou par unité de travail ne protège pas un tiers — 2026-09-12
+
+**L'occurrence, 16:34 → 16:41.** Deux collecteurs d'images ont tourné en même temps : le local
+(pid 35556, `DESKTOP-5LDV9CG`, set G1) et le worker Render (pid 52,
+`srv-dainu3bm8hqs73dklpi0`, set G2), chacun tenant sagement sa cadence de 5 s. **artofpkm.com a
+donc reçu deux requêtes toutes les 5 secondes, sur 58 requêtes.** La file d'attente partagée a
+fonctionné exactement comme écrit — elle donne un set à chaque demandeur — et c'est elle qui a
+rendu la faute possible.
+
+🔑 **LE VERROU PROTÉGEAIT NOS DONNÉES, PAS LEUR BANDE PASSANTE.** `collecte_images_etat` portait un
+verrou PAR SET : deux collecteurs sur deux sets différents ne se voyaient pas. Or la promesse
+« 1 requête / 5 s, jamais en parallèle » est un engagement pris **par écrit dans la demande à
+PKMJP**, et il se compte **chez la source**, pas chez nous. Un verrou par unité de travail et un
+verrou par hôte distant sont deux choses différentes ; il fallait les deux, il n'y en avait qu'un.
+
+**La correction** : `artofpkm/__collecteur__`, un verrou GLOBAL pris avant toute collecte ; un second
+collecteur refuse de démarrer et nomme celui qui tient. Et un set interrompu retourne en `attente`,
+jamais en `refuse` — il était sinon sorti de la file pour toujours.
+
+⚠️ **ELLE EST INERTE TANT QUE LE WORKER RENDER N'EST PAS REDÉPLOYÉ** : il tourne sur `46dbfa4`, qui
+ne connaît pas ce verrou. Un correctif qui vit dans le dépôt et pas dans le processus ne protège
+rien — c'est la même famille que le signal calculé et jamais branché (§0 de sets-vintage-japonais).
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`

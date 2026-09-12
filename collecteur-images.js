@@ -38,6 +38,35 @@ const VERROU_MS = 10 * 60 * 1000;
 const LARGEUR_MIN = 560;
 const SOURCE = arg('source') || 'artofpkm';
 
+// ════════════════════════════════════════════════════════════════════════════
+// LE VERROU GLOBAL — UN SEUL COLLECTEUR AU MONDE, PAS UN PAR SET
+// ════════════════════════════════════════════════════════════════════════════
+// 🔴 L'OCCURRENCE, 2026-09-12 16:34→16:41. Le verrou n'existait QUE par set. Deux collecteurs ont
+// donc tourné en même temps sur DEUX sets : le local (pid 35556, DESKTOP-5LDV9CG, G1) et le worker
+// Render (pid 52, srv-dainu3bm8hqs73dklpi0, G2). Chacun tenait sagement sa cadence de 5 s — et
+// artofpkm.com recevait DEUX requêtes toutes les 5 s. 58 requêtes sont parties à ce régime.
+// ⚠️ LA RÈGLE PORTE SUR L'HÔTE DISTANT, PAS SUR NOTRE UNITÉ DE TRAVAIL. « 1 requête / 5 s, jamais
+// en parallèle » est un engagement pris par écrit dans la demande à PKMJP : il se compte chez LUI.
+// Un verrou par set protège nos données d'une double écriture ; il ne protège pas sa bande passante.
+// Les deux sont nécessaires, et ce sont deux verrous différents.
+const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
+
+async function prendreVerrouGlobal(M) {
+    const perime = new Date(Date.now() - VERROU_MS);
+    try {
+        const r = await M.EtatImages.findOneAndUpdate(
+            { _id: VERROU_GLOBAL, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }] },
+            { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() }, phase: 'collecteur' } },
+            { upsert: true, new: true }
+        ).lean();
+        return r ? null : 'refus';
+    } catch (e) {
+        if (e.code !== 11000) throw e;
+        const tenu = await M.EtatImages.findById(VERROU_GLOBAL).lean();
+        return `pid ${tenu?.verrou?.pid} sur ${tenu?.verrou?.hote}, depuis ${tenu?.verrou?.depuis}`;
+    }
+}
+
 let arretDemande = false;
 process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit l\'unité en cours.'); arretDemande = true; });
 process.on('SIGTERM', () => { console.warn('\n⏹️  SIGTERM : on finit l\'unité en cours.'); arretDemande = true; });
@@ -220,6 +249,7 @@ async function collecterSet(code, M, dossierRapport) {
     const { cartes: cx, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_IMAGES'], production: false });
     const M = modeles(cx);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
+    // L'effacement ne frappe pas la source : il n'a pas besoin du verrou global.
     if (process.argv.includes('--arreter-et-effacer')) { await effacerTout(M, process.argv.includes('--confirmer')); await fermer(); return; }
     const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
 
@@ -236,25 +266,41 @@ async function collecterSet(code, M, dossierRapport) {
         console.log(`enfilé : ${codes.join(', ')} · file : ${JSON.stringify(await File.find({}).sort({ ordre: 1 }).select('_id etat').lean())}`);
         await fermer(); return;
     }
+    // LE VERROU GLOBAL, pris AVANT toute collecte : un seul collecteur frappe la source à la fois,
+    // quelle que soit la machine et quel que soit le set. Voir son bloc en tête de fichier.
+    const tenuPar = await prendreVerrouGlobal(M);
+    if (tenuPar) {
+        console.error(`❌ ARRÊT : un autre collecteur ${SOURCE} tient le verrou global (${tenuPar}). « 1 requête / 5 s, jamais en parallèle » se compte chez la SOURCE : on ne double pas la cadence.`);
+        await fermer(); process.exit(1);
+    }
+    const battementGlobal = setInterval(() => M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
+    const rendreVerrouGlobal = async () => { clearInterval(battementGlobal); await M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $unset: { verrou: 1 } }).catch(() => { }); };
+    process.on('SIGTERM', async () => { await rendreVerrouGlobal(); });
+
     if (process.argv.includes('--boucle')) {
         console.log('--boucle : file d\'attente `file_images`, un set à la fois, 10 min de sommeil quand elle est vide.');
         while (!arretDemande) {
             const suivant = await File.findOneAndUpdate({ etat: 'attente' }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
             if (!suivant) { await new Promise(r => setTimeout(r, 10 * 60 * 1000)); continue; }
             const b = await collecterSet(suivant._id, M, dossierRapport);
-            await File.updateOne({ _id: suivant._id }, { $set: { etat: b.etat === 'verifie' ? 'fait' : 'refuse', fini: new Date(), resultat: b.etat } });
+            // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
+            // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
+            // « refuse » le sortait de la file pour toujours, et personne ne l'aurait repris.
+            const etat = b.etat === 'verifie' ? 'fait' : (/^(interrompu|refuse-verrou|refuse-texte-en-cours)$/.test(b.etat) ? 'attente' : 'refuse');
+            await File.updateOne({ _id: suivant._id }, { $set: { etat, resultat: b.etat, ...(etat === 'attente' ? {} : { fini: new Date() }) }, ...(etat === 'attente' ? { $unset: { pris: 1 } } : {}) });
+            if (etat === 'attente') { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
         }
-        await fermer(); return;
+        await rendreVerrouGlobal(); await fermer(); return;
     }
 
     const codes = arg('sets') ? arg('sets').split(',').map(s => s.trim()) : arg('set') ? [arg('set')] : null;
-    if (!codes) { console.error('❌ ARRÊT : --set=<CODE>, --sets=A,B,C, --enfiler=… ou --boucle obligatoire.'); await fermer(); process.exit(1); }
+    if (!codes) { console.error('❌ ARRÊT : --set=<CODE>, --sets=A,B,C, --enfiler=… ou --boucle obligatoire.'); await rendreVerrouGlobal(); await fermer(); process.exit(1); }
     const bilan = [];
     for (const code of codes) {
         if (arretDemande) break;
         bilan.push(await collecterSet(code, M, dossierRapport));
     }
     console.log('\nbilan :', bilan.map(b => `${b.code} ${b.etat}`).join(' · '));
-    if (process.argv.includes('--attendre-a-la-fin')) { console.log('--attendre-a-la-fin : le processus reste vivant (worker), rien ne tourne plus.'); setInterval(() => { }, 60000); return; }
-    await fermer();
+    if (process.argv.includes('--attendre-a-la-fin')) { console.log('--attendre-a-la-fin : le processus reste vivant (worker), rien ne tourne plus.'); await rendreVerrouGlobal(); setInterval(() => { }, 60000); return; }
+    await rendreVerrouGlobal(); await fermer();
 })().catch(async e => { console.error('❌ ERREUR', e); process.exit(1); });

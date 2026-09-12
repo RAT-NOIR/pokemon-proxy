@@ -11,6 +11,12 @@ ce fichier-là), mêmes quatre arrêts durs, même base `cartes`. Rien ici n'est
 > 2. **Une requête toutes les 5 s, jamais en parallèle**, User-Agent
 >    `rat-market-collecte/0.1 (https://rat-market.fr ; contact)`. Un seul réessai sur 5xx après 30 s.
 >    C'est ce qui distingue un collecteur d'un aspirateur.
+>    🔴 **ET ÇA SE COMPTE CHEZ LA SOURCE, PAS CHEZ NOUS.** Le 2026-09-12 de 16:34 à 16:41, deux
+>    collecteurs ont tourné sur deux sets différents — le local et le worker Render — chacun à 5 s,
+>    donc **2 requêtes toutes les 5 s chez artofpkm.com, sur 58 requêtes**. Le verrou n'existait que
+>    PAR SET : il protégeait nos données, pas leur bande passante. Depuis, un **verrou GLOBAL**
+>    (`artofpkm/__collecteur__`) autorise un seul collecteur au monde ; un second refuse de démarrer
+>    et le dit. Les deux verrous sont nécessaires et ne protègent pas la même chose.
 > 3. **Attribution nommée dès la première fiche affichée** : « Image : The Art of Pokémon
 >    (artofpkm.com), © ayants droit Pokémon » avec lien, sous chaque image, plus la page Sources.
 >    Aucune image n'est servie publiquement avant que ce gabarit existe.
