@@ -2,55 +2,66 @@
 // LA TABLE SET → idExpansion, ÉCRITE À LA MAIN
 // ============================================================
 // La liaison automatique a été mesurée : 2 appariements sur 177, les deux faux. Chaque ligne est
-// donc écrite à la main et VÉRIFIÉE par un compte avant d'être admise — `verifie: true` n'est posé
-// qu'après un relevé réel (liens de la page du set, comptés contre `attendu`). Le collecteur REFUSE
-// une ligne non vérifiée : on ne collecte pas sur une hypothèse.
+// donc écrite à la main et VÉRIFIÉE par un relevé avant d'être admise ; le collecteur REFUSE une
+// ligne non vérifiée. On ne collecte pas sur une hypothèse.
+//
+// CE QUE LE RELEVÉ DU 2026-09-12 A ÉTABLI (verifier-table.js, 3 requêtes par set, 80 requêtes) :
+//   · Bulbapedia FUSIONNE un set japonais et son jumeau occidental sur UNE page : « Mystery of the
+//     Fossils (TCG) » redirige vers « Fossil (TCG) », « Leaders' Stadium (TCG) » vers « Gym Heroes
+//     (TCG) », et une page occidentale peut porter DEUX sets japonais (Aquapolis = The Town on No
+//     Map + Wind from the Sea ; Skyridge = Split Earth + Mysterious Mountains ; Legends Awakened =
+//     Cry from the Mysterious + Temple of Wrath). Le titre de la page ne suffit donc jamais.
+//   · L'APPARTENANCE se lit dans la SETLIST de la page : une section `Setlist/…header|title=X` par
+//     set, dont les entrées `{{TCG ID|A|Nom|B}}` donnent le titre `Nom (A B)`, redirection vers la
+//     page de la carte. C'est `bulba.setlist` (titres de sections) qui énumère, et
+//     `bulba.expansion` (le nom que `jpexpansion=` donne sur la page de la carte) qui joint.
+//   · `jacards` de l'infobox est le compte du DERNIER set japonais de la page quand elle en porte
+//     deux (Skyridge dit 91 pour Split Earth 88 + Mysterious Mountains 91) : il s'imprime, il ne
+//     décide pas. Le compte des entrées de la section décide.
 //
 // Colonnes :
-//   code, exp, prod       — les nôtres, recopiés de sets-vintage-japonais.js (source de vérité)
-//   bulba.titre           — la page du SET sur Bulbapedia
-//   bulba.expansion       — le nom que les pages de cartes donnent en `jpexpansion=` (nomDePage)
-//   bulba.motifTitres     — regex des TITRES DE CARTES liés par la Setlist (avant redirection)
-//   attendu               — nombre de pages de cartes attendu = `jacards` de l'infobox
-//   verifie               — relevé fait, date, résultat
-//
-// Relevé du 2026-09-12 sur api.php (prop=links) : EXP 102 titres « (Base Set n) », PJU 64 titres
-// « (Jungle n) » → 48 pages après redirections, MFO 62 → 47 pages pour 48 attendues (un reste).
+//   code, exp, prod, nom, slugSet   — les nôtres, recopiés de sets-vintage-japonais.js
+//   bulba.titre                     — la page demandée (la redirection est suivie et journalisée)
+//   bulba.setlist                   — titre(s) de section(s) de la Setlist à énumérer (défaut : expansion)
+//   bulba.expansion                 — nom(s) `jpexpansion=` sur les pages de cartes (jointure)
+//   bulba.deck                      — pour un kit : le deck retenu (IPB = Bulbasaur Deck)
+//   attendu                         — produits Cardmarket (notre dénominateur, PAS celui de Bulbapedia)
+//   verifie                         — le relevé : date, page résolue, entrées TCG ID vues par nom de set
 
 const { SETS_VINTAGE_JAPONAIS } = require('../sets-vintage-japonais');
 
 const parCode = Object.fromEntries(SETS_VINTAGE_JAPONAIS.map(s => [s.code, s]));
+const V = (page, entrees, note) => ({ le: '2026-09-12', page, entrees, ...(note ? { note } : {}) });
 
 const TABLE = [
-    { code: 'EXP', bulba: { titre: 'Expansion Pack (TCG)', expansion: 'Expansion Pack', motifTitres: '\\(Base Set \\d+\\)$' }, attendu: 102, verifie: { le: '2026-09-12', liens: 102, pages: 102 } },
-    { code: 'PJU', bulba: { titre: 'Pokémon Jungle (TCG)', expansion: 'Pokémon Jungle', motifTitres: '\\(Jungle \\d+\\)$' }, attendu: 48, verifie: { le: '2026-09-12', liens: 64, pages: 48 } },
-    { code: 'MFO', bulba: { titre: 'Mystery of the Fossils (TCG)', expansion: 'Mystery of the Fossils', motifTitres: '\\(Fossil \\d+\\)$' }, attendu: 48, verifie: { le: '2026-09-12', liens: 62, pages: 47, note: '47 pages pour 48 attendues : un reste à nommer' } },
-    // ---- NON VÉRIFIÉES : titres et motifs supposés, le collecteur les refuse tant que `verifie` est null ----
-    { code: 'ROG', bulba: { titre: 'Rocket Gang (TCG)', expansion: 'Rocket Gang', motifTitres: '\\(Team Rocket \\d+\\)$' }, attendu: 65, verifie: null },
-    { code: 'G1', bulba: { titre: "Leaders' Stadium (TCG)", expansion: "Leaders' Stadium", motifTitres: '\\(Gym Heroes \\d+\\)$' }, attendu: 96, verifie: null },
-    { code: 'G2', bulba: { titre: 'Challenge from the Darkness (TCG)', expansion: 'Challenge from the Darkness', motifTitres: '\\(Gym Challenge \\d+\\)$' }, attendu: 98, verifie: null },
-    { code: 'SI-JP', bulba: { titre: 'Southern Islands (TCG)', expansion: 'Southern Islands', motifTitres: '\\(Southern Islands \\d+\\)$' }, attendu: 18, verifie: null },
-    { code: 'N1', bulba: { titre: 'Gold, Silver, to a New World... (TCG)', expansion: 'Gold, Silver, to a New World...', motifTitres: '\\(Neo Genesis \\d+\\)$' }, attendu: 96, verifie: null },
-    { code: 'N2', bulba: { titre: 'Crossing the Ruins... (TCG)', expansion: 'Crossing the Ruins...', motifTitres: '\\(Neo Discovery \\d+\\)$' }, attendu: 57, verifie: null },
-    { code: 'N3', bulba: { titre: 'Awakening Legends (TCG)', expansion: 'Awakening Legends', motifTitres: '\\(Neo Revelation \\d+\\)$' }, attendu: 57, verifie: null },
-    { code: 'N4', bulba: { titre: 'Darkness, and to Light... (TCG)', expansion: 'Darkness, and to Light...', motifTitres: '\\(Neo Destiny \\d+\\)$' }, attendu: 113, verifie: null },
-    { code: 'VS', bulba: { titre: 'Pokémon VS (TCG)', expansion: 'Pokémon VS', motifTitres: '\\(VS \\d+\\)$' }, attendu: 151, verifie: null },
-    { code: 'WEB', bulba: { titre: 'Pokémon Web (TCG)', expansion: 'Pokémon Web', motifTitres: '\\(Web \\d+\\)$' }, attendu: 48, verifie: null },
-    { code: 'EC1', bulba: { titre: 'Base Expansion Pack (TCG)', expansion: 'Base Expansion Pack', motifTitres: '\\(Expedition \\d+\\)$' }, attendu: 128, verifie: null },
-    { code: 'EC2', bulba: { titre: 'The Town on No Map (TCG)', expansion: 'The Town on No Map', motifTitres: '\\(Aquapolis \\d+\\)$' }, attendu: 92, verifie: null },
-    { code: 'EC3', bulba: { titre: 'Wind from the Sea (TCG)', expansion: 'Wind from the Sea', motifTitres: '\\(Aquapolis \\d+\\)$' }, attendu: 87, verifie: null },
-    { code: 'EC4', bulba: { titre: 'Split Earth (TCG)', expansion: 'Split Earth', motifTitres: '\\(Skyridge \\d+\\)$' }, attendu: 88, verifie: null },
-    { code: 'EC5', bulba: { titre: 'Mysterious Mountains (TCG)', expansion: 'Mysterious Mountains', motifTitres: '\\(Skyridge \\d+\\)$' }, attendu: 88, verifie: null },
-    { code: 'ADV2', bulba: { titre: 'Miracle of the Desert (TCG)', expansion: 'Miracle of the Desert', motifTitres: '\\(EX Sandstorm \\d+\\)$' }, attendu: 53, verifie: null },
-    { code: 'ADV3', bulba: { titre: 'Rulers of the Heavens (TCG)', expansion: 'Rulers of the Heavens', motifTitres: '\\(EX Dragon \\d+\\)$' }, attendu: 54, verifie: null },
-    { code: 'ADVex1', bulba: { titre: 'Magma VS Aqua: Two Ambitions (TCG)', expansion: 'Magma VS Aqua: Two Ambitions', motifTitres: '\\(EX Team Magma vs Team Aqua \\d+\\)$' }, attendu: 80, verifie: null },
-    { code: 'IPB', bulba: { titre: 'Intro Pack (TCG)', expansion: 'Intro Pack', motifTitres: '\\(Base Set \\d+\\)$' }, attendu: 41, verifie: null },
-    { code: 'MCDP', bulba: { titre: "McDonald's Pokémon-e Minimum Pack (TCG)", expansion: "McDonald's Pokémon-e Minimum Pack", motifTitres: '\\(McDonald\'s Pokémon-e Minimum Pack \\d+\\)$' }, attendu: 24, verifie: null },
-    { code: 'DP5c', bulba: { titre: 'Cry from the Mysterious (TCG)', expansion: 'Cry from the Mysterious', motifTitres: '\\(Legends Awakened \\d+\\)$' }, attendu: 65, verifie: null },
-    { code: 'PCG6', bulba: { titre: 'Holon Research Tower (TCG)', expansion: 'Holon Research Tower', motifTitres: '\\(EX Delta Species \\d+\\)$' }, attendu: 86, verifie: null },
-    { code: 'PCG9', bulba: { titre: 'Offense and Defense of the Furthest Ends (TCG)', expansion: 'Offense and Defense of the Furthest Ends', motifTitres: '\\(EX Crystal Guardians \\d+\\)$' }, attendu: 68, verifie: null },
-    { code: 'DP2', bulba: { titre: 'Secret of the Lakes (TCG)', expansion: 'Secret of the Lakes', motifTitres: '\\(Mysterious Treasures \\d+\\)$' }, attendu: 123, verifie: null },
-    { code: 'EXS', bulba: { titre: 'Expansion Sheet (TCG)', expansion: 'Expansion Sheet', motifTitres: '\\(Vending S\\d \\d+\\)$' }, attendu: 125, verifie: null }
+    { code: 'EXP', bulba: { titre: 'Expansion Pack (TCG)', expansion: 'Expansion Pack' }, attendu: 102, verifie: V('Base Set (TCG)', { 'Expansion Pack': 102 }, 'collecté : 102 = 102 = 102, 102 produits joints, 0 reste') },
+    { code: 'PJU', bulba: { titre: 'Pokémon Jungle (TCG)', expansion: 'Pokémon Jungle' }, attendu: 48, verifie: V('Jungle (TCG)', { 'Pokémon Jungle': 48 }) },
+    { code: 'MFO', bulba: { titre: 'Mystery of the Fossils (TCG)', expansion: 'Mystery of the Fossils' }, attendu: 48, verifie: V('Fossil (TCG)', { 'Mystery of the Fossils': 48 }, '47 pages « (Fossil n) » pour 48 : la 48e (Mew) n\'a pas de tirage Fossil occidental, la Setlist japonaise la porte') },
+    { code: 'ROG', bulba: { titre: 'Rocket Gang (TCG)', expansion: 'Rocket Gang' }, attendu: 65, verifie: V('Team Rocket (TCG)', { 'Rocket Gang': 65 }) },
+    { code: 'G1', bulba: { titre: "Leaders' Stadium (TCG)", expansion: "Leaders' Stadium" }, attendu: 96, verifie: V('Gym Heroes (TCG)', { "Leaders' Stadium": 96 }, '84 + 12 titres désambiguïsés « (Leaders\' Stadium 1/2) »') },
+    { code: 'G2', bulba: { titre: 'Challenge from the Darkness (TCG)', expansion: 'Challenge from the Darkness' }, attendu: 98, verifie: V('Gym Challenge (TCG)', { 'Challenge from the Darkness': 97 }, '91 + 6 désambiguïsés = 97 pour 98 attendus : un reste à nommer') },
+    { code: 'SI-JP', bulba: { titre: 'Southern Islands (TCG)', expansion: 'Southern Islands' }, attendu: 18, verifie: V('Southern Islands (TCG)', { 'Southern Islands': 36 }, 'deux sections (occidentale et japonaise) aux mêmes 18 titres ; infobox sans jacards') },
+    { code: 'N1', bulba: { titre: 'Gold, Silver, to a New World... (TCG)', expansion: 'Gold, Silver, to a New World...' }, attendu: 96, verifie: V('Neo Genesis (TCG)', { 'Gold, Silver, to a New World...': 101 }, '101 entrées pour jacards 96 : à lire au collecté') },
+    { code: 'N2', bulba: { titre: 'Crossing the Ruins... (TCG)', expansion: 'Crossing the Ruins...' }, attendu: 57, verifie: V('Neo Discovery (TCG)', { 'Crossing the Ruins...': 57 }, '55 + 2 désambiguïsés = 57 ; jacards dit 56') },
+    { code: 'N3', bulba: { titre: 'Awakening Legends (TCG)', expansion: 'Awakening Legends' }, attendu: 57, verifie: V('Neo Revelation (TCG)', { 'Awakening Legends': 57 }) },
+    { code: 'N4', bulba: { titre: 'Darkness, and to Light... (TCG)', expansion: 'Darkness, and to Light...' }, attendu: 113, verifie: V('Neo Destiny (TCG)', { 'Darkness, and to Light...': 113 }) },
+    { code: 'VS', bulba: { titre: 'Pokémon VS (TCG)', expansion: 'Pokémon VS' }, attendu: 151, verifie: V('Pokémon VS (TCG)', { 'VS': 143 }, 'page japonaise seule, titres « (VS n) », 143 entrées pour 151 produits') },
+    { code: 'WEB', bulba: { titre: 'Pokémon Web (TCG)', expansion: 'Pokémon Web' }, attendu: 48, verifie: V('Pokémon Web (TCG)', { 'Pokémon Web': 49 }, '49 entrées + 2 promos hors set (Bill P Promo 9, Slowpoke P11)') },
+    { code: 'EC1', bulba: { titre: 'Base Expansion Pack (TCG)', expansion: 'Base Expansion Pack' }, attendu: 157, verifie: V('Expedition Base Set (TCG)', { 'Base Expansion Pack': 129 }, '129 entrées pour jacards 128 ; Cardmarket a 157 produits (sous-série S de 29 ?)') },
+    { code: 'EC2', bulba: { titre: 'The Town on No Map (TCG)', expansion: 'The Town on No Map' }, attendu: 92, verifie: V('Aquapolis (TCG)', { 'The Town on No Map': 92 }) },
+    { code: 'EC3', bulba: { titre: 'Wind from the Sea (TCG)', expansion: 'Wind from the Sea' }, attendu: 90, verifie: V('Aquapolis (TCG)', { 'Wind from the Sea': 90 }, 'même page qu\'EC2 ; jacards 92 est celui de The Town on No Map') },
+    { code: 'EC4', bulba: { titre: 'Split Earth (TCG)', expansion: 'Split Earth' }, attendu: 91, verifie: V('Skyridge (TCG)', { 'Split Earth': 91 }, 'même page qu\'EC5') },
+    { code: 'EC5', bulba: { titre: 'Mysterious Mountains (TCG)', expansion: 'Mysterious Mountains' }, attendu: 91, verifie: V('Skyridge (TCG)', { 'Mysterious Mountains': 91 }) },
+    { code: 'ADV2', bulba: { titre: 'Miracle of the Desert (TCG)', expansion: 'Miracle of the Desert' }, attendu: 53, verifie: V('EX Sandstorm (TCG)', { 'Miracle of the Desert': 53 }) },
+    { code: 'ADV3', bulba: { titre: 'Rulers of the Heavens (TCG)', expansion: 'Rulers of the Heavens' }, attendu: 54, verifie: V('EX Dragon (TCG)', { 'Rulers of the Heavens': 54 }) },
+    { code: 'ADVex1', bulba: { titre: 'Magma VS Aqua: Two Ambitions (TCG)', expansion: 'Magma VS Aqua: Two Ambitions' }, attendu: 80, verifie: V('EX Team Magma vs Team Aqua (TCG)', { 'Magma VS Aqua: Two Ambitions': 80 }) },
+    { code: 'IPB', bulba: { titre: 'Intro Pack (TCG)', setlist: ['Bulbasaur Deck'], expansion: 'Intro Pack', deck: 'Bulbasaur Deck' }, attendu: 41, verifie: V('Intro Pack (TCG)', { 'Bulbasaur Deck': 40, 'Bulbasaur': 2 }, 'kit à deux decks ; seul le Bulbasaur Deck est notre IPB (41 produits) ; « Venusaur (Bulbasaur Deck) » sans numéro') },
+    { code: 'MCDP', bulba: { titre: "McDonald's Pokémon-e Minimum Pack (TCG)", expansion: "McDonald's Pokémon-e Minimum Pack" }, attendu: 24, verifie: V("McDonald's Pokémon-e Minimum Pack (TCG)", { 'McDonald Pack': 18 }, '18 entrées pour 24 produits Cardmarket') },
+    { code: 'DP5c', bulba: { titre: 'Cry from the Mysterious (TCG)', expansion: 'Cry from the Mysterious' }, attendu: 65, verifie: V('Legends Awakened (TCG)', { 'Cry from the Mysterious': 62 }, 'page à deux sets japonais (+ Temple of Wrath 61) ; 62 entrées pour 65 produits') },
+    { code: 'PCG6', bulba: { titre: 'Holon Research Tower (TCG)', expansion: 'Holon Research Tower' }, attendu: 86, verifie: V('EX Delta Species (TCG)', { 'Holon Research Tower': 83 }, '83 entrées pour jacards 86 et 86 produits') },
+    { code: 'PCG9', bulba: { titre: 'Offense and Defense of the Furthest Ends (TCG)', expansion: 'Offense and Defense of the Furthest Ends' }, attendu: 68, verifie: V('EX Dragon Frontiers (TCG)', { 'Offense and Defense of the Furthest Ends': 66 }, '66 entrées pour 68') },
+    { code: 'DP2', bulba: { titre: 'Secret of the Lakes (TCG)', expansion: 'Secret of the Lakes' }, attendu: 123, verifie: V('Mysterious Treasures (TCG)', { 'Secret of the Lakes': 123 }) },
+    { code: 'EXS', bulba: { titre: 'Vending Machine cards (TCG)', setlistMotif: '^Vending S[123]( \\d+)?$', expansion: ['Expansion Sheet 1', 'Expansion Sheet 2', 'Expansion Sheet 3'] }, attendu: 125, verifie: V('Vending Machine cards (TCG)', { 'Vending S1/S2/S3': 125 }, 'trois feuilles pour une expansion Cardmarket ; entrées « (Vending S1) » … « (Vending S3 n) », les promos Wizards/CoroCoro de la même page sont exclues par le motif') }
 ].map(l => {
     const s = parCode[l.code];
     if (!s) throw new Error(`table-sets : code ${l.code} absent de sets-vintage-japonais.js`);

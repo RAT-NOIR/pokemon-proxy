@@ -87,7 +87,10 @@ function joindre(cartes, produits, cible) {
         // ou, à défaut, le seul fait que la Setlist du set a lié cette page (cas des énergies de
         // base, dont la page est générique et ne liste pas chaque tirage). La preuve le dit :
         // 'set+…' quand la page le déclare, 'setlist+…' quand seule la liste du set le dit.
-        const imp = (carte.impressions || []).find(i => i.tirage === cible.tirage && i.expansion === cible.expansionBulba);
+        // `expansionBulba` peut être un nom ou une LISTE de noms (EXS = trois Expansion Sheet) ; `deck`
+        // restreint à un deck d'un kit (IPB = « Intro Pack » / « Bulbasaur Deck »).
+        const nomsCible = [].concat(cible.expansionBulba);
+        const imp = (carte.impressions || []).find(i => i.tirage === cible.tirage && nomsCible.includes(i.expansion) && (!cible.deck || i.deck === cible.deck));
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;

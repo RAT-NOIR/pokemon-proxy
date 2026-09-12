@@ -211,7 +211,7 @@ function faitsDeCarte(texte) {
     return carte;
 }
 
-/** Les FAITS d'une page de set (`TCGExpansionInfobox`). */
+/** Les FAITS d'une page de set (`TCGExpansionInfobox`). Sur un set japonais SANS jumeau, le compte est `cards`. */
 function faitsDeSet(texte) {
     const g = gabarits(texte).find(x => x.nom === 'TCGExpansionInfobox');
     if (!g) return null;
@@ -222,10 +222,41 @@ function faitsDeSet(texte) {
         nomJa: plat(p.jasetname) || null,
         nomJaTraduit: plat(p.transsetname) || null,
         cartesEn: entier(p.encards),
-        cartesJa: entier(p.jacards),
+        cartesJa: entier(p.jacards) ?? entier(p.cards),
         sortieEn: plat(p.enrelease) || null,
-        sortieJa: plat(p.jarelease) || null
+        sortieJa: plat(p.jarelease) ?? plat(p.release) ?? null
     };
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, plat, nomDePage, numeroTotal, PARAMS_TEXTE };
+/**
+ * LES SECTIONS DE LA SETLIST — l'autorité pour l'appartenance d'une carte à un set.
+ *
+ * Relevé le 2026-09-12 : Bulbapedia FUSIONNE un set japonais et son jumeau occidental sur une seule
+ * page (« Expansion Pack (TCG) » redirige vers « Base Set (TCG) »), et la page porte alors PLUSIEURS
+ * listes, chacune ouverte par `{{Setlist/…header|title=…}}`. La liste japonaise énumère ses cartes
+ * par `{{TCG ID|A|Nom|B}}`, dont le titre de page se reconstruit `Nom (A B)` — pour un set sans
+ * numéros, A et B sont les morceaux du NOM DU SET (« Expansion » + « Pack », « Mystery of the » +
+ * « Fossils »), pour un set numéroté A est le set et B le numéro. Ces titres sont des redirections
+ * vers la page de la carte (souvent celle du tirage occidental), que `revisionsDe` suit.
+ *
+ * @returns {Array<{titre: string, entrees: Array<{titre: string, a: string, nom: string, b: string|null, setReconstruit: string}>}>}
+ */
+function sectionsSetlist(texte) {
+    const sections = [];
+    let courante = null;
+    for (const g of gabarits(texte)) {
+        if (/^Setlist\/\w*header$/i.test(g.nom)) { courante = { titre: plat(g.params.title) || '', entrees: [] }; sections.push(courante); continue; }
+        if (/^Setlist\/\w*footer$/i.test(g.nom)) { courante = null; continue; }
+        if (/^Setlist\/\w*entry$/i.test(g.nom)) {
+            const m = g.brut.match(/\{\{TCG ID\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?\}\}/);
+            if (!m) continue;
+            const a = m[1].trim(), nom = m[2].trim(), b = (m[3] || '').trim() || null;
+            const e = { titre: b ? `${nom} (${a} ${b})` : `${nom} (${a})`, a, nom, b, setReconstruit: b ? `${a} ${b}` : a };
+            if (!courante) { courante = { titre: '', entrees: [] }; sections.push(courante); }
+            courante.entrees.push(e);
+        }
+    }
+    return sections;
+}
+
+module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, PARAMS_TEXTE };

@@ -25,7 +25,7 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
-const { epurer, faitsDeCarte, faitsDeSet } = require('./collecte-cartes/wikitext');
+const { epurer, faitsDeCarte, faitsDeSet, sectionsSetlist } = require('./collecte-cartes/wikitext');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
@@ -61,7 +61,10 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     const finir = async () => { clearInterval(battement); await M.Etat.updateOne({ _id: slug }, { $unset: { verrou: 1 } }); await fermer(); };
 
     console.log(`\n══ ${L.code} « ${L.nom} » — exp ${L.exp}, ${L.prod} produits, page « ${L.bulba.titre} », attendu ${L.attendu} ══`);
-    const motif = new RegExp(L.bulba.motifTitres);
+    // L'impression qui rattache une page au set cible : tirage japonais, nom(s) d'expansion de la
+    // table, et le deck quand la table en nomme un (kits).
+    const nomsCibles = [].concat(L.bulba.expansion);
+    const impressionCible = faits => faits.impressions.find(x => x.tirage === 'jp' && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
 
     // ---- 1. la page du set -------------------------------------------------------------
     // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
@@ -91,15 +94,39 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     console.log(`1. set : « ${faitsSet?.nomEn} » / ${faitsSet?.nomJa} (${faitsSet?.nomJaTraduit}) — jacards ${faitsSet?.cartesJa}, encards ${faitsSet?.cartesEn}, sortie JP ${faitsSet?.sortieJa} ; R2 ${depotSet.ecrit ? 'écrit' : 'déjà là'} (${cleSet})`);
     if (faitsSet?.cartesJa !== L.attendu) console.warn(`   ⚠️ l'infobox dit ${faitsSet?.cartesJa} cartes, la table attend ${L.attendu}.`);
 
-    // ---- 2. les liens ---------------------------------------------------------------------
+    // ---- 2. la SETLIST de la page du set : l'autorité de l'appartenance -----------------------
+    // Les sections dont le titre est dans `bulba.setlist` (défaut : le nom de l'expansion) ; à
+    // défaut, les entrées dont le nom de set reconstruit (« A B ») est ce nom, éventuellement
+    // suivi d'un désambiguïsateur numérique. Zéro requête : tout est dans le wikitext déjà lu.
     const etat = await M.Etat.findById(slug).lean();
     let titres = etat.titres?.length ? etat.titres : null;
+    const nomsExpansion = [].concat(L.bulba.expansion);
+    const nomsSections = L.bulba.setlist === null ? null : (L.bulba.setlist || nomsExpansion);
+    const sections = sectionsSetlist(pSet.content);
+    let entrees;
+    if (L.bulba.setlistMotif) {                                                        // EXS : par motif sur le nom de set reconstruit
+        const re = new RegExp(L.bulba.setlistMotif);
+        entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
+    } else if (nomsSections === null) entrees = sections.flatMap(s => s.entrees);
+    else {
+        entrees = sections.filter(s => nomsSections.includes(s.titre)).flatMap(s => s.entrees);
+        if (!entrees.length) {
+            const re = new RegExp(`^(${nomsSections.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})( \\d+)?$`);
+            entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
+        }
+    }
+    if (L.bulba.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(L.bulba.deck));
+    const entreesSetlist = [...new Set(entrees.map(e => e.titre))];
     if (!titres) {
-        const tous = await bulba.liensDe(L.bulba.titre);
-        titres = [...new Set(tous.filter(t => motif.test(t)))];
-        await M.Etat.updateOne({ _id: slug }, { $set: { titres, phase: 'liens' } });
-        console.log(`2. liens : ${tous.length} sortants, ${titres.length} titres au motif ${motif}`);
-    } else console.log(`2. liens : ${titres.length} titres repris de l'état.`);
+        if (!entreesSetlist.length) {
+            console.error(`❌ ${L.code} : aucune entrée de Setlist pour ${JSON.stringify(nomsSections)}. Sections vues : ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}`).join(' · ')}`);
+            await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'setlist-vide', sectionsVues: sections.map(s => ({ titre: s.titre, n: s.entrees.length })) } });
+            await finir(); process.exit(1);
+        }
+        titres = entreesSetlist;
+        await M.Etat.updateOne({ _id: slug }, { $set: { titres, phase: 'liens', sectionsVues: sections.map(s => ({ titre: s.titre, n: s.entrees.length })) } });
+    }
+    console.log(`2. setlist : sections ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}`).join(' · ')} → ${entreesSetlist.length} titres retenus${etat.titres?.length ? ' (repris de l\'état : ' + titres.length + ')' : ''}`);
 
     // ---- 3. le texte, par lots de 50, reprise par titre ------------------------------------
     const dejaFaits = new Set((etat.pages || []).map(p => p.titre));
@@ -118,7 +145,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
             const faits = faitsDeCarte(epure);
-            const impCible = faits.impressions.find(x => x.tirage === 'jp' && x.expansion === L.bulba.expansion);
+            const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
             await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
             textesEpures.set(c._id, epure);
@@ -141,7 +168,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
             const depot = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, cle, epure);   // R2 AVANT la ligne
             if (depot.ecrit) r2Ecrits++;
             const faits = faitsDeCarte(pg.content);
-            const impCible = faits.impressions.find(x => x.tirage === 'jp' && x.expansion === L.bulba.expansion);
+            const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
             await M.Carte.updateOne({ _id: pg.pageid }, {
                 $set: {
@@ -167,7 +194,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     // ---- 4. la jointure ---------------------------------------------------------------------
     const cartesDuSet = await M.Carte.find({ sets: slug }).lean();
     const produits = await produitsDeLExpansion(prod, L.exp);
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, tirage: 'jp' });
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: 'jp' });
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
     if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
@@ -195,20 +222,24 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
     if (manquants) restesParType['titre-manquant'] = manquants;
     const produitsRestes = (restesParType['produit-sans-carte'] || 0);
+    // Les QUATRE nombres : entrées de la Setlist (l'autorité) · pages distinctes · cartes écrites ·
+    // produits = joints + restes. `jacards` s'imprime à côté, pour information : sur une page à deux
+    // sets japonais il ne décrit que l'un des deux.
     const complet = {
-        infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, pagesDistinctes, cartesEcrites,
+        setlist: entreesSetlist.length, infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, pagesDistinctes, cartesEcrites,
         produits: produits.length, produitsJoints: J.compte.produitsJoints, lignesJointure: J.lignes.length, restes: restesParType,
-        concordance: faitsSet?.cartesJa === pagesDistinctes && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
+        preuves: J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}),
+        concordance: entreesSetlist.length === pagesDistinctes && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
         verifieLe: new Date()
     };
-    await M.Set.updateOne({ _id: slug }, { $set: { complet } });
+    await M.Set.updateOne({ _id: slug }, { $set: { complet, entreesSetlist: entreesSetlist.length } });
     await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'verifie', fini: new Date(), requetes: bulba.compteRequetes() } });
 
     const nuls = {};
     for (const c of cartesDuSet) for (const k of c.champsNuls || []) nuls[k] = (nuls[k] || 0) + 1;
 
-    console.log(`\n════ COMPLÉTUDE ${L.code} — dénominateur : ${produits.length} produits Cardmarket, ${titres.length} titres liés ════`);
-    console.log(`   infobox (jacards)            : ${complet.infobox}`);
+    console.log(`\n════ COMPLÉTUDE ${L.code} — dénominateur : ${produits.length} produits Cardmarket, ${titres.length} titres de Setlist ════`);
+    console.log(`   entrées de la Setlist        : ${entreesSetlist.length}   (infobox jacards : ${complet.infobox ?? '—'})`);
     console.log(`   pages distinctes (redir. fusionnées) : ${pagesDistinctes}`);
     console.log(`   cartes écrites               : ${cartesEcrites}`);
     console.log(`   produits = joints + restes   : ${produits.length} = ${J.compte.produitsJoints} + ${produitsRestes}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
