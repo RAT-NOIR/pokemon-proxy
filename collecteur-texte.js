@@ -180,7 +180,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         // les liens dénormalisés se recomposent depuis ce qui RESTE en cartes_produits
         for (const id of idsCartes) {
             const restants = (await M.CarteProduit.find({ carteId: id }).select('idProduct').lean()).map(x => x.idProduct);
-            await M.Carte.updateOne({ _id: id }, { $set: { 'liens.idProduct': restants } });
+            await M.Carte.updateOne({ _id: id }, { $set: { 'liens.idProduct': restants, 'liens.idMetacards': [] }, $unset: { 'liens.idMetacard': 1 } });
         }
     }
     for (let i = 0; i < aFaire.length && !arretDemande; i += 50) {
@@ -206,7 +206,7 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
                     bulba: { titre: pg.title, pageid: pg.pageid, revid: pg.revid, redirigeDepuis: redirigeDepuisTout.get(pg.title) || [], cleR2: cle },
                     collecteLe: new Date()
                 },
-                $addToSet: { sets: slug }, $setOnInsert: { version: 1, liens: { idProduct: [], idMetacard: null } }
+                $addToSet: { sets: slug }, $setOnInsert: { version: 1, liens: { idProduct: [], idMetacards: [] } }
             }, { upsert: true });
             ecrites++;
             textesEpures.set(pg.pageid, epure);
@@ -228,10 +228,15 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
     if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
-    // liens dénormalisés sur la carte
+    // liens dénormalisés sur la carte : produits joints, et leurs MÉTACARTES distinctes (le champ
+    // singulier `idMetacard`, déclaré et jamais rempli, est retiré au passage).
+    const metaDe = new Map(produits.map(p => [p.idProduct, p.idMetacard]));
     const parCarte = new Map();
     for (const l of J.lignes) { if (!parCarte.has(l.carteId)) parCarte.set(l.carteId, []); parCarte.get(l.carteId).push(l.idProduct); }
-    for (const [carteId, ids] of parCarte) await M.Carte.updateOne({ _id: carteId }, { $addToSet: { 'liens.idProduct': { $each: ids } } });
+    for (const [carteId, ids] of parCarte) {
+        const metas = [...new Set(ids.map(id => metaDe.get(id)).filter(m => m != null))];
+        await M.Carte.updateOne({ _id: carteId }, { $addToSet: { 'liens.idProduct': { $each: ids }, 'liens.idMetacards': { $each: metas } }, $unset: { 'liens.idMetacard': 1 } });
+    }
     // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la complétude)
     let intlLignes = 0;
     for (const [nomIntl, idExpIntl] of Object.entries(EXPANSIONS_INTL)) {
@@ -239,7 +244,8 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         const prodIntl = await produitsDeLExpansion(prod, idExpIntl);
         const Ji = joindre(cartesDuSet, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
         for (const l of Ji.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
-        for (const l of Ji.lignes) await M.Carte.updateOne({ _id: l.carteId }, { $addToSet: { 'liens.idProduct': l.idProduct } });
+        const metaIntl = new Map(prodIntl.map(p => [p.idProduct, p.idMetacard]));
+        for (const l of Ji.lignes) await M.Carte.updateOne({ _id: l.carteId }, { $addToSet: { 'liens.idProduct': l.idProduct, ...(metaIntl.get(l.idProduct) != null ? { 'liens.idMetacards': metaIntl.get(l.idProduct) } : {}) } });
         intlLignes += Ji.lignes.length;
         console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
     }

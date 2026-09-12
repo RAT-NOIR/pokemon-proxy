@@ -692,6 +692,13 @@ saisie exacte. Seule la règle du §14 le voit, et elle est maintenant câblée 
 1 ligne sur 140, L070, qui n'a plus de vérité ; H005 garde la sienne. La clé et l'ancre n'ont pas
 bougé (§5).
 
+**DÉCISION DU 2026-09-12, PAS UNE DETTE : L070 RESTE SANS VÉRITÉ.** La récupérer demanderait un
+marqueur d'exclusivité par entrée, donc de toucher à l'ancre d'identité — l'instrument qui juge
+tous les autres, et qui s'est retourné trois fois cette semaine. Une vérité sur 140 ne le justifie
+pas. Les quatre autres lignes écartées par la règle (H070, H008, H032, H010) sont des rescans dont
+la production a rendu EXACTEMENT le produit de la vérité voisine : elles se resaisissent sans
+risque, sous leur propre clé, avec le même `idProduct`.
+
 🔑 **La leçon.** Après Berry et l'ancre du 04/08, c'est la troisième vérité fausse, et les trois ont
 la même forme : une vérité exacte rattachée à la mauvaise ligne. **Ce qui les trouve n'est jamais
 un contrôle interne — c'est une seconde source qui ne partage pas nos hypothèses.** Le pont en est

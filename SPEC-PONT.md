@@ -82,6 +82,25 @@ mesuré le 15/08). Le canal prix ne change pas.
 
 ## 5. La trajectoire : TCGdex disparaît, code supprimé, pas désactivé
 
+🔑 **LE COMPTEUR, PREMIÈRE LECTURE (2026-09-12, `node compteur-pont.js --n=500 --par-set`, 280 lignes
+du journal, toutes antérieures au câblage).** La base aurait servi **194 lignes sur 280 (69,3 %)**.
+Les 86 autres : **71 hors garde amont** (50 de région non japonaise, TCGdex les sert comme avant ;
+21 à setCode incompatible vintage, dont des promos SV-P et des decks Classic) et **15 dans la garde
+mais sans carte en base**. Dans le périmètre, TCGdex ne sert donc plus que 15 lignes.
+
+**De quels sets viennent les 86 ?** 47 expansions, 79 lignes avec un produit, 7 refus sans produit.
+La distribution est PLATE : la première expansion pèse 11 lignes (PBL, occidentale), les dix
+premières 39, aucune dizaine ne couvre la moitié. Ce qui se collecte ENSUITE pour le périmètre
+japonais, lu dans ce compteur et non dans l'ordre théorique par demande :
+- **le moderne japonais** — sv8a Terastal Festival 3, m2a MEGA Dream 2, sv11B Black Bolt JP,
+  s12a VSTAR Universe, sv9, sv6, 151C, sm8 : ~12 lignes, 7 sets, ~1 400 produits chez PKMJP ;
+- **UNP, les promos sans numéro** (205 produits, région à établir) : 3 lignes — et c'est le set
+  du promo de L070 ;
+- une ligne ADV3 « base sans carte » alors que le set est collecté : une jointure manquante à
+  nommer, pas un set à collecter.
+Les 50 lignes occidentales ne bougeront qu'avec la collecte occidentale (Bulbapedia ≥ 2010, §5 des
+images). Le compteur se relit après chaque lot : c'est lui qui donne l'ordre, pas ce paragraphe.
+
 **Le critère de bascule, posé d'avance, sur les lignes du journal** (ce que les gens scannent),
 pas sur les 752 expansions :
 

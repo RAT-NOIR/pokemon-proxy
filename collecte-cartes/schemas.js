@@ -30,7 +30,11 @@ const carteSchema = new mongoose.Schema({
     attaques: [{ _id: false, nom: String, nomJa: String, cout: [String], degats: String }],
     faiblesse: String, resistance: String, retraite: Number,
     impressions: [{ _id: false, tirage: String, expansion: String, deck: String, numero: String, total: String, rarete: String }],
-    liens: { idProduct: [Number], idMetacard: Number },
+    // `idMetacards` : les métacartes Cardmarket des produits joints, DISTINCTES — une page Bulbapedia
+    // joint parfois des produits de plusieurs métacartes (tirage japonais et jumeau occidental).
+    // ⚠️ `idMetacard` (singulier) a été déclaré puis jamais rempli du 12/09 matin au 12/09 soir : un
+    // champ déclaré et vide est pire qu'un champ absent, quelqu'un s'y fie. Retiré, remplacé.
+    liens: { idProduct: [Number], idMetacards: [Number] },
     bulba: { titre: String, pageid: Number, revid: Number, redirigeDepuis: [String], cleR2: String },
     sets: [String],                       // slugs des sets de la table qui ont amené cette page
     champsNuls: [String],
