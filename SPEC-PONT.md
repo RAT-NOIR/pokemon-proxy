@@ -66,6 +66,20 @@ tirée dans le vintage. La base n'est interrogée que si `regionAttendue` est ja
 `setCode` lu ne contredit pas le vintage (`setCodeCompatibleVintage`, déjà en place). C'est la même
 garde que le périmètre actuel, appliquée AVANT la requête et non après.
 
+🔴 **CE QU'IL FAUDRA Y CHANGER LE JOUR DE L'OCCIDENTAL, ET LE RISQUE — écrit d'avance.** La garde
+amont est aujourd'hui écrite en RÉGION (« japonaise ») parce que le périmètre collecté était
+japonais : les deux coïncidaient. Ils cessent de coïncider dès le premier set occidental. **La garde
+doit être réécrite en COUVERTURE, pas en région** : la base est interrogée quand ce qu'on lit peut
+appartenir à un set COLLECTÉ, et `setCodeCompatibleVintage` ne s'applique plus qu'au sous-ensemble
+vintage. Ce changement seul est inoffensif — hors couverture, la base rend `aucune` et TCGdex prend.
+⚠️ **LE DANGER N'EST PAS LÀ, IL EST DANS L'EXHAUSTIVITÉ.** `pont-cartes.js` ne compte aujourd'hui les
+homonymes que dans les expansions **japonaises ou sans région** hors des 28 : les occidentales sont
+ignorées parce qu'elles étaient hors sujet. Le jour où un set occidental entre dans la base, un
+« Pikachu » d'un set collecté serait AFFIRMÉ alors que quarante autres Pikachu vivent dans des sets
+non collectés. **La garde d'exhaustivité doit compter les homonymes de TOUTE expansion hors
+couverture, quelle que soit sa région, et dans le MÊME commit que l'élargissement de la garde
+amont.** Élargir l'une sans l'autre, c'est refaire le Ho-Oh à l'échelle du catalogue entier.
+
 Ce que la base ne remplace pas : `variants_detailed` (routage des reverses, moderne) reste à
 TCGdex hors périmètre ; sur les 28 sets il n'existait pas (0 idProduct sur les cartes japonaises,
 mesuré le 15/08). Le canal prix ne change pas.
@@ -95,6 +109,17 @@ sur les 128 noms d'expansion occidentale que nos pages citent, **103 se retrouve
 exacte de notre `slugSet` (80 %)**, contre 2 sur 177 côté japonais — les deux côtés sont en anglais.
 Les 25 restants sont des noms à esperluette ou à article (« HeartGold & SoulSilver », « Sun & Moon »,
 « Diamond & Pearl »), une correspondance à la main, pas une devinette.
+
+**CE QUE COÛTERAIENT LES DIX, ET CE QU'ELLES RENDENT — mesuré le 2026-09-12, rien collecté.**
+2 072 produits, ~1 993 pages, **~63 requêtes de TEXTE, cinq minutes**. Le compteur passerait de
+**69,3 % à 81,8 %** (229/280) ; les 51 occidentales entières le mettraient à **87,5 %**.
+Résolution Bulbapedia vérifiée sur trois cartes de trois sets : **Pitch Black 744×1040, Ascended
+Heroes et Journey Together 734×1024**, toutes au-dessus des 560 px. ⚠️ Mais **~1 Mo par image contre
+120 Ko chez PKMJP** : ~2 Go et ~3 h pour les images des dix, c'est l'image qui coûte, pas le texte.
+⚠️ **ET UN PIÈGE MESURÉ AU PASSAGE** : `|image=` d'une page est le PREMIER tirage, pas celui du set
+demandé — sur trois cartes d'Ascended Heroes, l'une rendait l'image de Sword & Shield. Pour un set
+occidental moderne, l'image se choisit dans `reprintN` / `TCGGallery` PAR NOM DE SET, jamais dans
+`image=`. Le texte n'a pas ce problème, la Setlist désigne le bon set.
 
 🔑 **LE COMPTEUR, PREMIÈRE LECTURE (2026-09-12, `node compteur-pont.js --n=500 --par-set`, 280 lignes
 du journal, toutes antérieures au câblage).** La base aurait servi **194 lignes sur 280 (69,3 %)**.

@@ -754,6 +754,11 @@ ATTENDRE son concurrent, jamais le tuer.** Sans (2) et (3), la garantie devient 
 pas protégé la source, on s'est bloqué soi-même. `--verrou` dit qui tient, `--liberer-verrou` est la
 sortie de secours et REFUSE tant que le battement est frais.
 
+🔑 **EN UNE LIGNE, POUR LA PROCHAINE FOIS : un chevauchement de rollout est le cas NORMAL, et un
+`process.exit(1)` en fait une boucle. Une attente vaut mieux qu'une mort.** Le remplaçant qui meurt
+parce que son prédécesseur n'est pas encore mort est un incident que le déploiement fabrique tout
+seul, à chaque fois, indéfiniment.
+
 ⚠️ **Corollaire pour l'exploitation** : un verrou tenu par un pod qu'on ne reconnaît plus n'est pas
 une anomalie à forcer — c'est peut-être son successeur qui travaille. On lit le BATTEMENT avant de
 conclure. Le 2026-09-12, le « pod fantôme » qui bloquait tout était en fait un pod vivant qui
