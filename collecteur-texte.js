@@ -34,6 +34,7 @@ const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`))
 const VERROU_MS = 10 * 60 * 1000;
 
 let arretDemande = false;
+let finirGlobal = null;   // posé dès que le verrou est pris, pour le libérer sur toute erreur
 process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit l\'unité en cours, puis on s\'arrête proprement.'); arretDemande = true; });
 
 (async () => {
@@ -59,6 +60,10 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     await M.Etat.updateOne({ _id: slug }, { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() } }, $setOnInsert: { debute: new Date(), phase: 'set', pages: [], titres: [] } }, { upsert: true });
     const battement = setInterval(() => M.Etat.updateOne({ _id: slug }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
     const finir = async () => { clearInterval(battement); await M.Etat.updateOne({ _id: slug }, { $unset: { verrou: 1 } }); await fermer(); };
+    // Un plantage doit LIBÉRER le verrou : le 2026-09-12, quatre sets plantés sur un `ndex` ou une
+    // `retraite` non numérique ont refusé leur propre relance pendant dix minutes. L'unité en cours
+    // n'est pas écrite (R2 avant la ligne), donc la reprise est sûre.
+    finirGlobal = finir;
 
     console.log(`\n══ ${L.code} « ${L.nom} » — exp ${L.exp}, ${L.prod} produits, page « ${L.bulba.titre} », attendu ${L.attendu} ══`);
     // L'impression qui rattache une page au set cible : tirage japonais, nom(s) d'expansion de la
@@ -114,6 +119,16 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
             const re = new RegExp(`^(${nomsSections.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})( \\d+)?$`);
             entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
         }
+    }
+    if (!entrees.length) {
+        // Page SANS gabarit Setlist (Intro Pack) : les `{{TCG ID|A|Nom|B}}` se lisent sur tout le
+        // wikitext, filtrés par le motif ou les noms — c'est ce que verifier-table.js avait compté.
+        const re = L.bulba.setlistMotif ? new RegExp(L.bulba.setlistMotif)
+            : new RegExp(`^(${(nomsSections || nomsExpansion).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})( \\d+)?$`);
+        entrees = [...pSet.content.matchAll(/\{\{TCG ID\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?\}\}/g)]
+            .map(m => { const a = m[1].trim(), nom = m[2].trim(), b = (m[3] || '').trim() || null; return { titre: b ? `${nom} (${a} ${b})` : `${nom} (${a})`, setReconstruit: b ? `${a} ${b}` : a }; })
+            .filter(e => re.test(e.setReconstruit));
+        if (entrees.length) console.log(`   (aucune section Setlist : ${entrees.length} entrées TCG ID lues sur tout le wikitext)`);
     }
     if (L.bulba.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(L.bulba.deck));
     const entreesSetlist = [...new Set(entrees.map(e => e.titre))];
@@ -262,4 +277,4 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     console.log(`\n📄 rapport : ${cheminRapport}`);
     console.log('\n⏹️  Un seul set par lancement : arrêt ici, relecture avant le suivant.');
     await finir();
-})().catch(async e => { console.error('❌ ERREUR', e); process.exit(1); });
+})().catch(async e => { console.error('❌ ERREUR', e); if (finirGlobal) { try { await finirGlobal(); } catch (_) { } } process.exit(1); });

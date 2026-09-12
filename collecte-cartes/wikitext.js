@@ -196,11 +196,13 @@ function faitsDeCarte(texte) {
         type: plat(p.type) || null,
         pv: p.hp != null && plat(p.hp) !== '' ? Number(plat(p.hp)) || plat(p.hp) : null,
         stade: plat(p.evostage) || null,
-        ndex: carddex && plat(carddex.params.ndex) ? parseInt(plat(carddex.params.ndex), 10) : null,
+        // `ndex` peut porter « ??? » ou un texte (cartes sans espèce) : un non-nombre est un null, pas un NaN.
+        ndex: (() => { const n = carddex ? parseInt(plat(carddex.params.ndex), 10) : NaN; return Number.isFinite(n) ? n : null; })(),
         illustrateur: infobox ? illustrateurDe(infobox) : null,
         faiblesse: plat(p.weakness) || null,
         resistance: plat(p.resistance) || null,
-        retraite: p.retreatcost != null && plat(p.retreatcost) !== '' ? Number(plat(p.retreatcost)) : null,
+        // « ? » ou un texte sur une carte de vending : un non-nombre est un null, pas un NaN (même faute que ndex).
+        retraite: (() => { const n = Number(plat(p.retreatcost)); return plat(p.retreatcost) !== '' && Number.isFinite(n) ? n : null; })(),
         attaques,
         impressions
     };

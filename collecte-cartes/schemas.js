@@ -17,7 +17,7 @@ const setSchema = new mongoose.Schema({
     _id: String,                          // slug stable : slugSet Cardmarket (ex. 'Expansion-Pack')
     code: String, idExpansion: [Number], nomEn: String, nomJa: String, nomJaTraduit: String, nomFr: String,
     region: String, dateSortieJa: String, dateSortieEn: String, totalImprime: Number,
-    bulba: { titre: String, pageid: Number, revid: Number, motifTitres: String, expansion: String },
+    bulba: { titre: String, pageid: Number, revid: Number, motifTitres: String, expansion: mongoose.Schema.Types.Mixed },   // nom OU liste (EXS)
     complet: mongoose.Schema.Types.Mixed,
     collecteLe: Date, version: { type: Number, default: 1 }
 }, { strict: false, collection: 'sets' });

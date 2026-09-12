@@ -33,13 +33,18 @@ function decomposerNomCardmarket(name) {
     let s = String(name || '').trim();
     const groupes = [...s.matchAll(/\[([^\]]*)\]/g)].map(m => m[1].trim());
     let nom = s.replace(/\s*\[[^\]]*\]/g, '').trim();
+    // Ère DP : « Paras Lv.16 », « Dialga LV.X » — le niveau n'est pas dans le nom Bulbapedia.
+    let niveau = null;
+    const lv = nom.match(/\s+(Lv\.\s*\S+|LV\.X)$/i);
+    if (lv) { niveau = lv[1]; nom = nom.slice(0, -lv[0].length).trim(); }
     let attaques = [];
     for (const g of groupes) {
         if (g === 'M') nom += '♂';
         else if (g === 'F') nom += '♀';
+        else if (/^[A-Z!?]$/.test(g)) nom += ' ' + g;                  // Unown [A] -> « Unown A »
         else attaques = g.split('|').map(x => x.trim()).filter(Boolean);
     }
-    return { nom, attaques };
+    return { nom, attaques, niveau };
 }
 
 /**
@@ -90,14 +95,17 @@ function joindre(cartes, produits, cible) {
         // `expansionBulba` peut être un nom ou une LISTE de noms (EXS = trois Expansion Sheet) ; `deck`
         // restreint à un deck d'un kit (IPB = « Intro Pack » / « Bulbasaur Deck »).
         const nomsCible = [].concat(cible.expansionBulba);
-        const imp = (carte.impressions || []).find(i => i.tirage === cible.tirage && nomsCible.includes(i.expansion) && (!cible.deck || i.deck === cible.deck));
+        // TOUTES les impressions de la page dans ce set : une carte e-Card existe en holo ET en
+        // non-holo sous DEUX numéros (Venusaur 033 et 065), et les deux produits s'attachent.
+        const imps = (carte.impressions || []).filter(i => i.tirage === cible.tirage && nomsCible.includes(i.expansion) && (!cible.deck || i.deck === cible.deck));
+        const imp = imps[0] || null;
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;
-        const num = imp ? chiffresDuNumero(imp.numero) : null;
-        if (num && parNumero.size) {
-            trouves = parNumero.get(num) || [];
-            preuve = 'set+numero'; detail = `n°${imp.numero} dans l'expansion ${cible.idExpansion}`;
+        const numeros = [...new Set(imps.map(i => chiffresDuNumero(i.numero)).filter(Boolean))];
+        if (numeros.length && parNumero.size) {
+            trouves = numeros.flatMap(n => parNumero.get(n) || []);
+            preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}`;
         }
         if (!trouves.length && carte.nomEn) {
             // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
