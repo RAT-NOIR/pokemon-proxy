@@ -118,11 +118,22 @@ Les 16 lignes occidentales encore non servies sont sur **16 expansions différen
 chacune** : WP, ROS, SS, PLF, PRE, SSP, PGO, LOR, EVS, TWM, SIT, OBF, CRZ, HS, HL, BLK. Seize sets à
 relever et à collecter pour seize lignes : ~130 requêtes et seize lignes de table écrites à la main.
 **Le rapport est mauvais et il faut le dire avant de s'y mettre.**
-🔑 **CE QUI VAUT LE COUP, LUI, EST DÉJÀ SUR NOS DISQUES** : les sections « Additional Cards » des dix
-pages déjà archivées, que notre table exclut délibérément — PAL 92 entrées, BRS 56, EVO 40, MEW 29,
-JTG 21, ASC 11, PBL 9, CRI 8, TR 3, soit **269 entrées** sur les 672 produits en reste. La page du
-set est déjà sur R2 ; seules les pages de cartes restent à chercher. C'est le prochain geste, pas
-seize expansions à une ligne.
+🔴 **« ADDITIONAL CARDS » : PISTE MORTE, ET C'ÉTAIT MA RECOMMANDATION — mesurée, puis abandonnée le
+2026-09-12.** J'avais proposé d'énumérer ces sections (280 entrées sur les dix pages : PAL 92, BRS 56,
+EVO 40, MEW 29…) en concluant d'un COMPTE qu'elles apporteraient des cartes. **Elles n'en apportent
+aucune** : leurs entrées reconstruisent les MÊMES titres que la section principale, parce que ce sont
+des tirages alternatifs des mêmes cartes, au même numéro. Essayée sur PBL : 95 titres → 95 titres,
+25 restes → 25 restes, zéro page nouvelle. 204 des 280 entrées désignent d'ailleurs des pages déjà
+en base.
+⚠️ **LA FAUTE EST LA MÊME QUE CELLE DU CATALOGUE (erreur #8) : j'ai conclu d'un COMPTE au lieu d'un
+CONSTAT.** Deux fois dans la même journée — après les 269 entrées « récupérables », les restes
+« récupérables ailleurs ». Compter des lignes ne dit pas ce qu'elles contiennent.
+
+**CE QUE SONT VRAIMENT LES 672 RESTES** : des produits Cardmarket dont le NUMÉRO ne correspond pas à
+celui que Bulbapedia donne à la même carte. Exemple : `Mega Excadrill ex` est le n°065 de Pitch Black
+chez Cardmarket, et le n°065 de Bulbapedia est `Trumbeak`. Ce ne sont pas des pages manquantes, c'est
+une DIVERGENCE DE NUMÉROTATION sur les cartes secrètes et alternatives. Les récupérer demande une clé
+par NOM pour les restes seulement — une autre clé, plus risquée, à mesurer avant d'être écrite.
 
 **CE QUE COÛTERAIENT LES DIX, ET CE QU'ELLES RENDENT — mesuré le 2026-09-12, rien collecté.**
 2 072 produits, ~1 993 pages, **~63 requêtes de TEXTE, cinq minutes**. Le compteur passerait de
@@ -134,6 +145,14 @@ Heroes et Journey Together 734×1024**, toutes au-dessus des 560 px. ⚠️ Mais
 demandé — sur trois cartes d'Ascended Heroes, l'une rendait l'image de Sword & Shield. Pour un set
 occidental moderne, l'image se choisit dans `reprintN` / `TCGGallery` PAR NOM DE SET, jamais dans
 `image=`. Le texte n'a pas ce problème, la Setlist désigne le bon set.
+
+🔴 **TCGDEX NE SE DÉBRANCHE PAS CETTE SEMAINE, ET IL FAUT LE DIRE FRANCHEMENT.** Le critère de bascule
+est « part utile sous 5 %, deux lots de suite ». Après les dix expansions occidentales, TCGdex serait
+encore appelé sur **54 lignes de 280, soit 19,3 %** — presque QUATRE FOIS le seuil. Il faut en retirer
+**40**, et on sait maintenant d'où elles NE viendront pas : ni des « Additional Cards » (piste morte,
+mesurée), ni des seize expansions à une ligne (mauvais rapport, décidé). Elles viendront du japonais
+moderne (~28 lignes sur 21 expansions) et du tri des 229 expansions sans région. **Aucune de ces deux
+voies n'est un geste de dix minutes.**
 
 🔑 **LE COMPTEUR, PREMIÈRE LECTURE (2026-09-12, `node compteur-pont.js --n=500 --par-set`, 280 lignes
 du journal, toutes antérieures au câblage).** La base aurait servi **194 lignes sur 280 (69,3 %)**.

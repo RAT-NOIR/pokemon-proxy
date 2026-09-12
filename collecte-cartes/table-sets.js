@@ -76,6 +76,10 @@ const TABLE = [
     // « Additional cards » ou rien chez eux) — l'écart se lit en restes, comme au japonais.
     // 🔑 DEUX PAGES SONT DÉJÀ ARCHIVÉES : « Team Rocket (TCG) » est la page de ROG, et ASC/xASC
     // partagent la leur. Une page, deux sets : c'est la relation n-n, déjà prévue.
+    // ⚠️ « Additional Cards » ESSAYÉE PUIS RETIRÉE le 2026-09-12, mesure par l'expérience : ses 9
+    // entrées reconstruisent les MÊMES titres que la section principale (ce sont des tirages
+    // alternatifs des mêmes cartes, au même numéro). Ajoutée, elle rend 95 titres au lieu de 95 et
+    // 25 restes au lieu de 25. Elle n'apporte aucune page. Ne pas la remettre sans mesure neuve.
     { code: 'PBL', exp: 6569, prod: 120, nom: 'Pitch Black', slugSet: 'Pitch-Black', region: 'occidental', bulba: { titre: 'Pitch Black (TCG)', tirage: 'intl', setlist: ['Pitch Black'], expansion: 'Pitch Black' }, attendu: 120, verifie: V('Pitch Black (TCG)', { 'Pitch Black': 95, 'Additional Cards': 9 }, 'section 95 pour 120 produits') },
     { code: 'ASC', exp: 6395, prod: 296, nom: 'Ascended Heroes', slugSet: 'Ascended-Heroes', region: 'occidental', bulba: { titre: 'Ascended Heroes (TCG)', tirage: 'intl', setlist: ['Ascended Heroes'], expansion: 'Ascended Heroes' }, attendu: 296, verifie: V('Ascended Heroes (TCG)', { 'Ascended Heroes': 225, 'Additional Cards': 11 }, 'partage sa page avec xASC') },
     { code: 'xASC', exp: 6455, prod: 296, nom: 'Ascended Heroes Additionals', slugSet: 'Ascended-Heroes-Additionals', region: 'occidental', bulba: { titre: 'Ascended Heroes (TCG)', tirage: 'intl', setlist: ['Additional Cards'], expansion: 'Ascended Heroes' }, attendu: 296, verifie: V('Ascended Heroes (TCG)', { 'Additional Cards': 11 }, 'même page qu\'ASC, section des additionnelles') },

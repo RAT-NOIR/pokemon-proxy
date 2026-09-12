@@ -134,11 +134,18 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     }
     if (L.bulba.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(L.bulba.deck));
     const entreesSetlist = [...new Set([...entrees.map(e => e.titre), ...(L.bulba.titresSupplementaires || [])])];
-    // Un titre supplémentaire ajouté à la table APRÈS une collecte s'ajoute à l'état : il sera fetché
-    // seul (une requête), les autres titres restent « déjà faits ».
-    if (titres && L.bulba.titresSupplementaires?.some(t => !titres.includes(t))) {
-        titres = [...new Set([...titres, ...L.bulba.titresSupplementaires])];
-        await M.Etat.updateOne({ _id: slug }, { $set: { titres } });
+    // ⚠️ LA TABLE PEUT CHANGER APRÈS UNE COLLECTE, ET L'ÉTAT NE DOIT PAS LA FIGER. Ajouter une
+    // section à `setlist` ne produisait RIEN sur un set déjà collecté : `titres` était relu de
+    // l'état et la nouvelle section ignorée, EN SILENCE. Mesuré le 2026-09-12 sur PBL. Tout titre
+    // que la table désigne aujourd'hui et que l'état ignore est ajouté ; il sera fetché seul, les
+    // autres restent « déjà faits ». On ne RETIRE jamais : une page déjà collectée le reste.
+    if (titres) {
+        const nouveaux = entreesSetlist.filter(t => !titres.includes(t));
+        if (nouveaux.length) {
+            console.log(`   ⚠️ la table désigne ${nouveaux.length} titre(s) que l'état ignorait — ajoutés : ${nouveaux.slice(0, 5).join(' · ')}${nouveaux.length > 5 ? ' …' : ''}`);
+            titres = [...new Set([...titres, ...nouveaux])];
+            await M.Etat.updateOne({ _id: slug }, { $set: { titres } });
+        }
     }
     if (!titres) {
         if (!entreesSetlist.length) {
