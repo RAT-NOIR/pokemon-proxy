@@ -193,6 +193,9 @@ function faitsDeCarte(texte) {
         categorie: infobox ? CATEGORIE_PAR_INFOBOX[infobox.nom] : null,
         nomEn: plat(p.cardname) || null,
         nomJa: plat(p.jname) || null,
+        // Ère DP : le niveau est un champ, pas un morceau du nom — « Magmortar » avec `level=X` est
+        // la carte que Cardmarket nomme « Magmortar LV.X ». La jointure reconstruit le nom depuis les deux.
+        niveau: plat(p.level) || null,
         type: plat(p.type) || null,
         pv: p.hp != null && plat(p.hp) !== '' ? Number(plat(p.hp)) || plat(p.hp) : null,
         stade: plat(p.evostage) || null,

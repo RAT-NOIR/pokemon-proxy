@@ -46,7 +46,9 @@ const TABLE = [
     { code: 'N3', bulba: { titre: 'Awakening Legends (TCG)', expansion: 'Awakening Legends' }, attendu: 57, verifie: V('Neo Revelation (TCG)', { 'Awakening Legends': 57 }) },
     { code: 'N4', bulba: { titre: 'Darkness, and to Light... (TCG)', expansion: 'Darkness, and to Light...' }, attendu: 113, verifie: V('Neo Destiny (TCG)', { 'Darkness, and to Light...': 113 }) },
     { code: 'VS', bulba: { titre: 'Pokémon VS (TCG)', setlist: ['Pokémon Card★VS'], expansion: 'Pokémon VS' }, attendu: 151, verifie: V('Pokémon VS (TCG)', { 'VS': 143 }, 'page japonaise seule, section « Pokémon Card★VS » ×142, titres « (VS n) », pour 151 produits') },
-    { code: 'WEB', bulba: { titre: 'Pokémon Web (TCG)', expansion: 'Pokémon Web' }, attendu: 48, verifie: V('Pokémon Web (TCG)', { 'Pokémon Web': 49 }, '49 entrées + 2 promos hors set (Bill P Promo 9, Slowpoke P11)') },
+    // `titresSupplementaires` : cartes DU set que la Setlist liste sous un titre de promo, hors motif
+    // (constaté sur les restes du 2026-09-12). Elles sont fetchées comme les autres, jointes par nom.
+    { code: 'WEB', bulba: { titre: 'Pokémon Web (TCG)', expansion: 'Pokémon Web', titresSupplementaires: ['Slowpoke (Promotional Card P11)'] }, attendu: 48, verifie: V('Pokémon Web (TCG)', { 'Pokémon Web': 49 }, '47 entrées de section + Slowpoke n°012 listé comme promo P11 ; Bill P Promo 9 reste hors set') },
     { code: 'EC1', bulba: { titre: 'Base Expansion Pack (TCG)', expansion: 'Base Expansion Pack' }, attendu: 157, verifie: V('Expedition Base Set (TCG)', { 'Base Expansion Pack': 129 }, '129 entrées pour jacards 128 ; Cardmarket a 157 produits (sous-série S de 29 ?)') },
     { code: 'EC2', bulba: { titre: 'The Town on No Map (TCG)', expansion: 'The Town on No Map' }, attendu: 92, verifie: V('Aquapolis (TCG)', { 'The Town on No Map': 92 }) },
     { code: 'EC3', bulba: { titre: 'Wind from the Sea (TCG)', expansion: 'Wind from the Sea' }, attendu: 90, verifie: V('Aquapolis (TCG)', { 'Wind from the Sea': 90 }, 'même page qu\'EC2 ; jacards 92 est celui de The Town on No Map') },
@@ -61,7 +63,7 @@ const TABLE = [
     { code: 'PCG6', bulba: { titre: 'Holon Research Tower (TCG)', expansion: 'Holon Research Tower' }, attendu: 86, verifie: V('EX Delta Species (TCG)', { 'Holon Research Tower': 83 }, '83 entrées pour jacards 86 et 86 produits') },
     { code: 'PCG9', bulba: { titre: 'Offense and Defense of the Furthest Ends (TCG)', expansion: 'Offense and Defense of the Furthest Ends' }, attendu: 68, verifie: V('EX Dragon Frontiers (TCG)', { 'Offense and Defense of the Furthest Ends': 66 }, '66 entrées pour 68') },
     { code: 'DP2', bulba: { titre: 'Secret of the Lakes (TCG)', expansion: 'Secret of the Lakes' }, attendu: 123, verifie: V('Mysterious Treasures (TCG)', { 'Secret of the Lakes': 123 }) },
-    { code: 'EXS', bulba: { titre: 'Vending Machine cards (TCG)', setlistMotif: '^Vending S[123]( \\d+)?$', expansion: ['Expansion Sheet 1', 'Expansion Sheet 2', 'Expansion Sheet 3'] }, attendu: 125, verifie: V('Vending Machine cards (TCG)', { 'Vending S1/S2/S3': 125 }, 'trois feuilles pour une expansion Cardmarket ; entrées « (Vending S1) » … « (Vending S3 n) », les promos Wizards/CoroCoro de la même page sont exclues par le motif') }
+    { code: 'EXS', bulba: { titre: 'Vending Machine cards (TCG)', setlistMotif: '^Vending S[123]( \\d+)?$', expansion: ['Expansion Sheet 1', 'Expansion Sheet 2', 'Expansion Sheet 3'], titresSupplementaires: ['Snorlax (Wizards Promo 49)'] }, attendu: 125, verifie: V('Vending Machine cards (TCG)', { 'Vending S1/S2/S3': 125 }, 'trois feuilles pour une expansion Cardmarket ; entrées « (Vending S1) » … « (Vending S3 n) », les promos Wizards/CoroCoro de la même page sont exclues par le motif') }
 ].map(l => {
     const s = parCode[l.code];
     if (!s) throw new Error(`table-sets : code ${l.code} absent de sets-vintage-japonais.js`);

@@ -180,21 +180,33 @@ async function collecterSet(code, M, dossierRapport) {
         } else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
         else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
     }
-    for (const c of cartes) if (!cartesAvecImage.has(c._id)) restes.push({ set: slug, type: 'carte-sans-image', carteId: c._id, detail: `${c._id} « ${c.nomEn} »`, le: new Date() });
+    // Une carte SANS image n'est pas un échec : c'est l'état attendu quand la source ne l'a pas
+    // (PKMJP ne liste pas les énergies de base), et c'est déjà la règle d'affichage du catalogue
+    // (symbole du set, mention d'indisponibilité). Elles se COMPTENT et se nomment, elles ne sont
+    // pas des restes.
+    const cartesSansImage = cartes.filter(c => !cartesAvecImage.has(c._id)).map(c => ({ carteId: c._id, nomEn: c.nomEn }));
     await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes'] } });
     if (restes.length) await M.Reste.insertMany(restes);
 
     // ---- 5. complétude ----------------------------------------------------------------------
+    // LA DÉFINITION (corrigée le 2026-09-12, comme pour le texte) : la source a ce qu'elle a. Trois
+    // égalités qui n'ont pas de raison d'être fausses : (1) originaux téléchargés = entrées de la
+    // source ; (2) chaque original est joint à UNE carte ; (3) aucune image vers plusieurs cartes.
+    // Les cartes sans image sont un état attendu, imprimé avec son dénominateur.
     const nEntrees = S.ids.reduce((a, id) => a + entrees[id].length, 0);
     const restesParType = restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {});
-    const complet = { entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length, imagesJointes: jointes, preuves, restes: restesParType, mesures, concordance: nEntrees === images.length && jointes === cartes.length, verifieLe: new Date() };
-    await M.Set.updateOne({ _id: slug }, { $set: { completImages: complet } });
+    const complet = {
+        entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length, imagesJointes: jointes, preuves,
+        cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
+        concordance: nEntrees === images.length && jointes === images.length && !restesParType['image-vers-plusieurs-cartes'],
+        verifieLe: new Date()
+    };
+    await M.Set.updateOne({ _id: slug }, { $set: { completImages: complet, cartesSansImage } });
     await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: src.compteRequetes() } });
     console.log(`\n════ COMPLÉTUDE IMAGES ${code} — dénominateur : ${nEntrees} entrées source, ${cartes.length} cartes du set ════`);
-    console.log(`   entrées source               : ${nEntrees}`);
-    console.log(`   images téléchargées (ok)     : ${images.length}`);
-    console.log(`   cartes du set                : ${cartes.length}`);
-    console.log(`   images jointes               : ${jointes}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
+    console.log(`   originaux = entrées source   : ${images.length} = ${nEntrees}`);
+    console.log(`   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
+    console.log(`   cartes sans image (attendu)  : ${cartesSansImage.length} / ${cartes.length}${cartesSansImage.length ? ' — ' + cartesSansImage.map(c => c.nomEn).join(', ') : ''}`);
     console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);
     for (const r of restes.slice(0, 40)) console.log(`      · ${r.type} : ${r.detail}`);
     console.log(`   requêtes ${SOURCE} : ${src.compteRequetes()}`);
@@ -209,9 +221,34 @@ async function collecterSet(code, M, dossierRapport) {
     const M = modeles(cx);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
     if (process.argv.includes('--arreter-et-effacer')) { await effacerTout(M, process.argv.includes('--confirmer')); await fermer(); return; }
-    const codes = arg('sets') ? arg('sets').split(',').map(s => s.trim()) : arg('set') ? [arg('set')] : null;
-    if (!codes) { console.error('❌ ARRÊT : --set=<CODE> ou --sets=A,B,C obligatoire.'); await fermer(); process.exit(1); }
     const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
+
+    // ---- pilotage par FILE D'ATTENTE (worker Render) ------------------------------------------
+    //   --enfiler=PJU,MFO   ajoute des sets à la file (collection `file_images`), depuis n'importe où
+    //   --boucle            le worker prend le premier set en attente, le collecte, recommence ;
+    //                       file vide -> il dort 10 min et regarde à nouveau. Aucun redéploiement
+    //                       pour élargir : on enfile, c'est tout.
+    const File = cx.model('FileImages', new (require('mongoose').Schema)({ _id: String, ordre: Number, etat: String, ajouteLe: Date, pris: Date, fini: Date, resultat: String }, { strict: false, collection: 'file_images' }));
+    if (arg('enfiler')) {
+        const codes = arg('enfiler').split(',').map(s => s.trim()).filter(Boolean);
+        const n = (await File.countDocuments()) + 1;
+        for (const [i, code] of codes.entries()) await File.updateOne({ _id: code }, { $setOnInsert: { ordre: n + i, etat: 'attente', ajouteLe: new Date() } }, { upsert: true });
+        console.log(`enfilé : ${codes.join(', ')} · file : ${JSON.stringify(await File.find({}).sort({ ordre: 1 }).select('_id etat').lean())}`);
+        await fermer(); return;
+    }
+    if (process.argv.includes('--boucle')) {
+        console.log('--boucle : file d\'attente `file_images`, un set à la fois, 10 min de sommeil quand elle est vide.');
+        while (!arretDemande) {
+            const suivant = await File.findOneAndUpdate({ etat: 'attente' }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
+            if (!suivant) { await new Promise(r => setTimeout(r, 10 * 60 * 1000)); continue; }
+            const b = await collecterSet(suivant._id, M, dossierRapport);
+            await File.updateOne({ _id: suivant._id }, { $set: { etat: b.etat === 'verifie' ? 'fait' : 'refuse', fini: new Date(), resultat: b.etat } });
+        }
+        await fermer(); return;
+    }
+
+    const codes = arg('sets') ? arg('sets').split(',').map(s => s.trim()) : arg('set') ? [arg('set')] : null;
+    if (!codes) { console.error('❌ ARRÊT : --set=<CODE>, --sets=A,B,C, --enfiler=… ou --boucle obligatoire.'); await fermer(); process.exit(1); }
     const bilan = [];
     for (const code of codes) {
         if (arretDemande) break;

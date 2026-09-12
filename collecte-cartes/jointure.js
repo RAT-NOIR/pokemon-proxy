@@ -20,7 +20,13 @@
 
 // ♂ / ♀ : Bulbapedia écrit « Nidoran♂ », Cardmarket « Nidoran [M] ». Les deux se normalisent en
 // « nidoranm » / « nidoranf » — le sexe fait partie du nom, ce n'est pas une attaque.
-const normaliserNom = n => String(n || '').normalize('NFC').toLowerCase().replace(/♂/g, 'm').replace(/♀/g, 'f').replace(/[\s\-'.&:]/g, '');
+// Apostrophes typographiques (’ ‘ ʼ) et tirets longs (– —) : « Farfetch’d » chez PKMJP, « Farfetch'd »
+// chez Bulbapedia, « The Last Cave – Cerulean! » contre « - » ; 1 ligne sur 96 le 2026-09-12, et ça
+// revient sur tous les noms à apostrophe. Normalisés AVANT la suppression des signes.
+const normaliserNom = n => String(n || '').normalize('NFC').toLowerCase()
+    .replace(/[’‘ʼ`´]/g, "'").replace(/[–—‐]/g, '-')
+    .replace(/♂/g, 'm').replace(/♀/g, 'f').replace(/[\s\-'.&:!?,]/g, '');
+const { ALIAS_CARDMARKET_VERS_BULBAPEDIA } = require('./alias-noms');
 const chiffresDuNumero = n => { const m = String(n ?? '').match(/\d+/); return m ? String(parseInt(m[0], 10)) : null; };
 
 /**
@@ -33,9 +39,11 @@ function decomposerNomCardmarket(name) {
     let s = String(name || '').trim();
     const groupes = [...s.matchAll(/\[([^\]]*)\]/g)].map(m => m[1].trim());
     let nom = s.replace(/\s*\[[^\]]*\]/g, '').trim();
-    // Ère DP : « Paras Lv.16 », « Dialga LV.X » — le niveau n'est pas dans le nom Bulbapedia.
+    // Ère DP : « Paras Lv.16 » — le niveau NUMÉRIQUE n'est pas dans le nom Bulbapedia, il sort.
+    // ⚠️ « LV.X » RESTE DANS LE NOM : Bulbapedia nomme la carte « Magmortar LV.X », distincte de
+    // « Magmortar ». L'avoir retiré a joint 5 produits LV.X à deux cartes (DP2, DP5c, 2026-09-12).
     let niveau = null;
-    const lv = nom.match(/\s+(Lv\.\s*\S+|LV\.X)$/i);
+    const lv = nom.match(/\s+(Lv\.\s*\d+)$/i);
     if (lv) { niveau = lv[1]; nom = nom.slice(0, -lv[0].length).trim(); }
     let attaques = [];
     for (const g of groupes) {
@@ -80,6 +88,9 @@ function joindre(cartes, produits, cible) {
         if (num) { if (!parNumero.has(num)) parNumero.set(num, []); parNumero.get(num).push(p); }
         const nom = normaliserNom(p.nom);
         if (!parNom.has(nom)) parNom.set(nom, []); parNom.get(nom).push(p);
+        // Alias à la main : le produit est aussi indexé sous le nom que Bulbapedia lui donne.
+        const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom];
+        if (alias) { const k = normaliserNom(alias); if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(p); }
     }
     const attache = (carte, p, preuve, detail) => {
         lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, verifieLe: new Date() });
@@ -109,7 +120,9 @@ function joindre(cartes, produits, cible) {
         }
         if (!trouves.length && carte.nomEn) {
             // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
-            const clesNom = [...new Set([normaliserNom(carte.nomEn), normaliserNom(String(carte.nomEn).replace(/^Basic\s+/i, ''))])];
+            // LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
+            const nomJoint = String(carte.nomEn) + (String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
+            const clesNom = [...new Set([normaliserNom(nomJoint), normaliserNom(nomJoint.replace(/^Basic\s+/i, ''))])];
             for (const k of clesNom) { trouves = parNom.get(k) || []; if (trouves.length) break; }
             if (trouves.length) {
                 const noms = new Set((carte.attaques || []).map(a => normaliserNom(a.nom)));

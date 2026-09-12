@@ -131,7 +131,13 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
         if (entrees.length) console.log(`   (aucune section Setlist : ${entrees.length} entrées TCG ID lues sur tout le wikitext)`);
     }
     if (L.bulba.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(L.bulba.deck));
-    const entreesSetlist = [...new Set(entrees.map(e => e.titre))];
+    const entreesSetlist = [...new Set([...entrees.map(e => e.titre), ...(L.bulba.titresSupplementaires || [])])];
+    // Un titre supplémentaire ajouté à la table APRÈS une collecte s'ajoute à l'état : il sera fetché
+    // seul (une requête), les autres titres restent « déjà faits ».
+    if (titres && L.bulba.titresSupplementaires?.some(t => !titres.includes(t))) {
+        titres = [...new Set([...titres, ...L.bulba.titresSupplementaires])];
+        await M.Etat.updateOne({ _id: slug }, { $set: { titres } });
+    }
     if (!titres) {
         if (!entreesSetlist.length) {
             console.error(`❌ ${L.code} : aucune entrée de Setlist pour ${JSON.stringify(nomsSections)}. Sections vues : ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}`).join(' · ')}`);
