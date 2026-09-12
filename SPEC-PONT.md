@@ -110,6 +110,20 @@ exacte de notre `slugSet` (80 %)**, contre 2 sur 177 côté japonais — les deu
 Les 25 restants sont des noms à esperluette ou à article (« HeartGold & SoulSilver », « Sun & Moon »,
 « Diamond & Pearl »), une correspondance à la main, pas une devinette.
 
+✅ **LES DIX SONT COLLECTÉES (2026-09-12) : compteur 69,3 % → 80,7 %, zéro faux affirmé au banc.**
+Coût réel : ~50 requêtes, 10 minutes, 10 sets tous concordants, 1 400 produits joints sur 2 384.
+
+🔴 **CE QUI RESTE, ET CE QUI NE VAUT PAS LE COUP — mesuré le 2026-09-12.**
+Les 16 lignes occidentales encore non servies sont sur **16 expansions différentes, une ligne
+chacune** : WP, ROS, SS, PLF, PRE, SSP, PGO, LOR, EVS, TWM, SIT, OBF, CRZ, HS, HL, BLK. Seize sets à
+relever et à collecter pour seize lignes : ~130 requêtes et seize lignes de table écrites à la main.
+**Le rapport est mauvais et il faut le dire avant de s'y mettre.**
+🔑 **CE QUI VAUT LE COUP, LUI, EST DÉJÀ SUR NOS DISQUES** : les sections « Additional Cards » des dix
+pages déjà archivées, que notre table exclut délibérément — PAL 92 entrées, BRS 56, EVO 40, MEW 29,
+JTG 21, ASC 11, PBL 9, CRI 8, TR 3, soit **269 entrées** sur les 672 produits en reste. La page du
+set est déjà sur R2 ; seules les pages de cartes restent à chercher. C'est le prochain geste, pas
+seize expansions à une ligne.
+
 **CE QUE COÛTERAIENT LES DIX, ET CE QU'ELLES RENDENT — mesuré le 2026-09-12, rien collecté.**
 2 072 produits, ~1 993 pages, **~63 requêtes de TEXTE, cinq minutes**. Le compteur passerait de
 **69,3 % à 81,8 %** (229/280) ; les 51 occidentales entières le mettraient à **87,5 %**.

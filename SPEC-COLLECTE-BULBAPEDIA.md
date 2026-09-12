@@ -1,5 +1,25 @@
 # Spécification de collecte — texte Bulbapedia, 28 sets vintage d'abord (2026-09-12)
 
+> # 🔴 2026-09-12 : ZÉRO FAUX AFFIRMÉ SUR LE BANC ENTIER, POUR LA PREMIÈRE FOIS
+>
+> **134 vérités individuelles, quatre seaux — entraînement, holdout, vérification, lot — et
+> 0 FAUX AFFIRMÉ.** Le critère de lancement, posé et tenu depuis des semaines à « zéro », est atteint.
+> 28 fermes justes, 74 réserves justes, **0 refus**. Compteur du pont : **80,7 %** des scans servis
+> par notre base (226/280), contre 69,3 % avant les dix expansions occidentales.
+>
+> ⚠️ **CE N'EST PAS « TOUT EST JUSTE »**, et il faut le dire dans la même phrase : 32 réserves sont
+> FAUSSES. Le produit montré en tête n'est pas le bon sur ces lignes. Ce qui est atteint, c'est que
+> la chaîne **n'AFFIRME plus jamais une fausse carte** — elle suggère, et l'utilisateur voit trois
+> candidats. C'est l'engagement qui décide du lancement, pas la justesse totale.
+>
+> 🔑 **ET LE DERNIER FAUX AFFIRMÉ N'A PAS DISPARU TOUT SEUL — il a été ATTRAPÉ, et la trace le dit.**
+> L109 (Slowpoke n°14/40) sortait `479739` affirmé par le chemin local. Il passe maintenant par le
+> pont, qui rend `562010` **sous réserve**, avec sa raison journalisée : « NON exhaustif : 50
+> expansions hors couverture portent ce nom ». La garde d'exhaustivité l'a arrêté, nommément. Sa
+> vraie carte (`558663`, Super-Burst-Impact) est dans un set non collecté : le pont ne la trouve
+> toujours pas, il a cessé de mentir à son sujet. Un défaut qui disparaît sans qu'on le corrige
+> revient ; celui-ci a une cause écrite et un champ qui la porte.
+>
 > 🔑 **LE CHANTIER A PAYÉ — câblé et mesuré sur la CHAÎNE, banc complet, 2026-09-12.** Sur les
 > 134 vérités individuelles du banc, **99 sont couvertes par les 28 sets**. Sur ces 99 lignes, avec
 > le pont (notre base répond d'abord, TCGdex seulement si elle rend zéro carte) :
