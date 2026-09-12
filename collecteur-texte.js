@@ -1,0 +1,234 @@
+// ============================================================
+// COLLECTEUR DE TEXTE — Bulbapedia -> base `cartes`, UN SET PAR LANCEMENT
+// ============================================================
+//   node collecteur-texte.js --set=EXP [--rapport=<dossier>]
+//
+// Ce qu'il fait, dans l'ordre, et rien d'autre :
+//   0. les quatre arrêts durs (garde.js), la table à la main (table-sets.js), le bucket R2 ;
+//   1. la page du SET : infobox -> `sets`, wikitext épuré -> R2 ;
+//   2. les LIENS de la page du set, filtrés par le motif de titres de la table ;
+//   3. le TEXTE de chaque carte, 50 titres par requête, redirections suivies (une page cible = UNE
+//      carte) : épuration -> R2 sous pageid/revid, faits -> `cartes` ;
+//   4. la JOINTURE n-n avec preuve -> `cartes_produits`, restes -> `restes` ;
+//   5. la COMPLÉTUDE : quatre nombres imprimés, restes par type, cinq cartes parsées à côté de leur
+//      wikitext épuré, champs nuls par champ. Puis il s'ARRÊTE.
+//
+// Reprise : l'état est écrit dans `collecte_etat` après chaque unité (page), jamais avant ; au
+// redémarrage, les titres déjà traités sont sautés. R2 est idempotent par `pageid/revid`.
+// Débit : bulba.js sérialise et espace de 5 s toutes les requêtes, sans exception.
+// ⚠️ Un seul set par lancement, et un set NON VÉRIFIÉ dans la table est refusé.
+
+require('dotenv').config();
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const r2 = require('./collecte-cartes/r2');
+const bulba = require('./collecte-cartes/bulba');
+const { epurer, faitsDeCarte, faitsDeSet } = require('./collecte-cartes/wikitext');
+const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
+const { modeles } = require('./collecte-cartes/schemas');
+const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
+
+const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
+const VERROU_MS = 10 * 60 * 1000;
+
+let arretDemande = false;
+process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit l\'unité en cours, puis on s\'arrête proprement.'); arretDemande = true; });
+
+(async () => {
+    const code = arg('set');
+    if (!code) { console.error('❌ ARRÊT : --set=<CODE> obligatoire (un seul set par lancement).'); process.exit(1); }
+    const L = ligneDeTable(code);
+    if (!L) { console.error(`❌ ARRÊT : ${code} n'est pas dans la table à la main (collecte-cartes/table-sets.js).`); process.exit(1); }
+    if (!L.verifie) { console.error(`❌ ARRÊT : la ligne ${code} n'est PAS VÉRIFIÉE (titre et motif supposés). On ne collecte pas sur une hypothèse.`); process.exit(1); }
+    const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
+
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions();
+    const M = modeles(cx);
+    await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
+    console.log(`📦 R2 : bucket ${process.env.R2_BUCKET_BRUT} joignable.`);
+
+    // ---- verrou : un seul collecteur par set --------------------------------------------
+    const slug = L.slugSet;
+    const existant = await M.Etat.findById(slug).lean();
+    if (existant?.verrou?.depuis && Date.now() - new Date(existant.verrou.depuis).getTime() < VERROU_MS && existant.verrou.pid !== process.pid) {
+        console.error(`❌ ARRÊT : un collecteur tient déjà ${slug} (pid ${existant.verrou.pid} sur ${existant.verrou.hote}, depuis ${existant.verrou.depuis}).`);
+        await fermer(); process.exit(1);
+    }
+    await M.Etat.updateOne({ _id: slug }, { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() } }, $setOnInsert: { debute: new Date(), phase: 'set', pages: [], titres: [] } }, { upsert: true });
+    const battement = setInterval(() => M.Etat.updateOne({ _id: slug }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
+    const finir = async () => { clearInterval(battement); await M.Etat.updateOne({ _id: slug }, { $unset: { verrou: 1 } }); await fermer(); };
+
+    console.log(`\n══ ${L.code} « ${L.nom} » — exp ${L.exp}, ${L.prod} produits, page « ${L.bulba.titre} », attendu ${L.attendu} ══`);
+    const motif = new RegExp(L.bulba.motifTitres);
+
+    // ---- 1. la page du set -------------------------------------------------------------
+    // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
+    const reparser = process.argv.includes('--reparser');
+    const setDeja = reparser ? await M.Set.findById(slug).lean() : null;
+    let pSet, depotSet;
+    if (setDeja?.bulba?.cleR2) {
+        pSet = { pageid: setDeja.bulba.pageid, revid: setDeja.bulba.revid, title: setDeja.bulba.titre, content: await r2.lireTexte(process.env.R2_BUCKET_BRUT, setDeja.bulba.cleR2) };
+        depotSet = { ecrit: false };
+    } else {
+        const { pages: pagesSet } = await bulba.revisionsDe([L.bulba.titre]);
+        if (!pagesSet.length) { console.error(`❌ page du set introuvable : « ${L.bulba.titre} »`); await finir(); process.exit(1); }
+        pSet = pagesSet[0];
+        depotSet = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, r2.cleWikitext(pSet.pageid, pSet.revid), epurer(pSet.content));
+    }
+    const faitsSet = faitsDeSet(pSet.content);
+    const cleSet = r2.cleWikitext(pSet.pageid, pSet.revid);
+    await M.Set.updateOne({ _id: slug }, {
+        $set: {
+            code: L.code, idExpansion: [L.exp], nomEn: faitsSet?.nomEn ?? null, nomJa: faitsSet?.nomJa ?? null, nomJaTraduit: faitsSet?.nomJaTraduit ?? null,
+            region: 'jp', dateSortieJa: faitsSet?.sortieJa ?? null, dateSortieEn: faitsSet?.sortieEn ?? null,
+            totalImprime: faitsSet?.cartesJa ?? null, cartesEnInfobox: faitsSet?.cartesEn ?? null,
+            bulba: { titre: pSet.title, pageid: pSet.pageid, revid: pSet.revid, motifTitres: L.bulba.motifTitres, expansion: L.bulba.expansion, cleR2: cleSet },
+            collecteLe: new Date()
+        }, $setOnInsert: { version: 1 }
+    }, { upsert: true });
+    console.log(`1. set : « ${faitsSet?.nomEn} » / ${faitsSet?.nomJa} (${faitsSet?.nomJaTraduit}) — jacards ${faitsSet?.cartesJa}, encards ${faitsSet?.cartesEn}, sortie JP ${faitsSet?.sortieJa} ; R2 ${depotSet.ecrit ? 'écrit' : 'déjà là'} (${cleSet})`);
+    if (faitsSet?.cartesJa !== L.attendu) console.warn(`   ⚠️ l'infobox dit ${faitsSet?.cartesJa} cartes, la table attend ${L.attendu}.`);
+
+    // ---- 2. les liens ---------------------------------------------------------------------
+    const etat = await M.Etat.findById(slug).lean();
+    let titres = etat.titres?.length ? etat.titres : null;
+    if (!titres) {
+        const tous = await bulba.liensDe(L.bulba.titre);
+        titres = [...new Set(tous.filter(t => motif.test(t)))];
+        await M.Etat.updateOne({ _id: slug }, { $set: { titres, phase: 'liens' } });
+        console.log(`2. liens : ${tous.length} sortants, ${titres.length} titres au motif ${motif}`);
+    } else console.log(`2. liens : ${titres.length} titres repris de l'état.`);
+
+    // ---- 3. le texte, par lots de 50, reprise par titre ------------------------------------
+    const dejaFaits = new Set((etat.pages || []).map(p => p.titre));
+    const aFaire = titres.filter(t => !dejaFaits.has(t));
+    console.log(`3. texte : ${aFaire.length} titres à traiter, ${dejaFaits.size} déjà faits.`);
+    const textesEpures = new Map();       // pageid -> épuré (pour le rapport)
+    let ecrites = 0, r2Ecrits = 0, manquants = 0;
+    const redirigeDepuisTout = new Map(); // cible -> [sources]
+
+    // ---- 3 bis. --reparser : rejouer le parseur sur l'archive R2, SANS refetcher ------------
+    // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
+    // relisant l'archive épurée (les faits y sont tous), pas en redemandant les pages.
+    if (process.argv.includes('--reparser')) {
+        const deja = await M.Carte.find({ sets: slug }).select('_id bulba').lean();
+        console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia.`);
+        for (const c of deja) {
+            const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
+            const faits = faitsDeCarte(epure);
+            const impCible = faits.impressions.find(x => x.tirage === 'jp' && x.expansion === L.bulba.expansion);
+            const { champsNuls, ...champs } = faits;
+            await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
+            textesEpures.set(c._id, epure);
+        }
+        await M.CarteProduit.deleteMany({ carteId: { $in: deja.map(c => c._id) } });
+        await M.Carte.updateMany({ sets: slug }, { $set: { 'liens.idProduct': [] } });
+    }
+    for (let i = 0; i < aFaire.length && !arretDemande; i += 50) {
+        const lot = aFaire.slice(i, i + 50);
+        const { pages, redirections, manquantes } = await bulba.revisionsDe(lot);
+        for (const [de, vers] of redirections) { if (!redirigeDepuisTout.has(vers)) redirigeDepuisTout.set(vers, []); redirigeDepuisTout.get(vers).push(de); }
+        for (const t of manquantes) {
+            manquants++;
+            await M.Reste.updateOne({ set: slug, type: 'titre-manquant', detail: t }, { $set: { le: new Date() } }, { upsert: true });
+            await M.Etat.updateOne({ _id: slug }, { $push: { pages: { titre: t, pageid: null, revid: null, etat: 'manquant' } } });
+        }
+        for (const pg of pages) {
+            const epure = epurer(pg.content);
+            const cle = r2.cleWikitext(pg.pageid, pg.revid);
+            const depot = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, cle, epure);   // R2 AVANT la ligne
+            if (depot.ecrit) r2Ecrits++;
+            const faits = faitsDeCarte(pg.content);
+            const impCible = faits.impressions.find(x => x.tirage === 'jp' && x.expansion === L.bulba.expansion);
+            const { champsNuls, ...champs } = faits;
+            await M.Carte.updateOne({ _id: pg.pageid }, {
+                $set: {
+                    ...champs, rarete: impCible?.rarete ?? null, champsNuls,
+                    bulba: { titre: pg.title, pageid: pg.pageid, revid: pg.revid, redirigeDepuis: redirigeDepuisTout.get(pg.title) || [], cleR2: cle },
+                    collecteLe: new Date()
+                },
+                $addToSet: { sets: slug }, $setOnInsert: { version: 1, liens: { idProduct: [], idMetacard: null } }
+            }, { upsert: true });
+            ecrites++;
+            textesEpures.set(pg.pageid, epure);
+            // l'état APRÈS l'unité : les titres du lot qui ont mené à cette page (cible + redirigés)
+            const titresDeCettePage = [pg.title, ...(redirigeDepuisTout.get(pg.title) || [])].filter(t => lot.includes(t));
+            await M.Etat.updateOne({ _id: slug }, {
+                $push: { pages: { $each: titresDeCettePage.map(t => ({ titre: t, pageid: pg.pageid, revid: pg.revid, etat: 'ok' })) } },
+                $set: { phase: 'texte', derniereRequete: new Date(), requetes: bulba.compteRequetes() }
+            });
+        }
+        console.log(`   lot ${Math.floor(i / 50) + 1} : ${pages.length} pages, ${redirections.size} redirections, ${manquantes.length} manquantes`);
+    }
+    if (arretDemande) { console.warn('⏹️  arrêté avant la jointure ; relancer reprend au premier titre non traité.'); await finir(); process.exit(0); }
+
+    // ---- 4. la jointure ---------------------------------------------------------------------
+    const cartesDuSet = await M.Carte.find({ sets: slug }).lean();
+    const produits = await produitsDeLExpansion(prod, L.exp);
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, tirage: 'jp' });
+    for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
+    if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
+    // liens dénormalisés sur la carte
+    const parCarte = new Map();
+    for (const l of J.lignes) { if (!parCarte.has(l.carteId)) parCarte.set(l.carteId, []); parCarte.get(l.carteId).push(l.idProduct); }
+    for (const [carteId, ids] of parCarte) await M.Carte.updateOne({ _id: carteId }, { $addToSet: { 'liens.idProduct': { $each: ids } } });
+    // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la complétude)
+    let intlLignes = 0;
+    for (const [nomIntl, idExpIntl] of Object.entries(EXPANSIONS_INTL)) {
+        if (!cartesDuSet.some(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === nomIntl))) continue;
+        const prodIntl = await produitsDeLExpansion(prod, idExpIntl);
+        const Ji = joindre(cartesDuSet, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
+        for (const l of Ji.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
+        for (const l of Ji.lignes) await M.Carte.updateOne({ _id: l.carteId }, { $addToSet: { 'liens.idProduct': l.idProduct } });
+        intlLignes += Ji.lignes.length;
+        console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
+    }
+    await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'jointure' } });
+
+    // ---- 5. complétude ----------------------------------------------------------------------
+    const pagesDistinctes = cartesDuSet.length;
+    const cartesEcrites = await M.Carte.countDocuments({ sets: slug });
+    const restesParType = {};
+    for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
+    if (manquants) restesParType['titre-manquant'] = manquants;
+    const produitsRestes = (restesParType['produit-sans-carte'] || 0);
+    const complet = {
+        infobox: faitsSet?.cartesJa ?? null, titresLies: titres.length, pagesDistinctes, cartesEcrites,
+        produits: produits.length, produitsJoints: J.compte.produitsJoints, lignesJointure: J.lignes.length, restes: restesParType,
+        concordance: faitsSet?.cartesJa === pagesDistinctes && pagesDistinctes === cartesEcrites && produits.length === J.compte.produitsJoints + produitsRestes,
+        verifieLe: new Date()
+    };
+    await M.Set.updateOne({ _id: slug }, { $set: { complet } });
+    await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'verifie', fini: new Date(), requetes: bulba.compteRequetes() } });
+
+    const nuls = {};
+    for (const c of cartesDuSet) for (const k of c.champsNuls || []) nuls[k] = (nuls[k] || 0) + 1;
+
+    console.log(`\n════ COMPLÉTUDE ${L.code} — dénominateur : ${produits.length} produits Cardmarket, ${titres.length} titres liés ════`);
+    console.log(`   infobox (jacards)            : ${complet.infobox}`);
+    console.log(`   pages distinctes (redir. fusionnées) : ${pagesDistinctes}`);
+    console.log(`   cartes écrites               : ${cartesEcrites}`);
+    console.log(`   produits = joints + restes   : ${produits.length} = ${J.compte.produitsJoints} + ${produitsRestes}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
+    console.log(`   lignes de jointure (jp)      : ${J.lignes.length}  ·  preuves : ${JSON.stringify(J.lignes.reduce((a, l) => (a[l.preuve] = (a[l.preuve] || 0) + 1, a), {}))}  ·  bonus intl : ${intlLignes}`);
+    console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);
+    for (const r of J.restes) console.log(`      · ${r.type} : ${r.detail}`);
+    console.log(`   champs nuls (sur ${cartesDuSet.length} cartes) : ${JSON.stringify(nuls)}`);
+    console.log(`   requêtes Bulbapedia : ${bulba.compteRequetes()} · R2 écrits : ${r2Ecrits + (depotSet.ecrit ? 1 : 0)}`);
+
+    // ---- rapport : cinq cartes au hasard, champs à côté du wikitext épuré ---------------------
+    fs.mkdirSync(dossierRapport, { recursive: true });
+    const cheminRapport = path.join(dossierRapport, `${L.code}-${new Date().toISOString().slice(0, 10)}.md`);
+    const tirage = [...cartesDuSet].sort(() => Math.random() - 0.5).slice(0, 5);
+    const lignesR = [`# Rapport ${L.code} — ${new Date().toISOString()}`, '', '```json', JSON.stringify({ complet, nuls }, null, 1), '```', ''];
+    for (const c of tirage) {
+        const { bulba: b, ...reste } = c;
+        lignesR.push(`## ${b.titre} (pageid ${b.pageid}, revid ${b.revid})`, '', '```json', JSON.stringify({ ...reste, bulba: b }, null, 1), '```', '', '```wikitext', textesEpures.get(c._id) || '(wikitext non rechargé : page déjà collectée à un lancement précédent — voir R2 ' + b.cleR2 + ')', '```', '');
+    }
+    fs.writeFileSync(cheminRapport, lignesR.join('\n'), 'utf8');
+    console.log(`\n📄 rapport : ${cheminRapport}`);
+    console.log('\n⏹️  Un seul set par lancement : arrêt ici, relecture avant le suivant.');
+    await finir();
+})().catch(async e => { console.error('❌ ERREUR', e); process.exit(1); });

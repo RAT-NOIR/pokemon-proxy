@@ -10,4 +10,6 @@ products_singles*.json
 price_guide*.json
 *.json.backup
 backup-*/
+# rapports du collecteur (relecture locale, jamais versionnés)
+collecte-cartes/rapports/
 verrou/couverture/
