@@ -42,6 +42,26 @@ Ce qui rend la collecte défendable, et qui NE BOUGE PAS :
 
 On n'efface pas un désaccord daté.
 
+## 0 ter. Ce qu'on STOCKE : WebP 700 px, mesuré le 2026-09-12 — le gratuit tient
+
+Les originaux Bulbapedia occidentaux pèsent ~1 Mo (744×1040 et 734×1024, JPEG). Recompressés en
+**WebP 700 px de large, qualité 80**, ils tombent à **10-11 % du poids** :
+
+| carte | original | WebP 700 q80 |
+|---|---|---|
+| Mega Darkrai ex, Pitch Black | 1 116 Ko | 108 Ko |
+| Anthea & Concordia, Ascended Heroes | 849 Ko | 95 Ko |
+| Alcremie ex, Journey Together | 902 Ko | 96 Ko |
+
+**Lisibilité vérifiée à l'œil sur la bande basse agrandie** (code de set, numéro, rareté) : « H |
+JTG EN | 075/159 ★★ » et la ligne de copyright sont EXACTEMENT aussi lisibles dans la version
+réduite que dans l'original. Le symbole ne perd rien.
+
+**Ce que ça change** : les dix expansions passent de 1,82 Go à **195 Mo** ; le catalogue entier
+(69 598 produits) de 63,4 Go à **6,6 Go** — sous les 10 Go gratuits de R2. **On stocke le réduit,
+et lui seul.** ⚠️ Pour le JAPONAIS, PKMJP sert déjà du WebP 593×834 à ~120 Ko : on le stocke tel
+quel, recompresser ne gagnerait rien et abîmerait.
+
 ## 1. Source A — The Art of Pokémon (artofpkm.com) : le JAPONAIS, toutes ères
 
 Relevé du 2026-09-12 (7 + 7 + 7 requêtes à 5 s, aucune image entière) :

@@ -532,7 +532,7 @@ function celluleDe(d) {
             const compatPont = setCodeCompatibleVintage(d.setCode, S, codesReels);
             const pont = await interrogerPont(
                 { nom: d.nom, nomBrut: d.nomBrut, numero: d.numero, total: d.total, setCode: d.setCode, attaqueLue: d.attaqueLue ?? null, langue: d.langue },
-                { regionJaponaise: regionAttendue(cardInfoNeutre) === 'japonais', setCodeCompatible: compatPont.compatible === true }
+                { region: regionAttendue(cardInfoNeutre), setCodeCompatible: compatPont.compatible === true }
             );
             if (pont.source === 'base-cartes' && pont.produits.length) {
                 pontServi++;

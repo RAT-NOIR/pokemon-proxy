@@ -27,6 +27,12 @@ const { normaliserNom, chiffresDuNumero, decomposerNomCardmarket } = require('./
 
 const NOMS_COUVERTS = new Set(TABLE.flatMap(l => [].concat(l.bulba.expansion)));
 const EXPANSIONS_COUVERTES = new Set(TABLE.map(l => l.exp));
+// LA COUVERTURE, PAS LA RÉGION. La garde amont était écrite « région japonaise » parce que le
+// périmètre collecté était japonais : les deux coïncidaient, et cessent de coïncider au premier set
+// occidental. Elle est désormais dérivée de la TABLE : la base est interrogée quand la région lue
+// est une région qu'elle couvre réellement. `region` d'une ligne de table vaut 'japonais' par
+// défaut ; une ligne occidentale devra porter `region: 'occidental'`.
+const REGIONS_COUVERTES = new Set(TABLE.map(l => l.region || 'japonais'));
 const kana = s => /[぀-ヿ一-鿿]/.test(String(s || ''));
 
 let _cx = null, _M = null, _indisponible = null;
@@ -54,13 +60,18 @@ async function modelesCartes() {
 /**
  * Interroge la base sur ce que l'IA a lu.
  * @param {object} lu  { nom, nomBrut, numero, total, setCode, attaqueLue, langue }
- * @param {object} garde  { regionJaponaise: boolean, setCodeCompatible: boolean } — posée par l'appelant
- * @returns {Promise<{source:'base-cartes'|'aucune', cartes:object[], produits:number[], expansions:number[], raison:string}>}
+ * @param {object} garde  { region: 'japonais'|'occidental'|null, setCodeCompatible: boolean }
+ * @returns {Promise<{source:'base-cartes'|'aucune', cartes, produits, expansions, exhaustif, raison}>}
  */
 async function interrogerPont(lu, garde) {
     const vide = raison => ({ source: 'aucune', cartes: [], produits: [], expansions: [], raison });
-    if (!garde || garde.regionJaponaise !== true || garde.setCodeCompatible !== true) {
-        return vide(`garde-amont : région ${garde?.regionJaponaise === true ? 'japonaise' : 'non japonaise'}, setCode ${garde?.setCodeCompatible === true ? 'compatible' : 'incompatible ou non évalué'}`);
+    const region = garde?.region ?? null;
+    if (!REGIONS_COUVERTES.has(region)) {
+        return vide(`garde-amont : région lue « ${region ?? 'inconnue'} », la base ne couvre que ${[...REGIONS_COUVERTES].join(', ')}`);
+    }
+    // Le setCode ne garde que le sous-ensemble VINTAGE : c'est lui qu'un code moderne contredit.
+    if (region === 'japonais' && garde.setCodeCompatible !== true) {
+        return vide('garde-amont : setCode lu incompatible avec le périmètre vintage');
     }
     const M = await modelesCartes();
     if (!M) return vide(`base indisponible : ${_indisponible}`);
@@ -106,12 +117,16 @@ async function interrogerPont(lu, garde) {
     }
     const expansions = [...new Set(liens.filter(l => produits.includes(l.idProduct)).map(l => l.idExpansion))];
 
-    // 5. EXHAUSTIVITÉ — la base ne porte que 28 sets. Si le catalogue Cardmarket connaît d'autres
-    //    produits de ce nom dans des expansions JAPONAISES HORS de ces 28, la réponse n'est pas
-    //    exhaustive : la vraie carte peut être dehors (Ho-Oh n°250 : la base désigne N3, la vérité
-    //    654129 est ailleurs). Un survivant unique d'un ensemble amputé est un RESTE, pas une
-    //    désignation (CLAUDE.md §8, §12). La réponse est rendue, mais `exhaustif: false` : l'appelant
-    //    ne peut pas l'affirmer, seulement la suggérer.
+    // 5. EXHAUSTIVITÉ — la base ne couvre qu'une partie du catalogue. Si Cardmarket connaît d'autres
+    //    produits de ce nom HORS couverture, la réponse n'est pas exhaustive : la vraie carte peut
+    //    être dehors (Ho-Oh n°250 : la base désigne N3, la vérité 654129 est ailleurs). Un survivant
+    //    unique d'un ensemble amputé est un RESTE, pas une désignation (CLAUDE.md §8, §12).
+    // 🔑 LES HOMONYMES SE COMPTENT DANS LA RÉGION LUE, PLUS CELLES SANS RÉGION — pas dans tout le
+    //    catalogue. Mesuré le 2026-09-12, trois écritures comparées : compter TOUT coûte 18 lignes
+    //    fermes du banc et ne protège pas une carte de plus ; compter la région lue en coûte 0 et
+    //    protège exactement les mêmes 17 noms sur les dix expansions occidentales. Un homonyme
+    //    occidental ne peut pas être la vérité d'une carte japonaise ; une expansion SANS région,
+    //    elle, compte toujours — « je ne sais pas » n'est pas « ce n'est pas là ».
     let exhaustif = true, horsPerimetre = 0;
     try {
         const CP = mongoose.connection.db?.collection('catalogue_produits');
@@ -121,19 +136,20 @@ async function interrogerPont(lu, garde) {
             const homonymes = await CP.find({ name: { $in: nomsDeBase.flatMap(n => [new RegExp('^' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\s|\\[|$)', 'i')]) } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray();
             const expsHors = [...new Set(homonymes.map(p => p.idExpansion).filter(e => e != null && !EXPANSIONS_COUVERTES.has(e)))];
             if (expsHors.length) {
-                // Région japonaise OU INCONNUE : 229 expansions n'ont pas de région (premier principe,
-                // « je ne sais pas » n'est pas « occidentale »). Brock's Rhyhorn et Berry, 2026-09-12 :
+                // Une expansion ne compte QUE si elle peut contenir la vérité : même région que la
+                // carte lue, ou région inconnue (229 expansions n'en ont pas — premier principe,
+                // « je ne sais pas » n'est pas « ailleurs »). Brock's Rhyhorn et Berry, 2026-09-12 :
                 // la vraie carte était dans une expansion sans région, et le pont affirmait.
-                const occidentales = new Set((await CS.find({ idExpansion: { $in: expsHors }, region: 'occidental' }, { projection: { idExpansion: 1 } }).toArray()).map(c => c.idExpansion));
-                horsPerimetre = expsHors.filter(e => !occidentales.has(e)).length;
+                const autreRegion = new Set((await CS.find({ idExpansion: { $in: expsHors }, region: { $nin: [null, region] } }, { projection: { idExpansion: 1 } }).toArray()).map(c => c.idExpansion));
+                horsPerimetre = expsHors.filter(e => !autreRegion.has(e)).length;
                 exhaustif = horsPerimetre === 0;
             }
         }
     } catch (e) { exhaustif = false; raison += ` ; exhaustivité non évaluée (${e.message})`; }
     return {
         source: 'base-cartes', cartes, produits, expansions, exhaustif, horsPerimetre,
-        raison: raison + ` -> ${produits.length} produit(s), ${expansions.length} expansion(s)` + (exhaustif ? '' : ` ; NON exhaustif : ${horsPerimetre} expansion(s) japonaise(s) hors des 28 portent ce nom`)
+        raison: raison + ` -> ${produits.length} produit(s), ${expansions.length} expansion(s)` + (exhaustif ? '' : ` ; NON exhaustif : ${horsPerimetre} expansion(s) hors couverture, de région « ${region} » ou sans région, portent ce nom`)
     };
 }
 
-module.exports = { interrogerPont, EXPANSIONS_COUVERTES, NOMS_COUVERTS };
+module.exports = { interrogerPont, EXPANSIONS_COUVERTES, NOMS_COUVERTS, REGIONS_COUVERTES };

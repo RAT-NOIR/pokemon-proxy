@@ -37,7 +37,7 @@ const ASIATIQUES = ['JP', 'ZH', 'KR', 'ZH-CN', 'ZH-TW', 'CN', 'TW'];
         const regionJaponaise = ASIATIQUES.includes(String(d.langue || '').toUpperCase());
         const compat = setCodeCompatibleVintage(d.setCode, SCORING, codesReels);
         if (!regionJaponaise || compat.compatible !== true) { c.horsGarde++; c.tcgdexAurait++; nonServies.push({ d, raison: regionJaponaise ? 'setCode-incompatible' : 'region-non-japonaise' }); continue; }
-        const p = await interrogerPont({ nom: d.nom, nomBrut: d.nomBrut, numero: d.numero, total: d.total, setCode: d.setCode, attaqueLue: d.attaqueLue ?? null, langue: d.langue }, { regionJaponaise: true, setCodeCompatible: true });
+        const p = await interrogerPont({ nom: d.nom, nomBrut: d.nomBrut, numero: d.numero, total: d.total, setCode: d.setCode, attaqueLue: d.attaqueLue ?? null, langue: d.langue }, { region: 'japonais', setCodeCompatible: true });
         if (p.source === 'base-cartes' && p.produits.length) c.baseAurait++; else { c.tcgdexAurait++; nonServies.push({ d, raison: 'base-sans-carte' }); }
         // TCGdex « utile » = il a rendu une carte ET du routage de motifs — ce que la base ne rend pas
         if (d.carteTcgdexId && Number.isFinite(d.variantsDetailedNb) && d.variantsDetailedNb > 0) c.tcgdexUtile++;

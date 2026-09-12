@@ -3889,7 +3889,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             const compatPont = setCodeCompatibleVintage(cardInfo.setCode, SCORING, [...(await lireTousLesCodesSet())]);
             pont = await interrogerPont(
                 { nom: cardInfo.name, nomBrut: cardInfo.nomBrut, numero: cardInfo.number, total: cardInfo.total, setCode: cardInfo.setCode, attaqueLue: cardInfo.attaque ?? null, langue: cardInfo.language },
-                { regionJaponaise: regionAttendue(cardInfo) === 'japonais', setCodeCompatible: compatPont.compatible === true }
+                { region: regionAttendue(cardInfo), setCodeCompatible: compatPont.compatible === true }
             );
             if (pont.source === 'base-cartes' && pont.produits.length) {
                 const docs = ecarterNonCartes(await CatalogueProduit.find({ idProduct: { $in: pont.produits } }).lean(), '[pont]');

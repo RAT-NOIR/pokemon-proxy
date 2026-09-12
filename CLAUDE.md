@@ -706,6 +706,27 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 19. Une image appartient à un TIRAGE, pas à une carte — 2026-09-12
+
+**LE PIÈGE DE `image=`, mesuré.** Sur une page Bulbapedia, `|image=` est le PREMIER tirage de la
+carte, pas celui du set qu'on demande. Sur trois cartes d'Ascended Heroes tirées au hasard, l'une
+rendait l'image de **Sword & Shield**. Pour un set occidental moderne, l'image se choisit dans
+`reprintN` / `recaptionN` ou `TCGGallery`, **par nom de set**, jamais dans `image=`. Le texte n'a
+pas ce défaut : la Setlist désigne le bon set, et c'est elle qui énumère.
+
+🔴 **ET NOUS AVONS LA MÊME FAUTE, DANS NOTRE PROPRE SCHÉMA.** `cartes.image` est un champ UNIQUE par
+carte, alors qu'une page Bulbapedia est une carte **tous tirages fusionnés** : **60 cartes de la base
+appartiennent à deux sets ou plus, 29 portent déjà une image**. Charmeleon vit dans Expansion Pack
+ET dans Pokémon Card web, et porte `artofpkm/6/15.webp` — le tirage d'Expansion Pack. Le jour où WEB
+est collecté, la même carte affichera le mauvais visuel sur l'une des deux pages, et rien ne le
+signalera. **L'image doit être clé par (carte, set), comme la jointure l'est déjà par (carte,
+produit).** Non corrigé : nommé, chiffré, à faire avant que le catalogue public affiche quoi que ce
+soit.
+
+⚠️ **Le collecteur d'images actuel n'est PAS victime du piège de `image=`** : la page PKMJP est par
+(set, rang), donc l'original qu'elle rend est bien le tirage de CE set. Il est en revanche la source
+du second défaut, puisqu'il écrit une image par CARTE.
+
 ## 18. Trois qui poussent dans le même dépôt, sans coordination — 2026-09-12
 
 Le testeur et deux agents poussent sur `main`. Le 2026-09-12, trois commits sont apparus sur
