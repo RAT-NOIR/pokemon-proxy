@@ -193,14 +193,39 @@ function rattacherVerites(lignes, verites) {
     const parIdentite = new Map();
     const desaccords = [], orphelines = [];
     const lignesParIdentite = new Map(lignes.map(l => [identiteDe(l.d), l]));
+    // TOUTES les lignes d'une identité, pas seulement la dernière vue : une identité vit
+    // parfois dans deux seaux (H005 au holdout, L070 au lot — même « Slowpoke|079| »).
+    const toutesParIdentite = new Map();
+    for (const l of lignes) { const k = identiteDe(l.d); if (!toutesParIdentite.has(k)) toutesParIdentite.set(k, []); toutesParIdentite.get(k).push(l); }
+    // ════════════════════════════════════════════════════════════════════════════
+    // LA RÈGLE DU §14 (CLAUDE.md, 2026-09-10), CÂBLÉE LE 2026-09-12 : UNE SAISIE NE SE RATTACHE
+    // JAMAIS À UNE LIGNE SCANNÉE APRÈS ELLE. Une vérité saisie le 21/08 pour H005 (N1 606445)
+    // ne peut rien dire d'une photo prise le 06/09 (L070, en réalité le promo UNP 571765). Le
+    // critère est mécanique — `saisiLe` de la vérité < `le` de la ligne -> pas de rattachement
+    // pour CETTE ligne — et il ne touche ni la clé, ni l'ancre : H005 garde sa vérité, L070
+    // n'en a plus. C'est le pont (mesure du 2026-09-12) qui a trouvé cette vérité fausse ;
+    // aucun contrôle de SAISIE ne pouvait l'attraper, la saisie était juste — c'est la LECTURE
+    // qui rattachait trop large. `parCle` porte le rattachement par ligne ; `parIdentite`
+    // reste tel quel pour qui compte les identités.
+    const parCle = new Map();
+    const exclusParDate = [];
+    const attacherParLigne = (v, cleEnregistree) => {
+        for (const l of toutesParIdentite.get(identiteDeVerite(v)) || []) {
+            if (v.saisiLe && l.d?.le && new Date(v.saisiLe) < new Date(l.d.le)) {
+                exclusParDate.push({ cle: l.cle, seau: l.seau, enregistree: cleEnregistree, saisiLe: v.saisiLe, le: l.d.le, lu: v.lu });
+                continue;
+            }
+            parCle.set(l.cle, v);
+        }
+    };
 
     for (const [cleEnregistree, v] of Object.entries(verites || {})) {
         const ident = identiteDeVerite(v);
         if (!ident) {
             // Vérité antérieure au champ `lu` : elle ne peut être rattachée que par sa clé,
             // ce qui la rend fragile. On la garde, on le dit.
-            const parCle = lignes.find(l => l.cle === cleEnregistree);
-            if (parCle) parIdentite.set(identiteDe(parCle.d), v);
+            const parCleSeule = lignes.find(l => l.cle === cleEnregistree);
+            if (parCleSeule) { parIdentite.set(identiteDe(parCleSeule.d), v); parCle.set(parCleSeule.cle, v); }
             else orphelines.push({ cle: cleEnregistree, raison: 'sans champ `lu`, et sa clé ne désigne aucune ligne' });
             continue;
         }
@@ -213,8 +238,9 @@ function rattacherVerites(lignes, verites) {
             desaccords.push({ enregistree: cleEnregistree, actuelle: ligne.cle, seau: ligne.seau, lu: v.lu });
         }
         parIdentite.set(ident, v);
+        attacherParLigne(v, cleEnregistree);
     }
-    return { parIdentite, desaccords, orphelines, rattachees: parIdentite.size };
+    return { parIdentite, parCle, exclusParDate, desaccords, orphelines, rattachees: parIdentite.size };
 }
 
 module.exports = {

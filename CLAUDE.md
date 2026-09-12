@@ -674,6 +674,31 @@ L026 8 contre 9, L102 14 contre 26.
 
 ---
 
+## 16. La troisième vérité fausse, trouvée par le pont — et pourquoi aucun contrôle de saisie ne l'aurait attrapée — 2026-09-12
+
+**L'occurrence.** La mesure du pont (notre base `cartes` à la place de TCGdex, 103 vérités couvertes
+sur 140) rendait UN faux affirmé : **L070 Slowpoke n°079**. Le pont désignait ROG « Slowpoke
+[Afternoon Nap | Headbutt] » par l'attaque lue ; la vérité du fichier disait N1 `606445`. Les deux
+sont faux : la vraie carte est le promo UNP `571765`, hors des 28 sets. C'est le cas du §14, réalisé
+et **mesuré comme faux affirmé** — une vérité fausse par ancre d'identité a survécu à tous nos
+contrôles jusqu'à ce qu'une source INDÉPENDANTE la contredise.
+
+**Ce qu'aucun contrôle de saisie n'aurait attrapé.** La saisie était JUSTE : `606445` pour H005,
+vérifié sur sa photo, le 21/08. Le défaut n'est pas dans l'entrée, il est dans la LECTURE :
+`rattacherVerites` donnait cette vérité à toute ligne de même identité, dont L070 scannée le 06/09.
+Un contrôle d'URL, de slug, de produit — tout ce que `saisir-verites.js` sait faire — voit une
+saisie exacte. Seule la règle du §14 le voit, et elle est maintenant câblée (`banc-seaux.js`,
+`parCle`) : **une saisie ne se rattache jamais à une ligne scannée après elle**. Coût mesuré :
+1 ligne sur 140, L070, qui n'a plus de vérité ; H005 garde la sienne. La clé et l'ancre n'ont pas
+bougé (§5).
+
+🔑 **La leçon.** Après Berry et l'ancre du 04/08, c'est la troisième vérité fausse, et les trois ont
+la même forme : une vérité exacte rattachée à la mauvaise ligne. **Ce qui les trouve n'est jamais
+un contrôle interne — c'est une seconde source qui ne partage pas nos hypothèses.** Le pont en est
+une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement comme pont.
+
+---
+
 **L'EXIGENCE POUR TOUTE CLÉ FUTURE.** Une clé qui départage doit **nommer son périmètre dans
 la raison journalisée**. `departagerParSymbole` et `departagerParAttaque` le font déjà — leur
 `raison` dit « est le SEUL EX AEQUO à la porter », pas « est le seul ». `departagerParNumero`
