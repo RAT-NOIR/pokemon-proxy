@@ -68,12 +68,17 @@ async function produitsDeLExpansion(prod, idExpansion) {
     const CP = prod.db.collection('catalogue_produits');
     const NC = prod.db.collection('numeros_cartes');
     const produits = await CP.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, idExpansion: 1, idMetacard: 1, name: 1 } }).toArray();
-    const numeros = await NC.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, numero: 1, slug: 1, variante: 1 } }).toArray();
+    // `slugSet` autant que `slug` : les DEUX font l'URL Cardmarket
+    // (/Pokemon/Products/Singles/<slugSet>/<slug>). N'en porter qu'un ne sert à rien.
+    const numeros = await NC.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, numero: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray();
     const parId = new Map(numeros.map(n => [n.idProduct, n]));
+    const avecNumero = numeros.filter(n => n.numero != null && String(n.numero).trim() !== '').length;
+    const avecSlug = numeros.filter(n => n.slug && n.slugSet).length;
+    console.log(`   catalogue exp ${idExpansion} : ${produits.length} produits · ${avecNumero} portent un numéro (le dénominateur de la clé) · ${avecSlug} portent slug ET slugSet`);
     return produits.map(p => {
         const d = decomposerNomCardmarket(p.name);
         const n = parId.get(p.idProduct);
-        return { ...p, nom: d.nom, attaques: d.attaques, numero: n?.numero ?? null, slug: n?.slug ?? null, variante: n?.variante ?? null };
+        return { ...p, nom: d.nom, attaques: d.attaques, numero: n?.numero ?? null, slug: n?.slug ?? null, slugSet: n?.slugSet ?? null, variante: n?.variante ?? null };
     });
 }
 
@@ -98,7 +103,11 @@ function joindre(cartes, produits, cible) {
         if (alias) { const k = normaliserNom(alias); if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(p); }
     }
     const attache = (carte, p, preuve, detail) => {
-        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, verifieLe: new Date() });
+        // `slug` et `slugSet` VOYAGENT AVEC LA LIGNE : ils font l'URL Cardmarket, et le site n'a pas
+        // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
+        // en texte nu. Ils n'ont jamais été spécifiés — ce n'était pas un rejeu manqué, c'était une
+        // colonne absente.
+        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, slug: p.slug ?? null, slugSet: p.slugSet ?? null, verifieLe: new Date() });
         if (!produitsJoints.has(p.idProduct)) produitsJoints.set(p.idProduct, []);
         produitsJoints.get(p.idProduct).push(carte._id);
     };

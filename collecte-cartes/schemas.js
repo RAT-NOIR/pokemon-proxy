@@ -56,6 +56,9 @@ const carteProduitSchema = new mongoose.Schema({
     _id: String,                          // `${carteId}|${idProduct}`
     carteId: Number, idProduct: Number, idExpansion: Number, tirage: String,
     preuve: String,                       // 'set+numero' | 'set+nom+attaques' | 'set+nom' | 'manuel'
+    // L'URL Cardmarket se fabrique avec les DEUX : /Pokemon/Products/Singles/<slugSet>/<slug>.
+    // Le site lit cette collection et n'a pas accès à `numeros_cartes` : sans eux, pas de lien.
+    slug: String, slugSet: String,
     detail: String, verifieLe: Date
 }, { strict: false, collection: 'cartes_produits' });
 carteProduitSchema.index({ idProduct: 1 });
