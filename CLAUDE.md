@@ -706,6 +706,33 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 21. Le motif du 2026-09-12 : QUATRE échecs silencieux en un jour, tous de la même famille
+
+Quelque chose ne se fait pas, et **rien ne le signale**. Quatre fois dans la même journée, sur quatre
+mécanismes différents :
+
+1. **Le verrou par set ne protégeait pas la source.** Deux collecteurs ont tourné en parallèle sur
+   deux sets, chacun à sa cadence : rien n'a prévenu, les logs des deux étaient parfaits (§17).
+2. **Le verrou global ressuscité en zombie.** Un battement arrivé après la libération recréait un
+   verrou sans propriétaire, frais, qui bloquait son successeur trois minutes en affichant
+   « pid undefined » (§17).
+3. **Les sets interrompus rangés en `refuse`.** G2 et SI-JP sortaient de la file POUR TOUJOURS, avec
+   `resultat: 'interrompu'` écrit juste à côté et personne pour le lire.
+4. **La table figée par l'état.** Ajouter une section à `setlist` sur un set déjà collecté ne
+   produisait RIEN : `titres` était relu de l'état, la nouvelle section ignorée sans un mot.
+
+🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
+baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
+envers un tiers, le quatrième m'a fait conclure « rien à récupérer » d'une mesure qui n'avait rien
+mesuré. **Un défaut qui lève une exception se corrige le jour même ; un défaut qui rend un résultat
+plausible se découvre des semaines plus tard, par accident.**
+
+⚠️ **CE QUI LES ATTRAPE N'EST PAS LA RELECTURE, C'EST LE DÉNOMINATEUR IMPRIMÉ.** Les quatre auraient
+été vus si le code avait dit ce qu'il FAISAIT et pas seulement ce qu'il rendait : « 95 titres retenus
+(repris de l'état : 95) » l'a montré dès qu'on l'a imprimé. Un compteur qui affiche l'entrée ET la
+sortie d'une étape rend ces défauts visibles à la première exécution. C'est la même règle que
+« tout outil de mesure imprime son dénominateur », appliquée aux étapes et plus seulement aux taux.
+
 ## 20. Câbler sans chiffre : l'exception du 2026-09-12, et pourquoi elle doit le rester
 
 Les deux gardes du pont ont été câblées **sans qu'aucune mesure du banc ne les justifie**. Le banc ne
@@ -723,6 +750,29 @@ qui pourrait être la vérité. Dix-sept restes potentiels qu'aucune ligne du ba
 ferme un mode d'erreur connu se câble sans attendre de le rencontrer. ⚠️ **Une garde qui coûte
 quelque chose, elle, attend son chiffre** — c'est la règle depuis le veto par le symbole (§8 de
 sets-vintage-japonais) et elle ne bouge pas. L'exception est le coût nul, pas l'urgence.
+
+## 22. Conclure d'un COMPTE au lieu d'un CONSTAT — deux fois dans la même journée, 2026-09-12
+
+**Première fois.** Les sections « Additional Cards » des dix pages occidentales portent 280 entrées,
+et 672 produits sont en reste : j'ai recommandé de les énumérer, en concluant du COMPTE qu'elles
+apporteraient des cartes. Elles n'en apportent aucune — leurs entrées reconstruisent les MÊMES titres
+que la section principale. Essai sur PBL : 95 titres → 95, 25 restes → 25.
+
+**Deuxième fois, dans la foulée.** J'ai alors annoncé que les restes étaient une « divergence de
+numérotation » récupérable par une clé par NOM, sur un exemple. Mesuré : sur 726 restes, **31 ont un
+homonyme unique dans leur set** — le plafond réel est 4 %. **693 n'ont AUCUN homonyme** : la carte
+n'est pas sur la page du set, ce n'est pas un problème de clé.
+
+🔑 **LE CONTRÔLE QUI A TUÉ LA CLÉ, ET IL FAUT LE GARDER POUR TOUTE CLÉ FUTURE : que ferait-elle sur
+ce qui MARCHE déjà ?** Sur les 2 814 jointures faites par le numéro, la clé par nom en rendrait 151
+AMBIGUËS et en déplacerait jusqu'à 213. **31 gagnées contre 364 dérangées.** Une clé ne se juge pas
+sur ce qu'elle rattrape, mais sur la somme de ce qu'elle rattrape et de ce qu'elle abîme.
+⚠️ Une part des 213 vient de ma normalisation simplifiée (« Basic Fire Energy » contre « Fire
+Energy »), pas de la clé : c'est une borne HAUTE. Les 151 ambiguës, elles, ne dépendent pas de ça.
+
+**LA RÈGLE.** Un compte de lignes ne dit pas ce que les lignes contiennent. `95 = 95` ne signifie pas
+« rien à récupérer », il signifie « je n'ai pas regardé ce que je comptais ». Avant de proposer une
+piste tirée d'un total, **ouvrir trois de ses lignes**.
 
 ## 19. Une image appartient à un TIRAGE, pas à une carte — 2026-09-12
 
