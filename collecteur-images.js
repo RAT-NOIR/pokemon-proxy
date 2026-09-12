@@ -28,7 +28,8 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const src = require('./collecte-cartes/artofpkm');
-const { ligne: ligneDeTable } = require('./collecte-cartes/table-sets');
+const { ligne: ligneDeTable, TABLE } = require('./collecte-cartes/table-sets');
+const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { normaliserNom, chiffresDuNumero } = require('./collecte-cartes/jointure');
@@ -109,12 +110,13 @@ async function effacerTout(M, confirmer) {
     const bucket = process.env.R2_BUCKET_IMAGES;
     const cles = await r2.listerPrefixe(bucket, `${SOURCE}/`);
     const nImages = await M.Image.countDocuments({ source: SOURCE });
-    const nCartes = await M.Carte.countDocuments({ 'image.source': SOURCE });
+    const nCartes = await M.Carte.countDocuments({ 'images.source': SOURCE });
     console.log(`--arreter-et-effacer : ${cles.length} objets R2 sous ${SOURCE}/, ${nImages} lignes images, ${nCartes} cartes avec image ${SOURCE}.`);
     if (!confirmer) { console.log('   Rien n\'est effacé sans --confirmer.'); return; }
     const n = await r2.supprimer(bucket, cles);
     await M.Image.deleteMany({ source: SOURCE });
-    await M.Carte.updateMany({ 'image.source': SOURCE }, { $set: { image: null } });
+    await M.Carte.updateMany({ 'images.source': SOURCE }, { $pull: { images: { source: SOURCE } } });
+    await M.Carte.updateMany({ image: { $exists: true } }, { $unset: { image: 1 } });
     await M.EtatImages.deleteMany({ _id: new RegExp(`^${SOURCE}/`) });
     await M.Reste.deleteMany({ type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes'] } });
     console.log(`   effacé : ${n} objets R2, ${nImages} lignes images, ${nCartes} cartes remises sans image. Le refus est appliqué.`);
@@ -209,6 +211,21 @@ async function collecterSet(code, M, dossierRapport) {
     console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
+    const complet = await joindreImages(M, L, slug, S, entrees, mesures, dossierRapport);
+    await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: src.compteRequetes() } });
+    console.log(`   requêtes ${SOURCE} : ${src.compteRequetes()}`);
+    await liberer();
+    return { code, etat: 'verifie', complet };
+}
+
+/**
+ * ÉTAPES 4 ET 5 — la jointure image -> carte et la complétude. EXTRAITE pour être rejouable sans
+ * toucher à la source (`--rejouer-jointure`) : corriger un schéma ne doit pas coûter 400
+ * téléchargements. Une seule définition, appelée par les deux chemins.
+ */
+async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false } = {}) {
+    const code = L.code;
+    const dire = (...a) => { if (!silencieux) console.log(...a); };
     // ---- 4. jointure image -> carte --------------------------------------------------------
     const cartes = await M.Carte.find({ sets: slug }).lean();
     const nomsCibles = [].concat(L.bulba.expansion);
@@ -241,7 +258,13 @@ async function collecterSet(code, M, dossierRapport) {
         if (cands.length === 1) {
             const c = cands[0];
             await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve } });
-            await M.Carte.updateOne({ _id: c._id }, { $set: { image: { source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve, jointeLe: new Date() } } });
+            // 🔴 UNE IMAGE APPARTIENT À UNE IMPRESSION, PAS À UNE CARTE (CLAUDE.md §19). `image`,
+            // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
+            // cartes de la base, 29 déjà pourvues. `images` est une LISTE clé par `set`, comme la
+            // jointure l'est par produit. L'ancien champ est retiré au passage.
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve, jointeLe: new Date() };
+            await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug } } });
+            await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
         } else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
         else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
@@ -268,24 +291,38 @@ async function collecterSet(code, M, dossierRapport) {
         verifieLe: new Date()
     };
     await M.Set.updateOne({ _id: slug }, { $set: { completImages: complet, cartesSansImage } });
-    await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: src.compteRequetes() } });
-    console.log(`\n════ COMPLÉTUDE IMAGES ${code} — dénominateur : ${nEntrees} entrées source, ${cartes.length} cartes du set ════`);
-    console.log(`   originaux = entrées source   : ${images.length} = ${nEntrees}`);
-    console.log(`   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
-    console.log(`   cartes sans image (attendu)  : ${cartesSansImage.length} / ${cartes.length}${cartesSansImage.length ? ' — ' + cartesSansImage.map(c => c.nomEn).join(', ') : ''}`);
-    console.log(`   restes par type              : ${JSON.stringify(restesParType)}`);
-    for (const r of restes.slice(0, 40)) console.log(`      · ${r.type} : ${r.detail}`);
-    console.log(`   requêtes ${SOURCE} : ${src.compteRequetes()}`);
+    dire(`\n════ COMPLÉTUDE IMAGES ${code} — dénominateur : ${nEntrees} entrées source, ${cartes.length} cartes du set ════`);
+    dire(`   originaux = entrées source   : ${images.length} = ${nEntrees}`);
+    dire(`   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
+    dire(`   cartes sans image (attendu)  : ${cartesSansImage.length} / ${cartes.length}${cartesSansImage.length ? ' — ' + cartesSansImage.map(c => c.nomEn).join(', ') : ''}`);
+    dire(`   restes par type              : ${JSON.stringify(restesParType)}`);
+    for (const r of restes.slice(0, 40)) dire(`      · ${r.type} : ${r.detail}`);
     fs.mkdirSync(dossierRapport, { recursive: true });
     fs.writeFileSync(path.join(dossierRapport, `images-${code}-${new Date().toISOString().slice(0, 10)}.json`), JSON.stringify({ complet, restes, echantillon: images.slice(0, 5) }, null, 1));
-    await liberer();
-    return { code, etat: 'verifie', complet };
+    return complet;
 }
 
 (async () => {
     const { cartes: cx, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_IMAGES'], production: false });
     const M = modeles(cx);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
+    const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
+    // `--rejouer-jointure=<CODE|tous>` : refait la JOINTURE image -> carte depuis la base, sans
+    // toucher à la source. Aucun verrou global : il ne protège que la bande passante d'un tiers, et
+    // rien ne sort d'ici. C'est ce qui permet de corriger un schéma sans retélécharger 400 images.
+    if (arg('rejouer-jointure')) {
+        const codes = arg('rejouer-jointure') === 'tous' ? TABLE_CODES : arg('rejouer-jointure').split(',').map(s => s.trim());
+        for (const code of codes) {
+            const L = ligneDeTable(code);
+            if (!L) { console.error(`  ${code} : absent de la table`); continue; }
+            const e = await M.EtatImages.findById(`${SOURCE}/${L.slugSet}`).lean();
+            if (!e?.entrees) { console.log(`  ${code} : jamais collecté, rien à rejouer`); continue; }
+            const r = await joindreImages(M, L, L.slugSet, sourceDe(code, SOURCE), e.entrees, e.mesures || {}, dossierRapport, { silencieux: true });
+            console.log(`  ${code.padEnd(7)} ${r.imagesOk} images · ${r.imagesJointes} jointes · ${r.cartesSansImage} carte(s) sans image / ${r.cartesDuSet} · ${JSON.stringify(r.restes)}`);
+        }
+        await fermer(); return;
+    }
+
     // `--verrou` : QUI tient le verrou global, et depuis quand. Lecture seule, ne prend rien —
     // c'est LA commande à lancer avant tout collecteur, et pour vérifier qu'un seul tourne.
     if (process.argv.includes('--verrou')) {
@@ -329,8 +366,6 @@ async function collecterSet(code, M, dossierRapport) {
 
     // L'effacement ne frappe pas la source : il n'a pas besoin du verrou global.
     if (process.argv.includes('--arreter-et-effacer')) { await effacerTout(M, process.argv.includes('--confirmer')); await fermer(); return; }
-    const dossierRapport = arg('rapport') || path.join(__dirname, 'collecte-cartes', 'rapports');
-
     // ---- pilotage par FILE D'ATTENTE (worker Render) ------------------------------------------
     //   --enfiler=PJU,MFO   ajoute des sets à la file (collection `file_images`), depuis n'importe où
     //   --boucle            le worker prend le premier set en attente, le collecte, recommence ;

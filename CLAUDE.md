@@ -706,6 +706,24 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ---
 
+## 20. Câbler sans chiffre : l'exception du 2026-09-12, et pourquoi elle doit le rester
+
+Les deux gardes du pont ont été câblées **sans qu'aucune mesure du banc ne les justifie**. Le banc ne
+porte que **8 lignes** dont la vérité est dans les dix expansions occidentales, dont 2 rendent un
+candidat unique : la garde élargie y évite **0 faux affirmé**, et la garde étroite en produit **0**
+aussi. La population est vide. C'est le §12 appliqué à nous-mêmes — mesurer la présence de la vérité
+AVANT la qualité du signal — et ici la présence est nulle.
+
+**Ce qui a décidé est l'EXPOSITION STRUCTURELLE, pas une mesure d'effet** : sur les 1 033 noms des dix
+expansions, **73 seraient affirmés sans vérifier l'extérieur, et 17 ont un homonyme hors couverture**
+qui pourrait être la vérité. Dix-sept restes potentiels qu'aucune ligne du banc n'a encore rencontrés.
+
+🔑 **CE N'EST ACCEPTABLE QUE PARCE QUE LE COÛT EST NUL ET MESURÉ.** La garde par région lue coûte
+**0 ligne ferme** (la garde large en coûtait 18, pour la même protection). Une garde gratuite qui
+ferme un mode d'erreur connu se câble sans attendre de le rencontrer. ⚠️ **Une garde qui coûte
+quelque chose, elle, attend son chiffre** — c'est la règle depuis le veto par le symbole (§8 de
+sets-vintage-japonais) et elle ne bouge pas. L'exception est le coût nul, pas l'urgence.
+
 ## 19. Une image appartient à un TIRAGE, pas à une carte — 2026-09-12
 
 **LE PIÈGE DE `image=`, mesuré.** Sur une page Bulbapedia, `|image=` est le PREMIER tirage de la
@@ -725,7 +743,19 @@ soit.
 
 ⚠️ **Le collecteur d'images actuel n'est PAS victime du piège de `image=`** : la page PKMJP est par
 (set, rang), donc l'original qu'elle rend est bien le tirage de CE set. Il est en revanche la source
-du second défaut, puisqu'il écrit une image par CARTE.
+du second défaut, puisqu'il écrivait une image par CARTE.
+
+✅ **CORRIGÉ le 2026-09-12** : `cartes.images` est une LISTE, une entrée par set
+(`{set, source, cleR2, sha256, w, h, fmt, urlOriginal, preuve}`), et `image` est retiré. Rejoué
+depuis la base par `collecteur-images.js --rejouer-jointure=tous` — **zéro téléchargement, zéro
+requête, et aucun verrou** : le verrou global protège la bande passante d'un tiers, une jointure ne
+sort pas de chez nous. 610 cartes portent leur liste, 0 l'ancien champ.
+
+🔑 **LA LEÇON, ET ELLE EST DÉSAGRÉABLE : NOUS AVONS REPRODUIT CHEZ NOUS LA FAUTE QUE NOUS VENIONS DE
+NOMMER CHEZ LA SOURCE.** Le piège de `image=` a été écrit, compris, expliqué — et notre propre schéma
+faisait exactement la même chose depuis le premier jour, sans que personne le voie. **Un défaut
+compris n'est pas un défaut évité.** Quand on nomme un défaut chez un tiers, le geste suivant est de
+chercher la même forme chez soi, tout de suite, avant de passer à la suite.
 
 ## 18. Trois qui poussent dans le même dépôt, sans coordination — 2026-09-12
 

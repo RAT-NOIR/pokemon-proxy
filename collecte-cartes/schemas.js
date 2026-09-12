@@ -38,7 +38,14 @@ const carteSchema = new mongoose.Schema({
     bulba: { titre: String, pageid: Number, revid: Number, redirigeDepuis: [String], cleR2: String },
     sets: [String],                       // slugs des sets de la table qui ont amené cette page
     champsNuls: [String],
-    image: mongoose.Schema.Types.Mixed,
+    // 🔴 UNE PAR IMPRESSION, clé par `set` — jamais un champ unique. Une page Bulbapedia est une
+    // carte TOUS TIRAGES FUSIONNÉS : 60 cartes vivent dans deux sets ou plus, et un champ `image`
+    // unique leur donnait le visuel du premier set collecté (CLAUDE.md §19). Le site lit l'entrée
+    // dont `set` est celui de la page qu'il affiche, jamais la première venue.
+    images: [{
+        _id: false, set: String, source: String, cleR2: String, sha256: String,
+        w: Number, h: Number, fmt: String, urlOriginal: String, preuve: String, jointeLe: Date
+    }],
     collecteLe: Date, version: { type: Number, default: 1 }
 }, { strict: false, collection: 'cartes' });
 carteSchema.index({ nomEn: 1 });
