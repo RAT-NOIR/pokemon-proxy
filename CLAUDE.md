@@ -709,7 +709,7 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 ## 23. Un seuil posé sur une supposition coûte dans l'AUTRE sens — 2026-09-12
 
 Le seuil de résolution des images était **560 px**, posé d'avance et jamais revu. Il a fait REFUSER
-**DEUX sets, pas un** : `DP5c` (20:35) et `DP2` (20:47), dont les originaux sont **tous deux à
+**DEUX sets, pas un** : `DP5c` (20:35 UTC) et `DP2` (20:47 UTC), dont les originaux sont **tous deux à
 500×700** sur 3 mesures sur 3 — l'ère DP n'a pas la résolution du vintage japonais. ⚠️ Ce paragraphe
 ne citait que DP5c ; DP2 n'était écrit nulle part, et c'est exactement ainsi qu'il a été oublié.
 Mesure faite avant de le toucher : à **157 px de vignette**, une source de 500 px et une de 593 px
@@ -727,10 +727,17 @@ sont bas sans recollecter.
 
 ### Et le seuil a changé sans que ses refus changent — 2026-09-13
 
-**L'occurrence.** Le seuil passe à 480 le 2026-09-12 à **22:37** (`9b4c0bb`). DP5c et DP2 avaient été
-refusés sous 560 à 20:35 et 20:47. **Personne ne les a remis en file** : la nuit s'est écoulée file
-vide (`fait×26 refuse×2`), 0 image après 21:07, et **185 cartes** (62 + 123) sont restées sans
-visuel alors que la règle qui les excluait n'existait plus. Remis en file le 2026-09-13 à 08:18.
+**L'occurrence.** Le seuil passe à 480 le 2026-09-12 à **20:37 UTC** (`9b4c0bb`, 22:37 heure de Paris).
+DP5c avait été refusé à **20:35 UTC**, deux minutes AVANT le commit ; DP2 à **20:47 UTC**, dix minutes
+APRÈS — par un worker qui tournait encore l'ancien code. **Personne ne les a remis en file** : la
+nuit s'est écoulée file vide (`fait×26 refuse×2`), 0 image après 21:07 UTC, et **185 cartes**
+(62 + 123) sont restées sans visuel alors que la règle qui les excluait n'existait plus. Remis en
+file le 2026-09-13 à 08:18 UTC.
+
+⚠️ **CE PARAGRAPHE A D'ABORD MÉLANGÉ DEUX FUSEAUX** : « seuil à 22:37 » (heure de Paris, celle de
+`git log`) face à « refusés à 20:35 et 20:47 » (UTC, celle de la base). Il faisait lire deux heures
+d'écart là où DP2 a été refusé dix minutes après le changement de seuil. **Toute heure écrite ici
+porte son fuseau** : `git log` rend l'heure locale, Mongo et les scripts de mesure rendent l'UTC.
 
 🔑 **LA LEÇON : QUAND UN SEUIL CHANGE, LES DÉCISIONS PRISES SOUS L'ANCIEN NE SE RÉÉVALUENT PAS TOUTES
 SEULES.** Un refus est une décision datée, prise sous une règle datée ; changer la règle ne touche
@@ -757,6 +764,13 @@ Deux fois dans la journée, un défaut réparé à un endroit est resté intact 
   du 091 restait orpheline, sans que rien ne le dise.
 - **le `$unset` du champ image** — `images[]` a remplacé `image` dans la jointure, mais l'effacement
   (`--arreter-et-effacer`) visait encore `image.source`.
+- **🔴 et une troisième fois le 2026-09-13, sur le verrou** — le BATTEMENT avait été rendu conditionnel
+  à la possession (`091f8d2`), la LIBÉRATION non : `$unset` par `_id` seul, lancé dès le SIGTERM. Un
+  pod qui s'arrêtait effaçait le verrou de son successeur, et le battement de celui-ci, conditionnel
+  mais muet, le laissait collecter sans verrou. Le pod de DP2 a tourné **de 08:21 à 13:39 UTC sans
+  verrou global** (compteur cumulé 200 → 324, DP5c pris à 13:29:28 pile sur son cycle de 10 min), et
+  deux pods ont frappé artofpkm ensemble de 08:21:12 à 08:21:53. Corrigé dans `d9d4767`
+  (`collecte-cartes/verrou-source.js`, une seule définition pour le global et le set).
 🔑 **Quand on corrige une règle qui existe en deux exemplaires, on corrige les deux dans le même
 commit, ou on n'en corrige aucun.** C'est la règle de symétrie du banc (§9), appliquée aux jointures :
 deux définitions de la même règle divergent toujours, et la seconde ne se découvre que par accident.
