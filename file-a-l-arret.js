@@ -32,19 +32,24 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     const verrous = await db.collection('collecte_images_etat').find({ verrou: { $exists: true } }).project({ verrou: 1 }).toArray();
     const ageDe = v => v?.depuis ? Date.now() - new Date(v.depuis).getTime() : null;
     const frais = verrous.filter(v => ageDe(v.verrou) != null && ageDe(v.verrou) < FRAIS_MS);
+    // ⚠️ UN VERROU GLOBAL FRAIS N'EST PAS UNE ÉCRITURE. Depuis d9d4767, le worker en `--boucle` tient le
+    // verrou global EN PERMANENCE, y compris quand il dort sur une file vide : le compter criait « la file
+    // écrit » sur le cas normal (2026-09-13, pod …-8v8lv, file vide). C'est le verrou de SET qui dit
+    // qu'un set est en travail ; le global dit seulement qu'un collecteur est vivant.
+    const fraisSet = frais.filter(v => !/\/__collecteur__$/.test(v._id));
     const derniere = await db.collection('images').find({}).sort({ telechargeLe: -1 }).limit(1).project({ telechargeLe: 1 }).toArray();
     const age = derniere[0]?.telechargeLe ? Date.now() - new Date(derniere[0].telechargeLe).getTime() : null;
 
     const total = await db.collection('images').countDocuments({});
     const attente = await db.collection('file_images').countDocuments({ etat: 'attente' });
     console.log(`file_images    : ${enCours.length} unité(s) « en-cours » ${enCours.length ? '— ' + enCours.map(x => x._id).join(' ') : ''} · ${attente} en attente · tous états : ${etats.map(e => `${e._id}×${e.n}`).join(' ')}`);
-    console.log(`verrous        : ${verrous.length} présent(s), ${frais.length} frais${verrous.length ? ' — ' + verrous.map(v => `${v._id} pid ${v.verrou.pid} sur ${v.verrou.hote}, battement il y a ${Math.round(ageDe(v.verrou) / 1000)} s`).join(' · ') : ''}`);
+    console.log(`verrous        : ${verrous.length} présent(s), ${frais.length} frais dont ${fraisSet.length} de SET${verrous.length ? ' — ' + verrous.map(v => `${v._id} pid ${v.verrou.pid} sur ${v.verrou.hote}, battement il y a ${Math.round(ageDe(v.verrou) / 1000)} s`).join(' · ') : ''}`);
     console.log(`dernière image : ${age == null ? 'aucune' : `il y a ${Math.round(age / 1000)} s`} · ${total} images en base, toutes sources`);
 
-    const bouge = enCours.length > 0 || frais.length > 0 || (age != null && age < FRAIS_MS);
+    const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS);
     console.log(bouge
         ? `\n🔴 LA FILE ÉCRIT. Toute mesure sur \`cartes\`, \`cartes_produits\` ou \`images\` prise maintenant est un INSTANTANÉ, pas un dénominateur. Attendre, ou dire dans le rapport que la file tournait.`
-        : `\n✅ FILE À L'ARRÊT (rien en cours, aucun verrou frais, aucune écriture depuis plus de ${FRAIS_MS / 60000} min). La mesure vaut, et le rapport doit le DIRE.`);
+        : `\n✅ FILE À L'ARRÊT (rien en cours, aucun verrou de set frais, aucune écriture depuis plus de ${FRAIS_MS / 60000} min${frais.length ? ' ; un collecteur vivant dort sur son verrou global' : ''}). La mesure vaut, et le rapport doit le DIRE.`);
     await fermer();
     process.exit(bouge ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });
