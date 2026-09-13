@@ -790,6 +790,22 @@ mécanismes différents :
 4. **La table figée par l'état.** Ajouter une section à `setlist` sur un set déjà collecté ne
    produisait RIEN : `titres` était relu de l'état, la nouvelle section ignorée sans un mot.
 
+**Et la liste s'est allongée le 2026-09-13 — même forme, trois de plus :**
+
+5. **La libération du verrou effaçait celui d'un autre** (§21 bis) : le pod de DP2 a collecté cinq
+   heures sans verrou global, son battement conditionnel échouant sans un mot.
+6. **Un `en-cours` jamais repris** : DP5c immobile cinq heures, 8 originaux sur 70, parce que la boucle
+   ne prenait que les `attente`.
+7. **🔴 LA LISTE TRONQUÉE À 100.** `listerSet` (artofpkm.js) cherchait le lien « page suivante » par deux
+   motifs devinés ; aucun ne matchait ; il rendait la page 1 comme un set complet. **4 listes sur les 30
+   des 28 sets s'arrêtent à n = 1…100 pile, sans un trou** — EC1, N4, VS, DP2 — dont trois sets ont plus
+   de cartes (113, 142, 123) : **78 cartes sans image** rangées en « la source ne les a pas ». Je l'ai
+   d'ailleurs écrit ainsi, et le testeur allait en tirer une règle sur « tous les sets DP à venir ».
+   🔑 **UN COMPTE ROND EST UN SIGNAL, PAS UN RÉSULTAT.** 100, 50, 1 000 : une valeur ronde en fin de liste
+   se vérifie avant de se lire comme une limite de la source. ⚠️ Correction `69f0c8e`, **page 2 non encore
+   prouvée** : la requête de vérification a été refusée par le verrou global que tenait le worker —
+   c'est le correctif 5 qui fonctionne. La preuve viendra de la première relecture de ces quatre sets.
+
 🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
 baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
 envers un tiers, le quatrième m'a fait conclure « rien à récupérer » d'une mesure qui n'avait rien
