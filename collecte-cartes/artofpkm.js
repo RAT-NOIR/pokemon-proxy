@@ -25,6 +25,7 @@ const crypto = require('crypto');
 const BASE = 'https://www.artofpkm.com/';
 const UA = 'rat-market-collecte/0.1 (https://rat-market.fr ; collecte images, contact via le site) axios';
 const DELAI_MS = 5000;
+const TAILLE_PAGE = 100;   // /sets/{id}/cards : 100 entrées par page, mesuré sur 4 listes le 2026-09-13
 
 let _derniere = 0, _file = Promise.resolve(), _compte = 0;
 const dodo = ms => new Promise(r => setTimeout(r, ms));
@@ -53,18 +54,41 @@ function requete(url, { bin = false, range = null } = {}) {
 }
 const compteRequetes = () => _compte;
 
-/** Les entrées d'un set (toutes pages si `?page=` existe). */
+/**
+ * Les entrées d'un set, TOUTES PAGES.
+ *
+ * 🔴 LE SEPTIÈME ÉCHEC SILENCIEUX (CLAUDE.md §21), 2026-09-13. Quatre listes sur les 30 relues des 28
+ * sets s'arrêtaient à n = 1…100 EXACTEMENT, sans un trou : Base Expansion Pack (EC1), Darkness and to
+ * Light (N4), Pokémon Card★VS (VS), Secret of the Lakes (DP2) — trois de ces sets ont plus de cartes
+ * (113, 142, 123). La liste s'arrêtait à « Aipom » ; Ambipom, son évolution, manquait. Le lien « page
+ * suivante » était cherché par deux motifs devinés, aucun ne matchait, et la boucle rendait 100 entrées
+ * comme un set complet. Un compte tronqué à une valeur RONDE est plausible : c'est ce qui l'a caché.
+ *
+ * LA RÈGLE, SANS DEVINER LE BALISAGE : une page PLEINE (autant d'entrées que la première) appelle la
+ * page suivante par `?page=N` ; on s'arrête dès qu'une page n'apporte AUCUN n nouveau (un serveur qui
+ * ignore le paramètre rend la page 1 : 0 nouvelle, arrêt, UNE requête perdue). Chaque page imprime son
+ * compte : un paramètre ignoré se VOIT, il ne se devine pas.
+ */
 async function listerSet(id) {
     const entrees = [];
-    let url = `${BASE}sets/${id}/cards`;
-    const vues = new Set();
-    while (url && !vues.has(url)) {
-        vues.add(url);
+    const vuesN = new Set();
+    const re = /<a [^>]*data-lightbox-title="([^"]*)"[^>]*data-lightbox-url="\/sets\/(\d+)\/card\/(\d+)"[^>]*href="(https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+)"[^>]*>\s*<img[^>]*(?:src|data-src)="([^"]+)"/g;
+    // ⚠️ La taille de page est celle OBSERVÉE (4 listes arrêtées à 100 pile), pas celle de la page 1 : sinon
+    // un set de 48 cartes, page « pleine » par définition, demanderait une page 2 pour rien.
+    const taillePage = TAILLE_PAGE;
+    for (let page = 1; page <= 50; page++) {
+        const url = `${BASE}sets/${id}/cards${page > 1 ? `?page=${page}` : ''}`;
         const html = (await requete(url)).data;
-        const re = /<a [^>]*data-lightbox-title="([^"]*)"[^>]*data-lightbox-url="\/sets\/(\d+)\/card\/(\d+)"[^>]*href="(https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+)"[^>]*>\s*<img[^>]*(?:src|data-src)="([^"]+)"/g;
-        for (const m of html.matchAll(re)) entrees.push({ titre: decode(m[1]), sourceSetId: Number(m[2]), n: Number(m[3]), original: m[4], cleCdn: m[4].split('/').pop(), vignette: m[5] });
-        const suivant = html.match(/<a[^>]*rel="next"[^>]*href="([^"]+)"/) || html.match(/href="([^"]*[?&]page=\d+[^"]*)"[^>]*>\s*(?:Next|Suivant|›|&raquo;)/i);
-        url = suivant ? new URL(decode(suivant[1]), BASE).href : null;
+        let lues = 0, nouvelles = 0;
+        for (const m of html.matchAll(re)) {
+            lues++;
+            const n = Number(m[3]);
+            if (vuesN.has(n)) continue;
+            vuesN.add(n); nouvelles++;
+            entrees.push({ titre: decode(m[1]), sourceSetId: Number(m[2]), n, original: m[4], cleCdn: m[4].split('/').pop(), vignette: m[5] });
+        }
+        console.log(`   liste ${id} page ${page} : ${lues} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})`);
+        if (!nouvelles || !lues || lues < taillePage) break;
     }
     return entrees;
 }
