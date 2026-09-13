@@ -252,6 +252,15 @@ async function collecterSet(code, M, dossierRapport) {
 // « Uncommon (Old Back) » chez la source, « Uncommon » chez Bulbapedia : la parenthèse est une
 // mention de dos de carte, pas un degré de rareté. Même famille que les apostrophes typographiques.
 const normaliserRarete = v => String(v ?? '').replace(/\([^)]*\)/g, '').trim().toLowerCase();
+// « Unown [E] » chez la source, « Unown E » chez Bulbapedia : les crochets de la LETTRE ne passaient pas
+// la clé — 8 orphelines sur 8 noms à crochets des 28 sets (DP2 E I M T, DP5c V W Y ?), mesuré le
+// 2026-09-13. Même famille que les apostrophes typographiques et le ☆.
+// ⚠️ LOCAL À LA JOINTURE DES IMAGES, VOLONTAIREMENT. `normaliserNom` est partagé avec pont-cartes.js
+// (la chaîne de production), et côté Cardmarket les crochets portent les ATTAQUES
+// (« Alakazam [Damage Swap | Confuse Ray] », lus par decomposerNomCardmarket) : les effacer là-bas
+// fondrait le nom et les attaques. Ici, sur des noms source PKMJP et des noms Bulbapedia, aucun des
+// deux n'utilise les crochets pour autre chose que la lettre.
+const nomImage = n => normaliserNom(String(n ?? '').replace(/[\[\]]/g, ' '));
 
 async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false } = {}) {
     const code = L.code;
@@ -271,7 +280,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             if (!parNumero.has(num)) parNumero.set(num, []);
             if (!parNumero.get(num).includes(c)) parNumero.get(num).push(c);
         }
-        const k = normaliserNom(c.nomEn);
+        const k = nomImage(c.nomEn);
         if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(c);
     }
     const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();
@@ -284,7 +293,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const num = chiffresDuNumero(im.numero);
         if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
         if (!cands.length && im.nomEn) {
-            cands = parNom.get(normaliserNom(im.nomEn)) || [];
+            cands = parNom.get(nomImage(im.nomEn)) || [];
             preuve = 'nom';
             if (cands.length > 1 && im.illustrateur) {
                 const ill = cands.filter(c => normaliserNom(c.illustrateur) === normaliserNom(im.illustrateur));
