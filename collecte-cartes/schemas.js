@@ -44,7 +44,10 @@ const carteSchema = new mongoose.Schema({
     // dont `set` est celui de la page qu'il affiche, jamais la première venue.
     images: [{
         _id: false, set: String, source: String, cleR2: String, sha256: String,
-        w: Number, h: Number, fmt: String, urlOriginal: String, preuve: String, jointeLe: Date
+        w: Number, h: Number, fmt: String, urlOriginal: String, preuve: String, jointeLe: Date,
+        // Bulbapedia : le NUMÉRO du tirage (une carte peut avoir deux tirages dans le même set —
+        // Charmander 004 et 168 de 151 — et donc deux entrées, la plus basse d'abord) et l'attribution.
+        numero: String, attribution: String, page: String
     }],
     collecteLe: Date, version: { type: Number, default: 1 }
 }, { strict: false, collection: 'cartes' });

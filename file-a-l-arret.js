@@ -26,21 +26,25 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     // `en-cours` est le SEUL état qu'un collecteur vivant écrit (collecteur-images.js:449).
     const enCours = await db.collection('file_images').find({ etat: 'en-cours' }).toArray();
     const etats = await db.collection('file_images').aggregate([{ $group: { _id: '$etat', n: { $sum: 1 } } }]).toArray();
-    const verrou = await db.collection('collecte_images_etat').findOne({ _id: 'artofpkm/__collecteur__' });
+    // ⚠️ TOUS LES VERROUS, PAS CELUI D'UNE SOURCE. Écrit quand seul artofpkm collectait, ce contrôle ne
+    // regardait que `artofpkm/__collecteur__` : le collecteur Bulbapedia (2026-09-13) aurait écrit sans
+    // qu'il le voie. Global ou de set, artofpkm ou bulbapedia : un battement frais = quelqu'un travaille.
+    const verrous = await db.collection('collecte_images_etat').find({ verrou: { $exists: true } }).project({ verrou: 1 }).toArray();
+    const ageDe = v => v?.depuis ? Date.now() - new Date(v.depuis).getTime() : null;
+    const frais = verrous.filter(v => ageDe(v.verrou) != null && ageDe(v.verrou) < FRAIS_MS);
     const derniere = await db.collection('images').find({}).sort({ telechargeLe: -1 }).limit(1).project({ telechargeLe: 1 }).toArray();
     const age = derniere[0]?.telechargeLe ? Date.now() - new Date(derniere[0].telechargeLe).getTime() : null;
-    const ageVerrou = verrou?.verrou?.depuis ? Date.now() - new Date(verrou.verrou.depuis).getTime() : null;
 
     const total = await db.collection('images').countDocuments({});
     const attente = await db.collection('file_images').countDocuments({ etat: 'attente' });
     console.log(`file_images    : ${enCours.length} unité(s) « en-cours » ${enCours.length ? '— ' + enCours.map(x => x._id).join(' ') : ''} · ${attente} en attente · tous états : ${etats.map(e => `${e._id}×${e.n}`).join(' ')}`);
-    console.log(`verrou global  : ${verrou?.verrou ? `tenu par pid ${verrou.verrou.pid} sur ${verrou.verrou.hote}, battement il y a ${Math.round(ageVerrou / 1000)} s` : 'libre'}`);
-    console.log(`dernière image : ${age == null ? 'aucune' : `il y a ${Math.round(age / 1000)} s`} · ${total} entrées source en base`);
+    console.log(`verrous        : ${verrous.length} présent(s), ${frais.length} frais${verrous.length ? ' — ' + verrous.map(v => `${v._id} pid ${v.verrou.pid} sur ${v.verrou.hote}, battement il y a ${Math.round(ageDe(v.verrou) / 1000)} s`).join(' · ') : ''}`);
+    console.log(`dernière image : ${age == null ? 'aucune' : `il y a ${Math.round(age / 1000)} s`} · ${total} images en base, toutes sources`);
 
-    const bouge = enCours.length > 0 || (ageVerrou != null && ageVerrou < FRAIS_MS) || (age != null && age < FRAIS_MS);
+    const bouge = enCours.length > 0 || frais.length > 0 || (age != null && age < FRAIS_MS);
     console.log(bouge
         ? `\n🔴 LA FILE ÉCRIT. Toute mesure sur \`cartes\`, \`cartes_produits\` ou \`images\` prise maintenant est un INSTANTANÉ, pas un dénominateur. Attendre, ou dire dans le rapport que la file tournait.`
-        : `\n✅ FILE À L'ARRÊT (rien en cours, verrou libre ou froid, aucune écriture depuis plus de ${FRAIS_MS / 60000} min). La mesure vaut, et le rapport doit le DIRE.`);
+        : `\n✅ FILE À L'ARRÊT (rien en cours, aucun verrou frais, aucune écriture depuis plus de ${FRAIS_MS / 60000} min). La mesure vaut, et le rapport doit le DIRE.`);
     await fermer();
     process.exit(bouge ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

@@ -45,7 +45,7 @@ const VERROU_MS = 10 * 60 * 1000;
 // une SUPPOSITION et jamais revu fait refuser du bon travail. Il coûte dans l'autre sens, et
 // silencieusement — un set refusé ne réclame rien. La résolution réelle de chaque set est conservée
 // dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
-const LARGEUR_MIN = 480;
+const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
 const SOURCE = arg('source') || 'artofpkm';
 
 // ════════════════════════════════════════════════════════════════════════════
