@@ -22,7 +22,6 @@
 // sha256 ; verrou avec battement ; SIGINT termine l'unité en cours. Débit : artofpkm.js.
 
 require('dotenv').config();
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
@@ -33,6 +32,7 @@ const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { normaliserNom, chiffresDuNumero } = require('./collecte-cartes/jointure');
+const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -68,31 +68,12 @@ const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
 const VERROU_GLOBAL_MS = 3 * 60 * 1000;
 const ATTENTE_VERROU_MS = 30 * 1000;
 
-/**
- * @returns {Promise<null|{pid,hote,depuis,ageS}>} null si pris, sinon le détenteur VIVANT.
- * ⚠️ TROIS FAÇONS D'ÊTRE LIBRE, et la troisième a coûté un incident : pas de verrou du tout ;
- * un verrou dont le battement est mort ; **un verrou SANS PROPRIÉTAIRE**. Ce dernier naît quand un
- * battement arrive après la libération (`$set: {'verrou.depuis'}` recrée le sous-document avec la
- * seule date) : il est frais, il n'appartient à personne, et il bloquait tout le monde pendant
- * trois minutes en s'affichant « pid undefined ». Le battement est désormais CONDITIONNEL à la
- * possession — c'est la vraie correction ; celle-ci ramasse les zombies déjà en base.
- */
-async function prendreVerrouGlobal(M) {
-    const perime = new Date(Date.now() - VERROU_GLOBAL_MS);
-    try {
-        const r = await M.EtatImages.findOneAndUpdate(
-            { _id: VERROU_GLOBAL, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }, { 'verrou.pid': { $exists: false } }] },
-            { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() }, phase: 'collecteur' } },
-            { upsert: true, new: true }
-        ).lean();
-        if (r) return null;
-    } catch (e) {
-        if (e.code !== 11000) throw e;   // 11000 : le doc existe et le filtre n'a pas matché = tenu par un vivant
-    }
-    const t = (await M.EtatImages.findById(VERROU_GLOBAL).lean())?.verrou;
-    if (!t) return null;                  // libéré entre-temps : l'appelant réessaiera
-    return { ...t, ageS: Math.round((Date.now() - new Date(t.depuis).getTime()) / 1000) };
-}
+// ⚠️ TROIS FAÇONS D'ÊTRE LIBRE — pas de verrou, battement mort, verrou SANS PROPRIÉTAIRE (zombie né
+// d'un battement arrivé après la libération) — et TROIS DÉFAUTS DE LIBÉRATION corrigés le 2026-09-13 :
+// tout est dans collecte-cartes/verrou-source.js, une seule définition pour le global et pour le set.
+// 🔴 Un verrou perdu (battement ou revérification à 0 document) ARRÊTE la collecte après l'unité.
+let verrouGlobal = null;
+const surPerte = () => { arretDemande = true; process.exitCode = 1; };
 
 /**
  * Attend que le verrou global se libère, au lieu de mourir. Un redéploiement Render laisse
@@ -100,8 +81,9 @@ async function prendreVerrouGlobal(M) {
  * NORMAL en boucle de redémarrage. On attend, on dit qui tient, et on reprend.
  */
 async function attendreVerrouGlobal(M, { patienter = true } = {}) {
+    verrouGlobal = fabriquerVerrou({ Modele: M.EtatImages, id: VERROU_GLOBAL, dureeMs: VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${SOURCE}` });
     for (let essai = 0; ; essai++) {
-        const tenu = await prendreVerrouGlobal(M);
+        const tenu = await verrouGlobal.prendre();
         if (!tenu) return true;
         const msg = `verrou global ${SOURCE} tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s ; mort à ${VERROU_GLOBAL_MS / 1000} s)`;
         if (!patienter) { console.error(`❌ ARRÊT : ${msg}. « 1 requête / 5 s, jamais en parallèle » se compte chez la SOURCE.`); return false; }
@@ -131,6 +113,36 @@ async function effacerTout(M, confirmer) {
     console.log(`   effacé : ${n} objets R2, ${nImages} lignes images, ${nCartes} cartes remises sans image. Le refus est appliqué.`);
 }
 
+/**
+ * UN `en-cours` DONT LE SET NE BAT PLUS RETOURNE EN `attente`. La boucle ne prend que les `attente` :
+ * un pod tué au milieu d'un set laissait sa ligne `en-cours` POUR TOUJOURS, sans que rien le signale.
+ * 🔴 L'OCCURRENCE : DP5c, pris à 08:20:37 UTC le 2026-09-13 par un pod tué vers 08:21:53, immobile
+ * plus de cinq heures avec 8 originaux sur 70, verrou de set périmé depuis 08:31.
+ * Dernier signe de vie = le plus récent de (battement du verrou de set, `pris`) : un set pris il y a
+ * une seconde, dont le verrou n'est pas encore posé, n'est pas figé. Même borne que le refus du
+ * verrou de set (VERROU_MS) : un seuil plus court le remettrait en attente pour le voir refusé aussitôt.
+ * Appelé sous le verrou global uniquement — c'est lui qui fait autorité sur la file.
+ */
+async function reprendreEnCoursFiges(File, M) {
+    const enCours = await File.find({ etat: 'en-cours' }).lean();
+    if (!enCours.length) return 0;
+    let repris = 0;
+    for (const f of enCours) {
+        const L = ligneDeTable(f._id);
+        const e = L ? await M.EtatImages.findById(`${SOURCE}/${L.slugSet}`).select('verrou').lean() : null;
+        const vie = Math.max(e?.verrou?.depuis ? new Date(e.verrou.depuis).getTime() : 0, f.pris ? new Date(f.pris).getTime() : 0);
+        const ageS = Math.round((Date.now() - vie) / 1000);
+        if (ageS * 1000 < VERROU_MS) { console.log(`   ${f._id} en-cours, dernier signe de vie il y a ${ageS} s : vivant, je n'y touche pas.`); continue; }
+        const motif = `en-cours figé : ${e?.verrou ? `verrou de set de pid ${e.verrou.pid} sur ${e.verrou.hote}` : 'aucun verrou de set'}, dernier signe de vie il y a ${ageS} s (borne ${VERROU_MS / 1000} s)`;
+        const r = await File.updateOne({ _id: f._id, etat: 'en-cours', ...(f.pris ? { pris: f.pris } : { pris: { $exists: false } }) },
+            { $set: { etat: 'attente', reprisLe: new Date(), reprisMotif: motif }, $unset: { pris: 1 } });
+        if (r.modifiedCount) console.warn(`↩️ ${f._id} remis en attente — ${motif}`);
+        repris += r.modifiedCount;
+    }
+    console.log(`en-cours figés : ${repris} remis en attente sur ${enCours.length} en-cours`);
+    return repris;
+}
+
 async function collecterSet(code, M, dossierRapport) {
     const L = ligneDeTable(code);
     if (!L) { console.error(`❌ ${code} : absent de la table à la main.`); return { code, etat: 'refuse-table' }; }
@@ -144,16 +156,16 @@ async function collecterSet(code, M, dossierRapport) {
         console.error(`❌ ${code} : le collecteur de TEXTE tient ${slug} (pid ${verrouTexte.verrou.pid}). Jamais en parallèle.`); return { code, etat: 'refuse-texte-en-cours' };
     }
     const idEtat = `${SOURCE}/${slug}`;
-    const existant = await M.EtatImages.findById(idEtat).lean();
-    if (existant?.verrou?.depuis && Date.now() - new Date(existant.verrou.depuis).getTime() < VERROU_MS && existant.verrou.pid !== process.pid) {
-        console.error(`❌ ${code} : un collecteur d'images tient déjà ${slug} (pid ${existant.verrou.pid} sur ${existant.verrou.hote}).`); return { code, etat: 'refuse-verrou' };
+    // LE VERROU DE SET, MÊME DÉFINITION QUE LE GLOBAL (§21 bis : deux exemplaires d'une règle se
+    // corrigent ensemble). ⚠️ L'ancienne garde excluait `pid === process.pid` : sur Render TOUS les pods
+    // ont le pid 52, donc un pod neuf prenait le verrou frais d'un autre pour le sien. Prise atomique,
+    // possession par pid + hôte + jeton, libération conditionnelle, perte = arrêt.
+    const verrouSet = fabriquerVerrou({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_MS, surInsertion: { debute: new Date(), phase: 'liste', entrees: {}, mesures: {} }, surPerte, nom: `verrou de set ${slug}` });
+    const tenuPar = await verrouSet.prendre();
+    if (tenuPar) {
+        console.error(`❌ ${code} : un collecteur d'images tient déjà ${slug} (pid ${tenuPar.pid} sur ${tenuPar.hote}, battement il y a ${tenuPar.ageS} s).`); return { code, etat: 'refuse-verrou' };
     }
-    await M.EtatImages.updateOne({ _id: idEtat }, { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() } }, $setOnInsert: { debute: new Date(), phase: 'liste', entrees: {}, mesures: {} } }, { upsert: true });
-    // Conditionnel à la possession, comme le verrou global : voir son bloc.
-    const battement = setInterval(() => M.EtatImages.updateOne(
-        { _id: idEtat, 'verrou.pid': process.pid, 'verrou.hote': os.hostname() },
-        { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
-    const liberer = async () => { clearInterval(battement); await M.EtatImages.updateOne({ _id: idEtat }, { $unset: { verrou: 1 } }); };
+    const liberer = () => verrouSet.rendre();
 
     const requetesAuDebut = src.compteRequetes();
     console.log(`\n══ ${code} « ${L.nom} » — ${nbCartes} cartes en base, source ${SOURCE} ${JSON.stringify(S.ids)} « ${S.noms.join(' / ')} » ══`);
@@ -434,20 +446,23 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // quelle que soit la machine et quel que soit le set. Voir son bloc en tête de fichier.
     // En BOUCLE (worker) on ATTEND ; en lancement manuel on refuse tout de suite.
     if (!await attendreVerrouGlobal(M, { patienter: process.argv.includes('--boucle') })) { await fermer(); process.exit(1); }
-    // ⚠️ CONDITIONNEL À LA POSSESSION. Un battement inconditionnel qui arrive après la libération
-    // RECRÉE le verrou avec la seule date : un zombie frais et sans propriétaire, qui bloque son
-    // successeur trois minutes. Mesuré le 2026-09-12 sur un redéploiement Render.
-    const battementGlobal = setInterval(() => M.EtatImages.updateOne(
-        { _id: VERROU_GLOBAL, 'verrou.pid': process.pid, 'verrou.hote': os.hostname() },
-        { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
-    const rendreVerrouGlobal = async () => { clearInterval(battementGlobal); await M.EtatImages.updateOne({ _id: VERROU_GLOBAL }, { $unset: { verrou: 1 } }).catch(() => { }); };
-    process.on('SIGTERM', async () => { await rendreVerrouGlobal(); });
+    // 🔴 PLUS AUCUN RENDU DANS UN GESTIONNAIRE DE SIGNAL. Le SIGTERM rendait le verrou IMMÉDIATEMENT
+    // pendant que l'autre gestionnaire laissait finir l'unité en cours : l'ancien pod requêtait sans
+    // verrou et le nouveau entrait (08:21:12 → 08:21:53 UTC, le 2026-09-13). Le signal lève
+    // `arretDemande` ; le verrou se rend APRÈS l'unité, en sortie de boucle, et seulement s'il est à nous.
+    const rendreVerrouGlobal = () => verrouGlobal.rendre();
 
     if (process.argv.includes('--boucle')) {
         console.log('--boucle : file d\'attente `file_images`, un set à la fois, 10 min de sommeil quand elle est vide.');
         while (!arretDemande) {
+            // ⚠️ LA POSSESSION SE REVÉRIFIE AVANT CHAQUE SET, pas seulement au démarrage : un verrou pris à
+            // minuit ne dit rien de 08:20. Non tenu = arrêt, Render relance, le neuf attend son tour.
+            if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
+            await reprendreEnCoursFiges(File, M);
             const suivant = await File.findOneAndUpdate({ etat: 'attente' }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
-            if (!suivant) { await new Promise(r => setTimeout(r, 10 * 60 * 1000)); continue; }
+            // Sommeil INTERROMPABLE : un SIGTERM pendant les 10 minutes rend le verrou tout de suite
+            // au lieu de le laisser expirer après le SIGKILL.
+            if (!suivant) { for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) await new Promise(r => setTimeout(r, 5000)); continue; }
             const b = await collecterSet(suivant._id, M, dossierRapport);
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
@@ -464,6 +479,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const bilan = [];
     for (const code of codes) {
         if (arretDemande) break;
+        if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
         bilan.push(await collecterSet(code, M, dossierRapport));
     }
     console.log('\nbilan :', bilan.map(b => `${b.code} ${b.etat}`).join(' · '));

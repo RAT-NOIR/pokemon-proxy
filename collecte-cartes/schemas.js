@@ -100,7 +100,7 @@ const etatImagesSchema = new mongoose.Schema({
     phase: String,                        // 'liste' | 'mesure' | 'originaux' | 'jointure' | 'verifie' | 'refuse-resolution'
     entrees: mongoose.Schema.Types.Mixed, // sourceSetId -> [{n, titre, original, cleCdn, vignette}]
     mesures: mongoose.Schema.Types.Mixed, // sourceSetId -> [{url, w, h, octets}]
-    verrou: { pid: Number, hote: String, depuis: Date },
+    verrou: { pid: Number, hote: String, jeton: String, depuis: Date },   // jeton : verrou-source.js
     requetes: Number, debute: Date, fini: Date, derniereRequete: Date
 }, { strict: false, collection: 'collecte_images_etat' });
 
