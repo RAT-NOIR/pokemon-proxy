@@ -24,6 +24,24 @@ let _compte = 0;
 
 const dodo = ms => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Télécharge un fichier (URL rendue par `imageinfo`, hôte archives.bulbagarden.net `/media/upload/`,
+ * hors du `/w/` interdit) DANS LA MÊME FILE que `api` : un seul débit pour tout Bulbagarden. Deux
+ * files, une par hôte, doubleraient la cadence chez le même opérateur — la faute du §17, en plus discret.
+ */
+function telecharger(url) {
+    const tache = _file.then(async () => {
+        const attente = _derniere + DELAI_MS - Date.now();
+        if (attente > 0) await dodo(attente);
+        _derniere = Date.now();
+        _compte++;
+        const r = await axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000 });
+        return { buffer: Buffer.from(r.data), type: r.headers['content-type'] || null };
+    });
+    _file = tache.catch(() => { });
+    return tache;
+}
+
 /** Requête sérialisée et espacée. Rend le JSON, lève sur erreur API (sauf maxlag, réessayé). */
 function api(params) {
     const tache = _file.then(async () => {
@@ -104,4 +122,4 @@ async function imageinfoDe(fichiers) {
     return infos;
 }
 
-module.exports = { api, liensDe, revisionsDe, imageinfoDe, compteRequetes, UA, DELAI_MS };
+module.exports = { api, liensDe, revisionsDe, imageinfoDe, telecharger, compteRequetes, UA, DELAI_MS };
