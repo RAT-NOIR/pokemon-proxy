@@ -709,7 +709,9 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 ## 23. Un seuil posé sur une supposition coûte dans l'AUTRE sens — 2026-09-12
 
 Le seuil de résolution des images était **560 px**, posé d'avance et jamais revu. Il a fait REFUSER
-`DP5c`, dont les originaux sont à **500×700** — l'ère DP n'a pas la résolution du vintage japonais.
+**DEUX sets, pas un** : `DP5c` (20:35) et `DP2` (20:47), dont les originaux sont **tous deux à
+500×700** sur 3 mesures sur 3 — l'ère DP n'a pas la résolution du vintage japonais. ⚠️ Ce paragraphe
+ne citait que DP5c ; DP2 n'était écrit nulle part, et c'est exactement ainsi qu'il a été oublié.
 Mesure faite avant de le toucher : à **157 px de vignette**, une source de 500 px et une de 593 px
 sont **indiscernables à l'œil** (bandes basses superposées, symbole illisible dans les deux). Le seuil
 ne protégeait que la vue pleine carte, **qui n'existe pas encore sur le site**. Abaissé à 480 par
@@ -722,6 +724,30 @@ plausible. ⚠️ Un seuil doit porter **ce qu'il protège** (ici : la vue plein
 seul, sinon personne ne peut dire quand il est devenu faux. La résolution réelle de chaque set est
 conservée dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels
 sont bas sans recollecter.
+
+### Et le seuil a changé sans que ses refus changent — 2026-09-13
+
+**L'occurrence.** Le seuil passe à 480 le 2026-09-12 à **22:37** (`9b4c0bb`). DP5c et DP2 avaient été
+refusés sous 560 à 20:35 et 20:47. **Personne ne les a remis en file** : la nuit s'est écoulée file
+vide (`fait×26 refuse×2`), 0 image après 21:07, et **185 cartes** (62 + 123) sont restées sans
+visuel alors que la règle qui les excluait n'existait plus. Remis en file le 2026-09-13 à 08:18.
+
+🔑 **LA LEÇON : QUAND UN SEUIL CHANGE, LES DÉCISIONS PRISES SOUS L'ANCIEN NE SE RÉÉVALUENT PAS TOUTES
+SEULES.** Un refus est une décision datée, prise sous une règle datée ; changer la règle ne touche
+à aucune des décisions déjà écrites. **Il faut une LISTE de ce qui a été refusé, relue à chaque
+changement de règle** — dans le même geste que le changement, pas plus tard. Ici la liste existe
+déjà : `file_images` `{ etat: 'refuse' }` avec son `resultat`. Elle n'a simplement pas été lue.
+
+⚠️ **ET LE GESTE ÉVIDENT NE MARCHE PAS.** `--enfiler=DP5c` fait un `$setOnInsert` : sur un set déjà
+présent dans la file, il **ne fait rien** et imprime quand même « enfilé ». La remise en file s'est
+faite par mise à jour directe, bornée à `etat: 'refuse'` et `resultat: 'refuse-resolution'`, avec
+`remisEnFileLe` et `remisEnFileMotif` sur la ligne. Même famille que le §21 : un résultat plausible,
+aucun effet.
+
+⚠️ **ET UN SEUIL VIT DANS LE PROCESSUS, PAS DANS LE DÉPÔT** (§17). Un worker qui tourne sur un
+commit antérieur à `9b4c0bb` a encore 560 : il relit les mesures en cache (500 px), refuse de
+nouveau **sans une seule requête**, et remet les deux sets en `refuse`. La remise en file ne vaut
+que si le worker a été redéployé après le changement de seuil — à vérifier, pas à supposer.
 
 ## 21 bis. Corrigé d'un côté, laissé de l'autre — le même défaut, deux fois
 
