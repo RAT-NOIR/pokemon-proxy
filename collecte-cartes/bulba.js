@@ -33,10 +33,18 @@ function telecharger(url) {
     const tache = _file.then(async () => {
         const attente = _derniere + DELAI_MS - Date.now();
         if (attente > 0) await dodo(attente);
-        _derniere = Date.now();
-        _compte++;
-        const r = await axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000 });
-        return { buffer: Buffer.from(r.data), type: r.headers['content-type'] || null };
+        for (let essai = 0; ; essai++) {
+            _derniere = Date.now();
+            _compte++;
+            try {
+                const r = await axios.get(url, { responseType: 'arraybuffer', headers: { 'User-Agent': UA }, timeout: 60000 });
+                return { buffer: Buffer.from(r.data), type: r.headers['content-type'] || null };
+            } catch (e) {
+                const statut = e.response?.status;
+                if (essai === 0 && (!statut || statut >= 500)) { console.warn(`   ↻ Bulbagarden ${statut ?? e.code} sur ${url} — un seul réessai dans 60 s`); await dodo(60000); continue; }
+                throw new Error(`Bulbagarden ${statut ?? e.code ?? ''} sur ${url} (après ${essai + 1} essai(s))`);
+            }
+        }
     });
     _file = tache.catch(() => { });
     return tache;
@@ -50,11 +58,26 @@ function api(params) {
             if (attente > 0) await dodo(attente);
             _derniere = Date.now();
             _compte++;
-            const r = await axios.get(API, {
-                params: { format: 'json', formatversion: 2, maxlag: 5, ...params },
-                headers: { 'User-Agent': UA, 'Api-User-Agent': UA },
-                timeout: 60000
-            });
+            let r;
+            try {
+                r = await axios.get(API, {
+                    params: { format: 'json', formatversion: 2, maxlag: 5, ...params },
+                    headers: { 'User-Agent': UA, 'Api-User-Agent': UA },
+                    timeout: 60000
+                });
+            } catch (e) {
+                // 5xx ou réseau : UN réessai après 60 s, comme artofpkm.js (§21 bis : les deux clients d'une
+                // même règle). Le 2026-09-14 à 18:43 UTC, un 503 Cloudflare a tué la génération de la table à
+                // sa première requête, avec une trace de 300 lignes. Au-delà d'un réessai, on s'arrête :
+                // insister sur un serveur qui dit « indisponible » n'est pas un débit, c'est une charge.
+                const statut = e.response?.status;
+                if (essai === 0 && (!statut || statut >= 500)) {
+                    console.warn(`   ↻ Bulbapedia ${statut ?? e.code ?? e.message} — un seul réessai dans 60 s`);
+                    await dodo(60000);
+                    continue;
+                }
+                throw new Error(`Bulbapedia ${statut ?? e.code ?? ''} ${e.message} (après ${essai + 1} essai(s))`);
+            }
             const err = r.data?.error;
             if (err?.code === 'maxlag') {
                 const retry = Number(r.headers['retry-after']) || 5;
