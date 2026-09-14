@@ -805,6 +805,33 @@ mécanismes différents :
    se vérifie avant de se lire comme une limite de la source. ⚠️ Correction `69f0c8e`, **page 2 non encore
    prouvée** : la requête de vérification a été refusée par le verrou global que tenait le worker —
    c'est le correctif 5 qui fonctionne. La preuve viendra de la première relecture de ces quatre sets.
+   ⚠️ **RELECTURE DU 2026-09-14, 18:43 UTC : NON CONCLUANTE.** Le worker (pod `…-6qxkh`) a fait **2 requêtes
+   par set** — page 1, page 2 — et les quatre listes sont restées à 100 : la page 2 n'a apporté **aucun
+   n nouveau**. Deux causes possibles, que la base ne sépare pas : le serveur ignore `?page=2` et rend
+   la page 1 (100 lues, 0 nouvelle), ou la page 2 est vide (0 lue). Le compte « lues » n'est imprimé que
+   dans les logs Render (`liste 150 page 2 : N entrées lues`). **Un compte qui décide et qui ne vit que
+   dans un log n'est pas encore une mesure** : il faudra l'écrire dans l'état.
+
+## 28. LE CHINOIS : UN CHANTIER DISTINCT, MIS DE CÔTÉ — 2026-09-14
+
+**Bulbapedia le couvre, mais pas là où notre jointure regarde.** Les expansions en chinois simplifié ont
+des pages d'expansion suffixées **« (ATCG) »** (au moins 12 pour Scarlet & Violet : Miracle Journey, Arcane
+Truth…) ; les pages de CARTES, elles, ne mentionnent le chinois que **3 fois sur 607** pages modernes.
+Notre collecte énumère par la Setlist d'une page de set puis joint par l'impression déclarée sur la page
+de carte : un tirage chinois absent des pages de cartes est **invisible** à cette jointure. Il faudrait
+passer par les listes des pages « (ATCG) » — une autre énumération, un autre chantier. Non collecté.
+
+🔴 **LE FAIT QUI COMPTE AUJOURD'HUI : 20 des 83 expansions chinoises de Cardmarket sont rangées « japonais »
+par `codes_set.region`** (règle « code en minuscules » ; `CS1bC` Dynamax Clash Flame…), et d'autres ne
+portent pas le motif `CS…C` (`151C` Collect 151, `CBB1C`–`CBB5C` Gem Pack, promos `/CS` `/CT`, `PKMTCH`).
+**Une table qui les prendrait pour japonaises collecterait du faux.** Le générateur des lignes
+automatiques les EXCLUT avant tout appariement (95 expansions d'une langue ni japonaise ni occidentale),
+et aucune des 399 lignes générées n'en est.
+
+⚠️ **Le même défaut existait en petit dans le parseur** : `{{ATCG|Gem Pack Vol. 1}} (Simplified Chinese)`
+dans un champ `jpexpansion` devenait une impression `tirage: 'jp'` (3 pages sur 2 981). Corrigé AVANT la
+collecte massive (`9f5353b`) : seul `{{TCG}}` est japonais, chaque autre gabarit rend son tirage
+(`zh-hans`, `zh-hant`, `id`, `th`, `ko`).
 
 🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
 baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
