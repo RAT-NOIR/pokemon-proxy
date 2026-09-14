@@ -21,7 +21,19 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Start Deck 100 (TCG)",
+   "entrees": 328,
+   "echantillon": "Hitmontop (Brilliant Stars 72)",
+   "tiragesVus": [],
+   "ratio": 0.76,
+   "etat": "À REGARDER",
+   "raisons": [
+    "tirage non établi (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "sv4a",
@@ -45,7 +57,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Paldean Fates (TCG)",
+   "entrees": {
+    "Shiny Treasure ex": 309
+   },
+   "note": "vérification automatique : 309 entrées pour 360 produits, échantillon « Paldean Student (Paldean Fates 85) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Paldean Fates (TCG)",
+   "entrees": 309,
+   "echantillon": "Paldean Student (Paldean Fates 85)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.86,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:14:41.093Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s4a",
@@ -69,7 +104,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Shining Fates (TCG)",
+   "entrees": {
+    "Shiny Star V": 274
+   },
+   "note": "vérification automatique : 274 entrées pour 330 produits, échantillon « Capacious Bucket (Rebel Clash 156) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Shining Fates (TCG)",
+   "entrees": 274,
+   "echantillon": "Capacious Bucket (Rebel Clash 156)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.83,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:16:32.208Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s8b",
@@ -93,7 +151,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "VMAX Climax (TCG)",
+   "entrees": {
+    "VMAX Climax": 182
+   },
+   "note": "vérification automatique : 182 entrées pour 285 produits, échantillon « Turbo Patch (Darkness Ablaze 172) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "VMAX Climax (TCG)",
+   "entrees": 182,
+   "echantillon": "Turbo Patch (Darkness Ablaze 172)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.64,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:17:43.095Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s12a",
@@ -117,7 +198,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Crown Zenith (TCG)",
+   "entrees": {
+    "VSTAR Universe": 178
+   },
+   "note": "vérification automatique : 178 entrées pour 262 produits, échantillon « Trekking Shoes (Astral Radiance 156) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Crown Zenith (TCG)",
+   "entrees": 178,
+   "echantillon": "Trekking Shoes (Astral Radiance 156)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.68,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:18:53.302Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "m2a",
@@ -141,7 +245,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "MEGA Dream ex (TCG)",
+   "entrees": {
+    "MEGA Dream ex": 198
+   },
+   "note": "vérification automatique : 198 entrées pour 250 produits, échantillon « Dratini (Ascended Heroes 150) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "MEGA Dream ex (TCG)",
+   "entrees": 198,
+   "echantillon": "Dratini (Ascended Heroes 150)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.79,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:19:51.700Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm8b",
@@ -165,7 +292,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Hidden Fates (TCG)",
+   "entrees": {
+    "GX Ultra Shiny": 177
+   },
+   "note": "vérification automatique : 177 entrées pour 250 produits, échantillon « Energy Loto (Guardians Rising 122) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Hidden Fates (TCG)",
+   "entrees": 177,
+   "echantillon": "Energy Loto (Guardians Rising 122)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.71,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:21:14.538Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm12a",
@@ -189,7 +339,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Tag All Stars (TCG)",
+   "entrees": {
+    "Tag All Stars": 165
+   },
+   "note": "vérification automatique : 165 entrées pour 235 produits, échantillon « Munchlax (Unified Minds 173) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Tag All Stars (TCG)",
+   "entrees": 165,
+   "echantillon": "Munchlax (Unified Minds 173)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.7,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:22:32.008Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv2a",
@@ -213,7 +386,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "151 (TCG)",
+   "entrees": {
+    "Pokémon Card 151": 179
+   },
+   "note": "vérification automatique : 179 entrées pour 210 produits, échantillon « Krabby (151 98) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "151 (TCG)",
+   "entrees": 179,
+   "echantillon": "Krabby (151 98)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.85,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:23:23.020Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "BXY",
@@ -237,7 +433,30 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "The Best of XY (TCG)",
+   "entrees": {
+    "The Best of XY": 135
+   },
+   "note": "vérification automatique : 135 entrées pour 188 produits, échantillon « Dive Ball (Primal Clash 125) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "The Best of XY (TCG)",
+   "entrees": 135,
+   "echantillon": "Dive Ball (Primal Clash 125)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.72,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:24:37.777Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svM",
@@ -261,7 +480,19 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Generations Start Decks (TCG)",
+   "entrees": 157,
+   "echantillon": "Dunsparce (Paldea Evolved 156)",
+   "tiragesVus": [],
+   "ratio": 0.9,
+   "etat": "À REGARDER",
+   "raisons": [
+    "tirage non établi (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "sv3",
@@ -285,7 +516,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Obsidian Flames (TCG)",
+   "entrees": {
+    "Ruler of the Black Flame": 120
+   },
+   "note": "vérification automatique : 120 entrées pour 141 produits, échantillon « Glimmet (Obsidian Flames 122) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Obsidian Flames (TCG)",
+   "entrees": 120,
+   "echantillon": "Glimmet (Obsidian Flames 122)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.85,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:25:36.381Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svD",
@@ -309,7 +563,17 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Ex Start Decks (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Ex Start Decks »"
+   ]
+  }
  },
  {
   "code": "sv8",
@@ -333,7 +597,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Super Electric Breaker (TCG)",
+   "entrees": {
+    "Super Electric Breaker": 117
+   },
+   "note": "vérification automatique : 117 entrées pour 138 produits, échantillon « Phanpy (Surging Sparks 102) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Super Electric Breaker (TCG)",
+   "entrees": 117,
+   "echantillon": "Phanpy (Surging Sparks 102)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.85,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:26:35.014Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv7",
@@ -357,7 +644,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Stellar Crown (TCG)",
+   "entrees": {
+    "Stellar Miracle": 114
+   },
+   "note": "vérification automatique : 114 entrées pour 135 produits, échantillon « Impidimp (Stellar Crown 94) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Stellar Crown (TCG)",
+   "entrees": 114,
+   "echantillon": "Impidimp (Stellar Crown 94)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.84,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:27:30.660Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv9",
@@ -381,7 +691,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Battle Partners (TCG)",
+   "entrees": {
+    "Battle Partners": 108
+   },
+   "note": "vérification automatique : 108 entrées pour 132 produits, échantillon « N's Purrloin (Journey Together 96) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Battle Partners (TCG)",
+   "entrees": 108,
+   "echantillon": "N's Purrloin (Journey Together 96)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.82,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:28:00.269Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CP4",
@@ -405,7 +738,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Premium Champion Pack (TCG)",
+   "entrees": {
+    "Premium Champion Pack": 112
+   },
+   "note": "vérification automatique : 112 entrées pour 131 produits, échantillon « Hawlucha (Furious Fists 63) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Premium Champion Pack (TCG)",
+   "entrees": 112,
+   "echantillon": "Hawlucha (Furious Fists 63)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.85,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:28:49.119Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "smH",
@@ -429,7 +785,19 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "GX Starter Decks (TCG)",
+   "entrees": 122,
+   "echantillon": "Honchkrow (Ultra Prism 72)",
+   "tiragesVus": [],
+   "ratio": 0.93,
+   "etat": "À REGARDER",
+   "raisons": [
+    "tirage non établi (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "s8",
@@ -453,7 +821,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Fusion Strike (TCG)",
+   "entrees": {
+    "Fusion Arts": 101
+   },
+   "note": "vérification automatique : 101 entrées pour 129 produits, échantillon « Galarian Zigzagoon (Fusion Strike 159) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Fusion Strike (TCG)",
+   "entrees": 101,
+   "echantillon": "Galarian Zigzagoon (Fusion Strike 159)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.78,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:29:39.837Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s11",
@@ -477,7 +868,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Lost Origin (TCG)",
+   "entrees": {
+    "Lost Abyss": 98
+   },
+   "note": "vérification automatique : 98 entrées pour 127 produits, échantillon « Dragapult (Silver Tempest 89) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Lost Origin (TCG)",
+   "entrees": 98,
+   "echantillon": "Dragapult (Silver Tempest 89)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.77,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-14T19:30:31.922Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s9",
@@ -501,7 +915,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Brilliant Stars (TCG)",
+   "entrees": {
+    "Star Birth": 98
+   },
+   "note": "vérification automatique : 98 entrées pour 127 produits, échantillon « Golett (Brilliant Stars 82) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Brilliant Stars (TCG)",
+   "entrees": 98,
+   "echantillon": "Golett (Brilliant Stars 82)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.77,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sD",
@@ -525,7 +958,19 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "V Starter Decks (TCG)",
+   "entrees": 118,
+   "echantillon": "Mawile (Sword & Shield 129)",
+   "tiragesVus": [],
+   "ratio": 0.93,
+   "etat": "À REGARDER",
+   "raisons": [
+    "tirage non établi (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "sm4+",
@@ -549,7 +994,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "GX Battle Boost (TCG)",
+   "entrees": {
+    "GX Battle Boost": 99
+   },
+   "note": "vérification automatique : 99 entrées pour 125 produits, échantillon « Murkrow (Guardians Rising 78) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "GX Battle Boost (TCG)",
+   "entrees": 99,
+   "echantillon": "Murkrow (Guardians Rising 78)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.79,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "s12",
@@ -573,7 +1037,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Silver Tempest (TCG)",
+   "entrees": {
+    "Paradigm Trigger": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 125 produits, échantillon « Purrloin (Crown Zenith 77) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Silver Tempest (TCG)",
+   "entrees": 96,
+   "echantillon": "Purrloin (Crown Zenith 77)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.77,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DP1",
@@ -597,7 +1080,21 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Diamond & Pearl (TCG)",
+   "entrees": 236,
+   "echantillon": "Wurmple (Diamond & Pearl 104)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.93,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.93 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "m4",
@@ -621,7 +1118,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Ninja Spinner (TCG)",
+   "entrees": {
+    "Ninja Spinner": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 120 produits, échantillon « Trubbish (Chaos Rising 56) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Ninja Spinner (TCG)",
+   "entrees": 96,
+   "echantillon": "Trubbish (Chaos Rising 56)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.8,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "s3",
@@ -645,7 +1161,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Darkness Ablaze (TCG)",
+   "entrees": {
+    "Infinity Zone": 93
+   },
+   "note": "vérification automatique : 93 entrées pour 119 produits, échantillon « Ariados (Darkness Ablaze 103) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Darkness Ablaze (TCG)",
+   "entrees": 93,
+   "echantillon": "Ariados (Darkness Ablaze 103)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.78,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "m5",
@@ -669,7 +1204,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Abyss Eye (TCG)",
+   "entrees": {
+    "Abyss Eye": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 118 produits, échantillon « Maschiff (Pitch Black 57) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Abyss Eye (TCG)",
+   "entrees": 95,
+   "echantillon": "Maschiff (Pitch Black 57)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.81,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sm9",
@@ -693,7 +1247,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Team Up (TCG)",
+   "entrees": {
+    "Tag Bolt": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 118 produits, échantillon « Mankey (Team Up 71) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Team Up (TCG)",
+   "entrees": 95,
+   "echantillon": "Mankey (Team Up 71)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.81,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "m3",
@@ -717,7 +1290,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Nihil Zero (TCG)",
+   "entrees": {
+    "Nihil Zero": 93
+   },
+   "note": "vérification automatique : 93 entrées pour 117 produits, échantillon « Chien-Pao (Perfect Order 54) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Nihil Zero (TCG)",
+   "entrees": 93,
+   "echantillon": "Chien-Pao (Perfect Order 54)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.79,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sm12",
@@ -741,7 +1333,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Cosmic Eclipse (TCG)",
+   "entrees": {
+    "Alter Genesis": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 117 produits, échantillon « Alolan Sandslash (Cosmic Eclipse 138) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Cosmic Eclipse (TCG)",
+   "entrees": 96,
+   "echantillon": "Alolan Sandslash (Cosmic Eclipse 138)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.82,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DP3",
@@ -765,7 +1376,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Secret Wonders (TCG)",
+   "entrees": {
+    "Shining Darkness": 109
+   },
+   "note": "vérification automatique : 109 entrées pour 117 produits, échantillon « Natu (Secret Wonders 96) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Secret Wonders (TCG)",
+   "entrees": 109,
+   "echantillon": "Natu (Secret Wonders 96)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.93,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sm10",
@@ -789,7 +1419,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Unbroken Bonds (TCG)",
+   "entrees": {
+    "Double Blaze": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 116 produits, échantillon « Tyrogue (Unbroken Bonds 100) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Unbroken Bonds (TCG)",
+   "entrees": 95,
+   "echantillon": "Tyrogue (Unbroken Bonds 100)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.82,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "m2",
@@ -813,7 +1462,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Inferno X (TCG)",
+   "entrees": {
+    "Inferno X": 94
+   },
+   "note": "vérification automatique : 94 entrées pour 116 produits, échantillon « Krokorok (Phantasmal Flames 65) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Inferno X (TCG)",
+   "entrees": 94,
+   "echantillon": "Krokorok (Phantasmal Flames 65)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.81,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "s2",
@@ -837,7 +1505,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Rebel Clash (TCG)",
+   "entrees": {
+    "Rebellion Crash": 89
+   },
+   "note": "vérification automatique : 89 entrées pour 115 produits, échantillon « Meditite (Rebel Clash 97) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Rebel Clash (TCG)",
+   "entrees": 89,
+   "echantillon": "Meditite (Rebel Clash 97)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.77,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sm11",
@@ -861,7 +1548,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Unified Minds (TCG)",
+   "entrees": {
+    "Miracle Twin": 94
+   },
+   "note": "vérification automatique : 94 entrées pour 115 produits, échantillon « Archeops (Unified Minds 121) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Unified Minds (TCG)",
+   "entrees": 94,
+   "echantillon": "Archeops (Unified Minds 121)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.82,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv1S",
@@ -885,7 +1591,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Scarlet & Violet (TCG)",
+   "entrees": 226,
+   "echantillon": "Stonjourner (Scarlet & Violet 121)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 1.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.98 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "sm7",
@@ -909,7 +1630,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Celestial Storm (TCG)",
+   "entrees": {
+    "Sky-Splitting Charisma": 94
+   },
+   "note": "vérification automatique : 94 entrées pour 112 produits, échantillon « Groudon (Celestial Storm 81) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Celestial Storm (TCG)",
+   "entrees": 94,
+   "echantillon": "Groudon (Celestial Storm 81)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.84,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sm8",
@@ -933,7 +1673,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "Lost Thunder (TCG)",
+   "entrees": {
+    "Super-Burst Impact": 92
+   },
+   "note": "vérification automatique : 92 entrées pour 111 produits, échantillon « Donphan (Lost Thunder 112) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "Lost Thunder (TCG)",
+   "entrees": 92,
+   "echantillon": "Donphan (Lost Thunder 112)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.83,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "WCP",
@@ -957,7 +1716,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-14",
+   "page": "EX Power Keepers (TCG)",
+   "entrees": {
+    "World Champions Pack": 105
+   },
+   "note": "vérification automatique : 105 entrées pour 108 produits, échantillon « Shiftry ex (EX Power Keepers 97) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-14",
+   "pageResolue": "EX Power Keepers (TCG)",
+   "entrees": 105,
+   "echantillon": "Shiftry ex (EX Power Keepers 97)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv1V",
