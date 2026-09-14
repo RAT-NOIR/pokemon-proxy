@@ -18,7 +18,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const bulba = require('./bulba');
-const { faitsDeSet, faitsDeCarte } = require('./wikitext');
+const { faitsDeSet, faitsDeCarte, RE_TCG_ID, tcgIdLisible } = require('./wikitext');
 const { TABLE } = require('./table-sets');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -37,7 +37,8 @@ async function verifier(L) {
     r.titreResolu = p.title; r.redirection = redirections.get(L.bulba.titre) || null; r.pageid = p.pageid;
     const f = faitsDeSet(p.content) || {};
     r.jasetname = f.nomJa; r.transsetname = f.nomJaTraduit; r.jacards = f.cartesJa; r.encards = f.cartesEn; r.jarelease = f.sortieJa;
-    const tcgIds = [...p.content.matchAll(/\{\{TCG ID\|([^|}]+)\|([^|}]+)\|([^|}]+)\}\}/g)].map(m => ({ set: m[1].trim(), nom: m[2].trim(), num: m[3].trim() }));
+    // Même expression que la Setlist (wikitext.js) : un TCG ID à 4 paramètres (affichage) est une carte (§21 bis).
+    const tcgIds = [...p.content.matchAll(new RegExp(RE_TCG_ID.source, 'g'))].filter(m => m[3] && tcgIdLisible(m)).map(m => ({ set: m[1].trim(), nom: m[2].trim(), num: m[3].trim() }));
     const titresTcgId = [...new Set(tcgIds.map(t => `${t.nom} (${t.set} ${t.num})`))];
     const setsTcgId = {};
     for (const t of tcgIds) setsTcgId[t.set] = (setsTcgId[t.set] || 0) + 1;

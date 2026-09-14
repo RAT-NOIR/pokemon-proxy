@@ -25,7 +25,7 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
-const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist } = require('./collecte-cartes/wikitext');
+const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
@@ -133,8 +133,15 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // La sélection vit dans wikitext.js (`entreesDeLaSetlist`) : verifier-table.js --auto juge une ligne
     // avec la MÊME fonction. Deux définitions de la même règle divergent toujours (§21 bis).
     const nomsSections = L.bulba.setlist === null ? null : (L.bulba.setlist || [].concat(L.bulba.expansion));
-    const { entrees, sections, surToutLeWikitext } = entreesDeLaSetlist(pSet.content, L.bulba);
-    if (surToutLeWikitext && entrees.length) console.log(`   (aucune section Setlist : ${entrees.length} entrées TCG ID lues sur tout le wikitext)`);
+    const lecture = entreesDeLaSetlist(pSet.content, L.bulba);
+    const { entrees, sections, surToutLeWikitext } = lecture;
+    if (surToutLeWikitext && entrees.length) console.log(`   (aucune section Setlist retenue : ${entrees.length} entrées retenues sur ${lecture.lues} références lues sur tout le wikitext)`);
+    // LE DÉNOMINATEUR DE L'ÉTAPE, ÉCRIT DANS L'ÉTAT ET PAS SEULEMENT DANS LE LOG (§21 n°7). Jusqu'au 2026-09-15,
+    // 1 064 entrées de Setlist étaient écartées sans un mot, et `sectionsVues` n'était écrit qu'à la première collecte.
+    const sectionsDuSet = lecture.chemin === 'sections-nommees' ? sections.filter(s => nomsSections.includes(s.titre)) : sections;
+    const ignoreesParNature = sectionsDuSet.flatMap(s => s.ignorees).reduce((a, x) => { const k = natureIgnoree(x); a[k] = (a[k] || 0) + 1; return a; }, {});
+    const sectionsVues = sections.map(s => ({ titre: s.titre, n: s.entrees.length, ignorees: s.ignorees.length }));
+    const lectureSetlist = { chemin: lecture.chemin, lues: lecture.lues, retenues: entrees.length, horsSet: lecture.horsSet, ignorees: ignoreesParNature, le: new Date() };
     const entreesSetlist = [...new Set([...entrees.map(e => e.titre), ...(L.bulba.titresSupplementaires || [])])];
     // ⚠️ LA TABLE PEUT CHANGER APRÈS UNE COLLECTE, ET L'ÉTAT NE DOIT PAS LA FIGER. Ajouter une
     // section à `setlist` ne produisait RIEN sur un set déjà collecté : `titres` était relu de
@@ -152,13 +159,19 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     if (!titres) {
         if (!entreesSetlist.length) {
             console.error(`❌ ${L.code} : aucune entrée de Setlist pour ${JSON.stringify(nomsSections)}. Sections vues : ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}`).join(' · ')}`);
-            await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'setlist-vide', sectionsVues: sections.map(s => ({ titre: s.titre, n: s.entrees.length })) } });
+            await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'setlist-vide', sectionsVues, lectureSetlist } });
             await finir(); process.exit(1);
         }
         titres = entreesSetlist;
-        await M.Etat.updateOne({ _id: slug }, { $set: { titres, phase: 'liens', sectionsVues: sections.map(s => ({ titre: s.titre, n: s.entrees.length })) } });
+        await M.Etat.updateOne({ _id: slug }, { $set: { titres, phase: 'liens' } });
     }
-    console.log(`2. setlist : sections ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}`).join(' · ')} → ${entreesSetlist.length} titres retenus${etat.titres?.length ? ' (repris de l\'état : ' + titres.length + ')' : ''}`);
+    // Dans les DEUX branches : une re-collecte réécrit la lecture du parseur d'aujourd'hui.
+    await M.Etat.updateOne({ _id: slug }, { $set: { sectionsVues, lectureSetlist } });
+    console.log(`2. setlist : sections ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}${s.ignorees.length ? ` (+${s.ignorees.length} ignorée(s))` : ''}`).join(' · ')} → ${entreesSetlist.length} titres retenus${etat.titres?.length ? ' (repris de l\'état : ' + titres.length + ')' : ''}`);
+    console.log(`   lecture (${lecture.chemin}) : ${lecture.lues} lues → ${entrees.length} retenues · ignorées dans les sections du set ${JSON.stringify(ignoreesParNature)} · hors set ${lecture.horsSet.length}${lecture.horsSet.length ? ' : ' + lecture.horsSet.slice(0, 5).join(' · ') : ''}`);
+    // Une énergie de base ne désigne pas une page par tirage ; une énergie SPÉCIALE, si — la voir ignorée est un trou.
+    // Seules les sections DU SET sont regardées : les sections d'un autre set, sur une page fusionnée, sont normales.
+    for (const s of sectionsDuSet) for (const brut of s.ignorees.filter(x => natureIgnoree(x) !== 'energie-base')) console.warn(`   ⚠️ entrée ignorée (${natureIgnoree(brut)}), section « ${s.titre} » : ${brut.replace(/\s+/g, ' ').slice(0, 160)}`);
 
     // ---- 3. le texte, par lots de 50, reprise par titre ------------------------------------
     const dejaFaits = new Set((etat.pages || []).map(p => p.titre));
