@@ -237,8 +237,22 @@ tout journal de set.**
   un vrai signal, que la re-collecte dira joint ou non.
 - [ ] Commit (fichiers nommés), puis une relecture ciblée des corrections, en parallèle de la re-vérification (qui
   n'écrit que le fichier de table). **La re-collecte, qui écrit la base, attend cette relecture.**
-- [ ] **Re-vérification des blocs 1 et 2** (4 requêtes) : les rapports entrées / produits changent, et une ligne
-  proche de 1,5 peut sortir des bornes.
+- [x] **Re-vérification des blocs 1 et 2** (4 requêtes, 23:52:37 UTC). **OBTENU = ATTENDU** :
+  - 33 OK sur 40, aucune ligne perdue ;
+  - bloc 1 : rapport **de 0,97 à 1,07**, avec **entrées = produits Cardmarket, exactement, sur 13 lignes**. BXY est
+    à 188 / 188 ;
+  - DP1 1,93 et sv1S 2,26 restent hors bornes ; sI100, svM, smH et sD restent en « tirage non établi », svD à
+    0 entrée. Ce sont deux défauts distincts du parseur, à regarder au lot F.
+
+  Texte d'origine de la tâche : **Re-vérification des blocs 1 et 2** (4 requêtes) : les rapports entrées / produits changent, et une ligne
+  proche de 1,5 peut sortir des bornes. Le script `remettre-verif-blocs-1-2.js` (scratchpad) retire `verif` et
+  `verifie` des 40 lignes, et garde l'ancien jugement dans `verifAvantCorrectifSetlist`. **ATTENDU, écrit avant** :
+  - **aucune ligne OK ne devient « à regarder »** : 33 OK sur 40 au moins ;
+  - bloc 1 : rapport entrées / produits **entre 0,90 et 1,10** sur les 15 lignes à section, BXY compris
+    (188 / 188), contre 0,64 à 0,86 avant ;
+  - DP1 (1,93) et sv1S (1,98) restent hors bornes : le correctif ajoute des entrées, il n'en retire pas ;
+  - l'échantillon (l'entrée du milieu) change sur la plupart des lignes. Un changement de verdict sur « tirage
+    non établi » (sI100, svM, smH, sD) est **possible et non prédit**.
 - [ ] **Re-collecte du bloc 1** (`collecteur-texte.js --set=…`, les titres ajoutés sont fetchés seuls). **ATTENDU :**
   - concordance 16 / 16 ;
   - **titres manquants = 0**, sinon ce sont des liens rouges, à lister ;
