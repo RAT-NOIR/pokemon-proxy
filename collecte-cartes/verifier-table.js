@@ -71,7 +71,81 @@ async function verifier(L) {
     return r;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// --auto : les lignes GÉNÉRÉES (table-sets-auto.json), PAR BLOC, en DEUX requêtes par bloc
+// ════════════════════════════════════════════════════════════════════════════
+//   node collecte-cartes/verifier-table.js --auto [--bloc=20]
+// (1) toutes les pages de set du bloc en UNE requête `revisions` (lot de 50, redirections suivies) ;
+// (2) une carte-échantillon par set, toutes en UNE requête. Critères, tous imprimés, tous nécessaires :
+//   · la page existe ;
+//   · `entreesDeLaSetlist` — LA fonction du collecteur — rend au moins une entrée ;
+//   · la carte-échantillon porte une impression de l'expansion sous le tirage de la ligne ; si la ligne
+//     n'a pas de tirage (appariée par page), il est ÉTABLI ici, et seulement s'il n'y en a qu'un ;
+//   · entrées / produits Cardmarket dans [0,5 ; 1,5] — l'écart mesuré sur 291 appariés : médiane 1,12.
+// OK -> `verifie` posé. Sinon `verif.raisons` dit lequel a manqué, et la ligne attend une main.
+// Écrit table-sets-auto.json (un fichier de l'outil, pas la base). Sous le verrou global bulbapedia.
+async function verifierAuto() {
+    const { TABLE_AUTO, FICHIER_AUTO } = require('./table-sets');
+    const { entreesDeLaSetlist } = require('./wikitext');
+    const { ouvrirConnexions } = require('./garde');
+    const { modeles } = require('./schemas');
+    const { fabriquerVerrou } = require('./verrou-source');
+    const taille = Number(arg('bloc') || 20);
+    const bloc = TABLE_AUTO.filter(l => !l.verif).slice(0, taille);
+    console.log(`--auto : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
+    if (!bloc.length) return;
+    const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    const verrou = fabriquerVerrou({ Modele: modeles(cx).EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: 3 * 60 * 1000, surInsertion: { phase: 'collecteur' }, nom: 'verrou global bulbapedia (vérification)' });
+    const tenu = await verrou.prendre();
+    if (tenu) { console.error(`❌ ARRÊT : verrou bulbapedia tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s).`); await fermer(); process.exit(1); }
+    try {
+        const { pages, redirections } = await bulba.revisionsDe(bloc.map(l => l.bulba.titre));
+        const pageDe = t => pages.find(p => p.title === (redirections.get(t) || t)) || pages.find(p => p.title === t);
+        const echantillons = new Map();
+        for (const l of bloc) {
+            const p = pageDe(l.bulba.titre);
+            l._p = p;
+            if (!p) continue;
+            l._entrees = entreesDeLaSetlist(p.content, l.bulba).entrees;
+            const e = l._entrees[Math.floor(l._entrees.length / 2)];
+            if (e) echantillons.set(l.code, e.titre);
+        }
+        const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set(echantillons.values())]) : { pages: [], redirections: new Map() };
+        const carteDe = t => pc.find(p => p.title === (rc.get(t) || t));
+        const ajd = new Date().toISOString().slice(0, 10);
+        for (const l of bloc) {
+            const raisons = [];
+            const v = { le: ajd, pageResolue: l._p?.title ?? null, entrees: l._entrees?.length ?? 0 };
+            if (!l._p) raisons.push('page absente');
+            else if (!v.entrees) raisons.push(`aucune entrée de Setlist pour « ${l.bulba.expansion} »`);
+            const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;
+            if (l._p && v.entrees && !c) raisons.push('carte-échantillon introuvable');
+            if (c) {
+                const imps = faitsDeCarte(c.content).impressions.filter(i => i.expansion === l.bulba.expansion);
+                const tirages = [...new Set(imps.map(i => i.tirage))];
+                v.echantillon = c.title; v.tiragesVus = tirages;
+                if (l.bulba.tirage) { if (!tirages.includes(l.bulba.tirage)) raisons.push(`l'échantillon n'a pas de tirage ${l.bulba.tirage} « ${l.bulba.expansion} » (vus : ${tirages.join(',') || 'aucun'})`); }
+                else if (tirages.length === 1 && ['jp', 'intl'].includes(tirages[0])) { v.tirageEtabli = tirages[0]; }
+                else raisons.push(`tirage non établi (vus : ${tirages.join(',') || 'aucun'})`);
+            }
+            v.ratio = l.attendu ? Math.round(100 * v.entrees / l.attendu) / 100 : null;
+            if (v.entrees && (v.ratio < 0.5 || v.ratio > 1.5)) raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]`);
+            v.etat = raisons.length ? 'À REGARDER' : 'OK';
+            v.raisons = raisons;
+            l.verif = v;
+            if (v.tirageEtabli && !raisons.length) { l.bulba.tirage = v.tirageEtabli; l.region = v.tirageEtabli === 'jp' ? 'japonais' : 'occidental'; }
+            if (v.etat === 'OK') l.verifie = { le: ajd, page: v.pageResolue, entrees: { [l.bulba.expansion]: v.entrees }, note: `vérification automatique : ${v.entrees} entrées pour ${l.attendu} produits, échantillon « ${v.echantillon} » (${l.bulba.tirage})` };
+            delete l._p; delete l._entrees;
+            console.log(`${l.code.padEnd(10)} ${v.etat.padEnd(11)} ${String(l.attendu).padStart(4)} produits · ${String(v.entrees).padStart(4)} entrées (${v.ratio}) · ${l.bulba.tirage ?? '?'} · « ${l.bulba.titre} »${v.pageResolue && v.pageResolue !== l.bulba.titre ? ` → « ${v.pageResolue} »` : ''}${raisons.length ? ' — ' + raisons.join(' ; ') : ''}`);
+        }
+        fs.writeFileSync(FICHIER_AUTO, JSON.stringify(TABLE_AUTO, null, 1));
+        const ok = bloc.filter(l => l.verif.etat === 'OK').length;
+        console.log(`\nBLOC : ${ok} OK / ${bloc.length} · requêtes Bulbapedia ${bulba.compteRequetes()} · écrit ${path.relative(process.cwd(), FICHIER_AUTO)}`);
+    } finally { await verrou.rendre(); await fermer(); }
+}
+
 (async () => {
+    if (process.argv.includes('--auto')) { await verifierAuto(); return; }
     const codes = arg('codes') ? arg('codes').split(',').map(s => s.trim()) : null;
     const lignes = TABLE.filter(l => codes ? codes.includes(l.code) : !l.verifie);
     console.log(`${lignes.length} lignes à vérifier, 3 requêtes chacune, 5 s d'intervalle → ~${Math.ceil(lignes.length * 3 * 5 / 60)} min\n`);

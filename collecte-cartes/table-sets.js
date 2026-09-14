@@ -105,8 +105,24 @@ const EXPANSIONS_INTL = {
     'Base Set 2': 1527
 };
 
+// ════════════════════════════════════════════════════════════════════════
+// LES LIGNES AUTOMATIQUES — générées par generer-table-auto.js, 2026-09-14
+// ════════════════════════════════════════════════════════════════════════
+// 399 candidates (slug exact 253 · code de set 11 · page « (TCG) » 135), chacune avec sa provenance
+// dans `auto`. 🔴 UNE CANDIDATE N'ENTRE DANS `TABLE` QU'AVEC `verifie` — posé par
+// `verifier-table.js --auto` sur des critères imprimés, jamais à la main. Tant qu'elle n'est pas
+// vérifiée, `ligne(code)` la rend quand même : collecteur-texte.js dit alors POURQUOI il refuse,
+// au lieu de répondre « absente de la table ».
+// `TABLE_MAIN` : les lignes écrites à la main, seules lues par le générateur pour ne pas se relire.
+const fs = require('fs');
+const path = require('path');
+const FICHIER_AUTO = path.join(__dirname, 'table-sets-auto.json');
+const TABLE_AUTO = fs.existsSync(FICHIER_AUTO) ? JSON.parse(fs.readFileSync(FICHIER_AUTO, 'utf8')) : [];
+const TABLE_MAIN = TABLE.slice();
+TABLE.push(...TABLE_AUTO.filter(l => l.verifie));
+
 function ligne(code) {
-    return TABLE.find(l => l.code === code) || null;
+    return TABLE.find(l => l.code === code) || TABLE_AUTO.find(l => l.code === code) || null;
 }
 
-module.exports = { TABLE, EXPANSIONS_INTL, ligne };
+module.exports = { TABLE, TABLE_MAIN, TABLE_AUTO, FICHIER_AUTO, EXPANSIONS_INTL, ligne };
