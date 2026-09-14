@@ -464,14 +464,24 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     if (process.argv.includes('--boucle')) {
         console.log('--boucle : file d\'attente `file_images`, un set à la fois, 10 min de sommeil quand elle est vide.');
         while (!arretDemande) {
+            // Réveil après un sommeil : le verrou a été RENDU pour dormir, on le reprend (en attendant son
+            // détenteur s'il le faut) avant de toucher à la file.
+            if (!verrouGlobal.tenu && !verrouGlobal.perdu) { if (!await attendreVerrouGlobal(M, { patienter: true })) break; }
             // ⚠️ LA POSSESSION SE REVÉRIFIE AVANT CHAQUE SET, pas seulement au démarrage : un verrou pris à
             // minuit ne dit rien de 08:20. Non tenu = arrêt, Render relance, le neuf attend son tour.
             if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
             await reprendreEnCoursFiges(File, M);
             const suivant = await File.findOneAndUpdate({ etat: 'attente' }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
-            // Sommeil INTERROMPABLE : un SIGTERM pendant les 10 minutes rend le verrou tout de suite
-            // au lieu de le laisser expirer après le SIGKILL.
-            if (!suivant) { for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) await new Promise(r => setTimeout(r, 5000)); continue; }
+            // 🔑 ON DORT SANS LE VERROU (2026-09-14). Le verrou global protège la CADENCE des requêtes chez la
+            // source ; un worker qui dort n'en fait aucune. Le garder pendant dix minutes de sommeil — soit
+            // en permanence sur une file vide — interdisait toute requête ponctuelle sous verrou : la
+            // vérification de la pagination, accordée par le testeur, a été REFUSÉE ainsi le 2026-09-13.
+            // Sommeil INTERROMPABLE : un SIGTERM pendant les 10 minutes sort tout de suite.
+            if (!suivant) {
+                await verrouGlobal.rendre();
+                for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) await new Promise(r => setTimeout(r, 5000));
+                continue;
+            }
             const b = await collecterSet(suivant._id, M, dossierRapport);
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer

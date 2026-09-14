@@ -112,7 +112,16 @@ const podA2 = { pid: 52, hote: 'srv-…-25grd', jeton: 'A2' };   // conteneur re
         M.updateOne = upd;
         await dormir(40);
         verifier('réseau revenu : le battement repasse et tient', E.perdu === false && (await E.tient()));
-        for (const v of [A, B, A2, C, D, E]) await v.rendre();
+        // RENDRE POUR DORMIR, REPRENDRE AU RÉVEIL (2026-09-14) — et un tiers passe pendant le sommeil
+        const W = V('w', podA, 'A'), X = V('w', podB, 'B');
+        pertes.A = 0;
+        await W.prendre(); await W.rendre();
+        verifier('rendu pour dormir : ni tenu ni perdu, aucune perte signalée', !W.tenu && !W.perdu && pertes.A === 0);
+        verifier('pendant le sommeil, un tiers prend le verrou', (await X.prendre()) === null);
+        verifier('au réveil, le worker ATTEND : le verrou est au tiers', (await W.prendre())?.jeton === 'B');
+        await X.rendre();
+        verifier('le tiers rend : le worker reprend', (await W.prendre()) === null && W.tenu && (await W.tient()));
+        for (const v of [A, B, A2, C, D, E, W, X]) await v.rendre();
     } finally { console.error = silence; console.warn = warn; }
     console.log(`\n${ok} / ${ok + ko} vérifications`);
     process.exit(ko ? 1 : 0);

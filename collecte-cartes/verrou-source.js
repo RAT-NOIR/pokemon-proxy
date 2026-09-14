@@ -109,7 +109,8 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
         }
     }
 
-    /** Rend le verrou SI ET SEULEMENT SI il est encore à nous. Jamais celui d'un autre. */
+    /** Rend le verrou SI ET SEULEMENT SI il est encore à nous. Jamais celui d'un autre. Un verrou rendu
+     *  n'est pas PERDU : `prendre()` peut le reprendre (le worker le rend pour dormir). */
     async function rendre() {
         clearInterval(battement);
         if (!tenu) return { rendu: false, motif: perdu ? 'perdu' : 'jamais pris' };
