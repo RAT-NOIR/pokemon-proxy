@@ -200,8 +200,43 @@ tout journal de set.**
 
   Les deux écarts viennent du **périmètre de l'attendu**, pas du parseur. Ils sont écrits ici et pas corrigés
   après coup dans l'attendu.
-- [ ] Relecture (`requesting-code-review`) de wikitext.js, verifier-table.js, collecteur-texte.js et
-  test-setlist.js, puis commit.
+- [x] **Relecture** (`requesting-code-review`), verdict : **à committer après corrections**. Aucun Critique. Cinq
+  Importants, tous vérifiés contre le code (`receiving-code-review`), quatre corrigés :
+  1. un lien générique `[[X (TCG)]]` pris pour une carte → garde des qualificatifs + compteur `horsSet` ;
+  2. l'ordre des références non testé → 2 tests, **contrôle par inversion : chaque inversion fait passer un test
+     au rouge** ;
+  3. `sectionsVues` périmé à la re-collecte → `sectionsVues` et `lectureSetlist` écrits dans les deux branches ;
+  4. le repli ne lisait pas les liens → lu sous le même filtre de nom, `chemin` et `lues` imprimés ;
+  5. `--auto` ne rejuge pas une ligne qui a déjà un `verif` → **déjà couvert** : le script de remise retire
+     `verif` des 40 lignes.
+
+  Mineurs corrigés : paramètre imbriqué `{{tt|…}}` rejeté, énergie SPÉCIALE séparée de l'énergie de base
+  (`natureIgnoree`), chiffres des commentaires. Test : rouge sur les nouvelles gardes, puis **vert 26/26**.
+- [ ] **Second rejeu sans requête**, parseur corrigé contre HEAD. **ATTENDU, écrit avant le lancement** :
+  - 0 titre perdu, **gain 1 064 inchangé**, 53 sets conformes à la prédiction (BXY comme au premier rejeu). Le
+    corpus n'a aucun lien générique ni paramètre imbriqué : les gardes ne doivent rien retirer ;
+  - ignorées par nature : **énergie-base 29, énergie-spéciale 2** (VS, `{{OBP|Darkness Energy|Special}}` et son
+    homologue), **autre 0** ;
+  - **hors set : 0** sur les 54 sets. C'est une prédiction : les pages fusionnées du vintage peuvent la faire
+    mentir.
+  - ⚠️ Le rejeu lit l'archive R2 **épurée**. Sans `--reparser`, la re-collecte lit la révision BRUTE courante.
+    De petits écarts sont possibles, et c'est la re-collecte qui les dira.
+
+  **OBTENU (23:49:36 UTC)** :
+  - 0 perdu ✅, gain 1 064 ✅, 53 sets conformes (BXY comme prévu) ✅ ;
+  - ❌ nature : **base 28, spéciale 3**, et non 29 et 2. **Le classement est juste, c'est l'attendu qui était
+    faux** : VS a 6 énergies de base et 3 spéciales (Darkness Special, Metal Special, Rainbow Energy). Ces 3
+    spéciales sont de vraies cartes non lues, désormais signalées par le collecteur ;
+  - ❌ **hors set 143, pour 0 attendu**, dont **142 sur VS : un faux signal**. Section « Pokémon Card★VS »,
+    expansion « Pokémon VS », jeton des TCG ID « VS ». Un contrôle qui crie sur un cas normal finit contourné
+    (§25). Correction : le jeton de set DOMINANT de la section vaut nom, comme le motif dérivé de
+    verifier-table.js. Test rouge (26/27) puis vert **27/27**.
+
+  **TROISIÈME REJEU (23:51:06 UTC)** : 0 perdu, gain 1 064, **hors set 1**. Ce reste est « Collapsed Stadium (Star
+  Birth 98) » dans la section Lost Abyss de s11 : une réimpression listée sous le lien de son premier tirage. C'est
+  un vrai signal, que la re-collecte dira joint ou non.
+- [ ] Commit (fichiers nommés), puis une relecture ciblée des corrections, en parallèle de la re-vérification (qui
+  n'écrit que le fichier de table). **La re-collecte, qui écrit la base, attend cette relecture.**
 - [ ] **Re-vérification des blocs 1 et 2** (4 requêtes) : les rapports entrées / produits changent, et une ligne
   proche de 1,5 peut sortir des bornes.
 - [ ] **Re-collecte du bloc 1** (`collecteur-texte.js --set=…`, les titres ajoutés sont fetchés seuls). **ATTENDU :**
