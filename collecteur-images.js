@@ -177,7 +177,8 @@ async function collecterSet(code, M, dossierRapport) {
     for (const id of S.ids) {
         if (!entrees[id]?.length) {
             entrees[id] = await src.listerSet(id);
-            await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], phase: 'liste', derniereRequete: new Date() } });
+            // `pagesListe` : page, entrées lues, nouvelles — la preuve d'une pagination, en base et pas en log.
+            await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], [`pagesListe.${id}`]: entrees[id].pages || null, phase: 'liste', derniereRequete: new Date() } });
         }
         console.log(`1. liste ${id} : ${entrees[id].length} entrées${etat.entrees?.[id]?.length ? ' (reprises de l\'état)' : ''}`);
         if (!mesures[id]?.length) {

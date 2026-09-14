@@ -76,6 +76,11 @@ async function listerSet(id) {
     // ⚠️ La taille de page est celle OBSERVÉE (4 listes arrêtées à 100 pile), pas celle de la page 1 : sinon
     // un set de 48 cartes, page « pleine » par définition, demanderait une page 2 pour rien.
     const taillePage = TAILLE_PAGE;
+    // Le relevé page par page VOYAGE avec la liste (`entrees.pages`) : l'appelant l'écrit dans l'état. Le
+    // 2026-09-14, la preuve de la page 2 n'existait que dans le log Render — un compte qui décide et ne vit
+    // que dans un log n'est pas une mesure.
+    const releve = [];
+    Object.defineProperty(entrees, 'pages', { value: releve, enumerable: false });
     for (let page = 1; page <= 50; page++) {
         const url = `${BASE}sets/${id}/cards${page > 1 ? `?page=${page}` : ''}`;
         const html = (await requete(url)).data;
@@ -87,6 +92,7 @@ async function listerSet(id) {
             vuesN.add(n); nouvelles++;
             entrees.push({ titre: decode(m[1]), sourceSetId: Number(m[2]), n, original: m[4], cleCdn: m[4].split('/').pop(), vignette: m[5] });
         }
+        releve.push({ page, lues, nouvelles });
         console.log(`   liste ${id} page ${page} : ${lues} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})`);
         if (!nouvelles || !lues || lues < taillePage) break;
     }
