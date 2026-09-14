@@ -812,6 +812,18 @@ mécanismes différents :
    dans les logs Render (`liste 150 page 2 : N entrées lues`). **Un compte qui décide et qui ne vit que
    dans un log n'est pas encore une mesure** : il faudra l'écrire dans l'état.
 
+🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
+baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
+envers un tiers, le quatrième m'a fait conclure « rien à récupérer » d'une mesure qui n'avait rien
+mesuré. **Un défaut qui lève une exception se corrige le jour même ; un défaut qui rend un résultat
+plausible se découvre des semaines plus tard, par accident.**
+
+⚠️ **CE QUI LES ATTRAPE N'EST PAS LA RELECTURE, C'EST LE DÉNOMINATEUR IMPRIMÉ.** Les quatre auraient
+été vus si le code avait dit ce qu'il FAISAIT et pas seulement ce qu'il rendait : « 95 titres retenus
+(repris de l'état : 95) » l'a montré dès qu'on l'a imprimé. Un compteur qui affiche l'entrée ET la
+sortie d'une étape rend ces défauts visibles à la première exécution. C'est la même règle que
+« tout outil de mesure imprime son dénominateur », appliquée aux étapes et plus seulement aux taux.
+
 ## 28. LE CHINOIS : UN CHANTIER DISTINCT, MIS DE CÔTÉ — 2026-09-14
 
 **Bulbapedia le couvre, mais pas là où notre jointure regarde.** Les expansions en chinois simplifié ont
@@ -833,17 +845,21 @@ dans un champ `jpexpansion` devenait une impression `tirage: 'jp'` (3 pages sur 
 collecte massive (`9f5353b`) : seul `{{TCG}}` est japonais, chaque autre gabarit rend son tirage
 (`zh-hans`, `zh-hant`, `id`, `th`, `ko`).
 
-🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
-baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
-envers un tiers, le quatrième m'a fait conclure « rien à récupérer » d'une mesure qui n'avait rien
-mesuré. **Un défaut qui lève une exception se corrige le jour même ; un défaut qui rend un résultat
-plausible se découvre des semaines plus tard, par accident.**
+## 29. Un échec externe se prouve par un TÉMOIN, pas par une supposition sur notre agent — 2026-09-14
 
-⚠️ **CE QUI LES ATTRAPE N'EST PAS LA RELECTURE, C'EST LE DÉNOMINATEUR IMPRIMÉ.** Les quatre auraient
-été vus si le code avait dit ce qu'il FAISAIT et pas seulement ce qu'il rendait : « 95 titres retenus
-(repris de l'état : 95) » l'a montré dès qu'on l'a imprimé. Un compteur qui affiche l'entrée ET la
-sortie d'une étape rend ces défauts visibles à la première exécution. C'est la même règle que
-« tout outil de mesure imprime son dénominateur », appliquée aux étapes et plus seulement aux taux.
+**L'occurrence.** À partir de 18:43 UTC, Bulbapedia répond 503 à la génération de la table, puis à la
+vérification du bloc 1 (18:58:07, et à son réessai une minute plus tard). Deux lectures étaient possibles :
+notre agent refusé (User-Agent, cadence, adresse) ou le site en panne. La première menait à « corriger »
+notre client — en-têtes, débit, réessais — pour un défaut qui n'existait pas. **Vérifié avec un autre client
+que le nôtre : 503 aussi.** La panne était chez eux ; le bloc 1 a passé à 19:09:08 UTC sans que rien ne
+change de notre côté.
+
+🔑 **Un échec externe confirmé par un témoin vaut mieux qu'une supposition sur notre agent.** Avant de
+toucher au client sur une erreur de la source, on la reproduit par un chemin qui ne partage RIEN avec le
+nôtre — autre client, autre machine. ⚠️ Ce qui a été changé ce jour-là (`6c75a2a`, un réessai après 60 s)
+ne répare pas une panne : il empêche une coupure d'une minute de tuer un lot, et il s'arrête au deuxième
+échec. Une panne longue doit rester une panne, visible — pas une boucle de réessais qui frappe un serveur
+déjà à terre.
 
 ## 20. Câbler sans chiffre : l'exception du 2026-09-12, et pourquoi elle doit le rester
 
