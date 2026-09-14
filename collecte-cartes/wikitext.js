@@ -174,6 +174,39 @@ const CATEGORIE_PAR_INFOBOX = {
     'TCGEnergyCardInfobox': 'energie', 'EnergycardInfobox': 'energie'
 };
 
+// 🔴 LE CHAMP « JAPONAIS » N'EST PAS TOUJOURS JAPONAIS — mesuré le 2026-09-14 sur les 2 981 pages archivées.
+// `jpexpansion=` porte parfois une impression d'une AUTRE langue d'Asie, sous son propre gabarit :
+// `{{ATCG|Gem Pack Vol. 1}} (Simplified Chinese)` (Quaxly, Fuecoco de Paldea Evolved), et même trois à
+// la fois : `{{TCTCG|SV-P Promotional cards}} (Traditional Chinese)<br>{{ITCG|…}} (Indonesian)<br>{{TTCG|…}} (Thai)`.
+// `nomDePage` ne reconnaît que `{{TCG|}}` : le reste tombait dans le filet de `plat` et s'écrivait en
+// base comme une impression `tirage: 'jp'` nommée « Gem Pack Vol. 1 (Simplified Chinese) ». 3 pages sur
+// 2 981 aujourd'hui — et 20 expansions chinoises de Cardmarket sont rangées « japonais » : à l'échelle
+// du japonais moderne, ce défaut aurait fabriqué des tirages japonais faux.
+// SEUL `{{TCG|}}` EST JAPONAIS. Chaque autre gabarit rend son tirage, que tous les consommateurs
+// ignorent (ils filtrent `tirage === 'jp'` ou `'intl'`, jamais « pas jp ») ; un gabarit inconnu rend
+// `tirage: 'inconnu'`, visible au lieu d'être deviné.
+const TIRAGE_PAR_GABARIT = { TCG: 'jp', ATCG: 'zh-hans', TCTCG: 'zh-hant', ITCG: 'id', TTCG: 'th', KTCG: 'ko' };
+
+/** Les impressions d'un champ `jpexpansion` / `jpdeckkit` : une par gabarit d'expansion, chacune avec SON tirage. */
+function impressionsDuChampAsiatique(g) {
+    const valeur = String(g.params.jpexpansion || g.params.jpdeckkit);
+    const gabs = [...valeur.matchAll(/\{\{\s*([A-Za-z]*TCG)\s*\|([^|}]+)/g)];
+    const base = { deck: plat(g.params.jpdeck || g.params.jphalfdeck) || null, rarete: plat(g.params.jprarity) || null, ...numeroTotal(g.params.jpcardno) };
+    // Sans gabarit, OU seulement des {{TCG}} : l'ancien comportement à l'identique, un seul tirage
+    // japonais. ⚠️ Premier jet découpant tout champ à plusieurs gabarits : les 3 pages « Entry Pack '08 »
+    // (deux {{TCG}} dans le champ) passaient de 3 impressions AVEC deck à 6 SANS deck — vu en rejouant les
+    // 2 981 pages contre la base avant tout commit.
+    if (gabs.every(m => m[1].toUpperCase() === 'TCG')) return [{ tirage: 'jp', expansion: nomDePage(valeur), ...base }];
+    // Plusieurs gabarits dans un champ : le numéro, la rareté et le deck ne disent pas à QUEL tirage ils
+    // appartiennent — nuls plutôt que devinés.
+    const seul = gabs.length === 1;
+    return gabs.map(m => ({
+        tirage: TIRAGE_PAR_GABARIT[m[1].toUpperCase()] || 'inconnu',
+        expansion: m[2].trim(),
+        deck: seul ? base.deck : null, numero: seul ? base.numero : null, total: seul ? base.total : null, rarete: seul ? base.rarete : null
+    }));
+}
+
 /** Toutes les entrées `…Infobox/Expansion`, au premier niveau OU imbriquées dans un `/ReleaseInfo`. */
 function entreesExpansion(gs) {
     const out = [];
@@ -216,13 +249,7 @@ function faitsDeCarte(texte) {
             const { numero, total } = numeroTotal(g.params.cardno);
             out.push({ tirage: 'intl', expansion: nomDePage(g.params.expansion), deck: plat(g.params.deck) || null, numero, total, rarete: plat(g.params.rarity) || null });
         }
-        if (g.params.jpexpansion || g.params.jpdeckkit) {
-            const { numero, total } = numeroTotal(g.params.jpcardno);
-            out.push({
-                tirage: 'jp', expansion: nomDePage(g.params.jpexpansion || g.params.jpdeckkit),
-                deck: plat(g.params.jpdeck || g.params.jphalfdeck) || null, numero, total, rarete: plat(g.params.jprarity) || null
-            });
-        }
+        if (g.params.jpexpansion || g.params.jpdeckkit) out.push(...impressionsDuChampAsiatique(g));
         if (!out.length) {
             const cles = Object.keys(g.params).filter(k => String(g.params[k]).trim() !== '');
             (cles.some(k => /^gb2?set/.test(k)) ? entreesJeuVideo : entreesNonRendues).push(cles.sort().join(','));
