@@ -25,10 +25,11 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
-const { epurer, faitsDeCarte, faitsDeSet, sectionsSetlist } = require('./collecte-cartes/wikitext');
+const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist } = require('./collecte-cartes/wikitext');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
+const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -36,6 +37,11 @@ const VERROU_MS = 10 * 60 * 1000;
 let arretDemande = false;
 let finirGlobal = null;   // posé dès que le verrou est pris, pour le libérer sur toute erreur
 process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit l\'unité en cours, puis on s\'arrête proprement.'); arretDemande = true; });
+// SIGTERM comme SIGINT, et AUCUN rendu de verrou dans le gestionnaire : il se rend après l'unité (verrou-source.js).
+process.on('SIGTERM', () => { console.warn('\n⏹️  SIGTERM : on finit l\'unité en cours.'); arretDemande = true; });
+const surPerte = () => { arretDemande = true; process.exitCode = 1; };
+const VERROU_GLOBAL_BULBA_MS = 3 * 60 * 1000;
+const ATTENTE_VERROU_MS = 30 * 1000;
 
 (async () => {
     const code = arg('set');
@@ -50,16 +56,33 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
     console.log(`📦 R2 : bucket ${process.env.R2_BUCKET_BRUT} joignable.`);
 
-    // ---- verrou : un seul collecteur par set --------------------------------------------
+    // ---- verrous ---------------------------------------------------------------------------
+    // 🔴 DEUX VERROUS, ET LE PREMIER MANQUAIT JUSQU'AU 2026-09-14. Le collecteur de texte frappe Bulbapedia
+    // comme le collecteur d'images Bulbapedia, et il ne prenait AUCUN verrou global : les deux pouvaient
+    // doubler la cadence chez le même serveur (§17). Il prend désormais `bulbapedia/__collecteur__`, le
+    // même que collecteur-images-bulba.js. `--reparser` ne sort pas de chez nous : pas de verrou global.
+    // Et le verrou de SET passe sur verrou-source.js — l'ancien excluait `pid === process.pid` (pid 52 sur
+    // tous les pods Render) et se libérait par `_id` seul : les défauts corrigés dans d9d4767 côté images.
     const slug = L.slugSet;
-    const existant = await M.Etat.findById(slug).lean();
-    if (existant?.verrou?.depuis && Date.now() - new Date(existant.verrou.depuis).getTime() < VERROU_MS && existant.verrou.pid !== process.pid) {
-        console.error(`❌ ARRÊT : un collecteur tient déjà ${slug} (pid ${existant.verrou.pid} sur ${existant.verrou.hote}, depuis ${existant.verrou.depuis}).`);
+    const reparserSeul = process.argv.includes('--reparser');
+    const verrouGlobal = reparserSeul ? null : fabriquerVerrou({ Modele: M.EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: VERROU_GLOBAL_BULBA_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: 'verrou global bulbapedia (texte)' });
+    for (let essai = 0; verrouGlobal; essai++) {
+        const tenu = await verrouGlobal.prendre();
+        if (!tenu) break;
+        const msg = `verrou global bulbapedia tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s)`;
+        if (!process.argv.includes('--attendre')) { console.error(`❌ ARRÊT : ${msg}. « 1 requête / 5 s, jamais en parallèle » se compte chez Bulbapedia.`); await fermer(); process.exit(1); }
+        if (essai === 0) console.log(`⏳ ${msg} — j'attends, ${ATTENTE_VERROU_MS / 1000} s entre deux essais.`);
+        if (arretDemande) { await fermer(); process.exit(1); }
+        await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
+    }
+    const verrouSet = fabriquerVerrou({ Modele: M.Etat, id: slug, dureeMs: VERROU_MS, surInsertion: { debute: new Date(), phase: 'set', pages: [], titres: [] }, surPerte, nom: `verrou de set texte ${slug}` });
+    const tenuSet = await verrouSet.prendre();
+    if (tenuSet) {
+        console.error(`❌ ARRÊT : un collecteur tient déjà ${slug} (pid ${tenuSet.pid} sur ${tenuSet.hote}, battement il y a ${tenuSet.ageS} s).`);
+        if (verrouGlobal) await verrouGlobal.rendre();
         await fermer(); process.exit(1);
     }
-    await M.Etat.updateOne({ _id: slug }, { $set: { verrou: { pid: process.pid, hote: os.hostname(), depuis: new Date() } }, $setOnInsert: { debute: new Date(), phase: 'set', pages: [], titres: [] } }, { upsert: true });
-    const battement = setInterval(() => M.Etat.updateOne({ _id: slug }, { $set: { 'verrou.depuis': new Date() } }).catch(() => { }), 60000);
-    const finir = async () => { clearInterval(battement); await M.Etat.updateOne({ _id: slug }, { $unset: { verrou: 1 } }); await fermer(); };
+    const finir = async () => { await verrouSet.rendre(); if (verrouGlobal) await verrouGlobal.rendre(); await fermer(); };
     // Un plantage doit LIBÉRER le verrou : le 2026-09-12, quatre sets plantés sur un `ndex` ou une
     // `retraite` non numérique ont refusé leur propre relance pendant dix minutes. L'unité en cours
     // n'est pas écrite (R2 avant la ligne), donc la reprise est sûre.
@@ -107,32 +130,11 @@ process.on('SIGINT', () => { console.warn('\n⏹️  arrêt demandé : on finit 
     // suivi d'un désambiguïsateur numérique. Zéro requête : tout est dans le wikitext déjà lu.
     const etat = await M.Etat.findById(slug).lean();
     let titres = etat.titres?.length ? etat.titres : null;
-    const nomsExpansion = [].concat(L.bulba.expansion);
-    const nomsSections = L.bulba.setlist === null ? null : (L.bulba.setlist || nomsExpansion);
-    const sections = sectionsSetlist(pSet.content);
-    let entrees;
-    if (L.bulba.setlistMotif) {                                                        // EXS : par motif sur le nom de set reconstruit
-        const re = new RegExp(L.bulba.setlistMotif);
-        entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
-    } else if (nomsSections === null) entrees = sections.flatMap(s => s.entrees);
-    else {
-        entrees = sections.filter(s => nomsSections.includes(s.titre)).flatMap(s => s.entrees);
-        if (!entrees.length) {
-            const re = new RegExp(`^(${nomsSections.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})( \\d+)?$`);
-            entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
-        }
-    }
-    if (!entrees.length) {
-        // Page SANS gabarit Setlist (Intro Pack) : les `{{TCG ID|A|Nom|B}}` se lisent sur tout le
-        // wikitext, filtrés par le motif ou les noms — c'est ce que verifier-table.js avait compté.
-        const re = L.bulba.setlistMotif ? new RegExp(L.bulba.setlistMotif)
-            : new RegExp(`^(${(nomsSections || nomsExpansion).map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})( \\d+)?$`);
-        entrees = [...pSet.content.matchAll(/\{\{TCG ID\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?\}\}/g)]
-            .map(m => { const a = m[1].trim(), nom = m[2].trim(), b = (m[3] || '').trim() || null; return { titre: b ? `${nom} (${a} ${b})` : `${nom} (${a})`, setReconstruit: b ? `${a} ${b}` : a }; })
-            .filter(e => re.test(e.setReconstruit));
-        if (entrees.length) console.log(`   (aucune section Setlist : ${entrees.length} entrées TCG ID lues sur tout le wikitext)`);
-    }
-    if (L.bulba.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(L.bulba.deck));
+    // La sélection vit dans wikitext.js (`entreesDeLaSetlist`) : verifier-table.js --auto juge une ligne
+    // avec la MÊME fonction. Deux définitions de la même règle divergent toujours (§21 bis).
+    const nomsSections = L.bulba.setlist === null ? null : (L.bulba.setlist || [].concat(L.bulba.expansion));
+    const { entrees, sections, surToutLeWikitext } = entreesDeLaSetlist(pSet.content, L.bulba);
+    if (surToutLeWikitext && entrees.length) console.log(`   (aucune section Setlist : ${entrees.length} entrées TCG ID lues sur tout le wikitext)`);
     const entreesSetlist = [...new Set([...entrees.map(e => e.titre), ...(L.bulba.titresSupplementaires || [])])];
     // ⚠️ LA TABLE PEUT CHANGER APRÈS UNE COLLECTE, ET L'ÉTAT NE DOIT PAS LA FIGER. Ajouter une
     // section à `setlist` ne produisait RIEN sur un set déjà collecté : `titres` était relu de

@@ -77,7 +77,7 @@ const etatSchema = new mongoose.Schema({
     _id: String,                          // slug du set
     phase: String,                        // 'set' | 'liens' | 'texte' | 'jointure' | 'verifie'
     titres: [String], pages: [{ _id: false, titre: String, pageid: Number, revid: Number, etat: String }],
-    verrou: { pid: Number, hote: String, depuis: Date },
+    verrou: { pid: Number, hote: String, jeton: String, depuis: Date },   // jeton : verrou-source.js (2026-09-14)
     requetes: Number, debute: Date, fini: Date, derniereRequete: Date
 }, { strict: false, collection: 'collecte_etat' });
 

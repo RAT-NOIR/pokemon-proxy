@@ -357,4 +357,41 @@ function sectionsSetlist(texte) {
     return sections;
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
+/**
+ * LES ENTRÉES D'UN SET dans la page de set, selon sa ligne de table (`L.bulba`). Une seule définition,
+ * utilisée par collecteur-texte.js (ce qu'on collecte) ET par verifier-table.js --auto (ce qu'on admet) :
+ * une vérification qui sélectionne autrement que le collecteur vérifie autre chose (§21 bis).
+ * Ordre : `setlistMotif` (EXS) · sections nommées par `setlist` (défaut : l'expansion) · à défaut, le
+ * nom de set reconstruit (« A B ») suivi d'un désambiguïsateur · page SANS gabarit Setlist (Intro Pack) :
+ * les `{{TCG ID}}` de tout le wikitext. Puis le filtre `deck`.
+ * @returns {{entrees: Array, sections: Array, surToutLeWikitext: boolean}}
+ */
+function entreesDeLaSetlist(texte, b) {
+    const echapper = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nomsExpansion = [].concat(b.expansion);
+    const nomsSections = b.setlist === null ? null : (b.setlist || nomsExpansion);
+    const sections = sectionsSetlist(texte);
+    let entrees, surToutLeWikitext = false;
+    if (b.setlistMotif) {
+        const re = new RegExp(b.setlistMotif);
+        entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
+    } else if (nomsSections === null) entrees = sections.flatMap(s => s.entrees);
+    else {
+        entrees = sections.filter(s => nomsSections.includes(s.titre)).flatMap(s => s.entrees);
+        if (!entrees.length) {
+            const re = new RegExp(`^(${nomsSections.map(echapper).join('|')})( \\d+)?$`);
+            entrees = sections.flatMap(s => s.entrees).filter(e => re.test(e.setReconstruit));
+        }
+    }
+    if (!entrees.length) {
+        const re = b.setlistMotif ? new RegExp(b.setlistMotif) : new RegExp(`^(${(nomsSections || nomsExpansion).map(echapper).join('|')})( \\d+)?$`);
+        entrees = [...String(texte).matchAll(/\{\{TCG ID\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?\}\}/g)]
+            .map(m => { const a = m[1].trim(), nom = m[2].trim(), c = (m[3] || '').trim() || null; return { titre: c ? `${nom} (${a} ${c})` : `${nom} (${a})`, setReconstruit: c ? `${a} ${c}` : a }; })
+            .filter(e => re.test(e.setReconstruit));
+        surToutLeWikitext = true;
+    }
+    if (b.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(b.deck));
+    return { entrees, sections, surToutLeWikitext };
+}
+
+module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, entreesDeLaSetlist, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
