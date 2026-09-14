@@ -826,7 +826,7 @@ par `codes_set.region`** (règle « code en minuscules » ; `CS1bC` Dynamax Clas
 portent pas le motif `CS…C` (`151C` Collect 151, `CBB1C`–`CBB5C` Gem Pack, promos `/CS` `/CT`, `PKMTCH`).
 **Une table qui les prendrait pour japonaises collecterait du faux.** Le générateur des lignes
 automatiques les EXCLUT avant tout appariement (95 expansions d'une langue ni japonaise ni occidentale),
-et aucune des 399 lignes générées n'en est.
+et aucune des 398 lignes générées n'en est.
 
 ⚠️ **Le même défaut existait en petit dans le parseur** : `{{ATCG|Gem Pack Vol. 1}} (Simplified Chinese)`
 dans un champ `jpexpansion` devenait une impression `tirage: 'jp'` (3 pages sur 2 981). Corrigé AVANT la

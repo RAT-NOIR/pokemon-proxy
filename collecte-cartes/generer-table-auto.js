@@ -112,6 +112,9 @@ function lignesListe(wt, liste) {
         for (const e of parExp) {
             const c = codes.get(e._id);
             if (dejaTable.has(e._id)) { compte['déjà dans la table']++; continue; }
+            // Le slug est l'_id de `sets` et de `collecte_etat` : une ligne sans slug écrirait un document
+            // d'_id null (constaté sur AQ au premier passage). Elle attend une main.
+            if (!e.slugSet) { compte['sans slugSet'] = (compte['sans slugSet'] || 0) + 1; continue; }
             const asia = langueAsiatique(c?.codeSet, e.slugSet);
             if (asia) { compte['langue asiatique non jp']++; continue; }
             const region = c?.region ?? null;

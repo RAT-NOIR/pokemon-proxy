@@ -108,7 +108,7 @@ const EXPANSIONS_INTL = {
 // ════════════════════════════════════════════════════════════════════════
 // LES LIGNES AUTOMATIQUES — générées par generer-table-auto.js, 2026-09-14
 // ════════════════════════════════════════════════════════════════════════
-// 399 candidates (slug exact 253 · code de set 11 · page « (TCG) » 135), chacune avec sa provenance
+// 398 candidates (slug exact 253 · code de set 10 · page « (TCG) » 135 ; 5 sans slugSet écartées), chacune avec sa provenance
 // dans `auto`. 🔴 UNE CANDIDATE N'ENTRE DANS `TABLE` QU'AVEC `verifie` — posé par
 // `verifier-table.js --auto` sur des critères imprimés, jamais à la main. Tant qu'elle n'est pas
 // vérifiée, `ligne(code)` la rend quand même : collecteur-texte.js dit alors POURQUOI il refuse,

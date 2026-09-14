@@ -528,30 +528,6 @@
   "verifie": null
  },
  {
-  "code": "s12",
-  "exp": 5156,
-  "prod": 125,
-  "nom": "Paradigm Trigger",
-  "slugSet": "Paradigm-Trigger",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Paradigm Trigger (TCG)",
-   "tirage": "jp",
-   "expansion": "Paradigm Trigger"
-  },
-  "attendu": 125,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Paradigm Trigger",
-   "cartesListe": 98,
-   "sectionListe": "Scarlet & Violet Era",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "sm4+",
   "exp": 3916,
   "prod": 125,
@@ -570,6 +546,30 @@
    "nomBulbapedia": "GX Battle Boost",
    "cartesListe": 114,
    "sectionListe": "High Class Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s12",
+  "exp": 5156,
+  "prod": 125,
+  "nom": "Paradigm Trigger",
+  "slugSet": "Paradigm-Trigger",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Paradigm Trigger (TCG)",
+   "tirage": "jp",
+   "expansion": "Paradigm Trigger"
+  },
+  "attendu": 125,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Paradigm Trigger",
+   "cartesListe": 98,
+   "sectionListe": "Scarlet & Violet Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -648,30 +648,6 @@
   "verifie": null
  },
  {
-  "code": "sm9",
-  "exp": 3851,
-  "prod": 118,
-  "nom": "Tag Bolt",
-  "slugSet": "Tag-Bolt",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Tag Bolt (TCG)",
-   "tirage": "jp",
-   "expansion": "Tag Bolt"
-  },
-  "attendu": 118,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Tag Bolt",
-   "cartesListe": 95,
-   "sectionListe": "Sun & Moon Era",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "m5",
   "exp": 6556,
   "prod": 118,
@@ -696,48 +672,24 @@
   "verifie": null
  },
  {
-  "code": "DP3",
-  "exp": 4313,
-  "prod": 117,
-  "nom": "Shining Darkness",
-  "slugSet": "Shining-Darkness",
+  "code": "sm9",
+  "exp": 3851,
+  "prod": 118,
+  "nom": "Tag Bolt",
+  "slugSet": "Tag-Bolt",
   "region": "japonais",
   "bulba": {
-   "titre": "Shining Darkness (TCG)",
+   "titre": "Tag Bolt (TCG)",
    "tirage": "jp",
-   "expansion": "Shining Darkness"
+   "expansion": "Tag Bolt"
   },
-  "attendu": 117,
+  "attendu": 118,
   "auto": {
    "cle": "slug exact",
    "liste": "JP",
-   "nomBulbapedia": "Shining Darkness",
-   "cartesListe": 119,
-   "sectionListe": "DP Era",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "sm12",
-  "exp": 3801,
-  "prod": 117,
-  "nom": "Alter Genesis",
-  "slugSet": "Alter-Genesis",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Alter Genesis (TCG)",
-   "tirage": "jp",
-   "expansion": "Alter Genesis"
-  },
-  "attendu": 117,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Alter Genesis",
+   "nomBulbapedia": "Tag Bolt",
    "cartesListe": 95,
-   "sectionListe": "Sword & Shield Era",
+   "sectionListe": "Sun & Moon Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -768,24 +720,48 @@
   "verifie": null
  },
  {
-  "code": "m2",
-  "exp": 6291,
-  "prod": 116,
-  "nom": "Inferno X",
-  "slugSet": "Inferno-X",
+  "code": "sm12",
+  "exp": 3801,
+  "prod": 117,
+  "nom": "Alter Genesis",
+  "slugSet": "Alter-Genesis",
   "region": "japonais",
   "bulba": {
-   "titre": "Inferno X (TCG)",
+   "titre": "Alter Genesis (TCG)",
    "tirage": "jp",
-   "expansion": "Inferno X"
+   "expansion": "Alter Genesis"
   },
-  "attendu": 116,
+  "attendu": 117,
   "auto": {
    "cle": "slug exact",
    "liste": "JP",
-   "nomBulbapedia": "Inferno X",
-   "cartesListe": 80,
-   "sectionListe": "MEGA Series",
+   "nomBulbapedia": "Alter Genesis",
+   "cartesListe": 95,
+   "sectionListe": "Sword & Shield Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DP3",
+  "exp": 4313,
+  "prod": 117,
+  "nom": "Shining Darkness",
+  "slugSet": "Shining-Darkness",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Shining Darkness (TCG)",
+   "tirage": "jp",
+   "expansion": "Shining Darkness"
+  },
+  "attendu": 117,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Shining Darkness",
+   "cartesListe": 119,
+   "sectionListe": "DP Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -810,6 +786,30 @@
    "nomBulbapedia": "Double Blaze",
    "cartesListe": 95,
    "sectionListe": "Sun & Moon Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "m2",
+  "exp": 6291,
+  "prod": 116,
+  "nom": "Inferno X",
+  "slugSet": "Inferno-X",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Inferno X (TCG)",
+   "tirage": "jp",
+   "expansion": "Inferno X"
+  },
+  "attendu": 116,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Inferno X",
+   "cartesListe": 80,
+   "sectionListe": "MEGA Series",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1032,30 +1032,6 @@
   "verifie": null
  },
  {
-  "code": "CP6",
-  "exp": 3989,
-  "prod": 103,
-  "nom": "Expansion Pack 20th Anniversary",
-  "slugSet": "Expansion-Pack-20th-Anniversary",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Expansion Pack 20th Anniversary (TCG)",
-   "tirage": "jp",
-   "expansion": "Expansion Pack 20th Anniversary"
-  },
-  "attendu": 103,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Expansion Pack 20th Anniversary",
-   "cartesListe": 87,
-   "sectionListe": "High Class Expansion Packs",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "sv1a",
   "exp": 5257,
   "prod": 103,
@@ -1074,6 +1050,30 @@
    "nomBulbapedia": "Triplet Beat",
    "cartesListe": 73,
    "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CP6",
+  "exp": 3989,
+  "prod": 103,
+  "nom": "Expansion Pack 20th Anniversary",
+  "slugSet": "Expansion-Pack-20th-Anniversary",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Expansion Pack 20th Anniversary (TCG)",
+   "tirage": "jp",
+   "expansion": "Expansion Pack 20th Anniversary"
+  },
+  "attendu": 103,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Expansion Pack 20th Anniversary",
+   "cartesListe": 87,
+   "sectionListe": "High Class Expansion Packs",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1128,30 +1128,6 @@
   "verifie": null
  },
  {
-  "code": "sv5K",
-  "exp": 5573,
-  "prod": 100,
-  "nom": "Wild Force",
-  "slugSet": "Wild-Force",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Temporal Forces (TCG)",
-   "tirage": null,
-   "expansion": "Temporal Forces"
-  },
-  "attendu": 100,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Temporal Forces",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "sv5M",
   "exp": 5574,
   "prod": 100,
@@ -1176,24 +1152,24 @@
   "verifie": null
  },
  {
-  "code": "EBB",
-  "exp": 4180,
-  "prod": 99,
-  "nom": "EX Battle Boost",
-  "slugSet": "EX-Battle-Boost",
+  "code": "sv5K",
+  "exp": 5573,
+  "prod": 100,
+  "nom": "Wild Force",
+  "slugSet": "Wild-Force",
   "region": "japonais",
   "bulba": {
-   "titre": "EX Battle Boost (TCG)",
-   "tirage": "jp",
-   "expansion": "EX Battle Boost"
+   "titre": "Temporal Forces (TCG)",
+   "tirage": null,
+   "expansion": "Temporal Forces"
   },
-  "attendu": 99,
+  "attendu": 100,
   "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "EX Battle Boost",
-   "cartesListe": 93,
-   "sectionListe": "Concept Packs",
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Temporal Forces",
+   "cartesListe": null,
+   "sectionListe": null,
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1224,24 +1200,24 @@
   "verifie": null
  },
  {
-  "code": "sv2P",
-  "exp": 5314,
+  "code": "EBB",
+  "exp": 4180,
   "prod": 99,
-  "nom": "Snow Hazard",
-  "slugSet": "Snow-Hazard",
+  "nom": "EX Battle Boost",
+  "slugSet": "EX-Battle-Boost",
   "region": "japonais",
   "bulba": {
-   "titre": "Paldea Evolved (TCG)",
-   "tirage": null,
-   "expansion": "Paldea Evolved"
+   "titre": "EX Battle Boost (TCG)",
+   "tirage": "jp",
+   "expansion": "EX Battle Boost"
   },
   "attendu": 99,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Paldea Evolved",
-   "cartesListe": null,
-   "sectionListe": null,
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "EX Battle Boost",
+   "cartesListe": 93,
+   "sectionListe": "Concept Packs",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1272,24 +1248,24 @@
   "verifie": null
  },
  {
-  "code": "XY7",
-  "exp": 4024,
-  "prod": 97,
-  "nom": "Bandit Ring",
-  "slugSet": "Bandit-Ring",
+  "code": "sv2P",
+  "exp": 5314,
+  "prod": 99,
+  "nom": "Snow Hazard",
+  "slugSet": "Snow-Hazard",
   "region": "japonais",
   "bulba": {
-   "titre": "Bandit Ring (TCG)",
-   "tirage": "jp",
-   "expansion": "Bandit Ring"
+   "titre": "Paldea Evolved (TCG)",
+   "tirage": null,
+   "expansion": "Paldea Evolved"
   },
-  "attendu": 97,
+  "attendu": 99,
   "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Bandit Ring",
-   "cartesListe": 81,
-   "sectionListe": "XY BREAK Era",
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Paldea Evolved",
+   "cartesListe": null,
+   "sectionListe": null,
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1314,6 +1290,30 @@
    "nomBulbapedia": "Phantom Gate",
    "cartesListe": 88,
    "sectionListe": "XY Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XY7",
+  "exp": 4024,
+  "prod": 97,
+  "nom": "Bandit Ring",
+  "slugSet": "Bandit-Ring",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Bandit Ring (TCG)",
+   "tirage": "jp",
+   "expansion": "Bandit Ring"
+  },
+  "attendu": 97,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Bandit Ring",
+   "cartesListe": 81,
+   "sectionListe": "XY BREAK Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1416,54 +1416,6 @@
   "verifie": null
  },
  {
-  "code": "s11a",
-  "exp": 5127,
-  "prod": 94,
-  "nom": "Incandescent Arcana",
-  "slugSet": "Incandescent-Arcana",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Incandescent Arcana (TCG)",
-   "tirage": "jp",
-   "expansion": "Incandescent Arcana"
-  },
-  "attendu": 94,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Incandescent Arcana",
-   "cartesListe": 68,
-   "sectionListe": "High Class Expansion Packs",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "sv6a",
-  "exp": 5757,
-  "prod": 94,
-  "nom": "Night Wanderer",
-  "slugSet": "Night-Wanderer",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Night Wanderer (TCG)",
-   "tirage": "jp",
-   "expansion": "Night Wanderer"
-  },
-  "attendu": 94,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Night Wanderer",
-   "cartesListe": 64,
-   "sectionListe": "Enhanced Expansion Packs",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "s3a",
   "exp": 3384,
   "prod": 94,
@@ -1512,6 +1464,54 @@
   "verifie": null
  },
  {
+  "code": "sv6a",
+  "exp": 5757,
+  "prod": 94,
+  "nom": "Night Wanderer",
+  "slugSet": "Night-Wanderer",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Night Wanderer (TCG)",
+   "tirage": "jp",
+   "expansion": "Night Wanderer"
+  },
+  "attendu": 94,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Night Wanderer",
+   "cartesListe": 64,
+   "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s11a",
+  "exp": 5127,
+  "prod": 94,
+  "nom": "Incandescent Arcana",
+  "slugSet": "Incandescent-Arcana",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Incandescent Arcana (TCG)",
+   "tirage": "jp",
+   "expansion": "Incandescent Arcana"
+  },
+  "attendu": 94,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Incandescent Arcana",
+   "cartesListe": 68,
+   "sectionListe": "High Class Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "s9a",
   "exp": 4441,
   "prod": 93,
@@ -1529,6 +1529,30 @@
    "liste": "JP",
    "nomBulbapedia": "Battle Region",
    "cartesListe": 67,
+   "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv3a",
+  "exp": 5432,
+  "prod": 92,
+  "nom": "Raging Surf",
+  "slugSet": "Raging-Surf",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Raging Surf (TCG)",
+   "tirage": "jp",
+   "expansion": "Raging Surf"
+  },
+  "attendu": 92,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Raging Surf",
+   "cartesListe": 62,
    "sectionListe": "Enhanced Expansion Packs",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
@@ -1555,30 +1579,6 @@
    "cartesListe": 92,
    "sectionListe": "DPt Era",
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "sv3a",
-  "exp": 5432,
-  "prod": 92,
-  "nom": "Raging Surf",
-  "slugSet": "Raging-Surf",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Raging Surf (TCG)",
-   "tirage": "jp",
-   "expansion": "Raging Surf"
-  },
-  "attendu": 92,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Raging Surf",
-   "cartesListe": 62,
-   "sectionListe": "Enhanced Expansion Packs",
-   "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -1656,6 +1656,30 @@
   "verifie": null
  },
  {
+  "code": "s5I",
+  "exp": 3712,
+  "prod": 91,
+  "nom": "Single Strike Master",
+  "slugSet": "Single-Strike-Master",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Battle Styles (TCG)",
+   "tirage": null,
+   "expansion": "Battle Styles"
+  },
+  "attendu": 91,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Battle Styles",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "pcgG",
   "exp": 5723,
   "prod": 91,
@@ -1704,48 +1728,24 @@
   "verifie": null
  },
  {
-  "code": "s5I",
-  "exp": 3712,
-  "prod": 91,
-  "nom": "Single Strike Master",
-  "slugSet": "Single-Strike-Master",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Battle Styles (TCG)",
-   "tirage": null,
-   "expansion": "Battle Styles"
-  },
-  "attendu": 91,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Battle Styles",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "Pt4",
-  "exp": 4280,
+  "code": "Pt2",
+  "exp": 4289,
   "prod": 90,
-  "nom": "Advent of Arceus",
-  "slugSet": "Advent-of-Arceus",
+  "nom": "Bonds to the End of Time",
+  "slugSet": "Bonds-to-the-End-of-Time",
   "region": "japonais",
   "bulba": {
-   "titre": "Advent of Arceus (TCG)",
+   "titre": "Bonds to the End of Time (TCG)",
    "tirage": "jp",
-   "expansion": "Advent of Arceus"
+   "expansion": "Bonds to the End of Time"
   },
   "attendu": 90,
   "auto": {
    "cle": "slug exact",
    "liste": "JP",
-   "nomBulbapedia": "Advent of Arceus",
+   "nomBulbapedia": "Bonds to the End of Time",
    "cartesListe": 90,
-   "sectionListe": "LEGEND Era",
+   "sectionListe": "DPt Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1776,24 +1776,24 @@
   "verifie": null
  },
  {
-  "code": "Pt2",
-  "exp": 4289,
+  "code": "Pt4",
+  "exp": 4280,
   "prod": 90,
-  "nom": "Bonds to the End of Time",
-  "slugSet": "Bonds-to-the-End-of-Time",
+  "nom": "Advent of Arceus",
+  "slugSet": "Advent-of-Arceus",
   "region": "japonais",
   "bulba": {
-   "titre": "Bonds to the End of Time (TCG)",
+   "titre": "Advent of Arceus (TCG)",
    "tirage": "jp",
-   "expansion": "Bonds to the End of Time"
+   "expansion": "Advent of Arceus"
   },
   "attendu": 90,
   "auto": {
    "cle": "slug exact",
    "liste": "JP",
-   "nomBulbapedia": "Bonds to the End of Time",
+   "nomBulbapedia": "Advent of Arceus",
    "cartesListe": 90,
-   "sectionListe": "DPt Era",
+   "sectionListe": "LEGEND Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1872,30 +1872,6 @@
   "verifie": null
  },
  {
-  "code": "s10P",
-  "exp": 4974,
-  "prod": 88,
-  "nom": "Space Juggler",
-  "slugSet": "Space-Juggler",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Astral Radiance (TCG)",
-   "tirage": null,
-   "expansion": "Astral Radiance"
-  },
-  "attendu": 88,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Astral Radiance",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "s10D",
   "exp": 4973,
   "prod": 88,
@@ -1920,48 +1896,24 @@
   "verifie": null
  },
  {
-  "code": "BW9",
-  "exp": 4182,
-  "prod": 86,
-  "nom": "Megalo Cannon",
-  "slugSet": "Megalo-Cannon",
+  "code": "s10P",
+  "exp": 4974,
+  "prod": 88,
+  "nom": "Space Juggler",
+  "slugSet": "Space-Juggler",
   "region": "japonais",
   "bulba": {
-   "titre": "Megalo Cannon (TCG)",
-   "tirage": "jp",
-   "expansion": "Megalo Cannon"
+   "titre": "Astral Radiance (TCG)",
+   "tirage": null,
+   "expansion": "Astral Radiance"
   },
-  "attendu": 86,
+  "attendu": 88,
   "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Megalo Cannon",
-   "cartesListe": 76,
-   "sectionListe": "XY Era",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "s1a",
-  "exp": 3284,
-  "prod": 86,
-  "nom": "VMAX Rising",
-  "slugSet": "VMAX-Rising",
-  "region": "japonais",
-  "bulba": {
-   "titre": "VMAX Rising (TCG)",
-   "tirage": "jp",
-   "expansion": "VMAX Rising"
-  },
-  "attendu": 86,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "VMAX Rising",
-   "cartesListe": 70,
-   "sectionListe": "Enhanced Expansion Packs",
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Astral Radiance",
+   "cartesListe": null,
+   "sectionListe": null,
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -1992,6 +1944,30 @@
   "verifie": null
  },
  {
+  "code": "s1a",
+  "exp": 3284,
+  "prod": 86,
+  "nom": "VMAX Rising",
+  "slugSet": "VMAX-Rising",
+  "region": "japonais",
+  "bulba": {
+   "titre": "VMAX Rising (TCG)",
+   "tirage": "jp",
+   "expansion": "VMAX Rising"
+  },
+  "attendu": 86,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "VMAX Rising",
+   "cartesListe": 70,
+   "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "PCG5",
   "exp": 5710,
   "prod": 86,
@@ -2010,6 +1986,30 @@
    "nomBulbapedia": "Mirage Forest",
    "cartesListe": 86,
    "sectionListe": "PCG Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BW9",
+  "exp": 4182,
+  "prod": 86,
+  "nom": "Megalo Cannon",
+  "slugSet": "Megalo-Cannon",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Megalo Cannon (TCG)",
+   "tirage": "jp",
+   "expansion": "Megalo Cannon"
+  },
+  "attendu": 86,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Megalo Cannon",
+   "cartesListe": 76,
+   "sectionListe": "XY Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -2136,30 +2136,6 @@
   "verifie": null
  },
  {
-  "code": "L2",
-  "exp": 4265,
-  "prod": 81,
-  "nom": "Reviving Legends",
-  "slugSet": "Reviving-Legends",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Reviving Legends (TCG)",
-   "tirage": "jp",
-   "expansion": "Reviving Legends"
-  },
-  "attendu": 81,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Reviving Legends",
-   "cartesListe": 80,
-   "sectionListe": "LEGEND Era",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "L3",
   "exp": 4261,
   "prod": 81,
@@ -2178,6 +2154,30 @@
    "nomBulbapedia": "Clash at the Summit",
    "cartesListe": 80,
    "sectionListe": "BW Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "L2",
+  "exp": 4265,
+  "prod": 81,
+  "nom": "Reviving Legends",
+  "slugSet": "Reviving-Legends",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Reviving Legends (TCG)",
+   "tirage": "jp",
+   "expansion": "Reviving Legends"
+  },
+  "attendu": 81,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Reviving Legends",
+   "cartesListe": 80,
+   "sectionListe": "LEGEND Era",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -2208,11 +2208,11 @@
   "verifie": null
  },
  {
-  "code": "XY5t",
-  "exp": 4034,
+  "code": "XY5g",
+  "exp": 4039,
   "prod": 80,
-  "nom": "Tidal Storm",
-  "slugSet": "Tidal-Storm",
+  "nom": "Gaia Volcano",
+  "slugSet": "Gaia-Volcano",
   "region": "japonais",
   "bulba": {
    "titre": "Primal Clash (TCG)",
@@ -2232,11 +2232,11 @@
   "verifie": null
  },
  {
-  "code": "XY5g",
-  "exp": 4039,
+  "code": "XY5t",
+  "exp": 4034,
   "prod": 80,
-  "nom": "Gaia Volcano",
-  "slugSet": "Gaia-Volcano",
+  "nom": "Tidal Storm",
+  "slugSet": "Tidal-Storm",
   "region": "japonais",
   "bulba": {
    "titre": "Primal Clash (TCG)",
@@ -2304,11 +2304,11 @@
   "verifie": null
  },
  {
-  "code": "sm5s",
-  "exp": 3911,
+  "code": "sm5m",
+  "exp": 3906,
   "prod": 78,
-  "nom": "Ultra Sun",
-  "slugSet": "Ultra-Sun",
+  "nom": "Ultra Moon",
+  "slugSet": "Ultra-Moon",
   "region": "japonais",
   "bulba": {
    "titre": "Ultra Prism (TCG)",
@@ -2328,11 +2328,11 @@
   "verifie": null
  },
  {
-  "code": "sm5m",
-  "exp": 3906,
+  "code": "sm5s",
+  "exp": 3911,
   "prod": 78,
-  "nom": "Ultra Moon",
-  "slugSet": "Ultra-Moon",
+  "nom": "Ultra Sun",
+  "slugSet": "Ultra-Sun",
   "region": "japonais",
   "bulba": {
    "titre": "Ultra Prism (TCG)",
@@ -2376,30 +2376,6 @@
   "verifie": null
  },
  {
-  "code": "sm11b",
-  "exp": 3806,
-  "prod": 75,
-  "nom": "Dream League",
-  "slugSet": "Dream-League",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Dream League (TCG)",
-   "tirage": "jp",
-   "expansion": "Dream League"
-  },
-  "attendu": 75,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Dream League",
-   "cartesListe": 49,
-   "sectionListe": "High Class Expansion Packs",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "PCG8",
   "exp": 5700,
   "prod": 75,
@@ -2418,6 +2394,30 @@
    "nomBulbapedia": "Miracle Crystal",
    "cartesListe": 75,
    "sectionListe": "PCG Era",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm11b",
+  "exp": 3806,
+  "prod": 75,
+  "nom": "Dream League",
+  "slugSet": "Dream-League",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Dream League (TCG)",
+   "tirage": "jp",
+   "expansion": "Dream League"
+  },
+  "attendu": 75,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Dream League",
+   "cartesListe": 49,
+   "sectionListe": "High Class Expansion Packs",
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -2472,11 +2472,11 @@
   "verifie": null
  },
  {
-  "code": "sm1M",
-  "exp": 3966,
+  "code": "sm1S",
+  "exp": 3971,
   "prod": 73,
-  "nom": "Collection Moon",
-  "slugSet": "Collection-Moon",
+  "nom": "Collection Sun",
+  "slugSet": "Collection-Sun",
   "region": "japonais",
   "bulba": {
    "titre": "Sun & Moon (TCG)",
@@ -2496,11 +2496,11 @@
   "verifie": null
  },
  {
-  "code": "sm1S",
-  "exp": 3971,
+  "code": "sm1M",
+  "exp": 3966,
   "prod": 73,
-  "nom": "Collection Sun",
-  "slugSet": "Collection-Sun",
+  "nom": "Collection Moon",
+  "slugSet": "Collection-Moon",
   "region": "japonais",
   "bulba": {
    "titre": "Sun & Moon (TCG)",
@@ -2640,30 +2640,6 @@
   "verifie": null
  },
  {
-  "code": "sm10b",
-  "exp": 3821,
-  "prod": 69,
-  "nom": "Sky Legend",
-  "slugSet": "Sky-Legend",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Sky Legend (TCG)",
-   "tirage": "jp",
-   "expansion": "Sky Legend"
-  },
-  "attendu": 69,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Sky Legend",
-   "cartesListe": 54,
-   "sectionListe": "Enhanced Expansion Packs",
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "sm10a",
   "exp": 3831,
   "prod": 69,
@@ -2680,6 +2656,30 @@
    "cle": "slug exact",
    "liste": "JP",
    "nomBulbapedia": "GG End",
+   "cartesListe": 54,
+   "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm10b",
+  "exp": 3821,
+  "prod": 69,
+  "nom": "Sky Legend",
+  "slugSet": "Sky-Legend",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Sky Legend (TCG)",
+   "tirage": "jp",
+   "expansion": "Sky Legend"
+  },
+  "attendu": 69,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Sky Legend",
    "cartesListe": 54,
    "sectionListe": "Enhanced Expansion Packs",
    "regionCodesSet": "japonais",
@@ -2760,22 +2760,46 @@
   "verifie": null
  },
  {
-  "code": "DP5t",
-  "exp": 4304,
+  "code": "XY8b",
+  "exp": 4014,
   "prod": 65,
-  "nom": "Temple of Anger",
-  "slugSet": "Temple-of-Anger",
+  "nom": "Blue Shock",
+  "slugSet": "Blue-Shock",
   "region": "japonais",
   "bulba": {
-   "titre": "Legends Awakened (TCG)",
+   "titre": "BREAKthrough (TCG)",
    "tirage": null,
-   "expansion": "Legends Awakened"
+   "expansion": "BREAKthrough"
   },
   "attendu": 65,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Legends Awakened",
+   "nomBulbapedia": "BREAKthrough",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BW6f",
+  "exp": 4195,
+  "prod": 65,
+  "nom": "Freeze Bolt",
+  "slugSet": "Freeze-Bolt",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Boundaries Crossed (TCG)",
+   "tirage": null,
+   "expansion": "Boundaries Crossed"
+  },
+  "attendu": 65,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Boundaries Crossed",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -2832,94 +2856,22 @@
   "verifie": null
  },
  {
-  "code": "XY8b",
-  "exp": 4014,
+  "code": "DP5t",
+  "exp": 4304,
   "prod": 65,
-  "nom": "Blue Shock",
-  "slugSet": "Blue-Shock",
+  "nom": "Temple of Anger",
+  "slugSet": "Temple-of-Anger",
   "region": "japonais",
   "bulba": {
-   "titre": "BREAKthrough (TCG)",
+   "titre": "Legends Awakened (TCG)",
    "tirage": null,
-   "expansion": "BREAKthrough"
+   "expansion": "Legends Awakened"
   },
   "attendu": 65,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "BREAKthrough",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "BW6f",
-  "exp": 4195,
-  "prod": 65,
-  "nom": "Freeze Bolt",
-  "slugSet": "Freeze-Bolt",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Boundaries Crossed (TCG)",
-   "tirage": null,
-   "expansion": "Boundaries Crossed"
-  },
-  "attendu": 65,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Boundaries Crossed",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "XY1x",
-  "exp": 4064,
-  "prod": 64,
-  "nom": "Collection X",
-  "slugSet": "Collection-X",
-  "region": "japonais",
-  "bulba": {
-   "titre": "XY (TCG)",
-   "tirage": null,
-   "expansion": "XY"
-  },
-  "attendu": 64,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "XY",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "sm3n",
-  "exp": 3936,
-  "prod": 64,
-  "nom": "Darkness that Consumes Light",
-  "slugSet": "Darkness-that-Consumes-Light",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Burning Shadows (TCG)",
-   "tirage": null,
-   "expansion": "Burning Shadows"
-  },
-  "attendu": 64,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Burning Shadows",
+   "nomBulbapedia": "Legends Awakened",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -2952,24 +2904,48 @@
   "verifie": null
  },
  {
-  "code": "sm7b",
-  "exp": 3871,
-  "prod": 63,
-  "nom": "Fairy Rise",
-  "slugSet": "Fairy-Rise",
+  "code": "sm3n",
+  "exp": 3936,
+  "prod": 64,
+  "nom": "Darkness that Consumes Light",
+  "slugSet": "Darkness-that-Consumes-Light",
   "region": "japonais",
   "bulba": {
-   "titre": "Fairy Rise (TCG)",
-   "tirage": "jp",
-   "expansion": "Fairy Rise"
+   "titre": "Burning Shadows (TCG)",
+   "tirage": null,
+   "expansion": "Burning Shadows"
   },
-  "attendu": 63,
+  "attendu": 64,
   "auto": {
-   "cle": "slug exact",
-   "liste": "JP",
-   "nomBulbapedia": "Fairy Rise",
-   "cartesListe": 50,
-   "sectionListe": "Enhanced Expansion Packs",
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Burning Shadows",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XY1x",
+  "exp": 4064,
+  "prod": 64,
+  "nom": "Collection X",
+  "slugSet": "Collection-X",
+  "region": "japonais",
+  "bulba": {
+   "titre": "XY (TCG)",
+   "tirage": null,
+   "expansion": "XY"
+  },
+  "attendu": 64,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "XY",
+   "cartesListe": null,
+   "sectionListe": null,
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
@@ -2992,6 +2968,30 @@
    "cle": "slug exact",
    "liste": "JP",
    "nomBulbapedia": "Ultra Force",
+   "cartesListe": 50,
+   "sectionListe": "Enhanced Expansion Packs",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm7b",
+  "exp": 3871,
+  "prod": 63,
+  "nom": "Fairy Rise",
+  "slugSet": "Fairy-Rise",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Fairy Rise (TCG)",
+   "tirage": "jp",
+   "expansion": "Fairy Rise"
+  },
+  "attendu": 63,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Fairy Rise",
    "cartesListe": 50,
    "sectionListe": "Enhanced Expansion Packs",
    "regionCodesSet": "japonais",
@@ -3024,22 +3024,22 @@
   "verifie": null
  },
  {
-  "code": "sm4a",
-  "exp": 3921,
+  "code": "sm2k",
+  "exp": 3956,
   "prod": 62,
-  "nom": "Ultradimensional Beasts",
-  "slugSet": "Ultradimensional-Beasts",
+  "nom": "Islands Await You",
+  "slugSet": "Islands-Await-You",
   "region": "japonais",
   "bulba": {
-   "titre": "Crimson Invasion (TCG)",
+   "titre": "Guardians Rising (TCG)",
    "tirage": null,
-   "expansion": "Crimson Invasion"
+   "expansion": "Guardians Rising"
   },
   "attendu": 62,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Crimson Invasion",
+   "nomBulbapedia": "Guardians Rising",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -3072,22 +3072,22 @@
   "verifie": null
  },
  {
-  "code": "sm2k",
-  "exp": 3956,
+  "code": "sm4a",
+  "exp": 3921,
   "prod": 62,
-  "nom": "Islands Await You",
-  "slugSet": "Islands-Await-You",
+  "nom": "Ultradimensional Beasts",
+  "slugSet": "Ultradimensional-Beasts",
   "region": "japonais",
   "bulba": {
-   "titre": "Guardians Rising (TCG)",
+   "titre": "Crimson Invasion (TCG)",
    "tirage": null,
-   "expansion": "Guardians Rising"
+   "expansion": "Crimson Invasion"
   },
   "attendu": 62,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Guardians Rising",
+   "nomBulbapedia": "Crimson Invasion",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -3120,11 +3120,11 @@
   "verifie": null
  },
  {
-  "code": "BW8t",
-  "exp": 4185,
+  "code": "BW8s",
+  "exp": 4186,
   "prod": 58,
-  "nom": "Thunder Knuckle",
-  "slugSet": "Thunder-Knuckle",
+  "nom": "Spiral Force",
+  "slugSet": "Spiral-Force",
   "region": "japonais",
   "bulba": {
    "titre": "Plasma Freeze (TCG)",
@@ -3144,11 +3144,11 @@
   "verifie": null
  },
  {
-  "code": "BW8s",
-  "exp": 4186,
+  "code": "BW8t",
+  "exp": 4185,
   "prod": 58,
-  "nom": "Spiral Force",
-  "slugSet": "Spiral-Force",
+  "nom": "Thunder Knuckle",
+  "slugSet": "Thunder-Knuckle",
   "region": "japonais",
   "bulba": {
    "titre": "Plasma Freeze (TCG)",
@@ -3216,30 +3216,6 @@
   "verifie": null
  },
  {
-  "code": "BW1w",
-  "exp": 4213,
-  "prod": 56,
-  "nom": "White Collection",
-  "slugSet": "White-Collection",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Black & White (TCG)",
-   "tirage": null,
-   "expansion": "Black & White"
-  },
-  "attendu": 56,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Black & White",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "BW1b",
   "exp": 4214,
   "prod": 56,
@@ -3264,11 +3240,35 @@
   "verifie": null
  },
  {
-  "code": "BW5t",
-  "exp": 4201,
+  "code": "BW1w",
+  "exp": 4213,
+  "prod": 56,
+  "nom": "White Collection",
+  "slugSet": "White-Collection",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Black & White (TCG)",
+   "tirage": null,
+   "expansion": "Black & White"
+  },
+  "attendu": 56,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Black & White",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BW5e",
+  "exp": 4200,
   "prod": 55,
-  "nom": "Dragon Blast",
-  "slugSet": "Dragon-Blast",
+  "nom": "Dragon Blade",
+  "slugSet": "Dragon-Blade",
   "region": "japonais",
   "bulba": {
    "titre": "Dragons Exalted (TCG)",
@@ -3288,11 +3288,11 @@
   "verifie": null
  },
  {
-  "code": "BW5e",
-  "exp": 4200,
+  "code": "BW5t",
+  "exp": 4201,
   "prod": 55,
-  "nom": "Dragon Blade",
-  "slugSet": "Dragon-Blade",
+  "nom": "Dragon Blast",
+  "slugSet": "Dragon-Blast",
   "region": "japonais",
   "bulba": {
    "titre": "Dragons Exalted (TCG)",
@@ -3480,30 +3480,6 @@
   "verifie": null
  },
  {
-  "code": "pcgF",
-  "exp": 5724,
-  "prod": 38,
-  "nom": "Gift Box Emerald",
-  "slugSet": "Gift-Box-Emerald",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Gift Box Emerald (TCG)",
-   "tirage": null,
-   "expansion": "Gift Box Emerald"
-  },
-  "attendu": 38,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Gift Box Emerald",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "svF",
   "exp": 5422,
   "prod": 38,
@@ -3520,6 +3496,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Ruler of the Black Flame Deck Build Box",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgF",
+  "exp": 5724,
+  "prod": 38,
+  "nom": "Gift Box Emerald",
+  "slugSet": "Gift-Box-Emerald",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Gift Box Emerald (TCG)",
+   "tirage": null,
+   "expansion": "Gift Box Emerald"
+  },
+  "attendu": 38,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Gift Box Emerald",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -3552,30 +3552,6 @@
   "verifie": null
  },
  {
-  "code": "advF",
-  "exp": 5868,
-  "prod": 33,
-  "nom": "Magma Deck Kit",
-  "slugSet": "Magma-Deck-Kit",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Magma Deck Kit (TCG)",
-   "tirage": null,
-   "expansion": "Magma Deck Kit"
-  },
-  "attendu": 33,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Magma Deck Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "advG",
   "exp": 5867,
   "prod": 33,
@@ -3592,6 +3568,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Aqua Deck Kit",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "advF",
+  "exp": 5868,
+  "prod": 33,
+  "nom": "Magma Deck Kit",
+  "slugSet": "Magma-Deck-Kit",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Magma Deck Kit (TCG)",
+   "tirage": null,
+   "expansion": "Magma Deck Kit"
+  },
+  "attendu": 33,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Magma Deck Kit",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -3672,30 +3672,6 @@
   "verifie": null
  },
  {
-  "code": "svB",
-  "exp": 5221,
-  "prod": 28,
-  "nom": "Premium Trainer Box ex",
-  "slugSet": "Premium-Trainer-Box-ex",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Premium Trainer Box ex (TCG)",
-   "tirage": null,
-   "expansion": "Premium Trainer Box ex"
-  },
-  "attendu": 28,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Premium Trainer Box ex",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "smD",
   "exp": 3974,
   "prod": 28,
@@ -3712,6 +3688,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Ash vs Team Rocket Deck Kit",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svB",
+  "exp": 5221,
+  "prod": 28,
+  "nom": "Premium Trainer Box ex",
+  "slugSet": "Premium-Trainer-Box-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Premium Trainer Box ex (TCG)",
+   "tirage": null,
+   "expansion": "Premium Trainer Box ex"
+  },
+  "attendu": 28,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Premium Trainer Box ex",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -3768,11 +3768,11 @@
   "verifie": null
  },
  {
-  "code": "svLS",
-  "exp": 5842,
+  "code": "svLN",
+  "exp": 5841,
   "prod": 25,
-  "nom": "Stellar Tera Type Starter Set Ceruledge ex",
-  "slugSet": "Stellar-Tera-Type-Starter-Set-Ceruledge-ex",
+  "nom": "Stellar Tera Type Starter Set Sylveon ex",
+  "slugSet": "Stellar-Tera-Type-Starter-Set-Sylveon-ex",
   "region": "japonais",
   "bulba": {
    "titre": "Stellar Tera Type Starter Sets (TCG)",
@@ -3792,11 +3792,11 @@
   "verifie": null
  },
  {
-  "code": "svLN",
-  "exp": 5841,
+  "code": "svLS",
+  "exp": 5842,
   "prod": 25,
-  "nom": "Stellar Tera Type Starter Set Sylveon ex",
-  "slugSet": "Stellar-Tera-Type-Starter-Set-Sylveon-ex",
+  "nom": "Stellar Tera Type Starter Set Ceruledge ex",
+  "slugSet": "Stellar-Tera-Type-Starter-Set-Ceruledge-ex",
   "region": "japonais",
   "bulba": {
    "titre": "Stellar Tera Type Starter Sets (TCG)",
@@ -3840,30 +3840,6 @@
   "verifie": null
  },
  {
-  "code": "mBD",
-  "exp": 6260,
-  "prod": 23,
-  "nom": "MEGA Starter Set Mega Diancie ex",
-  "slugSet": "MEGA-Starter-Set-Mega-Diancie-ex",
-  "region": "japonais",
-  "bulba": {
-   "titre": "MEGA Starter Set Mega Diancie ex (TCG)",
-   "tirage": null,
-   "expansion": "MEGA Starter Set Mega Diancie ex"
-  },
-  "attendu": 23,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "MEGA Starter Set Mega Diancie ex",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "mBG",
   "exp": 6259,
   "prod": 23,
@@ -3888,11 +3864,35 @@
   "verifie": null
  },
  {
-  "code": "svEL",
-  "exp": 5476,
+  "code": "mBD",
+  "exp": 6260,
+  "prod": 23,
+  "nom": "MEGA Starter Set Mega Diancie ex",
+  "slugSet": "MEGA-Starter-Set-Mega-Diancie-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "MEGA Starter Set Mega Diancie ex (TCG)",
+   "tirage": null,
+   "expansion": "MEGA Starter Set Mega Diancie ex"
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "MEGA Starter Set Mega Diancie ex",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svEM",
+  "exp": 5477,
   "prod": 22,
-  "nom": "Terastal Starter Set Skeledirge ex",
-  "slugSet": "Terastal-Starter-Set-Skeledirge-ex",
+  "nom": "Terastal Starter Set Mewtwo ex",
+  "slugSet": "Terastal-Starter-Set-Mewtwo-ex",
   "region": "japonais",
   "bulba": {
    "titre": "Terastal Starter Sets (TCG)",
@@ -3912,11 +3912,11 @@
   "verifie": null
  },
  {
-  "code": "svEM",
-  "exp": 5477,
+  "code": "svEL",
+  "exp": 5476,
   "prod": 22,
-  "nom": "Terastal Starter Set Mewtwo ex",
-  "slugSet": "Terastal-Starter-Set-Mewtwo-ex",
+  "nom": "Terastal Starter Set Skeledirge ex",
+  "slugSet": "Terastal-Starter-Set-Skeledirge-ex",
   "region": "japonais",
   "bulba": {
    "titre": "Terastal Starter Sets (TCG)",
@@ -3960,30 +3960,6 @@
   "verifie": null
  },
  {
-  "code": "pcgD",
-  "exp": 5726,
-  "prod": 20,
-  "nom": "Black Deck Kit",
-  "slugSet": "Black-Deck-Kit",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Black Deck Kit (TCG)",
-   "tirage": null,
-   "expansion": "Black Deck Kit"
-  },
-  "attendu": 20,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Black Deck Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "pcgE",
   "exp": 5725,
   "prod": 20,
@@ -4008,94 +3984,22 @@
   "verifie": null
  },
  {
-  "code": "XYb",
-  "exp": 4134,
-  "prod": 19,
-  "nom": "Hyper Metal Chain Deck",
-  "slugSet": "Hyper-Metal-Chain-Deck",
+  "code": "pcgD",
+  "exp": 5726,
+  "prod": 20,
+  "nom": "Black Deck Kit",
+  "slugSet": "Black-Deck-Kit",
   "region": "japonais",
   "bulba": {
-   "titre": "Hyper Metal Chain Deck (TCG)",
+   "titre": "Black Deck Kit (TCG)",
    "tirage": null,
-   "expansion": "Hyper Metal Chain Deck"
+   "expansion": "Black Deck Kit"
   },
-  "attendu": 19,
+  "attendu": 20,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Hyper Metal Chain Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "L2s",
-  "exp": 4264,
-  "prod": 19,
-  "nom": "Steelix Constructed Standard Deck",
-  "slugSet": "Steelix-Constructed-Standard-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Steelix Constructed Standard Deck (TCG)",
-   "tirage": null,
-   "expansion": "Steelix Constructed Standard Deck"
-  },
-  "attendu": 19,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Steelix Constructed Standard Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "advE",
-  "exp": 5870,
-  "prod": 19,
-  "nom": "Salamence Constructed Starter Deck",
-  "slugSet": "Salamence-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Salamence Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Salamence Constructed Starter Deck"
-  },
-  "attendu": 19,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Salamence Constructed Starter Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "advJ",
-  "exp": 5863,
-  "prod": 19,
-  "nom": "Metagross Constructed Starter Deck",
-  "slugSet": "Metagross-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Metagross Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Metagross Constructed Starter Deck"
-  },
-  "attendu": 19,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Metagross Constructed Starter Deck",
+   "nomBulbapedia": "Black Deck Kit",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -4152,6 +4056,102 @@
   "verifie": null
  },
  {
+  "code": "advE",
+  "exp": 5870,
+  "prod": 19,
+  "nom": "Salamence Constructed Starter Deck",
+  "slugSet": "Salamence-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Salamence Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Salamence Constructed Starter Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Salamence Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "advJ",
+  "exp": 5863,
+  "prod": 19,
+  "nom": "Metagross Constructed Starter Deck",
+  "slugSet": "Metagross-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Metagross Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Metagross Constructed Starter Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Metagross Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYb",
+  "exp": 4134,
+  "prod": 19,
+  "nom": "Hyper Metal Chain Deck",
+  "slugSet": "Hyper-Metal-Chain-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Hyper Metal Chain Deck (TCG)",
+   "tirage": null,
+   "expansion": "Hyper Metal Chain Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Hyper Metal Chain Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "L2s",
+  "exp": 4264,
+  "prod": 19,
+  "nom": "Steelix Constructed Standard Deck",
+  "slugSet": "Steelix-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Steelix Constructed Standard Deck (TCG)",
+   "tirage": null,
+   "expansion": "Steelix Constructed Standard Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Steelix Constructed Standard Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "smB",
   "exp": 4257,
   "prod": 18,
@@ -4168,6 +4168,54 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Premium Trainer Box",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgI",
+  "exp": 5721,
+  "prod": 16,
+  "nom": "Typhlosion Constructed Starter Deck",
+  "slugSet": "Typhlosion-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Typhlosion Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Typhlosion Constructed Starter Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Typhlosion Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "RtA",
+  "exp": 4315,
+  "prod": 16,
+  "nom": "Rampardos the Attacker",
+  "slugSet": "Rampardos-the-Attacker",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Rampardos the Attacker (TCG)",
+   "tirage": null,
+   "expansion": "Rampardos the Attacker"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Rampardos the Attacker",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -4248,70 +4296,22 @@
   "verifie": null
  },
  {
-  "code": "pcgI",
-  "exp": 5721,
-  "prod": 16,
-  "nom": "Typhlosion Constructed Starter Deck",
-  "slugSet": "Typhlosion-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Typhlosion Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Typhlosion Constructed Starter Deck"
-  },
-  "attendu": 16,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Typhlosion Constructed Starter Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "RtA",
-  "exp": 4315,
-  "prod": 16,
-  "nom": "Rampardos the Attacker",
-  "slugSet": "Rampardos-the-Attacker",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Rampardos the Attacker (TCG)",
-   "tirage": null,
-   "expansion": "Rampardos the Attacker"
-  },
-  "attendu": 16,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Rampardos the Attacker",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "pcgO",
-  "exp": 5715,
+  "code": "BtD",
+  "exp": 4316,
   "prod": 15,
-  "nom": "Holon Research Tower Lightning Quarter Deck",
-  "slugSet": "Holon-Research-Tower-Lightning-Quarter-Deck",
+  "nom": "Bastiodon the Defender",
+  "slugSet": "Bastiodon-the-Defender",
   "region": "japonais",
   "bulba": {
-   "titre": "Holon Research Tower Lightning Quarter Deck (TCG)",
+   "titre": "Bastiodon the Defender (TCG)",
    "tirage": null,
-   "expansion": "Holon Research Tower Lightning Quarter Deck"
+   "expansion": "Bastiodon the Defender"
   },
   "attendu": 15,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Holon Research Tower Lightning Quarter Deck",
+   "nomBulbapedia": "Bastiodon the Defender",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -4368,22 +4368,22 @@
   "verifie": null
  },
  {
-  "code": "BtD",
-  "exp": 4316,
+  "code": "pcgO",
+  "exp": 5715,
   "prod": 15,
-  "nom": "Bastiodon the Defender",
-  "slugSet": "Bastiodon-the-Defender",
+  "nom": "Holon Research Tower Lightning Quarter Deck",
+  "slugSet": "Holon-Research-Tower-Lightning-Quarter-Deck",
   "region": "japonais",
   "bulba": {
-   "titre": "Bastiodon the Defender (TCG)",
+   "titre": "Holon Research Tower Lightning Quarter Deck (TCG)",
    "tirage": null,
-   "expansion": "Bastiodon the Defender"
+   "expansion": "Holon Research Tower Lightning Quarter Deck"
   },
   "attendu": 15,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Bastiodon the Defender",
+   "nomBulbapedia": "Holon Research Tower Lightning Quarter Deck",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -4440,30 +4440,6 @@
   "verifie": null
  },
  {
-  "code": "SNPn",
-  "exp": 4104,
-  "prod": 10,
-  "nom": "Noivern BREAK Evolution Pack",
-  "slugSet": "Noivern-BREAK-Evolution-Pack",
-  "region": "japonais",
-  "bulba": {
-   "titre": "Noivern BREAK Evolution Pack (TCG)",
-   "tirage": null,
-   "expansion": "Noivern BREAK Evolution Pack"
-  },
-  "attendu": 10,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Noivern BREAK Evolution Pack",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "SNPr",
   "exp": 4109,
   "prod": 10,
@@ -4480,6 +4456,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Raichu BREAK Evolution Pack",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SNPn",
+  "exp": 4104,
+  "prod": 10,
+  "nom": "Noivern BREAK Evolution Pack",
+  "slugSet": "Noivern-BREAK-Evolution-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Noivern BREAK Evolution Pack (TCG)",
+   "tirage": null,
+   "expansion": "Noivern BREAK Evolution Pack"
+  },
+  "attendu": 10,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Noivern BREAK Evolution Pack",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
@@ -4632,30 +4632,6 @@
   "verifie": null
  },
  {
-  "code": "BA22",
-  "exp": 6199,
-  "prod": 138,
-  "nom": "Battle Academy 2022",
-  "slugSet": "Battle-Academy-2022",
-  "region": null,
-  "bulba": {
-   "titre": "Battle Academy 2022 (TCG)",
-   "tirage": null,
-   "expansion": "Battle Academy 2022"
-  },
-  "attendu": 138,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Battle Academy 2022",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "BA24",
   "exp": 5890,
   "prod": 138,
@@ -4672,6 +4648,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Battle Academy 2024",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BA22",
+  "exp": 6199,
+  "prod": 138,
+  "nom": "Battle Academy 2022",
+  "slugSet": "Battle-Academy-2022",
+  "region": null,
+  "bulba": {
+   "titre": "Battle Academy 2022 (TCG)",
+   "tirage": null,
+   "expansion": "Battle Academy 2022"
+  },
+  "attendu": 138,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Battle Academy 2022",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -4800,30 +4800,6 @@
   "verifie": null
  },
  {
-  "code": "MMBP",
-  "exp": 5915,
-  "prod": 49,
-  "nom": "M Master Deck Build Box Power Style",
-  "slugSet": "M-Master-Deck-Build-Box-Power-Style",
-  "region": null,
-  "bulba": {
-   "titre": "M Master Deck Build Box Power Style (TCG)",
-   "tirage": null,
-   "expansion": "M Master Deck Build Box Power Style"
-  },
-  "attendu": 49,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "M Master Deck Build Box Power Style",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "MMBS",
   "exp": 5914,
   "prod": 49,
@@ -4840,6 +4816,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "M Master Deck Build Box Speed Style",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "MMBP",
+  "exp": 5915,
+  "prod": 49,
+  "nom": "M Master Deck Build Box Power Style",
+  "slugSet": "M-Master-Deck-Build-Box-Power-Style",
+  "region": null,
+  "bulba": {
+   "titre": "M Master Deck Build Box Power Style (TCG)",
+   "tirage": null,
+   "expansion": "M Master Deck Build Box Power Style"
+  },
+  "attendu": 49,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "M Master Deck Build Box Power Style",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5016,30 +5016,6 @@
   "verifie": null
  },
  {
-  "code": "HRDK",
-  "exp": 4303,
-  "prod": 24,
-  "nom": "Heatran vs Regigigas Deck Kit",
-  "slugSet": "Heatran-vs-Regigigas-Deck-Kit",
-  "region": null,
-  "bulba": {
-   "titre": "Heatran vs Regigigas Deck Kit (TCG)",
-   "tirage": null,
-   "expansion": "Heatran vs Regigigas Deck Kit"
-  },
-  "attendu": 24,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Heatran vs Regigigas Deck Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "TK2",
   "exp": 1627,
   "prod": 24,
@@ -5056,6 +5032,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "EX Trainer Kit 2",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "HRDK",
+  "exp": 4303,
+  "prod": 24,
+  "nom": "Heatran vs Regigigas Deck Kit",
+  "slugSet": "Heatran-vs-Regigigas-Deck-Kit",
+  "region": null,
+  "bulba": {
+   "titre": "Heatran vs Regigigas Deck Kit (TCG)",
+   "tirage": null,
+   "expansion": "Heatran vs Regigigas Deck Kit"
+  },
+  "attendu": 24,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Heatran vs Regigigas Deck Kit",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5112,30 +5112,6 @@
   "verifie": null
  },
  {
-  "code": "BKR",
-  "exp": 4207,
-  "prod": 18,
-  "nom": "Reshiram EX Battle Strength Deck",
-  "slugSet": "Reshiram-EX-Battle-Strength-Deck",
-  "region": null,
-  "bulba": {
-   "titre": "Reshiram-EX Battle Strength Deck (TCG)",
-   "tirage": null,
-   "expansion": "Reshiram-EX Battle Strength Deck"
-  },
-  "attendu": 18,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Reshiram-EX Battle Strength Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "TLVS",
   "exp": 4351,
   "prod": 18,
@@ -5184,22 +5160,46 @@
   "verifie": null
  },
  {
-  "code": "MCVS",
-  "exp": 4348,
-  "prod": 16,
-  "nom": "Movie Commemoration VS Pack",
-  "slugSet": "Movie-Commemoration-VS-Pack",
+  "code": "BKR",
+  "exp": 4207,
+  "prod": 18,
+  "nom": "Reshiram EX Battle Strength Deck",
+  "slugSet": "Reshiram-EX-Battle-Strength-Deck",
   "region": null,
   "bulba": {
-   "titre": "Movie Commemoration VS Pack (TCG)",
+   "titre": "Reshiram-EX Battle Strength Deck (TCG)",
    "tirage": null,
-   "expansion": "Movie Commemoration VS Pack"
+   "expansion": "Reshiram-EX Battle Strength Deck"
+  },
+  "attendu": 18,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Reshiram-EX Battle Strength Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PBG",
+  "exp": 4188,
+  "prod": 16,
+  "nom": "Team Plasma Battle Gift Set",
+  "slugSet": "Team-Plasma-Battle-Gift-Set",
+  "region": null,
+  "bulba": {
+   "titre": "Team Plasma Battle Gift Set (TCG)",
+   "tirage": null,
+   "expansion": "Team Plasma Battle Gift Set"
   },
   "attendu": 16,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Movie Commemoration VS Pack",
+   "nomBulbapedia": "Team Plasma Battle Gift Set",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5232,22 +5232,70 @@
   "verifie": null
  },
  {
-  "code": "PBG",
-  "exp": 4188,
+  "code": "MCVS",
+  "exp": 4348,
   "prod": 16,
-  "nom": "Team Plasma Battle Gift Set",
-  "slugSet": "Team-Plasma-Battle-Gift-Set",
+  "nom": "Movie Commemoration VS Pack",
+  "slugSet": "Movie-Commemoration-VS-Pack",
   "region": null,
   "bulba": {
-   "titre": "Team Plasma Battle Gift Set (TCG)",
+   "titre": "Movie Commemoration VS Pack (TCG)",
    "tirage": null,
-   "expansion": "Team Plasma Battle Gift Set"
+   "expansion": "Movie Commemoration VS Pack"
   },
   "attendu": 16,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Team Plasma Battle Gift Set",
+   "nomBulbapedia": "Movie Commemoration VS Pack",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "GBR",
+  "exp": 4198,
+  "prod": 15,
+  "nom": "Garchomp Half Deck",
+  "slugSet": "Garchomp-Half-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Garchomp Half Deck (TCG)",
+   "tirage": null,
+   "expansion": "Garchomp Half Deck"
+  },
+  "attendu": 15,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Garchomp Half Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SZD",
+  "exp": 4199,
+  "prod": 15,
+  "nom": "Hydreigon Half Deck",
+  "slugSet": "Hydreigon-Half-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Hydreigon Half Deck (TCG)",
+   "tirage": null,
+   "expansion": "Hydreigon Half Deck"
+  },
+  "attendu": 15,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Hydreigon Half Deck",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5304,78 +5352,6 @@
   "verifie": null
  },
  {
-  "code": "SZD",
-  "exp": 4199,
-  "prod": 15,
-  "nom": "Hydreigon Half Deck",
-  "slugSet": "Hydreigon-Half-Deck",
-  "region": null,
-  "bulba": {
-   "titre": "Hydreigon Half Deck (TCG)",
-   "tirage": null,
-   "expansion": "Hydreigon Half Deck"
-  },
-  "attendu": 15,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Hydreigon Half Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "GBR",
-  "exp": 4198,
-  "prod": 15,
-  "nom": "Garchomp Half Deck",
-  "slugSet": "Garchomp-Half-Deck",
-  "region": null,
-  "bulba": {
-   "titre": "Garchomp Half Deck (TCG)",
-   "tirage": null,
-   "expansion": "Garchomp Half Deck"
-  },
-  "attendu": 15,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Garchomp Half Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "Y30",
-  "exp": 4144,
-  "prod": 14,
-  "nom": "Yveltal Half Deck",
-  "slugSet": "Yveltal-Half-Deck",
-  "region": null,
-  "bulba": {
-   "titre": "Yveltal Half Deck (TCG)",
-   "tirage": null,
-   "expansion": "Yveltal Half Deck"
-  },
-  "attendu": 14,
-  "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Yveltal Half Deck",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "X30",
   "exp": 4149,
   "prod": 14,
@@ -5400,22 +5376,22 @@
   "verifie": null
  },
  {
-  "code": "CGY",
-  "exp": 5685,
-  "prod": 11,
-  "nom": "Yamabuki City Gym",
-  "slugSet": "Yamabuki-City-Gym",
+  "code": "Y30",
+  "exp": 4144,
+  "prod": 14,
+  "nom": "Yveltal Half Deck",
+  "slugSet": "Yveltal-Half-Deck",
   "region": null,
   "bulba": {
-   "titre": "Yamabuki City Gym (TCG)",
+   "titre": "Yveltal Half Deck (TCG)",
    "tirage": null,
-   "expansion": "Yamabuki City Gym"
+   "expansion": "Yveltal Half Deck"
   },
-  "attendu": 11,
+  "attendu": 14,
   "auto": {
    "cle": "page (TCG)",
    "liste": null,
-   "nomBulbapedia": "Yamabuki City Gym",
+   "nomBulbapedia": "Yveltal Half Deck",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5464,6 +5440,30 @@
    "cle": "page (TCG)",
    "liste": null,
    "nomBulbapedia": "Guren Town Gym",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CGY",
+  "exp": 5685,
+  "prod": 11,
+  "nom": "Yamabuki City Gym",
+  "slugSet": "Yamabuki-City-Gym",
+  "region": null,
+  "bulba": {
+   "titre": "Yamabuki City Gym (TCG)",
+   "tirage": null,
+   "expansion": "Yamabuki City Gym"
+  },
+  "attendu": 11,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Yamabuki City Gym",
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
@@ -5736,30 +5736,6 @@
   "verifie": null
  },
  {
-  "code": "SSP",
-  "exp": 5879,
-  "prod": 272,
-  "nom": "Surging Sparks",
-  "slugSet": "Surging-Sparks",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Surging Sparks (TCG)",
-   "tirage": "intl",
-   "expansion": "Surging Sparks"
-  },
-  "attendu": 272,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Surging Sparks",
-   "cartesListe": 191,
-   "sectionListe": "Scarlet & Violet Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "OBF",
   "exp": 5385,
   "prod": 272,
@@ -5777,6 +5753,30 @@
    "liste": "EN",
    "nomBulbapedia": "Obsidian Flames",
    "cartesListe": 197,
+   "sectionListe": "Scarlet & Violet Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SSP",
+  "exp": 5879,
+  "prod": 272,
+  "nom": "Surging Sparks",
+  "slugSet": "Surging-Sparks",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Surging Sparks (TCG)",
+   "tirage": "intl",
+   "expansion": "Surging Sparks"
+  },
+  "attendu": 272,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Surging Sparks",
+   "cartesListe": 191,
    "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -5928,30 +5928,6 @@
   "verifie": null
  },
  {
-  "code": "TEF",
-  "exp": 5589,
-  "prod": 263,
-  "nom": "Temporal Forces",
-  "slugSet": "Temporal-Forces",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Temporal Forces (TCG)",
-   "tirage": "intl",
-   "expansion": "Temporal Forces"
-  },
-  "attendu": 263,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Temporal Forces",
-   "cartesListe": 162,
-   "sectionListe": "Scarlet & Violet Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "LOT",
   "exp": 2370,
   "prod": 263,
@@ -5970,6 +5946,30 @@
    "nomBulbapedia": "Lost Thunder",
    "cartesListe": 214,
    "sectionListe": "Sun & Moon Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "TEF",
+  "exp": 5589,
+  "prod": 263,
+  "nom": "Temporal Forces",
+  "slugSet": "Temporal-Forces",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Temporal Forces (TCG)",
+   "tirage": "intl",
+   "expansion": "Temporal Forces"
+  },
+  "attendu": 263,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Temporal Forces",
+   "cartesListe": 162,
+   "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -6216,30 +6216,6 @@
   "verifie": null
  },
  {
-  "code": "PPS1",
-  "exp": 5204,
-  "prod": 211,
-  "nom": "Play Pokemon Prize Pack Series One",
-  "slugSet": "Play-Pokemon-Prize-Pack-Series-One",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Play! Pokémon Prize Pack Series One (TCG)",
-   "tirage": "intl",
-   "expansion": "Play! Pokémon Prize Pack Series One"
-  },
-  "attendu": 211,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Play! Pokémon Prize Pack Series One",
-   "cartesListe": 170,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "VIV",
   "exp": 3484,
   "prod": 211,
@@ -6264,6 +6240,30 @@
   "verifie": null
  },
  {
+  "code": "PPS1",
+  "exp": 5204,
+  "prod": 211,
+  "nom": "Play Pokemon Prize Pack Series One",
+  "slugSet": "Play-Pokemon-Prize-Pack-Series-One",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Play! Pokémon Prize Pack Series One (TCG)",
+   "tirage": "intl",
+   "expansion": "Play! Pokémon Prize Pack Series One"
+  },
+  "attendu": 211,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Play! Pokémon Prize Pack Series One",
+   "cartesListe": 170,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "GRI",
   "exp": 1800,
   "prod": 201,
@@ -6281,6 +6281,30 @@
    "liste": "EN",
    "nomBulbapedia": "Guardians Rising",
    "cartesListe": 145,
+   "sectionListe": "Sun & Moon Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "TEU",
+  "exp": 2407,
+  "prod": 200,
+  "nom": "Team Up",
+  "slugSet": "Team-Up",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Team Up (TCG)",
+   "tirage": "intl",
+   "expansion": "Team Up"
+  },
+  "attendu": 200,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Team Up",
+   "cartesListe": 181,
    "sectionListe": "Sun & Moon Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -6312,24 +6336,24 @@
   "verifie": null
  },
  {
-  "code": "TEU",
-  "exp": 2407,
-  "prod": 200,
-  "nom": "Team Up",
-  "slugSet": "Team-Up",
+  "code": "SCR",
+  "exp": 5802,
+  "prod": 198,
+  "nom": "Stellar Crown",
+  "slugSet": "Stellar-Crown",
   "region": "occidental",
   "bulba": {
-   "titre": "Team Up (TCG)",
+   "titre": "Stellar Crown (TCG)",
    "tirage": "intl",
-   "expansion": "Team Up"
+   "expansion": "Stellar Crown"
   },
-  "attendu": 200,
+  "attendu": 198,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Team Up",
-   "cartesListe": 181,
-   "sectionListe": "Sun & Moon Series",
+   "nomBulbapedia": "Stellar Crown",
+   "cartesListe": 142,
+   "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -6354,30 +6378,6 @@
    "nomBulbapedia": "Celestial Storm",
    "cartesListe": 168,
    "sectionListe": "Sun & Moon Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "SCR",
-  "exp": 5802,
-  "prod": 198,
-  "nom": "Stellar Crown",
-  "slugSet": "Stellar-Crown",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Stellar Crown (TCG)",
-   "tirage": "intl",
-   "expansion": "Stellar Crown"
-  },
-  "attendu": 198,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Stellar Crown",
-   "cartesListe": 142,
-   "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -6480,30 +6480,6 @@
   "verifie": null
  },
  {
-  "code": "PPS2",
-  "exp": 5313,
-  "prod": 188,
-  "nom": "Play Pokemon Prize Pack Series Two",
-  "slugSet": "Play-Pokemon-Prize-Pack-Series-Two",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Play! Pokémon Prize Pack Series Two (TCG)",
-   "tirage": "intl",
-   "expansion": "Play! Pokémon Prize Pack Series Two"
-  },
-  "attendu": 188,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Play! Pokémon Prize Pack Series Two",
-   "cartesListe": 154,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "MEG",
   "exp": 6209,
   "prod": 188,
@@ -6523,6 +6499,30 @@
    "cartesListe": 132,
    "sectionListe": "Mega Evolution Series",
    "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PPS2",
+  "exp": 5313,
+  "prod": 188,
+  "nom": "Play Pokemon Prize Pack Series Two",
+  "slugSet": "Play-Pokemon-Prize-Pack-Series-Two",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Play! Pokémon Prize Pack Series Two (TCG)",
+   "tirage": "intl",
+   "expansion": "Play! Pokémon Prize Pack Series Two"
+  },
+  "attendu": 188,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Play! Pokémon Prize Pack Series Two",
+   "cartesListe": 154,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -6595,30 +6595,6 @@
    "cartesListe": 131,
    "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "AQ",
-  "exp": 1537,
-  "prod": 177,
-  "nom": "null",
-  "slugSet": null,
-  "region": "occidental",
-  "bulba": {
-   "titre": "Aquapolis (TCG)",
-   "tirage": "intl",
-   "expansion": "Aquapolis"
-  },
-  "attendu": 177,
-  "auto": {
-   "cle": "code de set",
-   "liste": "EN",
-   "nomBulbapedia": "Aquapolis",
-   "cartesListe": 147,
-   "sectionListe": "e-Card Series",
-   "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -6888,30 +6864,6 @@
   "verifie": null
  },
  {
-  "code": "UF",
-  "exp": 1548,
-  "prod": 146,
-  "nom": "EX Unseen Forces",
-  "slugSet": "EX-Unseen-Forces",
-  "region": "occidental",
-  "bulba": {
-   "titre": "EX Unseen Forces (TCG)",
-   "tirage": "intl",
-   "expansion": "EX Unseen Forces"
-  },
-  "attendu": 146,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "EX Unseen Forces",
-   "cartesListe": 115,
-   "sectionListe": "EX Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "LTR",
   "exp": 1581,
   "prod": 146,
@@ -6936,6 +6888,30 @@
   "verifie": null
  },
  {
+  "code": "UF",
+  "exp": 1548,
+  "prod": 146,
+  "nom": "EX Unseen Forces",
+  "slugSet": "EX-Unseen-Forces",
+  "region": "occidental",
+  "bulba": {
+   "titre": "EX Unseen Forces (TCG)",
+   "tirage": "intl",
+   "expansion": "EX Unseen Forces"
+  },
+  "attendu": 146,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "EX Unseen Forces",
+   "cartesListe": 115,
+   "sectionListe": "EX Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "DP",
   "exp": 1555,
   "prod": 142,
@@ -6954,30 +6930,6 @@
    "nomBulbapedia": "Diamond & Pearl",
    "cartesListe": 130,
    "sectionListe": "Diamond & Pearl Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "BLW",
-  "exp": 1571,
-  "prod": 140,
-  "nom": "Black White",
-  "slugSet": "Black-White",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Black & White (TCG)",
-   "tirage": "intl",
-   "expansion": "Black & White"
-  },
-  "attendu": 140,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Black & White",
-   "cartesListe": 114,
-   "sectionListe": "Black & White Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7032,6 +6984,30 @@
   "verifie": null
  },
  {
+  "code": "BLW",
+  "exp": 1571,
+  "prod": 140,
+  "nom": "Black White",
+  "slugSet": "Black-White",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Black & White (TCG)",
+   "tirage": "intl",
+   "expansion": "Black & White"
+  },
+  "attendu": 140,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Black & White",
+   "cartesListe": 114,
+   "sectionListe": "Black & White Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "FCO",
   "exp": 1706,
   "prod": 138,
@@ -7049,30 +7025,6 @@
    "liste": "EN",
    "nomBulbapedia": "Fates Collide",
    "cartesListe": 124,
-   "sectionListe": "XY Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "BKP",
-  "exp": 1687,
-  "prod": 137,
-  "nom": "BREAKpoint",
-  "slugSet": "BREAKpoint",
-  "region": "occidental",
-  "bulba": {
-   "titre": "BREAKpoint (TCG)",
-   "tirage": "intl",
-   "expansion": "BREAKpoint"
-  },
-  "attendu": 137,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "BREAKpoint",
-   "cartesListe": 122,
    "sectionListe": "XY Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -7128,6 +7080,30 @@
   "verifie": null
  },
  {
+  "code": "BKP",
+  "exp": 1687,
+  "prod": 137,
+  "nom": "BREAKpoint",
+  "slugSet": "BREAKpoint",
+  "region": "occidental",
+  "bulba": {
+   "titre": "BREAKpoint (TCG)",
+   "tirage": "intl",
+   "expansion": "BREAKpoint"
+  },
+  "attendu": 137,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "BREAKpoint",
+   "cartesListe": 122,
+   "sectionListe": "XY Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "SW",
   "exp": 1557,
   "prod": 136,
@@ -7152,30 +7128,6 @@
   "verifie": null
  },
  {
-  "code": "PHF",
-  "exp": 1521,
-  "prod": 135,
-  "nom": "Phantom Forces",
-  "slugSet": "Phantom-Forces",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Phantom Forces (TCG)",
-   "tirage": "intl",
-   "expansion": "Phantom Forces"
-  },
-  "attendu": 135,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Phantom Forces",
-   "cartesListe": 119,
-   "sectionListe": "XY Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "GEN",
   "exp": 1693,
   "prod": 135,
@@ -7193,6 +7145,30 @@
    "liste": "EN",
    "nomBulbapedia": "Generations",
    "cartesListe": 83,
+   "sectionListe": "XY Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PHF",
+  "exp": 1521,
+  "prod": 135,
+  "nom": "Phantom Forces",
+  "slugSet": "Phantom-Forces",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Phantom Forces (TCG)",
+   "tirage": "intl",
+   "expansion": "Phantom Forces"
+  },
+  "attendu": 135,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Phantom Forces",
+   "cartesListe": 119,
    "sectionListe": "XY Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -7272,24 +7248,24 @@
   "verifie": null
  },
  {
-  "code": "DRX",
-  "exp": 1576,
+  "code": "PFL",
+  "exp": 6299,
   "prod": 130,
-  "nom": "Dragons Exalted",
-  "slugSet": "Dragons-Exalted",
+  "nom": "Phantasmal Flames",
+  "slugSet": "Phantasmal-Flames",
   "region": "occidental",
   "bulba": {
-   "titre": "Dragons Exalted (TCG)",
+   "titre": "Phantasmal Flames (TCG)",
    "tirage": "intl",
-   "expansion": "Dragons Exalted"
+   "expansion": "Phantasmal Flames"
   },
   "attendu": 130,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Dragons Exalted",
-   "cartesListe": 124,
-   "sectionListe": "Black & White Series",
+   "nomBulbapedia": "Phantasmal Flames",
+   "cartesListe": 94,
+   "sectionListe": "Mega Evolution Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7320,48 +7296,24 @@
   "verifie": null
  },
  {
-  "code": "PFL",
-  "exp": 6299,
+  "code": "DRX",
+  "exp": 1576,
   "prod": 130,
-  "nom": "Phantasmal Flames",
-  "slugSet": "Phantasmal-Flames",
+  "nom": "Dragons Exalted",
+  "slugSet": "Dragons-Exalted",
   "region": "occidental",
   "bulba": {
-   "titre": "Phantasmal Flames (TCG)",
+   "titre": "Dragons Exalted (TCG)",
    "tirage": "intl",
-   "expansion": "Phantasmal Flames"
+   "expansion": "Dragons Exalted"
   },
   "attendu": 130,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Phantasmal Flames",
-   "cartesListe": 94,
-   "sectionListe": "Mega Evolution Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "RR",
-  "exp": 1563,
-  "prod": 128,
-  "nom": "Rising Rivals",
-  "slugSet": "Rising-Rivals",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Rising Rivals (TCG)",
-   "tirage": "intl",
-   "expansion": "Rising Rivals"
-  },
-  "attendu": 128,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Rising Rivals",
-   "cartesListe": 111,
-   "sectionListe": "Platinum Series",
+   "nomBulbapedia": "Dragons Exalted",
+   "cartesListe": 124,
+   "sectionListe": "Black & White Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7392,24 +7344,24 @@
   "verifie": null
  },
  {
-  "code": "FFI",
-  "exp": 1584,
-  "prod": 126,
-  "nom": "Furious Fists",
-  "slugSet": "Furious-Fists",
+  "code": "RR",
+  "exp": 1563,
+  "prod": 128,
+  "nom": "Rising Rivals",
+  "slugSet": "Rising-Rivals",
   "region": "occidental",
   "bulba": {
-   "titre": "Furious Fists (TCG)",
+   "titre": "Rising Rivals (TCG)",
    "tirage": "intl",
-   "expansion": "Furious Fists"
+   "expansion": "Rising Rivals"
   },
-  "attendu": 126,
+  "attendu": 128,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Furious Fists",
+   "nomBulbapedia": "Rising Rivals",
    "cartesListe": 111,
-   "sectionListe": "XY Series",
+   "sectionListe": "Platinum Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7433,6 +7385,30 @@
    "liste": "EN",
    "nomBulbapedia": "Steam Siege",
    "cartesListe": 114,
+   "sectionListe": "XY Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "FFI",
+  "exp": 1584,
+  "prod": 126,
+  "nom": "Furious Fists",
+  "slugSet": "Furious-Fists",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Furious Fists (TCG)",
+   "tirage": "intl",
+   "expansion": "Furious Fists"
+  },
+  "attendu": 126,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Furious Fists",
+   "cartesListe": 111,
    "sectionListe": "XY Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -7488,30 +7464,6 @@
   "verifie": null
  },
  {
-  "code": "DEX",
-  "exp": 1575,
-  "prod": 124,
-  "nom": "Dark Explorers",
-  "slugSet": "Dark-Explorers",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Dark Explorers (TCG)",
-   "tirage": "intl",
-   "expansion": "Dark Explorers"
-  },
-  "attendu": 124,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Dark Explorers",
-   "cartesListe": 108,
-   "sectionListe": "Black & White Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "POR",
   "exp": 6443,
   "prod": 124,
@@ -7536,25 +7488,25 @@
   "verifie": null
  },
  {
-  "code": "PPS7",
-  "exp": 6214,
-  "prod": 119,
-  "nom": "Play Pokemon Prize Pack Series Seven",
-  "slugSet": "Play-Pokemon-Prize-Pack-Series-Seven",
+  "code": "DEX",
+  "exp": 1575,
+  "prod": 124,
+  "nom": "Dark Explorers",
+  "slugSet": "Dark-Explorers",
   "region": "occidental",
   "bulba": {
-   "titre": "Play! Pokémon Prize Pack Series Seven (TCG)",
+   "titre": "Dark Explorers (TCG)",
    "tirage": "intl",
-   "expansion": "Play! Pokémon Prize Pack Series Seven"
+   "expansion": "Dark Explorers"
   },
-  "attendu": 119,
+  "attendu": 124,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Play! Pokémon Prize Pack Series Seven",
-   "cartesListe": 96,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": null,
+   "nomBulbapedia": "Dark Explorers",
+   "cartesListe": 108,
+   "sectionListe": "Black & White Series",
+   "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -7577,6 +7529,30 @@
    "liste": "EN",
    "nomBulbapedia": "Play! Pokémon Prize Pack Series Six",
    "cartesListe": 94,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PPS7",
+  "exp": 6214,
+  "prod": 119,
+  "nom": "Play Pokemon Prize Pack Series Seven",
+  "slugSet": "Play-Pokemon-Prize-Pack-Series-Seven",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Play! Pokémon Prize Pack Series Seven (TCG)",
+   "tirage": "intl",
+   "expansion": "Play! Pokémon Prize Pack Series Seven"
+  },
+  "attendu": 119,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Play! Pokémon Prize Pack Series Seven",
+   "cartesListe": 96,
    "sectionListe": "POP / Play! Pokemon Prize Packs",
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
@@ -7632,48 +7608,24 @@
   "verifie": null
  },
  {
-  "code": "CL",
-  "exp": 1570,
+  "code": "DS",
+  "exp": 1549,
   "prod": 115,
-  "nom": "Call of Legends",
-  "slugSet": "Call-of-Legends",
+  "nom": "EX Delta Species",
+  "slugSet": "EX-Delta-Species",
   "region": "occidental",
   "bulba": {
-   "titre": "Call of Legends (TCG)",
+   "titre": "EX Delta Species (TCG)",
    "tirage": "intl",
-   "expansion": "Call of Legends"
+   "expansion": "EX Delta Species"
   },
   "attendu": 115,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Call of Legends",
-   "cartesListe": 95,
-   "sectionListe": "Black & White Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "ROS",
-  "exp": 1649,
-  "prod": 115,
-  "nom": "Roaring Skies",
-  "slugSet": "Roaring-Skies",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Roaring Skies (TCG)",
-   "tirage": "intl",
-   "expansion": "Roaring Skies"
-  },
-  "attendu": 115,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Roaring Skies",
-   "cartesListe": 108,
-   "sectionListe": "XY Series",
+   "nomBulbapedia": "EX Delta Species",
+   "cartesListe": 113,
+   "sectionListe": "EX Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7752,72 +7704,48 @@
   "verifie": null
  },
  {
-  "code": "DS",
-  "exp": 1549,
+  "code": "ROS",
+  "exp": 1649,
   "prod": 115,
-  "nom": "EX Delta Species",
-  "slugSet": "EX-Delta-Species",
+  "nom": "Roaring Skies",
+  "slugSet": "Roaring-Skies",
   "region": "occidental",
   "bulba": {
-   "titre": "EX Delta Species (TCG)",
+   "titre": "Roaring Skies (TCG)",
    "tirage": "intl",
-   "expansion": "EX Delta Species"
+   "expansion": "Roaring Skies"
   },
   "attendu": 115,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "EX Delta Species",
-   "cartesListe": 113,
-   "sectionListe": "EX Series",
+   "nomBulbapedia": "Roaring Skies",
+   "cartesListe": 108,
+   "sectionListe": "XY Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
   "verifie": null
  },
  {
-  "code": "PPS4",
-  "exp": 5620,
-  "prod": 114,
-  "nom": "Play Pokemon Prize Pack Series Four",
-  "slugSet": "Play-Pokemon-Prize-Pack-Series-Four",
+  "code": "CL",
+  "exp": 1570,
+  "prod": 115,
+  "nom": "Call of Legends",
+  "slugSet": "Call-of-Legends",
   "region": "occidental",
   "bulba": {
-   "titre": "Play! Pokémon Prize Pack Series Four (TCG)",
+   "titre": "Call of Legends (TCG)",
    "tirage": "intl",
-   "expansion": "Play! Pokémon Prize Pack Series Four"
+   "expansion": "Call of Legends"
   },
-  "attendu": 114,
+  "attendu": 115,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Play! Pokémon Prize Pack Series Four",
-   "cartesListe": 86,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "NG",
-  "exp": 1531,
-  "prod": 114,
-  "nom": "Neo Genesis",
-  "slugSet": "Neo-Genesis",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Neo Genesis (TCG)",
-   "tirage": "intl",
-   "expansion": "Neo Genesis"
-  },
-  "attendu": 114,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Neo Genesis",
-   "cartesListe": 111,
-   "sectionListe": "Neo Series",
+   "nomBulbapedia": "Call of Legends",
+   "cartesListe": 95,
+   "sectionListe": "Black & White Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -7848,6 +7776,54 @@
   "verifie": null
  },
  {
+  "code": "NG",
+  "exp": 1531,
+  "prod": 114,
+  "nom": "Neo Genesis",
+  "slugSet": "Neo-Genesis",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Neo Genesis (TCG)",
+   "tirage": "intl",
+   "expansion": "Neo Genesis"
+  },
+  "attendu": 114,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Neo Genesis",
+   "cartesListe": 111,
+   "sectionListe": "Neo Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PPS4",
+  "exp": 5620,
+  "prod": 114,
+  "nom": "Play Pokemon Prize Pack Series Four",
+  "slugSet": "Play-Pokemon-Prize-Pack-Series-Four",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Play! Pokémon Prize Pack Series Four (TCG)",
+   "tirage": "intl",
+   "expansion": "Play! Pokémon Prize Pack Series Four"
+  },
+  "attendu": 114,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Play! Pokémon Prize Pack Series Four",
+   "cartesListe": 86,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "NDE",
   "exp": 1534,
   "prod": 113,
@@ -7872,30 +7848,6 @@
   "verifie": null
  },
  {
-  "code": "TRR",
-  "exp": 1545,
-  "prod": 112,
-  "nom": "EX Team Rocket Returns",
-  "slugSet": "EX-Team-Rocket-Returns",
-  "region": "occidental",
-  "bulba": {
-   "titre": "EX Team Rocket Returns (TCG)",
-   "tirage": "intl",
-   "expansion": "EX Team Rocket Returns"
-  },
-  "attendu": 112,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "EX Team Rocket Returns",
-   "cartesListe": 109,
-   "sectionListe": "EX Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "EM",
   "exp": 1547,
   "prod": 112,
@@ -7913,6 +7865,30 @@
    "liste": "EN",
    "nomBulbapedia": "EX Emerald",
    "cartesListe": 106,
+   "sectionListe": "EX Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "TRR",
+  "exp": 1545,
+  "prod": 112,
+  "nom": "EX Team Rocket Returns",
+  "slugSet": "EX-Team-Rocket-Returns",
+  "region": "occidental",
+  "bulba": {
+   "titre": "EX Team Rocket Returns (TCG)",
+   "tirage": "intl",
+   "expansion": "EX Team Rocket Returns"
+  },
+  "attendu": 112,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "EX Team Rocket Returns",
+   "cartesListe": 109,
    "sectionListe": "EX Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -7944,30 +7920,6 @@
   "verifie": null
  },
  {
-  "code": "DX",
-  "exp": 1546,
-  "prod": 110,
-  "nom": "EX Deoxys",
-  "slugSet": "EX-Deoxys",
-  "region": "occidental",
-  "bulba": {
-   "titre": "EX Deoxys (TCG)",
-   "tirage": "intl",
-   "expansion": "EX Deoxys"
-  },
-  "attendu": 110,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "EX Deoxys",
-   "cartesListe": 107,
-   "sectionListe": "EX Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "NVI",
   "exp": 1573,
   "prod": 110,
@@ -7992,25 +7944,49 @@
   "verifie": null
  },
  {
-  "code": "MD",
-  "exp": 1559,
-  "prod": 109,
-  "nom": "Majestic Dawn",
-  "slugSet": "Majestic-Dawn",
+  "code": "DX",
+  "exp": 1546,
+  "prod": 110,
+  "nom": "EX Deoxys",
+  "slugSet": "EX-Deoxys",
   "region": "occidental",
   "bulba": {
-   "titre": "Majestic Dawn (TCG)",
+   "titre": "EX Deoxys (TCG)",
    "tirage": "intl",
-   "expansion": "Majestic Dawn"
+   "expansion": "EX Deoxys"
+  },
+  "attendu": 110,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "EX Deoxys",
+   "cartesListe": 107,
+   "sectionListe": "EX Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PPS9",
+  "exp": 6616,
+  "prod": 109,
+  "nom": "Play Pokemon Prize Pack Series Nine",
+  "slugSet": "Play-Pokemon-Prize-Pack-Series-Nine",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Play! Pokémon Prize Pack Series Nine (TCG)",
+   "tirage": "intl",
+   "expansion": "Play! Pokémon Prize Pack Series Nine"
   },
   "attendu": 109,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Majestic Dawn",
-   "cartesListe": 100,
-   "sectionListe": "Diamond & Pearl Series",
-   "regionCodesSet": "occidental",
+   "nomBulbapedia": "Play! Pokémon Prize Pack Series Nine",
+   "cartesListe": 80,
+   "sectionListe": "Other Miscellaneous Sets",
+   "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -8064,48 +8040,24 @@
   "verifie": null
  },
  {
-  "code": "PPS9",
-  "exp": 6616,
+  "code": "MD",
+  "exp": 1559,
   "prod": 109,
-  "nom": "Play Pokemon Prize Pack Series Nine",
-  "slugSet": "Play-Pokemon-Prize-Pack-Series-Nine",
+  "nom": "Majestic Dawn",
+  "slugSet": "Majestic-Dawn",
   "region": "occidental",
   "bulba": {
-   "titre": "Play! Pokémon Prize Pack Series Nine (TCG)",
+   "titre": "Majestic Dawn (TCG)",
    "tirage": "intl",
-   "expansion": "Play! Pokémon Prize Pack Series Nine"
+   "expansion": "Majestic Dawn"
   },
   "attendu": 109,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Play! Pokémon Prize Pack Series Nine",
-   "cartesListe": 80,
-   "sectionListe": "Other Miscellaneous Sets",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "STF",
-  "exp": 1561,
-  "prod": 107,
-  "nom": "Stormfront",
-  "slugSet": "Stormfront",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Stormfront (TCG)",
-   "tirage": "intl",
-   "expansion": "Stormfront"
-  },
-  "attendu": 107,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Stormfront",
+   "nomBulbapedia": "Majestic Dawn",
    "cartesListe": 100,
-   "sectionListe": "Platinum Series",
+   "sectionListe": "Diamond & Pearl Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -8184,6 +8136,54 @@
   "verifie": null
  },
  {
+  "code": "STF",
+  "exp": 1561,
+  "prod": 107,
+  "nom": "Stormfront",
+  "slugSet": "Stormfront",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Stormfront (TCG)",
+   "tirage": "intl",
+   "expansion": "Stormfront"
+  },
+  "attendu": 107,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Stormfront",
+   "cartesListe": 100,
+   "sectionListe": "Platinum Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "UL",
+  "exp": 1567,
+  "prod": 106,
+  "nom": "Unleashed",
+  "slugSet": "Unleashed",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Unleashed (TCG)",
+   "tirage": "intl",
+   "expansion": "Unleashed"
+  },
+  "attendu": 106,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Unleashed",
+   "cartesListe": 95,
+   "sectionListe": "HeartGold & SoulSilver Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "DR",
   "exp": 1541,
   "prod": 106,
@@ -8226,30 +8226,6 @@
    "nomBulbapedia": "BW Black Star Promos",
    "cartesListe": 99,
    "sectionListe": "[[File:SetSymbolPromo.png|40px]] Black Star Promotional Cards",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "UL",
-  "exp": 1567,
-  "prod": 106,
-  "nom": "Unleashed",
-  "slugSet": "Unleashed",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Unleashed (TCG)",
-   "tirage": "intl",
-   "expansion": "Unleashed"
-  },
-  "attendu": 106,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Unleashed",
-   "cartesListe": 95,
-   "sectionListe": "HeartGold & SoulSilver Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -8496,30 +8472,6 @@
   "verifie": null
  },
  {
-  "code": "SLG",
-  "exp": 1842,
-  "prod": 81,
-  "nom": "Shining Legends",
-  "slugSet": "Shining-Legends",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Shining Legends (TCG)",
-   "tirage": "intl",
-   "expansion": "Shining Legends"
-  },
-  "attendu": 81,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Shining Legends",
-   "cartesListe": 73,
-   "sectionListe": "Sun & Moon Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "DRM",
   "exp": 2351,
   "prod": 81,
@@ -8537,6 +8489,30 @@
    "liste": "EN",
    "nomBulbapedia": "Dragon Majesty",
    "cartesListe": 70,
+   "sectionListe": "Sun & Moon Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SLG",
+  "exp": 1842,
+  "prod": 81,
+  "nom": "Shining Legends",
+  "slugSet": "Shining-Legends",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Shining Legends (TCG)",
+   "tirage": "intl",
+   "expansion": "Shining Legends"
+  },
+  "attendu": 81,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Shining Legends",
+   "cartesListe": 73,
    "sectionListe": "Sun & Moon Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -8592,30 +8568,6 @@
   "verifie": null
  },
  {
-  "code": "JU",
-  "exp": 1525,
-  "prod": 66,
-  "nom": "Jungle",
-  "slugSet": "Jungle",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Jungle (TCG)",
-   "tirage": "intl",
-   "expansion": "Jungle"
-  },
-  "attendu": 66,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Jungle",
-   "cartesListe": 64,
-   "sectionListe": "Original Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "NR",
   "exp": 1533,
   "prod": 66,
@@ -8634,6 +8586,30 @@
    "nomBulbapedia": "Neo Revelation",
    "cartesListe": 64,
    "sectionListe": "Neo Series",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "JU",
+  "exp": 1525,
+  "prod": 66,
+  "nom": "Jungle",
+  "slugSet": "Jungle",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Jungle (TCG)",
+   "tirage": "intl",
+   "expansion": "Jungle"
+  },
+  "attendu": 66,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Jungle",
+   "cartesListe": 64,
+   "sectionListe": "Original Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -8880,30 +8856,6 @@
   "verifie": null
  },
  {
-  "code": "BOO24",
-  "exp": 5796,
-  "prod": 30,
-  "nom": "Trick or Trade 2024",
-  "slugSet": "Trick-or-Trade-2024",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Trick or Trade 2024 (TCG)",
-   "tirage": "intl",
-   "expansion": "Trick or Trade 2024"
-  },
-  "attendu": 30,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "Trick or Trade 2024",
-   "cartesListe": 30,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "BOO23",
   "exp": 5405,
   "prod": 30,
@@ -8922,6 +8874,30 @@
    "nomBulbapedia": "Trick or Trade 2023",
    "cartesListe": 30,
    "sectionListe": "Trick or Trade",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BOO24",
+  "exp": 5796,
+  "prod": 30,
+  "nom": "Trick or Trade 2024",
+  "slugSet": "Trick-or-Trade-2024",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Trick or Trade 2024 (TCG)",
+   "tirage": "intl",
+   "expansion": "Trick or Trade 2024"
+  },
+  "attendu": 30,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "Trick or Trade 2024",
+   "cartesListe": 30,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
@@ -8976,48 +8952,24 @@
   "verifie": null
  },
  {
-  "code": "POP6",
-  "exp": 1618,
+  "code": "DET",
+  "exp": 2438,
   "prod": 18,
-  "nom": "POP Series 6",
-  "slugSet": "POP-Series-6",
+  "nom": "Detective Pikachu",
+  "slugSet": "Detective-Pikachu",
   "region": "occidental",
   "bulba": {
-   "titre": "POP Series 6 (TCG)",
+   "titre": "Detective Pikachu (TCG)",
    "tirage": "intl",
-   "expansion": "POP Series 6"
+   "expansion": "Detective Pikachu"
   },
   "attendu": 18,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "POP Series 6",
-   "cartesListe": 17,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "POP9",
-  "exp": 1621,
-  "prod": 18,
-  "nom": "POP Series 9",
-  "slugSet": "POP-Series-9",
-  "region": "occidental",
-  "bulba": {
-   "titre": "POP Series 9 (TCG)",
-   "tirage": "intl",
-   "expansion": "POP Series 9"
-  },
-  "attendu": 18,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "POP Series 9",
-   "cartesListe": 17,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "nomBulbapedia": "Detective Pikachu",
+   "cartesListe": 18,
+   "sectionListe": "Sun & Moon Series",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
@@ -9048,46 +9000,22 @@
   "verifie": null
  },
  {
-  "code": "DET",
-  "exp": 2438,
+  "code": "POP9",
+  "exp": 1621,
   "prod": 18,
-  "nom": "Detective Pikachu",
-  "slugSet": "Detective-Pikachu",
+  "nom": "POP Series 9",
+  "slugSet": "POP-Series-9",
   "region": "occidental",
   "bulba": {
-   "titre": "Detective Pikachu (TCG)",
+   "titre": "POP Series 9 (TCG)",
    "tirage": "intl",
-   "expansion": "Detective Pikachu"
+   "expansion": "POP Series 9"
   },
   "attendu": 18,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "Detective Pikachu",
-   "cartesListe": 18,
-   "sectionListe": "Sun & Moon Series",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "POP5",
-  "exp": 1617,
-  "prod": 17,
-  "nom": "POP Series 5",
-  "slugSet": "POP-Series-5",
-  "region": "occidental",
-  "bulba": {
-   "titre": "POP Series 5 (TCG)",
-   "tirage": "intl",
-   "expansion": "POP Series 5"
-  },
-  "attendu": 17,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "POP Series 5",
+   "nomBulbapedia": "POP Series 9",
    "cartesListe": 17,
    "sectionListe": "POP / Play! Pokemon Prize Packs",
    "regionCodesSet": "occidental",
@@ -9096,94 +9024,22 @@
   "verifie": null
  },
  {
-  "code": "POP7",
-  "exp": 1619,
-  "prod": 17,
-  "nom": "POP Series 7",
-  "slugSet": "POP-Series-7",
+  "code": "POP6",
+  "exp": 1618,
+  "prod": 18,
+  "nom": "POP Series 6",
+  "slugSet": "POP-Series-6",
   "region": "occidental",
   "bulba": {
-   "titre": "POP Series 7 (TCG)",
+   "titre": "POP Series 6 (TCG)",
    "tirage": "intl",
-   "expansion": "POP Series 7"
+   "expansion": "POP Series 6"
   },
-  "attendu": 17,
+  "attendu": 18,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "POP Series 7",
-   "cartesListe": 17,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "POP8",
-  "exp": 1620,
-  "prod": 17,
-  "nom": "POP Series 8",
-  "slugSet": "POP-Series-8",
-  "region": "occidental",
-  "bulba": {
-   "titre": "POP Series 8 (TCG)",
-   "tirage": "intl",
-   "expansion": "POP Series 8"
-  },
-  "attendu": 17,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "POP Series 8",
-   "cartesListe": 17,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "POP3",
-  "exp": 1615,
-  "prod": 17,
-  "nom": "POP Series 3",
-  "slugSet": "POP-Series-3",
-  "region": "occidental",
-  "bulba": {
-   "titre": "POP Series 3 (TCG)",
-   "tirage": "intl",
-   "expansion": "POP Series 3"
-  },
-  "attendu": 17,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "POP Series 3",
-   "cartesListe": 17,
-   "sectionListe": "POP / Play! Pokemon Prize Packs",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "POP2",
-  "exp": 1614,
-  "prod": 17,
-  "nom": "POP Series 2",
-  "slugSet": "POP-Series-2",
-  "region": "occidental",
-  "bulba": {
-   "titre": "POP Series 2 (TCG)",
-   "tirage": "intl",
-   "expansion": "POP Series 2"
-  },
-  "attendu": 17,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "POP Series 2",
+   "nomBulbapedia": "POP Series 6",
    "cartesListe": 17,
    "sectionListe": "POP / Play! Pokemon Prize Packs",
    "regionCodesSet": "occidental",
@@ -9240,6 +9096,126 @@
   "verifie": null
  },
  {
+  "code": "POP3",
+  "exp": 1615,
+  "prod": 17,
+  "nom": "POP Series 3",
+  "slugSet": "POP-Series-3",
+  "region": "occidental",
+  "bulba": {
+   "titre": "POP Series 3 (TCG)",
+   "tirage": "intl",
+   "expansion": "POP Series 3"
+  },
+  "attendu": 17,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "POP Series 3",
+   "cartesListe": 17,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "POP2",
+  "exp": 1614,
+  "prod": 17,
+  "nom": "POP Series 2",
+  "slugSet": "POP-Series-2",
+  "region": "occidental",
+  "bulba": {
+   "titre": "POP Series 2 (TCG)",
+   "tirage": "intl",
+   "expansion": "POP Series 2"
+  },
+  "attendu": 17,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "POP Series 2",
+   "cartesListe": 17,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "POP8",
+  "exp": 1620,
+  "prod": 17,
+  "nom": "POP Series 8",
+  "slugSet": "POP-Series-8",
+  "region": "occidental",
+  "bulba": {
+   "titre": "POP Series 8 (TCG)",
+   "tirage": "intl",
+   "expansion": "POP Series 8"
+  },
+  "attendu": 17,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "POP Series 8",
+   "cartesListe": 17,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "POP5",
+  "exp": 1617,
+  "prod": 17,
+  "nom": "POP Series 5",
+  "slugSet": "POP-Series-5",
+  "region": "occidental",
+  "bulba": {
+   "titre": "POP Series 5 (TCG)",
+   "tirage": "intl",
+   "expansion": "POP Series 5"
+  },
+  "attendu": 17,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "POP Series 5",
+   "cartesListe": 17,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "POP7",
+  "exp": 1619,
+  "prod": 17,
+  "nom": "POP Series 7",
+  "slugSet": "POP-Series-7",
+  "region": "occidental",
+  "bulba": {
+   "titre": "POP Series 7 (TCG)",
+   "tirage": "intl",
+   "expansion": "POP Series 7"
+  },
+  "attendu": 17,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "POP Series 7",
+   "cartesListe": 17,
+   "sectionListe": "POP / Play! Pokemon Prize Packs",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
   "code": "RM",
   "exp": 1634,
   "prod": 16,
@@ -9259,30 +9235,6 @@
    "cartesListe": 16,
    "sectionListe": "Other Miscellaneous Sets",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "M23",
-  "exp": 5430,
-  "prod": 15,
-  "nom": "McDonalds Match Battle 2023",
-  "slugSet": "McDonalds-Match-Battle-2023",
-  "region": "occidental",
-  "bulba": {
-   "titre": "McDonald's Collection 2023 (TCG)",
-   "tirage": "intl",
-   "expansion": "McDonald's Collection 2023"
-  },
-  "attendu": 15,
-  "auto": {
-   "cle": "code de set",
-   "liste": "EN",
-   "nomBulbapedia": "McDonald's Collection 2023",
-   "cartesListe": 15,
-   "sectionListe": "McDonald's Collection",
-   "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
   "verifie": null
@@ -9329,6 +9281,78 @@
    "liste": "EN",
    "nomBulbapedia": "McDonald's Collection 2022",
    "cartesListe": 15,
+   "sectionListe": "McDonald's Collection",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "M23",
+  "exp": 5430,
+  "prod": 15,
+  "nom": "McDonalds Match Battle 2023",
+  "slugSet": "McDonalds-Match-Battle-2023",
+  "region": "occidental",
+  "bulba": {
+   "titre": "McDonald's Collection 2023 (TCG)",
+   "tirage": "intl",
+   "expansion": "McDonald's Collection 2023"
+  },
+  "attendu": 15,
+  "auto": {
+   "cle": "code de set",
+   "liste": "EN",
+   "nomBulbapedia": "McDonald's Collection 2023",
+   "cartesListe": 15,
+   "sectionListe": "McDonald's Collection",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "MCD19",
+  "exp": 2829,
+  "prod": 12,
+  "nom": "McDonalds Collection 2019",
+  "slugSet": "McDonalds-Collection-2019",
+  "region": "occidental",
+  "bulba": {
+   "titre": "McDonald's Collection 2019 (TCG)",
+   "tirage": "intl",
+   "expansion": "McDonald's Collection 2019"
+  },
+  "attendu": 12,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "McDonald's Collection 2019",
+   "cartesListe": 12,
+   "sectionListe": "McDonald's Collection",
+   "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "MCD14",
+  "exp": 1625,
+  "prod": 12,
+  "nom": "McDonalds Collection 2014",
+  "slugSet": "McDonalds-Collection-2014",
+  "region": "occidental",
+  "bulba": {
+   "titre": "McDonald's Collection 2014 (TCG)",
+   "tirage": "intl",
+   "expansion": "McDonald's Collection 2014"
+  },
+  "attendu": 12,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "EN",
+   "nomBulbapedia": "McDonald's Collection 2014",
+   "cartesListe": 12,
    "sectionListe": "McDonald's Collection",
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
@@ -9384,30 +9408,6 @@
   "verifie": null
  },
  {
-  "code": "MCD12",
-  "exp": 1624,
-  "prod": 12,
-  "nom": "McDonalds Collection 2012",
-  "slugSet": "McDonalds-Collection-2012",
-  "region": "occidental",
-  "bulba": {
-   "titre": "McDonald's Collection 2012 (TCG)",
-   "tirage": "intl",
-   "expansion": "McDonald's Collection 2012"
-  },
-  "attendu": 12,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "McDonald's Collection 2012",
-   "cartesListe": 12,
-   "sectionListe": "McDonald's Collection",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "MCD15",
   "exp": 1741,
   "prod": 12,
@@ -9432,46 +9432,22 @@
   "verifie": null
  },
  {
-  "code": "MCD19",
-  "exp": 2829,
+  "code": "MCD12",
+  "exp": 1624,
   "prod": 12,
-  "nom": "McDonalds Collection 2019",
-  "slugSet": "McDonalds-Collection-2019",
+  "nom": "McDonalds Collection 2012",
+  "slugSet": "McDonalds-Collection-2012",
   "region": "occidental",
   "bulba": {
-   "titre": "McDonald's Collection 2019 (TCG)",
+   "titre": "McDonald's Collection 2012 (TCG)",
    "tirage": "intl",
-   "expansion": "McDonald's Collection 2019"
+   "expansion": "McDonald's Collection 2012"
   },
   "attendu": 12,
   "auto": {
    "cle": "slug exact",
    "liste": "EN",
-   "nomBulbapedia": "McDonald's Collection 2019",
-   "cartesListe": 12,
-   "sectionListe": "McDonald's Collection",
-   "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
-  "code": "MCD14",
-  "exp": 1625,
-  "prod": 12,
-  "nom": "McDonalds Collection 2014",
-  "slugSet": "McDonalds-Collection-2014",
-  "region": "occidental",
-  "bulba": {
-   "titre": "McDonald's Collection 2014 (TCG)",
-   "tirage": "intl",
-   "expansion": "McDonald's Collection 2014"
-  },
-  "attendu": 12,
-  "auto": {
-   "cle": "slug exact",
-   "liste": "EN",
-   "nomBulbapedia": "McDonald's Collection 2014",
+   "nomBulbapedia": "McDonald's Collection 2012",
    "cartesListe": 12,
    "sectionListe": "McDonald's Collection",
    "regionCodesSet": "occidental",
@@ -9504,30 +9480,6 @@
   "verifie": null
  },
  {
-  "code": "FUT20",
-  "exp": 3510,
-  "prod": 5,
-  "nom": "Futsal Promos",
-  "slugSet": "Futsal-Promos",
-  "region": "occidental",
-  "bulba": {
-   "titre": "Pokémon Futsal (TCG)",
-   "tirage": "intl",
-   "expansion": "Pokémon Futsal"
-  },
-  "attendu": 5,
-  "auto": {
-   "cle": "code de set",
-   "liste": "EN",
-   "nomBulbapedia": "Pokémon Futsal",
-   "cartesListe": 5,
-   "sectionListe": "Other Miscellaneous Sets",
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null
- },
- {
   "code": "PCCP",
   "exp": 4505,
   "prod": 5,
@@ -9547,6 +9499,30 @@
    "cartesListe": 5,
    "sectionListe": "Other Miscellaneous Sets",
    "regionCodesSet": "occidental",
+   "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "FUT20",
+  "exp": 3510,
+  "prod": 5,
+  "nom": "Futsal Promos",
+  "slugSet": "Futsal-Promos",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Pokémon Futsal (TCG)",
+   "tirage": "intl",
+   "expansion": "Pokémon Futsal"
+  },
+  "attendu": 5,
+  "auto": {
+   "cle": "code de set",
+   "liste": "EN",
+   "nomBulbapedia": "Pokémon Futsal",
+   "cartesListe": 5,
+   "sectionListe": "Other Miscellaneous Sets",
+   "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
   "verifie": null
