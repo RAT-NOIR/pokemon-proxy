@@ -5035,7 +5035,24 @@
     "retireeLe": "2026-09-15T18:35:44.687Z",
     "motif": "faux affirmé retiré (84 cartes_produits, 83 appartenances, état) ; rejugé en jp"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Generations (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « BREAK Starter Pack »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:36:11.237Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « BREAK Starter Pack »"
+   ]
+  }
  },
  {
   "code": "ADV4",
@@ -11993,10 +12010,19 @@
    "raisons": []
   },
   "collecte": {
-   "le": "2026-09-15T11:55:37.437Z",
-   "etat": "faux-affirme",
-   "note": "56 produits joints à plusieurs cartes : numéros Cardmarket « 002 » face à Bulbapedia « SWSH002 », repli par nom (Scorbunny n°002 → SWSH002 et SWSH244). 291 lignes pour 167 produits, ≥ 124 fausses. EN BASE, non retirées : décision du testeur."
-  }
+   "le": "2026-09-15T18:42:58.458Z",
+   "etat": "ok",
+   "note": "recollecté --reparser après le traitement du préfixe"
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T11:55:37.437Z",
+    "etat": "faux-affirme",
+    "note": "56 produits joints à plusieurs cartes : numéros Cardmarket « 002 » face à Bulbapedia « SWSH002 », repli par nom (Scorbunny n°002 → SWSH002 et SWSH244). 291 lignes pour 167 produits, ≥ 124 fausses. EN BASE, non retirées : décision du testeur.",
+    "retireeLe": "2026-09-15T18:42:58.457Z",
+    "motif": "291 jointures retirées ; préfixe SWSH traité (jointure.js), recollecté --reparser : 379/386, 0 vers plusieurs cartes, noms 285/285"
+   }
+  ]
  },
  {
   "code": "SVI",
@@ -16735,7 +16761,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Chilling Reign (TCG)",
+   "entrees": {
+    "Jet-Black Spirit": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 95 produits, échantillon « Shiftry (Evolving Skies 97) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Chilling Reign (TCG)",
+   "entrees": 95,
+   "echantillon": "Shiftry (Evolving Skies 97)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:36:54.320Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv4K",
@@ -16758,7 +16807,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Paradox Rift (TCG)",
+   "entrees": {
+    "Ancient Roar": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 95 produits, échantillon « Liepard (Paradox Rift 115) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Paradox Rift (TCG)",
+   "entrees": 95,
+   "echantillon": "Liepard (Paradox Rift 115)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:37:19.667Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s1W",
@@ -16781,7 +16853,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Sword & Shield (TCG)",
+   "entrees": {
+    "Sword": 75
+   },
+   "note": "vérification automatique : 75 entrées pour 75 produits, échantillon « Nickit (Sword & Shield 125) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Sword & Shield (TCG)",
+   "entrees": 75,
+   "echantillon": "Nickit (Sword & Shield 125)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:37:47.315Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DP4m",
@@ -16804,7 +16899,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Moonlit Pursuit/Dawn Dash (TCG)",
+   "entrees": {
+    "Moonlit Pursuit": 70
+   },
+   "note": "vérification automatique : 70 entrées pour 70 produits, échantillon « Unown H (Great Encounters 29) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Moonlit Pursuit/Dawn Dash (TCG)",
+   "entrees": 70,
+   "echantillon": "Unown H (Great Encounters 29)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:38:29.677Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm4s",
@@ -16827,7 +16945,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Crimson Invasion (TCG)",
+   "entrees": {
+    "Awakened Heroes": 62
+   },
+   "note": "vérification automatique : 62 entrées pour 62 produits, échantillon « Aron (Crimson Invasion 65) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Crimson Invasion (TCG)",
+   "entrees": 62,
+   "echantillon": "Aron (Crimson Invasion 65)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:39:02.249Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "XY11f",
@@ -16850,7 +16991,30 @@
    "note": "section",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Steam Siege (TCG)",
+   "entrees": {
+    "Fever-Burst Fighter": 59
+   },
+   "note": "vérification automatique : 59 entrées pour 59 produits, échantillon « Croagunk (Steam Siege 58) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Steam Siege (TCG)",
+   "entrees": 59,
+   "echantillon": "Croagunk (Steam Siege 58)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:39:35.441Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s7D",
@@ -16873,7 +17037,30 @@
    "note": "section, nom Cardmarket « Towering Perfection »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Evolving Skies (TCG)",
+   "entrees": {
+    "Skyscraping Perfection": 90
+   },
+   "note": "vérification automatique : 90 entrées pour 90 produits, échantillon « Noivern V (Evolving Skies 117) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Evolving Skies (TCG)",
+   "entrees": 90,
+   "echantillon": "Noivern V (Evolving Skies 117)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:40:15.382Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "xsv2a",
@@ -16896,7 +17083,30 @@
    "note": "Additionals Cardmarket",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "151 (TCG)",
+   "entrees": {
+    "Pokémon Card 151": 210
+   },
+   "note": "vérification automatique : 210 entrées pour 306 produits, échantillon « Hitmonlee (151 106) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "151 (TCG)",
+   "entrees": 210,
+   "echantillon": "Hitmonlee (151 106)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.69,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:41:22.144Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "xm2a",
@@ -16919,7 +17129,30 @@
    "note": "Additionals Cardmarket",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "MEGA Dream ex (TCG)",
+   "entrees": {
+    "MEGA Dream ex": 250
+   },
+   "note": "vérification automatique : 250 entrées pour 212 produits, échantillon « Mega Dragonite ex (Ascended Heroes 152) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "MEGA Dream ex (TCG)",
+   "entrees": 250,
+   "echantillon": "Mega Dragonite ex (Ascended Heroes 152)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.18,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:42:20.014Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm6",
@@ -16942,7 +17175,30 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Forbidden Light (TCG)",
+   "entrees": 256,
+   "echantillon": "Crasher Wake (Forbidden Light 104)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 2.33,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
+    "entrées/produits 2.33 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:42:20.020Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
+    "entrées/produits 2.33 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "sm3+",
@@ -16965,7 +17221,29 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Legends (TCG)",
+   "entrees": 160,
+   "echantillon": "Venusaur (Shining Legends 3)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1.95,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.95 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:42:20.027Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "entrées/produits 1.95 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "smP2",
@@ -16988,7 +17266,30 @@
    "note": "Cardmarket « Detective Pikachu JP »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Detective Pikachu (TCG)",
+   "entrees": {
+    "Great Detective Pikachu": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 25 produits, échantillon « Greninja-GX (SM Promo 197) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Detective Pikachu (TCG)",
+   "entrees": 25,
+   "echantillon": "Greninja-GX (SM Promo 197)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:42:40.820Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv8a",
@@ -17011,7 +17312,26 @@
    "note": "Cardmarket « Terastal Festival ex »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Terastal Fest ex (TCG)",
+   "entrees": {
+    "Terastal Fest ex": 237
+   },
+   "note": "vérification automatique : 237 entrées pour 237 produits, échantillon « Drakloak (Twilight Masquerade 129) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Terastal Fest ex (TCG)",
+   "entrees": 237,
+   "echantillon": "Drakloak (Twilight Masquerade 129)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "xsv8a",
@@ -17034,7 +17354,26 @@
    "note": "Additionals Cardmarket",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Terastal Fest ex (TCG)",
+   "entrees": {
+    "Terastal Fest ex": 237
+   },
+   "note": "vérification automatique : 237 entrées pour 245 produits, échantillon « Drakloak (Twilight Masquerade 129) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Terastal Fest ex (TCG)",
+   "entrees": 237,
+   "echantillon": "Drakloak (Twilight Masquerade 129)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv11B",
@@ -17057,7 +17396,21 @@
    "note": "page JP combinée",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Servine (Black Bolt 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+   ]
+  }
  },
  {
   "code": "sv11W",
@@ -17080,7 +17433,21 @@
    "note": "page JP combinée",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Swadloon (White Flare 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+   ]
+  }
  },
  {
   "code": "xsv11B",
@@ -17103,7 +17470,21 @@
    "note": "Additionals Cardmarket",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Servine (Black Bolt 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1.14,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+   ]
+  }
  },
  {
   "code": "xsv11W",
@@ -17126,7 +17507,21 @@
    "note": "Additionals Cardmarket",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Swadloon (White Flare 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1.14,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+   ]
+  }
  },
  {
   "code": "sv6",
@@ -17149,7 +17544,26 @@
    "note": "Cardmarket « Mask of Change »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Twilight Masquerade (TCG)",
+   "entrees": {
+    "Transformation Mask": 133
+   },
+   "note": "vérification automatique : 133 entrées pour 133 produits, échantillon « Mightyena (Twilight Masquerade 114) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Twilight Masquerade (TCG)",
+   "entrees": 133,
+   "echantillon": "Mightyena (Twilight Masquerade 114)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv10",

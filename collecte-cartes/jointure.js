@@ -111,6 +111,22 @@ function joindre(cartes, produits, cible) {
         if (!produitsJoints.has(p.idProduct)) produitsJoints.set(p.idProduct, []);
         produitsJoints.get(p.idProduct).push(carte._id);
     };
+    // 🔴 LE PRÉFIXE DE NUMÉRO D'UN SET DE PROMOS (2026-09-15). Bulbapedia écrit « SWSH002 », Cardmarket « 002 » : la clé
+    // garde le préfixe (voir cleNumero, EC1), set+numéro échouait sur tout le set, et le repli par NOM rattachait un produit
+    // à toutes les cartes du nom — 56 produits vers plusieurs cartes, ≥ 124 lignes fausses. Même famille que les crochets
+    // d'Unown et le ☆ : une écriture différente d'une même donnée. Le préfixe n'est retiré que s'il est COMMUN à toutes
+    // les impressions numérotées de la cible ET absent de tous les numéros Cardmarket : EC1, qui mêle « S04 » et « 004 »,
+    // n'est pas touché. Le détail de la preuve le nomme.
+    // Et la POSITION d'une pièce V-UNION, « SWSH215 (Top Left) » : la parenthèse n'est pas le numéro. Non retirée, la carte
+    // retombait sur le nom (« Morpeko ») et prenait les produits ordinaires — 11 produits vers plusieurs cartes au rejeu.
+    const sansPosition = n => String(n).trim().toUpperCase().replace(/\s*\([^)]*\)\s*$/, '');
+    const nomsCibleSet = [].concat(cible.expansionBulba);
+    const numerote = n => n != null && String(n).trim() !== '';
+    const numsImp = cartes.flatMap(c => (c.impressions || []).filter(i => i.tirage === cible.tirage && nomsCibleSet.includes(i.expansion) && (!cible.deck || i.deck === cible.deck) && numerote(i.numero)).map(i => sansPosition(i.numero)));
+    const prefixesImp = new Set(numsImp.map(n => (n.match(/^([A-Z]+)(?=\d)/) || [])[1] ?? null));
+    const numsProd = produits.filter(p => numerote(p.numero)).map(p => String(p.numero).trim().toUpperCase());
+    const prefixeDuSet = numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.length && numsProd.every(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
+    const cleImpression = n => cleNumero(prefixeDuSet ? sansPosition(n).replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : sansPosition(n));
     let cartesSansProduit = 0;
     for (const carte of cartes) {
         // L'appartenance au set a DEUX sources : l'impression déclarée sur la page (jpexpansion=…),
@@ -127,10 +143,10 @@ function joindre(cartes, produits, cible) {
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;
-        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').map(i => cleNumero(i.numero)).filter(Boolean))];
+        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').map(i => cleImpression(i.numero)).filter(Boolean))];
         if (numeros.length && parNumero.size) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
-            preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}`;
+            preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set retiré : commun à toutes les impressions, absent des ${numsProd.length} numéros Cardmarket)` : ''}`;
         }
         if (!trouves.length && carte.nomEn) {
             // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
@@ -160,7 +176,7 @@ function joindre(cartes, produits, cible) {
     }
     return {
         lignes, restes,
-        compte: { cartes: cartes.length, produits: produits.length, lignes: lignes.length, produitsJoints: produitsJoints.size, cartesSansProduit, restes: restes.length }
+        compte: { cartes: cartes.length, produits: produits.length, lignes: lignes.length, produitsJoints: produitsJoints.size, cartesSansProduit, restes: restes.length, prefixeRetire: prefixeDuSet }
     };
 }
 
