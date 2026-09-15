@@ -56,5 +56,20 @@ const JVU = joindre(cVU, pVU, { idExpansion: 2916, expansionBulba: SW, tirage: '
 verifier('V-UNION : la position est retirée, chaque pièce joint son numéro', paires(JVU), ['100|110', '100|111', '101|112']);
 verifier('V-UNION : aucun produit vers plusieurs cartes', multi(JVU), 0);
 
+// 7. SOUS-ENSEMBLE numéroté (xsv8a « Additionals ») : Cardmarket n'a que certains numéros. Leafeon n°003 n'a pas de produit
+// n°003 : il ne doit PAS prendre par son nom les produits de Leafeon n°002 (36 produits vers plusieurs cartes au premier passage).
+const TF = 'Terastal Fest ex';
+const cTF = [carte(120, 'Leafeon', TF, 'jp', '002'), carte(121, 'Leafeon', TF, 'jp', '003', '200'), carte(122, 'Sinistcha', TF, 'jp', '018')];
+const pTF = [produit(130, 'Leafeon', '002'), produit(131, 'Leafeon', '002'), produit(132, 'Sinistcha', '018')];
+const JTF = joindre(cTF, pTF, { idExpansion: 6220, expansionBulba: TF, tirage: 'jp' });
+verifier('sous-ensemble : seules les cartes au numéro présent joignent', paires(JTF), ['120|130', '120|131', '122|132']);
+verifier('sous-ensemble : la carte au numéro absent est un reste, pas un repli par nom', JTF.restes.filter(r => r.type === 'carte-sans-produit').map(r => r.carteId), [121]);
+// 8. Le repli par nom RESTE permis quand la carte ne déclare aucun numéro (énergies, pages sans impression) ou que le catalogue
+// n'a aucun numéro (vintage japonais).
+const JEN = joindre([{ _id: 140, nomEn: 'Basic Fire Energy', attaques: [], impressions: [] }], [produit(150, 'Fire Energy', '')], { idExpansion: 7, expansionBulba: TF, tirage: 'jp' });
+verifier('énergie sans numéro : repli par nom conservé', paires(JEN), ['140|150']);
+const JVI = joindre([carte(160, 'Pikachu', 'Base Set', 'jp', '025')], [produit(170, 'Pikachu', null)], { idExpansion: 8, expansionBulba: 'Base Set', tirage: 'jp' });
+verifier('catalogue sans numéro : repli par nom conservé', paires(JVI), ['160|170']);
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

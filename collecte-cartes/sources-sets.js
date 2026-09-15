@@ -63,7 +63,12 @@ const ARTOFPKM = {
     SNPr: { ids: [525], noms: ['BREAK Evolution Pack Raichu BREAK'] },
     SNPn: { ids: [523], noms: ['BREAK Evolution Pack Noivern BREAK'] },
     sm0: { ids: [323], noms: ['Pikachu and their New Friends'], note: 'Cardmarket « Pikachus New Friends »' },
-    sp4: { ids: [435], noms: ['VMAX Special Set, Eevee Heroes'] }
+    sp4: { ids: [435], noms: ['VMAX Special Set, Eevee Heroes'] },
+    // 2026-09-15, lignes japonaises ajoutées (demi-sets écrasés par leur jumeau, film) : nom artofpkm différent.
+    s6k: { ids: [431], noms: ['Jet-Black Poltergeist'], note: 'Cardmarket « Jet Black Spirit »' },
+    s7D: { ids: [438], noms: ['Skyscraping Perfect'], note: 'Cardmarket « Towering Perfection »' },
+    sm4s: { ids: [343], noms: ['Awakening Hero'], note: 'Cardmarket « Awakened Heroes »' },
+    smP2: { ids: [382], noms: ['Detective Pikachu'], note: 'Cardmarket « Detective Pikachu JP »' }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,

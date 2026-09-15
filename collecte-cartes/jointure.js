@@ -148,7 +148,12 @@ function joindre(cartes, produits, cible) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
             preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set retiré : commun à toutes les impressions, absent des ${numsProd.length} numéros Cardmarket)` : ''}`;
         }
-        if (!trouves.length && carte.nomEn) {
+        // 🔴 PAS DE REPLI PAR NOM QUAND LE NUMÉRO A ÉTÉ ESSAYÉ (2026-09-15). Une carte qui déclare un numéro dans un catalogue
+        // numéroté et ne le trouve pas N'EST PAS dans ce catalogue : la rattacher par son nom prend le produit d'une AUTRE carte
+        // du même nom. SWSH (56 produits vers plusieurs cartes) et xsv8a « Additionals », un sous-ensemble de numéros (36),
+        // avaient tous deux cette forme. Le repli par nom reste pour les cartes sans numéro déclaré et les catalogues sans numéro.
+        const numeroEssaye = numeros.length && parNumero.size;
+        if (!trouves.length && carte.nomEn && !numeroEssaye) {
             // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
             // LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
             const nomJoint = String(carte.nomEn) + (String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');

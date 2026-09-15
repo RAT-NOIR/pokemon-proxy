@@ -44,7 +44,12 @@ async function sousVerrouGlobal(M, travail) {
         const parNom = new Map();
         for (const s of sets) { const k = normaliser(s.nom); parNom.set(k, [...(parNom.get(k) || []), s]); }
         const sortie = {}, absentes = [], ambigues = [];
-        const candidates = TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code]);
+        // Les « Additionals » Cardmarket (xsv2a, xm2a, xsv11B…) sont des VARIANTES des cartes du set de base (motifs Poké Ball,
+        // Master Ball) : leur nom apparie le set artofpkm de base, dont les images appartiennent à un autre tirage (§19). Exclues,
+        // et comptées (2026-09-15).
+        const additionals = TABLE_AUTO.filter(l => /-Additionals$/.test(l.slugSet || ''));
+        const candidates = TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l));
+        console.log(`Additionals exclues (variantes du set de base) : ${additionals.length} ${JSON.stringify(additionals.map(l => l.code))}`);
         for (const l of candidates) {
             const cles = [...new Set([l.nom, l.bulba?.expansion, l.auto?.nomBulbapedia].flat().filter(Boolean).map(normaliser))];
             const trouves = [...new Map(cles.flatMap(k => parNom.get(k) || []).map(s => [s.id, s])).values()];

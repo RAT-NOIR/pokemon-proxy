@@ -17377,7 +17377,20 @@
    "ratio": 0.97,
    "etat": "OK",
    "raisons": []
-  }
+  },
+  "collecte": {
+   "le": "2026-09-15T18:50:09.160Z",
+   "etat": "ok",
+   "note": "recollecté --reparser après l'interdiction du repli par nom quand le numéro a été essayé"
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T18:44:44.650Z",
+    "etat": "noms-discordants",
+    "retireeLe": "2026-09-15T18:50:09.159Z",
+    "motif": "36 produits vers plusieurs cartes par repli sur le nom (sous-ensemble numéroté) ; 36 lignes retirées, jointure corrigée, --reparser 245/245"
+   }
+  ]
  },
  {
   "code": "sv11B",

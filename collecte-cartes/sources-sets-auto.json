@@ -1366,5 +1366,104 @@
    "Yveltal Half Deck"
   ],
   "cle": "nom-normalise"
+ },
+ "sv4K": {
+  "ids": [
+   501
+  ],
+  "noms": [
+   "Ancient Roar"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s1W": {
+  "ids": [
+   400
+  ],
+  "noms": [
+   "Sword"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DP4m": {
+  "ids": [
+   164
+  ],
+  "noms": [
+   "Moonlit Pursuit"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY11f": {
+  "ids": [
+   532
+  ],
+  "noms": [
+   "Fever-Burst Fighter"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm6": {
+  "ids": [
+   355
+  ],
+  "noms": [
+   "Forbidden Light"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv8a": {
+  "ids": [
+   552
+  ],
+  "noms": [
+   "Terastal Festival ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv11B": {
+  "ids": [
+   565
+  ],
+  "noms": [
+   "Black Bolt"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv11W": {
+  "ids": [
+   566
+  ],
+  "noms": [
+   "White Flare"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv6": {
+  "ids": [
+   515
+  ],
+  "noms": [
+   "Mask of Change"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv9a": {
+  "ids": [
+   557
+  ],
+  "noms": [
+   "Hot Wind Arena"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s10b": {
+  "ids": [
+   464
+  ],
+  "noms": [
+   "Pokémon GO"
+  ],
+  "cle": "nom-normalise"
  }
 }
