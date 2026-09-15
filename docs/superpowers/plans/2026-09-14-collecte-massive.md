@@ -780,6 +780,31 @@ nommé** puis redéploiement, puis `remplir-file-images.js` : les enfiler avant 
 relance a échoué dessus (battement il y a 398 s) et marqué L2 `echec-1-texte`, ce qui l'aurait sorti de la sélection
 pour toujours. Marque retirée, historique dans `collecteAvant`. Un arrêt par TaskStop ne libère rien (§17).
 
+## Suivi du 2026-09-15 après la relance (11:04 UTC) — listé, non traité
+
+- **Preuve de version du worker** : EC1 100 → **128**, N4 → **113**, VS → **145**, DP2 → **131**, relevés par `lot`, les
+  quatre `fait` entre 10:47 et 11:03 UTC. §21 n°7 fermé pour ces quatre sets. sv4a, première ligne automatique, est
+  pris par le worker (`ligne()` lit bien la table automatique).
+- **Toutes les lignes automatiques japonaises admises sont collectées** (blocs 1 à 8 de la relance) : 0 nom
+  discordant, 0 non concordant, 1 échec (L2, cause écrite plus haut). La boucle passe ensuite aux lignes occidentales
+  (sans source artofpkm : lot D).
+- **Restes ouverts, avec leur cause** (lot F, depuis R2) :
+  - sv1S : 6 énergies de base sans numéro (FIR, PSY, FIG, WAT, LIG, GRA). Le journal dit 116 produits et 8 restes,
+    la base 114 produits et 6 sans carte : écart de comptage **non ouvert** ;
+  - L1HG : 8 énergies de base sans numéro, plus **Donphan n°046** (cause non ouverte) ;
+  - sm2+ : 1 énergie ;
+  - produits joints à plusieurs cartes : XY5g, sm5s, sm1S, L1HG et sm2l, un chacun. C'est la famille du faux set+numéro
+    (lot F).
+- **Les 4 decks « tirage non établi (vus : aucun) »** : sI100 (430 produits), svM (175), smH (131), sD (127).
+  - Cause, 1 requête : les pages de cartes CITENT le tirage de deck (`{{TCG|GX Starter Decks|Darkness Yveltal-GX
+    Deck}}`, `{{TCG|Start Deck 100}}`), mais `faitsDeCarte` n'en fait aucune impression. L'échantillon Alolan Persian
+    rend 2 impressions, Sun & Moon et Collection Sun.
+  - La vérification refuse donc à juste titre : collectée, la ligne joindrait 0 produit. La Setlist, elle, est lisible
+    (422, 175, 131, 127 entrées).
+  - **Chantier de parseur, non traité** : 863 produits japonais attendent ce chantier.
+- **⚠️ Règle du §3 enfreinte à ~11:56 UTC** : un `node -e` avec des guillemets sous PowerShell, pour valider un JSON.
+  Le résultat est juste, mais la règle ne dépend pas du résultat. Revenu aux fichiers `.js`.
+
 ## Lot C : les images japonaises des lignes automatiques (artofpkm, worker existant)
 
 Conditions : lot B déployé, 🛑1 (D5).
