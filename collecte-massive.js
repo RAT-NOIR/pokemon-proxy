@@ -21,6 +21,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
+const { concordanceDesNoms } = require('./collecte-cartes/coherence-ligne');
+// Rejeu de concordanceDesNoms sur les 106 sets collectés au 2026-09-15 : 20th 14,5 %, le plus bas des sains VS 80,1 %
+// (abréviations de dresseurs : « Falkners-TM-01 » / « Falkner's Technical Machine 01 »). Seuil au milieu, pas au bord.
+const SEUIL_NOMS = 0.5;
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const TAILLE = Number(arg('bloc') || 20);
@@ -60,8 +64,8 @@ const lancer = (args, fichier) => {
         fs.writeFileSync(`${FICHIER_AUTO}.tmp`, JSON.stringify(frais, null, 1));
         fs.renameSync(`${FICHIER_AUTO}.tmp`, FICHIER_AUTO);
     };
-    let collectes = 0, echecsSuite = 0, blocs = 0;
-    const bilanTotal = { ok: 0, nonConcordant: 0, echec: 0, dejaFait: 0, produitsVersPlusieursCartes: 0 };
+    let collectes = 0, echecsSuite = 0, blocs = 0, arretNoms = null;
+    const bilanTotal = { ok: 0, nonConcordant: 0, nomsDiscordants: 0, echec: 0, dejaFait: 0, produitsVersPlusieursCartes: 0 };
     dire(`══ COLLECTE MASSIVE — blocs de ${TAILLE}, journal ${path.relative(__dirname, JOURNAL)} ══`);
     while (!arretDemande && blocs < MAX_BLOCS) {
         let { TABLE_AUTO } = lireTable();
@@ -76,7 +80,7 @@ const lancer = (args, fichier) => {
         }
         const bloc = TABLE_AUTO.filter(l => l.verif && !l.collecte).slice(0, TAILLE);
         blocs++;
-        const b = { ok: 0, nonConcordant: 0, echec: 0, aRegarder: 0, dejaFait: 0, produitsVersPlusieursCartes: 0, imagesEnAttente: { jp: 0, intl: 0 } };
+        const b = { ok: 0, nonConcordant: 0, nomsDiscordants: 0, echec: 0, aRegarder: 0, dejaFait: 0, produitsVersPlusieursCartes: 0, imagesEnAttente: { jp: 0, intl: 0 } };
         dire(`── bloc ${blocs} : ${bloc.length} lignes (${bloc.filter(l => l.verifie).length} admises, ${bloc.filter(l => !l.verifie).length} à regarder) ──`);
         for (const l of bloc) {
             if (arretDemande) break;
@@ -103,6 +107,17 @@ const lancer = (args, fichier) => {
                 const c = reussi ? (s1?.complet || {}) : {};
                 const plusieurs = c.restes?.['produit-vers-plusieurs-cartes'] || 0;
                 b.produitsVersPlusieursCartes += plusieurs;
+                // 🔴 LE CONTRÔLE INDÉPENDANT DE LA JOINTURE (2026-09-15). `20th` était « ok », 84/84 joints, concordant — et
+                // faux : 65 noms discordants sur 76. La jointure ne regarde que set+numéro ; le NOM du produit Cardmarket face
+                // au nom de la carte jointe est une seconde source (§16). Rejoué sur 106 sets : sains ≥ 80,1 %, 20th 14,5 %.
+                // Sous SEUIL_NOMS : pas d'image, et ARRÊT de la boucle — un faux affirmé ne se contourne pas, il s'écrit au plan.
+                let noms = null;
+                if (etat === 'ok') {
+                    const jointures = await cx.db.collection('cartes_produits').find({ slugSet: l.slugSet }, { projection: { slug: 1, carteId: 1 } }).toArray();
+                    const nomsCartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(jointures.map(j => j.carteId))] } }, { projection: { nomEn: 1 } }).toArray()).map(x => [x._id, x.nomEn]));
+                    noms = concordanceDesNoms(jointures.map(j => [j.slug, nomsCartes.get(j.carteId)]));
+                    if (noms.evaluables && noms.taux < SEUIL_NOMS) { etat = 'noms-discordants'; b.ok--; b.nomsDiscordants++; }
+                }
                 // RÈGLE DU TESTEUR, 2026-09-15 : un set CONCORDANT part en file d'images IMMÉDIATEMENT, sans validation. Le
                 // worker mesure ses 3 originaux avant tout téléchargement et liste ses refus. Sans source : listé, jamais
                 // enfilé (le worker le rangerait en `refuse-source`, hors de la file pour toujours — §23).
@@ -116,18 +131,19 @@ const lancer = (args, fichier) => {
                         if (r.upsertedCount) b.imagesEnfilees = (b.imagesEnfilees || 0) + 1;
                     }
                 }
-                dire(`   ${l.code.padEnd(10)} ${etat.padEnd(16)} ${String(l.attendu).padStart(4)} produits · ${l.bulba.tirage} · « ${l.bulba.titre} » · joints ${c.produitsJoints ?? '?'}/${c.produits ?? '?'}${c.restes && Object.keys(c.restes).length ? ` · restes ${JSON.stringify(c.restes)}` : ''}${plusieurs ? ` ⚠️ ${plusieurs} produit(s) joint(s) à plusieurs cartes` : ''}${images}`);
+                dire(`   ${l.code.padEnd(10)} ${etat.padEnd(16)} ${String(l.attendu).padStart(4)} produits · ${l.bulba.tirage} · « ${l.bulba.titre} » · joints ${c.produitsJoints ?? '?'}/${c.produits ?? '?'}${noms ? ` · noms ${noms.concordants}/${noms.evaluables}${noms.nonEvaluables ? ` (+${noms.nonEvaluables} non évaluables)` : ''}` : ''}${etat === 'noms-discordants' ? ` 🔴 FAUX AFFIRMÉ PROBABLE, ex. ${noms.exemples.slice(0, 3).join(' | ')}` : ''}${c.restes && Object.keys(c.restes).length ? ` · restes ${JSON.stringify(c.restes)}` : ''}${plusieurs ? ` ⚠️ ${plusieurs} produit(s) joint(s) à plusieurs cartes` : ''}${images}`);
             }
             l.collecte = { le: new Date().toISOString(), etat };
             b.imagesEnAttente[l.bulba.tirage === 'intl' ? 'intl' : 'jp']++;
             marquer(l);
             if (collectes && collectes % 5 === 0 && etat !== 'deja-fait') dire(`📍 POINT après ${collectes} collectes : bloc ${blocs} — ${JSON.stringify(b)}`);
+            if (etat === 'noms-discordants') { arretNoms = l.code; dire(`⛔ ${l.code} : noms discordants — ARRÊT de la collecte (règle du testeur : un chiffre qui ne colle pas arrête tout, il s'écrit au plan). Ses jointures restent en base : les retirer est une décision du testeur.`); break; }
             if (echecsSuite >= 3) { dire(`⛔ TROIS ÉCHECS DE SUITE — arrêt : une source en panne ne se contourne pas en brûlant la table.`); break; }
         }
         for (const k of Object.keys(bilanTotal)) bilanTotal[k] += b[k];
         dire(`══ BILAN bloc ${blocs} : ${JSON.stringify(b)} · cumul ${JSON.stringify(bilanTotal)} ══`);
-        if (echecsSuite >= 3) break;
+        if (echecsSuite >= 3 || arretNoms) break;
     }
     await fermer();
-    process.exit(echecsSuite >= 3 ? 1 : 0);
+    process.exit(arretNoms ? 3 : echecsSuite >= 3 ? 1 : 0);
 })().catch(e => { dire(`❌ ERREUR ${e.stack || e}`); process.exit(2); });

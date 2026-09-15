@@ -20,6 +20,7 @@ const path = require('path');
 const bulba = require('./bulba');
 const { faitsDeSet, faitsDeCarte, RE_TCG_ID, tcgIdLisible } = require('./wikitext');
 const { TABLE } = require('./table-sets');
+const { raisonsDeCoherence } = require('./coherence-ligne');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const echapper = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -129,6 +130,9 @@ async function verifierAuto() {
                 else if (tirages.length === 1 && ['jp', 'intl'].includes(tirages[0])) { v.tirageEtabli = tirages[0]; }
                 else raisons.push(`tirage non établi (vus : ${tirages.join(',') || 'aucun'})`);
             }
+            // 🔴 2026-09-15 : `20th` « BREAK Starter Pack » (japonais) admis sur « Generations (TCG) » en intl par une
+            // redirection suivie, 84 produits joints à des cartes fausses. Voir coherence-ligne.js.
+            raisons.push(...raisonsDeCoherence(l, l.bulba.tirage || v.tirageEtabli || null));
             v.ratio = l.attendu ? Math.round(100 * v.entrees / l.attendu) / 100 : null;
             if (v.entrees && (v.ratio < 0.5 || v.ratio > 1.5)) raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]`);
             v.etat = raisons.length ? 'À REGARDER' : 'OK';
