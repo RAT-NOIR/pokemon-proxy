@@ -19901,6 +19901,10 @@
    "ratio": 0.97,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:33:03.162Z",
+   "etat": "ok"
   }
  },
  {
@@ -19943,6 +19947,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:35:05.378Z",
+   "etat": "ok"
   }
  },
  {
@@ -19985,6 +19993,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:36:27.818Z",
+   "etat": "ok"
   }
  },
  {
@@ -20017,6 +20029,13 @@
    "tiragesVus": [],
    "ratio": 1.17,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « M-P Promotional cards » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:36:27.826Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage jp « M-P Promotional cards » (vus : aucun)"
    ]
@@ -20062,6 +20081,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:37:27.012Z",
+   "etat": "ok"
   }
  },
  {
@@ -20104,6 +20127,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:37:54.527Z",
+   "etat": "ok"
   }
  },
  {
@@ -20146,6 +20173,10 @@
    "ratio": 0.96,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:38:32.985Z",
+   "etat": "ok"
   }
  },
  {
@@ -20188,6 +20219,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:39:06.112Z",
+   "etat": "ok"
   }
  },
  {
@@ -20978,6 +21013,286 @@
    "nomBulbapedia": "Radiant Energy Vol. 2",
    "regionCodesSet": null,
    "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM1aC",
+  "exp": 6341,
+  "prod": 211,
+  "nom": "Storming Emergence Radiant",
+  "slugSet": "Storming-Emergence-Radiant",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Storming Emergence (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Storming Emergence Radiant",
+   "setlist": [
+    "Radiant"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 211,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Storming Emergence Radiant",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 211,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM1bC",
+  "exp": 6342,
+  "prod": 204,
+  "nom": "Storming Emergence Verdant",
+  "slugSet": "Storming-Emergence-Verdant",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Storming Emergence (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Storming Emergence Verdant",
+   "setlist": [
+    "Verdant"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 204,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Storming Emergence Verdant",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 204,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM1cC",
+  "exp": 6343,
+  "prod": 212,
+  "nom": "Storming Emergence Abundant",
+  "slugSet": "Storming-Emergence-Abundant",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Storming Emergence (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Storming Emergence Abundant",
+   "setlist": [
+    "Abundant"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 212,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Storming Emergence Abundant",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 212,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM2aC",
+  "exp": 6319,
+  "prod": 194,
+  "nom": "Shining Synergy Shower",
+  "slugSet": "Shining-Synergy-Shower",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Shining Synergy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Shining Synergy Shower",
+   "setlist": [
+    "Shower"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 194,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Shining Synergy Shower",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 194,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM2bC",
+  "exp": 6320,
+  "prod": 193,
+  "nom": "Shining Synergy Supreme",
+  "slugSet": "Shining-Synergy-Supreme",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Shining Synergy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Shining Synergy Supreme",
+   "setlist": [
+    "Supreme"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 193,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Shining Synergy Supreme",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 193,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM2cC",
+  "exp": 6321,
+  "prod": 192,
+  "nom": "Shining Synergy Summon",
+  "slugSet": "Shining-Synergy-Summon",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Shining Synergy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Shining Synergy Summon",
+   "setlist": [
+    "Summon"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 192,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Shining Synergy Summon",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 192,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS1aC",
+  "exp": 6297,
+  "prod": 217,
+  "nom": "Dynamax Clash Thunder",
+  "slugSet": "Dynamax-Clash-Thunder",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dynamax Clash (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dynamax Clash Thunder",
+   "setlist": [
+    "Thunder"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 217,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Dynamax Clash Thunder",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 217,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS1bC",
+  "exp": 6298,
+  "prod": 199,
+  "nom": "Dynamax Clash Flame",
+  "slugSet": "Dynamax-Clash-Flame",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dynamax Clash (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dynamax Clash Flame",
+   "setlist": [
+    "Flame"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 199,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Dynamax Clash Flame",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 199,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS3aC",
+  "exp": 6266,
+  "prod": 184,
+  "nom": "Primordial Arts Overgrow",
+  "slugSet": "Primordial-Arts-Overgrow",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Primordial Arts (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Primordial Arts Overgrow",
+   "setlist": [
+    "Overgrow"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 184,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Primordial Arts Overgrow",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 184,
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS3bC",
+  "exp": 6267,
+  "prod": 179,
+  "nom": "Primordial Arts Torrent",
+  "slugSet": "Primordial-Arts-Torrent",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Primordial Arts (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Primordial Arts Torrent",
+   "setlist": [
+    "Torrent"
+   ],
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 179,
+  "auto": {
+   "cle": "atcg-version-2026-09-15",
+   "liste": "sonde atcg3",
+   "nomBulbapedia": "Primordial Arts Torrent",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "entreesSection": 179,
    "genereLe": "2026-09-15"
   },
   "verifie": null
