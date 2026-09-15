@@ -93,7 +93,10 @@ async function verifierAuto() {
     const { modeles } = require('./schemas');
     const { fabriquerVerrou } = require('./verrou-source');
     const taille = Number(arg('bloc') || 20);
-    const bloc = TABLE_AUTO.filter(l => !l.verif).slice(0, taille);
+    // --region=japonais : la vérification ne prend que cette région (2026-09-15 : l'occidental attend le traitement des
+    // numéros à préfixe, SWSH002 face à 002). Sans l'option, toutes les lignes.
+    const region = arg('region');
+    const bloc = TABLE_AUTO.filter(l => !l.verif && (!region || l.region === region)).slice(0, taille);
     console.log(`--auto : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
     if (!bloc.length) return;
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });

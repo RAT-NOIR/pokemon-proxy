@@ -29,6 +29,9 @@ const SEUIL_NOMS = 0.5;
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const TAILLE = Number(arg('bloc') || 20);
 const MAX_BLOCS = Number(arg('blocs') || Infinity);
+// --region=japonais : ne vérifie et ne collecte que cette région (l'occidental attend le traitement des numéros à préfixe).
+const REGION = arg('region');
+const dansLaRegion = l => !REGION || l.region === REGION;
 const DOSSIER = path.join(__dirname, 'collecte-cartes', 'rapports', 'massive');
 fs.mkdirSync(DOSSIER, { recursive: true });
 const JOURNAL = path.join(DOSSIER, `collecte-massive-${new Date().toISOString().slice(0, 10)}.log`);
@@ -69,16 +72,16 @@ const lancer = (args, fichier) => {
     dire(`══ COLLECTE MASSIVE — blocs de ${TAILLE}, journal ${path.relative(__dirname, JOURNAL)} ══`);
     while (!arretDemande && blocs < MAX_BLOCS) {
         let { TABLE_AUTO } = lireTable();
-        const reste = TABLE_AUTO.filter(l => !l.collecte);
-        if (!reste.length) { dire('toutes les lignes automatiques sont traitées.'); break; }
+        const reste = TABLE_AUTO.filter(l => !l.collecte && dansLaRegion(l));
+        if (!reste.length) { dire(`toutes les lignes automatiques${REGION ? ` (${REGION})` : ''} sont traitées.`); break; }
         // 1. vérifier les lignes du prochain bloc qui ne l'ont pas été
-        const prochain = TABLE_AUTO.filter(l => !l.verif).slice(0, TAILLE);
+        const prochain = TABLE_AUTO.filter(l => !l.verif && dansLaRegion(l)).slice(0, TAILLE);
         if (prochain.length) {
-            const st = lancer(['collecte-cartes/verifier-table.js', '--auto', `--bloc=${TAILLE}`], path.join(DOSSIER, `verification.log`));
+            const st = lancer(['collecte-cartes/verifier-table.js', '--auto', `--bloc=${TAILLE}`, ...(REGION ? [`--region=${REGION}`] : [])], path.join(DOSSIER, `verification.log`));
             if (st !== 0) { echecsSuite++; dire(`❌ vérification du bloc en échec (code ${st}) — ${echecsSuite} échec(s) de suite`); if (echecsSuite >= 3) break; await new Promise(r => setTimeout(r, 10 * 60 * 1000)); continue; }
             ({ TABLE_AUTO } = lireTable());
         }
-        const bloc = TABLE_AUTO.filter(l => l.verif && !l.collecte).slice(0, TAILLE);
+        const bloc = TABLE_AUTO.filter(l => l.verif && !l.collecte && dansLaRegion(l)).slice(0, TAILLE);
         blocs++;
         const b = { ok: 0, nonConcordant: 0, nomsDiscordants: 0, echec: 0, aRegarder: 0, dejaFait: 0, produitsVersPlusieursCartes: 0, imagesEnAttente: { jp: 0, intl: 0 } };
         dire(`── bloc ${blocs} : ${bloc.length} lignes (${bloc.filter(l => l.verifie).length} admises, ${bloc.filter(l => !l.verifie).length} à regarder) ──`);

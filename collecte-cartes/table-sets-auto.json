@@ -4988,11 +4988,11 @@
   "prod": 84,
   "nom": "BREAK Starter Pack",
   "slugSet": "BREAK-Starter-Pack",
-  "region": "occidental",
+  "region": "japonais",
   "bulba": {
    "titre": "Generations (TCG)",
-   "tirage": "intl",
-   "expansion": "Generations"
+   "tirage": "jp",
+   "expansion": "BREAK Starter Pack"
   },
   "attendu": 84,
   "auto": {
@@ -5005,28 +5005,37 @@
    "genereLe": "2026-09-14"
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Generations (TCG)",
-   "entrees": 83,
-   "echantillon": "Machamp (Furious Fists 46)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "tirageEtabli": "intl",
-   "ratio": 0.99,
-   "etat": "À REGARDER",
-   "raisons": [
-    "page redirigée : « BREAK Starter Pack (TCG) » → « Generations » (le nom d'expansion est celui de la cible, pas celui de l'expansion Cardmarket)",
-    "région codes_set « japonais » contredite par le tirage « intl » de la carte-échantillon"
-   ],
-   "retireLe": "2026-09-15"
-  },
-  "collecte": {
-   "le": "2026-09-15T10:56:33.965Z",
-   "etat": "faux-affirme",
-   "note": "84 produits joints à Generations intl par numéro, 65 noms discordants sur 76 (Rapidash n°013 → Ninetales). Jointures EN BASE, non retirées : décision du testeur."
-  }
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T10:56:33.965Z",
+    "etat": "faux-affirme",
+    "note": "84 produits joints à Generations intl par numéro, 65 noms discordants sur 76 (Rapidash n°013 → Ninetales). Jointures EN BASE, non retirées : décision du testeur.",
+    "verifAvant": {
+     "le": "2026-09-15",
+     "pageResolue": "Generations (TCG)",
+     "entrees": 83,
+     "echantillon": "Machamp (Furious Fists 46)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "tirageEtabli": "intl",
+     "ratio": 0.99,
+     "etat": "À REGARDER",
+     "raisons": [
+      "page redirigée : « BREAK Starter Pack (TCG) » → « Generations » (le nom d'expansion est celui de la cible, pas celui de l'expansion Cardmarket)",
+      "région codes_set « japonais » contredite par le tirage « intl » de la carte-échantillon"
+     ],
+     "retireLe": "2026-09-15"
+    },
+    "bulbaAvant": {
+     "titre": "Generations (TCG)",
+     "tirage": "intl",
+     "expansion": "Generations"
+    },
+    "retireeLe": "2026-09-15T18:35:44.687Z",
+    "motif": "faux affirmé retiré (84 cartes_produits, 83 appartenances, état) ; rejugé en jp"
+   }
+  ]
  },
  {
   "code": "ADV4",
@@ -16702,6 +16711,604 @@
    "sectionListe": "McDonald's Collection",
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s6k",
+  "exp": 4172,
+  "prod": 95,
+  "nom": "Jet Black Spirit",
+  "slugSet": "Jet-Black-Spirit",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Chilling Reign (TCG)",
+   "tirage": "jp",
+   "expansion": "Jet-Black Spirit"
+  },
+  "attendu": 95,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Jet-Black Spirit",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv4K",
+  "exp": 5478,
+  "prod": 95,
+  "nom": "Ancient Roar",
+  "slugSet": "Ancient-Roar",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Paradox Rift (TCG)",
+   "tirage": "jp",
+   "expansion": "Ancient Roar"
+  },
+  "attendu": 95,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Ancient Roar",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s1W",
+  "exp": 3289,
+  "prod": 75,
+  "nom": "Sword",
+  "slugSet": "Sword",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Sword & Shield (TCG)",
+   "tirage": "jp",
+   "expansion": "Sword"
+  },
+  "attendu": 75,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Sword",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DP4m",
+  "exp": 4309,
+  "prod": 70,
+  "nom": "Moonlit Pursuit",
+  "slugSet": "Moonlit-Pursuit",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Moonlit Pursuit/Dawn Dash (TCG)",
+   "tirage": "jp",
+   "expansion": "Moonlit Pursuit"
+  },
+  "attendu": 70,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Moonlit Pursuit",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm4s",
+  "exp": 3926,
+  "prod": 62,
+  "nom": "Awakened Heroes",
+  "slugSet": "Awakened-Heroes",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Crimson Invasion (TCG)",
+   "tirage": "jp",
+   "expansion": "Awakened Heroes"
+  },
+  "attendu": 62,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Awakened Heroes",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XY11f",
+  "exp": 3999,
+  "prod": 59,
+  "nom": "Fever Burst Fighter",
+  "slugSet": "Fever-Burst-Fighter",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Steam Siege (TCG)",
+   "tirage": "jp",
+   "expansion": "Fever-Burst Fighter"
+  },
+  "attendu": 59,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Fever-Burst Fighter",
+   "regionCodesSet": "japonais",
+   "note": "section",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s7D",
+  "exp": 4329,
+  "prod": 90,
+  "nom": "Towering Perfection",
+  "slugSet": "Towering-Perfection",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Evolving Skies (TCG)",
+   "tirage": "jp",
+   "expansion": "Skyscraping Perfection"
+  },
+  "attendu": 90,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Skyscraping Perfection",
+   "regionCodesSet": "japonais",
+   "note": "section, nom Cardmarket « Towering Perfection »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "xsv2a",
+  "exp": 6219,
+  "prod": 306,
+  "nom": "Pokemon Card 151 Additionals",
+  "slugSet": "Pokemon-Card-151-Additionals",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Pokémon Card 151 (TCG)",
+   "tirage": "jp",
+   "expansion": "Pokémon Card 151"
+  },
+  "attendu": 306,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Pokémon Card 151",
+   "regionCodesSet": "japonais",
+   "note": "Additionals Cardmarket",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "xm2a",
+  "exp": 6409,
+  "prod": 212,
+  "nom": "MEGA Dream ex Additionals",
+  "slugSet": "MEGA-Dream-ex-Additionals",
+  "region": "japonais",
+  "bulba": {
+   "titre": "MEGA Dream ex (TCG)",
+   "tirage": "jp",
+   "expansion": "MEGA Dream ex"
+  },
+  "attendu": 212,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "MEGA Dream ex",
+   "regionCodesSet": "japonais",
+   "note": "Additionals Cardmarket",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm6",
+  "exp": 3896,
+  "prod": 110,
+  "nom": "Forbidden Light JP",
+  "slugSet": "Forbidden-Light-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Forbidden Light (TCG)",
+   "tirage": "jp",
+   "expansion": "Forbidden Light"
+  },
+  "attendu": 110,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Forbidden Light",
+   "regionCodesSet": "japonais",
+   "note": "nom partagé avec le set EN : tirage jp",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm3+",
+  "exp": 3931,
+  "prod": 82,
+  "nom": "Shining Legends JP",
+  "slugSet": "Shining-Legends-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Shining Legends (TCG)",
+   "tirage": "jp",
+   "expansion": "Shining Legends"
+  },
+  "attendu": 82,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Shining Legends",
+   "regionCodesSet": "japonais",
+   "note": "nom partagé avec le set EN : tirage jp",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "smP2",
+  "exp": 3826,
+  "prod": 25,
+  "nom": "Detective Pikachu JP",
+  "slugSet": "Detective-Pikachu-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Great Detective Pikachu (TCG)",
+   "tirage": "jp",
+   "expansion": "Great Detective Pikachu"
+  },
+  "attendu": 25,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Great Detective Pikachu",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Detective Pikachu JP »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv8a",
+  "exp": 5928,
+  "prod": 237,
+  "nom": "Terastal Festival ex",
+  "slugSet": "Terastal-Festival-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Terastal Fest ex (TCG)",
+   "tirage": "jp",
+   "expansion": "Terastal Fest ex"
+  },
+  "attendu": 237,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Terastal Fest ex",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Terastal Festival ex »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "xsv8a",
+  "exp": 6220,
+  "prod": 245,
+  "nom": "Terastal Festival ex Additionals",
+  "slugSet": "Terastal-Festival-ex-Additionals",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Terastal Fest ex (TCG)",
+   "tirage": "jp",
+   "expansion": "Terastal Fest ex"
+  },
+  "attendu": 245,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Terastal Fest ex",
+   "regionCodesSet": "japonais",
+   "note": "Additionals Cardmarket",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv11B",
+  "exp": 6130,
+  "prod": 174,
+  "nom": "Black Bolt JP",
+  "slugSet": "Black-Bolt-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Black Bolt/White Flare (TCG)",
+   "tirage": "jp",
+   "expansion": "Black Bolt"
+  },
+  "attendu": 174,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Black Bolt",
+   "regionCodesSet": "japonais",
+   "note": "page JP combinée",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv11W",
+  "exp": 6131,
+  "prod": 174,
+  "nom": "White Flare JP",
+  "slugSet": "White-Flare-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Black Bolt/White Flare (TCG)",
+   "tirage": "jp",
+   "expansion": "White Flare"
+  },
+  "attendu": 174,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "White Flare",
+   "regionCodesSet": "japonais",
+   "note": "page JP combinée",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "xsv11B",
+  "exp": 6222,
+  "prod": 152,
+  "nom": "Black Bolt JP Additionals",
+  "slugSet": "Black-Bolt-JP-Additionals",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Black Bolt/White Flare (TCG)",
+   "tirage": "jp",
+   "expansion": "Black Bolt"
+  },
+  "attendu": 152,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Black Bolt",
+   "regionCodesSet": "japonais",
+   "note": "Additionals Cardmarket",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "xsv11W",
+  "exp": 6223,
+  "prod": 152,
+  "nom": "White Flare JP Additionals",
+  "slugSet": "White-Flare-JP-Additionals",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Black Bolt/White Flare (TCG)",
+   "tirage": "jp",
+   "expansion": "White Flare"
+  },
+  "attendu": 152,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "White Flare",
+   "regionCodesSet": "japonais",
+   "note": "Additionals Cardmarket",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv6",
+  "exp": 5690,
+  "prod": 133,
+  "nom": "Mask of Change",
+  "slugSet": "Mask-of-Change",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Transformation Mask (TCG)",
+   "tirage": "jp",
+   "expansion": "Transformation Mask"
+  },
+  "attendu": 133,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Transformation Mask",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Mask of Change »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv10",
+  "exp": 6092,
+  "prod": 132,
+  "nom": "The Glory of Team Rocket",
+  "slugSet": "The-Glory-of-Team-Rocket",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Glory of the Rocket Gang (TCG)",
+   "tirage": "jp",
+   "expansion": "Glory of the Rocket Gang"
+  },
+  "attendu": 132,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Glory of the Rocket Gang",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « The Glory of Team Rocket »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s4",
+  "exp": 3479,
+  "prod": 121,
+  "nom": "Shocking Volt Tackle",
+  "slugSet": "Shocking-Volt-Tackle",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Amazing Volt Tackle (TCG)",
+   "tirage": "jp",
+   "expansion": "Amazing Volt Tackle"
+  },
+  "attendu": 121,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Amazing Volt Tackle",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Shocking Volt Tackle »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sv9a",
+  "exp": 6037,
+  "prod": 92,
+  "nom": "Heat Wave Arena",
+  "slugSet": "Heat-Wave-Arena",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Hot Wind Arena (TCG)",
+   "tirage": "jp",
+   "expansion": "Hot Wind Arena"
+  },
+  "attendu": 92,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Hot Wind Arena",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Heat Wave Arena »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s5a",
+  "exp": 3751,
+  "prod": 96,
+  "nom": "Matchless Fighter",
+  "slugSet": "Matchless-Fighter",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Peerless Fighters (TCG)",
+   "tirage": "jp",
+   "expansion": "Peerless Fighters"
+  },
+  "attendu": 96,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Peerless Fighters",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Matchless Fighter »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s10b",
+  "exp": 4786,
+  "prod": 101,
+  "nom": "Pokemon GO Enhanced Expansion Pack",
+  "slugSet": "Pokemon-GO-Enhanced-Expansion-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Pokémon GO (TCG)",
+   "tirage": "jp",
+   "expansion": "Pokémon GO"
+  },
+  "attendu": 101,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Pokémon GO",
+   "regionCodesSet": "japonais",
+   "note": "nom partagé avec le set EN : tirage jp",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sm1+",
+  "exp": 3961,
+  "prod": 69,
+  "nom": "Strength Expansion Pack Sun Moon",
+  "slugSet": "Strength-Expansion-Pack-Sun-Moon",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Enhanced Expansion Pack Sun & Moon (TCG)",
+   "tirage": "jp",
+   "expansion": "Enhanced Expansion Pack Sun & Moon"
+  },
+  "attendu": 69,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Enhanced Expansion Pack Sun & Moon",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « Strength Expansion Pack Sun Moon »",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "s8a-P",
+  "exp": 4346,
+  "prod": 25,
+  "nom": "25th Anniversary Edition",
+  "slugSet": "25th-Anniversary-Edition",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Promo Card Pack 25th Anniversary Edition (TCG)",
+   "tirage": "jp",
+   "expansion": "Promo Card Pack 25th Anniversary Edition"
+  },
+  "attendu": 25,
+  "auto": {
+   "cle": "main-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "Promo Card Pack 25th Anniversary Edition",
+   "regionCodesSet": "japonais",
+   "note": "Cardmarket « 25th Anniversary Edition »",
+   "genereLe": "2026-09-15"
   },
   "verifie": null
  }
