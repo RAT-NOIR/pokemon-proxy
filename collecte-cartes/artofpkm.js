@@ -79,11 +79,15 @@ async function listerSet(id) {
     // Le relevé page par page VOYAGE avec la liste (`entrees.pages`) : l'appelant l'écrit dans l'état. Le
     // 2026-09-14, la preuve de la page 2 n'existait que dans le log Render — un compte qui décide et ne vit
     // que dans un log n'est pas une mesure.
+    // ✅ RÉSOLU LE 2026-09-15, MESURÉ : le serveur IGNORE `?page=2` — « page 2 : 100 entrées lues, 0 nouvelles » sur
+    // sv4a (360 cartes), s4a (330), s8b (285), s12a. La suite se charge par un CADRE TURBO en fin de lot :
+    // `<turbo-frame id="card_batch_100" src="/sets/506/card_batches?offset=100">`. On suit ce cadre, lot après lot ;
+    // arrêt quand un lot n'apporte aucun n nouveau, ou quand il n'y a plus de cadre. Chaque lot imprime son compte.
     const releve = [];
     Object.defineProperty(entrees, 'pages', { value: releve, enumerable: false });
-    for (let page = 1; page <= 50; page++) {
-        const url = `${BASE}sets/${id}/cards${page > 1 ? `?page=${page}` : ''}`;
-        const html = (await requete(url)).data;
+    let chemin = `sets/${id}/cards`;
+    for (let lot = 1; chemin && lot <= 60; lot++) {
+        const html = (await requete(`${BASE}${chemin}`)).data;
         let lues = 0, nouvelles = 0;
         for (const m of html.matchAll(re)) {
             lues++;
@@ -92,10 +96,12 @@ async function listerSet(id) {
             vuesN.add(n); nouvelles++;
             entrees.push({ titre: decode(m[1]), sourceSetId: Number(m[2]), n, original: m[4], cleCdn: m[4].split('/').pop(), vignette: m[5] });
         }
-        releve.push({ page, lues, nouvelles });
-        console.log(`   liste ${id} page ${page} : ${lues} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})`);
-        if (!nouvelles || !lues || lues < taillePage) break;
+        const suite = html.match(/<turbo-frame[^>]*\ssrc="\/(sets\/\d+\/card_batches\?offset=\d+)"/);
+        releve.push({ lot, chemin, lues, nouvelles, suite: suite ? suite[1] : null });
+        console.log(`   liste ${id} lot ${lot} (${chemin}) : ${lues} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})${suite ? ` → ${suite[1]}` : ' · pas de lot suivant'}`);
+        chemin = nouvelles && suite ? suite[1] : null;
     }
+    if (entrees.length && entrees.length % taillePage === 0) console.warn(`   ⚠️ liste ${id} : ${entrees.length} entrées, un multiple de ${taillePage} — un compte rond se vérifie (§21 n°7)`);
     return entrees;
 }
 
