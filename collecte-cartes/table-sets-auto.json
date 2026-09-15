@@ -8,7 +8,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Start Deck 100 (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Start Deck 100"
   },
   "attendu": 430,
@@ -67,7 +67,31 @@
     "motif": "parseur : impressions jpdeck rendues (b9b0297)"
    }
   ],
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Start Deck 100 (TCG)",
+   "entrees": {
+    "Start Deck 100": 422
+   },
+   "note": "vérification automatique : 422 entrées pour 430 produits, échantillon « Onix (Battle Styles 68) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Start Deck 100 (TCG)",
+   "entrees": 422,
+   "echantillon": "Onix (Battle Styles 68)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:02:46.548Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv4a",
@@ -1170,7 +1194,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "GX Starter Decks (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "GX Starter Decks"
   },
   "attendu": 131,
@@ -1229,7 +1253,31 @@
     "motif": "parseur : impressions jpdeck rendues (b9b0297)"
    }
   ],
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "GX Starter Decks (TCG)",
+   "entrees": {
+    "GX Starter Decks": 131
+   },
+   "note": "vérification automatique : 131 entrées pour 131 produits, échantillon « Alolan Persian (Sun & Moon 79) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "GX Starter Decks (TCG)",
+   "entrees": 131,
+   "echantillon": "Alolan Persian (Sun & Moon 79)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:03:31.784Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s8",
@@ -1450,7 +1498,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "V Starter Decks (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "V Starter Decks"
   },
   "attendu": 127,
@@ -1509,7 +1557,31 @@
     "motif": "parseur : impressions jpdeck rendues (b9b0297)"
    }
   ],
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "V Starter Decks (TCG)",
+   "entrees": {
+    "V Starter Decks": 127
+   },
+   "note": "vérification automatique : 127 entrées pour 127 produits, échantillon « Impidimp (Rebel Clash 123) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "V Starter Decks (TCG)",
+   "entrees": 127,
+   "echantillon": "Impidimp (Rebel Clash 123)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:04:18.393Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm4+",
@@ -5043,7 +5115,14 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Generations (TCG)",
+   "entrees": {
+    "BREAK Starter Pack": 77
+   },
+   "note": "vérification automatique : 77 entrées pour 84 produits, échantillon « Clefairy (Furious Fists 69) » (jp)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T10:56:33.965Z",
@@ -5100,7 +5179,23 @@
     "retireeLe": "2026-09-15T19:00:23.293Z",
     "motif": "section « Starter Pack » ×77 de Generations (TCG) ; cartes jp « BREAK Starter Pack » (Clefairy n°039)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Generations (TCG)",
+   "entrees": 77,
+   "echantillon": "Clefairy (Furious Fists 69)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:04:48.388Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "ADV4",
@@ -17224,7 +17319,14 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Forbidden Light (TCG)",
+   "entrees": {
+    "Forbidden Light": 110
+   },
+   "note": "vérification automatique : 110 entrées pour 110 produits, échantillon « Guzzlord (Forbidden Light 80) » (jp)"
+  },
   "collecteAvant": [
    {
     "verif": {
@@ -17258,7 +17360,24 @@
     "retireeLe": "2026-09-15T19:00:23.293Z",
     "motif": "page à deux sections « Forbidden Light » : occidentale ×146 puis japonaise ×110 (= 110 produits)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Forbidden Light (TCG)",
+   "entrees": 110,
+   "echantillon": "Guzzlord (Forbidden Light 80)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:05:37.314Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm3+",
@@ -17282,7 +17401,14 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Shining Legends (TCG)",
+   "entrees": {
+    "Shining Legends": 82
+   },
+   "note": "vérification automatique : 82 entrées pour 82 produits, échantillon « Latios (Shining Legends 41) » (jp)"
+  },
   "collecteAvant": [
    {
     "verif": {
@@ -17315,7 +17441,24 @@
     "retireeLe": "2026-09-15T19:00:23.293Z",
     "motif": "deux sections « Shining Legends » : ×78 (EN) puis ×82 (JP, = 82 produits)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Legends (TCG)",
+   "entrees": 82,
+   "echantillon": "Latios (Shining Legends 41)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:06:15.023Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "smP2",
@@ -17908,7 +18051,14 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Pokémon GO (TCG)",
+   "entrees": {
+    "Pokémon GO": 101
+   },
+   "note": "vérification automatique : 101 entrées pour 101 produits, échantillon « Chansey (Pokémon GO 51) » (jp)"
+  },
   "collecteAvant": [
    {
     "verif": {
@@ -17941,7 +18091,24 @@
     "retireeLe": "2026-09-15T19:00:23.293Z",
     "motif": "deux sections « Pokémon GO » : ×88 (EN) puis ×101 (JP, = 101 produits)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Pokémon GO (TCG)",
+   "entrees": 101,
+   "echantillon": "Chansey (Pokémon GO 51)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:07:02.825Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sm1+",
@@ -17967,7 +18134,14 @@
    "note": "Cardmarket « Strength Expansion Pack Sun Moon »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Enhanced Expansion Pack Sun & Moon (TCG)",
+   "entrees": {
+    "Enhanced Expansion Pack Sun & Moon": 68
+   },
+   "note": "vérification automatique : 68 entrées pour 69 produits, échantillon « Palossand (Sun & Moon 75) » (jp)"
+  },
   "collecteAvant": [
    {
     "verif": {
@@ -17995,7 +18169,19 @@
     "retireeLe": "2026-09-15T19:00:23.293Z",
     "motif": "section « Sun & Moon » ×68 ; cartes jp « Enhanced Expansion Pack Sun & Moon »"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Enhanced Expansion Pack Sun & Moon (TCG)",
+   "entrees": 68,
+   "echantillon": "Palossand (Sun & Moon 75)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "s8a-P",
@@ -18042,5 +18228,1028 @@
    "le": "2026-09-15T18:55:52.206Z",
    "etat": "ok"
   }
+ },
+ {
+  "code": "smA",
+  "exp": 4258,
+  "prod": 59,
+  "nom": "Sun Moon Starter Set",
+  "slugSet": "Sun-Moon-Starter-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Sun & Moon Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Sun & Moon Starter Set"
+  },
+  "attendu": 59,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Sun & Moon Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svHM",
+  "exp": 5576,
+  "prod": 53,
+  "nom": "Starter Deck Build Set Future Miraidon ex",
+  "slugSet": "Starter-Deck-Build-Set-Future-Miraidon-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Future Miraidon ex Starter Deck & Build Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Future Miraidon ex Starter Deck & Build Set"
+  },
+  "attendu": 53,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Future Miraidon ex Starter Deck & Build Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svHK",
+  "exp": 5575,
+  "prod": 53,
+  "nom": "Starter Deck Build Set Ancient Koraidon ex",
+  "slugSet": "Starter-Deck-Build-Set-Ancient-Koraidon-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Ancient Koraidon ex Starter Deck & Build Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Ancient Koraidon ex Starter Deck & Build Set"
+  },
+  "attendu": 53,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Ancient Koraidon ex Starter Deck & Build Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgA",
+  "exp": 5729,
+  "prod": 52,
+  "nom": "Venusaur Charizard Blastoise Random Constructed Starter Decks",
+  "slugSet": "Venusaur-Charizard-Blastoise-Random-Constructed-Starter-Decks",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Venusaur/Charizard/Blastoise Random Constructed Starter Decks (TCG)",
+   "tirage": "jp",
+   "expansion": "Venusaur/Charizard/Blastoise Random Constructed Starter Decks"
+  },
+  "attendu": 52,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Venusaur/Charizard/Blastoise Random Constructed Starter Decks",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "smM",
+  "exp": 4245,
+  "prod": 31,
+  "nom": "Tag Team GX Starter Sets",
+  "slugSet": "Tag-Team-GX-Starter-Sets",
+  "region": "japonais",
+  "bulba": {
+   "titre": "TAG TEAM GX Starter Sets (TCG)",
+   "tirage": "jp",
+   "expansion": "TAG TEAM GX Starter Sets"
+  },
+  "attendu": 31,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "TAG TEAM GX Starter Sets",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svC",
+  "exp": 5299,
+  "prod": 24,
+  "nom": "ex Starter Set Pikachu ex Pawmot",
+  "slugSet": "ex-Starter-Set-Pikachu-ex-Pawmot",
+  "region": "japonais",
+  "bulba": {
+   "titre": "ex Starter Set Pikachu ex & Pawmot (TCG)",
+   "tirage": "jp",
+   "expansion": "ex Starter Set Pikachu ex & Pawmot"
+  },
+  "attendu": 24,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "ex Starter Set Pikachu ex & Pawmot",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgR",
+  "exp": 5694,
+  "prod": 24,
+  "nom": "Shockwave Tyranitar ex Constructed Standard Deck",
+  "slugSet": "Shockwave-Tyranitar-ex-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Shockwave! Tyranitar ex Constructed Standard Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Shockwave! Tyranitar ex Constructed Standard Deck"
+  },
+  "attendu": 24,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Shockwave! Tyranitar ex Constructed Standard Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgS",
+  "exp": 5695,
+  "prod": 24,
+  "nom": "Imprison Gardevoir ex Constructed Standard Deck",
+  "slugSet": "Imprison-Gardevoir-ex-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Imprison! Gardevoir ex Constructed Standard Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Imprison! Gardevoir ex Constructed Standard Deck"
+  },
+  "attendu": 24,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Imprison! Gardevoir ex Constructed Standard Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sGI",
+  "exp": 4242,
+  "prod": 23,
+  "nom": "Inteleon VMAX High Class Deck",
+  "slugSet": "Inteleon-VMAX-High-Class-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Inteleon VMAX High-Class Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Inteleon VMAX High-Class Deck"
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Inteleon VMAX High-Class Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "mP1",
+  "exp": 6382,
+  "prod": 23,
+  "nom": "MEGA Start Deck 100 Battle Collection Corociao Version",
+  "slugSet": "MEGA-Start-Deck-100-Battle-Collection-Corociao-Version",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Start Deck 100 Battle Collection CoroCiao Version (TCG)",
+   "tirage": "jp",
+   "expansion": "Start Deck 100 Battle Collection CoroCiao Version"
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Start Deck 100 Battle Collection CoroCiao Version",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYc",
+  "exp": 4129,
+  "prod": 23,
+  "nom": "Super Legend Set Xerneas EX Yveltal EX",
+  "slugSet": "Super-Legend-Set-Xerneas-EX-Yveltal-EX",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Super Legend Set: Xerneas-EX & Yveltal-EX (TCG)",
+   "tirage": "jp",
+   "expansion": "Super Legend Set: Xerneas-EX & Yveltal-EX"
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Super Legend Set: Xerneas-EX & Yveltal-EX",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svJL",
+  "exp": 5737,
+  "prod": 22,
+  "nom": "Battle Master Deck Tera Charizard ex",
+  "slugSet": "Battle-Master-Deck-Tera-Charizard-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Battle Master Deck Terastal Charizard ex (TCG)",
+   "tirage": "jp",
+   "expansion": "Battle Master Deck Terastal Charizard ex"
+  },
+  "attendu": 22,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Battle Master Deck Terastal Charizard ex",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYa",
+  "exp": 4139,
+  "prod": 21,
+  "nom": "MCharizard EX Mega Battle Deck",
+  "slugSet": "MCharizard-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "M Charizard-EX Mega Battle Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "M Charizard-EX Mega Battle Deck"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "M Charizard-EX Mega Battle Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svOD",
+  "exp": 6017,
+  "prod": 21,
+  "nom": "Starter Set ex Stevens Beldum Metagross ex",
+  "slugSet": "Starter-Set-ex-Stevens-Beldum-Metagross-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "ex Starter Set Steven's Beldum & Metagross ex (TCG)",
+   "tirage": "jp",
+   "expansion": "ex Starter Set Steven's Beldum & Metagross ex"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "ex Starter Set Steven's Beldum & Metagross ex",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sPD",
+  "exp": 5097,
+  "prod": 21,
+  "nom": "VMAX VSTAR High Class Decks Deoxys",
+  "slugSet": "VMAX-VSTAR-High-Class-Decks-Deoxys",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Deoxys VSTAR & VMAX High-Class Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Deoxys VSTAR & VMAX High-Class Deck"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Deoxys VSTAR & VMAX High-Class Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sEF",
+  "exp": 3585,
+  "prod": 21,
+  "nom": "VMAX Starter Deck Venusaur VMAX",
+  "slugSet": "VMAX-Starter-Deck-Venusaur-VMAX",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Venusaur VMAX Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Venusaur VMAX Starter Set"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Venusaur VMAX Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sPZ",
+  "exp": 5096,
+  "prod": 21,
+  "nom": "VSTAR VMAX High Class Deck Zeraora",
+  "slugSet": "VSTAR-VMAX-High-Class-Deck-Zeraora",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Zeraora VSTAR & VMAX High-Class Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Zeraora VSTAR & VMAX High-Class Deck"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Zeraora VSTAR & VMAX High-Class Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svOM",
+  "exp": 6016,
+  "prod": 21,
+  "nom": "Starter Set ex Marnies Morpeko Grimmsnarl ex",
+  "slugSet": "Starter-Set-ex-Marnies-Morpeko-Grimmsnarl-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "ex Starter Set Marnie's Morpeko & Grimmsnarl ex (TCG)",
+   "tirage": "jp",
+   "expansion": "ex Starter Set Marnie's Morpeko & Grimmsnarl ex"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "ex Starter Set Marnie's Morpeko & Grimmsnarl ex",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sLL",
+  "exp": 4516,
+  "prod": 21,
+  "nom": "Sword Shield Starter Set Lucario VSTAR",
+  "slugSet": "Sword-Shield-Starter-Set-Lucario-VSTAR",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Lucario VSTAR Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Lucario VSTAR Starter Set"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Lucario VSTAR Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "smE",
+  "exp": 4254,
+  "prod": 21,
+  "nom": "Solgaleo GX Lunala GX Legendary Starter Set",
+  "slugSet": "Solgaleo-GX-Lunala-GX-Legendary-Starter-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Solgaleo-GX & Lunala-GX Legendary Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Solgaleo-GX & Lunala-GX Legendary Starter Set"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Solgaleo-GX & Lunala-GX Legendary Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "smC",
+  "exp": 4255,
+  "prod": 21,
+  "nom": "Tapu Bulu GX Enhanced Starter Set",
+  "slugSet": "Tapu-Bulu-GX-Enhanced-Starter-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Tapu Bulu-GX Enhanced Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Tapu Bulu-GX Enhanced Starter Set"
+  },
+  "attendu": 21,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Tapu Bulu-GX Enhanced Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sLD",
+  "exp": 4517,
+  "prod": 20,
+  "nom": "Sword Shield Starter Set Darkrai VSTAR",
+  "slugSet": "Sword-Shield-Starter-Set-Darkrai-VSTAR",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Darkrai VSTAR Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Darkrai VSTAR Starter Set"
+  },
+  "attendu": 20,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Darkrai VSTAR Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sEK",
+  "exp": 3590,
+  "prod": 20,
+  "nom": "VMAX Starter Deck Blastoise VMAX",
+  "slugSet": "VMAX-Starter-Deck-Blastoise-VMAX",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Blastoise VMAX Starter Set (TCG)",
+   "tirage": "jp",
+   "expansion": "Blastoise VMAX Starter Set"
+  },
+  "attendu": 20,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Blastoise VMAX Starter Set",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "svJP",
+  "exp": 5738,
+  "prod": 20,
+  "nom": "Battle Master Deck Chien Pao ex",
+  "slugSet": "Battle-Master-Deck-Chien-Pao-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Battle Master Deck Chien-Pao ex (TCG)",
+   "tirage": "jp",
+   "expansion": "Battle Master Deck Chien-Pao ex"
+  },
+  "attendu": 20,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Battle Master Deck Chien-Pao ex",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sGG",
+  "exp": 4241,
+  "prod": 20,
+  "nom": "Gengar VMAX High Class Deck",
+  "slugSet": "Gengar-VMAX-High-Class-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Gengar VMAX High-Class Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Gengar VMAX High-Class Deck"
+  },
+  "attendu": 20,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Gengar VMAX High-Class Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYg",
+  "exp": 4084,
+  "prod": 19,
+  "nom": "Zygarde EX Perfect Battle Deck",
+  "slugSet": "Zygarde-EX-Perfect-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Zygarde-EX Perfect Battle Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Zygarde-EX Perfect Battle Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Zygarde-EX Perfect Battle Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DP3p",
+  "exp": 4311,
+  "prod": 19,
+  "nom": "Palkia LVX Constructed Standard Deck",
+  "slugSet": "Palkia-LVX-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Palkia LV.X Constructed Standard Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Palkia LV.X Constructed Standard Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Palkia LV.X Constructed Standard Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DP3d",
+  "exp": 4312,
+  "prod": 19,
+  "nom": "Dialga LVX Constructed Standard Deck",
+  "slugSet": "Dialga-LVX-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Dialga LV.X Constructed Standard Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Dialga LV.X Constructed Standard Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Dialga LV.X Constructed Standard Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYd",
+  "exp": 4119,
+  "prod": 18,
+  "nom": "MRayquaza EX Mega Battle Deck",
+  "slugSet": "MRayquaza-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "M Rayquaza-EX Mega Battle Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "M Rayquaza-EX Mega Battle Deck"
+  },
+  "attendu": 18,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "M Rayquaza-EX Mega Battle Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PtG",
+  "exp": 4285,
+  "prod": 16,
+  "nom": "Garchomp SP Half Deck",
+  "slugSet": "Garchomp-SP-Half-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Garchomp Half Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Garchomp Half Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Garchomp Half Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgQ",
+  "exp": 5698,
+  "prod": 16,
+  "nom": "Earths Groudon ex Constructed Starter Deck",
+  "slugSet": "Earths-Groudon-ex-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Earth's Groudon ex Constructed Starter Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Earth's Groudon ex Constructed Starter Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Earth's Groudon ex Constructed Starter Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgP",
+  "exp": 5699,
+  "prod": 16,
+  "nom": "Oceans Kyogre ex Constructed Starter Deck",
+  "slugSet": "Oceans-Kyogre-ex-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Ocean's Kyogre ex Constructed Starter Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Ocean's Kyogre ex Constructed Starter Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Ocean's Kyogre ex Constructed Starter Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XYf",
+  "exp": 4099,
+  "prod": 16,
+  "nom": "Golduck BREAK Palkia EX Combo Deck",
+  "slugSet": "Golduck-BREAK-Palkia-EX-Combo-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Golduck BREAK + Palkia-EX Combo Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Golduck BREAK + Palkia-EX Combo Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Golduck BREAK + Palkia-EX Combo Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "pcgK",
+  "exp": 5719,
+  "prod": 16,
+  "nom": "Mirages Mew Constructed Starter Deck",
+  "slugSet": "Mirages-Mew-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Mirage's Mew Constructed Starter Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Mirage's Mew Constructed Starter Deck"
+  },
+  "attendu": 16,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Mirage's Mew Constructed Starter Deck",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "sp1",
+  "exp": 3605,
+  "prod": 7,
+  "nom": "Zacian Zamazenta BOX",
+  "slugSet": "Zacian-Zamazenta-BOX",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Zacian + Zamazenta Box (TCG)",
+   "tirage": "jp",
+   "expansion": "Zacian + Zamazenta Box"
+  },
+  "attendu": 7,
+  "auto": {
+   "cle": "deck-2026-09-15",
+   "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
+   "nomBulbapedia": "Zacian + Zamazenta Box",
+   "regionCodesSet": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SM-P",
+  "exp": 3324,
+  "prod": 422,
+  "nom": "Sun Moon Promos",
+  "slugSet": "Sun-Moon-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "SM-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "SM-P Promotional cards"
+  },
+  "attendu": 422,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "SM-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "S-P",
+  "exp": 3214,
+  "prod": 354,
+  "nom": "Sword Shield Promos",
+  "slugSet": "Sword-Shield-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "S-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "S-P Promotional cards"
+  },
+  "attendu": 354,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "S-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "XY-P",
+  "exp": 4159,
+  "prod": 301,
+  "nom": "XY Promos",
+  "slugSet": "XY-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "XY-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "XY-P Promotional cards"
+  },
+  "attendu": 301,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "XY-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV-P",
+  "exp": 5212,
+  "prod": 297,
+  "nom": "Scarlet Violet Promos",
+  "slugSet": "Scarlet-Violet-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "SV-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "SV-P Promotional cards"
+  },
+  "attendu": 297,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "SV-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "BW-P",
+  "exp": 4218,
+  "prod": 248,
+  "nom": "BW Promos",
+  "slugSet": "BW-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "BW-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "BW-P Promotional cards"
+  },
+  "attendu": 248,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "BW-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "PCG-P",
+  "exp": 4341,
+  "prod": 154,
+  "nom": "PCG Promos",
+  "slugSet": "PCG-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "PCG-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "PCG-P Promotional cards"
+  },
+  "attendu": 154,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "PCG-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "M-P",
+  "exp": 6230,
+  "prod": 138,
+  "nom": "M P Promos",
+  "slugSet": "M-P-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "M-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "M-P Promotional cards"
+  },
+  "attendu": 138,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "M-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DP-P",
+  "exp": 4322,
+  "prod": 127,
+  "nom": "DP Promos",
+  "slugSet": "DP-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "DP-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "DP-P Promotional cards"
+  },
+  "attendu": 127,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "DP-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "DPt-P",
+  "exp": 4298,
+  "prod": 51,
+  "nom": "DPt Promos",
+  "slugSet": "DPt-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "DPt-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "DPt-P Promotional cards"
+  },
+  "attendu": 51,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "DPt-P Promotional cards",
+   "regionCodesSet": "japonais",
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "L-P",
+  "exp": 4274,
+  "prod": 82,
+  "nom": "L P Promos",
+  "slugSet": "L-P-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "L-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "L-P Promotional cards"
+  },
+  "attendu": 82,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "L-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "ADV-P",
+  "exp": 4350,
+  "prod": 63,
+  "nom": "ADV Promos",
+  "slugSet": "ADV-Promos",
+  "region": "japonais",
+  "bulba": {
+   "titre": "ADV-P Promotional cards (TCG)",
+   "tirage": "jp",
+   "expansion": "ADV-P Promotional cards"
+  },
+  "attendu": 63,
+  "auto": {
+   "cle": "promo-jp-2026-09-15",
+   "liste": "List of Japanese Pokémon Trading Card Game expansions",
+   "nomBulbapedia": "ADV-P Promotional cards",
+   "regionCodesSet": null,
+   "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
  }
 ]
