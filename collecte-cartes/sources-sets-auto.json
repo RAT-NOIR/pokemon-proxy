@@ -1,0 +1,1370 @@
+{
+ "sI100": {
+  "ids": [
+   452
+  ],
+  "noms": [
+   "Start Deck 100"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv4a": {
+  "ids": [
+   506
+  ],
+  "noms": [
+   "Shiny Treasure ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s4a": {
+  "ids": [
+   419
+  ],
+  "noms": [
+   "Shiny Star V"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s8b": {
+  "ids": [
+   451
+  ],
+  "noms": [
+   "VMAX Climax"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s12a": {
+  "ids": [
+   479
+  ],
+  "noms": [
+   "VSTAR Universe"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m2a": {
+  "ids": [
+   579
+  ],
+  "noms": [
+   "Mega Dream ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm8b": {
+  "ids": [
+   368
+  ],
+  "noms": [
+   "GX Ultra Shiny"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv2a": {
+  "ids": [
+   490
+  ],
+  "noms": [
+   "Pokémon Card 151"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BXY": {
+  "ids": [
+   537
+  ],
+  "noms": [
+   "The Best of XY"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv3": {
+  "ids": [
+   493
+  ],
+  "noms": [
+   "Ruler of the Black Flame"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svD": {
+  "ids": [
+   491
+  ],
+  "noms": [
+   "ex Start Decks"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv7": {
+  "ids": [
+   520
+  ],
+  "noms": [
+   "Stellar Miracle"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv9": {
+  "ids": [
+   556
+  ],
+  "noms": [
+   "Battle Partners"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s8": {
+  "ids": [
+   442
+  ],
+  "noms": [
+   "Fusion Arts"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s11": {
+  "ids": [
+   466
+  ],
+  "noms": [
+   "Lost Abyss"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s9": {
+  "ids": [
+   453
+  ],
+  "noms": [
+   "Star Birth"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm4+": {
+  "ids": [
+   345
+  ],
+  "noms": [
+   "GX Battle Boost"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s12": {
+  "ids": [
+   476
+  ],
+  "noms": [
+   "Paradigm Trigger"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m4": {
+  "ids": [
+   585
+  ],
+  "noms": [
+   "Ninja Spinner"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s3": {
+  "ids": [
+   410
+  ],
+  "noms": [
+   "Infinity Zone"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m5": {
+  "ids": [
+   588
+  ],
+  "noms": [
+   "Abyss Eye"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm9": {
+  "ids": [
+   372
+  ],
+  "noms": [
+   "Tag Bolt"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m3": {
+  "ids": [
+   583
+  ],
+  "noms": [
+   "Nihil Zero"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm12": {
+  "ids": [
+   391
+  ],
+  "noms": [
+   "Alter Genesis"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DP3": {
+  "ids": [
+   156
+  ],
+  "noms": [
+   "Shining Darkness"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm10": {
+  "ids": [
+   378
+  ],
+  "noms": [
+   "Double Blaze"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m2": {
+  "ids": [
+   575
+  ],
+  "noms": [
+   "Inferno X"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s2": {
+  "ids": [
+   405
+  ],
+  "noms": [
+   "Rebellion Crash"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm11": {
+  "ids": [
+   386
+  ],
+  "noms": [
+   "Miracle Twin"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv1S": {
+  "ids": [
+   481
+  ],
+  "noms": [
+   "Scarlet ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm7": {
+  "ids": [
+   359
+  ],
+  "noms": [
+   "Sky-Splitting Charisma"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm8": {
+  "ids": [
+   364
+  ],
+  "noms": [
+   "Super Burst Impact"
+  ],
+  "cle": "nom-normalise"
+ },
+ "WCP": {
+  "ids": [
+   119
+  ],
+  "noms": [
+   "World Champions Pack"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv1V": {
+  "ids": [
+   482
+  ],
+  "noms": [
+   "Violet ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG4": {
+  "ids": [
+   116
+  ],
+  "noms": [
+   "Golden Sky, Silvery Ocean"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY3": {
+  "ids": [
+   294
+  ],
+  "noms": [
+   "Rising Fist"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv1a": {
+  "ids": [
+   485
+  ],
+  "noms": [
+   "Triplet Beat"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s6a": {
+  "ids": [
+   432
+  ],
+  "noms": [
+   "Eevee Heroes"
+  ],
+  "cle": "nom-normalise"
+ },
+ "Pt3": {
+  "ids": [
+   189
+  ],
+  "noms": [
+   "Beat of the Frontier"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv5M": {
+  "ids": [
+   509
+  ],
+  "noms": [
+   "Cyber Judge"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv5K": {
+  "ids": [
+   508
+  ],
+  "noms": [
+   "Wild Force"
+  ],
+  "cle": "nom-normalise"
+ },
+ "EBB": {
+  "ids": [
+   277
+  ],
+  "noms": [
+   "EX Battle Boost"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv2D": {
+  "ids": [
+   486
+  ],
+  "noms": [
+   "Clay Burst"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv2P": {
+  "ids": [
+   484
+  ],
+  "noms": [
+   "Snow Hazard"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY4": {
+  "ids": [
+   296
+  ],
+  "noms": [
+   "Phantom Gate"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY7": {
+  "ids": [
+   308
+  ],
+  "noms": [
+   "Bandit Ring"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv5a": {
+  "ids": [
+   513
+  ],
+  "noms": [
+   "Crimson Haze"
+  ],
+  "cle": "nom-normalise"
+ },
+ "Pt1": {
+  "ids": [
+   181
+  ],
+  "noms": [
+   "Galactic's Conquest"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv4M": {
+  "ids": [
+   503
+  ],
+  "noms": [
+   "Future Flash"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s6h": {
+  "ids": [
+   429
+  ],
+  "noms": [
+   "Silver Lance"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s3a": {
+  "ids": [
+   411
+  ],
+  "noms": [
+   "Legendary Heartbeat"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv7a": {
+  "ids": [
+   544
+  ],
+  "noms": [
+   "Paradise Dragona"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv6a": {
+  "ids": [
+   519
+  ],
+  "noms": [
+   "Night Wanderer"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s11a": {
+  "ids": [
+   473
+  ],
+  "noms": [
+   "Incandescent Arcana"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s9a": {
+  "ids": [
+   456
+  ],
+  "noms": [
+   "Battle Region"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sv3a": {
+  "ids": [
+   502
+  ],
+  "noms": [
+   "Raging Surf"
+  ],
+  "cle": "nom-normalise"
+ },
+ "IFDS": {
+  "ids": [
+   175
+  ],
+  "noms": [
+   "Intense Fight in the Destroyed Sky"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m1S": {
+  "ids": [
+   571
+  ],
+  "noms": [
+   "Mega Symphonia"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m1L": {
+  "ids": [
+   570
+  ],
+  "noms": [
+   "Mega Brave"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY6": {
+  "ids": [
+   305
+  ],
+  "noms": [
+   "Emerald Break"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s5I": {
+  "ids": [
+   424
+  ],
+  "noms": [
+   "Single Strike Master"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s5R": {
+  "ids": [
+   423
+  ],
+  "noms": [
+   "Rapid Strike Master"
+  ],
+  "cle": "nom-normalise"
+ },
+ "Pt2": {
+  "ids": [
+   186
+  ],
+  "noms": [
+   "Bonds to the End of Time"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY2": {
+  "ids": [
+   290
+  ],
+  "noms": [
+   "Wild Blaze"
+  ],
+  "cle": "nom-normalise"
+ },
+ "Pt4": {
+  "ids": [
+   195
+  ],
+  "noms": [
+   "Advent of Arceus"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s7R": {
+  "ids": [
+   437
+  ],
+  "noms": [
+   "Blue Sky Stream"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY9": {
+  "ids": [
+   526
+  ],
+  "noms": [
+   "Rage of the Broken Heavens"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY10": {
+  "ids": [
+   528
+  ],
+  "noms": [
+   "Awakening Psychic King"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s10D": {
+  "ids": [
+   459
+  ],
+  "noms": [
+   "Time Gazer"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s10P": {
+  "ids": [
+   460
+  ],
+  "noms": [
+   "Space Juggler"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm6b": {
+  "ids": [
+   357
+  ],
+  "noms": [
+   "Champion Road"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s1a": {
+  "ids": [
+   404
+  ],
+  "noms": [
+   "VMAX Rising"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG5": {
+  "ids": [
+   117
+  ],
+  "noms": [
+   "Mirage Forest"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW9": {
+  "ids": [
+   272
+  ],
+  "noms": [
+   "Megalo Cannon"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG3": {
+  "ids": [
+   100
+  ],
+  "noms": [
+   "Rocket Gang Strikes Back"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG1": {
+  "ids": [
+   88
+  ],
+  "noms": [
+   "Flight of Legends"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG2": {
+  "ids": [
+   91
+  ],
+  "noms": [
+   "Clash of the Blue Sky"
+  ],
+  "cle": "nom-normalise"
+ },
+ "L3": {
+  "ids": [
+   220
+  ],
+  "noms": [
+   "Clash at the Summit"
+  ],
+  "cle": "nom-normalise"
+ },
+ "L2": {
+  "ids": [
+   213
+  ],
+  "noms": [
+   "Reviving Legends"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm11a": {
+  "ids": [
+   387
+  ],
+  "noms": [
+   "Remix Bout"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY5g": {
+  "ids": [
+   299
+  ],
+  "noms": [
+   "Gaia Volcano"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY5t": {
+  "ids": [
+   300
+  ],
+  "noms": [
+   "Tidal Storm"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW7": {
+  "ids": [
+   261
+  ],
+  "noms": [
+   "Plasma Gale"
+  ],
+  "cle": "nom-normalise"
+ },
+ "L1HG": {
+  "ids": [
+   203
+  ],
+  "noms": [
+   "HeartGold Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm5m": {
+  "ids": [
+   349
+  ],
+  "noms": [
+   "Ultra Moon"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm5s": {
+  "ids": [
+   350
+  ],
+  "noms": [
+   "Ultra Sun"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW4": {
+  "ids": [
+   247
+  ],
+  "noms": [
+   "Dark Rush"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG8": {
+  "ids": [
+   134
+  ],
+  "noms": [
+   "Miracle Crystal"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm11b": {
+  "ids": [
+   388
+  ],
+  "noms": [
+   "Dream League"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s1H": {
+  "ids": [
+   399
+  ],
+  "noms": [
+   "Shield"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm7a": {
+  "ids": [
+   360
+  ],
+  "noms": [
+   "Thunderclap Spark"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW2": {
+  "ids": [
+   238
+  ],
+  "noms": [
+   "Red Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "L1SS": {
+  "ids": [
+   204
+  ],
+  "noms": [
+   "SoulSilver Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm9a": {
+  "ids": [
+   373
+  ],
+  "noms": [
+   "Night Unison"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DP4d": {
+  "ids": [
+   166
+  ],
+  "noms": [
+   "Dawn Dash"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm9b": {
+  "ids": [
+   376
+  ],
+  "noms": [
+   "Full Metal Wall"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm10a": {
+  "ids": [
+   381
+  ],
+  "noms": [
+   "GG End"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm10b": {
+  "ids": [
+   383
+  ],
+  "noms": [
+   "Sky Legend"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm6a": {
+  "ids": [
+   356
+  ],
+  "noms": [
+   "Dragon Storm"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm8a": {
+  "ids": [
+   366
+  ],
+  "noms": [
+   "Dark Order"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY8b": {
+  "ids": [
+   521
+  ],
+  "noms": [
+   "Blue Shock"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW6f": {
+  "ids": [
+   257
+  ],
+  "noms": [
+   "Freeze Bolt"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY8r": {
+  "ids": [
+   522
+  ],
+  "noms": [
+   "Red Flash"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW6c": {
+  "ids": [
+   259
+  ],
+  "noms": [
+   "Cold Flare"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY1x": {
+  "ids": [
+   285
+  ],
+  "noms": [
+   "Collection X"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm7b": {
+  "ids": [
+   362
+  ],
+  "noms": [
+   "Fairy Rise"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY1y": {
+  "ids": [
+   286
+  ],
+  "noms": [
+   "Collection Y"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm2k": {
+  "ids": [
+   333
+  ],
+  "noms": [
+   "Islands Await You"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sm2l": {
+  "ids": [
+   330
+  ],
+  "noms": [
+   "Alolan Moonlight"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY11c": {
+  "ids": [
+   534
+  ],
+  "noms": [
+   "Cruel Traitor"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW8s": {
+  "ids": [
+   269
+  ],
+  "noms": [
+   "Spiral Force"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW8t": {
+  "ids": [
+   271
+  ],
+  "noms": [
+   "Thunder Knuckle"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW3h": {
+  "ids": [
+   241
+  ],
+  "noms": [
+   "Hail Blizzard"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW3p": {
+  "ids": [
+   240
+  ],
+  "noms": [
+   "Psycho Drive"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW1b": {
+  "ids": [
+   227
+  ],
+  "noms": [
+   "Black Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW1w": {
+  "ids": [
+   228
+  ],
+  "noms": [
+   "White Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW5e": {
+  "ids": [
+   251
+  ],
+  "noms": [
+   "Dragon Blade"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW5t": {
+  "ids": [
+   250
+  ],
+  "noms": [
+   "Dragon Blast"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PCG7": {
+  "ids": [
+   130
+  ],
+  "noms": [
+   "Holon Phantom"
+  ],
+  "cle": "nom-normalise"
+ },
+ "mAA": {
+  "ids": [
+   574
+  ],
+  "noms": [
+   "Premium Trainer Box MEGA"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgL": {
+  "ids": [
+   120
+  ],
+  "noms": [
+   "Master Kit"
+  ],
+  "cle": "nom-normalise"
+ },
+ "LL": {
+  "ids": [
+   217
+  ],
+  "noms": [
+   "Lost Link"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgF": {
+  "ids": [
+   102
+  ],
+  "noms": [
+   "Gift Box Emerald"
+  ],
+  "cle": "nom-normalise"
+ },
+ "CP3": {
+  "ids": [
+   527
+  ],
+  "noms": [
+   "Pokékyun Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s8a": {
+  "ids": [
+   446
+  ],
+  "noms": [
+   "25th Anniversary Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svB": {
+  "ids": [
+   538
+  ],
+  "noms": [
+   "Premium Trainer Box ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "SHC": {
+  "ids": [
+   274
+  ],
+  "noms": [
+   "Shiny Collection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DRS": {
+  "ids": [
+   248
+  ],
+  "noms": [
+   "Dragon Selection"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advD": {
+  "ids": [
+   74
+  ],
+  "noms": [
+   "Flygon Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advE": {
+  "ids": [
+   75
+  ],
+  "noms": [
+   "Salamence Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advJ": {
+  "ids": [
+   85
+  ],
+  "noms": [
+   "Metagross Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgI": {
+  "ids": [
+   111
+  ],
+  "noms": [
+   "Typhlosion Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgH": {
+  "ids": [
+   109
+  ],
+  "noms": [
+   "Meganium Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "s8a-G": {
+  "ids": [
+   448
+  ],
+  "noms": [
+   "25th Anniversary Golden Box"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgJ": {
+  "ids": [
+   112
+  ],
+  "noms": [
+   "Feraligatr Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgB": {
+  "ids": [
+   93
+  ],
+  "noms": [
+   "Deoxys Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgC": {
+  "ids": [
+   94
+  ],
+  "noms": [
+   "Rayquaza Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "10M": {
+  "ids": [
+   159
+  ],
+  "noms": [
+   "10th Movie Commemoration Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "11M": {
+  "ids": [
+   177
+  ],
+  "noms": [
+   "11th Movie Commemoration Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sp2": {
+  "ids": [
+   417
+  ],
+  "noms": [
+   "VMAX Special Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sp6": {
+  "ids": [
+   469
+  ],
+  "noms": [
+   "VSTAR Special Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "HSBW": {
+  "ids": [
+   223
+  ],
+  "noms": [
+   "Beginning Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "MMBS": {
+  "ids": [
+   312
+  ],
+  "noms": [
+   "M Master Deck Build Box Speed Style"
+  ],
+  "cle": "nom-normalise"
+ },
+ "MMBP": {
+  "ids": [
+   311
+  ],
+  "noms": [
+   "M Master Deck Build Box Power Style"
+  ],
+  "cle": "nom-normalise"
+ },
+ "ERB": {
+  "ids": [
+   393
+  ],
+  "noms": [
+   "Extra Regulation Box"
+  ],
+  "cle": "nom-normalise"
+ },
+ "TLVS": {
+  "ids": [
+   58
+  ],
+  "noms": [
+   "Theater Limited VS Pack"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PBG": {
+  "ids": [
+   270
+  ],
+  "noms": [
+   "Team Plasma Battle Gift Set"
+  ],
+  "cle": "nom-normalise"
+ },
+ "MCVS": {
+  "ids": [
+   76
+  ],
+  "noms": [
+   "Movie Commemoration VS Pack"
+  ],
+  "cle": "nom-normalise"
+ },
+ "GBR": {
+  "ids": [
+   252
+  ],
+  "noms": [
+   "Garchomp Half Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "SZD": {
+  "ids": [
+   253
+  ],
+  "noms": [
+   "Hydreigon Half Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "X30": {
+  "ids": [
+   287
+  ],
+  "noms": [
+   "Xerneas Half Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "Y30": {
+  "ids": [
+   288
+  ],
+  "noms": [
+   "Yveltal Half Deck"
+  ],
+  "cle": "nom-normalise"
+ }
+}

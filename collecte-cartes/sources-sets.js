@@ -36,13 +36,22 @@ const ARTOFPKM = {
     PCG6: { ids: [127], noms: ['Holon Research Tower'], note: 'half decks 123/125/126 à part' },
     PCG9: { ids: [137], noms: ['Offense and Defense of the Furthest Ends'] },
     DP2: { ids: [150], noms: ['Secret of the Lake'] },
-    EXS: { ids: [11, 14, 17], noms: ['Expansion Sheet No. 1 (Blue Version)', 'Expansion Sheet No. 2 (Red Version)', 'Expansion Sheet No. 3 (Green Version)'] }
+    EXS: { ids: [11, 14, 17], noms: ['Expansion Sheet No. 1 (Blue Version)', 'Expansion Sheet No. 2 (Red Version)', 'Expansion Sheet No. 3 (Green Version)'] },
+    // 2026-09-15 : lignes automatiques dont le nom artofpkm DIFFÈRE (preparer-images-auto.js les listait « absentes »),
+    // relues dans artofpkm-sets.json. sm12a « Tag All Stars » n'a AUCUN set chez artofpkm : pas d'images par cette source.
+    sv8: { ids: [551], noms: ['Electric Breaker'], note: 'Cardmarket « Super Electric Breaker »' },
+    CP4: { ids: [531], noms: ['Premium Champion Pack EX x M x BREAK'], note: 'Cardmarket « Premium Champion Pack »' }
 };
+
+// LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,
+// unique ; ambiguë ou absente = non écrite). La table à la main l'emporte toujours.
+const FICHIER_AUTO = require('path').join(__dirname, 'sources-sets-auto.json');
+const ARTOFPKM_AUTO = require('fs').existsSync(FICHIER_AUTO) ? JSON.parse(require('fs').readFileSync(FICHIER_AUTO, 'utf8')) : {};
 
 function sourceDe(code, source = 'artofpkm') {
     if (source !== 'artofpkm') return null;
-    const l = ARTOFPKM[code];
+    const l = ARTOFPKM[code] || ARTOFPKM_AUTO[code];
     return l ? { source, code, ...l } : null;
 }
 
-module.exports = { ARTOFPKM, sourceDe };
+module.exports = { ARTOFPKM, ARTOFPKM_AUTO, sourceDe };
