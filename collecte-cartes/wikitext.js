@@ -368,7 +368,10 @@ function sectionsSetlist(texte) {
 // la Setlist, le repli sur tout le wikitext et verifier-table.js (§21 bis). Le blanc après `TCG ID` : l'archive
 // ÉPURÉE recompose un gabarit de premier niveau sur plusieurs lignes (`{{TCG ID\n|Paradox Rift\n|…`) ; les
 // captures portent alors des retours à la ligne, que tout lecteur retire (`trim`).
-const RE_TCG_ID = /\{\{TCG ID\s*\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?(?:\|[^}]*)?\}\}/;
+// Le DÉBUT d'un TCG ID a lui aussi UNE définition : `natureIgnoree` reconnaît une carte illisible par la même tête que
+// `RE_TCG_ID` — si l'une accepte un jour une autre écriture, l'autre la suit.
+const DEBUT_TCG_ID = '\\{\\{TCG ID\\s*\\|';
+const RE_TCG_ID = new RegExp(`${DEBUT_TCG_ID}([^|}]+)\\|([^|}]+)(?:\\|([^|}]*))?(?:\\|[^}]*)?\\}\\}`);
 // Le numéro qui suit un nom de set dans une référence : « 29 », « TG13 », « 1a ». UNE définition pour le découpage
 // d'un lien, le jeton de set et la borne du compteur « hors set ».
 const NUMERO_DE_TIRAGE = '[A-Z]{0,3}\\d+[a-z]?';
@@ -434,7 +437,7 @@ function natureIgnoree(brut) {
     // D'abord : une entrée ignorée qui porte un TCG ID est une CARTE illisible (paramètre imbriqué), quoi que citent ses
     // notes. Testée après les énergies, elle se fondrait dans « energie-base » dès qu'une note cite une énergie — et le
     // collecteur ne signale que ce qui n'est pas une énergie de base : elle disparaîtrait sans un mot (§21).
-    if (/\{\{TCG ID\s*\|/.test(s)) return 'tcg-id-illisible';
+    if (new RegExp(DEBUT_TCG_ID).test(s)) return 'tcg-id-illisible';
     // Trois écritures d'une énergie de base : `{{OBP|Darkness Energy|Basic}}`, `{{TCG|Grass Energy}}` (ou « Basic Grass
     // Energy »), et le lien développé `[[Grass Energy (TCG)|…]]`.
     if (/\{\{OBP\|[^|}]*Energy\|Basic\}\}/i.test(s) || new RegExp(`\\{\\{TCG\\|${ENERGIE_DE_BASE}\\}\\}`).test(s) || new RegExp(`\\[\\[${ENERGIE_DE_BASE} \\(TCG\\)`).test(s)) return 'energie-base';
