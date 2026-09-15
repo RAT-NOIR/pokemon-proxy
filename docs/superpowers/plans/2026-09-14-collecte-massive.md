@@ -636,8 +636,11 @@ module.exports = { bouclerSurFile, etatDeFile };
 - **D3 : (b), priorité au texte** (`bulbapedia/__priorite-texte__`), à écrire avec le lot D.
 - **D4 : `main`.**
 - **D5 : oui, fait** (1 requête, 419 sets).
-- **Sans source d'images artofpkm (listés, non enfilés)** : sm12a « Tag All Stars » et s10a « Dark Phantasma »
-  (aucun set chez artofpkm), plus les 10 occidentaux (lot D).
+- **Sans source d'images artofpkm (listés, non enfilés)** : sm12a « Tag All Stars » et s10a « Dark Phantasma »,
+  plus les 10 occidentaux (lot D). ⚠️ **CORRIGÉ le 2026-09-15 à 12:00 UTC : « aucun set chez artofpkm » était FAUX.**
+  Les deux y sont sous un autre nom : 392 « Tag Team GX All Stars » et 462 « Dark Fantasma ». J'avais conclu de
+  l'absence d'une correspondance de NOM à l'absence du SET (§22 : un compte n'est pas un constat). Le commentaire de
+  `sources-sets.js` porte la même erreur, à corriger à la fusion de `sources-sets-en-attente.json`.
 - **`collecte-massive.js` enfile chaque set « ok » dès sa collecte**, si `sourceDe` le connaît. `sources-sets.js`
   local doit rester **identique au commit déployé** : sinon on enfile un set que le worker refusera pour toujours.
 - **File remplie le 2026-09-15** (`remplir-file-images.js`) : 37 sets enfilés, plus EC1, N4, VS et DP2 remis en file
