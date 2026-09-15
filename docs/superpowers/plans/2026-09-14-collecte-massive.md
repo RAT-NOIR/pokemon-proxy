@@ -652,7 +652,16 @@ premier geste (`collecteur-images.js:184-196` : 3 originaux, puis refus sous 480
 le refus est listé dans `file_images` (`resultat: 'refuse-resolution'`). La mesure a lieu avant le téléchargement
 dans les deux cas ; seul change qui la fait.
 
-**Reste à faire** : 🛑 **push nommé** de `sources-sets.js`, `sources-sets-auto.json`, `artofpkm-sets.json` et
+**🔴 ET LA MESURE A TROUVÉ LA RÉPONSE DU §21 N°7 : LES LISTES ARTOFPKM S'ARRÊTAIENT À 100.** « page 2 : 100 lues, 0 nouvelles »
+sur sv4a, s4a, s8b et s12a : **le serveur ignore `?page=`.** La suite se charge par un cadre Turbo
+(`/sets/{id}/card_batches?offset=100`). `listerSet` le suit désormais, lot par lot : sv4a passe de **100 à 482
+entrées en 5 lots**, et s'arrête seul. Les 4 listes tronquées écrites à 10:35 UTC sont retirées de l'état (mesures
+gardées). ⚠️ **EC1, N4, VS et DP2 sont toujours tronqués à 100** (relus le 2026-09-14 avec l'ancien code) : après le
+redéploiement, retirer leurs listes de l'état et les remettre en file. Le worker reprend au premier n sans image.
+⚠️ Correction non passée par l'agent relecteur, à cause de la limite d'usage. Ce qui la prouve : le relevé lot par
+lot de sv4a et l'avertissement « compte rond » ajouté à la fin de la liste.
+
+**Reste à faire** : 🛑 **push nommé** de `artofpkm.js`, `sources-sets.js`, `sources-sets-auto.json`, `artofpkm-sets.json` et
 `preparer-images-auto.js`, puis redéploiement du worker par le testeur. **Enfiler AVANT le redéploiement produirait
 les refus définitifs du §23.** Ensuite : enfiler les 29 sets, et `collecte-massive.js` enfile chaque set « ok » qui
 a une source.
