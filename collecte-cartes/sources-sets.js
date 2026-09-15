@@ -38,9 +38,32 @@ const ARTOFPKM = {
     DP2: { ids: [150], noms: ['Secret of the Lake'] },
     EXS: { ids: [11, 14, 17], noms: ['Expansion Sheet No. 1 (Blue Version)', 'Expansion Sheet No. 2 (Red Version)', 'Expansion Sheet No. 3 (Green Version)'] },
     // 2026-09-15 : lignes automatiques dont le nom artofpkm DIFFÈRE (preparer-images-auto.js les listait « absentes »),
-    // relues dans artofpkm-sets.json. sm12a « Tag All Stars » n'a AUCUN set chez artofpkm : pas d'images par cette source.
+    // relues dans artofpkm-sets.json. ⚠️ Ce commentaire disait « sm12a n'a AUCUN set chez artofpkm » : FAUX, il y est sous
+    // « Tag Team GX All Stars » (392). Une correspondance de nom absente n'est pas un set absent (§22).
     sv8: { ids: [551], noms: ['Electric Breaker'], note: 'Cardmarket « Super Electric Breaker »' },
-    CP4: { ids: [531], noms: ['Premium Champion Pack EX x M x BREAK'], note: 'Cardmarket « Premium Champion Pack »' }
+    CP4: { ids: [531], noms: ['Premium Champion Pack EX x M x BREAK'], note: 'Cardmarket « Premium Champion Pack »' },
+    // Fusionnées depuis sources-sets-en-attente.json (2026-09-15) : les 20 CERTAINES. Les 4 probables (sm2+, ADV4, MDB, MCRP)
+    // restent en attente : une source fausse attacherait les images d'un autre set.
+    CP6: { ids: [536], noms: ['20th Anniversary'], note: 'Cardmarket « Expansion Pack 20th Anniversary »' },
+    sm1S: { ids: [325], noms: ['Collection Sun'] },
+    sm1M: { ids: [326], noms: ['Collection Moon'] },
+    DP5t: { ids: [172], noms: ['Temple of Wrath'], note: 'Cardmarket « Temple of Anger »' },
+    sm3h: { ids: [339], noms: ['Did You See the Fighting Rainbow'], note: 'Cardmarket « To Have Seen the Battle Rainbow »' },
+    sm3n: { ids: [338], noms: ['Light-Devouring Darkness'], note: 'Cardmarket « Darkness that Consumes Light »' },
+    sm4a: { ids: [342], noms: ['Ultra Dimensional Beast'], note: 'Cardmarket « Ultradimensional Beasts »' },
+    'sm5+': { ids: [352], noms: ['Ultra Forces'], note: 'Cardmarket « Ultra Force »' },
+    svN: { ids: [587], noms: ['Deck Build Box Battle Partners'] },
+    sm12a: { ids: [392], noms: ['Tag Team GX All Stars'], note: 'Cardmarket « Tag All Stars »' },
+    s10a: { ids: [462], noms: ['Dark Fantasma'], note: 'Cardmarket « Dark Phantasma »' },
+    svK: { ids: [542], noms: ['Deck Build Box Stellar Miracle'] },
+    CP5: { ids: [535], noms: ['Mythical / Legendary Dream Holo Collection'], note: 'Cardmarket « Mythical Legendary Dream Shine Collection »' },
+    svF: { ids: [494], noms: ['Deck Build Box Ruler of the Black Flame'] },
+    CP1: { ids: [301], noms: ['Team Magma vs. Team Aqua Double Crisis'], note: 'Cardmarket « Magma Gang VS Aqua Gang Double Crisis »' },
+    CP2: { ids: [309], noms: ['Legendary Holo Collection'], note: 'Cardmarket « Legendary Shine Collection »' },
+    SNPr: { ids: [525], noms: ['BREAK Evolution Pack Raichu BREAK'] },
+    SNPn: { ids: [523], noms: ['BREAK Evolution Pack Noivern BREAK'] },
+    sm0: { ids: [323], noms: ['Pikachu and their New Friends'], note: 'Cardmarket « Pikachus New Friends »' },
+    sp4: { ids: [435], noms: ['VMAX Special Set, Eevee Heroes'] }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,
