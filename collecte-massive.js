@@ -20,6 +20,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { sourceDe } = require('./collecte-cartes/sources-sets');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const TAILLE = Number(arg('bloc') || 20);
@@ -102,7 +103,20 @@ const lancer = (args, fichier) => {
                 const c = reussi ? (s1?.complet || {}) : {};
                 const plusieurs = c.restes?.['produit-vers-plusieurs-cartes'] || 0;
                 b.produitsVersPlusieursCartes += plusieurs;
-                dire(`   ${l.code.padEnd(10)} ${etat.padEnd(16)} ${String(l.attendu).padStart(4)} produits · ${l.bulba.tirage} · « ${l.bulba.titre} » · joints ${c.produitsJoints ?? '?'}/${c.produits ?? '?'}${c.restes && Object.keys(c.restes).length ? ` · restes ${JSON.stringify(c.restes)}` : ''}${plusieurs ? ` ⚠️ ${plusieurs} produit(s) joint(s) à plusieurs cartes` : ''}`);
+                // RÈGLE DU TESTEUR, 2026-09-15 : un set CONCORDANT part en file d'images IMMÉDIATEMENT, sans validation. Le
+                // worker mesure ses 3 originaux avant tout téléchargement et liste ses refus. Sans source : listé, jamais
+                // enfilé (le worker le rangerait en `refuse-source`, hors de la file pour toujours — §23).
+                // ⚠️ `sourceDe` est lu ICI : il ne vaut que s'il est identique au commit DÉPLOYÉ du worker.
+                let images = '';
+                if (etat === 'ok') {
+                    if (!sourceDe(l.code)) { images = ' · 🖼️ SANS SOURCE d\'images (non enfilé)'; b.sansSourceImages = (b.sansSourceImages || 0) + 1; }
+                    else {
+                        const r = await cx.db.collection('file_images').updateOne({ _id: l.code }, { $setOnInsert: { ordre: Date.now(), etat: 'attente', ajouteLe: new Date() } }, { upsert: true });
+                        images = r.upsertedCount ? ' · 🖼️ enfilé' : ' · 🖼️ déjà en file (état conservé)';
+                        if (r.upsertedCount) b.imagesEnfilees = (b.imagesEnfilees || 0) + 1;
+                    }
+                }
+                dire(`   ${l.code.padEnd(10)} ${etat.padEnd(16)} ${String(l.attendu).padStart(4)} produits · ${l.bulba.tirage} · « ${l.bulba.titre} » · joints ${c.produitsJoints ?? '?'}/${c.produits ?? '?'}${c.restes && Object.keys(c.restes).length ? ` · restes ${JSON.stringify(c.restes)}` : ''}${plusieurs ? ` ⚠️ ${plusieurs} produit(s) joint(s) à plusieurs cartes` : ''}${images}`);
             }
             l.collecte = { le: new Date().toISOString(), etat };
             b.imagesEnAttente[l.bulba.tirage === 'intl' ? 'intl' : 'jp']++;

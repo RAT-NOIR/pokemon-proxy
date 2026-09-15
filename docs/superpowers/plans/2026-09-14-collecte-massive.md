@@ -623,6 +623,27 @@ module.exports = { bouclerSurFile, etatDeFile };
 
 ---
 
+## ✅ DÉCISIONS DU 2026-09-15 (délégation du testeur pour 3 jours : je tranche tout ce qui ne touche ni le schéma, ni le contrat du site, ni l'affichage)
+
+- **Mesure avant téléchargement : TRANCHÉ PAR LE TESTEUR, c'est le worker qui mesure.** Il le fait avant tout
+  téléchargement (`collecteur-images.js:184-196`) et liste ses refus. On n'attend jamais son verrou pour mesurer.
+- **D1 : ni (a) ni (b).** La correspondance set → source est générée dans le dépôt (`sources-sets-auto.json`,
+  152 lignes). Un seul déploiement couvre toutes les lignes, et l'entrée de file ne porte pas sa ligne. ⚠️ **Limite** :
+  une source ajoutée à la main n'existe pour le worker qu'après un push. **CP6 (« 20th Anniversary », 536) attend
+  donc le prochain push**, et il a été retiré de la file après y être entré par erreur.
+- **D2 : (c), un second worker Render pour les images Bulbapedia.** Créer le service est un geste d'infrastructure
+  du testeur, à son retour. Le lot D attend ce service.
+- **D3 : (b), priorité au texte** (`bulbapedia/__priorite-texte__`), à écrire avec le lot D.
+- **D4 : `main`.**
+- **D5 : oui, fait** (1 requête, 419 sets).
+- **Sans source d'images artofpkm (listés, non enfilés)** : sm12a « Tag All Stars » et s10a « Dark Phantasma »
+  (aucun set chez artofpkm), plus les 10 occidentaux (lot D).
+- **`collecte-massive.js` enfile chaque set « ok » dès sa collecte**, si `sourceDe` le connaît. `sources-sets.js`
+  local doit rester **identique au commit déployé** : sinon on enfile un set que le worker refusera pour toujours.
+- **File remplie le 2026-09-15** (`remplir-file-images.js`) : 37 sets enfilés, plus EC1, N4, VS et DP2 remis en file
+  (listes tronquées à 100 retirées de l'état). **Sur les 28 sets à images artofpkm, 4 étaient tronqués** ; les 24
+  autres ont des listes de moins de 100 entrées, complètes avec l'ancien code. File : **41 en attente**, 24 faits.
+
 ## 🔑 RÈGLE DU 2026-09-15, DÉCISION DU TESTEUR : LE WORKER NE DORT JAMAIS TANT QU'IL RESTE UN SET COLLECTÉ
 
 **Un set dont le texte est concordant part en file d'images IMMÉDIATEMENT** : sans attendre la fin du bloc, sans
