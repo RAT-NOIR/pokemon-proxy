@@ -87,20 +87,35 @@ async function produitsDeLExpansion(prod, idExpansion) {
  * cartes : `Venipede (Transfiguration Mask 115)` redirige vers `Venipede (Twilight Masquerade 115)`, sans impression chinoise.
  * Le numéro n'existe que dans l'entrée de Setlist. On en fait des impressions VIRTUELLES (jamais écrites en base), rattachées
  * à la page par `etat.pages` (titre demandé → pageid), que `joindre` lit comme les autres et nomme « setlist+numero ».
- * Seul un TCG ID donne un numéro : celui d'un lien est indicatif (« Pokémon Card 151 »).
  * @returns {{ parCarte: Map<number, object[]>, sansPage: string[], sansNumero: string[] }}
  */
 function impressionsDepuisSetlist(entrees, pages, cible) {
     const pageDe = new Map((pages || []).filter(p => p.pageid != null).map(p => [p.titre, p.pageid]));
     const parCarte = new Map(), sansPage = [], sansNumero = [];
+    const noms = [].concat(cible.expansionBulba);
     for (const e of entrees) {
-        if (e.forme !== 'tcg-id' || e.b == null || String(e.b).trim() === '') { sansNumero.push(e.titre); continue; }
+        const numero = numeroDeSetlist(e, noms);
+        if (numero == null) { sansNumero.push(e.titre); continue; }
         const id = pageDe.get(e.titre);
         if (id == null) { sansPage.push(e.titre); continue; }
         if (!parCarte.has(id)) parCarte.set(id, []);
-        parCarte.get(id).push({ tirage: cible.tirage, expansion: [].concat(cible.expansionBulba)[0], numero: String(e.b).trim(), total: null, deck: null, rarete: null, source: 'setlist' });
+        parCarte.get(id).push({ tirage: cible.tirage, expansion: noms[0], numero, total: null, deck: null, rarete: null, source: 'setlist' });
     }
     return { parCarte, sansPage, sansNumero };
+}
+
+/**
+ * Le numéro qu'une entrée de Setlist porte pour l'expansion lue — UNE définition, lue par la jointure ET par la vérification
+ * (§21 bis). Un TCG ID donne toujours son numéro. Un LIEN (cartes à suffixe : `[[Sinistcha ex (Transfiguration Mask 23)|…]]`)
+ * n'en donne un que si sa parenthèse est EXACTEMENT « <expansion> N » : ailleurs le numéro est indicatif (« Pokémon Card 151 »),
+ * et une coquille de la source (« Storming Emergrnce Verdant 27 ») n'est pas devinée.
+ * @returns {string|null}
+ */
+function numeroDeSetlist(e, nomsExpansion) {
+    if (e.b == null || String(e.b).trim() === '') return null;
+    if (e.forme === 'tcg-id') return String(e.b).trim();
+    if (e.forme === 'lien' && [].concat(nomsExpansion).includes(e.a)) return String(e.b).trim();
+    return null;
 }
 
 /**
@@ -211,4 +226,4 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, impressionsDepuisSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
+module.exports = { joindre, impressionsDepuisSetlist, numeroDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };

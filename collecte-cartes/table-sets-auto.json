@@ -20247,7 +20247,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:40:43.995Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 330/357 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Shining Synergy GX Starter Deck (ATCG)",
+     "entrees": 357,
+     "couverture": {
+      "produitsNumerotes": 357,
+      "couverts": 330,
+      "numerosSetlist": 330
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 330/357 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM1DC",
@@ -20271,7 +20297,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:40:44.005Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 274/301 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Storming Emergence GX Starter Deck (ATCG)",
+     "entrees": 336,
+     "couverture": {
+      "produitsNumerotes": 301,
+      "couverts": 274,
+      "numerosSetlist": 309
+     },
+     "ratio": 1.12,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 274/301 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSMPC",
@@ -20295,7 +20347,24 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Battle Party Set (ATCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Party Set »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:40:44.014Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Party Set »"
+   ]
+  }
  },
  {
   "code": "CSV9C",
@@ -20319,7 +20388,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Stellar Crystal (ATCG)",
+   "entrees": {
+    "Stellar Crystal": 266
+   },
+   "note": "vérification automatique : 266 entrées pour 266 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Stellar Crystal (ATCG)",
+   "entrees": 266,
+   "couverture": {
+    "produitsNumerotes": 266,
+    "couverts": 266,
+    "numerosSetlist": 266
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:41:51.915Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSV9.5C",
@@ -20343,7 +20436,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Terastal Gathering (ATCG)",
+   "entrees": {
+    "Terastal Gathering": 259
+   },
+   "note": "vérification automatique : 259 entrées pour 259 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Terastal Gathering (ATCG)",
+   "entrees": 259,
+   "couverture": {
+    "produitsNumerotes": 259,
+    "couverts": 259,
+    "numerosSetlist": 259
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:42:34.292Z",
+   "etat": "non-concordant"
+  }
  },
  {
   "code": "CSV7C",
@@ -20367,7 +20484,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Blade Awakening (ATCG)",
+   "entrees": {
+    "Blade Awakening": 259
+   },
+   "note": "vérification automatique : 259 entrées pour 259 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Blade Awakening (ATCG)",
+   "entrees": 259,
+   "couverture": {
+    "produitsNumerotes": 259,
+    "couverts": 259,
+    "numerosSetlist": 259
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:43:34.433Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSVE2C",
@@ -20391,7 +20532,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:43:34.442Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 207/232 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Battle Party: Shining Dream (ATCG)",
+     "entrees": 208,
+     "couverture": {
+      "produitsNumerotes": 232,
+      "couverts": 207,
+      "numerosSetlist": 207
+     },
+     "ratio": 0.9,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 207/232 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS1DC",
@@ -20415,7 +20582,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:43:34.451Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 199/222 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Dynamax Clash V Starter Deck (ATCG)",
+     "entrees": 221,
+     "couverture": {
+      "produitsNumerotes": 222,
+      "couverts": 199,
+      "numerosSetlist": 199
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 199/222 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CBB4C",
@@ -20439,7 +20632,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:43:34.459Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 49/196 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Gem Pack Vol. 4 (ATCG)",
+     "entrees": 196,
+     "couverture": {
+      "produitsNumerotes": 196,
+      "couverts": 49,
+      "numerosSetlist": 7
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 49/196 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CBB5C",
@@ -20463,7 +20682,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:43:34.468Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 49/196 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Gem Pack Vol. 5 (ATCG)",
+     "entrees": 196,
+     "couverture": {
+      "produitsNumerotes": 196,
+      "couverts": 49,
+      "numerosSetlist": 7
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 49/196 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS3DC",
@@ -20487,7 +20732,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:43:34.476Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 158/183 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Primordial Arts V Starter Deck (ATCG)",
+     "entrees": 183,
+     "couverture": {
+      "produitsNumerotes": 183,
+      "couverts": 158,
+      "numerosSetlist": 158
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 158/183 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSV4C",
@@ -20511,7 +20782,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Bonus Round (ATCG)",
+   "entrees": {
+    "Bonus Round": 165
+   },
+   "note": "vérification automatique : 165 entrées pour 165 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Bonus Round (ATCG)",
+   "entrees": 165,
+   "couverture": {
+    "produitsNumerotes": 165,
+    "couverts": 164,
+    "numerosSetlist": 164
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:44:22.393Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSV3C",
@@ -20535,7 +20830,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Fearless Terastal (ATCG)",
+   "entrees": {
+    "Fearless Terastal": 165
+   },
+   "note": "vérification automatique : 165 entrées pour 165 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Fearless Terastal (ATCG)",
+   "entrees": 165,
+   "couverture": {
+    "produitsNumerotes": 165,
+    "couverts": 165,
+    "numerosSetlist": 165
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:45:05.892Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSV2C",
@@ -20559,7 +20878,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Miracle Journey (ATCG)",
+   "entrees": {
+    "Miracle Journey": 163
+   },
+   "note": "vérification automatique : 163 entrées pour 163 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Miracle Journey (ATCG)",
+   "entrees": 163,
+   "couverture": {
+    "produitsNumerotes": 163,
+    "couverts": 163,
+    "numerosSetlist": 163
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:45:50.160Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CBB2C",
@@ -20583,7 +20926,31 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Gem Pack Vol. 2 (ATCG)",
+   "entrees": {
+    "Gem Pack Vol. 2": 140
+   },
+   "note": "vérification automatique : 140 entrées pour 140 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Gem Pack Vol. 2 (ATCG)",
+   "entrees": 140,
+   "couverture": {
+    "produitsNumerotes": 140,
+    "couverts": 140,
+    "numerosSetlist": 15
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:46:09.243Z",
+   "etat": "non-concordant"
+  }
  },
  {
   "code": "CBB3C",
@@ -20607,7 +20974,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:09.253Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 49/136 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Gem Pack Vol. 3 (ATCG)",
+     "entrees": 136,
+     "couverture": {
+      "produitsNumerotes": 136,
+      "couverts": 49,
+      "numerosSetlist": 7
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 49/136 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CBB1C",
@@ -20631,7 +21024,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:09.263Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 70/115 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Gem Pack Vol. 1 (ATCG)",
+     "entrees": 109,
+     "couverture": {
+      "produitsNumerotes": 115,
+      "couverts": 70,
+      "numerosSetlist": 9
+     },
+     "ratio": 0.95,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 70/115 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM2.5C",
@@ -20655,7 +21074,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:09.272Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 59/99 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Striking Competition (ATCG)",
+     "entrees": 99,
+     "couverture": {
+      "produitsNumerotes": 99,
+      "couverts": 59,
+      "numerosSetlist": 59
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 59/99 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS1.5C",
@@ -20679,7 +21124,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:09.283Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 71/96 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Dynamax Tactics (ATCG)",
+     "entrees": 96,
+     "couverture": {
+      "produitsNumerotes": 96,
+      "couverts": 71,
+      "numerosSetlist": 71
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 71/96 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSVM1C",
@@ -20703,7 +21174,24 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Master Strategy Deck Building Sets (ATCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Master Strategy Deck Building Sets »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:46:09.295Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Master Strategy Deck Building Sets »"
+   ]
+  }
  },
  {
   "code": "CS3.5C",
@@ -20727,7 +21215,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.105Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 68/90 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Scorching Skies (ATCG)",
+     "entrees": 90,
+     "couverture": {
+      "produitsNumerotes": 90,
+      "couverts": 68,
+      "numerosSetlist": 68
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 68/90 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM1.5C",
@@ -20751,7 +21265,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.114Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 48/88 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Battle Elite (ATCG)",
+     "entrees": 88,
+     "couverture": {
+      "produitsNumerotes": 88,
+      "couverts": 48,
+      "numerosSetlist": 48
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 48/88 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS2.5C",
@@ -20775,7 +21315,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.122Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 59/79 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Brilliant Counterattack (ATCG)",
+     "entrees": 79,
+     "couverture": {
+      "produitsNumerotes": 79,
+      "couverts": 59,
+      "numerosSetlist": 59
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 59/79 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV7s",
@@ -20799,7 +21365,33 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.130Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 39/63 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Stellar Guidance (ATCG)",
+     "entrees": 229,
+     "couverture": {
+      "produitsNumerotes": 63,
+      "couverts": 39,
+      "numerosSetlist": 191
+     },
+     "ratio": 3.63,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 39/63 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV8s",
@@ -20823,7 +21415,33 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.139Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 39/62 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Stellar Lightning (ATCG)",
+     "entrees": 244,
+     "couverture": {
+      "produitsNumerotes": 62,
+      "couverts": 39,
+      "numerosSetlist": 207
+     },
+     "ratio": 3.94,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 39/62 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV6s",
@@ -20847,7 +21465,33 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.147Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 39/62 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Transfiguration Mask (ATCG)",
+     "entrees": 229,
+     "couverture": {
+      "produitsNumerotes": 62,
+      "couverts": 39,
+      "numerosSetlist": 192
+     },
+     "ratio": 3.69,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 39/62 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV4s",
@@ -20871,7 +21515,33 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.159Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 38/58 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Paradox Encounters (ATCG)",
+     "entrees": 190,
+     "couverture": {
+      "produitsNumerotes": 58,
+      "couverts": 38,
+      "numerosSetlist": 158
+     },
+     "ratio": 3.28,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 38/58 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV5s",
@@ -20895,7 +21565,33 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.172Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 34/58 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Ace Paradox (ATCG)",
+     "entrees": 200,
+     "couverture": {
+      "produitsNumerotes": 58,
+      "couverts": 34,
+      "numerosSetlist": 164
+     },
+     "ratio": 3.45,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 34/58 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM2.1C",
@@ -20919,7 +21615,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:12.181Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 45/54 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Golden Energy (ATCG)",
+     "entrees": 54,
+     "couverture": {
+      "produitsNumerotes": 54,
+      "couverts": 45,
+      "numerosSetlist": 45
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 45/54 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "SV10s",
@@ -20943,7 +21665,31 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Presence of Champions (ATCG)",
+   "entrees": {
+    "Presence of Champions": 189
+   },
+   "note": "vérification automatique : 189 entrées pour 51 produits, échantillon « undefined » (zh-hant)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Presence of Champions (ATCG)",
+   "entrees": 189,
+   "couverture": {
+    "produitsNumerotes": 51,
+    "couverts": 51,
+    "numerosSetlist": 189
+   },
+   "ratio": 3.71,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:46:53.655Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV9s",
@@ -20967,7 +21713,31 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Bonds of Destiny (ATCG)",
+   "entrees": {
+    "Bonds of Destiny": 185
+   },
+   "note": "vérification automatique : 185 entrées pour 46 produits, échantillon « undefined » (zh-hant)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Bonds of Destiny (ATCG)",
+   "entrees": 185,
+   "couverture": {
+    "produitsNumerotes": 46,
+    "couverts": 46,
+    "numerosSetlist": 185
+   },
+   "ratio": 4.02,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:47:36.485Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS6.1C",
@@ -20991,7 +21761,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.493Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 16/24 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Radiant Energy Vol. 3 (ATCG)",
+     "entrees": 24,
+     "couverture": {
+      "produitsNumerotes": 24,
+      "couverts": 16,
+      "numerosSetlist": 16
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 16/24 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS5.1C",
@@ -21015,7 +21811,33 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.501Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 13/23 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Radiant Energy Vol. 2 (ATCG)",
+     "entrees": 23,
+     "couverture": {
+      "produitsNumerotes": 23,
+      "couverts": 13,
+      "numerosSetlist": 13
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 13/23 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM1aC",
@@ -21043,7 +21865,33 @@
    "entreesSection": 211,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.508Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 149/211 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Storming Emergence (ATCG)",
+     "entrees": 211,
+     "couverture": {
+      "produitsNumerotes": 211,
+      "couverts": 149,
+      "numerosSetlist": 149
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 149/211 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM1bC",
@@ -21071,7 +21919,33 @@
    "entreesSection": 204,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.516Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 145/204 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Storming Emergence (ATCG)",
+     "entrees": 204,
+     "couverture": {
+      "produitsNumerotes": 204,
+      "couverts": 145,
+      "numerosSetlist": 145
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 145/204 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM1cC",
@@ -21099,7 +21973,33 @@
    "entreesSection": 212,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.523Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 152/212 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Storming Emergence (ATCG)",
+     "entrees": 212,
+     "couverture": {
+      "produitsNumerotes": 212,
+      "couverts": 152,
+      "numerosSetlist": 152
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 152/212 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM2aC",
@@ -21127,7 +22027,33 @@
    "entreesSection": 194,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.531Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 153/194 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Shining Synergy (ATCG)",
+     "entrees": 194,
+     "couverture": {
+      "produitsNumerotes": 194,
+      "couverts": 153,
+      "numerosSetlist": 153
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 153/194 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM2bC",
@@ -21155,7 +22081,33 @@
    "entreesSection": 193,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.539Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 151/193 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Shining Synergy (ATCG)",
+     "entrees": 193,
+     "couverture": {
+      "produitsNumerotes": 193,
+      "couverts": 151,
+      "numerosSetlist": 151
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 151/193 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CSM2cC",
@@ -21183,7 +22135,33 @@
    "entreesSection": 192,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.546Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 151/192 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Shining Synergy (ATCG)",
+     "entrees": 192,
+     "couverture": {
+      "produitsNumerotes": 192,
+      "couverts": 151,
+      "numerosSetlist": 151
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 151/192 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS1aC",
@@ -21211,7 +22189,33 @@
    "entreesSection": 217,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:36.554Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 165/217 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Dynamax Clash (ATCG)",
+     "entrees": 217,
+     "couverture": {
+      "produitsNumerotes": 217,
+      "couverts": 165,
+      "numerosSetlist": 165
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 165/217 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS1bC",
@@ -21239,7 +22243,33 @@
    "entreesSection": 199,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:38.308Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 154/199 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Dynamax Clash (ATCG)",
+     "entrees": 199,
+     "couverture": {
+      "produitsNumerotes": 199,
+      "couverts": 154,
+      "numerosSetlist": 154
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 154/199 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS3aC",
@@ -21267,7 +22297,33 @@
    "entreesSection": 184,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:47:38.317Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "couverture des numéros Cardmarket 134/184 sous 0,95"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Primordial Arts (ATCG)",
+     "entrees": 184,
+     "couverture": {
+      "produitsNumerotes": 184,
+      "couverts": 134,
+      "numerosSetlist": 134
+     },
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "couverture des numéros Cardmarket 134/184 sous 0,95"
+     ]
+    },
+    "retireeLe": "2026-09-15T19:52:10.068Z",
+    "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
+   }
+  ]
  },
  {
   "code": "CS3bC",
@@ -21295,6 +22351,30 @@
    "entreesSection": 179,
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Primordial Arts (ATCG)",
+   "entrees": {
+    "Primordial Arts Torrent": 179
+   },
+   "note": "vérification automatique : 179 entrées pour 179 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Primordial Arts (ATCG)",
+   "entrees": 179,
+   "couverture": {
+    "produitsNumerotes": 179,
+    "couverts": 179,
+    "numerosSetlist": 179
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:48:18.676Z",
+   "etat": "ok"
+  }
  }
 ]
