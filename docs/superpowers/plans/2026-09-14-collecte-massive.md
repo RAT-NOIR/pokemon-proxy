@@ -253,14 +253,77 @@ tout journal de set.**
   - DP1 (1,93) et sv1S (1,98) restent hors bornes : le correctif ajoute des entrées, il n'en retire pas ;
   - l'échantillon (l'entrée du milieu) change sur la plupart des lignes. Un changement de verdict sur « tirage
     non établi » (sI100, svM, smH, sD) est **possible et non prédit**.
-- [ ] **Re-collecte du bloc 1** (`collecteur-texte.js --set=…`, les titres ajoutés sont fetchés seuls). **ATTENDU :**
+- [x] **Seconde relecture** (ciblée sur 5e77b47) : **« la re-collecte peut partir »**, aucun Critique. Quatre
+  Importants, sans effet sur les chemins de la re-collecte (`sections-nommees`, `set-reconstruit`), **à corriger
+  avant A2** :
+  1. un TCG ID illisible en tête laisse gagner un lien placé plus loin ;
+  2. le jeton dominant peut absorber l'erreur qu'il doit signaler → seuls les TCG ID votent, et le jeton est écrit
+     dans l'état ;
+  3. `horsSet` n'existe que sur 1 chemin sur 5 ;
+  4. le rejeu sur l'archive épurée ne peut pas exercer le repli sur tout le wikitext → `source` et `revid` dans
+     `lectureSetlist`, et une mesure sur des pages brutes.
+
+  Elle rappelle aussi le §3 : écriture en base = accord explicite.
+  - **Bloc 1** : fait partie de la collecte massive ordonnée par le testeur, pas encore d'images → re-collecté.
+  - **Les 14 sets déjà collectés** (10 occidentaux, G2, DP5c, PCG6, PCG9) portent images, jointures et marqueurs
+    d'orphelines → **🛑 accord du testeur, et sa sauvegarde s'il la veut**.
+    ⚠️ **Corrigé le 2026-09-15 : 12 sets, pas 14.** Mesuré sans requête sur les 38 sets collectés hors bloc 1
+    (`m-gain-titres-hors-bloc1.js`) : **xASC et TR n'ont aucun gain**, en entrées comme en titres. Rien à
+    re-collecter sur eux.
+- [x] **Re-collecte du bloc 1** (`collecteur-texte.js --set=…`, les titres ajoutés sont fetchés seuls ; la page du
+  set est relue depuis l'archive R2, soit le corpus exact du rejeu). **Titres nouveaux attendus par set = le gain
+  du rejeu** : sv4a 51 · s4a 56 · s8b 103 · s12a 76 · m2a 52 · sm8b 73 · sm12a 70 · sv2a 31 · BXY 53 · sv3 21 ·
+  sv8 21 · sv7 21 · sv9 24 · CP4 28 · s8 28 · s11 29 = **737**. **ATTENDU :**
   - concordance 16 / 16 ;
   - **titres manquants = 0**, sinon ce sont des liens rouges, à lister ;
   - joints / produits ≥ 0,95 sur chacun des 15 sets à section : produits = gabarits sur 14 d'entre eux, moins
     8 énergies sur s8b et s12a ;
   - BXY à part : 0 gabarit dans sa section, restes non expliqués par ce défaut.
-- [ ] **Puis les 10 sets occidentaux et G2, DP5c, PCG6, PCG9**, même attendu. Les jointures d'images seront
-  rejouées depuis R2 au lot F.
+
+  **OBTENU (2026-09-15, 00:06:36 → 00:13:50 UTC, 16 sets, code 0 sur les 16)** :
+
+  | set | titres ajoutés (attendu) | produits = joints + restes | joints / produits | titres manquants |
+  |---|---|---|---|---|
+  | sv4a | 51 (51) | 360 = 355 + 5 | 0,986 | 0 |
+  | s4a | 56 (56) | 330 = 330 + 0 | 1 | 0 |
+  | s8b | 103 (103) | 293 = 284 + 9 | 0,969 | 0 |
+  | s12a | 76 (76) | 262 = 254 + 8 | 0,969 | 0 |
+  | m2a | 52 (52) | 250 = 250 + 0 | 1 | 0 |
+  | sm8b | 73 (73) | 250 = 250 + 0 | 1 | 0 |
+  | sm12a | 70 (70) | 235 = 226 + 9 | 0,962 | 0 |
+  | sv2a | 31 (31) | 210 = 210 + 0 | 1 | 0 |
+  | BXY | 53 (53) | 188 = 187 + 1 | 0,995 | 0 |
+  | sv3 | 21 (21) | 141 = 141 + 0 | 1 | 0 |
+  | sv8 | 21 (21) | 138 = 138 + 0 | 1 | 0 |
+  | sv7 | 21 (21) | 135 = 135 + 0 | 1 | 0 |
+  | sv9 | 24 (24) | 132 = 132 + 0 | 1 | 0 |
+  | CP4 | 28 (28) | 140 = 140 + 0 | 1 | 0 |
+  | s8 | 28 (28) | 129 = 129 + 0 | 1 | 0 |
+  | **s11** | **12 (29) ❌** | 127 = 127 + 0 | 1 | 0 |
+  | **16 sets** | **720 (737)** | **3 320 = 3 288 + 32** | **0,990** | **0** |
+
+  - concordance **16 / 16** ✅ ; titres manquants **0 sur 16** ✅ ; joints / produits **≥ 0,96 sur 16** ✅
+    (bloc 1 à 0,768 avant le correctif) ;
+  - ❌ **s11 : 12 titres ajoutés pour 29 attendus. L'attendu était faux, pas le code — et je le dis au lieu de le
+    corriger après coup.** Le rejeu mesurait des ENTRÉES (98 → 127), j'en ai fait des TITRES. Les deux coïncident
+    quand chaque entrée a sa page ; sur s11, la Setlist lie **deux fois la même page** pour une carte et sa
+    variante (`[[Delphox V (Lost Abyss 17)|Delphox]]{{TCGV}}` deux fois, de même Kyurem V 29 et Kyurem VMAX 30 :
+    trois lignes ouvertes sur le document). Mesuré sans requête (`m-s11-entrees-titres.js`) : **29 entrées gagnées
+    = 12 titres nouveaux + 17 répétitions de ces mêmes titres + 0 titre déjà connu**. Témoins sv4a, s8b, CP4 :
+    une entrée par titre, 0 répétition. Le collecteur compte juste (une page, un titre) et la jointure passe par
+    les impressions des pages : 127 / 127. **Rien n'est annulé** : les trois contrôles indépendants de l'attendu
+    (concordance, titres manquants, jointure) passent, et revenir en arrière rendrait 98 entrées au lieu de 127.
+    ⚠️ Le testeur peut en décider autrement. Leçon pour les attendus suivants : **un attendu s'écrit dans l'unité
+    que le contrôle imprime**, pas dans celle de la mesure dont il est dérivé ;
+  - **« Collapsed Stadium (Star Birth 98) »**, le seul « hors set » du troisième rejeu, **est joint** : sa page
+    porte l'impression `jp` Lost Abyss 127, rattachée au produit 668245 (exp 5094) par set+numéro. C'est une
+    réimpression listée sous le lien de son premier tirage : un vrai signal, et pas une carte perdue. Mesure faite
+    file à l'arrêt (`file-a-l-arret.js` : 0 en cours, 0 verrou, aucune écriture depuis 39 h).
+- [ ] **Puis les 12 sets à gain — G2, DP5c, PCG6, PCG9, PBL, ASC, JTG, BRS, MEW, CRI, PAL, EVO** — 🛑 accord.
+  **ATTENDU, écrit en TITRES cette fois** (mesuré sans requête le 2026-09-15 ; entrées = titres sur les 12, 0
+  répétition) : G2 1 · DP5c 3 · PCG6 3 · PCG9 2 · PBL 25 · ASC 70 · JTG 32 · BRS 63 · MEW 30 · CRI 26 · PAL 49 ·
+  EVO 23 = **327** ; concordance 12 / 12 ; titres manquants 0. Les jointures d'images seront rejouées depuis R2
+  au lot F.
 
 ### Tâche A2 : blocs 2 à 20
 
