@@ -11985,7 +11985,8 @@
   },
   "collecte": {
    "le": "2026-09-15T11:55:37.437Z",
-   "etat": "ok"
+   "etat": "faux-affirme",
+   "note": "56 produits joints à plusieurs cartes : numéros Cardmarket « 002 » face à Bulbapedia « SWSH002 », repli par nom (Scorbunny n°002 → SWSH002 et SWSH244). 291 lignes pour 167 produits, ≥ 124 fausses. EN BASE, non retirées : décision du testeur."
   }
  },
  {

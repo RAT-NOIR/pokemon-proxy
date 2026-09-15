@@ -43,5 +43,14 @@ const cnul = concordanceDesNoms([['', 'Pikachu'], ['Pikachu', null]]);
 verifier('nom absent : non évaluable, jamais compté discordant', [cnul.concordants, cnul.evaluables, cnul.nonEvaluables], [0, 0, 2]);
 verifier('exemples de discordance rendus', c20.exemples.slice(0, 1), ['Rapidash → Ninetales']);
 
+// trop de produits joints à plusieurs cartes : SWSH 56 (numéros « 002 » face à « SWSH002 », repli sur le nom). Sur 206 sets,
+// aucun autre n'en a plus d'un.
+const { plusieursCartesAnormal } = require('./collecte-cartes/coherence-ligne');
+verifier('SWSH : 56 produits vers plusieurs cartes, anormal', plusieursCartesAnormal({ produits: 386, restes: { 'produit-vers-plusieurs-cartes': 56 } }), true);
+verifier('1 produit vers plusieurs cartes (sm8, Pt3…) : normal', plusieursCartesAnormal({ produits: 111, restes: { 'produit-vers-plusieurs-cartes': 1 } }), false);
+verifier('2 sur un petit set : normal', plusieursCartesAnormal({ produits: 40, restes: { 'produit-vers-plusieurs-cartes': 2 } }), false);
+verifier('3 : anormal', plusieursCartesAnormal({ produits: 400, restes: { 'produit-vers-plusieurs-cartes': 3 } }), true);
+verifier('restes absents : normal', plusieursCartesAnormal({ produits: 50 }), false);
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const { concordanceDesNoms } = require('./collecte-cartes/coherence-ligne');
+const { concordanceDesNoms, plusieursCartesAnormal, SEUIL_PLUSIEURS_CARTES } = require('./collecte-cartes/coherence-ligne');
 // Rejeu de concordanceDesNoms sur les 106 sets collectés au 2026-09-15 : 20th 14,5 %, le plus bas des sains VS 80,1 %
 // (abréviations de dresseurs : « Falkners-TM-01 » / « Falkner's Technical Machine 01 »). Seuil au milieu, pas au bord.
 const SEUIL_NOMS = 0.5;
@@ -117,6 +117,8 @@ const lancer = (args, fichier) => {
                     const nomsCartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(jointures.map(j => j.carteId))] } }, { projection: { nomEn: 1 } }).toArray()).map(x => [x._id, x.nomEn]));
                     noms = concordanceDesNoms(jointures.map(j => [j.slug, nomsCartes.get(j.carteId)]));
                     if (noms.evaluables && noms.taux < SEUIL_NOMS) { etat = 'noms-discordants'; b.ok--; b.nomsDiscordants++; }
+                    // SWSH : noms justes, mais 56 produits joints à plusieurs cartes (repli par nom sur des numéros à préfixe).
+                    else if (plusieursCartesAnormal(c)) { etat = 'noms-discordants'; b.ok--; b.nomsDiscordants++; noms.exemples = [`${plusieurs} produits joints à plusieurs cartes (seuil ${SEUIL_PLUSIEURS_CARTES})`, ...noms.exemples]; }
                 }
                 // RÈGLE DU TESTEUR, 2026-09-15 : un set CONCORDANT part en file d'images IMMÉDIATEMENT, sans validation. Le
                 // worker mesure ses 3 originaux avant tout téléchargement et liste ses refus. Sans source : listé, jamais

@@ -780,6 +780,35 @@ nommé** puis redéploiement, puis `remplir-file-images.js` : les enfiler avant 
 relance a échoué dessus (battement il y a 398 s) et marqué L2 `echec-1-texte`, ce qui l'aurait sorti de la sélection
 pour toujours. Marque retirée, historique dans `collecteAvant`. Un arrêt par TaskStop ne libère rien (§17).
 
+## 🔴 SECOND FAUX AFFIRMÉ, 2026-09-15 11:55 UTC : `SWSH` Black Star Promos — COLLECTE ARRÊTÉE À 11:59 UTC
+
+**Le chiffre refusé.** « SWSH ok, 385 produits, joints 167/386, restes produit-sans-carte 219, produit-vers-plusieurs-cartes
+56 », avec des noms concordants à 224 sur 224. L'attendu par set est une jointure ≥ 0,95 ; obtenu 0,43. **Arrêt, règle
+5.**
+
+**Cause, trois produits ouverts.** Cardmarket numérote « 002 », Bulbapedia « SWSH002 ». La jointure set+numéro échoue,
+et le repli par NOM rattache un produit à toutes les cartes du même nom : Scorbunny n°002 → SWSH002 **et** SWSH244,
+Morpeko n°012 → quatre cartes. **291 lignes `cartes_produits` pour 167 produits, donc au moins 124 lignes fausses.** Le
+contrôle des noms ne peut pas le voir, puisque les noms sont justes. C'est le mineur « préfixe de promo » du
+NUMERO_DE_TIRAGE, devenu un faux en base.
+
+**Étendue, mesurée** : 206 sets, 19 529 produits, **73 produits vers plusieurs cartes, dont 56 pour SWSH** ; aucun
+autre set n'en a plus d'un.
+
+**Fait.**
+- `plusieursCartesAnormal` (seuil 3), test 21/21, câblé dans `collecte-massive.js` : pas d'image, arrêt.
+- Ligne SWSH marquée `faux-affirme`, cause écrite dans la ligne.
+- SM Black Star Promos (coupé pendant une réponse 503 de Bulbapedia, avant toute jointure) : non marqué, rien en base.
+
+**🛑 TRANCHÉ SEUL : LA COLLECTE DE TEXTE N'EST PAS RELANCÉE.**
+- Les lignes restantes sont occidentales. Elles n'ont pas de source artofpkm, donc n'alimentent pas la file d'images
+  (lot D, second worker à créer).
+- Elles comptent d'autres promos à préfixe (SM, XY, BW, SV…).
+- Les gardes tournent APRÈS l'écriture des jointures : une relance écrirait le set faux suivant avant de s'arrêter.
+  Les relancer demande d'abord la jointure des numéros à préfixe, qui est un chantier.
+
+**🛑 CE QUI T'APPARTIENT** : les lignes `cartes_produits` de SWSH (`idExpansion: 2916`), comme celles de 20th.
+
 ## Suivi du 2026-09-15 après la relance (11:04 UTC) — listé, non traité
 
 - **Preuve de version du worker** : EC1 100 → **128**, N4 → **113**, VS → **145**, DP2 → **131**, relevés par `lot`, les

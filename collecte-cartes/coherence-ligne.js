@@ -56,4 +56,13 @@ function concordanceDesNoms(paires) {
     return { concordants, evaluables, nonEvaluables, taux: evaluables ? concordants / evaluables : null, exemples };
 }
 
-module.exports = { raisonsDeCoherence, concordanceDesNoms, teteDuSlug };
+// 🔴 2026-09-15, SWSH Black Star Promos : Cardmarket numérote « 002 », Bulbapedia « SWSH002 ». set+numéro échoue, le repli par
+// NOM rattache un produit à toutes les cartes du nom (Scorbunny n°002 → SWSH002 et SWSH244) : 56 produits vers plusieurs
+// cartes, ≥ 124 lignes fausses, et le contrôle des noms n'y voit rien (les noms sont justes). Sur les 206 sets collectés,
+// aucun autre n'en a plus d'UN. Seuil à 3 : deux passent encore, ce qui laisse une marge au-dessus du maximum sain.
+const SEUIL_PLUSIEURS_CARTES = 3;
+function plusieursCartesAnormal(complet) {
+    return (complet?.restes?.['produit-vers-plusieurs-cartes'] || 0) >= SEUIL_PLUSIEURS_CARTES;
+}
+
+module.exports = { raisonsDeCoherence, concordanceDesNoms, teteDuSlug, plusieursCartesAnormal, SEUIL_PLUSIEURS_CARTES };
