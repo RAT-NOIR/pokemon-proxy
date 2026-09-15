@@ -623,6 +623,40 @@ module.exports = { bouclerSurFile, etatDeFile };
 
 ---
 
+## 🔑 RÈGLE DU 2026-09-15, DÉCISION DU TESTEUR : LE WORKER NE DORT JAMAIS TANT QU'IL RESTE UN SET COLLECTÉ
+
+**Un set dont le texte est concordant part en file d'images IMMÉDIATEMENT** : sans attendre la fin du bloc, sans
+attendre l'accord du testeur. C'est une autorisation durable d'écrire dans `file_images`, donnée le 2026-09-15, et la
+seule façon que les deux collectes avancent en parallèle. Les images sont le goulot (~70 h en série) : chaque heure
+où le worker dort est perdue. **Le 2026-09-14 au soir, 30 sets avaient leur texte et le worker dormait, file vide.**
+
+**Ce qui l'empêchait, et comment c'est levé** :
+- le worker trouvait la source d'un set dans `sources-sets.js`, écrite à la main pour 28 sets. Une ligne automatique
+  finissait en `refuse-source`, hors de la file POUR TOUJOURS (§23). Enfiler avant d'avoir levé ce point aurait
+  produit 30 refus définitifs ;
+- `collecte-cartes/preparer-images-auto.js` : `--lister` (1 requête, **419 sets** = attendu), `--correspondre`
+  (0 requête : **152 uniques**, 2 ambiguës, 78 absentes, sur 232 lignes auto non occidentales). La correspondance est
+  générée dans `sources-sets-auto.json`, que `sourceDe` lit après la table à la main. **Un seul déploiement couvre
+  toutes les lignes à venir.** Cela tranche D1 autrement que (a) et (b) : ni redéploiement par bloc, ni refonte
+  du worker ;
+- sur les 30 sets collectés : **27 uniques** ; sv8 (« Electric Breaker », 551) et CP4 (« Premium Champion Pack EX x M
+  x BREAK », 531) sont ajoutés **à la main**, avec leur note ; **sm12a « Tag All Stars » n'a aucun set chez artofpkm**,
+  il n'est pas enfilé ;
+- `--mesurer` écrit liste et mesures **dans l'état du worker**, qui les reprend sans requête.
+
+**⚠️ CONFLIT À TRANCHER PAR LE TESTEUR — la mesure avant d'enfiler, en régime continu.** Pour ce premier lot, les
+3 cartes par set sont mesurées d'ici avant d'enfiler, comme demandé. En continu, mesurer d'ici demande le verrou global
+artofpkm, que le worker **tient pendant qu'il collecte** : la mesure attendrait la fin de son set en cours, parfois une
+heure. **Proposition** : en continu, on enfile tout de suite, et c'est le worker qui mesure. Il le fait déjà en
+premier geste (`collecteur-images.js:184-196` : 3 originaux, puis refus sous 480 px avant tout téléchargement), et
+le refus est listé dans `file_images` (`resultat: 'refuse-resolution'`). La mesure a lieu avant le téléchargement
+dans les deux cas ; seul change qui la fait.
+
+**Reste à faire** : 🛑 **push nommé** de `sources-sets.js`, `sources-sets-auto.json`, `artofpkm-sets.json` et
+`preparer-images-auto.js`, puis redéploiement du worker par le testeur. **Enfiler AVANT le redéploiement produirait
+les refus définitifs du §23.** Ensuite : enfiler les 29 sets, et `collecte-massive.js` enfile chaque set « ok » qui
+a une source.
+
 ## Lot C : les images japonaises des lignes automatiques (artofpkm, worker existant)
 
 Conditions : lot B déployé, 🛑1 (D5).
