@@ -19543,6 +19543,13 @@
    "raisons": [
     "aucune entrée de Setlist pour « Earth's Groudon ex Constructed Starter Deck »"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:14:00.323Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Earth's Groudon ex Constructed Starter Deck »"
+   ]
   }
  },
  {
@@ -19572,6 +19579,13 @@
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Ocean's Kyogre ex Constructed Starter Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:14:00.331Z",
+   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Ocean's Kyogre ex Constructed Starter Deck »"
    ]
@@ -19607,6 +19621,13 @@
    "raisons": [
     "aucune entrée de Setlist pour « Golduck BREAK + Palkia-EX Combo Deck »"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:14:00.338Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Golduck BREAK + Palkia-EX Combo Deck »"
+   ]
   }
  },
  {
@@ -19636,6 +19657,13 @@
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Mirage's Mew Constructed Starter Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:14:00.346Z",
+   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Mirage's Mew Constructed Starter Deck »"
    ]
@@ -19680,6 +19708,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:14:09.561Z",
+   "etat": "ok"
   }
  },
  {
@@ -19722,6 +19754,10 @@
    "ratio": 1.03,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:16:47.403Z",
+   "etat": "ok"
   }
  },
  {
@@ -19764,6 +19800,10 @@
    "ratio": 1.01,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:18:29.889Z",
+   "etat": "ok"
   }
  },
  {
@@ -19913,7 +19953,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "PCG-P Promotional cards (TCG)",
+   "entrees": {
+    "PCG-P Promotional cards": 154
+   },
+   "note": "vérification automatique : 154 entrées pour 154 produits, échantillon « Pichu Bros. (POP Series 3 16) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "PCG-P Promotional cards (TCG)",
+   "entrees": 154,
+   "echantillon": "Pichu Bros. (POP Series 3 16)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "M-P",
@@ -19936,7 +19995,19 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "M-P Promotional cards (TCG)",
+   "entrees": 162,
+   "echantillon": "Waitress (Ascended Heroes 215)",
+   "tiragesVus": [],
+   "ratio": 1.17,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « M-P Promotional cards » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "DP-P",
@@ -19959,7 +20030,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "DP-P Promotional cards (TCG)",
+   "entrees": {
+    "DP-P Promotional cards": 127
+   },
+   "note": "vérification automatique : 127 entrées pour 127 produits, échantillon « Magmar (Secret Wonders 93) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "DP-P Promotional cards (TCG)",
+   "entrees": 127,
+   "echantillon": "Magmar (Secret Wonders 93)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DPt-P",
@@ -19982,7 +20072,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "DPt-P Promotional cards (TCG)",
+   "entrees": {
+    "DPt-P Promotional cards": 51
+   },
+   "note": "vérification automatique : 51 entrées pour 51 produits, échantillon « Basic Psychic Energy (TCG) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "DPt-P Promotional cards (TCG)",
+   "entrees": 51,
+   "echantillon": "Basic Psychic Energy (TCG)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "L-P",
@@ -20005,7 +20114,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "L-P Promotional cards (TCG)",
+   "entrees": {
+    "L-P Promotional cards": 79
+   },
+   "note": "vérification automatique : 79 entrées pour 82 produits, échantillon « Wobbuffet (HGSS Promo 4) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "L-P Promotional cards (TCG)",
+   "entrees": 79,
+   "echantillon": "Wobbuffet (HGSS Promo 4)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "ADV-P",
@@ -20026,6 +20154,817 @@
    "nomBulbapedia": "ADV-P Promotional cards",
    "regionCodesSet": null,
    "note": "région posée à la main (codes_set sans région)",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "ADV-P Promotional cards (TCG)",
+   "entrees": {
+    "ADV-P Promotional cards": 63
+   },
+   "note": "vérification automatique : 63 entrées pour 63 produits, échantillon « Flygon (Nintendo Promo 25) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "ADV-P Promotional cards (TCG)",
+   "entrees": 63,
+   "echantillon": "Flygon (Nintendo Promo 25)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSM2DC",
+  "exp": 6582,
+  "prod": 357,
+  "nom": "Shining Synergy GX Starter Deck",
+  "slugSet": "Shining-Synergy-GX-Starter-Deck",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Shining Synergy GX Starter Deck (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Shining Synergy GX Starter Deck",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 357,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Shining Synergy GX Starter Deck",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM1DC",
+  "exp": 6581,
+  "prod": 301,
+  "nom": "Storming Emergence GX Starter Deck",
+  "slugSet": "Storming-Emergence-GX-Starter-Deck",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Storming Emergence GX Starter Deck (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Storming Emergence GX Starter Deck",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 301,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Storming Emergence GX Starter Deck",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSMPC",
+  "exp": 6549,
+  "prod": 299,
+  "nom": "Battle Party Set",
+  "slugSet": "Battle-Party-Set",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Battle Party Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Battle Party Set",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 299,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Battle Party Set",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV9C",
+  "exp": 6568,
+  "prod": 266,
+  "nom": "Stellar Crystal",
+  "slugSet": "Stellar-Crystal",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Stellar Crystal (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Stellar Crystal",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 266,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Stellar Crystal",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV9.5C",
+  "exp": 6595,
+  "prod": 259,
+  "nom": "Terastal Gathering",
+  "slugSet": "Terastal-Gathering",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Terastal Gathering (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Terastal Gathering",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 259,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Terastal Gathering",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV7C",
+  "exp": 6416,
+  "prod": 259,
+  "nom": "Blade Awakening",
+  "slugSet": "Blade-Awakening",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Blade Awakening (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Blade Awakening",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 259,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Blade Awakening",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSVE2C",
+  "exp": 6310,
+  "prod": 232,
+  "nom": "Battle Party Shining Dream",
+  "slugSet": "Battle-Party-Shining-Dream",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Battle Party: Shining Dream (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Battle Party: Shining Dream",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 232,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Battle Party: Shining Dream",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS1DC",
+  "exp": 6408,
+  "prod": 222,
+  "nom": "Dynamax Clash V Starter Deck",
+  "slugSet": "Dynamax-Clash-V-Starter-Deck",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dynamax Clash V Starter Deck (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dynamax Clash V Starter Deck",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 222,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Dynamax Clash V Starter Deck",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CBB4C",
+  "exp": 6447,
+  "prod": 196,
+  "nom": "Gem Pack Vol 4",
+  "slugSet": "Gem-Pack-Vol-4",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 4 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 4",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 196,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Gem Pack Vol. 4",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CBB5C",
+  "exp": 6544,
+  "prod": 196,
+  "nom": "Gem Pack Vol5",
+  "slugSet": "Gem-Pack-Vol5",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 5 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 5",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 196,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Gem Pack Vol. 5",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS3DC",
+  "exp": 6403,
+  "prod": 183,
+  "nom": "Primordial Arts V Starter Deck",
+  "slugSet": "Primordial-Arts-V-Starter-Deck",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Primordial Arts V Starter Deck (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Primordial Arts V Starter Deck",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 183,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Primordial Arts V Starter Deck",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV4C",
+  "exp": 6169,
+  "prod": 165,
+  "nom": "Bonus Round",
+  "slugSet": "Bonus-Round",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Bonus Round (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Bonus Round",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 165,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Bonus Round",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV3C",
+  "exp": 6110,
+  "prod": 165,
+  "nom": "Fearless Terastal",
+  "slugSet": "Fearless-Terastal",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Fearless Terastal (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Fearless Terastal",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 165,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Fearless Terastal",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSV2C",
+  "exp": 6121,
+  "prod": 163,
+  "nom": "Miracle Journey",
+  "slugSet": "Miracle-Journey",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Miracle Journey (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Miracle Journey",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 163,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Miracle Journey",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CBB2C",
+  "exp": 6111,
+  "prod": 140,
+  "nom": "Gem Pack Vol 2",
+  "slugSet": "Gem-Pack-Vol-2",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 2 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 2",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 140,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Gem Pack Vol. 2",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CBB3C",
+  "exp": 6292,
+  "prod": 136,
+  "nom": "Gem Pack Vol 3",
+  "slugSet": "Gem-Pack-Vol-3",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 3 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 3",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 136,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Gem Pack Vol. 3",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CBB1C",
+  "exp": 6001,
+  "prod": 115,
+  "nom": "Gem Pack Vol 1",
+  "slugSet": "Gem-Pack-Vol-1",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 1 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 1",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 115,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Gem Pack Vol. 1",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM2.5C",
+  "exp": 6313,
+  "prod": 99,
+  "nom": "Striking Competition",
+  "slugSet": "Striking-Competition",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Striking Competition (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Striking Competition",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 99,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Striking Competition",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS1.5C",
+  "exp": 6288,
+  "prod": 96,
+  "nom": "Dynamax Tactics",
+  "slugSet": "Dynamax-Tactics",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dynamax Tactics (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dynamax Tactics",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 96,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Dynamax Tactics",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSVM1C",
+  "exp": 6442,
+  "prod": 94,
+  "nom": "Master Strategy Deck Building Sets",
+  "slugSet": "Master-Strategy-Deck-Building-Sets",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Master Strategy Deck Building Sets (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Master Strategy Deck Building Sets",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 94,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Master Strategy Deck Building Sets",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS3.5C",
+  "exp": 6265,
+  "prod": 90,
+  "nom": "Scorching Skies",
+  "slugSet": "Scorching-Skies",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Scorching Skies (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Scorching Skies",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 90,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Scorching Skies",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM1.5C",
+  "exp": 6314,
+  "prod": 88,
+  "nom": "Battle Elite",
+  "slugSet": "Battle-Elite",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Battle Elite (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Battle Elite",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 88,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Battle Elite",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS2.5C",
+  "exp": 6276,
+  "prod": 79,
+  "nom": "Brilliant Counterattack",
+  "slugSet": "Brilliant-Counterattack",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Brilliant Counterattack (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Brilliant Counterattack",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 79,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Brilliant Counterattack",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV7s",
+  "exp": 6605,
+  "prod": 63,
+  "nom": "Stellar Guidance",
+  "slugSet": "Stellar-Guidance",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Stellar Guidance (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Stellar Guidance",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 63,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Stellar Guidance",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV8s",
+  "exp": 6419,
+  "prod": 62,
+  "nom": "Stellar Lightning",
+  "slugSet": "Stellar-Lightning",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Stellar Lightning (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Stellar Lightning",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 62,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Stellar Lightning",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV6s",
+  "exp": 6597,
+  "prod": 62,
+  "nom": "Transfiguration Mask",
+  "slugSet": "Transfiguration-Mask",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Transfiguration Mask (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Transfiguration Mask",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 62,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Transfiguration Mask",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV4s",
+  "exp": 6599,
+  "prod": 58,
+  "nom": "Paradox Encounters",
+  "slugSet": "Paradox-Encounters",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Paradox Encounters (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Paradox Encounters",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 58,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Paradox Encounters",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV5s",
+  "exp": 6598,
+  "prod": 58,
+  "nom": "Ace Paradox",
+  "slugSet": "Ace-Paradox",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Ace Paradox (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Ace Paradox",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 58,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Ace Paradox",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CSM2.1C",
+  "exp": 6548,
+  "prod": 54,
+  "nom": "Golden Energy",
+  "slugSet": "Golden-Energy",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Golden Energy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Golden Energy",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 54,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Golden Energy",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV10s",
+  "exp": 6413,
+  "prod": 51,
+  "nom": "Presence of Champions",
+  "slugSet": "Presence-of-Champions",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Presence of Champions (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Presence of Champions",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 51,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Presence of Champions",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "SV9s",
+  "exp": 6415,
+  "prod": 46,
+  "nom": "Bonds of Destiny",
+  "slugSet": "Bonds-of-Destiny",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Bonds of Destiny (ATCG)",
+   "tirage": "zh-hant",
+   "expansion": "Bonds of Destiny",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 46,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Bonds of Destiny",
+   "regionCodesSet": "japonais",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS6.1C",
+  "exp": 6274,
+  "prod": 24,
+  "nom": "Radiant Energy Vol 3",
+  "slugSet": "Radiant-Energy-Vol-3",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Radiant Energy Vol. 3 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Radiant Energy Vol. 3",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 24,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Radiant Energy Vol. 3",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-15"
+  },
+  "verifie": null
+ },
+ {
+  "code": "CS5.1C",
+  "exp": 6273,
+  "prod": 23,
+  "nom": "Radiant Energy Vol 2",
+  "slugSet": "Radiant-Energy-Vol-2",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Radiant Energy Vol. 2 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Radiant Energy Vol. 2",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "atcg-2026-09-15",
+   "liste": "recherche Bulbapedia intitle:ATCG",
+   "nomBulbapedia": "Radiant Energy Vol. 2",
+   "regionCodesSet": null,
+   "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
   "verifie": null

@@ -690,6 +690,53 @@ lot de sv4a et l'avertissement « compte rond » ajouté à la fin de la liste.
 les refus définitifs du §23.** Ensuite : enfiler les 29 sets, et `collecte-massive.js` enfile chaque set « ok » qui
 a une source.
 
+## ✅ 2026-09-15 SOIR — CE QUI A ÉTÉ FAIT ET TRANCHÉ SEUL (délégation : tout sauf schéma et contrat du site)
+
+**Objectif rappelé par le testeur** : le catalogue sert l'API de reconnaissance d'images de Rat-Market, TOUTES les cartes y
+vont. Dénominateur écrit : `collecte-cartes/univers-expansions.js` (+ `.json`), **751 expansions, 69 231 produits**, chacune
+avec famille de langue, état et cause.
+
+**Retraits (accord du testeur pour 20th et SWSH ; même principe appliqué ensuite), copies dans `backup-2026-09-15-faux-affirmes/`** :
+- 20th : 84 jointures, puis 83 appartenances `cartes.sets` (21 fausses) et l'état figé. Rejugé en jp, section « Starter
+  Pack » : **80/84, noms 76/76**.
+- SWSH : 291 jointures. Recollecté après le traitement du préfixe (voir plus bas) : **379/386, 0 produit vers plusieurs
+  cartes, noms 285/285**.
+- xsv8a / xm2a : **les 36 + 4 lignes exactes** du repli par nom sur un sous-ensemble numéroté. Le rejeu donnait la liste
+  des lignes fausses, donc pas besoin de retirer toute la série.
+- PtG : série entière (15 jointures, appartenances, état, set). **Faux de mon fait** : j'ai apparié « Garchomp SP Half
+  Deck » à « Garchomp Half Deck » sur un score de nom de 0,75. La garde a arrêté la boucle (noms 1/15). Depuis, les lignes
+  chinoises ne s'apparient qu'à nom **exactement égal**.
+- Aucune de ces séries n'était en file d'images (vérifié à chaque fois).
+
+**Code, avec tests en rouge d'abord et rejeu sans requête avant usage** :
+| changement | test | rejeu (ce qu'il fait à ce qui marchait) |
+|---|---|---|
+| préfixe commun d'un set de promos + position V-UNION (`jointure.js`) | 11/11 | 211 sets : 210 identiques, SWSH seul change |
+| pas de repli par NOM quand le numéro a été essayé | 15/15 | 217 sets : xsv8a et xm2a seuls changent, 0 multi |
+| impressions de deck `jpdeck={{TCG|Exp|Deck}}` (`wikitext.js`) | 5/5 | 12 284 pages : 0 impression modifiée, +3 042 |
+| `sectionOccurrence` (deux sections du même nom : EN puis JP) | 4/4 | option inerte sans la table |
+| jointure `setlist+numero` (numéro chinois porté par la seule Setlist) | 7/7 | nouvelle voie, lignes chinoises seulement |
+| garde « plusieurs cartes » ≥ 3 dans la boucle | 21/21 | 206 sets : SWSH seul au-dessus de 1 |
+| enfilage limité aux sources de la version POUSSÉE (`sources-deployees.js`) | contrôle | 20 sets « non poussés », 0 enfilé à tort |
+| `--region=` dans la boucle et la vérification | — | l'occidental n'est pas repris avant le préfixe |
+
+**Tranché, avec la raison** :
+- **SWSH retiré en entier (291), pas seulement les 124 fausses au minimum** : aucune ligne ne permettait de distinguer une
+  jointure juste d'une fausse, et le set allait être recollecté.
+- **Les 4 « probables » artofpkm restent hors de `sources-sets.js`** (sm2+, ADV4, MDB, MCRP) : une source fausse
+  attacherait les images d'un autre set.
+- **Les Additionals Cardmarket sont exclues de la correspondance d'images** : ce sont des variantes du set de base, dont
+  les images appartiennent à un autre tirage (§19).
+- **sv11B / sv11W (+ Additionals) non traités** : l'impression japonaise est fusionnée « Black Bolt/White Flare », et une
+  carte porte n°002 ET n°088. Rien ne dit à quel demi-set appartient un numéro ; les joindre fabriquerait des faux.
+- **SV3s…SV10s sont du chinois traditionnel classé japonais par codes_set** (pages « (ATCG) »), collectés comme tels.
+- **Lignes ajoutées, toutes jugées par la vérification normale** : 26 japonaises (7 demi-sets écrasés par leur jumeau,
+  19 par la liste JP, dont sv6 Mask of Change = « Transformation Mask »), 35 decks, 11 promos japonaises, 33 chinoises.
+
+**🛑 PUSH** : les commits de sources sont `7aabc22` (20 sources) puis `958278e` (+11 auto, +4 à la main). **Pousser la
+tête de `main`**. Après redéploiement : `node collecte-cartes/remplir-file-images.js`. Pour les demi-sets déjà passés
+par le worker avec l'ancienne table : `node collecteur-images.js --rejouer-jointure=<codes>` (0 requête).
+
 ## 🔴 FAUX AFFIRMÉ DU 2026-09-15 (≈ 11:00 UTC) : `20th` « BREAK Starter Pack » — POUR LE TESTEUR
 
 **Le fait.** `20th` (exp 4089, 84 produits, japonais pour codes_set) a été admis sur « Generations (TCG) » en tirage
