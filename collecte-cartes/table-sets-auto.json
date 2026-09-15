@@ -18181,6 +18181,10 @@
    "ratio": 0.99,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:07:27.094Z",
+   "etat": "ok"
   }
  },
  {
@@ -18249,7 +18253,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Sun & Moon Starter Set (TCG)",
+   "entrees": {
+    "Sun & Moon Starter Set": 59
+   },
+   "note": "vérification automatique : 59 entrées pour 59 produits, échantillon « Snubbull (Sun & Moon 90) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Sun & Moon Starter Set (TCG)",
+   "entrees": 59,
+   "echantillon": "Snubbull (Sun & Moon 90)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:07:54.637Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svHM",
@@ -18271,7 +18298,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Starter Deck & Build Sets (TCG)",
+   "entrees": {
+    "Future Miraidon ex Starter Deck & Build Set": 53
+   },
+   "note": "vérification automatique : 53 entrées pour 53 produits, échantillon « Nest Ball (Sun & Moon 123) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Starter Deck & Build Sets (TCG)",
+   "entrees": 53,
+   "echantillon": "Nest Ball (Sun & Moon 123)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:08:17.381Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svHK",
@@ -18293,7 +18343,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Starter Deck & Build Sets (TCG)",
+   "entrees": {
+    "Ancient Koraidon ex Starter Deck & Build Set": 53
+   },
+   "note": "vérification automatique : 53 entrées pour 53 produits, échantillon « Nest Ball (Sun & Moon 123) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Starter Deck & Build Sets (TCG)",
+   "entrees": 53,
+   "echantillon": "Nest Ball (Sun & Moon 123)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:08:39.935Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "pcgA",
@@ -18315,7 +18388,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Venusaur/Charizard/Blastoise Random Constructed Starter Decks (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Venusaur/Charizard/Blastoise Random Constructed Starter Decks »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:08:39.942Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Venusaur/Charizard/Blastoise Random Constructed Starter Decks »"
+   ]
+  }
  },
  {
   "code": "smM",
@@ -18337,7 +18427,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "TAG TEAM GX Starter Sets (TCG)",
+   "entrees": {
+    "TAG TEAM GX Starter Sets": 31
+   },
+   "note": "vérification automatique : 31 entrées pour 31 produits, échantillon « Hoopa (Shining Legends 55) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "TAG TEAM GX Starter Sets (TCG)",
+   "entrees": 31,
+   "echantillon": "Hoopa (Shining Legends 55)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:27.309Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svC",
@@ -18359,7 +18472,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": null,
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "page absente"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:27.317Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "page absente"
+   ]
+  }
  },
  {
   "code": "pcgR",
@@ -18381,7 +18511,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shockwave! Tyranitar ex Constructed Standard Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Shockwave! Tyranitar ex Constructed Standard Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:27.324Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Shockwave! Tyranitar ex Constructed Standard Deck »"
+   ]
+  }
  },
  {
   "code": "pcgS",
@@ -18403,7 +18550,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Imprison! Gardevoir ex Constructed Standard Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Imprison! Gardevoir ex Constructed Standard Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:27.332Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Imprison! Gardevoir ex Constructed Standard Deck »"
+   ]
+  }
  },
  {
   "code": "sGI",
@@ -18425,7 +18589,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "High-Class Decks (TCG)",
+   "entrees": {
+    "Inteleon VMAX High-Class Deck": 23
+   },
+   "note": "vérification automatique : 23 entrées pour 23 produits, échantillon « Switch (Base Set 95) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "High-Class Decks (TCG)",
+   "entrees": 23,
+   "echantillon": "Switch (Base Set 95)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:41.371Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "mP1",
@@ -18447,7 +18634,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Start Deck 100 Battle Collection CoroCiao Version (TCG)",
+   "entrees": {
+    "Start Deck 100 Battle Collection CoroCiao Version": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 23 produits, échantillon « Bellibolt (Twilight Masquerade 74) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Start Deck 100 Battle Collection CoroCiao Version (TCG)",
+   "entrees": 25,
+   "echantillon": "Bellibolt (Twilight Masquerade 74)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.09,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:55.609Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "XYc",
@@ -18469,7 +18679,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Super Legend Set: Xerneas-EX & Yveltal-EX (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Super Legend Set: Xerneas-EX & Yveltal-EX »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:55.617Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Super Legend Set: Xerneas-EX & Yveltal-EX »"
+   ]
+  }
  },
  {
   "code": "svJL",
@@ -18491,7 +18718,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Battle Master Decks (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Master Deck Terastal Charizard ex »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:55.625Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Master Deck Terastal Charizard ex »"
+   ]
+  }
  },
  {
   "code": "XYa",
@@ -18513,7 +18757,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "M Charizard-EX Mega Battle Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « M Charizard-EX Mega Battle Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:55.632Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « M Charizard-EX Mega Battle Deck »"
+   ]
+  }
  },
  {
   "code": "svOD",
@@ -18535,7 +18796,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": null,
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "page absente"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:09:55.639Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "page absente"
+   ]
+  }
  },
  {
   "code": "sPD",
@@ -18557,7 +18835,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "VSTAR & VMAX High-Class Decks (TCG)",
+   "entrees": {
+    "Deoxys VSTAR & VMAX High-Class Deck": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 21 produits, échantillon « Shauna (XY 127) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "VSTAR & VMAX High-Class Decks (TCG)",
+   "entrees": 20,
+   "echantillon": "Shauna (XY 127)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:08.319Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sEF",
@@ -18579,7 +18880,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Venusaur & Blastoise VMAX Starter Sets (TCG)",
+   "entrees": {
+    "Venusaur VMAX Starter Set": 21
+   },
+   "note": "vérification automatique : 21 entrées pour 21 produits, échantillon « Evolution Incense (Sword & Shield 163) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Venusaur & Blastoise VMAX Starter Sets (TCG)",
+   "entrees": 21,
+   "echantillon": "Evolution Incense (Sword & Shield 163)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:21.825Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sPZ",
@@ -18601,7 +18925,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "VSTAR & VMAX High-Class Decks (TCG)",
+   "entrees": {
+    "Zeraora VSTAR & VMAX High-Class Deck": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 21 produits, échantillon « Shauna (XY 127) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "VSTAR & VMAX High-Class Decks (TCG)",
+   "entrees": 20,
+   "echantillon": "Shauna (XY 127)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:33.999Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svOM",
@@ -18623,7 +18970,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": null,
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "page absente"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:34.006Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "page absente"
+   ]
+  }
  },
  {
   "code": "sLL",
@@ -18645,7 +19009,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "VSTAR Starter Sets (TCG)",
+   "entrees": {
+    "Lucario VSTAR Starter Set": 21
+   },
+   "note": "vérification automatique : 21 entrées pour 21 produits, échantillon « Switch (Base Set 95) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "VSTAR Starter Sets (TCG)",
+   "entrees": 21,
+   "echantillon": "Switch (Base Set 95)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:48.470Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "smE",
@@ -18667,7 +19054,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Solgaleo-GX & Lunala-GX Legendary Starter Set (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Solgaleo-GX & Lunala-GX Legendary Starter Set »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:48.477Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Solgaleo-GX & Lunala-GX Legendary Starter Set »"
+   ]
+  }
  },
  {
   "code": "smC",
@@ -18689,7 +19093,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Tapu Bulu-GX Enhanced Starter Set (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Tapu Bulu-GX Enhanced Starter Set »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:10:54.835Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Tapu Bulu-GX Enhanced Starter Set »"
+   ]
+  }
  },
  {
   "code": "sLD",
@@ -18711,7 +19132,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "VSTAR Starter Sets (TCG)",
+   "entrees": {
+    "Darkrai VSTAR Starter Set": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « Pokégear 3.0 (HeartGold & SoulSilver 96) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "VSTAR Starter Sets (TCG)",
+   "entrees": 20,
+   "echantillon": "Pokégear 3.0 (HeartGold & SoulSilver 96)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:09.701Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sEK",
@@ -18733,7 +19177,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Venusaur & Blastoise VMAX Starter Sets (TCG)",
+   "entrees": {
+    "Blastoise VMAX Starter Set": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « Evolution Incense (Sword & Shield 163) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Venusaur & Blastoise VMAX Starter Sets (TCG)",
+   "entrees": 20,
+   "echantillon": "Evolution Incense (Sword & Shield 163)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:22.827Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "svJP",
@@ -18755,7 +19222,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Battle Master Decks (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Master Deck Chien-Pao ex »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:22.835Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Master Deck Chien-Pao ex »"
+   ]
+  }
  },
  {
   "code": "sGG",
@@ -18777,7 +19261,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "High-Class Decks (TCG)",
+   "entrees": {
+    "Gengar VMAX High-Class Deck": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « Professor's Research (Sword & Shield 178) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "High-Class Decks (TCG)",
+   "entrees": 20,
+   "echantillon": "Professor's Research (Sword & Shield 178)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:35.707Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "XYg",
@@ -18799,7 +19306,30 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Zygarde-EX Perfect Battle Deck (TCG)",
+   "entrees": {
+    "Zygarde-EX Perfect Battle Deck": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « Power Memory (Fates Collide 108) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Zygarde-EX Perfect Battle Deck (TCG)",
+   "entrees": 19,
+   "echantillon": "Power Memory (Fates Collide 108)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:49.462Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DP3p",
@@ -18821,7 +19351,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Palkia LV.X Constructed Standard Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Palkia LV.X Constructed Standard Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:49.470Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Palkia LV.X Constructed Standard Deck »"
+   ]
+  }
  },
  {
   "code": "DP3d",
@@ -18843,7 +19390,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dialga LV.X Constructed Standard Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Dialga LV.X Constructed Standard Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:49.478Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Dialga LV.X Constructed Standard Deck »"
+   ]
+  }
  },
  {
   "code": "XYd",
@@ -18865,7 +19429,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "M Rayquaza-EX Mega Battle Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « M Rayquaza-EX Mega Battle Deck »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:11:49.485Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « M Rayquaza-EX Mega Battle Deck »"
+   ]
+  }
  },
  {
   "code": "PtG",
@@ -18887,7 +19468,50 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Garchomp Half Deck (TCG)",
+   "entrees": 15,
+   "echantillon": "Swablu (Dragons Exalted 105)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:12:56.199Z",
+   "etat": "faux-affirme",
+   "note": "apparié à tort à « Garchomp Half Deck » (autre produit) : noms 1/15 (Switch → Rare Candy) — retiré (copie backup-2026-09-15-faux-affirmes/PtG.json)"
+  },
+  "collecteAvant": [
+   {
+    "collecte": {
+     "le": "2026-09-15T19:12:03.796Z",
+     "etat": "noms-discordants"
+    },
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Garchomp Half Deck (TCG)",
+     "entrees": 15,
+     "echantillon": "Swablu (Dragons Exalted 105)",
+     "tiragesVus": [
+      "jp"
+     ],
+     "ratio": 0.94,
+     "etat": "OK",
+     "raisons": []
+    },
+    "bulba": {
+     "titre": "Garchomp Half Deck (TCG)",
+     "tirage": "jp",
+     "expansion": "Garchomp Half Deck"
+    },
+    "retireeLe": "2026-09-15T19:12:56.199Z"
+   }
+  ]
  },
  {
   "code": "pcgQ",
@@ -18909,7 +19533,17 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Earth's Groudon ex Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Earth's Groudon ex Constructed Starter Deck »"
+   ]
+  }
  },
  {
   "code": "pcgP",
@@ -18931,7 +19565,17 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Ocean's Kyogre ex Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Ocean's Kyogre ex Constructed Starter Deck »"
+   ]
+  }
  },
  {
   "code": "XYf",
@@ -18953,7 +19597,17 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Golduck BREAK + Palkia-EX Combo Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Golduck BREAK + Palkia-EX Combo Deck »"
+   ]
+  }
  },
  {
   "code": "pcgK",
@@ -18975,7 +19629,17 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Mirage's Mew Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Mirage's Mew Constructed Starter Deck »"
+   ]
+  }
  },
  {
   "code": "sp1",
@@ -18997,7 +19661,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Zacian + Zamazenta Box (TCG)",
+   "entrees": {
+    "Zacian + Zamazenta Box": 7
+   },
+   "note": "vérification automatique : 7 entrées pour 7 produits, échantillon « Zamazenta (SWSH Promo 34) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Zacian + Zamazenta Box (TCG)",
+   "entrees": 7,
+   "echantillon": "Zamazenta (SWSH Promo 34)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "SM-P",
@@ -19020,7 +19703,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "SM-P Promotional cards (TCG)",
+   "entrees": {
+    "SM-P Promotional cards": 435
+   },
+   "note": "vérification automatique : 435 entrées pour 422 produits, échantillon « Alolan Ninetales (SM Promo 128) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "SM-P Promotional cards (TCG)",
+   "entrees": 435,
+   "echantillon": "Alolan Ninetales (SM Promo 128)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.03,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "S-P",
@@ -19043,7 +19745,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "S-P Promotional cards (TCG)",
+   "entrees": {
+    "S-P Promotional cards": 357
+   },
+   "note": "vérification automatique : 357 entrées pour 354 produits, échantillon « Koffing (Chilling Reign 94) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "S-P Promotional cards (TCG)",
+   "entrees": 357,
+   "echantillon": "Koffing (Chilling Reign 94)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.01,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "XY-P",
@@ -19066,7 +19787,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "XY-P Promotional cards (TCG)",
+   "entrees": {
+    "XY-P Promotional cards": 438
+   },
+   "note": "vérification automatique : 438 entrées pour 301 produits, échantillon « Assault Vest (BREAKthrough 133) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "XY-P Promotional cards (TCG)",
+   "entrees": 438,
+   "echantillon": "Assault Vest (BREAKthrough 133)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.46,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "SV-P",
@@ -19089,7 +19829,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "SV-P Promotional cards (TCG)",
+   "entrees": {
+    "SV-P Promotional cards": 289
+   },
+   "note": "vérification automatique : 289 entrées pour 297 produits, échantillon « Morty's Conviction (Temporal Forces 155) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "SV-P Promotional cards (TCG)",
+   "entrees": 289,
+   "echantillon": "Morty's Conviction (Temporal Forces 155)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "BW-P",
@@ -19112,7 +19871,26 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "BW-P Promotional cards (TCG)",
+   "entrees": {
+    "BW-P Promotional cards": 236
+   },
+   "note": "vérification automatique : 236 entrées pour 248 produits, échantillon « Volcarona (Dark Explorers 22) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "BW-P Promotional cards (TCG)",
+   "entrees": 236,
+   "echantillon": "Volcarona (Dark Explorers 22)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "PCG-P",

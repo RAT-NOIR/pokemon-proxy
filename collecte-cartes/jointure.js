@@ -83,6 +83,27 @@ async function produitsDeLExpansion(prod, idExpansion) {
 }
 
 /**
+ * LE NUMÉRO PORTÉ PAR LA SETLIST (2026-09-15). Les tirages chinois (pages « (ATCG) ») ne sont PAS déclarés sur les pages de
+ * cartes : `Venipede (Transfiguration Mask 115)` redirige vers `Venipede (Twilight Masquerade 115)`, sans impression chinoise.
+ * Le numéro n'existe que dans l'entrée de Setlist. On en fait des impressions VIRTUELLES (jamais écrites en base), rattachées
+ * à la page par `etat.pages` (titre demandé → pageid), que `joindre` lit comme les autres et nomme « setlist+numero ».
+ * Seul un TCG ID donne un numéro : celui d'un lien est indicatif (« Pokémon Card 151 »).
+ * @returns {{ parCarte: Map<number, object[]>, sansPage: string[], sansNumero: string[] }}
+ */
+function impressionsDepuisSetlist(entrees, pages, cible) {
+    const pageDe = new Map((pages || []).filter(p => p.pageid != null).map(p => [p.titre, p.pageid]));
+    const parCarte = new Map(), sansPage = [], sansNumero = [];
+    for (const e of entrees) {
+        if (e.forme !== 'tcg-id' || e.b == null || String(e.b).trim() === '') { sansNumero.push(e.titre); continue; }
+        const id = pageDe.get(e.titre);
+        if (id == null) { sansPage.push(e.titre); continue; }
+        if (!parCarte.has(id)) parCarte.set(id, []);
+        parCarte.get(id).push({ tirage: cible.tirage, expansion: [].concat(cible.expansionBulba)[0], numero: String(e.b).trim(), total: null, deck: null, rarete: null, source: 'setlist' });
+    }
+    return { parCarte, sansPage, sansNumero };
+}
+
+/**
  * Joint les cartes d'un set à ses produits.
  * @param {object[]} cartes   documents `cartes` (avec impressions, attaques, nomEn)
  * @param {object[]} produits sortie de produitsDeLExpansion
@@ -146,7 +167,7 @@ function joindre(cartes, produits, cible) {
         const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').map(i => cleImpression(i.numero)).filter(Boolean))];
         if (numeros.length && parNumero.size) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
-            preuve = 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set retiré : commun à toutes les impressions, absent des ${numsProd.length} numéros Cardmarket)` : ''}`;
+            preuve = imps.every(i => i.source === 'setlist') ? 'setlist+numero' : 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set retiré : commun à toutes les impressions, absent des ${numsProd.length} numéros Cardmarket)` : ''}`;
         }
         // 🔴 PAS DE REPLI PAR NOM QUAND LE NUMÉRO A ÉTÉ ESSAYÉ (2026-09-15). Une carte qui déclare un numéro dans un catalogue
         // numéroté et ne le trouve pas N'EST PAS dans ce catalogue : la rattacher par son nom prend le produit d'une AUTRE carte
@@ -185,4 +206,4 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
+module.exports = { joindre, impressionsDepuisSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };

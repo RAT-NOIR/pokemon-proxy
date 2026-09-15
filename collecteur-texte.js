@@ -28,7 +28,7 @@ const bulba = require('./collecte-cartes/bulba');
 const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
-const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
+const { joindre, produitsDeLExpansion, impressionsDepuisSetlist } = require('./collecte-cartes/jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -288,7 +288,15 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     if (arretDemande) { console.warn('⏹️  arrêté avant la jointure ; relancer reprend au premier titre non traité.'); await finir(); process.exit(0); }
 
     // ---- 4. la jointure ---------------------------------------------------------------------
-    const cartesDuSet = await M.Carte.find({ sets: slug }).lean();
+    let cartesDuSet = await M.Carte.find({ sets: slug }).lean();
+    // `numerosDepuisSetlist` (tirages chinois, pages « (ATCG) ») : le numéro du set n'est que dans la Setlist. Impressions
+    // VIRTUELLES, jamais écrites en base, et une preuve qui le dit (« setlist+numero »). Voir jointure.js.
+    if (L.bulba.numerosDepuisSetlist) {
+        const etatPages = (await M.Etat.findById(slug).select('pages').lean())?.pages || [];
+        const V = impressionsDepuisSetlist(entrees, etatPages, { tirage: TIRAGE, expansionBulba: L.bulba.expansion });
+        cartesDuSet = cartesDuSet.map(c => V.parCarte.has(c._id) ? { ...c, impressions: [...(c.impressions || []), ...V.parCarte.get(c._id)] } : c);
+        console.log(`   numéros depuis la Setlist : ${entrees.length} entrées → ${V.parCarte.size} cartes, ${[...V.parCarte.values()].flat().length} impressions virtuelles · sans numéro ${V.sansNumero.length} · sans page ${V.sansPage.length}${V.sansPage.length ? ' : ' + V.sansPage.slice(0, 5).join(' · ') : ''}`);
+    }
     const produits = await produitsDeLExpansion(prod, L.exp);
     const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE });
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });

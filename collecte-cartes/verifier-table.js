@@ -99,7 +99,10 @@ async function verifierAuto() {
     const bloc = TABLE_AUTO.filter(l => !l.verif && (!region || l.region === region)).slice(0, taille);
     console.log(`--auto : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
     if (!bloc.length) return;
-    const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    // La production (lecture seule) seulement si une ligne du bloc tire ses numéros de la Setlist : sa vérification les compare
+    // aux numéros Cardmarket.
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: bloc.some(l => l.bulba.numerosDepuisSetlist), buckets: [] });
+    const { cleNumero } = require('./jointure');
     const verrou = fabriquerVerrou({ Modele: modeles(cx).EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: 3 * 60 * 1000, surInsertion: { phase: 'collecteur' }, nom: 'verrou global bulbapedia (vérification)' });
     const tenu = await verrou.prendre();
     if (tenu) { console.error(`❌ ARRÊT : verrou bulbapedia tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s).`); await fermer(); process.exit(1); }
@@ -113,7 +116,7 @@ async function verifierAuto() {
             if (!p) continue;
             l._entrees = entreesDeLaSetlist(p.content, l.bulba).entrees;
             const e = l._entrees[Math.floor(l._entrees.length / 2)];
-            if (e) echantillons.set(l.code, e.titre);
+            if (e && !l.bulba.numerosDepuisSetlist) echantillons.set(l.code, e.titre);
         }
         const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set(echantillons.values())]) : { pages: [], redirections: new Map() };
         const carteDe = t => pc.find(p => p.title === (rc.get(t) || t));
@@ -123,8 +126,19 @@ async function verifierAuto() {
             const v = { le: ajd, pageResolue: l._p?.title ?? null, entrees: l._entrees?.length ?? 0 };
             if (!l._p) raisons.push('page absente');
             else if (!v.entrees) raisons.push(`aucune entrée de Setlist pour « ${l.bulba.expansion} »`);
+            // 🔑 NUMÉROS DEPUIS LA SETLIST (tirages chinois, 2026-09-15) : la page de carte ne déclare pas le tirage, un échantillon
+            // ne prouverait rien. Le critère est la COUVERTURE : les numéros Cardmarket de l'expansion sont-ils des numéros de TCG ID
+            // de la Setlist ? SV6s n'a que 62 produits (168…229) pour 229 entrées : le ratio le refuserait, la couverture non.
+            if (l.bulba.numerosDepuisSetlist && l._p && v.entrees) {
+                const numsSetlist = new Set(l._entrees.filter(x => x.forme === 'tcg-id' && x.b).map(x => cleNumero(x.b)));
+                const numsProduits = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '').map(p => cleNumero(p.numero));
+                const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
+                v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size };
+                if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
+                else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95`);
+            }
             const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;
-            if (l._p && v.entrees && !c) raisons.push('carte-échantillon introuvable');
+            if (l._p && v.entrees && !c && !l.bulba.numerosDepuisSetlist) raisons.push('carte-échantillon introuvable');
             if (c) {
                 const imps = faitsDeCarte(c.content).impressions.filter(i => i.expansion === l.bulba.expansion);
                 const tirages = [...new Set(imps.map(i => i.tirage))];
@@ -137,7 +151,7 @@ async function verifierAuto() {
             // redirection suivie, 84 produits joints à des cartes fausses. Voir coherence-ligne.js.
             raisons.push(...raisonsDeCoherence(l, l.bulba.tirage || v.tirageEtabli || null));
             v.ratio = l.attendu ? Math.round(100 * v.entrees / l.attendu) / 100 : null;
-            if (v.entrees && (v.ratio < 0.5 || v.ratio > 1.5)) raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]`);
+            if (v.entrees && !l.bulba.numerosDepuisSetlist && (v.ratio < 0.5 || v.ratio > 1.5)) raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]`);
             v.etat = raisons.length ? 'À REGARDER' : 'OK';
             v.raisons = raisons;
             l.verif = v;
