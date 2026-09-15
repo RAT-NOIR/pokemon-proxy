@@ -687,6 +687,85 @@ lot de sv4a et l'avertissement « compte rond » ajouté à la fin de la liste.
 les refus définitifs du §23.** Ensuite : enfiler les 29 sets, et `collecte-massive.js` enfile chaque set « ok » qui
 a une source.
 
+## 🔴 FAUX AFFIRMÉ DU 2026-09-15 (≈ 11:00 UTC) : `20th` « BREAK Starter Pack » — POUR LE TESTEUR
+
+**Le fait.** `20th` (exp 4089, 84 produits, japonais pour codes_set) a été admis sur « Generations (TCG) » en tirage
+`intl` et collecté à 10:56:33 UTC : **84 / 84 joints, concordance vraie, verdict « ok »**. Et faux : la jointure
+set+numéro a posé les numéros de BREAK Starter Pack sur ceux de Generations. Rapidash n°013 → Ninetales, Hitmonchan
+n°037 → Meowstic, Blastoise-EX n°073 → Team Flare Grunt. **Noms concordants : 11 sur 76.** Les cartes portent pourtant
+la bonne impression (`jp:BREAK Starter Pack:038` sur Rhyhorn) : la donnée juste était sous la main.
+
+**Trouvé comment.** En examinant les ratios de sv4M et s6h (question 3), pas par un chiffre de la collecte : aucun n'a
+bougé (§21, n°8 : une concordance compte ce qu'elle a énuméré).
+
+**Deux défauts additionnés.**
+1. `generer-table-auto.js`, clé « page (TCG) » : il demande « BREAK Starter Pack (TCG) », suit la REDIRECTION vers
+   « Generations (TCG) » et retient comme nom d'expansion celui de la CIBLE. **53 lignes sur 398 sont redirigées.** Et
+   deux titres redirigés vers la même cible s'écrasent dans `redir` (Map to → from) : un des deux jumeaux perd sa ligne.
+2. `verifier-table.js` établit le tirage depuis la carte-échantillon et réécrit la région, sans la confronter à codes_set.
+
+**L'étendue, mesurée file de texte à l'arrêt** (contrôle indépendant : nom du produit Cardmarket face au nom de la carte
+jointe, sur toutes les jointures) : **106 sets collectés, 11 948 lignes `cartes_produits` ; un seul set faux, 20th.**
+Le plus bas des autres est VS à 80,1 % (abréviations de dresseurs), puis sm12a 96,0 % (énergies). IPB, à 53,7 % dans
+une première normalisation, n'avait que des énergies à suffixe V1/V2 (19 sur 19).
+
+**Ce qui est fait (aucune écriture en base).**
+- Collecte arrêtée à 11:00 UTC, bloc 3 vérifié mais pas encore collecté.
+- `coherence-ligne.js` + `test-coherence-ligne.js` (14/14), commit `489d504` :
+  - la vérification refuse une page redirigée et une région codes_set contredite. **Coût sur les 87 lignes admises :
+    20th seul**, pour chacune des deux gardes ;
+  - `collecte-massive.js` contrôle les noms après chaque collecte. **Seuil 0,5**, au milieu entre 14,5 % et 80,1 %.
+    Sous le seuil : pas d'image, et **arrêt de la boucle**.
+- Ligne 20th : `verifie` retiré, `collecte.etat: 'faux-affirme'`, cause écrite dans la ligne. Pas d'image : il n'a
+  jamais été enfilé (sans source artofpkm).
+
+**🛑 CE QUI T'APPARTIENT.** Les **84 lignes `cartes_produits` de 20th** (`slugSet: 'BREAK-Starter-Pack'`, `idExpansion:
+4089`) sont en base et fausses. Les retirer est une écriture destructive. Une re-collecte correcte n'est possible
+qu'après ce retrait : `collecteur-texte` n'efface jamais, et les paires justes s'ajouteraient aux fausses (produit vers
+deux cartes). La ligne juste serait `expansion: 'BREAK Starter Pack'`, tirage `jp`, sur la même page.
+
+## Question 3 : sv4M à 2,8 entrées par produit et s6h à 2,45 — même cause que les pages longues ?
+
+**Cause : la redirection ci-dessus, pas une page longue.** « Future Flash (TCG) » redirige vers « Paradox Rift (TCG) »,
+et « Silver Lance (TCG) » vers « Chilling Reign (TCG) ». Les entrées lues sont la liste ENTIÈRE du set international :
+**266 = Paradox Rift (182 + 84)** et **233 = Chilling Reign (198 + 35)**, face à la moitié japonaise (95 produits chacun).
+**Les 28 lignes « à regarder » dont le ratio dépasse 1,5 ont toutes cette cause** : 27 redirigées à la génération, plus
+DP1 (« Space-Time Creation (TCG) » → « Diamond & Pearl (TCG) », redirigée à la vérification).
+
+**Ce n'est PAS la cause des listes artofpkm arrêtées à 100** : celle-là est côté images (pagination par cadre Turbo,
+§21 n°7), et une page Bulbapedia de plus de 100 entrées n'est pas un défaut en soi (sv4a, s8b, s12a sont justes, noms
+≥ 96 %). Le seuil de ratio a joué son rôle : il a arrêté 28 lignes redirigées sur 28 dont le set international est plus
+gros. **20th est passé parce que Generations (83 entrées) a la taille de BREAK Starter Pack (84 produits)** : le ratio ne
+voit pas une redirection vers un set de même taille, la garde de redirection si.
+
+## ✅ TRANCHÉ SEUL, 2026-09-15 : les 46 demi-sets japonais redirigés lisent la SECTION à leur nom
+
+**Mesure, 1 requête** (38 pages cibles relues, sauvées pour rejeu) : sur 59 lignes japonaises dont la page est
+redirigée, **52 ont sur la page cible une section au nom exact de l'expansion Cardmarket**, en général pour autant
+d'entrées que de produits (Future Flash ×95 pour 95, Silver Lance ×95 pour 95, Scarlet ex ×108 pour 114, HeartGold
+Collection ×71 pour 79). C'est la forme déjà connue de DP5c (« Cry from the Mysterious » sur Legends Awakened).
+
+**Décision** (table seulement, ni schéma ni site) : `bulba.expansion` = le titre de la section, `bulba.titre` = la page
+cible, `tirage` remis à null. Chaque ligne perd `verif` et `verifie` : **la vérification normale la rejuge** (tirage
+`jp` de la carte-échantillon, ratio), puis le contrôle des noms après collecte. L'historique est dans
+`auto.redirection`. La garde de redirection compare désormais le nom Cardmarket au nom d'expansion LU, et non plus au
+nom de la page (16/16).
+
+**⚠️ ÉCART À L'ATTENDU, ÉCRIT COMME DEMANDÉ.** Attendu : 47 lignes modifiées. Obtenu au premier passage, à blanc :
+**52, rien écrit.** Les 6 lignes en trop, ouvertes : L2, BW2, sm6a, PCG7, CP1 et s8a ont DÉJÀ la bonne expansion.
+Seul leur titre est redirigé, et Bulbapedia le résout à la lecture ; elles étaient vérifiées OK. Mon attendu comptait
+les changements d'EXPANSION, le script comptait tout changement. Et CP1 n'avait aucun défaut de ponctuation : j'avais
+lu le nom Cardmarket au lieu de `bulba.expansion`. Critère restreint au nom d'expansion, nouvel attendu annoncé
+**46 → 46**, écrit à 11:11:38 UTC.
+
+**Listées, non traitées (sans section au nom Cardmarket)** : DP1 « Space Time Creation » (la page porte « Diamond
+Collection » ×117 et « Pearl Collection » ×119 : Cardmarket fusionne deux sets), svLN, svLS, svEM et svEL (pages de
+decks sans section), CS1 (feuilles McDonald's), HXY (région absente, non lue).
+
+**L2 : échec causé par mon arrêt de la collecte.** Le processus arrêté tenait le verrou du set Reviving-Legends ; la
+relance a échoué dessus (battement il y a 398 s) et marqué L2 `echec-1-texte`, ce qui l'aurait sorti de la sélection
+pour toujours. Marque retirée, historique dans `collecteAvant`. Un arrêt par TaskStop ne libère rien (§17).
+
 ## Lot C : les images japonaises des lignes automatiques (artofpkm, worker existant)
 
 Conditions : lot B déployé, 🛑1 (D5).

@@ -24,8 +24,11 @@ const nomLisibleDuSlug = slug => String(slug ?? '').replace(/-/g, ' ');
 function raisonsDeCoherence(l, tirage) {
     const raisons = [];
     const a = l.auto || {};
-    if (a.cle === 'page (TCG)' && a.nomBulbapedia && serre(nomLisibleDuSlug(l.slugSet)) !== serre(a.nomBulbapedia))
-        raisons.push(`page redirigée : « ${nomLisibleDuSlug(l.slugSet)} (TCG) » → « ${a.nomBulbapedia} » (le nom d'expansion est celui de la cible, pas celui de l'expansion Cardmarket)`);
+    // On compare au nom d'expansion LU (`bulba.expansion`), pas au nom de la page : un demi-set japonais corrigé garde la
+    // page cible (« Paradox Rift (TCG) ») et lit la section à son nom (« Future Flash ») — c'est juste, et ne doit pas crier.
+    const lue = [].concat(l.bulba?.expansion ?? a.nomBulbapedia ?? []);
+    if (a.cle === 'page (TCG)' && lue.length && !lue.some(x => serre(x) === serre(nomLisibleDuSlug(l.slugSet))))
+        raisons.push(`page redirigée : « ${nomLisibleDuSlug(l.slugSet)} (TCG) » → « ${lue.join(' / ')} » (le nom d'expansion lu est celui de la cible, pas celui de l'expansion Cardmarket)`);
     const r = regionDeTirage(tirage);
     if (a.regionCodesSet && r && a.regionCodesSet !== r)
         raisons.push(`région codes_set « ${a.regionCodesSet} » contredite par le tirage « ${tirage} » de la carte-échantillon`);

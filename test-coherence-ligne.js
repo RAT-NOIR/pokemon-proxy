@@ -8,7 +8,7 @@ const verifier = (nom, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
     if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); }
 };
-const ligne = (slugSet, cle, nomBulbapedia, regionCodesSet) => ({ slugSet, auto: { cle, nomBulbapedia, regionCodesSet } });
+const ligne = (slugSet, cle, nomBulbapedia, regionCodesSet) => ({ slugSet, bulba: { expansion: nomBulbapedia }, auto: { cle, nomBulbapedia, regionCodesSet } });
 
 const r20th = raisonsDeCoherence(ligne('BREAK-Starter-Pack', 'page (TCG)', 'Generations', 'japonais'), 'intl');
 verifier('20th : deux raisons (redirection, région contredite)', r20th.length, 2);
@@ -16,6 +16,11 @@ verifier('20th : la redirection nomme les deux noms', /« BREAK Starter Pack \(T
 verifier('20th : la région nomme codes_set et le tirage', /japonais.*intl/.test(r20th[1] || ''), true);
 verifier('sv4M redirigée, tirage jp : redirection seule',
     raisonsDeCoherence(ligne('Future-Flash', 'page (TCG)', 'Paradox Rift', 'japonais'), 'jp').length, 1);
+// Le demi-set corrigé : la page reste la cible (Paradox Rift), mais l'expansion lue est la SECTION au nom Cardmarket.
+const sv4MCorrige = { ...ligne('Future-Flash', 'page (TCG)', 'Paradox Rift', 'japonais'), bulba: { titre: 'Paradox Rift (TCG)', expansion: 'Future Flash' } };
+verifier('demi-set corrigé (expansion = section au nom Cardmarket) : aucune raison', raisonsDeCoherence(sv4MCorrige, 'jp'), []);
+verifier('ponctuation de section (CP1 « … : Double Crisis ») : aucune raison',
+    raisonsDeCoherence({ ...ligne('Magma-Gang-VS-Aqua-Gang-Double-Crisis', 'page (TCG)', 'Double Crisis', 'japonais'), bulba: { expansion: 'Magma Gang VS Aqua Gang: Double Crisis' } }, 'jp'), []);
 verifier('page (TCG) non redirigée, jp/japonais : aucune raison',
     raisonsDeCoherence(ligne('Crimson-Haze', 'page (TCG)', 'Crimson Haze', 'japonais'), 'jp'), []);
 verifier('slug exact : jamais lu comme une redirection',
