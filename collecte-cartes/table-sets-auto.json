@@ -37,25 +37,37 @@
    "verifie": null,
    "retireLe": "2026-09-14T23:52:37.866Z"
   },
-  "verif": {
-   "le": "2026-09-14",
-   "pageResolue": "Start Deck 100 (TCG)",
-   "entrees": 422,
-   "echantillon": "Onix (Battle Styles 68)",
-   "tiragesVus": [],
-   "ratio": 0.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T10:18:31.898Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  }
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-14",
+     "pageResolue": "Start Deck 100 (TCG)",
+     "entrees": 422,
+     "echantillon": "Onix (Battle Styles 68)",
+     "tiragesVus": [],
+     "ratio": 0.98,
+     "etat": "À REGARDER",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T10:18:31.898Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "bulba": {
+     "titre": "Start Deck 100 (TCG)",
+     "tirage": null,
+     "expansion": "Start Deck 100"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "parseur : impressions jpdeck rendues (b9b0297)"
+   }
+  ],
+  "verifie": null
  },
  {
   "code": "sv4a",
@@ -1187,25 +1199,37 @@
    "verifie": null,
    "retireLe": "2026-09-14T23:52:37.867Z"
   },
-  "verif": {
-   "le": "2026-09-14",
-   "pageResolue": "GX Starter Decks (TCG)",
-   "entrees": 131,
-   "echantillon": "Alolan Persian (Sun & Moon 79)",
-   "tiragesVus": [],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T10:18:31.912Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  }
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-14",
+     "pageResolue": "GX Starter Decks (TCG)",
+     "entrees": 131,
+     "echantillon": "Alolan Persian (Sun & Moon 79)",
+     "tiragesVus": [],
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T10:18:31.912Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "bulba": {
+     "titre": "GX Starter Decks (TCG)",
+     "tirage": null,
+     "expansion": "GX Starter Decks"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "parseur : impressions jpdeck rendues (b9b0297)"
+   }
+  ],
+  "verifie": null
  },
  {
   "code": "s8",
@@ -1455,25 +1479,37 @@
    "verifie": null,
    "retireLe": "2026-09-14T23:52:37.867Z"
   },
-  "verif": {
-   "le": "2026-09-14",
-   "pageResolue": "V Starter Decks (TCG)",
-   "entrees": 127,
-   "echantillon": "Impidimp (Rebel Clash 123)",
-   "tiragesVus": [],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T10:18:31.917Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
-  }
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-14",
+     "pageResolue": "V Starter Decks (TCG)",
+     "entrees": 127,
+     "echantillon": "Impidimp (Rebel Clash 123)",
+     "tiragesVus": [],
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T10:18:31.917Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "tirage non établi (vus : aucun)"
+     ]
+    },
+    "bulba": {
+     "titre": "V Starter Decks (TCG)",
+     "tirage": null,
+     "expansion": "V Starter Decks"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "parseur : impressions jpdeck rendues (b9b0297)"
+   }
+  ],
+  "verifie": null
  },
  {
   "code": "sm4+",
@@ -4992,7 +5028,10 @@
   "bulba": {
    "titre": "Generations (TCG)",
    "tirage": "jp",
-   "expansion": "BREAK Starter Pack"
+   "expansion": "BREAK Starter Pack",
+   "setlist": [
+    "Starter Pack"
+   ]
   },
   "attendu": 84,
   "auto": {
@@ -5034,25 +5073,34 @@
     },
     "retireeLe": "2026-09-15T18:35:44.687Z",
     "motif": "faux affirmé retiré (84 cartes_produits, 83 appartenances, état) ; rejugé en jp"
+   },
+   {
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Generations (TCG)",
+     "entrees": 0,
+     "ratio": 0,
+     "etat": "À REGARDER",
+     "raisons": [
+      "aucune entrée de Setlist pour « BREAK Starter Pack »"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T18:36:11.237Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "aucune entrée de Setlist pour « BREAK Starter Pack »"
+     ]
+    },
+    "bulba": {
+     "titre": "Generations (TCG)",
+     "tirage": "jp",
+     "expansion": "BREAK Starter Pack"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "section « Starter Pack » ×77 de Generations (TCG) ; cartes jp « BREAK Starter Pack » (Clefairy n°039)"
    }
-  ],
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Generations (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « BREAK Starter Pack »"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:36:11.237Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "aucune entrée de Setlist pour « BREAK Starter Pack »"
-   ]
-  }
+  ]
  },
  {
   "code": "ADV4",
@@ -17164,7 +17212,8 @@
   "bulba": {
    "titre": "Forbidden Light (TCG)",
    "tirage": "jp",
-   "expansion": "Forbidden Light"
+   "expansion": "Forbidden Light",
+   "sectionOccurrence": 2
   },
   "attendu": 110,
   "auto": {
@@ -17176,29 +17225,40 @@
    "genereLe": "2026-09-15"
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Forbidden Light (TCG)",
-   "entrees": 256,
-   "echantillon": "Crasher Wake (Forbidden Light 104)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "ratio": 2.33,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
-    "entrées/produits 2.33 hors [0,5 ; 1,5]"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:42:20.020Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
-    "entrées/produits 2.33 hors [0,5 ; 1,5]"
-   ]
-  }
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Forbidden Light (TCG)",
+     "entrees": 256,
+     "echantillon": "Crasher Wake (Forbidden Light 104)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 2.33,
+     "etat": "À REGARDER",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
+      "entrées/produits 2.33 hors [0,5 ; 1,5]"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T18:42:20.020Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « Forbidden Light » (vus : intl)",
+      "entrées/produits 2.33 hors [0,5 ; 1,5]"
+     ]
+    },
+    "bulba": {
+     "titre": "Forbidden Light (TCG)",
+     "tirage": "jp",
+     "expansion": "Forbidden Light"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "page à deux sections « Forbidden Light » : occidentale ×146 puis japonaise ×110 (= 110 produits)"
+   }
+  ]
  },
  {
   "code": "sm3+",
@@ -17210,7 +17270,8 @@
   "bulba": {
    "titre": "Shining Legends (TCG)",
    "tirage": "jp",
-   "expansion": "Shining Legends"
+   "expansion": "Shining Legends",
+   "sectionOccurrence": 2
   },
   "attendu": 82,
   "auto": {
@@ -17222,28 +17283,39 @@
    "genereLe": "2026-09-15"
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Shining Legends (TCG)",
-   "entrees": 160,
-   "echantillon": "Venusaur (Shining Legends 3)",
-   "tiragesVus": [
-    "intl",
-    "jp"
-   ],
-   "ratio": 1.95,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 1.95 hors [0,5 ; 1,5]"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:42:20.027Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "entrées/produits 1.95 hors [0,5 ; 1,5]"
-   ]
-  }
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Shining Legends (TCG)",
+     "entrees": 160,
+     "echantillon": "Venusaur (Shining Legends 3)",
+     "tiragesVus": [
+      "intl",
+      "jp"
+     ],
+     "ratio": 1.95,
+     "etat": "À REGARDER",
+     "raisons": [
+      "entrées/produits 1.95 hors [0,5 ; 1,5]"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T18:42:20.027Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "entrées/produits 1.95 hors [0,5 ; 1,5]"
+     ]
+    },
+    "bulba": {
+     "titre": "Shining Legends (TCG)",
+     "tirage": "jp",
+     "expansion": "Shining Legends"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "deux sections « Shining Legends » : ×78 (EN) puis ×82 (JP, = 82 produits)"
+   }
+  ]
  },
  {
   "code": "smP2",
@@ -17427,6 +17499,17 @@
    "raisons": [
     "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:51:29.659Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+   ]
+  },
+  "causeListee": {
+   "le": "2026-09-15T19:00:23.293Z",
+   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
   }
  },
  {
@@ -17464,6 +17547,17 @@
    "raisons": [
     "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:51:29.665Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+   ]
+  },
+  "causeListee": {
+   "le": "2026-09-15T19:00:23.293Z",
+   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
   }
  },
  {
@@ -17501,6 +17595,17 @@
    "raisons": [
     "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:51:29.671Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+   ]
+  },
+  "causeListee": {
+   "le": "2026-09-15T19:00:23.293Z",
+   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
   }
  },
  {
@@ -17538,6 +17643,17 @@
    "raisons": [
     "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-15T18:51:29.677Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+   ]
+  },
+  "causeListee": {
+   "le": "2026-09-15T19:00:23.293Z",
+   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
   }
  },
  {
@@ -17580,6 +17696,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:52:23.472Z",
+   "etat": "ok"
   }
  },
  {
@@ -17603,7 +17723,30 @@
    "note": "Cardmarket « The Glory of Team Rocket »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Glory of the Rocket Gang (TCG)",
+   "entrees": {
+    "Glory of the Rocket Gang": 132
+   },
+   "note": "vérification automatique : 132 entrées pour 132 produits, échantillon « Team Rocket's Grimer (Destined Rivals 123) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Glory of the Rocket Gang (TCG)",
+   "entrees": 132,
+   "echantillon": "Team Rocket's Grimer (Destined Rivals 123)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:53:23.701Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s4",
@@ -17626,7 +17769,30 @@
    "note": "Cardmarket « Shocking Volt Tackle »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Vivid Voltage (TCG)",
+   "entrees": {
+    "Amazing Volt Tackle": 121
+   },
+   "note": "vérification automatique : 121 entrées pour 121 produits, échantillon « Mudbray (Vivid Voltage 96) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Vivid Voltage (TCG)",
+   "entrees": 121,
+   "echantillon": "Mudbray (Vivid Voltage 96)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:54:18.459Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "sv9a",
@@ -17649,7 +17815,30 @@
    "note": "Cardmarket « Heat Wave Arena »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Hot Wind Arena (TCG)",
+   "entrees": {
+    "Hot Wind Arena": 92
+   },
+   "note": "vérification automatique : 92 entrées pour 92 produits, échantillon « Arven's Toedscool (Destined Rivals 109) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Hot Wind Arena (TCG)",
+   "entrees": 92,
+   "echantillon": "Arven's Toedscool (Destined Rivals 109)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:54:56.143Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s5a",
@@ -17672,7 +17861,30 @@
    "note": "Cardmarket « Matchless Fighter »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Peerless Fighters (TCG)",
+   "entrees": {
+    "Peerless Fighters": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « Spiritomb (Chilling Reign 103) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Peerless Fighters (TCG)",
+   "entrees": 96,
+   "echantillon": "Spiritomb (Chilling Reign 103)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:55:37.613Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "s10b",
@@ -17684,7 +17896,8 @@
   "bulba": {
    "titre": "Pokémon GO (TCG)",
    "tirage": "jp",
-   "expansion": "Pokémon GO"
+   "expansion": "Pokémon GO",
+   "sectionOccurrence": 2
   },
   "attendu": 101,
   "auto": {
@@ -17695,7 +17908,40 @@
    "note": "nom partagé avec le set EN : tirage jp",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Pokémon GO (TCG)",
+     "entrees": 189,
+     "echantillon": "Ariados (Pokémon GO 7)",
+     "tiragesVus": [
+      "intl",
+      "jp"
+     ],
+     "ratio": 1.87,
+     "etat": "À REGARDER",
+     "raisons": [
+      "entrées/produits 1.87 hors [0,5 ; 1,5]"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T18:55:37.621Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "entrées/produits 1.87 hors [0,5 ; 1,5]"
+     ]
+    },
+    "bulba": {
+     "titre": "Pokémon GO (TCG)",
+     "tirage": "jp",
+     "expansion": "Pokémon GO"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "deux sections « Pokémon GO » : ×88 (EN) puis ×101 (JP, = 101 produits)"
+   }
+  ]
  },
  {
   "code": "sm1+",
@@ -17707,7 +17953,10 @@
   "bulba": {
    "titre": "Enhanced Expansion Pack Sun & Moon (TCG)",
    "tirage": "jp",
-   "expansion": "Enhanced Expansion Pack Sun & Moon"
+   "expansion": "Enhanced Expansion Pack Sun & Moon",
+   "setlist": [
+    "Sun & Moon"
+   ]
   },
   "attendu": 69,
   "auto": {
@@ -17718,7 +17967,35 @@
    "note": "Cardmarket « Strength Expansion Pack Sun Moon »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": null,
+  "collecteAvant": [
+   {
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Enhanced Expansion Pack Sun & Moon (TCG)",
+     "entrees": 0,
+     "ratio": 0,
+     "etat": "À REGARDER",
+     "raisons": [
+      "aucune entrée de Setlist pour « Enhanced Expansion Pack Sun & Moon »"
+     ]
+    },
+    "collecte": {
+     "le": "2026-09-15T18:55:37.628Z",
+     "etat": "a-regarder",
+     "raisons": [
+      "aucune entrée de Setlist pour « Enhanced Expansion Pack Sun & Moon »"
+     ]
+    },
+    "bulba": {
+     "titre": "Enhanced Expansion Pack Sun & Moon (TCG)",
+     "tirage": "jp",
+     "expansion": "Enhanced Expansion Pack Sun & Moon"
+    },
+    "retireeLe": "2026-09-15T19:00:23.293Z",
+    "motif": "section « Sun & Moon » ×68 ; cartes jp « Enhanced Expansion Pack Sun & Moon »"
+   }
+  ]
  },
  {
   "code": "s8a-P",
@@ -17741,6 +18018,29 @@
    "note": "Cardmarket « 25th Anniversary Edition »",
    "genereLe": "2026-09-15"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Promo Card Pack 25th Anniversary Edition (TCG)",
+   "entrees": {
+    "Promo Card Pack 25th Anniversary Edition": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 25 produits, échantillon « Rocket's Admin. (EX Team Rocket Returns 86) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Promo Card Pack 25th Anniversary Edition (TCG)",
+   "entrees": 25,
+   "echantillon": "Rocket's Admin. (EX Team Rocket Returns 86)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T18:55:52.206Z",
+   "etat": "ok"
+  }
  }
 ]

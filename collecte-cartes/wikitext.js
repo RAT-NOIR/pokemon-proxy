@@ -502,7 +502,11 @@ function entreesDeLaSetlist(texte, b) {
         ({ entrees, lues, masquees } = filtrerLesGabarits(new RegExp(b.setlistMotif))); chemin = 'motif';
     } else if (nomsSections === null) { entrees = sections.flatMap(s => s.entrees); chemin = 'toutes-sections'; lues = entrees.length; }
     else {
-        entrees = sections.filter(s => nomsSections.includes(s.titre)).flatMap(s => s.entrees); chemin = 'sections-nommees'; lues = entrees.length;
+        // `sectionOccurrence` (2026-09-15) : une page peut porter DEUX sections du même nom — la liste occidentale puis la
+        // japonaise sur « Forbidden Light (TCG) » (146 + 110). Fusionnées, sm6 lisait 256 entrées. La table désigne la n-ième ;
+        // absente, AUCUN repli : un autre chemin lirait l'autre section, précisément ce qu'on a voulu écarter.
+        const nommees = sections.filter(s => nomsSections.includes(s.titre));
+        entrees = (b.sectionOccurrence ? nommees.slice(b.sectionOccurrence - 1, b.sectionOccurrence) : nommees).flatMap(s => s.entrees); chemin = 'sections-nommees'; lues = entrees.length;
         if (entrees.length) {
             // HORS SET : une entrée d'une section retenue dont le tirage n'est aucun nom attendu, suivi au plus d'un
             // numéro. Ce n'est pas un refus — la section fait autorité — c'est un signal imprimé : un lien générique qui
@@ -520,11 +524,11 @@ function entreesDeLaSetlist(texte, b) {
             const noms = [...new Set([...nomsSections, ...nomsExpansion, ...(jetonDominant ? [jetonDominant] : [])])];
             const borne = new RegExp(`^(${noms.map(echapper).join('|')})( ${NUMERO_DE_TIRAGE})?$`);
             horsSet = entrees.filter(e => !borne.test(e.setReconstruit)).map(e => e.titre);
-        } else {
+        } else if (!b.sectionOccurrence) {
             ({ entrees, lues, masquees } = filtrerLesGabarits(new RegExp(`^(${nomsSections.map(echapper).join('|')})( \\d+)?$`))); chemin = 'set-reconstruit';
         }
     }
-    if (!entrees.length) {
+    if (!entrees.length && !b.sectionOccurrence) {
         const re = b.setlistMotif ? new RegExp(b.setlistMotif) : new RegExp(`^(${(nomsSections || nomsExpansion).map(echapper).join('|')})( \\d+)?$`);
         // Symétrie avec les sections (§21 bis) : TCG ID lisibles ET liens de tirage, sous le même filtre de nom.
         const candidats = [
