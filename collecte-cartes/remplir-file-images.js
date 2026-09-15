@@ -16,6 +16,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const { ouvrirConnexions } = require('./garde');
 const { TABLE, TABLE_AUTO } = require('./table-sets');
 const { sourceDe } = require('./sources-sets');
+const { sourcesDeployees } = require('./sources-deployees');
 
 const aBlanc = process.argv.includes('--a-blanc');
 (async () => {
@@ -51,11 +52,16 @@ const aBlanc = process.argv.includes('--a-blanc');
     // 2. enfiler les sets collectés et concordants
     const sets = await cx.db.collection('sets').find({ 'complet.concordance': true }, { projection: { _id: 1 } }).toArray();
     const verifies = new Set((await cx.db.collection('collecte_etat').find({ phase: 'verifie' }, { projection: { _id: 1 } }).toArray()).map(e => e._id));
-    const enfiles = [], sansSource = [], deja = {};
+    const enfiles = [], sansSource = [], nonPoussee = [], deja = {};
+    // Même garde que collecte-massive.js (§21 bis) : la source doit exister dans la version POUSSÉE, que le worker connaît.
+    const deployees = sourcesDeployees();
+    if (deployees.erreur) console.log(`⚠️ ${deployees.erreur} : aucun set ne sera enfilé`);
+    else console.log(`sources de la version poussée : ${deployees.ref} ${deployees.commit}`);
     for (const s of sets) {
         const code = codeDeSlug.get(s._id);
         if (!code || !verifies.has(s._id)) continue;
         if (!sourceDe(code)) { sansSource.push(code); continue; }
+        if (deployees.erreur || !deployees.sourceDe(code)) { nonPoussee.push(code); continue; }
         const f = await F.findOne({ _id: code });
         if (f) { deja[f.etat] = (deja[f.etat] || 0) + 1; continue; }
         if (!aBlanc) await F.insertOne({ _id: code, ordre: ordre++, etat: 'attente', ajouteLe: new Date() });
@@ -67,6 +73,7 @@ const aBlanc = process.argv.includes('--a-blanc');
     console.log(`enfilés : ${enfiles.length} ${JSON.stringify(enfiles)}`);
     console.log(`déjà en file (état conservé) : ${JSON.stringify(deja)}`);
     console.log(`SANS SOURCE d'images artofpkm (listés, non enfilés) : ${sansSource.length} ${JSON.stringify(sansSource)}`);
+    console.log(`source locale NON POUSSÉE (listés, non enfilés — relancer après push et redéploiement) : ${nonPoussee.length} ${JSON.stringify(nonPoussee)}`);
     console.log(`file_images : ${file.length} entrées · ${JSON.stringify(file.reduce((m, x) => (m[x.etat] = (m[x.etat] || 0) + 1, m), {}))}${aBlanc ? ' (À BLANC : rien écrit)' : ''}`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });

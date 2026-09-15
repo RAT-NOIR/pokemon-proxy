@@ -22,6 +22,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { concordanceDesNoms, plusieursCartesAnormal, SEUIL_PLUSIEURS_CARTES } = require('./collecte-cartes/coherence-ligne');
+const { sourcesDeployees } = require('./collecte-cartes/sources-deployees');
 // Rejeu de concordanceDesNoms sur les 106 sets collectés au 2026-09-15 : 20th 14,5 %, le plus bas des sains VS 80,1 %
 // (abréviations de dresseurs : « Falkners-TM-01 » / « Falkner's Technical Machine 01 »). Seuil au milieu, pas au bord.
 const SEUIL_NOMS = 0.5;
@@ -127,9 +128,12 @@ const lancer = (args, fichier) => {
                 // worker mesure ses 3 originaux avant tout téléchargement et liste ses refus. Sans source : listé, jamais
                 // enfilé (le worker le rangerait en `refuse-source`, hors de la file pour toujours — §23).
                 // ⚠️ `sourceDe` est lu ICI : il ne vaut que s'il est identique au commit DÉPLOYÉ du worker.
+                // ⚠️ 2026-09-15 : la source doit exister dans la version POUSSÉE (sources-deployees.js), pas seulement en local.
                 let images = '';
+                const deployees = sourcesDeployees();
                 if (etat === 'ok') {
                     if (!sourceDe(l.code)) { images = ' · 🖼️ SANS SOURCE d\'images (non enfilé)'; b.sansSourceImages = (b.sansSourceImages || 0) + 1; }
+                    else if (deployees.erreur || !deployees.sourceDe(l.code)) { images = ` · 🖼️ source locale NON POUSSÉE (${deployees.erreur ?? `absente de ${deployees.ref} ${deployees.commit}`}) : non enfilé, remplir-file-images.js après redéploiement`; b.sourceNonPoussee = (b.sourceNonPoussee || 0) + 1; }
                     else {
                         const r = await cx.db.collection('file_images').updateOne({ _id: l.code }, { $setOnInsert: { ordre: Date.now(), etat: 'attente', ajouteLe: new Date() } }, { upsert: true });
                         images = r.upsertedCount ? ' · 🖼️ enfilé' : ' · 🖼️ déjà en file (état conservé)';
