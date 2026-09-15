@@ -80,7 +80,7 @@ verifier('autre chose : « autre »', natureIgnoree('{{Setlist/nmentry |None |Un
 console.log('\nsymétrie (§21 bis) : le repli sur tout le wikitext lit aussi les liens, sous le même filtre de nom');
 const r2 = entreesDeLaSetlist("Page sans gabarit Setlist.\n* [[Kyurem V (Lost Abyss 29)|Kyurem]]{{TCGV}}\n* [[Lost Origin (TCG)|Lost Origin]]\n", { expansion: 'Lost Abyss' });
 verifier('repli : le lien de tirage lu, le lien de set non', r2.surToutLeWikitext && r2.entrees.length === 1 && r2.entrees[0].titre === 'Kyurem V (Lost Abyss 29)', JSON.stringify(r2.entrees));
-verifier('repli : « lues » compte les candidats AVANT le filtre de nom', r2.lues === 1 || r2.lues === 2, `lues ${r2.lues}`);
+verifier('repli : « lues » vaut 1 — le lien de set « (TCG) » n\'est pas une référence', r2.lues === 1, `lues ${r2.lues}`);
 
 console.log('\nle compteur « hors set » : une entrée lue dans une section retenue dont le tirage n\'est pas ce set');
 const h = entreesDeLaSetlist(dansSection('Lost Abyss', S11_LIEN, '{{Setlist/entry |017/100 |F |[[Delphox V (Lost Abyss 17)|Delphox]]{{TCGV}} |Fire | |RR }}', '{{Setlist/entry |098/100 |F |[[Collapsed Stadium (Star Birth 98)|Collapsed Stadium]] |Trainer | |U }}'), { expansion: 'Lost Abyss' });
@@ -90,6 +90,51 @@ verifier('section retenue : 3 entrées, 1 hors set nommée (réimpression sous l
 const VS_FEAROW = "{{Setlist/nmentry\n|002/141\n|{{TCG ID|VS|Falkner's Fearow|2}}\n|Colorless\n|\n|Common\n}}";
 const hv = entreesDeLaSetlist(dansSection('Pokémon Card★VS', VS_LUE, VS_FEAROW), { setlist: ['Pokémon Card★VS'], expansion: 'Pokémon VS' });
 verifier('le jeton DOMINANT de la section vaut nom de set : VS, 0 hors set', hv.entrees.length === 2 && hv.horsSet.length === 0, JSON.stringify({ n: hv.entrees.length, horsSet: hv.horsSet }));
+
+console.log('\nseconde relecture (2026-09-15) — formes hypothétiques sauf mention');
+// Point 1 : un TCG ID illisible EN TÊTE ne laisse pas gagner un lien de la colonne des notes.
+s = seule('Base Set', "{{Setlist/nmentry |58/102 |{{TCG ID|Base Set|Pikachu|{{tt|58|holo}}}} |Lightning | | |Reprinted in [[Pikachu (Base Set 2 87)|Base Set 2]] }}");
+verifier('TCG ID illisible en tête + lien dans les notes : ignorée, pas « Pikachu (Base Set 2 87) »', s.entrees.length === 0 && s.ignorees.length === 1, JSON.stringify(s.entrees));
+// Point 2 : seuls les TCG ID votent pour le jeton dominant ; un lien générique systématique ne l'absorbe pas.
+const MECA = n => `{{Setlist/entry |0${n}/100 |F |[[VSTAR (mechanic)|VSTAR]] [[Kyurem VSTAR (Lost Abyss ${n})|Kyurem]] |Water | |RRR }}`;
+const d2 = entreesDeLaSetlist(dansSection('Lost Abyss', S11_LIEN, MECA(30), MECA(31)), { expansion: 'Lost Abyss' });
+verifier('lien générique systématique : il ne devient pas le jeton dominant, 2 hors set', d2.horsSet?.length === 2 && d2.jetonDominant == null, JSON.stringify({ horsSet: d2.horsSet, jetonDominant: d2.jetonDominant }));
+verifier('VS (réel) : le jeton dominant « VS » est RENDU, pour être écrit dans l\'état', hv.jetonDominant === 'VS', `jetonDominant ${hv.jetonDominant}`);
+// Borne : « Base Set 2 87 » n'est pas un tirage de « Base Set ».
+const b3 = entreesDeLaSetlist(dansSection('Base Set', EXP_NOTE_A_LIEN, '{{Setlist/nmentry |87/130 |[[Pikachu (Base Set 2 87)|Pikachu]] |Lightning | |Common }}'), { expansion: 'Base Set' });
+verifier('borne du nom : « Pikachu (Base Set 2 87) » est hors set de « Base Set »', b3.horsSet?.length === 1 && b3.horsSet[0] === 'Pikachu (Base Set 2 87)', JSON.stringify(b3.horsSet));
+// Point 3 : sur un chemin FILTRÉ, une entrée écartée qui porte une référence du set est une carte MASQUÉE, comptée.
+const d3 = entreesDeLaSetlist(dansSection('Base Set Additional', EXP_NOTE_A_LIEN, "{{Setlist/nmentry |30/102 |[[VSTAR (mechanic)|VSTAR]] [[Kyurem VSTAR (Base Set 30)|Kyurem]] |Water | |Rare }}"), { expansion: 'Base Set' });
+verifier('chemin set-reconstruit : 1 retenue, 1 masquée nommée', d3.chemin === 'set-reconstruit' && d3.entrees.length === 1 && d3.masquees?.length === 1 && d3.masquees[0] === 'Kyurem VSTAR (Base Set 30)', JSON.stringify({ chemin: d3.chemin, n: d3.entrees.length, masquees: d3.masquees }));
+verifier('chemin toutes-sections : horsSet NON ÉVALUÉ = null, jamais [] (§8, erreur n°8)', entreesDeLaSetlist(dansSection('X', VS_LUE), { setlist: null, expansion: 'VS' }).horsSet === null);
+// Repli : `lues` compte les références AVANT le filtre, et le lien d'un autre set est lu puis écarté.
+const r3 = entreesDeLaSetlist("Page sans gabarit Setlist.\n* [[Kyurem V (Lost Abyss 29)|Kyurem]]{{TCGV}}\n* [[Kyurem V (Lost Origin 48)|Kyurem]]\n", { expansion: 'Lost Abyss' });
+verifier('repli : lues 2, retenues 1', r3.lues === 2 && r3.entrees.length === 1, JSON.stringify({ lues: r3.lues, n: r3.entrees.length }));
+// Point 4 : l'archive ÉPURÉE recompose un TCG ID de premier niveau sur plusieurs lignes (rapports/BXY-2026-09-14.md:357, réel).
+const r4 = entreesDeLaSetlist("{{TCG ID\n|Paradox Rift\n|Professor Turo's Scenario\n|171\n}}\n", { expansion: 'Paradox Rift' });
+verifier('TCG ID recomposé par l\'épuration (réel) : lu', r4.entrees.length === 1 && r4.entrees[0].titre === "Professor Turo's Scenario (Paradox Rift 171)", JSON.stringify(r4.entrees));
+// Nature : énergies de base sous d'autres formes.
+verifier('[[Grass Energy (TCG)|Grass Energy]] : énergie de base', natureIgnoree("{{Setlist/nmentry |None |[[Grass Energy (TCG)|Grass Energy]] |Energy | |None }}") === 'energie-base');
+verifier('{{TCG|Basic Grass Energy}} : énergie de base', natureIgnoree('{{Setlist/nmentry |None |{{TCG|Basic Grass Energy}} |Energy | |None }}') === 'energie-base');
+
+console.log('\ntroisième relecture (2026-09-15) — formes hypothétiques sauf mention');
+// Important 1 : une carte retenue par une AUTRE entrée n'est pas masquée — le signal crierait sur un renvoi normal (§25).
+const d4 = entreesDeLaSetlist(dansSection('Legendary Collection', EXP_NOTE_A_LIEN, "{{Setlist/nmentry |2/110 |{{TCG ID|Legendary Collection|Blastoise|2}} |Water | | |Reprint of {{TCG ID|Base Set|Blastoise|2}} }}"), { expansion: 'Base Set' });
+verifier('masquées : un titre déjà retenu par une autre entrée n\'est pas masqué', d4.chemin === 'set-reconstruit' && d4.entrees.length === 1 && Array.isArray(d4.masquees) && d4.masquees.length === 0, JSON.stringify({ chemin: d4.chemin, n: d4.entrees.length, masquees: d4.masquees }));
+// Important 2 : une entrée ignorée à TCG ID illisible ne se fond pas dans les énergies parce que ses notes en citent une.
+verifier('nature : TCG ID illisible + lien d\'énergie dans les notes → « tcg-id-illisible », pas énergie de base', natureIgnoree("{{Setlist/nmentry |58/102 |{{TCG ID|Base Set|Pikachu|{{tt|58|holo}}}} |Lightning | | |[[Lightning Energy (TCG)|Lightning]] }}") === 'tcg-id-illisible', natureIgnoree("{{Setlist/nmentry |58/102 |{{TCG ID|Base Set|Pikachu|{{tt|58|holo}}}} |Lightning | | |[[Lightning Energy (TCG)|Lightning]] }}"));
+// Important 3 : les trois états sur les chemins que les tables EMPRUNTENT (set-reconstruit : WEB, BXY ; motif : MCDP, EXS ;
+// repli : IPB), et pas seulement sur `toutes-sections`, qu'aucune ligne n'utilise.
+verifier('set-reconstruit : horsSet et jetonDominant NON ÉVALUÉS = null', d3.horsSet === null && d3.jetonDominant === null, JSON.stringify({ horsSet: d3.horsSet, jetonDominant: d3.jetonDominant }));
+verifier('repli après set-reconstruit vide : horsSet, jetonDominant, masquees = null', r3.chemin === 'tout-le-wikitext' && r3.horsSet === null && r3.jetonDominant === null && r3.masquees === null, JSON.stringify({ chemin: r3.chemin, horsSet: r3.horsSet, jetonDominant: r3.jetonDominant, masquees: r3.masquees }));
+// Motif puis repli : la section d'Intro Pack ne porte que le deck voisin, le TCG ID recomposé du deck vit hors Setlist (IPB, R2, réel).
+const m5 = entreesDeLaSetlist(`${dansSection('Intro Pack', '{{Setlist/nmentry |1 |{{TCG ID|Squirtle|Blastoise|Deck}} |Water }}')}\n{{TCG ID\n|Bulbasaur\n|Venusaur\n|Deck\n}}\n`, { setlistMotif: '^Bulbasaur Deck( \\d+)?$', expansion: 'Intro Pack', deck: 'Bulbasaur Deck' });
+verifier('motif vide puis repli : 1 retenue, masquées NON ÉVALUÉES = null (et non le [] du motif)', m5.chemin === 'tout-le-wikitext' && m5.entrees.length === 1 && m5.entrees[0].titre === 'Venusaur (Bulbasaur Deck)' && m5.masquees === null && m5.horsSet === null, JSON.stringify({ chemin: m5.chemin, n: m5.entrees.map(e => e.titre), masquees: m5.masquees, horsSet: m5.horsSet }));
+const m6 = entreesDeLaSetlist(dansSection('Intro Pack', '{{Setlist/nmentry |1 |{{TCG ID|Bulbasaur|Venusaur|Deck}} |Grass }}', '{{Setlist/nmentry |2 |{{TCG ID|Squirtle|Blastoise|Deck}} |Water }}'), { setlistMotif: '^Bulbasaur Deck( \\d+)?$', expansion: 'Intro Pack' });
+verifier('motif : masquées ÉVALUÉES = [], horsSet et jetonDominant = null', m6.chemin === 'motif' && m6.entrees.length === 1 && Array.isArray(m6.masquees) && m6.masquees.length === 0 && m6.horsSet === null && m6.jetonDominant === null, JSON.stringify({ chemin: m6.chemin, masquees: m6.masquees, horsSet: m6.horsSet, jetonDominant: m6.jetonDominant }));
+// Mineur 13 : un nom de set coupé en deux dans le TCG ID (« Expansion » + « Pack », wikitext.js:336) vote pour le nom ENTIER.
+const exp = entreesDeLaSetlist(dansSection('Expansion Pack', '{{Setlist/nmentry |None |{{TCG ID|Expansion|Charmeleon|Pack}} |Fire }}', '{{Setlist/nmentry |None |{{TCG ID|Expansion|Charizard|Pack}} |Fire }}'), { expansion: 'Expansion Pack' });
+verifier('nom coupé « Expansion » + « Pack » : jeton dominant « Expansion Pack », 0 hors set', exp.jetonDominant === 'Expansion Pack' && exp.horsSet?.length === 0, JSON.stringify({ jetonDominant: exp.jetonDominant, horsSet: exp.horsSet }));
 
 console.log(`\n${ok} / ${ok + ko} vérifications`);
 process.exit(ko ? 1 : 0);

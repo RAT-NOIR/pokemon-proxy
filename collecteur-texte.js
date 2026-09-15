@@ -99,8 +99,10 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
     const reparser = process.argv.includes('--reparser');
     const setDeja = reparser ? await M.Set.findById(slug).lean() : null;
+    // UNE condition pour lire la page sur R2 ET pour le dire dans l'état (`lectureSetlist.source`) — §21 bis.
+    const pageDuSetSurR2 = !!setDeja?.bulba?.cleR2;
     let pSet, depotSet;
-    if (setDeja?.bulba?.cleR2) {
+    if (pageDuSetSurR2) {
         pSet = { pageid: setDeja.bulba.pageid, revid: setDeja.bulba.revid, title: setDeja.bulba.titre, content: await r2.lireTexte(process.env.R2_BUCKET_BRUT, setDeja.bulba.cleR2) };
         depotSet = { ecrit: false };
     } else {
@@ -141,7 +143,14 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const sectionsDuSet = lecture.chemin === 'sections-nommees' ? sections.filter(s => nomsSections.includes(s.titre)) : sections;
     const ignoreesParNature = sectionsDuSet.flatMap(s => s.ignorees).reduce((a, x) => { const k = natureIgnoree(x); a[k] = (a[k] || 0) + 1; return a; }, {});
     const sectionsVues = sections.map(s => ({ titre: s.titre, n: s.entrees.length, ignorees: s.ignorees.length }));
-    const lectureSetlist = { chemin: lecture.chemin, lues: lecture.lues, retenues: entrees.length, horsSet: lecture.horsSet, ignorees: ignoreesParNature, le: new Date() };
+    // `source` et `revid` : la même page ne se lit pas pareil BRUTE (Bulbapedia) et ÉPURÉE (R2, en --reparser) — un
+    // rejeu sur l'archive ne dit rien d'une lecture faite sur la brute, et l'état doit dire laquelle a été faite.
+    // `horsSet`, `jetonDominant`, `masquees` : null = NON ÉVALUÉ sur ce chemin, jamais « rien » (§8).
+    const lectureSetlist = {
+        chemin: lecture.chemin, source: pageDuSetSurR2 ? 'r2-epure' : 'bulbapedia', revid: pSet.revid,
+        lues: lecture.lues, retenues: entrees.length, horsSet: lecture.horsSet, jetonDominant: lecture.jetonDominant, masquees: lecture.masquees,
+        ignorees: ignoreesParNature, le: new Date()
+    };
     const entreesSetlist = [...new Set([...entrees.map(e => e.titre), ...(L.bulba.titresSupplementaires || [])])];
     // ⚠️ LA TABLE PEUT CHANGER APRÈS UNE COLLECTE, ET L'ÉTAT NE DOIT PAS LA FIGER. Ajouter une
     // section à `setlist` ne produisait RIEN sur un set déjà collecté : `titres` était relu de
@@ -168,7 +177,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // Dans les DEUX branches : une re-collecte réécrit la lecture du parseur d'aujourd'hui.
     await M.Etat.updateOne({ _id: slug }, { $set: { sectionsVues, lectureSetlist } });
     console.log(`2. setlist : sections ${sections.map(s => `« ${s.titre} » ×${s.entrees.length}${s.ignorees.length ? ` (+${s.ignorees.length} ignorée(s))` : ''}`).join(' · ')} → ${entreesSetlist.length} titres retenus${etat.titres?.length ? ' (repris de l\'état : ' + titres.length + ')' : ''}`);
-    console.log(`   lecture (${lecture.chemin}) : ${lecture.lues} lues → ${entrees.length} retenues · ignorées dans les sections du set ${JSON.stringify(ignoreesParNature)} · hors set ${lecture.horsSet.length}${lecture.horsSet.length ? ' : ' + lecture.horsSet.slice(0, 5).join(' · ') : ''}`);
+    const listeOuNonEvalue = (nom, xs) => ` · ${nom} ${xs === null ? 'non évalué' : xs.length}${xs?.length ? ' : ' + xs.slice(0, 5).join(' · ') : ''}`;
+    console.log(`   lecture (${lecture.chemin}, ${lectureSetlist.source} revid ${pSet.revid}) : ${lecture.lues} lues → ${entrees.length} retenues · ignorées dans les sections du set ${JSON.stringify(ignoreesParNature)}${listeOuNonEvalue('hors set', lecture.horsSet)}${lecture.chemin === 'sections-nommees' ? ` (jeton dominant ${lecture.jetonDominant ? `« ${lecture.jetonDominant} »` : 'aucun : 0 TCG ID dans la section'})` : ''}${listeOuNonEvalue('masquées', lecture.masquees)}`);
     // Une énergie de base ne désigne pas une page par tirage ; une énergie SPÉCIALE, si — la voir ignorée est un trou.
     // Seules les sections DU SET sont regardées : les sections d'un autre set, sur une page fusionnée, sont normales.
     for (const s of sectionsDuSet) for (const brut of s.ignorees.filter(x => natureIgnoree(x) !== 'energie-base')) console.warn(`   ⚠️ entrée ignorée (${natureIgnoree(brut)}), section « ${s.titre} » : ${brut.replace(/\s+/g, ' ').slice(0, 160)}`);

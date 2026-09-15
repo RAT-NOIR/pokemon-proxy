@@ -346,7 +346,8 @@ function faitsDeSet(texte) {
  * caché. Ce que la section NE lit PAS (énergies, `natureIgnoree`) est désormais COMPTÉ dans `ignorees` : une
  * entrée ne disparaît plus, elle se voit.
  *
- * @returns {Array<{titre: string, entrees: Array<{titre: string, a: string, nom: string, b: string|null, setReconstruit: string}>, ignorees: string[]}>}
+ * @returns {Array<{titre: string, entrees: Array<{titre: string, a: string, nom: string, b: string|null, setReconstruit: string,
+ *   forme: 'tcg-id'|'lien', references: Array<{titre: string, setReconstruit: string}>}>, ignorees: string[]}>}
  */
 function sectionsSetlist(texte) {
     const sections = [];
@@ -364,13 +365,19 @@ function sectionsSetlist(texte) {
 }
 
 // La référence d'une carte : `{{TCG ID|A|Nom|B}}`, avec ou sans 4e paramètre d'affichage. UNE définition pour
-// la Setlist, le repli sur tout le wikitext et verifier-table.js (§21 bis).
-const RE_TCG_ID = /\{\{TCG ID\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?(?:\|[^}]*)?\}\}/;
+// la Setlist, le repli sur tout le wikitext et verifier-table.js (§21 bis). Le blanc après `TCG ID` : l'archive
+// ÉPURÉE recompose un gabarit de premier niveau sur plusieurs lignes (`{{TCG ID\n|Paradox Rift\n|…`) ; les
+// captures portent alors des retours à la ligne, que tout lecteur retire (`trim`).
+const RE_TCG_ID = /\{\{TCG ID\s*\|([^|}]+)\|([^|}]+)(?:\|([^|}]*))?(?:\|[^}]*)?\}\}/;
+// Le numéro qui suit un nom de set dans une référence : « 29 », « TG13 », « 1a ». UNE définition pour le découpage
+// d'un lien, le jeton de set et la borne du compteur « hors set ».
+const NUMERO_DE_TIRAGE = '[A-Z]{0,3}\\d+[a-z]?';
 // Un lien vers la page d'une carte : `[[Nom (Set N)|affichage]]` — la DERNIÈRE parenthèse est le tirage.
 const RE_LIEN_CARTE = /\[\[([^\]|]+) \(([^()\]|]+)\)(?:\|[^\]]*)?\]\]/;
 // ⚠️ UN LIEN À PARENTHÈSE N'EST PAS FORCÉMENT UN TIRAGE : `[[Dark Pokémon (TCG)|Dark]]`, `[[Grass Energy (TCG)]]`
 // (la cible développée de `{{TCG|…}}`), `{{OBP|…|Special}}`. Ces qualificatifs de page ne désignent jamais un set.
-// La liste est courte et vieillira : le filet est le compteur `horsSet` de `entreesDeLaSetlist`, pas elle.
+// La liste est courte et vieillira : le filet est dans `entreesDeLaSetlist`, pas elle — `horsSet` sur les sections
+// nommées, `masquees` sur les chemins filtrés (motif, set-reconstruit).
 const QUALIFICATIF_NON_TIRAGE = /^(TCG|Pokémon|Special|Basic)$/i;
 
 /** Un TCG ID dont une capture contient `{{` (paramètre imbriqué, `{{tt|58|holo}}`) ne se lit pas : ignoré. */
@@ -381,31 +388,56 @@ function premierLienDeTirage(brut) {
 }
 function entreeDeTcgId(t) {
     const a = t[1].trim(), nom = t[2].trim(), b = (t[3] || '').trim() || null;
-    return { titre: b ? `${nom} (${a} ${b})` : `${nom} (${a})`, a, nom, b, setReconstruit: b ? `${a} ${b}` : a };
+    return { titre: b ? `${nom} (${a} ${b})` : `${nom} (${a})`, a, nom, b, setReconstruit: b ? `${a} ${b}` : a, forme: 'tcg-id' };
 }
-/** Pour un lien, `a` et `b` sont INDICATIFS (« Pokémon Card 151 » sans numéro donne b = 151) : seuls `titre` et
- *  `setReconstruit` (la parenthèse entière) sont lus en aval. */
+/** Pour un lien, `a` et `b` sont INDICATIFS (« Pokémon Card 151 » sans numéro donne b = 151) : seuls `titre`,
+ *  `setReconstruit` (la parenthèse entière) et `forme` sont lus en aval. */
 function entreeDeLien(l) {
     const nom = l[1].trim(), parenthese = l[2].trim();
-    const m = parenthese.match(/^(.+) ([A-Z]{0,3}\d+[a-z]?)$/);   // « Lost Abyss 29 », « Brilliant Stars TG13 »
-    return { titre: `${nom} (${parenthese})`, a: m ? m[1] : parenthese, nom, b: m ? m[2] : null, setReconstruit: parenthese };
+    const m = parenthese.match(new RegExp(`^(.+) (${NUMERO_DE_TIRAGE})$`));   // « Lost Abyss 29 », « Brilliant Stars TG13 »
+    return { titre: `${nom} (${parenthese})`, a: m ? m[1] : parenthese, nom, b: m ? m[2] : null, setReconstruit: parenthese, forme: 'lien' };
+}
+/** Toutes les références LISIBLES d'un gabarit, dans l'ordre du texte : ce qu'un chemin filtré regarde pour
+ *  nommer une carte MASQUÉE (écartée alors qu'une autre de ses références désigne le set). */
+function referencesDe(brut) {
+    const s = String(brut);
+    return [
+        ...[...s.matchAll(new RegExp(RE_TCG_ID.source, 'g'))].filter(tcgIdLisible).map(t => [t.index, entreeDeTcgId(t)]),
+        ...[...s.matchAll(new RegExp(RE_LIEN_CARTE.source, 'g'))].filter(l => !QUALIFICATIF_NON_TIRAGE.test(l[2].trim())).map(l => [l.index, entreeDeLien(l)])
+    ].sort((x, y) => x[0] - y[0]).map(([, e]) => ({ titre: e.titre, setReconstruit: e.setReconstruit }));
 }
 
 /**
  * L'entrée d'une ligne de Setlist, ou null si elle ne désigne aucune page de carte. La PREMIÈRE référence du
  * gabarit gagne — c'est la colonne du nom ; une référence de la colonne des notes vient après.
+ * ⚠️ « Première » se juge sur le TCG ID BRUT (tout ce que `RE_TCG_ID` reconnaît, capture lisible ou non ; une
+ * écriture qu'elle ne reconnaît pas — `{{ TCG ID|`, `{{TCG_ID|` — n'entre pas dans la priorité, aucune dans le corpus
+ * mesuré le 2026-09-15) : un TCG ID illisible dans la colonne du nom rend
+ * l'entrée IGNORÉE (comptée), il ne laisse pas gagner un lien de la colonne des notes — ce lien désigne une AUTRE
+ * carte (« Reprinted in [[Pikachu (Base Set 2 87)|…]] »), et la prendre serait un faux plausible (§21).
+ * @returns {{titre: string, a: string, nom: string, b: string|null, setReconstruit: string, forme: 'tcg-id'|'lien',
+ *   references: Array<{titre: string, setReconstruit: string}>}|null}
  */
 function entreeDeSetlist(brut) {
-    const t = tcgIdLisible(RE_TCG_ID.exec(brut)), l = premierLienDeTirage(brut);
-    if (t && (!l || t.index <= l.index)) return entreeDeTcgId(t);
-    return l ? entreeDeLien(l) : null;
+    const t = RE_TCG_ID.exec(brut), l = premierLienDeTirage(brut);
+    let e = null;
+    if (t && (!l || t.index <= l.index)) e = tcgIdLisible(t) ? entreeDeTcgId(t) : null;
+    else if (l) e = entreeDeLien(l);
+    return e && { ...e, references: referencesDe(brut) };
 }
 
 /** Ce qu'est une entrée IGNORÉE. Une énergie SPÉCIALE a un tirage et un produit : elle ne se range pas avec les
  *  énergies de base, qui ne désignent pas une page par tirage. */
+const ENERGIE_DE_BASE = '(?:Basic )?(?:Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy) Energy';
 function natureIgnoree(brut) {
     const s = String(brut);
-    if (/\{\{OBP\|[^|}]*Energy\|Basic\}\}/i.test(s) || /\{\{TCG\|(Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy) Energy\}\}/.test(s)) return 'energie-base';
+    // D'abord : une entrée ignorée qui porte un TCG ID est une CARTE illisible (paramètre imbriqué), quoi que citent ses
+    // notes. Testée après les énergies, elle se fondrait dans « energie-base » dès qu'une note cite une énergie — et le
+    // collecteur ne signale que ce qui n'est pas une énergie de base : elle disparaîtrait sans un mot (§21).
+    if (/\{\{TCG ID\s*\|/.test(s)) return 'tcg-id-illisible';
+    // Trois écritures d'une énergie de base : `{{OBP|Darkness Energy|Basic}}`, `{{TCG|Grass Energy}}` (ou « Basic Grass
+    // Energy »), et le lien développé `[[Grass Energy (TCG)|…]]`.
+    if (/\{\{OBP\|[^|}]*Energy\|Basic\}\}/i.test(s) || new RegExp(`\\{\\{TCG\\|${ENERGIE_DE_BASE}\\}\\}`).test(s) || new RegExp(`\\[\\[${ENERGIE_DE_BASE} \\(TCG\\)`).test(s)) return 'energie-base';
     if (/\{\{(?:OBP|TCG)\|[^|}]*Energy[|}]/.test(s)) return 'energie-speciale';
     return 'autre';
 }
@@ -417,37 +449,57 @@ function natureIgnoree(brut) {
  * Ordre : `setlistMotif` (EXS) · sections nommées par `setlist` (défaut : l'expansion) · à défaut, le
  * nom de set reconstruit (« A B ») suivi d'un désambiguïsateur · page SANS gabarit Setlist (Intro Pack) :
  * les `{{TCG ID}}` de tout le wikitext. Puis le filtre `deck`.
- * @returns {{entrees: Array, sections: Array, surToutLeWikitext: boolean}}
+ *
+ * Les signaux ont TROIS états (§8, erreur n°8) : un tableau (évalué, éventuellement vide) ou `null` (NON ÉVALUÉ sur
+ * ce chemin). `[]` ne se lit jamais comme « rien à signaler » là où le contrôle n'a pas tourné.
+ * @returns {{entrees: Array, sections: Array, surToutLeWikitext: boolean, chemin: string, lues: number,
+ *   horsSet: string[]|null, jetonDominant: string|null, masquees: string[]|null}}
+ *   - `horsSet` — chemin `sections-nommees` seulement : entrées d'une section retenue dont le tirage n'est pas ce set ;
+ *   - `jetonDominant` — même chemin : le jeton de set le plus fréquent parmi les TCG ID de la section, ou null ;
+ *   - `masquees` — chemins filtrés par gabarit (`motif`, `set-reconstruit`) : titres du set portés par une entrée
+ *     que le filtre a écartée (sa PREMIÈRE référence désigne autre chose).
  */
 function entreesDeLaSetlist(texte, b) {
     const echapper = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nomsExpansion = [].concat(b.expansion);
     const nomsSections = b.setlist === null ? null : (b.setlist || nomsExpansion);
     const sections = sectionsSetlist(texte);
-    // `chemin` et `lues` : le dénominateur de CHAQUE chemin (§21) — ce qui a été lu avant le filtre de nom.
-    let entrees, surToutLeWikitext = false, chemin, lues, horsSet = [];
-    if (b.setlistMotif) {
-        const re = new RegExp(b.setlistMotif);
+    // Un chemin qui FILTRE les entrées des gabarits : ce qu'il écarte et qui portait une référence du set est compté.
+    // Une carte déjà retenue par une AUTRE entrée n'est pas masquée : un renvoi « Reprint of … » vers une carte du set est
+    // normal sur une page fusionnée, et un signal qui crie sur un cas normal finit contourné (§25).
+    const filtrerLesGabarits = re => {
         const toutes = sections.flatMap(s => s.entrees);
-        entrees = toutes.filter(e => re.test(e.setReconstruit)); chemin = 'motif'; lues = toutes.length;
+        const retenues = toutes.filter(e => re.test(e.setReconstruit));
+        const titresRetenus = new Set(retenues.map(e => e.titre));
+        const masquees = [...new Set(toutes.filter(e => !re.test(e.setReconstruit)).flatMap(e => (e.references || []).filter(r => re.test(r.setReconstruit) && !titresRetenus.has(r.titre)).map(r => r.titre)))];
+        return { entrees: retenues, lues: toutes.length, masquees };
+    };
+    // `chemin` et `lues` : le dénominateur de CHAQUE chemin (§21) — ce qui a été lu avant le filtre de nom.
+    let entrees, surToutLeWikitext = false, chemin, lues, horsSet = null, jetonDominant = null, masquees = null;
+    if (b.setlistMotif) {
+        ({ entrees, lues, masquees } = filtrerLesGabarits(new RegExp(b.setlistMotif))); chemin = 'motif';
     } else if (nomsSections === null) { entrees = sections.flatMap(s => s.entrees); chemin = 'toutes-sections'; lues = entrees.length; }
     else {
         entrees = sections.filter(s => nomsSections.includes(s.titre)).flatMap(s => s.entrees); chemin = 'sections-nommees'; lues = entrees.length;
-        // HORS SET : une entrée d'une section retenue dont le tirage ne commence par aucun nom attendu. Ce n'est pas
-        // un refus — la section fait autorité — c'est un signal imprimé : un lien générique qui passerait la garde
-        // des qualificatifs, ou un renvoi vers un autre set, se VOIT ici.
-        // Le jeton de set d'une entrée (sa parenthèse sans le numéro) peut différer des noms de la table : VS écrit
-        // « (VS 1) » dans une section « Pokémon Card★VS ». Le jeton DOMINANT de la section vaut donc nom — le même
-        // principe que le motif dérivé de verifier-table.js (le jeton entre parenthèses le plus fréquent).
-        const jeton = e => e.setReconstruit.replace(/ [A-Z]{0,3}\d+[a-z]?$/, '');
-        const frequences = entrees.reduce((m, e) => m.set(jeton(e), (m.get(jeton(e)) || 0) + 1), new Map());
-        const dominant = [...frequences].sort((x, y) => y[1] - x[1])[0]?.[0];
-        const debut = new RegExp(`^(${[...new Set([...nomsSections, ...nomsExpansion, ...(dominant ? [dominant] : [])])].map(echapper).join('|')})( |$)`);
-        horsSet = entrees.filter(e => !debut.test(e.setReconstruit)).map(e => e.titre);
-        if (!entrees.length) {
-            const re = new RegExp(`^(${nomsSections.map(echapper).join('|')})( \\d+)?$`);
-            const toutes = sections.flatMap(s => s.entrees);
-            entrees = toutes.filter(e => re.test(e.setReconstruit)); chemin = 'set-reconstruit'; lues = toutes.length;
+        if (entrees.length) {
+            // HORS SET : une entrée d'une section retenue dont le tirage n'est aucun nom attendu, suivi au plus d'un
+            // numéro. Ce n'est pas un refus — la section fait autorité — c'est un signal imprimé : un lien générique qui
+            // passerait la garde des qualificatifs, ou un renvoi vers un autre set (« Base Set 2 87 » dans « Base Set »),
+            // se VOIT ici.
+            // Le jeton de set d'une entrée (sa parenthèse sans le numéro) peut différer des noms de la table : VS écrit
+            // « (VS 1) » dans une section « Pokémon Card★VS ». Le jeton DOMINANT vaut donc nom — mais SEULS LES TCG ID
+            // VOTENT : un lien générique répété sur chaque ligne (`[[VSTAR (mechanic)|VSTAR]]`) deviendrait sinon le nom
+            // du set, et le contrôle absorberait l'erreur qu'il doit signaler. LE PRIX, accepté : une section écrite
+            // UNIQUEMENT en liens, dont la parenthèse diffère des noms de la table, criera — un signal qui crie se lit,
+            // un silence non (§21).
+            const jeton = e => e.setReconstruit.replace(new RegExp(` ${NUMERO_DE_TIRAGE}$`), '');
+            const frequences = entrees.filter(e => e.forme === 'tcg-id').reduce((m, e) => m.set(jeton(e), (m.get(jeton(e)) || 0) + 1), new Map());
+            jetonDominant = [...frequences].sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+            const noms = [...new Set([...nomsSections, ...nomsExpansion, ...(jetonDominant ? [jetonDominant] : [])])];
+            const borne = new RegExp(`^(${noms.map(echapper).join('|')})( ${NUMERO_DE_TIRAGE})?$`);
+            horsSet = entrees.filter(e => !borne.test(e.setReconstruit)).map(e => e.titre);
+        } else {
+            ({ entrees, lues, masquees } = filtrerLesGabarits(new RegExp(`^(${nomsSections.map(echapper).join('|')})( \\d+)?$`))); chemin = 'set-reconstruit';
         }
     }
     if (!entrees.length) {
@@ -457,11 +509,13 @@ function entreesDeLaSetlist(texte, b) {
             ...[...String(texte).matchAll(new RegExp(RE_TCG_ID.source, 'g'))].filter(tcgIdLisible).map(entreeDeTcgId),
             ...[...String(texte).matchAll(new RegExp(RE_LIEN_CARTE.source, 'g'))].filter(l => !QUALIFICATIF_NON_TIRAGE.test(l[2].trim())).map(entreeDeLien)
         ];
-        entrees = candidats.filter(e => re.test(e.setReconstruit)); chemin = 'tout-le-wikitext'; lues = candidats.length; horsSet = [];
+        // Le repli n'a pas de gabarit : chaque référence est son propre candidat, rien n'y est « masqué ».
+        entrees = candidats.filter(e => re.test(e.setReconstruit)); chemin = 'tout-le-wikitext'; lues = candidats.length;
+        horsSet = null; jetonDominant = null; masquees = null;
         surToutLeWikitext = true;
     }
     if (b.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(b.deck));
-    return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet };
+    return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
 module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
