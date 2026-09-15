@@ -2517,6 +2517,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T11:13:09.999Z",
+   "etat": "ok"
   }
  },
  {
@@ -2780,6 +2784,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T11:13:54.391Z",
+   "etat": "ok"
   }
  },
  {
@@ -6011,14 +6019,7 @@
     "corrigeLe": "2026-09-15"
    }
   },
-  "verifie": null,
-  "collecte": {
-   "le": "2026-09-15T11:11:52.943Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "aucune entrée de Setlist pour « Moonlit Pursuit/Dawn Dash »"
-   ]
-  }
+  "verifie": null
  },
  {
   "code": "sm9b",

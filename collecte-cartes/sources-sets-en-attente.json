@@ -1,0 +1,10 @@
+{
+ "_note": "Sources artofpkm trouvées À LA MAIN (le nom artofpkm diffère du nom Cardmarket). AUCUN code ne lit ce fichier : une source n'existe pour le worker qu'après un push nommé et un redéploiement (commit déployé 9f2b602). Au push : fusionner dans ARTOFPKM de sources-sets.js, puis `node collecte-cartes/remplir-file-images.js` enfile les sets déjà collectés et concordants.",
+ "CP6": { "ids": [536], "noms": ["20th Anniversary"], "note": "Cardmarket « Expansion Pack 20th Anniversary », trouvé le 2026-09-15" },
+ "sm1S": { "ids": [325], "noms": ["Collection Sun"], "note": "nom identique, absent de sources-sets-auto.json (cause non ouverte)" },
+ "sm1M": { "ids": [326], "noms": ["Collection Moon"], "note": "nom identique, absent de sources-sets-auto.json (cause non ouverte)" },
+ "DP5t": { "ids": [172], "noms": ["Temple of Wrath"], "note": "Cardmarket « Temple of Anger »" },
+ "sm3h": { "ids": [339], "noms": ["Did You See the Fighting Rainbow"], "note": "Cardmarket « To Have Seen the Battle Rainbow »" },
+ "sm3n": { "ids": [338], "noms": ["Light-Devouring Darkness"], "note": "Cardmarket « Darkness that Consumes Light »" },
+ "sm4a": { "ids": [342], "noms": ["Ultra Dimensional Beast"], "note": "Cardmarket « Ultradimensional Beasts »" }
+}

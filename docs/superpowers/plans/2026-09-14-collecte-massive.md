@@ -762,6 +762,17 @@ lu le nom Cardmarket au lieu de `bulba.expansion`. Critère restreint au nom d'e
 Collection » ×117 et « Pearl Collection » ×119 : Cardmarket fusionne deux sets), svLN, svLS, svEM et svEL (pages de
 decks sans section), CS1 (feuilles McDonald's), HXY (région absente, non lue).
 
+**Vérification du bloc 2 (11:12 UTC), après l'écriture : 20 demi-sets admis sur 20**, la correction a tenu (46 lignes).
+⚠️ DP4d avait repris une marque « a-regarder » : `marquer` réécrit la marque d'une ligne depuis la MÉMOIRE du bloc
+en cours, ici celle d'avant ma correction. Sans `verif` et avec cette marque, la ligne n'aurait jamais été collectée.
+Marque retirée. **Toute édition de la table pendant une collecte massive doit être relue après le bloc suivant.**
+
+**Sources d'images : 40 sur 46 ont une source artofpkm.** Les 6 autres ont leur nom, trouvé à la main dans
+`artofpkm-sets.json` et consigné dans `collecte-cartes/sources-sets-en-attente.json` (que rien ne lit), avec CP6 :
+sm1S « Collection Sun » 325 · sm1M « Collection Moon » 326 · DP5t « Temple of Wrath » 172 · sm3h « Did You See the
+Fighting Rainbow » 339 · sm3n « Light-Devouring Darkness » 338 · sm4a « Ultra Dimensional Beast » 342. 🛑 **Push
+nommé** puis redéploiement, puis `remplir-file-images.js` : les enfiler avant ferait des `refuse-source` définitifs.
+
 **L2 : échec causé par mon arrêt de la collecte.** Le processus arrêté tenait le verrou du set Reviving-Legends ; la
 relance a échoué dessus (battement il y a 398 s) et marqué L2 `echec-1-texte`, ce qui l'aurait sorti de la sélection
 pour toujours. Marque retirée, historique dans `collecteAvant`. Un arrêt par TaskStop ne libère rien (§17).
