@@ -444,6 +444,91 @@ tout journal de set.**
   - `lectureSetlist` : chemin `sections-nommees` attendu sur les 14. **Un set qui passerait par le repli est
     l'occasion de la mesure sur page brute reportée** (troisième relecture, point 4) ;
   - après le bloc : ouvrir 3 des 4 lignes à tirage non établi (tâche ci-dessus).
+
+  **OBTENU (2026-09-15, 05:51:17 → 06:02:36 UTC)** — journal : 14 ok, 0 non concordant, 0 échec, 6 à regarder.
+
+  | set | joints / produits | restes |
+  |---|---|---|
+  | s9, sm4+, s12, m4, s3, m5, sm9, sm12, m2, s2, sm11 | 1 (chacun) | — |
+  | m3 | 116 / 117 = 0,991 | 1 produit sans carte, **1 produit vers plusieurs cartes** |
+  | sm10 | 114 / 116 = 0,983 | 2 produits sans carte, **2 produits vers plusieurs cartes** |
+  | **DP3** | **109 / 119 = 0,916 ❌** | 10 cartes sans produit, 10 produits sans carte |
+  | **bloc** | **1 654 / 1 667 = 0,992** ✅ | produits 1 667, et non 1 665 : DP3 a 119 produits au catalogue, la table en attendait 117 |
+
+  - concordance **14 / 14** ✅ ; titres manquants **0 / 14** ✅ ; chemin `sections-nommees` **14 / 14**, jeton dominant
+    = nom de l'expansion sur les 14, 0 hors set, 0 ignorée → **mesure sur page brute : pas d'occasion au bloc 2** ;
+  - ❌ **DP3 sous 0,95. Deux causes, écrites telles quelles** :
+    1. **l'attendu était mal posé** : je l'ai écrit sans regarder que DP3 n'a **aucun produit numéroté**
+       (0 / 119). La jointure y passe par le NOM, pas par le numéro. Le compte des produits numérotés figure
+       désormais dans l'attendu de chaque bloc (`m-bloc-suivant.js`) ;
+    2. **un vrai trou de jointure, 10 lignes ouvertes** : les 10 restes sont des **Pokémon à forme**. Bulbapedia
+       nomme la carte « Burmy » (×3), « Wormadam » (×3), « Shellos » (×2), « Gastrodon » (×2) ; Cardmarket met la forme
+       dans le nom du produit : « Burmy Plant Cloak Lv.10 [Wear Cloak | Plant Cloak Tackle] », « Shellos West Sea
+       Lv.25 ». La clé par nom échoue avant de comparer les attaques. **Lot F**, avec la mesure du §22 : que ferait une
+       clé tolérante à la forme sur les 1 223 jointures par nom qui marchent ?
+  - 🔴 **NON PRÉDIT : 3 JOINTURES FAUSSES, CONCORDANTES** (sm10 ×2, m3 ×1). La Setlist dit « Kingler (Double Blaze 27) » ;
+    la page vers laquelle ce titre redirige porte l'impression `jp` Double Blaze **026**. La clé `set+numero`
+    (`jointure.js:131-133`) **ne compare pas le nom** : elle joint le produit 026, **Krabby**, à Kingler, et le vrai
+    Kingler 027 reste sans carte. Même motif, décalé de 1, pour Dust Island → 557447 **Martial Arts Dojo**, et Wondrous
+    Patch → 868113 **Poké Pad**. Le reste `produit-vers-plusieurs-cartes` était bien écrit, mais il ne décidait de rien :
+    ni la concordance, ni le « ok » du journal. **Je ne l'ai vu qu'en ouvrant les restes numérotés.**
+    **Étendue, mesurée sur toute la base** (`m-produits-plusieurs-cartes.js`, deux sources) : **9 357** lignes de
+    jointure, dont **112** avec un nom de carte ≠ nom du produit, dont 111 par `set+numero`. Ligne par ligne :
+    - **71 sont justes** : 26 notations d'énergie (« Speed [L] Energy »), 22 traductions ou notations Cardmarket (« Retry
+      Badge » / « Backtrack Badge », « Gladion's Showdown » / « Gladion's Final Battle », « Nidoran [F] δ », « EXP. ALL »
+      par alias…), et **23 Méga ou Primal-EX**. Ces
+      dernières sont **vérifiées sur les 15 cartes** (`m-mega-titres.js`) : titre « M Lucario-EX (Furious Fists 55) »,
+      stade `MegaEX`. ⚠️ Mais leur `nomEn` vaut « Lucario » : le site afficherait le nom du Pokémon de base pour une
+      carte Méga. **Défaut du champ nom, lot F** ;
+    - 34 sont des variantes d'écriture (TM, lettres grecques, ♀/♂, δ) ;
+    - **6 sont FAUSSES** : un produit joint à la carte d'un autre nom qui a déjà sa propre carte — les 3 du bloc 2,
+      Zubat ← Golbat (exp 3984), Sableye ← Shroodle (exp 5519), et Pokémon Reversal ← Energy Restore (EC1, déjà
+      nommé au §24) ;
+    - 1 est incertaine : « Power Charge » ← « Energy Charge » (exp 5021).
+
+    **6 fausses sur 7 616 par numéro.** Chacune laisse aussi un produit orphelin. **Non corrigé, et c'est une
+    décision** : la correction touche la clé de jointure, et la seule forme sûre (« parmi plusieurs cartes, garder
+    celle dont le nom concorde ») doit d'abord être mesurée sur ce qui marche (§22). ⚠️ Et une re-jointure devra
+    SUPPRIMER les lignes fausses : `collecteur-texte.js:294` ne fait que des upserts.
+  - 🔴 **NON PRÉDIT : LA SÉLECTION SE BOUCHAIT.** Une ligne « à regarder » n'était jamais marquée dans le fichier
+    (`continue` avant l'écriture) : resélectionnée à chaque lancement. Le bloc 2 portait les 4 du bloc 1 et n'a eu que
+    **14 lignes nouvelles** ; le bloc 3 en aurait eu 10 ; à 20 lignes à regarder cumulées, chaque lancement aurait
+    collecté **0 set** avec un bilan d'apparence normale. Corrigé (`marquer`, une écriture pour les deux branches) ;
+    le journal imprime aussi joints/produits, les restes et un ⚠️ « produit(s) joint(s) à plusieurs cartes ».
+
+- [ ] **Bloc 3 — ATTENDU, écrit avant le lancement** (`m-bloc-suivant.js`, même sélection que le script) :
+  - 20 lignes : **10 à regarder**, dont les 6 déjà vues au bloc 2 et 4 nouvelles (sv1S 2,26, sv1V 2,39, sv5M 2,18,
+    sv5K 2,18) → **marquées cette fois** ; **10 admises, toutes `jp`, 1 048 produits, 1 048 numérotés** — sm7 112,
+    sm8 111, WCP 108, PCG4 106, XY3 105, sv1a 103, CP6 103, s6a 101, Pt3 100, s10a 99 ;
+  - avant la collecte, le script vérifie 20 lignes de plus (2 requêtes) ;
+  - **10 collectes, concordance 10 / 10, titres manquants 0, joints / produits ≥ 0,95 par set** (tous numérotés) et
+    **≥ 0,97 sur le bloc** ;
+  - **produits vers plusieurs cartes : 0 à 2** — le taux de la base (6 sur 7 616) donne 0,8 sur 1 048 ;
+  - **preuve du correctif de sélection** : la table passe de **30 à 50** lignes marquées, et la sélection suivante ne
+    contient **aucune** des 10 lignes à regarder ;
+  - mesure sur page brute : attendue sans occasion (10 sets à section attendus) ;
+  - après le bloc : ouvrir 3 des lignes à tirage non établi (demande des requêtes, donc hors collecte).
+  - **Compléments de la cinquième relecture** (ciblée sur `collecte-massive.js`, verdict « prêt après une correction ») :
+    en-tête du journal `bloc 1 : 20 lignes (10 admises, 10 à regarder)` (le compteur repart à 1 à chaque lancement) ;
+    lignes vérifiées **60 → 80** (rangs 60 à 79, placés après la sélection, qui ne bouge pas) ; **0 marque `echec-…`** ;
+    sélection suivante = rangs 50 à 69 (EBB, sv2D, sv2P, XY4, XY7, sv5a, Pt1, sv4M, s6h, s3a, sv7a, sv6a, s11a, s9a,
+    sv3a, IFDS, m1S, m1L, XY6, s5I), **aucune des 20 lignes marquées**. Ces comptes ne tiennent que si la boucle va au
+    bout.
+
+  **CINQUIÈME RELECTURE**, les points vérifiés contre le code :
+  - (A) le marquage des « à regarder » est juste. Pas de course : `marquer` relit puis écrit sans `await` entre les
+    deux. Pas de `code` en double sur 398 lignes ;
+  - (B) l'affichage des restes est juste ;
+  - **bloquant, antérieur au diff, corrigé** : sur Ctrl+C, `collecteur-texte.js:288` sort avec le code 0 avant la
+    jointure. `collecte-massive.js` le rangeait en `echec-0-…` et le marquait : **jamais repris** (§21 n°3). Il sort
+    désormais de la boucle **sans marquer** ;
+  - mineurs corrigés : l'écriture de la table est atomique (fichier temporaire puis renommage) ; une ligne introuvable à
+    la relecture est signalée ; `produitsVersPlusieursCartes` est initialisé à 0 et cumulé ; sur un échec, les chiffres
+    d'une collecte ANTÉRIEURE ne sont plus imprimés comme frais ;
+  - noté, non corrigé : un `verifier-table.js --auto` lancé **à la main** pendant la boucle réécrit toute la table depuis
+    sa copie de départ et effacerait les marques posées entre-temps. **Ne pas le lancer pendant une collecte massive.**
+  - Ces corrections suivent la description de la relecture ; **elles n'ont pas été relues une seconde fois.** Le chemin
+    d'interruption n'est pas exercé par un lancement normal.
 - [ ] ⚠️ **Limite connue :** le texte tourne sur ce poste. S'il s'éteint, la collecte s'arrête. Elle reprend là où
   elle en était : la colonne `collecte` est écrite ligne par ligne.
 
