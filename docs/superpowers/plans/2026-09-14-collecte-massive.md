@@ -397,6 +397,22 @@ tout journal de set.**
 
   **OBTENU (05:44:25 UTC) = ATTENDU, point par point** ; tests **44 / 44**. Commit du code, puis relecture ciblée des
   corrections de la troisième relecture **avant** le bloc 2, qui écrit la base avec ce parseur.
+
+  **QUATRIÈME RELECTURE** (ciblée, `5f7c128..ef55681`) : **« prêt pour le bloc 2 »**, aucun Important ouvert. Les
+  corrections I1 à I3 sont justes, et `tcg-id-illisible` testé en premier ne range mal ni une énergie spéciale (une
+  énergie en TCG ID lisible est une entrée), ni une entrée à TCG ID lisible. Trois mineurs :
+  1. le début d'un TCG ID défini deux fois (`RE_TCG_ID` et `natureIgnoree`) → **corrigé** : `DEBUT_TCG_ID` unique.
+     Source de `RE_TCG_ID` **identique à l'octet près** à l'ancien littéral (`m-source-re-tcg-id.js`), tests 44 / 44,
+     inversion 12 / 12 : comportement inchangé par construction, pas de rejeu ;
+  2. **antérieur, noté pour le lot F** : quand la colonne du nom ne porte aucune référence (`{{OBP|Darkness
+     Energy|Special}}`), un TCG ID lisible des NOTES devient l'entrée (« Darkness Energy (Neo Genesis 105) »). Visible
+     en `horsSet` sur les sections nommées, **silencieux sur un chemin filtré** : écarté, ni ignoré ni masqué ;
+  3. la mesure sur pages brutes peut ne pas trouver son occasion au bloc 2 → **si aucun set du bloc 2 ne passe par le
+     repli, elle est reportée au premier repli d'un bloc suivant, et chaque bilan de bloc dit « mesure sur page brute :
+     pas d'occasion » tant qu'elle n'a pas eu lieu.** Une mesure reportée qui n'est plus rappelée disparaît.
+
+  Rappel de la relecture : il n'existe AUCUN champ `bloc` dans la table ; le bloc 2 est la sélection de
+  `collecte-massive.js:61`. Avant de collecter, le script vérifie d'abord les 20 lignes suivantes (2 requêtes).
 - [ ] **Puis les 12 sets à gain — G2, DP5c, PCG6, PCG9, PBL, ASC, JTG, BRS, MEW, CRI, PAL, EVO** — 🛑 accord.
   **ATTENDU, écrit en TITRES cette fois** (mesuré sans requête le 2026-09-15 ; entrées = titres sur les 12, 0
   répétition) : G2 1 · DP5c 3 · PCG6 3 · PCG9 2 · PBL 25 · ASC 70 · JTG 32 · BRS 63 · MEW 30 · CRI 26 · PAL 49 ·
@@ -416,6 +432,18 @@ tout journal de set.**
 - [ ] **Arrêts :**
   - `collecte-massive.js` s'arrête seul après 3 échecs de suite ;
   - un set non concordant arrête la relance au bloc suivant.
+- [ ] **Bloc 2 — ATTENDU, écrit le 2026-09-15 avant le lancement** (sélection `verif && !collecte`, la même que
+  `collecte-massive.js:61`, lue par `m-bloc2-lignes.js`) :
+  - 20 lignes : **14 admises, toutes `jp`, 1 665 produits** — s9 127, sm4+ 125, s12 125, m4 120, s3 119, m5 118,
+    sm9 118, m3 117, sm12 117, DP3 117, sm10 116, m2 116, s2 115, sm11 115 ; **6 marquées « à regarder », non
+    collectées** — sI100, svM, smH, sD (tirage non établi), svD (0 entrée), DP1 (1,93) ;
+  - **14 collectes, concordance 14 / 14, titres manquants 0** (sinon des liens rouges, listés) ;
+  - **joints / produits ≥ 0,95 par set et ≥ 0,97 sur le bloc** : entrées = produits sur 13 lignes (1,00), DP3 à
+    1,02. C'est l'ordre de grandeur du bloc 1 re-collecté (0,990, minimum 0,962), et plus haut que le seuil du plan
+    (0,75 / 0,90), écrit avant le correctif Setlist ;
+  - `lectureSetlist` : chemin `sections-nommees` attendu sur les 14. **Un set qui passerait par le repli est
+    l'occasion de la mesure sur page brute reportée** (troisième relecture, point 4) ;
+  - après le bloc : ouvrir 3 des 4 lignes à tirage non établi (tâche ci-dessus).
 - [ ] ⚠️ **Limite connue :** le texte tourne sur ce poste. S'il s'éteint, la collecte s'arrête. Elle reprend là où
   elle en était : la colonne `collecte` est écrite ligne par ligne.
 
