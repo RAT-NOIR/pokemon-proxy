@@ -271,7 +271,10 @@ tout journal de set.**
     (`m-gain-titres-hors-bloc1.js`) : **xASC et TR n'ont aucun gain**, en entrées comme en titres. Rien à
     re-collecter sur eux.
 - [x] **Re-collecte du bloc 1** (`collecteur-texte.js --set=…`, les titres ajoutés sont fetchés seuls ; la page du
-  set est relue depuis l'archive R2, soit le corpus exact du rejeu). **Titres nouveaux attendus par set = le gain
+  set est relue depuis l'archive R2, soit le corpus exact du rejeu). ⚠️ **Faux, corrigé le 2026-09-15** : lancée
+  sans `--reparser`, la re-collecte a REFAIT la requête de la page du set (« requêtes Bulbapedia : 2 » sur s11 : la
+  page du set et un lot de redirections). Le corpus était le même parce que la révision n'avait pas bougé
+  (« R2 déjà là », même `revid`), pas parce qu'il avait été relu. **Titres nouveaux attendus par set = le gain
   du rejeu** : sv4a 51 · s4a 56 · s8b 103 · s12a 76 · m2a 52 · sm8b 73 · sm12a 70 · sv2a 31 · BXY 53 · sv3 21 ·
   sv8 21 · sv7 21 · sv9 24 · CP4 28 · s8 28 · s11 29 = **737**. **ATTENDU :**
   - concordance 16 / 16 ;
@@ -319,6 +322,81 @@ tout journal de set.**
     porte l'impression `jp` Lost Abyss 127, rattachée au produit 668245 (exp 5094) par set+numéro. C'est une
     réimpression listée sous le lien de son premier tirage : un vrai signal, et pas une carte perdue. Mesure faite
     file à l'arrêt (`file-a-l-arret.js` : 0 en cours, 0 verrou, aucune écriture depuis 39 h).
+- [ ] **Corrections de la seconde relecture, AVANT le bloc 2.** Tests rouges écrits pendant la re-collecte (sans
+  toucher `wikitext.js`, que chaque set rechargeait) : **28 / 37**, les 9 rouges pour la raison attendue. Code à
+  écrire :
+  1. un TCG ID **illisible en tête** rend l'entrée ignorée — l'index du TCG ID BRUT décide, pas celui du lisible ;
+  2. seuls les **TCG ID votent** pour le jeton dominant, rendu (`jetonDominant`) et écrit dans `lectureSetlist` ;
+  3. borne du nom : `^(noms)( numéro)?$`, pas `^(noms)( |$)` — « Base Set 2 87 » n'est pas un tirage de « Base Set » ;
+  4. `horsSet` = **null** hors du chemin `sections-nommees` (non évalué ≠ vide, §8) ; `masquees` sur les chemins
+     filtrés par gabarit (`motif`, `set-reconstruit`), null ailleurs ;
+  5. `{{TCG ID` suivi d'un blanc (forme recomposée par l'épuration) lu, sur la même `RE_TCG_ID` (§21 bis) ;
+  6. `natureIgnoree` : `[[Grass Energy (TCG)|…]]` et `{{TCG|Basic Grass Energy}}` sont des énergies de base ;
+  7. `lectureSetlist.source` (`r2-epure` en `--reparser`, `bulbapedia` sinon) et `revid` ; le log du collecteur
+     imprime « non évalué » pour un `horsSet` null.
+
+  **ATTENDU du rejeu (nouveau parseur contre HEAD, archive R2 épurée, 54 sets), mesuré AVANT le code**
+  (`m-prediction-relecture2.js`, parseur de HEAD et expressions indépendantes ; `m-ipb-recomposes.js` pour les
+  lignes ouvertes) :
+  - (a) TCG ID illisible en tête d'une entrée lue aujourd'hui : **0** → aucune entrée perdue ;
+  - (b) 37 TCG ID recomposés dans les textes, **0 dans une entrée de Setlist**, 2 sur IPB, seul set au repli :
+    « Venusaur (Bulbasaur Deck) », déjà retenu, et « Blastoise (Squirtle Deck) », hors motif. **IPB : lues 82 → 84,
+    entrées 41 → 42, titres distincts 41 → 41.** Les 53 autres sets : entrées identiques ;
+  - **0 titre perdu, 0 titre gagné, sur 54** ;
+  - (c) hors set sur les 49 sets en `sections-nommees` : **1 → 1** (Collapsed Stadium, s11) ; jeton dominant non nul
+    sur **49 / 49** ; `horsSet` null sur les **5** autres (2 `set-reconstruit` WEB et BXY, 2 `motif` MCDP et EXS,
+    1 repli IPB) ;
+  - (d) natures des ignorées : **inchangées** (base 28, spéciale 3, autre 0) ;
+  - (e) `masquees` : **0** sur les 4 sets à chemin filtré (WEB 1 écartée, EXS 1 écartée, aucune ne porte de
+    référence du set).
+
+  Aucun effet attendu sur les données collectées, sauf IPB (+1 entrée en double, déjà dédoublonnée en titres).
+
+  **OBTENU** — tests **37 / 37** ; **contrôle par inversion 7 / 7** (chaque correction défaite dans une copie en
+  mémoire fait passer au rouge le test qui lui correspond, `m-mutations-relecture2.js`) ; rejeu
+  (`m-rejeu-relecture2.js`, lancé 05:26:51 UTC) **= ATTENDU sur chaque point** :
+  - 0 titre perdu, 0 gagné, 0 set dont l'écart d'entrées diffère de l'attendu, aucun chemin changé ;
+  - IPB : lues 82 → 84, entrées 41 → 42, titres 41 → 41 ; lues au total 7 173 → 7 175 ;
+  - hors set 1 sur 49 évalués (Collapsed Stadium, s11), null sur 5 ; jeton dominant non nul sur 49 (« Lost Abyss »
+    sur s11, dont les liens seuls n'auraient pas voté) ;
+  - masquées 0 sur 4 évalués ; natures energie-base 28, energie-speciale 3, autre 0.
+
+  **TROISIÈME RELECTURE** (diff non commité contre 5f7c128), verdict : **à committer après corrections**, aucun
+  Critique. Les quatre Importants ont été vérifiés contre le code (`receiving-code-review`) :
+  1. `masquees` nommait un titre DÉJÀ retenu par une autre entrée (renvoi « Reprint of » vers une carte du set) →
+     les titres retenus sont exclus. Test rouge, puis vert ;
+  2. une ignorée à TCG ID illisible dont les notes citent `[[Lightning Energy (TCG)|…]]` était rangée
+     « energie-base », or le collecteur ne signale que le reste : elle disparaissait sans un mot (§21) → nature
+     `tcg-id-illisible`, testée AVANT les énergies. Test rouge, puis vert ;
+  3. les trois états n'étaient testés que sur `toutes-sections`, qu'aucune ligne de table n'emprunte : deux
+     contre-mutations de la relecture restaient VERTES (`horsSet = []` sur `set-reconstruit`, le repli qui ne remet
+     pas les signaux à null) → 4 tests sur `set-reconstruit`, `motif`, motif puis repli, repli. **Contrôle par
+     inversion : 12 / 12**, dont les deux contre-mutations ;
+  4. la moitié du 4e constat de la seconde relecture, « une mesure sur des pages BRUTES », avait disparu du plan →
+     **REPORTÉE, et c'est écrit** : l'épuration retire la prose, donc un rejeu sur R2 ne prédit pas ce que le repli
+     lira sur la page brute. Occasion prévue, sans requête de plus : le premier set du bloc 2 qui passe par le repli
+     (`lectureSetlist.source: 'bulbapedia'`) est rejoué sur son archive épurée de même `revid`, et les deux
+     lectures (`lues`, `retenues`) sont comparées.
+
+  Mineurs corrigés : 10 (trois commentaires devenus faux), 11 (la condition « page lue sur R2 » calculée une fois
+  dans le collecteur, §21 bis en miniature), 12 (le log dit « jeton dominant aucun : 0 TCG ID » sur les sections
+  nommées), 13 (test d'un nom coupé « Expansion » + « Pack »), 6 (le commentaire ne promet plus qu'un
+  `{{ TCG ID|` entre dans la priorité). **Notés, non corrigés, avec leur occasion** :
+  - 5 : `NUMERO_DE_TIRAGE = [A-Z]{0,3}` ne coupe pas `SWSH001` ni `HGSS01` et fera crier « hors set » sur les promos
+    (lignes 232 à 371 de la table auto, aucune vérifiée) → mesurer les formes réelles dans l'attendu du premier
+    bloc qui en contient ;
+  - 7 : un jeton dominant qui n'est aucun nom attendu n'est pas signalé (VS l'est légitimement) ;
+  - 8 : sur les sections nommées, la carte derrière un lien générique en tête n'est nommée nulle part ;
+  - 9 : les filtres `set-reconstruit` et repli restent `( \d+)?$` (antérieur, changerait les données : mesurer
+    avant).
+
+  **ATTENDU du rejeu après ces corrections** (mesuré avant : 0 ignorée sur 31 porte un `{{TCG ID`,
+  `m-ignorees-tcgid.js`) : **identique au rejeu précédent**, point par point — 0 titre perdu ou gagné, IPB 41 → 42,
+  lues 7 173 → 7 175, hors set 1 sur 49 et null sur 5, jeton sur 49, masquées 0 sur 4, natures energie-base 28,
+  energie-speciale 3, tcg-id-illisible 0.
+
+  **OBTENU (05:44:25 UTC) = ATTENDU, point par point** ; tests **44 / 44**. Commit du code, puis relecture ciblée des
+  corrections de la troisième relecture **avant** le bloc 2, qui écrit la base avec ce parseur.
 - [ ] **Puis les 12 sets à gain — G2, DP5c, PCG6, PCG9, PBL, ASC, JTG, BRS, MEW, CRI, PAL, EVO** — 🛑 accord.
   **ATTENDU, écrit en TITRES cette fois** (mesuré sans requête le 2026-09-15 ; entrées = titres sur les 12, 0
   répétition) : G2 1 · DP5c 3 · PCG6 3 · PCG9 2 · PBL 25 · ASC 70 · JTG 32 · BRS 63 · MEW 30 · CRI 26 · PAL 49 ·
