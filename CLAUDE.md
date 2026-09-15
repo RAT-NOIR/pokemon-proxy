@@ -812,6 +812,24 @@ mécanismes différents :
    dans les logs Render (`liste 150 page 2 : N entrées lues`). **Un compte qui décide et qui ne vit que
    dans un log n'est pas encore une mesure** : il faudra l'écrire dans l'état.
 
+**Et un huitième le 2026-09-15, le plus gros :**
+
+8. **🔴 LA SETLIST ÉCARTAIT LES CARTES À SUFFIXE, SANS UN MOT.** `entreesDeLaSetlist` ne lisait que
+   `{{TCG ID|A|Nom|B}}` ; toute autre entrée faisait `continue`. Or Bulbapedia écrit une carte V, VMAX, VSTAR, ex,
+   GX, EX ou ☆ par un LIEN (`[[Kyurem V (Lost Abyss 29)|Kyurem]]{{TCGV}}`) ou par un TCG ID à 4 paramètres.
+   **1 064 entrées perdues sur les 54 sets collectés** : 737 au bloc 1, 318 aux dix occidentaux, 9 au vintage.
+   Aucun chiffre ne criait : la concordance (`produits = joints + restes`) était juste, puisqu'une carte jamais
+   énumérée tombe proprement en reste. Seul le taux de jointure du bloc 1, **0,768 pour ~1 attendu**, a fait
+   chercher. Et le vintage, qui n'a presque pas de suffixes, joignait à 97,6 % : c'est ce chiffre qui a caché le
+   défaut pendant des semaines. Corrigé (`5e77b47`, `ef55681`), bloc 1 re-collecté : **16 / 16 concordants,
+   0 titre manquant, jointure 3 288 / 3 320 = 0,990**. Ce que la Setlist ne lit pas est désormais COMPTÉ par
+   nature (`ignorees`, `natureIgnoree`) et écrit dans l'état (`lectureSetlist`). ⚠️ Les dix occidentaux, G2, DP5c,
+   PCG6 et PCG9 ne sont pas encore re-collectés : les restes des §22 et §24 datent d'avant le correctif, et une
+   part d'entre eux est ce défaut, pas l'absence de la carte sur la page.
+   🔑 **UNE CONCORDANCE EST UNE TAUTOLOGIE POUR CE QUI N'A JAMAIS ÉTÉ ÉNUMÉRÉ.** `produits = joints + restes`
+   ne dit pas si l'énumération a tout vu : il faut un compte INDÉPENDANT de l'énumération en face (ici : les
+   gabarits de la section, ou les impressions portées par les pages).
+
 🔑 **LA FORME COMMUNE, ET CE QU'ELLE COÛTE.** Aucun de ces quatre n'a jeté d'erreur, aucun n'a fait
 baisser un chiffre : ils ont tous produit un résultat PLAUSIBLE. Le premier a rompu un engagement
 envers un tiers, le quatrième m'a fait conclure « rien à récupérer » d'une mesure qui n'avait rien
