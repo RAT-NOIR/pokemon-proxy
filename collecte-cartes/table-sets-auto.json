@@ -19846,7 +19846,20 @@
    "ratio": 1.46,
    "etat": "OK",
    "raisons": []
-  }
+  },
+  "collecte": {
+   "le": "2026-09-15T19:31:25.128Z",
+   "etat": "ok",
+   "note": "8 produits vers plusieurs cartes (carte déclarée sans numéro, repli par nom sur produits numérotés) ; 10 lignes retirées, jointure corrigée, --reparser 364/411, 0 multi"
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:20:55.775Z",
+    "etat": "noms-discordants",
+    "retireeLe": "2026-09-15T19:31:25.127Z",
+    "motif": "8 produits vers plusieurs cartes (carte déclarée sans numéro, repli par nom sur produits numérotés) ; 10 lignes retirées, jointure corrigée, --reparser 364/411, 0 multi"
+   }
+  ]
  },
  {
   "code": "SV-P",

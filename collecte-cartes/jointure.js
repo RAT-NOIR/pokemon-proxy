@@ -179,7 +179,12 @@ function joindre(cartes, produits, cible) {
             // LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
             const nomJoint = String(carte.nomEn) + (String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
             const clesNom = [...new Set([normaliserNom(nomJoint), normaliserNom(nomJoint.replace(/^Basic\s+/i, ''))])];
-            for (const k of clesNom) { trouves = parNom.get(k) || []; if (trouves.length) break; }
+            // Une carte qui DÉCLARE une impression dans le set SANS numéro (promo non numérotée), dans un catalogue NUMÉROTÉ, ne vise
+            // par son nom qu'un produit SANS numéro : XY-P, Greninja [jp:null] prenait Greninja n°073 (8 produits vers plusieurs
+            // cartes). ⚠️ PAS les cartes sans impression déclarée (énergies, pages génériques, « setlist+nom ») : le premier jet
+            // les incluait et retirait 1 à 44 jointures sur 19 sets sains au rejeu (WCP 5, s8a-G 8, S-P 44) — refusé.
+            const impSansNumero = imp && !imps.some(i => numerote(i.numero));
+            for (const k of clesNom) { trouves = (parNom.get(k) || []).filter(p => !(impSansNumero && parNumero.size) || !numerote(p.numero)); if (trouves.length) break; }
             if (trouves.length) {
                 const noms = new Set((carte.attaques || []).map(a => normaliserNom(a.nom)));
                 const concordants = trouves.filter(p => p.attaques.length && p.attaques.every(a => noms.has(normaliserNom(a))));

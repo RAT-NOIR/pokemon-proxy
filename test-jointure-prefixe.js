@@ -71,5 +71,14 @@ verifier('énergie sans numéro : repli par nom conservé', paires(JEN), ['140|1
 const JVI = joindre([carte(160, 'Pikachu', 'Base Set', 'jp', '025')], [produit(170, 'Pikachu', null)], { idExpansion: 8, expansionBulba: 'Base Set', tirage: 'jp' });
 verifier('catalogue sans numéro : repli par nom conservé', paires(JVI), ['160|170']);
 
+// 9. XY-P : une carte déclarée DANS le set mais SANS numéro (promo non numérotée) ne prend par son nom QUE des produits sans
+// numéro. Greninja [jp:null] prenait Greninja n°073 (déjà à sa carte) : 8 produits vers plusieurs cartes, garde.
+const XP = 'XY-P Promotional cards';
+const cXP = [carte(180, 'Greninja', XP, 'jp', '073'), carte(181, 'Greninja', XP, 'jp', null), carte(182, 'M Absol-EX', XP, 'jp', null)];
+const pXP = [produit(190, 'Greninja', '073'), produit(191, 'M Absol-EX', null)];
+const JXP = joindre(cXP, pXP, { idExpansion: 4159, expansionBulba: XP, tirage: 'jp' });
+verifier('XY-P : chaque produit à UNE carte', paires(JXP), ['180|190', '182|191']);
+verifier('XY-P : Greninja sans numéro est un reste', JXP.restes.filter(r => r.type === 'carte-sans-produit').map(r => r.carteId), [181]);
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);
