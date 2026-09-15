@@ -1383,6 +1383,10 @@
     "Star Birth": 127
    },
    "note": "vérification automatique : 127 entrées pour 127 produits, échantillon « Honchkrow V (Brilliant Stars 88) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:51:56.533Z",
+   "etat": "ok"
   }
  },
  {
@@ -1500,6 +1504,10 @@
     "GX Battle Boost": 125
    },
    "note": "vérification automatique : 125 entrées pour 125 produits, échantillon « Sableye (Guardians Rising 80) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:52:53.507Z",
+   "etat": "ok"
   }
  },
  {
@@ -1566,6 +1574,10 @@
     "Paradigm Trigger": 125
    },
    "note": "vérification automatique : 125 entrées pour 125 produits, échantillon « Galarian Meowth (Crown Zenith 84) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:53:49.885Z",
+   "etat": "ok"
   }
  },
  {
@@ -1687,6 +1699,10 @@
     "Ninja Spinner": 120
    },
    "note": "vérification automatique : 120 entrées pour 120 produits, échantillon « Ferrothorn (Chaos Rising 63) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:54:22.964Z",
+   "etat": "ok"
   }
  },
  {
@@ -1753,6 +1769,10 @@
     "Infinity Zone": 119
    },
    "note": "vérification automatique : 119 entrées pour 119 produits, échantillon « Malamar (Champion's Path 45) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:55:12.693Z",
+   "etat": "ok"
   }
  },
  {
@@ -1819,6 +1839,10 @@
     "Abyss Eye": 118
    },
    "note": "vérification automatique : 118 entrées pour 118 produits, échantillon « Bastiodon (Pitch Black 62) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:55:43.151Z",
+   "etat": "ok"
   }
  },
  {
@@ -1885,6 +1909,10 @@
     "Tag Bolt": 118
    },
    "note": "vérification automatique : 118 entrées pour 118 produits, échantillon « Latias & Latios-GX (Team Up 113) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:56:32.442Z",
+   "etat": "ok"
   }
  },
  {
@@ -1951,6 +1979,10 @@
     "Nihil Zero": 117
    },
    "note": "vérification automatique : 117 entrées pour 117 produits, échantillon « Rattata (Perfect Order 60) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:57:22.476Z",
+   "etat": "ok"
   }
  },
  {
@@ -2017,6 +2049,10 @@
     "Alter Genesis": 117
    },
    "note": "vérification automatique : 117 entrées pour 117 produits, échantillon « Flabébé (Cosmic Eclipse 150) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:58:16.042Z",
+   "etat": "ok"
   }
  },
  {
@@ -2083,6 +2119,10 @@
     "Shining Darkness": 119
    },
    "note": "vérification automatique : 119 entrées pour 117 produits, échantillon « Jynx (Secret Wonders 30) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T05:59:19.097Z",
+   "etat": "ok"
   }
  },
  {
@@ -2149,6 +2189,10 @@
     "Double Blaze": 116
    },
    "note": "vérification automatique : 116 entrées pour 116 produits, échantillon « Sandile (Unbroken Bonds 114) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T06:00:04.255Z",
+   "etat": "ok"
   }
  },
  {
@@ -2215,6 +2259,10 @@
     "Inferno X": 116
    },
    "note": "vérification automatique : 116 entrées pour 116 produits, échantillon « Bronzor (Phantasmal Flames 71) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T06:00:56.065Z",
+   "etat": "ok"
   }
  },
  {
@@ -2281,6 +2329,10 @@
     "Rebellion Crash": 115
    },
    "note": "vérification automatique : 115 entrées pour 115 produits, échantillon « Rolycoly (Rebel Clash 105) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T06:01:42.297Z",
+   "etat": "ok"
   }
  },
  {
@@ -2347,6 +2399,10 @@
     "Miracle Twin": 115
    },
    "note": "vérification automatique : 115 entrées pour 115 produits, échantillon « Liepard (Unified Minds 136) » (jp)"
+  },
+  "collecte": {
+   "le": "2026-09-15T06:02:36.132Z",
+   "etat": "ok"
   }
  },
  {
@@ -2626,7 +2682,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Scarlet & Violet (TCG)",
+   "entrees": 258,
+   "echantillon": "Croagunk (Scarlet & Violet 130)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.39,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.39 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "PCG4",
@@ -2650,7 +2721,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "EX Unseen Forces (TCG)",
+   "entrees": {
+    "Golden Sky, Silvery Ocean": 106
+   },
+   "note": "vérification automatique : 106 entrées pour 106 produits, échantillon « Unown (EX Unseen Forces L) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "EX Unseen Forces (TCG)",
+   "entrees": 106,
+   "echantillon": "Unown (EX Unseen Forces L)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "XY3",
@@ -2674,7 +2764,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Furious Fists (TCG)",
+   "entrees": {
+    "Rising Fist": 105
+   },
+   "note": "vérification automatique : 105 entrées pour 105 produits, échantillon « M Lucario-EX (Furious Fists 55) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Furious Fists (TCG)",
+   "entrees": 105,
+   "echantillon": "M Lucario-EX (Furious Fists 55)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv1a",
@@ -2698,7 +2807,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Triplet Beat (TCG)",
+   "entrees": {
+    "Triplet Beat": 103
+   },
+   "note": "vérification automatique : 103 entrées pour 103 produits, échantillon « Paldean Wooper (Paldea Evolved 129) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Triplet Beat (TCG)",
+   "entrees": 103,
+   "echantillon": "Paldean Wooper (Paldea Evolved 129)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "CP6",
@@ -2722,7 +2850,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Evolutions (TCG)",
+   "entrees": {
+    "Expansion Pack 20th Anniversary": 103
+   },
+   "note": "vérification automatique : 103 entrées pour 103 produits, échantillon « Sandshrew (Evolutions 54) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Evolutions (TCG)",
+   "entrees": 103,
+   "echantillon": "Sandshrew (Evolutions 54)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "s6a",
@@ -2746,7 +2893,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Eevee Heroes (TCG)",
+   "entrees": {
+    "Eevee Heroes": 101
+   },
+   "note": "vérification automatique : 101 entrées pour 101 produits, échantillon « Pangoro (Fusion Strike 174) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Eevee Heroes (TCG)",
+   "entrees": 101,
+   "echantillon": "Pangoro (Fusion Strike 174)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "Pt3",
@@ -2770,7 +2936,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Supreme Victors (TCG)",
+   "entrees": {
+    "Beat of the Frontier": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 100 produits, échantillon « Dusknoir FB (Supreme Victors 26) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Supreme Victors (TCG)",
+   "entrees": 100,
+   "echantillon": "Dusknoir FB (Supreme Victors 26)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv5M",
@@ -2794,7 +2979,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Temporal Forces (TCG)",
+   "entrees": 218,
+   "echantillon": "Forretress (Temporal Forces 110)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.18,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.18 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "sv5K",
@@ -2818,7 +3018,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Temporal Forces (TCG)",
+   "entrees": 218,
+   "echantillon": "Forretress (Temporal Forces 110)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.18,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.18 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "s10a",
@@ -2842,7 +3057,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Dark Phantasma (TCG)",
+   "entrees": {
+    "Dark Phantasma": 99
+   },
+   "note": "vérification automatique : 99 entrées pour 99 produits, échantillon « Radiant Steelix (Lost Origin 124) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dark Phantasma (TCG)",
+   "entrees": 99,
+   "echantillon": "Radiant Steelix (Lost Origin 124)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "EBB",
@@ -2866,7 +3100,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Legendary Treasures (TCG)",
+   "entrees": {
+    "EX Battle Boost": 99
+   },
+   "note": "vérification automatique : 99 entrées pour 99 produits, échantillon « Croagunk (Boundaries Crossed 65) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Legendary Treasures (TCG)",
+   "entrees": 99,
+   "echantillon": "Croagunk (Boundaries Crossed 65)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv2D",
@@ -2890,7 +3143,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Paldea Evolved (TCG)",
+   "entrees": 279,
+   "echantillon": "Hydreigon (Paldea Evolved 140)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.82,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.82 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "sv2P",
@@ -2914,7 +3182,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Paldea Evolved (TCG)",
+   "entrees": 279,
+   "echantillon": "Hydreigon (Paldea Evolved 140)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.82,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.82 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "XY4",
@@ -2938,7 +3221,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Phantom Forces (TCG)",
+   "entrees": {
+    "Phantom Gate": 97
+   },
+   "note": "vérification automatique : 97 entrées pour 97 produits, échantillon « Gigalith (Phantom Forces 50) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Phantom Forces (TCG)",
+   "entrees": 97,
+   "echantillon": "Gigalith (Phantom Forces 50)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "XY7",
@@ -2962,7 +3264,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Ancient Origins (TCG)",
+   "entrees": {
+    "Bandit Ring": 97
+   },
+   "note": "vérification automatique : 97 entrées pour 97 produits, échantillon « Metagross (Ancient Origins 49) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Ancient Origins (TCG)",
+   "entrees": 97,
+   "echantillon": "Metagross (Ancient Origins 49)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv5a",
@@ -2986,7 +3307,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Crimson Haze (TCG)",
+   "entrees": {
+    "Crimson Haze": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « Dipplin (Twilight Masquerade 127) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Crimson Haze (TCG)",
+   "entrees": 96,
+   "echantillon": "Dipplin (Twilight Masquerade 127)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "Pt1",
@@ -3010,7 +3350,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Platinum (TCG)",
+   "entrees": {
+    "Galactic's Conquest": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « Skuntank G (Platinum 94) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Platinum (TCG)",
+   "entrees": 96,
+   "echantillon": "Skuntank G (Platinum 94)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv4M",
@@ -3034,7 +3393,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Paradox Rift (TCG)",
+   "entrees": 266,
+   "echantillon": "Aegislash (Paradox Rift 134)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.8,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.8 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "s6h",
@@ -3058,7 +3432,22 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Chilling Reign (TCG)",
+   "entrees": 233,
+   "echantillon": "Porygon2 (Chilling Reign 117)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "tirageEtabli": "intl",
+   "ratio": 2.45,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.45 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "s3a",
@@ -3082,7 +3471,26 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Legendary Heartbeat (TCG)",
+   "entrees": {
+    "Legendary Heartbeat": 94
+   },
+   "note": "vérification automatique : 94 entrées pour 94 produits, échantillon « Metang (Vivid Voltage 117) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Legendary Heartbeat (TCG)",
+   "entrees": 94,
+   "echantillon": "Metang (Vivid Voltage 117)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv7a",
