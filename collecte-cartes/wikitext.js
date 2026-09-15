@@ -207,6 +207,24 @@ function impressionsDuChampAsiatique(g) {
     }));
 }
 
+// 🔴 LE DECK JAPONAIS SANS `jpexpansion` (2026-09-15). Les decks modernes s'écrivent
+// `jpdeck={{TCG|GX Starter Decks|Darkness Yveltal-GX Deck}}|jpcardno=066/131` : le gabarit porte l'EXPANSION (1er paramètre)
+// et le DECK (2e, facultatif — `{{TCG|Start Deck 100}}`). Sans `jpexpansion`, l'entrée ne rendait RIEN et tombait dans
+// `entreesNonRendues` : 177 sur les 262 pages de SWSH, et les 4 lignes de decks japonais (863 produits) étaient
+// invérifiables. Seule une valeur à GABARIT rend une impression : un deck en texte simple ne nomme aucune expansion.
+function impressionsDuDeckAsiatique(g) {
+    const valeur = String(g.params.jpdeck || g.params.jphalfdeck || g.params.jpthemedeck);
+    const gabs = [...valeur.matchAll(/\{\{\s*([A-Za-z]*TCG)\s*\|([^|}]+)(?:\|([^|}]+))?/g)];
+    const seul = gabs.length === 1;
+    const { numero, total } = numeroTotal(g.params.jpcardno);
+    return gabs.map(m => ({
+        tirage: TIRAGE_PAR_GABARIT[m[1].toUpperCase()] || 'inconnu',
+        expansion: m[2].trim(),
+        deck: m[3] ? m[3].trim() : null,
+        numero: seul ? numero : null, total: seul ? total : null, rarete: seul ? (plat(g.params.jprarity) || null) : null
+    }));
+}
+
 /** Toutes les entrées `…Infobox/Expansion`, au premier niveau OU imbriquées dans un `/ReleaseInfo`. */
 function entreesExpansion(gs) {
     const out = [];
@@ -250,6 +268,7 @@ function faitsDeCarte(texte) {
             out.push({ tirage: 'intl', expansion: nomDePage(g.params.expansion), deck: plat(g.params.deck) || null, numero, total, rarete: plat(g.params.rarity) || null });
         }
         if (g.params.jpexpansion || g.params.jpdeckkit) out.push(...impressionsDuChampAsiatique(g));
+        else if (/\{\{\s*[A-Za-z]*TCG\s*\|/.test(String(g.params.jpdeck || g.params.jphalfdeck || g.params.jpthemedeck || ''))) out.push(...impressionsDuDeckAsiatique(g));
         if (!out.length) {
             const cles = Object.keys(g.params).filter(k => String(g.params[k]).trim() !== '');
             (cles.some(k => /^gb2?set/.test(k)) ? entreesJeuVideo : entreesNonRendues).push(cles.sort().join(','));
