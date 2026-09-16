@@ -12302,6 +12302,10 @@
    "ratio": 0.81,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:28:47.303Z",
+   "etat": "ok"
   }
  },
  {
@@ -12345,6 +12349,10 @@
    "ratio": 0.94,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:29:53.186Z",
+   "etat": "ok"
   }
  },
  {
@@ -12388,7 +12396,20 @@
    "ratio": 0.75,
    "etat": "OK",
    "raisons": []
-  }
+  },
+  "collecte": {
+   "le": "2026-09-16T04:38:48.968Z",
+   "etat": "ok",
+   "note": "repli par nom sur produits deja joints par numero : 7 lignes fausses retirees, jointure refaite 297/304, 0 multi"
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-16T04:30:51.725Z",
+    "etat": "noms-discordants",
+    "retireeLe": "2026-09-16T04:38:48.968Z",
+    "motif": "repli par nom sur produits deja joints par numero : 7 lignes fausses retirees, jointure refaite 297/304, 0 multi"
+   }
+  ]
  },
  {
   "code": "CEC",
@@ -13929,7 +13950,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Prismatic Evolutions (TCG)",
+   "entrees": {
+    "Prismatic Evolutions": 180
+   },
+   "note": "vérification automatique : 180 entrées pour 180 produits, échantillon « Noivern ex (Prismatic Evolutions 91) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Prismatic Evolutions (TCG)",
+   "entrees": 180,
+   "echantillon": "Noivern ex (Prismatic Evolutions 91)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "BKT",
@@ -13953,7 +13993,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "BREAKthrough (TCG)",
+   "entrees": {
+    "BREAKthrough": 164
+   },
+   "note": "vérification automatique : 164 entrées pour 176 produits, échantillon « Hippopotas (BREAKthrough 83) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "BREAKthrough (TCG)",
+   "entrees": 164,
+   "echantillon": "Hippopotas (BREAKthrough 83)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.93,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "WHT",
@@ -13977,7 +14036,17 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt & White Flare (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   ]
+  }
  },
  {
   "code": "BLK",
@@ -14001,7 +14070,17 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt & White Flare (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   ]
+  }
  },
  {
   "code": "EX",
@@ -14025,7 +14104,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Expedition Base Set (TCG)",
+   "entrees": {
+    "Expedition Base Set": 165
+   },
+   "note": "vérification automatique : 165 entrées pour 169 produits, échantillon « Jynx (Expedition 83) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Expedition Base Set (TCG)",
+   "entrees": 165,
+   "echantillon": "Jynx (Expedition 83)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "PRC",
@@ -14049,7 +14147,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Primal Clash (TCG)",
+   "entrees": {
+    "Primal Clash": 164
+   },
+   "note": "vérification automatique : 164 entrées pour 167 produits, échantillon « Solrock (Primal Clash 83) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Primal Clash (TCG)",
+   "entrees": 164,
+   "echantillon": "Solrock (Primal Clash 83)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "SV",
@@ -14073,7 +14190,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Supreme Victors (TCG)",
+   "entrees": {
+    "Supreme Victors": 150
+   },
+   "note": "vérification automatique : 150 entrées pour 166 produits, échantillon « Plusle (Supreme Victors 76) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Supreme Victors (TCG)",
+   "entrees": 150,
+   "echantillon": "Plusle (Supreme Victors 76)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "HIF",
@@ -14097,7 +14233,21 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Hidden Fates (TCG)",
+   "entrees": 69,
+   "echantillon": "Golem (Hidden Fates 35)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.42,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 0.42 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "FLI",
@@ -14121,7 +14271,21 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Forbidden Light (TCG)",
+   "entrees": 256,
+   "echantillon": "Crasher Wake (Forbidden Light 104)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1.59,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.59 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "BCR",
@@ -14145,7 +14309,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Boundaries Crossed (TCG)",
+   "entrees": {
+    "Boundaries Crossed": 153
+   },
+   "note": "vérification automatique : 153 entrées pour 159 produits, échantillon « Meloetta (Boundaries Crossed 77) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Boundaries Crossed (TCG)",
+   "entrees": 153,
+   "echantillon": "Meloetta (Boundaries Crossed 77)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "LA",
@@ -14169,7 +14352,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Legends Awakened (TCG)",
+   "entrees": {
+    "Legends Awakened": 146
+   },
+   "note": "vérification automatique : 146 entrées pour 153 produits, échantillon « Tauros (Legends Awakened 74) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Legends Awakened (TCG)",
+   "entrees": 146,
+   "echantillon": "Tauros (Legends Awakened 74)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "XY",
@@ -14193,7 +14395,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "XY (TCG)",
+   "entrees": {
+    "XY": 146
+   },
+   "note": "vérification automatique : 146 entrées pour 150 produits, échantillon « Inkay (XY 74) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "XY (TCG)",
+   "entrees": 146,
+   "echantillon": "Inkay (XY 74)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "LTR",
@@ -14217,7 +14438,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Legendary Treasures (TCG)",
+   "entrees": {
+    "Legendary Treasures": 115
+   },
+   "note": "vérification automatique : 115 entrées pour 146 produits, échantillon « Mismagius (Legendary Treasures 58) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Legendary Treasures (TCG)",
+   "entrees": 115,
+   "echantillon": "Mismagius (Legendary Treasures 58)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.79,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "UF",
@@ -14241,7 +14481,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Unseen Forces (TCG)",
+   "entrees": {
+    "EX Unseen Forces": 117
+   },
+   "note": "vérification automatique : 117 entrées pour 146 produits, échantillon « Hoothoot (EX Unseen Forces 59) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Unseen Forces (TCG)",
+   "entrees": 117,
+   "echantillon": "Hoothoot (EX Unseen Forces 59)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.8,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DP",
@@ -14265,7 +14524,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Diamond & Pearl (TCG)",
+   "entrees": {
+    "Diamond & Pearl": 130
+   },
+   "note": "vérification automatique : 130 entrées pour 142 produits, échantillon « Unown B (Diamond & Pearl 66) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Diamond & Pearl (TCG)",
+   "entrees": 130,
+   "echantillon": "Unown B (Diamond & Pearl 66)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "PLS",
@@ -14289,7 +14567,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Plasma Storm (TCG)",
+   "entrees": {
+    "Plasma Storm": 138
+   },
+   "note": "vérification automatique : 138 entrées pour 140 produits, échantillon « Beheeyem (Plasma Storm 70) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Plasma Storm (TCG)",
+   "entrees": 138,
+   "echantillon": "Beheeyem (Plasma Storm 70)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "CIN",
@@ -14313,7 +14610,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Crimson Invasion (TCG)",
+   "entrees": {
+    "Crimson Invasion": 124
+   },
+   "note": "vérification automatique : 124 entrées pour 140 produits, échantillon « Guzzlord-GX (Crimson Invasion 63) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Crimson Invasion (TCG)",
+   "entrees": 124,
+   "echantillon": "Guzzlord-GX (Crimson Invasion 63)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.89,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "BLW",
@@ -14337,7 +14653,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black & White (TCG)",
+   "entrees": {
+    "Black & White": 115
+   },
+   "note": "vérification automatique : 115 entrées pour 140 produits, échantillon « Timburr (Black & White 58) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black & White (TCG)",
+   "entrees": 115,
+   "echantillon": "Timburr (Black & White 58)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.82,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "FCO",
@@ -14361,7 +14696,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Fates Collide (TCG)",
+   "entrees": {
+    "Fates Collide": 125
+   },
+   "note": "vérification automatique : 125 entrées pour 138 produits, échantillon « Lucario (Fates Collide 63) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Fates Collide (TCG)",
+   "entrees": 125,
+   "echantillon": "Lucario (Fates Collide 63)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.91,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "PL",
@@ -14385,7 +14739,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Platinum (TCG)",
+   "entrees": {
+    "Platinum": 130
+   },
+   "note": "vérification automatique : 130 entrées pour 137 produits, échantillon « Zangoose (Platinum 66) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Platinum (TCG)",
+   "entrees": 130,
+   "echantillon": "Zangoose (Platinum 66)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MEP",
@@ -17617,7 +17990,10 @@
   "bulba": {
    "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "jp",
-   "expansion": "Black Bolt"
+   "expansion": "Black Bolt/White Flare",
+   "setlist": [
+    "Black Bolt"
+   ]
   },
   "attendu": 174,
   "auto": {
@@ -17626,34 +18002,49 @@
    "nomBulbapedia": "Black Bolt",
    "regionCodesSet": "japonais",
    "note": "page JP combinée",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "demiSet": {
+    "avant": {
+     "expansion": "Black Bolt"
+    },
+    "le": "2026-09-16T04:27:40.642Z",
+    "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
+   }
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Black Bolt/White Flare (TCG)",
-   "entrees": 174,
-   "echantillon": "Servine (Black Bolt 2)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:51:29.659Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
-   ]
-  },
-  "causeListee": {
-   "le": "2026-09-15T19:00:23.293Z",
-   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
-  }
+  "causeRetiree": [
+   {
+    "le": "2026-09-15T19:00:23.293Z",
+    "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set.",
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "cause mal lue : n°002 et n°088 sont les variantes V1/V2 du même demi-set, pas deux demi-sets"
+   }
+  ],
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T18:51:29.659Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Black Bolt/White Flare (TCG)",
+     "entrees": 174,
+     "echantillon": "Servine (Black Bolt 2)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+     ]
+    },
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "ligne corrigée (expansion fusionnée + section)"
+   }
+  ]
  },
  {
   "code": "sv11W",
@@ -17665,7 +18056,10 @@
   "bulba": {
    "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "jp",
-   "expansion": "White Flare"
+   "expansion": "Black Bolt/White Flare",
+   "setlist": [
+    "White Flare"
+   ]
   },
   "attendu": 174,
   "auto": {
@@ -17674,34 +18068,49 @@
    "nomBulbapedia": "White Flare",
    "regionCodesSet": "japonais",
    "note": "page JP combinée",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "demiSet": {
+    "avant": {
+     "expansion": "White Flare"
+    },
+    "le": "2026-09-16T04:27:40.642Z",
+    "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
+   }
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Black Bolt/White Flare (TCG)",
-   "entrees": 174,
-   "echantillon": "Swadloon (White Flare 2)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:51:29.665Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
-   ]
-  },
-  "causeListee": {
-   "le": "2026-09-15T19:00:23.293Z",
-   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
-  }
+  "causeRetiree": [
+   {
+    "le": "2026-09-15T19:00:23.293Z",
+    "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set.",
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "cause mal lue : n°002 et n°088 sont les variantes V1/V2 du même demi-set, pas deux demi-sets"
+   }
+  ],
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T18:51:29.665Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Black Bolt/White Flare (TCG)",
+     "entrees": 174,
+     "echantillon": "Swadloon (White Flare 2)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 1,
+     "etat": "À REGARDER",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+     ]
+    },
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "ligne corrigée (expansion fusionnée + section)"
+   }
+  ]
  },
  {
   "code": "xsv11B",
@@ -17713,7 +18122,10 @@
   "bulba": {
    "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "jp",
-   "expansion": "Black Bolt"
+   "expansion": "Black Bolt/White Flare",
+   "setlist": [
+    "Black Bolt"
+   ]
   },
   "attendu": 152,
   "auto": {
@@ -17722,34 +18134,49 @@
    "nomBulbapedia": "Black Bolt",
    "regionCodesSet": "japonais",
    "note": "Additionals Cardmarket",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "demiSet": {
+    "avant": {
+     "expansion": "Black Bolt"
+    },
+    "le": "2026-09-16T04:27:40.642Z",
+    "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
+   }
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Black Bolt/White Flare (TCG)",
-   "entrees": 174,
-   "echantillon": "Servine (Black Bolt 2)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "ratio": 1.14,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:51:29.671Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
-   ]
-  },
-  "causeListee": {
-   "le": "2026-09-15T19:00:23.293Z",
-   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
-  }
+  "causeRetiree": [
+   {
+    "le": "2026-09-15T19:00:23.293Z",
+    "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set.",
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "cause mal lue : n°002 et n°088 sont les variantes V1/V2 du même demi-set, pas deux demi-sets"
+   }
+  ],
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T18:51:29.671Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Black Bolt/White Flare (TCG)",
+     "entrees": 174,
+     "echantillon": "Servine (Black Bolt 2)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 1.14,
+     "etat": "À REGARDER",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « Black Bolt » (vus : intl)"
+     ]
+    },
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "ligne corrigée (expansion fusionnée + section)"
+   }
+  ]
  },
  {
   "code": "xsv11W",
@@ -17761,7 +18188,10 @@
   "bulba": {
    "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "jp",
-   "expansion": "White Flare"
+   "expansion": "Black Bolt/White Flare",
+   "setlist": [
+    "White Flare"
+   ]
   },
   "attendu": 152,
   "auto": {
@@ -17770,34 +18200,49 @@
    "nomBulbapedia": "White Flare",
    "regionCodesSet": "japonais",
    "note": "Additionals Cardmarket",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "demiSet": {
+    "avant": {
+     "expansion": "White Flare"
+    },
+    "le": "2026-09-16T04:27:40.642Z",
+    "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
+   }
   },
   "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Black Bolt/White Flare (TCG)",
-   "entrees": 174,
-   "echantillon": "Swadloon (White Flare 2)",
-   "tiragesVus": [
-    "intl"
-   ],
-   "ratio": 1.14,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T18:51:29.677Z",
-   "etat": "a-regarder",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
-   ]
-  },
-  "causeListee": {
-   "le": "2026-09-15T19:00:23.293Z",
-   "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set."
-  }
+  "causeRetiree": [
+   {
+    "le": "2026-09-15T19:00:23.293Z",
+    "cause": "impression japonaise fusionnée « Black Bolt/White Flare » : une carte porte n°002 ET n°088, rien ne dit à quel demi-set appartient un numéro — joindre fabriquerait des faux. Phase 2 : autre source du numéro par demi-set.",
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "cause mal lue : n°002 et n°088 sont les variantes V1/V2 du même demi-set, pas deux demi-sets"
+   }
+  ],
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T18:51:29.677Z",
+    "etat": "a-regarder",
+    "raisons": [
+     "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+    ],
+    "verif": {
+     "le": "2026-09-15",
+     "pageResolue": "Black Bolt/White Flare (TCG)",
+     "entrees": 174,
+     "echantillon": "Swadloon (White Flare 2)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 1.14,
+     "etat": "À REGARDER",
+     "raisons": [
+      "l'échantillon n'a pas de tirage jp « White Flare » (vus : intl)"
+     ]
+    },
+    "retireeLe": "2026-09-16T04:27:40.642Z",
+    "motif": "ligne corrigée (expansion fusionnée + section)"
+   }
+  ]
  },
  {
   "code": "sv6",
@@ -20247,7 +20692,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Shining Synergy GX Starter Deck (ATCG)",
+   "entrees": {
+    "Shining Synergy GX Starter Deck": 357
+   },
+   "note": "vérification automatique : 357 entrées pour 357 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:40:43.995Z",
@@ -20273,7 +20725,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Synergy GX Starter Deck (ATCG)",
+   "entrees": 357,
+   "couverture": {
+    "produitsNumerotes": 357,
+    "couverts": 357,
+    "numerosSetlist": 357
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:53:50.765Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM1DC",
@@ -20297,7 +20766,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Storming Emergence GX Starter Deck (ATCG)",
+   "entrees": {
+    "Storming Emergence GX Starter Deck": 336
+   },
+   "note": "vérification automatique : 336 entrées pour 301 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:40:44.005Z",
@@ -20323,7 +20799,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Storming Emergence GX Starter Deck (ATCG)",
+   "entrees": 336,
+   "couverture": {
+    "produitsNumerotes": 301,
+    "couverts": 298,
+    "numerosSetlist": 333
+   },
+   "ratio": 1.12,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:55:07.171Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSMPC",
@@ -20558,7 +21051,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Battle Party: Shining Dream (ATCG)",
+   "entrees": 208,
+   "couverture": {
+    "produitsNumerotes": 232,
+    "couverts": 207,
+    "numerosSetlist": 207
+   },
+   "ratio": 0.9,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 207/232 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:55:07.179Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 207/232 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CS1DC",
@@ -20582,7 +21097,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Dynamax Clash V Starter Deck (ATCG)",
+   "entrees": {
+    "Dynamax Clash V Starter Deck": 221
+   },
+   "note": "vérification automatique : 221 entrées pour 222 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:43:34.451Z",
@@ -20608,7 +21130,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dynamax Clash V Starter Deck (ATCG)",
+   "entrees": 221,
+   "couverture": {
+    "produitsNumerotes": 222,
+    "couverts": 220,
+    "numerosSetlist": 220
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:16.043Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CBB4C",
@@ -20658,7 +21197,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Gem Pack Vol. 4 (ATCG)",
+   "entrees": 196,
+   "couverture": {
+    "produitsNumerotes": 196,
+    "couverts": 49,
+    "numerosSetlist": 7
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/196 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:16.052Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/196 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CBB5C",
@@ -20708,7 +21269,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Gem Pack Vol. 5 (ATCG)",
+   "entrees": 196,
+   "couverture": {
+    "produitsNumerotes": 196,
+    "couverts": 49,
+    "numerosSetlist": 7
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/196 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:16.061Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/196 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CS3DC",
@@ -20732,7 +21315,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Primordial Arts V Starter Deck (ATCG)",
+   "entrees": {
+    "Primordial Arts V Starter Deck": 183
+   },
+   "note": "vérification automatique : 183 entrées pour 183 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:43:34.476Z",
@@ -20758,7 +21348,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Primordial Arts V Starter Deck (ATCG)",
+   "entrees": 183,
+   "couverture": {
+    "produitsNumerotes": 183,
+    "couverts": 183,
+    "numerosSetlist": 183
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:59.305Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSV4C",
@@ -21000,7 +21607,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Gem Pack Vol. 3 (ATCG)",
+   "entrees": 136,
+   "couverture": {
+    "produitsNumerotes": 136,
+    "couverts": 49,
+    "numerosSetlist": 7
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/136 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:59.314Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/136 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CBB1C",
@@ -21050,7 +21679,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Gem Pack Vol. 1 (ATCG)",
+   "entrees": 109,
+   "couverture": {
+    "produitsNumerotes": 115,
+    "couverts": 70,
+    "numerosSetlist": 9
+   },
+   "ratio": 0.95,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 70/115 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T19:56:59.323Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 70/115 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CSM2.5C",
@@ -21074,7 +21725,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Striking Competition (ATCG)",
+   "entrees": {
+    "Striking Competition": 99
+   },
+   "note": "vérification automatique : 99 entrées pour 99 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:09.272Z",
@@ -21100,7 +21758,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Striking Competition (ATCG)",
+   "entrees": 99,
+   "couverture": {
+    "produitsNumerotes": 99,
+    "couverts": 99,
+    "numerosSetlist": 99
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:57:22.918Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS1.5C",
@@ -21124,7 +21799,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Dynamax Tactics (ATCG)",
+   "entrees": {
+    "Dynamax Tactics": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:09.283Z",
@@ -21150,7 +21832,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dynamax Tactics (ATCG)",
+   "entrees": 96,
+   "couverture": {
+    "produitsNumerotes": 96,
+    "couverts": 95,
+    "numerosSetlist": 95
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:57:49.855Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSVM1C",
@@ -21215,7 +21914,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Scorching Skies (ATCG)",
+   "entrees": {
+    "Scorching Skies": 90
+   },
+   "note": "vérification automatique : 90 entrées pour 90 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.105Z",
@@ -21241,7 +21947,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Scorching Skies (ATCG)",
+   "entrees": 90,
+   "couverture": {
+    "produitsNumerotes": 90,
+    "couverts": 90,
+    "numerosSetlist": 90
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:58:12.882Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM1.5C",
@@ -21265,7 +21988,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Battle Elite (ATCG)",
+   "entrees": {
+    "Battle Elite": 88
+   },
+   "note": "vérification automatique : 88 entrées pour 88 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.114Z",
@@ -21291,7 +22021,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Battle Elite (ATCG)",
+   "entrees": 88,
+   "couverture": {
+    "produitsNumerotes": 88,
+    "couverts": 87,
+    "numerosSetlist": 87
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:58:35.720Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS2.5C",
@@ -21315,7 +22062,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Brilliant Counterattack (ATCG)",
+   "entrees": {
+    "Brilliant Counterattack": 79
+   },
+   "note": "vérification automatique : 79 entrées pour 79 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.122Z",
@@ -21341,7 +22095,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Brilliant Counterattack (ATCG)",
+   "entrees": 79,
+   "couverture": {
+    "produitsNumerotes": 79,
+    "couverts": 79,
+    "numerosSetlist": 79
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:58:57.868Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV7s",
@@ -21365,7 +22136,14 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Stellar Guidance (ATCG)",
+   "entrees": {
+    "Stellar Guidance": 229
+   },
+   "note": "vérification automatique : 229 entrées pour 63 produits, échantillon « undefined » (zh-hant)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.130Z",
@@ -21391,7 +22169,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Stellar Guidance (ATCG)",
+   "entrees": 229,
+   "couverture": {
+    "produitsNumerotes": 63,
+    "couverts": 63,
+    "numerosSetlist": 229
+   },
+   "ratio": 3.63,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T19:59:42.717Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV8s",
@@ -21415,7 +22210,14 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Stellar Lightning (ATCG)",
+   "entrees": {
+    "Stellar Lightning": 244
+   },
+   "note": "vérification automatique : 244 entrées pour 62 produits, échantillon « undefined » (zh-hant)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.139Z",
@@ -21441,7 +22243,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Stellar Lightning (ATCG)",
+   "entrees": 244,
+   "couverture": {
+    "produitsNumerotes": 62,
+    "couverts": 62,
+    "numerosSetlist": 244
+   },
+   "ratio": 3.94,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:00:34.615Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV6s",
@@ -21465,7 +22284,14 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Transfiguration Mask (ATCG)",
+   "entrees": {
+    "Transfiguration Mask": 229
+   },
+   "note": "vérification automatique : 229 entrées pour 62 produits, échantillon « undefined » (zh-hant)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.147Z",
@@ -21491,7 +22317,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Transfiguration Mask (ATCG)",
+   "entrees": 229,
+   "couverture": {
+    "produitsNumerotes": 62,
+    "couverts": 62,
+    "numerosSetlist": 229
+   },
+   "ratio": 3.69,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:01:24.222Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV4s",
@@ -21515,7 +22358,14 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Paradox Encounters (ATCG)",
+   "entrees": {
+    "Paradox Encounters": 190
+   },
+   "note": "vérification automatique : 190 entrées pour 58 produits, échantillon « undefined » (zh-hant)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.159Z",
@@ -21541,7 +22391,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Paradox Encounters (ATCG)",
+   "entrees": 190,
+   "couverture": {
+    "produitsNumerotes": 58,
+    "couverts": 58,
+    "numerosSetlist": 190
+   },
+   "ratio": 3.28,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:02:03.377Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV5s",
@@ -21565,7 +22432,14 @@
    "familleUnivers": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Ace Paradox (ATCG)",
+   "entrees": {
+    "Ace Paradox": 200
+   },
+   "note": "vérification automatique : 200 entrées pour 58 produits, échantillon « undefined » (zh-hant)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.172Z",
@@ -21591,7 +22465,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Ace Paradox (ATCG)",
+   "entrees": 200,
+   "couverture": {
+    "produitsNumerotes": 58,
+    "couverts": 58,
+    "numerosSetlist": 200
+   },
+   "ratio": 3.45,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:02:44.963Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM2.1C",
@@ -21615,7 +22506,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Golden Energy (ATCG)",
+   "entrees": {
+    "Golden Energy": 54
+   },
+   "note": "vérification automatique : 54 entrées pour 54 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:46:12.181Z",
@@ -21641,7 +22539,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Golden Energy (ATCG)",
+   "entrees": 54,
+   "couverture": {
+    "produitsNumerotes": 54,
+    "couverts": 54,
+    "numerosSetlist": 54
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:03:04.441Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SV10s",
@@ -21787,7 +22702,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Radiant Energy Vol. 3 (ATCG)",
+   "entrees": 24,
+   "couverture": {
+    "produitsNumerotes": 24,
+    "couverts": 16,
+    "numerosSetlist": 16
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 16/24 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T20:03:06.788Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 16/24 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CS5.1C",
@@ -21837,7 +22774,29 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Radiant Energy Vol. 2 (ATCG)",
+   "entrees": 23,
+   "couverture": {
+    "produitsNumerotes": 23,
+    "couverts": 13,
+    "numerosSetlist": 13
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 13/23 sous 0,95"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-15T20:03:06.797Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "couverture des numéros Cardmarket 13/23 sous 0,95"
+   ]
+  }
  },
  {
   "code": "CSM1aC",
@@ -21865,7 +22824,14 @@
    "entreesSection": 211,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Storming Emergence (ATCG)",
+   "entrees": {
+    "Storming Emergence Radiant": 211
+   },
+   "note": "vérification automatique : 211 entrées pour 211 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.508Z",
@@ -21891,7 +22857,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Storming Emergence (ATCG)",
+   "entrees": 211,
+   "couverture": {
+    "produitsNumerotes": 211,
+    "couverts": 210,
+    "numerosSetlist": 210
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:03:55.096Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM1bC",
@@ -21919,7 +22902,14 @@
    "entreesSection": 204,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Storming Emergence (ATCG)",
+   "entrees": {
+    "Storming Emergence Verdant": 204
+   },
+   "note": "vérification automatique : 204 entrées pour 204 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.516Z",
@@ -21945,7 +22935,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Storming Emergence (ATCG)",
+   "entrees": 204,
+   "couverture": {
+    "produitsNumerotes": 204,
+    "couverts": 202,
+    "numerosSetlist": 202
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:04:44.251Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM1cC",
@@ -21973,7 +22980,14 @@
    "entreesSection": 212,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Storming Emergence (ATCG)",
+   "entrees": {
+    "Storming Emergence Abundant": 212
+   },
+   "note": "vérification automatique : 212 entrées pour 212 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.523Z",
@@ -21999,7 +23013,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Storming Emergence (ATCG)",
+   "entrees": 212,
+   "couverture": {
+    "produitsNumerotes": 212,
+    "couverts": 212,
+    "numerosSetlist": 212
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:05:36.163Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM2aC",
@@ -22027,7 +23058,14 @@
    "entreesSection": 194,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Shining Synergy (ATCG)",
+   "entrees": {
+    "Shining Synergy Shower": 194
+   },
+   "note": "vérification automatique : 194 entrées pour 194 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.531Z",
@@ -22053,7 +23091,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Synergy (ATCG)",
+   "entrees": 194,
+   "couverture": {
+    "produitsNumerotes": 194,
+    "couverts": 193,
+    "numerosSetlist": 193
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:06:20.705Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM2bC",
@@ -22081,7 +23136,14 @@
    "entreesSection": 193,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Shining Synergy (ATCG)",
+   "entrees": {
+    "Shining Synergy Supreme": 193
+   },
+   "note": "vérification automatique : 193 entrées pour 193 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.539Z",
@@ -22107,7 +23169,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Synergy (ATCG)",
+   "entrees": 193,
+   "couverture": {
+    "produitsNumerotes": 193,
+    "couverts": 193,
+    "numerosSetlist": 193
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:07:05.837Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CSM2cC",
@@ -22135,7 +23214,14 @@
    "entreesSection": 192,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Shining Synergy (ATCG)",
+   "entrees": {
+    "Shining Synergy Summon": 192
+   },
+   "note": "vérification automatique : 192 entrées pour 192 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.546Z",
@@ -22161,7 +23247,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Shining Synergy (ATCG)",
+   "entrees": 192,
+   "couverture": {
+    "produitsNumerotes": 192,
+    "couverts": 192,
+    "numerosSetlist": 192
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:07:50.258Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS1aC",
@@ -22189,7 +23292,14 @@
    "entreesSection": 217,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Dynamax Clash (ATCG)",
+   "entrees": {
+    "Dynamax Clash Thunder": 217
+   },
+   "note": "vérification automatique : 217 entrées pour 217 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.554Z",
@@ -22215,7 +23325,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dynamax Clash (ATCG)",
+   "entrees": 217,
+   "couverture": {
+    "produitsNumerotes": 217,
+    "couverts": 217,
+    "numerosSetlist": 217
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:08:44.354Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS1bC",
@@ -22243,7 +23370,14 @@
    "entreesSection": 199,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Dynamax Clash (ATCG)",
+   "entrees": {
+    "Dynamax Clash Flame": 199
+   },
+   "note": "vérification automatique : 199 entrées pour 199 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:38.308Z",
@@ -22269,7 +23403,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Dynamax Clash (ATCG)",
+   "entrees": 199,
+   "couverture": {
+    "produitsNumerotes": 199,
+    "couverts": 199,
+    "numerosSetlist": 199
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:09:34.176Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS3aC",
@@ -22297,7 +23448,14 @@
    "entreesSection": 184,
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-15",
+   "page": "Primordial Arts (ATCG)",
+   "entrees": {
+    "Primordial Arts Overgrow": 184
+   },
+   "note": "vérification automatique : 184 entrées pour 184 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:38.317Z",
@@ -22323,7 +23481,24 @@
     "retireeLe": "2026-09-15T19:52:10.068Z",
     "motif": "numeroDeSetlist : les liens « <expansion> N » portent aussi le numéro (cartes à suffixe)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-15",
+   "pageResolue": "Primordial Arts (ATCG)",
+   "entrees": 184,
+   "couverture": {
+    "produitsNumerotes": 184,
+    "couverts": 182,
+    "numerosSetlist": 182
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-15T20:10:16.566Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CS3bC",

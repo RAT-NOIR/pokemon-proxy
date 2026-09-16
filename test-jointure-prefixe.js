@@ -44,9 +44,25 @@ const pSM = [produit(70, 'Rowlet', '001'), produit(71, 'Litten', '002'), produit
 const JSM = joindre(cSM, pSM, { idExpansion: 3, expansionBulba: S, tirage: 'intl' });
 verifier('préfixe non commun : seules les correspondances exactes par numéro', JSM.lignes.filter(l => l.preuve === 'set+numero').map(l => `${l.carteId}|${l.idProduct}`), ['62|72']);
 
-// 5. Un produit Cardmarket porte un préfixe : on ne retire rien (l'hypothèse « Cardmarket sans préfixe » tombe).
-const JMX = joindre([carte(80, 'Eevee', SW, 'intl', 'SWSH042'), carte(81, 'Zacian', SW, 'intl', 'SWSH018')], [produit(90, 'Eevee', '042'), produit(91, 'Zacian', 'SWSH018')], { idExpansion: 2916, expansionBulba: SW, tirage: 'intl' });
-verifier('un numéro Cardmarket préfixé : pas de retrait', JMX.lignes.filter(l => l.preuve === 'set+numero').map(l => `${l.carteId}|${l.idProduct}`), ['81|91']);
+// 5. 🔴 CARDMARKET ÉCRIT LES DEUX FORMES DANS LE MÊME SET (SM Black Star Promos, 2026-09-16) : 305 numéros nus et
+// 5 préfixés (« SM240 » à côté de « 240 », deux produits de la MÊME carte). L'exigence « aucun numéro Cardmarket n'a le
+// préfixe » désactivait le retrait pour tout le set : 3 jointures sur 310. L'impression est donc indexée sous ses DEUX
+// écritures, et chaque produit joint la sienne. Un produit ne peut toujours aller qu'à UNE carte : deux produits pour une
+// carte est le cas normal des variantes.
+const JMX = joindre([carte(80, 'Eevee', SW, 'intl', 'SWSH042'), carte(81, 'Zacian', SW, 'intl', 'SWSH018')], [produit(90, 'Eevee', '042'), produit(91, 'Zacian', 'SWSH018'), produit(92, 'Zacian', '018')], { idExpansion: 2916, expansionBulba: SW, tirage: 'intl' });
+verifier('les deux écritures dans le même set : chacune joint sa carte', paires(JMX), ['80|90', '81|91', '81|92']);
+verifier('les deux écritures : aucun produit vers plusieurs cartes', multi(JMX), 0);
+
+// 5 bis. SVP Black Star Promos (2026-09-16) : une carte SANS impression du set (appartenance par la Setlist seule) ne doit
+// pas prendre par son NOM un produit DÉJÀ joint par son numéro à une autre carte — 7 produits vers plusieurs cartes,
+// garde déclenchée. Le repli par nom ne vise que des produits encore libres.
+const SVP = 'SVP Black Star Promos';
+const cSVP = [carte(200, 'Miraidon', SVP, 'intl', '013'), { _id: 201, nomEn: 'Miraidon', attaques: [], impressions: [] }, { _id: 202, nomEn: 'Koraidon', attaques: [], impressions: [] }];
+const pSVP = [produit(210, 'Miraidon', '013'), produit(211, 'Koraidon', null)];
+const JSVP = joindre(cSVP, pSVP, { idExpansion: 5241, expansionBulba: SVP, tirage: 'intl' });
+verifier('SVP : le produit déjà joint par son numéro n’est pas repris par un nom', paires(JSVP), ['200|210', '202|211']);
+verifier('SVP : aucun produit vers plusieurs cartes', multi(JSVP), 0);
+verifier('SVP : la carte sans impression et sans produit libre est un reste', JSVP.restes.filter(r => r.type === 'carte-sans-produit').map(r => r.carteId), [201]);
 
 // 6. V-UNION : « SWSH215 (Top Left) » — la position entre parenthèses n'est pas le numéro. Sans la retirer, la carte tombait sur
 // le repli par nom (nomEn « Morpeko ») et prenait les produits Morpeko ordinaires : 11 produits vers plusieurs cartes au rejeu.

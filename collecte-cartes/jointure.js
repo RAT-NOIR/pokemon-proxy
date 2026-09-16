@@ -161,9 +161,23 @@ function joindre(cartes, produits, cible) {
     const numsImp = cartes.flatMap(c => (c.impressions || []).filter(i => i.tirage === cible.tirage && nomsCibleSet.includes(i.expansion) && (!cible.deck || i.deck === cible.deck) && numerote(i.numero)).map(i => sansPosition(i.numero)));
     const prefixesImp = new Set(numsImp.map(n => (n.match(/^([A-Z]+)(?=\d)/) || [])[1] ?? null));
     const numsProd = produits.filter(p => numerote(p.numero)).map(p => String(p.numero).trim().toUpperCase());
-    const prefixeDuSet = numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.length && numsProd.every(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
-    const cleImpression = n => cleNumero(prefixeDuSet ? sansPosition(n).replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : sansPosition(n));
+    // ⚠️ CORRIGÉ le 2026-09-16 : l'exigence « AUCUN numéro Cardmarket ne porte le préfixe » était trop forte. SM Black Star
+    // Promos a 305 numéros nus et 5 préfixés (« SM240 » à côté de « 240 », deux produits de la même carte) : 5 exceptions
+    // désactivaient le retrait pour tout le set — 3 jointures sur 310, et la concordance restait vraie (§21 n°8).
+    // L'impression est donc indexée sous ses DEUX écritures, et chaque produit joint la sienne. La condition qui reste est
+    // celle qui protège EC1 : le préfixe doit être COMMUN à toutes les impressions numérotées.
+    const prefixeDuSet = numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
+    const clesImpression = n => {
+        const nu = sansPosition(n);
+        const sansPrefixe = prefixeDuSet ? nu.replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : nu;
+        return [...new Set([cleNumero(sansPrefixe), cleNumero(nu)].filter(Boolean))];
+    };
     let cartesSansProduit = 0;
+    // 🔑 DEUX PASSES, ET L'ORDRE COMPTE (2026-09-16). Le numéro d'abord pour TOUTES les cartes, le nom ensuite : sinon le repli
+    // par nom d'une carte lue tôt prend un produit qu'une carte lue plus tard réclamera par son numéro. SVP Black Star Promos :
+    // « Miraidon » sans impression (appartenance par la Setlist seule) prenait les produits n°013 et n°092 déjà joints — 7 produits
+    // vers plusieurs cartes. Un produit joint par son NUMÉRO n'est plus offert au nom de personne.
+    const etatDeCarte = new Map();
     for (const carte of cartes) {
         // L'appartenance au set a DEUX sources : l'impression déclarée sur la page (jpexpansion=…),
         // ou, à défaut, le seul fait que la Setlist du set a lié cette page (cas des énergies de
@@ -179,11 +193,20 @@ function joindre(cartes, produits, cible) {
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;
-        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').map(i => cleImpression(i.numero)).filter(Boolean))];
+        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').flatMap(i => clesImpression(i.numero)))];
         if (numeros.length && parNumero.size) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
-            preuve = imps.every(i => i.source === 'setlist') ? 'setlist+numero' : 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set retiré : commun à toutes les impressions, absent des ${numsProd.length} numéros Cardmarket)` : ''}`;
+            preuve = imps.every(i => i.source === 'setlist') ? 'setlist+numero' : 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set : les deux écritures essayées, ${numsProd.filter(n => /^\d/.test(n)).length} numéros Cardmarket nus sur ${numsProd.length})` : ''}`;
         }
+        for (const p of trouves) attache(carte, p, preuve, detail);
+        etatDeCarte.set(carte, { imp, imps, source, numeros, joint: trouves.length > 0 });
+    }
+    // PASSE 2 — le repli par NOM, sur les produits qu'aucun NUMÉRO n'a pris.
+    const jointsParNumero = new Set(produitsJoints.keys());
+    for (const carte of cartes) {
+        const { imp, imps, source, numeros, joint } = etatDeCarte.get(carte);
+        if (joint) continue;
+        let trouves = [], preuve = null, detail = null;
         // 🔴 PAS DE REPLI PAR NOM QUAND LE NUMÉRO A ÉTÉ ESSAYÉ (2026-09-15). Une carte qui déclare un numéro dans un catalogue
         // numéroté et ne le trouve pas N'EST PAS dans ce catalogue : la rattacher par son nom prend le produit d'une AUTRE carte
         // du même nom. SWSH (56 produits vers plusieurs cartes) et xsv8a « Additionals », un sous-ensemble de numéros (36),
@@ -199,7 +222,12 @@ function joindre(cartes, produits, cible) {
             // cartes). ⚠️ PAS les cartes sans impression déclarée (énergies, pages génériques, « setlist+nom ») : le premier jet
             // les incluait et retirait 1 à 44 jointures sur 19 sets sains au rejeu (WCP 5, s8a-G 8, S-P 44) — refusé.
             const impSansNumero = imp && !imps.some(i => numerote(i.numero));
-            for (const k of clesNom) { trouves = (parNom.get(k) || []).filter(p => !(impSansNumero && parNumero.size) || !numerote(p.numero)); if (trouves.length) break; }
+            for (const k of clesNom) {
+                trouves = (parNom.get(k) || [])
+                    .filter(p => !jointsParNumero.has(p.idProduct))                                  // déjà désigné par un numéro : il n'est pas à prendre
+                    .filter(p => !(impSansNumero && parNumero.size) || !numerote(p.numero));
+                if (trouves.length) break;
+            }
             if (trouves.length) {
                 const noms = new Set((carte.attaques || []).map(a => normaliserNom(a.nom)));
                 const concordants = trouves.filter(p => p.attaques.length && p.attaques.every(a => noms.has(normaliserNom(a))));

@@ -26,6 +26,10 @@ const { sourcesDeployees } = require('./collecte-cartes/sources-deployees');
 // Rejeu de concordanceDesNoms sur les 106 sets collectés au 2026-09-15 : 20th 14,5 %, le plus bas des sains VS 80,1 %
 // (abréviations de dresseurs : « Falkners-TM-01 » / « Falkner's Technical Machine 01 »). Seuil au milieu, pas au bord.
 const SEUIL_NOMS = 0.5;
+// Taux de jointure (produits joints / produits), mesuré le 2026-09-16 sur les 290 sets ayant au moins une jointure en base :
+// 288 au-dessus de 0,5, DEUX en dessous — SM 3/310 = 0,010 et xASC 26/293 = 0,089, tous deux faux. Le plus bas des sains est
+// sp2 à 0,500 (4 produits sur 8), puis BRS 0,656. Le seuil coûte donc 0 set sain et attrape les deux défauts.
+const SEUIL_JOINTURE = 0.5;
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const TAILLE = Number(arg('bloc') || 20);
@@ -90,7 +94,7 @@ const lancer = (args, fichier) => {
             if (arretDemande) break;
             if (!l.verifie) { b.aRegarder++; l.collecte = { le: new Date().toISOString(), etat: 'a-regarder', raisons: l.verif.raisons }; marquer(l); continue; }
             const e0 = await etatDe(l.slugSet);
-            let etat;
+            let etat, c = {};                     // `c` = le `complet` du set, lu aussi par l'arrêt en fin de tour
             if (e0?.phase === 'verifie') { etat = 'deja-fait'; b.dejaFait++; }
             else {
                 const st = lancer(['collecteur-texte.js', `--set=${l.code}`, '--attendre'], path.join(DOSSIER, `texte-${l.code.replace(/[^A-Za-z0-9.-]/g, '_')}.log`));
@@ -108,7 +112,7 @@ const lancer = (args, fichier) => {
                 // Les restes s'impriment À CÔTÉ du verdict : « ok » ne dit que la concordance, et un produit joint à
                 // plusieurs cartes (une page Bulbapedia au numéro décalé, sm10 et m3 au bloc 2) est concordant ET faux.
                 // Sur un échec, `complet` est celui d'une collecte ANTÉRIEURE : on ne l'imprime pas comme s'il était frais.
-                const c = reussi ? (s1?.complet || {}) : {};
+                c = reussi ? (s1?.complet || {}) : {};
                 const plusieurs = c.restes?.['produit-vers-plusieurs-cartes'] || 0;
                 b.produitsVersPlusieursCartes += plusieurs;
                 // 🔴 LE CONTRÔLE INDÉPENDANT DE LA JOINTURE (2026-09-15). `20th` était « ok », 84/84 joints, concordant — et
@@ -123,6 +127,13 @@ const lancer = (args, fichier) => {
                     if (noms.evaluables && noms.taux < SEUIL_NOMS) { etat = 'noms-discordants'; b.ok--; b.nomsDiscordants++; }
                     // SWSH : noms justes, mais 56 produits joints à plusieurs cartes (repli par nom sur des numéros à préfixe).
                     else if (plusieursCartesAnormal(c)) { etat = 'noms-discordants'; b.ok--; b.nomsDiscordants++; noms.exemples = [`${plusieurs} produits joints à plusieurs cartes (seuil ${SEUIL_PLUSIEURS_CARTES})`, ...noms.exemples]; }
+                }
+                // 🔴 LE TAUX DE JOINTURE, GARDE AJOUTÉE LE 2026-09-16. `SM Black Star Promos` est sorti « ok », concordant,
+                // avec 3 produits joints sur 316 : une concordance est une TAUTOLOGIE pour ce qui n'a jamais été joint
+                // (§21 n°8), et le contrôle des noms ne voit rien (1 seul nom évaluable, juste). Ce qui manquait était le
+                // chiffre le plus simple : combien de produits ont trouvé leur carte.
+                if (etat === 'ok' && c.produits && c.produitsJoints / c.produits < SEUIL_JOINTURE) {
+                    etat = 'jointure-basse'; b.ok--; b.jointureBasse = (b.jointureBasse || 0) + 1;
                 }
                 // RÈGLE DU TESTEUR, 2026-09-15 : un set CONCORDANT part en file d'images IMMÉDIATEMENT, sans validation. Le
                 // worker mesure ses 3 originaux avant tout téléchargement et liste ses refus. Sans source : listé, jamais
@@ -146,7 +157,7 @@ const lancer = (args, fichier) => {
             b.imagesEnAttente[l.bulba.tirage === 'intl' ? 'intl' : 'jp']++;
             marquer(l);
             if (collectes && collectes % 5 === 0 && etat !== 'deja-fait') dire(`📍 POINT après ${collectes} collectes : bloc ${blocs} — ${JSON.stringify(b)}`);
-            if (etat === 'noms-discordants') { arretNoms = l.code; dire(`⛔ ${l.code} : noms discordants — ARRÊT de la collecte (règle du testeur : un chiffre qui ne colle pas arrête tout, il s'écrit au plan). Ses jointures restent en base : les retirer est une décision du testeur.`); break; }
+            if (etat === 'noms-discordants' || etat === 'jointure-basse') { arretNoms = l.code; dire(`⛔ ${l.code} : ${etat === 'jointure-basse' ? `jointure ${c?.produitsJoints}/${c?.produits} sous ${SEUIL_JOINTURE}` : 'noms discordants'} — ARRÊT de la collecte (règle du testeur : un chiffre qui ne colle pas arrête tout, il s'écrit au plan). Ses jointures restent en base : les retirer est une décision du testeur.`); break; }
             if (echecsSuite >= 3) { dire(`⛔ TROIS ÉCHECS DE SUITE — arrêt : une source en panne ne se contourne pas en brûlant la table.`); break; }
         }
         for (const k of Object.keys(bilanTotal)) bilanTotal[k] += b[k];
