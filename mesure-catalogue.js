@@ -61,6 +61,20 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const attente = await cx.db.collection('file_images').countDocuments({ etat: 'attente' });
     console.log(`   file d'images : ${enCours} en cours · ${attente} en attente — ${enCours ? '🔴 LA FILE ÉCRIT : instantané, pas dénominateur' : 'à l\'arrêt'}`);
 
+    // ════ LE FILET QUI MANQUAIT — un contrôle TRANSVERSAL, après coup ════
+    // 🔑 Un produit Cardmarket est UNE carte. Cette propriété est vraie de la BASE ENTIÈRE, jamais
+    // d'une exécution : chaque collecte prend son produit de son côté, seule et sans ambiguïté locale,
+    // et toutes nos gardes d'unicité sont à l'intérieur d'un appel. Une ambiguïté répartie sur
+    // plusieurs exécutions ne se voit pas d'une exécution — il faut donc la chercher APRÈS, sur le
+    // tout. 1 993 lignes fausses ont vécu des semaines parce que personne ne posait cette question.
+    // Elle est désormais posée à CHAQUE mesure, et elle coûte une agrégation.
+    const multi = await cx.db.collection('cartes_produits').aggregate([
+        { $group: { _id: '$idProduct', cartes: { $addToSet: '$carteId' } } },
+        { $match: { 'cartes.1': { $exists: true } } }, { $count: 'n' }
+    ]).toArray();
+    const n = multi[0]?.n || 0;
+    console.log(`   ⚖️ contrôle transversal : ${n} produit(s) rattaché(s) à PLUSIEURS cartes ${n ? '— 🔴 autant de fiches qui montrent un lien, un illustrateur ou un visuel d\'une autre carte (node detacher-jointures-fausses.js)' : '✅'}`);
+
     if (process.argv.includes('--par-set')) {
         console.log(`\n   les 30 sets au plus gros écart (fiche sans visuel) :`);
         for (const [s, c] of [...parSet].sort((a, b) => (b[1].fiches - b[1].visuels) - (a[1].fiches - a[1].visuels)).slice(0, 30))

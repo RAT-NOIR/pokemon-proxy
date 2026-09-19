@@ -5,6 +5,41 @@ renégocie pas en cours de route.
 
 ---
 
+## 32. UNE AMBIGUÏTÉ RÉPARTIE SUR PLUSIEURS EXÉCUTIONS NE SE VOIT PAS D'UNE EXÉCUTION — 2026-09-19
+
+**La règle, en une ligne : toutes nos gardes d'unicité tranchent à l'intérieur d'UN appel, et l'unicité que nous
+promettons est une propriété de la BASE ENTIÈRE.** Une garde locale ne peut pas voir qu'une autre exécution a déjà
+pris le même objet : de son point de vue, il n'y a pas d'ambiguïté — il n'y a qu'un candidat, le sien.
+
+**L'occurrence, mesurée.** Le bonus « jumeau occidental » de `collecteur-texte.js` testait qu'**AU MOINS UNE** carte
+du set déclare « Base Set », puis joignait **TOUTES** les cartes du set à ses produits — `some` puis `all`. Celles
+qui ne déclaraient rien étaient prises par le repli par nom (`setlist+nom`, « appartenance par la Setlist seule »).
+Et comme ce bonus rejoue depuis **chaque** set japonais dont une page déclare une réimpression, le produit
+`Bulbasaur-V1-BS44` a fini rattaché à **sept** cartes Bulbasaur : Base Set, Bulbasaur Deck, Shining Legends,
+Pokémon GO, SWSH Promo, BW-P, DPt-P. **279 produits, 1 993 lignes fausses, 4 % des jointures.**
+
+🔴 **ET LE GARDE QUI AURAIT DÛ L'ATTRAPER AVAIT ÉTÉ POSÉ LE MATIN MÊME.** « Un nom qui désigne plusieurs cartes ne
+désigne rien » (jointure.js) tranche produit par produit, **une fois toutes les cartes vues** — toutes les cartes
+de CET appel. Chaque collecte prenait le produit seule, sans la moindre ambiguïté locale, et écrivait une ligne
+parfaitement justifiée. **Sept exécutions irréprochables font un défaut.**
+
+🔑 **LE FILET EST UN CONTRÔLE TRANSVERSAL, ET IL COÛTE UNE AGRÉGATION.** La propriété à vérifier ne se vérifie pas
+au moment d'écrire, elle se vérifie **après, sur le tout** : « aucun produit n'est rattaché à plusieurs cartes ».
+C'est désormais une ligne de `mesure-catalogue.js`, imprimée à chaque mesure, et `detacher-jointures-fausses.js`
+la répare en gardant la carte qui **DÉCLARE** l'impression (tirage, expansion, numéro) — la donnée de la source,
+pas une préférence — et en ne touchant à rien quand zéro ou plusieurs la déclarent.
+
+⚠️ **ET LA MÊME QUESTION SE POSE POUR TOUTES LES AUTRES UNICITÉS DU DÉPÔT.** Partout où une garde dit « un seul
+candidat » à l'intérieur d'une exécution, écrire le contrôle d'ensemble qui lui correspond : une image par
+(carte, set), un `nomAffichage` distinct par set, une vérité par ligne de banc. **Une invariante de base de données
+se contrôle dans la base, pas dans la fonction qui écrit.**
+
+⚠️ **Corollaire, déjà connu mais jamais aussi cher (§23)** : une règle corrigée ne corrige AUCUNE ligne déjà
+écrite, et `ecrireJointure` fait des upserts — rien n'efface une ligne devenue fausse. Un correctif de jointure se
+livre **en deux moitiés**, le code et la reprise des lignes existantes, ou il ne se livre pas.
+
+---
+
 ## 31. UNE CLÉ PAR INCLUSION APPARIE TOUJOURS QUELQUE CHOSE — 2026-09-19
 
 **La règle, en une ligne : une clé d'appariement par INCLUSION trouve toujours un partenaire, donc elle ne prouve

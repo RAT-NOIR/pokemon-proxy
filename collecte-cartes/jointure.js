@@ -275,6 +275,16 @@ function joindre(cartes, produits, cible) {
                 const avecAttaques = trouves.every(p => p.attaques.length && p.attaques.every(a => noms.has(normaliserNom(a))));
                 preuve = `${source}+nom${avecAttaques ? '+attaques' : ''}`;
                 detail = `nom « ${carte.nomEn} »${avecAttaques ? ' + attaques ' + trouves[0].attaques.join(' | ') : ''} dans l'expansion ${cible.idExpansion}${imp ? '' : ' (appartenance par la Setlist seule)'}`;
+                // 🔴 « setlist+nom » COUPÉ (2026-09-19), ET LUI SEUL. Une carte qui ne DÉCLARE aucune
+                // impression dans cette expansion et qui n'a que son nom à offrir ne prouve rien : c'est
+                // la clé qui a rattaché « Bulbasaur-V1-BS44 » à sept cartes Bulbasaur. Mesuré sur les
+                // 51 560 lignes avant de couper : 2 049 lignes, dont 1 827 (89 %) sur un produit déjà
+                // rattaché à plusieurs cartes ; couper coûte 222 produits qui n'avaient que ça.
+                // ⚠️ LES AUTRES RESTENT, ET C'EST LE MÊME CHIFFRE QUI LE DIT : « set+nom » (632 lignes)
+                // et « set+nom+attaques » (908) sont à 0 % de produits multi-cartes et feraient perdre
+                // 1 536 produits. La carte y DÉCLARE l'impression ; seul le numéro manque. On ne coupe
+                // pas un repli parce qu'il est un repli, on coupe celui dont on a mesuré les dégâts.
+                if (preuve === 'setlist+nom') { trouves = []; preuve = null; detail = null; }
             }
         }
         for (const p of trouves) {
