@@ -25,6 +25,10 @@ const setSchema = new mongoose.Schema({
 const carteSchema = new mongoose.Schema({
     _id: Number,                          // pageid Bulbapedia
     nomEn: String, nomJa: String, nomFr: String,
+    // 🔴 `nomFr` VIENT DE CARDMARKET, JAMAIS DE BULBAPEDIA : les traductions de Bulbapedia sont sous
+    // licence non commerciale. La source est écrite à côté du nom pour qu'on n'ait pas à s'en souvenir,
+    // et `null` y est une VALEUR — « ses produits ne s'accordent pas » — pas une absence de traitement.
+    nomFrSource: String, nomFrLe: Date,
     categorie: String, type: String, pv: mongoose.Schema.Types.Mixed, stade: String, ndex: Number,
     rarete: String, illustrateur: String,
     attaques: [{ _id: false, nom: String, nomJa: String, cout: [String], degats: String }],

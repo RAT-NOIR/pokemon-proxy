@@ -27,6 +27,36 @@ sauve rien si le critère est laxiste — ici chaque faux appariement était par
 Celui-ci écrivait le fichier puis affichait les paires ; la copie de sauvegarde prise à la main est la seule raison
 pour laquelle le retour en arrière a coûté une commande.
 
+### La SECONDE forme, le même jour : une COUVERTURE DE NUMÉROS — 2026-09-19
+
+**C'est la version la plus claire de la leçon, parce que l'inclusion n'y porte pas sur un libellé mais sur des
+ENTIERS, et que rien dans le code ne ressemble à une inclusion.** Pour apparier les expansions Cardmarket sans ligne
+de table aux noms d'expansion que nos propres pages déclarent, la clé demandait : « quelle part des numéros de
+l'expansion Cardmarket est couverte par les numéros de ce nom ? », et retenait le meilleur. Ce qu'elle a rendu :
+
+| paire proposée | couverture | ce que c'est réellement |
+|---|---|---|
+| **`Base-Set` → « White Flare »** | **100 %** | deux sets sans le moindre rapport, 30 ans d'écart |
+| `POP-Series-5` → « Blastoise + Kyurem-EX Combo Deck » | 100 % | un deck de 18 cartes « couvre » une série de 17 |
+
+**Sur des plages DENSES de PETITS ENTIERS, toute expansion couvre toute autre** : les numéros 1…17 de POP-5 sont
+inclus dans les numéros 1…18 du deck, et les 102 de Base Set dans les 173 de White Flare. La couverture ne mesure
+pas l'identité, elle mesure la TAILLE du candidat — plus il est gros, plus il couvre, et la clé choisissait donc
+systématiquement le plus gros. C'est exactement l'inclusion de libellés, avec des nombres à la place des mots.
+
+🔑 **ET LE SYMPTÔME EST LE MÊME QU'AU PREMIER CAS : UN TOTAL FLATTEUR.** « 6 568 produits récupérés sans une
+requête » — le chiffre que le testeur attendait, tombé du premier essai. Ce qui l'a attrapé n'est ni un test ni un
+seuil : **la table des paires a été imprimée et lue ligne à ligne**, et la première ligne disait « Base Set → White
+Flare ». Remplacée par l'**ÉGALITÉ du nom** (accents, `&`/`+` normalisés) : 26 paires, **677 produits** — dix fois
+moins, et vraies. La couverture est gardée, mais **imprimée à côté comme CONTRÔLE**, jamais comme clé : 17 paires
+sur 26 la passent à ≥ 0,9, et les 9 autres se regardent à la main.
+
+⚠️ **LA FORME À RECONNAÎTRE, POUR LA PROCHAINE.** Une clé est une inclusion déguisée dès qu'elle peut répondre
+« 100 % » sans que les deux ensembles aient la même taille. Le contrôle est mécanique et tient en une ligne :
+**demander la couverture DANS LES DEUX SENS**. `Base-Set → White Flare` rend 100 % d'un côté et 59 % de l'autre ;
+une vraie identité rend deux fois le même chiffre. Une clé asymétrique qu'on lit comme une preuve d'identité
+appariera toujours le plus gros candidat disponible.
+
 ---
 
 ## 30. UNE RECHERCHE QUI NE TROUVE RIEN ET UNE DONNÉE QUI N'EXISTE PAS RENDENT LE MÊME RÉSULTAT — 2026-09-19
