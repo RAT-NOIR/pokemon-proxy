@@ -1,5 +1,29 @@
 # Plan de collecte massive : texte, images, table
 
+## 🔴 CE QUI N'AURA JAMAIS DE VISUEL PAR NOS DEUX SOURCES — 2026-09-19
+
+**L'unité de mesure du chantier, à citer à chaque rapport** (dénominateur : `numeros_cartes`, 69 598 produits
+Cardmarket) : **fiches 48 908 · visuels 17 213 · écart 52 385**, dont 31 695 ont une fiche sans image.
+
+**LE CHINOIS EST IRRÉDUCTIBLE : 37 sets, 5 768 produits.** Vérifié par TÉMOINS, pas supposé (§30) :
+- **artofpkm** — 10 noms de sets chinois cherchés dans ses 419 sets, **10 absents** (Gem Pack, Storming Emergence,
+  Dynamax Clash, Primordial Arts, Shining Synergy, Blade Awakening, Terastal Gathering, Miracle Journey, Bonus
+  Round, Scorching Skies). C'est un site japonais ;
+- **Bulbapedia** — les pages « (ATCG) » ne portent que des bannières et des symboles de set (mesuré sur les
+  6 pages sauvées), et sur 15 cartes de CSV7C tirées au sort, **0 fichier** au nom du set chinois sur 20 fichiers vus.
+Le texte de ces 5 768 produits est collecté et juste ; **leur visuel n'existe pas chez nos deux sources.**
+
+**⛔ DÉCISION DU TESTEUR, 2026-09-19 : MA1 (Mega Evolution indonésien/thaï) N'AURA PAS L'IMAGE DU SET OCCIDENTAL
+HOMONYME.** La mesure qui a posé la question : sur 15 cartes de MA1, **15 portent un fichier** `…MegaEvolution61.jpg`
+— mais c'est le set **occidental** du même nom. Même illustration, **texte anglais, autre produit**. Servir ce fichier
+serait montrer une carte qui n'est pas celle-là, c'est-à-dire la règle du §19 enfreinte en connaissance de cause.
+🔑 **Une fiche sans image est un état normal ; un visuel faux ne l'est pas.** Les 6 sets ID/TH (957 produits) restent
+sans visuel, comme le chinois.
+
+**✅ Et ce qui a été RÉCUPÉRÉ le même jour, pour ne pas lire cette liste comme une fatalité** : 29 sets japonais dont
+le libellé artofpkm est réordonné (`Inteleon VMAX High Class Deck` ↔ `High Class Deck, Inteleon VMAX`) et les
+**5 Additionals** (1 067 produits) rattachées au set de base, avec la mention « motif non distingué par la source ».
+
 > **Pour l'exécutant :** superpowers:executing-plans, lot par lot. Les cases `- [ ]` suivent l'avancement.
 > Un point 🛑 attend la validation du testeur. Hors de ces points, **on n'attend personne entre deux blocs**.
 > ⚠️ Les divergences entre les skills et `CLAUDE.md` sont listées au §2 et **attendent une décision** :

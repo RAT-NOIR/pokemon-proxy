@@ -5,6 +5,30 @@ renégocie pas en cours de route.
 
 ---
 
+## 31. UNE CLÉ PAR INCLUSION APPARIE TOUJOURS QUELQUE CHOSE — 2026-09-19
+
+**La règle, en une ligne : une clé d'appariement par INCLUSION trouve toujours un partenaire, donc elle ne prouve
+rien.** L'égalité peut échouer et le dire ; l'inclusion, jamais : il existe presque toujours un libellé plus court
+contenu dans le nôtre, et il a l'air d'un résultat.
+
+**L'occurrence, mesurée.** Pour rattraper les libellés réordonnés (§30), la clé acceptait « les mots de A sont inclus
+dans ceux de B, ou l'inverse ». « M-P Promotional cards » **contient** « P Promotional Cards » : les promos **M-P,
+L-P, chinoises, thaïes et indonésiennes** ont reçu le set artofpkm des promos « P ». **9 sources fausses, dont 5 pour
+des sets qu'artofpkm ne porte pas du tout** — et elles étaient déjà ÉCRITES dans `sources-sets-auto.json` quand je
+les ai vues. Restaurées depuis la copie, clé resserrée à l'ÉGALITÉ des mots (l'ordre et le pluriel en moins), 29 sets
+retenus, 0 ambigu.
+
+🔑 **CE QUI L'A ATTRAPÉE N'EST PAS UN COMPTE, C'EST D'AVOIR LU LES 9 PAIRES.** Le compte, lui, disait « +54 sources » —
+un excellent chiffre, et c'était le symptôme. **Une clé d'appariement se relit ligne à ligne avant de s'en servir**,
+parce qu'elle ne produit pas des erreurs visibles : elle produit des faits qui ont l'air justes. Et l'unicité ne
+sauve rien si le critère est laxiste — ici chaque faux appariement était parfaitement unique.
+
+⚠️ **Corollaire d'écriture** : un outil qui apparie doit écrire son résultat APRÈS l'avoir imprimé, jamais avant.
+Celui-ci écrivait le fichier puis affichait les paires ; la copie de sauvegarde prise à la main est la seule raison
+pour laquelle le retour en arrière a coûté une commande.
+
+---
+
 ## 30. UNE RECHERCHE QUI NE TROUVE RIEN ET UNE DONNÉE QUI N'EXISTE PAS RENDENT LE MÊME RÉSULTAT — 2026-09-19
 
 **L'occurrence.** Pour savoir si Bulbapedia couvrait les promos indonésiennes et thaïes, la sonde
