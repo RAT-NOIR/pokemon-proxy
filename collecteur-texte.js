@@ -351,16 +351,28 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la
     // complétude). ⚠️ Seulement depuis un set JAPONAIS : sur un set occidental, le « jumeau » serait
     // le japonais, et il est déjà collecté par sa propre ligne de table.
+    // 🔴 « SOME » PUIS JOINDRE « ALL » — LE DÉFAUT QUI FABRIQUAIT 1 993 LIGNES FAUSSES (2026-09-19).
+    // Ce bonus testait qu'AU MOINS UNE carte du set déclare le jumeau occidental, puis joignait TOUTES
+    // les cartes du set à ses produits. Les autres n'ont aucune impression dans cette expansion : le
+    // repli par nom les prenait quand même (preuve « setlist+nom », « appartenance par la Setlist
+    // seule »), et comme le bonus rejoue depuis CHAQUE set japonais dont une page déclare une
+    // réimpression, le produit « Bulbasaur-V1-BS44 » a fini rattaché à SEPT cartes « Bulbasaur » —
+    // Base Set, Shining Legends, Pokémon GO, SWSH Promo, BW-P, DPt-P, Bulbasaur Deck.
+    // 🔑 Le garde d'unicité posé plus tôt aujourd'hui ne pouvait pas l'attraper : il tranche à
+    // l'intérieur d'UN appel de `joindre`, et ici chaque collecte prenait le produit de son côté, seule
+    // et sans ambiguïté locale. Une ambiguïté répartie sur plusieurs exécutions ne se voit pas d'une
+    // exécution. La correction est de ne joindre QUE les cartes qui déclarent réellement le jumeau.
     let intlLignes = 0;
     for (const [nomIntl, idExpIntl] of (TIRAGE === 'jp' ? Object.entries(EXPANSIONS_INTL) : [])) {
-        if (!cartesDuSet.some(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === nomIntl))) continue;
+        const cartesJumelles = cartesDuSet.filter(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === nomIntl));
+        if (!cartesJumelles.length) continue;
         const prodIntl = await produitsDeLExpansion(prod, idExpIntl);
-        const Ji = joindre(cartesDuSet, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
+        const Ji = joindre(cartesJumelles, prodIntl, { idExpansion: idExpIntl, expansionBulba: nomIntl, tirage: 'intl' });
         for (const l of Ji.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
         const metaIntl = new Map(prodIntl.map(p => [p.idProduct, p.idMetacard]));
         for (const l of Ji.lignes) await M.Carte.updateOne({ _id: l.carteId }, { $addToSet: { 'liens.idProduct': l.idProduct, ...(metaIntl.get(l.idProduct) != null ? { 'liens.idMetacards': metaIntl.get(l.idProduct) } : {}) } });
         intlLignes += Ji.lignes.length;
-        console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
+        console.log(`   bonus intl « ${nomIntl} » (exp ${idExpIntl}) : ${cartesJumelles.length} cartes sur ${cartesDuSet.length} déclarent ce jumeau → ${Ji.lignes.length} lignes sur ${prodIntl.length} produits, ${Ji.restes.length} restes non écrits`);
     }
     await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'jointure' } });
 
