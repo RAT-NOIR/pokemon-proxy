@@ -30,4 +30,20 @@ function sourcesDeployees(ref = 'origin/main') {
     } catch (e) { return { erreur: `sources de ${ref} illisibles : ${e.message.split('\n')[0]}` }; }
 }
 
-module.exports = { sourcesDeployees };
+/**
+ * Le worker de la version poussée sait-il AIGUILLER la file sur `source` ? Ajouté le 2026-09-19 avec les images
+ * Bulbapedia : une entrée `source: 'bulbapedia'` prise par un worker qui l'ignore serait collectée comme de
+ * l'artofpkm, refusée faute de source, et sortie de la file POUR TOUJOURS (§23). Même famille que la garde
+ * ci-dessus : ce qui n'est pas dans le commit du worker n'existe pas pour lui.
+ * @returns {{ sait: boolean, commit?: string, erreur?: string }}
+ */
+function aiguillageDeploye(ref = 'origin/main') {
+    try {
+        const racine = path.join(__dirname, '..');
+        const src = execFileSync(git(), ['show', `${ref}:collecteur-images.js`], { cwd: racine, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        const commit = execFileSync(git(), ['rev-parse', '--short', ref], { cwd: racine, encoding: 'utf8' }).trim();
+        return { sait: /sourceDuSet === 'bulbapedia'/.test(src), commit };
+    } catch (e) { return { sait: false, erreur: `collecteur-images.js de ${ref} illisible : ${e.message.split('\n')[0]}` }; }
+}
+
+module.exports = { sourcesDeployees, aiguillageDeploye };

@@ -16,7 +16,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const { ouvrirConnexions } = require('./garde');
 const { TABLE, TABLE_AUTO } = require('./table-sets');
 const { sourceDe } = require('./sources-sets');
-const { sourcesDeployees } = require('./sources-deployees');
+const { sourcesDeployees, aiguillageDeploye } = require('./sources-deployees');
 
 const aBlanc = process.argv.includes('--a-blanc');
 (async () => {
@@ -57,9 +57,26 @@ const aBlanc = process.argv.includes('--a-blanc');
     const deployees = sourcesDeployees();
     if (deployees.erreur) console.log(`⚠️ ${deployees.erreur} : aucun set ne sera enfilé`);
     else console.log(`sources de la version poussée : ${deployees.ref} ${deployees.commit}`);
+    // 🔑 L'OCCIDENTAL PASSE PAR BULBAPEDIA (2026-09-19). artofpkm ne porte que le japonais : les sets occidentaux
+    // n'avaient AUCUNE source d'images, et la file se vidait sans que rien ne le dise. Leur visuel vient de la page
+    // de la carte, fichier choisi PAR SET ET PAR NUMÉRO (`tirage-image.js`, le piège de `image=` du §19 : 361
+    // impressions sur 1 319 auraient été fausses). La file porte `source` ; le worker aiguille dessus.
+    const ligneDe = new Map(lignes.map(l => [l.code, l]));
+    const occidental = code => { const l = ligneDe.get(code); return l?.region === 'occidental' && l?.bulba?.tirage === 'intl'; };
+    const enfilesBulba = [], aiguillageAbsent = [];
+    const aiguillage = aiguillageDeploye();
+    console.log(`aiguillage « source » dans la version poussée : ${aiguillage.sait ? `OUI (${aiguillage.commit})` : `NON (${aiguillage.erreur ?? aiguillage.commit}) — aucun set occidental ne sera enfilé`}`);
     for (const s of sets) {
         const code = codeDeSlug.get(s._id);
         if (!code || !verifies.has(s._id)) continue;
+        if (!sourceDe(code) && occidental(code)) {
+            const f = await F.findOne({ _id: code });
+            if (f) { deja[f.etat] = (deja[f.etat] || 0) + 1; continue; }
+            if (!aiguillage.sait) { aiguillageAbsent.push(code); continue; }
+            if (!aBlanc) await F.insertOne({ _id: code, ordre: ordre++, etat: 'attente', source: 'bulbapedia', ajouteLe: new Date() });
+            enfilesBulba.push(code);
+            continue;
+        }
         if (!sourceDe(code)) { sansSource.push(code); continue; }
         if (deployees.erreur || !deployees.sourceDe(code)) { nonPoussee.push(code); continue; }
         const f = await F.findOne({ _id: code });
@@ -70,7 +87,9 @@ const aBlanc = process.argv.includes('--a-blanc');
     const file = await F.find({}).toArray();
     console.log(`\nDÉNOMINATEUR : ${sets.length} sets concordants en base · ${etats.length} états d'images`);
     console.log(`remis en file (listes tronquées) : ${[...new Set(remis)].length} ${JSON.stringify([...new Set(remis)])}`);
-    console.log(`enfilés : ${enfiles.length} ${JSON.stringify(enfiles)}`);
+    console.log(`enfilés (artofpkm) : ${enfiles.length} ${JSON.stringify(enfiles)}`);
+    console.log(`enfilés (bulbapedia, sets occidentaux) : ${enfilesBulba.length} ${JSON.stringify(enfilesBulba)}`);
+    console.log(`en attente de l'AIGUILLAGE déployé (occidentaux, non enfilés) : ${aiguillageAbsent.length} ${JSON.stringify(aiguillageAbsent)}`);
     console.log(`déjà en file (état conservé) : ${JSON.stringify(deja)}`);
     console.log(`SANS SOURCE d'images artofpkm (listés, non enfilés) : ${sansSource.length} ${JSON.stringify(sansSource)}`);
     console.log(`source locale NON POUSSÉE (listés, non enfilés — relancer après push et redéploiement) : ${nonPoussee.length} ${JSON.stringify(nonPoussee)}`);

@@ -218,6 +218,13 @@ async function collecterSet(code, M, { mesurerSeulement }) {
     }
 }
 
+module.exports = { collecterSet, resoudreSet, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
+
+// ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE (2026-09-19). Le worker Render `collecteur-images.js --boucle`
+// importe `collecterSet` et prend LUI-MÊME le verrou global de cette source : sans cette garde, un simple
+// `require` lancerait une seconde collecte dans le même processus.
+if (require.main !== module) return;
+
 (async () => {
     const codesDemandes = arg('sets') ? arg('sets').split(',').map(s => s.trim()).filter(Boolean) : TABLE.filter(l => l.region === 'occidental').map(l => l.code);
     const buckets = drapeau('plan') ? ['R2_BUCKET_BRUT'] : ['R2_BUCKET_BRUT', 'R2_BUCKET_IMAGES'];

@@ -483,7 +483,28 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) await new Promise(r => setTimeout(r, 5000));
                 continue;
             }
-            const b = await collecterSet(suivant._id, M, dossierRapport);
+            // 🔑 DEUX SOURCES DANS UNE SEULE FILE (2026-09-19). artofpkm ne couvre QUE le japonais : 193 sets
+            // collectés en texte — tout l'occidental — n'avaient aucune source d'images. La file porte donc
+            // `source` ; sans le champ, c'est artofpkm, et rien ne change pour les 196 entrées déjà écrites.
+            // ⚠️ LES DEUX VERROUS GLOBAUX SONT DISTINCTS PARCE QUE CE NE SONT PAS LES MÊMES SERVEURS (§17) :
+            // on REND celui d'artofpkm avant de frapper Bulbagarden, et on prend le sien — que le collecteur
+            // de TEXTE prend aussi depuis le 2026-09-14, donc les deux ne peuvent pas doubler la cadence.
+            const sourceDuSet = suivant.source || SOURCE;
+            let b;
+            if (sourceDuSet === 'bulbapedia') {
+                const bulbaImg = require('./collecteur-images-bulba');
+                await verrouGlobal.rendre();
+                const vb = fabriquerVerrou({ Modele: M.EtatImages, id: bulbaImg.VERROU_GLOBAL, dureeMs: bulbaImg.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${bulbaImg.SOURCE}` });
+                let tenuPar = await vb.prendre();
+                for (let essai = 0; tenuPar && !arretDemande; essai++) {
+                    if (essai === 0) console.log(`⏳ verrou global ${bulbaImg.SOURCE} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — j'attends, ${ATTENTE_VERROU_MS / 1000} s entre deux essais.`);
+                    await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
+                    tenuPar = await vb.prendre();
+                }
+                if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
+                try { b = await bulbaImg.collecterSet(suivant._id, M, { mesurerSeulement: false }); }
+                finally { await vb.rendre(); }
+            } else b = await collecterSet(suivant._id, M, dossierRapport);
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
             // « refuse » le sortait de la file pour toujours, et personne ne l'aurait repris.
