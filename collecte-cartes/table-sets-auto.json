@@ -12452,6 +12452,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:40:23.720Z",
+   "etat": "ok"
   }
  },
  {
@@ -12495,6 +12499,10 @@
    "ratio": 0.85,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:41:17.582Z",
+   "etat": "ok"
   }
  },
  {
@@ -12538,6 +12546,10 @@
    "ratio": 0.93,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:42:10.462Z",
+   "etat": "ok"
   }
  },
  {
@@ -12581,6 +12593,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:43:04.794Z",
+   "etat": "ok"
   }
  },
  {
@@ -12624,6 +12640,10 @@
    "ratio": 0.91,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:43:57.314Z",
+   "etat": "ok"
   }
  },
  {
@@ -12667,6 +12687,10 @@
    "ratio": 0.85,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:44:43.489Z",
+   "etat": "ok"
   }
  },
  {
@@ -12710,6 +12734,10 @@
    "ratio": 0.82,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:45:28.462Z",
+   "etat": "ok"
   }
  },
  {
@@ -12753,6 +12781,10 @@
    "ratio": 0.81,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:46:13.106Z",
+   "etat": "ok"
   }
  },
  {
@@ -12796,6 +12828,10 @@
    "ratio": 0.82,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:46:59.366Z",
+   "etat": "ok"
   }
  },
  {
@@ -12839,6 +12875,10 @@
    "ratio": 0.9,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:47:49.351Z",
+   "etat": "ok"
   }
  },
  {
@@ -12882,6 +12922,10 @@
    "ratio": 0.83,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:48:35.428Z",
+   "etat": "ok"
   }
  },
  {
@@ -12925,6 +12969,10 @@
    "ratio": 0.82,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:49:21.609Z",
+   "etat": "ok"
   }
  },
  {
@@ -12968,6 +13016,10 @@
    "ratio": 0.92,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:50:08.844Z",
+   "etat": "ok"
   }
  },
  {
@@ -13011,6 +13063,10 @@
    "ratio": 0.59,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:50:47.152Z",
+   "etat": "ok"
   }
  },
  {
@@ -13054,6 +13110,10 @@
    "ratio": 0.91,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:51:35.662Z",
+   "etat": "ok"
   }
  },
  {
@@ -13097,6 +13157,10 @@
    "ratio": 0.87,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:52:24.509Z",
+   "etat": "ok"
   }
  },
  {
@@ -13140,6 +13204,10 @@
    "ratio": 0.94,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:53:13.346Z",
+   "etat": "ok"
   }
  },
  {
@@ -13183,6 +13251,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:54:04.890Z",
+   "etat": "ok"
   }
  },
  {
@@ -13226,6 +13298,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:54:49.487Z",
+   "etat": "ok"
   }
  },
  {
@@ -13269,6 +13345,10 @@
    "ratio": 0.92,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:55:34.410Z",
+   "etat": "ok"
   }
  },
  {
@@ -13304,6 +13384,13 @@
    ],
    "ratio": 0.48,
    "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 0.48 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T04:55:40.775Z",
+   "etat": "a-regarder",
    "raisons": [
     "entrées/produits 0.48 hors [0,5 ; 1,5]"
    ]
@@ -13350,6 +13437,10 @@
    "ratio": 0.96,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:56:24.536Z",
+   "etat": "ok"
   }
  },
  {
@@ -13383,6 +13474,13 @@
    "tiragesVus": [],
    "ratio": 0.92,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series One » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T04:56:24.546Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series One » (vus : aucun)"
    ]
@@ -13429,6 +13527,10 @@
    "ratio": 0.84,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:57:01.908Z",
+   "etat": "ok"
   }
  },
  {
@@ -13472,6 +13574,10 @@
    "ratio": 0.98,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:57:41.774Z",
+   "etat": "ok"
   }
  },
  {
@@ -13505,6 +13611,13 @@
    "tiragesVus": [],
    "ratio": 0.91,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Three » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T04:57:41.782Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Three » (vus : aucun)"
    ]
@@ -13551,6 +13664,10 @@
    "ratio": 0.88,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:58:29.729Z",
+   "etat": "ok"
   }
  },
  {
@@ -13594,6 +13711,10 @@
    "ratio": 0.92,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:59:09.748Z",
+   "etat": "ok"
   }
  },
  {
@@ -13637,6 +13758,10 @@
    "ratio": 0.88,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T04:59:49.406Z",
+   "etat": "ok"
   }
  },
  {
@@ -13672,6 +13797,13 @@
    ],
    "ratio": 0.37,
    "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 0.37 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T04:59:49.414Z",
+   "etat": "a-regarder",
    "raisons": [
     "entrées/produits 0.37 hors [0,5 ; 1,5]"
    ]
@@ -13718,6 +13850,10 @@
    "ratio": 0.94,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:00:29.675Z",
+   "etat": "ok"
   }
  },
  {
@@ -13761,6 +13897,10 @@
    "ratio": 0.88,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:01:07.001Z",
+   "etat": "ok"
   }
  },
  {
@@ -13804,6 +13944,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:01:45.506Z",
+   "etat": "ok"
   }
  },
  {
@@ -13837,6 +13981,13 @@
    "tiragesVus": [],
    "ratio": 0.95,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Two » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:01:45.515Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Two » (vus : aucun)"
    ]
@@ -13883,6 +14034,10 @@
    "ratio": 0.98,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:02:25.459Z",
+   "etat": "ok"
   }
  },
  {
@@ -13926,6 +14081,10 @@
    "ratio": 0.88,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:03:03.009Z",
+   "etat": "ok"
   }
  },
  {
@@ -13969,6 +14128,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:03:49.552Z",
+   "etat": "ok"
   }
  },
  {
@@ -14012,6 +14175,10 @@
    "ratio": 0.93,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:04:29.064Z",
+   "etat": "ok"
   }
  },
  {
@@ -14046,6 +14213,13 @@
    "raisons": [
     "aucune entrée de Setlist pour « Black Bolt & White Flare »"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:04:29.071Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   ]
   }
  },
  {
@@ -14077,6 +14251,13 @@
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:04:29.079Z",
+   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Black Bolt & White Flare »"
    ]
@@ -14123,6 +14304,10 @@
    "ratio": 0.98,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:05:18.871Z",
+   "etat": "ok"
   }
  },
  {
@@ -14166,6 +14351,10 @@
    "ratio": 0.98,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:05:57.094Z",
+   "etat": "ok"
   }
  },
  {
@@ -14209,6 +14398,10 @@
    "ratio": 0.9,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:06:48.217Z",
+   "etat": "ok"
   }
  },
  {
@@ -14247,6 +14440,13 @@
    "raisons": [
     "entrées/produits 0.42 hors [0,5 ; 1,5]"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:06:48.225Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "entrées/produits 0.42 hors [0,5 ; 1,5]"
+   ]
   }
  },
  {
@@ -14282,6 +14482,13 @@
    ],
    "ratio": 1.59,
    "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.59 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:06:48.233Z",
+   "etat": "a-regarder",
    "raisons": [
     "entrées/produits 1.59 hors [0,5 ; 1,5]"
    ]
@@ -14328,6 +14535,10 @@
    "ratio": 0.96,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:07:36.024Z",
+   "etat": "ok"
   }
  },
  {
@@ -14371,6 +14582,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:08:17.515Z",
+   "etat": "ok"
   }
  },
  {
@@ -14414,6 +14629,10 @@
    "ratio": 0.97,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:08:53.854Z",
+   "etat": "ok"
   }
  },
  {
@@ -14457,6 +14676,10 @@
    "ratio": 0.79,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:09:26.815Z",
+   "etat": "ok"
   }
  },
  {
@@ -14500,6 +14723,10 @@
    "ratio": 0.8,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:10:03.148Z",
+   "etat": "ok"
   }
  },
  {
@@ -14543,6 +14770,10 @@
    "ratio": 0.92,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:10:58.273Z",
+   "etat": "ok"
   }
  },
  {
@@ -14586,6 +14817,10 @@
    "ratio": 0.99,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:11:40.616Z",
+   "etat": "ok"
   }
  },
  {
@@ -14629,6 +14864,10 @@
    "ratio": 0.89,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:12:09.593Z",
+   "etat": "ok"
   }
  },
  {
@@ -14672,6 +14911,10 @@
    "ratio": 0.82,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:12:46.269Z",
+   "etat": "ok"
   }
  },
  {
@@ -14715,6 +14958,10 @@
    "ratio": 0.91,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:13:21.986Z",
+   "etat": "ok"
   }
  },
  {
@@ -14758,6 +15005,10 @@
    "ratio": 0.95,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:14:02.066Z",
+   "etat": "ok"
   }
  },
  {
@@ -14782,7 +15033,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "MEP Black Star Promos (TCG)",
+   "entrees": {
+    "MEP Black Star Promos": 115
+   },
+   "note": "vérification automatique : 115 entrées pour 137 produits, échantillon « Chespin (MEP Promo 58) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "MEP Black Star Promos (TCG)",
+   "entrees": 115,
+   "echantillon": "Chespin (MEP Promo 58)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.84,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:14:45.199Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "BKP",
@@ -14806,7 +15080,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "BREAKpoint (TCG)",
+   "entrees": {
+    "BREAKpoint": 123
+   },
+   "note": "vérification automatique : 123 entrées pour 137 produits, échantillon « Aegislash (BREAKpoint 62) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "BREAKpoint (TCG)",
+   "entrees": 123,
+   "echantillon": "Aegislash (BREAKpoint 62)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:15:22.238Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SW",
@@ -14830,7 +15127,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Secret Wonders (TCG)",
+   "entrees": {
+    "Secret Wonders": 132
+   },
+   "note": "vérification automatique : 132 entrées pour 136 produits, échantillon « Smoochum (Secret Wonders 67) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Secret Wonders (TCG)",
+   "entrees": 132,
+   "echantillon": "Smoochum (Secret Wonders 67)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:15:56.393Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "GEN",
@@ -14854,7 +15174,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Generations (TCG)",
+   "entrees": {
+    "Generations": 83
+   },
+   "note": "vérification automatique : 83 entrées pour 135 produits, échantillon « Machamp (Furious Fists 46) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Generations (TCG)",
+   "entrees": 83,
+   "echantillon": "Machamp (Furious Fists 46)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.61,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:16:20.077Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PHF",
@@ -14878,7 +15221,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Phantom Forces (TCG)",
+   "entrees": {
+    "Phantom Forces": 122
+   },
+   "note": "vérification automatique : 122 entrées pour 135 produits, échantillon « Dialga-EX (Phantom Forces 62) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Phantom Forces (TCG)",
+   "entrees": 122,
+   "echantillon": "Dialga-EX (Phantom Forces 62)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:16:59.277Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "MT",
@@ -14902,7 +15268,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Mysterious Treasures (TCG)",
+   "entrees": {
+    "Mysterious Treasures": 124
+   },
+   "note": "vérification automatique : 124 entrées pour 134 produits, échantillon « Shieldon (Mysterious Treasures 63) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Mysterious Treasures (TCG)",
+   "entrees": 124,
+   "echantillon": "Shieldon (Mysterious Treasures 63)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.93,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:17:29.297Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "GH",
@@ -14926,7 +15315,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Gym Heroes (TCG)",
+   "entrees": {
+    "Gym Heroes": 132
+   },
+   "note": "vérification automatique : 132 entrées pour 133 produits, échantillon « Brock's Mankey (Gym Heroes 67) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Gym Heroes (TCG)",
+   "entrees": 132,
+   "echantillon": "Brock's Mankey (Gym Heroes 67)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:18:13.142Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "GC",
@@ -14950,7 +15362,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Gym Challenge (TCG)",
+   "entrees": {
+    "Gym Challenge": 132
+   },
+   "note": "vérification automatique : 132 entrées pour 132 produits, échantillon « Brock's Diglett (Gym Challenge 67) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Gym Challenge (TCG)",
+   "entrees": 132,
+   "echantillon": "Brock's Diglett (Gym Challenge 67)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:18:50.735Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PFL",
@@ -14974,7 +15409,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Phantasmal Flames (TCG)",
+   "entrees": {
+    "Phantasmal Flames": 130
+   },
+   "note": "vérification automatique : 130 entrées pour 130 produits, échantillon « Krookodile (Phantasmal Flames 66) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Phantasmal Flames (TCG)",
+   "entrees": 130,
+   "echantillon": "Krookodile (Phantasmal Flames 66)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:19:23.559Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "B2",
@@ -14998,7 +15456,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Base Set 2 (TCG)",
+   "entrees": {
+    "Base Set 2": 130
+   },
+   "note": "vérification automatique : 130 entrées pour 130 produits, échantillon « Bellsprout (Jungle 49) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Base Set 2 (TCG)",
+   "entrees": 130,
+   "echantillon": "Bellsprout (Jungle 49)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:19:56.670Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DRX",
@@ -15022,7 +15503,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Dragons Exalted (TCG)",
+   "entrees": {
+    "Dragons Exalted": 128
+   },
+   "note": "vérification automatique : 128 entrées pour 130 produits, échantillon « Roggenrola (Dragons Exalted 65) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Dragons Exalted (TCG)",
+   "entrees": 128,
+   "echantillon": "Roggenrola (Dragons Exalted 65)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:20:30.510Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "HS",
@@ -15046,7 +15550,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "HeartGold & SoulSilver (TCG)",
+   "entrees": {
+    "HeartGold & SoulSilver": 124
+   },
+   "note": "vérification automatique : 124 entrées pour 128 produits, échantillon « Exeggcute (HeartGold & SoulSilver 63) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "HeartGold & SoulSilver (TCG)",
+   "entrees": 124,
+   "echantillon": "Exeggcute (HeartGold & SoulSilver 63)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:21:01.078Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "RR",
@@ -15070,7 +15597,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Rising Rivals (TCG)",
+   "entrees": {
+    "Rising Rivals": 114
+   },
+   "note": "vérification automatique : 114 entrées pour 128 produits, échantillon « Carvanha (Rising Rivals 58) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Rising Rivals (TCG)",
+   "entrees": 114,
+   "echantillon": "Carvanha (Rising Rivals 58)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.89,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:21:36.656Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "STS",
@@ -15094,7 +15644,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Steam Siege (TCG)",
+   "entrees": {
+    "Steam Siege": 116
+   },
+   "note": "vérification automatique : 116 entrées pour 126 produits, échantillon « Toxicroak (Steam Siege 59) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Steam Siege (TCG)",
+   "entrees": 116,
+   "echantillon": "Toxicroak (Steam Siege 59)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:22:04.027Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "FFI",
@@ -15118,7 +15691,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Furious Fists (TCG)",
+   "entrees": {
+    "Furious Fists": 113
+   },
+   "note": "vérification automatique : 113 entrées pour 126 produits, échantillon « Mienshao (Furious Fists 57) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Furious Fists (TCG)",
+   "entrees": 113,
+   "echantillon": "Mienshao (Furious Fists 57)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:22:32.680Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "FLF",
@@ -15142,7 +15738,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Flashfire (TCG)",
+   "entrees": {
+    "Flashfire": 109
+   },
+   "note": "vérification automatique : 109 entrées pour 125 produits, échantillon « Skuntank (Flashfire 55) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Flashfire (TCG)",
+   "entrees": 109,
+   "echantillon": "Skuntank (Flashfire 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.87,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:23:03.305Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PLF",
@@ -15166,7 +15785,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Plasma Freeze (TCG)",
+   "entrees": {
+    "Plasma Freeze": 122
+   },
+   "note": "vérification automatique : 122 entrées pour 125 produits, échantillon « Makuhita (Plasma Freeze 62) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Plasma Freeze (TCG)",
+   "entrees": 122,
+   "echantillon": "Makuhita (Plasma Freeze 62)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:23:35.623Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "POR",
@@ -15190,7 +15832,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Perfect Order (TCG)",
+   "entrees": {
+    "Perfect Order": 124
+   },
+   "note": "vérification automatique : 124 entrées pour 124 produits, échantillon « Snorlax (Perfect Order 63) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Perfect Order (TCG)",
+   "entrees": 124,
+   "echantillon": "Snorlax (Perfect Order 63)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:24:04.716Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DEX",
@@ -15214,7 +15879,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Dark Explorers (TCG)",
+   "entrees": {
+    "Dark Explorers": 111
+   },
+   "note": "vérification automatique : 111 entrées pour 124 produits, échantillon « Excadrill (Dark Explorers 56) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Dark Explorers (TCG)",
+   "entrees": 111,
+   "echantillon": "Excadrill (Dark Explorers 56)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:24:38.535Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PPS6",
@@ -15238,7 +15926,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Six (TCG)",
+   "entrees": 102,
+   "echantillon": "Heatran (Twilight Masquerade 123)",
+   "tiragesVus": [],
+   "ratio": 0.86,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Six » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:24:38.543Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Six » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "PPS7",
@@ -15262,7 +15969,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Seven (TCG)",
+   "entrees": 102,
+   "echantillon": "Magneton (Surging Sparks 59)",
+   "tiragesVus": [],
+   "ratio": 0.86,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Seven » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:24:38.552Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Seven » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "PPS8",
@@ -15286,7 +16012,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Eight (TCG)",
+   "entrees": 102,
+   "echantillon": "Team Rocket's Giovanni (Destined Rivals 174)",
+   "tiragesVus": [],
+   "ratio": 0.86,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Eight » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:24:38.559Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Eight » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "FL",
@@ -15310,7 +16055,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX FireRed & LeafGreen (TCG)",
+   "entrees": {
+    "EX FireRed & LeafGreen": 116
+   },
+   "note": "vérification automatique : 116 entrées pour 117 produits, échantillon « Clefairy (EX FireRed & LeafGreen 59) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX FireRed & LeafGreen (TCG)",
+   "entrees": 116,
+   "echantillon": "Clefairy (EX FireRed & LeafGreen 59)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:25:14.279Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DS",
@@ -15334,7 +16102,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Delta Species (TCG)",
+   "entrees": {
+    "EX Delta Species": 114
+   },
+   "note": "vérification automatique : 114 entrées pour 115 produits, échantillon « Bagon δ (EX Delta Species 58) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Delta Species (TCG)",
+   "entrees": 114,
+   "echantillon": "Bagon δ (EX Delta Species 58)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:25:50.135Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PPS5",
@@ -15358,7 +16149,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Five (TCG)",
+   "entrees": 98,
+   "echantillon": "Earthen Vessel (Paradox Rift 163)",
+   "tiragesVus": [],
+   "ratio": 0.85,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Five » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:25:56.375Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Five » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "LC",
@@ -15382,7 +16192,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Legendary Collection (TCG)",
+   "entrees": {
+    "Legendary Collection": 110
+   },
+   "note": "vérification automatique : 110 entrées pour 115 produits, échantillon « Nidorino (Base Set 37) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Legendary Collection (TCG)",
+   "entrees": 110,
+   "echantillon": "Nidorino (Base Set 37)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:26:24.722Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "RS",
@@ -15406,7 +16239,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Ruby & Sapphire (TCG)",
+   "entrees": {
+    "EX Ruby & Sapphire": 109
+   },
+   "note": "vérification automatique : 109 entrées pour 115 produits, échantillon « Goldeen (EX Ruby & Sapphire 55) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Ruby & Sapphire (TCG)",
+   "entrees": 109,
+   "echantillon": "Goldeen (EX Ruby & Sapphire 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:27:14.669Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "ROS",
@@ -15430,7 +16286,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Roaring Skies (TCG)",
+   "entrees": {
+    "Roaring Skies": 110
+   },
+   "note": "vérification automatique : 110 entrées pour 115 produits, échantillon « Shelgon (Roaring Skies 56) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Roaring Skies (TCG)",
+   "entrees": 110,
+   "echantillon": "Shelgon (Roaring Skies 56)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:27:44.122Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CL",
@@ -15454,7 +16333,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Call of Legends (TCG)",
+   "entrees": {
+    "Call of Legends": 95
+   },
+   "note": "vérification automatique : 95 entrées pour 115 produits, échantillon « Pidgeotto (Triumphant 47) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Call of Legends (TCG)",
+   "entrees": 95,
+   "echantillon": "Pidgeotto (Triumphant 47)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.83,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:28:12.384Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "AR",
@@ -15478,7 +16380,24 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Platinum: Arceus (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Platinum: Arceus »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:28:12.393Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Platinum: Arceus »"
+   ]
+  }
  },
  {
   "code": "NG",
@@ -15502,7 +16421,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Neo Genesis (TCG)",
+   "entrees": {
+    "Neo Genesis": 105
+   },
+   "note": "vérification automatique : 105 entrées pour 114 produits, échantillon « Chikorita (Neo Genesis 53) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Neo Genesis (TCG)",
+   "entrees": 105,
+   "echantillon": "Chikorita (Neo Genesis 53)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:28:41.779Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PPS4",
@@ -15526,7 +16468,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Four (TCG)",
+   "entrees": 97,
+   "echantillon": "Nest Ball (Sun & Moon 123)",
+   "tiragesVus": [],
+   "ratio": 0.85,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Four » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:28:41.797Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Four » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "NDE",
@@ -15550,7 +16511,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Neo Destiny (TCG)",
+   "entrees": {
+    "Neo Destiny": 113
+   },
+   "note": "vérification automatique : 113 entrées pour 113 produits, échantillon « Unown C (Neo Destiny 57) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Neo Destiny (TCG)",
+   "entrees": 113,
+   "echantillon": "Unown C (Neo Destiny 57)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:29:10.545Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "EM",
@@ -15574,7 +16558,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Emerald (TCG)",
+   "entrees": {
+    "EX Emerald": 107
+   },
+   "note": "vérification automatique : 107 entrées pour 112 produits, échantillon « Makuhita (EX Emerald 54) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Emerald (TCG)",
+   "entrees": 107,
+   "echantillon": "Makuhita (EX Emerald 54)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:29:59.549Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "TRR",
@@ -15598,7 +16605,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Team Rocket Returns (TCG)",
+   "entrees": {
+    "EX Team Rocket Returns": 111
+   },
+   "note": "vérification automatique : 111 entrées pour 112 produits, échantillon « Grimer (EX Team Rocket Returns 56) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Team Rocket Returns (TCG)",
+   "entrees": 111,
+   "echantillon": "Grimer (EX Team Rocket Returns 56)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:30:27.708Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "GE",
@@ -15622,7 +16652,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Great Encounters (TCG)",
+   "entrees": {
+    "Great Encounters": 106
+   },
+   "note": "vérification automatique : 106 entrées pour 111 produits, échantillon « Slowbro (Great Encounters 54) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Great Encounters (TCG)",
+   "entrees": 106,
+   "echantillon": "Slowbro (Great Encounters 54)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:30:56.111Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "NVI",
@@ -15646,7 +16699,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Noble Victories (TCG)",
+   "entrees": {
+    "Noble Victories": 102
+   },
+   "note": "vérification automatique : 102 entrées pour 110 produits, échantillon « Reuniclus (Noble Victories 52) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Noble Victories (TCG)",
+   "entrees": 102,
+   "echantillon": "Reuniclus (Noble Victories 52)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.93,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:31:26.645Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DX",
@@ -15670,7 +16746,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Deoxys (TCG)",
+   "entrees": {
+    "EX Deoxys": 108
+   },
+   "note": "vérification automatique : 108 entrées pour 110 produits, échantillon « Beldum (EX Deoxys 55) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Deoxys (TCG)",
+   "entrees": 108,
+   "echantillon": "Beldum (EX Deoxys 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:31:58.264Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PPS9",
@@ -15694,7 +16793,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Play! Pokémon Prize Pack Series Nine (TCG)",
+   "entrees": 92,
+   "echantillon": "Mega Sharpedo ex (Phantasmal Flames 61)",
+   "tiragesVus": [],
+   "ratio": 0.84,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Nine » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:31:58.273Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Play! Pokémon Prize Pack Series Nine » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "PK",
@@ -15718,7 +16836,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Power Keepers (TCG)",
+   "entrees": {
+    "EX Power Keepers": 108
+   },
+   "note": "vérification automatique : 108 entrées pour 109 produits, échantillon « Meditite (EX Power Keepers 55) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Power Keepers (TCG)",
+   "entrees": 108,
+   "echantillon": "Meditite (EX Power Keepers 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:32:27.278Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "AOR",
@@ -15742,7 +16883,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Ancient Origins (TCG)",
+   "entrees": {
+    "Ancient Origins": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 109 produits, échantillon « Registeel (Ancient Origins 51) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Ancient Origins (TCG)",
+   "entrees": 100,
+   "echantillon": "Registeel (Ancient Origins 51)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:32:53.205Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "MD",
@@ -15766,7 +16930,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Majestic Dawn (TCG)",
+   "entrees": {
+    "Majestic Dawn": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 109 produits, échantillon « Aipom (Majestic Dawn 51) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Majestic Dawn (TCG)",
+   "entrees": 100,
+   "echantillon": "Aipom (Majestic Dawn 51)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.92,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:33:31.571Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "TM",
@@ -15790,7 +16977,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Triumphant (TCG)",
+   "entrees": {
+    "Triumphant": 103
+   },
+   "note": "vérification automatique : 103 entrées pour 107 produits, échantillon « Wailmer (Triumphant 52) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Triumphant (TCG)",
+   "entrees": 103,
+   "echantillon": "Wailmer (Triumphant 52)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:33:58.350Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "HL",
@@ -15814,7 +17024,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Hidden Legends (TCG)",
+   "entrees": {
+    "EX Hidden Legends": 102
+   },
+   "note": "vérification automatique : 102 entrées pour 107 produits, échantillon « Baltoy (EX Hidden Legends 52) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Hidden Legends (TCG)",
+   "entrees": 102,
+   "echantillon": "Baltoy (EX Hidden Legends 52)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:34:28.564Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PLB",
@@ -15838,7 +17071,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Plasma Blast (TCG)",
+   "entrees": {
+    "Plasma Blast": 105
+   },
+   "note": "vérification automatique : 105 entrées pour 107 produits, échantillon « Archen (Plasma Blast 53) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Plasma Blast (TCG)",
+   "entrees": 105,
+   "echantillon": "Archen (Plasma Blast 53)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:35:04.440Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "STF",
@@ -15862,7 +17118,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Stormfront (TCG)",
+   "entrees": {
+    "Stormfront": 106
+   },
+   "note": "vérification automatique : 106 entrées pour 107 produits, échantillon « Bidoof (Stormfront 54) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Stormfront (TCG)",
+   "entrees": 106,
+   "echantillon": "Bidoof (Stormfront 54)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:35:35.752Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "UL",
@@ -15886,7 +17165,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Unleashed (TCG)",
+   "entrees": {
+    "Unleashed": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 106 produits, échantillon « Horsea (Unleashed 49) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Unleashed (TCG)",
+   "entrees": 96,
+   "echantillon": "Horsea (Unleashed 49)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.91,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:36:11.823Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DR",
@@ -15910,7 +17212,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Dragon (TCG)",
+   "entrees": {
+    "EX Dragon": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 106 produits, échantillon « Barboach (EX Dragon 51) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Dragon (TCG)",
+   "entrees": 100,
+   "echantillon": "Barboach (EX Dragon 51)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:36:46.792Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "BW",
@@ -15934,7 +17259,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "BW Black Star Promos (TCG)",
+   "entrees": {
+    "BW Black Star Promos": 101
+   },
+   "note": "vérification automatique : 101 entrées pour 106 produits, échantillon « Crobat (Plasma Storm 55) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "BW Black Star Promos (TCG)",
+   "entrees": 101,
+   "echantillon": "Crobat (Plasma Storm 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:37:12.518Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CG",
@@ -15958,7 +17306,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Crystal Guardians (TCG)",
+   "entrees": {
+    "EX Crystal Guardians": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 104 produits, échantillon « Duskull (EX Crystal Guardians 51) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Crystal Guardians (TCG)",
+   "entrees": 100,
+   "echantillon": "Duskull (EX Crystal Guardians 51)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:37:42.205Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "NXD",
@@ -15982,7 +17353,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Next Destinies (TCG)",
+   "entrees": {
+    "Next Destinies": 103
+   },
+   "note": "vérification automatique : 103 entrées pour 104 produits, échantillon « Grimer (Next Destinies 52) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Next Destinies (TCG)",
+   "entrees": 103,
+   "echantillon": "Grimer (Next Destinies 52)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:38:10.252Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SS",
@@ -16006,7 +17400,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Sandstorm (TCG)",
+   "entrees": {
+    "EX Sandstorm": 100
+   },
+   "note": "vérification automatique : 100 entrées pour 103 produits, échantillon « Quilava (EX Sandstorm 51) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Sandstorm (TCG)",
+   "entrees": 100,
+   "echantillon": "Quilava (EX Sandstorm 51)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:38:41.461Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SFA",
@@ -16030,7 +17447,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Shrouded Fable (TCG)",
+   "entrees": {
+    "Shrouded Fable": 99
+   },
+   "note": "vérification automatique : 99 entrées pour 102 produits, échantillon « Eevee (Shrouded Fable 50) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Shrouded Fable (TCG)",
+   "entrees": 99,
+   "echantillon": "Eevee (Shrouded Fable 50)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:39:05.714Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DF",
@@ -16054,7 +17494,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Dragon Frontiers (TCG)",
+   "entrees": {
+    "EX Dragon Frontiers": 101
+   },
+   "note": "vérification automatique : 101 entrées pour 102 produits, échantillon « Larvitar (Expedition 116) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Dragon Frontiers (TCG)",
+   "entrees": 101,
+   "echantillon": "Larvitar (Expedition 116)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:39:39.311Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "EPO",
@@ -16078,7 +17541,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Emerging Powers (TCG)",
+   "entrees": {
+    "Emerging Powers": 98
+   },
+   "note": "vérification automatique : 98 entrées pour 101 produits, échantillon « Roggenrola (Emerging Powers 50) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Emerging Powers (TCG)",
+   "entrees": 98,
+   "echantillon": "Roggenrola (Emerging Powers 50)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:40:13.206Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "MA",
@@ -16102,7 +17588,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Team Magma vs Team Aqua (TCG)",
+   "entrees": {
+    "EX Team Magma vs Team Aqua": 97
+   },
+   "note": "vérification automatique : 97 entrées pour 98 produits, échantillon « Team Aqua's Chinchou (EX Team Magma vs Team Aqua 49) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Team Magma vs Team Aqua (TCG)",
+   "entrees": 97,
+   "echantillon": "Team Aqua's Chinchou (EX Team Magma vs Team Aqua 49)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:40:41.789Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "LM",
@@ -16126,7 +17635,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "EX Legend Maker (TCG)",
+   "entrees": {
+    "EX Legend Maker": 93
+   },
+   "note": "vérification automatique : 93 entrées pour 96 produits, échantillon « Weepinbell (EX Legend Maker 47) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "EX Legend Maker (TCG)",
+   "entrees": 93,
+   "echantillon": "Weepinbell (EX Legend Maker 47)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:41:09.568Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "UD",
@@ -16150,7 +17682,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Undaunted (TCG)",
+   "entrees": {
+    "Undaunted": 91
+   },
+   "note": "vérification automatique : 91 entrées pour 95 produits, échantillon « Drifloon (Undaunted 46) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Undaunted (TCG)",
+   "entrees": 91,
+   "echantillon": "Drifloon (Undaunted 46)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:41:38.751Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "PGO",
@@ -16174,7 +17729,29 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Pokémon GO (TCG)",
+   "entrees": 189,
+   "echantillon": "Ariados (Pokémon GO 7)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 2.08,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 2.08 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:41:38.764Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "entrées/produits 2.08 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "DRM",
@@ -16198,7 +17775,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Dragon Majesty (TCG)",
+   "entrees": {
+    "Dragon Majesty": 78
+   },
+   "note": "vérification automatique : 78 entrées pour 81 produits, échantillon « Altaria (Dragon Majesty 40) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Dragon Majesty (TCG)",
+   "entrees": 78,
+   "echantillon": "Altaria (Dragon Majesty 40)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:41:59.774Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SLG",
@@ -16222,7 +17822,29 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Shining Legends (TCG)",
+   "entrees": 160,
+   "echantillon": "Venusaur (Shining Legends 3)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 1.98 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:41:59.783Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "entrées/produits 1.98 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "CPA",
@@ -16246,7 +17868,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Champion's Path (TCG)",
+   "entrees": {
+    "Champion's Path": 80
+   },
+   "note": "vérification automatique : 80 entrées pour 80 produits, échantillon « Scraggy (Champion's Path 41) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Champion's Path (TCG)",
+   "entrees": 80,
+   "echantillon": "Scraggy (Champion's Path 41)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:42:22.843Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "NDI",
@@ -16270,7 +17915,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Neo Discovery (TCG)",
+   "entrees": {
+    "Neo Discovery": 75
+   },
+   "note": "vérification automatique : 75 entrées pour 75 produits, échantillon « Eevee (Neo Discovery 38) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Neo Discovery (TCG)",
+   "entrees": 75,
+   "echantillon": "Eevee (Neo Discovery 38)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:42:43.221Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "NR",
@@ -16294,7 +17962,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Neo Revelation (TCG)",
+   "entrees": {
+    "Neo Revelation": 66
+   },
+   "note": "vérification automatique : 66 entrées pour 66 produits, échantillon « Octillery (Neo Revelation 34) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Neo Revelation (TCG)",
+   "entrees": 66,
+   "echantillon": "Octillery (Neo Revelation 34)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:43:05.733Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "JU",
@@ -16318,7 +18009,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Jungle (TCG)",
+   "entrees": {
+    "Jungle": 64
+   },
+   "note": "vérification automatique : 64 entrées pour 66 produits, échantillon « Butterfree (Jungle 33) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Jungle (TCG)",
+   "entrees": 64,
+   "echantillon": "Butterfree (Jungle 33)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:43:22.206Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "FO",
@@ -16342,7 +18056,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Fossil (TCG)",
+   "entrees": {
+    "Fossil": 62
+   },
+   "note": "vérification automatique : 62 entrées pour 63 produits, échantillon « Cloyster (Fossil 32) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Fossil (TCG)",
+   "entrees": 62,
+   "echantillon": "Cloyster (Fossil 32)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:43:39.024Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "DPPR",
@@ -16366,7 +18103,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "DP Black Star Promos (TCG)",
+   "entrees": {
+    "DP Black Star Promos": 56
+   },
+   "note": "vérification automatique : 56 entrées pour 62 produits, échantillon « Rhyperior LV.X (Legends Awakened 145) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "DP Black Star Promos (TCG)",
+   "entrees": 56,
+   "echantillon": "Rhyperior LV.X (Legends Awakened 145)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:43:56.991Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "SVE",
@@ -16390,7 +18150,24 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "SVE Basic Energies (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « SVE Basic Energies »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:43:57.000Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « SVE Basic Energies »"
+   ]
+  }
  },
  {
   "code": "WP",
@@ -16414,7 +18191,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Wizards Black Star Promos (TCG)",
+   "entrees": {
+    "Wizards Black Star Promos": 53
+   },
+   "note": "vérification automatique : 53 entrées pour 55 produits, échantillon « Pikachu (Wizards Promo 27) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Wizards Black Star Promos (TCG)",
+   "entrees": 53,
+   "echantillon": "Pikachu (Wizards Promo 27)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:44:21.360Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "CEL",
@@ -16438,7 +18238,28 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Celebrations (TCG)",
+   "entrees": 25,
+   "echantillon": "Cosmog (Celebrations 13)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.48,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 0.48 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-16T05:44:21.368Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "entrées/produits 0.48 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "NP",
@@ -16462,7 +18283,30 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Nintendo Black Star Promos (TCG)",
+   "entrees": {
+    "Nintendo Black Star Promos": 40
+   },
+   "note": "vérification automatique : 40 entrées pour 46 produits, échantillon « Jirachi (Nintendo Promo 21) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Nintendo Black Star Promos (TCG)",
+   "entrees": 40,
+   "echantillon": "Jirachi (Nintendo Promo 21)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.87,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:44:38.318Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "KSS",
@@ -16486,7 +18330,30 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Kalos Starter Set (TCG)",
+   "entrees": {
+    "Kalos Starter Set": 39
+   },
+   "note": "vérification automatique : 39 entrées pour 42 produits, échantillon « Bisharp (Kalos Starter Set 20) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Kalos Starter Set (TCG)",
+   "entrees": 39,
+   "echantillon": "Bisharp (Kalos Starter Set 20)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.93,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:45:00.225Z",
+   "etat": "ok"
+  }
  },
  {
   "code": "HSP",
@@ -16510,7 +18377,30 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "HGSS Black Star Promos (TCG)",
+   "entrees": {
+    "HGSS Black Star Promos": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 41 produits, échantillon « Smoochum (HeartGold & SoulSilver 30) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "HGSS Black Star Promos (TCG)",
+   "entrees": 25,
+   "echantillon": "Smoochum (HeartGold & SoulSilver 30)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.61,
+   "etat": "OK",
+   "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-16T05:45:11.944Z",
+   "etat": "noms-discordants"
+  }
  },
  {
   "code": "MCD18F",
@@ -16534,7 +18424,19 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2018 (TCG)",
+   "entrees": 52,
+   "echantillon": "Murkrow (Guardians Rising 78)",
+   "tiragesVus": [],
+   "ratio": 1.3,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2018 » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "DCR",
@@ -16558,7 +18460,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Double Crisis (TCG)",
+   "entrees": {
+    "Double Crisis": 34
+   },
+   "note": "vérification automatique : 34 entrées pour 34 produits, échantillon « Team Aqua's Mightyena (Double Crisis 18) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Double Crisis (TCG)",
+   "entrees": 34,
+   "echantillon": "Team Aqua's Mightyena (Double Crisis 18)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "BOO23",
@@ -16582,7 +18503,19 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Trick or Trade 2023 (TCG)",
+   "entrees": 30,
+   "echantillon": "Haunter (Lost Origin 65)",
+   "tiragesVus": [],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Trick or Trade 2023 » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "BOO24",
@@ -16606,7 +18539,19 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Trick or Trade 2024 (TCG)",
+   "entrees": 30,
+   "echantillon": "Flutter Mane (Temporal Forces 78)",
+   "tiragesVus": [],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Trick or Trade 2024 » (vus : aucun)"
+   ]
+  }
  },
  {
   "code": "HGSS",
@@ -16630,7 +18575,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "HGSS Black Star Promos (TCG)",
+   "entrees": {
+    "HGSS Black Star Promos": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 25 produits, échantillon « Smoochum (HeartGold & SoulSilver 30) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "HGSS Black Star Promos (TCG)",
+   "entrees": 25,
+   "echantillon": "Smoochum (HeartGold & SoulSilver 30)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DRV",
@@ -16654,7 +18618,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Dragon Vault (TCG)",
+   "entrees": {
+    "Dragon Vault": 21
+   },
+   "note": "vérification automatique : 21 entrées pour 24 produits, échantillon « Rayquaza (Dragons Exalted 128) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Dragon Vault (TCG)",
+   "entrees": 21,
+   "echantillon": "Rayquaza (Dragons Exalted 128)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.88,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "DET",
@@ -16678,7 +18661,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Detective Pikachu (TCG)",
+   "entrees": {
+    "Detective Pikachu": 18
+   },
+   "note": "vérification automatique : 18 entrées pour 18 produits, échantillon « Detective Pikachu (Detective Pikachu 10) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Detective Pikachu (TCG)",
+   "entrees": 18,
+   "echantillon": "Detective Pikachu (Detective Pikachu 10)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "SI",
@@ -16702,7 +18704,27 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Southern Islands (TCG)",
+   "entrees": {
+    "Southern Islands": 18
+   },
+   "note": "vérification automatique : 18 entrées pour 18 produits, échantillon « Tentacruel (Southern Islands 10) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Southern Islands (TCG)",
+   "entrees": 18,
+   "echantillon": "Tentacruel (Southern Islands 10)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP9",
@@ -16726,7 +18748,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 9 (TCG)",
+   "entrees": {
+    "POP Series 9": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 18 produits, échantillon « Lopunny (POP Series 9 9) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 9 (TCG)",
+   "entrees": 17,
+   "echantillon": "Lopunny (POP Series 9 9)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP6",
@@ -16750,7 +18791,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 6 (TCG)",
+   "entrees": {
+    "POP Series 6": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 18 produits, échantillon « Pikachu (POP Series 6 9) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 6 (TCG)",
+   "entrees": 17,
+   "echantillon": "Pikachu (POP Series 6 9)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP1",
@@ -16774,7 +18834,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 1 (TCG)",
+   "entrees": {
+    "POP Series 1": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Pupitar (POP Series 1 9) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 1 (TCG)",
+   "entrees": 17,
+   "echantillon": "Pupitar (POP Series 1 9)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP4",
@@ -16798,7 +18877,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 4 (TCG)",
+   "entrees": {
+    "POP Series 4": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Pokémon Fan Club (Aquapolis 130) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 4 (TCG)",
+   "entrees": 17,
+   "echantillon": "Pokémon Fan Club (Aquapolis 130)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP3",
@@ -16822,7 +18920,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 3 (TCG)",
+   "entrees": {
+    "POP Series 3": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Forretress (POP Series 3 9) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 3 (TCG)",
+   "entrees": 17,
+   "echantillon": "Forretress (POP Series 3 9)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP2",
@@ -16846,7 +18963,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 2 (TCG)",
+   "entrees": {
+    "POP Series 2": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Multi Technical Machine 01 (Expedition 144) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 2 (TCG)",
+   "entrees": 17,
+   "echantillon": "Multi Technical Machine 01 (Expedition 144)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP8",
@@ -16870,7 +19006,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 8 (TCG)",
+   "entrees": {
+    "POP Series 8": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Night Maintenance (Mysterious Treasures 113) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 8 (TCG)",
+   "entrees": 17,
+   "echantillon": "Night Maintenance (Mysterious Treasures 113)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "POP5",
@@ -16894,7 +19049,17 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 5 (TCG)",
+   "entrees": 17,
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "carte-échantillon introuvable"
+   ]
+  }
  },
  {
   "code": "POP7",
@@ -16918,7 +19083,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "POP Series 7 (TCG)",
+   "entrees": {
+    "POP Series 7": 17
+   },
+   "note": "vérification automatique : 17 entrées pour 17 produits, échantillon « Stantler (Secret Wonders 113) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "POP Series 7 (TCG)",
+   "entrees": 17,
+   "echantillon": "Stantler (Secret Wonders 113)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "RM",
@@ -16942,7 +19126,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Pokémon Rumble (TCG)",
+   "entrees": {
+    "Pokémon Rumble": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « Mewtwo (Pokémon Rumble 9) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Pokémon Rumble (TCG)",
+   "entrees": 16,
+   "echantillon": "Mewtwo (Pokémon Rumble 9)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "M24",
@@ -16966,7 +19169,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2024 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2024": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Koraidon (Scarlet & Violet 124) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2024 (TCG)",
+   "entrees": 15,
+   "echantillon": "Koraidon (Scarlet & Violet 124)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD22",
@@ -16990,7 +19212,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2022 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2022": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Chinchou (Evolving Skies 52) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2022 (TCG)",
+   "entrees": 15,
+   "echantillon": "Chinchou (Evolving Skies 52)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "M23",
@@ -17014,7 +19255,17 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2023 (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « McDonald's Collection 2023 »"
+   ]
+  }
  },
  {
   "code": "MCD19",
@@ -17038,7 +19289,20 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2019 (TCG)",
+   "entrees": 52,
+   "echantillon": "Horsea (Dragon Majesty 16)",
+   "tiragesVus": [],
+   "ratio": 4.33,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2019 » (vus : aucun)",
+    "entrées/produits 4.33 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "MCD14",
@@ -17062,7 +19326,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2014 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2014": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 12 produits, échantillon « Honedge (Kalos Starter Set 21) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2014 (TCG)",
+   "entrees": 12,
+   "echantillon": "Honedge (Kalos Starter Set 21)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD16",
@@ -17086,7 +19369,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2016 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2016": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 12 produits, échantillon « Scraggy (Furious Fists 66) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2016 (TCG)",
+   "entrees": 12,
+   "echantillon": "Scraggy (Furious Fists 66)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD17",
@@ -17110,7 +19412,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2017 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2017": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 12 produits, échantillon « Crabrawler (Sun & Moon 72) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2017 (TCG)",
+   "entrees": 12,
+   "echantillon": "Crabrawler (Sun & Moon 72)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD15",
@@ -17134,7 +19455,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2015 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2015": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 12 produits, échantillon « Electrike (Primal Clash 59) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2015 (TCG)",
+   "entrees": 12,
+   "echantillon": "Electrike (Primal Clash 59)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD12",
@@ -17158,7 +19498,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "McDonald's Collection 2012 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2012": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 12 produits, échantillon « Woobat (Emerging Powers 36) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2012 (TCG)",
+   "entrees": 12,
+   "echantillon": "Woobat (Emerging Powers 36)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MEE",
@@ -17182,7 +19541,17 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "MEE Basic Energies (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « MEE Basic Energies »"
+   ]
+  }
  },
  {
   "code": "PCCP",
@@ -17206,7 +19575,26 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Poké Card Creator Pack (TCG)",
+   "entrees": {
+    "Poké Card Creator Pack": 5
+   },
+   "note": "vérification automatique : 5 entrées pour 5 produits, échantillon « Torchic (Creator Contest 3) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Poké Card Creator Pack (TCG)",
+   "entrees": 5,
+   "echantillon": "Torchic (Creator Contest 3)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "FUT20",
@@ -17230,7 +19618,26 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Pokémon Futsal (TCG)",
+   "entrees": {
+    "Pokémon Futsal": 5
+   },
+   "note": "vérification automatique : 5 entrées pour 5 produits, échantillon « Grookey on the Ball (Pokémon Futsal 3) » (intl)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Pokémon Futsal (TCG)",
+   "entrees": 5,
+   "echantillon": "Grookey on the Ball (Pokémon Futsal 3)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "MCD13",
@@ -17254,7 +19661,21 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "McDonald's Collection 2013 (TCG)",
+   "entrees": 12,
+   "echantillon": "Espeon (Dark Explorers 48)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 4,
+   "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 4 hors [0,5 ; 1,5]"
+   ]
+  }
  },
  {
   "code": "s6k",
@@ -18011,7 +20432,14 @@
     "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
    }
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "Black Bolt/White Flare": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 174 produits, échantillon « Servine (Black Bolt 2) » (jp)"
+  },
   "causeRetiree": [
    {
     "le": "2026-09-15T19:00:23.293Z",
@@ -18044,7 +20472,19 @@
     "retireeLe": "2026-09-16T04:27:40.642Z",
     "motif": "ligne corrigée (expansion fusionnée + section)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Servine (Black Bolt 2)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv11W",
@@ -18077,7 +20517,14 @@
     "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
    }
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "Black Bolt/White Flare": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 174 produits, échantillon « Swadloon (White Flare 2) » (jp)"
+  },
   "causeRetiree": [
    {
     "le": "2026-09-15T19:00:23.293Z",
@@ -18110,7 +20557,19 @@
     "retireeLe": "2026-09-16T04:27:40.642Z",
     "motif": "ligne corrigée (expansion fusionnée + section)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Swadloon (White Flare 2)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "xsv11B",
@@ -18143,7 +20602,14 @@
     "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
    }
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "Black Bolt/White Flare": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 152 produits, échantillon « Servine (Black Bolt 2) » (jp)"
+  },
   "causeRetiree": [
    {
     "le": "2026-09-15T19:00:23.293Z",
@@ -18176,7 +20642,19 @@
     "retireeLe": "2026-09-16T04:27:40.642Z",
     "motif": "ligne corrigée (expansion fusionnée + section)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Servine (Black Bolt 2)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.14,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "xsv11W",
@@ -18209,7 +20687,14 @@
     "raison": "impression japonaise fusionnée ; le demi-set vient de la section de Setlist"
    }
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "Black Bolt/White Flare": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 152 produits, échantillon « Swadloon (White Flare 2) » (jp)"
+  },
   "causeRetiree": [
    {
     "le": "2026-09-15T19:00:23.293Z",
@@ -18242,7 +20727,19 @@
     "retireeLe": "2026-09-16T04:27:40.642Z",
     "motif": "ligne corrigée (expansion fusionnée + section)"
    }
-  ]
+  ],
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Swadloon (White Flare 2)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.14,
+   "etat": "OK",
+   "raisons": []
+  }
  },
  {
   "code": "sv6",
@@ -23550,6 +26047,94 @@
   "collecte": {
    "le": "2026-09-15T19:48:18.676Z",
    "etat": "ok"
+  }
+ },
+ {
+  "code": "SV11s",
+  "exp": 6287,
+  "prod": 176,
+  "nom": "Black White IDTH",
+  "slugSet": "Black-White-IDTH",
+  "region": "idth",
+  "bulba": {
+   "titre": "Black & White (ATCG)",
+   "tirage": "idth",
+   "expansion": "Black & White",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 176,
+  "auto": {
+   "cle": "idth-2026-09-16",
+   "liste": "List of Pokémon Trading Card Game expansions in other languages",
+   "nomBulbapedia": "Black & White",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "172/176",
+   "genereLe": "2026-09-16"
+  },
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Black & White (ATCG)",
+   "entrees": {
+    "Black & White": 348
+   },
+   "note": "vérification automatique : 348 entrées pour 176 produits, échantillon « undefined » (idth)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Black & White (ATCG)",
+   "entrees": 348,
+   "couverture": {
+    "produitsNumerotes": 176,
+    "couverts": 172,
+    "numerosSetlist": 344
+   },
+   "ratio": 1.98,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "MA1",
+  "exp": 6394,
+  "prod": 58,
+  "nom": "Mega Evolution IDTH",
+  "slugSet": "Mega-Evolution-IDTH",
+  "region": "idth",
+  "bulba": {
+   "titre": "Mega Evolution (ATCG)",
+   "tirage": "idth",
+   "expansion": "Mega Evolution",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 58,
+  "auto": {
+   "cle": "idth-2026-09-16",
+   "liste": "List of Pokémon Trading Card Game expansions in other languages",
+   "nomBulbapedia": "Mega Evolution",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "58/58",
+   "genereLe": "2026-09-16"
+  },
+  "verifie": {
+   "le": "2026-09-16",
+   "page": "Mega Evolution (ATCG)",
+   "entrees": {
+    "Mega Evolution": 184
+   },
+   "note": "vérification automatique : 184 entrées pour 58 produits, échantillon « undefined » (idth)"
+  },
+  "verif": {
+   "le": "2026-09-16",
+   "pageResolue": "Mega Evolution (ATCG)",
+   "entrees": 184,
+   "couverture": {
+    "produitsNumerotes": 58,
+    "couverts": 58,
+    "numerosSetlist": 184
+   },
+   "ratio": 3.17,
+   "etat": "OK",
+   "raisons": []
   }
  }
 ]

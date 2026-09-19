@@ -1465,5 +1465,176 @@
    "Pokémon GO"
   ],
   "cle": "nom-normalise"
+ },
+ "svHM": {
+  "ids": [
+   511
+  ],
+  "noms": [
+   "Starter Deck & Build Set Future Miraidon ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svHK": {
+  "ids": [
+   510
+  ],
+  "noms": [
+   "Starter Deck & Build Set Ancient Koraidon ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgR": {
+  "ids": [
+   138
+  ],
+  "noms": [
+   "Shockwave! Tyranitar ex Constructed Standard Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "pcgS": {
+  "ids": [
+   139
+  ],
+  "noms": [
+   "Imprison! Gardevoir ex Constructed Standard Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XYc": {
+  "ids": [
+   303
+  ],
+  "noms": [
+   "Super Legend Set: Xerneas EX Yveltal EX"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svJL": {
+  "ids": [
+   516
+  ],
+  "noms": [
+   "Battle Master Deck Terastal Charizard ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svOD": {
+  "ids": [
+   559
+  ],
+  "noms": [
+   "Starter Set ex Steven's Beldum & Metagross ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sPZ": {
+  "ids": [
+   468
+  ],
+  "noms": [
+   "VSTAR & VMAX High Class Deck Zeraora"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svOM": {
+  "ids": [
+   558
+  ],
+  "noms": [
+   "Starter Set ex Marnie's Morpeko & Grimmsnarl ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "svJP": {
+  "ids": [
+   517
+  ],
+  "noms": [
+   "Battle Master Deck Chien-Pao ex"
+  ],
+  "cle": "nom-normalise"
+ },
+ "PtG": {
+  "ids": [
+   252
+  ],
+  "noms": [
+   "Garchomp Half Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "sp1": {
+  "ids": [
+   402
+  ],
+  "noms": [
+   "Zacian & Zamazenta Box"
+  ],
+  "cle": "nom-normalise"
+ },
+ "SM-P": {
+  "ids": [
+   324
+  ],
+  "noms": [
+   "Sun & Moon Promos"
+  ],
+  "cle": "nom-normalise"
+ },
+ "S-P": {
+  "ids": [
+   397
+  ],
+  "noms": [
+   "Sword & Shield Promos"
+  ],
+  "cle": "nom-normalise"
+ },
+ "XY-P": {
+  "ids": [
+   279
+  ],
+  "noms": [
+   "XY Promos"
+  ],
+  "cle": "nom-normalise"
+ },
+ "SV-P": {
+  "ids": [
+   478
+  ],
+  "noms": [
+   "Scarlet & Violet Promos"
+  ],
+  "cle": "nom-normalise"
+ },
+ "BW-P": {
+  "ids": [
+   226
+  ],
+  "noms": [
+   "BW-P Promotional cards"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DP-P": {
+  "ids": [
+   145
+  ],
+  "noms": [
+   "DP-P Promotional Cards"
+  ],
+  "cle": "nom-normalise"
+ },
+ "DPt-P": {
+  "ids": [
+   180
+  ],
+  "noms": [
+   "DPt-P Promotional cards"
+  ],
+  "cle": "nom-normalise"
  }
 }
