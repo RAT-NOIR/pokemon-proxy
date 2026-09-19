@@ -732,8 +732,9 @@
   "region": "japonais",
   "bulba": {
    "titre": "Generations Start Decks (TCG)",
-   "tirage": null,
-   "expansion": "Generations Start Decks"
+   "tirage": "jp",
+   "expansion": "Generations Start Decks",
+   "numerosDepuisSetlist": true
   },
   "attendu": 175,
   "auto": {
@@ -743,7 +744,29 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "corrections": [
+    {
+     "le": "2026-09-19T18:21:36.460Z",
+     "avant": {
+      "tirage": null,
+      "numerosDepuisSetlist": null,
+      "verif": {
+       "le": "2026-09-14",
+       "pageResolue": "Generations Start Decks (TCG)",
+       "entrees": 175,
+       "echantillon": "Duraludon (Stellar Crown 106)",
+       "tiragesVus": [],
+       "ratio": 1,
+       "etat": "À REGARDER",
+       "raisons": [
+        "tirage non établi (vus : aucun)"
+       ]
+      }
+     },
+     "raison": "la page porte une Setlist, mais les pages de CARTES ne déclarent pas l'impression du deck (« tirage non établi, vus : aucun ») — même cas que les tirages chinois : le numéro n'existe que dans l'entrée de Setlist, la clé est setlist+numero. La vérification comparera la COUVERTURE des numéros Cardmarket."
+    }
+   ]
   },
   "verifAvantCorrectifSetlist": {
    "verif": {
@@ -760,18 +783,6 @@
    },
    "verifie": null,
    "retireLe": "2026-09-14T23:52:37.867Z"
-  },
-  "verif": {
-   "le": "2026-09-14",
-   "pageResolue": "Generations Start Decks (TCG)",
-   "entrees": 175,
-   "echantillon": "Duraludon (Stellar Crown 106)",
-   "tiragesVus": [],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
   },
   "collecte": {
    "le": "2026-09-15T10:18:31.903Z",
@@ -8573,8 +8584,9 @@
   "region": "japonais",
   "bulba": {
    "titre": "Trainer Battle Decks (TCG)",
-   "tirage": null,
-   "expansion": "Trainer Battle Decks"
+   "tirage": "jp",
+   "expansion": "Trainer Battle Decks",
+   "numerosDepuisSetlist": true
   },
   "attendu": 31,
   "auto": {
@@ -8584,21 +8596,31 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Trainer Battle Decks (TCG)",
-   "entrees": 31,
-   "echantillon": "Acro Bike (Primal Clash 122)",
-   "tiragesVus": [],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
+   "genereLe": "2026-09-14",
+   "corrections": [
+    {
+     "le": "2026-09-19T18:21:36.461Z",
+     "avant": {
+      "tirage": null,
+      "numerosDepuisSetlist": null,
+      "verif": {
+       "le": "2026-09-15",
+       "pageResolue": "Trainer Battle Decks (TCG)",
+       "entrees": 31,
+       "echantillon": "Acro Bike (Primal Clash 122)",
+       "tiragesVus": [],
+       "ratio": 1,
+       "etat": "À REGARDER",
+       "raisons": [
+        "tirage non établi (vus : aucun)"
+       ]
+      }
+     },
+     "raison": "la page porte une Setlist, mais les pages de CARTES ne déclarent pas l'impression du deck (« tirage non établi, vus : aucun ») — même cas que les tirages chinois : le numéro n'existe que dans l'entrée de Setlist, la clé est setlist+numero. La vérification comparera la COUVERTURE des numéros Cardmarket."
+    }
    ]
   },
+  "verifie": null,
   "collecte": {
    "le": "2026-09-15T11:48:12.564Z",
    "etat": "a-regarder",
@@ -8932,8 +8954,9 @@
   "region": "japonais",
   "bulba": {
    "titre": "Start Deck 100 CoroCoro Comic Version (TCG)",
-   "tirage": null,
-   "expansion": "Start Deck 100 CoroCoro Comic Version"
+   "tirage": "jp",
+   "expansion": "Start Deck 100 CoroCoro Comic Version",
+   "numerosDepuisSetlist": true
   },
   "attendu": 24,
   "auto": {
@@ -8943,21 +8966,31 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-15",
-   "pageResolue": "Start Deck 100 CoroCoro Comic Version (TCG)",
-   "entrees": 24,
-   "echantillon": "Great Ball (EX FireRed & LeafGreen 92)",
-   "tiragesVus": [],
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
+   "genereLe": "2026-09-14",
+   "corrections": [
+    {
+     "le": "2026-09-19T18:21:36.461Z",
+     "avant": {
+      "tirage": null,
+      "numerosDepuisSetlist": null,
+      "verif": {
+       "le": "2026-09-15",
+       "pageResolue": "Start Deck 100 CoroCoro Comic Version (TCG)",
+       "entrees": 24,
+       "echantillon": "Great Ball (EX FireRed & LeafGreen 92)",
+       "tiragesVus": [],
+       "ratio": 1,
+       "etat": "À REGARDER",
+       "raisons": [
+        "tirage non établi (vus : aucun)"
+       ]
+      }
+     },
+     "raison": "la page porte une Setlist, mais les pages de CARTES ne déclarent pas l'impression du deck (« tirage non établi, vus : aucun ») — même cas que les tirages chinois : le numéro n'existe que dans l'entrée de Setlist, la clé est setlist+numero. La vérification comparera la COUVERTURE des numéros Cardmarket."
+    }
    ]
   },
+  "verifie": null,
   "collecte": {
    "le": "2026-09-15T11:49:22.978Z",
    "etat": "a-regarder",
@@ -14189,9 +14222,12 @@
   "slugSet": "White-Flare",
   "region": "occidental",
   "bulba": {
-   "titre": "Black Bolt & White Flare (TCG)",
+   "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "intl",
-   "expansion": "Black Bolt & White Flare"
+   "expansion": "White Flare",
+   "setlist": [
+    "White Flare"
+   ]
   },
   "attendu": 173,
   "auto": {
@@ -14201,19 +14237,30 @@
    "cartesListe": 86,
    "sectionListe": "Mega Evolution Series",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-16",
-   "pageResolue": "Black Bolt & White Flare (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   "genereLe": "2026-09-14",
+   "corrections": [
+    {
+     "le": "2026-09-19T18:34:23.109Z",
+     "avant": {
+      "titre": "Black Bolt & White Flare (TCG)",
+      "expansion": "Black Bolt & White Flare",
+      "setlist": null,
+      "verif": {
+       "le": "2026-09-16",
+       "pageResolue": "Black Bolt & White Flare (TCG)",
+       "entrees": 0,
+       "ratio": 0,
+       "etat": "À REGARDER",
+       "raisons": [
+        "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+       ]
+      }
+     },
+     "raison": "l'expansion « Black Bolt & White Flare » n'est déclarée par AUCUNE page ; nos propres cartes, collectées par les demi-sets japonais sv11B/sv11W qui partagent la page, déclarent « Black Bolt » (172 impressions intl) et « White Flare » (173). Contrôle : 172/172 et 173/173 des numéros Cardmarket sont des numéros de ces impressions."
+    }
    ]
   },
+  "verifie": null,
   "collecte": {
    "le": "2026-09-16T05:04:29.071Z",
    "etat": "a-regarder",
@@ -14230,9 +14277,12 @@
   "slugSet": "Black-Bolt",
   "region": "occidental",
   "bulba": {
-   "titre": "Black Bolt & White Flare (TCG)",
+   "titre": "Black Bolt/White Flare (TCG)",
    "tirage": "intl",
-   "expansion": "Black Bolt & White Flare"
+   "expansion": "Black Bolt",
+   "setlist": [
+    "Black Bolt"
+   ]
   },
   "attendu": 172,
   "auto": {
@@ -14242,19 +14292,30 @@
    "cartesListe": 86,
    "sectionListe": "Scarlet & Violet Series",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-16",
-   "pageResolue": "Black Bolt & White Flare (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+   "genereLe": "2026-09-14",
+   "corrections": [
+    {
+     "le": "2026-09-19T18:34:23.110Z",
+     "avant": {
+      "titre": "Black Bolt & White Flare (TCG)",
+      "expansion": "Black Bolt & White Flare",
+      "setlist": null,
+      "verif": {
+       "le": "2026-09-16",
+       "pageResolue": "Black Bolt & White Flare (TCG)",
+       "entrees": 0,
+       "ratio": 0,
+       "etat": "À REGARDER",
+       "raisons": [
+        "aucune entrée de Setlist pour « Black Bolt & White Flare »"
+       ]
+      }
+     },
+     "raison": "l'expansion « Black Bolt & White Flare » n'est déclarée par AUCUNE page ; nos propres cartes, collectées par les demi-sets japonais sv11B/sv11W qui partagent la page, déclarent « Black Bolt » (172 impressions intl) et « White Flare » (173). Contrôle : 172/172 et 173/173 des numéros Cardmarket sont des numéros de ces impressions."
+    }
    ]
   },
+  "verifie": null,
   "collecte": {
    "le": "2026-09-16T05:04:29.079Z",
    "etat": "a-regarder",
