@@ -23639,9 +23639,17 @@
    "etat": "OK",
    "raisons": []
   },
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:42:34.292Z",
+    "etat": "non-concordant",
+    "retireeLe": "2026-09-19T08:23:00.988Z",
+    "motif": "rejoues apres la regle des reimpressions de Setlist (SV-P/TH 173/211, 0 multi) ; CSV9.5C et CBB2C : liens rouges, a rejuger"
+   }
+  ],
   "collecte": {
-   "le": "2026-09-15T19:42:34.292Z",
-   "etat": "non-concordant"
+   "le": "2026-09-19T08:23:06.578Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -24243,9 +24251,17 @@
    "etat": "OK",
    "raisons": []
   },
+  "collecteAvant": [
+   {
+    "le": "2026-09-15T19:46:09.243Z",
+    "etat": "non-concordant",
+    "retireeLe": "2026-09-19T08:23:00.988Z",
+    "motif": "rejoues apres la regle des reimpressions de Setlist (SV-P/TH 173/211, 0 multi) ; CSV9.5C et CBB2C : liens rouges, a rejuger"
+   }
+  ],
   "collecte": {
-   "le": "2026-09-15T19:46:09.243Z",
-   "etat": "non-concordant"
+   "le": "2026-09-19T08:23:06.603Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -26641,9 +26657,17 @@
     "couverture des numéros Cardmarket 167/211 sous 0,95"
    ]
   },
+  "collecteAvant": [
+   {
+    "le": "2026-09-19T08:09:06.733Z",
+    "etat": "non-concordant",
+    "retireeLe": "2026-09-19T08:23:00.988Z",
+    "motif": "rejoues apres la regle des reimpressions de Setlist (SV-P/TH 173/211, 0 multi) ; CSV9.5C et CBB2C : liens rouges, a rejuger"
+   }
+  ],
   "collecte": {
-   "le": "2026-09-19T08:09:06.733Z",
-   "etat": "non-concordant"
+   "le": "2026-09-19T08:23:06.630Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -26689,9 +26713,18 @@
    ]
   },
   "collecte": {
-   "le": "2026-09-19T08:09:51.323Z",
-   "etat": "noms-discordants"
-  }
+   "le": "2026-09-19T08:22:53.273Z",
+   "etat": "ok",
+   "note": "reimpressions d autres sets ecartees + nom ambigu non joint : 12 multi -> 1, joints 142 -> 184 sur 220"
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-19T08:09:51.323Z",
+    "etat": "noms-discordants",
+    "retireeLe": "2026-09-19T08:22:53.272Z",
+    "motif": "reimpressions d autres sets ecartees + nom ambigu non joint : 12 multi -> 1, joints 142 -> 184 sur 220"
+   }
+  ]
  },
  {
   "code": "SV-P/CS",
@@ -26734,6 +26767,10 @@
    "raisons": [
     "couverture des numéros Cardmarket 171/300 sous 0,95"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T08:24:15.679Z",
+   "etat": "ok"
   }
  }
 ]
