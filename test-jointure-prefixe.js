@@ -96,5 +96,17 @@ const JXP = joindre(cXP, pXP, { idExpansion: 4159, expansionBulba: XP, tirage: '
 verifier('XY-P : chaque produit à UNE carte', paires(JXP), ['180|190', '182|191']);
 verifier('XY-P : Greninja sans numéro est un reste', JXP.restes.filter(r => r.type === 'carte-sans-produit').map(r => r.carteId), [181]);
 
+// 10. 🔴 UN NOM QUI DÉSIGNE PLUSIEURS CARTES NE DÉSIGNE RIEN (2026-09-19). S-P/CS : le produit « Gengar » n°148 tombait
+// sur TROIS pages Gengar appartenant au set par la Setlist seule, et les trois recevaient le même produit. Un produit est
+// UNE carte : l'ambiguïté est un reste, pas trois jointures. Les attaques départagent d'abord, comme avant.
+const G = 'S-P Promotional cards';
+const sansNum = (id, nomEn, attaques = []) => ({ _id: id, nomEn, attaques: attaques.map(nom => ({ nom })), impressions: [] });
+const JAMB = joindre([sansNum(300, 'Gengar'), sansNum(301, 'Gengar'), sansNum(302, 'Gengar')], [produit(310, 'Gengar', '148')], { idExpansion: 6329, expansionBulba: G, tirage: 'zh-hans' });
+verifier('nom ambigu : aucune jointure', paires(JAMB), []);
+verifier('nom ambigu : aucun produit vers plusieurs cartes', multi(JAMB), 0);
+const pAtt = { idProduct: 320, name: 'Gengar', nom: 'Gengar', attaques: ['Shadow Room'], numero: '149' };
+const JATT = joindre([sansNum(303, 'Gengar', ['Shadow Room']), sansNum(304, 'Gengar', ['Night Watch'])], [pAtt], { idExpansion: 6329, expansionBulba: G, tirage: 'zh-hans' });
+verifier('nom ambigu départagé par les attaques : une seule jointure', paires(JATT), ['303|320']);
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

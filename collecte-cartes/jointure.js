@@ -221,6 +221,7 @@ function joindre(cartes, produits, cible) {
     }
     // PASSE 2 — le repli par NOM, sur les produits qu'aucun NUMÉRO n'a pris.
     const jointsParNumero = new Set(produitsJoints.keys());
+    const candidatsParProduit = new Map();
     for (const carte of cartes) {
         const { imp, imps, source, numeros, joint } = etatDeCarte.get(carte);
         if (joint) continue;
@@ -255,11 +256,34 @@ function joindre(cartes, produits, cible) {
                 detail = `nom « ${carte.nomEn} »${avecAttaques ? ' + attaques ' + trouves[0].attaques.join(' | ') : ''} dans l'expansion ${cible.idExpansion}${imp ? '' : ' (appartenance par la Setlist seule)'}`;
             }
         }
-        if (!trouves.length) {
-            restes.push({ type: 'carte-sans-produit', carteId: carte._id, detail: `« ${carte.nomEn ?? carte.bulba?.titre} » n°${imp?.numero ?? '—'} : aucun produit dans l'expansion ${cible.idExpansion}${imp ? '' : ' (page sans impression déclarée pour ce set)'}` });
-            cartesSansProduit++; continue;
+        for (const p of trouves) {
+            if (!candidatsParProduit.has(p.idProduct)) candidatsParProduit.set(p.idProduct, []);
+            candidatsParProduit.get(p.idProduct).push({ carte, p, preuve, detail, avecAttaques: /\+attaques$/.test(preuve || '') });
         }
-        for (const p of trouves) attache(carte, p, preuve, detail);
+    }
+    // 🔴 UN NOM QUI DÉSIGNE PLUSIEURS CARTES NE DÉSIGNE RIEN (2026-09-19). Le départage par les attaques se fait par CARTE :
+    // il ne voit pas qu'un même produit a été retenu par trois pages « Gengar » (S-P/CS n°148, 3 produits vers plusieurs
+    // cartes). Un produit est UNE carte ; l'ambiguïté est donc tranchée ICI, produit par produit, une fois toutes les cartes
+    // vues. Les attaques départagent d'abord ; si elles ne laissent pas UN seul candidat, personne ne prend le produit.
+    // C'est le §8 pris à l'endroit : plusieurs candidats après restriction, ce n'est pas une désignation.
+    for (const [idProduct, liste] of candidatsParProduit) {
+        let retenus = liste;
+        if (retenus.length > 1) {
+            const avec = retenus.filter(c => c.avecAttaques);
+            retenus = avec.length === 1 ? avec : retenus;
+        }
+        if (retenus.length !== 1) {
+            restes.push({ type: 'nom-ambigu', idProduct, detail: `${idProduct} « ${liste[0].p.name} » : ${liste.length} cartes du même nom dans l'expansion ${cible.idExpansion} (${liste.map(c => c.carte._id).join(', ')}) — aucune retenue` });
+            continue;
+        }
+        attache(retenus[0].carte, retenus[0].p, retenus[0].preuve, retenus[0].detail);
+    }
+    const cartesJointes = new Set(lignes.map(l => l.carteId));
+    for (const carte of cartes) {
+        if (cartesJointes.has(carte._id)) continue;
+        const { imp } = etatDeCarte.get(carte);
+        restes.push({ type: 'carte-sans-produit', carteId: carte._id, detail: `« ${carte.nomEn ?? carte.bulba?.titre} » n°${imp?.numero ?? '—'} : aucun produit dans l'expansion ${cible.idExpansion}${imp ? '' : ' (page sans impression déclarée pour ce set)'}` });
+        cartesSansProduit++;
     }
     for (const p of produits) {
         const c = produitsJoints.get(p.idProduct);
