@@ -46,4 +46,26 @@ function aiguillageDeploye(ref = 'origin/main') {
     } catch (e) { return { sait: false, erreur: `collecteur-images.js de ${ref} illisible : ${e.message.split('\n')[0]}` }; }
 }
 
-module.exports = { sourcesDeployees, aiguillageDeploye };
+/**
+ * La LIGNE DE TABLE du set existe-t-elle dans la version poussée ? Ajoutée le 2026-09-19 avec les 10 « Additionals »
+ * occidentales : la garde d'à côté vérifiait la SOURCE d'images et l'AIGUILLAGE, jamais la ligne elle-même. Un set
+ * occidental n'a pas besoin de source (son visuel vient de la page de la carte), donc il passait la garde — et le
+ * worker, qui ne connaît que la table de SON commit, recevait un code inconnu. C'est le §21 bis, encore : une garde
+ * corrigée d'un côté, laissée de l'autre.
+ * @returns {{ connait: (code:string)=>boolean, codes: Set<string>, commit: string } | { erreur: string }}
+ */
+function lignesDeployees(ref = 'origin/main') {
+    try {
+        const racine = path.join(__dirname, '..');
+        const lire = f => execFileSync(git(), ['show', `${ref}:collecte-cartes/${f}`], { cwd: racine, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        const commit = execFileSync(git(), ['rev-parse', '--short', ref], { cwd: racine, encoding: 'utf8' }).trim();
+        // On ne CHARGE pas la table déployée (elle lit la base et d'autres modules) : on lit les CODES, qui sont le
+        // seul fait dont on a besoin ici. `code: 'xPRE'` dans le .js, `"code": "xPRE"` dans le .json.
+        const codes = new Set();
+        for (const src of [lire('table-sets.js'), lire('table-sets-auto.json')])
+            for (const m of src.matchAll(/["']?code["']?\s*:\s*['"]([^'"]+)['"]/g)) codes.add(m[1]);
+        return { connait: code => codes.has(code), codes, commit };
+    } catch (e) { return { erreur: `table de ${ref} illisible : ${e.message.split('\n')[0]}` }; }
+}
+
+module.exports = { sourcesDeployees, aiguillageDeploye, lignesDeployees };

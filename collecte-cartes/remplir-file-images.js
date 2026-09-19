@@ -16,7 +16,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const { ouvrirConnexions } = require('./garde');
 const { TABLE, TABLE_AUTO } = require('./table-sets');
 const { sourceDe } = require('./sources-sets');
-const { sourcesDeployees, aiguillageDeploye } = require('./sources-deployees');
+const { sourcesDeployees, aiguillageDeploye, lignesDeployees } = require('./sources-deployees');
 
 const aBlanc = process.argv.includes('--a-blanc');
 (async () => {
@@ -63,9 +63,14 @@ const aBlanc = process.argv.includes('--a-blanc');
     // impressions sur 1 319 auraient été fausses). La file porte `source` ; le worker aiguille dessus.
     const ligneDe = new Map(lignes.map(l => [l.code, l]));
     const occidental = code => { const l = ligneDe.get(code); return l?.region === 'occidental' && l?.bulba?.tirage === 'intl'; };
-    const enfilesBulba = [], aiguillageAbsent = [];
+    const enfilesBulba = [], aiguillageAbsent = [], ligneNonPoussee = [];
     const aiguillage = aiguillageDeploye();
     console.log(`aiguillage « source » dans la version poussée : ${aiguillage.sait ? `OUI (${aiguillage.commit})` : `NON (${aiguillage.erreur ?? aiguillage.commit}) — aucun set occidental ne sera enfilé`}`);
+    // 🔑 ET LA LIGNE ELLE-MÊME DOIT ÊTRE POUSSÉE (2026-09-19). La garde des SOURCES ne protège que les sets qui en ont
+    // une ; un set occidental n'en a pas (son visuel vient de la page de la carte), donc il passait tout droit — et le
+    // worker recevait un code absent de SA table. §21 bis : une garde corrigée d'un côté, laissée de l'autre.
+    const tableDeployee = lignesDeployees();
+    console.log(`table de la version poussée : ${tableDeployee.erreur ? `⚠️ ${tableDeployee.erreur}` : `${tableDeployee.codes.size} codes (${tableDeployee.commit})`}`);
     for (const s of sets) {
         const code = codeDeSlug.get(s._id);
         if (!code || !verifies.has(s._id)) continue;
@@ -73,6 +78,7 @@ const aBlanc = process.argv.includes('--a-blanc');
             const f = await F.findOne({ _id: code });
             if (f) { deja[f.etat] = (deja[f.etat] || 0) + 1; continue; }
             if (!aiguillage.sait) { aiguillageAbsent.push(code); continue; }
+            if (tableDeployee.erreur || !tableDeployee.connait(code)) { ligneNonPoussee.push(code); continue; }
             if (!aBlanc) await F.insertOne({ _id: code, ordre: ordre++, etat: 'attente', source: 'bulbapedia', ajouteLe: new Date() });
             enfilesBulba.push(code);
             continue;
@@ -90,6 +96,7 @@ const aBlanc = process.argv.includes('--a-blanc');
     console.log(`enfilés (artofpkm) : ${enfiles.length} ${JSON.stringify(enfiles)}`);
     console.log(`enfilés (bulbapedia, sets occidentaux) : ${enfilesBulba.length} ${JSON.stringify(enfilesBulba)}`);
     console.log(`en attente de l'AIGUILLAGE déployé (occidentaux, non enfilés) : ${aiguillageAbsent.length} ${JSON.stringify(aiguillageAbsent)}`);
+    console.log(`LIGNE DE TABLE non poussée (occidentaux, non enfilés — le worker ignorerait le code) : ${ligneNonPoussee.length} ${JSON.stringify(ligneNonPoussee)}`);
     console.log(`déjà en file (état conservé) : ${JSON.stringify(deja)}`);
     console.log(`SANS SOURCE d'images artofpkm (listés, non enfilés) : ${sansSource.length} ${JSON.stringify(sansSource)}`);
     console.log(`source locale NON POUSSÉE (listés, non enfilés — relancer après push et redéploiement) : ${nonPoussee.length} ${JSON.stringify(nonPoussee)}`);
