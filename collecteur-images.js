@@ -31,7 +31,7 @@ const { ligne: ligneDeTable, TABLE } = require('./collecte-cartes/table-sets');
 const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
-const { normaliserNom, chiffresDuNumero } = require('./collecte-cartes/jointure');
+const { normaliserNom, cleNumero } = require('./collecte-cartes/jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -275,9 +275,15 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // que la jointure du TEXTE avait déjà corrigé — corrigé à un endroit, laissé à l'autre.
     const TIRAGE = L.bulba.tirage || 'jp';
     const impsDe = c => (c.impressions || []).filter(i => i.tirage === TIRAGE && nomsCibles.includes(i.expansion) && (!L.bulba.deck || i.deck === L.bulba.deck));
+    // 🔴 LA CLÉ GARDE SON PRÉFIXE ALPHABÉTIQUE, ET ELLE AVAIT ÉTÉ CORRIGÉE D'UN SEUL CÔTÉ (§21 bis).
+    // `chiffresDuNumero` (« en1 » -> « 1 ») a donné à Ekans n°001 le visuel de l'Énergie Plante « en1 » :
+    // artofpkm numérote les énergies d'un set à part (en1…en8), et les feuillets d'Expansion Sheet
+    // « recommended rules no. 1 ». La jointure du TEXTE utilisait déjà `cleNumero` depuis le 2026-09-12 ;
+    // celle des IMAGES est restée sur l'ancienne. Rejeu mesuré avant de changer : 17 904 jointures
+    // IDENTIQUES, 0 déplacée, 0 ambiguë, 15 perdues — et les 15 sont exactement les 15 visuels faux.
     const parNumero = new Map(), parNom = new Map();
     for (const c of cartes) {
-        for (const num of [...new Set(impsDe(c).map(i => chiffresDuNumero(i.numero)).filter(Boolean))]) {
+        for (const num of [...new Set(impsDe(c).map(i => cleNumero(i.numero)).filter(Boolean))]) {
             if (!parNumero.has(num)) parNumero.set(num, []);
             if (!parNumero.get(num).includes(c)) parNumero.get(num).push(c);
         }
@@ -297,7 +303,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const preuves = {};
     for (const im of images) {
         let cands = [], preuve = null;
-        const num = chiffresDuNumero(im.numero);
+        const num = cleNumero(im.numero);
         if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
         if (!cands.length && im.nomEn) {
             cands = parNom.get(nomImage(im.nomEn)) || [];
