@@ -23,7 +23,12 @@ function familleAsiatique(codeSet, slugSet) {
 }
 
 (async () => {
-    const { prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
+    // ⚠️ L'ÉTAT SE LIT, IL NE SE SUPPOSE PAS. Cette ligne disait « les 38 lignes à la main sont
+    // collectées (2026-09-12) » et l'écrivait en dur : vrai ce jour-là, faux dès qu'une ligne à la
+    // main est ajoutée (les 10 « Additionals » occidentales du 2026-09-19). C'est la famille du §21 —
+    // un résultat plausible que rien ne contredit. On lit `collecte_etat`.
+    const phases = new Map((await cx.db.collection('collecte_etat').find({}, { projection: { phase: 1 } }).toArray()).map(e => [e._id, e.phase]));
     const parExp = await prod.db.collection('numeros_cartes').aggregate([
         { $match: { idExpansion: { $ne: null } } },
         { $group: { _id: { exp: '$idExpansion', slugSet: '$slugSet' }, n: { $sum: 1 } } },
@@ -37,7 +42,7 @@ function familleAsiatique(codeSet, slugSet) {
         const asia = familleAsiatique(c?.codeSet, e.slugSet);
         const famille = asia || (l?.region === 'japonais' || l?.bulba?.tirage === 'jp' ? 'japonais' : l?.region === 'occidental' || l?.bulba?.tirage === 'intl' ? 'occidental' : c?.region || 'inconnue');
         let etat, cause = null;
-        if (m) etat = 'collecte-ok';   // les 38 lignes à la main sont collectées (2026-09-12)
+        if (m) etat = phases.get(m.slugSet) === 'verifie' ? 'collecte-ok' : (etat = 'verifiee-non-collectee', cause = `ligne à la main, texte ${phases.get(m.slugSet) || 'jamais collecté'}`, etat);
         else if (a) {
             const ce = a.collecte?.etat;
             if (ce === 'ok' || ce === 'faux-affirme') etat = ce === 'ok' ? 'collecte-ok' : 'faux-affirme';
