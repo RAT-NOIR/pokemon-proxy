@@ -38,6 +38,25 @@ se contrôle dans la base, pas dans la fonction qui écrit.**
 écrite, et `ecrireJointure` fait des upserts — rien n'efface une ligne devenue fausse. Un correctif de jointure se
 livre **en deux moitiés**, le code et la reprise des lignes existantes, ou il ne se livre pas.
 
+### 🔑 ET LE CONTRÔLE TRANSVERSAL SE VÉRIFIE CONTRE UN CAS NORMAL CONNU AVANT D'ÊTRE CRU — 2026-09-19
+
+**Le deuxième contrôle posé le jour même a crié, et c'est LUI qui avait tort.** « Une image par (carte, set) » a
+rendu **684 couples en double** — un chiffre spectaculaire, écrit noir sur rouge dans la mesure du catalogue. Les
+684 ont été ouverts : **tous portent DEUX NUMÉROS DIFFÉRENTS dans le même set.** « Super Rod » est n°188 ET n°276
+de Paldea Evolved, « Slowbro » n°030 et n°090 de Pitch Black — un set moderne réimprime ses cartes en secrète et en
+illustration rare. **Deux tirages, deux visuels, et c'est le §19 lui-même (« une image appartient à un TIRAGE »)
+qu'une clé sans numéro trahissait.** La clé est (carte, set, **numéro**).
+
+⚠️ **CE QUI REND CE PIÈGE PARTICULIER : UN CONTRÔLE QUI SE TROMPE NE RESSEMBLE PAS À UN BOGUE, IL RESSEMBLE À UNE
+DÉCOUVERTE.** Il rend un nombre élevé sur une invariante qu'on vient d'écrire, donc il a l'air de prouver qu'on
+avait raison de l'écrire. Le réflexe est de réparer les données ; ici, réparer aurait effacé 684 visuels justes.
+
+🔑 **LA PARADE, MÉCANIQUE : avant de croire un contrôle transversal, le passer sur un cas NORMAL connu.** Un set
+moderne quelconque suffisait — il a des secrètes, donc il doit sortir à zéro. Un contrôle qui crie sur du légitime
+finit contourné le jour où il a raison (§25), et celui-là aurait crié à chaque mesure. **Un contrôle neuf se juge
+d'abord sur ce qui MARCHE**, exactement comme une clé d'appariement (§22) — et pour la même raison : les deux
+fabriquent des faits qui ont l'air justes.
+
 ---
 
 ## 31. UNE CLÉ PAR INCLUSION APPARIE TOUJOURS QUELQUE CHOSE — 2026-09-19
