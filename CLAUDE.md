@@ -5,6 +5,30 @@ renégocie pas en cours de route.
 
 ---
 
+## 30. UNE RECHERCHE QUI NE TROUVE RIEN ET UNE DONNÉE QUI N'EXISTE PAS RENDENT LE MÊME RÉSULTAT — 2026-09-19
+
+**L'occurrence.** Pour savoir si Bulbapedia couvrait les promos indonésiennes et thaïes, la sonde
+demandait `intitle:ITCG OR intitle:TTCG OR intitle:KTCG` : **0 résultat**, et j'en ai conclu
+« aucune source, 6 expansions sans voie » — écrit au plan comme un fait. Les pages existent :
+**`SV-P Promotional cards (ITCG)`, `M-P Promotional cards (TTCG)`, et 15 autres**, trouvées par une
+requête qui n'énumérait rien de neuf, `intitle:"Promotional cards"` — **55 pages**. Le suffixe est
+entre parenthèses, et la recherche par titre ne le voyait pas. Une formulation trop étroite rend
+exactement ce que rend une absence : le vide. **1 620 produits** attendaient derrière ce vide.
+
+🔑 **LA PARADE EST L'ÉNUMÉRATION, PAS LA REFORMULATION.** On ne prouve pas une absence en cherchant
+mieux : on liste la population entière (ici : toutes les pages « Promotional cards », tous les
+suffixes de langue) et on regarde ce qu'elle contient. Une requête ciblée répond « je n'ai pas
+trouvé » ; seule une énumération répond « ça n'existe pas ». Et tant qu'on n'a pas énuméré, on écrit
+**« non trouvé par telle requête »**, jamais « n'existe pas ».
+
+⚠️ **C'EST LA QUATRIÈME FOIS, ET LES TROIS AUTRES ONT LA MÊME FORME** : PKMJP « source de texte »
+écartée sur un compte au lieu d'un constat (§22), les sections « Additional Cards » jugées sur leur
+nombre d'entrées (§22), les listes artofpkm arrêtées à 100 lues comme la limite de la source
+(§21 n°7). Chaque fois, **un instrument muet a été lu comme un monde vide**. Avant d'écrire qu'une
+donnée n'existe pas, dire quel instrument l'a cherchée et ce qu'il aurait manqué.
+
+---
+
 ## 0. Ce qu'il faut savoir avant de citer un taux d'avancement — 2026-09-09
 
 **🔴 UN TAUX DE VERDICTS FERMES AGRÉGÉ SUR TOUS LES BUILDS EST UN ARTEFACT.** Les lignes

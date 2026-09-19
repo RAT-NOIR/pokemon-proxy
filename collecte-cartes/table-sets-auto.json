@@ -18361,45 +18361,72 @@
   "prod": 41,
   "nom": "Beginning Set Pikachu",
   "slugSet": "Beginning-Set-Pikachu",
-  "region": "occidental",
+  "region": "japonais",
   "bulba": {
-   "titre": "HGSS Black Star Promos (TCG)",
-   "tirage": "intl",
-   "expansion": "HGSS Black Star Promos"
+   "titre": "Beginning Set Pikachu Version (TCG)",
+   "tirage": "jp",
+   "expansion": "Beginning Set Pikachu Version"
   },
   "attendu": 41,
   "auto": {
-   "cle": "code de set",
+   "cle": "corrige-a-la-main-2026-09-19",
    "liste": "EN",
-   "nomBulbapedia": "HGSS Black Star Promos",
+   "nomBulbapedia": "Beginning Set Pikachu Version",
    "cartesListe": 25,
    "sectionListe": "[[File:SetSymbolPromo.png|40px]] Black Star Promotional Cards",
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "preuve": "impressions en base : Potion 030/034, Energy Retrieval 028/034"
   },
   "verifie": {
-   "le": "2026-09-16",
-   "page": "HGSS Black Star Promos (TCG)",
+   "le": "2026-09-19",
+   "page": "Beginning Set (TCG)",
    "entrees": {
-    "HGSS Black Star Promos": 25
+    "Beginning Set Pikachu Version": 42
    },
-   "note": "vérification automatique : 25 entrées pour 41 produits, échantillon « Smoochum (HeartGold & SoulSilver 30) » (intl)"
+   "note": "vérification automatique : 42 entrées pour 41 produits, échantillon « Joltik (Black & White 44) » (jp)"
   },
+  "collecteAvant": [
+   {
+    "le": "2026-09-16T05:45:11.944Z",
+    "etat": "noms-discordants",
+    "verif": {
+     "le": "2026-09-16",
+     "pageResolue": "HGSS Black Star Promos (TCG)",
+     "entrees": 25,
+     "echantillon": "Smoochum (HeartGold & SoulSilver 30)",
+     "tiragesVus": [
+      "intl"
+     ],
+     "ratio": 0.61,
+     "etat": "OK",
+     "raisons": []
+    },
+    "bulba": {
+     "titre": "HGSS Black Star Promos (TCG)",
+     "tirage": "intl",
+     "expansion": "HGSS Black Star Promos"
+    },
+    "region": "occidental",
+    "retireeLe": "2026-09-19T07:55:13.457Z",
+    "motif": "apparié à HGSS Black Star Promos sur le seul code « HSP » ; 25 jointures fausses retirées"
+   }
+  ],
   "verif": {
-   "le": "2026-09-16",
-   "pageResolue": "HGSS Black Star Promos (TCG)",
-   "entrees": 25,
-   "echantillon": "Smoochum (HeartGold & SoulSilver 30)",
+   "le": "2026-09-19",
+   "pageResolue": "Beginning Set (TCG)",
+   "entrees": 42,
+   "echantillon": "Joltik (Black & White 44)",
    "tiragesVus": [
-    "intl"
+    "jp"
    ],
-   "ratio": 0.61,
+   "ratio": 1.02,
    "etat": "OK",
    "raisons": []
   },
   "collecte": {
-   "le": "2026-09-16T05:45:11.944Z",
-   "etat": "noms-discordants"
+   "le": "2026-09-19T07:55:25.314Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -18433,6 +18460,13 @@
    "tiragesVus": [],
    "ratio": 1.3,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2018 » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:55:25.335Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « McDonald's Collection 2018 » (vus : aucun)"
    ]
@@ -18479,6 +18513,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:55:39.440Z",
+   "etat": "ok"
   }
  },
  {
@@ -18515,6 +18553,13 @@
    "raisons": [
     "l'échantillon n'a pas de tirage intl « Trick or Trade 2023 » (vus : aucun)"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:55:39.450Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Trick or Trade 2023 » (vus : aucun)"
+   ]
   }
  },
  {
@@ -18548,6 +18593,13 @@
    "tiragesVus": [],
    "ratio": 1,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Trick or Trade 2024 » (vus : aucun)"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:55:39.460Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « Trick or Trade 2024 » (vus : aucun)"
    ]
@@ -18594,6 +18646,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:55:51.494Z",
+   "etat": "ok"
   }
  },
  {
@@ -18637,6 +18693,10 @@
    "ratio": 0.88,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:02.702Z",
+   "etat": "ok"
   }
  },
  {
@@ -18680,6 +18740,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:13.147Z",
+   "etat": "ok"
   }
  },
  {
@@ -18724,6 +18788,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:23.663Z",
+   "etat": "ok"
   }
  },
  {
@@ -18767,6 +18835,10 @@
    "ratio": 0.94,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:34.025Z",
+   "etat": "ok"
   }
  },
  {
@@ -18810,6 +18882,10 @@
    "ratio": 0.94,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:44.104Z",
+   "etat": "ok"
   }
  },
  {
@@ -18853,6 +18929,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:56:55.056Z",
+   "etat": "ok"
   }
  },
  {
@@ -18896,6 +18976,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:05.397Z",
+   "etat": "ok"
   }
  },
  {
@@ -18939,6 +19023,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:16.597Z",
+   "etat": "ok"
   }
  },
  {
@@ -18982,6 +19070,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:27.514Z",
+   "etat": "ok"
   }
  },
  {
@@ -19025,6 +19117,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:37.658Z",
+   "etat": "ok"
   }
  },
  {
@@ -19056,6 +19152,13 @@
    "entrees": 17,
    "ratio": 1,
    "etat": "À REGARDER",
+   "raisons": [
+    "carte-échantillon introuvable"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:37.667Z",
+   "etat": "a-regarder",
    "raisons": [
     "carte-échantillon introuvable"
    ]
@@ -19102,6 +19205,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:57:48.175Z",
+   "etat": "ok"
   }
  },
  {
@@ -19145,6 +19252,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:03.424Z",
+   "etat": "ok"
   }
  },
  {
@@ -19188,6 +19299,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:13.251Z",
+   "etat": "ok"
   }
  },
  {
@@ -19231,6 +19346,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:24.966Z",
+   "etat": "ok"
   }
  },
  {
@@ -19262,6 +19381,13 @@
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « McDonald's Collection 2023 »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:24.975Z",
+   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « McDonald's Collection 2023 »"
    ]
@@ -19298,6 +19424,14 @@
    "tiragesVus": [],
    "ratio": 4.33,
    "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2019 » (vus : aucun)",
+    "entrées/produits 4.33 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:24.985Z",
+   "etat": "a-regarder",
    "raisons": [
     "l'échantillon n'a pas de tirage intl « McDonald's Collection 2019 » (vus : aucun)",
     "entrées/produits 4.33 hors [0,5 ; 1,5]"
@@ -19345,6 +19479,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:34.125Z",
+   "etat": "ok"
   }
  },
  {
@@ -19388,6 +19526,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:43.316Z",
+   "etat": "ok"
   }
  },
  {
@@ -19431,6 +19573,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:58:52.495Z",
+   "etat": "ok"
   }
  },
  {
@@ -19474,6 +19620,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:01.635Z",
+   "etat": "ok"
   }
  },
  {
@@ -19517,6 +19667,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:10.722Z",
+   "etat": "ok"
   }
  },
  {
@@ -19548,6 +19702,13 @@
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « MEE Basic Energies »"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:10.731Z",
+   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « MEE Basic Energies »"
    ]
@@ -19594,6 +19755,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:20.095Z",
+   "etat": "ok"
   }
  },
  {
@@ -19637,6 +19802,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:29.309Z",
+   "etat": "ok"
   }
  },
  {
@@ -19672,6 +19841,13 @@
    ],
    "ratio": 4,
    "etat": "À REGARDER",
+   "raisons": [
+    "entrées/produits 4 hors [0,5 ; 1,5]"
+   ]
+  },
+  "collecte": {
+   "le": "2026-09-19T07:59:29.317Z",
+   "etat": "a-regarder",
    "raisons": [
     "entrées/produits 4 hors [0,5 ; 1,5]"
    ]
@@ -26135,6 +26311,353 @@
    "ratio": 3.17,
    "etat": "OK",
    "raisons": []
+  }
+ },
+ {
+  "code": "M-P/CT",
+  "exp": 6391,
+  "prod": 127,
+  "nom": "M P Traditional Chinese Promos",
+  "slugSet": "M-P-Traditional-Chinese-Promos",
+  "region": "chinois",
+  "bulba": {
+   "titre": "M-P Promotional cards (TCTCG)",
+   "tirage": "zh-hant",
+   "expansion": "M-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 127,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "M-P Promotional cards",
+   "familleUnivers": "chinois-simplifie",
+   "couvertureSondee": "127/127 = 1,000",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "M-P Promotional cards (TCTCG)",
+   "entrees": {
+    "M-P Promotional cards": 206
+   },
+   "note": "vérification automatique : 206 entrées pour 127 produits, échantillon « undefined » (zh-hant)"
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "M-P Promotional cards (TCTCG)",
+   "entrees": 206,
+   "couverture": {
+    "produitsNumerotes": 127,
+    "couverts": 127,
+    "numerosSetlist": 198
+   },
+   "ratio": 1.62,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "M-P/TH",
+  "exp": 6392,
+  "prod": 84,
+  "nom": "M P Thai Promos",
+  "slugSet": "M-P-Thai-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "M-P Promotional cards (TTCG)",
+   "tirage": "th",
+   "expansion": "M-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 84,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "M-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "84/84 = 1,000",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "M-P Promotional cards (TTCG)",
+   "entrees": {
+    "M-P Promotional cards": 154
+   },
+   "note": "vérification automatique : 154 entrées pour 84 produits, échantillon « undefined » (th)"
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "M-P Promotional cards (TTCG)",
+   "entrees": 154,
+   "couverture": {
+    "produitsNumerotes": 84,
+    "couverts": 84,
+    "numerosSetlist": 146
+   },
+   "ratio": 1.83,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "M-P/ID",
+  "exp": 6393,
+  "prod": 130,
+  "nom": "M P Indonesian Promos",
+  "slugSet": "M-P-Indonesian-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "M-P Promotional cards (ITCG)",
+   "tirage": "id",
+   "expansion": "M-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 130,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "M-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "127/130 = 0,977",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "M-P Promotional cards (ITCG)",
+   "entrees": {
+    "M-P Promotional cards": 183
+   },
+   "note": "vérification automatique : 183 entrées pour 130 produits, échantillon « undefined » (id)"
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "M-P Promotional cards (ITCG)",
+   "entrees": 183,
+   "couverture": {
+    "produitsNumerotes": 130,
+    "couverts": 127,
+    "numerosSetlist": 172
+   },
+   "ratio": 1.41,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "SM-P/CS",
+  "exp": 6330,
+  "prod": 50,
+  "nom": "Sun Moon Simplified Chinese Promos",
+  "slugSet": "Sun-Moon-Simplified-Chinese-Promos",
+  "region": "chinois",
+  "bulba": {
+   "titre": "SM-P Promotional cards (SCTCG)",
+   "tirage": "zh-hans",
+   "expansion": "SM-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 50,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "SM-P Promotional cards",
+   "familleUnivers": "chinois-simplifie",
+   "couvertureSondee": "46/50 = 0,920",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "SM-P Promotional cards (SCTCG)",
+   "note": "admise à la main : couverture des numéros 46/50 = 0,920, mesurée 0 requête sur la page lue. Sous 0,95, les numéros absents de Bulbapedia tombent en restes ; les gardes de collecte jugent."
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "SM-P Promotional cards (SCTCG)",
+   "entrees": 74,
+   "couverture": {
+    "produitsNumerotes": 50,
+    "couverts": 46,
+    "numerosSetlist": 47
+   },
+   "ratio": 1.48,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 46/50 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "SV-P/ID",
+  "exp": 6127,
+  "prod": 298,
+  "nom": "Scarlet Violet Indonesian Promos",
+  "slugSet": "Scarlet-Violet-Indonesian-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "SV-P Promotional cards (ITCG)",
+   "tirage": "id",
+   "expansion": "SV-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 298,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "SV-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "257/298 = 0,862",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "SV-P Promotional cards (ITCG)",
+   "note": "admise à la main : couverture des numéros 257/298 = 0,862, mesurée 0 requête sur la page lue. Sous 0,95, les numéros absents de Bulbapedia tombent en restes ; les gardes de collecte jugent."
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "SV-P Promotional cards (ITCG)",
+   "entrees": 312,
+   "couverture": {
+    "produitsNumerotes": 298,
+    "couverts": 257,
+    "numerosSetlist": 247
+   },
+   "ratio": 1.05,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 257/298 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "SV-P/TH",
+  "exp": 6128,
+  "prod": 211,
+  "nom": "Scarlet Violet Thai Promos",
+  "slugSet": "Scarlet-Violet-Thai-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "SV-P Promotional cards (TTCG)",
+   "tirage": "th",
+   "expansion": "SV-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 211,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "SV-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "couvertureSondee": "167/211 = 0,791",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "SV-P Promotional cards (TTCG)",
+   "note": "admise à la main : couverture des numéros 167/211 = 0,791, mesurée 0 requête sur la page lue. Sous 0,95, les numéros absents de Bulbapedia tombent en restes ; les gardes de collecte jugent."
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "SV-P Promotional cards (TTCG)",
+   "entrees": 232,
+   "couverture": {
+    "produitsNumerotes": 211,
+    "couverts": 167,
+    "numerosSetlist": 173
+   },
+   "ratio": 1.1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 167/211 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "S-P/CS",
+  "exp": 6329,
+  "prod": 220,
+  "nom": "Sword Shield Simplified Chinese Promos",
+  "slugSet": "Sword-Shield-Simplified-Chinese-Promos",
+  "region": "chinois",
+  "bulba": {
+   "titre": "S-P Promotional cards (SCTCG)",
+   "tirage": "zh-hans",
+   "expansion": "S-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 220,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "S-P Promotional cards",
+   "familleUnivers": "chinois-simplifie",
+   "couvertureSondee": "132/220 = 0,600",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "S-P Promotional cards (SCTCG)",
+   "note": "admise à la main : couverture des numéros 132/220 = 0,600, mesurée 0 requête sur la page lue. Sous 0,95, les numéros absents de Bulbapedia tombent en restes ; les gardes de collecte jugent."
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "S-P Promotional cards (SCTCG)",
+   "entrees": 294,
+   "couverture": {
+    "produitsNumerotes": 220,
+    "couverts": 132,
+    "numerosSetlist": 154
+   },
+   "ratio": 1.34,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 132/220 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "SV-P/CS",
+  "exp": 6328,
+  "prod": 300,
+  "nom": "Scarlet Violet Simplified Chinese Promos",
+  "slugSet": "Scarlet-Violet-Simplified-Chinese-Promos",
+  "region": "chinois",
+  "bulba": {
+   "titre": "SV-P Promotional cards (SCTCG)",
+   "tirage": "zh-hans",
+   "expansion": "SV-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 300,
+  "auto": {
+   "cle": "promo-asie-2026-09-19",
+   "liste": "intitle:\"Promotional cards\" (55 pages)",
+   "nomBulbapedia": "SV-P Promotional cards",
+   "familleUnivers": "chinois-simplifie",
+   "couvertureSondee": "171/300 = 0,570",
+   "genereLe": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": "SV-P Promotional cards (SCTCG)",
+   "note": "admise à la main : couverture des numéros 171/300 = 0,570, mesurée 0 requête sur la page lue. Sous 0,95, les numéros absents de Bulbapedia tombent en restes ; les gardes de collecte jugent."
+  },
+  "verif": {
+   "le": "2026-09-19",
+   "pageResolue": "SV-P Promotional cards (SCTCG)",
+   "entrees": 367,
+   "couverture": {
+    "produitsNumerotes": 300,
+    "couverts": 171,
+    "numerosSetlist": 172
+   },
+   "ratio": 1.22,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 171/300 sous 0,95"
+   ]
   }
  }
 ]
