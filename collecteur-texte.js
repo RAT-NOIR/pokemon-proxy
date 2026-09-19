@@ -298,7 +298,9 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         console.log(`   numéros depuis la Setlist : ${entrees.length} entrées → ${V.parCarte.size} cartes, ${[...V.parCarte.values()].flat().length} impressions virtuelles · sans numéro ${V.sansNumero.length} · sans page ${V.sansPage.length}${V.sansPage.length ? ' : ' + V.sansPage.slice(0, 5).join(' · ') : ''}`);
     }
     const produits = await produitsDeLExpansion(prod, L.exp);
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE });
+    // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
+    // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slug });
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
     if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));

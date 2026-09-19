@@ -64,10 +64,22 @@ function decomposerNomCardmarket(name) {
  * Produits d'une expansion, lus une fois, avec leur numéro s'il existe.
  * @returns {Promise<Array<{idProduct, idExpansion, idMetacard, name, nom, attaques, numero}>>}
  */
+// 🔴 UNE CARTE-CODE N'EST PAS UNE CARTE — 2026-09-19. Cardmarket vend en « singles » des **Online Code
+// Card** / **Live Code Card** : un bout de carton qui porte un code pour le jeu en ligne. Il n'a ni
+// numéro, ni illustration, ni page Bulbapedia, et il ne peut par construction NI avoir une fiche NI
+// avoir un visuel. Compté au dénominateur, il fabrique un trou permanent et fausse tous les taux.
+// ÉNUMÉRÉ, pas deviné : 464 produits dans 22 expansions, dont Pokemon-Products 298 et
+// Scarlet-Violet-Products 122 — et tous les autres libellés suspects ouverts un par un (« Capsule
+// Énergie Booster », « Pack d'Eau Fraîches », « Collectionneur de Pokémon », « Theme Deck ») sont de
+// VRAIES cartes. Dénominateur du chantier : 69 598 - 464 = **69 134**.
+const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));
+
 async function produitsDeLExpansion(prod, idExpansion) {
     const CP = prod.db.collection('catalogue_produits');
     const NC = prod.db.collection('numeros_cartes');
-    const produits = await CP.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, idExpansion: 1, idMetacard: 1, name: 1 } }).toArray();
+    const bruts = await CP.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, idExpansion: 1, idMetacard: 1, name: 1 } }).toArray();
+    const produits = bruts.filter(p => !estCarteCode(p.name));
+    if (bruts.length !== produits.length) console.log(`   cartes-code écartées : ${bruts.length - produits.length} (ni fiche ni visuel possibles — ce ne sont pas des cartes)`);
     // `slugSet` autant que `slug` : les DEUX font l'URL Cardmarket
     // (/Pokemon/Products/Singles/<slugSet>/<slug>). N'en porter qu'un ne sert à rien.
     const numeros = await NC.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, numero: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray();
@@ -161,7 +173,16 @@ function joindre(cartes, produits, cible) {
         // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
         // en texte nu. Ils n'ont jamais été spécifiés — ce n'était pas un rejeu manqué, c'était une
         // colonne absente.
-        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, slug: p.slug ?? null, slugSet: p.slugSet ?? null, verifieLe: new Date() });
+        // 🔑 ET `slugSet` A UNE SECONDE FONCTION QUI N'EST PAS L'URL : il DÉSIGNE L'ENTRÉE D'IMAGE.
+        // `cartes.images` est clé par set (§19) ; une ligne sans `slugSet` ne peut désigner aucune
+        // entrée, donc le produit n'a PAS de visuel même quand sa carte en porte un. Mesuré le
+        // 2026-09-19 : les 1 787 produits sans `slug` (§6) n'ont pas non plus de `slugSet`, 630
+        // d'entre eux ont pourtant une fiche, 474 des 517 cartes visées portent une image — et le
+        // compte de visuels était 0. Le set, lui, est connu par CONSTRUCTION : c'est celui de la
+        // ligne de table qui a amené la jointure. On le retient en dernier recours.
+        // ⚠️ L'URL Cardmarket n'en devient pas constructible pour autant : elle exige `slug` ET
+        // `slugSet`, et `slug` reste absent. Le champ sert ici au visuel, pas au lien.
+        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, slug: p.slug ?? null, slugSet: p.slugSet ?? cible.slugSet ?? null, verifieLe: new Date() });
         if (!produitsJoints.has(p.idProduct)) produitsJoints.set(p.idProduct, []);
         produitsJoints.get(p.idProduct).push(carte._id);
     };
