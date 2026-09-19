@@ -50,12 +50,36 @@ async function sousVerrouGlobal(M, travail) {
         const additionals = TABLE_AUTO.filter(l => /-Additionals$/.test(l.slugSet || ''));
         const candidates = TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l));
         console.log(`Additionals exclues (variantes du set de base) : ${additionals.length} ${JSON.stringify(additionals.map(l => l.code))}`);
+        // 🔑 L'ÉGALITÉ EXACTE D'UN LIBELLÉ RATE LES RÉORDONNANCEMENTS (2026-09-19). artofpkm écrit « High Class Deck,
+        // Inteleon VMAX » là où Cardmarket écrit « Inteleon VMAX High Class Deck », et « Starter Set VSTAR, Lucario » là
+        // où Cardmarket ajoute l'ère (« Sword Shield Starter Set Lucario VSTAR »). Même famille que les crochets d'Unown,
+        // le ☆ et le préfixe SWSH : un ordre ou un mot de plus, et la clé se TAIT — elle ne se trompe pas, elle ne rend rien,
+        // ce qui est pire (§30 : une recherche qui ne trouve pas ressemble à une donnée qui n'existe pas).
+        // La seconde clé compare les MOTS (accents, ponctuation et pluriels retirés) et accepte l'INCLUSION d'un libellé
+        // dans l'autre. Elle n'écrit QUE si un seul set artofpkm correspond : l'unicité est ce qui remplace l'exactitude.
+        const mots = s => new Set(String(s || '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+            .replace(/[^a-z0-9★]+/g, ' ').trim().split(/\s+/).filter(Boolean).map(m => m.replace(/s$/, '')));
+        // ⚠️ L'INCLUSION A ÉTÉ ESSAYÉE PUIS REFUSÉE, LE 2026-09-19, AVANT TOUT USAGE. « M-P Promotional cards » CONTIENT
+        // « P Promotional Cards » : la clé rendait le set artofpkm des promos « P » pour les promos M-P, L-P, et même pour
+        // les promos chinoises, thaïes et indonésiennes — 9 sources FAUSSES, dont 5 sur des sets qu'artofpkm ne porte pas
+        // du tout. Un libellé plus court n'est pas le même set. Seule l'ÉGALITÉ des mots (l'ordre en moins) est retenue.
+        const memeMots = (a, b) => a.size === b.size && a.size >= 2 && [...a].every(m => b.has(m));
+        const parMots = sets.map(s => ({ s, m: mots(s.nom) }));
+        let parReordre = 0;
         for (const l of candidates) {
             const cles = [...new Set([l.nom, l.bulba?.expansion, l.auto?.nomBulbapedia].flat().filter(Boolean).map(normaliser))];
             const trouves = [...new Map(cles.flatMap(k => parNom.get(k) || []).map(s => [s.id, s])).values()];
-            if (trouves.length === 1) sortie[l.code] = { ids: [trouves[0].id], noms: [trouves[0].nom], cle: 'nom-normalise' };
-            else (trouves.length ? ambigues : absentes).push(`${l.code} « ${l.nom} »${trouves.length ? ' → ' + trouves.map(s => `${s.id} « ${s.nom} »`).join(' | ') : ''}`);
+            if (trouves.length === 1) { sortie[l.code] = { ids: [trouves[0].id], noms: [trouves[0].nom], cle: 'nom-normalise' }; continue; }
+            if (trouves.length) { ambigues.push(`${l.code} « ${l.nom} » → ${trouves.map(s => `${s.id} « ${s.nom} »`).join(' | ')}`); continue; }
+            const nos = [l.nom, l.bulba?.expansion, l.auto?.nomBulbapedia].flat().filter(Boolean).map(mots).filter(m => m.size >= 2);
+            const proches = parMots.filter(({ m }) => nos.some(n => memeMots(m, n)));
+            const uniques = [...new Map(proches.map(({ s }) => [s.id, s])).values()];
+            if (uniques.length === 1) { sortie[l.code] = { ids: [uniques[0].id], noms: [uniques[0].nom], cle: 'mots-reordonnes' }; parReordre++; continue; }
+            if (uniques.length) ambigues.push(`${l.code} « ${l.nom} » → (mots) ${uniques.map(s => `${s.id} « ${s.nom} »`).join(' | ')}`);
+            else absentes.push(`${l.code} « ${l.nom} »`);
         }
+        console.log(`dont par MOTS RÉORDONNÉS (nouvelle clé) : ${parReordre}`);
+        for (const [code, v] of Object.entries(sortie)) if (v.cle === 'mots-reordonnes') console.log(`   RÉORDONNÉ ${code.padEnd(9)} « ${(TABLE_AUTO.find(l => l.code === code) || {}).nom} »  →  ${v.ids[0]} « ${v.noms[0]} »`);
         fs.writeFileSync(FICHIER_AUTO, JSON.stringify(sortie, null, 1));
         console.log(`DÉNOMINATEUR : ${sets.length} sets artofpkm · ${candidates.length} lignes auto non occidentales hors table à la main`);
         console.log(`uniques ${Object.keys(sortie).length} · ambiguës ${ambigues.length} · absentes ${absentes.length} → ${path.basename(FICHIER_AUTO)}`);

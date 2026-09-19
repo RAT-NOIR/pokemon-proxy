@@ -80,6 +80,15 @@
   ],
   "cle": "nom-normalise"
  },
+ "svM": {
+  "ids": [
+   554
+  ],
+  "noms": [
+   "Start Deck Generations"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "sv3": {
   "ids": [
    493
@@ -115,6 +124,15 @@
    "Battle Partners"
   ],
   "cle": "nom-normalise"
+ },
+ "smH": {
+  "ids": [
+   361
+  ],
+  "noms": [
+   "Starter Deck GX"
+  ],
+  "cle": "mots-reordonnes"
  },
  "s8": {
   "ids": [
@@ -1142,6 +1160,42 @@
   ],
   "cle": "nom-normalise"
  },
+ "svLN": {
+  "ids": [
+   549
+  ],
+  "noms": [
+   "Starter Set Tera Type Stellar Sylveon ex"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "svLS": {
+  "ids": [
+   548
+  ],
+  "noms": [
+   "Starter Set Tera Type Stellar Ceruledge ex"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "mBG": {
+  "ids": [
+   577
+  ],
+  "noms": [
+   "Starter Set MEGA Mega Gengar ex"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "mBD": {
+  "ids": [
+   578
+  ],
+  "noms": [
+   "Starter Set MEGA Mega Diancie ex"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "DRS": {
   "ids": [
    248
@@ -1150,6 +1204,15 @@
    "Dragon Selection"
   ],
   "cle": "nom-normalise"
+ },
+ "L2t": {
+  "ids": [
+   215
+  ],
+  "noms": [
+   "Constructed Standard Deck Tyranitar"
+  ],
+  "cle": "mots-reordonnes"
  },
  "advD": {
   "ids": [
@@ -1177,6 +1240,15 @@
    "Metagross Constructed Starter Deck"
   ],
   "cle": "nom-normalise"
+ },
+ "L2s": {
+  "ids": [
+   216
+  ],
+  "noms": [
+   "Constructed Standard Deck Steelix"
+  ],
+  "cle": "mots-reordonnes"
  },
  "pcgI": {
   "ids": [
@@ -1313,6 +1385,24 @@
   ],
   "cle": "nom-normalise"
  },
+ "BKZ": {
+  "ids": [
+   242
+  ],
+  "noms": [
+   "Battle Strength Deck Zekrom EX"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "BKR": {
+  "ids": [
+   243
+  ],
+  "noms": [
+   "Battle Strength Deck Reshiram EX"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "PBG": {
   "ids": [
    270
@@ -1348,6 +1438,15 @@
    "Hydreigon Half Deck"
   ],
   "cle": "nom-normalise"
+ },
+ "KLD": {
+  "ids": [
+   254
+  ],
+  "noms": [
+   "Battle Strength Deck Keldeo"
+  ],
+  "cle": "mots-reordonnes"
  },
  "X30": {
   "ids": [
@@ -1412,6 +1511,15 @@
   ],
   "cle": "nom-normalise"
  },
+ "sm3+": {
+  "ids": [
+   341
+  ],
+  "noms": [
+   "Shining Legend"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "sv8a": {
   "ids": [
    552
@@ -1457,6 +1565,15 @@
   ],
   "cle": "nom-normalise"
  },
+ "s5a": {
+  "ids": [
+   427
+  ],
+  "noms": [
+   "Matchless Fighters"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "s10b": {
   "ids": [
    464
@@ -1484,6 +1601,15 @@
   ],
   "cle": "nom-normalise"
  },
+ "pcgA": {
+  "ids": [
+   87
+  ],
+  "noms": [
+   "Venusaur, Charizard, Blastoise Random Constructed Starter Deck"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "pcgR": {
   "ids": [
    138
@@ -1501,6 +1627,15 @@
    "Imprison! Gardevoir ex Constructed Standard Deck"
   ],
   "cle": "nom-normalise"
+ },
+ "sGI": {
+  "ids": [
+   433
+  ],
+  "noms": [
+   "High Class Deck, Inteleon VMAX"
+  ],
+  "cle": "mots-reordonnes"
  },
  "XYc": {
   "ids": [
@@ -1520,6 +1655,15 @@
   ],
   "cle": "nom-normalise"
  },
+ "XYa": {
+  "ids": [
+   291
+  ],
+  "noms": [
+   "Mega Battle Deck M Charizard EX"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "svOD": {
   "ids": [
    559
@@ -1528,6 +1672,24 @@
    "Starter Set ex Steven's Beldum & Metagross ex"
   ],
   "cle": "nom-normalise"
+ },
+ "sPD": {
+  "ids": [
+   467
+  ],
+  "noms": [
+   "VSTAR & VMAX High Class Deck Deoxys"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "sEF": {
+  "ids": [
+   420
+  ],
+  "noms": [
+   "Starter Set VMAX, Venusaur"
+  ],
+  "cle": "mots-reordonnes"
  },
  "sPZ": {
   "ids": [
@@ -1547,6 +1709,33 @@
   ],
   "cle": "nom-normalise"
  },
+ "sLL": {
+  "ids": [
+   458
+  ],
+  "noms": [
+   "Starter Set VSTAR, Lucario"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "sLD": {
+  "ids": [
+   461
+  ],
+  "noms": [
+   "Starter Set VSTAR, Darkrai"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "sEK": {
+  "ids": [
+   421
+  ],
+  "noms": [
+   "Starter Set VMAX, Blastoise"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "svJP": {
   "ids": [
    517
@@ -1556,6 +1745,42 @@
   ],
   "cle": "nom-normalise"
  },
+ "sGG": {
+  "ids": [
+   434
+  ],
+  "noms": [
+   "High Class Deck, Gengar VMAX"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "XYg": {
+  "ids": [
+   533
+  ],
+  "noms": [
+   "Perfect Battle Deck Zygarde EX"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "DP3p": {
+  "ids": [
+   158
+  ],
+  "noms": [
+   "Constructed Standard Deck Palkia LV.X"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "DP3d": {
+  "ids": [
+   157
+  ],
+  "noms": [
+   "Constructed Standard Deck Dialga LV.X"
+  ],
+  "cle": "mots-reordonnes"
+ },
  "PtG": {
   "ids": [
    252
@@ -1564,6 +1789,42 @@
    "Garchomp Half Deck"
   ],
   "cle": "nom-normalise"
+ },
+ "pcgQ": {
+  "ids": [
+   131
+  ],
+  "noms": [
+   "Earth Groudon ex Constructed Starter Deck"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "pcgP": {
+  "ids": [
+   133
+  ],
+  "noms": [
+   "Ocean Kyogre ex Constructed Starter Deck"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "XYf": {
+  "ids": [
+   524
+  ],
+  "noms": [
+   "Combo Deck Golduck BREAK + Palkia EX"
+  ],
+  "cle": "mots-reordonnes"
+ },
+ "pcgK": {
+  "ids": [
+   118
+  ],
+  "noms": [
+   "Mirage Mew Constructed Starter Deck"
+  ],
+  "cle": "mots-reordonnes"
  },
  "sp1": {
   "ids": [
