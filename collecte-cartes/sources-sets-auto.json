@@ -1897,5 +1897,60 @@
    "DPt-P Promotional cards"
   ],
   "cle": "nom-normalise"
+ },
+ "xsv2a": {
+  "ids": [
+   490
+  ],
+  "noms": [
+   "Pokémon Card 151"
+  ],
+  "cle": "set-de-base-motif-non-distingue",
+  "motifNonDistingue": true,
+  "setDeBase": "sv2a"
+ },
+ "xm2a": {
+  "ids": [
+   579
+  ],
+  "noms": [
+   "Mega Dream ex"
+  ],
+  "cle": "set-de-base-motif-non-distingue",
+  "motifNonDistingue": true,
+  "setDeBase": "m2a"
+ },
+ "xsv8a": {
+  "ids": [
+   552
+  ],
+  "noms": [
+   "Terastal Festival ex"
+  ],
+  "cle": "set-de-base-motif-non-distingue",
+  "motifNonDistingue": true,
+  "setDeBase": "sv8a"
+ },
+ "xsv11B": {
+  "ids": [
+   565
+  ],
+  "noms": [
+   "Black Bolt"
+  ],
+  "cle": "set-de-base-motif-non-distingue",
+  "motifNonDistingue": true,
+  "setDeBase": "sv11B"
+ },
+ "xsv11W": {
+  "ids": [
+   566
+  ],
+  "noms": [
+   "White Flare"
+  ],
+  "cle": "set-de-base-motif-non-distingue",
+  "motifNonDistingue": true,
+  "setDeBase": "sv11W"
  }
 }

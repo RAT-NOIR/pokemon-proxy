@@ -45,11 +45,15 @@ async function sousVerrouGlobal(M, travail) {
         for (const s of sets) { const k = normaliser(s.nom); parNom.set(k, [...(parNom.get(k) || []), s]); }
         const sortie = {}, absentes = [], ambigues = [];
         // Les « Additionals » Cardmarket (xsv2a, xm2a, xsv11B…) sont des VARIANTES des cartes du set de base (motifs Poké Ball,
-        // Master Ball) : leur nom apparie le set artofpkm de base, dont les images appartiennent à un autre tirage (§19). Exclues,
-        // et comptées (2026-09-15).
+        // Master Ball). Exclues le 2026-09-15 au motif que leur image appartiendrait à un autre tirage (§19).
+        // ✅ ROUVERT LE 2026-09-19, SUR MESURE ET PAR DÉCISION DU TESTEUR : les Additionals sont des produits Cardmarket
+        // à part entière (leur `idProduct`, leur prix), et un catalogue qui les laisse sans visuel ne couvre pas la
+        // référence. Ce qui a changé n'est pas l'avis, c'est le FAIT mesuré : la liste artofpkm de Terastal Festival ex
+        // porte 381 numéros DISTINCTS, aucun doublon — la source publie une image par NUMÉRO, pas par motif. Le visuel
+        // servi est donc le bon set et le bon numéro, et il ne montre simplement pas le motif du produit ; la ligne le
+        // DIT (`motifNonDistingue` → `mention`, écrite à côté de la preuve).
         const additionals = TABLE_AUTO.filter(l => /-Additionals$/.test(l.slugSet || ''));
         const candidates = TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l));
-        console.log(`Additionals exclues (variantes du set de base) : ${additionals.length} ${JSON.stringify(additionals.map(l => l.code))}`);
         // 🔑 L'ÉGALITÉ EXACTE D'UN LIBELLÉ RATE LES RÉORDONNANCEMENTS (2026-09-19). artofpkm écrit « High Class Deck,
         // Inteleon VMAX » là où Cardmarket écrit « Inteleon VMAX High Class Deck », et « Starter Set VSTAR, Lucario » là
         // où Cardmarket ajoute l'ère (« Sword Shield Starter Set Lucario VSTAR »). Même famille que les crochets d'Unown,
@@ -80,6 +84,19 @@ async function sousVerrouGlobal(M, travail) {
         }
         console.log(`dont par MOTS RÉORDONNÉS (nouvelle clé) : ${parReordre}`);
         for (const [code, v] of Object.entries(sortie)) if (v.cle === 'mots-reordonnes') console.log(`   RÉORDONNÉ ${code.padEnd(9)} « ${(TABLE_AUTO.find(l => l.code === code) || {}).nom} »  →  ${v.ids[0]} « ${v.noms[0]} »`);
+        // Les Additionals prennent la source du set DE BASE, nommé par le slug sans le suffixe.
+        const tous = [...TABLE_AUTO, ...require('./table-sets').TABLE_MAIN];
+        const basesFaites = [];
+        for (const a of additionals) {
+            const slugBase = a.slugSet.replace(/-Additionals$/, '');
+            const base = tous.find(l => l.slugSet === slugBase);
+            const S = base && (sortie[base.code] || ARTOFPKM[base.code]);
+            if (!S) { absentes.push(`${a.code} « ${a.nom} » (Additionals : set de base ${base?.code ?? slugBase} sans source)`); continue; }
+            sortie[a.code] = { ids: S.ids, noms: S.noms, cle: 'set-de-base-motif-non-distingue', motifNonDistingue: true, setDeBase: base.code };
+            basesFaites.push(`${a.code} → ${base.code} ${S.ids[0]} « ${S.noms[0]} »`);
+        }
+        console.log(`Additionals rattachées au set de base (motif non distingué par la source) : ${basesFaites.length} sur ${additionals.length}`);
+        for (const b of basesFaites) console.log(`   ADDITIONALS ${b}`);
         fs.writeFileSync(FICHIER_AUTO, JSON.stringify(sortie, null, 1));
         console.log(`DÉNOMINATEUR : ${sets.length} sets artofpkm · ${candidates.length} lignes auto non occidentales hors table à la main`);
         console.log(`uniques ${Object.keys(sortie).length} · ambiguës ${ambigues.length} · absentes ${absentes.length} → ${path.basename(FICHIER_AUTO)}`);

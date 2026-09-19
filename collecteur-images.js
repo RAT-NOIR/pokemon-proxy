@@ -285,6 +285,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(c);
     }
     const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();
+    // 🔑 LA MENTION VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
+    // (motifs Master Ball, Poké Ball) qui partagent le numéro du set de base ; artofpkm, lui, ne publie qu'UNE image par
+    // NUMÉRO — mesuré : Terastal Festival ex, 381 numéros distincts, aucun doublon. Leur visuel est donc le bon numéro du
+    // bon set, mais PAS le motif du produit. Sans cette mention, quelqu'un comparera un jour deux variantes en croyant
+    // voir deux visuels différents : la ligne le dit elle-même, à côté de la preuve.
+    const mention = S?.motifNonDistingue ? 'variante Cardmarket : la source ne distingue pas le motif — une image par numéro' : null;
     const restes = [];
     const cartesAvecImage = new Set();
     let jointes = 0;
@@ -316,12 +322,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         }
         if (cands.length === 1) {
             const c = cands[0];
-            await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve } });
+            await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(mention ? { mention } : {}) } });
             // 🔴 UNE IMAGE APPARTIENT À UNE IMPRESSION, PAS À UNE CARTE (CLAUDE.md §19). `image`,
             // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
             // cartes de la base, 29 déjà pourvues. `images` est une LISTE clé par `set`, comme la
             // jointure l'est par produit. L'ancien champ est retiré au passage.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve, jointeLe: new Date() };
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve, ...(mention ? { mention } : {}), jointeLe: new Date() };
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
