@@ -29,6 +29,7 @@ const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = 
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion, impressionsDepuisSetlist } = require('./collecte-cartes/jointure');
+const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
@@ -64,7 +65,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // Et le verrou de SET passe sur verrou-source.js — l'ancien excluait `pid === process.pid` (pid 52 sur
     // tous les pods Render) et se libérait par `_id` seul : les défauts corrigés dans d9d4767 côté images.
     const slug = L.slugSet;
-    const reparserSeul = process.argv.includes('--reparser');
+    // 🔑 LE VERROU GLOBAL PROTÈGE UNE PROMESSE FAITE À BULBAPEDIA (1 requête / 5 s) : il n'a de sens que
+    // pour un traitement qui SORT de chez nous. `--reparser` relit R2, et une ligne `sansPage` prend ses
+    // cartes dans notre propre base — aucun des deux ne frappe Bulbapedia, aucun des deux ne prend le
+    // verrou. C'est ce qui permet de collecter ces sets PENDANT que le worker d'images le tient.
+    const reparserSeul = process.argv.includes('--reparser') || !!L.bulba.sansPage;
     const verrouGlobal = reparserSeul ? null : fabriquerVerrou({ Modele: M.EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: VERROU_GLOBAL_BULBA_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: 'verrou global bulbapedia (texte)' });
     for (let essai = 0; verrouGlobal; essai++) {
         const tenu = await verrouGlobal.prendre();
@@ -94,6 +99,45 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const TIRAGE = L.bulba.tirage || 'jp';
     const nomsCibles = [].concat(L.bulba.expansion);
     const impressionCible = faits => faits.impressions.find(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck));
+
+    // ---- 0. LA COLLECTE SANS PAGE : les cartes prises par l'expansion QU'ELLES DÉCLARENT ----
+    // 🔑 CE QUE CE CHEMIN RÉPARE. Notre énumération part toujours de la Setlist d'une PAGE DE SET. Des
+    // dizaines d'expansions Cardmarket n'ont pas de page à elles — decks, coffrets, starter sets : leurs
+    // cartes sont listées, quand elles le sont, sur une page COLLECTIVE (« Terastal Starter Sets (TCG) »)
+    // sous une section au nom du deck, ou nulle part. Elles ont donc été classées « irréductibles ».
+    // Elles ne le sont pas : nos propres pages, déjà collectées, DÉCLARENT l'expansion dans `jpexpansion=`
+    // — 118 noms d'expansion que la table ignore, mesurés le 2026-09-19. L'énumération se retourne : au
+    // lieu de demander à un set quelles cartes il contient, on demande aux cartes à quel set elles
+    // appartiennent. ZÉRO requête Bulbapedia, zéro page nouvelle, la même jointure ensuite.
+    //
+    // ⚠️ CE CHEMIN NE COLLECTE AUCUNE CARTE. Il ne voit que ce qui est déjà en base : une carte de ce deck
+    // dont aucune page n'a encore été lue restera un « produit-sans-carte », et c'est le bon résultat —
+    // un reste nommé, pas un silence. Le contrôle qui le dit est imprimé : combien des numéros Cardmarket
+    // sont couverts par les impressions déclarées.
+    if (L.bulba.sansPage) {
+        const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
+        const produits = await produitsDeLExpansion(prod, L.exp);
+        console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
+        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slug });
+        const ecrit = await ecrireJointure(M, { slug, J, produits });
+        // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
+        // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
+        await M.Set.updateOne({ _id: slug }, {
+            $set: {
+                code: L.code, idExpansion: [L.exp], nomEn: TIRAGE === 'intl' ? nomsCibles[0] : null, nomJa: null, nomJaTraduit: null,
+                region: TIRAGE === 'jp' ? 'jp' : 'intl', totalImprime: null,
+                bulba: { titre: null, expansion: L.bulba.expansion, motifTitres: 'sans page : cartes prises par l\'expansion déclarée sur leurs propres pages' },
+                collecteLe: new Date()
+            }, $setOnInsert: { version: 1 }
+        }, { upsert: true });
+        const restesParType = {};
+        for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
+        const joints = new Set(J.lignes.map(l => l.idProduct)).size;
+        await M.Etat.updateOne({ _id: slug }, { $set: { phase: 'jointure', sansPage: true, cartesVues: cartesDuSet.length, joints, restes: restesParType, fin: new Date() } });
+        console.log(`   jointure : ${ecrit.lignes} lignes · ${joints}/${produits.length} produits joints (${(joints / (produits.length || 1) * 100).toFixed(1)} %) · ${ecrit.cartes} cartes · restes ${JSON.stringify(restesParType)}`);
+        console.log(joints === produits.length ? `   ✅ tous les produits de l'expansion sont joints` : `   ⚠️ ${produits.length - joints} produit(s) sans carte : leur page n'est pas encore en base, ou n'existe pas`);
+        await finir(); return;
+    }
 
     // ---- 1. la page du set -------------------------------------------------------------
     // En --reparser, la page du set est relue depuis R2 elle aussi : zéro requête Bulbapedia.
@@ -301,18 +345,9 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
     // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
     const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slug });
-    for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
-    if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
-    // liens dénormalisés sur la carte : produits joints, et leurs MÉTACARTES distinctes (le champ
-    // singulier `idMetacard`, déclaré et jamais rempli, est retiré au passage).
-    const metaDe = new Map(produits.map(p => [p.idProduct, p.idMetacard]));
-    const parCarte = new Map();
-    for (const l of J.lignes) { if (!parCarte.has(l.carteId)) parCarte.set(l.carteId, []); parCarte.get(l.carteId).push(l.idProduct); }
-    for (const [carteId, ids] of parCarte) {
-        const metas = [...new Set(ids.map(id => metaDe.get(id)).filter(m => m != null))];
-        await M.Carte.updateOne({ _id: carteId }, { $addToSet: { 'liens.idProduct': { $each: ids }, 'liens.idMetacards': { $each: metas } }, $unset: { 'liens.idMetacard': 1 } });
-    }
+    // L'écriture vit dans `ecrire-jointure.js` : la collecte SANS PAGE écrit exactement la même chose,
+    // et deux définitions du même geste divergent toujours (§21 bis).
+    await ecrireJointure(M, { slug, J, produits });
     // bonus : les expansions OCCIDENTALES jumelles nommées par ces pages (non comptées dans la
     // complétude). ⚠️ Seulement depuis un set JAPONAIS : sur un set occidental, le « jumeau » serait
     // le japonais, et il est déjà collecté par sa propre ligne de table.

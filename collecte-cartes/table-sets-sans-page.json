@@ -1,0 +1,683 @@
+[
+ {
+  "code": "WAK",
+  "exp": 4187,
+  "prod": 64,
+  "nom": "Everyones Exciting Battle",
+  "slugSet": "Everyones-Exciting-Battle",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Everyone's Exciting Battle"
+  },
+  "attendu": 64,
+  "controle": {
+   "cartesDeclarantes": 6,
+   "numerosCardmarket": 64,
+   "couverts": 16,
+   "taux": 0.25,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 16/64 = 25 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "GBML",
+  "exp": 4361,
+  "prod": 62,
+  "nom": "Gift Box Mew Lucario",
+  "slugSet": "Gift-Box-Mew-Lucario",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Gift Box Mew • Lucario"
+  },
+  "attendu": 62,
+  "controle": {
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 62,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 0/62 = 0 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "HXY",
+  "exp": 4154,
+  "prod": 45,
+  "nom": "XY Beginning Set",
+  "slugSet": "XY-Beginning-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "XY Beginning Set"
+  },
+  "attendu": 45,
+  "controle": {
+   "cartesDeclarantes": 42,
+   "numerosCardmarket": 45,
+   "couverts": 45,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "XY Beginning Set": 42
+   },
+   "note": "sans page : 42 cartes de la base déclarent « XY Beginning Set » ; 45 des 45 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "EP08",
+  "exp": 4306,
+  "prod": 42,
+  "nom": "Entry Pack 08",
+  "slugSet": "Entry-Pack-08",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Entry Pack '08"
+  },
+  "attendu": 42,
+  "controle": {
+   "cartesDeclarantes": 42,
+   "numerosCardmarket": 0,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "le": "2026-09-19"
+  },
+  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 42 cartes déclarent « Entry Pack '08 » pour 42 produits."
+ },
+ {
+  "code": "smJ",
+  "exp": 4249,
+  "prod": 35,
+  "nom": "Tag Team GX Premium Trainer Box",
+  "slugSet": "Tag-Team-GX-Premium-Trainer-Box",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "TAG TEAM GX Premium Trainer Box"
+  },
+  "attendu": 35,
+  "controle": {
+   "cartesDeclarantes": 35,
+   "numerosCardmarket": 35,
+   "couverts": 35,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "TAG TEAM GX Premium Trainer Box": 35
+   },
+   "note": "sans page : 35 cartes de la base déclarent « TAG TEAM GX Premium Trainer Box » ; 35 des 35 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "smN",
+  "exp": 4247,
+  "prod": 29,
+  "nom": "Tag Team GX Deck Build Box",
+  "slugSet": "Tag-Team-GX-Deck-Build-Box",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "TAG TEAM GX Deck Build Box"
+  },
+  "attendu": 29,
+  "controle": {
+   "cartesDeclarantes": 29,
+   "numerosCardmarket": 29,
+   "couverts": 29,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "TAG TEAM GX Deck Build Box": 29
+   },
+   "note": "sans page : 29 cartes de la base déclarent « TAG TEAM GX Deck Build Box » ; 29 des 29 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "XYe",
+  "exp": 4238,
+  "prod": 28,
+  "nom": "Emboar EX vs Togekiss EX Deck Kit",
+  "slugSet": "Emboar-EX-vs-Togekiss-EX-Deck-Kit",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Emboar-EX vs Togekiss-EX Deck Kit"
+  },
+  "attendu": 28,
+  "controle": {
+   "cartesDeclarantes": 23,
+   "numerosCardmarket": 28,
+   "couverts": 28,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Emboar-EX vs Togekiss-EX Deck Kit": 23
+   },
+   "note": "sans page : 23 cartes de la base déclarent « Emboar-EX vs Togekiss-EX Deck Kit » ; 28 des 28 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "BGS",
+  "exp": 4205,
+  "prod": 26,
+  "nom": "Battle Gift Set Thundurus vs Tornadus",
+  "slugSet": "Battle-Gift-Set-Thundurus-vs-Tornadus",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Battle Gift Set: Thundurus vs Tornadus"
+  },
+  "attendu": 26,
+  "controle": {
+   "cartesDeclarantes": 21,
+   "numerosCardmarket": 26,
+   "couverts": 26,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Battle Gift Set: Thundurus vs Tornadus": 21
+   },
+   "note": "sans page : 21 cartes de la base déclarent « Battle Gift Set: Thundurus vs Tornadus » ; 26 des 26 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "XYh",
+  "exp": 4079,
+  "prod": 26,
+  "nom": "MAudino EX Mega Battle Deck",
+  "slugSet": "MAudino-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "M Audino-EX Mega Battle Deck"
+  },
+  "attendu": 26,
+  "controle": {
+   "cartesDeclarantes": 26,
+   "numerosCardmarket": 26,
+   "couverts": 26,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "M Audino-EX Mega Battle Deck": 26
+   },
+   "note": "sans page : 26 cartes de la base déclarent « M Audino-EX Mega Battle Deck » ; 26 des 26 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "svLN",
+  "exp": 5841,
+  "prod": 25,
+  "nom": "Stellar Tera Type Starter Set Sylveon ex",
+  "slugSet": "Stellar-Tera-Type-Starter-Set-Sylveon-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Stellar Tera Type Starter Set Sylveon ex"
+  },
+  "attendu": 25,
+  "controle": {
+   "cartesDeclarantes": 1,
+   "numerosCardmarket": 25,
+   "couverts": 1,
+   "taux": 0.04,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 1/25 = 4 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "svLS",
+  "exp": 5842,
+  "prod": 25,
+  "nom": "Stellar Tera Type Starter Set Ceruledge ex",
+  "slugSet": "Stellar-Tera-Type-Starter-Set-Ceruledge-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Stellar Tera Type Starter Set Ceruledge ex"
+  },
+  "attendu": 25,
+  "controle": {
+   "cartesDeclarantes": 2,
+   "numerosCardmarket": 25,
+   "couverts": 2,
+   "taux": 0.08,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 2/25 = 8 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "BTV",
+  "exp": 4211,
+  "prod": 23,
+  "nom": "Battle Theme Deck Victini",
+  "slugSet": "Battle-Theme-Deck-Victini",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Battle Theme Deck: Victini"
+  },
+  "attendu": 23,
+  "controle": {
+   "cartesDeclarantes": 21,
+   "numerosCardmarket": 23,
+   "couverts": 23,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Battle Theme Deck: Victini": 21
+   },
+   "note": "sans page : 21 cartes de la base déclarent « Battle Theme Deck: Victini » ; 23 des 23 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "svEM",
+  "exp": 5477,
+  "prod": 22,
+  "nom": "Terastal Starter Set Mewtwo ex",
+  "slugSet": "Terastal-Starter-Set-Mewtwo-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Terastal Starter Set Mewtwo ex"
+  },
+  "attendu": 22,
+  "controle": {
+   "cartesDeclarantes": 18,
+   "numerosCardmarket": 22,
+   "couverts": 20,
+   "taux": 0.909,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Terastal Starter Set Mewtwo ex": 18
+   },
+   "note": "sans page : 18 cartes de la base déclarent « Terastal Starter Set Mewtwo ex » ; 20 des 22 numéros Cardmarket sont des numéros de ces impressions (91 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "svEL",
+  "exp": 5476,
+  "prod": 22,
+  "nom": "Terastal Starter Set Skeledirge ex",
+  "slugSet": "Terastal-Starter-Set-Skeledirge-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Terastal Starter Set Skeledirge ex"
+  },
+  "attendu": 22,
+  "controle": {
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 22,
+   "couverts": 16,
+   "taux": 0.727,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 16/22 = 73 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "MAL",
+  "exp": 4339,
+  "prod": 20,
+  "nom": "Movie Commemoration VS Pack Auras Lucario",
+  "slugSet": "Movie-Commemoration-VS-Pack-Auras-Lucario",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Movie Commemoration VS Pack: Aura's Lucario"
+  },
+  "attendu": 20,
+  "controle": {
+   "cartesDeclarantes": 7,
+   "numerosCardmarket": 20,
+   "couverts": 7,
+   "taux": 0.35,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 7/20 = 35 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "MSD",
+  "exp": 4340,
+  "prod": 19,
+  "nom": "Movie Commemoration VS Pack Sky Splitting Deoxys",
+  "slugSet": "Movie-Commemoration-VS-Pack-Sky-Splitting-Deoxys",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Movie Commemoration VS Pack: Sky-Splitting Deoxys"
+  },
+  "attendu": 19,
+  "controle": {
+   "cartesDeclarantes": 7,
+   "numerosCardmarket": 19,
+   "couverts": 7,
+   "taux": 0.368,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 7/19 = 37 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "MPS",
+  "exp": 4277,
+  "prod": 19,
+  "nom": "Melee Pokemon Scramble",
+  "slugSet": "Melee-Pokemon-Scramble",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Melee! Pokémon Scramble"
+  },
+  "attendu": 19,
+  "controle": {
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 19,
+   "couverts": 16,
+   "taux": 0.842,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "refus": "couverture 16/19 = 84 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "BKW",
+  "exp": 4189,
+  "prod": 18,
+  "nom": "White Kyurem EX Battle Strength Deck",
+  "slugSet": "White-Kyurem-EX-Battle-Strength-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "White Kyurem-EX Battle Strength Deck"
+  },
+  "attendu": 18,
+  "controle": {
+   "cartesDeclarantes": 19,
+   "numerosCardmarket": 18,
+   "couverts": 18,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "White Kyurem-EX Battle Strength Deck": 19
+   },
+   "note": "sans page : 19 cartes de la base déclarent « White Kyurem-EX Battle Strength Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "BKB",
+  "exp": 4190,
+  "prod": 18,
+  "nom": "Black Kyurem EX Battle Strength Deck",
+  "slugSet": "Black-Kyurem-EX-Battle-Strength-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Black Kyurem-EX Battle Strength Deck"
+  },
+  "attendu": 18,
+  "controle": {
+   "cartesDeclarantes": 18,
+   "numerosCardmarket": 18,
+   "couverts": 17,
+   "taux": 0.944,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Black Kyurem-EX Battle Strength Deck": 18
+   },
+   "note": "sans page : 18 cartes de la base déclarent « Black Kyurem-EX Battle Strength Deck » ; 17 des 18 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "PPD",
+  "exp": 4192,
+  "prod": 17,
+  "nom": "Team Plasmas Powered Half Deck",
+  "slugSet": "Team-Plasmas-Powered-Half-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Team Plasma's Powered Half Deck"
+  },
+  "attendu": 17,
+  "controle": {
+   "cartesDeclarantes": 17,
+   "numerosCardmarket": 17,
+   "couverts": 17,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Team Plasma's Powered Half Deck": 17
+   },
+   "note": "sans page : 17 cartes de la base déclarent « Team Plasma's Powered Half Deck » ; 17 des 17 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "PtS",
+  "exp": 4283,
+  "prod": 12,
+  "nom": "Shaymin LVX Collection Pack",
+  "slugSet": "Shaymin-LVX-Collection-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Shaymin LV.X Collection Pack"
+  },
+  "attendu": 12,
+  "controle": {
+   "cartesDeclarantes": 12,
+   "numerosCardmarket": 12,
+   "couverts": 12,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Shaymin LV.X Collection Pack": 12
+   },
+   "note": "sans page : 12 cartes de la base déclarent « Shaymin LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "PtM",
+  "exp": 4282,
+  "prod": 12,
+  "nom": "Mewtwo LVX Collection Pack",
+  "slugSet": "Mewtwo-LVX-Collection-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Mewtwo LV.X Collection Pack"
+  },
+  "attendu": 12,
+  "controle": {
+   "cartesDeclarantes": 12,
+   "numerosCardmarket": 12,
+   "couverts": 12,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Mewtwo LV.X Collection Pack": 12
+   },
+   "note": "sans page : 12 cartes de la base déclarent « Mewtwo LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "PtR",
+  "exp": 4281,
+  "prod": 12,
+  "nom": "Regigigas LVX Collection Pack",
+  "slugSet": "Regigigas-LVX-Collection-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Regigigas LV.X Collection Pack"
+  },
+  "attendu": 12,
+  "controle": {
+   "cartesDeclarantes": 12,
+   "numerosCardmarket": 12,
+   "couverts": 12,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "Regigigas LV.X Collection Pack": 12
+   },
+   "note": "sans page : 12 cartes de la base déclarent « Regigigas LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "PPB",
+  "exp": 4342,
+  "prod": 9,
+  "nom": "PokePark Blue",
+  "slugSet": "PokePark-Blue",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "PokéPark Blue"
+  },
+  "attendu": 9,
+  "controle": {
+   "cartesDeclarantes": 9,
+   "numerosCardmarket": 9,
+   "couverts": 9,
+   "taux": 1,
+   "inverse": 1,
+   "le": "2026-09-19"
+  },
+  "verifie": {
+   "le": "2026-09-19",
+   "page": null,
+   "entrees": {
+    "PokéPark Blue": 9
+   },
+   "note": "sans page : 9 cartes de la base déclarent « PokéPark Blue » ; 9 des 9 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ }
+]

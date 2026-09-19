@@ -123,7 +123,7 @@ const TABLE = [
     { code: 'xPBL', exp: 6640, prod: 12, nom: 'Pitch Black Additionals', slugSet: 'Pitch-Black-Additionals', region: 'occidental', bulba: { titre: 'Pitch Black (TCG)', tirage: 'intl', setlist: ['Pitch Black'], expansion: 'Pitch Black' }, attendu: 12, additionalsDe: 'PBL', verifie: V('Pitch Black (TCG)', { 'Pitch Black': 95 }, 'même page que PBL ; 8 numéros sur 8 sont ceux de la base') },
     { code: 'xCRI', exp: 6518, prod: 9, nom: 'Chaos Rising Additionals', slugSet: 'Chaos-Rising-Additionals', region: 'occidental', bulba: { titre: 'Chaos Rising (TCG)', tirage: 'intl', setlist: ['Chaos Rising'], expansion: 'Chaos Rising' }, attendu: 9, additionalsDe: 'CRI', verifie: V('Chaos Rising (TCG)', { 'Chaos Rising': 96, 'Additional Cards': 8 }, 'même page que CRI ; 7 numéros sur 7 sont ceux de la base') }
 ].map(l => {
-    if (l.region === 'occidental') return l;          // elles portent leurs propres colonnes
+    if (l.exp || l.region === 'occidental') return l;   // une ligne qui porte son `exp` porte toutes ses colonnes
     const s = parCode[l.code];
     if (!s) throw new Error(`table-sets : code ${l.code} absent de sets-vintage-japonais.js`);
     return { ...l, exp: s.exp, prod: s.prod, nom: s.nom, slugSet: s.slug, region: 'japonais' };
@@ -153,8 +153,21 @@ const TABLE_AUTO = fs.existsSync(FICHIER_AUTO) ? JSON.parse(fs.readFileSync(FICH
 const TABLE_MAIN = TABLE.slice();
 TABLE.push(...TABLE_AUTO.filter(l => l.verifie));
 
+// ════════════════════════════════════════════════════════════════════════
+// LES LIGNES « SANS PAGE » — generer-table-sans-page.js, 2026-09-19
+// ════════════════════════════════════════════════════════════════════════
+// Des expansions Cardmarket qui n'ont AUCUNE page de set chez Bulbapedia — decks, coffrets, starter
+// sets — mais dont les cartes déclarent l'expansion sur leurs propres pages, déjà collectées.
+// L'énumération se retourne : au lieu de demander à un set ses cartes, on demande aux cartes leur set.
+// Zéro requête, et la même jointure ensuite. Leur `verifie` est un contrôle MESURÉ EN BASE (part des
+// numéros Cardmarket qui sont des numéros des impressions déclarées) ; sous le seuil, la ligne existe
+// avec son motif de refus et ne collecte pas.
+const FICHIER_SANS_PAGE = path.join(__dirname, 'table-sets-sans-page.json');
+const TABLE_SANS_PAGE = fs.existsSync(FICHIER_SANS_PAGE) ? JSON.parse(fs.readFileSync(FICHIER_SANS_PAGE, 'utf8')) : [];
+TABLE.push(...TABLE_SANS_PAGE.filter(l => l.verifie));
+
 function ligne(code) {
-    return TABLE.find(l => l.code === code) || TABLE_AUTO.find(l => l.code === code) || null;
+    return TABLE.find(l => l.code === code) || TABLE_AUTO.find(l => l.code === code) || TABLE_SANS_PAGE.find(l => l.code === code) || null;
 }
 
-module.exports = { TABLE, TABLE_MAIN, TABLE_AUTO, FICHIER_AUTO, EXPANSIONS_INTL, ligne };
+module.exports = { TABLE, TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE, FICHIER_AUTO, FICHIER_SANS_PAGE, EXPANSIONS_INTL, ligne };
