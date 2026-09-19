@@ -30,6 +30,19 @@
 // CONFLIT : la légende et le nom de fichier nomment deux sets différents -> non collecté, compté.
 
 const serre = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+/**
+ * Les jetons d'une SÉRIE de promos, tirés du nom d'expansion lui-même — rien n'est deviné :
+ * « SWSH Black Star Promos » -> « swshpromo », « Wizards Black Star Promos » -> « wizardspromo »,
+ * « McDonald's Collection 2022 » -> « mcdonaldscollection2022promo » (qui ne matche rien, et c'est
+ * le bon résultat : ces pages ne portent que le fichier du set d'origine).
+ */
+const jetonsDeSerie = expansion => {
+    const t = String(expansion ?? '').replace(/Black Star Promos?/i, '').replace(/Promotional cards?/i, '').trim();
+    const mots = t.split(/\s+/).filter(Boolean);
+    const j = new Set();
+    if (mots.length) { j.add(serre(`${mots.join('')}promo`)); j.add(serre(`${mots[0]}promo`)); }
+    return [...j].filter(x => x.length > 5);   // « promo » nu exclu par construction
+};
 /** « 044 » -> 44, « TG05 » -> 5 ; rend null si pas de chiffres. */
 const numeroEntier = s => { const m = String(s ?? '').match(/(\d+)/); return m ? Number(m[1]) : null; };
 
@@ -133,6 +146,36 @@ function fichiersDeLaPage(wt, impressions) {
             else { f.tirages = []; f.conflit = true; }
         } else f.tirages = f.conflit ? [] : parNom;
         f.conflit = !!f.conflit;
+    }
+
+    // 🔑 LA CONVENTION DE NOM DES SÉRIES DE PROMOS — 2026-09-19.
+    // Bulbapedia nomme « ScorbunnySWSHPromo71.jpg » le n°SWSH071 des *SWSH Black Star Promos*, et
+    // « PikachuWizardsPromo27.jpg » le n°27 des *Wizards Black Star Promos*. La règle 2 ci-dessus
+    // cherche le nom d'expansion ENTIER dans le fichier (« swshblackstarpromos ») : elle ne trouve
+    // rien et la carte tombe en « absent » alors que le fichier la NOMME. C'est le §30 — un
+    // instrument muet lu comme un monde vide.
+    // MESURÉ AVANT D'ÉCRIRE, 8 sets de promos, 319 impressions tirées au sort : num 159 (50 %),
+    // absent 151, dont 130 récupérées par cette convention et 0 ambiguë → 91 %.
+    // ⚠️ Elle est STRICTEMENT ADDITIVE : elle ne s'exécute que sur un fichier qu'aucune règle n'a
+    // attribué (`tirages` vide, pas de conflit), donc elle ne peut déplacer aucune résolution qui
+    // marche. Et le jeton porte la SÉRIE (« swshpromo »), jamais « promo » nu : une carte tirée dans
+    // deux séries porterait deux fichiers au même numéro, et le numéro seul ne les sépare pas.
+    for (const f of F.values()) {
+        if (f.tirages.length || f.conflit) continue;
+        const base = serre(f.fichier.replace(/\.(?:jpe?g|png|gif|webp)$/i, ''));
+        const trouves = new Map();
+        for (const i of impressions) {
+            if (!/promo/i.test(i.expansion || '')) continue;
+            const n = numeroEntier(i.numero);
+            if (n == null) continue;
+            for (const j of jetonsDeSerie(i.expansion)) {
+                if (!new RegExp(`${j}0*${n}$`).test(base)) continue;
+                trouves.set(`${i.expansion}#${n}`, { expansion: i.expansion, numero: n, preuve: `convention de nom « ${j}<numéro> »` });
+            }
+        }
+        const uniques = [...trouves.values()];
+        if (uniques.length === 1) f.tirages = uniques;
+        else if (uniques.length > 1) f.conflit = true;
     }
     return [...F.values()];
 }
