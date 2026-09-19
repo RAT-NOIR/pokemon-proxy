@@ -255,7 +255,12 @@ function joindre(cartes, produits, cible) {
         if (!trouves.length && carte.nomEn && !numeroEssaye) {
             // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
             // LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
-            const nomJoint = String(carte.nomEn) + (String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
+            // ⚠️ NE PAS DOUBLER LE SUFFIXE. Tant que `nomEn` portait l'ESPÈCE (« Mesprit »), il fallait
+            // lui rendre son « LV.X » depuis `level=X`. Depuis que `nomEn` est recomposé sur le nom de
+            // la carte (« Mesprit LV.X »), l'ajouter une seconde fois fabrique « Mesprit LV.X LV.X » et
+            // fait perdre la jointure : 19 lignes des sets DP au rejeu, toutes des LV.X. Mesuré avant.
+            const dejaLvX = /lv\.?\s*x\s*$/i.test(String(carte.nomEn || ''));
+            const nomJoint = String(carte.nomEn) + (!dejaLvX && String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
             const clesNom = [...new Set([normaliserNom(nomJoint), normaliserNom(nomJoint.replace(/^Basic\s+/i, ''))])];
             // Une carte qui DÉCLARE une impression dans le set SANS numéro (promo non numérotée), dans un catalogue NUMÉROTÉ, ne vise
             // par son nom qu'un produit SANS numéro : XY-P, Greninja [jp:null] prenait Greninja n°073 (8 produits vers plusieurs

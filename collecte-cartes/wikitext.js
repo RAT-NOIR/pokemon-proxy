@@ -248,7 +248,35 @@ function cheminsAGabarit(valeur, prefixe = '', vus = new Set()) {
 /**
  * Les FAITS d'une page de carte. Rend aussi `champsNuls` pour le compte de la relecture.
  */
-function faitsDeCarte(texte) {
+// 🔴 `cardname` EST L'ESPÈCE, PAS LE NOM DE LA CARTE — 1 442 cartes sur 15 261 (9,4 %), 2026-09-19.
+// L'infobox de « M Lucario-EX (Furious Fists 55) » porte `cardname=Lucario` ; le suffixe vit ailleurs,
+// et à un endroit DIFFÉRENT selon l'ère : `class=ex`, `evostage=MegaEX`, `level=X`, ou nulle part
+// (les V, VMAX et VSTAR ne le portent que dans `jname`). Toutes les formes sont touchées à 100 % :
+// ex 442, V 250, GX 188, EX 216, VMAX 88, LV.X 57, VSTAR 36, BREAK 35, SP (G/GL/FB/C/4) 59, LEGEND 9,
+// V-UNION 5. Seul « ☆ » échappe, parce que la source le met dans `cardname` — la preuve qu'elle
+// distingue les deux emplacements délibérément.
+//
+// 🔑 LE NOM COMPLET EST DANS LE TITRE DE LA PAGE, et il y est pour toutes les ères à la fois : une
+// seule règle au lieu d'une par génération de suffixe. On ne prend le titre QUE s'il contient déjà
+// `cardname` et dit plus — sinon on garde `cardname`. Les 57 cas où le titre dit AUTRE CHOSE sont des
+// ABRÉVIATIONS (« Falkner's TM 01 » pour « Falkner's Technical Machine 01 ») : là, le titre est moins
+// bon que l'infobox, et une règle « le titre gagne toujours » les aurait tous abîmés.
+//
+// ⚠️ REJOUÉ AVANT D'ÊTRE ÉCRIT (§20), sur 418 sets et 42 624 lignes (86 % des jointures) : 9 lignes
+// GAGNÉES (« M Swampert-EX », « Crobat BREAK », « Mewtwo & Mew-GX » que Cardmarket nomme avec le
+// suffixe), 1 perdue, 0 DÉPLACÉE. La clé de nom normalise déjà espaces, tirets et casse, donc
+// « Gardevoir ex », « Gardevoir-EX » et « GardevoirEX » sont la même clé : seule la PRÉSENCE du
+// suffixe bouge, jamais sa ponctuation.
+const cleNom = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function nomDeLaCarte(cardname, titre) {
+    const base = cardname || null;
+    if (!base || !titre) return base;
+    const t = String(titre).replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (!t || cleNom(t) === cleNom(base)) return base;
+    return cleNom(t).includes(cleNom(base)) ? t : base;
+}
+
+function faitsDeCarte(texte, titre = null) {
     const gs = gabarits(texte);
     const infobox = gs.find(g => CATEGORIE_PAR_INFOBOX[g.nom]);
     // LE DÉNOMINATEUR DE CETTE FONCTION : combien d'entrées d'expansion la page PORTE, contre
@@ -289,7 +317,7 @@ function faitsDeCarte(texte) {
     const p = infobox?.params || {};
     const carte = {
         categorie: infobox ? CATEGORIE_PAR_INFOBOX[infobox.nom] : null,
-        nomEn: plat(p.cardname) || null,
+        nomEn: nomDeLaCarte(plat(p.cardname) || null, titre),
         nomJa: plat(p.jname) || null,
         // Ère DP : le niveau est un champ, pas un morceau du nom — « Magmortar » avec `level=X` est
         // la carte que Cardmarket nomme « Magmortar LV.X ». La jointure reconstruit le nom depuis les deux.
@@ -544,4 +572,4 @@ function entreesDeLaSetlist(texte, b) {
     return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
+module.exports = { gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };

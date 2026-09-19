@@ -75,6 +75,32 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const n = multi[0]?.n || 0;
     console.log(`   ⚖️ contrôle transversal : ${n} produit(s) rattaché(s) à PLUSIEURS cartes ${n ? '— 🔴 autant de fiches qui montrent un lien, un illustrateur ou un visuel d\'une autre carte (node detacher-jointures-fausses.js)' : '✅'}`);
 
+    // ⚠️ LES DEUX AUTRES UNICITÉS DU DÉPÔT, contrôlées ICI et plus seulement promises (§32).
+    // Chacune a sa garde locale — l'une dans le collecteur d'images, l'autre dans rapatrier-noms-sets.js
+    // — et une garde locale ne voit jamais ce qu'une AUTRE exécution a écrit.
+    //   · une IMAGE par (carte, set, NUMÉRO) — et le NUMÉRO n'était pas dans la première version de ce
+    //     contrôle, qui a crié sur 684 couples parfaitement normaux. Lus un par un : les 684 portent
+    //     DEUX NUMÉROS DIFFÉRENTS dans le même set — « Super Rod » Paldea-Evolved n°188 ET n°276,
+    //     « Slowbro » Pitch-Black n°030 et n°090. Un set moderne réimprime ses cartes en secrète et en
+    //     illustration rare : deux tirages, deux visuels, et c'est le §19 lui-même (« une image
+    //     appartient à un TIRAGE ») qu'une clé sans numéro trahissait. ⚠️ Un contrôle qui crie sur un
+    //     cas normal est contourné le jour où il a raison (§25) : il fallait corriger la clé, pas la
+    //     tolérance.
+    //   · un `nomAffichage` DISTINCT par set : deux sets au même nom à l'écran ne se distinguent plus,
+    //     et le départage (§26) tourne set par set, donc il ne peut pas voir la collision d'ensemble.
+    const imgDoublons = await cx.db.collection('cartes').aggregate([
+        { $unwind: '$images' }, { $group: { _id: { c: '$_id', s: '$images.set', n: '$images.numero' }, k: { $sum: 1 } } },
+        { $match: { k: { $gt: 1 } } }, { $count: 'n' }
+    ]).toArray();
+    const ni = imgDoublons[0]?.n || 0;
+    const nomsDoublons = await cx.db.collection('sets').aggregate([
+        { $match: { nomAffichage: { $nin: [null, ''] } } },
+        { $group: { _id: '$nomAffichage', sets: { $addToSet: '$_id' } } },
+        { $match: { 'sets.1': { $exists: true } } }
+    ]).toArray();
+    console.log(`   ⚖️ une image par (carte, set, n°) : ${ni} triplet(s) en double ${ni ? '— 🔴 le visuel affiché dépend de l\'ordre de lecture' : '✅'}`);
+    console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) porté(s) par plusieurs sets ${nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x._id} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
+
     if (process.argv.includes('--par-set')) {
         console.log(`\n   les 30 sets au plus gros écart (fiche sans visuel) :`);
         for (const [s, c] of [...parSet].sort((a, b) => (b[1].fiches - b[1].visuels) - (a[1].fiches - a[1].visuels)).slice(0, 30))

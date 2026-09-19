@@ -273,7 +273,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia.`);
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
-            const faits = faitsDeCarte(epure);
+            const faits = faitsDeCarte(epure, c.bulba?.titre);
             compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
@@ -306,7 +306,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
             const cle = r2.cleWikitext(pg.pageid, pg.revid);
             const depot = await r2.deposerTexte(process.env.R2_BUCKET_BRUT, cle, epure);   // R2 AVANT la ligne
             if (depot.ecrit) r2Ecrits++;
-            const faits = faitsDeCarte(pg.content);
+            const faits = faitsDeCarte(pg.content, pg.title);
             compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
