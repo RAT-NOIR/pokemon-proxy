@@ -408,7 +408,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
 
     // ---- rapport : cinq cartes au hasard, champs à côté du wikitext épuré ---------------------
     fs.mkdirSync(dossierRapport, { recursive: true });
-    const cheminRapport = path.join(dossierRapport, `${L.code}-${new Date().toISOString().slice(0, 10)}.md`);
+    // ⚠️ UN CODE DE SET N'EST PAS UN NOM DE FICHIER (2026-09-19). « M-P/CT », « SV-P/ID » : la barre oblique faisait
+    // écrire dans un dossier inexistant, ENOENT, code de sortie 1 — alors que la collecte était FINIE et concordante
+    // (127 jointures, 0 reste). La boucle a compté trois échecs et s'est arrêtée sur un rapport, pas sur une donnée.
+    const nomFichier = `${String(L.code).replace(/[^A-Za-z0-9.-]/g, '_')}-${new Date().toISOString().slice(0, 10)}.md`;
+    const cheminRapport = path.join(dossierRapport, nomFichier);
     const tirage = [...cartesDuSet].sort(() => Math.random() - 0.5).slice(0, 5);
     const lignesR = [`# Rapport ${L.code} — ${new Date().toISOString()}`, '', '```json', JSON.stringify({ complet, nuls }, null, 1), '```', ''];
     for (const c of tirage) {

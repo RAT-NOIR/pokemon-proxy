@@ -102,7 +102,7 @@ async function verifierAuto() {
     // La production (lecture seule) seulement si une ligne du bloc tire ses numéros de la Setlist : sa vérification les compare
     // aux numéros Cardmarket.
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: bloc.some(l => l.bulba.numerosDepuisSetlist), buckets: [] });
-    const { cleNumero, numeroDeSetlist } = require('./jointure');
+    const { cleNumero, numeroDeSetlist, jetonsDeSetlist } = require('./jointure');
     const verrou = fabriquerVerrou({ Modele: modeles(cx).EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: 3 * 60 * 1000, surInsertion: { phase: 'collecteur' }, nom: 'verrou global bulbapedia (vérification)' });
     const tenu = await verrou.prendre();
     if (tenu) { console.error(`❌ ARRÊT : verrou bulbapedia tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s).`); await fermer(); process.exit(1); }
@@ -130,7 +130,8 @@ async function verifierAuto() {
             // ne prouverait rien. Le critère est la COUVERTURE : les numéros Cardmarket de l'expansion sont-ils des numéros de TCG ID
             // de la Setlist ? SV6s n'a que 62 produits (168…229) pour 229 entrées : le ratio le refuserait, la couverture non.
             if (l.bulba.numerosDepuisSetlist && l._p && v.entrees) {
-                const numsSetlist = new Set(l._entrees.map(x => numeroDeSetlist(x, l.bulba.expansion)).filter(n => n != null).map(cleNumero));
+                const jetons = jetonsDeSetlist(l._entrees, [].concat(l.bulba.expansion, l.bulba.setlist || []));
+                const numsSetlist = new Set(l._entrees.map(x => numeroDeSetlist(x, jetons)).filter(n => n != null).map(cleNumero));
                 const numsProduits = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '').map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
                 v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size };

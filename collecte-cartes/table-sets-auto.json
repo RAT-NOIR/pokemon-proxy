@@ -20660,6 +20660,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:00:28.827Z",
+   "etat": "ok"
   }
  },
  {
@@ -20745,6 +20749,10 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:01:29.972Z",
+   "etat": "ok"
   }
  },
  {
@@ -20830,6 +20838,10 @@
    "ratio": 1.14,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:02:06.388Z",
+   "etat": "ok"
   }
  },
  {
@@ -20915,6 +20927,10 @@
    "ratio": 1.14,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:02:41.933Z",
+   "etat": "ok"
   }
  },
  {
@@ -26267,6 +26283,10 @@
    "ratio": 1.98,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:03:45.239Z",
+   "etat": "ok"
   }
  },
  {
@@ -26311,6 +26331,10 @@
    "ratio": 3.17,
    "etat": "OK",
    "raisons": []
+  },
+  "collecte": {
+   "le": "2026-09-19T08:04:18.174Z",
+   "etat": "ok"
   }
  },
  {
@@ -26355,6 +26379,18 @@
    "ratio": 1.62,
    "etat": "OK",
    "raisons": []
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-19T08:05:06.403Z",
+    "etat": "echec-1-verifie",
+    "retireeLe": "2026-09-19T08:07:03.723Z",
+    "motif": "rapport impossible a ecrire (barre oblique dans le code) : la collecte etait finie et concordante"
+   }
+  ],
+  "collecte": {
+   "le": "2026-09-19T08:07:09.470Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -26399,6 +26435,18 @@
    "ratio": 1.83,
    "etat": "OK",
    "raisons": []
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-19T08:05:40.016Z",
+    "etat": "echec-1-verifie",
+    "retireeLe": "2026-09-19T08:07:03.723Z",
+    "motif": "rapport impossible a ecrire (barre oblique dans le code) : la collecte etait finie et concordante"
+   }
+  ],
+  "collecte": {
+   "le": "2026-09-19T08:07:09.498Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -26443,6 +26491,18 @@
    "ratio": 1.41,
    "etat": "OK",
    "raisons": []
+  },
+  "collecteAvant": [
+   {
+    "le": "2026-09-19T08:06:16.589Z",
+    "etat": "echec-1-verifie",
+    "retireeLe": "2026-09-19T08:07:03.723Z",
+    "motif": "rapport impossible a ecrire (barre oblique dans le code) : la collecte etait finie et concordante"
+   }
+  ],
+  "collecte": {
+   "le": "2026-09-19T08:07:09.526Z",
+   "etat": "deja-fait"
   }
  },
  {
@@ -26486,6 +26546,10 @@
    "raisons": [
     "couverture des numéros Cardmarket 46/50 sous 0,95"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T08:07:26.330Z",
+   "etat": "ok"
   }
  },
  {
@@ -26529,6 +26593,10 @@
    "raisons": [
     "couverture des numéros Cardmarket 257/298 sous 0,95"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T08:08:26.279Z",
+   "etat": "ok"
   }
  },
  {
@@ -26572,6 +26640,10 @@
    "raisons": [
     "couverture des numéros Cardmarket 167/211 sous 0,95"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T08:09:06.733Z",
+   "etat": "non-concordant"
   }
  },
  {
@@ -26615,6 +26687,10 @@
    "raisons": [
     "couverture des numéros Cardmarket 132/220 sous 0,95"
    ]
+  },
+  "collecte": {
+   "le": "2026-09-19T08:09:51.323Z",
+   "etat": "noms-discordants"
   }
  },
  {

@@ -93,8 +93,9 @@ function impressionsDepuisSetlist(entrees, pages, cible) {
     const pageDe = new Map((pages || []).filter(p => p.pageid != null).map(p => [p.titre, p.pageid]));
     const parCarte = new Map(), sansPage = [], sansNumero = [];
     const noms = [].concat(cible.expansionBulba);
+    const jetons = jetonsDeSetlist(entrees, noms);
     for (const e of entrees) {
-        const numero = numeroDeSetlist(e, noms);
+        const numero = numeroDeSetlist(e, jetons);
         if (numero == null) { sansNumero.push(e.titre); continue; }
         const id = pageDe.get(e.titre);
         if (id == null) { sansPage.push(e.titre); continue; }
@@ -105,16 +106,33 @@ function impressionsDepuisSetlist(entrees, pages, cible) {
 }
 
 /**
- * Le numéro qu'une entrée de Setlist porte pour l'expansion lue — UNE définition, lue par la jointure ET par la vérification
- * (§21 bis). Un TCG ID donne toujours son numéro. Un LIEN (cartes à suffixe : `[[Sinistcha ex (Transfiguration Mask 23)|…]]`)
- * n'en donne un que si sa parenthèse est EXACTEMENT « <expansion> N » : ailleurs le numéro est indicatif (« Pokémon Card 151 »),
- * et une coquille de la source (« Storming Emergrnce Verdant 27 ») n'est pas devinée.
+ * Les jetons de set qu'une Setlist reconnaît comme SIENS : les noms de la table, plus le jeton le plus fréquent de ses
+ * TCG ID. Une page de promos écrit « S-P Promo » là où la table dit « S-P Promotional cards » ; tout autre jeton est une
+ * RÉIMPRESSION listée en passant (« Psyduck (Astral Radiance 28) »), et son numéro appartient à l'autre set.
+ * @returns {Set<string>}
+ */
+function jetonsDeSetlist(entrees, nomsExpansion) {
+    const jetons = new Set([].concat(nomsExpansion).filter(Boolean));
+    const frequences = new Map();
+    for (const e of entrees || []) if (e.forme === 'tcg-id' && e.a) frequences.set(e.a, (frequences.get(e.a) || 0) + 1);
+    const dominant = [...frequences].sort((x, y) => y[1] - x[1])[0]?.[0];
+    if (dominant) jetons.add(dominant);
+    return jetons;
+}
+
+/**
+ * Le numéro qu'une entrée de Setlist porte POUR CE SET — UNE définition, lue par la jointure ET par la vérification
+ * (§21 bis). L'entrée doit désigner ce set : son jeton est un nom de la table ou le jeton dominant de la page.
+ * ⚠️ 2026-09-19 : un TCG ID était accepté quel que soit son set. Les pages de promos listent les RÉIMPRESSIONS
+ * (« Psyduck (Astral Radiance 28) ») : leur numéro, pris pour celui du promo, a donné 12 produits joints à plusieurs
+ * cartes sur S-P/CS — la garde a arrêté la boucle. Un lien reste soumis à la même règle (coquille non devinée).
  * @returns {string|null}
  */
-function numeroDeSetlist(e, nomsExpansion) {
+function numeroDeSetlist(e, jetonsOuNoms) {
     if (e.b == null || String(e.b).trim() === '') return null;
-    if (e.forme === 'tcg-id') return String(e.b).trim();
-    if (e.forme === 'lien' && [].concat(nomsExpansion).includes(e.a)) return String(e.b).trim();
+    const jetons = jetonsOuNoms instanceof Set ? jetonsOuNoms : new Set([].concat(jetonsOuNoms).filter(Boolean));
+    if (!jetons.has(e.a)) return null;
+    if (e.forme === 'tcg-id' || e.forme === 'lien') return String(e.b).trim();
     return null;
 }
 
@@ -254,4 +272,4 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, impressionsDepuisSetlist, numeroDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
+module.exports = { joindre, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
