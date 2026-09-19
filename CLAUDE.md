@@ -21,6 +21,18 @@ suffixes de langue) et on regarde ce qu'elle contient. Une requête ciblée rép
 trouvé » ; seule une énumération répond « ça n'existe pas ». Et tant qu'on n'a pas énuméré, on écrit
 **« non trouvé par telle requête »**, jamais « n'existe pas ».
 
+⚠️ **ET LA CINQUIÈME, LE MÊME JOUR, SUR UN LIBELLÉ** : l'appariement des sources d'images exigeait l'ÉGALITÉ EXACTE du
+nom. artofpkm écrit « High Class Deck, Inteleon VMAX », Cardmarket « Inteleon VMAX High Class Deck » ; « Earth Groudon
+ex » contre « Earths Groudon ex » ; « Palkia LV.X » contre « Palkia LVX ». **29 sets présents passaient pour absents.**
+Même famille que les crochets d'Unown, le ☆ et le préfixe SWSH : un ordre, un pluriel ou un point qui diffère, et la clé
+ne se trompe pas — elle se TAIT, ce qui coûte plus cher, parce qu'un silence ne réclame rien. La clé de secours compare
+les MOTS, et c'est l'**unicité** qui remplace l'exactitude.
+🔴 **ET LA VERSION LARGE DE CETTE CLÉ A ÉTÉ ÉCRITE PUIS REFUSÉE DANS L'HEURE.** Accepter l'INCLUSION d'un libellé dans
+l'autre (au lieu de l'égalité) donnait « P Promotional Cards » aux promos **M-P, L-P, chinoises, thaïes et
+indonésiennes** : 9 sources fausses, dont 5 pour des sets qu'artofpkm ne porte pas du tout. **Un libellé plus court n'est
+pas le même set.** Ce qui l'a attrapé n'est pas un test, c'est d'avoir LU les 9 paires avant de s'en servir — une clé
+d'appariement se relit ligne à ligne, toujours, parce qu'elle fabrique des faits qui ont l'air justes.
+
 ⚠️ **C'EST LA QUATRIÈME FOIS, ET LES TROIS AUTRES ONT LA MÊME FORME** : PKMJP « source de texte »
 écartée sur un compte au lieu d'un constat (§22), les sections « Additional Cards » jugées sur leur
 nombre d'entrées (§22), les listes artofpkm arrêtées à 100 lues comme la limite de la source
