@@ -831,6 +831,21 @@ Deux fois dans la journée, un défaut réparé à un endroit est resté intact 
   verrou global** (compteur cumulé 200 → 324, DP5c pris à 13:29:28 pile sur son cycle de 10 min), et
   deux pods ont frappé artofpkm ensemble de 08:21:12 à 08:21:53. Corrigé dans `d9d4767`
   (`collecte-cartes/verrou-source.js`, une seule définition pour le global et le set).
+- **🔴 et une QUATRIÈME fois le 2026-09-19, sur la clé de numéro — et cette fois ça se VOYAIT à l'écran.**
+  `cleNumero` (le préfixe alphabétique gardé) a été écrit le 2026-09-12 pour la jointure du TEXTE, après
+  29 jointures fausses sur la sous-série S d'EC1. **La jointure des IMAGES est restée sur `chiffresDuNumero`
+  pendant sept jours**, et artofpkm numérote les énergies d'un set à part : `en1`…`en8`, réduits à `1`…`8`.
+  **La fiche 001 Ekans de Magma VS Aqua affichait une Énergie Plante** — 15 visuels faux (0,08 % des 19 596),
+  signalés par l'agent du site, pas par nous. ⚠️ **Le défaut était dans le MÊME dépôt, sous le MÊME nom,
+  exporté par le MÊME module** : `jointure.js` exporte les deux clés, et le collecteur d'images importait
+  l'ancienne. Un `require` est un endroit où une règle se duplique sans qu'on la recopie.
+  🔑 **Et ce qui a permis de trancher est un rejeu AVANT d'écrire** : les deux clés rejouées sur les 19 596
+  images — **17 904 identiques, 0 déplacée, 0 ambiguë, 15 perdues, et les 15 perdues sont exactement les
+  15 faux**. Le coût nul du §20, mesuré, pas supposé. ⚠️ **Un visuel faux ne se prouve pas par le nom** :
+  artofpkm traduit autrement (« Janine's Secret Technique » = « Janine's Secret Art », 129 cas) et numérote
+  autrement (`DPBP#468`, 555 cas). **Seuls les 15 où le nom ET le numéro discordent étaient faux** — un seul
+  des deux critères pris isolément aurait fait détacher des centaines de jointures justes.
+
 🔑 **Quand on corrige une règle qui existe en deux exemplaires, on corrige les deux dans le même
 commit, ou on n'en corrige aucun.** C'est la règle de symétrie du banc (§9), appliquée aux jointures :
 deux définitions de la même règle divergent toujours, et la seconde ne se découvre que par accident.
