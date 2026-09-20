@@ -5,7 +5,36 @@ renégocie pas en cours de route.
 
 ---
 
-## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LES DEUX RÉFLEXES QUI ONT LE PLUS RAPPORTÉ
+## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LE MOTIF DOMINANT DE CE CHANTIER
+
+> # 🔴 LA SONDE FABRIQUE LE DÉFAUT QU'ELLE MESURE.
+>
+> ### « Le collecteur savait lire, c'est ma mesure écrite à côté qui ne savait pas. »
+>
+> **Trois fois en deux jours, l'anomalie n'était pas dans les données ni dans le code de production :
+> elle était dans l'OUTIL QUI REGARDAIT.** Et chaque fois, l'outil rendait un résultat parfaitement
+> plausible — un vide, une ambiguïté, un doublon — qui ressemblait à une découverte.
+>
+> | ce que ma sonde a annoncé | ce qu'elle faisait | la vérité |
+> |---|---|---|
+> | « 0 page porte un `fr` » | ne lisait que les gabarits nommés `*infobox*` | **261 pages**, le `fr` vit dans `{{Langtable}}` |
+> | « 61 produits pour 30 numéros, chaque numéro désigne deux cartes » | `chiffres()` réduisait « 1N » et « 1S » à « 1 » | **61 numéros distincts, 0 ambigu** |
+> | « 4 kits sans aucune carte déclarante » | appariait le slug Cardmarket au nom Bulbapedia | **10 kits sur 11 ont leurs cartes** |
+>
+> 🔑 **LA CONSÉQUENCE PRATIQUE, ET ELLE EST MÉCANIQUE : avant de conclure qu'une donnée est ABSENTE ou
+> FAUSSE, vérifier que l'outil qui la lit lit la MÊME CHOSE que le code de production. Si les deux
+> divergent, c'est l'OUTIL qu'on ouvre, pas la donnée.** `cleNumero` gardait le suffixe « N » depuis
+> neuf jours, pour cette raison exacte, et ma mesure écrite à côté utilisait `chiffres()`. Le dépôt
+> portait déjà la bonne lecture ; je ne m'en servais pas pour mesurer.
+>
+> ⚠️ **C'est le §21 bis (« corrigé d'un côté, laissé de l'autre ») déplacé d'un cran** : la règle
+> n'est plus dupliquée entre deux fichiers de production, elle est dupliquée entre la PRODUCTION et
+> l'INSTRUMENT. Et cette copie-là est invisible, parce qu'un outil de mesure n'a pas de tests, ne
+> casse jamais, et n'est lu par personne.
+
+---
+
+## 🔑 ET LES DEUX RÉFLEXES QUI ONT LE PLUS RAPPORTÉ
 
 > ### « Quand ton chiffre dit 251 et le mien 0, c'est le MIEN qu'on ouvre. »
 >
@@ -83,6 +112,34 @@ jamais** : c'est tout l'intérêt de ce fichier, et c'est exactement le danger.
 | §33 | « 122 candidates jamais jugées » | `l.verification?.motif` — le champ est `l.verif` | **117 avaient un verdict écrit** |
 | §28 | « le chinois est irréductible » | une consigne de périmètre lue comme un fait | **5 675 produits fichés à 92,8 %** |
 | **§27** | **« aucune source ne porte la date »** | **Cardmarket + infobox Bulbapedia — TCGdex jamais interrogé** | **5 des 11, et 59 sets sur 281** |
+| **§26** | **« la ponctuation est perdue et ne se devine pas »** | **le seul `slugSet` de Cardmarket, où le tiret remplace tout** | **28 sets, et la source était DÉJÀ EN BASE** |
+
+### ✅ L'AUDIT COMPLET DU 2026-09-21 — CE QUI TOMBE, CE QUI TIENT, ET POURQUOI
+
+**Le §26 tombe, et sa sonde est la plus embarrassante des sept : la source n'était pas ailleurs, elle
+était DÉJÀ DANS NOTRE BASE.** « La ponctuation n'est pas dans le slug » est exact ; « elle ne se devine
+pas » l'est aussi. Mais on n'avait pas à la deviner : `bulba.expansion` la porte, sur **380 sets dont le
+nom NU est identique au nôtre** — même set, garanti — et **28 d'entre eux gagnent une ponctuation** :
+« Gold, Silver, to a New World... », « Leaders' Stadium », « Magma VS Aqua: Two Ambitions »,
+« McDonald's Collection », « Champion's Path », « Jet-Black Spirit ».
+🔑 **Et la clé est sûre PAR CONSTRUCTION, ce qui est rare** : elle n'accepte que des noms dont la forme
+nue est identique, donc elle ne peut ni changer de set, ni créer une collision d'affichage (§26) — le
+contrôle le confirme à 0 plutôt qu'il ne le découvre. **Une reponctuation n'est pas un appariement.**
+
+**CE QUI TIENT, REMESURÉ LE MÊME JOUR — et il faut l'écrire aussi fort que ce qui tombe :**
+
+| § | la limite | ce que la remesure a donné |
+|---|---|---|
+| §24 | « aucune carte portant ☆ dans la base » | **0 et 0** — cherché par le caractère, par le mot « Star », par les cinq noms nus. Les 9 irréductibles sont toujours 9. |
+| §7 | « deux étiquettes sont nécessaires, nous en avons ZÉRO » | **0 produit sur 73 188** ne nomme une édition (1st, Shadowless, Unlimited). ⚠️ Ses comptes de champs sont périmés (13→16, 4→7) ; sa RAISON ne l'est pas. |
+| §0 | « le plafond de la voie plus de clés est 62,5 % » | **le journal est à 280 lignes, exactement comme le 2026-09-09.** |
+
+🔴 **ET LE §0 DONNE LE FAIT LE PLUS IMPORTANT DE L'AUDIT, QUI N'EST PAS SON PLAFOND : LA DERNIÈRE LIGNE
+DU JOURNAL DATE DU 2026-09-08.** Le banc n'a pas grossi d'une ligne en treize jours. Le plafond ne peut
+donc pas avoir bougé — mais surtout, **le banc ne peut plus rien trancher de neuf** : toutes les
+décisions qui l'attendent (la promotion du §9, la garde du §8, le tri du §11) attendent des SCANS, pas
+des mesures. ⚠️ **Une conclusion qui « tient » parce que sa population est gelée n'est pas confirmée,
+elle est SUSPENDUE** — et c'est une troisième catégorie, à côté de « tombée » et « tenue ».
 
 🔴 **LE §27 EST TOMBÉ LE 2026-09-21, ET SA SONDE ÉTAIT PARTICULIÈREMENT COUPABLE.** Le paragraphe dit
 « Aucune source DISPONIBLE ne la porte » et détaille deux vérifications — Cardmarket n'a pas de date
