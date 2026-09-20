@@ -20,6 +20,11 @@
 //     `151C`), promos `…/CS` `…/CT` `…/ID` `…/TH`, `PKMTCH`, slugs Chinese/Taiwan/Indonesian/Thai/IDTH.
 //     🔴 20 des 83 expansions chinoises sont rangées « japonais » par codes_set : les prendre pour du
 //     japonais, c'est collecter du faux. Le chinois est un chantier distinct (pages « (ATCG) »).
+//     ✅ ET CE CHANTIER A SON GÉNÉRATEUR DEPUIS LE 2026-09-21 : `generer-table-atcg.js`. L'exclusion
+//     ci-dessous reste JUSTE — ce générateur-ci apparie par le NOM, et les noms chinois de Cardmarket
+//     et de Bulbapedia sont deux traductions indépendantes (0 paire sur 49). Mais elle n'est plus un
+//     renoncement : elle dit « pas ici », pas « nulle part ». ⚠️ Pendant un jour, elle a voulu dire
+//     « nulle part » alors que le §28 était tombé — 4 168 produits sans même une ligne candidate (§39).
 //
 // Débit : Bulbapedia, 1 requête pour les deux listes + 1 par lot de 50 titres, sous le verrou global
 // `bulbapedia/__collecteur__` (verrou-source.js). Production : LECTURE SEULE.

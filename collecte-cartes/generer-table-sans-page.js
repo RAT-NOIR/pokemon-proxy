@@ -116,6 +116,11 @@ async function principal() {
         // · `UNP Unnumbered-Promos` : 205 produits, AUCUN numéroté et AUCUN numéro déclaré — le contrôle
         //   n'est pas à 0 %, il n'est PAS ÉVALUABLE (§8). Il faudra une autre clé que le numéro.
     };
+    // ⚠️ L'EXCLUSION DU CHINOIS DIT « PAS ICI », ELLE NE DIT PLUS « NULLE PART ». Elle reste juste pour
+    // CETTE voie : le retournement part du nom d'expansion que nos cartes déclarent, et les pages de
+    // cartes ne mentionnent le chinois que 3 fois sur 607 (§28) — il n'y a rien à retourner. Mais elle
+    // a été écrite quand « le chinois est irréductible » était une conclusion, et elle a survécu d'un
+    // jour à la chute de cette conclusion. La route est `generer-table-atcg.js`, par le CODE de set (§39).
     const cibles = univers.filter(u => u.produits && (u.slugSet || A_LA_MAIN[u.exp]) && !slugsPris.has(u.slugSet) && !/chinois|asiatique/.test(u.famille || ''));
     console.log(`DÉNOMINATEUR : ${parNom.size} noms d'expansion déclarés par nos pages et absents de la table · ${cibles.length} expansions Cardmarket sans ligne (${cibles.reduce((s, u) => s + u.produits, 0)} produits)\n`);
 

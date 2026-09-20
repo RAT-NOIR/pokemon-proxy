@@ -45,12 +45,129 @@ renégocie pas en cours de route.
 > l'était. (§30 les promos ID/TH · §33 `verif` contre `verification` · §28 le chinois · §27 les dates ·
 > §36 le `fr` du `Langtable` · §21 n°7 les listes tronquées à 100.)
 
+> ### 🔴 « On a écrit QUE ÇA NE SE DEVINE PAS sans vérifier qu'on n'avait pas à deviner. »
+>
+> **C'est le pendant exact du zéro, et c'est la pire des sept limites tombées — parce que la source
+> n'était ni chez un tiers, ni sous licence, ni à collecter : ELLE ÉTAIT DÉJÀ DANS NOTRE BASE.** Le §26
+> disait « la ponctuation est perdue et ne se devine pas ». Les deux moitiés sont vraies : le slug
+> Cardmarket n'a pas la virgule, et inventer une ponctuation serait deviner. **Mais `bulba.expansion`
+> la porte, sur 380 sets dont le nom nu est identique au nôtre, depuis la première collecte.** 28 sets
+> ont attendu neuf jours un `updateOne` de zéro requête.
+>
+> 🔑 **LA QUESTION À POSER, ET ELLE VIENT AVANT « OÙ TROUVER ? » : QU'EST-CE QU'ON A DÉJÀ ?** Devant un
+> « c'est impossible », l'inventaire de ce qui est en base passe avant la recherche d'une source. Nous
+> collectons depuis des semaines des champs que personne ne relit ensuite pour répondre à une AUTRE
+> question que celle qui les a fait collecter. **Une donnée collectée pour un usage ne se range pas
+> toute seule à côté des questions qu'elle résout.**
+>
+> ⚠️ Et c'est la même asymétrie que le zéro : *« je n'ai pas trouvé »* et *« ça n'existe pas »* sont
+> deux phrases différentes, et *« ça ne se devine pas »* en est une troisième — elle ne dit rien de ce
+> qu'on possède déjà. **Les trois se distinguent en NOMMANT ce qui a été regardé.**
+
 > ### « Un contrôle qui devient parfait en rétrécissant son périmètre est un FAUX, pas une réussite. »
 >
 > Le décalage des Trainer Kits rendait **« 100 % de couverture, 0 ambigu »** — en poussant la moitié des
 > cartes hors de la plage comparée. Le contrôle n'était pas satisfait, il était **vidé**. La question à
 > poser devant tout contrôle qui s'améliore après un changement : *ai-je amélioré l'appariement, ou
 > retiré des candidats ?* Un dénominateur qui rétrécit pendant qu'un taux monte est le signal (§0, §34).
+
+---
+
+## 39. UN FILTRE DE GÉNÉRATION EST UN REFUS QUI NE SE RELIT JAMAIS — 2026-09-21
+
+**La règle, en une ligne : un refus est une décision datée qu'on peut relire (§23) ; un FILTRE qui
+empêche la candidate d'exister ne laisse rien à relire.** Une expansion sans ligne ne réclame rien,
+n'apparaît dans aucune liste de refus, et son absence ressemble à un monde où elle n'existe pas.
+
+**L'occurrence, et elle valait 4 168 produits.** `generer-table-auto.js` porte `langueAsiatique()`,
+`generer-table-sans-page.js` porte `!/chinois|asiatique/.test(u.famille)`. **Les deux ont été écrits
+quand le §28 disait « le chinois est irréductible ».** Le §28 est tombé le 2026-09-20 — la route
+« (ATCG) » est ouverte depuis le 2026-09-15 et produit 5 675 fiches à 92,8 %. **Les filtres, eux, sont
+restés**, et 49 expansions chinoises n'ont jamais reçu ne serait-ce qu'une ligne CANDIDATE.
+🔑 **Quand une limite tombe, la question suivante n'est pas « que peut-on faire maintenant ? » mais
+« QUI, dans le code, appliquait cette limite ? ».** Elle se cherche par `grep`, pas de mémoire.
+
+🔴 **ET LA CLÉ PAR LE NOM RENDAIT 0 PAIRE SUR 49 — un vide qui n'était pas une absence.** Cardmarket et
+Bulbapedia **traduisent chacun le chinois de leur côté**, et le résultat ne se ressemble pas :
+« Collect 151 » / « Collection 151 » · « Brilliant Fantasy » / « **Sparkling Fable** » · « Eternal
+Birth » / « **Ancient Times, Future Progress** » · « Dark Crystal Blaze » / « **Ardent Obsidian** ».
+⚠️ **Et une clé plus SOUPLE aurait été le §31 en pire** : « Vivid Portrayals Obsidian » et « Vivid
+Portrayals Indigo » contiennent tous deux « Vivid Portrayals ». L'inclusion aurait apparié les deux au
+même set, avec un total flatteur et une moitié de faux.
+
+✅ **LE DISCRIMINANT ÉTAIT LE CODE, PARCE QU'UN CODE NE SE TRADUIT PAS.** Bulbapedia l'écrit dans
+`alt=`, dans le nom du logo (« CSV10 Logo SC.png »), dans celui du symbole (« SetSymbolCS21.png »), et
+pour les sous-sets **en toutes lettres dans le corps du texte** (« The Obsidian subset was assigned
+expansion mark CS2a »). **44 paires, 3 866 produits, 34 admises à la vérification, 1 seul numéro
+ambigu sur 44 lignes.**
+🔴 **Et ma première sonde a rendu « AUCUN code » sur les cinq pages ouvertes** : elle cherchait
+`CS…C` — **Cardmarket suffixe ses codes d'un « C » que Bulbapedia n'écrit pas**. `CSV6C` contre
+`CSV6`. C'est le motif dominant du chantier, une sixième fois : *l'outil cherchait l'orthographe de
+l'AUTRE source, et son vide avait l'air d'une absence.*
+
+✅ **LES PAGES À DEUX MOITIÉS SONT CADRÉES, ET LE CADRAGE EST LU, PAS DEVINÉ.** Quatre pages portent
+DEUX expansions Cardmarket chacune (CS2a/b, CS4a/b, CS5a/b, CS6a/b — 1 342 produits), et **trois
+renumérotent chaque moitié de 1 à N** : « Vivid Portrayals » a 286 entrées pour 143 numéros distincts.
+Non cadrée, chaque ligne aurait réclamé toute la Setlist — les 14 produits à deux cartes du §34, à
+l'échelle. **L'en-tête de Setlist porte le code : `{{Setlist/header|title=Obsidian|…|image=SetSymbolCS2a.png}}`.**
+Le couple section↔code se LIT donc sur la page, et le cadrage réutilise `bulba.setlist`, le mécanisme
+déjà éprouvé par xWHT/xBLK sur leur page commune. Résultat : les 8 lignes à 100 % de couverture,
+**0 numéro ambigu**.
+
+### 🔴 ET DEUX DE MES PROPRES SONDES ONT MENTI DANS LA MÊME JOURNÉE, SUR LE MÊME FICHIER
+
+| ce que la sonde disait | ce qu'elle lisait | la vérité |
+|---|---|---|
+| « 152 expansions, 9 144 produits sans ligne » | `require('./table-sets').**TABLE_SETS**` — l'export s'appelle `TABLE` | **134 / 8 467** : la table à la main était INVISIBLE |
+| « 10 lignes à régénérer » (il y en avait 44) | `TABLE` comme « table à la main » | `table-sets.js:154` fait `TABLE.push(...TABLE_AUTO.filter(l => l.verifie))` — **`TABLE` = à la main + auto ADMISES** |
+
+🔑 **LA PREMIÈRE EST LA PLUS INSTRUCTIVE, PARCE QU'ELLE ÉTAIT SILENCIEUSE PAR CONSTRUCTION** :
+`try { X = require(…).TABLE_SETS || []; } catch {}`. **Un nom de champ faux ne lève pas ; le `|| []` le
+transforme en résultat plausible ; le `catch` vide mangerait même l'erreur s'il y en avait une.**
+Trois protections qui, ensemble, garantissent qu'aucune faute ne se voit. ⚠️ **Un repli par défaut sur
+une valeur VIDE est un mensonge silencieux** : il faut soit échouer, soit imprimer ce qu'on a repli.
+Et le dénominateur l'aurait dit — « table à la main : 0 ligne » se serait vu au premier coup d'œil.
+
+⚠️ **La seconde rappelle que `TABLE_MAIN` existe précisément pour ça**, et que
+`generer-table-sans-page.js` se protège du même piège avec son propre marqueur, commentaire à l'appui.
+**Je ne l'avais pas transposé.** C'est le §21 bis une fois de plus : la règle était écrite, à côté, dans
+le fichier voisin.
+
+---
+
+## 38. TOUTE SOURCE EXTERNE A UNE CADENCE ET UNE REPRISE — SANS EXCEPTION — 2026-09-21
+
+**La règle, en une ligne : un tiers qui ne nous a rien demandé se traite au moins aussi bien qu'un
+tiers qui nous a imposé un `Crawl-delay`.** L'absence de promesse explicite n'est pas une permission ;
+c'est simplement l'absence d'une phrase, et une phrase absente ne change pas ce que le serveur d'en
+face encaisse.
+
+**L'occurrence.** Le collecteur de logos français a tiré **270 requêtes d'affilée** sur `api.tcgdex.net`,
+sans pause et sans reprise. TCGdex a répondu **« no available server » sur 94 sets**. J'ai d'abord lu
+une panne de leur côté. **Ce n'était pas leur panne, c'était moi.**
+
+🔴 **ET LA PARADE ÉTAIT ÉCRITE DEUX FOIS DANS CE DÉPÔT, POUR DEUX AUTRES SOURCES.** `bulba.js` sérialise
+tout dans une file à 5 s ; `artofpkm.js` fait de même sous un verrou global ; le §17 explique, sur une
+page entière, qu'**une limite de débit se compte CHEZ LE DESTINATAIRE**. TCGdex n'avait rien, et
+personne ne l'a remarqué — parce que **le déclencheur avait été le `robots.txt` de Bulbapedia, pas un
+raisonnement sur ce qu'est un client.** Une règle posée en réaction à une contrainte ne se généralise
+pas toute seule aux cas qui n'ont pas la contrainte. C'est le §21 bis, appliqué non plus à deux
+fichiers mais à deux SOURCES.
+
+🔑 **CE QU'UN CLIENT DOIT PORTER, ET LES TROIS SE MESURENT :**
+**(1) une CADENCE** — une pause entre deux requêtes, tenue dans une file, pas dans une boucle (deux
+appelants concurrents doubleraient sinon le débit sans qu'aucun ne mente) ;
+**(2) un RÉESSAI BORNÉ** — un, à quelques secondes, pour qu'une coupure d'une seconde ne tue pas un
+lot ; **jamais une boucle**, une panne longue doit RESTER une panne visible (§29) ;
+**(3) une REPRISE** — un objet déjà obtenu ne se redemande pas. ⚠️ **Et c'est le point qu'on oublie,
+parce qu'il ne ressemble pas à de la politesse : un outil qui refait tout à chaque lancement est un
+outil qu'on n'ose pas relancer**, donc un outil qu'on lance en une seule fois, donc exactement celui
+qui martèle. La reprise n'est pas une optimisation, c'est ce qui rend la cadence tenable.
+
+⚠️ **LE TEST, AVANT D'ÉCRIRE LA PREMIÈRE REQUÊTE VERS UN HÔTE NOUVEAU** : *combien de requêtes cet
+outil peut-il faire au maximum, et en combien de temps ?* Si la réponse est « autant qu'il y a de
+lignes, aussi vite que possible », il n'est pas fini. Le compte se calcule AVANT, il ne se découvre
+pas dans un message d'erreur du tiers.
 
 ---
 
@@ -113,6 +230,15 @@ jamais** : c'est tout l'intérêt de ce fichier, et c'est exactement le danger.
 | §28 | « le chinois est irréductible » | une consigne de périmètre lue comme un fait | **5 675 produits fichés à 92,8 %** |
 | **§27** | **« aucune source ne porte la date »** | **Cardmarket + infobox Bulbapedia — TCGdex jamais interrogé** | **5 des 11, et 59 sets sur 281** |
 | **§26** | **« la ponctuation est perdue et ne se devine pas »** | **le seul `slugSet` de Cardmarket, où le tiret remplace tout** | **28 sets, et la source était DÉJÀ EN BASE** |
+| **§39** | **« le chinois est un chantier distinct » (§28), tombé le 20/09** | **le §28 a été relu, mais pas les DEUX FILTRES qu'il avait fait écrire dans les générateurs** | **49 expansions, 4 168 produits, jamais même CANDIDATES** |
+
+🔴 **LA HUITIÈME A UNE FORME NEUVE, ET ELLE EST PIRE QUE LES SEPT AUTRES : LA LIMITE ÉTAIT TOMBÉE
+DEPUIS UN JOUR, ET SON CODE TOURNAIT ENCORE.** Les sept premières étaient des phrases qu'il fallait
+remesurer. La huitième était une phrase DÉJÀ remesurée, déjà corrigée dans ce fichier — et deux
+`filter()` continuaient de l'appliquer, en silence, dans deux générateurs. ⚠️ **Retirer une limite du
+catalogue ne retire pas les décisions qu'elle a fait câbler** (§23), et un filtre de génération est la
+pire de ces décisions : il ne produit pas un refus qu'on pourrait relire, il produit une ABSENCE.
+🔑 **Quand une limite tombe, le geste suivant est un `grep` : QUI l'appliquait ?**
 
 ### ✅ L'AUDIT COMPLET DU 2026-09-21 — CE QUI TOMBE, CE QUI TIENT, ET POURQUOI
 
@@ -140,6 +266,14 @@ donc pas avoir bougé — mais surtout, **le banc ne peut plus rien trancher de 
 décisions qui l'attendent (la promotion du §9, la garde du §8, le tri du §11) attendent des SCANS, pas
 des mesures. ⚠️ **Une conclusion qui « tient » parce que sa population est gelée n'est pas confirmée,
 elle est SUSPENDUE** — et c'est une troisième catégorie, à côté de « tombée » et « tenue ».
+
+✅ **ET LA CATÉGORIE EST DÉSORMAIS PORTÉE PAR LES PARAGRAPHES EUX-MÊMES : les §8, §9 et §11 ouvrent sur
+une bannière ⏸️.** Une catégorie qui ne vit que dans le § qui l'a inventée ne sert à rien : c'est en
+tête du paragraphe concerné qu'elle doit se lire, au moment où quelqu'un s'apprête à s'en servir.
+🔑 **Et la distinction qui compte dans ces trois cas : la DÉCISION tient, la MESURE est suspendue.**
+Le §9 n'est pas promu — c'est un choix du testeur, il n'expire pas ; mais le chiffre sur lequel il a
+été pris ne peut plus bouger, donc on ne peut pas non plus dire qu'il est confirmé. **Suspendre une
+mesure n'annule pas la décision qu'elle a servi à prendre.**
 
 🔴 **LE §27 EST TOMBÉ LE 2026-09-21, ET SA SONDE ÉTAIT PARTICULIÈREMENT COUPABLE.** Le paragraphe dit
 « Aucune source DISPONIBLE ne la porte » et détaille deux vérifications — Cardmarket n'a pas de date
@@ -820,6 +954,13 @@ les commentaires, eux, sont périmés.
 
 ## 8. Deux faux affirmés, deux natures — impasse structurelle ou garde manquante
 
+> ⏸️ **SUSPENDU, NI TOMBÉ NI TENU — le banc n'a pas grossi d'une ligne depuis le 2026-09-08.** Ce
+> paragraphe repose sur 50 lignes jugeables et sur la mesure « `margeConfortable` prédit l'erreur à
+> l'envers ». Les deux dépendent d'une population GELÉE. **Une conclusion qui « tient » parce que rien
+> n'a été scanné depuis n'est pas confirmée** (§36). Elle attend des SCANS, pas une relecture — et la
+> consigne « ne pas la reproposer sans refaire cette mesure » reste entière, avec cette précision :
+> refaire la mesure suppose d'abord de nouvelles lignes.
+
 **Mesuré le 2026-09-09.** Le seau « lot » en portait deux. Ils se ressemblent — un prix
 affirmé sur la mauvaise carte, aucune réserve — et ils ne se réparent pas pareil.
 
@@ -861,6 +1002,12 @@ mettrait 27 lignes du mauvais côté de la garde, et c'est la famille d'erreurs 
 ---
 
 ## 9. Le prix de la promotion de `perimetre-vintage-suggestion` — mesuré, non câblé
+
+> ⏸️ **SUSPENDU, NI TOMBÉ NI TENU — mesuré sur 128 lignes jugeables, et le banc est figé depuis le
+> 2026-09-08.** La DÉCISION (non promu) tient : elle a été prise par le testeur sur ce chiffre. Mais le
+> chiffre, lui, ne peut plus bouger. ⚠️ Le paragraphe dit déjà la condition de réouverture — « si un
+> jour le vivier ramenait ces 11 vérités » — et elle ne peut se vérifier que sur des lignes NEUVES.
+> **Tant que rien n'est scanné, ce § ne peut ni se confirmer ni s'infirmer.**
 
 **La question est légitime et le contexte a changé.** L'arbitrage a été posé quand une sortie
 sous réserve était un refus muet ; depuis le 2026-09-08, elle affiche **trois candidats avec
@@ -931,6 +1078,12 @@ est le prochain trou de cette famille.
 ---
 
 ## 11. L'égalité est la NORME — et aucune n'est structurellement incassable
+
+> ⏸️ **SUSPENDU, NI TOMBÉ NI TENU — 84 lignes classables d'un seau qui n'a pas bougé depuis le
+> 2026-09-08.** Le « 60,7 % d'égalités strictes » et le tableau des ordres de tri décrivent une
+> population gelée. ⚠️ La consigne « ne pas reproposer plus cher / moins cher » tient — elle repose sur
+> une mesure faite, pas sur une intuition — mais **le tri entre égaux ne sera réellement « fermé » que
+> quand un lot neuf l'aura reconfirmé.** Il attend des SCANS.
 
 **Mesuré le 2026-09-09, seau lot, 84 lignes classables** (le classement est recalculé en
 appelant `scorerCandidatsLocal`, la fonction de la route) :
