@@ -1475,6 +1475,33 @@ une ; il faut le garder aussi comme instrument de mesure du banc, pas seulement 
 
 ## 23. Un seuil posé sur une supposition coûte dans l'AUTRE sens — 2026-09-12
 
+### ⬇️ 480 → 350 LE 2026-09-21, ET CE QUE LA MESURE A VRAIMENT DIT — 37 SETS, 3 320 CARTES
+
+**Le seuil est passé de 480 à 350 px** sur autorisation conditionnelle (« si le gain dépasse 500 »).
+La distribution réelle : **les archives Bulbagarden servent le vintage occidental à 350 px**, et
+350 px reste **2,2× la vignette de 157 px**, le seul usage qui existe. `remettre-en-file.js` relit les
+refus dans le même geste que le changement — c'est la leçon de ce § appliquée.
+
+🔴 **MAIS LE CHIFFRE QUE J'AI ANNONCÉ D'ABORD ÉTAIT FAUX D'UN FACTEUR QUATRE, ET TOUJOURS POUR LA MÊME
+RAISON.** J'ai jugé les sets sur leur largeur **MINIMALE** — 9 sets, 643 cartes. La production les
+juge sur leur **MÉDIANE** (`collecteur-images-bulba.js:135`), et elle écarte déjà les fichiers isolés
+trop petits un par un (l.143). Avec le bon critère : **37 sets, 3 320 cartes.** Skyridge a un minimum
+de 314 et une médiane de **465** ; Diamond & Pearl, 200 et **381** ; Legends Awakened, 245 et **400**.
+🔑 **Juger un ensemble sur son pire élément, c'est le refuser sur son bruit.** Et la parade est celle
+du haut du catalogue, pour la quatrième fois ce jour-là : **la sonde doit lire LA MÊME CHOSE que le
+code de production.** Ici elle lisait un autre agrégat du même champ — ce n'est même pas un champ mal
+nommé, c'est une STATISTIQUE différente, et ça suffit à fabriquer un refus.
+
+⚠️ **TROIS AUTRES DE MES SONDES ONT MENTI SUR CE MÊME DOSSIER, AVANT CELLE-LÀ** : `completImages.mesures`
+(le champ est `mesures`), `mesures` sur les sets Bulbapedia (leur champ est **`infosListe`**), et un
+appariement code↔slugSet entre deux collections qui ne partagent pas leur clé. **Quatre vides parfaits
+d'affilée sur un seul sujet.** Aucun n'a levé d'erreur ; chacun rendait un tableau plausible.
+
+🕳️ **CE QUI RESTE REFUSÉ, NOMMÉ** : Supreme Victors (médiane 245), Rising Rivals (245), POP-3 (266) —
+et **Secret Wonders + Platinum à 343 px, sept pixels sous le seuil**. ⚠️ Descendre à 340 pour les
+prendre serait exactement le geste que ce § dénonce : bouger un nombre pour sauver deux lignes. On les
+écrit, on ne les rattrape pas.
+
 Le seuil de résolution des images était **560 px**, posé d'avance et jamais revu. Il a fait REFUSER
 **DEUX sets, pas un** : `DP5c` (20:35 UTC) et `DP2` (20:47 UTC), dont les originaux sont **tous deux à
 500×700** sur 3 mesures sur 3 — l'ère DP n'a pas la résolution du vintage japonais. ⚠️ Ce paragraphe
