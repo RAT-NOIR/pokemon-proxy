@@ -25,6 +25,7 @@
 //   5. tout le reste — suffixe « EN », nom du jumeau, ou rien de reconnaissable — N'EST PAS ÉCRIT,
 //      et le motif est imprimé. Un logo faux ne se signale jamais tout seul.
 require('dotenv').config();
+const crypto = require('crypto');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { modeles } = require('./collecte-cartes/schemas');
 const r2 = require('./collecte-cartes/r2');
@@ -120,8 +121,17 @@ function deciderLangue(s, logo) {
             const ext = (info.mime || '').split('/')[1] || 'png';
             const cleObjet = `bulbapedia/logos/${cle(f)}.${ext}`;
             if (!await r2.existe(process.env.R2_BUCKET_IMAGES, cleObjet)) {
-                const buf = await bulba.telecharger(info.url);
-                await r2.deposerBinaire(process.env.R2_BUCKET_IMAGES, cleObjet, buf, info.mime);
+                // ⚠️ `bulba.telecharger` rend `{ buffer, type }`, PAS un Buffer. Passer l'objet entier en
+                // `Body` fait lever le SDK S3 « Unable to calculate hash for flowing readable stream » —
+                // 25 minutes d'attente du verrou perdues sur une destructuration manquante, le 2026-09-20.
+                // Les deux autres appelants du dépôt le déstructurent ; celui-ci était le seul à ne pas le
+                // faire (§21 bis : la même règle à deux endroits diverge toujours).
+                const { buffer } = await bulba.telecharger(info.url);
+                // le sha1 de l'API contre celui des octets reçus : un fichier remplacé entre l'imageinfo
+                // et le téléchargement se verrait ici, et nulle part ailleurs.
+                const sha1 = crypto.createHash('sha1').update(buffer).digest('hex');
+                if (info.sha1 && sha1 !== info.sha1) { console.warn(`   ⚠️ ${f} : sha1 ${sha1} ≠ imageinfo ${info.sha1} — non déposé`); sans++; continue; }
+                await r2.deposerBinaire(process.env.R2_BUCKET_IMAGES, cleObjet, buffer, info.mime);
             }
             objets.set(f, { cleR2: cleObjet, w: info.width ?? null, h: info.height ?? null, urlOriginal: info.url, sha1: info.sha1 ?? null });
             n++;

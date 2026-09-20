@@ -5,6 +5,71 @@ renégocie pas en cours de route.
 
 ---
 
+## 34. UN CONTRÔLE QUI COMPARE DES ENSEMBLES EST AVEUGLE AUX DOUBLONS — 2026-09-20
+
+**La règle, en une ligne : un `Set` écrase les doublons AVANT la comparaison, donc aucune mesure de couverture ne
+peut voir qu'un élément désignait deux choses.** Ce n'est pas un défaut de seuil ni de sens de lecture : c'est une
+information DÉTRUITE en amont du contrôle, et le contrôle ne peut pas la redemander.
+
+**L'occurrence, et elle a battu la parade du §31.** La ligne « sans page » `Leafeon-vs-Metagross-Expert-Deck` :
+15 numéros Cardmarket, 15 numéros déclarés, couverture **100 %**, couverture **inverse 100 %** — les deux sens,
+le contrôle exact que le §31 prescrit pour démasquer une inclusion déguisée. Elle a produit **14 produits
+rattachés à deux cartes**. La cause : c'est un **KIT À DEUX DECKS sous UN SEUL nom d'expansion**, donc le n°6
+existe deux fois, une fois par moitié. **26 cartes déclarent l'expansion pour 15 numéros distincts** — et le
+`Set` avait ramené les 26 à 15 avant que quoi que ce soit ne compare.
+
+🔑 **LA PARADE N'EST PAS UN AUTRE TAUX, C'EST DE COMPTER LES MULTIPLICITÉS.** À côté de toute couverture, écrire
+« combien d'éléments de la source désignent PLUSIEURS objets ». Ici : `controle.numerosAmbigus`. Mesuré sur les
+53 lignes proposées — **5 en portent au moins un, 85 produits concernés, une seule est pathologique**. Et le
+refus se formule comme un CONSTAT DE STRUCTURE, pas comme un seuil : si la MAJORITÉ des numéros sont doublés,
+le nom ne couvre pas une numérotation mais plusieurs. Une collision isolée (1 sur 19) ne referme pas la ligne —
+elle coûterait 18 produits justes pour un faux — elle s'ÉCRIT et attend la garde par numéro.
+
+⚠️ **ET LA GARDE MANQUANTE EST LE PENDANT D'UNE GARDE QUI EXISTE : « un NOM qui désigne plusieurs cartes ne
+désigne rien » est câblée depuis le 2026-09-19 ; le NUMÉRO ne l'a pas.** C'est encore le §21 bis. Elle ne se
+câble pas avant d'avoir été mesurée sur ce qui MARCHE déjà (§22).
+
+⚠️ **OÙ CHERCHER LA MÊME FORME** : partout où le dépôt écrit `new Set(...)` puis compare des tailles ou des
+appartenances — appariement de sets, couverture de numéros, `distinct()` de Mongo, `$addToSet` d'une agrégation.
+**`$addToSet` est un `Set` côté base** : le contrôle transversal du §32 l'utilise (`cartes: { $addToSet: '$carteId' }`)
+et ne dit donc jamais COMBIEN de lignes portent le doublon, seulement qu'il y en a deux. C'est acceptable là
+parce que la question posée est booléenne ; ça ne l'est pas dès qu'on lit le résultat comme une quantité.
+
+---
+
+## 33. UN ÉTAT INTERMÉDIAIRE QUI SE COMPORTE COMME UN ÉTAT FINAL — 2026-09-20
+
+**La règle, en une ligne : une candidate NON JUGÉE occupait la place d'une candidate REFUSÉE.** Elle ne
+collectait pas — et elle empêchait quand même toute autre voie de prendre son objet. Le pire des deux états :
+l'inertie d'un refus sans la décision d'un refus.
+
+**L'occurrence, mesurée.** `table-sets-auto.json` porte 523 candidates ; **122 n'ont AUCUNE trace de
+vérification** — ni `verifie`, ni `refus`, ni même un champ disant qu'on a regardé. Le générateur de la voie de
+secours (`generer-table-sans-page.js`) construisait `connus` — les noms d'expansion déjà couverts — sur
+`[...TABLE, ...TABLE_AUTO]`, donc **sur ces 122 lignes mortes**. Résultat : **75 expansions dont nos cartes
+DÉCLARENT déjà l'impression, 2 999 produits, invisibles aux DEUX voies à la fois** — la page jamais vérifiée,
+et le retournement aveuglé par la ligne qui ne fait rien.
+
+🔴 **ET LE RAISONNEMENT JUSTE ÉTAIT ÉCRIT TROIS LIGNES PLUS HAUT.** Un commentaire de six lignes explique
+pourquoi une ligne non vérifiée ne prend pas son SLUG (« les compter comme pourvues les laisserait sans collecte
+pour toujours ») — et la ligne d'à côté faisait exactement l'inverse pour le NOM. **Ce n'est pas une règle
+dupliquée dans deux fichiers, c'est la même fonction : relire le commentaire ne suffisait pas, il fallait relire
+ce que la ligne suivante FAISAIT.** Corrigé : une ligne qui ne peut pas collecter ne prend ni son slug NI son
+nom. Effet immédiat, zéro requête : 24 lignes → 91, dont 52 vérifiées, **+893 fiches**.
+
+🔑 **LA FORME À RECONNAÎTRE, ET ELLE EST PARTOUT OÙ ON ÉNUMÈRE.** Un ensemble « ce qui est déjà pris » se
+construit sur ce qui PRODUIT, jamais sur ce qui EXISTE. La question mécanique : *cette ligne peut-elle faire le
+travail ?* — si non, elle ne réserve rien. Et le corollaire d'exploitation : **une candidate jugée ne doit jamais
+rester sans verdict écrit.** Un `undefined` se lit comme « pas encore » par celui qui l'a écrit et comme « non »
+par tout le reste du code — c'est l'erreur #8 (§3) déplacée du journal vers une table de travail.
+
+⚠️ **ET LE MÊME MOTIF EXISTE AILLEURS, NOMMÉ ICI POUR QU'IL SOIT CHERCHÉ** : `ligne(code)` rend
+`TABLE ?? TABLE_AUTO ?? TABLE_SANS_PAGE`, donc une candidate automatique NON JUGÉE est préférée à une ligne
+« sans page » qui porte, elle, un refus MESURÉ. Le set est refusé dans les deux cas, mais le motif imprimé est
+le mauvais — un refus exact qui ne nomme pas la bonne cause fait chercher au mauvais endroit (§6).
+
+---
+
 ## 32. UNE AMBIGUÏTÉ RÉPARTIE SUR PLUSIEURS EXÉCUTIONS NE SE VOIT PAS D'UNE EXÉCUTION — 2026-09-19
 
 **La règle, en une ligne : toutes nos gardes d'unicité tranchent à l'intérieur d'UN appel, et l'unicité que nous
