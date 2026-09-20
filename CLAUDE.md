@@ -5,6 +5,35 @@ renégocie pas en cours de route.
 
 ---
 
+## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
+
+> # **100 %. Pas 81 %, pas 95 %.**
+>
+> **Cardmarket est la RÉFÉRENCE DU LISTING. Un catalogue qui n'en couvre pas la totalité n'est pas une
+> référence — c'est un échantillon.** Et l'unité de la cible n'est pas le set, ni l'expansion, ni le
+> pourcentage : **c'est le PRODUIT**. Chaque produit absent est une carte que l'outil de
+> reconnaissance ne saura jamais nommer, quel que soit le reste de la chaîne. Un modèle parfait sur un
+> catalogue à 95 % se trompe sur 5 % des scans, définitivement, et aucune amélioration en aval ne le
+> rattrape.
+>
+> 🔑 **CE QUE CET OBJECTIF CHANGE DANS LA MÉTHODE, ET C'EST LE POINT : UN TAUX QUI MONTE N'EST PLUS UNE
+> BONNE NOUVELLE EN SOI.** Tant que la cible était « le plus possible », un gain se célébrait. Avec
+> 100 % pour cible, **la seule question qui compte est le RESTE** : combien, où, et pourquoi. Un
+> rapport qui annonce un progrès sans décomposer ce qui manque ne dit rien d'utile.
+>
+> ⚠️ **ET UN RESTE N'EST PAS UNE LIMITE TANT QU'ON N'A PAS NOMMÉ SA CAUSE.** Le catalogue d'erreurs
+> ci-dessous existe parce que, huit fois, ce qu'on avait rangé en « impossible » était une sonde
+> étroite, un filtre survivant, une source jamais interrogée ou un champ mal nommé. **La barre à
+> franchir avant d'écrire « hors d'atteinte » est donc haute, et elle est écrite : dire QUEL
+> instrument a cherché, QUELLES sources ont été interrogées, et à QUELLE date (§36).**
+>
+> 🔴 **LA SEULE CATÉGORIE QUI BORNE VRAIMENT : « aucune page chez AUCUNE source ».** Ni « refusé », ni
+> « sans ligne », ni « pas encore collecté » — ceux-là sont des états de NOTRE travail, pas des
+> propriétés du monde. Le plancher réel est le nombre de produits pour lesquels il n'existe, nulle
+> part, de document à lire. **C'est ce chiffre-là qui dit si 100 % est atteignable, et lui seul.**
+
+---
+
 ## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LE MOTIF DOMINANT DE CE CHANTIER
 
 > # 🔴 LA SONDE FABRIQUE LE DÉFAUT QU'ELLE MESURE.
@@ -31,6 +60,47 @@ renégocie pas en cours de route.
 > n'est plus dupliquée entre deux fichiers de production, elle est dupliquée entre la PRODUCTION et
 > l'INSTRUMENT. Et cette copie-là est invisible, parce qu'un outil de mesure n'a pas de tests, ne
 > casse jamais, et n'est lu par personne.
+
+---
+
+## 🔑 LES TROIS LEÇONS DU 2026-09-21 — TROIS FAÇONS DE PERDRE DU TRAVAIL SANS UNE SEULE ERREUR
+
+> ### 1. « Quand une limite tombe, le geste suivant est un `grep` : QUI l'appliquait ? »
+>
+> **Un paragraphe corrigé ne décâble rien.** Le §28 (« le chinois est irréductible ») est tombé le
+> 2026-09-20 ; le lendemain, **deux `filter()` l'appliquaient encore** dans deux générateurs —
+> `langueAsiatique()` et `!/chinois|asiatique/.test(u.famille)`. Coût : **49 expansions, 4 168
+> produits, jamais même CANDIDATES.**
+> 🔴 **ET UN FILTRE EST LA PIRE FORME DE DÉCISION PÉRIMÉE, parce qu'il ne produit pas un refus : il
+> produit une ABSENCE.** Un refus est daté, motivé, listé — donc relisible (§23). Une expansion qu'un
+> filtre empêche d'exister ne figure dans aucune liste, ne réclame rien, et son absence ressemble
+> exactement à un monde où elle n'a jamais existé. **Relire ses refus ne suffit pas : il faut relire
+> ce qui n'a jamais eu le droit d'en devenir un.**
+
+> ### 2. « Une sonde qui se rabat sur du vide EN SILENCE ment toujours dans le même sens. »
+>
+> `try { MAIN = require('./table-sets.js').TABLE_SETS || []; } catch {}` — **l'export s'appelle
+> `TABLE`.** Le champ n'existe pas, `|| []` en fait un résultat plausible, le `catch` vide avalerait
+> même une erreur s'il y en avait une. **Trois protections qui, ensemble, garantissent qu'aucune faute
+> ne se voie.** Annoncé : « 152 expansions, 9 144 produits sans ligne ». Réel : **134 / 8 467**.
+> 🔑 **ET LE BIAIS A UNE DIRECTION, CE QUI LE REND PRÉVISIBLE : un repli sur le vide gonfle toujours
+> ce qui MANQUE et rabote ce qu'on POSSÈDE.** Il ne produit jamais un faux optimisme — il produit un
+> faux chantier. C'est pour ça qu'il survit : le chiffre a l'air d'une découverte, et on se met au
+> travail dessus. ⚠️ **Un `|| []`, un `?? 0`, un `catch {}` sur une LECTURE de configuration ne sont
+> pas des précautions, ce sont des bâillons.** Sur un outil de mesure : échouer, ou imprimer le repli.
+> **Le dénominateur l'aurait dit** — « table à la main : 0 ligne » se serait vu au premier coup d'œil.
+
+> ### 3. « Une ligne à la main sans marqueur est une ligne qu'une régénération efface sans erreur. »
+>
+> `generer-table-auto.js` ne reconduit du fichier précédent que les lignes portant `auto.aLaMain`.
+> **Les 49 lignes chinoises de septembre — dont 42 vérifiées et collectées — ne l'avaient pas**, et ce
+> générateur EXCLUT le chinois : il ne les aurait pas refabriquées. La prochaine régénération les
+> effaçait, sans exception, sans avertissement, avec un « ÉCRIT : 535 lignes » parfaitement normal.
+> 🔑 **LA RÈGLE : tout ce qu'un outil ne sait pas REFABRIQUER doit porter la marque de sa
+> conservation, et cette marque se pose DANS LE MÊME GESTE que l'écriture à la main.** Posée plus
+> tard, elle dépend de quelqu'un qui se souvient. ⚠️ **Et le test se formule sans lire le code : « si
+> je relance le générateur, qu'est-ce qui disparaît ? »** S'il faut ouvrir la source pour répondre, la
+> réponse est déjà mauvaise.
 
 ---
 
@@ -70,6 +140,53 @@ renégocie pas en cours de route.
 > cartes hors de la plage comparée. Le contrôle n'était pas satisfait, il était **vidé**. La question à
 > poser devant tout contrôle qui s'améliore après un changement : *ai-je amélioré l'appariement, ou
 > retiré des candidats ?* Un dénominateur qui rétrécit pendant qu'un taux monte est le signal (§0, §34).
+
+---
+
+## 40. LE PLANCHER RÉEL EST 66 PRODUITS — ET LES WCD N'AVAIENT JAMAIS ÉTÉ ÉNUMÉRÉS — 2026-09-21
+
+**La question posée était : sur les 15 598 produits manquants, combien n'ont de page chez AUCUNE
+source ? Réponse mesurée : 66, sur 3 expansions.** Pas 1 240, pas 2 000. **0,42 % de l'écart,
+0,10 % du catalogue.** Le plafond mesurable aujourd'hui est donc **99,90 %**, et rien de ce qui a été
+mesuré ne contredit la cible de 100 %.
+
+| nature | produits | ce que c'est |
+|---|---|---|
+| **TRAVAIL** — page connue, route connue | **12 933** | 6 061 lignes refusées par un contrôle (la page existe) · 4 870 lignes admises à collecter · 1 944 WCD · 58 un set chinois oublié |
+| **À INSTRUIRE** — aucune page trouvée *par les écritures testées* | **2 599** | ⚠️ ce n'est PAS « n'existe pas » : 2 ou 3 orthographes de titre, c'est une requête ciblée, pas une énumération (§30) |
+| 🕳️ **PLANCHER PROUVÉ** — page absente, vérifié | **66** | 3 « Starter Set ex » |
+
+🔴 **ET LE PLUS GROS BLOC A CHANGÉ DE CAMP : LES WCD, 1 944 PRODUITS, CLASSÉS « AUCUNE PAGE
+BULBAPEDIA, ÉNUMÉRÉ ».** Ils n'avaient pas été énumérés — ils avaient été CHERCHÉS, sous le nom que
+**Cardmarket** leur donne : `WCD-2009`. **Bulbapedia ne nomme pas un millésime, il nomme un DECK** :
+« ADP », « Bebe Deck », « Darkrai Deck », « Eeveelutions », « American Gothic »… **90 pages**, chacune
+disant son année en toutes lettres (« it is one of the four 2013 World Championships Decks »).
+🔑 **C'est le §30 exactement, et c'est la neuvième fois : chercher l'orthographe d'une source chez une
+autre rend le même vide qu'une absence.** Le mot « énuméré » dans la classification était faux — et
+c'est lui qui a fermé le dossier pendant deux jours.
+
+✅ **ET LA CLÉ DE JOINTURE EXISTE DES DEUX CÔTÉS, CE QUI EST RARE.** Un deck de championnat réimprime
+des cartes d'autres sets, donc ni le nom ni un numéro propre ne peuvent servir. Mais :
+· **Bulbapedia** écrit `{{decklist/entry|4|{{TCG ID|Dark Explorers|Sableye|62}}|…}}` — **le set
+d'origine et son numéro** ;
+· **Cardmarket** ne numérote PAS ses WCD (**9 produits sur 111**), et son SLUG porte la même chose :
+`Trapinch-Lv9-**WCD09SW-115**` = Stormfront n°115, `Palkia-LVX-**WCD09DPPR-28**` = DP Promo n°28.
+**Les deux sources désignent le tirage D'ORIGINE, avec son set et son numéro.** La jointure est donc
+(set d'origine, numéro), et elle est discriminante par construction.
+⚠️ **Deux réserves écrites avant d'y toucher** : (1) `decklist/entry` est un gabarit que
+`entreesDeLaSetlist` ne connaît pas — mais les références qu'il contient sont les DEUX formes qu'elle
+lit déjà (`TCG ID` et `[[Nom (Set N)]]`), donc c'est un en-tête à ajouter, pas un parseur à écrire ;
+(2) **la carte vendue est une RÉIMPRESSION non tournoi-légale**, pas le tirage d'origine — il faudra
+décider si on la rattache à la page du tirage d'origine (§19 : une image appartient à un TIRAGE).
+**Route proposée, pas prouvée.**
+
+🔑 **CE QUE CE PARAGRAPHE CHANGE DANS LA FAÇON DE COMPTER, ET C'EST LE VRAI RÉSULTAT.** Jusqu'ici
+l'écart était décomposé par ÉTAT DE NOTRE TRAVAIL — « sans ligne », « refusée », « admise ». Ces trois
+mots décrivent ce que nous avons fait, pas ce qui est possible, et ils font passer pour des limites
+des choses qui n'attendent qu'une ligne. **La décomposition qui décide n'a que trois cases : une page
+existe (TRAVAIL) · on n'en a pas trouvé (À INSTRUIRE) · on a vérifié qu'il n'y en a pas (PLANCHER).**
+Et la troisième case exige la même preuve que toute limite : quel instrument, quelles sources, quelle
+date (§36).
 
 ---
 
