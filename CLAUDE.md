@@ -37,18 +37,25 @@ parce que la question posée est booléenne ; ça ne l'est pas dès qu'on lit le
 
 ---
 
-## 33. UN ÉTAT INTERMÉDIAIRE QUI SE COMPORTE COMME UN ÉTAT FINAL — 2026-09-20
+## 33. UN REFUS QUI CONTINUE DE RÉSERVER SON OBJET — 2026-09-20
 
-**La règle, en une ligne : une candidate NON JUGÉE occupait la place d'une candidate REFUSÉE.** Elle ne
-collectait pas — et elle empêchait quand même toute autre voie de prendre son objet. Le pire des deux états :
-l'inertie d'un refus sans la décision d'un refus.
+**La règle, en une ligne : une candidate REFUSÉE gardait son nom d'expansion, donc elle interdisait à l'autre
+voie de prendre le set qu'elle venait elle-même de renoncer à collecter.** Un refus doit LIBÉRER, pas retenir.
 
-**L'occurrence, mesurée.** `table-sets-auto.json` porte 523 candidates ; **122 n'ont AUCUNE trace de
-vérification** — ni `verifie`, ni `refus`, ni même un champ disant qu'on a regardé. Le générateur de la voie de
-secours (`generer-table-sans-page.js`) construisait `connus` — les noms d'expansion déjà couverts — sur
-`[...TABLE, ...TABLE_AUTO]`, donc **sur ces 122 lignes mortes**. Résultat : **75 expansions dont nos cartes
-DÉCLARENT déjà l'impression, 2 999 produits, invisibles aux DEUX voies à la fois** — la page jamais vérifiée,
-et le retournement aveuglé par la ligne qui ne fait rien.
+🔴 **ET LA PREMIÈRE VERSION DE CE PARAGRAPHE DISAIT « 122 candidates sans AUCUNE trace de vérification ».
+C'ÉTAIT FAUX, ET C'EST LA SIXIÈME FOIS QUE LE MÊME INSTRUMENT MUET ME TROMPE (§30).** Mon détecteur lisait
+`l.verification?.motif` ; le champ s'appelle **`l.verif`**. Sur les 118 candidates non vérifiées, **117 avaient
+un verdict écrit** — `etat: 'À REGARDER'` et jusqu'à trois raisons chacune — et **5 seulement** n'avaient
+jamais été jugées. Un champ absent a été lu comme « personne n'a regardé », et j'ai écrit une leçon entière
+sur ce vide. ⚠️ **Une erreur de mesure qui finit dans un RAPPORT se corrige au rapport suivant ; une erreur de
+mesure qui finit dans CE FICHIER devient une règle, et une règle ne se remesure jamais.** Avant d'écrire un §,
+relire le détecteur qui l'a produit — pas seulement son résultat.
+
+**L'occurrence, corrigée.** `generer-table-sans-page.js` construisait `connus` — les noms d'expansion déjà
+couverts — sur `[...TABLE, ...TABLE_AUTO]`, donc sur **118 lignes qui ne collectent pas**, dont 117 refusées
+pour une raison écrite (« aucune entrée de Setlist », « entrées/produits hors bornes », « l'échantillon n'a
+pas ce tirage »). Résultat : **75 expansions dont nos cartes DÉCLARENT déjà l'impression, 2 999 produits,
+invisibles aux DEUX voies à la fois** — la page refusée, et le retournement aveuglé par la ligne qui a refusé.
 
 🔴 **ET LE RAISONNEMENT JUSTE ÉTAIT ÉCRIT TROIS LIGNES PLUS HAUT.** Un commentaire de six lignes explique
 pourquoi une ligne non vérifiée ne prend pas son SLUG (« les compter comme pourvues les laisserait sans collecte
@@ -59,9 +66,9 @@ nom. Effet immédiat, zéro requête : 24 lignes → 91, dont 52 vérifiées, **
 
 🔑 **LA FORME À RECONNAÎTRE, ET ELLE EST PARTOUT OÙ ON ÉNUMÈRE.** Un ensemble « ce qui est déjà pris » se
 construit sur ce qui PRODUIT, jamais sur ce qui EXISTE. La question mécanique : *cette ligne peut-elle faire le
-travail ?* — si non, elle ne réserve rien. Et le corollaire d'exploitation : **une candidate jugée ne doit jamais
-rester sans verdict écrit.** Un `undefined` se lit comme « pas encore » par celui qui l'a écrit et comme « non »
-par tout le reste du code — c'est l'erreur #8 (§3) déplacée du journal vers une table de travail.
+travail ?* — si non, elle ne réserve rien, **et un refus est précisément la preuve écrite qu'elle ne le peut
+pas.** C'est ce qui rend l'erreur contre-intuitive : plus la ligne était documentée comme inutilisable, plus
+elle bloquait solidement.
 
 ⚠️ **ET LE MÊME MOTIF EXISTE AILLEURS, NOMMÉ ICI POUR QU'IL SOIT CHERCHÉ** : `ligne(code)` rend
 `TABLE ?? TABLE_AUTO ?? TABLE_SANS_PAGE`, donc une candidate automatique NON JUGÉE est préférée à une ligne
@@ -1108,7 +1115,20 @@ plausible se découvre des semaines plus tard, par accident.**
 sortie d'une étape rend ces défauts visibles à la première exécution. C'est la même règle que
 « tout outil de mesure imprime son dénominateur », appliquée aux étapes et plus seulement aux taux.
 
-## 28. LE CHINOIS : UN CHANTIER DISTINCT, MIS DE CÔTÉ — 2026-09-14
+## 28. LE CHINOIS : UN CHANTIER DISTINCT, OUVERT LE LENDEMAIN ET QUI MARCHE — 2026-09-14, corrigé le 2026-09-20
+
+✅ **À LIRE AVANT LE RESTE DU PARAGRAPHE, QUI DATE DE LA VEILLE DE L'OUVERTURE.** La route « (ATCG) » que ce
+texte décrit comme « une autre énumération, un autre chantier » a été ouverte **le 2026-09-15** et elle
+produit : **40 lignes chinoises vérifiées, 38 sets collectés, 5 675 produits fichés — 92,8 %**. Ce qui reste
+fermé est ce que la suite décrit : les expansions chinoises **rangées « japonais » par `codes_set`**, qu'il ne
+faut pas prendre pour du japonais.
+
+🔴 **ET CE PARAGRAPHE A FAILLI DÉTRUIRE CE TRAVAIL.** Le 2026-09-20, lisant « mis de côté » comme un périmètre
+fermé, j'ai câblé dans `verifier-table.js` un refus de **toute** ligne chinoise — 40 lignes justes, 5 675
+fiches. Retiré dans l'heure par la seule mesure qui décidait : *combien cette règle refuserait-elle de choses
+qui marchent ?* **Un périmètre se vérifie sur ce qui marche déjà, exactement comme une clé (§22) et comme un
+contrôle transversal (§32 bis) — et une consigne de périmètre vieillit plus vite qu'une leçon de méthode.**
+⚠️ Un paragraphe daté qui décrit un état du monde doit dire, en tête, si cet état a changé depuis.
 
 **Bulbapedia le couvre, mais pas là où notre jointure regarde.** Les expansions en chinois simplifié ont
 des pages d'expansion suffixées **« (ATCG) »** (au moins 12 pour Scarlet & Violet : Miracle Journey, Arcane

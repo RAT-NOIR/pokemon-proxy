@@ -96,12 +96,22 @@ async function verifierAuto() {
     // --region=japonais : la vérification ne prend que cette région (2026-09-15 : l'occidental attend le traitement des
     // numéros à préfixe, SWSH002 face à 002). Sans l'option, toutes les lignes.
     const region = arg('region');
-    const bloc = TABLE_AUTO.filter(l => !l.verif && (!region || l.region === region)).slice(0, taille);
-    console.log(`--auto : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
+    // `--rejuger --codes=A,B` : REJOUER le verdict de lignes déjà jugées. Sans lui, une ligne refusée l'est pour
+    // toujours — or un critère de refus peut changer (§23 : quand un seuil change, les décisions prises sous
+    // l'ancien ne se réévaluent pas toutes seules, il faut RELIRE la liste des refus dans le même geste).
+    const codes = arg('codes') ? arg('codes').split(',').map(s => s.trim()) : null;
+    const rejuger = process.argv.includes('--rejuger');
+    // NOMMER un code, c'est demander son verdict — même s'il en a déjà un. Sans cette règle, un critère qui
+    // vient de changer ne peut pas être rejoué sur les lignes qu'il ADMETTAIT à tort : on ne sait relire que
+    // les refus, jamais les admissions, et c'est le mauvais côté de la liste (§23).
+    const bloc = TABLE_AUTO
+        .filter(l => (codes ? codes.includes(l.code) : (rejuger ? !l.verifie : !l.verif)) && (!region || l.region === region))
+        .slice(0, taille);
+    console.log(`--auto${rejuger ? ' --rejuger' : ''} : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
     if (!bloc.length) return;
-    // La production (lecture seule) seulement si une ligne du bloc tire ses numéros de la Setlist : sa vérification les compare
-    // aux numéros Cardmarket.
-    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: bloc.some(l => l.bulba.numerosDepuisSetlist), buckets: [] });
+    // La production (LECTURE SEULE) est désormais nécessaire pour TOUTE ligne : la couverture des numéros se
+    // calcule partout, plus seulement sur les lignes `numerosDepuisSetlist`.
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const { cleNumero, numeroDeSetlist, jetonsDeSetlist } = require('./jointure');
     const verrou = fabriquerVerrou({ Modele: modeles(cx).EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: 3 * 60 * 1000, surInsertion: { phase: 'collecteur' }, nom: 'verrou global bulbapedia (vérification)' });
     const tenu = await verrou.prendre();
@@ -129,14 +139,25 @@ async function verifierAuto() {
             // 🔑 NUMÉROS DEPUIS LA SETLIST (tirages chinois, 2026-09-15) : la page de carte ne déclare pas le tirage, un échantillon
             // ne prouverait rien. Le critère est la COUVERTURE : les numéros Cardmarket de l'expansion sont-ils des numéros de TCG ID
             // de la Setlist ? SV6s n'a que 62 produits (168…229) pour 229 entrées : le ratio le refuserait, la couverture non.
-            if (l.bulba.numerosDepuisSetlist && l._p && v.entrees) {
+            // 🔴 ET CE CORRECTIF NE S'APPLIQUAIT QU'AUX LIGNES `numerosDepuisSetlist` — §21 bis, une sixième fois,
+            // avec sa justification écrite trois lignes plus haut. Mesuré le 2026-09-20 : le ratio a REFUSÉ
+            // `Shining-Fates` à 0,37 (73 entrées pour 196 produits) et la voie « sans page » a joint le même set
+            // à **196/196 = 100 %**. Cardmarket vend PLUSIEURS PRODUITS PAR CARTE — holo, reverse, V1/V2 — donc
+            // sur tout set occidental moderne le ratio entrées/produits est structurellement bas et ne dit RIEN
+            // de la justesse de la jointure. La couverture, elle, répond à la vraie question : les numéros que
+            // Cardmarket vend sont-ils des numéros de CE set ? Elle se calcule maintenant pour TOUTE ligne.
+            // ⚠️ Et elle n'est ajoutée qu'en ADMISSION (§20, coût nul mesuré) : une couverture ≥ 0,95 annule le
+            // refus par le ratio, jamais l'inverse. Aucune des 405 lignes déjà vérifiées ne peut donc tomber.
+            if (l._p && v.entrees) {
                 const jetons = jetonsDeSetlist(l._entrees, [].concat(l.bulba.expansion, l.bulba.setlist || []));
                 const numsSetlist = new Set(l._entrees.map(x => numeroDeSetlist(x, jetons)).filter(n => n != null).map(cleNumero));
                 const numsProduits = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '').map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
-                v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size };
-                if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
-                else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95`);
+                v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size, taux: numsProduits.length ? Number((couverts / numsProduits.length).toFixed(3)) : null };
+                if (l.bulba.numerosDepuisSetlist) {
+                    if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
+                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95`);
+                }
             }
             const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;
             if (l._p && v.entrees && !c && !l.bulba.numerosDepuisSetlist) raisons.push('carte-échantillon introuvable');
@@ -151,13 +172,32 @@ async function verifierAuto() {
             // 🔴 2026-09-15 : `20th` « BREAK Starter Pack » (japonais) admis sur « Generations (TCG) » en intl par une
             // redirection suivie, 84 produits joints à des cartes fausses. Voir coherence-ligne.js.
             raisons.push(...raisonsDeCoherence(l, l.bulba.tirage || v.tirageEtabli || null));
+            // 🔴 ICI A VÉCU UN GARDE « le chinois est mis de côté (§28) », ÉCRIT ET RETIRÉ DANS LA MÊME HEURE,
+            // le 2026-09-20. Il était faux, et la mesure qui l'a tué tient en une ligne : **40 lignes chinoises
+            // sont vérifiées, 38 sets collectés, 5 675 produits fichés à 92,8 %** depuis le 2026-09-15. §28 dit
+            // que les expansions chinoises RANGÉES « japonais » par `codes_set` ne doivent pas être prises pour
+            // du japonais — il ne ferme pas la route « (ATCG) », qui a été ouverte le lendemain et qui marche.
+            // ⚠️ Le garde aurait refusé 40 lignes justes au nom d'un paragraphe lu trop large. Avant d'interdire
+            // au nom d'une règle, MESURER ce que la règle interdirait : un périmètre se vérifie sur ce qui
+            // marche déjà, comme une clé (§22) et comme un contrôle transversal (§32 bis).
             v.ratio = l.attendu ? Math.round(100 * v.entrees / l.attendu) / 100 : null;
-            if (v.entrees && !l.bulba.numerosDepuisSetlist && (v.ratio < 0.5 || v.ratio > 1.5)) raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]`);
+            // Le ratio devient un CONTRÔLE, pas une clé : il ne refuse que si la couverture n'a pas pu trancher
+            // (aucun produit numéroté, ou moins de 0,95). C'est la même correction que le §31 sur la couverture
+            // des numéros — ce qui décide doit répondre à la question posée, le reste s'imprime à côté.
+            const couvre = v.couverture && v.couverture.taux != null && v.couverture.taux >= 0.95;
+            if (v.entrees && !l.bulba.numerosDepuisSetlist && !couvre && (v.ratio < 0.5 || v.ratio > 1.5))
+                raisons.push(`entrées/produits ${v.ratio} hors [0,5 ; 1,5]${v.couverture?.taux != null ? ` et couverture des numéros ${v.couverture.couverts}/${v.couverture.produitsNumerotes} = ${(v.couverture.taux * 100).toFixed(0)} % sous 95 %` : ' (couverture non évaluable : aucun produit numéroté)'}`);
             v.etat = raisons.length ? 'À REGARDER' : 'OK';
             v.raisons = raisons;
             l.verif = v;
             if (v.tirageEtabli && !raisons.length) { l.bulba.tirage = v.tirageEtabli; l.region = v.tirageEtabli === 'jp' ? 'japonais' : 'occidental'; }
             if (v.etat === 'OK') l.verifie = { le: ajd, page: v.pageResolue, entrees: { [l.bulba.expansion]: v.entrees }, note: `vérification automatique : ${v.entrees} entrées pour ${l.attendu} produits, échantillon « ${v.echantillon} » (${l.bulba.tirage})` };
+            // 🔴 ET UN VERDICT QUI NE SAIT QU'ADMETTRE N'EST PAS UN VERDICT. `verifie` n'était JAMAIS effacé :
+            // une ligne admise hier restait admise même quand le rejugement la refusait, en silence, avec
+            // « À REGARDER » imprimé juste à côté. Un critère qui se resserre ne pouvait donc agir sur rien —
+            // seule une liste de refus se relisait, c'est-à-dire le mauvais côté de la liste (§23). Effacer ne
+            // touche que les lignes réellement rejugées, donc jamais celles que personne n'a nommées.
+            else if (l.verifie) { v.admissionRetiree = l.verifie.le; delete l.verifie; }
             delete l._p; delete l._entrees;
             console.log(`${l.code.padEnd(10)} ${v.etat.padEnd(11)} ${String(l.attendu).padStart(4)} produits · ${String(v.entrees).padStart(4)} entrées (${v.ratio}) · ${l.bulba.tirage ?? '?'} · « ${l.bulba.titre} »${v.pageResolue && v.pageResolue !== l.bulba.titre ? ` → « ${v.pageResolue} »` : ''}${raisons.length ? ' — ' + raisons.join(' ; ') : ''}`);
         }

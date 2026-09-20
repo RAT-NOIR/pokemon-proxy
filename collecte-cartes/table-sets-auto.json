@@ -790,6 +790,27 @@
    "raisons": [
     "tirage non établi (vus : aucun)"
    ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Generations Start Decks (TCG)",
+   "entrees": 175,
+   "couverture": {
+    "produitsNumerotes": 175,
+    "couverts": 175,
+    "numerosSetlist": 175
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Generations Start Decks (TCG)",
+   "entrees": {
+    "Generations Start Decks": 175
+   },
+   "note": "vérification automatique : 175 entrées pour 175 produits, échantillon « undefined » (jp)"
   }
  },
  {
@@ -899,7 +920,7 @@
    "retireLe": "2026-09-14T23:52:37.867Z"
   },
   "verif": {
-   "le": "2026-09-14",
+   "le": "2026-09-20",
    "pageResolue": "Ex Start Decks (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -1775,9 +1796,15 @@
    "retireLe": "2026-09-14T23:52:37.867Z"
   },
   "verif": {
-   "le": "2026-09-14",
+   "le": "2026-09-20",
    "pageResolue": "Diamond & Pearl (TCG)",
    "entrees": 236,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 1,
+    "taux": null
+   },
    "echantillon": "Wurmple (Diamond & Pearl 104)",
    "tiragesVus": [
     "jp"
@@ -1785,7 +1812,7 @@
    "ratio": 1.93,
    "etat": "À REGARDER",
    "raisons": [
-    "entrées/produits 1.93 hors [0,5 ; 1,5]"
+    "entrées/produits 1.93 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -4386,7 +4413,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Quick Construction Packs (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -8185,7 +8212,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Master Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -8368,7 +8395,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Gift Box Emerald (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -8620,13 +8647,33 @@
     }
    ]
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Trainer Battle Decks (TCG)",
+   "entrees": {
+    "Trainer Battle Decks": 31
+   },
+   "note": "vérification automatique : 31 entrées pour 31 produits, échantillon « undefined » (jp)"
+  },
   "collecte": {
    "le": "2026-09-15T11:48:12.564Z",
    "etat": "a-regarder",
    "raisons": [
     "tirage non établi (vus : aucun)"
    ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Trainer Battle Decks (TCG)",
+   "entrees": 31,
+   "couverture": {
+    "produitsNumerotes": 31,
+    "couverts": 31,
+    "numerosSetlist": 31
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -8700,7 +8747,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Ash vs Team Rocket Deck Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -8883,14 +8930,14 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Stellar Tera Type Starter Sets (TCG)",
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
    "raisons": [
     "aucune entrée de Setlist pour « Stellar Tera Type Starter Sets »",
-    "page redirigée : « Stellar Tera Type Starter Set Sylveon ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion est celui de la cible, pas celui de l'expansion Cardmarket)"
+    "page redirigée : « Stellar Tera Type Starter Set Sylveon ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion lu est celui de la cible, pas celui de l'expansion Cardmarket)"
    ]
   },
   "collecte": {
@@ -8926,14 +8973,14 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Stellar Tera Type Starter Sets (TCG)",
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
    "raisons": [
     "aucune entrée de Setlist pour « Stellar Tera Type Starter Sets »",
-    "page redirigée : « Stellar Tera Type Starter Set Ceruledge ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion est celui de la cible, pas celui de l'expansion Cardmarket)"
+    "page redirigée : « Stellar Tera Type Starter Set Ceruledge ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion lu est celui de la cible, pas celui de l'expansion Cardmarket)"
    ]
   },
   "collecte": {
@@ -8997,6 +9044,22 @@
    "raisons": [
     "tirage non établi (vus : aucun)"
    ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Start Deck 100 CoroCoro Comic Version (TCG)",
+   "entrees": 24,
+   "couverture": {
+    "produitsNumerotes": 24,
+    "couverts": 22,
+    "numerosSetlist": 22,
+    "taux": 0.917
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 22/24 sous 0,95"
+   ]
   }
  },
  {
@@ -9023,7 +9086,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "MEGA Starter Set Mega Gengar ex (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9064,7 +9127,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "MEGA Starter Set Mega Diancie ex (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9105,7 +9168,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Terastal Starter Sets (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9148,7 +9211,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Terastal Starter Sets (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9334,7 +9397,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Tyranitar Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9375,7 +9438,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Flygon Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9416,7 +9479,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Salamence Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9457,7 +9520,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Metagross Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9483,7 +9546,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Hyper Metal Chain Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Hyper Metal Chain Deck"
   },
   "attendu": 19,
@@ -9496,18 +9559,32 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Hyper Metal Chain Deck (TCG)",
+   "entrees": {
+    "Hyper Metal Chain Deck": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 19 produits, échantillon « Roller Skates (XY 125) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Hyper Metal Chain Deck (TCG)",
    "entrees": 20,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
    "echantillon": "Roller Skates (XY 125)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.05,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:50:17.195Z",
@@ -9541,7 +9618,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Steelix Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9630,7 +9707,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Typhlosion Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9656,7 +9733,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Rampardos the Attacker (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Rampardos the Attacker"
   },
   "attendu": 16,
@@ -9669,18 +9746,32 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Rampardos the Attacker (TCG)",
+   "entrees": {
+    "Rampardos the Attacker": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « Skull Fossil (Mysterious Treasures 117) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Rampardos the Attacker (TCG)",
    "entrees": 16,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 1,
+    "taux": null
+   },
    "echantillon": "Skull Fossil (Mysterious Treasures 117)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:50:28.141Z",
@@ -9714,7 +9805,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Meganium Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9803,7 +9894,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Feraligatr Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9829,7 +9920,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Bastiodon the Defender (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Bastiodon the Defender"
   },
   "attendu": 15,
@@ -9842,18 +9933,32 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Bastiodon the Defender (TCG)",
+   "entrees": {
+    "Bastiodon the Defender": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 15 produits, échantillon « Armor Fossil (Mysterious Treasures 116) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Bastiodon the Defender (TCG)",
    "entrees": 16,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 1,
+    "taux": null
+   },
    "echantillon": "Armor Fossil (Mysterious Treasures 116)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.07,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:50:41.472Z",
@@ -9887,7 +9992,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Deoxys Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9928,7 +10033,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Rayquaza Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -9969,9 +10074,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Holon Research Tower Lightning Quarter Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
    "echantillon": "Great Ball (EX FireRed & LeafGreen 92)",
    "tiragesVus": [],
    "ratio": 1,
@@ -9997,7 +10108,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Rockruff Full Power Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Rockruff Full Power Deck"
   },
   "attendu": 13,
@@ -10010,18 +10121,32 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Rockruff Full Power Deck (TCG)",
+   "entrees": {
+    "Rockruff Full Power Deck": 13
+   },
+   "note": "vérification automatique : 13 entrées pour 13 produits, échantillon « Zygarde (SM Promo 15) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Rockruff Full Power Deck (TCG)",
    "entrees": 13,
+   "couverture": {
+    "produitsNumerotes": 13,
+    "couverts": 13,
+    "numerosSetlist": 13,
+    "taux": 1
+   },
    "echantillon": "Zygarde (SM Promo 15)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:50:41.491Z",
@@ -10245,9 +10370,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "McDonald's Collection (TCG)",
    "entrees": 12,
+   "couverture": {
+    "produitsNumerotes": 9,
+    "couverts": 9,
+    "numerosSetlist": 12,
+    "taux": 1
+   },
    "echantillon": "Munna (McDonald's Collection 7)",
    "tiragesVus": [
     "intl"
@@ -10484,7 +10615,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Academy 2024 (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10525,7 +10656,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Academy 2022 (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10566,7 +10697,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Academy 2020 (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10607,7 +10738,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Professor Program (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10648,7 +10779,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "XY Trainer Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10689,7 +10820,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "HS Trainer Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -10712,10 +10843,10 @@
   "prod": 51,
   "nom": "Beginning Set",
   "slugSet": "Beginning-Set",
-  "region": null,
+  "region": "japonais",
   "bulba": {
    "titre": "Beginning Set (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Beginning Set"
   },
   "attendu": 51,
@@ -10728,21 +10859,32 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Beginning Set (TCG)",
+   "entrees": {
+    "Beginning Set": 84
+   },
+   "note": "vérification automatique : 84 entrées pour 51 produits, échantillon « Snivy (Black & White 1) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Beginning Set (TCG)",
    "entrees": 84,
+   "couverture": {
+    "produitsNumerotes": 51,
+    "couverts": 51,
+    "numerosSetlist": 37,
+    "taux": 1
+   },
    "echantillon": "Snivy (Black & White 1)",
    "tiragesVus": [
     "jp"
    ],
    "tirageEtabli": "jp",
    "ratio": 1.65,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 1.65 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:52:08.919Z",
@@ -10920,9 +11062,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Kalos Starter Set (TCG)",
    "entrees": 39,
+   "couverture": {
+    "produitsNumerotes": 45,
+    "couverts": 45,
+    "numerosSetlist": 39,
+    "taux": 1
+   },
    "echantillon": "Bisharp (Kalos Starter Set 20)",
    "tiragesVus": [
     "intl"
@@ -11014,7 +11162,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Strength Decks (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11055,7 +11203,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Mewtwo vs Genesect Deck Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11096,7 +11244,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Trick or Trade (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11137,7 +11285,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Magmortar vs Electivire Deck Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11178,7 +11326,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "EX Trainer Kit 2 (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11219,7 +11367,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Heatran vs Regigigas Deck Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11308,7 +11456,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "EX Trainer Kit (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11349,7 +11497,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Theater Limited VS Pack (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11390,7 +11538,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Zekrom-EX Battle Strength Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11431,7 +11579,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Reshiram-EX Battle Strength Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11472,7 +11620,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Team Plasma Battle Gift Set (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11513,7 +11661,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Pikachu World Collection (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11554,7 +11702,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Movie Commemoration VS Pack (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11577,10 +11725,10 @@
   "prod": 15,
   "nom": "Garchomp Half Deck",
   "slugSet": "Garchomp-Half-Deck",
-  "region": null,
+  "region": "japonais",
   "bulba": {
    "titre": "Garchomp Half Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Garchomp Half Deck"
   },
   "attendu": 15,
@@ -11593,18 +11741,32 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Garchomp Half Deck (TCG)",
+   "entrees": {
+    "Garchomp Half Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Swablu (Dragons Exalted 105) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Garchomp Half Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
    "echantillon": "Swablu (Dragons Exalted 105)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.530Z",
@@ -11620,10 +11782,10 @@
   "prod": 15,
   "nom": "Hydreigon Half Deck",
   "slugSet": "Hydreigon-Half-Deck",
-  "region": null,
+  "region": "japonais",
   "bulba": {
    "titre": "Hydreigon Half Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Hydreigon Half Deck"
   },
   "attendu": 15,
@@ -11636,18 +11798,32 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Hydreigon Half Deck (TCG)",
+   "entrees": {
+    "Hydreigon Half Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Zweilous (Dragons Exalted 96) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Hydreigon Half Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
    "echantillon": "Zweilous (Dragons Exalted 96)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.535Z",
@@ -11681,7 +11857,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Keldeo Battle Strength Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11722,7 +11898,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Leafeon vs Metagross Expert Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -11745,10 +11921,10 @@
   "prod": 14,
   "nom": "Xerneas Half Deck",
   "slugSet": "Xerneas-Half-Deck",
-  "region": null,
+  "region": "japonais",
   "bulba": {
    "titre": "Xerneas Half Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Xerneas Half Deck"
   },
   "attendu": 14,
@@ -11761,18 +11937,32 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Xerneas Half Deck (TCG)",
+   "entrees": {
+    "Xerneas Half Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 14 produits, échantillon « Potion (Base Set 94) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Xerneas Half Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 14,
+    "couverts": 14,
+    "numerosSetlist": 14,
+    "taux": 1
+   },
    "echantillon": "Potion (Base Set 94)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.07,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.552Z",
@@ -11788,10 +11978,10 @@
   "prod": 14,
   "nom": "Yveltal Half Deck",
   "slugSet": "Yveltal-Half-Deck",
-  "region": null,
+  "region": "japonais",
   "bulba": {
    "titre": "Yveltal Half Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Yveltal Half Deck"
   },
   "attendu": 14,
@@ -11804,18 +11994,32 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Yveltal Half Deck (TCG)",
+   "entrees": {
+    "Yveltal Half Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 14 produits, échantillon « Crushing Hammer (Emerging Powers 92) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Yveltal Half Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 14,
+    "couverts": 14,
+    "numerosSetlist": 14,
+    "taux": 1
+   },
    "echantillon": "Crushing Hammer (Emerging Powers 92)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.07,
-   "etat": "À REGARDER",
-   "raisons": [
-    "tirage non établi (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:54.048Z",
@@ -11849,16 +12053,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Hanada City Gym (TCG)",
    "entrees": 19,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Misty's Goldeen (Gym Heroes 30)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.73,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 1.73 hors [0,5 ; 1,5]"
+    "entrées/produits 1.73 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -11894,16 +12106,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Guren Town Gym (TCG)",
    "entrees": 20,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Blaine's Magmar (Gym Heroes 37)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.82,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 1.82 hors [0,5 ; 1,5]"
+    "entrées/produits 1.82 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -11939,16 +12159,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Yamabuki City Gym (TCG)",
    "entrees": 19,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Sabrina's Hypno (Gym Challenge 56)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.73,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 1.73 hors [0,5 ; 1,5]"
+    "entrées/produits 1.73 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -11984,16 +12212,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Kuchiba City Gym (TCG)",
    "entrees": 19,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Lt. Surge's Electabuzz (Gym Heroes 27)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 1.9,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 1.9 hors [0,5 ; 1,5]"
+    "entrées/produits 1.9 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -12029,16 +12265,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Nivi City Gym (TCG)",
    "entrees": 18,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Brock's Onix (Gym Heroes 21)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 2,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 2 hors [0,5 ; 1,5]"
+    "entrées/produits 2 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -12074,16 +12318,24 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Tamamushi City Gym (TCG)",
    "entrees": 21,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": null
+   },
    "echantillon": "Erika's Tangela (Gym Heroes 79)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
    "ratio": 3,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)",
-    "entrées/produits 3 hors [0,5 ; 1,5]"
+    "entrées/produits 3 hors [0,5 ; 1,5] (couverture non évaluable : aucun produit numéroté)"
    ]
   },
   "collecte": {
@@ -13406,20 +13658,31 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Base Set (TCG)",
+   "entrees": {
+    "Base Set": 102
+   },
+   "note": "vérification automatique : 102 entrées pour 211 produits, échantillon « Machop (Base Set 52) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Base Set (TCG)",
    "entrees": 102,
+   "couverture": {
+    "produitsNumerotes": 211,
+    "couverts": 211,
+    "numerosSetlist": 102,
+    "taux": 1
+   },
    "echantillon": "Machop (Base Set 52)",
    "tiragesVus": [
     "intl"
    ],
    "ratio": 0.48,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 0.48 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T04:55:40.775Z",
@@ -13500,9 +13763,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series One (TCG)",
    "entrees": 194,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 24,
+    "taux": null
+   },
    "echantillon": "Bruno (Battle Styles 121)",
    "tiragesVus": [],
    "ratio": 0.92,
@@ -13637,9 +13906,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Three (TCG)",
    "entrees": 182,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 37,
+    "taux": null
+   },
    "echantillon": "Thorton (Lost Origin 167)",
    "tiragesVus": [],
    "ratio": 0.91,
@@ -13821,9 +14096,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Shining Fates (TCG)",
    "entrees": 73,
+   "couverture": {
+    "produitsNumerotes": 196,
+    "couverts": 74,
+    "numerosSetlist": 73,
+    "taux": 0.378
+   },
    "echantillon": "Morpeko V (Sword & Shield 79)",
    "tiragesVus": [
     "intl"
@@ -13831,7 +14112,7 @@
    "ratio": 0.37,
    "etat": "À REGARDER",
    "raisons": [
-    "entrées/produits 0.37 hors [0,5 ; 1,5]"
+    "entrées/produits 0.37 hors [0,5 ; 1,5] et couverture des numéros 74/196 = 38 % sous 95 %"
    ]
   },
   "collecte": {
@@ -14007,9 +14288,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Two (TCG)",
    "entrees": 179,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 41,
+    "taux": null
+   },
    "echantillon": "Rayquaza V (Evolving Skies 110)",
    "tiragesVus": [],
    "ratio": 0.95,
@@ -14260,13 +14547,32 @@
     }
    ]
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "White Flare": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 173 produits, échantillon « Swadloon (White Flare 2) » (intl)"
+  },
   "collecte": {
    "le": "2026-09-16T05:04:29.071Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Black Bolt & White Flare »"
    ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Swadloon (White Flare 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1.01,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -14315,13 +14621,32 @@
     }
    ]
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Black Bolt/White Flare (TCG)",
+   "entrees": {
+    "Black Bolt": 174
+   },
+   "note": "vérification automatique : 174 entrées pour 172 produits, échantillon « Servine (Black Bolt 2) » (intl)"
+  },
   "collecte": {
    "le": "2026-09-16T05:04:29.079Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Black Bolt & White Flare »"
    ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Black Bolt/White Flare (TCG)",
+   "entrees": 174,
+   "echantillon": "Servine (Black Bolt 2)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1.01,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -14489,9 +14814,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Hidden Fates (TCG)",
    "entrees": 69,
+   "couverture": {
+    "produitsNumerotes": 163,
+    "couverts": 69,
+    "numerosSetlist": 69,
+    "taux": 0.423
+   },
    "echantillon": "Golem (Hidden Fates 35)",
    "tiragesVus": [
     "intl"
@@ -14499,7 +14830,7 @@
    "ratio": 0.42,
    "etat": "À REGARDER",
    "raisons": [
-    "entrées/produits 0.42 hors [0,5 ; 1,5]"
+    "entrées/produits 0.42 hors [0,5 ; 1,5] et couverture des numéros 69/163 = 42 % sous 95 %"
    ]
   },
   "collecte": {
@@ -14532,20 +14863,31 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Forbidden Light (TCG)",
+   "entrees": {
+    "Forbidden Light": 256
+   },
+   "note": "vérification automatique : 256 entrées pour 161 produits, échantillon « Crasher Wake (Forbidden Light 104) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Forbidden Light (TCG)",
    "entrees": 256,
+   "couverture": {
+    "produitsNumerotes": 161,
+    "couverts": 157,
+    "numerosSetlist": 146,
+    "taux": 0.975
+   },
    "echantillon": "Crasher Wake (Forbidden Light 104)",
    "tiragesVus": [
     "intl"
    ],
    "ratio": 1.59,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 1.59 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:06:48.233Z",
@@ -15989,9 +16331,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Six (TCG)",
    "entrees": 102,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 27,
+    "taux": null
+   },
    "echantillon": "Heatran (Twilight Masquerade 123)",
    "tiragesVus": [],
    "ratio": 0.86,
@@ -16032,9 +16380,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Seven (TCG)",
    "entrees": 102,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 22,
+    "taux": null
+   },
    "echantillon": "Magneton (Surging Sparks 59)",
    "tiragesVus": [],
    "ratio": 0.86,
@@ -16075,9 +16429,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Eight (TCG)",
    "entrees": 102,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 27,
+    "taux": null
+   },
    "echantillon": "Team Rocket's Giovanni (Destined Rivals 174)",
    "tiragesVus": [],
    "ratio": 0.86,
@@ -16212,9 +16572,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Five (TCG)",
    "entrees": 98,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 27,
+    "taux": null
+   },
    "echantillon": "Earthen Vessel (Paradox Rift 163)",
    "tiragesVus": [],
    "ratio": 0.85,
@@ -16443,7 +16809,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Platinum: Arceus (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -16531,9 +16897,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Four (TCG)",
    "entrees": 97,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 22,
+    "taux": null
+   },
    "echantillon": "Nest Ball (Sun & Moon 123)",
    "tiragesVus": [],
    "ratio": 0.85,
@@ -16856,9 +17228,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Play! Pokémon Prize Pack Series Nine (TCG)",
    "entrees": 92,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 17,
+    "taux": null
+   },
    "echantillon": "Mega Sharpedo ex (Phantasmal Flames 61)",
    "tiragesVus": [],
    "ratio": 0.84,
@@ -17790,21 +18168,32 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon GO (TCG)",
+   "entrees": {
+    "Pokémon GO": 189
+   },
+   "note": "vérification automatique : 189 entrées pour 91 produits, échantillon « Ariados (Pokémon GO 7) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Pokémon GO (TCG)",
    "entrees": 189,
+   "couverture": {
+    "produitsNumerotes": 91,
+    "couverts": 91,
+    "numerosSetlist": 89,
+    "taux": 1
+   },
    "echantillon": "Ariados (Pokémon GO 7)",
    "tiragesVus": [
     "intl",
     "jp"
    ],
    "ratio": 2.08,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 2.08 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:41:38.764Z",
@@ -17883,21 +18272,32 @@
    "regionCodesSet": "occidental",
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Shining Legends (TCG)",
+   "entrees": {
+    "Shining Legends": 160
+   },
+   "note": "vérification automatique : 160 entrées pour 81 produits, échantillon « Venusaur (Shining Legends 3) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Shining Legends (TCG)",
    "entrees": 160,
+   "couverture": {
+    "produitsNumerotes": 81,
+    "couverts": 78,
+    "numerosSetlist": 82,
+    "taux": 0.963
+   },
    "echantillon": "Venusaur (Shining Legends 3)",
    "tiragesVus": [
     "intl",
     "jp"
    ],
    "ratio": 1.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 1.98 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:41:59.783Z",
@@ -18213,7 +18613,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "SVE Basic Energies (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -18301,9 +18701,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Celebrations (TCG)",
    "entrees": 25,
+   "couverture": {
+    "produitsNumerotes": 41,
+    "couverts": 25,
+    "numerosSetlist": 25,
+    "taux": 0.61
+   },
    "echantillon": "Cosmog (Celebrations 13)",
    "tiragesVus": [
     "intl"
@@ -18311,7 +18717,7 @@
    "ratio": 0.48,
    "etat": "À REGARDER",
    "raisons": [
-    "entrées/produits 0.48 hors [0,5 ; 1,5]"
+    "entrées/produits 0.48 hors [0,5 ; 1,5] et couverture des numéros 25/41 = 61 % sous 95 %"
    ]
   },
   "collecte": {
@@ -18514,9 +18920,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "McDonald's Collection 2018 (TCG)",
    "entrees": 52,
+   "couverture": {
+    "produitsNumerotes": 40,
+    "couverts": 40,
+    "numerosSetlist": 40,
+    "taux": 1
+   },
    "echantillon": "Murkrow (Guardians Rising 78)",
    "tiragesVus": [],
    "ratio": 1.3,
@@ -18604,9 +19016,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Trick or Trade 2023 (TCG)",
    "entrees": 30,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 10,
+    "taux": null
+   },
    "echantillon": "Haunter (Lost Origin 65)",
    "tiragesVus": [],
    "ratio": 1,
@@ -18647,9 +19065,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "Trick or Trade 2024 (TCG)",
    "entrees": 30,
+   "couverture": {
+    "produitsNumerotes": 0,
+    "couverts": 0,
+    "numerosSetlist": 11,
+    "taux": null
+   },
    "echantillon": "Flutter Mane (Temporal Forces 78)",
    "tiragesVus": [],
    "ratio": 1,
@@ -19208,9 +19632,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "POP Series 5 (TCG)",
    "entrees": 17,
+   "couverture": {
+    "produitsNumerotes": 17,
+    "couverts": 17,
+    "numerosSetlist": 17,
+    "taux": 1
+   },
    "ratio": 1,
    "etat": "À REGARDER",
    "raisons": [
@@ -19437,7 +19867,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "McDonald's Collection 2023 (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -19478,16 +19908,21 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "McDonald's Collection 2019 (TCG)",
    "entrees": 52,
+   "couverture": {
+    "produitsNumerotes": 12,
+    "couverts": 12,
+    "numerosSetlist": 40,
+    "taux": 1
+   },
    "echantillon": "Horsea (Dragon Majesty 16)",
    "tiragesVus": [],
    "ratio": 4.33,
    "etat": "À REGARDER",
    "raisons": [
-    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2019 » (vus : aucun)",
-    "entrées/produits 4.33 hors [0,5 ; 1,5]"
+    "l'échantillon n'a pas de tirage intl « McDonald's Collection 2019 » (vus : aucun)"
    ]
   },
   "collecte": {
@@ -19758,7 +20193,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "MEE Basic Energies (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -19891,20 +20326,31 @@
    "regionCodesSet": null,
    "genereLe": "2026-09-14"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "McDonald's Collection 2013 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2013": 12
+   },
+   "note": "vérification automatique : 12 entrées pour 3 produits, échantillon « Espeon (Dark Explorers 48) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-16",
+   "le": "2026-09-20",
    "pageResolue": "McDonald's Collection 2013 (TCG)",
    "entrees": 12,
+   "couverture": {
+    "produitsNumerotes": 3,
+    "couverts": 3,
+    "numerosSetlist": 12,
+    "taux": 1
+   },
    "echantillon": "Espeon (Dark Explorers 48)",
    "tiragesVus": [
     "intl"
    ],
    "ratio": 4,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 4 hors [0,5 ; 1,5]"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-19T07:59:29.317Z",
@@ -21585,7 +22031,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Venusaur/Charizard/Blastoise Random Constructed Starter Decks (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21669,7 +22115,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": null,
    "entrees": 0,
    "ratio": 0,
@@ -21708,7 +22154,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Shockwave! Tyranitar ex Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21747,7 +22193,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Imprison! Gardevoir ex Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21876,7 +22322,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Super Legend Set: Xerneas-EX & Yveltal-EX (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21915,7 +22361,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Master Decks (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21954,7 +22400,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "M Charizard-EX Mega Battle Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -21993,7 +22439,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": null,
    "entrees": 0,
    "ratio": 0,
@@ -22167,7 +22613,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": null,
    "entrees": 0,
    "ratio": 0,
@@ -22251,7 +22697,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Solgaleo-GX & Lunala-GX Legendary Starter Set (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22290,7 +22736,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Tapu Bulu-GX Enhanced Starter Set (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22419,7 +22865,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Master Decks (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22548,7 +22994,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Palkia LV.X Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22587,7 +23033,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Dialga LV.X Constructed Standard Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22626,7 +23072,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "M Rayquaza-EX Mega Battle Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22663,11 +23109,24 @@
    "regionCodesSet": "japonais",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Garchomp Half Deck (TCG)",
+   "entrees": {
+    "Garchomp Half Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 16 produits, échantillon « Swablu (Dragons Exalted 105) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Garchomp Half Deck (TCG)",
    "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 0.938
+   },
    "echantillon": "Swablu (Dragons Exalted 105)",
    "tiragesVus": [
     "jp"
@@ -22730,7 +23189,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Earth's Groudon ex Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22769,7 +23228,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Ocean's Kyogre ex Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22808,7 +23267,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Golduck BREAK + Palkia-EX Combo Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -22847,7 +23306,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Mirage's Mew Constructed Starter Deck (TCG)",
    "entrees": 0,
    "ratio": 0,
@@ -23217,9 +23676,15 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "M-P Promotional cards (TCG)",
    "entrees": 162,
+   "couverture": {
+    "produitsNumerotes": 138,
+    "couverts": 130,
+    "numerosSetlist": 154,
+    "taux": 0.942
+   },
    "echantillon": "Waitress (Ascended Heroes 215)",
    "tiragesVus": [],
    "ratio": 1.17,
@@ -23592,7 +24057,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Party Set (ATCG)",
    "entrees": 0,
    "ratio": 0,
@@ -23811,13 +24276,14 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Battle Party: Shining Dream (ATCG)",
    "entrees": 208,
    "couverture": {
     "produitsNumerotes": 232,
     "couverts": 207,
-    "numerosSetlist": 207
+    "numerosSetlist": 207,
+    "taux": 0.892
    },
    "ratio": 0.9,
    "etat": "À REGARDER",
@@ -23957,13 +24423,14 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Gem Pack Vol. 4 (ATCG)",
    "entrees": 196,
    "couverture": {
     "produitsNumerotes": 196,
     "couverts": 49,
-    "numerosSetlist": 7
+    "numerosSetlist": 7,
+    "taux": 0.25
    },
    "ratio": 1,
    "etat": "À REGARDER",
@@ -24029,13 +24496,14 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Gem Pack Vol. 5 (ATCG)",
    "entrees": 196,
    "couverture": {
     "produitsNumerotes": 196,
     "couverts": 49,
-    "numerosSetlist": 7
+    "numerosSetlist": 7,
+    "taux": 0.25
    },
    "ratio": 1,
    "etat": "À REGARDER",
@@ -24375,13 +24843,14 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Gem Pack Vol. 3 (ATCG)",
    "entrees": 136,
    "couverture": {
     "produitsNumerotes": 136,
     "couverts": 49,
-    "numerosSetlist": 7
+    "numerosSetlist": 7,
+    "taux": 0.36
    },
    "ratio": 1,
    "etat": "À REGARDER",
@@ -24447,13 +24916,14 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Gem Pack Vol. 1 (ATCG)",
    "entrees": 109,
    "couverture": {
     "produitsNumerotes": 115,
     "couverts": 70,
-    "numerosSetlist": 9
+    "numerosSetlist": 9,
+    "taux": 0.609
    },
    "ratio": 0.95,
    "etat": "À REGARDER",
@@ -24641,7 +25111,7 @@
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Master Strategy Deck Building Sets (ATCG)",
    "entrees": 0,
    "ratio": 0,
@@ -25442,7 +25912,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Radiant Energy Vol. 3 (ATCG)",
+   "entrees": {
+    "Radiant Energy Vol. 3": 24
+   },
+   "note": "vérification automatique : 24 entrées pour 24 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.493Z",
@@ -25470,19 +25947,18 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Radiant Energy Vol. 3 (ATCG)",
    "entrees": 24,
    "couverture": {
     "produitsNumerotes": 24,
-    "couverts": 16,
-    "numerosSetlist": 16
+    "couverts": 24,
+    "numerosSetlist": 24,
+    "taux": 1
    },
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 16/24 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T20:03:06.788Z",
@@ -25514,7 +25990,14 @@
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Radiant Energy Vol. 2 (ATCG)",
+   "entrees": {
+    "Radiant Energy Vol. 2": 23
+   },
+   "note": "vérification automatique : 23 entrées pour 23 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:47:36.501Z",
@@ -25542,19 +26025,18 @@
    }
   ],
   "verif": {
-   "le": "2026-09-15",
+   "le": "2026-09-20",
    "pageResolue": "Radiant Energy Vol. 2 (ATCG)",
    "entrees": 23,
    "couverture": {
     "produitsNumerotes": 23,
-    "couverts": 13,
-    "numerosSetlist": 13
+    "couverts": 23,
+    "numerosSetlist": 23,
+    "taux": 1
    },
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 13/23 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T20:03:06.797Z",
