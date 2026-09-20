@@ -5,6 +5,34 @@ renégocie pas en cours de route.
 
 ---
 
+## 35. LE SYMBOLE DE SET N'EST ÉCRIT NULLE PART : IL EST CALCULÉ — 2026-09-20
+
+**La question posée le 2026-09-19 était « où vit le fichier ? », et la réponse mesurée était NULLE PART** :
+`setsymbol` est un **booléen** (376 « yes », 22 « no »), **447 wikitexts de sets ne citent aucun fichier de
+symbole**, les pages de cartes échantillonnées non plus. Une source qui ne cite pas un fichier peut quand
+même le désigner — **par une convention**, et une convention se lit dans le GABARIT, pas dans les pages.
+
+🔑 **UNE REQUÊTE A RÉPONDU.** `Template:TCGExpansionInfobox` construit le symbole ainsi :
+```
+[[File:SetSymbol{{{alt|{{{setname|Base Set}}}}}}.png|{{{symbolsize|30px}}}]]
+```
+→ **`SetSymbol<alt, à défaut setname>.png`**, et `alt`/`setname` sont des paramètres d'infobox **déjà
+archivés chez nous**. Le nom de 138 fichiers s'est donc calculé à **zéro requête supplémentaire**.
+
+⚠️ **ET LA VÉRIFICATION AVANT COLLECTE A PAYÉ TOUT DE SUITE : 112 des 138 noms existent (81,2 %).** Les 26
+absents sont **tous des promos** — et c'est cohérent : une carte promo porte un tampon, pas un symbole de
+set. Sans ce contrôle, c'étaient 26 erreurs 404 découvertes une par une, au rythme d'une requête toutes
+les cinq secondes chez un tiers. **Un nom calculé se confronte à la source AVANT de servir**, par lots,
+et jamais en collectant.
+
+🔑 **CE QUI CHANGE DANS LA RÈGLE DU TESTEUR.** « Le symbole seulement si le fichier porte EXACTEMENT le nom
+du set » fermait le chantier tant que le fichier n'était « cité nulle part ». Dès lors qu'il est CALCULÉ
+depuis un paramètre d'infobox, la règle n'a plus à être assouplie : **elle est satisfaite par
+construction**, et le seul travail restant est de vérifier que le nom utilisé est celui de CE set et non
+de son jumeau (§26).
+
+---
+
 ## 34. UN CONTRÔLE QUI COMPARE DES ENSEMBLES EST AVEUGLE AUX DOUBLONS — 2026-09-20
 
 **La règle, en une ligne : un `Set` écrase les doublons AVANT la comparaison, donc aucune mesure de couverture ne
@@ -1485,6 +1513,38 @@ rend le slug lisible, **on ne reconstruit pas une ponctuation qu'on n'a pas** �
 et PBL, ASC, xASC, JTG, CRI (occidentaux). Le nom est réglé, la date ne l'est pas : elle n'est ni
 chez Cardmarket, ni dans l'infobox de ces pages. Il faudra une autre source ou onze lignes à la
 main. **Non corrigé, nommé.**
+
+### 🔴 LE PIÈGE DE `nomEn` A ÉTÉ TENDU TROIS FOIS EN DEUX JOURS, ET J'Y SUIS TOMBÉ DEUX FOIS — 2026-09-20
+
+**Le même défaut, sur trois objets différents, à quelques heures d'intervalle** : un set japonais et son
+homologue occidental partagent UNE page Bulbapedia, dont l'infobox porte le nom OCCIDENTAL.
+
+| objet | ce que `nomEn` aurait donné | attrapé par |
+|---|---|---|
+| le **nom d'affichage** (§26) | « Base Set » pour *Expansion Pack* | la règle, écrite d'avance |
+| le **logo** | **125 sets japonais sur 192** pointant le fichier du jumeau | la règle de langue, écrite d'avance |
+| le **symbole** | **125 sets japonais retenus**, `Rocket Gang → SetSymbolTeam Rocket.png` | 🔴 **rien — le chiffre seul** |
+
+🔴 **LA TROISIÈME FOIS, LA RÈGLE ÉTAIT ÉCRITE, COMPRISE, ET APPLIQUÉE TROIS HEURES PLUS TÔT AUX LOGOS —
+et je l'ai quand même reproduite sur les symboles, dans un fichier qui la CITE en commentaire.** Ce qui
+l'a arrêtée n'est pas la relecture : c'est **125 japonais retenus alors que les logos n'en avaient donné
+que 53**. Un chiffre impossible, comparé à un chiffre connu.
+
+⚠️ **ET LA DEUXIÈME VERSION ÉTAIT ENCORE FAUSSE.** `nomEn` retiré, il restait 25 japonais — dont **sept
+passaient par le jumeau autrement** : `nomJa` et `nomJaTraduit` portent parfois le nom occidental
+(« Pokémon Card 151 » a `nomJa` = « 151 », « Collection X » a `nomJa` = « XY »). **Retirer le champ
+coupable ne suffit pas quand la valeur coupable vit aussi ailleurs.**
+
+🔑 **LA RÈGLE QUI TIENT EST NÉGATIVE AUTANT QUE POSITIVE, et c'est la forme à reprendre partout : le nom
+retenu doit être un nom de CE set ET ne pas être aussi celui du jumeau.** « Un nom qui désigne les deux
+n'en désigne aucun » — c'est la garde par le nom de `jointure.js`, transposée aux métadonnées de set.
+Résultat : **153 symboles retenus, 143 occidentaux et 10 japonais**, tous des pages de promos qui
+portent leur propre nom.
+
+🔑 **ET LA PARADE GÉNÉRALE N'EST PAS « FAIRE ATTENTION » : c'est d'avoir un chiffre COMPARABLE sous la
+main.** Les logos avaient donné 53 japonais ; c'est ce 53 qui a condamné le 125. Un contrôle transversal
+se vérifie contre un cas normal connu (§32 bis) — une MESURE se vérifie contre une mesure voisine déjà
+faite. Quand il n'y en a pas, il faut en fabriquer une avant d'écrire.
 
 ---
 
