@@ -127,7 +127,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
         const produits = await produitsDeLExpansion(prod, L.exp);
         console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
-        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slugCardmarket });
+        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, tirage: TIRAGE, slugSet: slugCardmarket });
         const ecrit = await ecrireJointure(M, { slug, J, produits });
         // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
         // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
@@ -353,7 +353,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const produits = await produitsDeLExpansion(prod, L.exp);
     // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
     // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slugCardmarket });
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, tirage: TIRAGE, slugSet: slugCardmarket });
     // L'écriture vit dans `ecrire-jointure.js` : la collecte SANS PAGE écrit exactement la même chose,
     // et deux définitions du même geste divergent toujours (§21 bis).
     await ecrireJointure(M, { slug, J, produits });

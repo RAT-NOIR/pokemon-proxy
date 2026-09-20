@@ -5,6 +5,26 @@ renégocie pas en cours de route.
 
 ---
 
+## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LES DEUX RÉFLEXES QUI ONT LE PLUS RAPPORTÉ
+
+> ### « Quand ton chiffre dit 251 et le mien 0, c'est le MIEN qu'on ouvre. »
+>
+> **L'asymétrie n'est pas une politesse envers celui qui annonce, elle est dans la NATURE des deux
+> résultats.** Zéro est ce que rend un instrument cassé, un filtre trop étroit, un champ mal nommé, une
+> requête qui n'a pas vu le suffixe. Un chiffre non nul a au moins dû trouver quelque chose. **Devant un
+> désaccord, le vide est toujours le suspect le plus probable** — et six fois sur six dans ce dépôt, il
+> l'était. (§30 les promos ID/TH · §33 `verif` contre `verification` · §28 le chinois · §27 les dates ·
+> §36 le `fr` du `Langtable` · §21 n°7 les listes tronquées à 100.)
+
+> ### « Un contrôle qui devient parfait en rétrécissant son périmètre est un FAUX, pas une réussite. »
+>
+> Le décalage des Trainer Kits rendait **« 100 % de couverture, 0 ambigu »** — en poussant la moitié des
+> cartes hors de la plage comparée. Le contrôle n'était pas satisfait, il était **vidé**. La question à
+> poser devant tout contrôle qui s'améliore après un changement : *ai-je amélioré l'appariement, ou
+> retiré des candidats ?* Un dénominateur qui rétrécit pendant qu'un taux monte est le signal (§0, §34).
+
+---
+
 ## 37. LE NOM D'UNE CHOSE N'EST PAS LA CHOSE — `TCGPromoInfobox` NE VEUT PAS DIRE « PROMO » — 2026-09-21
 
 **La règle, en une ligne : quand une source nomme ses catégories, le NOM est une étiquette de sa
@@ -164,10 +184,33 @@ chaque demi-deck 1–30 ». D'où la question naturelle : un décalage systémat
 **Non — et il n'y a rien à décaler.** Mesuré sur les 11 kits, 527 produits : `XY Trainer Kit` a **61
 produits pour 30 numéros distincts, de 1 à 30**. Cardmarket numérote 1–30 exactement comme Bulbapedia.
 
-🔑 **LA VRAIE CAUSE EST UNE AMBIGUÏTÉ DE LA SOURCE, PAS UNE DIVERGENCE DE CONVENTION : 61 produits pour
-30 numéros, donc chaque numéro Cardmarket désigne DEUX cartes**, une par demi-deck. C'est le §34 dans sa
-forme pure, et aucune renumérotation ne peut le défaire — l'information qui manque (de quel demi-deck
-vient ce produit) n'est pas décalée, elle est **absente**.
+🔴 **ET LA PHRASE QUI SUIVAIT ÉTAIT FAUSSE AUSSI — ÉCRITE PAR MOI, CORRIGÉE LE LENDEMAIN.** J'avais écrit :
+« 61 produits pour 30 numéros, donc chaque numéro désigne DEUX cartes ; aucune renumérotation ne peut le
+défaire, l'information manquante est ABSENTE ». **Elle est présente, et c'est mon instrument qui l'effaçait.**
+Cardmarket numérote **« 1N », « 1S », « 2N », « 2S »** — une LETTRE par moitié du kit (N = Noivern,
+S = Sylveon ; a = Latias, o = Latios ; Z = Zoroark, E = Excadrill). **61 produits, 61 numéros distincts, et
+`0` numéro portant plusieurs produits.** Ma fonction `chiffres()` réduisait « 1N » et « 1S » à « 1 » : les
+« 30 numéros » et toute l'ambiguïté étaient fabriqués par la sonde.
+
+🔑 **C'EST EXACTEMENT LE §21 bis n°4, ET LA PARADE ÉTAIT DÉJÀ CÂBLÉE À CÔTÉ.** `cleNumero` garde le préfixe
+alphabétique depuis les 29 jointures fausses d'EC1, et sa regex `^([A-Z-]*)0*(\d+)([A-Z]*)$` **garde aussi le
+suffixe**. Le collecteur savait lire « 1N » ; c'est ma mesure, écrite à côté, qui ne savait pas. ⚠️ **Deux
+écritures d'une même donnée, encore** — le kit chez Cardmarket, le `deck` chez Bulbapedia. Traité comme le
+préfixe de set l'est déjà : l'impression est indexée sous ses DEUX écritures, via `cible.suffixesParDeck`,
+**un chemin qui ne s'ouvre que si le champ est posé** — donc gratuit sur les 528 sets collectés, non pas
+parce qu'on l'a mesuré partout mais parce que le code n'y est pas atteint.
+
+✅ **RÉSULTAT : 5 kits collectés, 234 produits, contrôle transversal INCHANGÉ à 35** — TK6, TK7, TK8 à
+**60/60 = 100 %**, TK1 18/20, TK5 36/60. L'appariement suffixe → demi-deck est MESURÉ (recouvrement des noms,
+écart au second imprimé), jamais deviné : « Latias » et « Latios » donneraient tous deux « L », et Cardmarket
+écrit « a » et « o ».
+🕳️ **Les six autres kits n'ont AUCUN suffixe** (`HS`, `EX Trainer Kit 2`, `DP`, `XY Pikachu Libre & Suicune`,
+`SM Lycanroc`, `SM Alolan Sandslash`) : là, et là seulement, rien ne distingue les deux moitiés. Ils restent
+refusés, et c'est le bon résultat.
+🔴 **ET J'AI CORRIGÉ UN TROISIÈME CHIFFRE À MOI** : « 4 kits sans carte déclarante, 207 produits » était un
+artefact de ma clé slug→nom. `BW Trainer Kit` s'appelle « Black & White Trainer Kit » chez Bulbapedia, `DP`
+« Diamond & Pearl Trainer Kit », `SM Lycanroc` « Sun & Moon Trainer Kit: … ». **10 kits sur 11 ont leurs
+cartes ; un seul n'en a pas.**
 
 🔴 **ET LE DÉCALAGE ESSAYÉ RENDAIT « 100 % DE COUVERTURE, 0 AMBIGU » SUR TROIS KITS — UN FAUX SUCCÈS
 PARFAIT.** En poussant un demi-deck à 31–60, il ne restait qu'un seul candidat par numéro Cardmarket :
@@ -176,12 +219,11 @@ attribuait les 30 produits au demi-deck classé premier par ordre alphabétique.
 satisfait en retirant des candidats ne mesure plus rien** — c'est le §31 (« une clé par inclusion apparie
 toujours quelque chose ») déguisé en transformation arithmétique.
 
-✅ **LA CLÉ QUI MARCHE EST LE NOM, et elle est mesurée** : sur les 7 kits dont nos pages déclarent
-l'expansion, (nom, puis nom+numéro) joint **212 produits sur 348 — 61 %, avec 9 ambigus (1,6 %)**, et les
-ambigus sont exactement les cartes communes aux deux moitiés (`Acro Bike`, `Tierno`, `Potion`).
-🕳️ **Le reste est nommé** : 4 kits sur 11 (`BW`, `DP`, `SM Lycanroc`, `SM Sandslash`, **207 produits**)
-n'ont **aucune carte qui déclare leur expansion** — ce n'est pas un problème de clé, c'est un trou de
-collecte, et il se traite par la page, pas par le numéro.
+⚠️ **ET LA CLÉ PAR LE NOM, QUE J'AVAIS PROPOSÉE ENSUITE, AURAIT ÉTÉ UN MAUVAIS CHOIX** : mesurée à
+**212/348 = 61 % avec 9 ambigus**, elle avait l'air du meilleur disponible. Le suffixe rend **234 produits
+avec ZÉRO ambigu**. 🔑 **Quand une clé mesurée laisse un résidu d'ambiguïté, c'est souvent le signe qu'une
+donnée discriminante existe et qu'on ne la lit pas** — le résidu n'est pas un coût à accepter, c'est une
+piste. Neuf collisions sur 555, c'était le bruit exact que produit une lettre effacée.
 
 ⚠️ **OÙ CHERCHER LA MÊME FORME** : partout où le dépôt écrit `new Set(...)` puis compare des tailles ou des
 appartenances — appariement de sets, couverture de numéros, `distinct()` de Mongo, `$addToSet` d'une agrégation.

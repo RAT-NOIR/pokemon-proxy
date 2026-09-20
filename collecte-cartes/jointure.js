@@ -206,10 +206,22 @@ function joindre(cartes, produits, cible) {
     // L'impression est donc indexée sous ses DEUX écritures, et chaque produit joint la sienne. La condition qui reste est
     // celle qui protège EC1 : le préfixe doit être COMMUN à toutes les impressions numérotées.
     const prefixeDuSet = numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
-    const clesImpression = n => {
+    // 🔑 LE SUFFIXE DE DEMI-DECK D'UN TRAINER KIT (2026-09-21). Cardmarket numérote « 1N »/« 1S » — la
+    // LETTRE désigne la moitié du kit (N = Noivern, S = Sylveon ; a = Latias, o = Latios). Bulbapedia
+    // numérote chaque demi-deck 1–30 sans lettre, et porte la moitié dans `deck`. La même donnée, deux
+    // écritures : exactement la forme du préfixe de set ci-dessus, et elle se traite pareil — l'impression
+    // est indexée sous ses DEUX écritures, et chaque produit joint la sienne.
+    // ⚠️ CE CHEMIN NE S'OUVRE QUE SI `suffixesParDeck` EST POSÉ. Sans lui, pas une clé ne change : c'est
+    // ce qui rend la modification gratuite sur les 528 sets déjà collectés (§20, §22) — non pas parce
+    // qu'on l'a mesuré partout, mais parce que le code n'est pas atteint.
+    // 🔴 ET SANS CE SUFFIXE, IL N'Y A RIEN À JOINDRE : 6 kits sur 11 ne le portent pas, et pour ceux-là
+    // les numéros des deux moitiés sont indiscernables. Ils restent refusés, c'est le bon résultat.
+    const suffixes = cible.suffixesParDeck || null;
+    const clesImpression = (n, deck) => {
         const nu = sansPosition(n);
         const sansPrefixe = prefixeDuSet ? nu.replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : nu;
-        return [...new Set([cleNumero(sansPrefixe), cleNumero(nu)].filter(Boolean))];
+        const suf = suffixes && deck ? suffixes[deck] : null;
+        return [...new Set([cleNumero(sansPrefixe), cleNumero(nu), suf ? cleNumero(`${nu}${suf}`) : null].filter(Boolean))];
     };
     let cartesSansProduit = 0;
     // 🔑 DEUX PASSES, ET L'ORDRE COMPTE (2026-09-16). Le numéro d'abord pour TOUTES les cartes, le nom ensuite : sinon le repli
@@ -232,7 +244,7 @@ function joindre(cartes, produits, cible) {
         const source = imp ? 'set' : 'setlist';
         let trouves = [];
         let preuve = null, detail = null;
-        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').flatMap(i => clesImpression(i.numero)))];
+        const numeros = [...new Set(imps.filter(i => i.numero != null && String(i.numero).trim() !== '').flatMap(i => clesImpression(i.numero, i.deck)))];
         if (numeros.length && parNumero.size) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
             preuve = imps.every(i => i.source === 'setlist') ? 'setlist+numero' : 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set : les deux écritures essayées, ${numsProd.filter(n => /^\d/.test(n)).length} numéros Cardmarket nus sur ${numsProd.length})` : ''}`;
