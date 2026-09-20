@@ -5,6 +5,106 @@ renégocie pas en cours de route.
 
 ---
 
+## 37. LE NOM D'UNE CHOSE N'EST PAS LA CHOSE — `TCGPromoInfobox` NE VEUT PAS DIRE « PROMO » — 2026-09-21
+
+**La règle, en une ligne : quand une source nomme ses catégories, le NOM est une étiquette de sa
+commodité, pas une définition — et le lire comme une définition étiquette faux en masse, avec l'air
+d'avoir lu la source.**
+
+**L'occurrence.** Le site demande un champ `type` (extension / deck / coffret). Aucune page de set ne
+porte de paramètre `type` — énuméré, **0 sur 463**. En revanche trois GABARITS se partagent les pages :
+`TCGExpansionInfobox` 309 · `TCGPromoInfobox` 104 · `DeckInfobox` 49, et pas une page n'en porte deux.
+La correspondance semblait écrite d'avance. Confrontée à la devinette par le nom que le site fait
+aujourd'hui, elle rendait **133 désaccords** — un excellent chiffre, et c'était le symptôme (§32 bis).
+
+🔴 **`TCGPromoInfobox` PORTE `VMAX Climax` (285 CARTES), `Tag All Stars` (226), `MEGA Dream ex` (250).**
+Ce sont des extensions. 92 des 133 « désaccords » étaient mes propres faux. Ce que le gabarit distingue
+n'est pas la nature du produit mais **le nombre de sorties régionales** : `TCGExpansionInfobox` porte
+`encards` ET `jacards` (japonaise et occidentale), `TCGPromoInfobox` porte `cards` seul. Bulbapedia
+l'appelle « Promo » parce que la plupart de ses mono-région sont des promos ; c'est une statistique de
+sa population, pas le sens du champ.
+
+🔑 **CE QUI L'A ARRÊTÉ N'EST PAS UNE RELECTURE, C'EST D'AVOIR OUVERT TROIS PAGES** (§22). Le compteur
+disait 133 ; la page de VMAX Climax disait « High Class Pack, 285 cartes, une date de sortie ». **Un
+compte ne dit pas ce qu'il compte**, et une catégorie héritée d'un tiers se vérifie sur ses membres,
+jamais sur son intitulé.
+
+🔑 **LE DISCRIMINANT RÉEL ÉTAIT DANS LES PARAMÈTRES, À CÔTÉ** : `period` (une FENÊTRE de distribution)
+contre `date` (une sortie unique). Lu sur les 104 pages : tout ce qui porte `period` est une promo —
+Black Star Promos, POP Series, « … Promotional cards », McDonald's ; tout ce qui porte `date` est un
+pack nommé — High Class Pack, 強化拡張パック, コンセプトパック, 强化包. **371 extensions, 49 decks, 42 promos, 87 %
+des sets typés**, et le gain mesuré contre la devinette au nom : **19 decks qu'elle ne voit pas**
+(« Premium Trainer Box », « Zacian Zamazenta BOX », « Evolution Pack ») et 2 faux positifs retirés.
+
+⚠️ **LE RÉSIDU EST NOMMÉ, PAS LISSÉ** : `s8a-P` s'appelle « Promo Card Pack » et porte `date` — il sera
+dit « extension ». `MCRP` aussi. Deux lignes sur 104, écrites ici pour qu'on les retrouve.
+🕳️ **ET « COFFRET » N'EXISTE PAS À LA SOURCE** : Bulbapedia n'a que trois gabarits, et un coffret y est
+un `DeckInfobox` (`25th Anniversary Golden Box`, `Extra Regulation Box`). Le champ rend donc TROIS
+valeurs et non les trois demandées. **Inventer le quatrième type depuis le nom serait exactement la
+devinette qu'on remplace** — on rend moins que ce qui est demandé plutôt que de rendre du faux.
+
+---
+
+## 36. NOS « LIMITES DÉFINITIVES » TIENNENT À UNE SONDE, ET LA SONDE VIEILLIT — 2026-09-21
+
+🔴 **C'EST LA SIXIÈME FOIS, ET IL FAUT L'ÉCRIRE COMME UNE LOI DU CHANTIER : une limite écrite dans ce
+fichier n'est pas une propriété du monde, c'est le RÉSULTAT D'UN INSTRUMENT À UNE DATE.** Une propriété
+du monde ne change pas ; un instrument, si — parce qu'une source s'ouvre, parce qu'un champ s'appelle
+autrement, parce que la requête était trop étroite. Et une limite, une fois écrite ici, **ne se remesure
+jamais** : c'est tout l'intérêt de ce fichier, et c'est exactement le danger.
+
+**LES SIX OCCURRENCES, dans l'ordre, avec ce que la sonde avait raté :**
+
+| § | la limite écrite | la sonde | ce qu'il y avait derrière |
+|---|---|---|---|
+| §21 n°7 | « la source s'arrête à 100 cartes » | un motif de « page suivante » deviné | 78 cartes, 4 listes tronquées |
+| §22 | « PKMJP n'apporte rien » | un COMPTE d'entrées, pas un constat | mesure refaite, conclusion tenue |
+| §30 | « aucune source pour les promos ID/TH » | `intitle:ITCG` — le suffixe est entre parenthèses | **55 pages, 1 620 produits** |
+| §33 | « 122 candidates jamais jugées » | `l.verification?.motif` — le champ est `l.verif` | **117 avaient un verdict écrit** |
+| §28 | « le chinois est irréductible » | une consigne de périmètre lue comme un fait | **5 675 produits fichés à 92,8 %** |
+| **§27** | **« aucune source ne porte la date »** | **Cardmarket + infobox Bulbapedia — TCGdex jamais interrogé** | **5 des 11, et 59 sets sur 281** |
+
+🔴 **LE §27 EST TOMBÉ LE 2026-09-21, ET SA SONDE ÉTAIT PARTICULIÈREMENT COUPABLE.** Le paragraphe dit
+« Aucune source DISPONIBLE ne la porte » et détaille deux vérifications — Cardmarket n'a pas de date
+d'expansion, l'infobox de ces onze pages n'en porte pas. Les deux sont exactes. **TCGdex sert
+`releaseDate`, il est utilisé par le dépôt depuis le premier jour (`prefill-tcgdex.js`), et personne ne
+lui a posé la question.** PBL 2026-07-17, ASC 2026-01-30, JTG 2025-03-28, CRI 2026-05-22. Les six
+japonais (SI-JP, VS, WEB, IPB, MCDP, EXS) restent, et c'est le vrai résidu.
+⚠️ **« Disponible » était le mot qui cachait le trou** : il avait l'air d'un quantificateur sur toutes les
+sources, il ne portait que sur celles qu'on venait de nommer. **Une limite doit dire QUELLES sources
+ont été interrogées, et la phrase « aucune source » est interdite sans cette liste.**
+
+✅ **ET UNE LIMITE QUI SURVIT À SA RELECTURE VAUT AUTANT QU'UNE QUI TOMBE — le §24 tient.** « Aucune carte
+portant ☆ n'existe dans toute la base » : remesuré avec l'instrument refait (le caractère ☆, PUIS le mot
+« Star » écrit en toutes lettres, PUIS les cinq noms nus), **0 et 0** — les deux seuls « Star » de la base
+sont `Star Piece` et `Team Star Grunt`. Les neuf irréductibles sont toujours neuf. **Une relecture qui
+confirme n'est pas une relecture perdue : elle transforme une supposition datée en fait mesuré deux fois.**
+
+🔑 **LA PARADE, ET ELLE EST MÉCANIQUE.** Tout paragraphe qui écrit une limite porte désormais trois
+choses, faute de quoi il n'est pas une limite mais une note : **(1) QUEL instrument a cherché, (2) QUELLES
+sources ont été interrogées — nommées, pas sous-entendues, (3) à QUELLE date.** Et la question à poser
+devant n'importe laquelle d'entre elles est toujours la même : *qu'est-ce que cette sonde ne pouvait pas
+voir ?* — pas *est-ce que j'y crois ?*
+
+### 🔴 ET LE MÊME SOIR, J'AI FAILLI EN ÉCRIRE UNE SEPTIÈME — SUR MON PROPRE INSTRUMENT
+
+**L'agent du site annonçait 251 pages Bulbapedia portant un paramètre `fr`, le nom français du set.**
+Mon énumération des infoboxes des 463 pages de sets archivées en a trouvé **ZÉRO**, et zéro paramètre
+`type` avec. J'allais écrire « la voie est morte, l'archive ne porte pas le nom français ».
+
+**Le chiffre ne collait pas, donc je n'ai pas conclu — et c'est la seule chose qui a marché.** Mon
+instrument ne regardait que les gabarits **dont le nom contient « infobox »**. Le `fr` vit dans
+`{{Langtable}}`, qui n'en est pas une. Recherché dans le TEXTE BRUT : **261 pages sur 463**, dont les 251
+de l'agent. **Un filtre que j'avais écrit moi-même, trois lignes plus haut, rendait le même vide qu'une
+absence** — le §30 appliqué à ma propre sonde, le jour où j'écrivais un § sur les sondes.
+
+🔑 **LA LEÇON D'EXPLOITATION : QUAND UN TIERS ANNONCE UN CHIFFRE ET QUE LE MIEN DIT ZÉRO, C'EST LE MIEN
+QU'ON OUVRE EN PREMIER.** Zéro est le résultat que produit un instrument cassé ; un chiffre non nul
+demande au moins d'avoir trouvé quelque chose. **L'asymétrie n'est pas dans la confiance qu'on accorde
+aux gens, elle est dans la nature des deux résultats.**
+
+---
+
 ## 35. LE SYMBOLE DE SET N'EST ÉCRIT NULLE PART : IL EST CALCULÉ — 2026-09-20
 
 **La question posée le 2026-09-19 était « où vit le fichier ? », et la réponse mesurée était NULLE PART** :
@@ -56,6 +156,32 @@ elle coûterait 18 produits justes pour un faux — elle s'ÉCRIT et attend la g
 ⚠️ **ET LA GARDE MANQUANTE EST LE PENDANT D'UNE GARDE QUI EXISTE : « un NOM qui désigne plusieurs cartes ne
 désigne rien » est câblée depuis le 2026-09-19 ; le NUMÉRO ne l'a pas.** C'est encore le §21 bis. Elle ne se
 câble pas avant d'avoir été mesurée sur ce qui MARCHE déjà (§22).
+
+### 🔴 LES TRAINER KITS : LA CAUSE ÉCRITE ÉTAIT FAUSSE, ET C'EST LA MESURE QUI L'A DIT — 2026-09-21
+
+**Ce que tout le monde répétait, moi le premier : « Cardmarket numérote le kit 1–60, Bulbapedia numérote
+chaque demi-deck 1–30 ». D'où la question naturelle : un décalage systématique de +30 suffirait-il ?**
+**Non — et il n'y a rien à décaler.** Mesuré sur les 11 kits, 527 produits : `XY Trainer Kit` a **61
+produits pour 30 numéros distincts, de 1 à 30**. Cardmarket numérote 1–30 exactement comme Bulbapedia.
+
+🔑 **LA VRAIE CAUSE EST UNE AMBIGUÏTÉ DE LA SOURCE, PAS UNE DIVERGENCE DE CONVENTION : 61 produits pour
+30 numéros, donc chaque numéro Cardmarket désigne DEUX cartes**, une par demi-deck. C'est le §34 dans sa
+forme pure, et aucune renumérotation ne peut le défaire — l'information qui manque (de quel demi-deck
+vient ce produit) n'est pas décalée, elle est **absente**.
+
+🔴 **ET LE DÉCALAGE ESSAYÉ RENDAIT « 100 % DE COUVERTURE, 0 AMBIGU » SUR TROIS KITS — UN FAUX SUCCÈS
+PARFAIT.** En poussant un demi-deck à 31–60, il ne restait qu'un seul candidat par numéro Cardmarket :
+le contrôle était satisfait **parce que la moitié des cartes avait quitté la plage comparée**. Il
+attribuait les 30 produits au demi-deck classé premier par ordre alphabétique. **Un contrôle qu'on
+satisfait en retirant des candidats ne mesure plus rien** — c'est le §31 (« une clé par inclusion apparie
+toujours quelque chose ») déguisé en transformation arithmétique.
+
+✅ **LA CLÉ QUI MARCHE EST LE NOM, et elle est mesurée** : sur les 7 kits dont nos pages déclarent
+l'expansion, (nom, puis nom+numéro) joint **212 produits sur 348 — 61 %, avec 9 ambigus (1,6 %)**, et les
+ambigus sont exactement les cartes communes aux deux moitiés (`Acro Bike`, `Tierno`, `Potion`).
+🕳️ **Le reste est nommé** : 4 kits sur 11 (`BW`, `DP`, `SM Lycanroc`, `SM Sandslash`, **207 produits**)
+n'ont **aucune carte qui déclare leur expansion** — ce n'est pas un problème de clé, c'est un trou de
+collecte, et il se traite par la page, pas par le numéro.
 
 ⚠️ **OÙ CHERCHER LA MÊME FORME** : partout où le dépôt écrit `new Set(...)` puis compare des tailles ou des
 appartenances — appariement de sets, couverture de numéros, `distinct()` de Mongo, `$addToSet` d'une agrégation.
@@ -1569,6 +1695,54 @@ portent leur propre nom.
 main.** Les logos avaient donné 53 japonais ; c'est ce 53 qui a condamné le 125. Un contrôle transversal
 se vérifie contre un cas normal connu (§32 bis) — une MESURE se vérifie contre une mesure voisine déjà
 faite. Quand il n'y en a pas, il faut en fabriquer une avant d'écrire.
+
+### ✅ LA CINQUIÈME OCCURRENCE, ET LA PREMIÈRE OÙ LA RÈGLE EST STRUCTURELLE — LE NOM FRANÇAIS — 2026-09-21
+
+**Le `{{Langtable|fr=}}` de Bulbapedia donne le nom français du set. 261 pages sur 463 en portent un, et
+127 d'entre elles sont des sets JAPONAIS** : « Expansion Pack » → « Set de Base », « Rocket Gang » →
+« Team Rocket », « Cry from the Mysterious » → « Éveil des Légendes ». Le piège est le même que pour
+`nomEn`, `nomJa`, `dateSortieJa` et les logos — une page fusionnée, un nom occidental.
+
+🔑 **MAIS CETTE FOIS LE REFUS NE SE FONDE PAS SUR UNE PRUDENCE, IL SE DÉMONTRE : un set japonais n'a
+jamais eu de sortie française, donc il n'a pas de nom français.** Tout `fr` lu sur sa page est celui du
+jumeau, par construction, sans exception possible. **C'est la forme la plus solide qu'une garde puisse
+prendre** — non pas « ça se trompe souvent », mais « ça ne peut pas être autre chose ». Quand une garde
+peut se formuler ainsi, elle n'a plus besoin de seuil ni d'échantillon.
+
+⚠️ **ET LA SOURCE RETENUE N'EST PAS CELLE QUI ÉTAIT GRATUITE.** L'archive Bulbapedia coûte zéro requête
+et porte la donnée ; elle est écartée quand même, parce que `rapatrier-noms-fr.js` porte depuis le
+premier jour la règle qui tranche : **« les traductions de Bulbapedia sont sous licence NON COMMERCIALE
+et n'ont rien à faire ici »**. Elle avait été écrite pour le nom d'une carte ; elle vaut pour celui d'un
+set. ⚠️ Cardmarket ne pouvait pas servir de repli : **les 12 collections de la production ont été
+énumérées champ par champ** — `numeros_cartes.nomFr` est le nom de la CARTE, `slugSet` est en anglais,
+`codes_set` ne porte que code et région. **Aucun nom français d'expansion en base.** C'est TCGdex qui
+sert, licence ouverte, déjà utilisé par le dépôt — et il couvre PLUS que Bulbapedia (135 contre 116).
+🔑 **Une contrainte de licence se traite comme une contrainte de mesure : on cherche la TROISIÈME source,
+on ne discute pas la règle.**
+
+⚠️ **LES DEUX SOURCES ONT ÉTÉ CONFRONTÉES AVANT QUE L'UNE SOIT CRUE (§16), et c'est ce qui a fait les
+trois refus les plus utiles.** Sur les 109 sets que TCGdex et Bulbapedia couvrent tous les deux :
+**106 d'accord (97,2 %)**, 3 en désaccord — `EX` (« Expedition » / « Expedition Édition de Base »),
+`GE` (« Duels au Sommets » / « Duels au Sommet »), `TM` (« Triomphant » / « Triomphe »). **Ces trois ne
+reçoivent rien** : c'est la règle 2 de `rapatrier-noms-fr.js`, « si les sources divergent, on écrit null,
+jamais l'une des deux ». Une divergence est le seul signe qu'on a que quelque chose ne va pas.
+
+🔴 **ET LE CONTRÔLE DE DISCRIMINANCE A ATTRAPÉ TROIS APPARIEMENTS FAUX QUE LA RÉGION NE VOYAIT PAS.**
+`SV11s` s'appelle chez nous « Black White **IDTH** » et porte `nomEn` = « Black & White » ; `MA1` est
+« Mega Evolution IDTH » ; `HSP` est « Beginning Set Pikachu » avec `bulba.expansion` = « HGSS Black Star
+Promos ». Tous trois sont `region: 'intl'`, donc la garde de région les laissait passer — et tous trois
+s'appariaient par un nom **EMPRUNTÉ à un autre set**. Ce qui les a vus : « ce nom français désigne-t-il
+plusieurs de nos sets ? ». **Le piège du jumeau ne se limite pas au couple jp/occidental : une réimpression
+régionale (Indonésie, Thaïlande) porte elle aussi le nom anglais de l'original.** La parade est la même
+qu'au §26 : la clé se bâtit sur `nomAffichage`, le seul nom qu'on ait établi comme unique par set.
+
+🔴 **ET LE REPLI A ÉTÉ ÉCRIT D'ABORD EN ANNULATION MUTUELLE — C'ÉTAIT LE §33, DEUX JOURS APRÈS.** Les
+extras Cardmarket « Additionals » (`xPBL`, `xJTG`, `xCRI`…) n'ont pas de `nomAffichage` ; en repliant sur
+`nomEn` ils réclamaient le nom de leur primaire, et le contrôle de discriminance **abattait les deux** —
+`PBL` perdu à cause de `xPBL`. Bilan de cette version : 6 sets gagnés, **8 justes perdus**. Un extra qui
+ne peut rien afficher ne doit pas réserver le nom du set qui le peut. **La priorité remplace
+l'annihilation** : la passe 1 possède le nom, la passe 2 ne prend que ce qui reste libre. 135 retenus,
+**0 collision sur les deux contrôles**.
 
 ---
 
