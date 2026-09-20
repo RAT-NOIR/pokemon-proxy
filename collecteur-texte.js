@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // COLLECTEUR DE TEXTE — Bulbapedia -> base `cartes`, UN SET PAR LANCEMENT
 // ============================================================
 //   node collecteur-texte.js --set=EXP [--rapport=<dossier>]
@@ -64,7 +64,16 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // même que collecteur-images-bulba.js. `--reparser` ne sort pas de chez nous : pas de verrou global.
     // Et le verrou de SET passe sur verrou-source.js — l'ancien excluait `pid === process.pid` (pid 52 sur
     // tous les pods Render) et se libérait par `_id` seul : les défauts corrigés dans d9d4767 côté images.
-    const slug = L.slugSet;
+    // 🔴 L'IDENTITÉ DU SET NE PEUT PAS ÊTRE UNE COLONNE FACULTATIVE — mesuré le 2026-09-20. `slug` sert à
+    // TROIS choses : le nom du verrou de set, l'`_id` de `collecte_etat`, et le slugSet de repli des
+    // produits qui n'en portent pas. Les deux premières doivent exister TOUJOURS ; la troisième doit
+    // rester VIDE quand Cardmarket n'a pas de slug, sinon on invente une donnée de la source.
+    // L'expansion `AQ` (Aquapolis, 177 produits) n'a de slugSet sur AUCUNE de ses lignes : le verrou
+    // s'appelait alors « null », `collecte_etat` recevait un document d'`_id` null, et le lancement
+    // suivant s'arrêtait sur « un collecteur tient déjà null ». Un identifiant facultatif n'est pas un
+    // identifiant.
+    const slug = L.slugSet || L.code;          // l'IDENTITÉ : verrou, `sets._id`, `collecte_etat._id`, `cartes.sets`, `restes.set`
+    const slugCardmarket = L.slugSet || null;  // le vrai slug de la SOURCE, ou rien — jamais un substitut
     // 🔑 LE VERROU GLOBAL PROTÈGE UNE PROMESSE FAITE À BULBAPEDIA (1 requête / 5 s) : il n'a de sens que
     // pour un traitement qui SORT de chez nous. `--reparser` relit R2, et une ligne `sansPage` prend ses
     // cartes dans notre propre base — aucun des deux ne frappe Bulbapedia, aucun des deux ne prend le
@@ -118,7 +127,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
         const produits = await produitsDeLExpansion(prod, L.exp);
         console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
-        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slug });
+        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slugCardmarket });
         const ecrit = await ecrireJointure(M, { slug, J, produits });
         // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
         // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
@@ -344,7 +353,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const produits = await produitsDeLExpansion(prod, L.exp);
     // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
     // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slug });
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, tirage: TIRAGE, slugSet: slugCardmarket });
     // L'écriture vit dans `ecrire-jointure.js` : la collecte SANS PAGE écrit exactement la même chose,
     // et deux définitions du même geste divergent toujours (§21 bis).
     await ecrireJointure(M, { slug, J, produits });

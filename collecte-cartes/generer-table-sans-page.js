@@ -24,8 +24,15 @@ const path = require('path');
 
 const FICHIER = path.join(__dirname, 'table-sets-sans-page.json');
 const SEUIL = 0.9;
+// 🔴 LE « & » ÉTAIT NORMALISÉ DANS LES DEUX SENS OPPOSÉS — mesuré le 2026-09-20. Cette clé le
+// DÉVELOPPAIT (« Sword & Shield Family » → « swordandshieldfamily ») ; Cardmarket le SUPPRIME de ses
+// slugs (« Sword-Shield-Family » → « swordshieldfamily »). Deux conventions contraires sur un seul
+// caractère, et l'égalité échouait sans un mot — une clé ne se trompe pas, elle se TAIT (§30).
+// Le signe disparaît donc des deux côtés. ⚠️ On reste sur de l'ÉGALITÉ de chaînes entières, jamais sur
+// de l'inclusion (§31) : mesuré à **10 paires gagnées, 298 produits, 0 ambiguë**, et les 10 ont été
+// lues une à une avant d'être admises.
 const cle = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .toLowerCase().replace(/&/g, 'and').replace(/\+/g, 'and').replace(/[^a-z0-9]/g, '');
+    .toLowerCase().replace(/[&+]/g, ' ').replace(/[^a-z0-9]/g, '');
 
 async function principal() {
     require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
@@ -78,13 +85,46 @@ async function principal() {
             e.tirages.add(i.tirage); e.cartes.add(c._id);
         }
     }
-    const cibles = univers.filter(u => u.produits && u.slugSet && !slugsPris.has(u.slugSet) && !/chinois|asiatique/.test(u.famille || ''));
+    // ════ LES APPARIEMENTS QUE L'ÉGALITÉ NE PEUT PAS ATTEINDRE — nommés un par un, JAMAIS devinés ════
+    // 🔴 Ce n'est PAS une clé plus souple : une clé souple apparie tout (§31). C'est une liste FERMÉE,
+    // écrite à la main, où chaque entrée porte la raison pour laquelle l'égalité échoue — et chaque ligne
+    // produite passe ENSUITE les mêmes contrôles que les autres (couverture dans les deux sens, numéros
+    // ambigus). La liste ne décide de rien : elle propose, la mesure tranche.
+    const A_LA_MAIN = {
+        // Cardmarket préfixe « MEGA- » ce que Bulbapedia nomme sans préfixe. 774 produits, dont 473 sans
+        // slugSet — l'expansion la plus grosse qui n'a aucune ligne.
+        6381: { nom: 'Start Deck 100 Battle Collection', pourquoi: 'Cardmarket ajoute le préfixe « MEGA- » au nom du set' },
+        // AUCUNE de ses 177 lignes ne porte de slugSet (§6). Le nom vient de `catalogue_produits` :
+        // « Arcanine [Extreme Speed | Fire Blow] » aux n° H02 et H19 — la série H est celle d'Aquapolis.
+        // ⚠️ La ligne n'aura donc pas de slugSet : elle se désigne par son `exp`, pas par un slug inventé.
+        1537: { nom: 'Aquapolis', pourquoi: 'aucune ligne Cardmarket ne porte de slugSet ; les n° de la série H désignent Aquapolis' },
+        // Cardmarket insère « Flame » : « Explosive-Flame-Walker » contre « Explosive Walker ».
+        3219: { nom: 'Explosive Walker', pourquoi: 'Cardmarket insère « Flame » dans le nom du set' },
+        // Cardmarket écrit « Pokédex » là où Bulbapedia écrit « National » seul.
+        4196: { nom: 'National Beginning Set', pourquoi: 'Cardmarket insère « Pokedex » dans le nom du set' },
+        // Le « + » du nom est écrit « Plus » par Cardmarket.
+        6509: { nom: 'Beginning Set +', pourquoi: 'Cardmarket écrit « Plus » là où le nom porte « + »' },
+        // Cardmarket nomme la série (« Scarlet & Violet »), Bulbapedia nomme le jeu (« Pokémon Card Game »).
+        5621: { nom: 'Pokémon Card Game Battle Academy', pourquoi: 'Cardmarket nomme la série, Bulbapedia nomme le jeu' }
+        // ════ ÉPROUVÉES ET REFUSÉES LE 2026-09-20, écrites pour qu'on ne les repropose pas ════
+        // · `sA Sword-Shield-Starter-Decks` = « V Starter Sets » : couverture **100 % dans les DEUX sens**,
+        //   et **23 des 24 numéros déclarés désignent plusieurs cartes**. Le motif « kit à plusieurs decks »
+        //   du §34, et la seule chose qui l'a vu est le compte des multiplicités.
+        // · les six decks « Classic » (CLV CLC CLB CLF CLL CLK) : 24 à 26 numéros ambigus sur 32, et UN nom
+        //   pour SIX expansions Cardmarket. Un nom qui désigne six sets ne désigne rien.
+        // · `IPNT`/`IPNC Intro-Pack-Neo-*` : un nom pour deux expansions, couverture 53 %.
+        // · `UNP Unnumbered-Promos` : 205 produits, AUCUN numéroté et AUCUN numéro déclaré — le contrôle
+        //   n'est pas à 0 %, il n'est PAS ÉVALUABLE (§8). Il faudra une autre clé que le numéro.
+    };
+    const cibles = univers.filter(u => u.produits && (u.slugSet || A_LA_MAIN[u.exp]) && !slugsPris.has(u.slugSet) && !/chinois|asiatique/.test(u.famille || ''));
     console.log(`DÉNOMINATEUR : ${parNom.size} noms d'expansion déclarés par nos pages et absents de la table · ${cibles.length} expansions Cardmarket sans ligne (${cibles.reduce((s, u) => s + u.produits, 0)} produits)\n`);
 
     const paires = [];
     for (const u of cibles) {
-        const e = parNom.get(cle(String(u.slugSet).replace(/-/g, ' ')));
+        const main = A_LA_MAIN[u.exp] || null;
+        const e = parNom.get(cle(main ? main.nom : String(u.slugSet).replace(/-/g, ' ')));
         if (!e) continue;
+        if (main) e.aLaMain = main.pourquoi;
         const nums = (await prod.db.collection('numeros_cartes').find({ idExpansion: u.exp }, { projection: { numero: 1 } }).toArray())
             .map(p => p.numero).filter(n => n != null && String(n).trim() !== '').map(cleNumero);
         const couverts = nums.filter(n => e.nums.has(n)).length;
@@ -107,14 +147,15 @@ async function principal() {
     // 🔑 IMPRIMER AVANT D'ÉCRIRE, TOUJOURS (§31) : une clé d'appariement se relit ligne à ligne.
     console.log(`PAIRES PAR ÉGALITÉ DU NOM — la couverture est un CONTRÔLE, pas la clé :`);
     for (const p of paires)
-        console.log(`   ${p.taux >= SEUIL ? '✅' : '⚠️ '} ${String(p.u.produits).padStart(4)} p · ${String(p.u.codeSet || '—').padEnd(7)} ${String(p.u.slugSet).slice(0, 42).padEnd(42)} = « ${p.e.nom} » · ${p.e.cartes.size} cartes, ${[...p.e.tirages].join(',')} · contrôle ${p.couverts}/${p.nums} = ${(p.taux * 100).toFixed(0)} % (inverse ${(p.inverse * 100).toFixed(0)} %)${p.ambigus.length ? ` · 🔴 ${p.ambigus.length}/${p.e.nums.size} numéros désignent PLUSIEURS cartes` : ''}`);
+        console.log(`   ${p.taux >= SEUIL ? '✅' : '⚠️ '} ${String(p.u.produits).padStart(4)} p · ${String(p.u.codeSet || '—').padEnd(7)} ${String(p.u.slugSet || '(sans slugSet)').slice(0, 42).padEnd(42)} = « ${p.e.nom} » · ${p.e.cartes.size} cartes, ${[...p.e.tirages].join(',')} · contrôle ${p.couverts}/${p.nums} = ${(p.taux * 100).toFixed(0)} % (inverse ${(p.inverse * 100).toFixed(0)} %)${p.ambigus.length ? ` · 🔴 ${p.ambigus.length}/${p.e.nums.size} numéros désignent PLUSIEURS cartes` : ''}${p.e.aLaMain ? ` · ✋ apparié à la main : ${p.e.aLaMain}` : ''}`);
 
     const sortie = paires.map(p => {
         const tirage = p.e.tirages.has('jp') && !p.e.tirages.has('intl') ? 'jp' : (p.e.tirages.has('intl') && !p.e.tirages.has('jp') ? 'intl' : 'jp');
         const l = {
             code: p.u.codeSet, exp: p.u.exp, prod: p.u.produits, nom: p.u.nom || String(p.u.slugSet).replace(/-/g, ' '),
-            slugSet: p.u.slugSet, region: tirage === 'intl' ? 'occidental' : 'japonais',
+            slugSet: p.u.slugSet || null, region: tirage === 'intl' ? 'occidental' : 'japonais',
             bulba: { titre: null, sansPage: true, tirage, expansion: p.e.nom },
+            ...(p.e.aLaMain ? { apparieALaMain: p.e.aLaMain } : {}),
             attendu: p.u.produits,
             controle: { cartesDeclarantes: p.e.cartes.size, numerosCardmarket: p.nums, couverts: p.couverts, taux: Number(p.taux.toFixed(3)), inverse: Number(p.inverse.toFixed(3)), numerosDeclares: p.e.nums.size, numerosAmbigus: p.ambigus.length, le: new Date().toISOString().slice(0, 10) }
         };

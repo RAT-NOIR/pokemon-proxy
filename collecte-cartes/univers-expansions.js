@@ -32,7 +32,22 @@ function familleAsiatique(codeSet, slugSet) {
     const parExp = await prod.db.collection('numeros_cartes').aggregate([
         { $match: { idExpansion: { $ne: null } } },
         { $group: { _id: { exp: '$idExpansion', slugSet: '$slugSet' }, n: { $sum: 1 } } },
-        { $sort: { n: -1 } },
+        // 🔴 « LE PLUS FRÉQUENT » CHOISIT L'ABSENCE QUAND L'ABSENCE EST FRÉQUENTE — mesuré le 2026-09-20.
+        // Le tri par effectif seul mettait `null` en tête pour `mC` : **473 lignes sans slugSet contre 301
+        // qui portent « MEGA-Start-Deck-100-Battle-Collection »**. L'expansion entière était donc rangée
+        // « sans slugSet » et écartée de TOUS les appariements — 774 produits — alors que son nom était
+        // écrit, lisiblement, sur 301 de ses lignes. C'est le §6 (une colonne qu'un chemin d'apprentissage
+        // n'écrit pas) transformé en verdict d'expansion par une règle de majorité.
+        // ⚠️ Un `null` n'est pas une valeur candidate : il ne peut PAS gagner un vote contre une valeur
+        // réelle. Le tri place donc les lignes renseignées d'abord, l'effectif ne départage qu'entre elles.
+        // 🔴 ET LA PREMIÈRE VERSION DE CE TEST NE VOYAIT RIEN : `{ $in: ['$_id.slugSet', [null, '']] }`.
+        // Quand le champ est ABSENT du document, `$group` ne met PAS la clé dans `_id` — il rend
+        // `{"_id":{"exp":6381},"n":473}`, sans `slugSet` du tout. `$_id.slugSet` vaut alors « manquant »,
+        // que `$in` ne trouve ni égal à `null` ni égal à `''` : les deux groupes sortaient « renseignés »
+        // et l'effectif reprenait la main. **Absent, `null` et `''` sont TROIS choses dans une agrégation**
+        // — c'est l'erreur #8 (§3) à l'intérieur d'une expression Mongo. `$ifNull` couvre les trois.
+        { $addFields: { renseigne: { $cond: [{ $gt: [{ $strLenCP: { $ifNull: ['$_id.slugSet', ''] } }, 0] }, 1, 0] } } },
+        { $sort: { renseigne: -1, n: -1 } },
         { $group: { _id: '$_id.exp', slugSet: { $first: '$_id.slugSet' }, produits: { $sum: '$n' } } }
     ]).toArray();
     const codes = new Map((await prod.db.collection('codes_set').find({}).toArray()).map(c => [c.idExpansion, c]));

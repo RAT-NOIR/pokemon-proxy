@@ -1,5 +1,39 @@
 [
  {
+  "code": "mC",
+  "exp": 6381,
+  "prod": 774,
+  "nom": "MEGA Start Deck 100 Battle Collection",
+  "slugSet": "MEGA-Start-Deck-100-Battle-Collection",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Start Deck 100 Battle Collection"
+  },
+  "apparieALaMain": "Cardmarket ajoute le préfixe « MEGA- » au nom du set",
+  "attendu": 774,
+  "controle": {
+   "cartesDeclarantes": 711,
+   "numerosCardmarket": 774,
+   "couverts": 726,
+   "taux": 0.938,
+   "inverse": 1,
+   "numerosDeclares": 726,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Start Deck 100 Battle Collection": 711
+   },
+   "note": "sans page : 711 cartes de la base déclarent « Start Deck 100 Battle Collection » ; 726 des 774 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
   "code": "SHF",
   "exp": 3630,
   "prod": 196,
@@ -33,30 +67,38 @@
   }
  },
  {
-  "code": "svM",
-  "exp": 5927,
-  "prod": 175,
-  "nom": "Generations Start Decks",
-  "slugSet": "Generations-Start-Decks",
-  "region": "japonais",
+  "code": "AQ",
+  "exp": 1537,
+  "prod": 177,
+  "nom": "null",
+  "slugSet": null,
+  "region": "occidental",
   "bulba": {
    "titre": null,
    "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Generations Start Decks"
+   "tirage": "intl",
+   "expansion": "Aquapolis"
   },
-  "attendu": 175,
+  "apparieALaMain": "aucune ligne Cardmarket ne porte de slugSet ; les n° de la série H désignent Aquapolis",
+  "attendu": 177,
   "controle": {
-   "cartesDeclarantes": 11,
-   "numerosCardmarket": 175,
-   "couverts": 11,
-   "taux": 0.063,
-   "inverse": 1,
-   "numerosDeclares": 11,
+   "cartesDeclarantes": 150,
+   "numerosCardmarket": 177,
+   "couverts": 177,
+   "taux": 1,
+   "inverse": 0.952,
+   "numerosDeclares": 186,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 11/175 = 6 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Aquapolis": 150
+   },
+   "note": "sans page : 150 cartes de la base déclarent « Aquapolis » ; 177 des 177 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "HIF",
@@ -73,16 +115,16 @@
   },
   "attendu": 163,
   "controle": {
-   "cartesDeclarantes": 138,
+   "cartesDeclarantes": 141,
    "numerosCardmarket": 163,
-   "couverts": 142,
-   "taux": 0.871,
+   "couverts": 145,
+   "taux": 0.89,
    "inverse": 1,
-   "numerosDeclares": 142,
+   "numerosDeclares": 145,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 142/163 = 87 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "refus": "couverture 145/163 = 89 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "svD",
@@ -99,16 +141,16 @@
   },
   "attendu": 139,
   "controle": {
-   "cartesDeclarantes": 120,
+   "cartesDeclarantes": 122,
    "numerosCardmarket": 139,
-   "couverts": 122,
-   "taux": 0.878,
+   "couverts": 124,
+   "taux": 0.892,
    "inverse": 1,
-   "numerosDeclares": 122,
+   "numerosDeclares": 124,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 122/139 = 88 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "refus": "couverture 124/139 = 89 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "DP1",
@@ -137,6 +179,40 @@
   "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 121 cartes déclarent « Space-Time Creation » pour 122 produits."
  },
  {
+  "code": "svIba",
+  "exp": 5621,
+  "prod": 97,
+  "nom": "Scarlet Violet Battle Academy",
+  "slugSet": "Scarlet-Violet-Battle-Academy",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Pokémon Card Game Battle Academy"
+  },
+  "apparieALaMain": "Cardmarket nomme la série, Bulbapedia nomme le jeu",
+  "attendu": 97,
+  "controle": {
+   "cartesDeclarantes": 64,
+   "numerosCardmarket": 97,
+   "couverts": 90,
+   "taux": 0.928,
+   "inverse": 1,
+   "numerosDeclares": 66,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Pokémon Card Game Battle Academy": 64
+   },
+   "note": "sans page : 64 cartes de la base déclarent « Pokémon Card Game Battle Academy » ; 90 des 97 numéros Cardmarket sont des numéros de ces impressions (93 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
   "code": "pcgG",
   "exp": 5723,
   "prod": 91,
@@ -161,6 +237,73 @@
    "le": "2026-09-20"
   },
   "refus": "8 des 10 numéros déclarés désignent PLUSIEURS cartes : « Quick Construction Packs » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "S2A",
+  "exp": 3219,
+  "prod": 86,
+  "nom": "Explosive Flame Walker",
+  "slugSet": "Explosive-Flame-Walker",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Explosive Walker"
+  },
+  "apparieALaMain": "Cardmarket insère « Flame » dans le nom du set",
+  "attendu": 86,
+  "controle": {
+   "cartesDeclarantes": 71,
+   "numerosCardmarket": 86,
+   "couverts": 86,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 86,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Explosive Walker": 71
+   },
+   "note": "sans page : 71 cartes de la base déclarent « Explosive Walker » ; 86 des 86 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "sH",
+  "exp": 4243,
+  "prod": 72,
+  "nom": "Sword Shield Family Pokemon Card Game",
+  "slugSet": "Sword-Shield-Family-Pokemon-Card-Game",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Sword & Shield Family Pokémon Card Game"
+  },
+  "attendu": 72,
+  "controle": {
+   "cartesDeclarantes": 53,
+   "numerosCardmarket": 72,
+   "couverts": 72,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 53,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Sword & Shield Family Pokémon Card Game": 53
+   },
+   "note": "sans page : 53 cartes de la base déclarent « Sword & Shield Family Pokémon Card Game » ; 72 des 72 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "WAK",
@@ -215,6 +358,65 @@
   "refus": "couverture 0/62 = 0 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
+  "code": "svG",
+  "exp": 5525,
+  "prod": 52,
+  "nom": "Venusaur Charizard Blastoise Special Deck Set ex",
+  "slugSet": "Venusaur-Charizard-Blastoise-Special-Deck-Set-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Venusaur & Charizard & Blastoise Special Deck Set ex"
+  },
+  "attendu": 52,
+  "controle": {
+   "cartesDeclarantes": 47,
+   "numerosCardmarket": 52,
+   "couverts": 52,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 52,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Venusaur & Charizard & Blastoise Special Deck Set ex": 47
+   },
+   "note": "sans page : 47 cartes de la base déclarent « Venusaur & Charizard & Blastoise Special Deck Set ex » ; 52 des 52 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "CEL",
+  "exp": 4347,
+  "prod": 52,
+  "nom": "Celebrations",
+  "slugSet": "Celebrations",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "Celebrations"
+  },
+  "attendu": 52,
+  "controle": {
+   "cartesDeclarantes": 48,
+   "numerosCardmarket": 41,
+   "couverts": 25,
+   "taux": 0.61,
+   "inverse": 0.641,
+   "numerosDeclares": 39,
+   "numerosAmbigus": 8,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 25/41 = 61 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
   "code": "pcgA",
   "exp": 5729,
   "prod": 52,
@@ -248,63 +450,30 @@
   }
  },
  {
-  "code": "CEL",
-  "exp": 4347,
-  "prod": 52,
-  "nom": "Celebrations",
-  "slugSet": "Celebrations",
-  "region": "occidental",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "intl",
-   "expansion": "Celebrations"
-  },
-  "attendu": 52,
-  "controle": {
-   "cartesDeclarantes": 48,
-   "numerosCardmarket": 41,
-   "couverts": 25,
-   "taux": 0.61,
-   "inverse": 0.641,
-   "numerosDeclares": 39,
-   "numerosAmbigus": 8,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 25/41 = 61 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
-  "code": "HSBW",
-  "exp": 4216,
+  "code": "smL",
+  "exp": 4246,
   "prod": 51,
-  "nom": "Beginning Set",
-  "slugSet": "Beginning-Set",
+  "nom": "Sun Moon Family Pokemon Card Game",
+  "slugSet": "Sun-Moon-Family-Pokemon-Card-Game",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Beginning Set"
+   "expansion": "Sun & Moon Family Pokémon Card Game"
   },
   "attendu": 51,
   "controle": {
-   "cartesDeclarantes": 38,
+   "cartesDeclarantes": 33,
    "numerosCardmarket": 51,
-   "couverts": 51,
-   "taux": 1,
+   "couverts": 33,
+   "taux": 0.647,
    "inverse": 1,
-   "numerosDeclares": 37,
+   "numerosDeclares": 33,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Beginning Set": 38
-   },
-   "note": "sans page : 38 cartes de la base déclarent « Beginning Set » ; 51 des 51 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
+  "refus": "couverture 33/51 = 65 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "HXY",
@@ -390,6 +559,40 @@
    "le": "2026-09-20"
   },
   "refus": "8 des 14 numéros déclarés désignent PLUSIEURS cartes : « Battle Strength Decks » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "HSZ",
+  "exp": 4196,
+  "prod": 42,
+  "nom": "National Pokedex Beginning Set",
+  "slugSet": "National-Pokedex-Beginning-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "National Beginning Set"
+  },
+  "apparieALaMain": "Cardmarket insère « Pokedex » dans le nom du set",
+  "attendu": 42,
+  "controle": {
+   "cartesDeclarantes": 35,
+   "numerosCardmarket": 42,
+   "couverts": 42,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 34,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "National Beginning Set": 35
+   },
+   "note": "sans page : 35 cartes de la base déclarent « National Beginning Set » ; 42 des 42 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "EP08",
@@ -503,6 +706,39 @@
   }
  },
  {
+  "code": "sF",
+  "exp": 3717,
+  "prod": 33,
+  "nom": "Single Strike Rapid Strike Premium Trainer Boxes",
+  "slugSet": "Single-Strike-Rapid-Strike-Premium-Trainer-Boxes",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Single Strike & Rapid Strike Premium Trainer Boxes"
+  },
+  "attendu": 33,
+  "controle": {
+   "cartesDeclarantes": 33,
+   "numerosCardmarket": 33,
+   "couverts": 33,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 33,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Single Strike & Rapid Strike Premium Trainer Boxes": 33
+   },
+   "note": "sans page : 33 cartes de la base déclarent « Single Strike & Rapid Strike Premium Trainer Boxes » ; 33 des 33 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
   "code": "MG",
   "exp": 4179,
   "prod": 32,
@@ -527,39 +763,6 @@
    "le": "2026-09-20"
   },
   "refus": "10 des 16 numéros déclarés désignent PLUSIEURS cartes : « Mewtwo vs Genesect Deck Kit » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
- },
- {
-  "code": "smK",
-  "exp": 4248,
-  "prod": 31,
-  "nom": "Trainer Battle Decks",
-  "slugSet": "Trainer-Battle-Decks",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Trainer Battle Decks"
-  },
-  "attendu": 31,
-  "controle": {
-   "cartesDeclarantes": 28,
-   "numerosCardmarket": 31,
-   "couverts": 28,
-   "taux": 0.903,
-   "inverse": 1,
-   "numerosDeclares": 28,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Trainer Battle Decks": 28
-   },
-   "note": "sans page : 28 cartes de la base déclarent « Trainer Battle Decks » ; 28 des 31 numéros Cardmarket sont des numéros de ces impressions (90 %). Contrôle mesuré en base, 0 requête."
-  }
  },
  {
   "code": "smN",
@@ -621,32 +824,6 @@
   "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 26 cartes déclarent « Magmortar vs Electivire Deck Kit » pour 28 produits."
  },
  {
-  "code": "smD",
-  "exp": 3974,
-  "prod": 28,
-  "nom": "Ash vs Team Rocket Deck Kit",
-  "slugSet": "Ash-vs-Team-Rocket-Deck-Kit",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Ash vs Team Rocket Deck Kit"
-  },
-  "attendu": 28,
-  "controle": {
-   "cartesDeclarantes": 11,
-   "numerosCardmarket": 28,
-   "couverts": 9,
-   "taux": 0.321,
-   "inverse": 1,
-   "numerosDeclares": 7,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 9/28 = 32 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
   "code": "XYe",
   "exp": 4238,
   "prod": 28,
@@ -677,6 +854,65 @@
     "Emboar-EX vs Togekiss-EX Deck Kit": 23
    },
    "note": "sans page : 23 cartes de la base déclarent « Emboar-EX vs Togekiss-EX Deck Kit » ; 28 des 28 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "smD",
+  "exp": 3974,
+  "prod": 28,
+  "nom": "Ash vs Team Rocket Deck Kit",
+  "slugSet": "Ash-vs-Team-Rocket-Deck-Kit",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Ash vs Team Rocket Deck Kit"
+  },
+  "attendu": 28,
+  "controle": {
+   "cartesDeclarantes": 11,
+   "numerosCardmarket": 28,
+   "couverts": 9,
+   "taux": 0.321,
+   "inverse": 1,
+   "numerosDeclares": 7,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 9/28 = 32 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "XYh",
+  "exp": 4079,
+  "prod": 26,
+  "nom": "MAudino EX Mega Battle Deck",
+  "slugSet": "MAudino-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "M Audino-EX Mega Battle Deck"
+  },
+  "attendu": 26,
+  "controle": {
+   "cartesDeclarantes": 26,
+   "numerosCardmarket": 26,
+   "couverts": 26,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 26,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "M Audino-EX Mega Battle Deck": 26
+   },
+   "note": "sans page : 26 cartes de la base déclarent « M Audino-EX Mega Battle Deck » ; 26 des 26 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -713,37 +949,30 @@
   }
  },
  {
-  "code": "XYh",
-  "exp": 4079,
-  "prod": 26,
-  "nom": "MAudino EX Mega Battle Deck",
-  "slugSet": "MAudino-EX-Mega-Battle-Deck",
+  "code": "svLS",
+  "exp": 5842,
+  "prod": 25,
+  "nom": "Stellar Tera Type Starter Set Ceruledge ex",
+  "slugSet": "Stellar-Tera-Type-Starter-Set-Ceruledge-ex",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "M Audino-EX Mega Battle Deck"
+   "expansion": "Stellar Tera Type Starter Set Ceruledge ex"
   },
-  "attendu": 26,
+  "attendu": 25,
   "controle": {
-   "cartesDeclarantes": 26,
-   "numerosCardmarket": 26,
-   "couverts": 26,
-   "taux": 1,
+   "cartesDeclarantes": 2,
+   "numerosCardmarket": 25,
+   "couverts": 2,
+   "taux": 0.08,
    "inverse": 1,
-   "numerosDeclares": 26,
+   "numerosDeclares": 2,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "M Audino-EX Mega Battle Deck": 26
-   },
-   "note": "sans page : 26 cartes de la base déclarent « M Audino-EX Mega Battle Deck » ; 26 des 26 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
+  "refus": "couverture 2/25 = 8 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "svLN",
@@ -770,32 +999,6 @@
    "le": "2026-09-20"
   },
   "refus": "couverture 1/25 = 4 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
-  "code": "svLS",
-  "exp": 5842,
-  "prod": 25,
-  "nom": "Stellar Tera Type Starter Set Ceruledge ex",
-  "slugSet": "Stellar-Tera-Type-Starter-Set-Ceruledge-ex",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Stellar Tera Type Starter Set Ceruledge ex"
-  },
-  "attendu": 25,
-  "controle": {
-   "cartesDeclarantes": 2,
-   "numerosCardmarket": 25,
-   "couverts": 2,
-   "taux": 0.08,
-   "inverse": 1,
-   "numerosDeclares": 2,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 2/25 = 8 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "HRDK",
@@ -923,37 +1126,30 @@
   }
  },
  {
-  "code": "BTV",
-  "exp": 4211,
-  "prod": 23,
-  "nom": "Battle Theme Deck Victini",
-  "slugSet": "Battle-Theme-Deck-Victini",
+  "code": "svC",
+  "exp": 5299,
+  "prod": 24,
+  "nom": "ex Starter Set Pikachu ex Pawmot",
+  "slugSet": "ex-Starter-Set-Pikachu-ex-Pawmot",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Battle Theme Deck: Victini"
+   "expansion": "ex Starter Set Pikachu ex & Pawmot"
   },
-  "attendu": 23,
+  "attendu": 24,
   "controle": {
-   "cartesDeclarantes": 21,
-   "numerosCardmarket": 23,
-   "couverts": 23,
-   "taux": 1,
+   "cartesDeclarantes": 17,
+   "numerosCardmarket": 24,
+   "couverts": 19,
+   "taux": 0.792,
    "inverse": 1,
-   "numerosDeclares": 21,
+   "numerosDeclares": 16,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Battle Theme Deck: Victini": 21
-   },
-   "note": "sans page : 21 cartes de la base déclarent « Battle Theme Deck: Victini » ; 23 des 23 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
+  "refus": "couverture 19/24 = 79 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "mBD",
@@ -989,6 +1185,32 @@
   }
  },
  {
+  "code": "XYc",
+  "exp": 4129,
+  "prod": 23,
+  "nom": "Super Legend Set Xerneas EX Yveltal EX",
+  "slugSet": "Super-Legend-Set-Xerneas-EX-Yveltal-EX",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Super Legend Set: Xerneas-EX & Yveltal-EX"
+  },
+  "attendu": 23,
+  "controle": {
+   "cartesDeclarantes": 18,
+   "numerosCardmarket": 23,
+   "couverts": 20,
+   "taux": 0.87,
+   "inverse": 1,
+   "numerosDeclares": 20,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 20/23 = 87 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
   "code": "mBG",
   "exp": 6259,
   "prod": 23,
@@ -1020,6 +1242,65 @@
    },
    "note": "sans page : 21 cartes de la base déclarent « MEGA Starter Set Mega Gengar ex » ; 22 des 23 numéros Cardmarket sont des numéros de ces impressions (96 %). Contrôle mesuré en base, 0 requête."
   }
+ },
+ {
+  "code": "BTV",
+  "exp": 4211,
+  "prod": 23,
+  "nom": "Battle Theme Deck Victini",
+  "slugSet": "Battle-Theme-Deck-Victini",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Battle Theme Deck: Victini"
+  },
+  "attendu": 23,
+  "controle": {
+   "cartesDeclarantes": 21,
+   "numerosCardmarket": 23,
+   "couverts": 23,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 21,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Battle Theme Deck: Victini": 21
+   },
+   "note": "sans page : 21 cartes de la base déclarent « Battle Theme Deck: Victini » ; 23 des 23 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "svEL",
+  "exp": 5476,
+  "prod": 22,
+  "nom": "Terastal Starter Set Skeledirge ex",
+  "slugSet": "Terastal-Starter-Set-Skeledirge-ex",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Terastal Starter Set Skeledirge ex"
+  },
+  "attendu": 22,
+  "controle": {
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 22,
+   "couverts": 16,
+   "taux": 0.727,
+   "inverse": 1,
+   "numerosDeclares": 16,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 16/22 = 73 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "svEM",
@@ -1055,47 +1336,21 @@
   }
  },
  {
-  "code": "svEL",
-  "exp": 5476,
-  "prod": 22,
-  "nom": "Terastal Starter Set Skeledirge ex",
-  "slugSet": "Terastal-Starter-Set-Skeledirge-ex",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Terastal Starter Set Skeledirge ex"
-  },
-  "attendu": 22,
-  "controle": {
-   "cartesDeclarantes": 16,
-   "numerosCardmarket": 22,
-   "couverts": 16,
-   "taux": 0.727,
-   "inverse": 1,
-   "numerosDeclares": 16,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 16/22 = 73 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
-  "code": "XYa",
-  "exp": 4139,
+  "code": "smE",
+  "exp": 4254,
   "prod": 21,
-  "nom": "MCharizard EX Mega Battle Deck",
-  "slugSet": "MCharizard-EX-Mega-Battle-Deck",
+  "nom": "Solgaleo GX Lunala GX Legendary Starter Set",
+  "slugSet": "Solgaleo-GX-Lunala-GX-Legendary-Starter-Set",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "M Charizard-EX Mega Battle Deck"
+   "expansion": "Solgaleo-GX & Lunala-GX Legendary Starter Set"
   },
   "attendu": 21,
   "controle": {
-   "cartesDeclarantes": 23,
+   "cartesDeclarantes": 21,
    "numerosCardmarket": 21,
    "couverts": 21,
    "taux": 1,
@@ -1108,9 +1363,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "M Charizard-EX Mega Battle Deck": 23
+    "Solgaleo-GX & Lunala-GX Legendary Starter Set": 21
    },
-   "note": "sans page : 23 cartes de la base déclarent « M Charizard-EX Mega Battle Deck » ; 21 des 21 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 21 cartes de la base déclarent « Solgaleo-GX & Lunala-GX Legendary Starter Set » ; 21 des 21 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -1144,6 +1399,39 @@
     "Tapu Bulu-GX Enhanced Starter Set": 21
    },
    "note": "sans page : 21 cartes de la base déclarent « Tapu Bulu-GX Enhanced Starter Set » ; 20 des 21 numéros Cardmarket sont des numéros de ces impressions (95 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "XYa",
+  "exp": 4139,
+  "prod": 21,
+  "nom": "MCharizard EX Mega Battle Deck",
+  "slugSet": "MCharizard-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "M Charizard-EX Mega Battle Deck"
+  },
+  "attendu": 21,
+  "controle": {
+   "cartesDeclarantes": 23,
+   "numerosCardmarket": 21,
+   "couverts": 21,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 21,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "M Charizard-EX Mega Battle Deck": 23
+   },
+   "note": "sans page : 23 cartes de la base déclarent « M Charizard-EX Mega Battle Deck » ; 21 des 21 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -1206,26 +1494,26 @@
   "refus": "couverture 7/20 = 35 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
-  "code": "advD",
-  "exp": 5871,
-  "prod": 19,
-  "nom": "Flygon Constructed Starter Deck",
-  "slugSet": "Flygon-Constructed-Starter-Deck",
+  "code": "smF",
+  "exp": 4253,
+  "prod": 20,
+  "nom": "Ultra Sun Ultra Moon Premium Trainer Box",
+  "slugSet": "Ultra-Sun-Ultra-Moon-Premium-Trainer-Box",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Flygon Constructed Starter Deck"
+   "expansion": "Ultra Sun & Ultra Moon Premium Trainer Box"
   },
-  "attendu": 19,
+  "attendu": 20,
   "controle": {
    "cartesDeclarantes": 20,
-   "numerosCardmarket": 19,
-   "couverts": 19,
+   "numerosCardmarket": 20,
+   "couverts": 20,
    "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 19,
+   "numerosDeclares": 20,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -1233,68 +1521,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Flygon Constructed Starter Deck": 20
+    "Ultra Sun & Ultra Moon Premium Trainer Box": 20
    },
-   "note": "sans page : 20 cartes de la base déclarent « Flygon Constructed Starter Deck » ; 19 des 19 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "MSD",
-  "exp": 4340,
-  "prod": 19,
-  "nom": "Movie Commemoration VS Pack Sky Splitting Deoxys",
-  "slugSet": "Movie-Commemoration-VS-Pack-Sky-Splitting-Deoxys",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Movie Commemoration VS Pack: Sky-Splitting Deoxys"
-  },
-  "attendu": 19,
-  "controle": {
-   "cartesDeclarantes": 7,
-   "numerosCardmarket": 19,
-   "couverts": 7,
-   "taux": 0.368,
-   "inverse": 1,
-   "numerosDeclares": 7,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 7/19 = 37 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
-  "code": "L2t",
-  "exp": 4263,
-  "prod": 19,
-  "nom": "Tyranitar Constructed Standard Deck",
-  "slugSet": "Tyranitar-Constructed-Standard-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Tyranitar Constructed Standard Deck"
-  },
-  "attendu": 19,
-  "controle": {
-   "cartesDeclarantes": 19,
-   "numerosCardmarket": 19,
-   "couverts": 19,
-   "taux": 1,
-   "inverse": 1,
-   "numerosDeclares": 19,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Tyranitar Constructed Standard Deck": 19
-   },
-   "note": "sans page : 19 cartes de la base déclarent « Tyranitar Constructed Standard Deck » ; 19 des 19 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 20 cartes de la base déclarent « Ultra Sun & Ultra Moon Premium Trainer Box » ; 20 des 20 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -1331,39 +1560,6 @@
   }
  },
  {
-  "code": "XYb",
-  "exp": 4134,
-  "prod": 19,
-  "nom": "Hyper Metal Chain Deck",
-  "slugSet": "Hyper-Metal-Chain-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Hyper Metal Chain Deck"
-  },
-  "attendu": 19,
-  "controle": {
-   "cartesDeclarantes": 19,
-   "numerosCardmarket": 19,
-   "couverts": 19,
-   "taux": 1,
-   "inverse": 1,
-   "numerosDeclares": 19,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Hyper Metal Chain Deck": 19
-   },
-   "note": "sans page : 19 cartes de la base déclarent « Hyper Metal Chain Deck » ; 19 des 19 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
   "code": "MPS",
   "exp": 4277,
   "prod": 19,
@@ -1388,32 +1584,6 @@
    "le": "2026-09-20"
   },
   "refus": "couverture 16/19 = 84 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
- },
- {
-  "code": "DP3d",
-  "exp": 4312,
-  "prod": 19,
-  "nom": "Dialga LVX Constructed Standard Deck",
-  "slugSet": "Dialga-LVX-Constructed-Standard-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Dialga LV.X Constructed Standard Deck"
-  },
-  "attendu": 19,
-  "controle": {
-   "cartesDeclarantes": 18,
-   "numerosCardmarket": 0,
-   "couverts": 0,
-   "taux": 0,
-   "inverse": 0,
-   "numerosDeclares": 0,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 18 cartes déclarent « Dialga LV.X Constructed Standard Deck » pour 19 produits."
  },
  {
   "code": "DP3p",
@@ -1475,6 +1645,32 @@
   }
  },
  {
+  "code": "DP3d",
+  "exp": 4312,
+  "prod": 19,
+  "nom": "Dialga LVX Constructed Standard Deck",
+  "slugSet": "Dialga-LVX-Constructed-Standard-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Dialga LV.X Constructed Standard Deck"
+  },
+  "attendu": 19,
+  "controle": {
+   "cartesDeclarantes": 18,
+   "numerosCardmarket": 0,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 0,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 18 cartes déclarent « Dialga LV.X Constructed Standard Deck » pour 19 produits."
+ },
+ {
   "code": "advE",
   "exp": 5870,
   "prod": 19,
@@ -1508,26 +1704,26 @@
   }
  },
  {
-  "code": "XYd",
-  "exp": 4119,
-  "prod": 18,
-  "nom": "MRayquaza EX Mega Battle Deck",
-  "slugSet": "MRayquaza-EX-Mega-Battle-Deck",
+  "code": "advD",
+  "exp": 5871,
+  "prod": 19,
+  "nom": "Flygon Constructed Starter Deck",
+  "slugSet": "Flygon-Constructed-Starter-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "M Rayquaza-EX Mega Battle Deck"
+   "expansion": "Flygon Constructed Starter Deck"
   },
-  "attendu": 18,
+  "attendu": 19,
   "controle": {
-   "cartesDeclarantes": 19,
-   "numerosCardmarket": 18,
-   "couverts": 18,
+   "cartesDeclarantes": 20,
+   "numerosCardmarket": 19,
+   "couverts": 19,
    "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 18,
+   "numerosDeclares": 19,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -1535,23 +1731,82 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "M Rayquaza-EX Mega Battle Deck": 19
+    "Flygon Constructed Starter Deck": 20
    },
-   "note": "sans page : 19 cartes de la base déclarent « M Rayquaza-EX Mega Battle Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 20 cartes de la base déclarent « Flygon Constructed Starter Deck » ; 19 des 19 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
-  "code": "BKZ",
-  "exp": 4206,
-  "prod": 18,
-  "nom": "Zekrom EX Battle Strength Deck",
-  "slugSet": "Zekrom-EX-Battle-Strength-Deck",
+  "code": "L2t",
+  "exp": 4263,
+  "prod": 19,
+  "nom": "Tyranitar Constructed Standard Deck",
+  "slugSet": "Tyranitar-Constructed-Standard-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Zekrom-EX Battle Strength Deck"
+   "expansion": "Tyranitar Constructed Standard Deck"
+  },
+  "attendu": 19,
+  "controle": {
+   "cartesDeclarantes": 19,
+   "numerosCardmarket": 19,
+   "couverts": 19,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 19,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Tyranitar Constructed Standard Deck": 19
+   },
+   "note": "sans page : 19 cartes de la base déclarent « Tyranitar Constructed Standard Deck » ; 19 des 19 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "MSD",
+  "exp": 4340,
+  "prod": 19,
+  "nom": "Movie Commemoration VS Pack Sky Splitting Deoxys",
+  "slugSet": "Movie-Commemoration-VS-Pack-Sky-Splitting-Deoxys",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Movie Commemoration VS Pack: Sky-Splitting Deoxys"
+  },
+  "attendu": 19,
+  "controle": {
+   "cartesDeclarantes": 7,
+   "numerosCardmarket": 19,
+   "couverts": 7,
+   "taux": 0.368,
+   "inverse": 1,
+   "numerosDeclares": 7,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 7/19 = 37 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "K+K",
+  "exp": 4181,
+  "prod": 18,
+  "nom": "Blastoise Kyurem EX Combo Deck",
+  "slugSet": "Blastoise-Kyurem-EX-Combo-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Blastoise + Kyurem-EX Combo Deck"
   },
   "attendu": 18,
   "controle": {
@@ -1568,36 +1823,10 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Zekrom-EX Battle Strength Deck": 18
+    "Blastoise + Kyurem-EX Combo Deck": 18
    },
-   "note": "sans page : 18 cartes de la base déclarent « Zekrom-EX Battle Strength Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 18 cartes de la base déclarent « Blastoise + Kyurem-EX Combo Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
- },
- {
-  "code": "TLVS",
-  "exp": 4351,
-  "prod": 18,
-  "nom": "Theater Limited VS Pack",
-  "slugSet": "Theater-Limited-VS-Pack",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Theater Limited VS Pack"
-  },
-  "attendu": 18,
-  "controle": {
-   "cartesDeclarantes": 4,
-   "numerosCardmarket": 18,
-   "couverts": 4,
-   "taux": 0.222,
-   "inverse": 1,
-   "numerosDeclares": 4,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 4/18 = 22 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "BKW",
@@ -1699,6 +1928,124 @@
   }
  },
  {
+  "code": "XYd",
+  "exp": 4119,
+  "prod": 18,
+  "nom": "MRayquaza EX Mega Battle Deck",
+  "slugSet": "MRayquaza-EX-Mega-Battle-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "M Rayquaza-EX Mega Battle Deck"
+  },
+  "attendu": 18,
+  "controle": {
+   "cartesDeclarantes": 19,
+   "numerosCardmarket": 18,
+   "couverts": 18,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 18,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "M Rayquaza-EX Mega Battle Deck": 19
+   },
+   "note": "sans page : 19 cartes de la base déclarent « M Rayquaza-EX Mega Battle Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "BKZ",
+  "exp": 4206,
+  "prod": 18,
+  "nom": "Zekrom EX Battle Strength Deck",
+  "slugSet": "Zekrom-EX-Battle-Strength-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Zekrom-EX Battle Strength Deck"
+  },
+  "attendu": 18,
+  "controle": {
+   "cartesDeclarantes": 18,
+   "numerosCardmarket": 18,
+   "couverts": 18,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 18,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Zekrom-EX Battle Strength Deck": 18
+   },
+   "note": "sans page : 18 cartes de la base déclarent « Zekrom-EX Battle Strength Deck » ; 18 des 18 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "TLVS",
+  "exp": 4351,
+  "prod": 18,
+  "nom": "Theater Limited VS Pack",
+  "slugSet": "Theater-Limited-VS-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Theater Limited VS Pack"
+  },
+  "attendu": 18,
+  "controle": {
+   "cartesDeclarantes": 4,
+   "numerosCardmarket": 18,
+   "couverts": 4,
+   "taux": 0.222,
+   "inverse": 1,
+   "numerosDeclares": 4,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 4/18 = 22 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "AGF",
+  "exp": 4279,
+  "prod": 17,
+  "nom": "Arceus LVX Deck Grass Fire",
+  "slugSet": "Arceus-LVX-Deck-Grass-Fire",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Arceus LV.X Deck: Grass & Fire"
+  },
+  "attendu": 17,
+  "controle": {
+   "cartesDeclarantes": 7,
+   "numerosCardmarket": 17,
+   "couverts": 7,
+   "taux": 0.412,
+   "inverse": 1,
+   "numerosDeclares": 7,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 7/17 = 41 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
   "code": "POP5",
   "exp": 1617,
   "prod": 17,
@@ -1765,188 +2112,30 @@
   }
  },
  {
-  "code": "RtA",
-  "exp": 4315,
-  "prod": 16,
-  "nom": "Rampardos the Attacker",
-  "slugSet": "Rampardos-the-Attacker",
+  "code": "ALP",
+  "exp": 4278,
+  "prod": 17,
+  "nom": "Arceus LVX Deck Lightning Psychic",
+  "slugSet": "Arceus-LVX-Deck-Lightning-Psychic",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Rampardos the Attacker"
+   "expansion": "Arceus LV.X Deck: Lightning & Psychic"
   },
-  "attendu": 16,
+  "attendu": 17,
   "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 0,
-   "couverts": 0,
-   "taux": 0,
-   "inverse": 0,
-   "numerosDeclares": 0,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 15 cartes déclarent « Rampardos the Attacker » pour 16 produits."
- },
- {
-  "code": "pcgQ",
-  "exp": 5698,
-  "prod": 16,
-  "nom": "Earths Groudon ex Constructed Starter Deck",
-  "slugSet": "Earths-Groudon-ex-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Earth's Groudon ex Constructed Starter Deck"
-  },
-  "attendu": 16,
-  "controle": {
-   "cartesDeclarantes": 16,
-   "numerosCardmarket": 16,
-   "couverts": 16,
-   "taux": 1,
+   "cartesDeclarantes": 6,
+   "numerosCardmarket": 17,
+   "couverts": 6,
+   "taux": 0.353,
    "inverse": 1,
-   "numerosDeclares": 16,
+   "numerosDeclares": 6,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Earth's Groudon ex Constructed Starter Deck": 16
-   },
-   "note": "sans page : 16 cartes de la base déclarent « Earth's Groudon ex Constructed Starter Deck » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "PBG",
-  "exp": 4188,
-  "prod": 16,
-  "nom": "Team Plasma Battle Gift Set",
-  "slugSet": "Team-Plasma-Battle-Gift-Set",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Team Plasma Battle Gift Set"
-  },
-  "attendu": 16,
-  "controle": {
-   "cartesDeclarantes": 16,
-   "numerosCardmarket": 16,
-   "couverts": 16,
-   "taux": 1,
-   "inverse": 1,
-   "numerosDeclares": 16,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Team Plasma Battle Gift Set": 16
-   },
-   "note": "sans page : 16 cartes de la base déclarent « Team Plasma Battle Gift Set » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "pcgI",
-  "exp": 5721,
-  "prod": 16,
-  "nom": "Typhlosion Constructed Starter Deck",
-  "slugSet": "Typhlosion-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Typhlosion Constructed Starter Deck"
-  },
-  "attendu": 16,
-  "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 16,
-   "couverts": 15,
-   "taux": 0.938,
-   "inverse": 1,
-   "numerosDeclares": 15,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Typhlosion Constructed Starter Deck": 15
-   },
-   "note": "sans page : 15 cartes de la base déclarent « Typhlosion Constructed Starter Deck » ; 15 des 16 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "pcgJ",
-  "exp": 5720,
-  "prod": 16,
-  "nom": "Feraligatr Constructed Starter Deck",
-  "slugSet": "Feraligatr-Constructed-Starter-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Feraligatr Constructed Starter Deck"
-  },
-  "attendu": 16,
-  "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 16,
-   "couverts": 15,
-   "taux": 0.938,
-   "inverse": 1,
-   "numerosDeclares": 15,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Feraligatr Constructed Starter Deck": 15
-   },
-   "note": "sans page : 15 cartes de la base déclarent « Feraligatr Constructed Starter Deck » ; 15 des 16 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "MCVS",
-  "exp": 4348,
-  "prod": 16,
-  "nom": "Movie Commemoration VS Pack",
-  "slugSet": "Movie-Commemoration-VS-Pack",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Movie Commemoration VS Pack"
-  },
-  "attendu": 16,
-  "controle": {
-   "cartesDeclarantes": 7,
-   "numerosCardmarket": 16,
-   "couverts": 4,
-   "taux": 0.25,
-   "inverse": 0.571,
-   "numerosDeclares": 7,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "couverture 4/16 = 25 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "refus": "couverture 6/17 = 35 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "pcgP",
@@ -1979,6 +2168,65 @@
     "Ocean's Kyogre ex Constructed Starter Deck": 16
    },
    "note": "sans page : 16 cartes de la base déclarent « Ocean's Kyogre ex Constructed Starter Deck » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "MCVS",
+  "exp": 4348,
+  "prod": 16,
+  "nom": "Movie Commemoration VS Pack",
+  "slugSet": "Movie-Commemoration-VS-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Movie Commemoration VS Pack"
+  },
+  "attendu": 16,
+  "controle": {
+   "cartesDeclarantes": 7,
+   "numerosCardmarket": 16,
+   "couverts": 4,
+   "taux": 0.25,
+   "inverse": 0.571,
+   "numerosDeclares": 7,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 4/16 = 25 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "pcgJ",
+  "exp": 5720,
+  "prod": 16,
+  "nom": "Feraligatr Constructed Starter Deck",
+  "slugSet": "Feraligatr-Constructed-Starter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Feraligatr Constructed Starter Deck"
+  },
+  "attendu": 16,
+  "controle": {
+   "cartesDeclarantes": 15,
+   "numerosCardmarket": 16,
+   "couverts": 15,
+   "taux": 0.938,
+   "inverse": 1,
+   "numerosDeclares": 15,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Feraligatr Constructed Starter Deck": 15
+   },
+   "note": "sans page : 15 cartes de la base déclarent « Feraligatr Constructed Starter Deck » ; 15 des 16 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -2015,6 +2263,39 @@
   }
  },
  {
+  "code": "XYf",
+  "exp": 4099,
+  "prod": 16,
+  "nom": "Golduck BREAK Palkia EX Combo Deck",
+  "slugSet": "Golduck-BREAK-Palkia-EX-Combo-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Golduck BREAK + Palkia-EX Combo Deck"
+  },
+  "attendu": 16,
+  "controle": {
+   "cartesDeclarantes": 17,
+   "numerosCardmarket": 16,
+   "couverts": 16,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 16,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Golduck BREAK + Palkia-EX Combo Deck": 17
+   },
+   "note": "sans page : 17 cartes de la base déclarent « Golduck BREAK + Palkia-EX Combo Deck » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
   "code": "pcgK",
   "exp": 5719,
   "prod": 16,
@@ -2041,26 +2322,26 @@
   "refus": "couverture 12/16 = 75 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
-  "code": "pcgC",
-  "exp": 5727,
-  "prod": 15,
-  "nom": "Rayquaza Constructed Starter Deck",
-  "slugSet": "Rayquaza-Constructed-Starter-Deck",
+  "code": "pcgQ",
+  "exp": 5698,
+  "prod": 16,
+  "nom": "Earths Groudon ex Constructed Starter Deck",
+  "slugSet": "Earths-Groudon-ex-Constructed-Starter-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Rayquaza Constructed Starter Deck"
+   "expansion": "Earth's Groudon ex Constructed Starter Deck"
   },
-  "attendu": 15,
+  "attendu": 16,
   "controle": {
    "cartesDeclarantes": 16,
-   "numerosCardmarket": 15,
-   "couverts": 14,
-   "taux": 0.933,
+   "numerosCardmarket": 16,
+   "couverts": 16,
+   "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 14,
+   "numerosDeclares": 16,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -2068,30 +2349,30 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Rayquaza Constructed Starter Deck": 16
+    "Earth's Groudon ex Constructed Starter Deck": 16
    },
-   "note": "sans page : 16 cartes de la base déclarent « Rayquaza Constructed Starter Deck » ; 14 des 15 numéros Cardmarket sont des numéros de ces impressions (93 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 16 cartes de la base déclarent « Earth's Groudon ex Constructed Starter Deck » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
-  "code": "SZD",
-  "exp": 4199,
-  "prod": 15,
-  "nom": "Hydreigon Half Deck",
-  "slugSet": "Hydreigon-Half-Deck",
+  "code": "pcgI",
+  "exp": 5721,
+  "prod": 16,
+  "nom": "Typhlosion Constructed Starter Deck",
+  "slugSet": "Typhlosion-Constructed-Starter-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Hydreigon Half Deck"
+   "expansion": "Typhlosion Constructed Starter Deck"
   },
-  "attendu": 15,
+  "attendu": 16,
   "controle": {
    "cartesDeclarantes": 15,
-   "numerosCardmarket": 15,
+   "numerosCardmarket": 16,
    "couverts": 15,
-   "taux": 1,
+   "taux": 0.938,
    "inverse": 1,
    "numerosDeclares": 15,
    "numerosAmbigus": 0,
@@ -2101,91 +2382,32 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Hydreigon Half Deck": 15
+    "Typhlosion Constructed Starter Deck": 15
    },
-   "note": "sans page : 15 cartes de la base déclarent « Hydreigon Half Deck » ; 15 des 15 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 15 cartes de la base déclarent « Typhlosion Constructed Starter Deck » ; 15 des 16 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
-  "code": "pcgB",
-  "exp": 5728,
-  "prod": 15,
-  "nom": "Deoxys Constructed Starter Deck",
-  "slugSet": "Deoxys-Constructed-Starter-Deck",
+  "code": "PBG",
+  "exp": 4188,
+  "prod": 16,
+  "nom": "Team Plasma Battle Gift Set",
+  "slugSet": "Team-Plasma-Battle-Gift-Set",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Deoxys Constructed Starter Deck"
+   "expansion": "Team Plasma Battle Gift Set"
   },
-  "attendu": 15,
+  "attendu": 16,
   "controle": {
    "cartesDeclarantes": 16,
-   "numerosCardmarket": 15,
-   "couverts": 14,
-   "taux": 0.933,
-   "inverse": 1,
-   "numerosDeclares": 14,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Deoxys Constructed Starter Deck": 16
-   },
-   "note": "sans page : 16 cartes de la base déclarent « Deoxys Constructed Starter Deck » ; 14 des 15 numéros Cardmarket sont des numéros de ces impressions (93 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "BtD",
-  "exp": 4316,
-  "prod": 15,
-  "nom": "Bastiodon the Defender",
-  "slugSet": "Bastiodon-the-Defender",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Bastiodon the Defender"
-  },
-  "attendu": 15,
-  "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 0,
-   "couverts": 0,
-   "taux": 0,
-   "inverse": 0,
-   "numerosDeclares": 0,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 15 cartes déclarent « Bastiodon the Defender » pour 15 produits."
- },
- {
-  "code": "GBR",
-  "exp": 4198,
-  "prod": 15,
-  "nom": "Garchomp Half Deck",
-  "slugSet": "Garchomp-Half-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Garchomp Half Deck"
-  },
-  "attendu": 15,
-  "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 15,
-   "couverts": 15,
+   "numerosCardmarket": 16,
+   "couverts": 16,
    "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 15,
+   "numerosDeclares": 16,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -2193,9 +2415,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Garchomp Half Deck": 15
+    "Team Plasma Battle Gift Set": 16
    },
-   "note": "sans page : 15 cartes de la base déclarent « Garchomp Half Deck » ; 15 des 15 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 16 cartes de la base déclarent « Team Plasma Battle Gift Set » ; 16 des 16 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -2277,24 +2499,24 @@
   "refus": "couverture 13/15 = 87 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
-  "code": "X30",
-  "exp": 4149,
-  "prod": 14,
-  "nom": "Xerneas Half Deck",
-  "slugSet": "Xerneas-Half-Deck",
+  "code": "pcgC",
+  "exp": 5727,
+  "prod": 15,
+  "nom": "Rayquaza Constructed Starter Deck",
+  "slugSet": "Rayquaza-Constructed-Starter-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Xerneas Half Deck"
+   "expansion": "Rayquaza Constructed Starter Deck"
   },
-  "attendu": 14,
+  "attendu": 15,
   "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 14,
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 15,
    "couverts": 14,
-   "taux": 1,
+   "taux": 0.933,
    "inverse": 1,
    "numerosDeclares": 14,
    "numerosAmbigus": 0,
@@ -2304,30 +2526,30 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Xerneas Half Deck": 15
+    "Rayquaza Constructed Starter Deck": 16
    },
-   "note": "sans page : 15 cartes de la base déclarent « Xerneas Half Deck » ; 14 des 14 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 16 cartes de la base déclarent « Rayquaza Constructed Starter Deck » ; 14 des 15 numéros Cardmarket sont des numéros de ces impressions (93 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
-  "code": "Y30",
-  "exp": 4144,
-  "prod": 14,
-  "nom": "Yveltal Half Deck",
-  "slugSet": "Yveltal-Half-Deck",
+  "code": "pcgB",
+  "exp": 5728,
+  "prod": 15,
+  "nom": "Deoxys Constructed Starter Deck",
+  "slugSet": "Deoxys-Constructed-Starter-Deck",
   "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
    "tirage": "jp",
-   "expansion": "Yveltal Half Deck"
+   "expansion": "Deoxys Constructed Starter Deck"
   },
-  "attendu": 14,
+  "attendu": 15,
   "controle": {
-   "cartesDeclarantes": 15,
-   "numerosCardmarket": 14,
+   "cartesDeclarantes": 16,
+   "numerosCardmarket": 15,
    "couverts": 14,
-   "taux": 1,
+   "taux": 0.933,
    "inverse": 1,
    "numerosDeclares": 14,
    "numerosAmbigus": 0,
@@ -2337,75 +2559,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Yveltal Half Deck": 15
+    "Deoxys Constructed Starter Deck": 16
    },
-   "note": "sans page : 15 cartes de la base déclarent « Yveltal Half Deck » ; 14 des 14 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "smP1",
-  "exp": 4256,
-  "prod": 13,
-  "nom": "Rockruff Full Power Deck",
-  "slugSet": "Rockruff-Full-Power-Deck",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Rockruff Full Power Deck"
-  },
-  "attendu": 13,
-  "controle": {
-   "cartesDeclarantes": 13,
-   "numerosCardmarket": 13,
-   "couverts": 13,
-   "taux": 1,
-   "inverse": 1,
-   "numerosDeclares": 13,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Rockruff Full Power Deck": 13
-   },
-   "note": "sans page : 13 cartes de la base déclarent « Rockruff Full Power Deck » ; 13 des 13 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
-  }
- },
- {
-  "code": "PtS",
-  "exp": 4283,
-  "prod": 12,
-  "nom": "Shaymin LVX Collection Pack",
-  "slugSet": "Shaymin-LVX-Collection-Pack",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Shaymin LV.X Collection Pack"
-  },
-  "attendu": 12,
-  "controle": {
-   "cartesDeclarantes": 12,
-   "numerosCardmarket": 12,
-   "couverts": 12,
-   "taux": 1,
-   "inverse": 1,
-   "numerosDeclares": 12,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": null,
-   "entrees": {
-    "Shaymin LV.X Collection Pack": 12
-   },
-   "note": "sans page : 12 cartes de la base déclarent « Shaymin LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 16 cartes de la base déclarent « Deoxys Constructed Starter Deck » ; 14 des 15 numéros Cardmarket sont des numéros de ces impressions (93 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -2439,6 +2595,39 @@
     "Mewtwo LV.X Collection Pack": 12
    },
    "note": "sans page : 12 cartes de la base déclarent « Mewtwo LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "smG",
+  "exp": 4252,
+  "prod": 12,
+  "nom": "Ultra Sun Ultra Moon Deck Build Boxes",
+  "slugSet": "Ultra-Sun-Ultra-Moon-Deck-Build-Boxes",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Ultra Sun & Ultra Moon Deck Build Boxes"
+  },
+  "attendu": 12,
+  "controle": {
+   "cartesDeclarantes": 41,
+   "numerosCardmarket": 12,
+   "couverts": 12,
+   "taux": 1,
+   "inverse": 0.293,
+   "numerosDeclares": 41,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Ultra Sun & Ultra Moon Deck Build Boxes": 41
+   },
+   "note": "sans page : 41 cartes de la base déclarent « Ultra Sun & Ultra Moon Deck Build Boxes » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -2508,6 +2697,65 @@
   }
  },
  {
+  "code": "PtS",
+  "exp": 4283,
+  "prod": 12,
+  "nom": "Shaymin LVX Collection Pack",
+  "slugSet": "Shaymin-LVX-Collection-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Shaymin LV.X Collection Pack"
+  },
+  "attendu": 12,
+  "controle": {
+   "cartesDeclarantes": 12,
+   "numerosCardmarket": 12,
+   "couverts": 12,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 12,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Shaymin LV.X Collection Pack": 12
+   },
+   "note": "sans page : 12 cartes de la base déclarent « Shaymin LV.X Collection Pack » ; 12 des 12 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
+ },
+ {
+  "code": "CGY",
+  "exp": 5685,
+  "prod": 11,
+  "nom": "Yamabuki City Gym",
+  "slugSet": "Yamabuki-City-Gym",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "Yamabuki City Gym"
+  },
+  "attendu": 11,
+  "controle": {
+   "cartesDeclarantes": 27,
+   "numerosCardmarket": 0,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 0,
+   "numerosAmbigus": 0,
+   "le": "2026-09-20"
+  },
+  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 27 cartes déclarent « Yamabuki City Gym » pour 11 produits."
+ },
+ {
   "code": "GTG",
   "exp": 5686,
   "prod": 11,
@@ -2558,32 +2806,6 @@
    "le": "2026-09-20"
   },
   "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 25 cartes déclarent « Hanada City Gym » pour 11 produits."
- },
- {
-  "code": "CGY",
-  "exp": 5685,
-  "prod": 11,
-  "nom": "Yamabuki City Gym",
-  "slugSet": "Yamabuki-City-Gym",
-  "region": "japonais",
-  "bulba": {
-   "titre": null,
-   "sansPage": true,
-   "tirage": "jp",
-   "expansion": "Yamabuki City Gym"
-  },
-  "attendu": 11,
-  "controle": {
-   "cartesDeclarantes": 27,
-   "numerosCardmarket": 0,
-   "couverts": 0,
-   "taux": 0,
-   "inverse": 0,
-   "numerosDeclares": 0,
-   "numerosAmbigus": 0,
-   "le": "2026-09-20"
-  },
-  "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 27 cartes déclarent « Yamabuki City Gym » pour 11 produits."
  },
  {
   "code": "CGK",
@@ -2697,26 +2919,26 @@
   "refus": "aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). 30 cartes déclarent « Tamamushi City Gym » pour 7 produits."
  },
  {
-  "code": "MCD13",
-  "exp": 2352,
-  "prod": 3,
-  "nom": "McDonalds Collection 2013",
-  "slugSet": "McDonalds-Collection-2013",
-  "region": "occidental",
+  "code": "sp3",
+  "exp": 4173,
+  "prod": 6,
+  "nom": "Silver Lance Jet Black Spirit Jumbo Pack Set",
+  "slugSet": "Silver-Lance-Jet-Black-Spirit-Jumbo-Pack-Set",
+  "region": "japonais",
   "bulba": {
    "titre": null,
    "sansPage": true,
-   "tirage": "intl",
-   "expansion": "McDonald's Collection 2013"
+   "tirage": "jp",
+   "expansion": "Silver Lance & Jet-Black Spirit Jumbo Pack Set"
   },
-  "attendu": 3,
+  "attendu": 6,
   "controle": {
-   "cartesDeclarantes": 12,
-   "numerosCardmarket": 3,
-   "couverts": 3,
+   "cartesDeclarantes": 6,
+   "numerosCardmarket": 6,
+   "couverts": 6,
    "taux": 1,
-   "inverse": 0.25,
-   "numerosDeclares": 12,
+   "inverse": 1,
+   "numerosDeclares": 6,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -2724,9 +2946,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "McDonald's Collection 2013": 12
+    "Silver Lance & Jet-Black Spirit Jumbo Pack Set": 6
    },
-   "note": "sans page : 12 cartes de la base déclarent « McDonald's Collection 2013 » ; 3 des 3 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 6 cartes de la base déclarent « Silver Lance & Jet-Black Spirit Jumbo Pack Set » ; 6 des 6 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  }
 ]
