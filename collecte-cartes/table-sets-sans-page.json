@@ -15,12 +15,12 @@
   "apparieALaMain": "Cardmarket ajoute le préfixe « MEGA- » au nom du set",
   "attendu": 774,
   "controle": {
-   "cartesDeclarantes": 711,
+   "cartesDeclarantes": 736,
    "numerosCardmarket": 774,
-   "couverts": 726,
-   "taux": 0.938,
+   "couverts": 757,
+   "taux": 0.978,
    "inverse": 1,
-   "numerosDeclares": 726,
+   "numerosDeclares": 757,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -28,9 +28,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Start Deck 100 Battle Collection": 711
+    "Start Deck 100 Battle Collection": 736
    },
-   "note": "sans page : 711 cartes de la base déclarent « Start Deck 100 Battle Collection » ; 726 des 774 numéros Cardmarket sont des numéros de ces impressions (94 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 736 cartes de la base déclarent « Start Deck 100 Battle Collection » ; 757 des 774 numéros Cardmarket sont des numéros de ces impressions (98 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -141,16 +141,23 @@
   },
   "attendu": 139,
   "controle": {
-   "cartesDeclarantes": 122,
+   "cartesDeclarantes": 137,
    "numerosCardmarket": 139,
-   "couverts": 124,
-   "taux": 0.892,
+   "couverts": 139,
+   "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 124,
+   "numerosDeclares": 139,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 124/139 = 89 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "ex Start Decks": 137
+   },
+   "note": "sans page : 137 cartes de la base déclarent « ex Start Decks » ; 139 des 139 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "DP1",
@@ -356,6 +363,136 @@
    "le": "2026-09-20"
   },
   "refus": "couverture 0/62 = 0 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+ },
+ {
+  "code": "TK9",
+  "exp": 1707,
+  "prod": 61,
+  "nom": "XY Trainer Kit Pikachu Libre Suicune",
+  "slugSet": "XY-Trainer-Kit-Pikachu-Libre-Suicune",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "XY Trainer Kit: Pikachu Libre & Suicune"
+  },
+  "attendu": 61,
+  "controle": {
+   "cartesDeclarantes": 21,
+   "numerosCardmarket": 60,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 22,
+   "numerosAmbigus": 15,
+   "le": "2026-09-20"
+  },
+  "refus": "15 des 22 numéros déclarés désignent PLUSIEURS cartes : « XY Trainer Kit: Pikachu Libre & Suicune » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "TK6",
+  "exp": 1631,
+  "prod": 61,
+  "nom": "XY Trainer Kit",
+  "slugSet": "XY-Trainer-Kit",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "XY Trainer Kit"
+  },
+  "attendu": 61,
+  "controle": {
+   "cartesDeclarantes": 22,
+   "numerosCardmarket": 60,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 30,
+   "numerosAmbigus": 30,
+   "le": "2026-09-20"
+  },
+  "refus": "30 des 30 numéros déclarés désignent PLUSIEURS cartes : « XY Trainer Kit » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "TK8",
+  "exp": 1683,
+  "prod": 61,
+  "nom": "XY Trainer Kit Latias Latios",
+  "slugSet": "XY-Trainer-Kit-Latias-Latios",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "XY Trainer Kit: Latias & Latios"
+  },
+  "attendu": 61,
+  "controle": {
+   "cartesDeclarantes": 22,
+   "numerosCardmarket": 60,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 30,
+   "numerosAmbigus": 29,
+   "le": "2026-09-20"
+  },
+  "refus": "29 des 30 numéros déclarés désignent PLUSIEURS cartes : « XY Trainer Kit: Latias & Latios » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "TK7",
+  "exp": 1632,
+  "prod": 61,
+  "nom": "XY Trainer Kit Bisharp Wigglytuff",
+  "slugSet": "XY-Trainer-Kit-Bisharp-Wigglytuff",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "XY Trainer Kit: Bisharp & Wigglytuff"
+  },
+  "attendu": 61,
+  "controle": {
+   "cartesDeclarantes": 22,
+   "numerosCardmarket": 60,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 30,
+   "numerosAmbigus": 30,
+   "le": "2026-09-20"
+  },
+  "refus": "30 des 30 numéros déclarés désignent PLUSIEURS cartes : « XY Trainer Kit: Bisharp & Wigglytuff » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
+ },
+ {
+  "code": "TK4",
+  "exp": 1629,
+  "prod": 60,
+  "nom": "HS Trainer Kit",
+  "slugSet": "HS-Trainer-Kit",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "HS Trainer Kit"
+  },
+  "attendu": 60,
+  "controle": {
+   "cartesDeclarantes": 19,
+   "numerosCardmarket": 60,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 24,
+   "numerosAmbigus": 12,
+   "le": "2026-09-20"
+  },
+  "refus": "couverture 0/60 = 0 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
  },
  {
   "code": "svG",
@@ -1041,12 +1178,12 @@
   },
   "attendu": 24,
   "controle": {
-   "cartesDeclarantes": 23,
+   "cartesDeclarantes": 24,
    "numerosCardmarket": 24,
-   "couverts": 23,
-   "taux": 0.958,
+   "couverts": 24,
+   "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 23,
+   "numerosDeclares": 24,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -1054,9 +1191,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Start Deck 100 CoroCoro Comic Version": 23
+    "Start Deck 100 CoroCoro Comic Version": 24
    },
-   "note": "sans page : 23 cartes de la base déclarent « Start Deck 100 CoroCoro Comic Version » ; 23 des 24 numéros Cardmarket sont des numéros de ces impressions (96 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 24 cartes de la base déclarent « Start Deck 100 CoroCoro Comic Version » ; 24 des 24 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -1124,6 +1261,32 @@
    },
    "note": "sans page : 24 cartes de la base déclarent « Imprison! Gardevoir ex Constructed Standard Deck » ; 24 des 24 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
+ },
+ {
+  "code": "TK2",
+  "exp": 1627,
+  "prod": 24,
+  "nom": "EX Trainer Kit 2",
+  "slugSet": "EX-Trainer-Kit-2",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "EX Trainer Kit 2"
+  },
+  "attendu": 24,
+  "controle": {
+   "cartesDeclarantes": 17,
+   "numerosCardmarket": 24,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 10,
+   "numerosAmbigus": 9,
+   "le": "2026-09-20"
+  },
+  "refus": "9 des 10 numéros déclarés désignent PLUSIEURS cartes : « EX Trainer Kit 2 » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
  },
  {
   "code": "svC",
@@ -1199,16 +1362,23 @@
   },
   "attendu": 23,
   "controle": {
-   "cartesDeclarantes": 18,
+   "cartesDeclarantes": 19,
    "numerosCardmarket": 23,
-   "couverts": 20,
-   "taux": 0.87,
+   "couverts": 21,
+   "taux": 0.913,
    "inverse": 1,
-   "numerosDeclares": 20,
+   "numerosDeclares": 21,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 20/23 = 87 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Super Legend Set: Xerneas-EX & Yveltal-EX": 19
+   },
+   "note": "sans page : 19 cartes de la base déclarent « Super Legend Set: Xerneas-EX & Yveltal-EX » ; 21 des 23 numéros Cardmarket sont des numéros de ces impressions (91 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "mBG",
@@ -1291,16 +1461,23 @@
   },
   "attendu": 22,
   "controle": {
-   "cartesDeclarantes": 16,
+   "cartesDeclarantes": 20,
    "numerosCardmarket": 22,
-   "couverts": 16,
-   "taux": 0.727,
+   "couverts": 22,
+   "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 16,
+   "numerosDeclares": 20,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
-  "refus": "couverture 16/22 = 73 % < 90 % : les numéros Cardmarket ne sont pas ceux des impressions déclarées, la jointure tomberait sur le repli par nom."
+  "verifie": {
+   "le": "2026-09-20",
+   "page": null,
+   "entrees": {
+    "Terastal Starter Set Skeledirge ex": 20
+   },
+   "note": "sans page : 20 cartes de la base déclarent « Terastal Starter Set Skeledirge ex » ; 22 des 22 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  },
  {
   "code": "svEM",
@@ -1317,12 +1494,12 @@
   },
   "attendu": 22,
   "controle": {
-   "cartesDeclarantes": 18,
+   "cartesDeclarantes": 20,
    "numerosCardmarket": 22,
-   "couverts": 20,
-   "taux": 0.909,
+   "couverts": 22,
+   "taux": 1,
    "inverse": 1,
-   "numerosDeclares": 18,
+   "numerosDeclares": 20,
    "numerosAmbigus": 0,
    "le": "2026-09-20"
   },
@@ -1330,9 +1507,9 @@
    "le": "2026-09-20",
    "page": null,
    "entrees": {
-    "Terastal Starter Set Mewtwo ex": 18
+    "Terastal Starter Set Mewtwo ex": 20
    },
-   "note": "sans page : 18 cartes de la base déclarent « Terastal Starter Set Mewtwo ex » ; 20 des 22 numéros Cardmarket sont des numéros de ces impressions (91 %). Contrôle mesuré en base, 0 requête."
+   "note": "sans page : 20 cartes de la base déclarent « Terastal Starter Set Mewtwo ex » ; 22 des 22 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
  },
  {
@@ -1466,6 +1643,32 @@
    },
    "note": "sans page : 19 cartes de la base déclarent « Battle Master Deck Chien-Pao ex » ; 19 des 20 numéros Cardmarket sont des numéros de ces impressions (95 %). Contrôle mesuré en base, 0 requête."
   }
+ },
+ {
+  "code": "TK1",
+  "exp": 1626,
+  "prod": 20,
+  "nom": "EX Trainer Kit",
+  "slugSet": "EX-Trainer-Kit",
+  "region": "occidental",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "intl",
+   "expansion": "EX Trainer Kit"
+  },
+  "attendu": 20,
+  "controle": {
+   "cartesDeclarantes": 17,
+   "numerosCardmarket": 20,
+   "couverts": 0,
+   "taux": 0,
+   "inverse": 0,
+   "numerosDeclares": 10,
+   "numerosAmbigus": 7,
+   "le": "2026-09-20"
+  },
+  "refus": "7 des 10 numéros déclarés désignent PLUSIEURS cartes : « EX Trainer Kit » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à 0 % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble."
  },
  {
   "code": "MAL",

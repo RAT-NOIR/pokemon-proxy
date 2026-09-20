@@ -295,6 +295,23 @@ function faitsDeCarte(texte, titre = null) {
             const { numero, total } = numeroTotal(g.params.cardno);
             out.push({ tirage: 'intl', expansion: nomDePage(g.params.expansion), deck: plat(g.params.deck) || null, numero, total, rarete: plat(g.params.rarity) || null });
         }
+        // 🔴 LE KIT OCCIDENTAL N'ÉTAIT PAS LU, ALORS QUE SON JUMEAU JAPONAIS L'ÉTAIT DEPUIS LE 2026-09-15 —
+        // §21 bis, une septième fois. Une carte de Trainer Kit déclare son tirage sans `expansion=` :
+        //   {{PokémoncardInfobox/Expansion|deckkit={{TCG|XY Trainer Kit: Latias & Latios}}|halfdeck=Latias Half Deck|cardno=4/30}}
+        // `jpdeckkit` était traité, `deckkit` non : l'impression était donc INVISIBLE, et les onze Trainer
+        // Kits (≈ 500 produits) restaient sans voie — la page existe, la Setlist énumère ses 60 entrées, et
+        // l'échantillon « n'a pas de tirage intl ». ⚠️ Ces entrées TOMBAIENT DÉJÀ dans `entreesNonRendues`,
+        // le compteur écrit pour ça : il comptait, et personne ne l'a lu en face de la question (§21).
+        // Purement ADDITIF : aucune impression existante n'est touchée, seules de nouvelles apparaissent.
+        else if (g.params.deckkit || g.params.halfdeck || g.params.themedeck) {
+            const { numero, total } = numeroTotal(g.params.cardno);
+            const valeur = String(g.params.deckkit || g.params.halfdeck || g.params.themedeck);
+            const nom = nomDePage(valeur);
+            // Seule une valeur à GABARIT nomme une expansion : un deck en texte simple ne désigne rien
+            // (même règle que `impressionsDuDeckAsiatique`, pour la même raison).
+            if (/\{\{\s*[A-Za-z]*TCG\s*\|/.test(valeur) && nom)
+                out.push({ tirage: 'intl', expansion: nom, deck: plat(g.params.halfdeck || g.params.deck) || null, numero, total, rarete: plat(g.params.rarity) || null });
+        }
         if (g.params.jpexpansion || g.params.jpdeckkit) out.push(...impressionsDuChampAsiatique(g));
         else if (/\{\{\s*[A-Za-z]*TCG\s*\|/.test(String(g.params.jpdeck || g.params.jphalfdeck || g.params.jpthemedeck || ''))) out.push(...impressionsDuDeckAsiatique(g));
         if (!out.length) {

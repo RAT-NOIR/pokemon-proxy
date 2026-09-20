@@ -1072,9 +1072,33 @@ Deux fois dans la journée, un défaut réparé à un endroit est resté intact 
   MÊME FONCTION, à trois lignes d'intervalle, avec la justification écrite au-dessus.** Relire le commentaire ne
   suffisait pas — il fallait relire ce que la ligne suivante FAISAIT.
 
+- **🔴 et une SIXIÈME fois le 2026-09-20, dans `verifier-table.js`, avec la justification écrite au-dessus.**
+  Un commentaire de trois lignes dit : « le critère est la COUVERTURE… **le ratio le refuserait, la
+  couverture non** » — et la couverture n'était calculée que pour les lignes `numerosDepuisSetlist`.
+  `Shining-Fates` a donc été refusé sur `entrées/produits = 0,37`, et la voie « sans page » a joint le même
+  set à **196/196**. Cardmarket vend PLUSIEURS PRODUITS PAR CARTE (holo, reverse, V1/V2) : sur tout set
+  occidental moderne le ratio est structurellement bas et ne dit rien de la jointure. Couverture calculée
+  partout, **en ADMISSION seulement** (coût nul, §20) : +17 lignes, 782 produits.
+- **🔴 et une SEPTIÈME fois le même jour, dans le parseur.** `jpdeckkit` (kit japonais) était lu depuis le
+  2026-09-15 ; **`deckkit` (kit occidental) ne l'a jamais été.** Une carte de Trainer Kit déclare son tirage
+  sans `expansion=` :
+  `{{PokémoncardInfobox/Expansion|deckkit={{TCG|XY Trainer Kit: Latias & Latios}}|halfdeck=Latias Half Deck|cardno=4/30}}`
+  L'impression était donc INVISIBLE, et les onze Trainer Kits (≈ 500 produits) restaient sans voie : la page
+  existe, la Setlist énumère ses 60 entrées, et la vérification échouait sur « l'échantillon n'a pas de
+  tirage intl ». ⚠️ **Ces entrées tombaient déjà dans `entreesNonRendues`** — le compteur écrit exactement
+  pour ça. Il comptait, et personne ne l'a lu en face de la question (§21). Rejeu mesuré avant écriture :
+  **204 impressions gagnées, 0 perdue, 0 déplacée** sur 3 000 cartes.
+
 🔑 **Quand on corrige une règle qui existe en deux exemplaires, on corrige les deux dans le même
 commit, ou on n'en corrige aucun.** C'est la règle de symétrie du banc (§9), appliquée aux jointures :
 deux définitions de la même règle divergent toujours, et la seconde ne se découvre que par accident.
+
+🔑 **ET LA FORME LA PLUS COÛTEUSE N'EST PAS LA RÈGLE DUPLIQUÉE DANS DEUX FICHIERS — C'EST CELLE QUI EST
+ÉCRITE EN COMMENTAIRE À TROIS LIGNES DE L'ENDROIT OÙ ELLE N'EST PAS APPLIQUÉE.** Trois fois le 2026-09-20 :
+`connus`/`slugsPris` dans la même fonction, la couverture de `verifier-table.js` sous sa propre
+justification, `deckkit`/`jpdeckkit` dans le même `flatMap`. **Relire le commentaire ne suffit pas : il
+faut relire ce que la ligne suivante FAIT.** Un commentaire juste rend le code d'à côté plus crédible, pas
+plus correct.
 
 ## 21. Le motif du 2026-09-12 : QUATRE échecs silencieux en un jour, tous de la même famille
 

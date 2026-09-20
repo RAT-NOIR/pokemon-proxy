@@ -10597,36 +10597,31 @@
   "prod": 138,
   "nom": "Battle Academy 2024",
   "slugSet": "Battle-Academy-2024",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "Battle Academy 2024 (TCG)",
-   "tirage": null,
+   "tirage": "intl",
    "expansion": "Battle Academy 2024"
   },
   "attendu": 138,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Battle Academy 2024",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
-  "verifie": null,
+  "collecte": {
+   "le": "2026-09-15T11:52:08.885Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Academy 2024 »"
+   ]
+  },
   "verif": {
    "le": "2026-09-20",
    "pageResolue": "Battle Academy 2024 (TCG)",
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Academy 2024 »"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T11:52:08.885Z",
-   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Battle Academy 2024 »"
    ]
@@ -10638,36 +10633,31 @@
   "prod": 138,
   "nom": "Battle Academy 2022",
   "slugSet": "Battle-Academy-2022",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "Battle Academy 2022 (TCG)",
-   "tirage": null,
+   "tirage": "intl",
    "expansion": "Battle Academy 2022"
   },
   "attendu": 138,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Battle Academy 2022",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
-  "verifie": null,
+  "collecte": {
+   "le": "2026-09-15T11:52:08.891Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Academy 2022 »"
+   ]
+  },
   "verif": {
    "le": "2026-09-20",
    "pageResolue": "Battle Academy 2022 (TCG)",
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Academy 2022 »"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T11:52:08.891Z",
-   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Battle Academy 2022 »"
    ]
@@ -10679,36 +10669,31 @@
   "prod": 137,
   "nom": "Battle Academy 2020",
   "slugSet": "Battle-Academy-2020",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "Battle Academy 2020 (TCG)",
-   "tirage": null,
+   "tirage": "intl",
    "expansion": "Battle Academy 2020"
   },
   "attendu": 137,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "Battle Academy 2020",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
-  "verifie": null,
+  "collecte": {
+   "le": "2026-09-15T11:52:08.897Z",
+   "etat": "a-regarder",
+   "raisons": [
+    "aucune entrée de Setlist pour « Battle Academy 2020 »"
+   ]
+  },
   "verif": {
    "le": "2026-09-20",
    "pageResolue": "Battle Academy 2020 (TCG)",
    "entrees": 0,
    "ratio": 0,
    "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Academy 2020 »"
-   ]
-  },
-  "collecte": {
-   "le": "2026-09-15T11:52:08.897Z",
-   "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « Battle Academy 2020 »"
    ]
@@ -10761,38 +10746,48 @@
   "prod": 61,
   "nom": "XY Trainer Kit",
   "slugSet": "XY-Trainer-Kit",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "XY Trainer Kit (TCG)",
-   "tirage": null,
-   "expansion": "XY Trainer Kit"
+   "tirage": "intl",
+   "expansion": [
+    "Sylveon Half Deck",
+    "Noivern Half Deck"
+   ],
+   "setlist": [
+    "Sylveon Half Deck",
+    "Noivern Half Deck"
+   ]
   },
   "attendu": 61,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "XY Trainer Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "XY Trainer Kit (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « XY Trainer Kit »"
-   ]
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
   "collecte": {
    "le": "2026-09-15T11:52:08.908Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « XY Trainer Kit »"
+   ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "XY Trainer Kit (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Spoink (XY 49)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Sylveon Half Deck,Noivern Half Deck » (vus : aucun)"
    ]
   }
  },
@@ -10802,38 +10797,48 @@
   "prod": 60,
   "nom": "HS Trainer Kit",
   "slugSet": "HS-Trainer-Kit",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "HS Trainer Kit (TCG)",
-   "tirage": null,
-   "expansion": "HS Trainer Kit"
+   "tirage": "intl",
+   "expansion": [
+    "Gyarados Half Deck",
+    "Raichu Half Deck"
+   ],
+   "setlist": [
+    "Gyarados Half Deck",
+    "Raichu Half Deck"
+   ]
   },
   "attendu": 60,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "HS Trainer Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "HS Trainer Kit (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « HS Trainer Kit »"
-   ]
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
   "collecte": {
    "le": "2026-09-15T11:52:08.913Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « HS Trainer Kit »"
+   ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "HS Trainer Kit (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Moo-Moo Milk (Neo Genesis 101)",
+   "tiragesVus": [],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Gyarados Half Deck,Raichu Half Deck » (vus : aucun)"
    ]
   }
  },
@@ -11308,38 +11313,49 @@
   "prod": 24,
   "nom": "EX Trainer Kit 2",
   "slugSet": "EX-Trainer-Kit-2",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "EX Trainer Kit 2 (TCG)",
-   "tirage": null,
-   "expansion": "EX Trainer Kit 2"
+   "tirage": "intl",
+   "expansion": [
+    "Plusle Half Deck",
+    "Minun Half Deck"
+   ],
+   "setlist": [
+    "Plusle Half Deck",
+    "Minun Half Deck"
+   ]
   },
   "attendu": 24,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "EX Trainer Kit 2",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "EX Trainer Kit 2 (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « EX Trainer Kit 2 »"
-   ]
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
   "collecte": {
    "le": "2026-09-15T11:53:31.085Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « EX Trainer Kit 2 »"
+   ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "EX Trainer Kit 2 (TCG)",
+   "entrees": 2,
+   "couverture": {
+    "produitsNumerotes": 24,
+    "couverts": 0,
+    "numerosSetlist": 1,
+    "taux": 0
+   },
+   "echantillon": "Minun (Minun Half Deck 6)",
+   "tiragesVus": [],
+   "ratio": 0.08,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Plusle Half Deck,Minun Half Deck » (vus : aucun)",
+    "entrées/produits 0.08 hors [0,5 ; 1,5] et couverture des numéros 0/24 = 0 % sous 95 %"
    ]
   }
  },
@@ -11438,38 +11454,49 @@
   "prod": 20,
   "nom": "EX Trainer Kit",
   "slugSet": "EX-Trainer-Kit",
-  "region": null,
+  "region": "occidental",
   "bulba": {
    "titre": "EX Trainer Kit (TCG)",
-   "tirage": null,
-   "expansion": "EX Trainer Kit"
+   "tirage": "intl",
+   "expansion": [
+    "Latias Half Deck",
+    "Latios Half Deck"
+   ],
+   "setlist": [
+    "Latias Half Deck",
+    "Latios Half Deck"
+   ]
   },
   "attendu": 20,
   "auto": {
-   "cle": "page (TCG)",
-   "liste": null,
-   "nomBulbapedia": "EX Trainer Kit",
-   "cartesListe": null,
-   "sectionListe": null,
-   "regionCodesSet": null,
-   "genereLe": "2026-09-14"
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "EX Trainer Kit (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « EX Trainer Kit »"
-   ]
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.490Z",
    "etat": "a-regarder",
    "raisons": [
     "aucune entrée de Setlist pour « EX Trainer Kit »"
+   ]
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "EX Trainer Kit (TCG)",
+   "entrees": 2,
+   "couverture": {
+    "produitsNumerotes": 20,
+    "couverts": 0,
+    "numerosSetlist": 2,
+    "taux": 0
+   },
+   "echantillon": "Latios (Latios Half Deck 2)",
+   "tiragesVus": [],
+   "ratio": 0.1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Latias Half Deck,Latios Half Deck » (vus : aucun)",
+    "entrées/produits 0.1 hors [0,5 ; 1,5] et couverture des numéros 0/20 = 0 % sous 95 %"
    ]
   }
  },
@@ -27314,6 +27341,488 @@
   "collecte": {
    "le": "2026-09-19T08:24:15.679Z",
    "etat": "ok"
+  }
+ },
+ {
+  "code": "TK5",
+  "exp": 1630,
+  "prod": 61,
+  "nom": "BW Trainer Kit",
+  "slugSet": "BW-Trainer-Kit",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Black & White Trainer Kit (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Excadrill Half Deck",
+    "Zoroark Half Deck"
+   ],
+   "setlist": [
+    "Excadrill Half Deck",
+    "Zoroark Half Deck"
+   ]
+  },
+  "attendu": 61,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Black & White Trainer Kit (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Purrloin (Black & White 66)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Excadrill Half Deck,Zoroark Half Deck » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "TK7",
+  "exp": 1632,
+  "prod": 61,
+  "nom": "XY Trainer Kit Bisharp Wigglytuff",
+  "slugSet": "XY-Trainer-Kit-Bisharp-Wigglytuff",
+  "region": "occidental",
+  "bulba": {
+   "titre": "XY Trainer Kit: Bisharp & Wigglytuff (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Bisharp Half Deck",
+    "Wigglytuff Half Deck"
+   ],
+   "setlist": [
+    "Bisharp Half Deck",
+    "Wigglytuff Half Deck"
+   ]
+  },
+  "attendu": 61,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "XY Trainer Kit: Bisharp & Wigglytuff (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Swirlix (Kalos Starter Set 24)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Bisharp Half Deck,Wigglytuff Half Deck » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "TK8",
+  "exp": 1683,
+  "prod": 61,
+  "nom": "XY Trainer Kit Latias Latios",
+  "slugSet": "XY-Trainer-Kit-Latias-Latios",
+  "region": "occidental",
+  "bulba": {
+   "titre": "XY Trainer Kit: Latias & Latios (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Latias Half Deck",
+    "Latios Half Deck"
+   ],
+   "setlist": [
+    "Latias Half Deck",
+    "Latios Half Deck"
+   ]
+  },
+  "attendu": 61,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "XY Trainer Kit: Latias & Latios (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Skitty (Primal Clash 113)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Latias Half Deck,Latios Half Deck » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "TK9",
+  "exp": 1707,
+  "prod": 61,
+  "nom": "XY Trainer Kit Pikachu Libre Suicune",
+  "slugSet": "XY-Trainer-Kit-Pikachu-Libre-Suicune",
+  "region": "occidental",
+  "bulba": {
+   "titre": "XY Trainer Kit: Pikachu Libre & Suicune (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Pikachu Libre Half Deck",
+    "Suicune Half Deck"
+   ],
+   "setlist": [
+    "Pikachu Libre Half Deck",
+    "Suicune Half Deck"
+   ]
+  },
+  "attendu": 61,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "XY Trainer Kit: Pikachu Libre & Suicune (TCG)",
+   "entrees": 60,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Basic Water Energy (TCG)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Pikachu Libre Half Deck,Suicune Half Deck » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "TK10",
+  "exp": 1758,
+  "prod": 61,
+  "nom": "SM Trainer Kit Lycanroc Alolan Raichu",
+  "slugSet": "SM-Trainer-Kit-Lycanroc-Alolan-Raichu",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Lycanroc Half Deck",
+    "Alolan Raichu Half Deck"
+   ],
+   "setlist": [
+    "Lycanroc Half Deck",
+    "Alolan Raichu Half Deck"
+   ]
+  },
+  "attendu": 61,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu (TCG)",
+   "entrees": 65,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Basic Fighting Energy (TCG)",
+   "tiragesVus": [],
+   "ratio": 1.07,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage intl « Lycanroc Half Deck,Alolan Raichu Half Deck » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "TK11",
+  "exp": 2070,
+  "prod": 34,
+  "nom": "SM Trainer Kit Alolan Sandslash Alolan Ninetales",
+  "slugSet": "SM-Trainer-Kit-Alolan-Sandslash-Alolan-Ninetales",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Sun & Moon Trainer Kit: Alolan Sandslash & Alolan Ninetales (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Alolan Sandslash Half Deck",
+    "Alolan Ninetales Half Deck"
+   ],
+   "setlist": [
+    "Alolan Sandslash Half Deck",
+    "Alolan Ninetales Half Deck"
+   ]
+  },
+  "attendu": 34,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Sun & Moon Trainer Kit: Alolan Sandslash & Alolan Ninetales (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Alolan Sandslash Half Deck,Alolan Ninetales Half Deck »"
+   ]
+  }
+ },
+ {
+  "code": "TK3",
+  "exp": 1628,
+  "prod": 23,
+  "nom": "DP Trainer Kit",
+  "slugSet": "DP-Trainer-Kit",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Diamond & Pearl Trainer Kit (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Manaphy Half Deck",
+    "Lucario Half Deck"
+   ],
+   "setlist": [
+    "Manaphy Half Deck",
+    "Lucario Half Deck"
+   ]
+  },
+  "attendu": 23,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Diamond & Pearl Trainer Kit (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Manaphy Half Deck,Lucario Half Deck »"
+   ]
+  }
+ },
+ {
+  "code": "IPNT",
+  "exp": 5062,
+  "prod": 40,
+  "nom": "Intro Pack Neo Totodile",
+  "slugSet": "Intro-Pack-Neo-Totodile",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Intro Pack Neo (TCG)",
+   "tirage": "jp",
+   "expansion": [
+    "Totodile Half Deck",
+    "Totodile Side"
+   ],
+   "setlist": [
+    "Totodile Half Deck",
+    "Totodile Side Deck"
+   ]
+  },
+  "attendu": 40,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Intro Pack Neo (TCG)",
+   "entrees": 39,
+   "couverture": {
+    "produitsNumerotes": 30,
+    "couverts": 30,
+    "numerosSetlist": 31,
+    "taux": 1
+   },
+   "echantillon": "Potion (Base Set 94)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Totodile Half Deck,Totodile Side » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "IPNC",
+  "exp": 5061,
+  "prod": 40,
+  "nom": "Intro Pack Neo Chikorita",
+  "slugSet": "Intro-Pack-Neo-Chikorita",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Intro Pack Neo (TCG)",
+   "tirage": "jp",
+   "expansion": [
+    "Chikorita Half Deck",
+    "Chikorita Side"
+   ],
+   "setlist": [
+    "Chikorita Half Deck",
+    "Chikorita Side Deck"
+   ]
+  },
+  "attendu": 40,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Intro Pack Neo (TCG)",
+   "entrees": 39,
+   "couverture": {
+    "produitsNumerotes": 30,
+    "couverts": 30,
+    "numerosSetlist": 31,
+    "taux": 1
+   },
+   "echantillon": "Bill (Base Set 91)",
+   "tiragesVus": [],
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "l'échantillon n'a pas de tirage jp « Chikorita Half Deck,Chikorita Side » (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "CLV",
+  "exp": 5530,
+  "prod": 35,
+  "nom": "Pokemon Trading Card Game Classic Venusaur Lugia ex Deck",
+  "slugSet": "Pokemon-Trading-Card-Game-Classic-Venusaur-Lugia-ex-Deck",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Pokémon Trading Card Game Classic (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Venusaur Deck"
+   ],
+   "setlist": [
+    "Venusaur & Lugia ex Deck"
+   ]
+  },
+  "attendu": 35,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Venusaur Deck »"
+   ]
+  }
+ },
+ {
+  "code": "CLC",
+  "exp": 5531,
+  "prod": 34,
+  "nom": "Pokemon Trading Card Game Classic Charizard Ho Oh ex Deck",
+  "slugSet": "Pokemon-Trading-Card-Game-Classic-Charizard-Ho-Oh-ex-Deck",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Pokémon Trading Card Game Classic (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Charizard Deck"
+   ],
+   "setlist": [
+    "Charizard & Ho-Oh ex Deck"
+   ]
+  },
+  "attendu": 34,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Charizard Deck »"
+   ]
+  }
+ },
+ {
+  "code": "CLB",
+  "exp": 5532,
+  "prod": 34,
+  "nom": "Pokemon Trading Card Game Classic Blastoise Suicune ex Deck",
+  "slugSet": "Pokemon-Trading-Card-Game-Classic-Blastoise-Suicune-ex-Deck",
+  "region": "occidental",
+  "bulba": {
+   "titre": "Pokémon Trading Card Game Classic (TCG)",
+   "tirage": "intl",
+   "expansion": [
+    "Blastoise Deck"
+   ],
+   "setlist": [
+    "Blastoise & Suicune ex Deck"
+   ]
+  },
+  "attendu": 34,
+  "auto": {
+   "cle": "énumération intitle (2026-09-20)",
+   "aLaMain": true,
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Blastoise Deck »"
+   ]
   }
  }
 ]

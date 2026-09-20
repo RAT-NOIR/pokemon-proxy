@@ -191,6 +191,17 @@ function lignesListe(wt, liste) {
         }
     }
     if (reprises) console.log(`vérifications reprises du fichier précédent : ${reprises}`);
+    // 🔴 ET UNE RÉGÉNÉRATION NE DOIT PAS NON PLUS PERDRE UNE LIGNE QUE LA CLÉ AUTOMATIQUE NE SAIT PAS
+    // FABRIQUER. Les Trainer Kits, `Intro Pack Neo`, `Pokémon TCG Classic` et les Battle Academy ont une
+    // page Bulbapedia — mais sous un titre que la clé « <slug> (TCG) » ne trouve jamais :
+    // « BW-Trainer-Kit » contre « Black & White Trainer Kit ». Leurs lignes ont été écrites À LA MAIN après
+    // une ÉNUMÉRATION (`intitle:"Trainer Kit"` — §30 : on liste la population, on ne devine pas un titre).
+    // Sans cette reprise, la prochaine régénération les effacerait en silence, et c'est la forme du §21 :
+    // un résultat plausible, aucune erreur, du travail disparu.
+    const codesSortie = new Set(sortie.map(l => l.exp));
+    const gardees = PRECEDENTES.filter(l => l.auto?.aLaMain && !codesSortie.has(l.exp));
+    sortie.push(...gardees);
+    if (gardees.length) console.log(`lignes écrites à la main, conservées : ${gardees.length} (${gardees.map(l => l.code).join(', ')})`);
     fs.writeFileSync(SORTIE, JSON.stringify(sortie, null, 1));
     const par = sortie.reduce((a, l) => (a[l.bulba.tirage ?? 'à établir'] = (a[l.bulba.tirage ?? 'à établir'] || 0) + 1, a), {});
     console.log(`\n${sortie.length} lignes écrites dans ${path.relative(process.cwd(), SORTIE)} · par tirage ${JSON.stringify(par)} · ${sortie.reduce((a, l) => a + l.prod, 0)} produits`);
