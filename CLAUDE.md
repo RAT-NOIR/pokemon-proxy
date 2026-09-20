@@ -111,6 +111,34 @@ sur 26 la passent à ≥ 0,9, et les 9 autres se regardent à la main.
 une vraie identité rend deux fois le même chiffre. Une clé asymétrique qu'on lit comme une preuve d'identité
 appariera toujours le plus gros candidat disponible.
 
+### 🔴 ET LA TROISIÈME FORME BAT LE CONTRÔLE BIDIRECTIONNEL LUI-MÊME — 2026-09-20
+
+**Le contrôle prescrit ci-dessus a répondu 100 % DANS LES DEUX SENS sur un appariement faux.** La ligne « sans
+page » `Leafeon-vs-Metagross-Expert-Deck` : 15 numéros Cardmarket, 15 numéros déclarés, couverture 100 %,
+inverse 100 %. Elle a produit **14 produits rattachés à deux cartes**. La cause : **c'est un KIT À DEUX DECKS
+sous UN SEUL nom d'expansion**, donc le n°6 existe DEUX FOIS, une fois par moitié — 26 cartes déclarent
+l'expansion pour 15 numéros distincts.
+
+🔑 **LA COUVERTURE COMPARE DES ENSEMBLES, ET UN DOUBLON S'ÉCRASE DANS UN `Set`.** Les deux sens rendent donc le
+même chiffre alors que les deux populations n'ont PAS la même taille — exactement ce que le contrôle
+bidirectionnel était censé interdire. **Il ne mesure pas les tailles, il mesure des appartenances**, et
+l'information qui manquait (« ce numéro désigne combien de cartes ? ») avait été détruite avant qu'il ne
+regarde. Un contrôle posé sur une donnée déjà dédoublonnée ne peut pas voir un doublon.
+
+⚠️ **LE PENDANT DE LA GARDE PAR LE NOM, ET IL MANQUAIT : un NUMÉRO qui désigne plusieurs cartes ne désigne
+rien.** `jointure.js` porte cette garde pour le nom depuis le 2026-09-19 ; elle n'existe pas pour le numéro.
+Mesuré sur les 53 lignes proposées : **5 portent au moins un numéro ambigu, 85 produits concernés**, et une
+seule est pathologique (LED, 14 numéros sur 15). La ligne de table est refusée quand la MAJORITÉ des numéros
+sont doublés — ce n'est pas un seuil de réglage mais un constat de structure : **si la plupart des numéros sont
+doublés, le nom ne couvre pas une numérotation mais plusieurs.** Les collisions ISOLÉES (1 sur 19) ne referment
+pas la ligne — elles coûteraient 18 produits justes pour un faux — elles sont ÉCRITES dans `controle.numerosAmbigus`
+et attendent la garde par numéro, qui ne se câble pas avant d'avoir été mesurée sur ce qui marche déjà (§22).
+
+🔑 **ET LE CORRECTIF S'EST LIVRÉ EN DEUX MOITIÉS (§23), PARCE QUE LA PREMIÈRE NE SERT À RIEN SEULE.** Refuser la
+ligne LED ne retire aucune des 29 jointures déjà écrites. `retirer-collecte-set.js` est la moitié manquante :
+sauvegarde, puis retrait des lignes, des `liens.idProduct`, des restes et de l'état — 15 produits perdent leur
+seule carte, et c'est le bon résultat, ils en montraient deux dont une fausse.
+
 ---
 
 ## 30. UNE RECHERCHE QUI NE TROUVE RIEN ET UNE DONNÉE QUI N'EXISTE PAS RENDENT LE MÊME RÉSULTAT — 2026-09-19
@@ -929,6 +957,20 @@ Deux fois dans la journée, un défaut réparé à un endroit est resté intact 
   artofpkm traduit autrement (« Janine's Secret Technique » = « Janine's Secret Art », 129 cas) et numérote
   autrement (`DPBP#468`, 555 cas). **Seuls les 15 où le nom ET le numéro discordent étaient faux** — un seul
   des deux critères pris isolément aurait fait détacher des centaines de jointures justes.
+
+- **🔴 et une CINQUIÈME fois le 2026-09-20, sur ce qu'une ligne de table « prend ».** `generer-table-sans-page.js`
+  porte un commentaire de six lignes qui explique pourquoi **une ligne non vérifiée ne prend pas son SLUG** : elle
+  ne peut pas collecter, donc la compter comme pourvue laisserait son expansion sans collecte pour toujours. Deux
+  lignes plus haut, `connus` — l'ensemble des NOMS D'EXPANSION déjà couverts — était construit sur
+  `[...TABLE, ...TABLE_AUTO]`, donc **sur ces mêmes lignes non vérifiées**. Le raisonnement était écrit, appliqué
+  à un des deux ensembles, et pas à l'autre. **Mesuré : 122 candidates sans la moindre trace de vérification, dont
+  75 dont l'expansion est DÉJÀ DÉCLARÉE par nos cartes — 2 999 produits invisibles aux DEUX voies à la fois**,
+  la page jamais vérifiée et le retournement aveuglé par la ligne qui ne fait rien. Corrigé : une ligne qui ne peut
+  pas collecter ne prend ni son slug NI son nom. Effet immédiat : 24 lignes → 91, dont 52 vérifiées, **+893 fiches
+  en une exécution et zéro requête**.
+  ⚠️ **Et la forme est pire que les quatre autres : ce n'est pas une règle dupliquée dans deux fichiers, c'est la
+  MÊME FONCTION, à trois lignes d'intervalle, avec la justification écrite au-dessus.** Relire le commentaire ne
+  suffisait pas — il fallait relire ce que la ligne suivante FAISAIT.
 
 🔑 **Quand on corrige une règle qui existe en deux exemplaires, on corrige les deux dans le même
 commit, ou on n'en corrige aucun.** C'est la règle de symétrie du banc (§9), appliquée aux jointures :

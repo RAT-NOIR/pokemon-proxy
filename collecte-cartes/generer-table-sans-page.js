@@ -31,7 +31,7 @@ async function principal() {
     require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
     const { ouvrirConnexions } = require('./garde');
     const { cleNumero } = require('./jointure');
-    const { TABLE, TABLE_AUTO } = require('./table-sets');
+    const { TABLE, TABLE_AUTO, EXPANSIONS_INTL } = require('./table-sets');
     const univers = require('./univers-expansions.json');
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
 
@@ -39,14 +39,28 @@ async function principal() {
     // les compter comme « déjà prises » viderait le fichier au lancement suivant, sans une erreur — un
     // générateur qui s'efface lui-même. Ses propres lignes sont donc exclues de ce qu'il considère connu.
     const lignes = [...TABLE, ...TABLE_AUTO].filter(l => !l.bulba?.sansPage);
-    const connus = new Set(lignes.flatMap(l => [].concat(l.bulba?.expansion || [])).map(cle));
     const codesPris = new Set(lignes.map(l => l.code));
     // ⚠️ UNE LIGNE NON VÉRIFIÉE NE PREND PAS SON SLUG. Cinq expansions ont une ligne automatique qui
     // ÉCHOUE — « Terastal Starter Sets (TCG) » est une page COLLECTIVE dont aucune section ne porte le nom
     // du deck, exactement le motif de BLK/WHT. Les compter comme pourvues les laisserait sans collecte
     // pour toujours. Seules les lignes qui peuvent réellement collecter (celles de `TABLE`) prennent un
     // slug ; `ligne(code)` préfère de toute façon `TABLE` à une candidate automatique.
-    const slugsPris = new Set(TABLE.filter(l => !l.bulba?.sansPage).map(l => l.slugSet));
+    const collectantes = TABLE.filter(l => !l.bulba?.sansPage);
+    const slugsPris = new Set(collectantes.map(l => l.slugSet));
+    // 🔴 ET LA MÊME RÈGLE VAUT POUR LE NOM D'EXPANSION — CORRIGÉE D'UN CÔTÉ, LAISSÉE DE L'AUTRE (§21 bis,
+    // cinquième fois). `connus` se construisait sur `[...TABLE, ...TABLE_AUTO]`, donc une candidate que
+    // PERSONNE N'A VÉRIFIÉE — et qui ne collectera donc rien — masquait son nom d'expansion à ce
+    // générateur. Mesuré le 2026-09-20 : 122 candidates sans la moindre trace de vérification, dont 75
+    // dont l'expansion est DÉJÀ DÉCLARÉE par nos cartes (2 999 produits). Elles étaient invisibles aux
+    // deux voies à la fois : la page n'a jamais été vérifiée, et le retournement ne les voyait pas. Une
+    // ligne qui ne peut pas collecter ne prend ni son slug NI son nom.
+    const connus = new Set(collectantes.flatMap(l => [].concat(l.bulba?.expansion || [])).map(cle));
+    // 🔴 ET LE BONUS JUMEAU SERT DÉJÀ DEUX EXPANSIONS QUI N'ONT AUCUNE LIGNE À ELLES. `Base Set` est
+    // collecté par le bonus `intl` de EXP (`EXPANSIONS_INTL`) : la première sortie du correctif ci-dessus
+    // le proposait à 100 % de couverture — et il aurait gagné **4 produits sur 211**, les 207 autres
+    // étant déjà fichés. Ce n'est pas un gisement, c'est un DOUBLE de la voie qui a produit les 1 993
+    // lignes fausses du §32. Une expansion servie par une autre voie n'est pas une expansion sans ligne.
+    for (const nom of Object.keys(EXPANSIONS_INTL)) connus.add(cle(nom));
 
     // ce que NOS pages déclarent et que la table ignore
     const parNom = new Map();
@@ -55,8 +69,12 @@ async function principal() {
             if (!i.expansion) continue;
             const k = cle(i.expansion);
             if (connus.has(k)) continue;
-            const e = parNom.get(k) || (parNom.set(k, { nom: i.expansion, nums: new Set(), tirages: new Set(), cartes: new Set(), sansNumero: 0 }), parNom.get(k));
-            if (i.numero) e.nums.add(cleNumero(i.numero)); else e.sansNumero++;
+            const e = parNom.get(k) || (parNom.set(k, { nom: i.expansion, nums: new Set(), parNumero: new Map(), tirages: new Set(), cartes: new Set(), sansNumero: 0 }), parNom.get(k));
+            if (i.numero) {
+                const n = cleNumero(i.numero);
+                e.nums.add(n);
+                (e.parNumero.get(n) || e.parNumero.set(n, new Set()).get(n)).add(c._id);
+            } else e.sansNumero++;
             e.tirages.add(i.tirage); e.cartes.add(c._id);
         }
     }
@@ -72,14 +90,24 @@ async function principal() {
         const couverts = nums.filter(n => e.nums.has(n)).length;
         // la couverture INVERSE : une vraie identité rend deux fois le même chiffre (§31)
         const inverse = e.nums.size ? [...e.nums].filter(n => nums.includes(n)).length / e.nums.size : 0;
-        paires.push({ u, e, nums: nums.length, couverts, taux: nums.length ? couverts / nums.length : 0, inverse });
+        // 🔴 ET LA COUVERTURE NE VOIT PAS UN NUMÉRO QUI DÉSIGNE DEUX CARTES — mesuré le 2026-09-20.
+        // « Leafeon vs Metagross Expert Deck » a passé les DEUX sens à 100 % et a produit 14 produits
+        // rattachés à deux cartes : c'est un KIT À DEUX DECKS sous UN nom d'expansion, donc le n°6 existe
+        // deux fois, une fois par moitié. 26 cartes déclarent l'expansion pour 15 numéros distincts.
+        // 🔑 La couverture compare des ENSEMBLES, et un doublon s'écrase dans un `Set` : elle répondait
+        // donc 100 % dans les deux sens sans que les deux populations aient la même taille — la forme
+        // exacte de l'inclusion déguisée du §31, une troisième fois, et le contrôle bidirectionnel du §31
+        // ne l'attrape PAS. Le pendant de la garde par le nom : un numéro qui désigne PLUSIEURS cartes ne
+        // désigne rien.
+        const ambigus = [...e.parNumero.entries()].filter(([, cs]) => cs.size > 1).map(([n]) => n);
+        paires.push({ u, e, nums: nums.length, couverts, taux: nums.length ? couverts / nums.length : 0, inverse, ambigus });
     }
     paires.sort((a, b) => b.u.produits - a.u.produits);
 
     // 🔑 IMPRIMER AVANT D'ÉCRIRE, TOUJOURS (§31) : une clé d'appariement se relit ligne à ligne.
     console.log(`PAIRES PAR ÉGALITÉ DU NOM — la couverture est un CONTRÔLE, pas la clé :`);
     for (const p of paires)
-        console.log(`   ${p.taux >= SEUIL ? '✅' : '⚠️ '} ${String(p.u.produits).padStart(4)} p · ${String(p.u.codeSet || '—').padEnd(7)} ${String(p.u.slugSet).slice(0, 42).padEnd(42)} = « ${p.e.nom} » · ${p.e.cartes.size} cartes, ${[...p.e.tirages].join(',')} · contrôle ${p.couverts}/${p.nums} = ${(p.taux * 100).toFixed(0)} % (inverse ${(p.inverse * 100).toFixed(0)} %)`);
+        console.log(`   ${p.taux >= SEUIL ? '✅' : '⚠️ '} ${String(p.u.produits).padStart(4)} p · ${String(p.u.codeSet || '—').padEnd(7)} ${String(p.u.slugSet).slice(0, 42).padEnd(42)} = « ${p.e.nom} » · ${p.e.cartes.size} cartes, ${[...p.e.tirages].join(',')} · contrôle ${p.couverts}/${p.nums} = ${(p.taux * 100).toFixed(0)} % (inverse ${(p.inverse * 100).toFixed(0)} %)${p.ambigus.length ? ` · 🔴 ${p.ambigus.length}/${p.e.nums.size} numéros désignent PLUSIEURS cartes` : ''}`);
 
     const sortie = paires.map(p => {
         const tirage = p.e.tirages.has('jp') && !p.e.tirages.has('intl') ? 'jp' : (p.e.tirages.has('intl') && !p.e.tirages.has('jp') ? 'intl' : 'jp');
@@ -88,12 +116,19 @@ async function principal() {
             slugSet: p.u.slugSet, region: tirage === 'intl' ? 'occidental' : 'japonais',
             bulba: { titre: null, sansPage: true, tirage, expansion: p.e.nom },
             attendu: p.u.produits,
-            controle: { cartesDeclarantes: p.e.cartes.size, numerosCardmarket: p.nums, couverts: p.couverts, taux: Number(p.taux.toFixed(3)), inverse: Number(p.inverse.toFixed(3)), le: new Date().toISOString().slice(0, 10) }
+            controle: { cartesDeclarantes: p.e.cartes.size, numerosCardmarket: p.nums, couverts: p.couverts, taux: Number(p.taux.toFixed(3)), inverse: Number(p.inverse.toFixed(3)), numerosDeclares: p.e.nums.size, numerosAmbigus: p.ambigus.length, le: new Date().toISOString().slice(0, 10) }
         };
         // ⚠️ `0 / 0` N'EST PAS `0 %` (§8). Quand aucun produit de l'expansion ne porte de numéro, le
         // contrôle n'a pas échoué : il n'a pas été ÉVALUÉ. La ligne reste refusée — mais le motif dit
         // laquelle des deux choses s'est produite, sinon personne ne saura quoi chercher.
         if (!p.nums) l.refus = `aucun produit de cette expansion ne porte de numéro : le contrôle par les numéros n'est PAS ÉVALUÉ (ce n'est pas 0 %). ${p.e.cartes.size} cartes déclarent « ${p.e.nom} » pour ${p.u.produits} produits.`;
+        // ⚠️ LA MAJORITÉ DES NUMÉROS DOUBLÉS N'EST PAS UN SEUIL DE RÉGLAGE, C'EST UN CONSTAT DE STRUCTURE :
+        // si la plupart des numéros déclarés désignent deux cartes, le nom d'expansion ne couvre pas UNE
+        // numérotation mais PLUSIEURS — un kit à deux decks, une page qui fusionne deux moitiés. La
+        // jointure par numéro n'y veut plus rien dire. Les collisions ISOLÉES (1 numéro sur 19) ne
+        // referment pas la ligne : elles coûteraient 18 produits justes pour un faux. Elles sont ÉCRITES
+        // dans le contrôle, à charge du garde par numéro, qui reste à mesurer sur ce qui marche déjà (§22).
+        else if (p.ambigus.length > p.e.nums.size / 2) l.refus = `${p.ambigus.length} des ${p.e.nums.size} numéros déclarés désignent PLUSIEURS cartes : « ${p.e.nom} » ne couvre pas une numérotation mais plusieurs (kit à deux decks). La couverture passe à ${(p.taux * 100).toFixed(0)} % dans les deux sens sans le voir — un doublon s'écrase dans un ensemble.`;
         else if (p.taux >= SEUIL) l.verifie = {
             le: new Date().toISOString().slice(0, 10), page: null, entrees: { [p.e.nom]: p.e.cartes.size },
             note: `sans page : ${p.e.cartes.size} cartes de la base déclarent « ${p.e.nom} » ; ${p.couverts} des ${p.nums} numéros Cardmarket sont des numéros de ces impressions (${(p.taux * 100).toFixed(0)} %). Contrôle mesuré en base, 0 requête.`
@@ -108,7 +143,14 @@ async function principal() {
     console.log(`  dont VÉRIFIÉES (couverture ≥ ${SEUIL}) : ${ok.length} · ${ok.reduce((s, l) => s + l.prod, 0)} produits`);
     console.log(`  les autres sont écrites mais refusées par le collecteur, avec leur motif.`);
 
-    if (process.argv.includes('--ecrire')) {
+    // `--sortie=<chemin>` écrit AILLEURS que dans la table : de quoi peser les lignes proposées avec
+    // un autre outil avant de remplacer le fichier que le collecteur lit. Imprimer avant d'écrire ne
+    // suffit pas quand la décision demande une mesure en base (§22).
+    const ailleurs = (process.argv.find(a => a.startsWith('--sortie=')) || '').slice(9);
+    if (ailleurs) {
+        fs.writeFileSync(ailleurs, JSON.stringify(sortie, null, 1));
+        console.log(`\n  ÉCRIT HORS TABLE (inspection) : ${ailleurs}`);
+    } else if (process.argv.includes('--ecrire')) {
         fs.writeFileSync(FICHIER, JSON.stringify(sortie, null, 1));
         console.log(`\n  ÉCRIT : ${FICHIER}`);
     } else console.log(`\n  (mesure seule — relancer avec --ecrire)`);

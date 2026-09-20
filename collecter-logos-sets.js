@@ -33,7 +33,15 @@ const { gabarits } = require('./collecte-cartes/wikitext');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
 const cle = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
-const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 30 * 1000;
+// 🔴 L'INTERVALLE D'ATTENTE DOIT ÊTRE PLUS COURT QUE LA FENÊTRE QU'IL ATTEND — mesuré le 2026-09-20.
+// Ce script a attendu le verrou global pendant des dizaines de cycles sans jamais l'obtenir, et j'ai
+// d'abord lu ça comme « le worker le tient en continu ». Le champ `depuis` dit le contraire : le worker
+// le REND après chaque set et le REPREND dans la seconde (`depuis` 0,9 min, un set dure ~2 min). La
+// fenêtre de libération dure quelques secondes ; un sondage toutes les 30 s ne peut pas la voir.
+// ⚠️ Ce n'est pas une attente, c'est une FAMINE, et elle ne se distingue d'une attente normale que par
+// le nombre d'essais — donc il s'imprime. Le sondage est une lecture Mongo, pas une requête chez le
+// tiers : le raccourcir ne touche à aucune promesse.
+const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
 
 function deciderLangue(s, logo) {
     const f = cle(logo);
@@ -95,8 +103,9 @@ function deciderLangue(s, logo) {
     const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: VERROU_MS, surInsertion: { phase: 'logos' }, surPerte: () => { arret = true; }, nom: 'verrou global bulbapedia (logos)' });
     for (let essai = 0; ; essai++) {
         const tenu = await verrou.prendre();
-        if (!tenu) break;
+        if (!tenu) { if (essai) console.log(`   verrou obtenu au bout de ${essai} essais (${(essai * ATTENTE_MS / 60000).toFixed(1)} min d'attente).`); break; }
         if (essai === 0) console.log(`⏳ verrou global tenu par pid ${tenu.pid} sur ${tenu.hote} (battement il y a ${tenu.ageS} s) — j'attends, ${ATTENTE_MS / 1000} s entre deux essais.`);
+        else if (essai % 60 === 0) console.log(`   ⏳ toujours pas obtenu après ${essai} essais (${(essai * ATTENTE_MS / 60000).toFixed(1)} min) — détenteur pid ${tenu.pid}, pris depuis ${tenu.ageS} s.`);
         await new Promise(r => setTimeout(r, ATTENTE_MS));
     }
     console.log(`🔒 verrou global pris.`);
