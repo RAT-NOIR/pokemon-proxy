@@ -143,6 +143,101 @@ renégocie pas en cours de route.
 
 ---
 
+## 42. « AUCUNE SOURCE » ÉTAIT UNE FONCTION QUI N'EN CONNAÎT QU'UNE — 2026-09-21
+
+**Le chiffre à instruire était « 179 sets, 10 421 cartes, sans AUCUNE source d'images ». Remesuré
+avec son dénominateur : 226 sets, 15 065 cartes — et la phrase est fausse dans les deux moitiés.**
+
+🔴 **D'ABORD LE 179 ÉTAIT LUI-MÊME PRODUIT PAR UN FILTRE.** Dans `remettre-en-file.js`, le test
+`if (u.etat === 'attente') continue` vient AVANT le test de source : tout set déjà en file sortait
+de la boucle sans jamais être compté comme « sans source ». **Un set n'était pas classé selon ce
+qu'il EST, mais selon l'endroit de la boucle où il sortait.** C'est le §39 dans un outil que je
+venais d'écrire, et l'ordre de deux `continue` suffit à le produire.
+
+🔴 **ET « AUCUNE SOURCE » NE VOULAIT DIRE QUE « PAS CHEZ ARTOFPKM ».** La ligne 80 de
+`sources-sets.js` est `if (source !== 'artofpkm') return null`. Une seule source interrogée, et le
+résultat nommé « aucune » — la phrase que le §36 interdit explicitement. **Or `collecteur-images-
+bulba.js` n'ouvre JAMAIS `sources-sets.js`** : il résout le fichier depuis le wikitext DE LA CARTE,
+déjà archivé sur R2. Sa disponibilité ne se déclare nulle part, donc elle ne pouvait pas manquer à
+un inventaire des déclarations. **Mesuré : les 226 sets, soit 15 065 cartes, portent leur wikitext
+archivé. ZÉRO n'en manque.** La condition nécessaire de la route Bulbapedia est remplie PARTOUT.
+
+**LA DÉCOMPOSITION DEMANDÉE — 226 sets, 15 065 cartes, dénominateur 568 lignes admises :**
+
+| tirage | sets | cartes | la source a-t-elle été CHERCHÉE ? |
+|---|---|---|---|
+| **intl** (occidental) | **135** | **5 976** | 🔴 **non** — et c'est la population pour laquelle `collecteur-images-bulba.js` a été ÉCRIT (`tirage: 'intl'` en dur). Skyridge, Supreme Victors, Legends Awakened y sont, et ils sont déjà passés en file. |
+| **zh-hans** | 52 | 5 534 | 🔴 non — et la route est FERMÉE PAR NOTRE CODE, pas par la source : le collecteur code `tirage: 'intl'` en dur, donc il ne résoudrait rien. **Ce n'est pas une absence, c'est un paramètre.** |
+| **jp** | 25 | 1 269 | ⚠️ partiellement — artofpkm couvre le japonais, ces 25 n'y ont pas de correspondance de NOM (§30 : une correspondance absente n'est pas un set absent) |
+| **zh-hant** | 8 | 1 251 | 🔴 non — même paramètre en dur |
+| **id · th · idth** | 6 | 1 035 | 🔴 non — les pages existent (§30 : 55 pages « Promotional cards », 1 620 produits) |
+
+| type (§37) | sets | cartes |
+|---|---|---|
+| extension | 154 | 10 258 |
+| promo | 34 | 2 110 |
+| deck | 17 | 1 511 |
+| non typé | 21 | 1 186 |
+
+🔑 **LA RÉPONSE À LA QUESTION POSÉE, EN UNE LIGNE : SUR LES 226, LA SOURCE N'A ÉTÉ CHERCHÉE NULLE
+PART.** Elle a été DÉCLARÉE absente par une table qui ne décrit qu'un fournisseur, pour une question
+— « ce set peut-il recevoir des images ? » — à laquelle cette table ne répond pas. Aucun des 226
+n'a fait l'objet d'une recherche chez Bulbapedia, chez PKMJP, ni ailleurs.
+⚠️ **Et le plus gros bloc n'attend AUCUNE découverte : 135 sets occidentaux, 5 976 cartes, relèvent
+d'une route déjà en production.** Ce n'est pas un chantier de source, c'est une file à remplir.
+🕳️ **Le second bloc — 60 sets chinois, 6 785 cartes — attend UN PARAMÈTRE**, `tirage` au lieu de
+`'intl'` en dur, et ensuite une vérification que Bulbapedia porte bien des fichiers pour ces
+tirages. **La première moitié est gratuite ; la seconde est la vraie question, et elle n'a pas
+encore été posée.**
+
+---
+
+## 41. LA PARADE AU MOTIF DOMINANT : UN VIDE DOIT COÛTER UNE EXCEPTION — 2026-09-21
+
+**Neuf fois, ce dépôt a rangé en « absence » ce qui était une clé fausse, un champ mal nommé ou un
+filtre trop étroit. CINQ le même jour, sur le seul dossier du seuil d'images, à quelques minutes
+d'intervalle.** Le catalogue en a fait une leçon à chaque fois. **Une dixième leçon ne vaut rien :
+il fallait un OUTIL.** `collecte-cartes/lecture-sure.js`, et son banc `test-lecture-sure.js` qui
+rejoue les neuf occurrences réelles — 17 assertions, 0 échec.
+
+🔑 **LE POINT QUI A DEMANDÉ LE PLUS DE RÉFLEXION, ET C'EST LUI QUI FAIT TENIR LA GARDE : « lever
+quand une requête rend 0 » serait FAUX, et contourné dans la journée.** Un set sans carte, une file
+sans unité en attente, un reste vide sont des zéros JUSTES et fréquents. Une garde qui crie sur eux
+se fait retirer, pas satisfaire (§25).
+**Ce qui sépare les neuf défauts des zéros légitimes n'est pas le résultat, c'est le DÉNOMINATEUR :
+tous les neuf ont la forme « une population non vide, et une intersection VIDE avec elle ».**
+552 documents dans `collecte_etat`, et ma clé en apparie 0. 42 sets refusés, et 0 portent le champ
+que je lis. Un export de module qui existe, et le nom demandé n'y est pas.
+🔴 **Zéro sur zéro est normal. Zéro sur 552 est une clé fausse.** C'est la seule frontière qui ne se
+règle pas — et c'est pour ça qu'elle est tenable. **Au-dessus de zéro, `apparier` AVERTIT et ne lève
+pas** : un appariement à 3 % est un jugement, et un jugement qui s'arme tout seul devient un seuil
+qu'on baisse pour faire passer un cas (§23).
+
+🔑 **CE QUE L'OUTIL FAIT ET QU'UNE RELECTURE NE PEUT PAS FAIRE : IL IMPRIME CE QUI EXISTE À CÔTÉ DE
+CE QU'ON A DEMANDÉ.** « `TABLE_SETS` n'existe pas ; clés disponibles : TABLE, TABLE_AUTO,
+TABLE_SANS_PAGE » ne demande aucune sagacité. **C'est la règle « tout outil de mesure imprime son
+dénominateur » (§3) rendue MÉCANIQUE** : le dénominateur ne s'imprime plus à côté du résultat en
+espérant que quelqu'un le lise — il est calculé, et il LÈVE. Quatre fonctions, une par forme de vide :
+`champ` (un export, un champ d'objet) · `champSur` (un champ sur une population — le dénominateur est
+le nombre de documents) · `apparier` (deux populations, et c'est la plus rentable : elle attrape
+quatre des neuf) · `lireMongo` (un filtre, et le dénominateur est un `countDocuments({})`).
+
+⚠️ **L'ÉCHAPPATOIRE EST DÉLIBÉRÉE, ET ELLE DOIT RESTER BON MARCHÉ : `{ videAutorise: '<raison>' }`.**
+Une garde sans sortie de secours se fait retirer, et le contournement qu'on improvise sous la
+pression est toujours pire que celui qu'on a prévu. Mais **`videAutorise: true` est REFUSÉ** : la
+raison doit être une phrase écrite, et elle est IMPRIMÉE quand le vide survient. **Le coût du
+contournement n'est pas un effort, c'est une phrase qu'on doit pouvoir écrire — et c'est exactement
+le moment où l'on s'aperçoit qu'on n'en a pas.**
+
+🕳️ **DETTE NOMMÉE, ET ELLE EST LA MOITIÉ DU TRAVAIL : le module existe, il n'est pas encore
+OBLIGATOIRE.** Le dépôt compte des dizaines de lectures écrites avant lui. Les convertir toutes d'un
+coup serait un grand diff non mesuré ; la règle posée est donc : **toute sonde NEUVE passe par
+`lecture-sure`, et toute sonde ANCIENNE qui rend un zéro s'y convertit AVANT qu'on croie son zéro.**
+⚠️ C'est le §21 bis en embuscade — une règle appliquée à la moitié d'un dépôt est une règle qui
+diverge. Écrit ici pour qu'on sache que la conversion est en cours et non faite.
+
+---
+
 ## 40. LE PLANCHER RÉEL EST 66 PRODUITS — ET LES WCD N'AVAIENT JAMAIS ÉTÉ ÉNUMÉRÉS — 2026-09-21
 
 **La question posée était : sur les 15 598 produits manquants, combien n'ont de page chez AUCUNE
@@ -1497,10 +1592,37 @@ nommé, c'est une STATISTIQUE différente, et ça suffit à fabriquer un refus.
 appariement code↔slugSet entre deux collections qui ne partagent pas leur clé. **Quatre vides parfaits
 d'affilée sur un seul sujet.** Aucun n'a levé d'erreur ; chacun rendait un tableau plausible.
 
+🔑 **ET LA RÈGLE QUE LA MÉDIANE DONNE, ÉCRITE POUR ÊTRE REPRISE AILLEURS : JUGER UN ENSEMBLE SUR SON
+PIRE ÉLÉMENT, C'EST LE REFUSER SUR SON BRUIT.** Une liste de 150 fichiers contient toujours une
+miniature, un placeholder, une vignette de navigation. Un critère qui prend le MINIMUM ne mesure pas
+la qualité du set, il mesure la présence d'un accident — et il devient d'autant plus sévère que
+l'échantillon est GRAND, ce qui est l'inverse de ce qu'on veut. **Un agrégat sur une population se
+choisit d'après ce qu'on décide : refuser un SET demande une statistique de masse (médiane), écarter
+un FICHIER demande le fichier lui-même.** Les deux gestes existent déjà dans le collecteur, aux
+lignes 135 et 143 ; c'est ma sonde qui confondait les deux.
+
+### 🔑 ET LE REFUS DE DESCENDRE À 340 EST LA VRAIE LEÇON DE CE PARAGRAPHE — 2026-09-21
+
 🕳️ **CE QUI RESTE REFUSÉ, NOMMÉ** : Supreme Victors (médiane 245), Rising Rivals (245), POP-3 (266) —
-et **Secret Wonders + Platinum à 343 px, sept pixels sous le seuil**. ⚠️ Descendre à 340 pour les
-prendre serait exactement le geste que ce § dénonce : bouger un nombre pour sauver deux lignes. On les
-écrit, on ne les rattrape pas.
+et **Secret Wonders + Platinum à 343 px, sept pixels sous le seuil**.
+
+> # **UN SEUIL QU'ON BOUGE POUR SAUVER DEUX CAS N'EST PLUS UN SEUIL.**
+
+**340 px se défendrait aussi bien que 350 dans l'absolu — c'est précisément ce qui rend le geste
+mauvais.** La valeur n'aurait pas été choisie sur ce qu'elle protège, elle aurait été choisie sur la
+liste des sets qu'on voulait dedans. Un seuil dérivé de ses propres refus ne décide plus rien : il
+enregistre une préférence et lui donne l'apparence d'une mesure. **Et l'opération est reproductible à
+l'infini** — deux lignes de plus à 331 px, et 330 se défendra tout aussi bien.
+
+🔑 **LA FORME EST CELLE DU §7, APPLIQUÉE À UN RÉGLAGE AU LIEU D'UNE ÉTIQUETTE : dériver le critère de
+ce qu'on veut qu'il produise le rend vrai par construction et invérifiable pour toujours.** La
+différence entre 480 → 350 et 350 → 340 n'est pas la taille du pas, c'est la DIRECTION DE LA
+JUSTIFICATION : 350 vient de la distribution des sources (les archives Bulbagarden servent le
+vintage occidental à cette largeur) et de l'usage (2,2× la vignette de 157 px) ; 340 ne viendrait que
+de Secret Wonders et Platinum.
+⚠️ **Le test, avant de toucher un nombre : puis-je énoncer la nouvelle valeur SANS nommer ce qu'elle
+fait passer ?** Si la seule justification disponible est une liste de cas, ce n'est pas un seuil
+qu'on ajuste, c'est une exception qu'on déguise en règle. **On les écrit, on ne les rattrape pas.**
 
 Le seuil de résolution des images était **560 px**, posé d'avance et jamais revu. Il a fait REFUSER
 **DEUX sets, pas un** : `DP5c` (20:35 UTC) et `DP2` (20:47 UTC), dont les originaux sont **tous deux à
@@ -1549,6 +1671,45 @@ aucun effet.
 commit antérieur à `9b4c0bb` a encore 560 : il relit les mesures en cache (500 px), refuse de
 nouveau **sans une seule requête**, et remet les deux sets en `refuse`. La remise en file ne vaut
 que si le worker a été redéployé après le changement de seuil — à vérifier, pas à supposer.
+
+### 🔴 CE PARAGRAPHE S'EST RÉALISÉ MOT POUR MOT LE LENDEMAIN, ET J'AVAIS CITÉ LE § EN L'ÉCRIVANT
+
+**Le 2026-09-21, j'ai abaissé le seuil à 350, remis 37 sets en file, et annoncé « la file contient
+39 unités ». Une heure plus tard : `attente×1 · refuse×52`. Les 37 étaient ressortis refusés,
+`refuse-resolution`, en 1 à 3 secondes chacun.**
+
+🔑 **ET LA PREUVE QUE CE N'EST PAS LE SEUIL QUI REFUSE TIENT EN UNE LIGNE DE LA MESURE : WP a un
+minimum de 353 px, une médiane de 388, et ZÉRO fichier sous 350.** Aucun critère à 350 — ni le
+minimum, ni la médiane, ni le filtrage par image — ne peut refuser ce set. GH, GC, MA, NDI, NR, JU,
+FO, SI sont dans le même cas. **En revanche les 36 sets refusés ont TOUS une médiane sous 480.**
+Le worker applique donc 480 : il tourne sur un commit antérieur, et il a refusé les 37 **sans une
+seule requête**, en relisant ses mesures en cache. `remettre-en-file.js` a écrit dans une base que
+le processus ne lit pas de la même façon.
+
+🔴 **LA FAUTE N'EST PAS D'AVOIR IGNORÉ LA RÈGLE, ELLE EST PIRE : `remettre-en-file.js` CITE CE §
+DANS SON EN-TÊTE.** J'ai écrit « la leçon de ce § appliquée » au-dessus d'un outil qui ne vérifiait
+pas la seule condition que le § pose. ⚠️ **Citer un paragraphe n'est pas l'appliquer, et c'est la
+forme la plus trompeuse d'erreur de ce dépôt** : le commentaire rend le code d'à côté plus crédible,
+pas plus correct (§21 bis). Le geste manquant tient en une question — *sur quel commit tourne le
+processus qui va lire ça ?* — et elle n'a pas de réponse dans le dépôt.
+
+⚠️ **ET L'INSTRUMENT QUI EXISTE DÉJÀ NE RÉPOND PAS À CETTE QUESTION.** `sources-deployees.js` imprime
+« sources de la version poussée : origin/main 00559af » : il compare au dernier commit **POUSSÉ**, ce
+qui est un autre fait. Poussé ≠ déployé. **Entre les deux il y a un redéploiement Render que
+personne ne mesure**, et c'est exactement l'intervalle où les deux sets de 2026-09-12 s'étaient
+déjà perdus.
+🔑 **CE QU'IL FAUDRAIT, ET C'EST PETIT : que le worker ÉCRIVE SON COMMIT dans le verrou global à
+chaque battement.** Un verrou dit déjà qui tient, sur quelle machine, depuis quand — il lui manque
+*avec quel code*. La question « ce refus a-t-il été pris sous la règle d'aujourd'hui ? » deviendrait
+lisible en base, au lieu de se déduire d'une distribution de largeurs. **Dette nommée, non faite.**
+
+✅ **ET CINQ SETS SONT QUAND MÊME PASSÉS — DP5c, DP2, N4, VS, EC1.** Ce sont les sets **artofpkm**,
+dont les mesures étaient à 500 et 593 px : au-dessus de 480 comme de 350, ils passent quel que soit
+le commit. Leur succès prouve que la remise en file elle-même fonctionne, et isole la cause au seul
+seuil du processus. 🕳️ Le sixième, **PCG2, reste refusé pour une AUTRE raison, et c'est la dette
+nommée dans `seuils-images.js`** : 3 mesures, minimum 162 px, et `collecteur-images.js` (artofpkm)
+refuse le set entier sur sa pire image. Deux causes distinctes dans une même liste de refus — c'est
+pour ça qu'un refus porte un motif et qu'on ne relit jamais une liste « au global ».
 
 ## 21 bis. Corrigé d'un côté, laissé de l'autre — le même défaut, deux fois
 
