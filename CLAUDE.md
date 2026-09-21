@@ -63,6 +63,53 @@ renégocie pas en cours de route.
 
 ---
 
+## 🔑 LES TROIS LEÇONS DE LA NUIT DU 2026-09-21 — TROIS FAÇONS DE MESURER À CÔTÉ
+
+> ### 1. « Un prédicat qui ne mord sur rien ne rend pas zéro : il rend TOUT. »
+>
+> Le §41 a été écrit contre le VIDE — une clé fausse, un champ mal nommé, une intersection à zéro sur
+> une population non vide. **Il n'attrape pas le PLEIN fabriqué.** Mon inventaire filtrait les
+> cartes-code par `p.name` ; le champ n'existe pas sur `numeros_cartes` (le libellé est
+> `nom || nomFr || nomEn || slug`). Le filtre n'a retiré AUCUNE ligne : 69 598 au lieu de 69 134, et
+> 80,7 % au lieu de 81,2 %.
+> 🔴 **UN `.filter()` DONT LE PRÉDICAT EST TOUJOURS FAUX NE LÈVE RIEN ET NE VIDE RIEN — il laisse
+> passer la population entière, ce qui est le repli le plus plausible de tous.** Un vide se remarque ;
+> un « tout » ressemble à un travail bien fait. ⚠️ Et le module ne garde que les lectures qu'on lui
+> CONFIE : `lecture-sure` ne voit pas ce qui se passe dans un `filter()` écrit à la main.
+> 🔑 **LA PARADE, ET ELLE EST MÉCANIQUE : un prédicat de production se RECOPIE de la production**
+> (ici `mesure-catalogue.js:24`, mot pour mot), **et tout compte se confronte à une mesure voisine
+> déjà faite avant d'être cru.** C'est ce 69 134 connu qui a démasqué le 69 598.
+> ⚠️ **Trois fois dans la même nuit, dans mes propres sondes** : `p.name` sur `numeros_cartes` ·
+> `images.set` (un **slug**) comparé à `impressions.expansion` (un **nom**), qui a fabriqué « 16 914
+> numéros non déductibles » · `codes_set.code` alors que le champ est **`codeSet`**, qui a rangé
+> 90 expansions sur 90 dans « même pas au catalogue appris », avec un aplomb parfait.
+
+> ### 2. « “Absent de la file” est un état de NOTRE travail, pas un fait sur la source. »
+>
+> **J'ai classé 4 530 produits et 73 sets en ATTEIGNABLE parce qu'ils n'avaient pas d'unité dans
+> `file_images`.** L'instrument qui décide — `--plan`, qui lit le wikitext archivé de chaque carte —
+> existait, coûtait **zéro requête**, et rend **0 fichier à collecter sur les 73**.
+> 🔴 **LE §40 AVAIT DÉJÀ NOMMÉ CE PIÈGE avec trois mots — « sans ligne », « refusée », « pas encore
+> collecté » — et j'en ai inventé un quatrième.** Une unité absente de la file dit que personne n'a
+> demandé le travail ; elle ne dit rien de ce que le travail rendrait. **La liste des mots interdits
+> n'est pas la parade : la parade est de LANCER l'instrument avant d'écrire le mot.**
+> 🔑 Et quand l'instrument est gratuit, ne pas l'avoir lancé n'a aucune excuse. La question n'est pas
+> *« ai-je le droit de conclure ? »* mais *« qu'est-ce qui, ici, répondrait pour de bon, et combien
+> ça coûte ? »*
+
+> ### 3. « Une règle n'est pas une constante : ta garde surveillait le nombre, le critère vivait ailleurs. »
+>
+> La garde du commit du worker vérifiait `collecte-cartes/seuils-images.js`. Ce fichier porte le
+> NOMBRE (350). **Le CRITÈRE qui s'en sert vit dans `collecteur-images.js`, et c'est lui qui a
+> changé** : un set se refusait sur le MINIMUM de ses trois mesures, il se refuse désormais sur leur
+> MÉDIANE. Une remise en file faite ce matin aurait trouvé la garde **verte**, le seuil n'ayant pas
+> bougé, et le worker aurait refusé PCG2 une troisième fois.
+> 🔑 **LE TEST EN ÉCRIVANT UNE GARDE : si la règle changeait demain, QUEL FICHIER bougerait ?** Si ce
+> n'est pas celui que la garde surveille, la garde répond à une question plus étroite que celle
+> qu'elle a l'air de poser. Elle surveille désormais les trois fichiers, chacun imprimé séparément.
+
+---
+
 ## 🔑 LES TROIS LEÇONS DU SOIR DU 2026-09-21 — TROIS FAÇONS DE SE CROIRE COUVERT
 
 > ### 1. « Un outil qui interroge UNE source et nomme son résultat “aucune” ment par construction. »
@@ -453,6 +500,55 @@ voie « sans page », qui joint par l'expansion déclarée sur la carte et n'én
 inquiétante : **elle est muette sur des lignes qui ne passent pas par une Setlist**, donc qui ne
 peuvent pas être admises sur des liens rouges. ⚠️ Une limite qu'on écrit pour être honnête doit être
 remesurée comme les autres : celle-ci était honnête et surdimensionnée.
+
+---
+
+## 47. TROIS DÉFAUTS TROUVÉS EN PRÉPARANT DEUX ÉCRITURES — 2026-09-21
+
+> ### 🔴 1. UN VERROU EXPIRÉ N'EST PAS UN DÉTENTEUR — troisième défaut de la MÊME garde
+>
+> La garde du commit prenait le verrou le plus RÉCENT **sans vérifier qu'il était encore FRAIS**. Un
+> processus local à moi, tué par un délai d'outil 48 minutes plus tôt, n'avait rien libéré (§17 : « un
+> processus tué ne libère rien ») — et **ce mort a masqué le worker** : la garde répondait « processus
+> local » alors que le worker venait d'être redéployé.
+> 🔑 **LE MORT LE PLUS RÉCENT L'EMPORTAIT SUR LE VIVANT**, et la direction de l'échec est la même que
+> les deux fois précédentes : `local` n'est pas bloquant, donc la garde laissait enfiler **sans avoir
+> jamais lu le worker**. ⚠️ Trois défauts, trois jours, sur quinze lignes de code, et les trois vers
+> le PASSANT. Une garde se teste en la faisant dire NON une fois, sur un cas fabriqué (§41).
+> La fraîcheur se mesure comme le verrou la mesure lui-même : trois battements manqués, 3 min.
+
+> ### 🔴 2. `backup-collections.js` NE SAIT PAS SAUVEGARDER LA BASE QUE NOUS ÉCRIVONS
+>
+> Il passe par `connecterMongo`, qui ouvre la base de PRODUCTION (`test`). **La base `cartes` vit sur
+> une autre grappe** — c'est-à-dire exactement la base que toute la collecte écrit. Lancé
+> `--base=cartes`, il répond « collection(s) introuvable(s) » ; **sans y penser, on croit être
+> couvert.** C'est le défaut du `--collections` par défaut (§3), une marche plus haut : là c'était le
+> PÉRIMÈTRE qui trompait, ici c'est la BASE.
+> ✅ `sauvegarder-champs-cartes.js` : il nomme sa base, exporte **le champ qu'on s'apprête à écrire**
+> avec son `_id` (restauration = un `$set` du champ sauvé, rien d'autre), imprime son dénominateur et
+> **lève si zéro document porte le champ**. 15 264 documents `cartes` (images, sets) et 38 795 lignes
+> `images` (carteId, preuve) sauvés avant les deux écritures du jour.
+> ⚠️ **Une sauvegarde qu'on croit avoir est pire que pas de sauvegarde : elle ne se découvre fausse
+> qu'au moment de restaurer.**
+
+> ### ✅ 3. LA PASSE `cartes.sets` A ÉTÉ REFUSÉE PAR SON PROPRE CONTRÔLE — et c'était le bon résultat
+>
+> Premier critère essayé : « la carte reçoit le slug si elle déclare une impression dont l'expansion
+> est celle que nomme la ligne ». Rejoué sur les **494 sets dont `cartes.sets` est DÉJÀ peuplé**, il
+> **ajoutait 2 196 appartenances et en ratait 8 484**, et donnait **68 sets à une seule Énergie de
+> base**. Il ne décrit pas l'appartenance à un set, il décrit « cette carte a été imprimée quelque
+> part sous ce nom ».
+> 🔑 **LE CRITÈRE JUSTE ÉTAIT DÉJÀ EN BASE, ET IL N'ÉTAIT PAS À INVENTER : `cartes_produits`.** Chaque
+> ligne y dit « ce produit, qui appartient au set S, est cette carte » — c'est le résultat de la
+> jointure du TEXTE, celle qui a produit les fiches. Rejoué sur les mêmes 494 sets : **1 ajout,
+> 2 382 manques**. Les manques sont attendus et bénins (la Setlist connaît des cartes qu'aucun produit
+> Cardmarket ne vend) ; **pour poser un slug là où il n'y en a AUCUN, un sous-ensemble du vrai est
+> exactement ce qu'on veut.**
+> ⚠️ **L'unique ajout a été OUVERT, pas compté** (§22) : « Basic Fire Energy », carte 13682, déjà
+> membre de 43 sets, lien `preuve: 'set+nom'` vers un produit de `Beginning-Set`. Juste. Il est
+> désormais **borné par un nombre énoncé d'avance** dans le code (`AJOUTS_ACCEPTES = 1`) : au-delà,
+> l'écriture refuse. C'est la mécanique de `videAutorise` (§41) — le coût du contournement n'est pas
+> un effort, c'est une phrase qu'on doit pouvoir écrire.
 
 ---
 

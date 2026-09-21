@@ -99,6 +99,41 @@ function deciderLangue(s, logo) {
     console.log(`\n   ${retenus.length} sets pour ${fichiers.length} fichiers distincts (un logo peut servir à plusieurs sets : demi-sets, Additionals)`);
     if (!ecrire) { console.log(`\n   (décision seule — relancer avec --ecrire pour télécharger et écrire)`); await fermer(); return; }
 
+    // ════════════════════════════════════════════════════════════════════════════
+    // 🔴 LES REFUS S'ÉCRIVENT, ET ILS S'ÉCRIVENT AVANT LES SUCCÈS — 2026-09-21
+    // ════════════════════════════════════════════════════════════════════════════
+    // Cet outil décidait, imprimait sa raison dans un terminal, et n'écrivait que ce qu'il retenait.
+    // Résultat mesuré : **232 sets publiés sans logo, et ZÉRO motif lisible en base.** Impossible de
+    // répondre à « la source a-t-elle été cherchée, ou est-elle absente ? » — la seule question que
+    // le §36 pose devant une limite.
+    // 🔑 UN REFUS NON ÉCRIT EST INDISTINGUABLE D'UN TRAVAIL JAMAIS FAIT. C'est le §21 n°7 (« un
+    // compte qui décide et qui ne vit que dans un log n'est pas encore une mesure ») déplacé du
+    // COMPTE au REFUS, et c'est pire : un compte se recalcule, un refus est une DÉCISION DATÉE, et
+    // une décision qu'on ne peut pas relire ne se rouvre jamais (§23).
+    // ⚠️ ILS S'ÉCRIVENT EN PREMIER, parce qu'ils ne coûtent aucune requête : si le téléchargement
+    // échoue ou si le verrou n'est jamais obtenu, la base porte quand même la cause de chaque refus.
+    let nRefus = 0;
+    for (const r of refuses) {
+        await cx.db.collection('sets').updateOne({ _id: r.s._id }, {
+            $set: { logoRefus: { motif: r.motif, fichier: r.logo ?? null, le: new Date(), instrument: 'collecter-logos-sets.js', source: 'bulbapedia:setlogo' } },
+            $unset: { logo: 1 }                       // un refus RETIRE un logo devenu faux : sinon la base garde un visuel que la règle d'aujourd'hui rejette
+        });
+        nRefus++;
+    }
+    // Et le PENDANT, qui manquait aussi : un set retenu ne doit pas garder le refus d'hier.
+    const nNettoyes = (await cx.db.collection('sets').updateMany(
+        { _id: { $in: retenus.map(r => r.s._id) }, logoRefus: { $exists: true } }, { $unset: { logoRefus: 1 } })).modifiedCount;
+    console.log(`\n   ✍️  ${nRefus} refus écrits avec leur motif · ${nNettoyes} refus périmés retirés des sets désormais retenus`);
+    // ⚠️ Les sets SANS page archivée n'apparaissent ni dans `retenus` ni dans `refuses` : ils n'ont
+    // pas été jugés, et écrire « refusé » sur eux serait mentir. Ils portent leur propre cause.
+    const codesJuges = new Set([...retenus, ...refuses].map(r => String(r.s._id)));
+    const nonJuges = sets.filter(s => !codesJuges.has(String(s._id)));
+    if (nonJuges.length) {
+        await cx.db.collection('sets').updateMany({ _id: { $in: nonJuges.map(s => s._id) } },
+            { $set: { logoRefus: { motif: 'aucune page Bulbapedia archivée : la source n\'a pas pu être interrogée', fichier: null, le: new Date(), instrument: 'collecter-logos-sets.js', source: 'bulbapedia:setlogo' } } });
+        console.log(`   ✍️  ${nonJuges.length} sets sans page archivée marqués « jamais interrogés » — « pas cherché » et « absent » ne sont pas la même phrase (§36)`);
+    }
+
     // ---- le verrou global : on frappe Bulbapedia, donc la promesse s'applique (§17) ----
     let arret = false;
     const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: VERROU_MS, surInsertion: { phase: 'logos' }, surPerte: () => { arret = true; }, nom: 'verrou global bulbapedia (logos)' });
@@ -136,13 +171,27 @@ function deciderLangue(s, logo) {
             objets.set(f, { cleR2: cleObjet, w: info.width ?? null, h: info.height ?? null, urlOriginal: info.url, sha1: info.sha1 ?? null });
             n++;
         }
-        let ecrits = 0;
+        let ecrits = 0, sansFichier = 0;
         for (const r of retenus) {
             const o = objets.get(r.logo);
-            if (!o) continue;
+            // 🔴 UN SET RETENU DONT LE FICHIER NE SE TÉLÉCHARGE PAS TOMBAIT ENTRE LES DEUX ÉCRITURES :
+            // son `logoRefus` venait d'être retiré (il est retenu) et aucun `logo` ne le remplace —
+            // il finissait sans logo ET SANS CAUSE, c'est-à-dire exactement l'état qu'on vient de
+            // supprimer partout ailleurs. Mesuré le 2026-09-21 : 3 sets publiés (CBB2C, CSM2.1C,
+            // MCD12), dont les fichiers n'ont aucune `imageinfo` chez Bulbagarden.
+            // 🔑 Une décision a TROIS issues, pas deux — retenu, refusé, et « retenu mais
+            // irréalisable » — et c'est toujours la troisième qui n'est écrite nulle part.
+            if (!o) {
+                sansFichier++;
+                await cx.db.collection('sets').updateOne({ _id: r.s._id }, {
+                    $set: { logoRefus: { motif: `le fichier « ${r.logo} » est nommé par l'infobox mais introuvable chez Bulbagarden (aucune imageinfo)`, fichier: r.logo, le: new Date(), instrument: 'collecter-logos-sets.js', source: 'bulbapedia:setlogo' } }
+                });
+                continue;
+            }
             await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() } } });
             ecrits++;
         }
+        if (sansFichier) console.log(`   ✍️  ${sansFichier} set(s) retenu(s) dont le FICHIER est introuvable — cause écrite, pas laissée vide`);
         const relu = await cx.db.collection('sets').countDocuments({ 'logo.cleR2': { $nin: [null, ''] } });
         console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans imageinfo) · ÉCRITS : ${ecrits} sets · relu en base : ${relu} sets portent un logo`);
     } finally { await verrou.rendre(); console.log(`🔓 verrou rendu.`); }

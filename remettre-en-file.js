@@ -72,9 +72,22 @@ async function etatDuWorker(cx) {
     // « aucun détenteur », elle doit LEVER. C'est `lireMongo` qui le fait, et c'est tout l'objet du §41.
     await lireMongo(col, {}, { nom: COLLECTION_VERROUS });
     const verrous = await col.find({ _id: /__collecteur__$/ }).toArray();
-    // On prend le détenteur le plus FRAIS, quelle que soit la source : c'est lui qui travaille.
-    const v = verrous.map(d => d.verrou).filter(x => x && x.pid != null)
-        .sort((a, b) => new Date(b.depuis) - new Date(a.depuis))[0] || null;
+    // 🔴 UN VERROU EXPIRÉ N'EST PAS UN DÉTENTEUR — corrigé le 2026-09-21, troisième défaut de cette
+    // même garde en deux jours. Elle prenait le verrou le plus RÉCENT sans vérifier qu'il était
+    // encore FRAIS : un processus local tué 48 minutes plus tôt, qui n'avait rien libéré (§17, « un
+    // processus tué ne libère rien »), a masqué le worker et fait répondre « processus local » alors
+    // que le worker venait d'être redéployé. **Le mort le plus récent l'emportait sur le vivant.**
+    // 🔑 Et la direction de l'échec est la même que les deux fois précédentes : vers le PASSANT.
+    // `local` n'est pas bloquant, donc la garde laissait enfiler sans jamais avoir lu le worker.
+    // La fraîcheur se mesure comme le verrou lui-même la mesure : trois battements manqués (§17).
+    const FRAIS_MS = 3 * 60 * 1000;
+    const maintenant = Date.now();
+    const tous = verrous.map(d => d.verrou).filter(x => x && x.pid != null);
+    const frais = tous.filter(x => x.depuis && maintenant - new Date(x.depuis).getTime() < FRAIS_MS);
+    const perimes = tous.length - frais.length;
+    if (perimes) console.log(`   ⚪ ${perimes} verrou(x) EXPIRÉ(s) ignoré(s) — un détenteur qui ne bat plus n'en est pas un : ${tous.filter(x => !frais.includes(x)).map(x => `pid ${x.pid} sur ${x.hote} (${Math.round((maintenant - new Date(x.depuis).getTime()) / 60000)} min)`).join(' · ')}`);
+    // Parmi les VIVANTS, le plus frais : c'est lui qui travaille.
+    const v = frais.sort((a, b) => new Date(b.depuis) - new Date(a.depuis))[0] || null;
     // Chaque règle est vérifiée SÉPARÉMENT et chacune s'imprime : un « ✅ » global qui cache un
     // fichier en retard est exactement la garde verte et fausse d'hier.
     const resultats = REGLES.map(f => ({ f, r: workerContient(v, f) }));
