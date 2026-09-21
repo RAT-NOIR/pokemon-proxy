@@ -21,6 +21,29 @@ const mongoose = require('mongoose');
 const BASE_PRODUCTION = 'test';
 const BASE_BAC_A_SABLE = 'test_scratch';
 
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// 🔴 LE DÉFAUT DU 2026-09-21 : ON VÉRIFIAIT LE NOM DE LA BASE, JAMAIS LA GRAPPE
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Ce module ouvrait TOUJOURS `MONGODB_URI` — la grappe de production — quelle que soit la base
+// demandée, puis contrôlait que `databaseName` valait bien ce qu'on avait demandé. Ce contrôle
+// passe toujours : **MongoDB crée une base à la demande**, donc `--base=cartes` ouvrait une base
+// VIDE, du bon nom, sur la MAUVAISE grappe. `backup-collections.js` répondait alors « collection(s)
+// introuvable(s) », c'est-à-dire qu'il accusait la collection d'un défaut de CONNEXION.
+// ⚠️ **La base `cartes` — celle que toute la collecte écrit — n'a donc jamais pu être sauvegardée,
+// et l'outil ne le disait pas.** Une sauvegarde qu'on croit avoir est pire que pas de sauvegarde :
+// elle ne se découvre fausse qu'au moment de restaurer.
+//
+// 🔑 UNE VÉRIFICATION QUI PORTE SUR CE QUI EST FACILE À VÉRIFIER N'EST PAS UNE VÉRIFICATION. Le nom
+// se lit sur la connexion ; la grappe demande de savoir OÙ la base est censée vivre. C'est cette
+// table-là qui manquait, et sans elle le contrôle ne pouvait que se confirmer lui-même.
+//
+// LA TABLE EST DONC LA GARDE : une base qui n'y figure pas est REFUSÉE, jamais devinée.
+const BASES = Object.freeze({
+    [BASE_PRODUCTION]: 'MONGODB_URI',        // le catalogue Cardmarket appris, lecture seule
+    [BASE_BAC_A_SABLE]: 'MONGODB_URI',       // le bac à sable, même grappe
+    cartes: 'MONGODB_CARTES_URI'             // la base de collecte — AUTRE grappe (collecte-cartes/garde.js)
+});
+
 /**
  * Résout la base demandée, sans jamais deviner.
  * Ordre de priorité : --base=<nom> en ligne de commande, puis MONGODB_BASE (.env).
@@ -67,7 +90,27 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
         process.exit(1);
     }
 
-    await mongoose.connect(process.env.MONGODB_URI, { dbName: attendue });
+    // ── LA GRAPPE, AVANT LA BASE. Une base inconnue de la table est REFUSÉE : elle ne « n'existe
+    //    pas », elle n'a pas d'adresse chez nous, et c'est une phrase différente (§36).
+    const variable = BASES[attendue];
+    if (!variable) {
+        console.error(`\n❌ REFUS : je ne sais pas OÙ vit la base "${attendue}".`);
+        console.error(`   Ce n'est pas « elle est vide » ni « la collection est introuvable » : je n'ai`);
+        console.error(`   pas son adresse. M'y connecter quand même créerait une base VIDE du bon nom`);
+        console.error(`   sur la grappe de production, et tout contrôle portant sur le NOM passerait.`);
+        console.error(`\n   Bases connues :`);
+        for (const [b, v] of Object.entries(BASES))
+            console.error(`     ${b.padEnd(14)} → ${v}${process.env[v] ? '' : '   🔴 absente du .env'}`);
+        console.error(`\n   Pour en ajouter une : une ligne dans BASES de mongo-connexion.js, pas un --base= de plus.`);
+        process.exit(1);
+    }
+    if (!process.env[variable]) {
+        console.error(`\n❌ REFUS : la base "${attendue}" vit derrière ${variable}, absente du .env.`);
+        console.error(`   Aucune opération n'a été effectuée, et surtout : aucune connexion de repli.`);
+        process.exit(1);
+    }
+
+    await mongoose.connect(process.env[variable], { dbName: attendue });
     const reelle = mongoose.connection.db.databaseName;
 
     // Vérification malgré dbName : une URI contenant déjà un chemin de base, une
@@ -76,6 +119,18 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     if (reelle !== attendue) {
         console.error(`❌ ARRÊT : base connectée "${reelle}" alors que "${attendue}" était demandée.`);
         console.error("   Aucune opération n'a été effectuée.");
+        await mongoose.disconnect();
+        process.exit(1);
+    }
+
+    // 🔑 ET LE CONTRÔLE QUI AURAIT SUFFI À LUI SEUL, PARCE QU'IL NE PORTE PAS SUR UN NOM : une base
+    // RÉELLE de ce projet n'est jamais vide. Zéro collection veut dire qu'on vient de la faire
+    // naître en s'y connectant — la signature exacte d'une grappe fausse.
+    const nCollections = (await mongoose.connection.db.listCollections().toArray()).length;
+    if (!nCollections) {
+        console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} ne contient AUCUNE collection.`);
+        console.error(`   Une base vide n'est pas un résultat : MongoDB la crée à la demande, donc c'est`);
+        console.error(`   le signe qu'on n'est pas sur la bonne grappe. Aucune opération n'a été effectuée.`);
         await mongoose.disconnect();
         process.exit(1);
     }
@@ -104,4 +159,4 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     return reelle;
 }
 
-module.exports = { connecterMongo, baseDemandee, BASE_PRODUCTION, BASE_BAC_A_SABLE };
+module.exports = { connecterMongo, baseDemandee, BASES, BASE_PRODUCTION, BASE_BAC_A_SABLE };

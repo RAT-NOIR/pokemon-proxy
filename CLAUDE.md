@@ -503,6 +503,145 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 51. UNE GARDE SE CONÇOIT PAR CE QU'ELLE AUTORISE — 2026-09-21
+
+> # 🔴 TROIS ÉCHECS, TROIS CAUSES, UNE SEULE DIRECTION. CE N'EST PLUS UN ACCIDENT.
+
+**La garde du commit du worker a échoué VERS LE PASSANT trois fois en trois jours :**
+
+| jour | la cause | ce qu'elle a laissé passer |
+|---|---|---|
+| 19/09 | la collection interrogée était `etatimages` — le nom du MODÈLE mongoose | tout, en permanence |
+| 20/09 | elle surveillait `seuils-images.js`, **le NOMBRE**, quand le CRITÈRE vit ailleurs | un worker sans la règle de la médiane |
+| 21/09 | elle prenait le verrou le plus RÉCENT sans vérifier qu'il était FRAIS | un processus mort masquait le vivant |
+
+🔑 **TROIS CAUSES INDÉPENDANTES NE DONNENT PAS TROIS FOIS LA MÊME DIRECTION PAR HASARD. La cause
+commune est dans la FORME : la garde énumérait ce qui BLOQUE, et tout le reste passait.** Un défaut,
+quel qu'il soit, sort forcément de cette liste — donc tout défaut, quel qu'il soit, laisse passer.
+**Une garde énumérée par ses refus a un défaut PAR DÉFAUT, et c'est d'être ouverte.**
+
+> ## **UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE, JAMAIS PAR CE QU'ELLE REFUSE.**
+
+✅ **RETOURNÉE : un seul chemin mène à « passe »** — une balise fraîche, UNE SEULE, dont le commit
+contient les TROIS règles. Verrou ambigu, détenteur périmé, collection vide, commit inconnu, état
+non prévu, **exception** : tout cela bloque et le DIT. ⚠️ C'est la règle d'énumération du §25
+appliquée à une garde : **on énumère le petit ensemble STABLE (ce qui est sûr), jamais le grand
+ensemble OUVERT (ce qui est douteux)** — la liste des façons d'être douteux s'allonge avec le temps
+et personne ne revient la compléter.
+
+✅ **ET LE BANC EXISTE, PARCE QUE MA PROPRE RÈGLE L'EXIGEAIT SANS QUE JE L'APPLIQUE.** Le §41 dit :
+*« le test n'est pas ‹ refuse-t-elle quand il faut ? › mais ‹ SAIT-ELLE refuser ? › »*.
+`test-garde-worker.js` la fait crier **sept fois sur sept états fabriqués** et passer **une seule
+fois** — collection vide · aucune balise · balise périmée · deux balises sur deux commits · balise
+sans commit · commit `local` · commit inconnu du dépôt. **8 passés, 0 en échec.** Aucune base n'est
+ouverte : la garde reçoit une fausse connexion, ce qui permet de fabriquer les états qu'on ne sait
+pas provoquer en vrai.
+
+### 🔑 ET LA MOITIÉ QUI MANQUAIT : UN VERROU ET UNE BALISE NE RÉPONDENT PAS À LA MÊME QUESTION
+
+**« Échouer fermé » aurait rendu la garde inutilisable, et la raison est instructive : le commit du
+worker était lu dans le VERROU DE SOURCE, et un worker dont la file est vide REND son verrou pour
+dormir dix minutes** (`collecteur-images.js`, la boucle) — parce qu'un dormeur ne frappe personne et
+n'a donc rien à protéger. **Le seul moment où le worker publiait son commit était celui où il
+travaillait, c'est-à-dire exactement le moment où l'on ne remplit pas la file.**
+🔴 **UN VERROU DIT ‹ QUI A LE DROIT DE FRAPPER LA SOURCE MAINTENANT › — il DOIT disparaître au
+repos. UNE BALISE DIT ‹ QUEL CODE TOURNE ICI › — elle doit vivre tant que le processus vit.** Le
+premier protège un tiers, la seconde répond à une question sur NOUS. Les confondre, c'est ce qui a
+coûté trois jours. ✅ `collecte-cartes/balise-worker.js` : elle bat à chaque tour de boucle ET
+pendant le sommeil, et **l'absence du champ `commit` reste l'information** (§23).
+
+---
+
+## 50. LA SAUVEGARDE VÉRIFIAIT LE NOM DE LA BASE, JAMAIS LA GRAPPE — 2026-09-21
+
+**`mongo-connexion.js` ouvrait TOUJOURS `MONGODB_URI` — la grappe de production — quelle que soit la
+base demandée, puis contrôlait que `databaseName` valait bien celle-ci. Ce contrôle passe toujours :
+MongoDB crée une base à la demande.** `--base=cartes` ouvrait donc une base VIDE, du bon nom, sur la
+MAUVAISE grappe, et `backup-collections.js` répondait « collection(s) introuvable(s) » — **il
+accusait la collection d'un défaut de CONNEXION**.
+
+> 🔴 **LA BASE `cartes` — CELLE QUE TOUTE LA COLLECTE ÉCRIT — N'A JAMAIS PU ÊTRE SAUVEGARDÉE PAR
+> L'OUTIL GÉNÉRIQUE, ET L'OUTIL NE LE DISAIT PAS.**
+
+🔑 **UNE VÉRIFICATION QUI PORTE SUR CE QUI EST FACILE À VÉRIFIER N'EST PAS UNE VÉRIFICATION.** Le nom
+se lit sur la connexion ; la grappe demande de savoir OÙ la base est censée vivre. **C'est cette
+table-là qui manquait, et sans elle le contrôle ne pouvait que se confirmer lui-même.**
+
+✅ **CORRIGÉ AU MOTIF, PAS AU CAS.** `mongo-connexion.js` porte désormais `BASES = { test →
+MONGODB_URI, test_scratch → MONGODB_URI, cartes → MONGODB_CARTES_URI }`. **Une base absente de cette
+table est REFUSÉE** — « je ne sais pas OÙ elle vit » n'est ni « elle est vide » ni « la collection
+est introuvable », et les trois phrases ne se traitent pas pareil (§36). Deux gardes, pas une :
+1. la base doit figurer dans la table, et sa variable d'environnement doit exister ;
+2. **une base RÉELLE de ce projet n'est jamais vide** — zéro collection veut dire qu'on vient de la
+   faire naître en s'y connectant, la signature exacte d'une grappe fausse. Ce second contrôle
+   aurait suffi seul, **parce qu'il ne porte pas sur un nom.**
+
+### 🕳️ QUELLES ÉCRITURES ONT EU LIEU SANS VRAIE SAUVEGARDE — la réponse est : TOUTES celles sur `cartes`
+
+**L'outil générique n'ayant jamais pu atteindre cette base, aucune écriture de collecte n'a jamais
+été couverte par lui.** Ce qui existe, ce sont des exports PARTIELS faits à la main par les scripts
+de réparation eux-mêmes — 11 fichiers ciblés du 15 au 19/09, plus un `cartes.json` complet du 21/09.
+Les épisodes d'écriture de masse sur `cartes`, avec ce qu'ils avaient :
+
+| § | l'écriture | sauvegarde ? |
+|---|---|---|
+| §19 (12/09) | `cartes.image` → `cartes.images[]`, `$unset` de l'ancien champ, 610 cartes | 🔴 **aucune** |
+| §26 (12/09) | `rapatrier-noms-sets.js`, 38 sets | 🔴 **aucune** |
+| §32 (19/09) | `detacher-jointures-fausses.js` — 1 993 lignes fausses, 279 produits | ⚠️ partielle, faite par le script |
+| §21 bis (19/09) | la clé `cleNumero` sur les images — 15 visuels détachés | ⚠️ partielle |
+| §31 (20/09) | `retirer-collecte-set.js` sur LED — 29 jointures, 15 produits perdent leur seule carte | ⚠️ partielle, faite par le script |
+| §35 (20/09) | les symboles, 153 sets · les logos, 221 sets | 🔴 **aucune** |
+| §26 bis (21/09) | `rapatrier-noms-fr.js`, 135 sets | 🔴 **aucune** |
+
+⚠️ **Rien n'a été perdu — ce n'est pas le sujet.** Le sujet est qu'aucune de ces opérations n'était
+rattrapable, et que **le seul outil censé le garantir répondait par un message sur les collections**.
+✅ `sauvegarder-champs-cartes.js` couvre le geste fin (le CHAMP qu'on s'apprête à écrire, avec son
+`_id` : restauration = un `$set`, rien d'autre) ; `backup-collections.js --base=cartes` couvre
+désormais le gros. **Les deux ont servi aujourd'hui, avant les deux écritures accordées.**
+
+---
+
+## 49. LES WCD : LA ROUTE EST PLUS COURTE QUE CE QUE LE §40 ANNONÇAIT — 2026-09-21
+
+**Le §40 décrivait une route en deux moitiés : lire `decklist/entry` sur les ~90 pages de decks de
+Bulbapedia, et le rapprocher du slug Cardmarket. Mesuré : LA MOITIÉ BULBAPEDIA N'EST PAS
+NÉCESSAIRE.** Le slug Cardmarket porte à lui seul le tirage d'origine, et il suffit.
+
+**Dénominateur : 1 956 produits, 20 expansions `WCD-*`. Zéro requête, tout en base.**
+
+| | produits | |
+|---|---|---|
+| slugs de forme `WCD<aa><CODE>-<n°>` | **1 735** | `Trapinch-Lv9-WCD09SW-115`, `Zapdos-WCD24PGO-029` |
+| → **désignent UNE carte de notre base** | **1 684 (97,1 %)** | ✅ la fiche est possible sans une requête |
+| → dont l'ambiguïté était sur le PRODUIT, pas la carte | 265 | plusieurs produits Cardmarket, **une seule carte** |
+| → **ambiguës au niveau de la CARTE** | **0** | 🔑 rien à départager |
+| le produit d'origine existe mais n'a pas de carte | 31 | trou de texte en amont, pas un défaut de clé |
+| code d'origine absent de `codes_set` (`Lot`, `DXR`, `HP`) | 19 | |
+| numéro absent du set d'origine | 1 | |
+
+🔑 **104 des 107 codes d'origine cités par les slugs (97,2 %) se retrouvent dans `codes_set`.** La
+clé est discriminante par construction, comme le §40 l'annonçait — mais elle est **entièrement de
+notre côté**. ⚠️ **C'est la question du haut du catalogue, une fois de plus : *qu'est-ce qu'on a
+DÉJÀ ?* avant *où chercher ?*** Une route « proposée, pas prouvée » a été mesurée deux fois moins
+chère que prévu, et le pas cher était le côté qu'on n'avait pas regardé.
+
+🕳️ **LES 221 SLUGS QUE LE MOTIF NE DÉCODE PAS, OUVERTS (§22) — et ils se séparent en deux :**
+· **99 en `WCD25###`** (WCD-2025 quasi entier) : l'année suivie d'un numéro à trois chiffres, **sans
+code de set d'origine**. Cardmarket numérote le deck lui-même. **C'est pour CEUX-LÀ, et eux seuls,
+que la moitié Bulbapedia du §40 reste nécessaire.**
+· **~110 en `WCD##DP`, `WCD##XY`, `WCD##RS`, `WCD##SUM`, `WCD##CL`, `WCD##BRS`** : un code d'origine
+**sans numéro** — ce sont des Énergies de base, que Cardmarket ne numérote pas. La clé par le numéro
+ne peut rien en dire ; il faudra le NOM dans le set d'origine, et le §22 a mesuré ce que vaut une
+clé par nom (31 gagnées contre 364 dérangées) — **à mesurer sur cette population-là avant d'y
+toucher.**
+· 5 slugs portent un nom de JOUEUR (`WCD-2024-Riley-McKay-Flutter-Devo-Gardevoir-WCD24`), 9 n'ont
+aucun `WCD`.
+
+⚠️ **RIEN N'EST ÉCRIT : c'est une mesure, pas une collecte.** Poser les 1 684 fiches demande des
+lignes de table `WCD-*` et une écriture sur `cartes_produits` — elle attend l'accord.
+
+---
+
 ## 48. LES 4 603 PRODUITS SANS LIGNE DE TABLE, DÉCOMPOSÉS — 2026-09-21
 
 **C'est la plus grosse cause « à instruire » du bloc de 10 924, et « aucune ligne de table » ne dit

@@ -39,6 +39,7 @@ const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
+const balise = require('./collecte-cartes/balise-worker');   // le commit du worker, au repos comme au travail
 
 // Les règles dont cette remise en file dépend ENTIÈREMENT : si le worker ne porte pas ces
 // fichiers-là, il rejugera chaque set sur l'ancienne règle, en relisant ses mesures en cache, sans
@@ -65,52 +66,99 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
 // PASSANT est pire qu'une garde absente — l'absence, au moins, ne rassure personne.
 const COLLECTION_VERROUS = 'collecte_images_etat';
 
-/** Le worker porte-t-il la règle ? Rend { bloque, phrase } — la phrase va au rapport, toujours. */
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// 🔴 TROIS ÉCHECS, TOUS DANS LE MÊME SENS : CE N'EST PLUS UN ACCIDENT, C'EST UNE CONCEPTION
+// ════════════════════════════════════════════════════════════════════════════════════════════════
+// Cette garde a échoué VERS LE PASSANT trois fois en trois jours, et chaque fois sur une cause
+// différente : une collection mal nommée (`etatimages` au lieu de `collecte_images_etat`), une règle
+// surveillée au mauvais endroit (le NOMBRE au lieu du CRITÈRE), un verrou MORT qui masquait le
+// vivant. Trois causes indépendantes ne peuvent pas donner trois fois la même direction par hasard.
+//
+// 🔑 LA CAUSE COMMUNE EST DANS LA FORME, PAS DANS LES BOGUES : la garde était écrite comme une liste
+// de cas QUI BLOQUENT, et tout le reste passait. Un défaut, quel qu'il soit, sort forcément de cette
+// liste — donc tout défaut, quel qu'il soit, laisse passer. **Une garde énumérée par ses refus a un
+// défaut par défaut, et c'est d'être ouverte.**
+//
+// ✅ ELLE EST DONC RETOURNÉE : elle énumère ce qui AUTORISE, et tout le reste bloque. Un seul chemin
+// mène à `bloque: false` — une balise fraîche, une seule, dont le commit contient les TROIS règles.
+// Verrou ambigu, détenteur périmé, collection vide, état non prévu, exception : tout cela BLOQUE et
+// le DIT. C'est la règle des états du §25 appliquée à une garde : **on énumère le petit ensemble
+// stable (ce qui est sûr), jamais le grand ensemble ouvert (ce qui est douteux)**, parce que la
+// liste des façons d'être douteux s'allonge avec le temps et que personne ne revient la compléter.
+//
+// ⚠️ L'ÉCHAPPATOIRE RESTE, ET ELLE EST NOMMÉE : `--malgre-le-commit`. Une garde sans sortie de
+// secours se fait retirer, pas satisfaire (§41). Elle est bruyante et laisse une trace.
+
+/**
+ * Le worker porte-t-il les règles ? Rend { bloque, phrase, etat }.
+ * 🔑 `bloque: false` est le cas PARTICULIER, et il n'a qu'un seul chemin. Tout le reste bloque.
+ */
 async function etatDuWorker(cx) {
-    const col = cx.db.collection(COLLECTION_VERROUS);
-    // Le dénominateur AVANT la question : une collection vide ou mal nommée ne peut pas répondre
-    // « aucun détenteur », elle doit LEVER. C'est `lireMongo` qui le fait, et c'est tout l'objet du §41.
-    await lireMongo(col, {}, { nom: COLLECTION_VERROUS });
-    const verrous = await col.find({ _id: /__collecteur__$/ }).toArray();
-    // 🔴 UN VERROU EXPIRÉ N'EST PAS UN DÉTENTEUR — corrigé le 2026-09-21, troisième défaut de cette
-    // même garde en deux jours. Elle prenait le verrou le plus RÉCENT sans vérifier qu'il était
-    // encore FRAIS : un processus local tué 48 minutes plus tôt, qui n'avait rien libéré (§17, « un
-    // processus tué ne libère rien »), a masqué le worker et fait répondre « processus local » alors
-    // que le worker venait d'être redéployé. **Le mort le plus récent l'emportait sur le vivant.**
-    // 🔑 Et la direction de l'échec est la même que les deux fois précédentes : vers le PASSANT.
-    // `local` n'est pas bloquant, donc la garde laissait enfiler sans jamais avoir lu le worker.
-    // La fraîcheur se mesure comme le verrou lui-même la mesure : trois battements manqués (§17).
-    const FRAIS_MS = 3 * 60 * 1000;
-    const maintenant = Date.now();
-    const tous = verrous.map(d => d.verrou).filter(x => x && x.pid != null);
-    const frais = tous.filter(x => x.depuis && maintenant - new Date(x.depuis).getTime() < FRAIS_MS);
-    const perimes = tous.length - frais.length;
-    if (perimes) console.log(`   ⚪ ${perimes} verrou(x) EXPIRÉ(s) ignoré(s) — un détenteur qui ne bat plus n'en est pas un : ${tous.filter(x => !frais.includes(x)).map(x => `pid ${x.pid} sur ${x.hote} (${Math.round((maintenant - new Date(x.depuis).getTime()) / 60000)} min)`).join(' · ')}`);
-    // Parmi les VIVANTS, le plus frais : c'est lui qui travaille.
-    const v = frais.sort((a, b) => new Date(b.depuis) - new Date(a.depuis))[0] || null;
-    // Chaque règle est vérifiée SÉPARÉMENT et chacune s'imprime : un « ✅ » global qui cache un
-    // fichier en retard est exactement la garde verte et fausse d'hier.
-    const resultats = REGLES.map(f => ({ f, r: workerContient(v, f) }));
-    const pire = resultats.find(x => ['anterieur', 'sans-commit', 'inconnu'].includes(x.r.etat)) || resultats[0];
-    const r = pire.r;
-    const lignes = resultats.map(({ f, r: x }) => {
-        const dire = {
-            'a-jour': () => `✅ ${f} : le worker tourne sur ${x.commit}, qui contient ${x.dernier}`,
-            'anterieur': () => `🔴 ${f} : ${x.raison}`,
-            'sans-commit': () => `🔴 ${f} : ${x.raison}`,
-            'local': () => `⚠️ ${f} : ${x.raison}`,
-            'absent': () => `⚠️ ${f} : ${x.raison} — aucun worker ne tourne, donc rien ne contredit la règle, mais rien ne la confirme non plus`,
-            'inconnu': () => `⚠️ ${f} : ${x.raison}`
-        }[x.etat];
-        return dire ? dire() : `⚠️ ${f} : état « ${x.etat} » non prévu`;
-    });
-    const phrase = lignes.join('\n   ');
-    // ⚠️ `absent` N'EST PAS BLOQUANT, et c'est un choix qui s'explique : un worker arrêté ne peut pas
-    // refuser ce qu'on enfile. Il prendra la file à son démarrage, avec le code de son déploiement —
-    // et c'est à ce moment-là que la question se reposera. Bloquer ici empêcherait de remplir une
-    // file PENDANT que le worker est coupé, ce qui est exactement le moment où on veut le faire.
-    return { bloque: ['anterieur', 'sans-commit', 'inconnu'].includes(r.etat), phrase, etat: r.etat };
+    const lignes = [];
+    const bloquer = (...l) => ({ bloque: true, phrase: [...lignes, ...l].join('\n   '), etat: 'bloque' });
+    try {
+        const col = cx.db.collection(COLLECTION_VERROUS);
+        // Le dénominateur AVANT la question : une collection vide ou mal nommée ne peut pas répondre
+        // « aucun détenteur », elle doit LEVER (§41) — et l'exception est rattrapée en BLOCAGE.
+        await lireMongo(col, {}, { nom: COLLECTION_VERROUS });
+
+        // ── LA BALISE, PAS LE VERROU. Un verrou dit qui a le droit de frapper la source, donc il
+        //    disparaît dès que le worker dort — c'est-à-dire dès que la file est vide, c'est-à-dire
+        //    exactement quand on veut la remplir. La balise dit quel code tourne, au repos comme au
+        //    travail (collecte-cartes/balise-worker.js).
+        const { balises, perimees, FRAIS_MS } = await balise.lireBalises(cx.db);
+        if (perimees.length)
+            lignes.push(`⚪ ${perimees.length} balise(s) périmée(s) ignorée(s) — un processus qui ne bat plus n'est pas un détenteur : ${perimees.map(b => `pid ${b.pid} sur ${b.hote}`).join(' · ')}`);
+
+        if (!balises.length)
+            return bloquer(`🔴 AUCUNE balise fraîche (moins de ${FRAIS_MS / 60000} min) : je ne sais pas quel code tourne.`,
+                `   Ce n'est pas « aucun worker ne tourne » — c'est « je ne peux pas conclure », et les deux`,
+                `   ne se traitent pas pareil. Un worker arrêté redémarrera sur un commit que je n'ai pas lu.`,
+                `   ⚠️ Un worker antérieur au 2026-09-21 ne pose PAS de balise : l'absence est alors l'information.`,
+                `   → relancer après le redéploiement, ou forcer avec --malgre-le-commit.`);
+
+        // ── DEUX BALISES QUI NE DISENT PAS LA MÊME CHOSE : on ne choisit pas, on bloque. Un
+        //    chevauchement de rollout est le cas NORMAL sur Render (§17) ; pendant ce chevauchement,
+        //    la file peut être prise par l'ancien pod aussi bien que par le neuf.
+        const commits = [...new Set(balises.map(b => b.commit ?? '(aucun)'))];
+        if (commits.length > 1)
+            return bloquer(`🔴 ${balises.length} balises fraîches sur ${commits.length} commits DIFFÉRENTS : ${commits.join(', ')}.`,
+                `   Un chevauchement de déploiement est normal, mais pendant qu'il dure je ne peux pas dire`,
+                `   lequel des deux prendra l'unité que j'enfile. On attend qu'il n'en reste qu'un.`);
+
+        const b = balises[0];
+        if (!b.commit)
+            return bloquer(`🔴 la balise (pid ${b.pid} sur ${b.hote}) n'écrit pas son commit — elle tourne sur du code antérieur au 2026-09-21.`);
+        if (b.commit === 'local')
+            return bloquer(`🔴 le détenteur est un processus LOCAL (pid ${b.pid} sur ${b.hote}) : un arbre de travail n'est pas un commit,`,
+                `   donc je ne peux pas dire quelles règles il porte.`);
+
+        // ── CHAQUE RÈGLE SÉPARÉMENT, et chacune s'imprime. Un « ✅ » global qui cache un fichier en
+        //    retard est exactement la garde verte et fausse du 2026-09-20.
+        const faux = { verrou: { ...b, depuis: b.depuis } };
+        const resultats = REGLES.map(f => ({ f, r: workerContient(faux.verrou, f) }));
+        for (const { f, r } of resultats) {
+            if (r.etat === 'a-jour') { lignes.push(`✅ ${f} : ${b.commit} contient ${r.dernier}`); continue; }
+            lignes.push(`🔴 ${f} : ${r.raison || `état « ${r.etat} »`}`);
+        }
+        if (resultats.some(x => x.r.etat !== 'a-jour'))
+            return bloquer(`🔴 une règle au moins n'est pas portée par le worker — enfiler maintenant fabriquerait des refus.`);
+
+        // ✅ LE SEUL CHEMIN QUI AUTORISE.
+        return { bloque: false, phrase: [...lignes, `✅ worker ${b.hote}/${b.pid}, état « ${b.etat} », sur ${b.commit} — les ${REGLES.length} règles sont portées.`].join('\n   '), etat: 'a-jour' };
+    } catch (e) {
+        // ⚠️ UNE EXCEPTION EST UN DOUTE, DONC UN BLOCAGE. La version précédente n'avait pas de `catch`
+        // du tout, ce qui revenait à faire tomber l'outil — mieux qu'un passage, mais moins lisible.
+        return bloquer(`🔴 la garde n'a pas pu conclure : ${e.message}`,
+            `   Une garde qui ne sait pas BLOQUE. C'est le sens dans lequel elle doit échouer.`);
+    }
 }
+
+// Exportée pour son banc : une garde qu'on n'a jamais VUE dire non n'a pas été vérifiée, elle a été
+// supposée (§41). `test-garde-worker.js` la fait crier sur huit états fabriqués.
+module.exports = { etatDuWorker, REGLES, COLLECTION_VERROUS };
+
+if (require.main !== module) return;
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');

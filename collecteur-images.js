@@ -46,6 +46,7 @@ const VERROU_MS = 10 * 60 * 1000;
 // silencieusement — un set refusé ne réclame rien. La résolution réelle de chaque set est conservée
 // dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
+const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const SOURCE = arg('source') || 'artofpkm';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -509,7 +510,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
 
     if (process.argv.includes('--boucle')) {
         console.log('--boucle : file d\'attente `file_images`, un set à la fois, 10 min de sommeil quand elle est vide.');
+        // 🔑 LA BALISE, POSÉE AVANT TOUT : elle dit QUEL CODE tourne ici, et elle doit vivre au
+        // repos comme au travail. Le verrou, lui, dit qui a le droit de frapper la source — il
+        // disparaît dès qu'on dort, et c'est pour ça qu'il ne pouvait pas porter cette réponse.
+        await balise.battre(M.EtatImages.db, 'travail');
         while (!arretDemande) {
+            await balise.battre(M.EtatImages.db, 'travail');
             // Réveil après un sommeil : le verrou a été RENDU pour dormir, on le reprend (en attendant son
             // détenteur s'il le faut) avant de toucher à la file.
             if (!verrouGlobal.tenu && !verrouGlobal.perdu) { if (!await attendreVerrouGlobal(M, { patienter: true })) break; }
@@ -525,7 +531,14 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // Sommeil INTERROMPABLE : un SIGTERM pendant les 10 minutes sort tout de suite.
             if (!suivant) {
                 await verrouGlobal.rendre();
-                for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) await new Promise(r => setTimeout(r, 5000));
+                // ⚠️ LA BALISE BAT PENDANT LE SOMMEIL, ET C'EST TOUT L'INTÉRÊT : une file vide est
+                // exactement le moment où l'on veut la remplir, donc exactement le moment où la
+                // garde doit pouvoir lire le commit du worker. Le verrou vient d'être rendu ; la
+                // balise reste.
+                for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) {
+                    await new Promise(r => setTimeout(r, 5000));
+                    if (t % 60000 === 0) await balise.battre(M.EtatImages.db, 'repos').catch(() => { });
+                }
                 continue;
             }
             // 🔑 DEUX SOURCES DANS UNE SEULE FILE (2026-09-19). artofpkm ne couvre QUE le japonais : 193 sets
