@@ -503,6 +503,27 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 48. LES 4 603 PRODUITS SANS LIGNE DE TABLE, DÉCOMPOSÉS — 2026-09-21
+
+**C'est la plus grosse cause « à instruire » du bloc de 10 924, et « aucune ligne de table » ne dit
+rien du monde : il dit que nos DEUX générateurs ne l'ont pas fabriquée.** 90 expansions, 4 603
+produits, **0 fiche sur les 90** — dénominateur : 751 expansions au catalogue, 661 couvertes.
+
+| bloc | exp. | produits | ce que c'est, et la route |
+|---|---|---|---|
+| **WCD — decks de championnat** | 44 | **2 448** | 🔑 **la route est déjà écrite au §40** : Bulbapedia nomme un DECK, pas un millésime (90 pages), et `decklist/entry` porte `{{TCG ID\|set d'origine\|nom\|n°}}` pendant que le slug Cardmarket porte la même chose (`WCD09SW-115` = Stormfront 115). Jointure (set d'origine, numéro). |
+| **japonais, entièrement numérotés** | 31 | **939** | 🔴 `Collect-151` (192), `Sword-Shield-Starter-Decks` (117), `Black-Sparkle` (63)… **tous leurs produits portent un numéro** et aucun générateur ne leur a proposé de ligne. C'est le §39 : il faut demander QUEL filtre les écarte. |
+| **aucun produit numéroté** | 10 | 715 | `UNP Unnumbered-Promos` (205), `PR Promos` (84), `SEA Southeast-Asia-Promos` (81) — le contrôle par couverture des numéros est structurellement impossible, il faut un autre critère d'admission. |
+| **même pas dans `codes_set`** | 4 | 489 | 🔴 **`Chasing-Glory-Together`, 367 produits, 367 numérotés, absent du catalogue appris.** Plus trois expansions sans slug (`1551`, `5877`, `5526`). |
+| occidental | 1 | 12 | `McDonalds-Collection-2011` |
+
+🔑 **CE QUE LA DÉCOMPOSITION CHANGE : deux tiers de ce bloc ne demandent pas une source, ils
+demandent une LIGNE.** Les WCD ont leur route écrite depuis le §40 et n'ont jamais été ouverts ; les
+31 japonais numérotés ont tout ce qu'il faut pour être jugés. **Aucun des 4 603 n'est classé
+« non atteignable » à ce stade — et c'est exactement pourquoi la phase 2 n'est pas ouverte.**
+
+---
+
 ## 47. TROIS DÉFAUTS TROUVÉS EN PRÉPARANT DEUX ÉCRITURES — 2026-09-21
 
 > ### 🔴 1. UN VERROU EXPIRÉ N'EST PAS UN DÉTENTEUR — troisième défaut de la MÊME garde
@@ -569,6 +590,13 @@ correspondent aux sets qu'artofpkm ne numérote pas (Gym japonais) : **une absen
 source**, écrite `null`, pas un champ oublié.
 ✅ Corrigé d'une ligne, et le rejeu est `--rejouer-jointure=tous` : **zéro requête, zéro
 téléchargement** (§19, où ce mécanisme a déjà servi à changer un schéma sans redemander 400 images).
+**FAIT ET VÉRIFIÉ le 2026-09-21, compte réel : `cartes.images` passe de 0 à 16 091 entrées artofpkm
+portant un `numero`** (17 133 entrées au total), **soit 33 478 / 34 520 = 97,0 %** avec les 17 387 de
+Bulbapedia qui en portaient déjà. **Les 1 042 restantes sont les sets qu'artofpkm ne numérote pas** —
+vérifié, ce ne sont pas des entrées ratées par le rejeu : aucune n'a de numéro disponible nulle part.
+⚠️ **Et la voie « côté site » est ce qui en dépend** : 5 915 cartes n'ont aucune fiche parce qu'un
+document × set n'en produit qu'une, et 82 % d'entre elles sont des SECRÈTES. Le numéro est la seule
+chose qui distingue deux impressions d'un même document dans un même set.
 ⚠️ **ET LA LISTE SOURCE ARCHIVÉE NE PORTE PAS LE NUMÉRO** — `collecte_images_etat.entrees` porte
 `titre, sourceSetId, n, original, cleCdn, vignette`, où `n` est un RANG dans la liste, pas un numéro
 de carte. Ma sonde a d'abord annoncé « 0 numéro sur 23 289 entrées » : **la signature exacte du §41,
@@ -602,9 +630,26 @@ occidentaux, 53 japonais) et **252 refusés**, chacun avec sa cause énumérée 
 | le fichier porte le nom du jumeau (« Jungle », « Fossil », « Team Rocket »…) | 7 |
 | set occidental, fichier suffixé « JP » | 4 |
 
-🔑 **ET LE COLLECTEUR RETIENT AUJOURD'HUI 245 SETS QUAND LA BASE N'EN PORTE QUE 221 : 24 sets
-gagneraient leur logo à la prochaine écriture.** La règle a évolué depuis la dernière collecte et
-personne n'a relu ses refus — **c'est le §23 en une phrase, sur un autre objet que le seuil.**
+🔑 **ET LE COLLECTEUR RETIENT AUJOURD'HUI 245 SETS QUAND LA BASE N'EN PORTAIT QUE 221.** La règle a
+évolué depuis la dernière collecte et personne n'a relu ses refus — **c'est le §23 en une phrase, sur
+un autre objet que le seuil.**
+
+### ✅ ÉCRIT, ET LE COMPTE RÉEL CORRIGE MON ATTENDU — 2026-09-21
+
+**J'avais annoncé « 24 sets gagneraient leur logo ». Le réel est +9 (221 → 230), et ZÉRO sur les
+sets publiés** : les 9 nouveaux sont des sets que le site n'affiche pas. **15 des 245 retenus n'ont
+pas pu être téléchargés** — leur fichier est nommé par l'infobox et n'existe pas chez Bulbagarden
+(« aucune imageinfo »). ⚠️ **Un attendu calculé sur une décision n'est pas un résultat : entre les
+deux il y a une source qui peut ne pas avoir le fichier qu'elle nomme elle-même.**
+🔴 **ET CES 15 TOMBAIENT ENTRE LES DEUX ÉCRITURES** : retenus, donc leur `logoRefus` venait d'être
+retiré ; sans fichier, donc aucun `logo` ne le remplaçait. Ils finissaient **sans logo ET sans
+cause** — précisément l'état qu'on venait de supprimer partout ailleurs. 🔑 **Une décision a TROIS
+issues, pas deux — retenu, refusé, et « retenu mais irréalisable » — et c'est toujours la troisième
+qui n'est écrite nulle part.**
+✅ **BILAN VÉRIFIÉ : 230 sets portent un logo, 340 portent une CAUSE ÉCRITE, 570 sur 570, zéro
+orphelin.** Les causes, désormais lisibles en base : 125 logo du jumeau · 109 aucun `setlogo` ·
+**73 aucune page archivée (jamais interrogés)** · 15 fichier introuvable · 7 aucune preuve de
+langue · 7 nom du jumeau · 4 suffixe JP sur un occidental.
 
 🔑 **POUR LE LOGO FRANÇAIS, LA RÉPONSE SE DÉMONTRE ET NE SE MESURE PAS : sur les 333 publiés qui
 n'en ont pas, 246 sont JAPONAIS — un set japonais n'a jamais eu de sortie française, donc il n'a
