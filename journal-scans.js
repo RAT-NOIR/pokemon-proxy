@@ -51,7 +51,11 @@ const RETENTION_JOURS = 90;
 
 // La version qui produit les lignes. Render expose RENDER_GIT_COMMIT ; en local, on le dit.
 // Tronqué à 12 caractères : de quoi identifier un commit, pas de quoi peser.
-const VERSION = String(process.env.RENDER_GIT_COMMIT || process.env.VERSION || 'local').slice(0, 12);
+// ⚠️ DÉPLACÉE dans `version-code.js` le 2026-09-21, et RÉEXPORTÉE ici pour ne rien casser. Le verrou
+// de source a besoin du même fait (§23 : « poussé n'est pas déployé ») et ne peut pas importer ce
+// module-ci, qui porte des modèles Mongoose. La règle écrite plus bas ne change pas — une seule
+// définition — elle vit simplement dans le module le plus léger qui puisse la porter.
+const { VERSION } = require('./version-code');
 
 // Modèles guardés : ce module est requis par index.js, qui déclare déjà ses propres
 // modèles sur les mêmes collections. Sans le garde, un second require lèverait

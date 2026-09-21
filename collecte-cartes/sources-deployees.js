@@ -68,4 +68,57 @@ function lignesDeployees(ref = 'origin/main') {
     } catch (e) { return { erreur: `table de ${ref} illisible : ${e.message.split('\n')[0]}` }; }
 }
 
-module.exports = { sourcesDeployees, aiguillageDeploye, lignesDeployees };
+// ============================================================
+// CE QUE LE WORKER TOURNE VRAIMENT — lu dans le VERROU, pas dans git — 2026-09-21
+// ============================================================
+// 🔴 LES TROIS GARDES CI-DESSUS COMPARENT À `origin/main`, C'EST-À-DIRE AU DERNIER COMMIT **POUSSÉ**.
+// C'est un autre fait que celui qui décide. Le 2026-09-21, 37 sets remis en file après l'abaissement
+// du seuil à 350 px sont ressortis `refuse-resolution` en une à trois secondes : `origin/main` portait
+// bien 350, et le pod Render tournait sur un commit antérieur qui appliquait encore 480. **Toutes les
+// gardes étaient vertes.** Elles répondaient à « le code est-il poussé ? » quand la question était
+// « le code TOURNE-t-il ? ».
+// 🔑 ENTRE POUSSÉ ET DÉPLOYÉ IL Y A UN REDÉPLOIEMENT, ET IL N'ÉTAIT MESURÉ NULLE PART. Le verrou
+// global le dit maintenant : `verrou-source.js` écrit `verrou.commit` à la prise ET à chaque
+// battement.
+
+const { execFileSync: exec } = require('child_process');
+
+/**
+ * Le détenteur du verrou global tourne-t-il sur un commit qui CONTIENT le dernier changement de
+ * `fichier` ? C'est la seule formulation utile : « à jour » dans l'absolu ne veut rien dire, alors
+ * que « contient la règle dont je m'apprête à dépendre » se décide et se prouve.
+ *
+ * ⚠️ LES QUATRE RÉPONSES SONT DISTINCTES, ET AUCUNE N'EST « PROBABLEMENT BON » :
+ *   `a-jour`    — le commit du worker contient le dernier changement du fichier ;
+ *   `anterieur` — il ne le contient pas : tout refus qu'il produira sera pris sous l'ANCIENNE règle ;
+ *   `sans-commit` — le détenteur n'écrit pas son commit, donc il tourne sur du code antérieur au
+ *                 2026-09-21. 🔑 **L'absence du champ EST l'information**, pas un trou ;
+ *   `local`     — le détenteur est un processus local : un arbre de travail n'est pas un commit ;
+ *   `absent`    — personne ne tient le verrou. On ne sait rien, et on ne fait pas semblant.
+ *
+ * @param {object|null} verrou  le sous-document `verrou` du document de verrou global
+ * @param {string} fichier      chemin dans le dépôt, ex. 'collecte-cartes/seuils-images.js'
+ */
+function workerContient(verrou, fichier) {
+    const racine = require('path').join(__dirname, '..');
+    const g = (...a) => exec(git(), a, { cwd: racine, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (!verrou || verrou.pid == null) return { etat: 'absent', raison: 'aucun détenteur du verrou global' };
+    const c = verrou.commit;
+    if (!c) return { etat: 'sans-commit', raison: `le détenteur (pid ${verrou.pid} sur ${verrou.hote}) n'écrit pas son commit — donc il tourne sur du code ANTÉRIEUR au 2026-09-21` };
+    if (c === 'local') return { etat: 'local', commit: c, raison: 'processus local : un arbre de travail n\'est pas un commit' };
+    let dernier;
+    try { dernier = g('log', '-1', '--format=%H', '--', fichier); }
+    catch (e) { return { etat: 'inconnu', commit: c, raison: `git illisible : ${e.message.split('\n')[0]}` }; }
+    if (!dernier) return { etat: 'inconnu', commit: c, raison: `aucun commit ne touche ${fichier}` };
+    try {
+        exec(git(), ['merge-base', '--is-ancestor', dernier, c], { cwd: racine, stdio: 'ignore' });
+        return { etat: 'a-jour', commit: c, dernier: dernier.slice(0, 7), fichier };
+    } catch (e) {
+        // status 1 = n'est pas un ancêtre ; tout autre code = le commit du worker est inconnu ici
+        // (jamais fetché, ou branche disparue). Les deux refusent, mais pour des raisons différentes.
+        if (e.status === 1) return { etat: 'anterieur', commit: c, dernier: dernier.slice(0, 7), fichier, raison: `le commit ${c} ne contient pas ${dernier.slice(0, 7)}, le dernier changement de ${fichier}` };
+        return { etat: 'inconnu', commit: c, raison: `le commit ${c} est introuvable en local (git fetch ?)` };
+    }
+}
+
+module.exports = { sourcesDeployees, aiguillageDeploye, lignesDeployees, workerContient };

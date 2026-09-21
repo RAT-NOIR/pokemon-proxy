@@ -22,15 +22,53 @@
 //       Les remettre en file sans cause, c'est demander au worker de refaire ce qu'il a déjà fait et
 //       de re-échouer de la même façon. Une file qu'on remplit de travail impossible n'est pas pleine,
 //       elle est bouchée.
+//
+// 🔴 ET CE FICHIER CITAIT LE §23 SANS EN VÉRIFIER LA CONDITION — corrigé le 2026-09-21.
+// Le § dit, en toutes lettres : « un seuil vit dans le PROCESSUS, pas dans le dépôt… la remise en
+// file ne vaut que si le worker a été redéployé après le changement de seuil — à vérifier, pas à
+// supposer ». L'en-tête ci-dessus annonçait « la leçon de ce § appliquée ». Elle ne l'était pas :
+// les 37 sets remis en file le 2026-09-21 sont ressortis `refuse-resolution` en une à trois
+// secondes, refusés par un worker qui appliquait encore 480 **sans faire une seule requête**.
+// 🔑 CITER UN PARAGRAPHE N'EST PAS L'APPLIQUER. Un commentaire juste rend le code d'à côté plus
+// crédible, pas plus correct (§21 bis). La vérification est désormais CÂBLÉE, pas écrite : on lit
+// `verrou.commit` du verrou global et on refuse d'enfiler si le worker ne porte pas la règle.
 require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
+const { workerContient } = require('./collecte-cartes/sources-deployees');
+
+// La règle dont cette remise en file dépend ENTIÈREMENT : si le worker ne porte pas ce fichier-là,
+// il rejugera chaque set sur l'ancien seuil, en relisant ses mesures en cache, sans une requête.
+const REGLE = 'collecte-cartes/seuils-images.js';
+
+/** Le worker porte-t-il la règle ? Rend { bloque, phrase } — la phrase va au rapport, toujours. */
+async function etatDuWorker(cx) {
+    const v = (await cx.db.collection('etatimages').findOne({ _id: 'bulbapedia/__collecteur__' }))?.verrou
+        || (await cx.db.collection('etatimages').findOne({ _id: 'artofpkm/__collecteur__' }))?.verrou;
+    const r = workerContient(v, REGLE);
+    const phrase = {
+        'a-jour': () => `✅ le worker tourne sur ${r.commit}, qui contient ${r.dernier} (dernier changement de ${REGLE})`,
+        'anterieur': () => `🔴 ${r.raison}`,
+        'sans-commit': () => `🔴 ${r.raison}`,
+        'local': () => `⚠️ ${r.raison}`,
+        'absent': () => `⚠️ ${r.raison} — aucun worker ne tourne, donc rien ne contredit la règle, mais rien ne la confirme non plus`,
+        'inconnu': () => `⚠️ ${r.raison}`
+    }[r.etat]();
+    // ⚠️ `absent` N'EST PAS BLOQUANT, et c'est un choix qui s'explique : un worker arrêté ne peut pas
+    // refuser ce qu'on enfile. Il prendra la file à son démarrage, avec le code de son déploiement —
+    // et c'est à ce moment-là que la question se reposera. Bloquer ici empêcherait de remplir une
+    // file PENDANT que le worker est coupé, ce qui est exactement le moment où on veut le faire.
+    return { bloque: ['anterieur', 'sans-commit', 'inconnu'].includes(r.etat), phrase, etat: r.etat };
+}
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
+    const quandMeme = process.argv.includes('--malgre-le-commit');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    const W = await etatDuWorker(cx);
+    console.log(`\n════ LE COMMIT DU WORKER ════\n   ${W.phrase}`);
 
     // les lignes ADMISES, dédoublonnées par code (`ligne()` rend la première trouvée)
     const parCode = new Map();
@@ -106,6 +144,18 @@ const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
         console.log(`   ${String(x.manque).padStart(4)} cartes · ${x.code.padEnd(9)} ${String(x.slug).slice(0, 30).padEnd(30)} — ${x.pourquoi}`);
 
     if (!ecrire) { console.log(`\n   (mesure seule — relancer avec --ecrire)`); await fermer(); return; }
+
+    // 🔑 LE REFUS EST ICI, APRÈS LA MESURE ET AVANT L'ÉCRITURE. La mesure reste toujours lisible —
+    // on veut savoir ce qu'on ENFILERAIT même quand on ne peut pas enfiler ; c'est l'écriture seule
+    // qui est bloquée. Un outil qui refuse de MESURER parce qu'il ne peut pas AGIR cache deux fois.
+    if (W.bloque && !quandMeme) {
+        console.log(`\n🔴 RIEN N'EST ÉCRIT. ${W.phrase}`);
+        console.log(`   Enfiler maintenant refabriquerait le 2026-09-21 : le worker relit ses mesures en cache et`);
+        console.log(`   refuse chaque set en une seconde, sans une requête — et le refus repart pour toujours (§23).`);
+        console.log(`   → redéployer le worker, PUIS relancer. Forcer : --malgre-le-commit (et dire pourquoi).`);
+        await fermer(); process.exitCode = 1; return;
+    }
+    if (W.bloque) console.log(`\n⚠️ FORCÉ malgré le commit du worker (--malgre-le-commit). ${W.phrase}`);
 
     const F = cx.db.collection('file_images');
     let repris = 0, insere = 0;

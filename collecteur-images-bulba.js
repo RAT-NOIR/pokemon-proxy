@@ -35,6 +35,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
 const { ligne, TABLE } = require('./collecte-cartes/table-sets');
+const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-image');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
@@ -67,7 +68,16 @@ async function resoudreSet(M, L) {
         await Promise.all(cartes.slice(i, i + 12).map(async c => {
             if (!c.bulba?.cleR2) { sansWikitext++; return; }
             const wt = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
-            for (const r of resoudreTirages(wt, c, L.bulba.expansion, { tirage: 'intl' })) {
+            // 🔴 `tirage: 'intl'` ÉTAIT ÉCRIT EN DUR — 2026-09-21. Ce collecteur a été fait pour les
+            // sets occidentaux, et la valeur a été figée là où la ligne de table la porte déjà.
+            // Conséquence : 60 sets chinois (6 785 cartes) ne pouvaient RIEN résoudre, et le rapport
+            // les rangeait en « aucune source d'images ». **Ce n'était pas une absence chez la source,
+            // c'était un paramètre chez nous** — et un paramètre figé ne produit pas un refus qu'on
+            // relit, il produit une absence (§39). La ligne sait son tirage : `zh-hans`, `zh-hant`,
+            // `id`, `th`, `intl`. On le lui demande.
+            // ⚠️ `'intl'` reste le défaut pour les lignes qui ne le portent pas : c'est ce que
+            // `resoudreTirages` fait déjà, et le changer ici en ferait deux définitions (§21 bis).
+            for (const r of resoudreTirages(wt, c, L.bulba.expansion, { tirage: L.bulba.tirage || 'intl' })) {
                 impressions++;
                 classes[r.classe] = (classes[r.classe] || 0) + 1;
                 const base = { carteId: c._id, nomEn: c.nomEn, page: c.bulba.titre, numero: r.impression.numero, rarete: r.impression.rarete };
@@ -96,10 +106,32 @@ async function relireCache(M, idEtat) {
     return Object.fromEntries((e?.infosListe || []).map(x => [x.fichier, x.absent ? null : { url: x.url, w: x.w, h: x.h, mime: x.mime, sha1: x.sha1 }]));
 }
 
+/**
+ * Ce set relève-t-il de CE collecteur ? UNE définition, appelée par la collecte ET par `--plan`.
+ *
+ * 🔴 LA RÈGLE ÉTAIT ÉCRITE DEUX FOIS, ET ELLE POSAIT LA MAUVAISE QUESTION — corrigé le 2026-09-21.
+ * Les deux exemplaires demandaient « est-ce un set OCCIDENTAL ? » et le message de refus disait
+ * « ses images viennent d'artofpkm ». **C'est faux pour 60 sets chinois : artofpkm ne les porte
+ * pas.** Ils tombaient donc entre les deux collecteurs — refusés ici pour n'être pas occidentaux,
+ * absents de là-bas faute de source — et le rapport les rangeait en « aucune source d'images ».
+ * 🔑 LE DISCRIMINANT RÉEL N'EST PAS LA RÉGION, C'EST LA PROVENANCE DU VISUEL : artofpkm sert les
+ * sets qu'il DÉCLARE (`sources-sets.js`) ; tout le reste, s'il a une page de carte archivée, relève
+ * de la résolution par tirage. La région n'était qu'un proxy de cette propriété, vrai tant que les
+ * seuls sets sans source artofpkm étaient occidentaux.
+ * ⚠️ Et le tirage n'est plus supposé : il vient de la ligne (`intl`, `zh-hans`, `zh-hant`, `id`, `th`).
+ */
+function relevedeCeCollecteur(L) {
+    if (!L) return { ok: false, etat: 'refuse-table', motif: 'absent de la table' };
+    const S = sourceDe(L.code);
+    if (S) return { ok: false, etat: 'refuse-region', motif: `ses images viennent d'artofpkm (source déclarée : ${S.noms?.[0] ?? S.code})` };
+    if (!L.bulba?.expansion) return { ok: false, etat: 'refuse-region', motif: 'la ligne ne nomme aucune expansion Bulbapedia — rien à résoudre sur les pages de cartes' };
+    return { ok: true, tirage: L.bulba.tirage || 'intl' };
+}
+
 async function collecterSet(code, M, { mesurerSeulement }) {
     const L = ligne(code);
-    if (!L) { console.error(`❌ ${code} : absent de la table.`); return { code, etat: 'refuse-table' }; }
-    if (L.region !== 'occidental' || L.bulba?.tirage !== 'intl') { console.error(`❌ ${code} : pas un set occidental — ses images viennent d'artofpkm.`); return { code, etat: 'refuse-region' }; }
+    const R = relevedeCeCollecteur(L);
+    if (!R.ok) { console.error(`❌ ${code} : ${R.motif}.`); return { code, etat: R.etat }; }
     const slug = L.slugSet;
     const idEtat = `${SOURCE}/${slug}`;
     const verrouSet = fabriquerVerrou({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'resolution' }, surPerte, nom: `verrou de set ${idEtat}` });
@@ -246,7 +278,8 @@ if (require.main !== module) return;
         let total = 0, fichiers = 0;
         for (const code of codesDemandes) {
             const L = ligne(code);
-            if (!L || L.region !== 'occidental') { console.log(`${code} : pas un set occidental de la table`); continue; }
+            const releve = relevedeCeCollecteur(L);   // MÊME prédicat que la collecte, jamais une copie (§21 bis)
+            if (!releve.ok) { console.log(`${code} : ${releve.motif}`); continue; }
             const R = await resoudreSet(M, L);
             imprimerResolution(L, R);
             total += R.impressions; fichiers += R.plan.length;

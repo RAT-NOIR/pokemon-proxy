@@ -23,10 +23,22 @@
 // TOUS les pods, et un conteneur relancé sur place garde son nom d'hôte. Un processus neuf prendrait
 // alors le verrou de son prédécesseur mort pour le sien. Le jeton est tiré au démarrage du processus.
 
+// 🔴 LA QUATRIÈME COLONNE, AJOUTÉE LE 2026-09-21 : `commit`. Un verrou disait QUI tient, sur QUELLE
+// machine, DEPUIS QUAND — jamais AVEC QUEL CODE. Le 2026-09-21, 37 sets remis en file après
+// l'abaissement du seuil à 350 px sont ressortis `refuse-resolution` en une à trois secondes : le
+// worker tournait sur un commit antérieur et appliquait encore 480. **Rien en base ne permettait de
+// le savoir** ; il a fallu le déduire d'une distribution de largeurs (§23).
+// 🔑 ET LA PROPRIÉTÉ QUI REND CETTE COLONNE UTILE EST SON ABSENCE : un détenteur qui n'écrit PAS son
+// commit tourne forcément sur du code antérieur à cette ligne. Le champ manquant n'est donc pas un
+// trou d'information, c'est l'information — « plus vieux que le 2026-09-21 ». Une garde peut s'y
+// fier sans attendre que tous les workers soient à jour.
+// ⚠️ `version-code.js` rend « local » hors de Render : un arbre de travail n'est pas un commit, et
+// aucune garde ne doit le lire comme tel.
 const os = require('os');
 const crypto = require('crypto');
+const { VERSION } = require('../version-code');
 
-const IDENTITE = Object.freeze({ pid: process.pid, hote: os.hostname(), jeton: crypto.randomUUID() });
+const IDENTITE = Object.freeze({ pid: process.pid, hote: os.hostname(), jeton: crypto.randomUUID(), commit: VERSION });
 
 /**
  * @param {object} o
@@ -59,7 +71,7 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
                 const r = await Modele.findOneAndUpdate(
                     // Libre si : aucun verrou · battement périmé · verrou sans propriétaire (zombie) · déjà le mien.
                     { _id: id, $or: [{ verrou: { $exists: false } }, { 'verrou.depuis': { $lt: perime } }, { 'verrou.pid': { $exists: false } }, { 'verrou.jeton': identite.jeton }] },
-                    { $set: { verrou: { pid: identite.pid, hote: identite.hote, jeton: identite.jeton, depuis: new Date() } }, ...(surInsertion ? { $setOnInsert: surInsertion } : {}) },
+                    { $set: { verrou: { pid: identite.pid, hote: identite.hote, jeton: identite.jeton, commit: identite.commit, depuis: new Date() } }, ...(surInsertion ? { $setOnInsert: surInsertion } : {}) },
                     { upsert: true, new: true }
                 ).lean();
                 if (r) {
@@ -82,7 +94,10 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
 
     async function battre() {
         try {
-            const r = await Modele.updateOne(aMoi(), { $set: { 'verrou.depuis': new Date() } });
+            // Le commit est réécrit à CHAQUE battement, pas seulement à la prise : c'est ce qui rend
+            // la colonne auto-réparante. Un verrou repris sur place, ou écrit par une version qui ne
+            // connaissait pas encore le champ, se corrige au premier battement du détenteur réel.
+            const r = await Modele.updateOne(aMoi(), { $set: { 'verrou.depuis': new Date(), 'verrou.commit': identite.commit } });
             echecsBattement = 0;
             if (r.matchedCount === 0) perte('le battement a touché 0 document');
         } catch (e) {
@@ -100,7 +115,7 @@ function fabriquerVerrou({ Modele, id, dureeMs, battementMs = 60000, surInsertio
     async function tient() {
         if (!tenu || perdu) return false;
         try {
-            const r = await Modele.updateOne(aMoi(), { $set: { 'verrou.depuis': new Date() } });
+            const r = await Modele.updateOne(aMoi(), { $set: { 'verrou.depuis': new Date(), 'verrou.commit': identite.commit } });
             if (r.matchedCount === 0) { perte('revérification : 0 document'); return false; }
             return true;
         } catch (e) {

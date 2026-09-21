@@ -63,6 +63,56 @@ renégocie pas en cours de route.
 
 ---
 
+## 🔑 LES TROIS LEÇONS DU SOIR DU 2026-09-21 — TROIS FAÇONS DE SE CROIRE COUVERT
+
+> ### 1. « Un outil qui interroge UNE source et nomme son résultat “aucune” ment par construction. »
+>
+> `sourceDe(code, source)` porte `if (source !== 'artofpkm') return null`. Toute question posée à ce
+> module ne peut donc recevoir qu'une réponse sur artofpkm — et le champ qu'elle remplit s'appelle
+> « sans source ». **226 sets, 15 065 cartes, rangés « aucune source d'images » par une fonction qui
+> n'en connaît qu'une**, pendant que `collecteur-images-bulba.js` sert une deuxième route sans jamais
+> ouvrir ce module.
+> 🔴 **LE DÉFAUT N'EST PAS DANS LA FONCTION, IL EST DANS LE NOM DE SON RÉSULTAT.** `sourceDe` répond
+> exactement à ce qu'on lui demande ; c'est l'appelant qui a écrit « aucune » là où la seule phrase
+> vraie était « pas chez artofpkm ». **Un quantificateur — “aucune”, “toutes”, “jamais” — ne peut pas
+> être plus large que l'instrument qui l'a produit**, et c'est le §36 exactement (« la phrase *aucune
+> source* est interdite sans la liste de celles qu'on a interrogées »), cette fois non pas dans un
+> paragraphe mais dans un nom de variable. ⚠️ **Le test : si j'ajoutais une source demain, cette
+> réponse changerait-elle sans que le code change ?** Si oui, le mot est trop grand.
+
+> ### 2. « Poussé n'est pas déployé, et la question n'avait de réponse NULLE PART. »
+>
+> Trois gardes comparaient déjà à `origin/main` — les sources, l'aiguillage, la ligne de table. **Les
+> trois étaient vertes** quand les 37 sets remis en file sont ressortis refusés en une seconde : elles
+> répondaient à *« le code est-il poussé ? »* quand la question était *« le code TOURNE-t-il ? »*.
+> Entre les deux il y a un redéploiement que personne ne mesurait, et il a fallu déduire le commit du
+> worker d'une **distribution de largeurs d'images**.
+> ✅ **CORRIGÉ, PAS SEULEMENT ÉCRIT : `verrou.commit`.** Un verrou disait qui tient, où, depuis quand —
+> jamais avec quel code. Il l'écrit maintenant à la prise ET à chaque battement, et `remettre-en-file.js`
+> refuse d'écrire quand le commit du worker ne contient pas le dernier changement de la règle dont la
+> remise en file dépend (`git merge-base --is-ancestor`).
+> 🔑 **ET LA PROPRIÉTÉ QUI REND LA GARDE UTILISABLE TOUT DE SUITE EST L'ABSENCE DU CHAMP** : un
+> détenteur qui n'écrit pas son commit tourne forcément sur du code antérieur à cette ligne. **Le champ
+> manquant EST la réponse**, pas un trou — on n'a donc pas à attendre que tout soit à jour pour que la
+> garde serve. ⚠️ Et la bonne formulation n'est pas « le worker est-il à jour ? », qui ne veut rien
+> dire, mais **« son commit contient-il la règle dont je m'apprête à dépendre ? »** — une question qui
+> se prouve, fichier par fichier.
+
+> ### 3. « Citer un paragraphe n'est pas l'appliquer. »
+>
+> `remettre-en-file.js` s'ouvre sur *« 🔑 ET LA RAISON D'ÊTRE EST LE §23 »* et cite la leçon en entier.
+> Le §23 dit, en toutes lettres : *« un seuil vit dans le PROCESSUS, pas dans le dépôt… la remise en
+> file ne vaut que si le worker a été redéployé — à vérifier, pas à supposer »*. **L'outil ne vérifiait
+> pas.** Il portait la référence, le raisonnement, et pas le geste.
+> 🔴 **C'EST LA FORME LA PLUS TROMPEUSE D'ERREUR DE CE DÉPÔT, ET ELLE EST DÉJÀ AU §21 bis : un
+> commentaire juste rend le code d'à côté plus CRÉDIBLE, pas plus CORRECT.** Une citation de § est un
+> signal de sérieux — c'est précisément pour ça qu'elle endort la relecture. ⚠️ **La règle : tout § cité
+> dans un en-tête doit correspondre à une ligne EXÉCUTABLE du fichier, ou la citation se retire.** Et la
+> question de relecture se formule sans ouvrir le paragraphe : *ce fichier cite un §  — quelle ligne
+> l'applique ?* S'il n'y en a pas, le commentaire est une décoration qui coûte cher.
+
+---
+
 ## 🔑 LES TROIS LEÇONS DU 2026-09-21 — TROIS FAÇONS DE PERDRE DU TRAVAIL SANS UNE SEULE ERREUR
 
 > ### 1. « Quand une limite tombe, le geste suivant est un `grep` : QUI l'appliquait ? »
@@ -167,7 +217,7 @@ archivé. ZÉRO n'en manque.** La condition nécessaire de la route Bulbapedia e
 | tirage | sets | cartes | la source a-t-elle été CHERCHÉE ? |
 |---|---|---|---|
 | **intl** (occidental) | **135** | **5 976** | 🔴 **non** — et c'est la population pour laquelle `collecteur-images-bulba.js` a été ÉCRIT (`tirage: 'intl'` en dur). Skyridge, Supreme Victors, Legends Awakened y sont, et ils sont déjà passés en file. |
-| **zh-hans** | 52 | 5 534 | 🔴 non — et la route est FERMÉE PAR NOTRE CODE, pas par la source : le collecteur code `tirage: 'intl'` en dur, donc il ne résoudrait rien. **Ce n'est pas une absence, c'est un paramètre.** |
+| **zh-hans** | 52 | 5 534 | ⚠️ **mesurée depuis — voir l'encadré ci-dessous. Le paramètre était un blocage RÉEL mais pas LA cause.** |
 | **jp** | 25 | 1 269 | ⚠️ partiellement — artofpkm couvre le japonais, ces 25 n'y ont pas de correspondance de NOM (§30 : une correspondance absente n'est pas un set absent) |
 | **zh-hant** | 8 | 1 251 | 🔴 non — même paramètre en dur |
 | **id · th · idth** | 6 | 1 035 | 🔴 non — les pages existent (§30 : 55 pages « Promotional cards », 1 620 produits) |
@@ -189,6 +239,71 @@ d'une route déjà en production.** Ce n'est pas un chantier de source, c'est un
 `'intl'` en dur, et ensuite une vérification que Bulbapedia porte bien des fichiers pour ces
 tirages. **La première moitié est gratuite ; la seconde est la vraie question, et elle n'a pas
 encore été posée.**
+
+### 🔴 LA QUESTION A ÉTÉ POSÉE LE SOIR MÊME, ET MA PRÉVISION ÉTAIT FAUSSE — 2026-09-21
+
+**J'avais écrit « ce n'est pas une absence, c'est un paramètre ». Le paramètre existait bien, il a
+été corrigé, et il ne débloque RIEN.** Deux verrous, pas un :
+✅ **le premier était bien chez nous, et il était double** — `collecteur-images-bulba.js` codait
+`tirage: 'intl'` en dur (l. 70) ET refusait tout set non occidental, **dans deux exemplaires de la
+même règle** (l. 111 et 258), dont le message disait « ses images viennent d'artofpkm » — faux pour
+60 sets chinois qu'artofpkm ne porte pas. Ils tombaient **entre les deux collecteurs**. Corrigé :
+un seul prédicat, `relevedeCeCollecteur`, dont le discriminant n'est plus la RÉGION mais la
+PROVENANCE DU VISUEL (« artofpkm le déclare-t-il ? »). La région n'était qu'un proxy, vrai tant que
+les seuls sets sans source artofpkm étaient occidentaux.
+🔴 **LE SECOND EST RÉEL, ET IL EST MESURÉ : sur les 212 cartes de Sparkling Fable, ZÉRO porte une
+impression de tirage `zh-hans`.** Elles portent `intl×373` et `jp×551`, rien d'autre. Idem pour
+`SV8s` en `zh-hant` : 0 sur 184. **La résolution d'images lit `carte.impressions` ; il n'y a rien à
+lire.** C'est le §28 remesuré : les pages de CARTES de Bulbapedia ne déclarent pas le tirage chinois.
+🔑 **ET LA RAISON EST DANS NOTRE PROPRE ARCHITECTURE, CE QUI LA REND INSTRUCTIVE : la jointure
+chinoise est VIRTUELLE.** `jointure.js:115` fabrique l'impression depuis la Setlist
+(`source: 'setlist'`) et l'écrit dans `cartes_produits` — **8 067 lignes en `zh-hans`, dont 7 808
+par `setlist+numero`** — sans jamais la poser sur la carte. Le TEXTE chinois marche donc
+parfaitement ; l'IMAGE, qui lit la carte, ne voit rien. **Deux voies, deux endroits où vit la même
+impression, et une seule des deux est alimentée.**
+🕳️ **CE QUI RESTE OUVERT, ET C'EST LA VRAIE QUESTION MAINTENANT : la page de SET « (ATCG) » porte-t-elle
+une galerie ?** Toute la résolution actuelle part de la page de la CARTE ; personne n'a regardé la
+page du SET. ⚠️ Et la voie facile est interdite : servir le fichier japonais du même dessin
+violerait le §19 (« une image appartient à un TIRAGE »). **Non mesuré, nommé — et à ne pas
+reformuler en « absence » avant de l'avoir énuméré (§30).**
+
+---
+
+## 43. UNE COUVERTURE DE 100 % SUR UNE SETLIST DE LIENS ROUGES — 2026-09-21
+
+**Deux lignes chinoises ont collecté ZÉRO : `CSVL2C` Travel Theme Pack (139 produits) et `CSVNC`
+Kitakami Theme Pack (44). Instruites, voici ce qu'elles sont.**
+
+🔴 **LES 139 PAGES ÉNUMÉRÉES PAR LEUR SETLIST N'EXISTENT PAS.** `collecte_etat.pages` le dit sur
+chaque entrée : `{"titre":"Oinkologne (Travel Theme Pack 50)","pageid":null,"revid":null,"etat":"manquant"}`
+— **139 sur 139, sur les deux sets.** Ce sont des LIENS ROUGES : la Setlist de la page de set cite
+des titres de cartes que Bulbapedia n'a jamais créés. La collecte a donc parfaitement fonctionné,
+elle a traité 139 titres et rendu 0 carte, et sa concordance `produits = joints + restes` était
+JUSTE — c'est le §21 n°8 exactement : **une concordance est une tautologie pour ce qui n'a jamais
+existé.**
+
+🔴 **ET LA VÉRIFICATION LES A ADMISES À 100 % DE COUVERTURE — C'EST LE VRAI DÉFAUT.** Le critère
+d'admission des lignes `numerosDepuisSetlist` est la couverture des numéros Cardmarket par les
+numéros de la Setlist. Les 44 numéros de Kitakami sont tous compris entre 1 et 139 : **couverture
+100 %, `numerosAmbigus: 0`, admise.** C'est le §31 dans sa forme la plus pure — *« sur des plages
+DENSES de PETITS ENTIERS, toute expansion couvre toute autre »* — et le contrôle bidirectionnel ne
+l'aurait pas vue non plus, puisque le problème n'est pas l'appariement : **c'est que rien de ce qui
+est apparié n'existe.**
+🔑 **LA GARDE QUI MANQUE SE FORMULE EN UNE LIGNE ET NE COÛTE AUCUNE REQUÊTE DE PLUS : une ligne dont
+les titres de Setlist sont tous des liens rouges ne peut rien collecter, donc elle n'est pas
+admise.** L'information est déjà là — `etat: 'manquant'` est écrit par la collecte —, elle n'est
+simplement jamais relue en face de la décision d'admettre. ⚠️ Et c'est la même forme que le §33 :
+une ligne qui ne peut pas collecter ne doit rien réserver. **Non câblée : elle doit d'abord être
+mesurée sur ce qui MARCHE (§22), car un set neuf a lui aussi des pages non encore archivées, et
+« manquant » ne veut pas dire la même chose avant et après une collecte.**
+
+✅ **ET LA ROUTE EXISTE, ELLE EST DÉJÀ DÉCRITE AU §40.** Ces deux produits sont des **packs à thème
+qui RÉIMPRIMENT des cartes existantes** : « Forretress ex » est chez nous sous `_id 282519`, sets
+`Shiny-Treasure-ex`, `Clay-Burst`, `Fearless-Terastal`, `Paldean-Fates`. La carte existe, seule la
+page du tirage manque — **exactement la situation des WCD**, où Bulbapedia ne crée pas de page par
+réimpression. 🕳️ La clé de jointure, elle, est plus faible que celle des WCD : le slug Cardmarket
+ne porte pas le set d'origine, donc il reste le NOM, et le §22 a mesuré ce que vaut une clé par nom
+(**31 gagnées contre 364 dérangées**). **Route nommée, pas proposée.**
 
 ---
 
