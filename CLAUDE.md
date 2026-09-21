@@ -656,6 +656,40 @@ produits, **0 fiche sur les 90** — dénominateur : 751 expansions au catalogue
 | **même pas dans `codes_set`** | 4 | 489 | 🔴 **`Chasing-Glory-Together`, 367 produits, 367 numérotés, absent du catalogue appris.** Plus trois expansions sans slug (`1551`, `5877`, `5526`). |
 | occidental | 1 | 12 | `McDonalds-Collection-2011` |
 
+### 🔑 LE CONTRÔLE QUI REMPLACE LA COUVERTURE QUAND AUCUN PRODUIT N'EST NUMÉROTÉ — CALIBRÉ, PAS PROPOSÉ
+
+**Les 10 expansions sans un seul produit numéroté (715 produits) ne peuvent pas être admises par la
+couverture des numéros : il n'y a rien à couvrir.** La seule clé qui reste est le NOM, et le §22 a
+mesuré ce qu'une clé par nom coûte — **mais cette mesure-là répondait à une AUTRE question** : « que
+perd-on à REMPLACER le numéro par le nom là où le numéro marche ? » (31 gagnées, 364 dérangées).
+Ici le numéro n'existe pas ; la question est « que vaut le nom quand il est SEUL ? ».
+
+🔑 **ON NE PROPOSE PAS LE CONTRÔLE, ON LE CALIBRE : on prend la population qui MARCHE — 54 334
+jointures faites par le numéro — on CACHE le numéro, et on mesure ce que le nom seul aurait rendu.**
+
+| | jointures | |
+|---|---|---|
+| ✅ un seul candidat, **et c'est le bon** | 29 620 | 54,5 % |
+| 🔴 un seul candidat, **et c'est le mauvais** | **82** | **0,2 %** — le seul mode d'erreur qui compte |
+| ⚠️ plusieurs candidats → refusé | 2 121 | 3,9 % — « un nom qui désigne plusieurs cartes ne désigne rien » |
+| ⚪ aucun candidat → la clé se TAIT | 22 511 | 41,4 % |
+
+> **PRÉCISION QUAND ELLE PARLE : 29 620 / 29 702 = 99,72 %. RAPPEL : 54,5 %.**
+
+⚠️ **LE CHIFFRE QUI DÉCIDE N'EST PAS LE TAUX DE RÉUSSITE, C'EST LA PRÉCISION** : une clé qui se tait
+ne coûte rien (le produit reste sans fiche, et on le sait), une clé qui se TROMPE pose une fiche
+fausse **qui ne se signale jamais toute seule** (§32). Le prix d'admettre ces 10 expansions est donc
+énonçable d'avance : **environ 0,28 % de fiches fausses, et à peu près une moitié des produits
+fichés.**
+🔴 **ET LES 82 FAUX NE SONT PAS RÉPARTIS AU HASARD — ils se concentrent sur les COMPILATIONS de
+réimpressions** : `The-Best-of-XY`, `VMAX-Climax`, où le même nom désigne deux cartes à deux numéros
+(« zubat » 195229 contre 195230). **C'est le §31 sur les noms** : là où un set réimprime, le nom
+cesse d'être discriminant, et c'est justement ce que sont des promos sans numéro.
+✅ **LA GARDE À EXIGER AVANT D'ADMETTRE UNE SEULE DE CES LIGNES, et elle est bidirectionnelle** :
+chaque produit désigne UN titre **et** chaque titre désigne UN produit, **multiplicités comptées, pas
+des `Set`** (§34) — un `Set` écrase précisément le doublon qui fabrique les 82. **Décision au
+testeur : le chiffre est posé, il n'est pas à moi de trancher 0,28 %.**
+
 🔑 **CE QUE LA DÉCOMPOSITION CHANGE : deux tiers de ce bloc ne demandent pas une source, ils
 demandent une LIGNE.** Les WCD ont leur route écrite depuis le §40 et n'ont jamais été ouverts ; les
 31 japonais numérotés ont tout ce qu'il faut pour être jugés. **Aucun des 4 603 n'est classé
