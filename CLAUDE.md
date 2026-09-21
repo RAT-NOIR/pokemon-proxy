@@ -355,6 +355,171 @@ ne porte pas le set d'origine, donc il reste le NOM, et le §22 a mesuré ce que
 
 ---
 
+## 44. « JAMAIS MISE EN FILE » N'EST PAS « ATTEIGNABLE » — 2026-09-21
+
+**L'inventaire d'avant-phase-2 a classé 4 530 produits, 73 sets, en ATTEIGNABLE. Le critère était
+« absent de `file_images` ». `--plan`, à ZÉRO requête, en rend le verdict : 0 fichier à collecter
+sur les 73.** Pas 200, pas 40 : zéro, sur la totalité.
+
+🔴 **LA FAUTE EST DE CLASSER SELON UN ÉTAT DE NOTRE TRAVAIL.** Le §40 l'avait déjà écrit — « sans
+ligne », « refusée », « pas encore collecté » décrivent ce que NOUS avons fait, pas ce qui est
+possible — et je l'ai refait avec un quatrième mot, « jamais enfilé ». **Une unité absente de la
+file dit que personne n'a demandé le travail ; elle ne dit rien de ce que le travail rendrait.**
+✅ **L'instrument qui décide existait, il coûte zéro requête, et je ne l'avais pas lancé :** `--plan`
+lit le wikitext archivé de chaque carte et compte les fichiers résolus. **Il aurait dû être exécuté
+AVANT d'écrire le mot « atteignable », pas après.** La décomposition rendue, une fois lancé :
+
+| ce que `--plan` a rendu | sets | ce que c'est |
+|---|---|---|
+| `absent: N` — impressions présentes, **aucun fichier** | 20 | Bulbapedia n'a pas le visuel du tirage JAPONAIS de ces sets |
+| `{}` — **aucune carte ne déclare l'expansion** | 41 | rien à résoudre : la page de carte ne connaît pas ce set |
+| `absent` sur 3 entrées (promos ID/TH) | 12 | idem, sur les tirages indonésien et thaï |
+
+🔑 **ET LA FORME EST CELLE DU CHINOIS (§42), À UNE AUTRE ÉCHELLE : la page de CARTE de Bulbapedia ne
+porte le fichier que du tirage OCCIDENTAL.** Le japonais, le chinois, l'indonésien et le thaï
+partagent le même plancher, pour la même raison, et ce n'est ni un paramètre ni une file : c'est ce
+que la source contient. ⚠️ **Le plancher d'IMAGES est donc beaucoup plus large que celui de FICHES**,
+et les deux ne se confondent jamais dans le décompte du 100 %.
+
+### 🔴 ET LE VRAI GISEMENT ÉTAIT INVISIBLE À L'OUTIL QUI DEVAIT LE TROUVER — §33, TROISIÈME FOIS
+
+**`remettre-en-file.js` n'énumérait que les lignes ADMISES.** Or la question qu'il pose est « ce SET
+a-t-il des cartes sans visuel ? », et les deux ne coïncident pas : une expansion peut être FICHÉE
+par la voie « sans page » — jointure par le nom d'expansion déclaré sur la carte — sans que sa ligne
+soit jamais passée en vérification. **Mesuré : 25 sets, 670 produits, cartes présentes, source
+artofpkm DÉCLARÉE, aucun visuel, et aucune unité de file ne pouvait naître.** L'outil imprimait
+« 0 à insérer » avec une parfaite assurance.
+🔑 **Un ensemble « ce qu'il reste à faire » se construit sur ce qui PRODUIT, jamais sur un état
+administratif** — c'est le §33 mot pour mot, et la garde utile était déjà trois lignes plus bas
+(`if (!g.n) continue` : un set sans carte n'a rien à imager). Corrigé : 660 lignes énumérées au lieu
+de 568, et l'admission ne sert plus qu'à trancher les doublons de code.
+🕳️ **ET LE BLOCAGE RÉEL, UNE FOIS L'ÉNUMÉRATION OUVERTE, N'EST PAS LA SOURCE : c'est
+`cartes.sets`.** `collecteur-images.js` joint par `M.Carte.find({ sets: slug })`, et la voie « sans
+page » ne pose JAMAIS le slug dans ce champ — 0 carte sur les 29 sets vérifiés, y compris les 4
+admis. Les cartes existent, déclarent l'expansion, et la clé de jointure des images est vide.
+**Dette nommée, chiffrée (670 produits), zéro requête : elle se comble par une passe qui pose le
+slug sur les cartes qui déclarent déjà l'expansion.** Non faite — c'est une écriture sur `cartes`.
+
+### ✅ LE §23 CÂBLÉ CHEZ artofpkm : LA MÉDIANE, ET LE FILTRAGE PAR FICHIER QUI MANQUAIT
+
+**`collecteur-images.js` refusait un set entier dès qu'UNE de ses trois mesures passait sous le
+seuil.** Le §23 dit l'inverse en toutes lettres : *« refuser un SET demande une statistique de masse
+(médiane), écarter un FICHIER demande le fichier lui-même »*, et *« juger un ensemble sur son pire
+élément, c'est le refuser sur son bruit »*. Les deux gestes existaient chez Bulbapedia (l. 135 et
+143) et manquaient ici — **§21 bis, deux exemplaires d'une règle qui divergent.**
+⚠️ **MESURÉ AVANT D'ÊTRE ÉCRIT, sur les 229 sets artofpkm et leurs mesures déjà en base, zéro
+requête : 0 set perdu, 1 gagné** — PCG2 Clash of the Blue Sky, largeurs 162/593/593, refusé depuis
+le 2026-09-13 à cause d'une seule vignette. **Le coût nul du §20**, et c'est ce qui autorise à
+câbler sans attendre de rencontrer le cas. La moitié manquante est posée dans le même commit : une
+image sous le seuil est écartée au téléchargement, **comptée**, et écrite en `etat: 'trop-petit'`
+avec sa largeur — une carte sans visuel qu'aucun compteur ne nomme est l'échec silencieux du §21.
+
+### 🔴 ET LA GARDE ÉCRITE LA VEILLE NE SURVEILLAIT QU'UN FICHIER
+
+**`remettre-en-file.js` vérifiait que le commit du worker contient `seuils-images.js`. Ce fichier
+porte le NOMBRE (350) ; le CRITÈRE qui s'en sert vit ailleurs — et c'est lui qui vient de changer.**
+Une remise en file faite ce matin aurait trouvé la garde VERTE, le seuil n'ayant pas bougé, et le
+worker aurait refusé PCG2 une troisième fois.
+🔑 **UNE RÈGLE N'EST PAS UNE CONSTANTE : c'est la constante ET le code qui décide avec elle.** La
+garde surveille désormais les trois fichiers, et chacun s'imprime séparément — un « ✅ » global qui
+cache un fichier en retard serait la garde verte et fausse du §41, à un jour d'intervalle. ⚠️ **Le
+test à se poser en écrivant une garde : si la règle changeait DEMAIN, quel fichier bougerait ?** Si
+la réponse n'est pas celle que la garde surveille, la garde répond à une question plus étroite que
+celle qu'elle a l'air de poser.
+
+### ⚠️ ET LE MOTIF DOMINANT A FRAPPÉ DANS LA SONDE ÉCRITE POUR CET INVENTAIRE
+
+**Mon dénominateur disait 69 598 quand `mesure-catalogue.js` dit 69 134.** Le filtre des cartes-code
+testait `p.name` — **le champ n'existe pas sur `numeros_cartes`**, où le libellé est
+`nom || nomFr || nomEn || slug`. Le filtre ne retirait donc RIEN, et le taux tombait à 80,7 % au
+lieu de 81,2 %.
+🔑 **CE QUE ÇA APPREND SUR `lecture-sure` LUI-MÊME, ET IL FAUT L'ÉCRIRE : le module ne garde que les
+lectures qu'on lui CONFIE.** Un `.filter()` sur un champ inexistant reste silencieux — il ne rend
+pas zéro, il rend TOUT, qui est le repli le plus plausible de tous. **Le §41 attrape le vide ; il
+n'attrape pas le PLEIN fabriqué par un prédicat qui ne mord sur rien.** La parade est celle du haut
+du catalogue : un prédicat de production se RECOPIE de la production (ici `mesure-catalogue.js:24`),
+et le chiffre se confronte à une mesure voisine déjà faite avant d'être cru.
+⚠️ **Deuxième occurrence le même jour, sur le même inventaire** : `images.set` est un **slugSet**
+(`Expansion-Pack`) et `impressions.expansion` est un **nom** (`Expansion Pack`). Comparer les deux
+rendait « 16 914 numéros non déductibles » — un faux chantier entier, bâti sur les seuls sets dont
+le slug vaut le nom.
+
+### ✅ ET LES « 71 LIGNES JAMAIS COLLECTÉES » N'EN SONT PAS
+
+**Les 71 portent toutes un `collecte_etat` en phase `jointure`, sans tableau `pages`** : c'est la
+voie « sans page », qui joint par l'expansion déclarée sur la carte et n'énumère aucune Setlist.
+**53 sont pourvues à 100 % par ailleurs, 18 laissent 97 produits au total.** La portée écrite au §43
+(« la garde des liens rouges est muette sur 71 lignes ») reste vraie et devient beaucoup moins
+inquiétante : **elle est muette sur des lignes qui ne passent pas par une Setlist**, donc qui ne
+peuvent pas être admises sur des liens rouges. ⚠️ Une limite qu'on écrit pour être honnête doit être
+remesurée comme les autres : celle-ci était honnête et surdimensionnée.
+
+---
+
+## 45. LE `numero` DES IMAGES ÉTAIT LU, UTILISÉ, ET JETÉ — 2026-09-21
+
+**L'agent du site demande un `numero` sur les 17 034 images artofpkm : sans lui, deux impressions
+d'un même document dans un même set (n°006, n°183, n°199 du set 151) ne se distinguent pas, et la
+fiche affiche le visuel de l'une pour l'autre — 149 cas mesurés côté site.**
+
+🔑 **LA RÉPONSE EST « REJEU », PAS « RECOLLECTE », ET LA DONNÉE N'A JAMAIS MANQUÉ.**
+`collecteur-images.js:306` LIT `im.numero` pour choisir la carte à joindre ; la ligne 336, qui
+construit l'entrée de `cartes.images`, ne le reportait pas. **Lu, utilisé, jeté à trois lignes
+d'intervalle.** C'est la question du haut du catalogue — *qu'est-ce qu'on a DÉJÀ ?* — et la réponse
+était dans la fonction elle-même.
+**Mesuré : 20 541 des 21 856 documents `images` d'artofpkm (94,0 %) portent un `numero`, et
+16 043 des 17 034 entrées de `cartes.images` le retrouvent par `cleR2`.** Les 991 restantes
+correspondent aux sets qu'artofpkm ne numérote pas (Gym japonais) : **une absence RÉELLE à la
+source**, écrite `null`, pas un champ oublié.
+✅ Corrigé d'une ligne, et le rejeu est `--rejouer-jointure=tous` : **zéro requête, zéro
+téléchargement** (§19, où ce mécanisme a déjà servi à changer un schéma sans redemander 400 images).
+⚠️ **ET LA LISTE SOURCE ARCHIVÉE NE PORTE PAS LE NUMÉRO** — `collecte_images_etat.entrees` porte
+`titre, sourceSetId, n, original, cleCdn, vignette`, où `n` est un RANG dans la liste, pas un numéro
+de carte. Ma sonde a d'abord annoncé « 0 numéro sur 23 289 entrées » : **la signature exacte du §41,
+dans une boucle écrite à la main hors du helper.** Le numéro vient de la page de CARTE d'artofpkm et
+vit sur la collection `images` — c'est elle que le rejeu relit, et c'est pour ça qu'il suffit.
+
+---
+
+## 46. LES LOGOS : LE COMPTE, ET LA CAUSE QUI N'A JAMAIS ÉTÉ ÉCRITE — 2026-09-21
+
+**Dénominateurs d'abord, parce que deux circulaient : 221 sets au logo et 111 au logo français sur
+les 570 ; sur les 439 sets PUBLIÉS (ceux qui portent un `nomAffichage`, donc visibles du site),
+207 (47,2 %) et 106 (24,1 %). 231 publiés n'ont AUCUN logo.**
+
+🔴 **ET LA CAUSE N'EST LISIBLE NULLE PART EN BASE : sur les 232 publiés sans logo anglais, ZÉRO
+porte un motif de refus.** Le collecteur décide, imprime sa raison, et n'écrit que les succès.
+C'est le §21 n°7 — *« un compte qui décide et qui ne vit que dans un log n'est pas encore une
+mesure »* — appliqué non plus à un compte mais à un REFUS. ⚠️ **Un refus non écrit est
+indistinguable d'un travail jamais fait**, et c'est exactement la question posée.
+
+✅ **RELANCÉ EN MODE MESURE, ZÉRO REQUÊTE (l'archive suffit), IL RÉPOND — et la réponse est
+« cherchée », pas « absente » :** 497 des 570 sets ont leur page archivée, **73 n'en ont aucune :
+pour ceux-là, la source n'a jamais pu être interrogée.** Sur les 497 : **245 retenus** (192
+occidentaux, 53 japonais) et **252 refusés**, chacun avec sa cause énumérée —
+
+| cause du refus | sets |
+|---|---|
+| fichier suffixé « EN » : c'est le logo du JUMEAU international (§26) | **125** |
+| aucun `setlogo` dans l'infobox — le paramètre n'existe pas | **109** |
+| aucune preuve de langue dans le nom de fichier | 7 |
+| le fichier porte le nom du jumeau (« Jungle », « Fossil », « Team Rocket »…) | 7 |
+| set occidental, fichier suffixé « JP » | 4 |
+
+🔑 **ET LE COLLECTEUR RETIENT AUJOURD'HUI 245 SETS QUAND LA BASE N'EN PORTE QUE 221 : 24 sets
+gagneraient leur logo à la prochaine écriture.** La règle a évolué depuis la dernière collecte et
+personne n'a relu ses refus — **c'est le §23 en une phrase, sur un autre objet que le seuil.**
+
+🔑 **POUR LE LOGO FRANÇAIS, LA RÉPONSE SE DÉMONTRE ET NE SE MESURE PAS : sur les 333 publiés qui
+n'en ont pas, 246 sont JAPONAIS — un set japonais n'a jamais eu de sortie française, donc il n'a
+pas de logo français.** C'est la forme la plus solide qu'une garde puisse prendre (§26, cinquième
+occurrence) : non pas « ça se trompe souvent » mais « ça ne peut pas être autre chose ». **Le reste
+atteignable est donc 87 sets occidentaux, dont 23 portent déjà une identité TCGdex** et sont
+interrogeables tout de suite ; les 64 autres demandent d'abord l'appariement TCGdex, qui est le
+même geste que pour le nom français.
+
+---
+
 ## 41. LA PARADE AU MOTIF DOMINANT : UN VIDE DOIT COÛTER UNE EXCEPTION — 2026-09-21
 
 **Neuf fois, ce dépôt a rangé en « absence » ce qui était une clé fausse, un champ mal nommé ou un

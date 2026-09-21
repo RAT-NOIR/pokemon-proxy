@@ -40,9 +40,20 @@ const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 
-// La règle dont cette remise en file dépend ENTIÈREMENT : si le worker ne porte pas ce fichier-là,
-// il rejugera chaque set sur l'ancien seuil, en relisant ses mesures en cache, sans une requête.
-const REGLE = 'collecte-cartes/seuils-images.js';
+// Les règles dont cette remise en file dépend ENTIÈREMENT : si le worker ne porte pas ces
+// fichiers-là, il rejugera chaque set sur l'ancienne règle, en relisant ses mesures en cache, sans
+// une requête — et l'unité ressortira `refuse` en une seconde.
+// 🔴 IL N'Y EN AVAIT QU'UNE, ET C'ÉTAIT DÉJÀ TROP PEU — corrigé le 2026-09-21, le lendemain du jour
+// où la garde a été écrite. `seuils-images.js` porte le NOMBRE (350) ; le CRITÈRE qui s'en sert vit
+// ailleurs, et il vient de changer : `collecteur-images.js` refusait un set sur le MINIMUM de ses
+// trois mesures et le refuse désormais sur leur MÉDIANE. Une remise en file faite ce matin aurait
+// trouvé la garde VERTE — le seuil n'ayant pas bougé — et le worker aurait refusé PCG2 pour la
+// troisième fois.
+// 🔑 LA QUESTION N'EST PAS « LE WORKER EST-IL À JOUR ? » MAIS « PORTE-T-IL LA RÈGLE DONT JE
+// DÉPENDS ? » — et une règle, ce n'est pas une constante : c'est la constante ET le code qui décide
+// avec elle. Une garde qui ne surveille qu'un des deux fichiers répond à une question plus étroite
+// que celle qu'elle a l'air de poser.
+const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma
@@ -64,15 +75,23 @@ async function etatDuWorker(cx) {
     // On prend le détenteur le plus FRAIS, quelle que soit la source : c'est lui qui travaille.
     const v = verrous.map(d => d.verrou).filter(x => x && x.pid != null)
         .sort((a, b) => new Date(b.depuis) - new Date(a.depuis))[0] || null;
-    const r = workerContient(v, REGLE);
-    const phrase = {
-        'a-jour': () => `✅ le worker tourne sur ${r.commit}, qui contient ${r.dernier} (dernier changement de ${REGLE})`,
-        'anterieur': () => `🔴 ${r.raison}`,
-        'sans-commit': () => `🔴 ${r.raison}`,
-        'local': () => `⚠️ ${r.raison}`,
-        'absent': () => `⚠️ ${r.raison} — aucun worker ne tourne, donc rien ne contredit la règle, mais rien ne la confirme non plus`,
-        'inconnu': () => `⚠️ ${r.raison}`
-    }[r.etat]();
+    // Chaque règle est vérifiée SÉPARÉMENT et chacune s'imprime : un « ✅ » global qui cache un
+    // fichier en retard est exactement la garde verte et fausse d'hier.
+    const resultats = REGLES.map(f => ({ f, r: workerContient(v, f) }));
+    const pire = resultats.find(x => ['anterieur', 'sans-commit', 'inconnu'].includes(x.r.etat)) || resultats[0];
+    const r = pire.r;
+    const lignes = resultats.map(({ f, r: x }) => {
+        const dire = {
+            'a-jour': () => `✅ ${f} : le worker tourne sur ${x.commit}, qui contient ${x.dernier}`,
+            'anterieur': () => `🔴 ${f} : ${x.raison}`,
+            'sans-commit': () => `🔴 ${f} : ${x.raison}`,
+            'local': () => `⚠️ ${f} : ${x.raison}`,
+            'absent': () => `⚠️ ${f} : ${x.raison} — aucun worker ne tourne, donc rien ne contredit la règle, mais rien ne la confirme non plus`,
+            'inconnu': () => `⚠️ ${f} : ${x.raison}`
+        }[x.etat];
+        return dire ? dire() : `⚠️ ${f} : état « ${x.etat} » non prévu`;
+    });
+    const phrase = lignes.join('\n   ');
     // ⚠️ `absent` N'EST PAS BLOQUANT, et c'est un choix qui s'explique : un worker arrêté ne peut pas
     // refuser ce qu'on enfile. Il prendra la file à son démarrage, avec le code de son déploiement —
     // et c'est à ce moment-là que la question se reposera. Bloquer ici empêcherait de remplir une
@@ -87,10 +106,24 @@ async function etatDuWorker(cx) {
     const W = await etatDuWorker(cx);
     console.log(`\n════ LE COMMIT DU WORKER ════\n   ${W.phrase}`);
 
-    // les lignes ADMISES, dédoublonnées par code (`ligne()` rend la première trouvée)
+    // 🔴 L'ÉNUMÉRATION NE SE BORNE PLUS AUX LIGNES ADMISES — corrigé le 2026-09-21, et c'est le §33
+    // à un nouvel endroit. Cet outil ne regardait que `l.verifie`, alors que la question qu'il pose
+    // est « ce SET a-t-il des cartes sans visuel ? ». Les deux ne coïncident pas : une expansion
+    // peut être fichée par la voie « sans page » (jointure par le nom d'expansion déclaré sur la
+    // carte) sans que sa ligne soit jamais passée en vérification. **Mesuré : 25 sets, 670 produits,
+    // cartes présentes, source artofpkm DÉCLARÉE, aucun visuel — et invisibles à la file pour
+    // toujours**, parce qu'une ligne non admise n'était pas même énumérée.
+    // 🔑 Un ensemble « ce qu'il y a à faire » se construit sur ce qui PRODUIT (des cartes en base),
+    // jamais sur un état administratif de notre travail. La garde utile est déjà trois lignes plus
+    // bas — `if (!g.n) continue` : un set sans carte n'a rien à imager, et elle suffit.
+    // ⚠️ L'ordre de préférence est conservé : une ligne ADMISE l'emporte sur une non admise de même
+    // code, sinon une ligne « à la main » non jugée masquerait la ligne automatique qui, elle, a un
+    // verdict écrit (§33, le motif `ligne()` rend TABLE ?? TABLE_AUTO ?? TABLE_SANS_PAGE).
     const parCode = new Map();
-    for (const l of [...TABLE_MAIN, ...TABLE_AUTO, ...TABLE_SANS_PAGE])
-        if (l.verifie && l.slugSet && l.code && !parCode.has(l.code)) parCode.set(l.code, l);
+    const toutesLignes = [...TABLE_MAIN, ...TABLE_AUTO, ...TABLE_SANS_PAGE].filter(l => l.slugSet && l.code);
+    for (const l of toutesLignes) if (l.verifie && !parCode.has(l.code)) parCode.set(l.code, l);
+    const admises = parCode.size;
+    for (const l of toutesLignes) if (!parCode.has(l.code)) parCode.set(l.code, l);
 
     // combien de cartes par set, combien portent un visuel POUR CE SET (§19 : la clé est (carte, set))
     const parSet = new Map();
@@ -143,7 +176,7 @@ async function etatDuWorker(cx) {
     }
 
     const tot = a => a.reduce((s, x) => s + x.manque, 0);
-    console.log(`\n════ DÉNOMINATEUR : ${parCode.size} lignes admises · ${file.size} unités en file · seuil ${LARGEUR_MIN} px ════`);
+    console.log(`\n════ DÉNOMINATEUR : ${parCode.size} lignes énumérées (${admises} admises + ${parCode.size - admises} non admises mais dont le set peut porter des cartes) · ${file.size} unités en file · seuil ${LARGEUR_MIN} px ════`);
     console.log(`   ✅ sets complets (toutes les cartes ont leur visuel)     : ${complets.length}`);
     console.log(`   ♻️  À REPRENDRE (refusées au seuil, passent maintenant)  : ${reprises.length} sets · ${tot(reprises)} cartes`);
     console.log(`   ➕ À INSÉRER (absentes de la file, source connue)        : ${insertions.length} sets · ${tot(insertions)} cartes`);

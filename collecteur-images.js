@@ -188,9 +188,22 @@ async function collecterSet(code, M, dossierRapport) {
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`mesures.${id}`]: m, phase: 'mesure' } });
         }
         console.log(`2. mesure ${id} : ${mesures[id].map(x => `${x.w}×${x.h} ${x.fmt} ${x.octets ? Math.round(x.octets / 1024) + ' Ko' : ''}`).join(' · ')}`);
-        const trop = mesures[id].filter(x => !x.w || x.w < LARGEUR_MIN);
+        // 🔴 LE SET SE REFUSE SUR SA MÉDIANE, PLUS SUR SON MINIMUM — corrigé le 2026-09-21, et c'est
+        // le §23 mot pour mot : « juger un ensemble sur son pire élément, c'est le refuser sur son
+        // bruit ». Une liste de 150 fichiers contient toujours une miniature, et un critère qui prend
+        // le MINIMUM devient d'autant plus sévère que l'échantillon est GRAND — l'inverse de ce qu'on
+        // veut. Le § dit aussi où vit chaque geste : « refuser un SET demande une statistique de
+        // masse, écarter un FICHIER demande le fichier lui-même ». Les deux existaient chez Bulbapedia
+        // (l. 135 et l. 143) et manquaient ici — §21 bis, deux exemplaires d'une règle qui divergent.
+        // ⚠️ MESURÉ AVANT D'ÊTRE ÉCRIT, sur les 229 sets artofpkm et leurs mesures déjà en base, zéro
+        // requête : **0 set perdu, 1 gagné** — PCG2 Clash of the Blue Sky, largeurs 162/593/593,
+        // refusé depuis le 2026-09-13 à cause d'une seule vignette. C'est le coût nul du §20 : une
+        // règle qui ne dérange rien de ce qui marche se câble sans attendre de la rencontrer.
+        const largeurs = mesures[id].map(x => x?.w).filter(Boolean).sort((a, b) => a - b);
+        const mediane = largeurs.length ? largeurs[Math.floor(largeurs.length / 2)] : null;
+        const trop = (mediane == null || mediane < LARGEUR_MIN) ? mesures[id].filter(x => !x.w || x.w < LARGEUR_MIN) : [];
         if (trop.length) {
-            console.error(`❌ ${code} : ${trop.length} original(s) sur 3 sous ${LARGEUR_MIN} px de large — set REFUSÉ, rien n'est téléchargé.`);
+            console.error(`❌ ${code} : largeur MÉDIANE ${mediane ?? '?'} px < ${LARGEUR_MIN} (${mesures[id].length} mesures, ${trop.length} sous le seuil) — set REFUSÉ, rien n'est téléchargé.`);
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-resolution' } });
             await liberer(); return { code, etat: 'refuse-resolution', mesures };
         }
@@ -198,7 +211,13 @@ async function collecterSet(code, M, dossierRapport) {
 
     // ---- 3. originaux, reprise au premier n sans sha256 -------------------------------------
     const bucket = process.env.R2_BUCKET_IMAGES;
-    let telecharges = 0, sautes = 0, echecs = 0;
+    // `tropPetits` est la MOITIÉ MANQUANTE du geste ci-dessus : admettre un set sur sa médiane sans
+    // écarter ses fichiers trop petits servirait la miniature de 162 px. Et il se COMPTE — une carte
+    // sans visuel qu'aucun compteur ne nomme est l'échec silencieux du §21, celui qui se découvre des
+    // semaines plus tard. La ligne `images` est écrite quand même, en `etat: 'trop-petit'` avec sa
+    // largeur : `joindreImages` ne lit que `etat: 'ok'`, donc elle ne joint rien, et le jour où la vue
+    // pleine carte existera on saura lesquelles reprendre sans redemander un octet au tiers.
+    let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
     for (const id of S.ids) {
         const faites = new Set((await M.Image.find({ source: SOURCE, sourceSetId: id, sha256: { $ne: null } }).select('n').lean()).map(x => x.n));
         for (const e of entrees[id]) {
@@ -210,6 +229,12 @@ async function collecterSet(code, M, dossierRapport) {
                 if (deja && deja.cleCdn && deja.cleCdn !== e.cleCdn) console.warn(`   ⚠️ ${_id} : clé CDN changée (${deja.cleCdn} -> ${e.cleCdn}) — mise à jour de la source, journalisée.`);
                 const faits = await src.pageCarte(id, e.n);
                 const img = await src.telecharger(faits.original || e.original);
+                if (!img.w || img.w < LARGEUR_MIN) {
+                    tropPetits++;
+                    console.warn(`   ⤵️ ${_id} « ${e.titre} » : ${img.w ?? '?'} px de large < ${LARGEUR_MIN} — ÉCARTÉE, comptée, non servie.`);
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: id, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit' } }, { upsert: true });
+                    continue;
+                }
                 const ext = img.fmt === 'webp' ? 'webp' : img.fmt === 'png' ? 'png' : 'jpg';
                 const cleR2 = `${SOURCE}/${id}/${e.n}.${ext}`;
                 await r2.deposerBinaire(bucket, cleR2, img.buffer, img.type || `image/${ext}`);   // R2 AVANT la ligne
@@ -231,7 +256,7 @@ async function collecterSet(code, M, dossierRapport) {
             }
         }
     }
-    console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs`);
+    console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${LARGEUR_MIN} px`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
     const complet = await joindreImages(M, L, slug, S, entrees, mesures, dossierRapport);
@@ -333,7 +358,15 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
             // cartes de la base, 29 déjà pourvues. `images` est une LISTE clé par `set`, comme la
             // jointure l'est par produit. L'ancien champ est retiré au passage.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve, ...(mention ? { mention } : {}), jointeLe: new Date() };
+            // 🔑 LE `numero` EST REPORTÉ ICI, ET IL N'A JAMAIS MANQUÉ : la ligne 306 le LIT pour
+            // joindre, et cette entrée-ci ne le reportait pas — lu, utilisé, jeté. Une page
+            // Bulbapedia est une carte TOUS TIRAGES FUSIONNÉS (§19) et un set moderne réimprime ses
+            // cartes en secrète et en illustration rare : sans le numéro, deux impressions d'un même
+            // document dans un même set ne se distinguent pas, et le site affiche le visuel de
+            // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
+            // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
+            // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(mention ? { mention } : {}), jointeLe: new Date() };
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
