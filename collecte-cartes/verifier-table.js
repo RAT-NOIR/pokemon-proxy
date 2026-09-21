@@ -130,6 +130,35 @@ async function verifierAuto() {
         }
         const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set(echantillons.values())]) : { pages: [], redirections: new Map() };
         const carteDe = t => pc.find(p => p.title === (rc.get(t) || t));
+
+        // ============================================================
+        // 🔴 LES LIENS ROUGES — une page MANQUANTE ne compte pas dans la couverture — 2026-09-21
+        // ============================================================
+        // L'occurrence : `CSVL2C` Travel Theme Pack et `CSVNC` Kitakami Theme Pack ont été ADMIS à
+        // 100 % de couverture, `numerosAmbigus: 0`, et ont collecté ZÉRO. Leurs 139 entrées de
+        // Setlist pointent vers des pages que Bulbapedia n'a jamais créées — `collecte_etat.pages`
+        // le dit sur chacune : `{"pageid":null,"revid":null,"etat":"manquant"}`, 139 sur 139.
+        // 🔑 ET C'EST LE §31 DANS SA FORME LA PLUS PURE : les 44 numéros de Kitakami tiennent tous
+        // entre 1 et 139, donc la couverture répond 100 % — « sur des plages DENSES de PETITS
+        // ENTIERS, toute expansion couvre toute autre ». Le contrôle bidirectionnel ne l'aurait pas
+        // vue non plus : le problème n'est pas l'appariement, c'est que RIEN de ce qui est apparié
+        // n'existe. **Une couverture mesure une appartenance de numéros, jamais l'existence des
+        // objets qu'ils désignent.**
+        // ⚠️ L'INFORMATION ÉTAIT DÉJÀ ÉCRITE, et c'est ce qui rend l'oubli coûteux : la collecte
+        // marque `manquant` depuis toujours ; personne ne la relisait en face de la décision
+        // d'ADMETTRE. C'est le §33 — une ligne qui ne peut pas collecter ne doit rien réserver.
+        // ⚠️ PORTÉE HONNÊTE, ÉCRITE ICI POUR QU'ON NE LA SURESTIME PAS : cette garde ne parle que
+        // des lignes DÉJÀ COLLECTÉES une fois. Sur une ligne neuve, `collecte_etat` n'existe pas et
+        // la garde est muette — prouver l'absence d'une page AVANT la collecte demanderait une
+        // requête d'existence par lot de 50 titres, non faite. **Une garde qui ne couvre qu'une
+        // moitié de sa population doit le dire, sinon elle rassure sur l'autre.**
+        const titresManquants = new Map();   // slugSet → Set de titres dont la page n'existe pas
+        for (const e of await cx.db.collection('collecte_etat')
+            .find({ _id: { $in: bloc.map(l => l.slugSet).filter(Boolean) } })
+            .project({ pages: 1 }).toArray()) {
+            const m = (e.pages || []).filter(p => p && p.etat === 'manquant').map(p => p.titre);
+            if (m.length) titresManquants.set(String(e._id), new Set(m));
+        }
         const ajd = new Date().toISOString().slice(0, 10);
         for (const l of bloc) {
             const raisons = [];
@@ -150,13 +179,25 @@ async function verifierAuto() {
             // refus par le ratio, jamais l'inverse. Aucune des 405 lignes déjà vérifiées ne peut donc tomber.
             if (l._p && v.entrees) {
                 const jetons = jetonsDeSetlist(l._entrees, [].concat(l.bulba.expansion, l.bulba.setlist || []));
-                const numsSetlist = new Set(l._entrees.map(x => numeroDeSetlist(x, jetons)).filter(n => n != null).map(cleNumero));
+                // 🔴 LES ENTRÉES DONT LA PAGE EST MANQUANTE SORTENT DE LA COUVERTURE. Le titre est
+                // pris sur l'entrée elle-même (`e.titre`), exactement comme `collecteur-texte.js:207`
+                // construit sa liste : la garde lit LA MÊME CHOSE que le code de production, faute de
+                // quoi elle fabriquerait le défaut qu'elle mesure (motif dominant du chantier).
+                const absentes = titresManquants.get(l.slugSet) || new Set();
+                const vivantes = l._entrees.filter(x => !absentes.has(x.titre));
+                v.entreesSansPage = l._entrees.length - vivantes.length;
+                const numsSetlist = new Set(vivantes.map(x => numeroDeSetlist(x, jetons)).filter(n => n != null).map(cleNumero));
                 const numsProduits = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '').map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
                 v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size, taux: numsProduits.length ? Number((couverts / numsProduits.length).toFixed(3)) : null };
+                // La garde des liens rouges vaut pour TOUTE ligne, pas seulement `numerosDepuisSetlist` :
+                // une Setlist entièrement rouge ne peut rien collecter, quelle que soit la clé. §21 bis —
+                // ne pas refaire la faute de la couverture, corrigée d'un côté et laissée de l'autre.
+                if (v.entreesSansPage && !vivantes.length)
+                    raisons.push(`les ${l._entrees.length} entrées de Setlist sont des LIENS ROUGES (aucune page chez Bulbapedia) : rien à collecter`);
                 if (l.bulba.numerosDepuisSetlist) {
                     if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
-                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95`);
+                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}`);
                 }
             }
             const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;

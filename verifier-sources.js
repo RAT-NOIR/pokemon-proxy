@@ -78,11 +78,70 @@ function verifierSyntaxe(fichiers) {
  *
  * @returns {{fichier: string, nom: string, module: string}[]}
  */
+/**
+ * Blanchit le TEXTE des littéraux de chaîne, en gardant le code des interpolations `${…}`.
+ *
+ * 🔴 POURQUOI, 2026-09-21 : les commentaires étaient retirés, les CHAÎNES non. `test-chargement.js`
+ * échouait en permanence sur « collecteur-texte.js appelle « ligne » sans l'importer » — le fichier
+ * importe ce module sous un ALIAS et n'appelle jamais `ligne` : ce que le contrôle voyait était la
+ * chaîne `` `${n} ligne(s) sans lien` ``. ⚠️ **Un test qui échoue en permanence finit ignoré, et
+ * c'est lui qui masquera le prochain vrai défaut.** Un faux positif ne coûte pas une ligne de bruit,
+ * il coûte le contrôle.
+ *
+ * 🔑 ET L'INTERPOLATION EST GARDÉE, CE QUI EST LE POINT DÉLICAT : `${apparier(x)}` est du CODE dans
+ * un gabarit. Blanchir le gabarit en entier aurait supprimé le faux positif en créant un angle mort
+ * — la correction qui « marche » en retirant des candidats (§34), sur un outil de contrôle.
+ *
+ * ⚠️ RÉSIDU NOMMÉ : une apostrophe ou un accent grave DANS UN LITTÉRAL RÉGULIER (`/l'un/`) ouvrirait
+ * une fausse chaîne et blanchirait la suite. Le sens de l'erreur devient alors un faux NÉGATIF
+ * (un oubli non vu) au lieu d'un faux positif — moins bon en principe, mais le contrôle reste
+ * utilisable, ce qu'il n'était plus. Non corrigé, écrit ici pour qu'on le retrouve.
+ */
+function sansChaines(src) {
+    const n = src.length;
+    const pile = [];            // sommet : 'gabarit' | { depth } pour une interpolation en cours
+    let out = '', i = 0;
+    while (i < n) {
+        const sommet = pile[pile.length - 1];
+        const c = src[i];
+        if (sommet === 'gabarit') {
+            if (c === '\\') { out += '  '; i += 2; continue; }
+            if (c === '`') { pile.pop(); out += ' '; i++; continue; }
+            if (c === '$' && src[i + 1] === '{') { pile.push({ depth: 0 }); out += '  '; i += 2; continue; }
+            out += (c === '\n' ? '\n' : ' '); i++; continue;
+        }
+        if (c === "'" || c === '"') {
+            const fin = c; out += ' '; i++;
+            while (i < n && src[i] !== fin) {
+                if (src[i] === '\\') { out += '  '; i += 2; continue; }
+                if (src[i] === '\n') break;      // chaîne non terminée : elle ne mange pas le fichier
+                out += ' '; i++;
+            }
+            if (i < n && src[i] === fin) { out += ' '; i++; }
+            continue;
+        }
+        if (c === '`') { pile.push('gabarit'); out += ' '; i++; continue; }
+        if (sommet && typeof sommet === 'object') {
+            if (c === '{') { sommet.depth++; out += c; i++; continue; }
+            if (c === '}') {
+                if (sommet.depth === 0) { pile.pop(); out += ' '; i++; continue; }   // retour au gabarit
+                sommet.depth--; out += c; i++; continue;
+            }
+        }
+        out += c; i++;
+    }
+    return out;
+}
+
 function verifierImports(fichier) {
     const brut = fs.readFileSync(fichier, 'utf8');
     // Commentaires retirés d'abord : ce projet en est plein, et ils contiennent des noms
     // de fonctions suivis de parenthèses. Le `[^:]` épargne les « https:// ».
     const source = brut.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    // ⚠️ DEUX LECTURES DU MÊME FICHIER, ET ELLES NE SERVENT PAS À LA MÊME CHOSE : la détection des
+    // `require('./x')` a BESOIN des chaînes (le chemin du module en est une) ; la détection des
+    // APPELS doit les ignorer. On ne peut donc pas blanchir une fois pour toutes.
+    const sansTextes = sansChaines(source);
 
     const importes = new Set();
     for (const m of source.matchAll(/(?:const|let)\s*\{([^}]+)\}\s*=\s*require\(['"]\.\/[^'"]+['"]\)/g)) {
@@ -119,7 +178,8 @@ function verifierImports(fichier) {
         for (const nom of exports) {
             if (importes.has(nom) || locaux.has(nom)) continue;
             // Appelé comme FONCTION, et pas en accès de propriété (voir l'avertissement).
-            if (new RegExp(`(?<![.\\w])${nom}\\s*\\(`).test(source)) {
+            // Sur le source SANS le texte des chaînes : `« ligne(s) sans lien »` n'est pas un appel.
+            if (new RegExp(`(?<![.\\w])${nom}\\s*\\(`).test(sansTextes)) {
                 oublis.push({ fichier: path.relative(RACINE, fichier), nom, module: mod });
             }
         }

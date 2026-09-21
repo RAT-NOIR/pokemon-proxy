@@ -38,15 +38,32 @@ const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/t
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
+const { lireMongo } = require('./collecte-cartes/lecture-sure');
 
 // La règle dont cette remise en file dépend ENTIÈREMENT : si le worker ne porte pas ce fichier-là,
 // il rejugera chaque set sur l'ancien seuil, en relisant ses mesures en cache, sans une requête.
 const REGLE = 'collecte-cartes/seuils-images.js';
 
+// 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
+// garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma
+// porte `{ collection: 'collecte_images_etat' }`). Une collection inexistante rend `null`, `null`
+// devient « aucun détenteur », et « aucun détenteur » est NON BLOQUANT par conception.
+// **La garde écrite pour empêcher d'enfiler sous un mauvais commit était donc toujours verte.**
+// 🔑 C'est le motif dominant du chantier appliqué à la parade elle-même, le jour où je l'écrivais :
+// `lecture-sure.js` existait déjà, et je ne l'avais pas utilisé ICI. Une garde qui échoue vers le
+// PASSANT est pire qu'une garde absente — l'absence, au moins, ne rassure personne.
+const COLLECTION_VERROUS = 'collecte_images_etat';
+
 /** Le worker porte-t-il la règle ? Rend { bloque, phrase } — la phrase va au rapport, toujours. */
 async function etatDuWorker(cx) {
-    const v = (await cx.db.collection('etatimages').findOne({ _id: 'bulbapedia/__collecteur__' }))?.verrou
-        || (await cx.db.collection('etatimages').findOne({ _id: 'artofpkm/__collecteur__' }))?.verrou;
+    const col = cx.db.collection(COLLECTION_VERROUS);
+    // Le dénominateur AVANT la question : une collection vide ou mal nommée ne peut pas répondre
+    // « aucun détenteur », elle doit LEVER. C'est `lireMongo` qui le fait, et c'est tout l'objet du §41.
+    await lireMongo(col, {}, { nom: COLLECTION_VERROUS });
+    const verrous = await col.find({ _id: /__collecteur__$/ }).toArray();
+    // On prend le détenteur le plus FRAIS, quelle que soit la source : c'est lui qui travaille.
+    const v = verrous.map(d => d.verrou).filter(x => x && x.pid != null)
+        .sort((a, b) => new Date(b.depuis) - new Date(a.depuis))[0] || null;
     const r = workerContient(v, REGLE);
     const phrase = {
         'a-jour': () => `✅ le worker tourne sur ${r.commit}, qui contient ${r.dernier} (dernier changement de ${REGLE})`,

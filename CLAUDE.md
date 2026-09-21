@@ -261,11 +261,32 @@ chinoise est VIRTUELLE.** `jointure.js:115` fabrique l'impression depuis la Setl
 par `setlist+numero`** — sans jamais la poser sur la carte. Le TEXTE chinois marche donc
 parfaitement ; l'IMAGE, qui lit la carte, ne voit rien. **Deux voies, deux endroits où vit la même
 impression, et une seule des deux est alimentée.**
-🕳️ **CE QUI RESTE OUVERT, ET C'EST LA VRAIE QUESTION MAINTENANT : la page de SET « (ATCG) » porte-t-elle
-une galerie ?** Toute la résolution actuelle part de la page de la CARTE ; personne n'a regardé la
-page du SET. ⚠️ Et la voie facile est interdite : servir le fichier japonais du même dessin
-violerait le §19 (« une image appartient à un TIRAGE »). **Non mesuré, nommé — et à ne pas
-reformuler en « absence » avant de l'avoir énuméré (§30).**
+### 🕳️ LA GALERIE ATCG N'EXISTE PAS — ÉNUMÉRÉ, PAS CHERCHÉ — 2026-09-21
+
+**La dernière voie possible pour les images chinoises était la page de SET. Mesurée sur les 136
+wikitexts « (ATCG) » archivés — l'énumération COMPLÈTE (129 `(ATCG)` + 3 `(SCTCG)` + 4 `(TCTCG)`),
+pas un échantillon — et à ZÉRO requête, le worker tenant le verrou Bulbapedia :**
+
+| marqueur | pages sur 136 |
+|---|---|
+| `<gallery` | **0** |
+| `{{TCGGallery` | **0** |
+| `[[File:…png\|jpg]]` | 50 |
+| `{{Setlist/header` | 122 |
+
+⚠️ **Et les 50 fichiers cités ont été OUVERTS, pas comptés (§22) : ce sont des BANNIÈRES DE SET** —
+`CSM1.5 Banner.png`, `CSM2.5 Banner.png`, `CSML banner.png`, une par page. Pas une image de carte.
+
+🔴 **LES TROIS SOURCES SONT DONC ÉPUISÉES POUR LES VISUELS CHINOIS, ET ELLES SONT NOMMÉES** :
+artofpkm ne porte pas le chinois (table des sources, énumérée) · la page de CARTE ne déclare aucun
+tirage chinois (0 impression `zh-hans` sur 212 cartes de Sparkling Fable) · la page de SET n'a pas
+de galerie (0 sur 136). **Instrument : l'archive R2 des pages (ATCG) et la base `cartes`. Date :
+2026-09-21.** C'est le format que le §36 exige, et il permet de rouvrir le dossier le jour où une
+quatrième source apparaît.
+⚠️ **ET LA VOIE FACILE RESTE INTERDITE** : servir le fichier japonais du même dessin violerait le
+§19 (« une image appartient à un TIRAGE »). 🔑 **Le TEXTE chinois, lui, est complet** — 34 lignes
+collectées, 8 067 jointures. **Ce qui manque est le VISUEL de 6 785 cartes, et c'est un plancher
+d'images, pas un plancher de fiches.** Les deux ne se confondent pas dans le décompte du 100 %.
 
 ---
 
@@ -296,6 +317,33 @@ simplement jamais relue en face de la décision d'admettre. ⚠️ Et c'est la m
 une ligne qui ne peut pas collecter ne doit rien réserver. **Non câblée : elle doit d'abord être
 mesurée sur ce qui MARCHE (§22), car un set neuf a lui aussi des pages non encore archivées, et
 « manquant » ne veut pas dire la même chose avant et après une collecte.**
+
+### ✅ LA GARDE EST CÂBLÉE, ET LE REJEU A TROUVÉ UN TROISIÈME CAS — 2026-09-21
+
+**`verifier-table.js` retire désormais de la couverture toute entrée dont la page est `manquant`**,
+et refuse la ligne quand il n'en reste aucune. Le titre est lu sur l'entrée (`e.titre`), exactement
+comme `collecteur-texte.js:207` construit sa liste — **la garde lit la MÊME CHOSE que la production**,
+faute de quoi elle fabriquerait le défaut qu'elle mesure.
+
+**REJEU DES 568 LIGNES ADMISES, zéro requête. Dénominateur imprimé : 71 n'ont jamais été collectées
+(la garde est muette sur elles), 6 portent au moins une page manquante.**
+
+| | lignes | produits | ce que la garde fait |
+|---|---|---|---|
+| 🔴 **100 % de liens rouges** | **3** | **323** | **REFUSE** |
+| ⚠️ partiellement rouges | 3 | — | retire ces numéros de la couverture |
+
+🔑 **ET LE REJEU A TROUVÉ UN TROISIÈME CAS QUE PERSONNE N'AVAIT VU : `CBB2C` Gem-Pack-Vol-2,
+140 produits, 140/140 pages manquantes.** Il collectait zéro depuis le début, sans rien réclamer —
+exactement le silence que le §39 décrit. Les deux autres sont `CSVL2C` (139/139) et `CSVNC`
+(139/139), et la garde les refuse tous les trois. Les partielles : `CSV9.5C` Terastal-Gathering à
+54,1 % (259 produits), `SV-P/TH` à 13,6 %, `CS6.5C` à 1,0 %.
+
+⚠️ **PORTÉE HONNÊTE, ÉCRITE DANS LE CODE ET ICI : la garde ne parle que des lignes DÉJÀ COLLECTÉES
+une fois.** Sur une ligne neuve, `collecte_etat` n'existe pas et elle est muette — prouver
+l'absence d'une page AVANT la collecte demanderait une requête d'existence par lot de 50 titres,
+non faite. **Une garde qui ne couvre qu'une moitié de sa population doit le dire, sinon elle
+rassure sur l'autre.**
 
 ✅ **ET LA ROUTE EXISTE, ELLE EST DÉJÀ DÉCRITE AU §40.** Ces deux produits sont des **packs à thème
 qui RÉIMPRIMENT des cartes existantes** : « Forretress ex » est chez nous sous `_id 282519`, sets
@@ -343,6 +391,29 @@ pression est toujours pire que celui qu'on a prévu. Mais **`videAutorise: true`
 raison doit être une phrase écrite, et elle est IMPRIMÉE quand le vide survient. **Le coût du
 contournement n'est pas un effort, c'est une phrase qu'on doit pouvoir écrire — et c'est exactement
 le moment où l'on s'aperçoit qu'on n'en a pas.**
+
+### 🔴 ET LE LENDEMAIN, LA GARDE ÉCRITE POUR ÇA A ÉCHOUÉ VERS LE PASSANT — 2026-09-21
+
+**La garde du commit du worker interrogeait `etatimages`. La collection s'appelle
+`collecte_images_etat`** — `etatimages` est le nom du MODÈLE mongoose, et le schéma porte
+`{ collection: 'collecte_images_etat' }`. Une collection inexistante rend `null` ; `null` devient
+« aucun détenteur » ; et « aucun détenteur » est **non bloquant par conception**. **La garde écrite
+pour empêcher d'enfiler sous un mauvais commit était donc verte en permanence.**
+
+🔑 **CE QUI L'A ATTRAPÉE : DEUX LECTURES CONTRADICTOIRES À TRENTE SECONDES D'ÉCART.**
+`file-a-l-arret.js` imprimait « bulbapedia/__collecteur__ pid 52, battement il y a 34 s » pendant
+que ma garde disait « aucun détenteur ». **Un chiffre qui ne colle pas, et c'est le mien qu'on
+ouvre** — le réflexe du haut du catalogue, pour la septième fois.
+
+🔴 **ET LA DIRECTION DE L'ÉCHEC EST CE QUI COMPTE : une garde qui échoue vers le PASSANT est pire
+qu'une garde absente.** Une garde absente ne rassure personne ; une garde qui laisse tout passer
+fait croire que la question a été posée. ⚠️ **Le test à écrire pour toute garde neuve n'est donc pas
+« refuse-t-elle quand il faut ? » mais « SAIT-ELLE refuser ? »** — la faire crier une fois, sur un
+cas fabriqué, avant de lui faire confiance. Un contrôle qu'on n'a jamais vu dire non n'a pas été
+vérifié, il a été supposé.
+⚠️ **Et le module de ce § existait déjà quand j'ai écrit cette garde. Je ne l'y avais pas appliqué.**
+`lireMongo` lève sur une collection vide ou mal nommée : trois lignes auraient suffi. **Écrire la
+parade ne la met pas en service.**
 
 🕳️ **DETTE NOMMÉE, ET ELLE EST LA MOITIÉ DU TRAVAIL : le module existe, il n'est pas encore
 OBLIGATOIRE.** Le dépôt compte des dizaines de lectures écrites avant lui. Les convertir toutes d'un
