@@ -81,8 +81,11 @@ function installerArretPropre() {
 // Renvoie { n, cartes, apercu, idExpansion, codeSet }. n = 0 si rien récupéré.
 async function apprendreUnSet(identifiant) {
     const cartes = await scraperListeExpansion(identifiant);
+    // `arret` : Cardmarket nous a limités (1015) ou Cloudflare n'est pas franchi — la liste est PARTIELLE, et le lot doit
+    // s'arrêter (live-cardmarket.js, 2026-09-24). Ce qui a été lu s'écrit quand même : un produit appris ne se redemande pas.
+    const arret = cartes.arret || null;
     if (cartes.length === 0) {
-        return { n: 0, cartes: [], apercu: null, idExpansion: null, codeSet: null };
+        return { n: 0, cartes: [], apercu: null, idExpansion: null, codeSet: null, arret };
     }
 
     // idExpansion : direct si numérique, sinon déduit du catalogue via la 1re carte
@@ -113,7 +116,7 @@ async function apprendreUnSet(identifiant) {
         );
     }
 
-    return { n: operations.length, cartes, apercu: cartes[0], idExpansion, codeSet };
+    return { n: operations.length, cartes, apercu: cartes[0], idExpansion, codeSet, arret };
 }
 
 module.exports = {

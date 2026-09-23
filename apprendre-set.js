@@ -21,7 +21,8 @@ const {
 } = require('./apprentissage-commun');
 
 async function main() {
-    const cibles = process.argv.slice(2).filter(Boolean);
+    // les drapeaux (`--base=test`) ne sont pas des cibles : sans ce filtre, « --base=test » était appris comme un slug
+    const cibles = process.argv.slice(2).filter(a => a && !a.startsWith('--'));
     if (cibles.length === 0) {
         console.error('Usage : node apprendre-set.js <idExpansion|slug> [autres...]');
         console.error('Exemples :');
@@ -35,10 +36,21 @@ async function main() {
     console.log('(Si Cloudflare demande la case, la fenêtre Chrome apparaîtra.)');
 
     let total = 0;
-    for (const cible of cibles) {
+    for (const [i, cible] of cibles.entries()) {
         console.log(`\n=== Apprentissage de "${cible}" ===`);
-        const { n, cartes, idExpansion, codeSet } = await apprendreUnSet(cible);
+        const { n, cartes, idExpansion, codeSet, arret } = await apprendreUnSet(cible);
 
+        // 🔴 CARDMARKET NOUS LIMITE : LE LOT ENTIER S'ARRÊTE (2026-09-24). Une limite de débit porte sur le client ; passer
+        // à l'expansion suivante, c'est frapper encore un serveur qui vient de dire non (cinq fois de suite ce jour-là).
+        if (arret) {
+            if (n) console.log(`⚠️ ${n} cartes mémorisées pour "${cible}" — liste PARTIELLE.`);
+            console.log(`\n🚫 ${arret === '1015' ? 'Cardmarket nous limite (1015)' : 'Cloudflare non franchi'} : arrêt du lot, rien d'autre n'est demandé.`);
+            console.log(`   Reprendre plus tard (un produit appris ne se redemande pas, mais la liste d'un set se relit en entier) :`);
+            console.log(`     node apprendre-set.js --base=${process.env.MONGODB_BASE || '<base>'} ${cibles.slice(i).join(' ')}`);
+            total += n;
+            process.exitCode = 3;
+            break;
+        }
         if (n === 0) {
             console.log(`⚠️ Aucune carte récupérée pour "${cible}" (slug erroné, Cloudflare, ou rate-limit ?).`);
             continue;

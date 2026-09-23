@@ -34,6 +34,8 @@ const ANCIEN = args[1] || null;
 const RACINE = process.env.RACINE_IMAGES || 'C:\\Users\\Yung\\Desktop\\CARDMARKET IMAGE';
 const EST_CARTE = /^(\d+)\.(jpe?g|png|webp)$/i;
 const pc = (n, d) => d ? `${(100 * n / d).toFixed(1)} %` : '—';
+// « 0000-00-00 » n'est pas une date (import-catalogue.js, la même règle)
+const estDate = v => typeof v === 'string' && !/^0{4}-0{2}-0{2}/.test(v) && !Number.isNaN(new Date(v).getTime());
 
 function lireExport(f) {
     const brut = JSON.parse(fs.readFileSync(f, 'utf8'));
@@ -111,6 +113,67 @@ function lireExport(f) {
         for (const x of liste.slice(0, 15)) console.log(`      ${format(x)}`);
         if (liste.length > 15) console.log(`      … +${liste.length - 15}`);
     }
+
+    // ── LES NOUVEAUX, PAR EXPANSION (2026-09-24) ────────────────────────────
+    // L'export ne porte PAS le nom d'expansion, seulement `idExpansion` : on le résout par `codes_set` (appris) et par le
+    // `slugSet` de `numeros_cartes`. 🔑 Deux populations qui ne se traitent pas pareil : une expansion ENTIÈREMENT nouvelle
+    // (aucun de ses produits en base) demande une ligne de table et un apprentissage ; un produit AJOUTÉ à une expansion
+    // connue ne demande qu'une recollecte de son set. « Créée le » = la plus ancienne `dateAdded` de ses produits.
+    const CODES = mongoose.connection.collection('codes_set');
+    const codeDe = new Map((await CODES.find({}, { projection: { idExpansion: 1, codeSet: 1 } }).toArray()).map(c => [c.idExpansion, c.codeSet]));
+    const slugsDe = new Map();
+    for (const n of await NUM.find({ slugSet: { $nin: [null, ''] } }, { projection: { idExpansion: 1, slugSet: 1 } }).toArray()) {
+        const m = slugsDe.get(n.idExpansion) || slugsDe.set(n.idExpansion, new Map()).get(n.idExpansion);
+        m.set(n.slugSet, (m.get(n.slugSet) || 0) + 1);
+    }
+    const slugDe = id => { const m = slugsDe.get(id); return m ? [...m].sort((a, b) => b[1] - a[1])[0][0] : null; };
+    const expEnBase = new Set([...enBase.values()].map(p => p.idExpansion));
+    const parExp = new Map();
+    for (const p of nouveaux) (parExp.get(p.idExpansion) || parExp.set(p.idExpansion, []).get(p.idExpansion)).push(p);
+    const dateDe = p => estDate(p.dateAdded) ? p.dateAdded.slice(0, 10) : null;
+    const lignes = [...parExp].map(([id, ps]) => {
+        const tous = neuf.produits.filter(p => p.idExpansion === id);
+        const dates = tous.map(dateDe).filter(Boolean).sort();
+        // `cartesCode` : combien de ces nouveaux sont des cartes-code (prédicat de production, mesure-catalogue.js:24) —
+        // une expansion qui n'en porte pas d'autres n'a rien à apprendre ni à collecter
+        const cartesCode = ps.filter(p => /\b(online|live)\s+code\s+card\b/i.test(String(p.name || ''))).length;
+        return { id, n: ps.length, cartesCode, total: tous.length, neuve: !expEnBase.has(id), code: codeDe.get(id) ?? null, slug: slugDe(id), creee: dates[0] ?? null, derniere: dates.slice(-1)[0] ?? null, ex: ps.slice(0, 2).map(p => p.name) };
+    });
+    const neuves = lignes.filter(l => l.neuve).sort((a, b) => String(b.creee).localeCompare(String(a.creee)));
+    const connues = lignes.filter(l => !l.neuve).sort((a, b) => b.n - a.n);
+    console.log('\n' + '═'.repeat(96));
+    console.log(`LES ${nouveaux.length} NOUVEAUX, PAR EXPANSION — ${parExp.size} expansions touchées`);
+    console.log('═'.repeat(96));
+    console.log(`   🆕 expansions ENTIÈREMENT nouvelles (aucun produit en base) : ${neuves.length} · ${neuves.reduce((s, l) => s + l.n, 0)} produits`);
+    console.log(`      dont résolues par codes_set : ${neuves.filter(l => l.code).length} · par un slugSet appris : ${neuves.filter(l => l.slug).length}`);
+    for (const l of neuves) console.log(`      ${String(l.id).padEnd(6)} ${String(l.code ?? '—').padEnd(9)} ${String(l.slug ?? '(slug inconnu)').padEnd(34)} ${String(l.n).padStart(4)} p · créée ${l.creee ?? '?'} · ex. « ${l.ex.join(' », « ').slice(0, 60)} »`);
+    console.log(`\n   ➕ produits AJOUTÉS à des expansions connues : ${connues.reduce((s, l) => s + l.n, 0)} dans ${connues.length} expansions`);
+    for (const l of connues) console.log(`      ${String(l.id).padEnd(6)} ${String(l.code ?? '—').padEnd(9)} ${String(l.slug ?? '(slug inconnu)').padEnd(34)} +${String(l.n).padStart(3)} / ${l.total} · derniers ${l.derniere ?? '?'} · ex. « ${l.ex.join(' », « ').slice(0, 60)} »`);
+    fs.mkdirSync(path.join(__dirname, 'collecte-cartes', 'rapports'), { recursive: true });
+    // horodaté : relancé APRÈS l'import, le diff rend zéro — il ne doit pas effacer celui d'avant (vécu le 2026-09-24)
+    const rapport = path.join(__dirname, 'collecte-cartes', 'rapports', `diff-${path.basename(NOUVEAU, '.json')}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    fs.writeFileSync(rapport, JSON.stringify({ fichier: path.basename(NOUVEAU), createdAt: neuf.createdAt, nouveaux: nouveaux.length, disparus: disparus.map(d => d.idProduct), neuves, connues, nomChange, expChange }, null, 1));
+    console.log(`   (détail : collecte-cartes/rapports/${path.basename(rapport)})`);
+
+    // ── LES CARTES-CODE : CE QUE LE FILTRE DE PRODUCTION RETIRE, DE CHAQUE CÔTÉ ──
+    // Le prédicat est RECOPIÉ de la production (mesure-catalogue.js:24, §21 bis) ; « code card » tout court est imprimé
+    // à côté pour qu'un libellé que le filtre raterait se voie (le filtre dit « online|live », l'export dit autre chose ?).
+    const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));
+    const large = nom => /code\s*card/i.test(String(nom || ''));
+    const codesFichier = neuf.produits.filter(p => large(p.name));
+    const libelle = n => n.nom || n.nomFr || n.nomEn || n.slug || '';
+    const numsCode = await NUM.find({ idProduct: { $in: codesFichier.map(p => p.idProduct) } }, { projection: { idProduct: 1, nom: 1, nomFr: 1, nomEn: 1, slug: 1 } }).toArray();
+    const numAll = await NUM.countDocuments({});
+    console.log('\n' + '═'.repeat(96));
+    console.log('LES CARTES-CODE — trois populations, un prédicat');
+    console.log('═'.repeat(96));
+    console.log(`   export (${neuf.produits.length}) : « code card » ${codesFichier.length} · dont le filtre de production retient ${codesFichier.filter(p => estCarteCode(p.name)).length}`);
+    console.log(`   catalogue_produits en base (${enBase.size}) : « code card » ${[...enBase.values()].filter(p => large(p.name)).length} · filtre ${[...enBase.values()].filter(p => estCarteCode(p.name)).length}`);
+    console.log(`   numeros_cartes (${numAll}) : présentes ${numsCode.length} des ${codesFichier.length} de l'export · le filtre (sur le libellé appris) en retient ${numsCode.filter(n => estCarteCode(libelle(n))).length}`);
+    const rates = numsCode.filter(n => !estCarteCode(libelle(n)));
+    if (rates.length) console.log(`   🔴 ratées par le filtre sur le libellé appris : ${rates.length} · ex. ${rates.slice(0, 6).map(n => `« ${libelle(n)} »`).join(' ')}`);
+    const nouveauxCode = codesFichier.filter(p => !enBase.has(p.idProduct)).length;
+    console.log(`   cartes-code parmi les ${nouveaux.length} nouveaux : ${nouveauxCode}`);
 
     // ── CE QUE ÇA RÉSOUT SUR LE DISQUE ──────────────────────────────────────
     if (fs.existsSync(RACINE)) {

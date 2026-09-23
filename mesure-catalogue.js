@@ -25,11 +25,33 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
 
 (async () => {
     const tout = process.argv.includes('--tout');
+    // --export=<products_singles_*.json> : le dénominateur est l'EXPORT CARDMARKET LUI-MÊME (2026-09-24). 🔴 Sans lui,
+    // le dénominateur est `numeros_cartes`, c'est-à-dire ce que NOUS avons appris : un produit jamais appris n'était pas
+    // un trou, il n'existait pas (3 590 produits du catalogue sur 73 188). « 100 % du catalogue » se mesure sur le catalogue.
+    const exportArg = process.argv.find(a => a.startsWith('--export='));
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
 
-    const produits = await prod.db.collection('numeros_cartes')
-        .find({}, { projection: { idProduct: 1, slugSet: 1, nom: 1, nomFr: 1, nomEn: 1, slug: 1 } }).toArray();
-    const libelle = p => p.nom || p.nomFr || p.nomEn || p.slug || '';
+    const appris = await prod.db.collection('numeros_cartes')
+        .find({}, { projection: { idProduct: 1, idExpansion: 1, slugSet: 1, nom: 1, nomFr: 1, nomEn: 1, slug: 1 } }).toArray();
+    // 🔴 LE FILTRE LIT LE NOM DE CARDMARKET, PAS LE LIBELLÉ APPRIS (2026-09-24) : 216 cartes-code de `numeros_cartes` ont un
+    // libellé appris VIDE — le prédicat n'avait rien à lire et les laissait au dénominateur. Le nom du catalogue d'abord.
+    const nomCatalogue = new Map((await prod.db.collection('catalogue_produits').find({}, { projection: { idProduct: 1, name: 1 } }).toArray()).map(p => [p.idProduct, p.name]));
+    const libelle = p => nomCatalogue.get(p.idProduct) || p.nom || p.nomFr || p.nomEn || p.slug || '';
+    let produits = appris;
+    if (exportArg) {
+        const fichier = exportArg.slice('--export='.length);
+        const E = JSON.parse(require('fs').readFileSync(fichier, 'utf8'));
+        if (!E.products?.length) throw new Error(`${fichier} : aucun produit lu — je ne mesure pas sur un vide`);
+        const parId = new Map(appris.map(p => [p.idProduct, p]));
+        // le slugSet d'un produit jamais appris : celui, majoritaire, des produits appris de la même expansion
+        const slugsExp = new Map();
+        for (const p of appris) if (p.slugSet) { const m = slugsExp.get(p.idExpansion) || slugsExp.set(p.idExpansion, new Map()).get(p.idExpansion); m.set(p.slugSet, (m.get(p.slugSet) || 0) + 1); }
+        const slugExp = id => { const m = slugsExp.get(id); return m ? [...m].sort((a, b) => b[1] - a[1])[0][0] : null; };
+        for (const p of E.products) nomCatalogue.set(p.idProduct, p.name);
+        produits = E.products.map(p => ({ idProduct: p.idProduct, slugSet: parId.get(p.idProduct)?.slugSet || slugExp(p.idExpansion), appris: parId.has(p.idProduct) }));
+        const nonAppris = produits.filter(p => !p.appris && !estCarteCode(libelle(p)));
+        console.log(`\n   export ${fichier} (créé le ${E.createdAt}) : ${E.products.length} produits · dont JAMAIS APPRIS (absents de numeros_cartes, hors cartes-code) : ${nonAppris.length}, sans expansion connue ${nonAppris.filter(p => !p.slugSet).length}`);
+    }
     const cartons = produits.filter(p => estCarteCode(libelle(p)));
     const retenus = tout ? produits : produits.filter(p => !estCarteCode(libelle(p)));
     const slugParProduit = new Map(retenus.map(p => [p.idProduct, p.slugSet]));
@@ -72,7 +94,7 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
         else visuelsJumeau.add(l.idProduct);
     }
     const pc = n => `${n} = ${(n / total * 100).toFixed(1)} %`;
-    console.log(`\n════ DÉNOMINATEUR : ${total} produits Cardmarket${tout ? ' (BRUT, cartes-code comprises)' : ` (${produits.length} lignes − ${cartons.length} cartes-code)`} ════`);
+    console.log(`\n════ DÉNOMINATEUR : ${total} produits Cardmarket${tout ? ' (BRUT, cartes-code comprises)' : ` (${produits.length} ${exportArg ? 'produits de l\'export' : 'lignes apprises'} − ${cartons.length} cartes-code)`} ════`);
     console.log(`   FICHES  : ${pc(fiches.size)}`);
     console.log(`   VISUELS : ${pc(visuels.size)}  (du tirage du set)`);
     console.log(`   🔴 + ${visuelsJumeau.size} produits dont le SEUL visuel est le scan japonais du jumeau (entrée \`langue: ja\` sous un set non jp) — pas comptés comme visuels`);

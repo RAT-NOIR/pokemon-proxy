@@ -498,14 +498,20 @@ async function scraperListeExpansion(identifiant, maxPages = 25) {
             await page.goto(url, { waitUntil: 'domcontentloaded', timeout: TIMEOUT_NAVIGATION_MS });
 
             // Attendre le passage de Cloudflare (la fenêtre réapparaît si un défi surgit)
+            // 🔴 L'ARRÊT SE DIT À L'APPELANT (2026-09-24) : ces deux `break` rendaient une liste partielle ou vide
+            // SANS LE DIRE, et apprendre-set.js passait à l'expansion suivante — cinq pages de plus demandées à un
+            // serveur qui venait de nous limiter (1015). Une limite de débit porte sur le CLIENT, pas sur un set :
+            // `toutes.arret` la remonte, et le lot entier s'arrête (§38).
             if (!(await attendrePassageCloudflare(page))) {
                 console.log(`🚫 [Liste] Cloudflare non franchi (page ${site}). Arrêt.`);
+                toutes.arret = 'cloudflare';
                 break;
             }
 
             const html = await page.content();
             if (/error 1015|rate limited/i.test(html)) {
                 console.log(`🚫 [Liste] Rate-limité (1015) page ${site}. Arrêt — on garde ce qui est déjà récupéré.`);
+                toutes.arret = '1015';
                 break;
             }
 

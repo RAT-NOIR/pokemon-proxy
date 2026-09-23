@@ -82,7 +82,14 @@ async function main() {
     for (const [i, e] of lot.entries()) {
         console.log(`--- [${i + 1}/${lot.length}] Expansion ${e._id} (~${e.taille} cartes) ---`);
         try {
-            const { n, apercu } = await apprendreUnSet(e._id);
+            const { n, apercu, arret } = await apprendreUnSet(e._id);
+            // la limite de débit arrête TOUT, dès la première fois : c'est le client qui est limité, pas le set (2026-09-24)
+            if (arret) {
+                totalCartes += n;
+                console.log(`\n🚫 ${arret === '1015' ? 'Cardmarket nous limite (1015)' : 'Cloudflare non franchi'} sur ${e._id}${n ? ` (${n} cartes, liste partielle)` : ''} — on s'arrête là, rien d'autre n'est demandé.`);
+                console.log('   Relance ce script plus tard : il reprend automatiquement où il s\'est arrêté.');
+                break;
+            }
             if (n === 0) {
                 echecs++;
                 console.log(`   ⚠️ Rien récupéré (${echecs}/${MAX_ECHECS_CONSECUTIFS} échecs consécutifs).`);
