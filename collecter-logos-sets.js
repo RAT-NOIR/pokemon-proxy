@@ -33,7 +33,7 @@ const bulba = require('./collecte-cartes/bulba');
 const { gabarits } = require('./collecte-cartes/wikitext');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
-const { deciderLangue, cle } = require('./collecte-cartes/langue-logo');   // la règle, une seule fois (2026-09-23)
+const { deciderLangue, cle, refusDuCouple, logoGenerique } = require('./collecte-cartes/langue-logo');   // la règle, une seule fois (2026-09-23)
 // 🔴 L'INTERVALLE D'ATTENTE DOIT ÊTRE PLUS COURT QUE LA FENÊTRE QU'IL ATTEND — mesuré le 2026-09-20.
 // Ce script a attendu le verrou global pendant des dizaines de cycles sans jamais l'obtenir, et j'ai
 // d'abord lu ça comme « le worker le tient en continu ». Le champ `depuis` dit le contraire : le worker
@@ -67,6 +67,8 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
         const box = gabarits(txt).find(g => /infobox/i.test(g.nom));
         const logo = String(box?.params?.setlogo ?? box?.params?.logo ?? '').trim().replace(/-->\s*$/, '');
         if (!logo) { refuses.push({ s, motif: 'aucun `setlogo` dans l\'infobox' }); continue; }
+        const couple = refusDuCouple(logo);                           // lu à l'œil : passe avant la langue (§21 bis)
+        if (couple) { refuses.push({ s, logo, motif: couple }); continue; }
         const d = deciderLangue(s, logo);
         (d.ok ? retenus : refuses).push({ s, logo, ...d });
     }
@@ -177,7 +179,8 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
                 });
                 continue;
             }
-            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() } } });
+            const gen = logoGenerique(o.sha1);
+            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() }, logoGenerique: !!gen, ...(gen ? { logoGeneriquePreuve: gen } : {}) }, ...(gen ? {} : { $unset: { logoGeneriquePreuve: 1 } }) });
             ecrits++;
         }
         if (sansFichier) console.log(`   ✍️  ${sansFichier} set(s) retenu(s) dont le FICHIER est introuvable — cause écrite, pas laissée vide`);

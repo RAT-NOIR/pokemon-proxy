@@ -20,14 +20,11 @@ const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { fabriquerClient, VERROU_GLOBAL: VERROU_TCGDEX, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
-const { deciderLangue, cle } = require('./collecte-cartes/langue-logo');
+// La table du COUPLE et celle des GÉNÉRIQUES vivent dans langue-logo.js, partagées avec collecter-logos-sets.js : une copie
+// locale ici a déjà existé, et un fichier lu à l'œil sur un chemin ne l'était pas sur l'autre (M1, SV11 : 2026-09-24).
+const { deciderLangue, cle, refusDuCouple, logoGenerique } = require('./collecte-cartes/langue-logo');
 
 const DEMANDE = 'C:/Users/Yung/Desktop/rat-market-site/DEMANDE-LOGOS.md';
-// LUS À L'ŒIL le 2026-09-23 après dépôt : ces fichiers sont le logo du COUPLE et nomment DEUX sets (« スノーハザード » au-dessus
-// de « クレイバースト »). Sur la page d'un seul set, c'est afficher le nom d'un autre produit — refusés, avec leur cause.
-const LOGOS_DU_COUPLE = new Map([
-    ['SV2 Logo JP.png', 'Snow Hazard + Clay Burst'], ['SV4 Logo JP.png', 'Ancient Roar + Future Flash'], ['SV5 Logo JP.png', 'Wild Force + Cyber Judge']
-]);
 const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\*/;
 
 (async () => {
@@ -47,7 +44,8 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
         const u = new URL(d.url);
         const fichier = decodeURIComponent(u.pathname.split('/').pop()).replace(/_/g, ' ');
         // le refus lu à l'œil passe AVANT « déjà un logo » : sinon un logo du couple déjà posé ne se retirerait jamais
-        if (LOGOS_DU_COUPLE.has(fichier)) { refus.push({ d, s, fichier, motif: `logo du COUPLE « ${LOGOS_DU_COUPLE.get(fichier)} » : le fichier nomme deux sets (lu à l'œil le 2026-09-23)` }); continue; }
+        const couple = refusDuCouple(fichier);
+        if (couple) { refus.push({ d, s, fichier, couple: true, motif: couple }); continue; }
         if (s.logo?.cleR2) { refus.push({ d, motif: `porte déjà un logo (${s.logo.source})` }); continue; }
         if (u.hostname === 'archives.bulbagarden.net') {
             const v = deciderLangue(s, fichier);
@@ -65,7 +63,7 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
     for (const r of refus) console.log(`      ${r.d.slug.padEnd(34)} ${r.motif}`);
     if (!ecrire) { console.log('\n   (jugement seul — --ecrire télécharge et écrit)'); await fermer(); return; }
     // Un refus s'écrit (§46) — et un logo du couple déjà posé se RETIRE : la règle d'aujourd'hui le rejette.
-    for (const r of refus.filter(x => x.s && x.fichier && LOGOS_DU_COUPLE.has(x.fichier))) {
+    for (const r of refus.filter(x => x.s && x.couple)) {
         await cx.db.collection('sets').updateOne({ _id: r.s._id, $or: [{ logo: { $exists: false } }, { 'logo.source': 'bulbagarden:demande-site' }] },
             { $set: { logoRefus: { motif: r.motif, fichier: r.fichier, le: new Date(), instrument: 'collecter-logos-demande.js', source: 'bulbagarden:demande-site' } }, $unset: { logo: 1 } });
     }
@@ -79,7 +77,8 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
         for (const r of retenus) {
             const o = objets.get(r.d.url);
             if (!o || r.ecrit) continue;
-            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.fichier, source: r.hote === 'tcgdex' ? 'tcgdex:en' : 'bulbagarden:demande-site', preuve: r.preuve, le: new Date() } }, $unset: { logoRefus: 1 } });
+            const gen = logoGenerique(o.sha1);
+            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.fichier, source: r.hote === 'tcgdex' ? 'tcgdex:en' : 'bulbagarden:demande-site', preuve: r.preuve, le: new Date() }, logoGenerique: !!gen, ...(gen ? { logoGeneriquePreuve: gen } : {}) }, $unset: { logoRefus: 1, ...(gen ? {} : { logoGeneriquePreuve: 1 }) } });
             r.ecrit = true; ecrits++;
         }
     };
