@@ -59,4 +59,15 @@ function setDeLaLigne(L, apparier) {
     return { set: r[0].a.set };
 }
 
-module.exports = { COLLECTION, listeEn, cartesEn, fabriquerAppariement, setDeLaLigne };
+// 🔑 LES SOUS-SETS QUE TCGdex RANGE À PART et que Bulbapedia range DANS l'expansion (numéros TG01…, GG01…) : sans eux, les
+// 190 impressions TG/GG de cinq sets tombaient en « absente-de-tcgdex » — dont 50 scans japonais de Brilliant Stars et
+// Lost Origin (2026-09-23). L'orthographe d'une source cherchée chez l'autre rend un vide (§30) : c'était celle-là.
+// Énumérés par ce qu'ils SONT (le petit ensemble stable des suffixes), et par le nom EXACT « <set> <suffixe> » — jamais
+// par l'inclusion (§31) : « Stars » ne prend pas « Brilliant Stars Trainer Gallery ».
+const SUFFIXES_COMPAGNONS = ['Trainer Gallery', 'Galarian Gallery'];
+function compagnonsDuSet(set, sets) {
+    const voulus = new Set(SUFFIXES_COMPAGNONS.map(s => normaliserNom(`${set.name} ${s}`)));
+    return sets.filter(s => s.id !== set.id && voulus.has(normaliserNom(s.name)));
+}
+
+module.exports = { COLLECTION, listeEn, cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet, SUFFIXES_COMPAGNONS };

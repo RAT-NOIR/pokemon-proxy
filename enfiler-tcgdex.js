@@ -76,7 +76,24 @@ const { etatDuWorker } = require('./remettre-en-file');
         const r = await F.updateOne({ _id: `tcgdex/${u.code}` }, { $setOnInsert: { code: u.code, source: 'tcgdex', tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: dernier + 1 + i, etat: 'attente', ajouteLe: new Date(), motif: `strate à risque : ${u.ja} scans japonais sous ce set, remplacés par le scan anglais de TCGdex` } }, { upsert: true });
         inseres += r.upsertedCount;
     }
+    // 🔑 LA GALERIE (2026-09-24) : une unité FINIE avant que la route des galeries existe (collecte-cartes/tcgdex-cache.js,
+    // compagnonsDuSet) n'a jamais lu la Trainer Gallery de son set — son résultat ne porte pas `compagnons`. « Fait » dit
+    // qu'une unité a tourné, pas qu'elle avait la règle d'aujourd'hui (§52) : elle se REMET en file, motif écrit.
+    // L'état terminal s'énumère par ce qui TRAVAILLE (§25) : tout ce qui n'est ni en attente ni en cours est fini.
+    const listeTcg = (await cx.db.collection('tcgdex_sets').findOne({ _id: 'en/__liste__' }))?.sets || [];
+    const { compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
+    let remises = 0;
+    for (const u of unites) {
+        const galeries = compagnonsDuSet({ id: u.tcgdexSet, name: u.tcgdexNom }, listeTcg).map(c => c.id);
+        if (!galeries.length) continue;
+        const doc = await F.findOne({ _id: `tcgdex/${u.code}` });
+        if (!doc || ['attente', 'en-cours'].includes(doc.etat)) continue;
+        const fait = (await cx.db.collection('sets').findOne({ _id: u.slug }, { projection: { remplacementTcgdex: 1 } }))?.remplacementTcgdex;
+        if (Array.isArray(fait?.compagnons) && !fait.compagnonsNonLus?.length) continue;   // la galerie a été lue
+        const r = await F.updateOne({ _id: doc._id, etat: doc.etat }, { $set: { etat: 'attente', ordre: dernier + unites.length + 1 + remises, remisEnFileLe: new Date(), remisEnFileMotif: `galerie TCGdex jamais lue (${galeries.join(', ')}) : l'unité a tourné avant la route des galeries` }, $unset: { pris: 1 } });
+        remises += r.modifiedCount;
+    }
     const enFile = await F.countDocuments({ source: 'tcgdex', etat: 'attente' });
-    console.log(`\n   ✅ insérées : ${inseres} sur ${unites.length} · unités tcgdex en attente, RELU : ${enFile}`);
+    console.log(`\n   ✅ insérées : ${inseres} sur ${unites.length} · remises pour leur galerie : ${remises} · unités tcgdex en attente, RELU : ${enFile}`);
     await fermer();
 })().catch(e => { console.error('❌', e.message); process.exit(1); });

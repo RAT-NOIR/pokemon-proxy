@@ -34,7 +34,7 @@ const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/s
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
-const { cartesEn, fabriquerAppariement, setDeLaLigne } = require('./collecte-cartes/tcgdex-cache');
+const { cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion } = require('./collecte-cartes/tcgdex-appariement');
 
 const SOURCE = 'tcgdex';
@@ -61,16 +61,25 @@ function releve(unite, sets) {
     return { ok: true, L, set: s };
 }
 
-/** Étapes 2-3 : ce que la collecte ferait. Zéro requête si le cache a le set ; sinon le client (verrou tenu) le lit. */
+/** Étapes 2-3 : ce que la collecte ferait. Zéro requête si le cache a le set ; sinon le client (verrou tenu) le lit.
+ *  Le set TCGdex et ses GALERIES (compagnonsDuSet : Trainer Gallery, Galarian Gallery), que Bulbapedia range dans la même
+ *  expansion. Sans client, une galerie absente du cache n'est pas lue — et ses restes le DISENT (`compagnonsNonLus`). */
 async function planifier(M, db, client, L, set) {
-    const { cartes: tcg, cache } = client ? await cartesEn(db, client, set.id) : { cartes: (await db.collection('tcgdex_sets').findOne({ _id: `en/${set.id}` }))?.cartes, cache: true };
-    if (!tcg) return null;
+    const lire = async id => client ? (await cartesEn(db, client, id)).cartes : (await db.collection('tcgdex_sets').findOne({ _id: `en/${id}` }))?.cartes;
+    const principal = await lire(set.id);
+    if (!principal) return null;
+    const liste = (await db.collection('tcgdex_sets').findOne({ _id: 'en/__liste__' }))?.sets;
+    if (!liste?.length) throw new Error('liste TCGdex absente du cache : les galeries d\'un set ne peuvent pas être cherchées');
+    const compagnons = compagnonsDuSet(set, liste), compagnonsNonLus = [];
+    const tcg = [...principal];
+    for (const c of compagnons) { const cs = await lire(c.id); if (cs) tcg.push(...cs); else compagnonsNonLus.push(c.id); }
     const cartes = await M.Carte.find({ sets: L.slugSet }).select('nomEn niveau attaques impressions').lean();
     const R = [].concat(L.bulba.expansion).flatMap(nom => apparierExpansion(nom, cartes, tcg));
     const plan = R.filter(r => r.tcg?.image);
-    const restes = R.filter(r => !r.tcg?.image).map(r => ({ carteId: r.carte._id, nomEn: r.carte.nomEn, numero: r.numero, motif: r.motif || 'tcgdex-sans-image', ...(r.detail ? { detail: r.detail } : {}) }));
+    const nonLu = compagnonsNonLus.length ? ` (galerie ${compagnonsNonLus.join(', ')} non lue : reste NON MESURÉ)` : '';
+    const restes = R.filter(r => !r.tcg?.image).map(r => ({ carteId: r.carte._id, nomEn: r.carte.nomEn, numero: r.numero, motif: (r.motif === 'absente-de-tcgdex' ? r.motif + nonLu : r.motif) || 'tcgdex-sans-image', ...(r.detail ? { detail: r.detail } : {}) }));
     const motifs = {}; for (const x of restes) motifs[x.motif] = (motifs[x.motif] || 0) + 1;
-    return { cartes, tcg, plan, restes, motifs, cache, impressions: R.length };
+    return { cartes, tcg, plan, restes, motifs, impressions: R.length, compagnons: compagnons.map(c => c.id), compagnonsNonLus };
 }
 
 async function collecterSet(unite, M, { verrou }) {
@@ -143,7 +152,8 @@ async function collecterSet(unite, M, { verrou }) {
             await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
         }
         const complet = {
-            tcgdexSet: set.id, tcgdexNom: set.name, impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
+            tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
+            impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
             telecharges, sautes, echecs, tropPetits, bulbaRemplacees: bulbaRetirees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             concordance: images.length + tropPetits === P.plan.length && echecs === 0,
