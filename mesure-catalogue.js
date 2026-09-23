@@ -38,8 +38,28 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const liens = await cx.db.collection('cartes_produits').find({}, { projection: { idProduct: 1, carteId: 1, slugSet: 1 } }).toArray();
     const avecImages = await cx.db.collection('cartes').find({ 'images.0': { $exists: true } }, { projection: { images: 1 } }).toArray();
     const setsParCarte = new Map(avecImages.map(c => [c._id, new Set((c.images || []).map(i => i.set))]));
+    // 🔴 LE SCAN DU JUMEAU (2026-09-23, DEMANDE-VISUELS-JAPONAIS.md du site). Bulbapedia publie le scan de l'impression
+    // JAPONAISE sous le nom de fichier ANGLAIS tant que l'anglais n'a pas été scanné (« PinsirEvolvingSkies1.jpg » =
+    // Eevee Heroes). Le wikitext ne le dit pas ; les DIMENSIONS du fichier source, si : 868×1212 et 748×1044 sont les deux
+    // formats des scans japonais (ceux d'artofpkm), validés à l'œil par le site (9/9) et ici (4/4, dont 2 que sa liste
+    // n'avait pas). Lues dans NOTRE cache `imageinfo` (collecte_images_etat.infosListe) : zéro requête. Un format non
+    // regardé n'est pas classé — on préfère rater un japonais que refuser un anglais.
+    // ⚠️ Un tel visuel n'est pas celui du tirage du set : il est compté À PART, jamais comme visuel du set.
+    const FORMATS_JAPONAIS = new Set(['868×1212', '748×1044']);
+    const sets = await cx.db.collection('sets').find({}, { projection: { region: 1 } }).toArray();
+    const regionDe = new Map(sets.map(s => [s._id, s.region]));
+    const dimsDe = new Map();
+    const fichierNu = f => decodeURIComponent(String(f || '').split('/').pop()).replace(/^File:/, '').replace(/_/g, ' ').trim();
+    for (const e of await cx.db.collection('collecte_images_etat').find({ _id: /^bulbapedia\//, infosListe: { $exists: true } }, { projection: { infosListe: 1 } }).toArray())
+        for (const i of e.infosListe || []) if (i.fichier && i.w) dimsDe.set(fichierNu(i.fichier), `${i.w}×${i.h}`);
+    // Un cache ou une table des sets VIDES ne rendraient pas zéro jumeau : ils rendraient « tout est du bon tirage » (§41,
+    // le plein fabriqué). Ils lèvent.
+    if (!dimsDe.size || !sets.length) throw new Error(`lecture vide : ${dimsDe.size} dimensions en cache, ${sets.length} sets — le tri des visuels du jumeau ne peut pas conclure`);
+    const scanDuJumeau = i => /^bulbapedia\//.test(i.cleR2 || '') && regionDe.get(i.set) !== 'jp' && FORMATS_JAPONAIS.has(dimsDe.get(fichierNu(i.urlOriginal)));
+    // les sets où la carte a AU MOINS UN visuel du bon tirage
+    const setsBonTirage = new Map(avecImages.map(c => [c._id, new Set((c.images || []).filter(i => !scanDuJumeau(i)).map(i => i.set))]));
 
-    const fiches = new Set(), visuels = new Set();
+    const fiches = new Set(), visuels = new Set(), visuelsJumeau = new Set();
     const parSet = new Map();
     const de = s => parSet.get(s) || (parSet.set(s, { produits: 0, fiches: 0, visuels: 0 }), parSet.get(s));
     for (const [, s] of slugParProduit) de(s || '(sans slugSet)').produits++;
@@ -49,13 +69,17 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
         if (!fiches.has(l.idProduct)) { fiches.add(l.idProduct); de(s || '(sans slugSet)').fiches++; }
         if (visuels.has(l.idProduct)) continue;
         const sets = setsParCarte.get(l.carteId);
-        if (sets && (sets.has(l.slugSet) || sets.has(s))) { visuels.add(l.idProduct); de(s || '(sans slugSet)').visuels++; }
+        if (!sets || !(sets.has(l.slugSet) || sets.has(s))) continue;
+        const bons = setsBonTirage.get(l.carteId);
+        if (bons.has(l.slugSet) || bons.has(s)) { visuels.add(l.idProduct); visuelsJumeau.delete(l.idProduct); de(s || '(sans slugSet)').visuels++; }
+        else visuelsJumeau.add(l.idProduct);
     }
     const pc = n => `${n} = ${(n / total * 100).toFixed(1)} %`;
     console.log(`\n════ DÉNOMINATEUR : ${total} produits Cardmarket${tout ? ' (BRUT, cartes-code comprises)' : ` (${produits.length} lignes − ${cartons.length} cartes-code)`} ════`);
     console.log(`   FICHES  : ${pc(fiches.size)}`);
-    console.log(`   VISUELS : ${pc(visuels.size)}`);
-    console.log(`   ÉCART   : ${total - visuels.size} sans visuel, dont ${fiches.size - visuels.size} qui ont une fiche`);
+    console.log(`   VISUELS : ${pc(visuels.size)}  (du tirage du set)`);
+    console.log(`   🔴 + ${visuelsJumeau.size} produits dont le SEUL visuel est le scan japonais du jumeau (Bulbapedia, fichier ${[...FORMATS_JAPONAIS].join(' / ')}) — pas comptés comme visuels · cache imageinfo : ${dimsDe.size} fichiers`);
+    console.log(`   ÉCART   : ${total - visuels.size} sans visuel du bon tirage, dont ${fiches.size - visuels.size} qui ont une fiche`);
 
     const enCours = await cx.db.collection('file_images').countDocuments({ etat: 'en-cours' });
     const attente = await cx.db.collection('file_images').countDocuments({ etat: 'attente' });
@@ -99,6 +123,18 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
         { $match: { 'sets.1': { $exists: true } } }
     ]).toArray();
     console.log(`   ⚖️ une image par (carte, set, n°) : ${ni} triplet(s) en double ${ni ? '— 🔴 le visuel affiché dépend de l\'ordre de lecture' : '✅'}`);
+    //   · AUCUN FICHIER `artofpkm/` SOUS UN SET NON JAPONAIS (2026-09-23). artofpkm ne sert que le japonais : un tel fichier
+    //     sous un set intl, chinois, indonésien ou thaï est le scan d'un autre tirage (§19). Mesuré à 0 ce jour-là — le
+    //     contrôle est pour la collecte de demain. Son DÉNOMINATEUR s'imprime : lu sur zéro entrée, il ne prouverait rien.
+    const artofpkm = { jp: 0, autre: 0, inconnu: 0 }, exemples = [];
+    for (const c of avecImages) for (const i of c.images || []) {
+        if (!/^artofpkm\//.test(i.cleR2 || '')) continue;
+        const r = regionDe.get(i.set);
+        if (r === 'jp') artofpkm.jp++;
+        else { artofpkm[r ? 'autre' : 'inconnu']++; if (exemples.length < 3) exemples.push(`${c._id} sous ${i.set}`); }
+    }
+    const nArt = artofpkm.autre + artofpkm.inconnu;
+    console.log(`   ⚖️ artofpkm/ sous un set non jp : ${nArt} sur ${artofpkm.jp + nArt} entrées artofpkm/ lues ${!(artofpkm.jp + nArt) ? '— 🔴 AUCUNE entrée lue : le contrôle ne peut pas conclure' : nArt ? `— 🔴 ${artofpkm.autre} sous un set d'une autre région, ${artofpkm.inconnu} sous un set inconnu (${exemples.join(' · ')})` : '✅'}`);
     console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) porté(s) par plusieurs sets ${nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x._id} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
 
     if (process.argv.includes('--par-set')) {
