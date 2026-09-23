@@ -19,10 +19,13 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { modeles } = require('./collecte-cartes/schemas');
 
-// Les 9 que Bulbapedia n'a PAS. Nommées, parce qu'une limite définitive se nomme.
+// Les 9 que Bulbapedia n'avait PAS le 2026-09-12. Nommées, parce qu'une limite définitive se nomme.
+// 🔴 CINQ SONT TOMBÉES LE 2026-09-23, ET LA LIMITE N'ÉTAIT PAS DANS LA SOURCE : les cinq Gold Star (PCG6 ×3, PCG9 ×2)
+// sont listées par leur Setlist sous une écriture que le parseur n'a lue qu'à partir du 2026-09-15 (§21 n°8) ; ces deux
+// sets n'avaient pas été recollectés depuis. La recollecte les a trouvées (3 + 2 redirections vers les pages EX Delta
+// Species / Dragon Frontiers), et les cinq objets R2 GARDÉS ici ont joint sans une requête. C'est exactement le cas
+// pour lequel on les avait gardés. Le §24 écrivait « aucune page » ; il fallait écrire « aucune page LUE ».
 const IRREDUCTIBLES = new Set([
-    'artofpkm/127/28', 'artofpkm/127/54', 'artofpkm/127/73',   // Kyogre ☆, Groudon ☆, Metagross ☆ (PCG6)
-    'artofpkm/137/15', 'artofpkm/137/52',                      // Mew ☆, Charizard ☆ (PCG9)
     'artofpkm/8/34', 'artofpkm/27/2',                          // « Pi » (Jungle, Southern Islands)
     'artofpkm/18/54',                                          // Team Rocket's Hitmonchan (G1)
     'artofpkm/25/85'                                           // Blaine's Quiz #3 (G2)

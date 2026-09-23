@@ -3,6 +3,7 @@
 // ============================================================
 //   node remettre-en-file.js            (mesure seule, c'est le défaut)
 //   node remettre-en-file.js --ecrire
+//   node remettre-en-file.js --ecrire --reprendre=MEW,BRS --motif="<la cause qui a changé>"
 //
 // 🔴 POURQUOI UN OUTIL, ET PAS `--enfiler=` : `--enfiler` fait un `$setOnInsert`. Sur un set DÉJÀ
 // présent dans la file, il ne fait RIEN et imprime quand même « enfilé » (§23). Toute remise en file
@@ -270,6 +271,40 @@ if (require.main !== module) return;
 
     const F = cx.db.collection('file_images');
     let repris = 0, insere = 0;
+    // ── `--reprendre=CODE,…  --motif="…"` : UNE CAUSE NEUVE, NOMMÉE (2026-09-23) ─────────────────────
+    // La population (3) de l'en-tête — « fait/verifie avec des cartes sans visuel » — n'est « non reprise » que
+    // tant qu'aucune cause n'a changé. Quand une cause CHANGE (des cartes rattachées au set après le passage de
+    // l'unité), la reprise redevient un travail, et c'est la seule condition qui l'autorise : le motif est
+    // OBLIGATOIRE, il s'écrit sur la ligne, et un set dont toutes les cartes ont déjà leur visuel est refusé —
+    // une reprise qui n'a rien à faire est une file bouchée, pas une file pleine.
+    const aReprendre = (process.argv.find(a => a.startsWith('--reprendre=')) || '').slice(12).split(',').map(s => s.trim()).filter(Boolean);
+    const motif = (process.argv.find(a => a.startsWith('--motif=')) || '').slice(8).trim();
+    if (aReprendre.length && !motif) { console.error(`\n🔴 --reprendre exige --motif="<la cause qui a changé>" : une reprise sans cause écrite est indistinguable d'un état initial.`); await fermer(); process.exitCode = 1; return; }
+    for (const code of aReprendre) {
+        const l = parCode.get(code);
+        const g = l ? (parSet.get(l.slugSet) || { n: 0, avec: 0 }) : null;
+        const u = file.get(code);
+        if (!l || !g?.n) { console.log(`   ⚪ ${code} : aucune carte en base pour ce set — rien à reprendre`); continue; }
+        if (g.n - g.avec <= 0) { console.log(`   ⚪ ${code} : ${g.n}/${g.n} cartes ont leur visuel — rien à reprendre`); continue; }
+        // 🔴 ABSENT DE LA FILE : l'insertion par défaut plus haut ne connaît QUE artofpkm (`if (!S) sansSource`) — un set
+        // Bulbapedia collecté APRÈS la vague de mise en file du 2026-09-19 n'a donc jamais reçu d'unité. Shining Fates :
+        // 181 fichiers résolus à zéro requête, 0 visuel, aucune unité, rangé « jamais mis en file » (2026-09-23).
+        // Nommé ici avec sa cause, il est inséré, et sa SOURCE est écrite : c'est sur elle que le worker aiguille.
+        if (!u) {
+            const source = sourceDe(code) ? 'artofpkm' : 'bulbapedia';
+            const r = await F.updateOne({ _id: code }, { $setOnInsert: { ajouteLe: new Date(), etat: 'attente', ordre: Date.now(), source, ajouteMotif: `${motif} — ${g.n - g.avec} carte(s) sans visuel sur ${g.n}` } }, { upsert: true });
+            if (r.upsertedCount) insere++;
+            console.log(`   ➕ ${code.padEnd(8)} inséré (${source}) · ${g.n - g.avec} carte(s) sans visuel sur ${g.n}`);
+            continue;
+        }
+        if (u.etat === 'attente' || u.etat === 'en-cours') { console.log(`   ⚪ ${code} : déjà ${u.etat}`); continue; }
+        const r = await F.updateOne({ _id: code, etat: u.etat }, {
+            $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `${motif} — ${g.n - g.avec} carte(s) sans visuel sur ${g.n} (état précédent ${u.etat}/${u.resultat ?? '—'})` },
+            $unset: { resultat: '', pris: '', fini: '' }
+        });
+        repris += r.modifiedCount;
+        console.log(`   ♻️ ${code.padEnd(8)} ${u.etat}/${u.resultat ?? '—'} → attente · ${g.n - g.avec} carte(s) sans visuel sur ${g.n}`);
+    }
     for (const x of reprises) {
         const r = await F.updateOne({ _id: x.code, etat: 'refuse', resultat: 'refuse-resolution' }, {
             $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `seuil abaissé de 480 à ${LARGEUR_MIN} px le 2026-09-21 ; largeur mediane de ce set : ${x.min} px` },

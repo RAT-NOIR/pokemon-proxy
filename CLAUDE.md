@@ -34,6 +34,31 @@ renégocie pas en cours de route.
 
 ---
 
+## 🔐 EN TÊTE DES RÈGLES DE SÉCURITÉ — DEUX PHRASES, ET TOUTES LES GARDES S'Y MESURENT
+
+> # **UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE, JAMAIS PAR CE QU'ELLE REFUSE.**
+>
+> Une garde qui énumère ses refus laisse passer tout ce qu'elle n'a pas prévu — et un défaut, par
+> définition, est ce qu'on n'a pas prévu. **Elle a donc un défaut PAR DÉFAUT, et c'est d'être
+> ouverte.** La garde du commit du worker a échoué vers le passant trois fois en trois jours, sur trois
+> causes indépendantes (§51) : trois causes ne donnent pas trois fois la même direction par hasard.
+> 🔑 **On énumère le petit ensemble STABLE — ce qui est sûr — et tout le reste bloque, exception
+> comprise.** Une garde qui ne peut pas conclure BLOQUE et le DIT : « je ne sais pas » n'est jamais
+> « tout va bien ». Et elle se prouve en la faisant dire NON sur des états fabriqués avant de lui faire
+> confiance (`test-garde-worker.js`, 8 états).
+
+> # **UNE VÉRIFICATION QUI PORTE SUR CE QUI EST FACILE À VÉRIFIER N'EN EST PAS UNE.**
+>
+> `mongo-connexion.js` vérifiait le NOM de la base, qui se lit sur la connexion, et jamais la GRAPPE,
+> qui demande de savoir où la base doit vivre (§50). Le contrôle passait toujours — MongoDB crée une
+> base à la demande — et la base `cartes` n'a jamais pu être sauvegardée par l'outil générique.
+> 🔑 **Le test, avant d'écrire un contrôle : ce contrôle PEUT-IL échouer dans le cas que je crains ?**
+> S'il porte sur une propriété que le cas redouté possède aussi (le bon nom sur la mauvaise grappe), il
+> se confirme lui-même. Le contrôle juste porte sur ce que le cas redouté n'a PAS — ici, une base réelle
+> n'est jamais vide.
+
+---
+
 ## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LE MOTIF DOMINANT DE CE CHANTIER
 
 > # 🔴 LA SONDE FABRIQUE LE DÉFAUT QU'ELLE MESURE.
@@ -503,6 +528,81 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 52. SEPT CAUSES DE TRAVAIL PERDU, TROUVÉES EN REMPLISSANT UNE FILE — 2026-09-23
+
+**La demande : remplir la file pour trois jours d'absence, et dire ce qu'on remet et pourquoi. `remettre-en-file.js`
+répondait « 0 à reprendre, 0 à insérer ».** Chaque « 0 » a été ouvert, et aucun n'était un fait sur le monde :
+
+| ce qui dormait | combien | la cause | l'instrument qui l'a dit |
+|---|---|---|---|
+| Setlists lues AVANT le correctif du 15/09 (§21 n°8), jamais recollectées | **254 impressions**, 7 sets (151, BRS, PAL…) — Charizard ex, Mew ex | un paragraphe disait « pas encore re-collectés » ; personne ne l'a relu en face d'une question | `entreesDeLaSetlist` d'aujourd'hui sur la page archivée, contre `collecte_etat.titres` |
+| sous-sets (Galarian Gallery, Trainer Gallery, Radiant Collection, Shiny, Rotom, Unown) absents des lignes auto | **215 impressions**, 11 sets | BRS portait sa Trainer Gallery depuis le 12/09 : la règle était écrite, **sur une ligne** | le même rejeu, section par section |
+| les 5 *Additionals* japonais : 0 visuel | **737 cartes** | le document `images` n'a qu'un `set` ; la base l'avait pris la première, `set: slug` rendait 0 | `sourceSetId` contre `set` |
+| fichiers de 350 à 479 px écartés un par un sous 480, jamais relus après le 21/09 | **401 fichiers**, 45 sets | **le §23, troisième fois** : on a relu les SETS refusés, pas les FICHIERS écartés | le cache `imageinfo` du collecteur |
+| sets Bulbapedia collectés après la mise en file du 19/09 | **196 fichiers** (Shining Fates 181) | l'insertion par défaut ne connaît qu'artofpkm (`if (!S) sansSource`) | `--plan`, zéro requête |
+| les 5 Gold Star « irréductibles » (§24) | 5 cartes, 5 images gardées | « aucune page » voulait dire « aucune page LUE » | la recollecte, 2 requêtes par set |
+| **fiches FAUSSES posées par le numéro** | **62 lignes, 33 sets** (SV-P chinois 25/41) | le numéro de la source désigne parfois une autre carte ; rien ne le recoupait | `temoin-nom.js` |
+
+🔑 **LA FORME COMMUNE : UN ÉTAT DE NOTRE TRAVAIL — « fait », « vérifié », « jamais enfilé », « irréductible » — LU COMME
+UN FAIT SUR LA SOURCE.** C'est le §40 et le §44, et c'est la leçon du §36 appliquée à la file : **« fait » dit
+qu'une unité a tourné, pas qu'elle avait tout ce qu'il lui fallait au moment où elle a tourné.** Une unité passée
+AVANT qu'une carte soit rattachée, AVANT qu'un seuil baisse, AVANT qu'un parseur soit corrigé, reste « faite » pour
+toujours. ⚠️ **La question juste devant un « fait » n'est pas « a-t-il tourné ? » mais « qu'est-ce qui a changé
+DEPUIS qu'il a tourné ? »** — et chaque cause de ce tableau se lit dans une donnée datée qu'on possède déjà.
+
+### 🔴 LE TÉMOIN DU NOM : « 0 AMBIGU » N'A JAMAIS VOULU DIRE « 0 FAUX »
+**Le même témoin a servi trois fois dans la journée et a trouvé du faux trois fois** : 4 WCD sur 1 684 (§49), puis
+— en calibrant le nom seul — 14 « faux du nom » qui étaient des faux du NUMÉRO (SV-P chinois : `Ninetales [Will-O-Wisp
+| Nine-tailed Dance]` joint par le numéro à Murkrow), puis, rejoué sur les 54 790 jointures par le numéro, **62 lignes
+contredites** : `White Kyurem EX → Black Kyurem-EX`, `Pokémon Reversal → Energy Restore` (le conflit d'EC1 du §24),
+`MAggron EX → Probopass` (la page Probopass déclare le n°046). **Détachées, sauvegarde avant, reste écrit par ligne
+(`fiche-contredite-par-le-nom`).** 🔑 Une clé et son témoin doivent être INDÉPENDANTS : c'est parce que le nom
+n'entre pas dans la clé par le numéro qu'il peut la contredire.
+⚠️ **DETTE NOMMÉE, ET C'EST LA MOITIÉ CODE DU §32** : le détachement répare les lignes, pas la jointure — une
+recollecte de ces 33 sets refera les 62. Le témoin doit entrer dans `joindre()` ; en attendant, `temoin-nom.js`
+se relance après toute collecte. Les **263 écarts de FORME** (« Pokémon Reverse »/« Reversal », « Mystery Plate
+alpha »/« α ») sont listés et non touchés ; Garchomp SP Half Deck (14/15, `Switch → Rare Candy`) y est — son nom
+ne désigne aucune autre carte du set, le témoin fort ne peut rien, la ligne est à rouvrir à la main.
+
+### ✅ LE NOM SEUL, CALIBRÉ PAR LA PRODUCTION ELLE-MÊME — ET CE QU'« ADMETTRE » VOULAIT DIRE
+`rejouer-nom-seul.js` appelle `joindre()` numéros masqués des DEUX côtés (la calibration du §48 lisait le nom dans
+`numeros_cartes.nomEn` et ignorait le départage par les attaques — une sonde à côté de la production). **Précision
+99,91 % ; puis garde bidirectionnelle à multiplicités comptées et exclusion des sets de réimpressions (majorité des
+cartes réimprimées dans le même tirage, 173 sets) : 21 712 justes, 0 faux du nom** — les 14 restants étaient les
+faux du numéro ci-dessus. 🕳️ **Mais rien n'est admis, et ce n'est pas le contrôle qui bloque** : sur les 34
+expansions sans produit numéroté, les 7 sans ligne (Unnumbered Promos 205, Scarlet-Violet-Products 122, Promos 88,
+Southeast-Asia 81, Burger King ×2, W-Promos) n'ont **aucune population candidate** — aucune carte ne déclare ces
+expansions sous ce nom. Il faut d'abord leur nom chez Bulbapedia : c'est le §30 des WCD, un chantier, pas un
+interrupteur. Les Prize Packs (9 lignes, ~1 300 produits) sont des réimpressions : l'exclusion les écarte.
+
+### 🔴 LA BALISE MOURAIT PENDANT LE TRAVAIL — ET LA GARDE A BLOQUÉ, COMME ON LE LUI A DEMANDÉ
+La première remise en file de l'après-midi a été **refusée** : balise périmée, « je ne peux pas conclure ». Le worker
+travaillait. La balise battait « à chaque tour » — et un tour, c'est une unité entière, 2 à 10 min, pour une
+fraîcheur de 3. **Le §51 écrivait « elle vit tant que le processus vit » ; le code disait « elle bat entre deux
+unités ».** Corrigé par une minuterie (`collecteur-images.js`), **inerte tant que le worker n'est pas redéployé**.
+✅ Rien n'a été forcé : la balise redevient fraîche à chaque fin d'unité, l'outil a attendu la fenêtre, et les deux
+remises l'ont lue dedans. **Une garde qui bloque à tort coûte une attente ; une garde contournée coûte la garde.**
+⚠️ **Et ce commit touche `collecteur-images.js`, une des trois règles surveillées : jusqu'au redéploiement, la garde
+BLOQUERA toute remise en file.** C'est son rôle ; la file a été remplie avant.
+
+### 🔴 ET DEUX FOIS LE MOTIF DOMINANT, DANS MES SONDES DU JOUR
+· **« 39 pages de set ILLISIBLES sur R2 »** : ma sonde n'appelait pas `verifierBucket`, qui fixe le point d'accès UE.
+La production l'appelle toujours d'abord. 39 sur 39 : un vide parfait, donc un instrument cassé.
+· **« 9 908 produits jamais mis en file, à instruire »** : `reste-visuels.js` lisait `sets.region`, que
+`collecteur-texte.js` écrit `intl` pour tout tirage non japonais. C'était le plancher chinois (§42), rebaptisé chantier.
+Le tirage vit sur la LIGNE de table : c'est elle que la production suit.
+
+### LA FILE, ET POURQUOI ELLE NE DURERA PAS TROIS JOURS
+**65 unités remises ou insérées, chacune avec son motif écrit** (15 rattachements, 45 seuil/cartes tardives, 5 jamais
+enfilées) — de l'ordre de **1 100 fichiers, quelques heures** à 1 requête / 5 s. **Le reste
+n'a pas changé de cause**, et c'est écrit par `reste-visuels.js` : 8 536 plancher chinois, 3 892 planchers
+JP/ID/TH/IDTH, 1 679 WCD, 622 sous le seuil (médiane), 599 fichiers isolés sous 350 px. **Une seconde passe dessus
+rendrait zéro** — le testeur l'a dit avant moi. La suite qui donnerait du travail au worker n'est pas une file :
+c'est du TEXTE (les 31 japonais numérotés du §48, 939 produits ; les 4 absents de `codes_set`), qui fera naître des
+cartes, donc des images.
+
+---
+
 ## 51. UNE GARDE SE CONÇOIT PAR CE QU'ELLE AUTORISE — 2026-09-21
 
 > # 🔴 TROIS ÉCHECS, TROIS CAUSES, UNE SEULE DIRECTION. CE N'EST PLUS UN ACCIDENT.
@@ -639,6 +739,27 @@ aucun `WCD`.
 
 ⚠️ **RIEN N'EST ÉCRIT : c'est une mesure, pas une collecte.** Poser les 1 684 fiches demande des
 lignes de table `WCD-*` et une écriture sur `cartes_produits` — elle attend l'accord.
+
+### ✅ ÉCRIT LE 2026-09-23 — 1 679, PAS 1 684, ET LES CINQ D'ÉCART SONT LA LEÇON
+
+**Accord donné, sauvegarde RÉELLE d'abord** (`backup-collections.js --base=cartes`, la première qui atteigne la
+grappe : 56 324 `cartes_produits` + 15 264 `cartes` relus). `poser-wcd.js` retire les deux raccourcis de la sonde
+(un code → une seule expansion ; un produit → sa première carte) et retrouve **1 684 contre 1 684, 0 ambigu**.
+🔴 **PUIS UN TÉMOIN, ET IL A PARLÉ : le NOM en tête du slug contre le `nomEn` de la carte désignée.** Le nom n'entre
+pas dans la clé — c'est ce qui en fait un témoin (§16). **5 désaccords, dont 4 VRAIES erreurs** : le slug
+Cardmarket porte parfois un mauvais numéro (`Choice-Belt-V2-WCD22BRS-125` → Cinccino, `Palkia-LVX-WCD09DPPR-28` →
+Mewtwo LV.X, `Quick-Ball-V2-WCD22FST-236` → Power Tablet, `Ancient-Technical-Machine-WCD06HL-095` → Metagross ex).
+> 🔑 **« 0 ambigu » NE VEUT PAS DIRE « 0 faux ».** Une clé qui désigne UNE carte peut désigner la MAUVAISE, et
+> seule une donnée qu'elle n'a PAS utilisée peut le dire. L'unicité est une propriété de la clé ; la justesse
+> est une propriété du monde.
+
+Le témoin est câblé comme seconde garde obligatoire : un désaccord de nom REFUSE (zéro faux affirmé), même quand
+c'est la forme qui diffère — `Blend-Energy-WLFM` contre « Blend Energy WaterLightningFightingMetal », juste,
+sacrifiée et listée. Les 35 inclusions (« Boss's Orders (Ghetsis) », « Mew ☆ δ », « ATM [Rock] ») ont été lues une
+à une. **Compte réel relu en base : 1 679 lignes `wcd+origine+numero`, 748 cartes, 0 produit WCD à deux cartes.**
+Aucune image (le visuel d'un WCD n'est pas celui du tirage d'origine, §19), aucune appartenance `cartes.sets`
+(pas de page de set) ; le site filtre `cartes_produits` par l'`idExpansion` du set affiché, donc ces lignes
+n'apparaissent sur aucune page existante.
 
 ---
 
@@ -2739,6 +2860,16 @@ peut déplacer aucune jointure qui marche : **+6 gagnées, 0 dérangée**, le co
 nomme son périmètre : « seul ex aequo à porter cette rareté ».
 
 ## LES 9 IRRÉDUCTIBLES — limite définitive, nommée
+
+> 🔴 **CINQ SONT TOMBÉES LE 2026-09-23, ET LA LIMITE N'ÉTAIT PAS CHEZ LA SOURCE (§52).** Les cinq Gold Star (PCG6 ×3,
+> PCG9 ×2) SONT listées par leur Setlist, sous l'écriture à suffixe que le parseur n'a su lire qu'à partir du
+> 2026-09-15 (§21 n°8) — et ces deux sets n'avaient jamais été recollectés depuis. Recollectés : 3 + 2 redirections
+> vers les pages EX Delta Species / Dragon Frontiers, 86/86 et 68/68 produits joints, et **les cinq objets R2 GARDÉS
+> ci-dessous ont joint sans une requête** — exactement le cas pour lequel on les avait gardés. Instrument :
+> `collecteur-texte.js` (parseur du 15/09), 2 requêtes par set. **Restent 4 : Pi ×2, Team Rocket's Hitmonchan,
+> Blaine's Quiz #3** — et le dernier A une page (« Blaine's Quiz 3 (Gym Challenge 112) », qui déclare G2) que la
+> Setlist de G2 ne liste pas : « aucune page » était déjà faux pour lui, c'est « aucune entrée de Setlist ».
+> ⚠️ **« Aucune page » voulait dire « aucune page LUE ».** C'est le §36 sur une limite écrite « définitive ».
 
 **Ces neuf cartes n'auront ni texte ni image, jamais**, tant que Bulbapedia ne crée pas leur page :
 
