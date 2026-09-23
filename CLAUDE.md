@@ -550,6 +550,66 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 56. UN NOUVEL EXPORT CARDMARKET : LA PROCÉDURE, ET LE DÉNOMINATEUR QUI NE COMPTAIT QUE CE QU'ON AVAIT APPRIS — 2026-09-24
+
+> ## 🔑 LA PROCÉDURE — quatre ou cinq exports par an, une commande
+> ```
+> node integrer-export.js <products_singles_*.json>                                    # le diff + les trois nombres, lecture seule
+> node integrer-export.js <products_singles_*.json> --ecrire --confirmer-production     # sauvegarde relue → import → diff à zéro → apprentissage
+> ```
+> Puis, tant que cette moitié n'a pas tourné une fois d'un bout à l'autre : `collecte-cartes/generer-table-auto.js` →
+> `collecte-cartes/verifier-table.js --auto` → `collecteur-texte.js --set=<code>` (témoin du nom dans `joindre()`) →
+> commit des tables + push NOMMÉ + redéploiement (le worker lit les tables de SON commit) → `remettre-en-file.js --ecrire`.
+> ⚠️ **L'export ne porte pas le nom d'expansion** (`idProduct, name, idCategory, categoryName, idExpansion, idMetacard,
+> dateAdded`). Une expansion NEUVE n'est dans aucune de nos tables (`codes_set` : 0 sur 8 le 2026-09-24) : son nom, son slug,
+> ses numéros ne s'obtiennent que par l'APPRENTISSAGE (`apprendre-set.js`, navigateur visible, 20-45 s par page, Cloudflare).
+
+**LE DIFF DU 23/09 (74 188 produits, 782 expansions) CONTRE LA BASE (l'export du 30/08, 73 188) :** 1 000 nouveaux —
+**971 dans 8 expansions entièrement nouvelles**, toutes nées en septembre (6601-6604 : ~180 produits chacune, code appris
+`30C` pour 6601 ; 6628 et 6774 : 49 et 45 ; 6700 : 122 ; 6767 : 9 cartes-code « 30th Celebration Live Code Card ») — et
+**29 ajoutés à 13 expansions connues**. 425 noms changés, 60 `idExpansion` (énergies de base vers 6697), 0 disparu.
+Réconcilié avec les chiffres annoncés : 23 expansions nées depuis le 1/07 ✅, 413 produits ajoutés depuis le 1/07 à des
+expansions plus anciennes ✅, 993 depuis le 1/09 ✅ — mais **8 expansions nées en septembre, pas 5**. Sauvegarde réelle
+(`backup-2026-09-24-avant-export`, 143 534 documents relus), import, diff relancé : zéro partout.
+**Les 425 renommages, mesurés contre le témoin :** 360 ne changent que les attaques (un code de set ou « [Female] » ajouté),
+6 rien de lu, **59 le nom** — des traductions officielles (« Celebration Fanfare » → « Celebratory Fanfare »). Un nom qui ne
+désigne aucune autre carte du set laisse le témoin muet : rien de faux. 🕳️ **Dette trouvée en passant** :
+`decomposerNomCardmarket` lit « Rock [F] Energy » comme « Rock Energy♀ » — le [F] du type Combat pris pour un sexe.
+
+> 🔴 **LE DÉNOMINATEUR ÉTAIT `numeros_cartes`, C'EST-À-DIRE CE QUE NOUS AVONS APPRIS.** Un produit jamais appris n'était pas
+> un trou : il n'existait pas. **4 008 produits de l'export, hors cartes-code, sont absents de `numeros_cartes`**, dont
+> 2 741 sans même une expansion apprise. « 100 % du catalogue » se mesure sur le catalogue : `mesure-catalogue.js
+> --export=<fichier>` le fait. **Sur l'export : 72 926 produits (74 188 − 1 262 cartes-code), FICHES 58 788 = 80,6 %,
+> VISUELS 39 161 = 53,7 %, ÉCART 33 765** (file TCGdex en marche : instantané).
+> ⚠️ **ET LES CARTES-CODE : « 464 retirées » ÉTAIT LE FILTRE QUI N'AVAIT RIEN À LIRE.** Le prédicat lisait le libellé APPRIS ;
+> **216 cartes-code de `numeros_cartes` ont un libellé vide** — elles restaient au dénominateur. Cardmarket en a ajouté 7
+> (1 255 → 1 262). Le filtre lit désormais le nom du CATALOGUE : dénominateur appris 68 918, pas 69 134.
+
+**🔴 L'APPRENTISSAGE A FRAPPÉ CINQ FOIS UN SERVEUR QUI VENAIT DE DIRE NON.** Cardmarket a répondu 1015 dès la 2ᵉ page ;
+`scraperListeExpansion` sortait de sa boucle SANS LE DIRE, et `apprendre-set.js` passait à l'expansion suivante. **Une
+limite de débit porte sur le CLIENT, pas sur un set** (§38) : `toutes.arret` remonte désormais, et `apprendre-set.js` comme
+`apprendre-tout.js` arrêtent le lot au premier 1015, en imprimant la commande de reprise. Rejoué une heure plus tard :
+toujours 1015, **une seule requête**, lot arrêté. 🕳️ **Appris à ce jour : 100 produits de 6601 sur les 971** — les 8
+expansions neuves n'ont ni slug ni numéro, donc ni ligne de table, ni texte, ni images, tant que Cardmarket nous limite.
+
+**LOGOS : L'EMPREINTE AVANT L'ŒIL.** Groupés par sha1, 18 fichiers sont partagés par 52 sets. Lus à l'œil : 10 sont un set et
+ses Additionals (justes) · **5 sont le logo du COUPLE** — SV11 JP, M1 JP, Primordial Arts, Dynamax Clash, CSM2 : 13 sets,
+retirés comme SV2/SV4/SV5 la veille, que `collecter-logos-sets.js` avait posés sans jamais voir la règle de l'autre
+collecteur (§21 bis) · **3 sont GÉNÉRIQUES** — l'étoile PROMO (8 sets), Organized Play (8), « 横空出世 » (3) : gardés,
+`logoGenerique: true`. Les deux tables vivent dans `collecte-cartes/langue-logo.js`, appliquées par les DEUX collecteurs à
+l'écriture ; `appliquer-logos-lus.js` a rattrapé la base (sauvegarde `backup-2026-09-24-avant-logos-lus`) : **242 sets à
+logo, 19 génériques, 223 logos de set, relu concordant.**
+
+**LA TRAINER GALLERY** : TCGdex range les TG/GG dans des sets à part (`swsh9tg`, `swsh10tg`, `swsh11tg`, `swsh12tg`,
+`swsh12.5gg`), Bulbapedia dans l'expansion — 190 impressions chez nous. `compagnonsDuSet` les trouve par le nom EXACT
+« <set> Trainer Gallery | Galarian Gallery », jamais par l'inclusion (7/7) ; une galerie non lue se dit « reste NON
+MESURÉ », jamais « absente ». Une unité finie sans l'avoir lue se remet en file (`enfiler-tcgdex.js --ecrire`).
+
+**LE CHINOIS, DEUX PISTES LUES LE 2026-09-24 :** `pokemon.cn/termofuse` (art. 1 et 2) — « 仅限个人娱乐之用，不得作商业用途 »,
+aucune copie ni diffusion sans accord écrit, pas de site miroir ; et pokemon.cn n'a PAS de base de cartes (visuels produits
+sur `image.pokemon.com.cn`, URL signées). **Pokécardex** sert ses scans depuis SON CDN (`pokecardex-scans.b-cdn.net`,
+une page ouverte) : aucune source officielle derrière. Rien n'a été collecté.
+
 ## 55. REMPLACER PLUTÔT QUE TRANCHER, ET TROIS TÉMOINS QUI NE VALAIENT QUE LEUR DONNÉE — 2026-09-23
 
 **LE COLLECTEUR TCGdex (`collecteur-images-tcgdex.js`, unités `tcgdex/<code>` du worker).** On ne tranche pas la langue
