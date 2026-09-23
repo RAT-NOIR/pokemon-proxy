@@ -316,7 +316,16 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const k = nomImage(c.nomEn);
         if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(c);
     }
-    const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();
+    // 🔴 UNE IMAGE PARTAGÉE N'A QU'UN `set`, ET LES « ADDITIONALS » JAPONAISES N'EN VOYAIENT AUCUNE — corrigé le 2026-09-23.
+    // Le document `images` est clé par (source, set source, n) : xsv2a et sv2a lisent LA MÊME liste artofpkm (n° 490), donc
+    // les MÊMES documents, et le premier collecté y écrit son slug. Au passage de xsv2a, xm2a, xsv8a, xsv11B et xsv11W
+    // (2026-09-20, ~1 s chacun), les originaux étaient « déjà faits » sous le slug de la base : `set: slug` rendait ZÉRO
+    // image, la jointure ne joignait rien, et l'unité sortait « fait/verifie ». 737 cartes rattachées, 0 visuel, aucune
+    // erreur — une concordance juste sur un ensemble vide (§21 n°8). Pour un set À BASE PARTAGÉE, on lit donc les images
+    // par leur set SOURCE, qui est la vraie clé ; et on ne réécrit PAS le document image (l. suivante), qui appartient à
+    // la base — lui poser la mention « motif non distingué » la ferait porter à la base.
+    const partagees = !!S?.setDeBase;
+    const images = await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: S.ids }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean();
     // 🔑 LA MENTION VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
     // (motifs Master Ball, Poké Ball) qui partagent le numéro du set de base ; artofpkm, lui, ne publie qu'UNE image par
     // NUMÉRO — mesuré : Terastal Festival ex, 381 numéros distincts, aucun doublon. Leur visuel est donc le bon numéro du
@@ -354,7 +363,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         }
         if (cands.length === 1) {
             const c = cands[0];
-            await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(mention ? { mention } : {}) } });
+            if (!partagees) await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(mention ? { mention } : {}) } });
             // 🔴 UNE IMAGE APPARTIENT À UNE IMPRESSION, PAS À UNE CARTE (CLAUDE.md §19). `image`,
             // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
             // cartes de la base, 29 déjà pourvues. `images` est une LISTE clé par `set`, comme la
@@ -514,7 +523,19 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // repos comme au travail. Le verrou, lui, dit qui a le droit de frapper la source — il
         // disparaît dès qu'on dort, et c'est pour ça qu'il ne pouvait pas porter cette réponse.
         await balise.battre(M.EtatImages.db, 'travail');
+        // 🔴 LA BALISE MOURAIT PENDANT LE TRAVAIL — constaté le 2026-09-23, par la garde elle-même. Elle battait « à
+        // chaque tour et pendant le sommeil », et un tour, c'est une unité ENTIÈRE : une unité Bulbapedia dure 2 à 10
+        // min, la fraîcheur en exige une toutes les 3. La garde voyait donc une balise PÉRIMÉE pendant que le worker
+        // collectait, ne pouvait pas conclure — et bloquait. Elle avait raison (§51) ; c'est la balise qui mentait sur
+        // son propre contrat : « elle vit tant que le processus vit » était écrit, « elle bat entre deux unités » était
+        // codé. 🔑 Une durée de vie se tient par une MINUTERIE, jamais par les points de passage d'une boucle dont on ne
+        // borne pas la durée des tours. Les battements explicites restent : ils portent l'ÉTAT (travail/repos) à l'instant.
+        let etatBalise = 'travail';
+        const minuterieBalise = setInterval(() => {
+            balise.battre(M.EtatImages.db, etatBalise).catch(e => console.warn(`⚠️ balise : battement manqué (${e.message}) — la garde bloquera, et c'est le bon sens`));
+        }, 60 * 1000);
         while (!arretDemande) {
+            etatBalise = 'travail';
             await balise.battre(M.EtatImages.db, 'travail');
             // Réveil après un sommeil : le verrou a été RENDU pour dormir, on le reprend (en attendant son
             // détenteur s'il le faut) avant de toucher à la file.
@@ -535,6 +556,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 // exactement le moment où l'on veut la remplir, donc exactement le moment où la
                 // garde doit pouvoir lire le commit du worker. Le verrou vient d'être rendu ; la
                 // balise reste.
+                etatBalise = 'repos';
                 for (let t = 0; t < 10 * 60 * 1000 && !arretDemande; t += 5000) {
                     await new Promise(r => setTimeout(r, 5000));
                     if (t % 60000 === 0) await balise.battre(M.EtatImages.db, 'repos').catch(() => { });
@@ -570,6 +592,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             await File.updateOne({ _id: suivant._id }, { $set: { etat, resultat: b.etat, ...(etat === 'attente' ? {} : { fini: new Date() }) }, ...(etat === 'attente' ? { $unset: { pris: 1 } } : {}) });
             if (etat === 'attente') { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
         }
+        clearInterval(minuterieBalise);
         await rendreVerrouGlobal(); await fermer(); return;
     }
 
