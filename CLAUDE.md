@@ -550,6 +550,45 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 55. REMPLACER PLUTÔT QUE TRANCHER, ET TROIS TÉMOINS QUI NE VALAIENT QUE LEUR DONNÉE — 2026-09-23
+
+**LE COLLECTEUR TCGdex (`collecteur-images-tcgdex.js`, unités `tcgdex/<code>` du worker).** On ne tranche pas la langue
+de chaque fichier de la strate à risque : on REMPLACE ses 34 sets par le scan anglais que TCGdex sert, `langue: 'en'`
+prouvé par la source. La jointure retire l'entrée Bulbapedia du même (set, numéro) ; celle de Bulbapedia saute un numéro
+que TCGdex sert (préséance des deux côtés, §21 bis). Client unique (`collecte-cartes/tcgdex.js`) : file à cadence, un
+réessai, verrou global `tcgdex/__collecteur__` LIÉ — sans lui, aucune requête (garde fermée, 11/11 ; garde du collecteur
+7/7). La mise en file passe par `etatDuWorker` : 13 règles surveillées désormais. **Mesuré sur le cache complet
+(164 sets TCGdex, 248 + 43 requêtes GraphQL) : 3 277 des 3 454 scans japonais reçoivent le scan anglais, 5 619 fichiers
+pour la strate entière.** Restent 177, listés (`collecte-cartes/rapports/restes-scan-anglais.json`) : Dragon Majesty 48 et
+Shining Legends 40 (TCGdex n'a pas l'image), 50 Trainer Gallery (Brilliant Stars 26, Lost Origin 24 — TCGdex les range dans
+des sets `…tg` séparés : route à ouvrir), promos SM 25 · SWSH 8 · MEP 2, Forbidden Light 3, Guardians Rising 1.
+⚠️ **Le GraphQL de TCGdex a répondu 503 après ~45 requêtes à 2 s** ; témoin (§29) : REST et GraphQL répondaient 20 s
+plus tard. Surcharge, pas panne : le GraphQL passe à 5 s. Et le verrou d'un processus mort bloque 3 min — la seconde
+lecture a été REFUSÉE par la garde, ce qui était juste.
+
+**TROIS TÉMOINS PAR LE NOM, MESURÉS AVANT D'ÊTRE CÂBLÉS (§22) — ET AUCUN N'A TENU SUR LES IMAGES artofpkm :**
+| témoin | contredites | vraies | pourquoi il ment |
+|---|---|---|---|
+| nom anglais d'artofpkm | 54 (40 affichées) | 2 | カプ・テテフ nommée « Tapu Fini », LV.X omis |
+| nom japonais d'artofpkm | 14 (3 affichées) | 2 | Thunderclap Spark n°072 est カスタムキャッチャー à l'œil, la page dit カウンターゲイン |
+🔑 **Un témoin ne vaut que ce que vaut la donnée qu'il lit** — et la langue de la source ne la rend pas juste. Les deux
+Kyurem (seuls vrais faux) passent par `collecte-cartes/corrections-images.js` : des lignes LUES À L'ŒIL, appliquées par
+la jointure avant le numéro, donc tenues au rejeu (rejoué : EBB 95/95).
+
+**LES ILLUSTRATEURS PAR TIRAGE, FUSIONNÉS (`construire-illustrateurs.js`).** intl : le fichier TCGdex du site (preuve =
+identifiant TCGdex) ; ses compléments « wikitext » (1 023) sont écartés — c'est la source que son témoin avait refusée.
+TÉMOIN : mon appariement TCGdex, numéro + nom — même source, autre chemin : **18 060 accords, 0 désaccord** ; là où le
+fichier se taisait, mon appariement parle seul (1 359). jp : artofpkm contre le TCGdex `ja` du site — **9 571 accords, 58
+désaccords → `null`**. **Écrit (sauvegarde `backup-2026-09-23-avant-illustrateurs`), relu : 39 414 / 48 494 impressions
+portent leur illustrateur = 81,3 % (intl 91,3 %, jp 73,5 %), 9 080 `null` avec leur raison (109 contradictions), 0 absent.**
+
+**LOGOS** : la règle de langue sort en module (`langue-logo.js`, verdict identique : 245 / 252) ; `collecter-logos-sets.js`
+ne retire plus un logo d'une autre source (il aurait effacé en silence ceux du site). 29 demandés : 9 Bulbagarden posés,
+**4 retirés à l'œil** (SV2, SV4, SV5 JP sont le logo du COUPLE et nomment deux sets), 16 TCGdex posés — authentiques mais
+GÉNÉRIQUES (l'étoile « PROMO » ×8, « Organized Play » ×8) : ils ne distinguent pas un set d'un autre. 255 sets à logo, relu. **CHINOIS** : les conditions de TPC Asie
+(asia.pokemon-card.com/tw/policy, art. 7 et 11.1(2)) interdisent de copier, diffuser ou utiliser hors du service, et
+tout usage lucratif — la recherche officielle n'est pas une source. TCGdex zh-tw : 0 image sur le set ouvert.
+
 ## 54. LA LANGUE DU SCAN : UN FORMAT PROUVE LE JAPONAIS, JAMAIS L'ANGLAIS — 2026-09-23
 
 **`langue` est écrit** sur les 40 996 documents `images` et les 36 883 entrées de `cartes.images` (sauvegarde réelle
@@ -557,6 +596,8 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 au téléchargement et à la jointure). `ja` : artofpkm par construction, et Bulbapedia aux trois formats du scanner japonais —
 868×1212, 748×1044, **748×1045** (ceux des scans artofpkm eux-mêmes ; Guardians Rising 4/4 à l'œil). **3 454 scans
 japonais sous un set non jp**, dont 11 lus un par un. Tout le reste : `null`, avec sa preuve.
+> 🔑 **3 454 EST UN PLANCHER, ET IL SE CITE COMME TEL.** 9 japonais sur 36 tirés hors formats dans la strate à risque :
+> le vrai nombre est plus haut, et seul le REMPLACEMENT par TCGdex (§55) le rend sans objet.
 🔴 **AUCUN FORMAT NE PROUVE L'ANGLAIS, ET LE « 3 353 » ÉTAIT UN PLANCHER.** Marnie (733×1024) et Collapsed Stadium
 (400×558) sont japonais dans des formats où vivent des scans anglais ; 734×1024 porte 22 scans japonais chez artofpkm.
 **Tiré au hasard dans les 34 sets « à risque » (SM/SWSH), hors formats japonais : 9 japonais sur 36** ; ailleurs 0 sur 12.
