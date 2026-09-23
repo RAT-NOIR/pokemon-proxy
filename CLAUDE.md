@@ -7,6 +7,12 @@ renégocie pas en cours de route.
 
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
 
+> # **L'OBJECTIF EST FIXÉ (2026-09-23) : chaque produit qui a une fiche et un visuel chez Cardmarket doit avoir chez nous la BONNE fiche et la BONNE image.**
+>
+> **L'outil s'appuiera sur ce catalogue par l'API : un TROU est une carte que l'outil ne reconnaîtra pas, une ERREUR est
+> un mensonge à un client.** Les deux se comptent, et le second ne se rachète pas par le premier : un visuel absent est
+> honnête, celui d'un autre tirage ne l'est pas.
+
 > # **100 %. Pas 81 %, pas 95 %.**
 >
 > **Cardmarket est la RÉFÉRENCE DU LISTING. Un catalogue qui n'en couvre pas la totalité n'est pas une
@@ -543,6 +549,41 @@ peuvent pas être admises sur des liens rouges. ⚠️ Une limite qu'on écrit p
 remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
+
+## 54. LA LANGUE DU SCAN : UN FORMAT PROUVE LE JAPONAIS, JAMAIS L'ANGLAIS — 2026-09-23
+
+**`langue` est écrit** sur les 40 996 documents `images` et les 36 883 entrées de `cartes.images` (sauvegarde réelle
+`backup-2026-09-23-avant-langue`, relue ; règle unique `collecte-cartes/langue-visuel.js`, appelée par les deux collecteurs
+au téléchargement et à la jointure). `ja` : artofpkm par construction, et Bulbapedia aux trois formats du scanner japonais —
+868×1212, 748×1044, **748×1045** (ceux des scans artofpkm eux-mêmes ; Guardians Rising 4/4 à l'œil). **3 454 scans
+japonais sous un set non jp**, dont 11 lus un par un. Tout le reste : `null`, avec sa preuve.
+🔴 **AUCUN FORMAT NE PROUVE L'ANGLAIS, ET LE « 3 353 » ÉTAIT UN PLANCHER.** Marnie (733×1024) et Collapsed Stadium
+(400×558) sont japonais dans des formats où vivent des scans anglais ; 734×1024 porte 22 scans japonais chez artofpkm.
+**Tiré au hasard dans les 34 sets « à risque » (SM/SWSH), hors formats japonais : 9 japonais sur 36** ; ailleurs 0 sur 12.
+La strate à risque compte 2 290 visuels : plusieurs centaines de japonais y restent affichés, et `null` n'est pas « anglais ».
+🔑 **LA SORTIE N'EST PAS DE DÉTECTER MIEUX, C'EST DE REMPLACER** : TCGdex a l'image ANGLAISE de **3 326 des 3 454**
+(96,3 %, PNG 600×825, 40 requêtes à 2 s). Trous : Dragon Majesty 48, Shining Legends 40, promos SM 25, SWSH 8. Le même
+remplacement couvrirait la strate à risque entière, sans avoir à trancher sa langue. pokemontcg.io : 502, non conclu.
+
+**UN DOCUMENT DE CARTE NE FUSIONNE PAS DEUX TEXTES — IL FUSIONNE LES TIRAGES D'UN TEXTE.** « 13 illustrateurs sur un
+Pikachu » : une page Bulbapedia est un texte de jeu avec toutes ses réimpressions, réillustrées comprises (Professor's
+Research : 132 impressions, 10 illustrateurs dans nos seuls scans artofpkm). La fiche est juste pour tous ; tout ce qui
+est PAR TIRAGE (image, illustrateur, rareté) doit vivre sur l'impression — `impressions[].illustrateur` est déclaré.
+🔴 **`CORRECTION-ILLUSTRATEURS.json` (agent site, 15 069 impressions) est REFUSÉ par son témoin** : l'illustrateur des pages
+artofpkm, jamais utilisé par le fichier, le contredit 20 fois sur 1 925 (« & Direc. », « Toyste Beach » pour Planeta
+Mochizuki). `poser-illustrateurs.js --ecrire` refuse au premier désaccord. Et 4 584 impressions japonaises que le fichier
+laisse `null` ont DÉJÀ leur illustrateur chez artofpkm, en base.
+
+⚠️ **LE TÉMOIN DU NOM SUR LES IMAGES, MESURÉ AVANT D'ÊTRE CÂBLÉ (§22), NE VAUT RIEN** : 54 contredites, 40 affichées,
+16 ouvertes — **2 fausses** (les Kyurem croisés d'EX Battle Boost, le même croisement que le texte) et 14 justes, parce que
+c'est le nom ANGLAIS d'artofpkm qui est faux (カプ・テテフ nommée « Tapu Fini », ドラパルト « Dreepy », LV.X omis). Un témoin
+ne vaut que ce que vaut la donnée qu'il lit. Les deux Kyurem sont listés, non corrigés : un rejeu les recroiserait.
+
+🔴 **ET J'AI LANCÉ UN COLLECTEUR EN LOCAL.** `collecteur-images-bulba.js --plan=SHF` : ce n'est pas `--plan`, le drapeau
+n'a pas mordu, et sans `--sets=` le script a pris le verrou global Bulbapedia et TOUS les sets occidentaux. Zéro requête
+par chance (PBL en cache), un set rejoint, tué par la coupure du tube. **Une ligne de commande est une garde : elle
+s'écrit par ce qu'elle AUTORISE** — un argument inconnu refuse avant toute connexion, une collecte nomme ses sets
+(`test-arguments-bulba.js`, 4/4).
 
 ## 53. LE TÉMOIN DANS LA JOINTURE, LE JUMEAU CHEZ LA SOURCE, ET 20 DECKS QU'UNE ÉGALITÉ DE NOM CACHAIT — 2026-09-23
 
