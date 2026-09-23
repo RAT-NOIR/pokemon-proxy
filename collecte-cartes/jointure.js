@@ -148,6 +148,67 @@ function numeroDeSetlist(e, jetonsOuNoms) {
     return null;
 }
 
+// Le nom sous lequel une carte se joint. Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
+// LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
+// ⚠️ NE PAS DOUBLER LE SUFFIXE. Tant que `nomEn` portait l'ESPÈCE (« Mesprit »), il fallait lui rendre son « LV.X » depuis
+// `level=X`. Depuis que `nomEn` est recomposé sur le nom de la carte (« Mesprit LV.X »), l'ajouter une seconde fois fabrique
+// « Mesprit LV.X LV.X » et fait perdre la jointure : 19 lignes des sets DP au rejeu, toutes des LV.X. Mesuré avant.
+function nomJointDe(carte) {
+    const dejaLvX = /lv\.?\s*x\s*$/i.test(String(carte.nomEn || ''));
+    return String(carte.nomEn) + (!dejaLvX && String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
+}
+const clesNom = nom => [...new Set([normaliserNom(nom), normaliserNom(String(nom).replace(/^Basic\s+/i, ''))])].filter(Boolean);
+
+/**
+ * 🔴 LE TÉMOIN DU NOM SUR UNE FICHE PAR LE NUMÉRO (2026-09-23). « 0 AMBIGU NE VEUT PAS DIRE 0 FAUX » : une clé qui ne
+ * désigne qu'UNE carte peut désigner la MAUVAISE, et seule une donnée qu'elle n'a PAS utilisée peut le dire. Le nom n'entre
+ * pas dans la clé par le numéro : c'est ce qui en fait un témoin (§16, §49). Rejoué APRÈS coup, il a trouvé 4 clés WCD
+ * fausses puis 62 fiches par le numéro (SV-P chinois 25/41, Kyurem blanc et noir croisés, « Pokémon Reversal » sur
+ * Energy Restore) ; détachées, une recollecte les aurait refaites. Il vit donc ICI, dans la jointure.
+ *
+ * La contradiction est STRUCTURELLE, pas un seuil : le nom du produit n'est pas celui de la carte, ET il EST celui d'une
+ * AUTRE carte du set. Deux données indépendantes désignent deux cartes différentes. Le nombre de ces autres cartes ne
+ * change rien — une seule ou trois « Mew », « Mew » n'est pas Mewtwo — et l'INCLUSION ne protège pas non plus : c'est
+ * exactement le cas « Mew » / « Mewtwo ».
+ * ⚪ Un nom qui ne désigne AUCUNE autre carte du set est un écart de FORME (« Pokémon Reverse » / « Reversal »,
+ * « Mystery Plate alpha » / « α ») : le témoin se tait, la fiche reste. Une traduction n'est pas une fiche fausse.
+ * ⚪ Une carte sans `nomEn` : le témoin n'a rien à dire, le numéro décide comme avant.
+ * 🔑 LES ATTAQUES DÉPARTAGENT, et elles sont un second témoin indépendant de la clé. Cardmarket écrit « Vulpix [Gather
+ * Snow | Gnaw] » pour Alolan Vulpix, « Drifblim [FB] » pour Drifblim FB, « Hippowdon [4] » pour Hippowdon 4 : le nom
+ * tombe sur une AUTRE carte du set, les attaques sont celles de la carte du numéro. Numéro et attaques l'emportent alors
+ * sur le nom — à une condition COMPARATIVE : les attaques du produit désignent la carte du numéro PLUS que chacune des
+ * cartes du nom. À égalité, elles ne départagent rien, et le nom contredit toujours.
+ * ⚠️ PAS « toutes les attaques concordent » (la règle du repli par nom) : mesuré sur ces cas, elle refusait les trois.
+ * Cardmarket écrit « Gather Snow » où Bulbapedia écrit « Snow Gather », et met entre crochets les Poké-Power/Poké-Body
+ * (« Pump Up », « Sand Armor ») que Bulbapedia ne range pas dans `attaques`. Les mots sont donc comparés sans leur ordre.
+ * Premier rejeu, 2026-09-23 : 4 fiches justes de cette forme, refusées sans ce départage.
+ * @param {object[]} cartes les cartes du set, TOUTES (multiplicités comptées, §34)
+ * @returns {(carte: object, p: {nom: string}) => object[]|null}  les AUTRES cartes que le nom désigne, ou null
+ */
+function temoinDuNom(cartes) {
+    const clesCarte = new Map(), parCle = new Map();
+    for (const c of cartes) {
+        const k = c.nomEn ? clesNom(nomJointDe(c)) : [];
+        clesCarte.set(c._id, k);
+        for (const x of k) { if (!parCle.has(x)) parCle.set(x, []); parCle.get(x).push(c); }
+    }
+    return (carte, p) => {
+        const kc = clesCarte.get(carte._id) || [];
+        if (!kc.length) return null;
+        const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom];
+        const kp = [...new Set([...clesNom(p.nom), ...(alias ? clesNom(alias) : [])])];
+        if (kp.some(k => kc.includes(k))) return null;
+        const autres = [...new Map(kp.flatMap(k => parCle.get(k) || []).filter(c => c._id !== carte._id).map(c => [c._id, c])).values()];
+        if (!autres.length) return null;
+        const communes = c => { const s = new Set((c.attaques || []).map(a => cleAttaque(a.nom))); return (p.attaques || []).filter(a => s.has(cleAttaque(a))).length; };
+        const n = communes(carte);
+        if (n > 0 && autres.every(c => communes(c) < n)) return null;
+        return autres;
+    };
+}
+// « Gather Snow » et « Snow Gather » : les mots d'une attaque, sans leur ordre.
+const cleAttaque = a => String(a || '').split(/\s+/).map(normaliserNom).filter(Boolean).sort().join(' ');
+
 /**
  * Joint les cartes d'un set à ses produits.
  * @param {object[]} cartes   documents `cartes` (avec impressions, attaques, nomEn)
@@ -229,6 +290,8 @@ function joindre(cartes, produits, cible) {
     // « Miraidon » sans impression (appartenance par la Setlist seule) prenait les produits n°013 et n°092 déjà joints — 7 produits
     // vers plusieurs cartes. Un produit joint par son NUMÉRO n'est plus offert au nom de personne.
     const etatDeCarte = new Map();
+    const temoin = temoinDuNom(cartes);
+    const contradictions = [];            // { carte, p, autres, detail } — le numéro désigne carte, le nom désigne autres
     for (const carte of cartes) {
         // L'appartenance au set a DEUX sources : l'impression déclarée sur la page (jpexpansion=…),
         // ou, à défaut, le seul fait que la Setlist du set a lié cette page (cas des énergies de
@@ -249,11 +312,28 @@ function joindre(cartes, produits, cible) {
             trouves = numeros.flatMap(n => parNumero.get(n) || []);
             preuve = imps.every(i => i.source === 'setlist') ? 'setlist+numero' : 'set+numero'; detail = `n°${numeros.join(', ')} dans l'expansion ${cible.idExpansion}${prefixeDuSet ? ` (préfixe « ${prefixeDuSet} » du set : les deux écritures essayées, ${numsProd.filter(n => /^\d/.test(n)).length} numéros Cardmarket nus sur ${numsProd.length})` : ''}`;
         }
-        for (const p of trouves) attache(carte, p, preuve, detail);
-        etatDeCarte.set(carte, { imp, imps, source, numeros, joint: trouves.length > 0 });
+        // Le témoin du nom juge chaque produit que le numéro apporte : une fiche qu'il contredit n'est pas posée.
+        const retenus = [];
+        for (const p of trouves) {
+            const autres = temoin(carte, p);
+            if (autres) contradictions.push({ carte, p, autres, detail });
+            else retenus.push(p);
+        }
+        for (const p of retenus) attache(carte, p, preuve, detail);
+        etatDeCarte.set(carte, { imp, imps, source, numeros, joint: retenus.length > 0 });
+    }
+    // Une contradiction dont le produit a trouvé SA carte par le numéro ET le nom (EC1 n°059 : deux cartes, un numéro) est
+    // un DÉPARTAGE, pas un trou. Les autres sont des restes nommés, et leur produit n'est offert à personne : le numéro et
+    // le nom disent deux choses différentes, aucune des deux ne désigne.
+    const contredits = new Set();
+    let departagesParLeNom = 0;
+    for (const x of contradictions) {
+        if (produitsJoints.has(x.p.idProduct)) { departagesParLeNom++; continue; }
+        contredits.add(x.p.idProduct);
+        restes.push({ type: 'fiche-contredite-par-le-nom', carteId: x.carte._id, idProduct: x.p.idProduct, detail: `${x.p.idProduct} « ${x.p.name} » : le numéro désigne « ${x.carte.nomEn} » (${x.carte._id}, ${x.detail}), le nom est celui de ${x.autres.map(c => `« ${c.nomEn} » (${c._id})`).join(', ')} — aucune fiche` });
     }
     // PASSE 2 — le repli par NOM, sur les produits qu'aucun NUMÉRO n'a pris.
-    const jointsParNumero = new Set(produitsJoints.keys());
+    const jointsParNumero = new Set([...produitsJoints.keys(), ...contredits]);
     const candidatsParProduit = new Map();
     for (const carte of cartes) {
         const { imp, imps, source, numeros, joint } = etatDeCarte.get(carte);
@@ -265,21 +345,14 @@ function joindre(cartes, produits, cible) {
         // avaient tous deux cette forme. Le repli par nom reste pour les cartes sans numéro déclaré et les catalogues sans numéro.
         const numeroEssaye = numeros.length && parNumero.size;
         if (!trouves.length && carte.nomEn && !numeroEssaye) {
-            // Énergies : « Basic Fire Energy » chez Bulbapedia, « Fire Energy » chez Cardmarket.
-            // LV.X : « Magmortar » + `level=X` chez Bulbapedia, « Magmortar LV.X » chez Cardmarket.
-            // ⚠️ NE PAS DOUBLER LE SUFFIXE. Tant que `nomEn` portait l'ESPÈCE (« Mesprit »), il fallait
-            // lui rendre son « LV.X » depuis `level=X`. Depuis que `nomEn` est recomposé sur le nom de
-            // la carte (« Mesprit LV.X »), l'ajouter une seconde fois fabrique « Mesprit LV.X LV.X » et
-            // fait perdre la jointure : 19 lignes des sets DP au rejeu, toutes des LV.X. Mesuré avant.
-            const dejaLvX = /lv\.?\s*x\s*$/i.test(String(carte.nomEn || ''));
-            const nomJoint = String(carte.nomEn) + (!dejaLvX && String(carte.niveau || '').toUpperCase() === 'X' ? ' LV.X' : '');
-            const clesNom = [...new Set([normaliserNom(nomJoint), normaliserNom(nomJoint.replace(/^Basic\s+/i, ''))])];
+            // Le nom joint (Basic, LV.X) : une seule définition, celle que le témoin du nom lit aussi (§21 bis).
+            const clesDeLaCarte = clesNom(nomJointDe(carte));
             // Une carte qui DÉCLARE une impression dans le set SANS numéro (promo non numérotée), dans un catalogue NUMÉROTÉ, ne vise
             // par son nom qu'un produit SANS numéro : XY-P, Greninja [jp:null] prenait Greninja n°073 (8 produits vers plusieurs
             // cartes). ⚠️ PAS les cartes sans impression déclarée (énergies, pages génériques, « setlist+nom ») : le premier jet
             // les incluait et retirait 1 à 44 jointures sur 19 sets sains au rejeu (WCP 5, s8a-G 8, S-P 44) — refusé.
             const impSansNumero = imp && !imps.some(i => numerote(i.numero));
-            for (const k of clesNom) {
+            for (const k of clesDeLaCarte) {
                 trouves = (parNom.get(k) || [])
                     .filter(p => !jointsParNumero.has(p.idProduct))                                  // déjà désigné par un numéro : il n'est pas à prendre
                     .filter(p => !(impSansNumero && parNumero.size) || !numerote(p.numero));
@@ -335,13 +408,13 @@ function joindre(cartes, produits, cible) {
     }
     for (const p of produits) {
         const c = produitsJoints.get(p.idProduct);
-        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}` });
+        if (!c) restes.push({ type: 'produit-sans-carte', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » n°${p.numero ?? '—'}${contredits.has(p.idProduct) ? ' — le nom contredit le numéro (fiche-contredite-par-le-nom)' : ''}` });
         else if (c.length > 1) restes.push({ type: 'produit-vers-plusieurs-cartes', idProduct: p.idProduct, detail: `${p.idProduct} « ${p.name} » -> cartes ${c.join(', ')}` });
     }
     return {
         lignes, restes,
-        compte: { cartes: cartes.length, produits: produits.length, lignes: lignes.length, produitsJoints: produitsJoints.size, cartesSansProduit, restes: restes.length, prefixeRetire: prefixeDuSet }
+        compte: { cartes: cartes.length, produits: produits.length, lignes: lignes.length, produitsJoints: produitsJoints.size, cartesSansProduit, restes: restes.length, prefixeRetire: prefixeDuSet, contredits: contredits.size, departagesParLeNom }
     };
 }
 
-module.exports = { joindre, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
+module.exports = { joindre, temoinDuNom, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };

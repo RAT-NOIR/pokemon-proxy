@@ -20,7 +20,9 @@ async function ecrireJointure(M, { slug, J, produits }) {
     for (const l of J.lignes) await M.CarteProduit.updateOne({ _id: l._id }, { $set: l }, { upsert: true });
     // Les restes du set sont REMPLACÉS, jamais ajoutés : un reste qu'une correction a fait disparaître
     // doit disparaître de la base, sinon le compte des trous ne descend jamais.
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes'] } });
+    // `fiche-contredite-par-le-nom` : le témoin du nom vit dans `joindre()` depuis le 2026-09-23 ; ses restes se remplacent
+    // comme les autres, sinon chaque recollecte les ajouterait une fois de plus.
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['produit-sans-carte', 'carte-sans-produit', 'produit-vers-plusieurs-cartes', 'fiche-contredite-par-le-nom'] } });
     if (J.restes.length) await M.Reste.insertMany(J.restes.map(r => ({ ...r, set: slug, le: new Date() })));
     // liens dénormalisés sur la carte : produits joints, et leurs MÉTACARTES distinctes (le champ
     // singulier `idMetacard`, déclaré et jamais rempli, est retiré au passage).

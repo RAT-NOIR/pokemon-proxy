@@ -57,7 +57,9 @@ verifier('les deux écritures : aucun produit vers plusieurs cartes', multi(JMX)
 // pas prendre par son NOM un produit DÉJÀ joint par son numéro à une autre carte — 7 produits vers plusieurs cartes,
 // garde déclenchée. Le repli par nom ne vise que des produits encore libres.
 const SVP = 'SVP Black Star Promos';
-const cSVP = [carte(200, 'Miraidon', SVP, 'intl', '013'), { _id: 201, nomEn: 'Miraidon', attaques: [], impressions: [] }, { _id: 202, nomEn: 'Koraidon', attaques: [], impressions: [] }];
+// ⚠️ Koraidon DÉCLARE l'impression sans numéro (« set+nom ») : depuis la coupure de « setlist+nom » (2026-09-19,
+// jointure.js), une carte sans AUCUNE impression ne joint plus par son nom. Ce test échouait sur HEAD depuis ce jour-là.
+const cSVP = [carte(200, 'Miraidon', SVP, 'intl', '013'), { _id: 201, nomEn: 'Miraidon', attaques: [], impressions: [] }, carte(202, 'Koraidon', SVP, 'intl', null)];
 const pSVP = [produit(210, 'Miraidon', '013'), produit(211, 'Koraidon', null)];
 const JSVP = joindre(cSVP, pSVP, { idExpansion: 5241, expansionBulba: SVP, tirage: 'intl' });
 verifier('SVP : le produit déjà joint par son numéro n’est pas repris par un nom', paires(JSVP), ['200|210', '202|211']);
@@ -82,8 +84,11 @@ verifier('sous-ensemble : seules les cartes au numéro présent joignent', paire
 verifier('sous-ensemble : la carte au numéro absent est un reste, pas un repli par nom', JTF.restes.filter(r => r.type === 'carte-sans-produit').map(r => r.carteId), [121]);
 // 8. Le repli par nom RESTE permis quand la carte ne déclare aucun numéro (énergies, pages sans impression) ou que le catalogue
 // n'a aucun numéro (vintage japonais).
-const JEN = joindre([{ _id: 140, nomEn: 'Basic Fire Energy', attaques: [], impressions: [] }], [produit(150, 'Fire Energy', '')], { idExpansion: 7, expansionBulba: TF, tirage: 'jp' });
+const JEN = joindre([carte(140, 'Basic Fire Energy', TF, 'jp', null)], [produit(150, 'Fire Energy', '')], { idExpansion: 7, expansionBulba: TF, tirage: 'jp' });
 verifier('énergie sans numéro : repli par nom conservé', paires(JEN), ['140|150']);
+// …et une énergie qui ne DÉCLARE rien n'a que son nom à offrir : « setlist+nom », coupé le 2026-09-19 (Bulbasaur-V1-BS44).
+const JEN0 = joindre([{ _id: 141, nomEn: 'Basic Fire Energy', attaques: [], impressions: [] }], [produit(151, 'Fire Energy', '')], { idExpansion: 7, expansionBulba: TF, tirage: 'jp' });
+verifier('énergie sans impression déclarée : « setlist+nom » coupé', paires(JEN0), []);
 const JVI = joindre([carte(160, 'Pikachu', 'Base Set', 'jp', '025')], [produit(170, 'Pikachu', null)], { idExpansion: 8, expansionBulba: 'Base Set', tirage: 'jp' });
 verifier('catalogue sans numéro : repli par nom conservé', paires(JVI), ['160|170']);
 
