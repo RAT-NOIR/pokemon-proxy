@@ -33,7 +33,7 @@ const bulba = require('./collecte-cartes/bulba');
 const { gabarits } = require('./collecte-cartes/wikitext');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
-const cle = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const { deciderLangue, cle } = require('./collecte-cartes/langue-logo');   // la règle, une seule fois (2026-09-23)
 // 🔴 L'INTERVALLE D'ATTENTE DOIT ÊTRE PLUS COURT QUE LA FENÊTRE QU'IL ATTEND — mesuré le 2026-09-20.
 // Ce script a attendu le verrou global pendant des dizaines de cycles sans jamais l'obtenir, et j'ai
 // d'abord lu ça comme « le worker le tient en continu ». Le champ `depuis` dit le contraire : le worker
@@ -44,23 +44,6 @@ const cle = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowe
 // tiers : le raccourcir ne touche à aucune promesse.
 const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
 
-function deciderLangue(s, logo) {
-    const f = cle(logo);
-    const suf = String(logo).match(/\s(EN|JP|JA)\.(png|jpg|svg|gif)$/i)?.[1]?.toUpperCase() || null;
-    if (s.region === 'intl') return suf === 'JP' || suf === 'JA'
-        ? { ok: false, motif: `set occidental, fichier suffixé « ${suf} » : c'est le logo japonais` }
-        : { ok: true, preuve: `set occidental${suf ? `, fichier suffixé « ${suf} »` : ', aucun suffixe de langue'}` };
-    if (suf === 'JP' || suf === 'JA') return { ok: true, preuve: `fichier suffixé « ${suf} »` };
-    if (suf === 'EN') return { ok: false, motif: 'fichier suffixé « EN » : c\'est le logo du jumeau international' };
-    const code = cle(s.code);
-    if (code && code.length > 1 && f.startsWith(code)) return { ok: true, preuve: `le fichier commence par le code japonais « ${s.code} »` };
-    const ja = cle(s.nomJaTraduit || s.nomAffichage);
-    if (ja && ja.length > 3 && f.includes(ja)) return { ok: true, preuve: `le fichier porte le nom japonais du set` };
-    const jumeau = cle(s.nomEn);
-    if (jumeau && jumeau.length > 3 && f.includes(jumeau)) return { ok: false, motif: `le fichier porte le nom du jumeau « ${s.nomEn} »` };
-    return { ok: false, motif: 'aucune preuve de langue dans le nom de fichier' };
-}
-
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
@@ -68,7 +51,13 @@ function deciderLangue(s, logo) {
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
 
-    const sets = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1 } }).toArray();
+    const tous = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1 } }).toArray();
+    // 🔴 UN LOGO D'UNE AUTRE SOURCE N'EST PAS À CET OUTIL (2026-09-23). Il juge le paramètre `setlogo` et RETIRE le logo
+    // de tout set qu'il refuse — donc il effaçait, en silence et avec un « ✍️ refus écrits » parfaitement normal, les
+    // logos posés par collecter-logos-demande.js, précisément sur des sets dont il refuse le `setlogo`. Une ligne qu'un
+    // outil ne sait pas refabriquer porte sa marque (`logo.source`) et cet outil ne la touche pas.
+    const sets = tous.filter(s => !s.logo?.source || s.logo.source === 'bulbapedia:setlogo');
+    if (tous.length > sets.length) console.log(`   (${tous.length - sets.length} sets portent un logo d'une autre source : ni jugés ni touchés ici)`);
     const avecArchive = sets.filter(s => s.bulba?.cleR2);
     console.log(`\n════ DÉNOMINATEUR : ${sets.length} sets · ${avecArchive.length} ont leur page archivée (${sets.length - avecArchive.length} sans : rien à lire) ════`);
 

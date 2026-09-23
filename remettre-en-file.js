@@ -60,9 +60,14 @@ const balise = require('./collecte-cartes/balise-worker');   // le commit du wor
 // unité enfilée pour un set que son commit ne connaît pas sort `refuse-source`, hors de la file pour toujours (§23) — et
 // la garde restait verte, parce qu'elle ne regardait que la règle d'images. Le test du §44 (« si ça changeait demain,
 // quel fichier bougerait ? ») rend ces cinq-là pour tout set NEUF : 20 decks japonais y sont entrés ce jour-là.
+// ➕ 2026-09-23 : la troisième source. Une unité `tcgdex/<code>` dépend du collecteur, du client (cadence, garde fermée), du
+// cache, de l'appariement et de la règle de langue — cinq fichiers qu'un worker antérieur ne connaît pas : il sortirait
+// l'unité `refuse-table` pour toujours.
 const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
-    'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json'];
+    'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
+    'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
+    'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma

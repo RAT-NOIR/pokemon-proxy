@@ -219,9 +219,14 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         for (const [carteId, ims] of parCarte) {
             ims.sort((a, b) => (numeroEntier(a.numero) ?? 1e9) - (numeroEntier(b.numero) ?? 1e9));
             if (ims.length > 1) entreesMultiples++;
-            const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), jointeLe: new Date() }));
+            // 🔑 LA PRÉSÉANCE DE TCGdex (2026-09-23) : un (set, numéro) que collecteur-images-tcgdex.js a servi porte le scan
+            // ANGLAIS, prouvé ; le fichier Bulbapedia du même tirage est peut-être le jumeau japonais. Le rejoindre ici
+            // referait deux visuels pour un tirage — le remplacement se défait au premier rejeu. Même règle, deux côtés (§21 bis).
+            const avant = await M.Carte.findById(carteId).select('images').lean();
+            const servisParTcgdex = new Set((avant?.images || []).filter(e => e.set === slug && e.source === 'tcgdex').map(e => e.numero));
+            const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), jointeLe: new Date() }));
             await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
-            await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
+            if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
         }
 
         // ---- 6. complétude -----------------------------------------------------------------------

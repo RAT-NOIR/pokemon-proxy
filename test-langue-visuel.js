@@ -25,7 +25,9 @@ verifier('bulbapedia 733×1024 → null (Marnie, scan japonais)', langue(bulba(7
 verifier('bulbapedia 660×920 → null', langue(bulba(660, 920)), null);
 // 4. Sans dimensions, rien ne se lit.
 verifier('bulbapedia sans wOriginal → null', langue({ source: 'bulbapedia' }), null);
-verifier('source inconnue → null', langue({ source: 'tcgdex', wOriginal: 868, hOriginal: 1212 }), null);
+verifier('source inconnue → null', langue({ source: 'pokellector', wOriginal: 868, hOriginal: 1212 }), null);
+// 4 bis. TCGdex anglais : la source déclare la langue — la seule preuve d'anglais, même sur un format « japonais ».
+verifier('tcgdex → en', langue({ source: 'tcgdex', wOriginal: 600, hOriginal: 825 }), 'en');
 // 5. La preuve est toujours écrite, verdict ou pas.
 verifier('la preuve du format nomme le format', langueDuVisuel(bulba(868, 1212)).preuve.includes('868×1212'), true);
 verifier('un null porte aussi sa preuve', typeof langueDuVisuel(bulba(734, 1024)).preuve, 'string');

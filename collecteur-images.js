@@ -47,6 +47,7 @@ const VERROU_MS = 10 * 60 * 1000;
 // dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { correctionDe } = require('./collecte-cartes/corrections-images');
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
@@ -131,8 +132,11 @@ async function reprendreEnCoursFiges(File, M) {
     if (!enCours.length) return 0;
     let repris = 0;
     for (const f of enCours) {
-        const L = ligneDeTable(f._id);
-        const e = L ? await M.EtatImages.findById(`${SOURCE}/${L.slugSet}`).select('verrou').lean() : null;
+        // ⚠️ LE VERROU DE SET EST CELUI DE LA SOURCE DE L'UNITÉ (corrigé le 2026-09-23) : on lisait `artofpkm/<slug>` pour
+        // une unité Bulbapedia, qui bat sur `bulbapedia/<slug>` — une unité longue et VIVANTE passait pour figée. Et une
+        // unité TCGdex a pour `_id` `tcgdex/<code>` : son code est dans `f.code`.
+        const L = ligneDeTable(f.code || f._id);
+        const e = L ? await M.EtatImages.findById(`${f.source || SOURCE}/${L.slugSet}`).select('verrou').lean() : null;
         const vie = Math.max(e?.verrou?.depuis ? new Date(e.verrou.depuis).getTime() : 0, f.pris ? new Date(f.pris).getTime() : 0);
         const ageS = Math.round((Date.now() - vie) / 1000);
         if (ageS * 1000 < VERROU_MS) { console.log(`   ${f._id} en-cours, dernier signe de vie il y a ${ageS} s : vivant, je n'y touche pas.`); continue; }
@@ -342,8 +346,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     for (const im of images) {
         let cands = [], preuve = null;
         const num = cleNumero(im.numero);
-        if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
-        if (!cands.length && im.nomEn) {
+        // Une correction LUE À L'ŒIL passe avant le numéro (collecte-cartes/corrections-images.js : les deux témoins par
+        // le nom ont été mesurés et refusés). Elle ne joint que si la carte nommée est dans CE set.
+        const corr = correctionDe(im.cleR2);
+        if (corr) { cands = cartes.filter(c => c._id === corr.carteId); preuve = `correction lue à l'œil le ${corr.le} (« ${corr.lu} »)`; }
+        else if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
+        if (!corr && !cands.length && im.nomEn) {
             cands = parNom.get(nomImage(im.nomEn)) || [];
             preuve = 'nom';
             if (cands.length > 1 && im.illustrateur) {
@@ -587,6 +595,21 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await bulbaImg.collecterSet(suivant._id, M, { mesurerSeulement: false }); }
                 finally { await vb.rendre(); }
+            } else if (sourceDuSet === 'tcgdex') {
+                // 🔑 TROISIÈME SOURCE, TROISIÈME VERROU (2026-09-23) : api.tcgdex.net n'est ni Bulbagarden ni artofpkm (§17).
+                // Le verrou est LIÉ au client TCGdex : sans lui tenu, le client refuse toute requête (garde fermée).
+                const tcgImg = require('./collecteur-images-tcgdex');
+                await verrouGlobal.rendre();
+                const vt = fabriquerVerrou({ Modele: M.EtatImages, id: tcgImg.VERROU_GLOBAL, dureeMs: tcgImg.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${tcgImg.SOURCE}` });
+                let tenuPar = await vt.prendre();
+                for (let essai = 0; tenuPar && !arretDemande; essai++) {
+                    if (essai === 0) console.log(`⏳ verrou global ${tcgImg.SOURCE} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — j'attends, ${ATTENTE_VERROU_MS / 1000} s entre deux essais.`);
+                    await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
+                    tenuPar = await vt.prendre();
+                }
+                if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
+                try { b = await tcgImg.collecterSet(suivant, M, { verrou: vt }); }
+                finally { await vt.rendre(); }
             } else b = await collecterSet(suivant._id, M, dossierRapport);
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
