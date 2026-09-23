@@ -33,7 +33,10 @@ const carteSchema = new mongoose.Schema({
     rarete: String, illustrateur: String,
     attaques: [{ _id: false, nom: String, nomJa: String, cout: [String], degats: String }],
     faiblesse: String, resistance: String, retraite: Number,
-    impressions: [{ _id: false, tirage: String, expansion: String, deck: String, numero: String, total: String, rarete: String }],
+    // `illustrateur` PAR IMPRESSION (2026-09-23) : une page Bulbapedia est une carte TOUS TIRAGES FUSIONNÉS, et deux
+    // tirages d'un même nom n'ont pas toujours le même illustrateur — le champ unique de la carte en choisissait un.
+    // `null` = la source ne tranche pas pour CE tirage ; absent = jamais évalué. La preuve dit où il a été lu.
+    impressions: [{ _id: false, tirage: String, expansion: String, deck: String, numero: String, total: String, rarete: String, illustrateur: String, illustrateurPreuve: String }],
     // `idMetacards` : les métacartes Cardmarket des produits joints, DISTINCTES — une page Bulbapedia
     // joint parfois des produits de plusieurs métacartes (tirage japonais et jumeau occidental).
     // ⚠️ `idMetacard` (singulier) a été déclaré puis jamais rempli du 12/09 matin au 12/09 soir : un
@@ -51,7 +54,10 @@ const carteSchema = new mongoose.Schema({
         w: Number, h: Number, fmt: String, urlOriginal: String, preuve: String, jointeLe: Date,
         // Bulbapedia : le NUMÉRO du tirage (une carte peut avoir deux tirages dans le même set —
         // Charmander 004 et 168 de 151 — et donc deux entrées, la plus basse d'abord) et l'attribution.
-        numero: String, attribution: String, page: String
+        numero: String, attribution: String, page: String,
+        // LA LANGUE DU SCAN (collecte-cartes/langue-visuel.js) : `ja` ou `null` (« la source ne tranche pas »), et sa
+        // preuve. Bulbapedia publie le scan japonais sous le nom de fichier anglais ; le site refuse un `ja` sur un set intl.
+        langue: String, languePreuve: String
     }],
     collecteLe: Date, version: { type: Number, default: 1 }
 }, { strict: false, collection: 'cartes' });
@@ -96,6 +102,7 @@ const imageSchema = new mongoose.Schema({
     numero: String, total: String, nomEn: String, nomJa: String, illustrateur: String, rarete: String,
     setNomSource: String, setNomJa: String,
     carteId: Number, set: String, preuve: String,
+    langue: String, languePreuve: String,  // posés au téléchargement (langue-visuel.js), repris par l'entrée de `cartes.images`
     telechargeLe: Date, etat: String
 }, { strict: false, collection: 'images' });
 imageSchema.index({ set: 1 });

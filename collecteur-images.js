@@ -46,8 +46,10 @@ const VERROU_MS = 10 * 60 * 1000;
 // silencieusement — un set refusé ne réclame rien. La résolution réelle de chaque set est conservée
 // dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
+const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const SOURCE = arg('source') || 'artofpkm';
+const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
 // ════════════════════════════════════════════════════════════════════════════
 // LE VERROU GLOBAL — UN SEUL COLLECTEUR AU MONDE, PAS UN PAR SET
@@ -245,6 +247,7 @@ async function collecterSet(code, M, dossierRapport) {
                         sha256: img.sha256, octets: img.octets, w: img.w, h: img.h, fmt: img.fmt,
                         numero: faits.numero, total: faits.total, nomEn: faits.nomEn, nomJa: faits.nomJa, illustrateur: faits.illustrateur, rarete: faits.rarete,
                         setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok',
+                        langue: LANGUE.langue, languePreuve: LANGUE.preuve,
                         ...(deja?.cleCdn && deja.cleCdn !== e.cleCdn ? { cleCdnPrecedente: deja.cleCdn } : {})
                     }
                 }, { upsert: true });
@@ -376,7 +379,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(mention ? { mention } : {}), jointeLe: new Date() };
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(mention ? { mention } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;

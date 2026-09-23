@@ -40,22 +40,19 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const setsParCarte = new Map(avecImages.map(c => [c._id, new Set((c.images || []).map(i => i.set))]));
     // 🔴 LE SCAN DU JUMEAU (2026-09-23, DEMANDE-VISUELS-JAPONAIS.md du site). Bulbapedia publie le scan de l'impression
     // JAPONAISE sous le nom de fichier ANGLAIS tant que l'anglais n'a pas été scanné (« PinsirEvolvingSkies1.jpg » =
-    // Eevee Heroes). Le wikitext ne le dit pas ; les DIMENSIONS du fichier source, si : 868×1212 et 748×1044 sont les deux
-    // formats des scans japonais (ceux d'artofpkm), validés à l'œil par le site (9/9) et ici (4/4, dont 2 que sa liste
-    // n'avait pas). Lues dans NOTRE cache `imageinfo` (collecte_images_etat.infosListe) : zéro requête. Un format non
-    // regardé n'est pas classé — on préfère rater un japonais que refuser un anglais.
+    // Eevee Heroes). Depuis le 2026-09-23 le verdict est ÉCRIT sur l'entrée, `langue` (collecte-cartes/langue-visuel.js) —
+    // c'est ce champ que le site lit, c'est donc lui qu'on compte, jamais une copie de la règle (§21 bis).
     // ⚠️ Un tel visuel n'est pas celui du tirage du set : il est compté À PART, jamais comme visuel du set.
-    const FORMATS_JAPONAIS = new Set(['868×1212', '748×1044']);
+    // ⚠️ `null` n'est PAS « anglais » : c'est « le format ne tranche pas » — un plancher, pas un compte (des scans japonais
+    // vivent aussi dans des formats anglais : 9 sur 36 tirés au hasard dans les sets à risque).
     const sets = await cx.db.collection('sets').find({}, { projection: { region: 1 } }).toArray();
     const regionDe = new Map(sets.map(s => [s._id, s.region]));
-    const dimsDe = new Map();
-    const fichierNu = f => decodeURIComponent(String(f || '').split('/').pop()).replace(/^File:/, '').replace(/_/g, ' ').trim();
-    for (const e of await cx.db.collection('collecte_images_etat').find({ _id: /^bulbapedia\//, infosListe: { $exists: true } }, { projection: { infosListe: 1 } }).toArray())
-        for (const i of e.infosListe || []) if (i.fichier && i.w) dimsDe.set(fichierNu(i.fichier), `${i.w}×${i.h}`);
-    // Un cache ou une table des sets VIDES ne rendraient pas zéro jumeau : ils rendraient « tout est du bon tirage » (§41,
-    // le plein fabriqué). Ils lèvent.
-    if (!dimsDe.size || !sets.length) throw new Error(`lecture vide : ${dimsDe.size} dimensions en cache, ${sets.length} sets — le tri des visuels du jumeau ne peut pas conclure`);
-    const scanDuJumeau = i => /^bulbapedia\//.test(i.cleR2 || '') && regionDe.get(i.set) !== 'jp' && FORMATS_JAPONAIS.has(dimsDe.get(fichierNu(i.urlOriginal)));
+    const entrees = avecImages.flatMap(c => c.images || []);
+    const sansLangue = entrees.filter(i => !('langue' in i)).length;
+    // Une table des sets vide ou AUCUNE entrée évaluée ne rendraient pas zéro jumeau : elles rendraient « tout est du bon
+    // tirage » (§41, le plein fabriqué). Elles lèvent.
+    if (!sets.length || sansLangue === entrees.length) throw new Error(`lecture vide : ${sets.length} sets, ${entrees.length - sansLangue} entrées sur ${entrees.length} portent \`langue\` — le tri des visuels du jumeau ne peut pas conclure`);
+    const scanDuJumeau = i => i.langue === 'ja' && regionDe.get(i.set) !== 'jp';
     // les sets où la carte a AU MOINS UN visuel du bon tirage
     const setsBonTirage = new Map(avecImages.map(c => [c._id, new Set((c.images || []).filter(i => !scanDuJumeau(i)).map(i => i.set))]));
 
@@ -78,7 +75,8 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     console.log(`\n════ DÉNOMINATEUR : ${total} produits Cardmarket${tout ? ' (BRUT, cartes-code comprises)' : ` (${produits.length} lignes − ${cartons.length} cartes-code)`} ════`);
     console.log(`   FICHES  : ${pc(fiches.size)}`);
     console.log(`   VISUELS : ${pc(visuels.size)}  (du tirage du set)`);
-    console.log(`   🔴 + ${visuelsJumeau.size} produits dont le SEUL visuel est le scan japonais du jumeau (Bulbapedia, fichier ${[...FORMATS_JAPONAIS].join(' / ')}) — pas comptés comme visuels · cache imageinfo : ${dimsDe.size} fichiers`);
+    console.log(`   🔴 + ${visuelsJumeau.size} produits dont le SEUL visuel est le scan japonais du jumeau (entrée \`langue: ja\` sous un set non jp) — pas comptés comme visuels`);
+    console.log(`   ⚖️ entrées cartes.images sans \`langue\` évaluée : ${sansLangue} sur ${entrees.length} ${sansLangue ? '— 🔴 posées par un worker antérieur au champ : relancer poser-langue-images.js --ecrire' : '✅'}`);
     console.log(`   ÉCART   : ${total - visuels.size} sans visuel du bon tirage, dont ${fiches.size - visuels.size} qui ont une fiche`);
 
     const enCours = await cx.db.collection('file_images').countDocuments({ etat: 'en-cours' });

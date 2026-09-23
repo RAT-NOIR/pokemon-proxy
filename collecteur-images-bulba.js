@@ -40,6 +40,7 @@ const { modeles } = require('./collecte-cartes/schemas');
 const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-image');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 
 const SOURCE = 'bulbapedia';
 const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
@@ -187,10 +188,13 @@ async function collecterSet(code, M, { mesurerSeulement }) {
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                 const cleR2 = `${SOURCE}/${slug}/${numeroEntier(p.numero)}-${p.carteId}.webp`;
                 await r2.deposerBinaire(bucket, cleR2, webp.data, 'image/webp');   // R2 AVANT la ligne
+                // La langue se lit sur le fichier TÉLÉCHARGÉ : un fichier remplacé (sha1 changé) repasse ici, et un
+                // verdict posé sur l'ancien ne lui survit pas.
+                const L = langueDuVisuel({ source: SOURCE, wOriginal: info.w, hOriginal: info.h });
                 await M.Image.updateOne({ _id }, {
                     $set: {
                         source: SOURCE, set: slug, carteId: p.carteId, numero: p.numero, rarete: p.rarete, nomEn: p.nomEn,
-                        fichier: p.fichier, page: p.page, preuve: p.preuve, urlOriginal: info.url,
+                        fichier: p.fichier, page: p.page, preuve: p.preuve, urlOriginal: info.url, langue: L.langue, languePreuve: L.preuve,
                         wOriginal: info.w, hOriginal: info.h, sha1Original: sha1, octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         attribution: 'Bulbapedia', telechargeLe: new Date(), etat: 'ok'
@@ -215,7 +219,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         for (const [carteId, ims] of parCarte) {
             ims.sort((a, b) => (numeroEntier(a.numero) ?? 1e9) - (numeroEntier(b.numero) ?? 1e9));
             if (ims.length > 1) entreesMultiples++;
-            const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, jointeLe: new Date() }));
+            const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), jointeLe: new Date() }));
             await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
             await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
         }
@@ -256,6 +260,14 @@ module.exports = { collecterSet, resoudreSet, SOURCE, VERROU_GLOBAL, VERROU_GLOB
 // importe `collecterSet` et prend LUI-MÊME le verrou global de cette source : sans cette garde, un simple
 // `require` lancerait une seconde collecte dans le même processus.
 if (require.main !== module) return;
+
+// 🔴 LA LIGNE DE COMMANDE S'ÉCRIT PAR CE QU'ELLE AUTORISE (2026-09-23). `--plan=SHF` n'est pas `--plan` : le drapeau ne
+// mordait pas, le script passait en COLLECTE, et sans `--sets=` il prenait TOUS les sets occidentaux — en local, verrou
+// global Bulbapedia pris. Un argument inconnu REFUSE avant toute connexion ; une collecte nomme ses sets.
+const AUTORISES = [/^--plan$/, /^--mesurer$/, /^--verrou$/, /^--attendre$/, /^--sets=[^,\s][^\s]*$/];
+const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --plan, --mesurer, --verrou, --attendre, --sets=A,B`); process.exit(2); }
+if (!drapeau('plan') && !drapeau('verrou') && !arg('sets')) { console.error('❌ une collecte nomme ses sets (--sets=A,B) : sans eux elle prendrait tous les sets occidentaux. Pour voir ce qu\'elle ferait : --plan.'); process.exit(2); }
 
 (async () => {
     const codesDemandes = arg('sets') ? arg('sets').split(',').map(s => s.trim()).filter(Boolean) : TABLE.filter(l => l.region === 'occidental').map(l => l.code);
