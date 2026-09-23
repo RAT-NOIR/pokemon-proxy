@@ -164,6 +164,9 @@ const DATE = new Date().toISOString().slice(0, 10);
         const tem = temoinIntl.get(k);
         const contre = tem && v.valeurs.size === 1 && !v.valeurs.has(cleIll(tem.valeur));
         if (tem && v.valeurs.size === 1) (contre ? T.intlDesaccord++ : T.intlAccord++);
+        // Là où le fichier du site SE TAIT, mon appariement TCGdex parle seul — même source, chemin calibré contre le sien
+        // (accords/désaccords imprimés ci-dessous). Une source qui parle seule donne sa valeur ; il n'y a rien à contredire.
+        if (tem && !v.valeurs.size) { v.valeurs.set(cleIll(tem.valeur), tem.valeur); v.preuves.push(`TCGdex ${tem.id} (appariement par le numéro, nom en témoin — le fichier du site se taisait)`); T.parTemoin = (T.parTemoin || 0) + 1; }
         let valeur = null, preuve;
         if (v.valeurs.size === 1 && !contre) { valeur = [...v.valeurs.values()][0]; preuve = [...new Set(v.preuves)].join(' ; '); T.nom++; t.nom++; }
         else if (v.valeurs.size > 1 || contre) {
@@ -180,7 +183,7 @@ const DATE = new Date().toISOString().slice(0, 10);
     console.log(`   illustrateur établi : ${pc(T.nom, T.impressions)} · contradictions : ${T.contradiction} · silence : ${T.silence}`);
     for (const [tir, x] of Object.entries(T.parTirage).sort((a, b) => b[1].total - a[1].total)) console.log(`      ${tir.padEnd(8)} ${pc(x.nom, x.total)}`);
     console.log(`   ⚖️ jp, artofpkm contre TCGdex ja du site : ${T.jaAccord} accords · ${T.jaDesaccord} désaccords (→ null)`);
-    console.log(`   ⚖️ intl, fichier du site contre mon appariement TCGdex : ${T.intlAccord} accords · ${T.intlDesaccord} désaccords (→ null)`);
+    console.log(`   ⚖️ intl, fichier du site contre mon appariement TCGdex : ${T.intlAccord} accords · ${T.intlDesaccord} désaccords (→ null) · mon appariement seul, là où le fichier se taisait : ${T.parTemoin || 0}`);
     for (const x of contradictions.slice(0, 12)) console.log(`   ⚠️ ${x}`);
     const dossier = require('path').join(__dirname, 'collecte-cartes', 'rapports');   // rapports : jamais versionnés
     require('fs').mkdirSync(dossier, { recursive: true });
