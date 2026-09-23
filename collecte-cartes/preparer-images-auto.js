@@ -53,7 +53,18 @@ async function sousVerrouGlobal(M, travail) {
         // servi est donc le bon set et le bon numéro, et il ne montre simplement pas le motif du produit ; la ligne le
         // DIT (`motifNonDistingue` → `mention`, écrite à côté de la preuve).
         const additionals = TABLE_AUTO.filter(l => /-Additionals$/.test(l.slugSet || ''));
-        const candidates = TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l));
+        // 🔴 LES LIGNES JAPONAISES QUI NE SONT PAS DANS `TABLE_AUTO` N'ÉTAIENT JAMAIS CANDIDATES (2026-09-23) : ni celles écrites
+        // à la main (les 20 decks du §48), ni celles de la voie « sans page ». Une ligne sans source ne peut pas avoir de visuel,
+        // et aucune liste ne le réclamait — le §39, un filtre qui produit une ABSENCE. Elles entrent, JAPONAISES seulement
+        // (artofpkm ne sert que le japonais : une ligne chinoise appariée par le nom prendrait le scan du jumeau, §42).
+        // ⚠️ ET UNE LIGNE RESTREINTE À UN DECK NE SE CHERCHE PAS SOUS LE NOM DU KIT : « Gift Box DPt » chez artofpkm est le kit
+        // ENTIER, dont les demi-decks se renumérotent chacun depuis 1. Sa clé est le nom de la ligne et son `deck`, jamais
+        // `bulba.expansion`.
+        const codesAuto = new Set(TABLE_AUTO.map(l => l.code));
+        const horsAuto = [...require('./table-sets').TABLE_MAIN, ...require('./table-sets').TABLE_SANS_PAGE]
+            .filter(l => l.region === 'japonais' && (l.bulba?.tirage || 'jp') === 'jp' && !ARTOFPKM[l.code] && !codesAuto.has(l.code))
+            .map(l => l.bulba?.deck ? { ...l, bulba: { ...l.bulba, expansion: l.bulba.deck } } : l);
+        const candidates = [...TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l)), ...horsAuto];
         // 🔑 L'ÉGALITÉ EXACTE D'UN LIBELLÉ RATE LES RÉORDONNANCEMENTS (2026-09-19). artofpkm écrit « High Class Deck,
         // Inteleon VMAX » là où Cardmarket écrit « Inteleon VMAX High Class Deck », et « Starter Set VSTAR, Lucario » là
         // où Cardmarket ajoute l'ère (« Sword Shield Starter Set Lucario VSTAR »). Même famille que les crochets d'Unown,

@@ -55,7 +55,14 @@ const balise = require('./collecte-cartes/balise-worker');   // le commit du wor
 // DÉPENDS ? » — et une règle, ce n'est pas une constante : c'est la constante ET le code qui décide
 // avec elle. Une garde qui ne surveille qu'un des deux fichiers répond à une question plus étroite
 // que celle qu'elle a l'air de poser.
-const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js'];
+// 🔴 ET L'UNITÉ DÉPEND AUSSI DE SA LIGNE ET DE SA SOURCE — ajouté le 2026-09-23. Le worker résout le set d'une unité par
+// `ligne(code)` (les trois tables) et sa source par `sourceDe(code)` (les deux fichiers de sources), DANS SON COMMIT. Une
+// unité enfilée pour un set que son commit ne connaît pas sort `refuse-source`, hors de la file pour toujours (§23) — et
+// la garde restait verte, parce qu'elle ne regardait que la règle d'images. Le test du §44 (« si ça changeait demain,
+// quel fichier bougerait ? ») rend ces cinq-là pour tout set NEUF : 20 decks japonais y sont entrés ce jour-là.
+const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js',
+    'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
+    'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma

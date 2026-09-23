@@ -59,6 +59,22 @@ renégocie pas en cours de route.
 
 ---
 
+## 🔑 « 0 AMBIGU » NE VOULAIT PAS DIRE « 0 FAUX » — ET LE TÉMOIN VIT DANS LA JOINTURE
+
+> # **UNE CLÉ SANS DOUBLON PEUT DÉSIGNER LA MAUVAISE CARTE.**
+>
+> L'unicité est une propriété de la CLÉ ; la justesse est une propriété du MONDE. Une clé qui ne désigne qu'une carte
+> peut désigner la mauvaise, et **seule une donnée qu'elle n'a PAS utilisée peut le dire** : c'est pour ça que le nom
+> sait contredire le numéro, et qu'il ne sait plus rien dire dès qu'il entre dans la clé. Le témoin du nom a trouvé
+> 4 clés WCD fausses, puis 62 fiches posées par le numéro, puis 20 de plus (§49, §52, §53).
+> 🔴 **UN TÉMOIN QUI TOURNE APRÈS COUP NE PROTÈGE RIEN** : détacher répare les lignes, et la collecte suivante les
+> refait. Depuis le 2026-09-23, il est DANS `joindre()` (`temoinDuNom`) — et les outils de rattrapage lisent cette
+> fonction-là, pas une copie (la copie de `temoin-nom.js` laissait passer 17 fiches fausses, §21 bis).
+> 🔑 **Et quand le nom doit entrer dans la clé** (les WCD sans code d'origine), il ne reste qu'une parade : calibrer
+> la clé sur une population dont on CONNAÎT la vérité, en cachant la donnée qu'elle n'aura pas.
+
+---
+
 ## 🔑 EN TÊTE DU CATALOGUE D'ERREURS — LE MOTIF DOMINANT DE CE CHANTIER
 
 > # 🔴 LA SONDE FABRIQUE LE DÉFAUT QU'ELLE MESURE.
@@ -525,6 +541,53 @@ voie « sans page », qui joint par l'expansion déclarée sur la carte et n'én
 inquiétante : **elle est muette sur des lignes qui ne passent pas par une Setlist**, donc qui ne
 peuvent pas être admises sur des liens rouges. ⚠️ Une limite qu'on écrit pour être honnête doit être
 remesurée comme les autres : celle-ci était honnête et surdimensionnée.
+
+---
+
+## 53. LE TÉMOIN DANS LA JOINTURE, LE JUMEAU CHEZ LA SOURCE, ET 20 DECKS QU'UNE ÉGALITÉ DE NOM CACHAIT — 2026-09-23
+
+**LE TÉMOIN DANS `joindre()`, MESURÉ AVANT D'ÊTRE CRU (§22).** Ancienne et nouvelle jointure rejouées sur 794 jointures
+(chemin de production : `cartes.sets`, impressions virtuelles de Setlist, voie sans page, bonus intl), zéro requête :
+**les 62 fiches détachées le matin sont toutes refusées, 0 ligne ajoutée, 20 de plus retirées en base** (16 SV-P
+chinois dont le nom désigne DEUX cartes du set — la copie de la règle exigeait « une seule » —, Pikachu → Snorlax-GX,
+et 3 produits à deux cartes ramenés à celle que le nom confirme ; contrôle transversal 8 → 5).
+⚠️ **Le premier rejeu refusait aussi 4 fiches JUSTES** : Cardmarket écrit « Vulpix [Gather Snow | Gnaw] » pour Alolan
+Vulpix, « Drifblim [FB] », « Hippowdon [4] » — le nom tombe sur une autre carte du set. Les attaques départagent, mais
+**« toutes les attaques concordent » les refusait encore** : « Gather Snow » contre « Snow Gather », et les Poké-Power
+que Cardmarket met entre crochets. La règle est COMPARATIVE : les attaques doivent désigner la carte du numéro PLUS que
+chaque carte du nom ; à égalité, le nom contredit toujours. Test : `test-jointure-temoin.js`, 18/18.
+⚠️ Et `test-jointure-prefixe.js` **échouait sur HEAD depuis le 19/09** (3/24) — la coupure de `setlist+nom` n'y avait
+pas été reportée. Un banc rouge que personne ne lance est un banc qui ment par omission.
+
+**LE JUMEAU : LE DÉFAUT N'ÉTAIT PAS DANS NOTRE JOINTURE.** La demande disait « 3 331 fichiers `artofpkm/` sous un set
+intl ». **Mesuré : 0** (22 586 images artofpkm, 18 490 entrées `cartes.images`, toutes sur des sets `jp`). Le document
+réel du site (`DEMANDE-VISUELS-JAPONAIS.md`) dit autre chose : **Bulbapedia publie le scan JAPONAIS sous le nom de fichier
+ANGLAIS** (« PinsirEvolvingSkies1.jpg » = Eevee Heroes). Confirmé depuis NOTRE cache `imageinfo`, zéro requête :
+**3 353 visuels `bulbapedia/` de sets non jp ont un fichier source au format des scans japonais** (868×1212, 748×1044),
+les 3 178 du site plus 175 ; 4 ouverts sur 4 japonais, le témoin anglais anglais. `mesure-catalogue.js` ne les compte
+plus : **VISUELS 53,8 %, pas 58,2 %**, et l'invariant « aucun `artofpkm/` sous un set non jp » y est, dénominateur imprimé.
+🕳️ **Rien n'est écrit sur ces 3 353 : « réattribuer par rejeu » est impossible** — le set japonais d'origine n'est écrit
+que sur la carte imprimée (s6a, SM3+…), et ces sets ont déjà leur visuel artofpkm. Ce qui est juste, c'est ce que le
+site demande : un champ `images.langue` (`ja` pour ces formats) — un ajout de SCHÉMA, qui attend l'accord.
+
+**LES « 31 JAPONAIS NUMÉROTÉS » (§48) : LE FILTRE ÉTAIT L'ÉGALITÉ DU NOM.** `generer-table-sans-page.js` apparie le slug
+Cardmarket au nom déclaré ; « Gallade-SP-Half-Deck » n'est pas « Infernape vs Gallade SP Deck Kit ». Clé DOUBLE
+(numéro ET nom du produit sur une même carte), puis restriction par `deck` (le mécanisme d'IPB) : **20 lignes à la main,
+326 produits, écrits = rejoués**, 318 `cartes.sets` posés. Refusées sans bouger le seuil : sKV 79 %, svAL 88 %, advI/advH
+72 %, sA (Cardmarket fusionne cinq decks : 71 contredits) ; sC/smI/sp5 fusionnent l'inverse ; 151C, 30th-P, SV3s sont du
+chinois (§28). 🔴 **Et `--correspondre` n'avait jamais proposé de source artofpkm à une ligne hors `TABLE_AUTO`** —
+§39 encore, une absence : étendu aux lignes japonaises (clé = nom + `deck`, jamais le nom du KIT, dont les moitiés se
+renumérotent), **33 sources ajoutées, 0 existante changée**, dont `mC` MEGA Start Deck 100 Battle Collection (774 p).
+
+**LA GARDE DE LA FILE SURVEILLE DÉSORMAIS HUIT FICHIERS.** Une unité dépend de sa LIGNE et de sa SOURCE, lues dans le
+commit du worker ; une unité pour un set qu'il ne connaît pas sort `refuse-source` pour toujours. Les tables et les
+sources rejoignent donc la règle d'images (§44 : « si ça changeait demain, quel fichier bougerait ? »). ✅ La balise tient
+pendant le travail : échantillonnée 6 min, rafraîchie au milieu des unités, âge maximal 50 s.
+
+**LES WCD SANS CODE D'ORIGINE (WCD25###).** Le numéro est celui du tirage d'origine, le code absent : clé (nom, numéro)
+sur les impressions intl. Le nom étant DANS la clé, elle a été calibrée sur les 1 679 WCD de la route 1, code caché :
+**1 540 justes, 0 faux**. Écrits : **90 sur 99** (`wcd+nom+numero`). Restent 3 ambigus (Dreepy, Drakloak, Joltik) et 6
+écarts de forme (« Professor's Research - Professor Sada »), listés.
 
 ---
 
