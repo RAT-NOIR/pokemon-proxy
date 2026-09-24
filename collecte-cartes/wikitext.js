@@ -15,6 +15,8 @@
 // premier niveau (les `{{…}}` et `[[…]]` imbriqués sont respectés), valeurs gardées BRUTES. Les
 // aides `plat()` et `nomDePage()` en tirent une valeur lisible quand on en a besoin.
 
+const { corrigerImpressions } = require('./corrections-impressions');
+
 const PARAMS_TEXTE = new Set(['effect', 'jtrans', 'dex', 'jdex', 'transdex', 'text', 'jtext', 'rule', 'jrule', 'trivia', 'jgroup']);
 
 /**
@@ -350,7 +352,9 @@ function faitsDeCarte(texte, titre = null) {
         // « ? » ou un texte sur une carte de vending : un non-nombre est un null, pas un NaN (même faute que ndex).
         retraite: (() => { const n = Number(plat(p.retreatcost)); return plat(p.retreatcost) !== '' && Number.isFinite(n) ? n : null; })(),
         attaques,
-        impressions,
+        // la table lue des numéros contredits (collecte-cartes/corrections-impressions.js) : appliquée ICI, pour qu'aucune
+        // relecture de la page ne refasse le faux numéro (§52)
+        impressions: corrigerImpressions(titre, impressions).impressions,
         // à CONFRONTER à impressions.length, jamais à lire seuls
         entreesVues: entreesVues.length, entreesJeuVideo: entreesJeuVideo.length, entreesNonRendues
     };

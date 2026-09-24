@@ -151,6 +151,9 @@ const DATE = new Date().toISOString().slice(0, 10);
         T.impressions++;
         const t = T.parTirage[i.tirage || '?'] || (T.parTirage[i.tirage || '?'] = { total: 0, nom: 0 });
         t.total++;
+        // une impression CORRIGÉE par la table lue (collecte-cartes/corrections-impressions.js) porte l'illustrateur de la table :
+        // la recalculer la ferait dépendre d'un appariement que cette même page a déjà trompé (§58). Comptée, jamais réécrite.
+        if (i.correction) { T.corrigees = (T.corrigees || 0) + 1; if (i.illustrateur) { T.nom++; t.nom++; } return; }
         const k = `${c._id}|${index}`;
         const v = verdict.get(k) || { valeurs: new Map(), preuves: [], silences: [] };
         // jp : le TCGdex japonais du site est une SECONDE source — accord, il confirme ; désaccord, rien ne tranche.
@@ -180,7 +183,7 @@ const DATE = new Date().toISOString().slice(0, 10);
     });
     const pc = (n, d) => `${n} / ${d} = ${(100 * n / (d || 1)).toFixed(1)} %`;
     console.log(`\n════ COUVERTURE : ${T.impressions} impressions ════`);
-    console.log(`   illustrateur établi : ${pc(T.nom, T.impressions)} · contradictions : ${T.contradiction} · silence : ${T.silence}`);
+    console.log(`   illustrateur établi : ${pc(T.nom, T.impressions)} · contradictions : ${T.contradiction} · silence : ${T.silence} · corrigées par la table (non recalculées) : ${T.corrigees || 0}`);
     for (const [tir, x] of Object.entries(T.parTirage).sort((a, b) => b[1].total - a[1].total)) console.log(`      ${tir.padEnd(8)} ${pc(x.nom, x.total)}`);
     console.log(`   ⚖️ jp, artofpkm contre TCGdex ja du site : ${T.jaAccord} accords · ${T.jaDesaccord} désaccords (→ null)`);
     console.log(`   ⚖️ intl, fichier du site contre mon appariement TCGdex : ${T.intlAccord} accords · ${T.intlDesaccord} désaccords (→ null) · mon appariement seul, là où le fichier se taisait : ${T.parTemoin || 0}`);
