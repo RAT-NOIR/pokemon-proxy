@@ -48,6 +48,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
+const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { issueDeLUnite } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const SOURCE = arg('source') || 'artofpkm';
@@ -342,8 +343,9 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const mention = S?.motifNonDistingue ? 'variante Cardmarket : la source ne distingue pas le motif — une image par numéro' : null;
     const restes = [];
     const cartesAvecImage = new Set();
-    let jointes = 0;
+    let jointes = 0, clesRefusees = 0;
     const preuves = {};
+    const resolues = [];                  // passe 1 : la carte de chaque image ; passe 2 (plus bas) : l'écriture
     for (const im of images) {
         let cands = [], preuve = null;
         const num = cleNumero(im.numero);
@@ -373,8 +375,21 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 if (parRarete.length === 1) { cands = parRarete; preuve = 'nom+rarete'; }
             }
         }
-        if (cands.length === 1) {
-            const c = cands[0];
+        if (cands.length === 1) resolues.push({ im, carteId: cands[0]._id, c: cands[0], preuve });
+        else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
+        else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
+    }
+    // 🔴 UNE CLÉ QUE PLUSIEURS IMAGES PARTAGENT N'EN DÉSIGNE AUCUNE (2026-09-24, collecte-cartes/images-cle-partagee.js) :
+    // « Victory Ring » porte le « numéro » XY-P sur 24 images de 24 tournois ; la clé (carte, set, numéro) n'en gardait que
+    // la dernière lue, affichée comme LE visuel. Refusées et nommées ; une entrée déjà affichée n'est pas retirée ici.
+    const refusees = clesPartagees(resolues);
+    for (const { im, c, preuve } of resolues) {
+        if (refusees.has(`${c._id}|${String(im.numero).trim()}`)) {
+            clesRefusees++;
+            restes.push({ set: slug, type: 'image-cle-partagee', detail: `${im._id} « ${im.titre} » n°${im.numero} → carte ${c._id} : ce numéro sans chiffre est porté par plusieurs images différentes de la carte — aucune ne le désigne`, le: new Date() });
+            continue;
+        }
+        {
             if (!partagees) await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(mention ? { mention } : {}) } });
             // 🔴 UNE IMAGE APPARTIENT À UNE IMPRESSION, PAS À UNE CARTE (CLAUDE.md §19). `image`,
             // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
@@ -398,15 +413,14 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, numero: entree.numero } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
-        } else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
-        else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
+        }
     }
     // Une carte SANS image n'est pas un échec : c'est l'état attendu quand la source ne l'a pas
     // (PKMJP ne liste pas les énergies de base), et c'est déjà la règle d'affichage du catalogue
     // (symbole du set, mention d'indisponibilité). Elles se COMPTENT et se nomment, elles ne sont
     // pas des restes.
     const cartesSansImage = cartes.filter(c => !cartesAvecImage.has(c._id)).map(c => ({ carteId: c._id, nomEn: c.nomEn }));
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes'] } });
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee'] } });
     if (restes.length) await M.Reste.insertMany(restes);
 
     // ---- 5. complétude ----------------------------------------------------------------------
@@ -425,12 +439,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const emplacements = cartes.length > 0 && nEntrees / cartes.length >= 1.5;
     const complet = {
         entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length,
-        rattachements: jointes, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
+        rattachements: jointes, clesRefusees, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
         cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
         // Sur un set à cartes : chaque original joint UNE carte. Sur un set à emplacements : toutes
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
+        // Une image refusée pour clé partagée n'est pas un original perdu : elle est NOMMÉE (reste `image-cle-partagee`).
         concordance: nEntrees === images.length
-            && (emplacements ? cartesAvecImage.size === cartes.length : jointes === images.length)
+            && (emplacements ? cartesAvecImage.size === cartes.length : jointes + clesRefusees === images.length)
             && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };
