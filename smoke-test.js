@@ -225,6 +225,17 @@ async function testerLesRoutes() {
     verifier('   ... success:true (le recalcul du numeroUrl s\'exécute)', r.json?.success, true);
     verifier('   ... une carte reçue', r.json?.recus, 1);
 
+    // --- Une ligne EXACTE sans slug se COMPLÈTE, sans être écrasée (2026-09-24) ---
+    // `/api/apprendre` écrit une ligne `source: 'cardmarket'` SANS slug — la forme des 246 lignes que l'ancienne route
+    // sautait pour toujours. Le lot suivant porte le slug : il doit le poser, et ne toucher ni numéro ni code.
+    r = await appeler(port, 'POST', '/api/apprendre', { corps: { userId: 'SMOKE-TEST-USER', idProduct: 999000002, numero: '12', codeSet: 'SMK' } });
+    verifier('POST /api/apprendre (ligne exacte sans slug) -> success:true', r.json?.success, true);
+    r = await appeler(port, 'POST', '/api/apprendre-lot', {
+        corps: { userId: 'SMOKE-TEST-USER', cartes: [{ idProduct: 999000002, numero: '99', codeSet: 'AUTRE', nomFr: 'Complétée', slug: 'Smoke-Complete-SMK12', slugSet: 'Smoke-Test' }] }
+    });
+    verifier('   ... le lot la compte « déjà exacte »', r.json?.dejaExactes, 1);
+    verifier('   ... et « complétée »', r.json?.completees, 1);
+
     r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { userId: 'SMOKE-TEST-USER', cartes: [] } });
     verifier('POST /api/apprendre-lot lot vide -> success:false', r.json?.success, false);
 
@@ -264,7 +275,10 @@ async function testerLesRoutes() {
     } else {
         const N = mongoose.models.NumeroCarte || mongoose.model('NumeroCarteST', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
         const C = mongoose.models.Credit || mongoose.model('CreditST', new mongoose.Schema({}, { strict: false }), 'credits');
-        const supprN = (await N.deleteMany({ idProduct: 999000001 })).deletedCount;
+        const complete = await N.findOne({ idProduct: 999000002 }).lean();
+        verifier('   ligne complétée : slug posé', complete?.slug, 'Smoke-Complete-SMK12');
+        verifier('   ligne complétée : numéro et code INTACTS (12, SMK)', `${complete?.numero}/${complete?.codeSet}`, '12/SMK');
+        const supprN = (await N.deleteMany({ idProduct: { $in: [999000001, 999000002] } })).deletedCount;
         const supprC = (await C.deleteMany({ userId: 'SMOKE-TEST-USER' })).deletedCount;
         console.log(`\n🧹 Nettoyage test_scratch : ${supprN} numéro(s), ${supprC} crédit(s) supprimé(s).`);
     }

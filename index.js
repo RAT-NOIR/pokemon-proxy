@@ -6567,18 +6567,34 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         }
 
         // Source actuelle de chaque idProduct déjà en base
-        const existants = await NumeroCarte.find({ idProduct: { $in: ids } }, { idProduct: 1, source: 1 }).lean();
+        const existants = await NumeroCarte.find({ idProduct: { $in: ids } }, { idProduct: 1, source: 1, slug: 1, slugSet: 1, nomFr: 1, variante: 1 }).lean();
         const sourceParId = new Map(existants.map(d => [d.idProduct, d.source || null]));
+        const existantParId = new Map(existants.map(d => [d.idProduct, d]));
 
         // Classement : exact -> intact ; reste -> à écrire
-        const aEcrire = [];
+        // 🔑 2026-09-24 : « INTACT » NE VEUT PAS DIRE « INCOMPLET À VIE ». 246 lignes `source: 'cardmarket'` n'ont pas de
+        // slug (apprises par un chemin qui ne l'enregistrait pas, CLAUDE.md §6) : aucune URL ne peut les désigner, et cette
+        // route les sautait comme « déjà exactes » à chaque passage. On COMPLÈTE désormais leurs champs VIDES — slug,
+        // slugSet, nomFr, variante — sans jamais toucher numéro, code ni expansion : une ligne exacte ne s'écrase toujours pas.
+        const aEcrire = [], aCompleter = [];
         let nouvelles = 0, ameliorees = 0, dejaExactes = 0;
         for (const c of lisibles) {
             const id = Number(c.idProduct);
             if (!sourceParId.has(id))                        { aEcrire.push(c); nouvelles++; }
             else if (sourceParId.get(id) !== 'cardmarket')   { aEcrire.push(c); ameliorees++; }
-            else                                             { dejaExactes++; } // déjà exact -> on n'y touche pas
+            else {
+                dejaExactes++; // déjà exact -> numéro, code, expansion intacts
+                const ex = existantParId.get(id) || {};
+                const manquants = {};
+                for (const champ of ['slug', 'slugSet', 'nomFr', 'variante']) if (!ex[champ] && c[champ]) manquants[champ] = c[champ];
+                if (Object.keys(manquants).length) aCompleter.push({ id, manquants });
+            }
         }
+        if (aCompleter.length) {
+            // Le filtre porte la source : une ligne devenue autre chose entre la lecture et l'écriture n'est pas touchée.
+            await NumeroCarte.bulkWrite(aCompleter.map(({ id, manquants }) => ({ updateOne: { filter: { idProduct: id, source: 'cardmarket' }, update: { $set: manquants } } })), { ordered: false });
+        }
+        const completees = aCompleter.length;
 
         if (aEcrire.length > 0) {
             const ops = aEcrire.map(c => ({
@@ -6635,11 +6651,12 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
             };
         }
 
-        console.log(`🧠 [apprendre-lot] userId=${userId} ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes (exp ${idExpansion ?? (expansionsDuLot.length ? expansionsDuLot.join('/') : '?')})`
+        console.log(`🧠 [apprendre-lot] userId=${userId} ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes${completees ? ` dont ${completees} complétées (slug…)` : ''} (exp ${idExpansion ?? (expansionsDuLot.length ? expansionsDuLot.join('/') : '?')})`
             + (couverture ? ` — couverture ${couverture.avecNumero}/${couverture.produits} (${couverture.pourcent} %)` : ''));
         // `idExpansions` : ADDITIF. Les expansions réellement vues dans le lot, pour que le
         // client sache pourquoi `idExpansion` et `couverture` sont nuls sur un lot mixte.
-        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, sansNumero, idExpansion, idExpansions: expansionsDuLot, couverture });
+        // `completees` : ADDITIF (2026-09-24), les lignes exactes dont un champ vide a été rempli.
+        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, completees, sansNumero, idExpansion, idExpansions: expansionsDuLot, couverture });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
         // Message brut au log, jamais dans la réponse — voir /api/identifier.
