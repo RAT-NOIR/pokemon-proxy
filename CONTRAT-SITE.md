@@ -72,6 +72,38 @@ celles-là ; ce n'est pas une erreur à signaler.
 
 ---
 
+## `sets.tirage` — la clé EXACTE des impressions d'un set (2026-09-24)
+
+**601 sets sur 602 le portent** (le 602ᵉ n'a pas de ligne de table). `region` ne vaut que `jp` ou `intl` ;
+`tirage` dit lequel des tirages de la carte ce set affiche :
+
+| `tirage` | sets | `region` |
+|---|---|---|
+| `jp` | 341 | `jp` |
+| `intl` | 174 | `intl` |
+| `zh-hans` · `zh-hant` | 68 · 8 | `intl` |
+| `id` · `th` · `idth` | 4 · 3 · 3 | `intl` |
+
+```js
+// ✅ l'impression que CE set affiche : par le tirage exact, la région n'étant qu'un repli
+const cle = set.tirage ?? set.region;
+const imp = carte.impressions.find(i => i.tirage === cle && expansions.includes(i.expansion));
+```
+
+🔴 **Avec `imp.tirage === set.region`, les 86 sets chinois, indonésiens et thaïs ne trouvent jamais leurs
+impressions** : elles ont pour tirage `zh-hans`, `id`, `th`… — c'est ce qui laissait « fiche sans numéro »
+sur 10 062 produits (`LISTE-FICHES-MANQUANTES.json`, `numerosManquants`).
+
+## `impressions[].source: 'setlist'` — une impression posée depuis la Setlist (2026-09-24)
+
+**10 008 impressions, 5 751 cartes, 72 expansions** (Lady 136 et 182 de Storming Emergence Radiant parmi
+elles). La page de carte de Bulbapedia ne déclare pas ces tirages ; la Setlist de la page de set les range,
+et l'URL Cardmarket du produit joint confirme le numéro — les deux sources sont exigées. Forme identique aux
+autres impressions (`total`, `deck`, `rarete` à `null`, pas d'`illustrateur`). Une relecture de la page ne
+les efface pas (`collecte-cartes/impressions-posees.js`).
+
+---
+
 ## Dettes connues, à ne pas rediagnostiquer
 
 - **La DATE manque sur 11 sets de 38** : SI-JP, VS, WEB, IPB, MCDP, EXS (japonais) et PBL, ASC,

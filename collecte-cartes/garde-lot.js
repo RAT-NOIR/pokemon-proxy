@@ -22,6 +22,9 @@ const COMPTEURS = Object.freeze({
     'fiches': 'produits distincts rattachés à une carte, par expansion Cardmarket (cartes_produits.idExpansion)',
     'cartes': 'cartes membres du set (cartes.sets)',
     'noms-cartes': 'cartes du set qui portent un nomEn',
+    // ➕ 2026-09-24 : une impression écrite depuis la Setlist (sans illustrateur) qu'une relecture efface ne faisait bouger
+    // aucun compteur — « illustrateurs » ne compte que les impressions qui portent le champ.
+    'impressions': 'impressions de cartes, toutes, par tirage et expansion',
     'illustrateurs': 'impressions qui portent le champ illustrateur (null compris : il porte sa raison), par tirage et expansion',
     'illustrateurs-nommes': 'impressions dont l\'illustrateur est un nom',
     'images': 'entrées de cartes.images, par set',
@@ -47,6 +50,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
         for (const i of c.impressions || []) {
             if (!i) continue;
             const g = `imp:${i.tirage}|${i.expansion}`;
+            inc(`impressions ${g}`);
             if ('illustrateur' in i) inc(`illustrateurs ${g}`);
             if (typeof i.illustrateur === 'string' && i.illustrateur) inc(`illustrateurs-nommes ${g}`);
         }

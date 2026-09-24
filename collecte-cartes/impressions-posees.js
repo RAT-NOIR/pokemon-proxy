@@ -13,6 +13,11 @@
 // RIEN : son illustrateur était celui d'un autre numéro, et construire-illustrateurs.js le recalcule. Cette perte-là est
 // voulue, et elle est COMPTÉE (`perdus`).
 const CHAMPS_POSES_APRES = ['illustrateur', 'illustrateurPreuve'];
+// ➕ 2026-09-24 : des IMPRESSIONS ENTIÈRES posées après le parseur. Les tirages chinois, indonésiens et thaïs ne sont pas
+// déclarés par la page de carte : la jointure les fabrique depuis la Setlist (`source: 'setlist'`, jointure.js) et
+// poser-impressions-setlist.js les écrit sur la carte quand l'URL Cardmarket confirme le numéro. Le parseur ne sait pas
+// les refabriquer : elles portent la marque de leur conservation, posée dans le même geste que l'écriture.
+const SOURCES_POSEES_APRES = ['setlist'];
 const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
 
 /**
@@ -32,8 +37,10 @@ function reporterChampsPoses(anciennes, nouvelles) {
         reportes++;
         return { ...n, ...Object.fromEntries(aReporter.map(k => [k, a[k]])) };
     });
-    const perdus = (anciennes || []).filter(a => CHAMPS_POSES_APRES.some(k => k in a) && !cles.has(cleImpression(a))).length;
-    return { impressions, reportes, perdus };
+    // une impression posée depuis la Setlist que le parseur ne rend pas est GARDÉE ; s'il rend la même clé, la sienne vaut
+    const gardees = (anciennes || []).filter(a => SOURCES_POSEES_APRES.includes(a.source) && !cles.has(cleImpression(a)));
+    const perdus = (anciennes || []).filter(a => !SOURCES_POSEES_APRES.includes(a.source) && CHAMPS_POSES_APRES.some(k => k in a) && !cles.has(cleImpression(a))).length;
+    return { impressions: [...impressions, ...gardees], reportes, perdus, gardees: gardees.length };
 }
 
-module.exports = { CHAMPS_POSES_APRES, cleImpression, reporterChampsPoses };
+module.exports = { CHAMPS_POSES_APRES, SOURCES_POSEES_APRES, cleImpression, reporterChampsPoses };

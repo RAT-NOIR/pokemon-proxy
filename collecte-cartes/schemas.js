@@ -16,7 +16,9 @@ const mongoose = require('mongoose');
 const setSchema = new mongoose.Schema({
     _id: String,                          // slug stable : slugSet Cardmarket (ex. 'Expansion-Pack')
     code: String, idExpansion: [Number], nomEn: String, nomJa: String, nomJaTraduit: String, nomFr: String,
-    region: String, dateSortieJa: String, dateSortieEn: String, totalImprime: Number,
+    // `region` : jp | intl (le site en fait sa clé). `tirage` (2026-09-24) : la clé EXACTE des impressions du set, celle de
+    // la ligne de table — `zh-hans`, `zh-hant`, `id`, `th`, `idth` là où `region` dit `intl`.
+    region: String, tirage: String, dateSortieJa: String, dateSortieEn: String, totalImprime: Number,
     bulba: { titre: String, pageid: Number, revid: Number, motifTitres: String, expansion: mongoose.Schema.Types.Mixed },   // nom OU liste (EXS)
     complet: mongoose.Schema.Types.Mixed,
     collecteLe: Date, version: { type: Number, default: 1 }
@@ -36,7 +38,9 @@ const carteSchema = new mongoose.Schema({
     // `illustrateur` PAR IMPRESSION (2026-09-23) : une page Bulbapedia est une carte TOUS TIRAGES FUSIONNÉS, et deux
     // tirages d'un même nom n'ont pas toujours le même illustrateur — le champ unique de la carte en choisissait un.
     // `null` = la source ne tranche pas pour CE tirage ; absent = jamais évalué. La preuve dit où il a été lu.
-    impressions: [{ _id: false, tirage: String, expansion: String, deck: String, numero: String, total: String, rarete: String, illustrateur: String, illustrateurPreuve: String }],
+    // `source` (2026-09-24) : 'setlist' sur une impression posée depuis la Setlist (poser-impressions-setlist.js) — le
+    // parseur ne la refabrique pas, et c'est cette marque qui la fait survivre à une relecture (impressions-posees.js).
+    impressions: [{ _id: false, tirage: String, expansion: String, deck: String, numero: String, total: String, rarete: String, illustrateur: String, illustrateurPreuve: String, source: String }],
     // `idMetacards` : les métacartes Cardmarket des produits joints, DISTINCTES — une page Bulbapedia
     // joint parfois des produits de plusieurs métacartes (tirage japonais et jumeau occidental).
     // ⚠️ `idMetacard` (singulier) a été déclaré puis jamais rempli du 12/09 matin au 12/09 soir : un

@@ -28,7 +28,7 @@ const bulba = require('./collecte-cartes/bulba');
 const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
-const { joindre, produitsDeLExpansion, impressionsDepuisSetlist } = require('./collecte-cartes/jointure');
+const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = require('./collecte-cartes/jointure');
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
@@ -146,7 +146,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         await M.Set.updateOne({ _id: slug }, {
             $set: {
                 code: L.code, idExpansion: [L.exp], nomEn: TIRAGE === 'intl' ? nomsCibles[0] : null, nomJa: null, nomJaTraduit: null,
-                region: TIRAGE === 'jp' ? 'jp' : 'intl', totalImprime: null,
+                // `tirage` (2026-09-24) : la clé exacte des impressions du set (`zh-hans`, `id`, `th`…) — `region` ne dit que jp/intl
+                region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE, totalImprime: null,
                 bulba: { titre: null, expansion: L.bulba.expansion, motifTitres: 'sans page : cartes prises par l\'expansion déclarée sur leurs propres pages' },
                 collecteLe: new Date()
             }, $setOnInsert: { version: 1 }
@@ -181,7 +182,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     await M.Set.updateOne({ _id: slug }, {
         $set: {
             code: L.code, idExpansion: [L.exp], nomEn: faitsSet?.nomEn ?? null, nomJa: faitsSet?.nomJa ?? null, nomJaTraduit: faitsSet?.nomJaTraduit ?? null,
-            region: TIRAGE === 'jp' ? 'jp' : 'intl', dateSortieJa: faitsSet?.sortieJa ?? null, dateSortieEn: faitsSet?.sortieEn ?? null,
+            // `tirage` (2026-09-24) : la clé exacte des impressions du set (`zh-hans`, `id`, `th`…) — `region` ne dit que jp/intl
+            region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE, dateSortieJa: faitsSet?.sortieJa ?? null, dateSortieEn: faitsSet?.sortieEn ?? null,
             // Le total imprimé est celui du TIRAGE collecté : `jacards` pour un set japonais, `encards` pour un occidental.
             totalImprime: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, cartesEnInfobox: faitsSet?.cartesEn ?? null,
             bulba: { titre: pSet.title, pageid: pSet.pageid, revid: pSet.revid, motifTitres: L.bulba.motifTitres, expansion: L.bulba.expansion, cleR2: cleSet },
@@ -365,11 +367,17 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // ---- 4. la jointure ---------------------------------------------------------------------
     let cartesDuSet = await M.Carte.find({ sets: slug }).lean();
     // `numerosDepuisSetlist` (tirages chinois, pages « (ATCG) ») : le numéro du set n'est que dans la Setlist. Impressions
-    // VIRTUELLES, jamais écrites en base, et une preuve qui le dit (« setlist+numero »). Voir jointure.js.
+    // VIRTUELLES, et une preuve qui le dit (« setlist+numero »). Voir jointure.js. Depuis le 2026-09-24, celles que l'URL
+    // Cardmarket confirme sont ÉCRITES sur la carte (poser-impressions-setlist.js) : la virtuelle ne s'ajoute pas en double.
     if (L.bulba.numerosDepuisSetlist) {
         const etatPages = (await M.Etat.findById(slug).select('pages').lean())?.pages || [];
         const V = impressionsDepuisSetlist(entrees, etatPages, { tirage: TIRAGE, expansionBulba: L.bulba.expansion });
-        cartesDuSet = cartesDuSet.map(c => V.parCarte.has(c._id) ? { ...c, impressions: [...(c.impressions || []), ...V.parCarte.get(c._id)] } : c);
+        const cleImp = i => `${i.tirage}|${i.expansion}|${cleNumero(String(i.numero ?? ''))}`;
+        cartesDuSet = cartesDuSet.map(c => {
+            const v = V.parCarte.get(c._id); if (!v) return c;
+            const deja = new Set((c.impressions || []).map(cleImp));
+            return { ...c, impressions: [...(c.impressions || []), ...v.filter(i => !deja.has(cleImp(i)))] };
+        });
         console.log(`   numéros depuis la Setlist : ${entrees.length} entrées → ${V.parCarte.size} cartes, ${[...V.parCarte.values()].flat().length} impressions virtuelles · sans numéro ${V.sansNumero.length} · sans page ${V.sansPage.length}${V.sansPage.length ? ' : ' + V.sansPage.slice(0, 5).join(' · ') : ''}`);
     }
     const produits = await produitsDeLExpansion(prod, L.exp);

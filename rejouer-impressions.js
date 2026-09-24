@@ -17,7 +17,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const { faitsDeCarte } = require('./collecte-cartes/wikitext');
-const { cleImpression: cle, reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
+const { cleImpression: cle, reporterChampsPoses, SOURCES_POSEES_APRES } = require('./collecte-cartes/impressions-posees');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -54,7 +54,8 @@ const { cleImpression: cle, reporterChampsPoses } = require('./collecte-cartes/i
         let txt, f;
         try { txt = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2); f = faitsDeCarte(txt, c.bulba?.titre); }
         catch (e) { illisibles++; if (illisibles <= 3) console.warn(`   ⚠️ ${c.nomEn} illisible : ${String(e.message).slice(0, 120)}`); continue; }
-        const avant = new Map((c.impressions || []).map(i => [cle(i), i]));
+        // une impression posée depuis la Setlist n'est pas une sortie du parseur : elle ne se compare pas (le report la garde)
+        const avant = new Map((c.impressions || []).filter(i => !SOURCES_POSEES_APRES.includes(i.source)).map(i => [cle(i), i]));
         const apres = new Map((f.impressions || []).map(i => [cle(i), i]));
         const plus = [...apres.keys()].filter(k => !avant.has(k));
         const moins = [...avant.keys()].filter(k => !apres.has(k));

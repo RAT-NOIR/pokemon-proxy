@@ -25,5 +25,15 @@ verifier('un champ déjà rendu par le parseur n\'est jamais écrasé', R3.impre
 verifier('rien d\'ancien (carte neuve) : les impressions passent telles quelles', reporterChampsPoses(undefined, [imp('001')]).impressions, [imp('001')]);
 verifier('le tableau d\'entrée n\'est pas modifié', 'illustrateur' in imp('011'), false);
 
+// 2026-09-24 : une impression ÉCRITE DEPUIS LA SETLIST (tirages chinois, ID, TH : la page de carte ne les déclare pas) n'est
+// pas rendue par le parseur. Une relecture de la page la perdait en entier — Lady 136/182 de Storming Emergence Radiant.
+const zh = n => ({ tirage: 'zh-hans', expansion: 'Storming Emergence Radiant', numero: n, total: null, deck: null, rarete: null, source: 'setlist' });
+const R4 = reporterChampsPoses([imp('011'), zh('136'), zh('182')], [imp('011')]);
+verifier('une impression posée depuis la Setlist, absente du parseur, est GARDÉE', R4.impressions.map(i => `${i.tirage}|${i.numero}`), ['jp|011', 'zh-hans|136', 'zh-hans|182']);
+verifier('et comptée à part', R4.gardees, 2);
+const R5 = reporterChampsPoses([zh('136')], [{ ...zh('136'), source: undefined, rarete: 'SR' }].map(({ source, ...i }) => i));
+verifier('si le parseur rend désormais la même clé, c\'est la sienne qui vaut (pas de doublon)', [R5.impressions.length, R5.impressions[0].rarete, R5.gardees], [1, 'SR', 0]);
+verifier('une impression SANS source posée qui disparaît n\'est pas gardée (le parseur fait foi)', reporterChampsPoses([imp('099')], [imp('011')]).impressions.map(i => i.numero), ['011']);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

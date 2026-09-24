@@ -29,6 +29,12 @@ const avant = compterEtat(etat0);
 // ── 1. LES COMPTEURS, un par groupe
 verifier('fiches : produits DISTINCTS par expansion (une ligne en double ne fait pas une fiche de plus)', [avant.get('fiches exp:11'), avant.get('fiches exp:12')], [2, 1]);
 verifier('illustrateurs : champ posé, null compris ; nommés : une chaîne', [avant.get('illustrateurs imp:intl|Set A'), avant.get('illustrateurs-nommes imp:intl|Set A'), avant.get('illustrateurs imp:jp|Set B') ?? 0], [2, 1, 0]);
+verifier('impressions : toutes, par tirage et expansion (sans illustrateur comprises)', [avant.get('impressions imp:intl|Set A'), avant.get('impressions imp:jp|Set B')], [2, 1]);
+// 2026-09-24 : une impression écrite depuis la Setlist n'a pas d'illustrateur ; si une relecture l'efface, le compteur
+// « illustrateurs » ne bouge pas. Celui-ci, oui.
+const lotImp = copie(etat0);
+lotImp.cartes[1].impressions = lotImp.cartes[1].impressions.filter(i => i.tirage !== 'jp');
+verifier('une impression SANS illustrateur effacée est une baisse', comparer(avant, compterEtat(lotImp)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['impressions imp:jp|Set B 1→0']);
 verifier('images, cartes, noms de cartes, nom affiché : par set', [avant.get('images set:Set-A'), avant.get('images set:Set-B'), avant.get('cartes set:Set-A'), avant.get('noms-cartes set:Set-B'), avant.get('nom-affiche set:Set-A'), avant.get('nom-affiche set:Set-C') ?? 0], [1, 1, 2, 1, 1, 0]);
 
 // ── 2. LE CAS DU §59 : +1 fiche annoncée, un illustrateur effacé à côté. Le total monte, le groupe baisse.
