@@ -31,6 +31,7 @@ const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion, impressionsDepuisSetlist } = require('./collecte-cartes/jointure');
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
+const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -278,7 +279,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
     // relisant l'archive épurée (les faits y sont tous), pas en redemandant les pages.
     if (process.argv.includes('--reparser')) {
-        const deja = await M.Carte.find({ sets: slug }).select('_id bulba').lean();
+        const deja = await M.Carte.find({ sets: slug }).select('_id bulba impressions').lean();
         console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia.`);
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
@@ -286,6 +287,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
             compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
+            const P = reporterChampsPoses(c.impressions, champs.impressions);   // l'illustrateur par tirage n'est pas au wikitext
+            champs.impressions = P.impressions; D.posesReportes = (D.posesReportes || 0) + P.reportes; D.posesPerdus = (D.posesPerdus || 0) + P.perdus;
             await M.Carte.updateOne({ _id: c._id }, { $set: { ...champs, rarete: impCible?.rarete ?? null, champsNuls, reparseLe: new Date() } });
             textesEpures.set(c._id, epure);
         }
@@ -319,6 +322,10 @@ const ATTENTE_VERROU_MS = 30 * 1000;
             compter(faits);
             const impCible = impressionCible(faits);
             const { champsNuls, ...champs } = faits;
+            // 🔴 une page déjà en base porte des illustrateurs POSÉS APRÈS le parseur : le `$set` du tableau les effaçait
+            // (2 179 perdus le 2026-09-24, recollectes de xASC et HSP). Ils se reportent par la clé de l'impression.
+            const P = reporterChampsPoses((await M.Carte.findById(pg.pageid).select('impressions').lean())?.impressions, champs.impressions);
+            champs.impressions = P.impressions; D.posesReportes = (D.posesReportes || 0) + P.reportes; D.posesPerdus = (D.posesPerdus || 0) + P.perdus;
             await M.Carte.updateOne({ _id: pg.pageid }, {
                 $set: {
                     ...champs, rarete: impCible?.rarete ?? null, champsNuls,
@@ -444,6 +451,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         console.log(`   1. faitsDeCarte()  entrées /Expansion vues : ${D.entreesExp}  ·  impressions rendues : ${D.impressionsRendues}  ·  écartées jeu vidéo (gbset) : ${D.jeuVideo}  ·  NON RENDUES : ${nonRendues}`);
         console.log(`      ${verdict(D.pagesSansEntree === 0, `toute page parsée porte au moins une entrée d'expansion`, `${D.pagesSansEntree} page(s) parsée(s) SANS aucune entrée d'expansion — elles n'appartiendront à aucun set`)}`);
         console.log(`      ${verdict(nonRendues === 0, `aucune impression physique perdue par le parseur`, `${nonRendues} entrée(s) d'impression PHYSIQUE non rendues : ${[...D.nonRendues].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `×${n} {${k}}`).join(' · ')}`)}`);
+        console.log(`      illustrateurs posés après le parseur : ${D.posesReportes || 0} impression(s) reportée(s) · ${D.posesPerdus || 0} perdue(s) (clé changée : construire-illustrateurs.js les recalcule)`);
     } else console.log(`   1. faitsDeCarte()  — aucune page parsée ce tour (tout était déjà fait) : rien à confronter.`);
     if (D.epure.pages) {
         console.log(`   2. epurer()        ${D.epure.pages} pages · ${D.epure.gabarits} gabarits vus · ${D.epure.paramsVides} paramètres de PROSE vidés · ${D.epure.octetsAvant} → ${D.epure.octetsApres} octets (${(100 * D.epure.octetsApres / D.epure.octetsAvant).toFixed(1)} %)`);

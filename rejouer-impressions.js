@@ -17,8 +17,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const { faitsDeCarte } = require('./collecte-cartes/wikitext');
-
-const cle = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
+const { cleImpression: cle, reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -67,7 +66,8 @@ const cle = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
         }
         gagnantes++; impGagnees += plus.length;
         for (const k of plus) { const e = k.split('|')[1]; parExpansion[e] = (parExpansion[e] || 0) + 1; }
-        if (ecrire) { await cx.db.collection('cartes').updateOne({ _id: c._id }, { $set: { impressions: f.impressions } }); ecrites++; }
+        // l'illustrateur par tirage est posé APRÈS le parseur (construire-illustrateurs.js) : il se reporte par la clé (2026-09-24)
+        if (ecrire) { await cx.db.collection('cartes').updateOne({ _id: c._id }, { $set: { impressions: reporterChampsPoses(c.impressions, f.impressions).impressions } }); ecrites++; }
         }
     }
     console.log(`\n   vues ${vues} · identiques ${identiques} · GAGNANTES ${gagnantes} · perdantes ${perdantes} · illisibles ${illisibles}`);
