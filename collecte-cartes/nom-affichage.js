@@ -24,6 +24,23 @@
 //     slug ; sinon le set RESTE SANS NOM, avec sa raison.
 const lisible = s => String(s || '').replace(/-/g, ' ').trim();
 
+// 🔑 DEUX NOMS SONT LE MÊME À L'ÉCRAN s'ils ne diffèrent que par la casse, les accents ou la ponctuation (2026-09-24, condition
+// du feu vert des 151 noms) : « Gold, Silver » et « Gold Silver », « Pokémon » et « pokemon ». L'égalité brute des chaînes
+// les séparait, donc la garde d'ensemble et le départage répondaient à une question plus étroite que « le lecteur les
+// distingue-t-il ? ». Une clé, lue par le départage (proposerNoms), par l'outil qui écrit et par mesure-catalogue.js (§21 bis).
+const cleAffichage = n => String(n ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9぀-ヿ㐀-鿿]+/g, ' ').trim();
+
+/** Les noms affichés portés par PLUSIEURS sets, à la clé d'écran près. Un set sans nom (non-chaîne ou vide) ne compte pas. */
+function doublonsDAffichage(sets) {
+    const parCle = new Map();
+    for (const s of sets) {
+        if (typeof s.nomAffichage !== 'string' || !cleAffichage(s.nomAffichage)) continue;
+        const k = cleAffichage(s.nomAffichage);
+        (parCle.get(k) || parCle.set(k, []).get(k)).push(s);
+    }
+    return [...parCle].filter(([, g]) => g.length > 1).map(([cle, g]) => ({ cle, noms: g.map(s => s.nomAffichage), sets: g.map(s => s._id) }));
+}
+
 function choisirAffichage(s, nomCardmarket, occidental) {
     const essais = occidental
         ? [['nomEn', s.nomEn], ['cardmarket', nomCardmarket], ['nomJaTraduit', s.nomJaTraduit]]
@@ -49,8 +66,8 @@ function regionDe(s, L) {
  * @returns {{ proposes: object[], refuses: object[] }}
  */
 function proposerNoms(tousLesSets, parSlug, slugMajoritaire) {
-    const pris = new Map();   // nom affiché -> slug qui le porte déjà
-    for (const s of tousLesSets) if (typeof s.nomAffichage === 'string') pris.set(s.nomAffichage, s._id);
+    const pris = new Map();   // CLÉ d'écran du nom affiché -> slug qui le porte déjà
+    for (const s of tousLesSets) if (typeof s.nomAffichage === 'string') pris.set(cleAffichage(s.nomAffichage), s._id);
     const candidats = [];
     for (const s of tousLesSets.filter(x => typeof x.nomAffichage !== 'string')) {
         const L = parSlug.get(s._id);
@@ -62,24 +79,24 @@ function proposerNoms(tousLesSets, parSlug, slugMajoritaire) {
     // collisions : entre candidats, et avec un nom déjà affiché
     const proposes = [], refuses = [];
     const parNom = new Map();
-    for (const c of candidats) (parNom.get(c.a.nom) || parNom.set(c.a.nom, []).get(c.a.nom)).push(c);
-    const libres = n => !pris.has(n);
+    for (const c of candidats) { const k = cleAffichage(c.a.nom); (parNom.get(k) || parNom.set(k, []).get(k)).push(c); }
+    const libres = n => !pris.has(cleAffichage(n));
     // d'abord les noms sans collision — ils se RÉSERVENT, pour qu'un départage ne tombe pas dessus
     const enCollision = [];
-    for (const [nom, groupe] of parNom) {
-        if (groupe.length === 1 && libres(nom)) { proposes.push(groupe[0]); pris.set(nom, groupe[0].s._id); }
-        else enCollision.push([nom, groupe, pris.get(nom)]);
+    for (const [k, groupe] of parNom) {
+        if (groupe.length === 1 && libres(groupe[0].a.nom)) { proposes.push(groupe[0]); pris.set(k, groupe[0].s._id); }
+        else enCollision.push([groupe[0].a.nom, groupe, pris.get(k)]);
     }
     for (const [nom, groupe, occupe] of enCollision) {
         for (const c of groupe) {
             const essais = [[c.nomCardmarket, 'cardmarket (départage de collision)'], [lisible(c.s._id), 'slug du set (départage de collision)']];
-            const autres = new Set(groupe.filter(x => x !== c).flatMap(x => [x.nomCardmarket, lisible(x.s._id)]));
-            const ok = essais.find(([n]) => n && libres(n) && !autres.has(n));
-            if (ok) { proposes.push({ ...c, a: { nom: ok[0], source: ok[1] }, collision: `« ${nom} » ${occupe ? `déjà affiché par ${occupe}` : `porté par ${groupe.map(x => x.s._id).join(', ')}`}` }); pris.set(ok[0], c.s._id); }
+            const autres = new Set(groupe.filter(x => x !== c).flatMap(x => [x.nomCardmarket, lisible(x.s._id)]).map(cleAffichage));
+            const ok = essais.find(([n]) => n && libres(n) && !autres.has(cleAffichage(n)));
+            if (ok) { proposes.push({ ...c, a: { nom: ok[0], source: ok[1] }, collision: `« ${nom} » ${occupe ? `déjà affiché par ${occupe}` : `porté par ${groupe.map(x => x.s._id).join(', ')}`}` }); pris.set(cleAffichage(ok[0]), c.s._id); }
             else refuses.push({ ...c, raison: `« ${nom} » ${occupe ? `déjà affiché par ${occupe}` : `porté par ${groupe.length} sets`}, et ni le nom Cardmarket ni le slug ne les séparent` });
         }
     }
     return { proposes, refuses };
 }
 
-module.exports = { lisible, choisirAffichage, regionDe, proposerNoms };
+module.exports = { lisible, cleAffichage, doublonsDAffichage, choisirAffichage, regionDe, proposerNoms };

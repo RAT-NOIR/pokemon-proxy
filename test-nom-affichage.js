@@ -37,5 +37,16 @@ verifier('occidental avec nomFr : le nom ANGLAIS (nomEn), jamais le français', 
 verifier('japonais avec nomFr : le nom Cardmarket, jamais le français', r3.proposes.find(p => p.s._id === 'Forbidden-Light-JP')?.a, { nom: 'Forbidden Light JP', source: 'cardmarket' });
 verifier('tous les noms proposés sont distincts entre eux et des noms publiés', new Set([...proposes.map(p => p.a.nom), 'Expansion Pack', 'Black Bolt JP']).size, proposes.length + 2);
 
+// 🔑 LA GARDE D'ENSEMBLE (2026-09-24, condition du feu vert des 151 noms) : aucun nom affiché porté par deux sets, à
+// l'écran — donc à la casse, aux accents et à la ponctuation près. « Gold, Silver » et « Gold Silver » se lisent pareil.
+const { doublonsDAffichage } = require('./collecte-cartes/nom-affichage');
+verifier('garde : un doublon exact est vu', doublonsDAffichage([{ _id: 'A', nomAffichage: 'Black Bolt' }, { _id: 'B', nomAffichage: 'Black Bolt' }]).map(g => g.sets), [['A', 'B']]);
+verifier('garde : casse, accents, ponctuation ne séparent pas deux noms', doublonsDAffichage([{ _id: 'A', nomAffichage: 'Pokémon Card 151' }, { _id: 'B', nomAffichage: 'pokemon card-151' }, { _id: 'C', nomAffichage: 'Gold, Silver' }, { _id: 'D', nomAffichage: 'Gold Silver' }]).length, 2);
+verifier('garde : « Black Bolt » et « Black Bolt JP » sont deux noms', doublonsDAffichage([{ _id: 'Black-Bolt', nomAffichage: 'Black Bolt' }, { _id: 'Black-Bolt-JP', nomAffichage: 'Black Bolt JP' }]).length, 0);
+verifier('garde : un set sans nom ne compte pas', doublonsDAffichage([{ _id: 'A', nomAffichage: 'X' }, { _id: 'B' }, { _id: 'C', nomAffichage: null }]).length, 0);
+// et le départage de proposerNoms lit la MÊME clé : un candidat qui ne diffère d'un nom publié que par sa ponctuation est en collision
+const r4 = proposerNoms([{ _id: 'Gold-Silver-JP', region: 'jp', nomAffichage: 'Gold, Silver, to a New World...' }, { _id: 'Gold-Silver-to-a-New-World', region: 'intl', nomEn: 'Gold Silver to a New World' }], new Map(), new Map());
+verifier('départage : la ponctuation seule ne sépare pas d\'un nom publié', r4.proposes.length + r4.refuses.length === 1 && r4.proposes[0]?.a.nom !== 'Gold Silver to a New World', true);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

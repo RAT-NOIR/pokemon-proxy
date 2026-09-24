@@ -137,11 +137,12 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
         { $match: { k: { $gt: 1 } } }, { $count: 'n' }
     ]).toArray();
     const ni = imgDoublons[0]?.n || 0;
-    const nomsDoublons = await cx.db.collection('sets').aggregate([
-        { $match: { nomAffichage: { $nin: [null, ''] } } },
-        { $group: { _id: '$nomAffichage', sets: { $addToSet: '$_id' } } },
-        { $match: { 'sets.1': { $exists: true } } }
-    ]).toArray();
+    //     🔑 2026-09-24 : la clé est celle de l'ÉCRAN (casse, accents, ponctuation), et la fonction est celle de l'outil qui
+    //     nomme (collecte-cartes/nom-affichage.js, §21 bis) — un `$group` sur la chaîne brute voyait « Gold, Silver » et
+    //     « Gold Silver » comme deux noms. Condition du feu vert des 151 noms, gardée à chaque mesure.
+    const { doublonsDAffichage } = require('./collecte-cartes/nom-affichage');
+    const setsNommes = await cx.db.collection('sets').find({ nomAffichage: { $type: 'string' } }, { projection: { nomAffichage: 1 } }).toArray();
+    const nomsDoublons = doublonsDAffichage(setsNommes);
     console.log(`   ⚖️ une image par (carte, set, n°) : ${ni} triplet(s) en double ${ni ? '— 🔴 le visuel affiché dépend de l\'ordre de lecture' : '✅'}`);
     //   · AUCUN FICHIER `artofpkm/` SOUS UN SET NON JAPONAIS (2026-09-23). artofpkm ne sert que le japonais : un tel fichier
     //     sous un set intl, chinois, indonésien ou thaï est le scan d'un autre tirage (§19). Mesuré à 0 ce jour-là — le
@@ -155,7 +156,14 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     }
     const nArt = artofpkm.autre + artofpkm.inconnu;
     console.log(`   ⚖️ artofpkm/ sous un set non jp : ${nArt} sur ${artofpkm.jp + nArt} entrées artofpkm/ lues ${!(artofpkm.jp + nArt) ? '— 🔴 AUCUNE entrée lue : le contrôle ne peut pas conclure' : nArt ? `— 🔴 ${artofpkm.autre} sous un set d'une autre région, ${artofpkm.inconnu} sous un set inconnu (${exemples.join(' · ')})` : '✅'}`);
-    console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) porté(s) par plusieurs sets ${nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x._id} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
+    console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) d'écran porté(s) par plusieurs sets, sur ${setsNommes.length} sets nommés ${!setsNommes.length ? '— 🔴 AUCUN set nommé lu : le contrôle ne peut pas conclure' : nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x.noms.join(' » / « ')} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
+    //   · L'ILLUSTRATEUR PAR IMPRESSION N'EST JAMAIS ABSENT (2026-09-24) : nommé, ou `null` avec sa raison. Un champ ABSENT est
+    //     une impression que construire-illustrateurs.js n'a pas vue (carte neuve) — ou qu'une réécriture du tableau a vidée :
+    //     les recollectes de xASC et HSP en ont effacé 2 179 sans un mot, restaurés (collecte-cartes/impressions-posees.js).
+    const etatsIllus = await cx.db.collection('cartes').aggregate([{ $unwind: '$impressions' },
+        { $group: { _id: { $cond: [{ $eq: [{ $type: '$impressions.illustrateur' }, 'missing'] }, 'absent', 'present'] }, n: { $sum: 1 } } }]).toArray();
+    const illusAbsent = etatsIllus.find(x => x._id === 'absent')?.n || 0, illusTotal = etatsIllus.reduce((s, x) => s + x.n, 0);
+    console.log(`   ⚖️ illustrateur par impression   : ${illusAbsent} impression(s) SANS le champ, sur ${illusTotal} ${!illusTotal ? '— 🔴 AUCUNE impression lue : le contrôle ne peut pas conclure' : illusAbsent ? '— ⚠️ cartes neuves, ou tableau réécrit : node construire-illustrateurs.js (mesure), puis comparer à la dernière sauvegarde' : '✅'}`);
     //   · UN SET QUI PORTE DES CARTES A UN NOM (2026-09-24). Sans `nomAffichage`, le site ne publie pas le set : ni page, ni
     //     fiche, ni visuel servi. 151 sets l'ont été en silence, cinq jours, parce que seul un outil lancé une fois les
     //     nommait (collecte-cartes/nom-affichage.js). Le dénominateur s'imprime : lu sur zéro set, le contrôle ne dirait rien.

@@ -16,7 +16,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
-const { proposerNoms } = require('./collecte-cartes/nom-affichage');
+const { proposerNoms, doublonsDAffichage } = require('./collecte-cartes/nom-affichage');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -51,6 +51,13 @@ const { proposerNoms } = require('./collecte-cartes/nom-affichage');
     console.log(`   par source  : ${JSON.stringify(parSource)}`);
     const tombeSurCode = proposes.filter(c => c.a.source === 'code');
     if (tombeSurCode.length) console.log(`   ❌ ${tombeSurCode.length} retombent sur leur CODE : ${tombeSurCode.map(c => c.s._id).join(', ')}`);
+    // 🔑 LA CONDITION DU FEU VERT (2026-09-24) : AUCUN nom affiché porté par deux sets parmi TOUS les sets — posés ET proposés,
+    // à la clé d'écran (casse, accents, ponctuation). Un doublon, et rien ne s'écrit.
+    const apresEcriture = [...tous.filter(s => typeof s.nomAffichage === 'string'), ...proposes.map(c => ({ _id: c.s._id, nomAffichage: c.a.nom }))];
+    const doublons = doublonsDAffichage(apresEcriture);
+    console.log(`\n   ⚖️ garde d'ensemble : ${doublons.length} nom(s) d'écran porté(s) par plusieurs sets, sur ${apresEcriture.length} sets nommés après écriture (${tous.length} sets)`);
+    for (const d of doublons) console.log(`      🔴 « ${d.noms.join(' » / « ')} » : ${d.sets.join(', ')}`);
+    if (doublons.length) { console.log('\n   🔴 RIEN N\'EST ÉCRIT : un nom affiché doit désigner UN set.'); await fermer(); process.exit(1); }
     if (!ecrire) { console.log('\n   (dry-run — rien d\'écrit. --ecrire après la sauvegarde de la base cartes)'); await fermer(); return; }
 
     const avant = await S.countDocuments({ nomAffichage: { $type: 'string' } });
@@ -58,8 +65,8 @@ const { proposerNoms } = require('./collecte-cartes/nom-affichage');
         nomAffichage: c.a.nom, nomAffichageSource: c.a.source, nomAffichagePreuve: c.preuve, nomCardmarket: c.nomCardmarket, nomsLe: new Date() } });
     for (const c of refuses) await S.updateOne({ _id: c.s._id }, { $set: { nomAffichageRefus: { raison: c.raison, le: new Date(), instrument: 'rapatrier-noms-sets.js' } } });
     const apres = await S.countDocuments({ nomAffichage: { $type: 'string' } });
-    const noms = await S.aggregate([{ $match: { nomAffichage: { $type: 'string' } } }, { $group: { _id: '$nomAffichage', n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }]).toArray();
-    console.log(`\n   RELU : sets nommés ${avant} → ${apres} (attendu ${avant + proposes.length}) · noms en double : ${noms.length} ${apres === avant + proposes.length && !noms.length ? '✅' : '🔴 NE CONCORDE PAS'}`);
+    const noms = doublonsDAffichage(await S.find({}, { projection: { nomAffichage: 1 } }).toArray());
+    console.log(`\n   RELU : sets nommés ${avant} → ${apres} (attendu ${avant + proposes.length}) · noms d'écran en double : ${noms.length} ${apres === avant + proposes.length && !noms.length ? '✅' : '🔴 NE CONCORDE PAS'}`);
     await fermer();
     if (apres !== avant + proposes.length || noms.length) process.exit(1);
 })().catch(e => { console.error('❌', e.message); process.exit(1); });
