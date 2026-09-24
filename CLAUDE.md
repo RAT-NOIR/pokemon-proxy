@@ -550,6 +550,33 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 61. UN CONTRE-EXEMPLE, DEUX LISTES, ET LA CLÉ QUE LE SITE NE POUVAIT PAS LIRE — 2026-09-24 (soir)
+
+> 🔴 **« 286 faux signaux » était un raccourci : je jugeais par le numéro du TITRE, et le titre peut mentir.** Le testeur a vérifié
+> Lady-V2-CSM1aC182 à l'œil : c'est la 182. Rejugés un par un avec des TÉMOINS indépendants — la Setlist (`detail`), le nom du
+> produit, ses attaques, le dernier numéro du set —, les 325 du site donnent **319 faux signaux** (168 URL sans numéro :
+> « Porygon2 », « Falkners-TM-01 » ; 116 URL qui range une carte d'un autre nom ; 18 suffixes de kit ; « SVPen023 », « …-V2-SV000 »,
+> RR140 au-delà du 114 du set…), **5 vraies impressions manquantes** (Mega Evolution IDTH), **1 à trancher** (Iron Bundle PCS232).
+> Et **Lady n'était pas dans ces 325** : elle était dans l'AUTRE liste (`numerosManquants`), où la jointure avait raison.
+
+**LA JOINTURE AVAIT RAISON, LA CARTE NE LE SAVAIT PAS.** V1 → 136, V2 → 182, `detail: n°136, 182` : l'impression chinoise
+vivait dans la mémoire de `joindre()` (§42) et jamais sur la carte. `poser-impressions-setlist.js` exige DEUX sources — le numéro
+de l'URL Cardmarket ET la Setlist — et écrit l'impression telle que la jointure la fabrique, `source: 'setlist'` : **10 008
+impressions, 5 751 cartes**, 29 refusées (l'URL contredit la Setlist : Deino-CSV2C089 est le 90). La marque de conservation est
+posée dans le même geste (impressions-posees.js, rejouer-impressions.js, collecteur-texte.js, schéma) ; la garde de lot compte
+désormais les impressions (une impression sans illustrateur effacée ne faisait bouger aucun compteur).
+🔴 **ET LE SITE NE POUVAIT PAS LES VOIR : il apparie `imp.tirage === set.region`, et `region` ne vaut que jp/intl.** 86 sets
+chinois, indonésiens et thaïs portent `intl`. `sets.tirage` (601 sets) dit la clé exacte ; CONTRAT-SITE.md : `set.tirage ??
+set.region`. Mesuré avec les règles du site IMPORTÉES : +58 produits servis, 19 perdus — le gain est le NUMÉRO des fiches
+chinoises, déjà servies sans numéro.
+
+**`--correspondre` S'ÉCRIVAIT PAR CE QU'IL REFUSE** (`tirage !== 'intl'`), avec « japonaises seulement » écrit trois lignes plus
+haut pour l'autre moitié des lignes (§21 bis) : MA6 et 30thC recevaient le set JAPONAIS d'artofpkm, sur des cartes qui portent
+depuis ce soir des impressions de Setlist. Corrigé avant tout redéploiement.
+**LE WORKER NE S'EST PAS ARRÊTÉ, LA FILE S'EST VIDÉE** (16:54 UTC), et la garde bloquait toute remise tant que mes commits de
+règles n'étaient pas déployés. Les galeries TCGdex (swsh9tg…swsh12.5gg) : `image` absent de l'API ET 404 au chemin standard
+(png et webp, 24/09) — pas de file à remplir de ce côté. MEP : l'API dit « sans image », le CDN a 001 et pas 050.
+
 ## 60. LA GARDE DE LOT, ET CE QU'ELLE A PERMIS LE MÊME SOIR — 2026-09-24
 
 > 🔑 **LA RÈGLE DU TESTEUR : une recollecte RÉÉCRIT, elle n'est pas additive. Tout lot passe par `lot-additif.js`, qui compte
