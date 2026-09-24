@@ -40,34 +40,53 @@ const { etatDuWorker } = require('./remettre-en-file');
     const apparier = fabriquerAppariement(liste);
     const parSlug = new Map(); for (const L of [...TABLE, ...TABLE_AUTO, ...TABLE_SANS_PAGE]) if (L.slugSet && !parSlug.has(L.slugSet)) parSlug.set(L.slugSet, L);
 
+    // ── UN LOT DE SETS « EN TÊTE » : la population (set → nombre de visuels visés), le plan TCGdex de chacun, l'insertion.
+    // Une définition pour les deux modes ci-dessous (§21 bis) — la garde, le plan et le collecteur sont les mêmes.
+    async function enTete(parSet, { titre, quoi, motif }) {
+        const U = [];
+        for (const { _id: slug, n } of parSet.filter(p => regionDe.get(p._id) !== 'jp')) {
+            const L = parSlug.get(slug); const d = L ? setDeLaLigne(L, apparier) : { motif: 'aucune ligne de table' };
+            if (!d.set) { console.log(`   ⛔ ${slug} (${n}) : ${d.motif}`); continue; }
+            const P = await planifier(M, cx.db, null, L, d.set);
+            if (!P) { console.log(`   ⛔ ${slug} (${n}) → ${d.set.id} : cartes TCGdex absentes du cache`); continue; }
+            U.push({ code: L.code, slug, tcgdexSet: d.set.id, tcgdexNom: d.set.name, vises: n, plan: P.plan.length });
+        }
+        console.log(`\n════ ${titre} : ${U.length} sets, ${U.reduce((s, u) => s + u.vises, 0)} ${quoi}, ${U.reduce((s, u) => s + u.plan, 0)} scans TCGdex à prendre ════`);
+        for (const u of U) console.log(`   ${u.code.padEnd(8)} ${u.slug.padEnd(30)} → ${u.tcgdexSet.padEnd(9)} visés ${String(u.vises).padStart(4)} · scans du set ${u.plan}`);
+        const F = cx.db.collection('file_images');
+        const tete = process.argv.includes('--en-tete');
+        const premier = (await F.find({ etat: 'attente' }).sort({ ordre: 1 }).limit(1).toArray())[0]?.ordre;
+        const dernier = (await F.find({}).sort({ ordre: -1 }).limit(1).toArray())[0]?.ordre ?? 0;
+        // en tête : avant la première unité en attente, dans l'ordre du lot (le plus de visuels visés d'abord) ; file vide :
+        // après la dernière, ce qui revient au même.
+        const ordreDe = i => tete && premier != null ? premier - U.length + i : dernier + 1 + i;
+        const existants = await F.find({ _id: { $in: U.map(u => `tcgdex/${u.code}`) } }, { projection: { etat: 1 } }).toArray();
+        console.log(`   ordre : ${tete ? (premier != null ? `EN TÊTE, avant ${premier}` : 'EN TÊTE (file vide)') : 'en queue'} · unités déjà en file : ${existants.map(e => `${e._id} (${e.etat})`).join(', ') || 'aucune'}`);
+        if (!ecrire) { console.log('\n   (dry-run — --ecrire insère, si la garde du commit passe)'); return; }
+        if (W.bloque) { console.error('\n❌ ÉCRITURE REFUSÉE : la garde du commit bloque.'); process.exitCode = 1; return; }
+        let n = 0;
+        for (const [i, u] of U.entries()) n += (await F.updateOne({ _id: `tcgdex/${u.code}` }, { $setOnInsert: { code: u.code, source: 'tcgdex', tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: ordreDe(i), etat: 'attente', ajouteLe: new Date(), motif: motif(u) } }, { upsert: true })).upsertedCount;
+        console.log(`\n   ✅ insérées : ${n} sur ${U.length} · RELU en attente : ${await F.countDocuments({ _id: { $in: U.map(u => `tcgdex/${u.code}`) }, etat: 'attente' })}`);
+    }
+
     // ── --petits-formats [--en-tete] (2026-09-24) : les visuels Bulbapedia 350×495 et 355×500 — les plus petits servis
     // sur des sets internationaux, anglais (audit du site, 6 sur 6), flous à 700 px. Leurs sets passent EN TÊTE de file :
     // TCGdex les remplace tous (1 095 sur 1 095 mesurés sur le cache, 37 sets). La même garde, le même plan, le même collecteur.
     if (process.argv.includes('--petits-formats')) {
         const petits = await cx.db.collection('cartes').aggregate([{ $unwind: '$images' }, { $match: { 'images.source': 'bulbapedia', $or: [{ 'images.w': 350, 'images.h': 495 }, { 'images.w': 355, 'images.h': 500 }] } },
             { $group: { _id: '$images.set', n: { $sum: 1 } } }, { $sort: { n: -1 } }]).toArray();
-        const U = [];
-        for (const { _id: slug, n } of petits.filter(p => regionDe.get(p._id) !== 'jp')) {
-            const L = parSlug.get(slug); const d = L ? setDeLaLigne(L, apparier) : { motif: 'aucune ligne de table' };
-            if (!d.set) { console.log(`   ⛔ ${slug} (${n}) : ${d.motif}`); continue; }
-            const P = await planifier(M, cx.db, null, L, d.set);
-            if (!P) { console.log(`   ⛔ ${slug} (${n}) → ${d.set.id} : cartes TCGdex absentes du cache`); continue; }
-            U.push({ code: L.code, slug, tcgdexSet: d.set.id, tcgdexNom: d.set.name, petits: n, plan: P.plan.length });
-        }
-        console.log(`\n════ PETITS FORMATS : ${U.length} sets, ${U.reduce((s, u) => s + u.petits, 0)} visuels 350×495 / 355×500, ${U.reduce((s, u) => s + u.plan, 0)} scans TCGdex à prendre ════`);
-        for (const u of U) console.log(`   ${u.code.padEnd(8)} ${u.slug.padEnd(28)} → ${u.tcgdexSet.padEnd(8)} petits ${String(u.petits).padStart(3)} · scans du set ${u.plan}`);
-        const F = cx.db.collection('file_images');
-        const tete = process.argv.includes('--en-tete');
-        const premier = (await F.find({ etat: 'attente' }).sort({ ordre: 1 }).limit(1).toArray())[0]?.ordre;
-        const dernier = (await F.find({}).sort({ ordre: -1 }).limit(1).toArray())[0]?.ordre ?? 0;
-        const ordreDe = i => tete && premier != null ? premier - U.length + i : dernier + 1 + i;
-        const existants = await F.find({ _id: { $in: U.map(u => `tcgdex/${u.code}`) } }, { projection: { etat: 1 } }).toArray();
-        console.log(`   ordre : ${tete ? `EN TÊTE, avant ${premier}` : 'en queue'} · unités déjà en file : ${existants.map(e => `${e._id} (${e.etat})`).join(', ') || 'aucune'}`);
-        if (!ecrire) { console.log('\n   (dry-run — --ecrire insère, si la garde du commit passe)'); await fermer(); return; }
-        if (W.bloque) { console.error('\n❌ ÉCRITURE REFUSÉE : la garde du commit bloque.'); await fermer(); process.exit(1); }
-        let n = 0;
-        for (const [i, u] of U.entries()) n += (await F.updateOne({ _id: `tcgdex/${u.code}` }, { $setOnInsert: { code: u.code, source: 'tcgdex', tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: ordreDe(i), etat: 'attente', ajouteLe: new Date(), motif: `petits formats Bulbapedia : ${u.petits} visuels 350×495 / 355×500, remplacés par le scan anglais de TCGdex` } }, { upsert: true })).upsertedCount;
-        console.log(`\n   ✅ insérées : ${n} sur ${U.length} · RELU en attente : ${await F.countDocuments({ _id: { $in: U.map(u => `tcgdex/${u.code}`) }, etat: 'attente' })}`);
+        await enTete(petits, { titre: 'PETITS FORMATS', quoi: 'visuels 350×495 / 355×500', motif: u => `petits formats Bulbapedia : ${u.vises} visuels 350×495 / 355×500, remplacés par le scan anglais de TCGdex` });
+        await fermer(); return;
+    }
+    // ── --langue-nulle [--en-tete] (2026-09-24, demande du testeur) : les sets internationaux par nombre de visuels Bulbapedia
+    // à langue NULL. Aucun format ne prouve l'anglais (§54) : `null` n'est pas « anglais », et la strate SM/SWSH a montré
+    // 9 japonais sur 36 tirés hors formats. On ne tranche pas la langue fichier par fichier : on REMPLACE par le scan que
+    // TCGdex sert, `langue: 'en'` prouvé par la source (§55). Chaque null remplacé ferme un trou possible de japonais mal
+    // étiqueté. Mesuré le 2026-09-24 : 94 sets, 10 664 visuels.
+    if (process.argv.includes('--langue-nulle')) {
+        const nuls = await cx.db.collection('cartes').aggregate([{ $unwind: '$images' }, { $match: { 'images.source': 'bulbapedia', 'images.langue': null } },
+            { $group: { _id: '$images.set', n: { $sum: 1 } } }, { $sort: { n: -1 } }]).toArray();
+        await enTete(nuls, { titre: 'LANGUE NULLE', quoi: 'visuels Bulbapedia à langue null', motif: u => `langue null : ${u.vises} visuels Bulbapedia dont la langue n'est pas prouvée, remplacés par le scan anglais de TCGdex` });
         await fermer(); return;
     }
     const unites = [], refus = [], sansScan = [];
