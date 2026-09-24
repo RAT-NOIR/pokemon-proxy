@@ -157,6 +157,17 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const nArt = artofpkm.autre + artofpkm.inconnu;
     console.log(`   ⚖️ artofpkm/ sous un set non jp : ${nArt} sur ${artofpkm.jp + nArt} entrées artofpkm/ lues ${!(artofpkm.jp + nArt) ? '— 🔴 AUCUNE entrée lue : le contrôle ne peut pas conclure' : nArt ? `— 🔴 ${artofpkm.autre} sous un set d'une autre région, ${artofpkm.inconnu} sous un set inconnu (${exemples.join(' · ')})` : '✅'}`);
     console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) d'écran porté(s) par plusieurs sets, sur ${setsNommes.length} sets nommés ${!setsNommes.length ? '— 🔴 AUCUN set nommé lu : le contrôle ne peut pas conclure' : nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x.noms.join(' » / « ')} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
+    //   · UNE IMAGE JOINTE EST UNE IMAGE AFFICHABLE (2026-09-24) : un document `images` qui désigne sa carte (`carteId`) doit
+    //     figurer dans `cartes.images` de cette carte. collecteur-images.js gardait UNE image par (carte, set) : 4 562 jointes
+    //     et invisibles (Shiny Treasure ex 292, Sableye n°121 effacée par la jointure de sa n°291). Dénominateur imprimé.
+    //     ⚠️ La clé est (carte, set, NUMÉRO), pas le fichier : artofpkm publie parfois DEUX scans d'un même numéro (123 sur
+    //     Shiny Treasure ex, variante du même tirage) — une entrée par numéro est la règle, l'autre n'est pas une perte.
+    const imsJointes = await cx.db.collection('images').find({ source: 'artofpkm', etat: 'ok', carteId: { $ne: null } }, { projection: { carteId: 1, set: 1, numero: 1 } }).toArray();
+    const entreesArt = new Set();
+    for await (const c of cx.db.collection('cartes').find({ 'images.source': 'artofpkm' }, { projection: { images: 1 } }))
+        for (const e of c.images || []) if (e.source === 'artofpkm') entreesArt.add(`${c._id}|${e.set}|${e.numero ?? ''}`);
+    const invisibles = imsJointes.filter(im => !entreesArt.has(`${im.carteId}|${im.set}|${im.numero ?? ''}`));
+    console.log(`   ⚖️ image jointe = image affichée : ${invisibles.length} image(s) artofpkm jointes absentes de leur carte, sur ${imsJointes.length} jointes ${!imsJointes.length ? '— 🔴 AUCUNE image jointe lue : le contrôle ne peut pas conclure' : invisibles.length ? `— 🔴 (${[...new Set(invisibles.map(i => i.set))].length} sets) : node collecteur-images.js --rejouer-jointure=<codes>` : '✅'}`);
     //   · L'ILLUSTRATEUR PAR IMPRESSION N'EST JAMAIS ABSENT (2026-09-24) : nommé, ou `null` avec sa raison. Un champ ABSENT est
     //     une impression que construire-illustrateurs.js n'a pas vue (carte neuve) — ou qu'une réécriture du tableau a vidée :
     //     les recollectes de xASC et HSP en ont effacé 2 179 sans un mot, restaurés (collecte-cartes/impressions-posees.js).

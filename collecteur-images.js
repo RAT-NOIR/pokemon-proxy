@@ -389,7 +389,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
             const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(mention ? { mention } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
-            await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug } } });
+            // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
+            // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
+            // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur
+            // carte (`images.carteId`) et absentes de `cartes.images`, sur 165 sets — Shiny Treasure ex 292, Terastal Festival
+            // 184, VSTAR Universe 163. Le §32 bis et le §45 l'avaient écrit ; la jointure du TEXTE et celle de Bulbapedia le
+            // faisaient, celle-ci non (§21 bis). `numero: null` (sources sans numéro, Gym) reste une entrée par carte.
+            await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, numero: entree.numero } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
         } else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
@@ -432,7 +438,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     dire(`\n════ COMPLÉTUDE IMAGES ${code} — dénominateur : ${nEntrees} entrées source, ${cartes.length} cartes du set ════`);
     dire(`   originaux = entrées source   : ${images.length} = ${nEntrees}${emplacements ? `   (set à EMPLACEMENTS : ${(nEntrees / cartes.length).toFixed(2)} par carte)` : ''}`);
     dire(emplacements
-        ? `   cartes couvertes = cartes    : ${cartesAvecImage.size} = ${cartes.length}  ·  ${jointes} rattachements pour ${cartesAvecImage.size} cartes (une entrée survit par carte)  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`
+        ? `   cartes couvertes = cartes    : ${cartesAvecImage.size} = ${cartes.length}  ·  ${jointes} rattachements pour ${cartesAvecImage.size} cartes (une entrée par carte et par numéro)  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`
         : `   images jointes = originaux   : ${jointes} = ${images.length}  ·  preuves ${JSON.stringify(preuves)}  ${complet.concordance ? '✅ concordants' : '❌ NON concordants'}`);
     dire(`   cartes sans image (attendu)  : ${cartesSansImage.length} / ${cartes.length}${cartesSansImage.length ? ' — ' + cartesSansImage.map(c => c.nomEn).join(', ') : ''}`);
     dire(`   restes par type              : ${JSON.stringify(restesParType)}`);
