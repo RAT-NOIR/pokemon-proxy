@@ -68,7 +68,34 @@ const ARTOFPKM = {
     s6k: { ids: [431], noms: ['Jet-Black Poltergeist'], note: 'Cardmarket « Jet Black Spirit »' },
     s7D: { ids: [438], noms: ['Skyscraping Perfect'], note: 'Cardmarket « Towering Perfection »' },
     sm4s: { ids: [343], noms: ['Awakening Hero'], note: 'Cardmarket « Awakened Heroes »' },
-    smP2: { ids: [382], noms: ['Detective Pikachu'], note: 'Cardmarket « Detective Pikachu JP »' }
+    smP2: { ids: [382], noms: ['Detective Pikachu'], note: 'Cardmarket « Detective Pikachu JP »' },
+    // 2026-09-25 : lignes japonaises SANS source dont les cartes attendent un visuel (55 lignes, 1 920 cartes). --correspondre
+    // se taisait : un mot de plus (« The Glory… », « PCG-P » contre « PCG »), une autre traduction du même titre japonais
+    // (« Amazing » / « Astonishing Volt Tackle »), l'ère en préfixe (« Scarlet & Violet Starter set ex… »). Paires LUES une à
+    // une dans artofpkm-sets.json, jamais par inclusion (§31). Restent dehors, douteuses : svIba, MDB, HSP, MCRP, XYe, pcgN, sD,
+    // 20th, smA, les demi-decks de coffret (artofpkm renumérote le coffret entier) — et ADV4, « probable » depuis le 15/09.
+    'PCG-P': { ids: [89], noms: ['PCG Promotional Cards'], note: 'Cardmarket « PCG Promos » ; 3 « PCG Players Promotional Cards » est un autre set' },
+    'ADV-P': { ids: [64], noms: ['ADV Promotional cards'], note: 'Cardmarket « ADV Promos »' },
+    'L-P': { ids: [202], noms: ['Legend Promos'], note: 'Cardmarket « L P Promos » (L-P Promotional cards)' },
+    sv10: { ids: [563], noms: ['Glory of Team Rocket'], note: 'Cardmarket « The Glory of Team Rocket »' },
+    s4: { ids: [415], noms: ['Astonishing Volt Tackle'], note: 'Cardmarket « Shocking Volt Tackle », Bulbapedia « Amazing Volt Tackle » : trois traductions du même titre' },
+    sF: { ids: [422], noms: ['Premium Trainer Box - Rapid Strike, Single Strike'], note: 'Cardmarket « Single Strike Rapid Strike Premium Trainer Boxes »' },
+    mP1: { ids: [582], noms: ['Start Deck 100 Battle Collection - CoroCiào Ver.'] },
+    sN: { ids: [455], noms: ['Start Deck 100 (Corocoro Version)'], note: 'Cardmarket « Start Deck 100 CoroCoro Comic Version »' },
+    svAM: { ids: [540], noms: ['Scarlet & Violet Starter set ex Sprigatito & Lucario ex'] },
+    svAW: { ids: [541], noms: ['Scarlet & Violet Starter set ex Quaxly & Mimikyu ex'] },
+    smE: { ids: [348], noms: ['Starter Set Legend Solgaleo GX & Lunala GX'], note: 'Cardmarket « Solgaleo GX Lunala GX Legendary Starter Set »' },
+    smC: { ids: [334], noms: ['Starter Set Tapu Bulu GX'], note: 'Cardmarket « Tapu Bulu GX Enhanced Starter Set »' },
+    svEL: { ids: [500], noms: ['Starter Set Tera Skeledirge ex'], note: 'Cardmarket « Terastal Starter Set Skeledirge ex »' },
+    svEM: { ids: [499], noms: ['Starter Set Tera Mewtwo ex'], note: 'Cardmarket « Terastal Starter Set Mewtwo ex »' },
+    XYd: { ids: [304], noms: ['Battle Deck 60 Mega Rayquaza EX'], note: 'Cardmarket « MRayquaza EX Mega Battle Deck »' },
+    XYb: { ids: [297], noms: ['Hyper Metal Chain Deck Dialga EX & Aegislash EX'] },
+    smP1: { ids: [331], noms: ['Corocoro Rockruff Full Power Deck'] },
+    smG: { ids: [354], noms: ['Deck Build Box Ultra Sun & Ultra Moon'], note: 'Cardmarket « Ultra Sun Ultra Moon Deck Build Boxes »' },
+    sp3: { ids: [430], noms: ['Jumbo Pack Set - Silver Lance & Jet-Black Poltergeist'], note: 'Cardmarket « Silver Lance Jet Black Spirit Jumbo Pack Set »' },
+    's8a-P': { ids: [447], noms: ['25th Anniversary Promo Pack'], note: 'Cardmarket « 25th Anniversary Edition » (Promo Card Pack 25th Anniversary Edition)' },
+    RtA: { ids: [152], noms: ['Constructed Half Deck Rampardos the Attacker'] },
+    BtD: { ids: [151], noms: ['Constructed Half Deck Bastiodon the Defender'] }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,

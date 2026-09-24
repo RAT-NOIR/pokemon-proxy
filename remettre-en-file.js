@@ -313,12 +313,16 @@ if (require.main !== module) return;
             continue;
         }
         if (u.etat === 'attente' || u.etat === 'en-cours') { console.log(`   ⚪ ${code} : déjà ${u.etat}`); continue; }
+        // 🔴 LA REPRISE GARDAIT L'ANCIENNE SOURCE (2026-09-25). m6a, passé par Bulbapedia, a reçu sa source artofpkm (28ec241) ;
+        // repris, il est ressorti « refuse-region » en une seconde — Bulbapedia ne prend pas un set japonais. L'insertion
+        // écrit la source par `sourceDe` (plus haut), la reprise ne l'écrivait pas : la même règle, une seule fois (§21 bis).
+        const source = sourceDe(code) ? 'artofpkm' : (u.source ?? 'bulbapedia');
         const r = await F.updateOne({ _id: code, etat: u.etat }, {
-            $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `${motif} — ${g.n - g.avec} carte(s) sans visuel sur ${g.n} (état précédent ${u.etat}/${u.resultat ?? '—'})` },
+            $set: { etat: 'attente', source, remisEnFileLe: new Date(), remisEnFileMotif: `${motif} — ${g.n - g.avec} carte(s) sans visuel sur ${g.n} (état précédent ${u.etat}/${u.resultat ?? '—'}${source !== u.source ? `, source ${u.source ?? '—'} → ${source}` : ''})` },
             $unset: { resultat: '', pris: '', fini: '' }
         });
         repris += r.modifiedCount;
-        console.log(`   ♻️ ${code.padEnd(8)} ${u.etat}/${u.resultat ?? '—'} → attente · ${g.n - g.avec} carte(s) sans visuel sur ${g.n}`);
+        console.log(`   ♻️ ${code.padEnd(8)} ${u.etat}/${u.resultat ?? '—'} → attente${source !== u.source ? ` · source ${u.source ?? '—'} → ${source}` : ''} · ${g.n - g.avec} carte(s) sans visuel sur ${g.n}`);
     }
     for (const x of reprises) {
         const r = await F.updateOne({ _id: x.code, etat: 'refuse', resultat: 'refuse-resolution' }, {

@@ -50,6 +50,7 @@ const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-vi
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
+const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { issueDeLUnite } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
@@ -577,6 +578,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // minuit ne dit rien de 08:20. Non tenu = arrêt, Render relance, le neuf attend son tour.
             if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
             await reprendreEnCoursFiges(File, M);
+            // 🔑 L'ALIMENTATEUR (2026-09-25) : sous 3 unités, le worker remplit SA file lui-même — plus gros manques d'abord,
+            // toutes sources légales, reprise seulement sur cause neuve (collecte-cartes/alimentateur.js, banc
+            // test-alimentateur.js). Il lit les règles de CE commit : ce qu'il enfile est exécuté par le code qui l'a choisi.
+            // Une file encore vide après lui est une ALERTE écrite en base, jamais un sommeil muet. Son échec ne tue pas la
+            // boucle (la file déjà pleine continue de tourner) — mais il crie.
+            try { await alimenter(cx.db, { journal: console }); }
+            catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
             // `pasAvant` : une unité remise en file après une surcharge de la source attend son délai (issue-unite.js).
             const suivant = await File.findOneAndUpdate({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: new Date() } }] }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
             // 🔑 ON DORT SANS LE VERROU (2026-09-14). Le verrou global protège la CADENCE des requêtes chez la

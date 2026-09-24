@@ -45,6 +45,10 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     console.log(`file_images    : ${enCours.length} unité(s) « en-cours » ${enCours.length ? '— ' + enCours.map(x => x._id).join(' ') : ''} · ${attente} en attente · tous états : ${etats.map(e => `${e._id}×${e.n}`).join(' ')}`);
     console.log(`verrous        : ${verrous.length} présent(s), ${frais.length} frais dont ${fraisSet.length} de SET${verrous.length ? ' — ' + verrous.map(v => `${v._id} pid ${v.verrou.pid} sur ${v.verrou.hote}, battement il y a ${Math.round(ageDe(v.verrou) / 1000)} s`).join(' · ') : ''}`);
     console.log(`dernière image : ${age == null ? 'aucune' : `il y a ${Math.round(age / 1000)} s`} · ${total} images en base, toutes sources`);
+    // L'alerte de l'alimentateur (collecte-cartes/alimentateur.js) : une file restée vide APRÈS son passage.
+    const alerte = await db.collection('collecte_images_etat').findOne({ _id: 'alerte/file-vide', active: true });
+    if (alerte) console.log(`🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()} (constatée ${new Date(alerte.constateLe).toISOString()}) : ${alerte.setsSansVisuelComplet} sets, ${alerte.cartesSansVisuel} cartes sans visuel, rien d'enfilable — ${JSON.stringify(alerte.raisons)}`);
+    else if (!attente && !enCours.length) console.log(`⚠️ file vide et AUCUNE alerte écrite : le worker tourne sur un commit sans alimentateur, ou ne tourne pas`);
 
     const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS);
     console.log(bouge
