@@ -97,6 +97,21 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         // 7. Serveur pas encore redéployé (pas de champ `appris`) : repli sur le seuil des numéros, et c'est DIT.
         const G = await charger(navigateur, {}, [OK(3, { produits: 191, avecNumero: 161, pourcent: 84 })], 1500);
         verifier('7. sans `appris` : le panneau dit que le serveur n\'est pas redéployé', /pas encore redéployé/.test(G.panneau), true);
+
+        // 8. LE CAS RÉEL DU 2026-09-24 : Unnumbered Promos (4170). Aucune carte n'a de numéro, ni dans le titre ni dans le
+        //    slug : la route d'avant jetait tout le lot, et la 1.6 marquait pourtant la page « apprise ». La 1.7 la RENVOIE.
+        const URL_UNP = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/Unnumbered-Promos';
+        const unp = (id, slug, nom) => `<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Unnumbered-Promos/${slug}"><img data-echo="https://product-images.s3.cardmarket.com/51/UNP/${id}/${id}.jpg" alt="${nom}"><h2>${nom}</h2></a>`;
+        const HTML_UNP = `<!doctype html><html><body>${unp(806285, 'Boss-s-Orders-Lysandre-UNP', 'Boss\'s Orders - Lysandre')}${unp(903176, 'Arceus-Lv100-Judgment-UNP', 'Arceus Lv.100')}</body></html>`;
+        const OK_UNP = { status: 200, entetes: 'ratelimit-remaining: 110', corps: { success: true, recus: 2, nouvelles: 2, ameliorees: 0, dejaExactes: 0, completees: 0, sansNumero: 2, ignorees: 0, idExpansion: 4170, idExpansions: [4170], couverture: { produits: 208, avecNumero: 0, appris: 207, pourcent: 0 } } };
+        const H = await charger(navigateur, { rm_pagesFaites: { '/fr/Pokemon/Products/Singles/Unnumbered-Promos': { le: 1, n: 2 } } }, [OK_UNP], 1500, { url: URL_UNP, html: HTML_UNP });
+        verifier('8. page sans numéro marquée par la 1.6 : RENVOYÉE (1 envoi, 2 cartes, slug compris)', H.appels.filter(x => x.chemin === '/api/apprendre-lot').map(l => [l.corps.cartes.length, l.corps.cartes[0].slug]), [[2, 'Boss-s-Orders-Lysandre-UNP']]);
+        verifier('   le bilan dit « appris par leur slug », jamais « ignorées »', [/2 sans numéro : appris par leur slug/.test(H.panneau), /ignorées/.test(H.panneau)], [true, false]);
+        verifier('   et la page est marquée par la 1.7', H.store.rm_pagesFaites['/fr/Pokemon/Products/Singles/Unnumbered-Promos'].v, 17);
+
+        // 9. Une page NUMÉROTÉE marquée par la 1.6 reste apprise : la route d'avant l'avait bien écrite.
+        const I = await charger(navigateur, { rm_pagesFaites: { '/fr/Pokemon/Products/Singles/30th-Celebration': { le: 1, n: 3 } } }, [OK(3)], 1500);
+        verifier('9. page numérotée marquée par la 1.6 : 0 envoi', I.appels.length, 0);
     } finally { await navigateur.close(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

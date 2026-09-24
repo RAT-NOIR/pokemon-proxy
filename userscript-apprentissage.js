@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage manuel Cardmarket
 // @namespace    rat-market
-// @version      1.6
+// @version      1.7
 // @description  Apprend chaque page de galerie Singles dès son chargement. Lit UNIQUEMENT la page ouverte — ne navigue jamais.
 // @match        https://www.cardmarket.com/*/Pokemon/Products/Singles*
 // @grant        GM_xmlhttpRequest
@@ -10,6 +10,15 @@
 // @connect      pokemon-proxy-ratnoir666.onrender.com
 // @run-at       document-idle
 // ==/UserScript==
+
+// ============================================================
+// CE QUI A CHANGÉ EN 1.7 — 2026-09-24, UNNUMBERED PROMOS (4170) NE S'APPRENAIT PAS
+// ============================================================
+// Aucune carte n'y a de numéro, ni dans le titre ni dans le slug (« Venusaur-V1-UNP ») : le serveur jetait le lot entier
+// (« sans numéro ignorées »), et la 1.6 marquait pourtant la page « apprise ». Le serveur apprend désormais une carte sans
+// numéro par son SLUG (numéro null, jamais inventé). Une page marquée par une version antérieure dont AUCUNE carte n'a de
+// numéro de titre n'avait donc rien écrit : la 1.7 la considère comme NON apprise et la renvoie au chargement.
+// Le bilan dit « N sans numéro : appris par leur slug » ; « ignorées » ne désigne plus que les cartes sans slug ni numéro.
 
 // ============================================================
 // CE QUI A CHANGÉ EN 1.6 — 2026-09-24, LE PANNEAU DISAIT TROIS CHOSES FAUSSES SUR 30th Celebration
@@ -209,7 +218,7 @@
     return { items, cartes: [...parId.values()] };
   }
 
-  const session = { nouvelles: 0, ameliorees: 0, dejaExactes: 0, completees: 0, sansNumero: 0, envois: 0, restant: null };
+  const session = { nouvelles: 0, ameliorees: 0, dejaExactes: 0, completees: 0, sansNumero: 0, ignorees: 0, envois: 0, restant: null };
   let enCours = false, reprise = null, repriseA = null, bloque = null;
   function planifier(ms) {
     clearTimeout(reprise); repriseA = Date.now() + ms;
@@ -249,9 +258,11 @@
   }
 
   function noterSucces(items, c) {
-    for (const k of ['nouvelles', 'ameliorees', 'dejaExactes', 'completees', 'sansNumero']) session[k] += (c[k] || 0);
+    for (const k of ['nouvelles', 'ameliorees', 'dejaExactes', 'completees', 'sansNumero', 'ignorees']) session[k] += (c[k] || 0);
     const faites = lire('rm_pagesFaites', {});
-    for (const it of items) faites[it.cle] = { le: Date.now(), n: it.cartes.length };
+    // `v: 17` : la marque dit que la page a été apprise par un serveur qui écrit les cartes SANS numéro — il renvoie
+    // `ignorees`. Un serveur plus ancien les jetait : sa marque reste sans `v` (voir `pageApprise`).
+    for (const it of items) faites[it.cle] = { le: Date.now(), n: it.cartes.length, ...(c.ignorees != null ? { v: 17 } : {}) };
     const cles = Object.keys(faites); if (cles.length > 3000) for (const k of cles.sort((a, b) => faites[a].le - faites[b].le).slice(0, cles.length - 3000)) delete faites[k];
     garder('rm_pagesFaites', faites);
     const exps = Array.isArray(c.idExpansions) ? c.idExpansions : (c.idExpansion != null ? [c.idExpansion] : []);
@@ -287,8 +298,12 @@
   // 2026-09-24). Un serveur plus ancien ne le renvoie pas : on retombe alors sur le seuil des numéros.
   const complete = cv => !!cv && (cv.appris != null ? cv.appris >= cv.produits : cv.pourcent >= SEUIL_TERMINEE);
   const faite = cv => complete(cv) || !!(cv && (cv.parcourue || cv.terminee));
+  // Une marque posée par un serveur d'avant le 2026-09-24 sur une page dont AUCUNE carte n'a de numéro de titre n'a rien
+  // écrit : ce serveur jetait les cartes sans numéro (Unnumbered Promos, énergies de base). Elle ne compte pas — la page repart.
+  const pageApprise = m => !!m && (m.v >= 17 || cartesPage.some(c => c.numero));
+  const marqueDeLaPage = () => { const m = lire('rm_pagesFaites', {})[ctx.cle]; return pageApprise(m) ? m : null; };
   // « Déjà apprise » ne se dit que d'une page apprise AVANT ce chargement — pas de celle qu'on vient d'envoyer.
-  const faiteAvant = lire('rm_pagesFaites', {})[ctx.cle] || null;
+  const faiteAvant = marqueDeLaPage();
 
   function majPanneau() {
     const couv = lire('rm_couv', {});
@@ -298,7 +313,7 @@
     const faites = LISTE.filter(([x]) => faite(couv[x])).length;
     const suivante = LISTE.find(([x]) => x !== id && !faite(couv[x]));
     const avecNum = cartesPage.filter(c => c.numero).length;
-    const dejaFaite = lire('rm_pagesFaites', {})[ctx.cle];
+    const dejaFaite = marqueDeLaPage();
     const auto = lire('rm_auto', true);
     const cv = id != null ? couv[id] : null;
     let h = `<div style="display:flex;justify-content:space-between;align-items:center"><b>🐀 Apprentissage</b>` +
@@ -322,11 +337,15 @@
     }
     if (dernierBilan) {
       const c = dernierBilan.c;
-      h += `<div>✅ ${c.nouvelles} nouvelles · ${c.ameliorees} améliorées · ${c.dejaExactes} déjà exactes${c.completees ? ` (${c.completees} complétées)` : ''}${c.sansNumero ? ` · <span style="color:#e6a23c">${c.sansNumero} sans numéro ignorées</span>` : ''}</div>`;
+      // `ignorees` n'existe que sur le serveur qui apprend les cartes sans numéro (2026-09-24) : sans lui, elles étaient jetées.
+      const sansNum = !c.sansNumero ? '' : c.ignorees != null ? ` · <span style="color:#888">${c.sansNumero} sans numéro : appris par leur slug</span>`
+        : ` · <span style="color:#e6a23c">${c.sansNumero} sans numéro ignorées (serveur pas encore redéployé)</span>`;
+      h += `<div>✅ ${c.nouvelles} nouvelles · ${c.ameliorees} améliorées · ${c.dejaExactes} déjà exactes${c.completees ? ` (${c.completees} complétées)` : ''}${sansNum}` +
+        `${c.ignorees ? ` · <span style="color:#e6a23c">${c.ignorees} ignorées (ni numéro ni slug)</span>` : ''}</div>`;
       if (dernierBilan.exps.length > 1) h += `<div style="color:#e6a23c">⚠️ envoi sur ${dernierBilan.exps.length} expansions (${dernierBilan.exps.join(', ')}) : pas de couverture calculée.</div>`;
     }
     if (!cartesPage.length) h += `<div style="color:#e6a23c">${estPage1015() ? '🛑 Cardmarket te limite (erreur 1015). Arrête-toi un moment : ta file et ta liste sont gardées.' : 'Aucune carte lue : passe en vue GALERIE (icône grille).'}</div>`;
-    else if (!avecNum) h += `<div style="color:#e6a23c">⚠️ aucune carte de la page n'a de numéro dans son titre.</div>`;
+    else if (!avecNum) h += `<div style="color:#888">aucune carte de la page n'a de numéro dans son titre : le serveur les apprend par leur slug.</div>`;
     if (faiteAvant && !file.some(x => x.cle === ctx.cle)) h += `<div style="color:#888">Page déjà apprise avant ce chargement (${new Date(faiteAvant.le).toLocaleString()}) : rien n'a été renvoyé.</div>`;
     if (ligneEtat) h += `<div style="margin-top:4px">${esc(ligneEtat)}</div>`;
     if (file.length) h += `<div style="color:#aaa;font-size:11px">📦 ${file.length} page(s) en attente d'envoi${repriseA ? ` · reprise ${new Date(repriseA).toLocaleTimeString()}` : ''}</div>`;
@@ -349,7 +368,7 @@
 
   function apprendreCettePage(forcer) {
     if (!cartesPage.length) { majPanneau(); return; }
-    if (!forcer && lire('rm_pagesFaites', {})[ctx.cle]) { majPanneau(); vider(); return; }
+    if (!forcer && marqueDeLaPage()) { majPanneau(); vider(); return; }
     enfiler({ cle: ctx.cle, slugSet: ctx.slugSet, cartes: cartesPage, le: Date.now(), derniere: !ctx.hrefSuivant });
     bloque = null;
     vider();

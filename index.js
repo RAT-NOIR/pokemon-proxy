@@ -6530,13 +6530,21 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
             console.log(`🔧 [apprendre-lot] ${numeroUrlRecalcules}/${cartes.length} numeroUrl recalculés depuis le slug — la règle du serveur fait foi.`);
         }
 
-        // Cartes exploitables = celles qui ont au moins un numéro (titre ou URL)
-        const lisibles = cartes.filter(c => c.idProduct && (c.numero || c.numeroUrl));
-        const sansNumero = cartes.length - lisibles.length;
+        // Cartes exploitables = un numéro (titre ou URL) OU, à défaut, un SLUG.
+        // 🔴 2026-09-24 : UNE EXPANSION SANS AUCUN NUMÉRO NE S'APPRENAIT PAS. Unnumbered Promos (4170, 208 produits, slugs
+        // « Venusaur-V1-UNP ») : ni le titre ni le slug ne portent de numéro, et la route jetait le lot entier — les 3
+        // produits nouveaux de l'export ne pouvaient pas entrer. L'apprenant Puppeteer (apprentissage-commun.js) écrit ces
+        // lignes depuis toujours : 2 729 lignes `cardmarket` sans numéro en base. Deux règles pour le même geste (§21 bis) :
+        // la route s'aligne. Le slug est ce qui fabrique l'URL et porte le nom ; le numéro reste null, jamais inventé.
+        // `sansNumero` compte désormais les cartes SANS numéro (apprises par leur slug ou non) ; `ignorees`, celles qui
+        // n'ont ni l'un ni l'autre et ne sont PAS écrites.
+        const lisibles = cartes.filter(c => c.idProduct && (c.numero || c.numeroUrl || c.slug));
+        const sansNumero = cartes.filter(c => !(c.numero || c.numeroUrl)).length;
+        const ignorees = cartes.length - lisibles.length;
 
         const ids = [...new Set(lisibles.map(c => Number(c.idProduct)).filter(Boolean))];
         if (ids.length === 0) {
-            return res.json({ success: true, recus: cartes.length, nouvelles: 0, ameliorees: 0, dejaExactes: 0, sansNumero });
+            return res.json({ success: true, recus: cartes.length, nouvelles: 0, ameliorees: 0, dejaExactes: 0, sansNumero, ignorees });
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -6661,7 +6669,7 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         // `idExpansions` : ADDITIF. Les expansions réellement vues dans le lot, pour que le
         // client sache pourquoi `idExpansion` et `couverture` sont nuls sur un lot mixte.
         // `completees` : ADDITIF (2026-09-24), les lignes exactes dont un champ vide a été rempli.
-        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, completees, sansNumero, idExpansion, idExpansions: expansionsDuLot, couverture });
+        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, completees, sansNumero, ignorees, idExpansion, idExpansions: expansionsDuLot, couverture });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
         // Message brut au log, jamais dans la réponse — voir /api/identifier.

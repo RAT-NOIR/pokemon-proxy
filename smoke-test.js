@@ -252,6 +252,22 @@ async function testerLesRoutes() {
         });
         const cv = r.json?.couverture;
         verifier('POST /api/apprendre-lot : couverture 2 produits, 1 numéroté, 2 appris', `${cv?.produits}/${cv?.avecNumero}/${cv?.appris}`, '2/1/2');
+
+        // --- UNE EXPANSION SANS AUCUN NUMÉRO S'APPREND PAR LE SLUG (2026-09-24, Unnumbered Promos 4170) ---
+        // Ni le titre ni le slug (« Venusaur-V1-UNP ») ne portent de numéro : la route jetait tout le lot, alors que
+        // l'apprenant Puppeteer écrit ces lignes (2 729 en base). Une carte SANS slug ni numéro reste ignorée, et le dit.
+        await mgST.connection.db.collection('catalogue_produits').insertMany([
+            { idProduct: 999000005, idExpansion: 999998, name: 'Smoke Promo' }, { idProduct: 999000006, idExpansion: 999998, name: 'Smoke Rien' }]);
+        r = await appeler(port, 'POST', '/api/apprendre-lot', {
+            corps: { userId: 'SMOKE-TEST-USER', cartes: [
+                { idProduct: 999000005, numero: null, codeSet: 'UNP', slug: 'Smoke-Promo-V1-UNP', slugSet: 'Unnumbered-Promos' },
+                { idProduct: 999000006, numero: null, codeSet: 'UNP' }] }
+        });
+        const cu = r.json?.couverture;
+        verifier('POST /api/apprendre-lot sans numéro : 1 nouvelle (par le slug), 1 ignorée (ni slug ni numéro)', `${r.json?.nouvelles}/${r.json?.ignorees}`, '1/1');
+        verifier('   ... couverture 2 produits, 0 numéroté, 1 appris', `${cu?.produits}/${cu?.avecNumero}/${cu?.appris}`, '2/0/1');
+        const unp = await mgST.connection.db.collection('numeros_cartes').findOne({ idProduct: 999000005 });
+        verifier('   ... la ligne : slug posé, numéro null, code UNP', `${unp?.slug}/${unp?.numero}/${unp?.codeSet}`, 'Smoke-Promo-V1-UNP/null/UNP');
     }
 
     r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { userId: 'SMOKE-TEST-USER', cartes: [] } });
@@ -296,8 +312,8 @@ async function testerLesRoutes() {
         const complete = await N.findOne({ idProduct: 999000002 }).lean();
         verifier('   ligne complétée : slug posé', complete?.slug, 'Smoke-Complete-SMK12');
         verifier('   ligne complétée : numéro et code INTACTS (12, SMK)', `${complete?.numero}/${complete?.codeSet}`, '12/SMK');
-        const supprN = (await N.deleteMany({ idProduct: { $in: [999000001, 999000002, 999000003, 999000004] } })).deletedCount;
-        await mongoose.connection.db.collection('catalogue_produits').deleteMany({ idProduct: { $in: [999000003, 999000004] } });
+        const supprN = (await N.deleteMany({ idProduct: { $in: [999000001, 999000002, 999000003, 999000004, 999000005, 999000006] } })).deletedCount;
+        await mongoose.connection.db.collection('catalogue_produits').deleteMany({ idProduct: { $in: [999000003, 999000004, 999000005, 999000006] } });
         const supprC = (await C.deleteMany({ userId: 'SMOKE-TEST-USER' })).deletedCount;
         console.log(`\n🧹 Nettoyage test_scratch : ${supprN} numéro(s), ${supprC} crédit(s) supprimé(s).`);
     }
