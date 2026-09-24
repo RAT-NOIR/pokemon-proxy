@@ -8380,8 +8380,16 @@
   "region": "japonais",
   "bulba": {
    "titre": "Gift Box Emerald (TCG)",
-   "tirage": null,
-   "expansion": "Gift Box Emerald"
+   "tirage": "jp",
+   "expansion": "Gift Box Emerald",
+   "setlist": [
+    "Deoxys Half Deck",
+    "Rayquaza Half Deck"
+   ],
+   "prefixesParDeck": {
+    "Deoxys Half Deck": "D",
+    "Rayquaza Half Deck": "R"
+   }
   },
   "attendu": 38,
   "auto": {
@@ -8391,18 +8399,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : deux demi-decks : préfixes D/R mesurés 19/19, la carte déclare jp « Gift Box Emerald » + deck"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Gift Box Emerald (TCG)",
+   "entrees": {
+    "Gift Box Emerald": 38
+   },
+   "note": "vérification automatique : 38 entrées pour 38 produits, échantillon « Feebas (EX Emerald 50) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Gift Box Emerald (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Gift Box Emerald »"
-   ]
+   "entrees": 38,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 38,
+    "couverts": 0,
+    "numerosSetlist": 19,
+    "taux": 0
+   },
+   "echantillon": "Feebas (EX Emerald 50)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:46:47.877Z",
@@ -8732,8 +8759,11 @@
   "region": "japonais",
   "bulba": {
    "titre": "Ash vs Team Rocket Deck Kit (TCG)",
-   "tirage": null,
-   "expansion": "Ash vs Team Rocket Deck Kit"
+   "tirage": "jp",
+   "expansion": "Ash vs Team Rocket Deck Kit",
+   "setlist": [
+    "Ash vs Team Rocket Deck"
+   ]
   },
   "attendu": 28,
   "auto": {
@@ -8743,18 +8773,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Ash vs Team Rocket Deck », numérotation continue des deux moitiés (14+14/28)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Ash vs Team Rocket Deck Kit (TCG)",
+   "entrees": {
+    "Ash vs Team Rocket Deck Kit": 32
+   },
+   "note": "vérification automatique : 32 entrées pour 28 produits, échantillon « Toxapex (Ash vs Team Rocket Deck 3) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Ash vs Team Rocket Deck Kit (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Ash vs Team Rocket Deck Kit »"
-   ]
+   "entrees": 32,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 28,
+    "couverts": 28,
+    "numerosSetlist": 26,
+    "taux": 1
+   },
+   "echantillon": "Toxapex (Ash vs Team Rocket Deck 3)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.14,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:48:34.887Z",
@@ -8915,8 +8964,13 @@
   "region": "japonais",
   "bulba": {
    "titre": "Stellar Tera Type Starter Sets (TCG)",
-   "tirage": null,
-   "expansion": "Stellar Tera Type Starter Sets"
+   "tirage": "jp",
+   "expansion": "Stellar Tera Type Starter Sets",
+   "deck": "Stellar Tera Type Starter Set Sylveon ex",
+   "setlist": [
+    "Stellar Tera Type Starter Set Sylveon ex"
+   ],
+   "listesDeDeck": true
   },
   "attendu": 25,
   "auto": {
@@ -8926,19 +8980,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : deux starter sets sous un jeton : la section de deck les sépare ; la carte déclare jp « Stellar Tera Type Starter Sets » + deck"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Stellar Tera Type Starter Sets (TCG)",
+   "entrees": {
+    "Stellar Tera Type Starter Sets": 22
+   },
+   "note": "vérification automatique : 22 entrées pour 25 produits, échantillon « Tera Orb (Surging Sparks 189) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Stellar Tera Type Starter Sets (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Stellar Tera Type Starter Sets »",
-    "page redirigée : « Stellar Tera Type Starter Set Sylveon ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion lu est celui de la cible, pas celui de l'expansion Cardmarket)"
-   ]
+   "entrees": 22,
+   "entreesSansPage": 0,
+   "codesEnergie": 3,
+   "couverture": {
+    "produitsNumerotes": 22,
+    "couverts": 22,
+    "numerosSetlist": 22,
+    "taux": 1
+   },
+   "echantillon": "Tera Orb (Surging Sparks 189)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.88,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:49:22.967Z",
@@ -8958,8 +9030,13 @@
   "region": "japonais",
   "bulba": {
    "titre": "Stellar Tera Type Starter Sets (TCG)",
-   "tirage": null,
-   "expansion": "Stellar Tera Type Starter Sets"
+   "tirage": "jp",
+   "expansion": "Stellar Tera Type Starter Sets",
+   "deck": "Stellar Tera Type Starter Set Ceruledge ex",
+   "setlist": [
+    "Stellar Tera Type Starter Set Ceruledge ex"
+   ],
+   "listesDeDeck": true
   },
   "attendu": 25,
   "auto": {
@@ -8969,19 +9046,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : idem, deck Ceruledge ex"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Stellar Tera Type Starter Sets (TCG)",
+   "entrees": {
+    "Stellar Tera Type Starter Sets": 22
+   },
+   "note": "vérification automatique : 22 entrées pour 25 produits, échantillon « Tera Orb (Surging Sparks 189) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Stellar Tera Type Starter Sets (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Stellar Tera Type Starter Sets »",
-    "page redirigée : « Stellar Tera Type Starter Set Ceruledge ex (TCG) » → « Stellar Tera Type Starter Sets » (le nom d'expansion lu est celui de la cible, pas celui de l'expansion Cardmarket)"
-   ]
+   "entrees": 22,
+   "entreesSansPage": 0,
+   "codesEnergie": 3,
+   "couverture": {
+    "produitsNumerotes": 22,
+    "couverts": 22,
+    "numerosSetlist": 22,
+    "taux": 1
+   },
+   "echantillon": "Tera Orb (Surging Sparks 189)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.88,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:49:22.973Z",
@@ -10059,7 +10154,7 @@
   "region": "japonais",
   "bulba": {
    "titre": "Holon Research Tower Lightning Quarter Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Holon Research Tower Lightning Quarter Deck"
   },
   "attendu": 15,
@@ -10070,13 +10165,17 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : la carte déclare jp « Holon Research Tower Lightning Quarter Deck » (échantillon relu)"
   },
   "verifie": null,
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Holon Research Tower Lightning Quarter Deck (TCG)",
    "entrees": 15,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 15,
     "couverts": 15,
@@ -10088,7 +10187,7 @@
    "ratio": 1,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)"
+    "l'échantillon n'a pas de tirage jp « Holon Research Tower Lightning Quarter Deck » (vus : aucun)"
    ]
   },
   "collecte": {
@@ -10813,20 +10912,21 @@
   "bulba": {
    "titre": "HS Trainer Kit (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Gyarados Half Deck",
-    "Raichu Half Deck"
-   ],
+   "expansion": "HS Trainer Kit",
    "setlist": [
     "Gyarados Half Deck",
     "Raichu Half Deck"
-   ]
+   ],
+   "prefixesParDeck": {
+    "Gyarados Half Deck": "G",
+    "Raichu Half Deck": "R"
+   }
   },
   "attendu": 60,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : la carte déclare intl « HS Trainer Kit » + deck (l'expansion de la ligne nommait les demi-decks) ; préfixes G/R 30/30"
   },
   "collecte": {
    "le": "2026-09-15T11:52:08.913Z",
@@ -10836,9 +10936,11 @@
    ]
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "HS Trainer Kit (TCG)",
    "entrees": 60,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 60,
     "couverts": 0,
@@ -10846,12 +10948,20 @@
     "taux": 0
    },
    "echantillon": "Moo-Moo Milk (Neo Genesis 101)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "intl"
+   ],
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage intl « Gyarados Half Deck,Raichu Half Deck » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "HS Trainer Kit (TCG)",
+   "entrees": {
+    "HS Trainer Kit": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 60 produits, échantillon « Moo-Moo Milk (Neo Genesis 101) » (intl)"
   }
  },
  {
@@ -11164,8 +11274,18 @@
   "region": null,
   "bulba": {
    "titre": "Battle Strength Decks (TCG)",
-   "tirage": null,
-   "expansion": "Battle Strength Decks"
+   "tirage": "jp",
+   "expansion": "Battle Strength Decks",
+   "setlist": [
+    "Virizion Strength Deck",
+    "Terrakion Strength Deck",
+    "Cobalion Strength Deck"
+   ],
+   "suffixesParDeck": {
+    "Virizion Battle Strength Deck": "V",
+    "Terrakion Battle Strength Deck": "T",
+    "Cobalion Battle Strength Deck": "C"
+   }
   },
   "attendu": 42,
   "auto": {
@@ -11175,18 +11295,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : trois decks : suffixes V/T/C mesurés 14/14, la carte déclare jp « Battle Strength Decks » + deck"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Battle Strength Decks (TCG)",
+   "entrees": {
+    "Battle Strength Decks": 42
+   },
+   "note": "vérification automatique : 42 entrées pour 42 produits, échantillon « Energy Search (Fossil 59) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Battle Strength Decks (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Strength Decks »"
-   ]
+   "entrees": 42,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 42,
+    "couverts": 0,
+    "numerosSetlist": 14,
+    "taux": 0
+   },
+   "echantillon": "Energy Search (Fossil 59)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:31.063Z",
@@ -11205,8 +11344,16 @@
   "region": null,
   "bulba": {
    "titre": "Mewtwo vs Genesect Deck Kit (TCG)",
-   "tirage": null,
-   "expansion": "Mewtwo vs Genesect Deck Kit"
+   "tirage": "jp",
+   "expansion": "Mewtwo vs Genesect Deck Kit",
+   "setlist": [
+    "Mewtwo Half Deck",
+    "Genesect Half Deck"
+   ],
+   "suffixesParDeck": {
+    "Mewtwo Half Deck": "M",
+    "Genesect Half Deck": "G"
+   }
   },
   "attendu": 32,
   "auto": {
@@ -11216,18 +11363,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : kit à deux demi-decks : Cardmarket suffixe M/G (16/16 chacun), la carte déclare jp « Mewtwo vs Genesect Deck Kit » + deck"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Mewtwo vs Genesect Deck Kit (TCG)",
+   "entrees": {
+    "Mewtwo vs Genesect Deck Kit": 32
+   },
+   "note": "vérification automatique : 32 entrées pour 32 produits, échantillon « Tangela (Legendary Treasures 1) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Mewtwo vs Genesect Deck Kit (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Mewtwo vs Genesect Deck Kit »"
-   ]
+   "entrees": 32,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 32,
+    "couverts": 0,
+    "numerosSetlist": 16,
+    "taux": 0
+   },
+   "echantillon": "Tangela (Legendary Treasures 1)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:31.068Z",
@@ -11511,8 +11677,11 @@
   "region": null,
   "bulba": {
    "titre": "Theater Limited VS Pack (TCG)",
-   "tirage": null,
-   "expansion": "Theater Limited VS Pack"
+   "tirage": "jp",
+   "expansion": "Theater Limited VS Pack",
+   "setlist": [
+    "Theater VS Pack"
+   ]
   },
   "attendu": 18,
   "auto": {
@@ -11522,18 +11691,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Theater VS Pack » (18/18)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Theater Limited VS Pack (TCG)",
+   "entrees": {
+    "Theater Limited VS Pack": 21
+   },
+   "note": "vérification automatique : 21 entrées pour 18 produits, échantillon « Alto Mare's Latias (Theater VS Pack 11) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Theater Limited VS Pack (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Theater Limited VS Pack »"
-   ]
+   "entrees": 21,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 18,
+    "couverts": 18,
+    "numerosSetlist": 18,
+    "taux": 1
+   },
+   "echantillon": "Alto Mare's Latias (Theater VS Pack 11)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.17,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.496Z",
@@ -11716,8 +11904,11 @@
   "region": null,
   "bulba": {
    "titre": "Movie Commemoration VS Pack (TCG)",
-   "tirage": null,
-   "expansion": "Movie Commemoration VS Pack"
+   "tirage": "jp",
+   "expansion": "Movie Commemoration VS Pack",
+   "setlist": [
+    "Movie VS Pack"
+   ]
   },
   "attendu": 16,
   "auto": {
@@ -11727,18 +11918,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Movie VS Pack » (16/19)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Movie Commemoration VS Pack (TCG)",
+   "entrees": {
+    "Movie Commemoration VS Pack": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 16 produits, échantillon « Butler's Dusclops (Movie VS Pack 10) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Movie Commemoration VS Pack (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Movie Commemoration VS Pack »"
-   ]
+   "entrees": 19,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 16,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "echantillon": "Butler's Dusclops (Movie VS Pack 10)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1.19,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.525Z",
@@ -11871,8 +12081,11 @@
   "region": null,
   "bulba": {
    "titre": "Keldeo Battle Strength Deck (TCG)",
-   "tirage": null,
-   "expansion": "Keldeo Battle Strength Deck"
+   "tirage": "jp",
+   "expansion": "Keldeo Battle Strength Deck",
+   "setlist": [
+    "Keldeo Strength Deck"
+   ]
   },
   "attendu": 15,
   "auto": {
@@ -11882,18 +12095,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : liste de deck au jeton « Keldeo Strength Deck » (15/15)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Keldeo Battle Strength Deck (TCG)",
+   "entrees": {
+    "Keldeo Battle Strength Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Klink (Boundaries Crossed 97) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Keldeo Battle Strength Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Keldeo Battle Strength Deck »"
-   ]
+   "entrees": 15,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "echantillon": "Klink (Boundaries Crossed 97)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.540Z",
@@ -11912,8 +12144,12 @@
   "region": null,
   "bulba": {
    "titre": "Leafeon vs Metagross Expert Deck (TCG)",
-   "tirage": null,
-   "expansion": "Leafeon vs Metagross Expert Deck"
+   "tirage": "jp",
+   "expansion": "Leafeon vs Metagross Expert Deck",
+   "setlist": [
+    "Leafeon Deck"
+   ],
+   "deck": "Leafeon Deck"
   },
   "attendu": 15,
   "auto": {
@@ -11923,18 +12159,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : Cardmarket ne vend que le deck Leafeon (15/15 numéro+nom, Metagross 0/14) : la ligne se restreint au deck, plus aucun numéro doublé"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Leafeon vs Metagross Expert Deck (TCG)",
+   "entrees": {
+    "Leafeon vs Metagross Expert Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Good Rod (Unleashed 76) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Leafeon vs Metagross Expert Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Leafeon vs Metagross Expert Deck »"
-   ]
+   "entrees": 15,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "echantillon": "Good Rod (Unleashed 76)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:53:47.545Z",
@@ -14829,7 +15084,11 @@
   "bulba": {
    "titre": "Hidden Fates (TCG)",
    "tirage": "intl",
-   "expansion": "Hidden Fates"
+   "expansion": "Hidden Fates",
+   "setlist": [
+    "Hidden Fates",
+    "Shiny Vault"
+   ]
   },
   "attendu": 163,
   "auto": {
@@ -14839,28 +15098,37 @@
    "cartesListe": 68,
    "sectionListe": "Sun & Moon Series",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : Shiny Vault (SV1…SV94) sur la même page : 69 + 94 = 163/163"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Hidden Fates (TCG)",
+   "entrees": {
+    "Hidden Fates": 163
+   },
+   "note": "vérification automatique : 163 entrées pour 163 produits, échantillon « Voltorb (Celestial Storm 47) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Hidden Fates (TCG)",
-   "entrees": 69,
+   "entrees": 163,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 163,
-    "couverts": 69,
-    "numerosSetlist": 69,
-    "taux": 0.423
+    "couverts": 163,
+    "numerosSetlist": 163,
+    "taux": 1
    },
-   "echantillon": "Golem (Hidden Fates 35)",
+   "echantillon": "Voltorb (Celestial Storm 47)",
    "tiragesVus": [
     "intl"
    ],
-   "ratio": 0.42,
-   "etat": "À REGARDER",
-   "raisons": [
-    "entrées/produits 0.42 hors [0,5 ; 1,5] et couverture des numéros 69/163 = 42 % sous 95 %"
-   ]
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:06:48.225Z",
@@ -16824,7 +17092,12 @@
   "bulba": {
    "titre": "Platinum: Arceus (TCG)",
    "tirage": "intl",
-   "expansion": "Platinum: Arceus"
+   "expansion": "Platinum: Arceus",
+   "setlist": [
+    "Arceus",
+    "Arceus cards",
+    "Shiny cards"
+   ]
   },
   "attendu": 114,
   "auto": {
@@ -16834,18 +17107,37 @@
    "cartesListe": 99,
    "sectionListe": "HeartGold & SoulSilver Series",
    "regionCodesSet": "occidental",
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : sections « Arceus », « Arceus cards », « Shiny cards » ; 90 cartes de la base déclarent déjà « Platinum: Arceus »"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Platinum: Arceus (TCG)",
+   "entrees": {
+    "Platinum: Arceus": 111
+   },
+   "note": "vérification automatique : 111 entrées pour 114 produits, échantillon « Burmy (Arceus 56) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Platinum: Arceus (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Platinum: Arceus »"
-   ]
+   "entrees": 111,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 114,
+    "couverts": 114,
+    "numerosSetlist": 111,
+    "taux": 1
+   },
+   "echantillon": "Burmy (Arceus 56)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.97,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:28:12.393Z",
@@ -18628,7 +18920,10 @@
   "bulba": {
    "titre": "SVE Basic Energies (TCG)",
    "tirage": "intl",
-   "expansion": "SVE Basic Energies"
+   "expansion": "SVE Basic Energies",
+   "setlist": [
+    "SVE Basic Energy cards"
+   ]
   },
   "attendu": 56,
   "auto": {
@@ -18638,18 +18933,37 @@
    "cartesListe": 24,
    "sectionListe": "Basic Energy Cards",
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : section « SVE Basic Energy cards » (56/56)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "SVE Basic Energies (TCG)",
+   "entrees": {
+    "SVE Basic Energies": 24
+   },
+   "note": "vérification automatique : 24 entrées pour 56 produits, échantillon « Basic Psychic Energy (TCG) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "SVE Basic Energies (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « SVE Basic Energies »"
-   ]
+   "entrees": 24,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 56,
+    "couverts": 56,
+    "numerosSetlist": 24,
+    "taux": 1
+   },
+   "echantillon": "Basic Psychic Energy (TCG)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.43,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-16T05:43:57.000Z",
@@ -19882,7 +20196,10 @@
   "bulba": {
    "titre": "McDonald's Collection 2023 (TCG)",
    "tirage": "intl",
-   "expansion": "McDonald's Collection 2023"
+   "expansion": "McDonald's Collection 2023",
+   "setlist": [
+    "Match Battle 2023"
+   ]
   },
   "attendu": 15,
   "auto": {
@@ -19892,18 +20209,37 @@
    "cartesListe": 15,
    "sectionListe": "McDonald's Collection",
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : section « Match Battle 2023 » (15/15)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "McDonald's Collection 2023 (TCG)",
+   "entrees": {
+    "McDonald's Collection 2023": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Kilowattrel (Scarlet & Violet 79) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "McDonald's Collection 2023 (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « McDonald's Collection 2023 »"
-   ]
+   "entrees": 15,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "echantillon": "Kilowattrel (Scarlet & Violet 79)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-19T07:58:24.975Z",
@@ -20208,7 +20544,10 @@
   "bulba": {
    "titre": "MEE Basic Energies (TCG)",
    "tirage": "intl",
-   "expansion": "MEE Basic Energies"
+   "expansion": "MEE Basic Energies",
+   "setlist": [
+    "MEE Basic Energy cards"
+   ]
   },
   "attendu": 8,
   "auto": {
@@ -20218,18 +20557,37 @@
    "cartesListe": 16,
    "sectionListe": "[[File:SetSymbolPromo.png|40px]] Black Star Promotional Cards",
    "regionCodesSet": null,
-   "genereLe": "2026-09-14"
+   "genereLe": "2026-09-14",
+   "aLaMain": true,
+   "note": "2026-09-25 : section « MEE Basic Energy cards » (16/16)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "MEE Basic Energies (TCG)",
+   "entrees": {
+    "MEE Basic Energies": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 8 produits, échantillon « Basic Grass Energy (TCG) » (intl)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "MEE Basic Energies (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « MEE Basic Energies »"
-   ]
+   "entrees": 16,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 16,
+    "numerosSetlist": 16,
+    "taux": 1
+   },
+   "echantillon": "Basic Grass Energy (TCG)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 2,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-19T07:59:10.731Z",
@@ -22378,7 +22736,11 @@
   "bulba": {
    "titre": "Battle Master Deck Terastal Charizard ex (TCG)",
    "tirage": "jp",
-   "expansion": "Battle Master Deck Terastal Charizard ex"
+   "expansion": "Battle Master Deck Terastal Charizard ex",
+   "setlist": [
+    "Battle Master Deck Terastal Charizard ex"
+   ],
+   "listesDeDeck": true
   },
   "attendu": 22,
   "auto": {
@@ -22386,18 +22748,37 @@
    "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
    "nomBulbapedia": "Battle Master Deck Terastal Charizard ex",
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "aLaMain": true,
+   "note": "2026-09-25 : deux decks sous le jeton « Battle Master Deck » : la section les sépare (19/21)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Battle Master Decks (TCG)",
+   "entrees": {
+    "Battle Master Deck Terastal Charizard ex": 21
+   },
+   "note": "vérification automatique : 21 entrées pour 22 produits, échantillon « Super Rod (Neo Genesis 103) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Battle Master Decks (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Master Deck Terastal Charizard ex »"
-   ]
+   "entrees": 21,
+   "entreesSansPage": 0,
+   "codesEnergie": 1,
+   "couverture": {
+    "produitsNumerotes": 21,
+    "couverts": 21,
+    "numerosSetlist": 21,
+    "taux": 1
+   },
+   "echantillon": "Super Rod (Neo Genesis 103)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:09:55.625Z",
@@ -23323,7 +23704,10 @@
   "bulba": {
    "titre": "Mirage's Mew Constructed Starter Deck (TCG)",
    "tirage": "jp",
-   "expansion": "Mirage's Mew Constructed Starter Deck"
+   "expansion": "Mirage's Mew Constructed Starter Deck",
+   "setlist": [
+    "Mew Starter Deck"
+   ]
   },
   "attendu": 16,
   "auto": {
@@ -23331,18 +23715,37 @@
    "liste": "impressions jpdeck de l'archive (parseur b9b0297)",
    "nomBulbapedia": "Mirage's Mew Constructed Starter Deck",
    "regionCodesSet": "japonais",
-   "genereLe": "2026-09-15"
+   "genereLe": "2026-09-15",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Mew Starter Deck » (15/16)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Mirage's Mew Constructed Starter Deck (TCG)",
+   "entrees": {
+    "Mirage's Mew Constructed Starter Deck": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « Furret (EX Legend Maker 33) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Mirage's Mew Constructed Starter Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Mirage's Mew Constructed Starter Deck »"
-   ]
+   "entrees": 16,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 16,
+    "numerosSetlist": 16,
+    "taux": 1
+   },
+   "echantillon": "Furret (EX Legend Maker 33)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:14:00.346Z",
@@ -24075,7 +24478,44 @@
    "titre": "Battle Party Set (ATCG)",
    "tirage": "zh-hans",
    "expansion": "Battle Party Set",
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "listesDeDeck": true,
+   "setlist": [
+    "Grass Deck",
+    "Fire Deck",
+    "Water Deck",
+    "Lightning Deck",
+    "Psychic Deck",
+    "Fighting Deck",
+    "Darkness Deck",
+    "Metal Deck",
+    "Battle Party Set Reward Pack",
+    "Grass Modification Pack",
+    "Fire Modification Pack",
+    "Water Modification Pack",
+    "Lightning Modification Pack",
+    "Psychic Modification Pack",
+    "Fighting Modification Pack",
+    "Darkness Modification Pack"
+   ],
+   "prefixesParJeton": {
+    "Battle Party Set Grass": "a",
+    "Battle Party Set Fire": "b",
+    "Battle Party Set Water": "c",
+    "Battle Party Set Lightning": "d",
+    "Battle Party Set Psychic": "e",
+    "Battle Party Set Fighting": "f",
+    "Battle Party Set Darkness": "g",
+    "Battle Party Set Metal": "h",
+    "Battle Party Set Reward": "i",
+    "Battle Party Set Grass Modification": "j",
+    "Battle Party Set Fire Modification": "k",
+    "Battle Party Set Water Modification": "l",
+    "Battle Party Set Lightning Modification": "m",
+    "Battle Party Set Psychic Modification": "n",
+    "Battle Party Set Fighting Modification": "o",
+    "Battle Party Set Darkness Modification": "p"
+   }
   },
   "attendu": 299,
   "auto": {
@@ -24085,18 +24525,32 @@
    "regionCodesSet": null,
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15",
-   "aLaMain": "route « (ATCG) » — ligne du 2026-09-15, à conserver : le générateur automatique exclut le chinois et ne la refabriquerait pas."
+   "aLaMain": true,
+   "note": "2026-09-25 : huit decks (listes Halfdecklist) et huit packs ; lettre Cardmarket par liste mesurée numéro+nom (21-25/21-25 par deck, 47/48 reward, 9-10/10 par pack ; Metal Modification : aucun produit Cardmarket)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Battle Party Set (ATCG)",
+   "entrees": {
+    "Battle Party Set": 305
+   },
+   "note": "vérification automatique : 305 entrées pour 299 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Battle Party Set (ATCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Battle Party Set »"
-   ]
+   "entrees": 305,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 299,
+    "couverts": 298,
+    "numerosSetlist": 304,
+    "taux": 0.997
+   },
+   "ratio": 1.02,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:40:44.014Z",
@@ -24272,7 +24726,15 @@
    "titre": "Battle Party: Shining Dream (ATCG)",
    "tirage": "zh-hans",
    "expansion": "Battle Party: Shining Dream",
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Battle Party: Shining Dream",
+    "Battle King Reward Pack"
+   ],
+   "prefixesParJeton": {
+    "Battle Party: Shining Dream": "",
+    "Battle Party: Shining Dream Reward Pack": "p"
+   }
   },
   "attendu": 232,
   "auto": {
@@ -24282,9 +24744,17 @@
    "regionCodesSet": null,
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15",
-   "aLaMain": "route « (ATCG) » — ligne du 2026-09-15, à conserver : le générateur automatique exclut le chinois et ne la refabriquerait pas."
+   "aLaMain": true,
+   "note": "2026-09-25 : Reward Pack numéroté p001… chez Cardmarket, mesuré 24/24"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Battle Party: Shining Dream (ATCG)",
+   "entrees": {
+    "Battle Party: Shining Dream": 232
+   },
+   "note": "vérification automatique : 232 entrées pour 232 produits, échantillon « undefined » (zh-hans)"
+  },
   "collecteAvant": [
    {
     "le": "2026-09-15T19:43:34.442Z",
@@ -24312,20 +24782,20 @@
    }
   ],
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Battle Party: Shining Dream (ATCG)",
-   "entrees": 208,
+   "entrees": 232,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 232,
-    "couverts": 207,
-    "numerosSetlist": 207,
-    "taux": 0.892
+    "couverts": 231,
+    "numerosSetlist": 231,
+    "taux": 0.996
    },
-   "ratio": 0.9,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 207/232 sous 0,95"
-   ]
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:55:07.179Z",
@@ -25146,7 +25616,17 @@
    "titre": "Master Strategy Deck Building Sets (ATCG)",
    "tirage": "zh-hans",
    "expansion": "Master Strategy Deck Building Sets",
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Charizard ex Master Strategy Deck Building Set",
+    "Gardevoir ex Master Strategy Deck Building Set",
+    "Miraidon ex Master Strategy Deck Building Set"
+   ],
+   "prefixesParJeton": {
+    "Charizard ex Master Strategy Deck Building Set": "a",
+    "Gardevoir ex Master Strategy Deck Building Set": "b",
+    "Miraidon ex Master Strategy Deck Building Set": "c"
+   }
   },
   "attendu": 94,
   "auto": {
@@ -25156,18 +25636,32 @@
    "regionCodesSet": null,
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-15",
-   "aLaMain": "route « (ATCG) » — ligne du 2026-09-15, à conserver : le générateur automatique exclut le chinois et ne la refabriquerait pas."
+   "aLaMain": true,
+   "note": "2026-09-25 : trois des six decks vendus par Cardmarket (a/b/c), mesurés 28/32, 31/33, 26/28"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Master Strategy Deck Building Sets (ATCG)",
+   "entrees": {
+    "Master Strategy Deck Building Sets": 94
+   },
+   "note": "vérification automatique : 94 entrées pour 94 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Master Strategy Deck Building Sets (ATCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Master Strategy Deck Building Sets »"
-   ]
+   "entrees": 94,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 94,
+    "couverts": 91,
+    "numerosSetlist": 91,
+    "taux": 0.968
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:46:09.295Z",
@@ -27572,38 +28066,49 @@
   "bulba": {
    "titre": "XY Trainer Kit: Pikachu Libre & Suicune (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Pikachu Libre Half Deck",
-    "Suicune Half Deck"
-   ],
+   "expansion": "XY Trainer Kit: Pikachu Libre & Suicune",
    "setlist": [
     "Pikachu Libre Half Deck",
     "Suicune Half Deck"
-   ]
+   ],
+   "prefixesParDeck": {
+    "Pikachu Libre Half Deck": "P-",
+    "Suicune Half Deck": "S-"
+   }
   },
   "attendu": 61,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : la carte déclare le kit + deck ; préfixes « P- »/« S- » 30/30"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "XY Trainer Kit: Pikachu Libre & Suicune (TCG)",
    "entrees": 60,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 60,
     "couverts": 0,
     "numerosSetlist": 30,
     "taux": 0
    },
-   "echantillon": "Basic Water Energy (TCG)",
-   "tiragesVus": [],
+   "echantillon": "Pikachu Libre (Pikachu Libre Half Deck 14)",
+   "tiragesVus": [
+    "intl"
+   ],
    "ratio": 0.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage intl « Pikachu Libre Half Deck,Suicune Half Deck » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "XY Trainer Kit: Pikachu Libre & Suicune (TCG)",
+   "entrees": {
+    "XY Trainer Kit: Pikachu Libre & Suicune": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 61 produits, échantillon « Pikachu Libre (Pikachu Libre Half Deck 14) » (intl)"
   }
  },
  {
@@ -27616,25 +28121,28 @@
   "bulba": {
    "titre": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Lycanroc Half Deck",
-    "Alolan Raichu Half Deck"
-   ],
+   "expansion": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu",
    "setlist": [
     "Lycanroc Half Deck",
     "Alolan Raichu Half Deck"
-   ]
+   ],
+   "prefixesParDeck": {
+    "Lycanroc Half Deck": "L",
+    "Alolan Raichu Half Deck": "A"
+   }
   },
   "attendu": 61,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : la carte déclare le kit + deck ; préfixes L/A 30/30"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu (TCG)",
    "entrees": 65,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 60,
     "couverts": 0,
@@ -27642,12 +28150,20 @@
     "taux": 0
    },
    "echantillon": "Basic Fighting Energy (TCG)",
-   "tiragesVus": [],
+   "tiragesVus": [
+    "intl"
+   ],
    "ratio": 1.07,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage intl « Lycanroc Half Deck,Alolan Raichu Half Deck » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu (TCG)",
+   "entrees": {
+    "Sun & Moon Trainer Kit: Lycanroc & Alolan Raichu": 65
+   },
+   "note": "vérification automatique : 65 entrées pour 61 produits, échantillon « Basic Fighting Energy (TCG) » (intl)"
   }
  },
  {
@@ -27732,38 +28248,46 @@
   "bulba": {
    "titre": "Intro Pack Neo (TCG)",
    "tirage": "jp",
-   "expansion": [
-    "Totodile Half Deck",
-    "Totodile Side"
-   ],
+   "expansion": "Intro Pack Neo",
    "setlist": [
-    "Totodile Half Deck",
-    "Totodile Side Deck"
-   ]
+    "Totodile Half Deck"
+   ],
+   "deck": "Totodile Half Deck",
+   "listesDeDeck": true
   },
   "attendu": 40,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : la carte déclare jp « Intro Pack Neo » + deck ; le demi-deck est numéroté 1–30, le side deck ne l'est pas"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Intro Pack Neo (TCG)",
-   "entrees": 39,
+   "entrees": 30,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 30,
     "couverts": 30,
-    "numerosSetlist": 31,
+    "numerosSetlist": 30,
     "taux": 1
    },
-   "echantillon": "Potion (Base Set 94)",
-   "tiragesVus": [],
-   "ratio": 0.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Totodile Half Deck,Totodile Side » (vus : aucun)"
-   ]
+   "echantillon": "Totodile (Totodile Half Deck 16)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.75,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Intro Pack Neo (TCG)",
+   "entrees": {
+    "Intro Pack Neo": 30
+   },
+   "note": "vérification automatique : 30 entrées pour 40 produits, échantillon « Totodile (Totodile Half Deck 16) » (jp)"
   }
  },
  {
@@ -27776,38 +28300,46 @@
   "bulba": {
    "titre": "Intro Pack Neo (TCG)",
    "tirage": "jp",
-   "expansion": [
-    "Chikorita Half Deck",
-    "Chikorita Side"
-   ],
+   "expansion": "Intro Pack Neo",
    "setlist": [
-    "Chikorita Half Deck",
-    "Chikorita Side Deck"
-   ]
+    "Chikorita Half Deck"
+   ],
+   "deck": "Chikorita Half Deck",
+   "listesDeDeck": true
   },
   "attendu": 40,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : idem, demi-deck Chikorita"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Intro Pack Neo (TCG)",
-   "entrees": 39,
+   "entrees": 30,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 30,
     "couverts": 30,
-    "numerosSetlist": 31,
+    "numerosSetlist": 30,
     "taux": 1
    },
-   "echantillon": "Bill (Base Set 91)",
-   "tiragesVus": [],
-   "ratio": 0.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Chikorita Half Deck,Chikorita Side » (vus : aucun)"
-   ]
+   "echantillon": "Cyndaquil (Chikorita Half Deck 16)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.75,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Intro Pack Neo (TCG)",
+   "entrees": {
+    "Intro Pack Neo": 30
+   },
+   "note": "vérification automatique : 30 entrées pour 40 produits, échantillon « Cyndaquil (Chikorita Half Deck 16) » (jp)"
   }
  },
  {
@@ -27820,28 +28352,47 @@
   "bulba": {
    "titre": "Pokémon Trading Card Game Classic (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Venusaur Deck"
-   ],
+   "expansion": "Pokémon Trading Card Game Classic",
    "setlist": [
     "Venusaur & Lugia ex Deck"
-   ]
+   ],
+   "deck": "Venusaur & Lugia ex Deck",
+   "listesDeDeck": true,
+   "sectionOccurrence": 1
   },
   "attendu": 35,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : la carte déclare intl « Pokémon Trading Card Game Classic » + deck ; 1re section = la liste anglaise (31/32)"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Venusaur Deck »"
-   ]
+   "entrees": 32,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 35,
+    "couverts": 33,
+    "numerosSetlist": 32,
+    "taux": 0.943
+   },
+   "echantillon": "Lugia ex (Venusaur Deck 17)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.91,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": {
+    "Pokémon Trading Card Game Classic": 32
+   },
+   "note": "vérification automatique : 32 entrées pour 35 produits, échantillon « Lugia ex (Venusaur Deck 17) » (intl)"
   }
  },
  {
@@ -27854,28 +28405,47 @@
   "bulba": {
    "titre": "Pokémon Trading Card Game Classic (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Charizard Deck"
-   ],
+   "expansion": "Pokémon Trading Card Game Classic",
    "setlist": [
     "Charizard & Ho-Oh ex Deck"
-   ]
+   ],
+   "deck": "Charizard & Ho-Oh ex Deck",
+   "listesDeDeck": true,
+   "sectionOccurrence": 1
   },
   "attendu": 34,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : idem, deck Charizard & Ho-Oh ex"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Charizard Deck »"
-   ]
+   "entrees": 32,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 34,
+    "couverts": 32,
+    "numerosSetlist": 32,
+    "taux": 0.941
+   },
+   "echantillon": "Miltank (Secret Wonders 55)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": {
+    "Pokémon Trading Card Game Classic": 32
+   },
+   "note": "vérification automatique : 32 entrées pour 34 produits, échantillon « Miltank (Secret Wonders 55) » (intl)"
   }
  },
  {
@@ -27888,28 +28458,47 @@
   "bulba": {
    "titre": "Pokémon Trading Card Game Classic (TCG)",
    "tirage": "intl",
-   "expansion": [
-    "Blastoise Deck"
-   ],
+   "expansion": "Pokémon Trading Card Game Classic",
    "setlist": [
     "Blastoise & Suicune ex Deck"
-   ]
+   ],
+   "deck": "Blastoise & Suicune ex Deck",
+   "listesDeDeck": true,
+   "sectionOccurrence": 1
   },
   "attendu": 34,
   "auto": {
    "cle": "énumération intitle (2026-09-20)",
    "aLaMain": true,
-   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas"
+   "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas · 2026-09-25 : idem, deck Blastoise & Suicune ex"
   },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Pokémon Trading Card Game Classic (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Blastoise Deck »"
-   ]
+   "entrees": 32,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 34,
+    "couverts": 32,
+    "numerosSetlist": 32,
+    "taux": 0.941
+   },
+   "echantillon": "Kangaskhan (Plasma Blast 71)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.94,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Pokémon Trading Card Game Classic (TCG)",
+   "entrees": {
+    "Pokémon Trading Card Game Classic": 32
+   },
+   "note": "vérification automatique : 32 entrées pour 34 produits, échantillon « Kangaskhan (Plasma Blast 71) » (intl)"
   }
  },
  {
@@ -27971,8 +28560,11 @@
   "region": null,
   "bulba": {
    "titre": "Torchic Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Torchic Constructed Starter Deck"
+   "tirage": "jp",
+   "expansion": "Torchic Constructed Starter Deck",
+   "setlist": [
+    "Torchic Starter Deck"
+   ]
   },
   "attendu": 19,
   "auto": {
@@ -27982,18 +28574,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-24"
+   "genereLe": "2026-09-24",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Torchic Starter Deck »"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Torchic Constructed Starter Deck (TCG)",
+   "entrees": {
+    "Torchic Constructed Starter Deck": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « Poochyena (EX Ruby & Sapphire 63) » (jp)"
+  },
   "verif": {
    "le": "2026-09-24",
    "pageResolue": "Torchic Constructed Starter Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Torchic Constructed Starter Deck »"
-   ]
+   "entrees": 19,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "echantillon": "Poochyena (EX Ruby & Sapphire 63)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -28005,8 +28616,11 @@
   "region": null,
   "bulba": {
    "titre": "Mudkip Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Mudkip Constructed Starter Deck"
+   "tirage": "jp",
+   "expansion": "Mudkip Constructed Starter Deck",
+   "setlist": [
+    "Mudkip Starter Deck"
+   ]
   },
   "attendu": 19,
   "auto": {
@@ -28016,18 +28630,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-24"
+   "genereLe": "2026-09-24",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Mudkip Starter Deck »"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Mudkip Constructed Starter Deck (TCG)",
+   "entrees": {
+    "Mudkip Constructed Starter Deck": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « Aron (EX Ruby & Sapphire 49) » (jp)"
+  },
   "verif": {
    "le": "2026-09-24",
    "pageResolue": "Mudkip Constructed Starter Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Mudkip Constructed Starter Deck »"
-   ]
+   "entrees": 19,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "echantillon": "Aron (EX Ruby & Sapphire 49)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -28039,8 +28672,11 @@
   "region": null,
   "bulba": {
    "titre": "Treecko Constructed Starter Deck (TCG)",
-   "tirage": null,
-   "expansion": "Treecko Constructed Starter Deck"
+   "tirage": "jp",
+   "expansion": "Treecko Constructed Starter Deck",
+   "setlist": [
+    "Treecko Starter Deck"
+   ]
   },
   "attendu": 19,
   "auto": {
@@ -28050,18 +28686,37 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-24"
+   "genereLe": "2026-09-24",
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Treecko Starter Deck » (19/19)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Treecko Constructed Starter Deck (TCG)",
+   "entrees": {
+    "Treecko Constructed Starter Deck": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « Skitty (EX Ruby & Sapphire 70) » (jp)"
+  },
   "verif": {
    "le": "2026-09-24",
    "pageResolue": "Treecko Constructed Starter Deck (TCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Treecko Constructed Starter Deck »"
-   ]
+   "entrees": 19,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "echantillon": "Skitty (EX Ruby & Sapphire 70)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -28073,7 +28728,7 @@
   "region": null,
   "bulba": {
    "titre": "Holon Research Tower Fire Quarter Deck (TCG)",
-   "tirage": null,
+   "tirage": "jp",
    "expansion": "Holon Research Tower Fire Quarter Deck"
   },
   "attendu": 15,
@@ -28084,7 +28739,9 @@
    "cartesListe": null,
    "sectionListe": null,
    "regionCodesSet": null,
-   "genereLe": "2026-09-24"
+   "genereLe": "2026-09-24",
+   "aLaMain": true,
+   "note": "2026-09-25 : la carte déclare jp « Holon Research Tower Fire Quarter Deck » (échantillon relu)"
   },
   "verifie": null,
   "verif": {
@@ -28092,6 +28749,7 @@
    "pageResolue": "Holon Research Tower Fire Quarter Deck (TCG)",
    "entrees": 15,
    "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 15,
     "couverts": 15,
@@ -28103,7 +28761,7 @@
    "ratio": 1,
    "etat": "À REGARDER",
    "raisons": [
-    "tirage non établi (vus : aucun)"
+    "l'échantillon n'a pas de tirage jp « Holon Research Tower Fire Quarter Deck » (vus : aucun)"
    ]
   }
  },
@@ -28496,8 +29154,13 @@
    "expansion": "Battle Party: Shared Dream",
    "numerosDepuisSetlist": true,
    "setlist": [
-    "Battle Party: Shared Dream"
-   ]
+    "Battle Party: Shared Dream",
+    "Battle King Reward Pack"
+   ],
+   "prefixesParJeton": {
+    "Battle Party: Shared Dream": "",
+    "Battle Party: Shared Dream Reward Pack": "p"
+   }
   },
   "attendu": 202,
   "controle": {
@@ -28513,24 +29176,32 @@
    "nomBulbapedia": "Battle Party: Shared Dream",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVE1C → CSVE1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Battle Party: Shared Dream », reconnue par son en-tête « image=SetSymbolCSVE1 »."
+   "aLaMain": true,
+   "note": "2026-09-25 : Reward Pack numéroté p001… chez Cardmarket, mesuré 22/24"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Battle Party: Shared Dream (ATCG)",
+   "entrees": {
+    "Battle Party: Shared Dream": 202
+   },
+   "note": "vérification automatique : 202 entrées pour 202 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Battle Party: Shared Dream (ATCG)",
-   "entrees": 178,
+   "entrees": 202,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 202,
-    "couverts": 177,
-    "numerosSetlist": 177,
-    "taux": 0.876
+    "couverts": 201,
+    "numerosSetlist": 201,
+    "taux": 0.995
    },
-   "ratio": 0.88,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 177/202 sous 0,95"
-   ]
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -29090,8 +29761,17 @@
    "expansion": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
    "numerosDepuisSetlist": true,
    "setlist": [
-    "Happy Set"
-   ]
+    "Happy Set",
+    "Happy Set Modification Pack",
+    "Happy Set Reward Pack",
+    "Happy Set Happy Pack"
+   ],
+   "prefixesParJeton": {
+    "Happy Set": "",
+    "Happy Set Modification Pack": "a",
+    "Happy Set Reward Pack": "p",
+    "Happy Set Happy Pack": "e"
+   }
   },
   "attendu": 151,
   "controle": {
@@ -29107,24 +29787,32 @@
    "nomBulbapedia": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH4C → CSVH4, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH4 »."
+   "aLaMain": true,
+   "note": "2026-09-25 : préfixe par liste mesuré (a 21/23, p 6/6, e 45/49)"
   },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
-   "entrees": 59,
-   "couverture": {
-    "produitsNumerotes": 151,
-    "couverts": 59,
-    "numerosSetlist": 59,
-    "taux": 0.391
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
+   "entrees": {
+    "Decidueye & Melmetal & Koraidon & Miraidon Happy Set": 137
    },
-   "ratio": 0.39,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 59/151 sous 0,95"
-   ]
+   "note": "vérification automatique : 137 entrées pour 151 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
+   "entrees": 137,
+   "entreesSansPage": 0,
+   "codesEnergie": 14,
+   "couverture": {
+    "produitsNumerotes": 137,
+    "couverts": 137,
+    "numerosSetlist": 137,
+    "taux": 1
+   },
+   "ratio": 0.91,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -29266,22 +29954,29 @@
    "genereLe": "2026-09-24",
    "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVL1C → CSVL1, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Journey Theme Pack (ATCG)",
+   "entrees": {
+    "Journey Theme Pack": 133
+   },
+   "note": "vérification automatique : 133 entrées pour 141 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Journey Theme Pack (ATCG)",
    "entrees": 133,
+   "entreesSansPage": 0,
+   "codesEnergie": 8,
    "couverture": {
-    "produitsNumerotes": 141,
+    "produitsNumerotes": 133,
     "couverts": 133,
     "numerosSetlist": 133,
-    "taux": 0.943
+    "taux": 1
    },
    "ratio": 0.94,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 133/141 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -29401,8 +30096,15 @@
    "expansion": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
    "numerosDepuisSetlist": true,
    "setlist": [
-    "Happy Set"
-   ]
+    "Happy Set",
+    "Happy Set Modification Pack",
+    "Happy Set Reward Pack"
+   ],
+   "prefixesParJeton": {
+    "Happy Set": "",
+    "Happy Set Modification Pack": "a",
+    "Happy Set Reward Pack": "p"
+   }
   },
   "attendu": 118,
   "controle": {
@@ -29418,24 +30120,32 @@
    "nomBulbapedia": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH2C → CSVH2, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH2 »."
+   "aLaMain": true,
+   "note": "2026-09-25 : préfixe par liste mesuré (a 22/23, p 6/6)"
   },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
-   "entrees": 58,
-   "couverture": {
-    "produitsNumerotes": 118,
-    "couverts": 85,
-    "numerosSetlist": 58,
-    "taux": 0.72
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
+   "entrees": {
+    "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set": 87
    },
-   "ratio": 0.49,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 85/118 sous 0,95"
-   ]
+   "note": "vérification automatique : 87 entrées pour 118 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
+   "entrees": 87,
+   "entreesSansPage": 0,
+   "codesEnergie": 4,
+   "couverture": {
+    "produitsNumerotes": 114,
+    "couverts": 114,
+    "numerosSetlist": 87,
+    "taux": 1
+   },
+   "ratio": 0.74,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -29451,8 +30161,15 @@
    "expansion": "Altaria & Latios & Infernape & Maushold Happy Set",
    "numerosDepuisSetlist": true,
    "setlist": [
-    "Happy Set"
-   ]
+    "Happy Set",
+    "Happy Set Modification Pack",
+    "Happy Set Reward Pack"
+   ],
+   "prefixesParJeton": {
+    "Happy Set": "",
+    "Happy Set Modification Pack": "a",
+    "Happy Set Reward Pack": "p"
+   }
   },
   "attendu": 97,
   "controle": {
@@ -29468,24 +30185,32 @@
    "nomBulbapedia": "Altaria & Latios & Infernape & Maushold Happy Set",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH3C → CSVH3, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH3 »."
+   "aLaMain": true,
+   "note": "2026-09-25 : préfixe par liste mesuré (a 22/23, p 6/6)"
   },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
-   "entrees": 64,
-   "couverture": {
-    "produitsNumerotes": 97,
-    "couverts": 64,
-    "numerosSetlist": 64,
-    "taux": 0.66
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
+   "entrees": {
+    "Altaria & Latios & Infernape & Maushold Happy Set": 93
    },
-   "ratio": 0.66,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 64/97 sous 0,95"
-   ]
+   "note": "vérification automatique : 93 entrées pour 97 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
+   "entrees": 93,
+   "entreesSansPage": 0,
+   "codesEnergie": 4,
+   "couverture": {
+    "produitsNumerotes": 93,
+    "couverts": 93,
+    "numerosSetlist": 93,
+    "taux": 1
+   },
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -29556,8 +30281,15 @@
    "expansion": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
    "numerosDepuisSetlist": true,
    "setlist": [
-    "Happy Set"
-   ]
+    "Happy Set",
+    "Happy Set Modification Pack",
+    "Happy Set Reward Pack"
+   ],
+   "prefixesParJeton": {
+    "Happy Set": "",
+    "Happy Set Modification Pack": "a",
+    "Happy Set Reward Pack": "p"
+   }
   },
   "attendu": 92,
   "controle": {
@@ -29573,24 +30305,32 @@
    "nomBulbapedia": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH1C → CSVH1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH1 »."
+   "aLaMain": true,
+   "note": "2026-09-25 : trois listes numérotées depuis 1 ; préfixe Cardmarket par liste MESURÉ numéro+nom (a 22/23, p 6/6, second choix 0)"
   },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
-   "entrees": 59,
-   "couverture": {
-    "produitsNumerotes": 92,
-    "couverts": 59,
-    "numerosSetlist": 59,
-    "taux": 0.641
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
+   "entrees": {
+    "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set": 88
    },
-   "ratio": 0.64,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 59/92 sous 0,95"
-   ]
+   "note": "vérification automatique : 88 entrées pour 92 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
+   "entrees": 88,
+   "entreesSansPage": 0,
+   "codesEnergie": 4,
+   "couverture": {
+    "produitsNumerotes": 88,
+    "couverts": 88,
+    "numerosSetlist": 88,
+    "taux": 1
+   },
+   "ratio": 0.96,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -30041,7 +30781,14 @@
    "titre": "Dynamax Clash Deck Building Gift Box (ATCG)",
    "tirage": "zh-hans",
    "expansion": "Dynamax Clash Deck Building Gift Box",
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "listesDeDeck": true,
+   "setlist": [
+    "Dynamax Clash Deck Building Box"
+   ],
+   "prefixesParJeton": {
+    "Dynamax Clash Deck Building Box": ""
+   }
   },
   "attendu": 24,
   "controle": {
@@ -30057,18 +30804,32 @@
    "nomBulbapedia": "Dynamax Clash Deck Building Gift Box",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSAC → CSA, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+   "aLaMain": true,
+   "note": "2026-09-25 : liste de deck Halfdecklist, jeton sans « Gift » ; 22/24 numéro+nom"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Dynamax Clash Deck Building Gift Box (ATCG)",
+   "entrees": {
+    "Dynamax Clash Deck Building Gift Box": 24
+   },
+   "note": "vérification automatique : 24 entrées pour 24 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Dynamax Clash Deck Building Gift Box (ATCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Dynamax Clash Deck Building Gift Box »"
-   ]
+   "entrees": 24,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 24,
+    "couverts": 24,
+    "numerosSetlist": 24,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -30192,7 +30953,10 @@
    "numerosDepuisSetlist": true,
    "setlist": [
     "Connected Quartet Gift Boxes"
-   ]
+   ],
+   "prefixesParJeton": {
+    "Connected Quartet Gift Box": ""
+   }
   },
   "attendu": 20,
   "controle": {
@@ -30208,24 +30972,32 @@
    "nomBulbapedia": "Connected Quartet Gift Boxes",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSEC → CSE, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Connected Quartet Gift Boxes », reconnue par son en-tête « image=SetSymbolCSE »."
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton « Gift Box » au singulier, écrit en liens (pas de jeton dominant) ; 20/20 numéro+nom"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Connected Quartet Gift Boxes (ATCG)",
+   "entrees": {
+    "Connected Quartet Gift Boxes": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Connected Quartet Gift Boxes (ATCG)",
    "entrees": 20,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 20,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
+    "couverts": 20,
+    "numerosSetlist": 20,
+    "taux": 1
    },
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/20 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -30676,7 +31448,10 @@
    "numerosDepuisSetlist": true,
    "setlist": [
     "Eevee Advanced Gift Boxes"
-   ]
+   ],
+   "prefixesParJeton": {
+    "Eevee Advanced Gift Box": ""
+   }
   },
   "attendu": 9,
   "controle": {
@@ -30692,24 +31467,32 @@
    "nomBulbapedia": "Eevee Advanced Gift Boxes",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSHC → CSH, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee Advanced Gift Boxes », reconnue par son en-tête « image=SetSymbolCSH »."
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton au singulier, écrit en liens ; 9/9 numéro+nom"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Eevee Advanced Gift Boxes (ATCG)",
+   "entrees": {
+    "Eevee Advanced Gift Boxes": 9
+   },
+   "note": "vérification automatique : 9 entrées pour 9 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Eevee Advanced Gift Boxes (ATCG)",
    "entrees": 9,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 9,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
+    "couverts": 9,
+    "numerosSetlist": 9,
+    "taux": 1
    },
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/9 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   }
  },
  {
@@ -30782,7 +31565,10 @@
    "numerosDepuisSetlist": true,
    "setlist": [
     "Eevee-GX Boxes"
-   ]
+   ],
+   "prefixesParJeton": {
+    "Eevee-GX Box": ""
+   }
   },
   "attendu": 8,
   "controle": {
@@ -30798,24 +31584,32 @@
    "nomBulbapedia": "Eevee-GX Gift Box Sets",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMYC → CSMY, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee-GX Boxes », reconnue par son en-tête « image=SetSymbolCSMY »."
+   "aLaMain": true,
+   "note": "2026-09-25 : jeton au singulier, écrit en liens ; 8/8 numéro+nom"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Eevee-GX Gift Box Sets (ATCG)",
+   "entrees": {
+    "Eevee-GX Gift Box Sets": 8
+   },
+   "note": "vérification automatique : 8 entrées pour 8 produits, échantillon « undefined » (zh-hans)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-24",
    "pageResolue": "Eevee-GX Gift Box Sets (ATCG)",
    "entrees": 8,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 8,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
+    "couverts": 8,
+    "numerosSetlist": 8,
+    "taux": 1
    },
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/8 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
   }
  },
  {

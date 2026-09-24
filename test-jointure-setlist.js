@@ -56,9 +56,29 @@ verifier('jetonsDeSetlist : le nom de la table ET le jeton dominant de la page',
 verifier('jeton dominant : le numéro de la page passe', numeroDeSetlist(entreesPromo[0], jetons), '28');
 verifier('jeton dominant : la réimpression est refusée', numeroDeSetlist(entreesPromo[3], jetons), null);
 verifier('entrée sans page : listée', S.sansPage, ['Absente (Transfiguration Mask 9)']);
+const produit = (idProduct, nom, numero) => ({ idProduct, name: nom, nom, attaques: [], numero });
+
+// 🔑 LE PRÉFIXE PAR SECTION (2026-09-25). Un Happy Set chinois range quatre listes sur sa page, chacune sous SON jeton de
+// TCG ID (« Happy Set », « Happy Set Modification Pack »…), et chacune numérotée à partir de 1. Cardmarket écrit « 001 »,
+// « a001 », « e001 », « p001 » — la lettre désigne la liste. Mesuré par numéro ET nom (CSVH4C : a 21/23, e 45/49, p 6/6,
+// second choix 0) : le préfixe se LIT, il ne se devine pas. Sans lui, les quatre n°1 se confondent et trois listes sortent.
+const prefixes = { 'Happy Set Modification Pack': 'a', 'Happy Set Reward Pack': 'p', 'Happy Set': '' };
+const jetonsHappy = jetonsDeSetlist([], ['Decidueye & Melmetal & Koraidon & Miraidon Happy Set']);
+verifier('préfixe par jeton : la liste Modification Pack donne « a » + n°', numeroDeSetlist({ a: 'Happy Set Modification Pack', b: '1', forme: 'tcg-id' }, jetonsHappy, prefixes), 'a1');
+verifier('préfixe par jeton : un LIEN de la liste Reward Pack aussi', numeroDeSetlist({ a: 'Happy Set Reward Pack', b: '6', forme: 'lien' }, jetonsHappy, prefixes), 'p6');
+verifier('préfixe vide : le jeton est reconnu comme celui du set, numéro nu', numeroDeSetlist({ a: 'Happy Set', b: '17', forme: 'lien' }, jetonsHappy, prefixes), '17');
+verifier('un jeton absent de la table des préfixes suit la règle d’avant (réimpression refusée)', numeroDeSetlist({ a: 'Astral Radiance', b: '28', forme: 'tcg-id' }, jetonsHappy, prefixes), null);
+verifier('préfixe par jeton, sans numéro → rien', numeroDeSetlist({ a: 'Happy Set Reward Pack', b: null, forme: 'lien' }, jetonsHappy, prefixes), null);
+verifier('sans table de préfixes, rien ne change', numeroDeSetlist({ a: 'Happy Set Modification Pack', b: '1', forme: 'tcg-id' }, jetonsHappy), null);
+const SH = impressionsDepuisSetlist([{ titre: 'Chansey (Happy Set Modification Pack 1)', a: 'Happy Set Modification Pack', b: '1', forme: 'tcg-id' }],
+    [{ titre: 'Chansey (Happy Set Modification Pack 1)', pageid: 31, etat: 'ok' }],
+    { tirage: 'zh-hans', expansionBulba: 'Decidueye & Melmetal & Koraidon & Miraidon Happy Set', prefixesParJeton: prefixes });
+verifier('impressionsDepuisSetlist lit les préfixes de la cible', (SH.parCarte.get(31) || []).map(i => `${i.expansion}|${i.numero}`), ['Decidueye & Melmetal & Koraidon & Miraidon Happy Set|a1']);
+const JH = joindre([{ _id: 31, nomEn: 'Chansey', attaques: [], impressions: SH.parCarte.get(31) }],
+    [produit(40, 'Chansey', 'a001'), produit(41, 'Rowlet', '001')], { idExpansion: 6543, expansionBulba: 'Decidueye & Melmetal & Koraidon & Miraidon Happy Set', tirage: 'zh-hans', prefixesParJeton: prefixes });
+verifier('« a1 » de la Setlist joint « a001 » de Cardmarket, pas « 001 »', JH.lignes.map(l => `${l.carteId}|${l.idProduct}`), ['31|40']);
 
 const carte = (id, nomEn) => ({ _id: id, nomEn, attaques: [], impressions: [{ tirage: 'intl', expansion: 'Twilight Masquerade', numero: '115' }, ...(S.parCarte.get(id) || [])] });
-const produit = (idProduct, nom, numero) => ({ idProduct, name: nom, nom, attaques: [], numero });
 const J = joindre([carte(11, 'Venipede'), carte(12, 'Pinsir')], [produit(20, 'Pinsir', '168'), produit(21, 'Pinsir', '201'), produit(22, 'Scream Tail ex', '200')], cible);
 verifier('SV6s : seuls les numéros présents chez Cardmarket joignent', J.lignes.map(l => `${l.carteId}|${l.idProduct}`), ['12|20', '12|21']);
 verifier('preuve « setlist+numero », jamais « set+numero »', [...new Set(J.lignes.map(l => l.preuve))], ['setlist+numero']);

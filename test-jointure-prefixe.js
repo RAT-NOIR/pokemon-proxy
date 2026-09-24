@@ -113,5 +113,23 @@ const pAtt = { idProduct: 320, name: 'Gengar', nom: 'Gengar', attaques: ['Shadow
 const JATT = joindre([sansNum(303, 'Gengar', ['Shadow Room']), sansNum(304, 'Gengar', ['Night Watch'])], [pAtt], { idExpansion: 6329, expansionBulba: G, tirage: 'zh-hans' });
 verifier('nom ambigu départagé par les attaques : une seule jointure', paires(JATT), ['303|320']);
 
+// 🔑 LE PRÉFIXE DE DEMI-DECK (2026-09-25), pendant du suffixe des Trainer Kits (« 1N »). Quick Construction Packs : Cardmarket
+// écrit « G1 », « R1 » — la lettre est le pack (Grass, Fire→R) ; Bulbapedia numérote chaque pack 1–15 et le porte dans `deck`.
+// Mesuré par numéro ET nom (15/15 par pack, second choix ≤ 3). Sans la table, rien ne change.
+const QC = 'Quick Construction Packs';
+const deckee = (id, nomEn, deck, numero) => ({ _id: id, nomEn, attaques: [], impressions: [{ tirage: 'jp', expansion: QC, deck, numero }] });
+const cQC = [deckee(400, 'Treecko', 'Grass Quick Construction Pack', '1'), deckee(401, 'Torchic', 'Fire Quick Construction Pack', '1'), deckee(402, 'Grovyle', 'Grass Quick Construction Pack', '2')];
+const pQC = [produit(410, 'Treecko', 'G1'), produit(411, 'Torchic', 'R1'), produit(412, 'Grovyle', 'G2')];
+const prefQC = { 'Grass Quick Construction Pack': 'G', 'Fire Quick Construction Pack': 'R' };
+const JQC = joindre(cQC, pQC, { idExpansion: 5723, expansionBulba: QC, tirage: 'jp', prefixesParDeck: prefQC });
+verifier('préfixe de demi-deck : chaque produit joint la carte de SON pack', paires(JQC), ['400|410', '401|411', '402|412']);
+verifier('préfixe de demi-deck : aucun produit vers plusieurs cartes', multi(JQC), 0);
+const JQC0 = joindre(cQC, pQC, { idExpansion: 5723, expansionBulba: QC, tirage: 'jp' });
+verifier('sans table de préfixes : « 1 » ne joint ni « G1 » ni « R1 »', paires(JQC0).filter(p => /\|41[01]$/.test(p) && !/^40[01]\|/.test(p)), []);
+// TK9 : « P-14 » — le tiret fait partie du préfixe, et cleNumero le garde.
+const cTK = [{ _id: 420, nomEn: 'Pikachu Libre', attaques: [], impressions: [{ tirage: 'intl', expansion: 'XY Trainer Kit: Pikachu Libre & Suicune', deck: 'Pikachu Libre Half Deck', numero: '14' }] }];
+const JTK = joindre(cTK, [produit(430, 'Pikachu Libre', 'P-14'), produit(431, 'Suicune', 'S-14')], { idExpansion: 1707, expansionBulba: 'XY Trainer Kit: Pikachu Libre & Suicune', tirage: 'intl', prefixesParDeck: { 'Pikachu Libre Half Deck': 'P-', 'Suicune Half Deck': 'S-' } });
+verifier('préfixe à tiret « P-14 »', paires(JTK), ['420|430']);
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

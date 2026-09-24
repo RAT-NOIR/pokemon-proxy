@@ -126,7 +126,15 @@ async function verifierAuto() {
             l._p = p;
             if (!p) continue;
             l._entrees = entreesDeLaSetlist(p.content, l.bulba).entrees;
-            const e = l._entrees[Math.floor(l._entrees.length / 2)];
+            // 🔴 UNE PAGE D'ÉNERGIE DE BASE N'EST PAS UN ÉCHANTILLON (2026-09-25). « Water Energy (Suicune Half Deck 1) » redirige
+            // vers « Basic Water Energy (TCG) », une page générique qui liste soixante tirages sans ce kit : TK9, pcgO, pcgM
+            // étaient refusés « l'échantillon n'a pas de tirage » sur ce seul tirage au sort. On prend l'entrée la plus proche
+            // du milieu qui N'EST PAS une énergie de base (définition de wikitext.js), à défaut le milieu comme avant.
+            const { ENERGIE_DE_BASE } = require('./wikitext');
+            const estEnergie = x => new RegExp(`^${ENERGIE_DE_BASE}$`, 'i').test(String(x.nom || '').trim());
+            const milieu = Math.floor(l._entrees.length / 2);
+            const ordre = l._entrees.map((x, i) => [x, Math.abs(i - milieu), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(a => a[0]);
+            const e = ordre.find(x => !estEnergie(x)) || l._entrees[milieu];
             if (e && !l.bulba.numerosDepuisSetlist) echantillons.set(l.code, e.titre);
         }
         const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set(echantillons.values())]) : { pages: [], redirections: new Map() };
@@ -187,8 +195,17 @@ async function verifierAuto() {
                 const absentes = titresManquants.get(l.slugSet) || new Set();
                 const vivantes = l._entrees.filter(x => !absentes.has(x.titre));
                 v.entreesSansPage = l._entrees.length - vivantes.length;
-                const numsSetlist = new Set(vivantes.map(x => numeroDeSetlist(x, jetons)).filter(n => n != null).map(cleNumero));
-                const numsProduits = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '').map(p => cleNumero(p.numero));
+                // `prefixesParJeton` : la MÊME lecture que la jointure (jointure.js, numeroDeSetlist) — sinon la vérification juge
+                // des numéros que la collecte n'écrira pas (§21 bis).
+                const numsSetlist = new Set(vivantes.map(x => numeroDeSetlist(x, jetons, l.bulba.prefixesParJeton || null)).filter(n => n != null).map(cleNumero));
+                // 🔑 UN CODE D'ÉNERGIE N'EST PAS UN NUMÉRO (2026-09-25). Cardmarket « numérote » les Énergies de base d'un deck par un
+                // code de type (GRA, FIR, WAT…), et la Setlist ne les liste pas (`natureIgnoree` : energie-base). Comptées, elles
+                // refusaient Journey Theme Pack à 133/141 alors que ses 133 numéros de carte concordent tous. Retirées du
+                // dénominateur — et imprimées : un retrait qu'on ne compte pas est un filtre silencieux (§39).
+                const CODE_ENERGIE = /^(GRA|FIR|WAT|LIG|PSY|FIG|DAR|MET|FAI|DRA)$/i;
+                const numerosBruts = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '');
+                v.codesEnergie = numerosBruts.filter(p => CODE_ENERGIE.test(String(p.numero).trim())).length;
+                const numsProduits = numerosBruts.filter(p => !CODE_ENERGIE.test(String(p.numero).trim())).map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
                 v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size, taux: numsProduits.length ? Number((couverts / numsProduits.length).toFixed(3)) : null };
                 // La garde des liens rouges vaut pour TOUTE ligne, pas seulement `numerosDepuisSetlist` :
@@ -198,7 +215,7 @@ async function verifierAuto() {
                     raisons.push(`les ${l._entrees.length} entrées de Setlist sont des LIENS ROUGES (aucune page chez Bulbapedia) : rien à collecter`);
                 if (l.bulba.numerosDepuisSetlist) {
                     if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
-                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}`);
+                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}${v.codesEnergie ? ` (${v.codesEnergie} code(s) d'énergie hors dénominateur)` : ''}`);
                 }
             }
             const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;

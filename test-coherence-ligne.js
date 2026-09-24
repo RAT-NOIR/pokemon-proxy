@@ -33,6 +33,12 @@ verifier('tirage non établi (null) : pas de raison de région',
     raisonsDeCoherence(ligne('Some-Set', 'slug exact', 'Some Set', 'japonais'), null), []);
 verifier('occidental lu en jp : raison de région',
     raisonsDeCoherence(ligne('Base-Set', 'slug exact', 'Base Set', 'occidental'), 'jp').length, 1);
+// 2026-09-25 : deux starter sets sur UNE page collective (« Stellar Tera Type Starter Sets »). La carte déclare l'expansion
+// collective ET son deck ; la ligne se restreint au deck, qui porte EXACTEMENT le nom Cardmarket. Seule cette égalité passe.
+const svLN = { ...ligne('Stellar-Tera-Type-Starter-Set-Sylveon-ex', 'page (TCG)', 'Stellar Tera Type Starter Sets', null), bulba: { expansion: 'Stellar Tera Type Starter Sets', deck: 'Stellar Tera Type Starter Set Sylveon ex' } };
+verifier('page collective, deck au nom Cardmarket : aucune raison', raisonsDeCoherence(svLN, 'jp'), []);
+verifier('page collective, deck d\'un AUTRE nom : la redirection crie',
+    raisonsDeCoherence({ ...svLN, bulba: { ...svLN.bulba, deck: 'Stellar Tera Type Starter Set Ceruledge ex' } }, 'jp').length, 1);
 
 // concordanceDesNoms : part des jointures dont le nom du produit (slug Cardmarket) concorde avec le nom de la carte.
 const c20 = concordanceDesNoms([['Rapidash', 'Ninetales'], ['Hitmonchan', 'Meowstic'], ['Blastoise-EX', 'Team Flare Grunt'], ['Venusaur-EX', 'Venusaur']]);

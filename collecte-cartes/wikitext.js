@@ -424,13 +424,20 @@ function faitsDeSet(texte) {
 const COLONNES_DE_MISE_EN_PAGE = /^Flexitem$/i;
 const gabaritsDeLecture = texte => gabarits(texte).flatMap(g => COLONNES_DE_MISE_EN_PAGE.test(String(g.nom).trim()) ? gabaritsDeLecture(g.brut.slice(2, -2)) : [g]);
 
-function sectionsSetlist(texte) {
+// 🔑 LES LISTES DE DECK (2026-09-25). Un deck, un kit, un starter set écrit ses cartes dans `{{Halfdecklist/nmentry|…}}` ou
+// `{{halfdecklist/entry|…}}`, pas dans `{{Setlist/entry}}` : 39 lignes refusées « aucune entrée de Setlist ». Une page à UN
+// deck se lit déjà par le repli dès que la ligne nomme son jeton ; une page à PLUSIEURS decks sous un même jeton (« Battle
+// Master Deck 1 » pour deux decks) ne se sépare que par la SECTION. La lecture est donc OPT-IN (`bulba.listesDeDeck`) : une
+// ligne déjà collectée ne change pas de chemin, par construction — le §20, coût nul non pas mesuré partout mais inatteignable.
+function sectionsSetlist(texte, { listesDeDeck = false } = {}) {
     const sections = [];
     let courante = null;
+    const famille = listesDeDeck ? '(?:Setlist|Halfdecklist)' : 'Setlist';
+    const tete = new RegExp(`^${famille}\\/\\w*header$`, 'i'), pied = new RegExp(`^${famille}\\/\\w*footer$`, 'i'), ligne = new RegExp(`^${famille}\\/\\w*entry$`, 'i');
     for (const g of gabaritsDeLecture(texte)) {
-        if (/^Setlist\/\w*header$/i.test(g.nom)) { courante = { titre: plat(g.params.title) || '', entrees: [], ignorees: [] }; sections.push(courante); continue; }
-        if (/^Setlist\/\w*footer$/i.test(g.nom)) { courante = null; continue; }
-        if (/^Setlist\/\w*entry$/i.test(g.nom)) {
+        if (tete.test(g.nom)) { courante = { titre: plat(g.params.title) || '', entrees: [], ignorees: [] }; sections.push(courante); continue; }
+        if (pied.test(g.nom)) { courante = null; continue; }
+        if (ligne.test(g.nom)) {
             if (!courante) { courante = { titre: '', entrees: [], ignorees: [] }; sections.push(courante); }
             const e = entreeDeSetlist(g.brut);
             if (e) courante.entrees.push(e); else courante.ignorees.push(g.brut);
@@ -541,7 +548,7 @@ function entreesDeLaSetlist(texte, b) {
     const echapper = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nomsExpansion = [].concat(b.expansion);
     const nomsSections = b.setlist === null ? null : (b.setlist || nomsExpansion);
-    const sections = sectionsSetlist(texte);
+    const sections = sectionsSetlist(texte, { listesDeDeck: !!b.listesDeDeck });
     // Un chemin qui FILTRE les entrées des gabarits : ce qu'il écarte et qui portait une référence du set est compté.
     // Une carte déjà retenue par une AUTRE entrée n'est pas masquée : un renvoi « Reprint of … » vers une carte du set est
     // normal sur une page fusionnée, et un signal qui crie sur un cas normal finit contourné (§25).
@@ -596,8 +603,10 @@ function entreesDeLaSetlist(texte, b) {
         horsSet = null; jetonDominant = null; masquees = null;
         surToutLeWikitext = true;
     }
-    if (b.deck) entrees = entrees.filter(e => e.setReconstruit.startsWith(b.deck));
+    // Une section de deck lue sur demande EST le deck : ses entrées portent le jeton de la page (« Stellar Tera Type Starter
+    // Set 1 »), pas le nom du deck, et `deck` ne sert plus qu'à la jointure (impressions déclarées par la carte).
+    if (b.deck && !(b.listesDeDeck && chemin === 'sections-nommees')) entrees = entrees.filter(e => e.setReconstruit.startsWith(b.deck));
     return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE };
+module.exports = { gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };

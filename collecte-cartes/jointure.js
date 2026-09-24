@@ -107,7 +107,7 @@ function impressionsDepuisSetlist(entrees, pages, cible) {
     const noms = [].concat(cible.expansionBulba);
     const jetons = jetonsDeSetlist(entrees, noms);
     for (const e of entrees) {
-        const numero = numeroDeSetlist(e, jetons);
+        const numero = numeroDeSetlist(e, jetons, cible.prefixesParJeton);
         if (numero == null) { sansNumero.push(e.titre); continue; }
         const id = pageDe.get(e.titre);
         if (id == null) { sansPage.push(e.titre); continue; }
@@ -138,10 +138,17 @@ function jetonsDeSetlist(entrees, nomsExpansion) {
  * ⚠️ 2026-09-19 : un TCG ID était accepté quel que soit son set. Les pages de promos listent les RÉIMPRESSIONS
  * (« Psyduck (Astral Radiance 28) ») : leur numéro, pris pour celui du promo, a donné 12 produits joints à plusieurs
  * cartes sur S-P/CS — la garde a arrêté la boucle. Un lien reste soumis à la même règle (coquille non devinée).
+ * 🔑 `prefixes` (ligne de table `bulba.prefixesParJeton`, 2026-09-25) : une page qui range PLUSIEURS listes numérotées
+ * chacune depuis 1, sous leur propre jeton (Happy Set, « … Modification Pack », « … Reward Pack »), et que Cardmarket
+ * distingue par une LETTRE (« a001 », « p001 »). Le préfixe de chaque jeton est MESURÉ par numéro et nom avant d'être écrit.
+ * Un jeton présent dans la table gagne sur toute autre règle — préfixe vide compris, qui dit « ce jeton est celui du set » ;
+ * un jeton absent suit la règle d'avant. Sans table, rien ne change.
  * @returns {string|null}
  */
-function numeroDeSetlist(e, jetonsOuNoms) {
+function numeroDeSetlist(e, jetonsOuNoms, prefixes = null) {
     if (e.b == null || String(e.b).trim() === '') return null;
+    if (prefixes && Object.prototype.hasOwnProperty.call(prefixes, e.a))
+        return e.forme === 'tcg-id' || e.forme === 'lien' ? `${prefixes[e.a]}${String(e.b).trim()}` : null;
     const jetons = jetonsOuNoms instanceof Set ? jetonsOuNoms : new Set([].concat(jetonsOuNoms).filter(Boolean));
     if (!jetons.has(e.a)) return null;
     if (e.forme === 'tcg-id' || e.forme === 'lien') return String(e.b).trim();
@@ -266,7 +273,9 @@ function joindre(cartes, produits, cible) {
     // désactivaient le retrait pour tout le set — 3 jointures sur 310, et la concordance restait vraie (§21 n°8).
     // L'impression est donc indexée sous ses DEUX écritures, et chaque produit joint la sienne. La condition qui reste est
     // celle qui protège EC1 : le préfixe doit être COMMUN à toutes les impressions numérotées.
-    const prefixeDuSet = numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
+    // Une ligne qui DÉCLARE ses préfixes (`prefixesParJeton`, Happy Sets chinois) les a mesurés : ils désignent une liste, et
+    // les retirer rendrait « a1 » au « 001 » d'une autre liste. Le retrait ne s'applique qu'aux lignes qui n'en déclarent pas.
+    const prefixeDuSet = !cible.prefixesParJeton && numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
     // 🔑 LE SUFFIXE DE DEMI-DECK D'UN TRAINER KIT (2026-09-21). Cardmarket numérote « 1N »/« 1S » — la
     // LETTRE désigne la moitié du kit (N = Noivern, S = Sylveon ; a = Latias, o = Latios). Bulbapedia
     // numérote chaque demi-deck 1–30 sans lettre, et porte la moitié dans `deck`. La même donnée, deux
@@ -278,10 +287,18 @@ function joindre(cartes, produits, cible) {
     // 🔴 ET SANS CE SUFFIXE, IL N'Y A RIEN À JOINDRE : 6 kits sur 11 ne le portent pas, et pour ceux-là
     // les numéros des deux moitiés sont indiscernables. Ils restent refusés, c'est le bon résultat.
     const suffixes = cible.suffixesParDeck || null;
+    // 🔑 ET SON PENDANT, LE PRÉFIXE DE DEMI-DECK (2026-09-25) : « G1 », « R18 », « P-14 » (Quick Construction Packs, Gift Box
+    // Emerald, HS/XY/SM Trainer Kits). Même règle, même ouverture : le chemin n'existe que si `prefixesParDeck` est posé,
+    // et chaque lettre est MESURÉE par numéro et nom avant d'être écrite dans la ligne.
+    const prefixesDeck = cible.prefixesParDeck || null;
     const clesImpression = (n, deck) => {
         const nu = sansPosition(n);
         const sansPrefixe = prefixeDuSet ? nu.replace(new RegExp(`^${prefixeDuSet}(?=\\d)`), '') : nu;
         const suf = suffixes && deck ? suffixes[deck] : null;
+        const pre = prefixesDeck && deck ? prefixesDeck[deck] : null;
+        // Un demi-deck à PRÉFIXE ne joint que par le préfixe : son numéro nu (« 1 ») est aussi celui de l'autre moitié. Le chemin
+        // du suffixe (2026-09-21) reste tel quel — les kits déjà collectés ne bougent pas.
+        if (pre != null) return [cleNumero(`${pre}${nu}`)];
         return [...new Set([cleNumero(sansPrefixe), cleNumero(nu), suf ? cleNumero(`${nu}${suf}`) : null].filter(Boolean))];
     };
     let cartesSansProduit = 0;
