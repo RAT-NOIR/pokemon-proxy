@@ -550,6 +550,32 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 57. 151 SETS SANS NOM : UN CHAMP QU'UN SEUL OUTIL, LANCÉ UNE FOIS, SAVAIT ÉCRIRE — 2026-09-24
+
+**Prédit 151 / 5 740 / 4 460, mesuré 151 / 5 740 / 4 460** (définitions recopiées du script du site ; 0 set en écart avec sa
+liste). Dont 113 portent des fiches ou des images ; 34 sets chinois ont des cartes sans fiche, 4 n'ont rien.
+🔴 **LA CAUSE, PAR UNE ÉGALITÉ EXACTE : 590 − 439 = 151.** `nomAffichage` n'était écrit que par `rapatrier-noms-sets.js`,
+lancé le 19/09 sur les 439 sets d'alors ; le collecteur crée des sets et ne les nomme pas. Un set sans nom n'a ni page ni
+fiche sur le site, et rien ne le disait. ⚠️ **Et relancer l'outil tel quel aurait RÉÉCRIT les 439 noms posés** (les 28
+reponctués du §36, les départages). La règle vit désormais dans `collecte-cartes/nom-affichage.js` (banc 7/7) ; l'outil ne
+nomme QUE les sets sans nom, collisions vérifiées contre tous les noms posés. **La garde, double :** `collecteur-texte.js`
+imprime le verdict « nom affiché » à la création ; `mesure-catalogue.js` compte les sets à cartes sans nom — **elle a crié
+147 sur la base d'aujourd'hui** (151 − 4 sans carte) : elle sait dire non.
+
+**Trois chiffres à moi, faux, corrigés par la mesure :** « 11 expansions jamais apprises » (j'en listais 12, et les 8 de
+septembre ne l'étaient pas non plus : **20**) ; « appris > produits » sur xASC et xPBL (mon tableau comptait les produits hors
+cartes-code et les appris avec : aucun produit en trop) ; « 1 066 petits formats » était juste pour le site — **1 095**
+avec les 29 de Base-Set, que le site ne compte pas puisqu'il ne le publie pas.
+
+**Le contrôle du nom sur les 67 fusions du site :** 4 impressions contredites par TCGdex ET par le produit Cardmarket
+(Alomomola / Alolan Moonlight 011 = Wailord, Kingler / Double Blaze 026 = Krabby, Ribombee / Collection Sun 043 = Kangaskhan,
+Shroodle / Shiny Treasure ex 291 = Sableye) — ni image ni produit joint. 🔑 **Et une contradiction de TCGdex était FAUSSE** :
+Melmetal-GX Tag All Stars 184/217, lu à l'œil (メルメタルGX 217/173) et confirmé par Cardmarket — TCGdex est décalé sur
+SM12a. Un témoin ne vaut que sa donnée, une fois de plus.
+
+**pokemon-card.com/policy.html (著作権について) : « 個人的に楽しむ場合に限って », copie et diffusion « 固くお断り ».** Ses 12 logos
+sont écartés, rien n'a été téléchargé.
+
 ## 56. UN NOUVEL EXPORT CARDMARKET : LA PROCÉDURE, ET LE DÉNOMINATEUR QUI NE COMPTAIT QUE CE QU'ON AVAIT APPRIS — 2026-09-24
 
 > ## 🔑 LA PROCÉDURE — quatre ou cinq exports par an, une commande
