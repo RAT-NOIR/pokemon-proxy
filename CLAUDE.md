@@ -550,6 +550,48 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 58. UNE SURCHARGE N'EST PAS UN VERDICT, UN NOM N'A QU'UNE LANGUE, ET QUATRE PAGES QUI DONNAIENT LE NUMÉRO DU VOISIN — 2026-09-24
+
+> 🔑 **LE FEU VERT PERMANENT (testeur, 2026-09-24) : les écritures ADDITIVES — images nouvelles, fiches nouvelles passées au
+> témoin du nom, remises en file — partent sans attendre, par `lot-additif.js` (sauvegarde `backup-collections.js
+> --base=cartes` AVANT, comptes avant/après, une ligne dans `JOURNAL-LOTS.md`). Tout ce qui MODIFIE ou SUPPRIME (noms,
+> fusions, détachements, remplacements) attend toujours son feu vert.** 🔴 Et l'outil a menti à son premier lot :
+> `--compte=cartes_produits:idExpansion=6395` a rendu 0 → 0, la valeur partait en CHAÎNE sur un champ NUMÉRIQUE — le §41
+> dans l'instrument écrit pour tenir la règle. Corrigé (les deux types, et chaque compte imprimé sur le total de sa
+> collection), la ligne du journal rectifiée à la main avec le réel (225 → 295).
+
+**LOR ET CRE N'AVAIENT PAS « ABANDONNÉ » : ILS AVAIENT ÉTÉ JUGÉS.** Le client avait sa cadence et son réessai (un, à 5 s) ;
+la reprise par image existait (sha256 + même URL : sautée). Mais `incomplet` tombait en `refuse`, un état terminal : **une
+surcharge de 20 s prise pour un verdict sur le set**, le §17 pour une autre cause passagère. `collecte-cartes/issue-unite.js`
+(banc 17/17) : une unité dont TOUS les échecs sont transitoires (5xx, réseau) revient en file, en queue, pas avant 10 min,
+3 passages au plus, puis refuse et le dit. `enfiler-tcgdex.js --ecrire` reprend aussi les refus déjà écrits. La garde du
+commit surveille le fichier — **donc elle bloque toute mise en file tant que `1571f7a` n'est pas déployé**, et c'est juste.
+Rejouées la nuit sous l'ancien code : LOR 217/217 (galerie lue), CRE 231/231. Nouveaux : GEN (un 503, à reprendre), EM (un
+**404** : TCGdex liste la carte et n'a pas le fichier — refus juste, 105/106).
+
+**LE NOM AFFICHÉ EST EN ANGLAIS — mesuré, pas choisi.** Les 439 noms posés le 19/09 : 426 identiques à une source anglaise, 13
+identiques dans les deux langues, **0 en français seul** ; 116 d'entre eux ont un `nomFr` qu'ils n'affichent pas. Mon module du
+matin mettait `nomFr` en tête en se disant « règle inchangée » : il aurait publié « Set de Base » et « Lumière Interdite »
+parmi 125 noms Cardmarket anglais. `nomFr` retiré de `choisirAffichage` (banc 9/9). 🔴 **Un commentaire qui dit « inchangé » est
+une affirmation : elle se vérifie contre ce que la règle a PRODUIT, pas contre le souvenir qu'on en a.**
+
+**LES QUATRE « FUSIONS » RÉELLES SONT DES ERREURS DE LA PAGE, PAS DE LA JOINTURE.** `jpcardno` donne le numéro de la carte
+voisine : Alomomola 011 (= Wailord), Kingler 026 (= Krabby), Ribombee 043 (= Kangaskhan), Shroodle 291 (= Sableye). Le vrai
+numéro, par DEUX sources indépendantes — le produit Cardmarket au nom de la carte, en reste « produit-sans-carte », et le
+fichier japonais de TCGdex : **012, 027, 042, 297**. Et trois de ces impressions portent l'ILLUSTRATEUR de la voisine (OOYAMA,
+Sekio, TOKIYA : lu par l'identifiant TCGdex du mauvais numéro) — trois faux affichés. Correction proposée, pas écrite.
+
+**LA RECOLLECTE, PRÉDITE PAR LES FONCTIONS DE PRODUCTION ET TENUE :** ASC 225 → **295/295** (3 requêtes), xASC 26 → **288/288**
+(7 requêtes, 0 carte neuve : toutes étaient sous ASC). **HSP** : la ligne pointe la bonne page depuis le 19/09, mais l'état
+gardait les 25 titres de la mauvaise, donc « déjà fait » — et **25 cartes HGSS portent le slug de HSP : le site les affiche dans
+Beginning Set Pikachu**. Dry-run : 35 cartes de la base déclarent l'expansion, 42/48 produits joints, 0 produit à deux cartes.
+
+**TCGdex ET LE CHINOIS, INSTRUMENT NOMMÉ (§36)** : l'arborescence du dépôt public `tcgdex/cards-database` (GitHub, 1 requête,
+le verrou de l'API étant au worker), 2026-09-24. `CSV9.5C` Terastal Gathering y est DÉCLARÉ (« 太晶盛聚 », 208 cartes,
+2026-06-12) avec **zéro fichier de carte** ; Kitakami n'y est pas. **Trois chiffres à moi, faux** : « 20 expansions jamais
+apprises » (le catalogue en compte **30** ; mes 20 étaient celles de 2026) ; « Aquapolis jamais apprise » (177/190 apprises
+**sans slug**) ; « Shroodle sans produit joint » (il porte 746509, son n°127, juste — c'est le n°291 qui n'a rien).
+
 ## 57. 151 SETS SANS NOM : UN CHAMP QU'UN SEUL OUTIL, LANCÉ UNE FOIS, SAVAIT ÉCRIRE — 2026-09-24
 
 **Prédit 151 / 5 740 / 4 460, mesuré 151 / 5 740 / 4 460** (définitions recopiées du script du site ; 0 set en écart avec sa

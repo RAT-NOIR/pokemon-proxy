@@ -10,10 +10,15 @@
 // ne le disait. La garde est désormais double : collecteur-texte.js imprime le verdict à la création, mesure-catalogue.js
 // compte les sets sans nom qui portent des cartes.
 //
-// LA RÈGLE (inchangée, celle du 2026-09-19) :
-//   · set OCCIDENTAL : nomFr, puis nomEn — il désigne le set lui-même —, puis le nom Cardmarket ;
-//   · set NON occidental : nomFr, puis le nom Cardmarket, puis nomJaTraduit. 🔴 JAMAIS `nomEn` : sur une page partagée,
+// LA RÈGLE, celle du 2026-09-19 :
+//   · set OCCIDENTAL : nomEn — il désigne le set lui-même —, puis le nom Cardmarket ;
+//   · set NON occidental : le nom Cardmarket, puis nomJaTraduit. 🔴 JAMAIS `nomEn` : sur une page partagée,
 //     c'est le jumeau international (« Base Set » pour Expansion Pack, « Shining Fates » pour Shiny Star V) ;
+//   🔴 ET JAMAIS `nomFr` : LA CONVENTION DU NOM AFFICHÉ EST L'ANGLAIS. Mesuré le 2026-09-24 sur les 439 noms posés le 19/09 :
+//     426 identiques à une source anglaise, 13 identiques dans les deux langues, 0 en français seul — et 116 d'entre eux ont
+//     un nomFr qu'ils n'affichent pas. La version du matin mettait nomFr en tête en se disant « inchangée » : elle aurait
+//     publié « Set de Base » et « Lumière Interdite » au milieu de 125 noms Cardmarket anglais. Le nom français est un
+//     AUTRE champ (`nomFr`, TCGdex) : c'est au site de choisir de l'afficher, pas à ce nom de mélanger les langues ;
 //   · dernier recours : le `_id` du set rendu lisible — c'est le slug Cardmarket de l'expansion. Jamais le code.
 //   · DEUX SETS NE PORTENT PAS LE MÊME NOM À L'ÉCRAN : une collision se départage par le nom Cardmarket, puis par le
 //     slug ; sinon le set RESTE SANS NOM, avec sa raison.
@@ -21,8 +26,8 @@ const lisible = s => String(s || '').replace(/-/g, ' ').trim();
 
 function choisirAffichage(s, nomCardmarket, occidental) {
     const essais = occidental
-        ? [['nomFr', s.nomFr], ['nomEn', s.nomEn], ['cardmarket', nomCardmarket], ['nomJaTraduit', s.nomJaTraduit]]
-        : [['nomFr', s.nomFr], ['cardmarket', nomCardmarket], ['nomJaTraduit', s.nomJaTraduit]];
+        ? [['nomEn', s.nomEn], ['cardmarket', nomCardmarket], ['nomJaTraduit', s.nomJaTraduit]]
+        : [['cardmarket', nomCardmarket], ['nomJaTraduit', s.nomJaTraduit]];
     for (const [source, v] of essais) if (v && String(v).trim()) return { nom: String(v).trim(), source };
     const duSlug = lisible(s._id);
     if (duSlug) return { nom: duSlug, source: 'slug du set' };

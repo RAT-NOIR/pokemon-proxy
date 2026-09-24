@@ -26,10 +26,14 @@ const AUTORISES = [/^--quoi=.+/, /^--collections=[\w,]+$/, /^--compte=\w+(:\w+=[
 const inconnus = options.filter(a => !AUTORISES.some(r => r.test(a)));
 const val = nom => options.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const quoi = val('quoi'), collections = val('collections');
+// 🔴 « idExpansion=6395 » a compté 0 → 0 au premier lot (2026-09-24) : la valeur partait en CHAÎNE, le champ est un
+// NOMBRE. Un filtre qui ne mord sur rien rend un zéro plausible (§41). Une valeur numérique cherche donc les deux types,
+// et chaque compte s'imprime sur le total de sa collection : « 0 sur 64 000 » se voit, « 0 » non.
 const comptes = options.filter(a => a.startsWith('--compte=')).map(a => {
     const [coll, filtre] = a.slice(9).split(':');
     const [champ, valeur] = filtre ? filtre.split('=') : [];
-    return { coll, filtre: champ ? { [champ]: valeur } : {}, libelle: a.slice(9) };
+    const v = /^-?\d+$/.test(valeur ?? '') ? { $in: [Number(valeur), valeur] } : valeur;
+    return { coll, filtre: champ ? { [champ]: v } : {}, libelle: a.slice(9) };
 });
 if (inconnus.length || !quoi || !collections || !commande.length) {
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}usage : --quoi="…" --collections=a,b [--compte=coll[:champ=valeur]]… -- <commande…>`);
@@ -41,7 +45,11 @@ async function compter() {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
     const r = [];
-    for (const c of comptes) r.push(await cx.db.collection(c.coll).countDocuments(c.filtre));
+    for (const c of comptes) {
+        const n = await cx.db.collection(c.coll).countDocuments(c.filtre), total = await cx.db.collection(c.coll).countDocuments({});
+        if (!total) throw new Error(`collection « ${c.coll} » VIDE ou mal nommée : un compte sur elle ne mesure rien`);
+        r.push(`${n}/${total}`);
+    }
     await fermer();
     return r;
 }
