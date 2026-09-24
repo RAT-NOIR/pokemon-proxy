@@ -10775,11 +10775,32 @@
     "aucune entrée de Setlist pour « XY Trainer Kit »"
    ]
   },
-  "verif": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "XY Trainer Kit (TCG)",
+   "entrees": 60,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Spoink (XY 49)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
   "verifie": {
-   "le": "2026-09-20",
-   "par": "mesure des suffixes de demi-deck",
-   "detail": "60/61 joints, 0 ambigu (suffixes N/S, 14 et 11 noms communs contre 6 au second)"
+   "le": "2026-09-24",
+   "page": "XY Trainer Kit (TCG)",
+   "entrees": {
+    "XY Trainer Kit": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 61 produits, échantillon « Spoink (XY 49) » (intl)"
   }
  },
  {
@@ -27401,11 +27422,32 @@
    "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas",
    "pourquoi": "Trainer Kit : Cardmarket suffixe le numéro par la moitié du kit, Bulbapedia la porte dans `deck`"
   },
-  "verif": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Black & White Trainer Kit (TCG)",
+   "entrees": 60,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Purrloin (Black & White 66)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
   "verifie": {
-   "le": "2026-09-20",
-   "par": "mesure des suffixes de demi-deck",
-   "detail": "36/61 joints, 0 ambigu (suffixes Z/E, 12 et 12 noms communs contre 3) ; 25 orphelins = cartes non encore collectées"
+   "le": "2026-09-24",
+   "page": "Black & White Trainer Kit (TCG)",
+   "entrees": {
+    "Black & White Trainer Kit": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 61 produits, échantillon « Purrloin (Black & White 66) » (intl)"
   }
  },
  {
@@ -27436,11 +27478,32 @@
    "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas",
    "pourquoi": "Trainer Kit : Cardmarket suffixe le numéro par la moitié du kit, Bulbapedia la porte dans `deck`"
   },
-  "verif": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "XY Trainer Kit: Bisharp & Wigglytuff (TCG)",
+   "entrees": 60,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Swirlix (Kalos Starter Set 24)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
   "verifie": {
-   "le": "2026-09-20",
-   "par": "mesure des suffixes de demi-deck",
-   "detail": "60/61 joints, 0 ambigu (suffixes B/W, 12 et 11 noms communs contre 3)"
+   "le": "2026-09-24",
+   "page": "XY Trainer Kit: Bisharp & Wigglytuff (TCG)",
+   "entrees": {
+    "XY Trainer Kit: Bisharp & Wigglytuff": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 61 produits, échantillon « Swirlix (Kalos Starter Set 24) » (intl)"
   }
  },
  {
@@ -27471,11 +27534,32 @@
    "note": "page relevée par `intitle:\"…\"` ; la clé « <slug> (TCG) » ne la trouvait pas",
    "pourquoi": "Trainer Kit : Cardmarket suffixe le numéro par la moitié du kit, Bulbapedia la porte dans `deck`"
   },
-  "verif": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "XY Trainer Kit: Latias & Latios (TCG)",
+   "entrees": 60,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 60,
+    "couverts": 0,
+    "numerosSetlist": 30,
+    "taux": 0
+   },
+   "echantillon": "Skitty (Primal Clash 113)",
+   "tiragesVus": [
+    "intl"
+   ],
+   "ratio": 0.98,
+   "etat": "OK",
+   "raisons": []
+  },
   "verifie": {
-   "le": "2026-09-20",
-   "par": "mesure des suffixes de demi-deck",
-   "detail": "60/61 joints, 0 ambigu (suffixes a/o, 11 et 10 noms communs contre 2)"
+   "le": "2026-09-24",
+   "page": "XY Trainer Kit: Latias & Latios (TCG)",
+   "entrees": {
+    "XY Trainer Kit: Latias & Latios": 60
+   },
+   "note": "vérification automatique : 60 entrées pour 61 produits, échantillon « Skitty (Primal Clash 113) » (intl)"
   }
  },
  {
@@ -27829,2336 +27913,6 @@
   }
  },
  {
-  "code": "CSV8C",
-  "exp": 6495,
-  "prod": 264,
-  "nom": "Sparkling Fable",
-  "slugSet": "Brilliant-Fantasy",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Sparkling Fable (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Sparkling Fable",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 264,
-  "controle": {
-   "entreesSection": 264,
-   "numerosSetlist": 264,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Sparkling Fable",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV8C → CSV8, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Sparkling Fable (ATCG)",
-   "entrees": {
-    "Sparkling Fable": 264
-   },
-   "note": "vérification automatique : 264 entrées pour 264 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Sparkling Fable (ATCG)",
-   "entrees": 264,
-   "couverture": {
-    "produitsNumerotes": 264,
-    "couverts": 264,
-    "numerosSetlist": 264,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVE1C",
-  "exp": 6311,
-  "prod": 202,
-  "nom": "Battle Party: Shared Dream",
-  "slugSet": "Battle-Party-Dream-Together",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Battle Party: Shared Dream (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Battle Party: Shared Dream",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Battle Party: Shared Dream"
-   ]
-  },
-  "attendu": 202,
-  "controle": {
-   "entreesSection": 178,
-   "numerosSetlist": 177,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Battle Party: Shared Dream",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVE1C → CSVE1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Battle Party: Shared Dream », reconnue par son en-tête « image=SetSymbolCSVE1 »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Battle Party: Shared Dream (ATCG)",
-   "entrees": 178,
-   "couverture": {
-    "produitsNumerotes": 202,
-    "couverts": 177,
-    "numerosSetlist": 177,
-    "taux": 0.876
-   },
-   "ratio": 0.88,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 177/202 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CS4aC",
-  "exp": 6204,
-  "prod": 184,
-  "nom": "Polychromatic Gathering",
-  "slugSet": "Nine-Colors-Gathering-Friends",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Polychromatic Gathering (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Polychromatic Gathering",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Friend"
-   ]
-  },
-  "attendu": 184,
-  "controle": {
-   "entreesSection": 184,
-   "numerosSetlist": 184,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Polychromatic Gathering",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4aC → CS4A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Friend », reconnue par son en-tête « image=SetSymbolCS4A »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Polychromatic Gathering (ATCG)",
-   "entrees": {
-    "Polychromatic Gathering": 184
-   },
-   "note": "vérification automatique : 184 entrées pour 184 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Polychromatic Gathering (ATCG)",
-   "entrees": 184,
-   "couverture": {
-    "produitsNumerotes": 184,
-    "couverts": 184,
-    "numerosSetlist": 184,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS5bC",
-  "exp": 6258,
-  "prod": 178,
-  "nom": "Gallant Galaxy",
-  "slugSet": "Brave-Stars-Brave",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Gallant Galaxy (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Gallant Galaxy",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Brave"
-   ]
-  },
-  "attendu": 178,
-  "controle": {
-   "entreesSection": 178,
-   "numerosSetlist": 178,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Gallant Galaxy",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5bC → CS5B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Brave », reconnue par son en-tête « image=SetSymbolCS5B »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Gallant Galaxy (ATCG)",
-   "entrees": {
-    "Gallant Galaxy": 178
-   },
-   "note": "vérification automatique : 178 entrées pour 178 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Gallant Galaxy (ATCG)",
-   "entrees": 178,
-   "couverture": {
-    "produitsNumerotes": 178,
-    "couverts": 178,
-    "numerosSetlist": 178,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS4bC",
-  "exp": 6205,
-  "prod": 177,
-  "nom": "Polychromatic Gathering",
-  "slugSet": "Nine-Colors-Gathering-Origin",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Polychromatic Gathering (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Polychromatic Gathering",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Origin"
-   ]
-  },
-  "attendu": 177,
-  "controle": {
-   "entreesSection": 176,
-   "numerosSetlist": 176,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Polychromatic Gathering",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4bC → CS4B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Origin », reconnue par son en-tête « image=SetSymbolCS4B »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Polychromatic Gathering (ATCG)",
-   "entrees": {
-    "Polychromatic Gathering": 176
-   },
-   "note": "vérification automatique : 176 entrées pour 177 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Polychromatic Gathering (ATCG)",
-   "entrees": 176,
-   "couverture": {
-    "produitsNumerotes": 177,
-    "couverts": 176,
-    "numerosSetlist": 176,
-    "taux": 0.994
-   },
-   "ratio": 0.99,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS5aC",
-  "exp": 6257,
-  "prod": 176,
-  "nom": "Gallant Galaxy",
-  "slugSet": "Brave-Stars-Charm",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Gallant Galaxy (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Gallant Galaxy",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Charm"
-   ]
-  },
-  "attendu": 176,
-  "controle": {
-   "entreesSection": 176,
-   "numerosSetlist": 176,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Gallant Galaxy",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5aC → CS5A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Charm », reconnue par son en-tête « image=SetSymbolCS5A »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Gallant Galaxy (ATCG)",
-   "entrees": {
-    "Gallant Galaxy": 176
-   },
-   "note": "vérification automatique : 176 entrées pour 176 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Gallant Galaxy (ATCG)",
-   "entrees": 176,
-   "couverture": {
-    "produitsNumerotes": 176,
-    "couverts": 176,
-    "numerosSetlist": 176,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS6bC",
-  "exp": 6250,
-  "prod": 172,
-  "nom": "Marine Shadow",
-  "slugSet": "Azure-Shadow-Pursuit",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Marine Shadow (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Marine Shadow",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Banish"
-   ]
-  },
-  "attendu": 172,
-  "controle": {
-   "entreesSection": 171,
-   "numerosSetlist": 170,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Marine Shadow",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6bC → CS6B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Banish », reconnue par son en-tête « image=SetSymbolCS6B »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Marine Shadow (ATCG)",
-   "entrees": {
-    "Marine Shadow": 171
-   },
-   "note": "vérification automatique : 171 entrées pour 172 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Marine Shadow (ATCG)",
-   "entrees": 171,
-   "couverture": {
-    "produitsNumerotes": 172,
-    "couverts": 170,
-    "numerosSetlist": 170,
-    "taux": 0.988
-   },
-   "ratio": 0.99,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS6aC",
-  "exp": 6249,
-  "prod": 169,
-  "nom": "Marine Shadow",
-  "slugSet": "Azure-Shadow-Roar",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Marine Shadow (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Marine Shadow",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Roar"
-   ]
-  },
-  "attendu": 169,
-  "controle": {
-   "entreesSection": 169,
-   "numerosSetlist": 169,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Marine Shadow",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6aC → CS6A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Roar », reconnue par son en-tête « image=SetSymbolCS6A »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Marine Shadow (ATCG)",
-   "entrees": {
-    "Marine Shadow": 169
-   },
-   "note": "vérification automatique : 169 entrées pour 169 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Marine Shadow (ATCG)",
-   "entrees": 169,
-   "couverture": {
-    "produitsNumerotes": 169,
-    "couverts": 169,
-    "numerosSetlist": 169,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSV1C",
-  "exp": 6193,
-  "prod": 167,
-  "nom": "Ancient Times, Future Progress",
-  "slugSet": "Eternal-Birth",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Ancient Times, Future Progress (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Ancient Times, Future Progress",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 167,
-  "controle": {
-   "entreesSection": 167,
-   "numerosSetlist": 167,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Ancient Times, Future Progress",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV1C → CSV1, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Ancient Times, Future Progress (ATCG)",
-   "entrees": {
-    "Ancient Times, Future Progress": 167
-   },
-   "note": "vérification automatique : 167 entrées pour 167 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Ancient Times, Future Progress (ATCG)",
-   "entrees": 167,
-   "couverture": {
-    "produitsNumerotes": 167,
-    "couverts": 167,
-    "numerosSetlist": 167,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSV6C",
-  "exp": 6362,
-  "prod": 163,
-  "nom": "Arcane Truth",
-  "slugSet": "True-Mystery",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Arcane Truth (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Arcane Truth",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 163,
-  "controle": {
-   "entreesSection": 163,
-   "numerosSetlist": 163,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Arcane Truth",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV6C → CSV6, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Arcane Truth (ATCG)",
-   "entrees": {
-    "Arcane Truth": 163
-   },
-   "note": "vérification automatique : 163 entrées pour 163 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Arcane Truth (ATCG)",
-   "entrees": 163,
-   "couverture": {
-    "produitsNumerotes": 163,
-    "couverts": 163,
-    "numerosSetlist": 163,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS5DC",
-  "exp": 6397,
-  "prod": 163,
-  "nom": "Gallant Galaxy V Starter Deck",
-  "slugSet": "Brave-Stars-V-Starter-Deck",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Gallant Galaxy V Starter Deck (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Gallant Galaxy V Starter Deck",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Gallant Galaxy V Starter Deck"
-   ]
-  },
-  "attendu": 163,
-  "controle": {
-   "entreesSection": 161,
-   "numerosSetlist": 161,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Gallant Galaxy V Starter Deck",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5DC → CS5D, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Gallant Galaxy V Starter Deck », reconnue par son en-tête « image=SetSymbolCS5D »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Gallant Galaxy V Starter Deck (ATCG)",
-   "entrees": {
-    "Gallant Galaxy V Starter Deck": 161
-   },
-   "note": "vérification automatique : 161 entrées pour 163 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Gallant Galaxy V Starter Deck (ATCG)",
-   "entrees": 161,
-   "couverture": {
-    "produitsNumerotes": 163,
-    "couverts": 161,
-    "numerosSetlist": 161,
-    "taux": 0.988
-   },
-   "ratio": 0.99,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVH4C",
-  "exp": 6543,
-  "prod": 151,
-  "nom": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
-  "slugSet": "Happy-Set-Decidueye-Melmetal-Koraidon-Miraidon",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Happy Set"
-   ]
-  },
-  "attendu": 151,
-  "controle": {
-   "entreesSection": 59,
-   "numerosSetlist": 59,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH4C → CSVH4, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH4 »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
-   "entrees": 59,
-   "couverture": {
-    "produitsNumerotes": 151,
-    "couverts": 59,
-    "numerosSetlist": 59,
-    "taux": 0.391
-   },
-   "ratio": 0.39,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 59/151 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CS2aC",
-  "exp": 6279,
-  "prod": 143,
-  "nom": "Vivid Portrayals",
-  "slugSet": "Vivid-Portrayals-Obsidian",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Vivid Portrayals (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Vivid Portrayals",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Obsidian"
-   ]
-  },
-  "attendu": 143,
-  "controle": {
-   "entreesSection": 143,
-   "numerosSetlist": 143,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Vivid Portrayals",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2aC → CS2A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Obsidian », reconnue par son en-tête « image=SetSymbolCS2A »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Vivid Portrayals (ATCG)",
-   "entrees": {
-    "Vivid Portrayals": 143
-   },
-   "note": "vérification automatique : 143 entrées pour 143 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Vivid Portrayals (ATCG)",
-   "entrees": 143,
-   "couverture": {
-    "produitsNumerotes": 143,
-    "couverts": 143,
-    "numerosSetlist": 143,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS2bC",
-  "exp": 6281,
-  "prod": 143,
-  "nom": "Vivid Portrayals",
-  "slugSet": "Vivid-Portrayals-Indigo",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Vivid Portrayals (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Vivid Portrayals",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Indigo"
-   ]
-  },
-  "attendu": 143,
-  "controle": {
-   "entreesSection": 143,
-   "numerosSetlist": 143,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Vivid Portrayals",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2bC → CS2B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Indigo », reconnue par son en-tête « image=SetSymbolCS2B »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Vivid Portrayals (ATCG)",
-   "entrees": {
-    "Vivid Portrayals": 143
-   },
-   "note": "vérification automatique : 143 entrées pour 143 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Vivid Portrayals (ATCG)",
-   "entrees": 143,
-   "couverture": {
-    "produitsNumerotes": 143,
-    "couverts": 143,
-    "numerosSetlist": 143,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVL1C",
-  "exp": 6168,
-  "prod": 141,
-  "nom": "Journey Theme Pack",
-  "slugSet": "Adventure-Special-Pack",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Journey Theme Pack (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Journey Theme Pack",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 141,
-  "controle": {
-   "entreesSection": 133,
-   "numerosSetlist": 133,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Journey Theme Pack",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVL1C → CSVL1, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Journey Theme Pack (ATCG)",
-   "entrees": 133,
-   "couverture": {
-    "produitsNumerotes": 141,
-    "couverts": 133,
-    "numerosSetlist": 133,
-    "taux": 0.943
-   },
-   "ratio": 0.94,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 133/141 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CSVL2C",
-  "exp": 6361,
-  "prod": 139,
-  "nom": "Travel Theme Pack",
-  "slugSet": "Travel-Special-Pack",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Travel Theme Pack (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Travel Theme Pack",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 139,
-  "controle": {
-   "entreesSection": 139,
-   "numerosSetlist": 139,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Travel Theme Pack",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVL2C → CSVL2, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Travel Theme Pack (ATCG)",
-   "entrees": {
-    "Travel Theme Pack": 139
-   },
-   "note": "vérification automatique : 139 entrées pour 139 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Travel Theme Pack (ATCG)",
-   "entrees": 139,
-   "couverture": {
-    "produitsNumerotes": 139,
-    "couverts": 139,
-    "numerosSetlist": 139,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSV5C",
-  "exp": 6237,
-  "prod": 134,
-  "nom": "Ardent Obsidian",
-  "slugSet": "Dark-Crystal-Blaze",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Ardent Obsidian (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Ardent Obsidian",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 134,
-  "controle": {
-   "entreesSection": 164,
-   "numerosSetlist": 164,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Ardent Obsidian",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV5C → CSV5, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Ardent Obsidian (ATCG)",
-   "entrees": {
-    "Ardent Obsidian": 164
-   },
-   "note": "vérification automatique : 164 entrées pour 134 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Ardent Obsidian (ATCG)",
-   "entrees": 164,
-   "couverture": {
-    "produitsNumerotes": 134,
-    "couverts": 134,
-    "numerosSetlist": 164,
-    "taux": 1
-   },
-   "ratio": 1.22,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVH2C",
-  "exp": 6334,
-  "prod": 118,
-  "nom": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
-  "slugSet": "Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Happy Set"
-   ]
-  },
-  "attendu": 118,
-  "controle": {
-   "entreesSection": 58,
-   "numerosSetlist": 58,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH2C → CSVH2, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH2 »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
-   "entrees": 58,
-   "couverture": {
-    "produitsNumerotes": 118,
-    "couverts": 85,
-    "numerosSetlist": 58,
-    "taux": 0.72
-   },
-   "ratio": 0.49,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 85/118 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CSVH3C",
-  "exp": 6309,
-  "prod": 97,
-  "nom": "Altaria & Latios & Infernape & Maushold Happy Set",
-  "slugSet": "Happy-Set-Altaria-Latios-Infernape-Maushold",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Altaria & Latios & Infernape & Maushold Happy Set",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Happy Set"
-   ]
-  },
-  "attendu": 97,
-  "controle": {
-   "entreesSection": 64,
-   "numerosSetlist": 64,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Altaria & Latios & Infernape & Maushold Happy Set",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH3C → CSVH3, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH3 »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
-   "entrees": 64,
-   "couverture": {
-    "produitsNumerotes": 97,
-    "couverts": 64,
-    "numerosSetlist": 64,
-    "taux": 0.66
-   },
-   "ratio": 0.66,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 64/97 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CS6.5C",
-  "exp": 6247,
-  "prod": 96,
-  "nom": "Victory Lodestar",
-  "slugSet": "Victory-Star-Guide",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Victory Lodestar (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Victory Lodestar",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Victory Lodestar"
-   ]
-  },
-  "attendu": 96,
-  "controle": {
-   "entreesSection": 96,
-   "numerosSetlist": 96,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Victory Lodestar",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6.5C → CS65, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Victory Lodestar », reconnue par son en-tête « image=SetSymbolCS65 »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Victory Lodestar (ATCG)",
-   "entrees": {
-    "Victory Lodestar": 96
-   },
-   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Victory Lodestar (ATCG)",
-   "entrees": 96,
-   "couverture": {
-    "produitsNumerotes": 96,
-    "couverts": 96,
-    "numerosSetlist": 96,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVH1C",
-  "exp": 6335,
-  "prod": 92,
-  "nom": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
-  "slugSet": "Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Happy Set"
-   ]
-  },
-  "attendu": 92,
-  "controle": {
-   "entreesSection": 59,
-   "numerosSetlist": 59,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH1C → CSVH1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH1 »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
-   "entrees": 59,
-   "couverture": {
-    "produitsNumerotes": 92,
-    "couverts": 59,
-    "numerosSetlist": 59,
-    "taux": 0.641
-   },
-   "ratio": 0.64,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 59/92 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CS5.5C",
-  "exp": 6248,
-  "prod": 89,
-  "nom": "Overshadowed Radiance",
-  "slugSet": "Shadow-of-Glory",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Overshadowed Radiance (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Overshadowed Radiance",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Overshadowed Radiance"
-   ]
-  },
-  "attendu": 89,
-  "controle": {
-   "entreesSection": 89,
-   "numerosSetlist": 88,
-   "numerosAmbigus": 1,
-   "exemplesAmbigus": [
-    "2"
-   ],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Overshadowed Radiance",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5.5C → CS55, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Overshadowed Radiance », reconnue par son en-tête « image=SetSymbolCS55 »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Overshadowed Radiance (ATCG)",
-   "entrees": {
-    "Overshadowed Radiance": 89
-   },
-   "note": "vérification automatique : 89 entrées pour 89 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Overshadowed Radiance (ATCG)",
-   "entrees": 89,
-   "couverture": {
-    "produitsNumerotes": 89,
-    "couverts": 88,
-    "numerosSetlist": 88,
-    "taux": 0.989
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS4.5C",
-  "exp": 6252,
-  "prod": 83,
-  "nom": "Flame Dance of the End",
-  "slugSet": "Final-Flame-Dance",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Flame Dance of the End (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Flame Dance of the End",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Flame Dance of the End"
-   ]
-  },
-  "attendu": 83,
-  "controle": {
-   "entreesSection": 83,
-   "numerosSetlist": 83,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Flame Dance of the End",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4.5C → CS45, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Flame Dance of the End », reconnue par son en-tête « image=SetSymbolCS45 »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Flame Dance of the End (ATCG)",
-   "entrees": {
-    "Flame Dance of the End": 83
-   },
-   "note": "vérification automatique : 83 entrées pour 83 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Flame Dance of the End (ATCG)",
-   "entrees": 83,
-   "couverture": {
-    "produitsNumerotes": 83,
-    "couverts": 83,
-    "numerosSetlist": 83,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSZC",
-  "exp": 6355,
-  "prod": 68,
-  "nom": "Peripheral Collection Gift Box: Variety Treasure Box",
-  "slugSet": "Variety-Treasure-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Peripheral Collection Gift Box: Variety Treasure Box",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Peripheral Collection Gift Box: Variety Treasure Box"
-   ]
-  },
-  "attendu": 68,
-  "controle": {
-   "entreesSection": 68,
-   "numerosSetlist": 68,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Peripheral Collection Gift Box: Variety Treasure Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSZC → CSZ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Peripheral Collection Gift Box: Variety Treasure Box », reconnue par son en-tête « image=SetSymbolCSZ »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
-   "entrees": {
-    "Peripheral Collection Gift Box: Variety Treasure Box": 68
-   },
-   "note": "vérification automatique : 68 entrées pour 68 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
-   "entrees": 68,
-   "couverture": {
-    "produitsNumerotes": 68,
-    "couverts": 68,
-    "numerosSetlist": 68,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSVNC",
-  "exp": 6579,
-  "prod": 44,
-  "nom": "Kitakami Theme Pack",
-  "slugSet": "Land-of-Kitakami-Special-Pack",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Kitakami Theme Pack (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Kitakami Theme Pack",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 44,
-  "controle": {
-   "entreesSection": 139,
-   "numerosSetlist": 139,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Kitakami Theme Pack",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVNC → CSVN, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Kitakami Theme Pack (ATCG)",
-   "entrees": {
-    "Kitakami Theme Pack": 139
-   },
-   "note": "vérification automatique : 139 entrées pour 44 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Kitakami Theme Pack (ATCG)",
-   "entrees": 139,
-   "couverture": {
-    "produitsNumerotes": 44,
-    "couverts": 44,
-    "numerosSetlist": 139,
-    "taux": 1
-   },
-   "ratio": 3.16,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSFC",
-  "exp": 6275,
-  "prod": 26,
-  "nom": "Dragon Resurgence",
-  "slugSet": "Return-of-the-Dragon",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Dragon Resurgence (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Dragon Resurgence",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Dragon Resurgence"
-   ]
-  },
-  "attendu": 26,
-  "controle": {
-   "entreesSection": 26,
-   "numerosSetlist": 26,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Dragon Resurgence",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSFC → CSF, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Dragon Resurgence », reconnue par son en-tête « image=SetSymbolCSF »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Dragon Resurgence (ATCG)",
-   "entrees": {
-    "Dragon Resurgence": 26
-   },
-   "note": "vérification automatique : 26 entrées pour 26 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Dragon Resurgence (ATCG)",
-   "entrees": 26,
-   "couverture": {
-    "produitsNumerotes": 26,
-    "couverts": 26,
-    "numerosSetlist": 26,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSDC",
-  "exp": 6348,
-  "prod": 25,
-  "nom": "Pikachu Legendary Celebration Gift Boxes",
-  "slugSet": "Pikachu-Legendary-Celebration",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pikachu Legendary Celebration Gift Boxes",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pikachu Legendary Celebration Gift Boxes"
-   ]
-  },
-  "attendu": 25,
-  "controle": {
-   "entreesSection": 25,
-   "numerosSetlist": 25,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pikachu Legendary Celebration Gift Boxes",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSDC → CSD, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pikachu Legendary Celebration Gift Boxes », reconnue par son en-tête « image=SetSymbolCSD »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
-   "entrees": {
-    "Pikachu Legendary Celebration Gift Boxes": 25
-   },
-   "note": "vérification automatique : 25 entrées pour 25 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
-   "entrees": 25,
-   "couverture": {
-    "produitsNumerotes": 25,
-    "couverts": 25,
-    "numerosSetlist": 25,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSNC",
-  "exp": 6398,
-  "prod": 24,
-  "nom": "Gallant Galaxy Deck Building Gift Box",
-  "slugSet": "Brave-Stars-Deck-Building-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Gallant Galaxy Deck Building Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Gallant Galaxy Deck Building Gift Box",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 24,
-  "controle": {
-   "entreesSection": 24,
-   "numerosSetlist": 24,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Gallant Galaxy Deck Building Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSNC → CSN, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Gallant Galaxy Deck Building Gift Box (ATCG)",
-   "entrees": {
-    "Gallant Galaxy Deck Building Gift Box": 24
-   },
-   "note": "vérification automatique : 24 entrées pour 24 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Gallant Galaxy Deck Building Gift Box (ATCG)",
-   "entrees": 24,
-   "couverture": {
-    "produitsNumerotes": 24,
-    "couverts": 24,
-    "numerosSetlist": 24,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSAC",
-  "exp": 6407,
-  "prod": 24,
-  "nom": "Dynamax Clash Deck Building Gift Box",
-  "slugSet": "Dynamax-Clash-Deck-Building-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Dynamax Clash Deck Building Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Dynamax Clash Deck Building Gift Box",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 24,
-  "controle": {
-   "entreesSection": 0,
-   "numerosSetlist": 0,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Dynamax Clash Deck Building Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSAC → CSA, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Dynamax Clash Deck Building Gift Box (ATCG)",
-   "entrees": 0,
-   "ratio": 0,
-   "etat": "À REGARDER",
-   "raisons": [
-    "aucune entrée de Setlist pour « Dynamax Clash Deck Building Gift Box »"
-   ]
-  }
- },
- {
-  "code": "CS4.1C",
-  "exp": 6272,
-  "prod": 23,
-  "nom": "Radiant Energy",
-  "slugSet": "Radiant-Energy-Vol-1",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Radiant Energy (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Radiant Energy",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Radiant Energy"
-   ]
-  },
-  "attendu": 23,
-  "controle": {
-   "entreesSection": 23,
-   "numerosSetlist": 23,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Radiant Energy",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4.1C → CS41, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Radiant Energy », reconnue par son en-tête « image=SetSymbolCS41 »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Radiant Energy (ATCG)",
-   "entrees": {
-    "Radiant Energy": 23
-   },
-   "note": "vérification automatique : 23 entrées pour 23 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Radiant Energy (ATCG)",
-   "entrees": 23,
-   "couverture": {
-    "produitsNumerotes": 23,
-    "couverts": 23,
-    "numerosSetlist": 23,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSEC",
-  "exp": 6347,
-  "prod": 20,
-  "nom": "Connected Quartet Gift Boxes",
-  "slugSet": "Four-Party-Connection-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Connected Quartet Gift Boxes (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Connected Quartet Gift Boxes",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Connected Quartet Gift Boxes"
-   ]
-  },
-  "attendu": 20,
-  "controle": {
-   "entreesSection": 20,
-   "numerosSetlist": 0,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Connected Quartet Gift Boxes",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSEC → CSE, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Connected Quartet Gift Boxes », reconnue par son en-tête « image=SetSymbolCSE »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Connected Quartet Gift Boxes (ATCG)",
-   "entrees": 20,
-   "couverture": {
-    "produitsNumerotes": 20,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
-   },
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/20 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CSXC",
-  "exp": 6301,
-  "prod": 20,
-  "nom": "Giratina VSTAR Advanced Deck Building Gift Box",
-  "slugSet": "Giratina-VSTAR-Deck-Building-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Giratina VSTAR Advanced Deck Building Gift Box",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 20,
-  "controle": {
-   "entreesSection": 20,
-   "numerosSetlist": 20,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Giratina VSTAR Advanced Deck Building Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSXC → CSX, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
-   "entrees": {
-    "Giratina VSTAR Advanced Deck Building Gift Box": 20
-   },
-   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
-   "entrees": 20,
-   "couverture": {
-    "produitsNumerotes": 20,
-    "couverts": 20,
-    "numerosSetlist": 20,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSMAC",
-  "exp": 6368,
-  "prod": 19,
-  "nom": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
-  "slugSet": "Arceus-Dialga-Palkia-GX-Premium-Deck-Building-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 19,
-  "controle": {
-   "entreesSection": 19,
-   "numerosSetlist": 19,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMAC → CSMA, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
-   "entrees": {
-    "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box": 19
-   },
-   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
-   "entrees": 19,
-   "couverture": {
-    "produitsNumerotes": 19,
-    "couverts": 19,
-    "numerosSetlist": 19,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSOC",
-  "exp": 6402,
-  "prod": 19,
-  "nom": "Fusion Strike Advanced Deck Building Gift Box",
-  "slugSet": "Mew-Confluence-Deck-Building-Advanced-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Fusion Strike Advanced Deck Building Gift Box",
-   "numerosDepuisSetlist": true
-  },
-  "attendu": 19,
-  "controle": {
-   "entreesSection": 19,
-   "numerosSetlist": 19,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Fusion Strike Advanced Deck Building Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSOC → CSO, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
-   "entrees": {
-    "Fusion Strike Advanced Deck Building Gift Box": 19
-   },
-   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
-   "entrees": 19,
-   "couverture": {
-    "produitsNumerotes": 19,
-    "couverts": 19,
-    "numerosSetlist": 19,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSJC",
-  "exp": 6349,
-  "prod": 16,
-  "nom": "Pokémon Art Illustration Festival: Scene Gift Boxes",
-  "slugSet": "Pokemon-Art-Illustration-Celebration-Scene",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pokémon Art Illustration Festival: Scene Gift Boxes",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pokémon Art Illustration Festival: Scene"
-   ]
-  },
-  "attendu": 16,
-  "controle": {
-   "entreesSection": 16,
-   "numerosSetlist": 16,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pokémon Art Illustration Festival: Scene Gift Boxes",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSJC → CSJ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Art Illustration Festival: Scene », reconnue par son en-tête « image=SetSymbolCSJ »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
-   "entrees": {
-    "Pokémon Art Illustration Festival: Scene Gift Boxes": 16
-   },
-   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
-   "entrees": 16,
-   "couverture": {
-    "produitsNumerotes": 16,
-    "couverts": 16,
-    "numerosSetlist": 16,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSYC",
-  "exp": 6302,
-  "prod": 16,
-  "nom": "Pokémon Art Illustration Festival: Gather Gift Boxes",
-  "slugSet": "Pokemon-Art-Illustration-Celebration-Gathering",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pokémon Art Illustration Festival: Gather Gift Boxes",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pokémon Art Illustration Festival: Scene"
-   ]
-  },
-  "attendu": 16,
-  "controle": {
-   "entreesSection": 16,
-   "numerosSetlist": 16,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pokémon Art Illustration Festival: Gather Gift Boxes",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSYC → CSY, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Art Illustration Festival: Scene », reconnue par son en-tête « image=SetSymbolCSY »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
-   "entrees": {
-    "Pokémon Art Illustration Festival: Gather Gift Boxes": 16
-   },
-   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
-   "entrees": 16,
-   "couverture": {
-    "produitsNumerotes": 16,
-    "couverts": 16,
-    "numerosSetlist": 16,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSMJC",
-  "exp": 6369,
-  "prod": 15,
-  "nom": "Shining Pokémon Poké Ball Gift Box",
-  "slugSet": "Shining-Pokemon-Poke-Ball-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Shining Pokémon Poké Ball Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Shining Pokémon Poké Ball Gift Box",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Shining Pokémon Poké Ball Box"
-   ]
-  },
-  "attendu": 15,
-  "controle": {
-   "entreesSection": 15,
-   "numerosSetlist": 15,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Shining Pokémon Poké Ball Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMJC → CSMJ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Shining Pokémon Poké Ball Box », reconnue par son en-tête « image=SetSymbolCSMJ »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Shining Pokémon Poké Ball Gift Box (ATCG)",
-   "entrees": {
-    "Shining Pokémon Poké Ball Gift Box": 15
-   },
-   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Shining Pokémon Poké Ball Gift Box (ATCG)",
-   "entrees": 15,
-   "couverture": {
-    "produitsNumerotes": 15,
-    "couverts": 15,
-    "numerosSetlist": 15,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSMC",
-  "exp": 6357,
-  "prod": 13,
-  "nom": "Pokémon Card Display Set Gift Box Vol. 2",
-  "slugSet": "Pokemon-Card-Display-Set-Gift-Box-Charizard",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pokémon Card Display Set Gift Box Vol. 2",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pokémon Card Display Set Gift Box Vol. 2"
-   ]
-  },
-  "attendu": 13,
-  "controle": {
-   "entreesSection": 13,
-   "numerosSetlist": 13,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pokémon Card Display Set Gift Box Vol. 2",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMC → CSM, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box Vol. 2 », reconnue par son en-tête « image=SetSymbolCSM »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
-   "entrees": {
-    "Pokémon Card Display Set Gift Box Vol. 2": 13
-   },
-   "note": "vérification automatique : 13 entrées pour 13 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
-   "entrees": 13,
-   "couverture": {
-    "produitsNumerotes": 13,
-    "couverts": 13,
-    "numerosSetlist": 13,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSUC",
-  "exp": 6350,
-  "prod": 13,
-  "nom": "Pokémon Card Display Set Gift Box Vol. 3",
-  "slugSet": "Display-Set-Gift-Box-Gengar",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pokémon Card Display Set Gift Box Vol. 3",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pokémon Card Display Set Gift Box Vol. 3"
-   ]
-  },
-  "attendu": 13,
-  "controle": {
-   "entreesSection": 13,
-   "numerosSetlist": 13,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pokémon Card Display Set Gift Box Vol. 3",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSUC → CSU, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box Vol. 3 », reconnue par son en-tête « image=SetSymbolCSU »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
-   "entrees": {
-    "Pokémon Card Display Set Gift Box Vol. 3": 13
-   },
-   "note": "vérification automatique : 13 entrées pour 13 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
-   "entrees": 13,
-   "couverture": {
-    "produitsNumerotes": 13,
-    "couverts": 13,
-    "numerosSetlist": 13,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CS2.1C",
-  "exp": 6406,
-  "prod": 10,
-  "nom": "Meowth's Slick Trick",
-  "slugSet": "Meowths-Little-Tricks",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Meowth's Slick Trick (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Meowth's Slick Trick",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Meowth's Slick Trick"
-   ]
-  },
-  "attendu": 10,
-  "controle": {
-   "entreesSection": 10,
-   "numerosSetlist": 10,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Meowth's Slick Trick",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2.1C → CS21, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Meowth's Slick Trick », reconnue par son en-tête « image=SetSymbolCS21 »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Meowth's Slick Trick (ATCG)",
-   "entrees": {
-    "Meowth's Slick Trick": 10
-   },
-   "note": "vérification automatique : 10 entrées pour 10 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Meowth's Slick Trick (ATCG)",
-   "entrees": 10,
-   "couverture": {
-    "produitsNumerotes": 10,
-    "couverts": 10,
-    "numerosSetlist": 10,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSHC",
-  "exp": 6401,
-  "prod": 9,
-  "nom": "Eevee Advanced Gift Boxes",
-  "slugSet": "Eevee-Advanced-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Eevee Advanced Gift Boxes (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Eevee Advanced Gift Boxes",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Eevee Advanced Gift Boxes"
-   ]
-  },
-  "attendu": 9,
-  "controle": {
-   "entreesSection": 9,
-   "numerosSetlist": 0,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Eevee Advanced Gift Boxes",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSHC → CSH, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee Advanced Gift Boxes », reconnue par son en-tête « image=SetSymbolCSH »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Eevee Advanced Gift Boxes (ATCG)",
-   "entrees": 9,
-   "couverture": {
-    "produitsNumerotes": 9,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
-   },
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/9 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CSMYC",
-  "exp": 6367,
-  "prod": 8,
-  "nom": "Eevee-GX Gift Box Sets",
-  "slugSet": "Eeveelutions-GX-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Eevee-GX Gift Box Sets (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Eevee-GX Gift Box Sets",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Eevee-GX Boxes"
-   ]
-  },
-  "attendu": 8,
-  "controle": {
-   "entreesSection": 8,
-   "numerosSetlist": 0,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Eevee-GX Gift Box Sets",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMYC → CSMY, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee-GX Boxes », reconnue par son en-tête « image=SetSymbolCSMY »."
-  },
-  "verifie": null,
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Eevee-GX Gift Box Sets (ATCG)",
-   "entrees": 8,
-   "couverture": {
-    "produitsNumerotes": 8,
-    "couverts": 0,
-    "numerosSetlist": 0,
-    "taux": 0
-   },
-   "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 0/8 sous 0,95"
-   ]
-  }
- },
- {
-  "code": "CSGC",
-  "exp": 6356,
-  "prod": 8,
-  "nom": "Pokémon Card Display Set Gift Box",
-  "slugSet": "Pokemon-Card-Display-Set-Gift-Box-Eevee",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Pokémon Card Display Set Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Pokémon Card Display Set Gift Box",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Pokémon Card Display Set Gift Box"
-   ]
-  },
-  "attendu": 8,
-  "controle": {
-   "entreesSection": 8,
-   "numerosSetlist": 8,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Pokémon Card Display Set Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSGC → CSG, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box », reconnue par son en-tête « image=SetSymbolCSG »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Pokémon Card Display Set Gift Box (ATCG)",
-   "entrees": {
-    "Pokémon Card Display Set Gift Box": 8
-   },
-   "note": "vérification automatique : 8 entrées pour 8 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Pokémon Card Display Set Gift Box (ATCG)",
-   "entrees": 8,
-   "couverture": {
-    "produitsNumerotes": 8,
-    "couverts": 8,
-    "numerosSetlist": 8,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
-  "code": "CSMLC",
-  "exp": 6366,
-  "prod": 5,
-  "nom": "Lillie's Support Exclusive Gift Box",
-  "slugSet": "Lillies-Support-Gift-Box",
-  "region": "chinois",
-  "bulba": {
-   "titre": "Lillie's Support Exclusive Gift Box (ATCG)",
-   "tirage": "zh-hans",
-   "expansion": "Lillie's Support Exclusive Gift Box",
-   "numerosDepuisSetlist": true,
-   "setlist": [
-    "Lillie's Support Box"
-   ]
-  },
-  "attendu": 5,
-  "controle": {
-   "entreesSection": 5,
-   "numerosSetlist": 5,
-   "numerosAmbigus": 0,
-   "exemplesAmbigus": [],
-   "le": "2026-09-20"
-  },
-  "auto": {
-   "cle": "atcg-code-2026-09-20",
-   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
-   "nomBulbapedia": "Lillie's Support Exclusive Gift Box",
-   "familleUnivers": "chinois-simplifie",
-   "genereLe": "2026-09-20",
-   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMLC → CSML, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Lillie's Support Box », reconnue par son en-tête « image=SetSymbolCSML »."
-  },
-  "verifie": {
-   "le": "2026-09-20",
-   "page": "Lillie's Support Exclusive Gift Box (ATCG)",
-   "entrees": {
-    "Lillie's Support Exclusive Gift Box": 5
-   },
-   "note": "vérification automatique : 5 entrées pour 5 produits, échantillon « undefined » (zh-hans)"
-  },
-  "verif": {
-   "le": "2026-09-20",
-   "pageResolue": "Lillie's Support Exclusive Gift Box (ATCG)",
-   "entrees": 5,
-   "couverture": {
-    "produitsNumerotes": 5,
-    "couverts": 5,
-    "numerosSetlist": 5,
-    "taux": 1
-   },
-   "ratio": 1,
-   "etat": "OK",
-   "raisons": []
-  }
- },
- {
   "code": "m6",
   "exp": 6636,
   "prod": 113,
@@ -30402,6 +28156,2972 @@
    "ratio": 1,
    "etat": "OK",
    "raisons": []
+  }
+ },
+ {
+  "code": "S-P/ID",
+  "exp": 6673,
+  "prod": 380,
+  "nom": "Sword Shield Indonesian Promos",
+  "slugSet": "Sword-Shield-Indonesian-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "S-P Promotional cards (ITCG)",
+   "tirage": "id",
+   "expansion": "S-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 380,
+  "auto": {
+   "cle": "promo-asie-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "S-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « ITCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "S-P Promotional cards (ITCG)",
+   "entrees": 389,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 266,
+    "couverts": 266,
+    "numerosSetlist": 379,
+    "taux": 1
+   },
+   "ratio": 1.02,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "S-P Promotional cards (ITCG)",
+   "entrees": {
+    "S-P Promotional cards": 389
+   },
+   "note": "vérification automatique : 389 entrées pour 380 produits, échantillon « undefined » (id)"
+  }
+ },
+ {
+  "code": "S-P/TH",
+  "exp": 6672,
+  "prod": 146,
+  "nom": "Sword Shield Thai Promos",
+  "slugSet": "Sword-Shield-Thai-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "S-P Promotional cards (TTCG)",
+   "tirage": "th",
+   "expansion": "S-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 146,
+  "auto": {
+   "cle": "promo-asie-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "S-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « TTCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "S-P Promotional cards (TTCG)",
+   "entrees": 152,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 145,
+    "couverts": 145,
+    "numerosSetlist": 145,
+    "taux": 1
+   },
+   "ratio": 1.04,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "S-P Promotional cards (TTCG)",
+   "entrees": {
+    "S-P Promotional cards": 152
+   },
+   "note": "vérification automatique : 152 entrées pour 146 produits, échantillon « undefined » (th)"
+  }
+ },
+ {
+  "code": "SM-P/ID",
+  "exp": 6694,
+  "prod": 187,
+  "nom": "Sun Moon Indonesian Promos",
+  "slugSet": "Sun-Moon-Indonesian-Promos",
+  "region": "idth",
+  "bulba": {
+   "titre": "SM-P Promotional cards (ITCG)",
+   "tirage": "id",
+   "expansion": "SM-P Promotional cards",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 187,
+  "auto": {
+   "cle": "promo-asie-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "SM-P Promotional cards",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « ITCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "SM-P Promotional cards (ITCG)",
+   "entrees": 186,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 187,
+    "couverts": 184,
+    "numerosSetlist": 183,
+    "taux": 0.984
+   },
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "SM-P Promotional cards (ITCG)",
+   "entrees": {
+    "SM-P Promotional cards": 186
+   },
+   "note": "vérification automatique : 186 entrées pour 187 produits, échantillon « undefined » (id)"
+  }
+ },
+ {
+  "code": "MA4",
+  "exp": 6519,
+  "prod": 58,
+  "nom": "Void Blast",
+  "slugSet": "Void-Blast",
+  "region": "idth",
+  "bulba": {
+   "titre": "Void Blast (ATCG)",
+   "tirage": "idth",
+   "expansion": "Void Blast",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 58,
+  "auto": {
+   "cle": "idth-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "Void Blast",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « ATCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Void Blast (ATCG)",
+   "entrees": 181,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 58,
+    "couverts": 58,
+    "numerosSetlist": 181,
+    "taux": 1
+   },
+   "ratio": 3.12,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Void Blast (ATCG)",
+   "entrees": {
+    "Void Blast": 181
+   },
+   "note": "vérification automatique : 181 entrées pour 58 produits, échantillon « undefined » (idth)"
+  }
+ },
+ {
+  "code": "AC3",
+  "exp": 6699,
+  "prod": 266,
+  "nom": "Tag Team Collection",
+  "slugSet": "Tag-Team-Collection",
+  "region": "idth",
+  "bulba": {
+   "titre": "Tag Team Collection (ATCG)",
+   "tirage": "id",
+   "expansion": "Tag Team Collection",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 266,
+  "auto": {
+   "cle": "idth-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "Tag Team Collection",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « ATCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Tag Team Collection (ATCG)",
+   "entrees": 609,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 182,
+    "couverts": 0,
+    "numerosSetlist": 308,
+    "taux": 0
+   },
+   "ratio": 2.29,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 0/182 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "mF",
+  "exp": 6628,
+  "prod": 49,
+  "nom": "30th Celebration Premium Deck Set",
+  "slugSet": "30th-Celebration-Premium-Deck-Set",
+  "region": "japonais",
+  "bulba": {
+   "titre": "30th Celebration Premium Deck Set Espeon & Umbreon (TCG)",
+   "tirage": "jp",
+   "expansion": "30th Celebration Premium Deck Set Espeon & Umbreon"
+  },
+  "attendu": 49,
+  "auto": {
+   "cle": "page (TCG)-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "30th Celebration Premium Deck Set Espeon & Umbreon",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « TCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "30th Celebration Premium Deck Set Espeon & Umbreon (TCG)",
+   "entrees": 44,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 49,
+    "couverts": 44,
+    "numerosSetlist": 44,
+    "taux": 0.898
+   },
+   "echantillon": "Hydreigon (30th Celebration 99)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 0.9,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "30th Celebration Premium Deck Set Espeon & Umbreon (TCG)",
+   "entrees": {
+    "30th Celebration Premium Deck Set Espeon & Umbreon": 44
+   },
+   "note": "vérification automatique : 44 entrées pour 49 produits, échantillon « Hydreigon (30th Celebration 99) » (jp)"
+  }
+ },
+ {
+  "code": "CSV8C",
+  "exp": 6495,
+  "prod": 264,
+  "nom": "Sparkling Fable",
+  "slugSet": "Brilliant-Fantasy",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Sparkling Fable (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Sparkling Fable",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 264,
+  "controle": {
+   "entreesSection": 264,
+   "numerosSetlist": 264,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Sparkling Fable",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV8C → CSV8, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Sparkling Fable (ATCG)",
+   "entrees": {
+    "Sparkling Fable": 264
+   },
+   "note": "vérification automatique : 264 entrées pour 264 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Sparkling Fable (ATCG)",
+   "entrees": 264,
+   "couverture": {
+    "produitsNumerotes": 264,
+    "couverts": 264,
+    "numerosSetlist": 264,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVE1C",
+  "exp": 6311,
+  "prod": 202,
+  "nom": "Battle Party: Shared Dream",
+  "slugSet": "Battle-Party-Dream-Together",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Battle Party: Shared Dream (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Battle Party: Shared Dream",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Battle Party: Shared Dream"
+   ]
+  },
+  "attendu": 202,
+  "controle": {
+   "entreesSection": 178,
+   "numerosSetlist": 177,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Battle Party: Shared Dream",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVE1C → CSVE1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Battle Party: Shared Dream », reconnue par son en-tête « image=SetSymbolCSVE1 »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Battle Party: Shared Dream (ATCG)",
+   "entrees": 178,
+   "couverture": {
+    "produitsNumerotes": 202,
+    "couverts": 177,
+    "numerosSetlist": 177,
+    "taux": 0.876
+   },
+   "ratio": 0.88,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 177/202 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CBB6C",
+  "exp": 6669,
+  "prod": 196,
+  "nom": "Gem Pack Vol. 6",
+  "slugSet": "Gem-Pack-Vol-6",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gem Pack Vol. 6 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gem Pack Vol. 6",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 196,
+  "controle": {
+   "entreesSection": 196,
+   "numerosSetlist": 7,
+   "numerosAmbigus": 7,
+   "exemplesAmbigus": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5"
+   ],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Gem Pack Vol. 6",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CBB6C → CBB6, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": null,
+  "refus": "7 des 7 numéros de la section désignent PLUSIEURS cartes : le cadrage ne sépare pas les moitiés de cette page (§34).",
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Gem Pack Vol. 6 (ATCG)",
+   "entrees": 196,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 196,
+    "couverts": 49,
+    "numerosSetlist": 7,
+    "taux": 0.25
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 49/196 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CS4aC",
+  "exp": 6204,
+  "prod": 184,
+  "nom": "Polychromatic Gathering",
+  "slugSet": "Nine-Colors-Gathering-Friends",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Polychromatic Gathering (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Polychromatic Gathering",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Friend"
+   ]
+  },
+  "attendu": 184,
+  "controle": {
+   "entreesSection": 184,
+   "numerosSetlist": 184,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Polychromatic Gathering",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4aC → CS4A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Friend », reconnue par son en-tête « image=SetSymbolCS4A »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Polychromatic Gathering (ATCG)",
+   "entrees": {
+    "Polychromatic Gathering": 184
+   },
+   "note": "vérification automatique : 184 entrées pour 184 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Polychromatic Gathering (ATCG)",
+   "entrees": 184,
+   "couverture": {
+    "produitsNumerotes": 184,
+    "couverts": 184,
+    "numerosSetlist": 184,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS5bC",
+  "exp": 6258,
+  "prod": 178,
+  "nom": "Gallant Galaxy",
+  "slugSet": "Brave-Stars-Brave",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gallant Galaxy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gallant Galaxy",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Brave"
+   ]
+  },
+  "attendu": 178,
+  "controle": {
+   "entreesSection": 178,
+   "numerosSetlist": 178,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Gallant Galaxy",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5bC → CS5B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Brave », reconnue par son en-tête « image=SetSymbolCS5B »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Gallant Galaxy (ATCG)",
+   "entrees": {
+    "Gallant Galaxy": 178
+   },
+   "note": "vérification automatique : 178 entrées pour 178 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Gallant Galaxy (ATCG)",
+   "entrees": 178,
+   "couverture": {
+    "produitsNumerotes": 178,
+    "couverts": 178,
+    "numerosSetlist": 178,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS4bC",
+  "exp": 6205,
+  "prod": 177,
+  "nom": "Polychromatic Gathering",
+  "slugSet": "Nine-Colors-Gathering-Origin",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Polychromatic Gathering (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Polychromatic Gathering",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Origin"
+   ]
+  },
+  "attendu": 177,
+  "controle": {
+   "entreesSection": 176,
+   "numerosSetlist": 176,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Polychromatic Gathering",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4bC → CS4B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Origin », reconnue par son en-tête « image=SetSymbolCS4B »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Polychromatic Gathering (ATCG)",
+   "entrees": {
+    "Polychromatic Gathering": 176
+   },
+   "note": "vérification automatique : 176 entrées pour 177 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Polychromatic Gathering (ATCG)",
+   "entrees": 176,
+   "couverture": {
+    "produitsNumerotes": 177,
+    "couverts": 176,
+    "numerosSetlist": 176,
+    "taux": 0.994
+   },
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS5aC",
+  "exp": 6257,
+  "prod": 176,
+  "nom": "Gallant Galaxy",
+  "slugSet": "Brave-Stars-Charm",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gallant Galaxy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gallant Galaxy",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Charm"
+   ]
+  },
+  "attendu": 176,
+  "controle": {
+   "entreesSection": 176,
+   "numerosSetlist": 176,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Gallant Galaxy",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5aC → CS5A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Charm », reconnue par son en-tête « image=SetSymbolCS5A »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Gallant Galaxy (ATCG)",
+   "entrees": {
+    "Gallant Galaxy": 176
+   },
+   "note": "vérification automatique : 176 entrées pour 176 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Gallant Galaxy (ATCG)",
+   "entrees": 176,
+   "couverture": {
+    "produitsNumerotes": 176,
+    "couverts": 176,
+    "numerosSetlist": 176,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS6bC",
+  "exp": 6250,
+  "prod": 172,
+  "nom": "Marine Shadow",
+  "slugSet": "Azure-Shadow-Pursuit",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Marine Shadow (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Marine Shadow",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Banish"
+   ]
+  },
+  "attendu": 172,
+  "controle": {
+   "entreesSection": 171,
+   "numerosSetlist": 170,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Marine Shadow",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6bC → CS6B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Banish », reconnue par son en-tête « image=SetSymbolCS6B »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Marine Shadow (ATCG)",
+   "entrees": {
+    "Marine Shadow": 171
+   },
+   "note": "vérification automatique : 171 entrées pour 172 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Marine Shadow (ATCG)",
+   "entrees": 171,
+   "couverture": {
+    "produitsNumerotes": 172,
+    "couverts": 170,
+    "numerosSetlist": 170,
+    "taux": 0.988
+   },
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS6aC",
+  "exp": 6249,
+  "prod": 169,
+  "nom": "Marine Shadow",
+  "slugSet": "Azure-Shadow-Roar",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Marine Shadow (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Marine Shadow",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Roar"
+   ]
+  },
+  "attendu": 169,
+  "controle": {
+   "entreesSection": 169,
+   "numerosSetlist": 169,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Marine Shadow",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6aC → CS6A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Roar », reconnue par son en-tête « image=SetSymbolCS6A »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Marine Shadow (ATCG)",
+   "entrees": {
+    "Marine Shadow": 169
+   },
+   "note": "vérification automatique : 169 entrées pour 169 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Marine Shadow (ATCG)",
+   "entrees": 169,
+   "couverture": {
+    "produitsNumerotes": 169,
+    "couverts": 169,
+    "numerosSetlist": 169,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSV1C",
+  "exp": 6193,
+  "prod": 167,
+  "nom": "Ancient Times, Future Progress",
+  "slugSet": "Eternal-Birth",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Ancient Times, Future Progress (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Ancient Times, Future Progress",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 167,
+  "controle": {
+   "entreesSection": 167,
+   "numerosSetlist": 167,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Ancient Times, Future Progress",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV1C → CSV1, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Ancient Times, Future Progress (ATCG)",
+   "entrees": {
+    "Ancient Times, Future Progress": 167
+   },
+   "note": "vérification automatique : 167 entrées pour 167 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Ancient Times, Future Progress (ATCG)",
+   "entrees": 167,
+   "couverture": {
+    "produitsNumerotes": 167,
+    "couverts": 167,
+    "numerosSetlist": 167,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSV6C",
+  "exp": 6362,
+  "prod": 163,
+  "nom": "Arcane Truth",
+  "slugSet": "True-Mystery",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Arcane Truth (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Arcane Truth",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 163,
+  "controle": {
+   "entreesSection": 163,
+   "numerosSetlist": 163,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Arcane Truth",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV6C → CSV6, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Arcane Truth (ATCG)",
+   "entrees": {
+    "Arcane Truth": 163
+   },
+   "note": "vérification automatique : 163 entrées pour 163 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Arcane Truth (ATCG)",
+   "entrees": 163,
+   "couverture": {
+    "produitsNumerotes": 163,
+    "couverts": 163,
+    "numerosSetlist": 163,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS5DC",
+  "exp": 6397,
+  "prod": 163,
+  "nom": "Gallant Galaxy V Starter Deck",
+  "slugSet": "Brave-Stars-V-Starter-Deck",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gallant Galaxy V Starter Deck (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gallant Galaxy V Starter Deck",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Gallant Galaxy V Starter Deck"
+   ]
+  },
+  "attendu": 163,
+  "controle": {
+   "entreesSection": 161,
+   "numerosSetlist": 161,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Gallant Galaxy V Starter Deck",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5DC → CS5D, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Gallant Galaxy V Starter Deck », reconnue par son en-tête « image=SetSymbolCS5D »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Gallant Galaxy V Starter Deck (ATCG)",
+   "entrees": {
+    "Gallant Galaxy V Starter Deck": 161
+   },
+   "note": "vérification automatique : 161 entrées pour 163 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Gallant Galaxy V Starter Deck (ATCG)",
+   "entrees": 161,
+   "couverture": {
+    "produitsNumerotes": 163,
+    "couverts": 161,
+    "numerosSetlist": 161,
+    "taux": 0.988
+   },
+   "ratio": 0.99,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVH4C",
+  "exp": 6543,
+  "prod": 151,
+  "nom": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
+  "slugSet": "Happy-Set-Decidueye-Melmetal-Koraidon-Miraidon",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Happy Set"
+   ]
+  },
+  "attendu": 151,
+  "controle": {
+   "entreesSection": 59,
+   "numerosSetlist": 59,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH4C → CSVH4, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH4 »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Decidueye & Melmetal & Koraidon & Miraidon Happy Set (ATCG)",
+   "entrees": 59,
+   "couverture": {
+    "produitsNumerotes": 151,
+    "couverts": 59,
+    "numerosSetlist": 59,
+    "taux": 0.391
+   },
+   "ratio": 0.39,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 59/151 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CS2bC",
+  "exp": 6281,
+  "prod": 143,
+  "nom": "Vivid Portrayals",
+  "slugSet": "Vivid-Portrayals-Indigo",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Vivid Portrayals (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Vivid Portrayals",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Indigo"
+   ]
+  },
+  "attendu": 143,
+  "controle": {
+   "entreesSection": 143,
+   "numerosSetlist": 143,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Vivid Portrayals",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2bC → CS2B, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Indigo », reconnue par son en-tête « image=SetSymbolCS2B »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Vivid Portrayals (ATCG)",
+   "entrees": {
+    "Vivid Portrayals": 143
+   },
+   "note": "vérification automatique : 143 entrées pour 143 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Vivid Portrayals (ATCG)",
+   "entrees": 143,
+   "couverture": {
+    "produitsNumerotes": 143,
+    "couverts": 143,
+    "numerosSetlist": 143,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS2aC",
+  "exp": 6279,
+  "prod": 143,
+  "nom": "Vivid Portrayals",
+  "slugSet": "Vivid-Portrayals-Obsidian",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Vivid Portrayals (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Vivid Portrayals",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Obsidian"
+   ]
+  },
+  "attendu": 143,
+  "controle": {
+   "entreesSection": 143,
+   "numerosSetlist": 143,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Vivid Portrayals",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2aC → CS2A, lu dans texte « expansion mark »), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Obsidian », reconnue par son en-tête « image=SetSymbolCS2A »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Vivid Portrayals (ATCG)",
+   "entrees": {
+    "Vivid Portrayals": 143
+   },
+   "note": "vérification automatique : 143 entrées pour 143 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Vivid Portrayals (ATCG)",
+   "entrees": 143,
+   "couverture": {
+    "produitsNumerotes": 143,
+    "couverts": 143,
+    "numerosSetlist": 143,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVL1C",
+  "exp": 6168,
+  "prod": 141,
+  "nom": "Journey Theme Pack",
+  "slugSet": "Adventure-Special-Pack",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Journey Theme Pack (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Journey Theme Pack",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 141,
+  "controle": {
+   "entreesSection": 133,
+   "numerosSetlist": 133,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Journey Theme Pack",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVL1C → CSVL1, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Journey Theme Pack (ATCG)",
+   "entrees": 133,
+   "couverture": {
+    "produitsNumerotes": 141,
+    "couverts": 133,
+    "numerosSetlist": 133,
+    "taux": 0.943
+   },
+   "ratio": 0.94,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 133/141 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CSVL2C",
+  "exp": 6361,
+  "prod": 139,
+  "nom": "Travel Theme Pack",
+  "slugSet": "Travel-Special-Pack",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Travel Theme Pack (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Travel Theme Pack",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 139,
+  "controle": {
+   "entreesSection": 139,
+   "numerosSetlist": 139,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Travel Theme Pack",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVL2C → CSVL2, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Travel Theme Pack (ATCG)",
+   "entrees": {
+    "Travel Theme Pack": 139
+   },
+   "note": "vérification automatique : 139 entrées pour 139 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Travel Theme Pack (ATCG)",
+   "entrees": 139,
+   "couverture": {
+    "produitsNumerotes": 139,
+    "couverts": 139,
+    "numerosSetlist": 139,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSV5C",
+  "exp": 6237,
+  "prod": 134,
+  "nom": "Ardent Obsidian",
+  "slugSet": "Dark-Crystal-Blaze",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Ardent Obsidian (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Ardent Obsidian",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 134,
+  "controle": {
+   "entreesSection": 164,
+   "numerosSetlist": 164,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Ardent Obsidian",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV5C → CSV5, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Ardent Obsidian (ATCG)",
+   "entrees": {
+    "Ardent Obsidian": 164
+   },
+   "note": "vérification automatique : 164 entrées pour 134 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Ardent Obsidian (ATCG)",
+   "entrees": 164,
+   "couverture": {
+    "produitsNumerotes": 134,
+    "couverts": 134,
+    "numerosSetlist": 164,
+    "taux": 1
+   },
+   "ratio": 1.22,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVH2C",
+  "exp": 6334,
+  "prod": 118,
+  "nom": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
+  "slugSet": "Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Happy Set"
+   ]
+  },
+  "attendu": 118,
+  "controle": {
+   "entreesSection": 58,
+   "numerosSetlist": 58,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH2C → CSVH2, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH2 »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Lucario & Greninja & Zamazenta & Mabosstiff Happy Set (ATCG)",
+   "entrees": 58,
+   "couverture": {
+    "produitsNumerotes": 118,
+    "couverts": 85,
+    "numerosSetlist": 58,
+    "taux": 0.72
+   },
+   "ratio": 0.49,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 85/118 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CSVH3C",
+  "exp": 6309,
+  "prod": 97,
+  "nom": "Altaria & Latios & Infernape & Maushold Happy Set",
+  "slugSet": "Happy-Set-Altaria-Latios-Infernape-Maushold",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Altaria & Latios & Infernape & Maushold Happy Set",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Happy Set"
+   ]
+  },
+  "attendu": 97,
+  "controle": {
+   "entreesSection": 64,
+   "numerosSetlist": 64,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Altaria & Latios & Infernape & Maushold Happy Set",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH3C → CSVH3, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH3 »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Altaria & Latios & Infernape & Maushold Happy Set (ATCG)",
+   "entrees": 64,
+   "couverture": {
+    "produitsNumerotes": 97,
+    "couverts": 64,
+    "numerosSetlist": 64,
+    "taux": 0.66
+   },
+   "ratio": 0.66,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 64/97 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CS6.5C",
+  "exp": 6247,
+  "prod": 96,
+  "nom": "Victory Lodestar",
+  "slugSet": "Victory-Star-Guide",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Victory Lodestar (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Victory Lodestar",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Victory Lodestar"
+   ]
+  },
+  "attendu": 96,
+  "controle": {
+   "entreesSection": 96,
+   "numerosSetlist": 96,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Victory Lodestar",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS6.5C → CS65, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Victory Lodestar », reconnue par son en-tête « image=SetSymbolCS65 »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Victory Lodestar (ATCG)",
+   "entrees": {
+    "Victory Lodestar": 96
+   },
+   "note": "vérification automatique : 96 entrées pour 96 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Victory Lodestar (ATCG)",
+   "entrees": 96,
+   "couverture": {
+    "produitsNumerotes": 96,
+    "couverts": 96,
+    "numerosSetlist": 96,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVH1C",
+  "exp": 6335,
+  "prod": 92,
+  "nom": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
+  "slugSet": "Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Happy Set"
+   ]
+  },
+  "attendu": 92,
+  "controle": {
+   "entreesSection": 59,
+   "numerosSetlist": 59,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH1C → CSVH1, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH1 »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pikachu & Clefairy & Turtwig & Gimmighoul Happy Set (ATCG)",
+   "entrees": 59,
+   "couverture": {
+    "produitsNumerotes": 92,
+    "couverts": 59,
+    "numerosSetlist": 59,
+    "taux": 0.641
+   },
+   "ratio": 0.64,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 59/92 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CS5.5C",
+  "exp": 6248,
+  "prod": 89,
+  "nom": "Overshadowed Radiance",
+  "slugSet": "Shadow-of-Glory",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Overshadowed Radiance (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Overshadowed Radiance",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Overshadowed Radiance"
+   ]
+  },
+  "attendu": 89,
+  "controle": {
+   "entreesSection": 89,
+   "numerosSetlist": 88,
+   "numerosAmbigus": 1,
+   "exemplesAmbigus": [
+    "2"
+   ],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Overshadowed Radiance",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS5.5C → CS55, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Overshadowed Radiance », reconnue par son en-tête « image=SetSymbolCS55 »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Overshadowed Radiance (ATCG)",
+   "entrees": {
+    "Overshadowed Radiance": 89
+   },
+   "note": "vérification automatique : 89 entrées pour 89 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Overshadowed Radiance (ATCG)",
+   "entrees": 89,
+   "couverture": {
+    "produitsNumerotes": 89,
+    "couverts": 88,
+    "numerosSetlist": 88,
+    "taux": 0.989
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS4.5C",
+  "exp": 6252,
+  "prod": 83,
+  "nom": "Flame Dance of the End",
+  "slugSet": "Final-Flame-Dance",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Flame Dance of the End (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Flame Dance of the End",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Flame Dance of the End"
+   ]
+  },
+  "attendu": 83,
+  "controle": {
+   "entreesSection": 83,
+   "numerosSetlist": 83,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Flame Dance of the End",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4.5C → CS45, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Flame Dance of the End », reconnue par son en-tête « image=SetSymbolCS45 »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Flame Dance of the End (ATCG)",
+   "entrees": {
+    "Flame Dance of the End": 83
+   },
+   "note": "vérification automatique : 83 entrées pour 83 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Flame Dance of the End (ATCG)",
+   "entrees": 83,
+   "couverture": {
+    "produitsNumerotes": 83,
+    "couverts": 83,
+    "numerosSetlist": 83,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSZC",
+  "exp": 6355,
+  "prod": 68,
+  "nom": "Peripheral Collection Gift Box: Variety Treasure Box",
+  "slugSet": "Variety-Treasure-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Peripheral Collection Gift Box: Variety Treasure Box",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Peripheral Collection Gift Box: Variety Treasure Box"
+   ]
+  },
+  "attendu": 68,
+  "controle": {
+   "entreesSection": 68,
+   "numerosSetlist": 68,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Peripheral Collection Gift Box: Variety Treasure Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSZC → CSZ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Peripheral Collection Gift Box: Variety Treasure Box », reconnue par son en-tête « image=SetSymbolCSZ »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
+   "entrees": {
+    "Peripheral Collection Gift Box: Variety Treasure Box": 68
+   },
+   "note": "vérification automatique : 68 entrées pour 68 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Peripheral Collection Gift Box: Variety Treasure Box (ATCG)",
+   "entrees": 68,
+   "couverture": {
+    "produitsNumerotes": 68,
+    "couverts": 68,
+    "numerosSetlist": 68,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVH5C",
+  "exp": 6634,
+  "prod": 61,
+  "nom": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set",
+  "slugSet": "Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Happy Set"
+   ]
+  },
+  "attendu": 61,
+  "controle": {
+   "entreesSection": 58,
+   "numerosSetlist": 58,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVH5C → CSVH5, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Happy Set », reconnue par son en-tête « image=SetSymbolCSVH5 »."
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set (ATCG)",
+   "entrees": {
+    "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set": 58
+   },
+   "note": "vérification automatique : 58 entrées pour 61 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Dragonite & Mewtwo & Camerupt & Sinistcha Happy Set (ATCG)",
+   "entrees": 58,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 61,
+    "couverts": 58,
+    "numerosSetlist": 58,
+    "taux": 0.951
+   },
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSVNC",
+  "exp": 6579,
+  "prod": 44,
+  "nom": "Kitakami Theme Pack",
+  "slugSet": "Land-of-Kitakami-Special-Pack",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Kitakami Theme Pack (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Kitakami Theme Pack",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 44,
+  "controle": {
+   "entreesSection": 139,
+   "numerosSetlist": 139,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Kitakami Theme Pack",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSVNC → CSVN, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Kitakami Theme Pack (ATCG)",
+   "entrees": {
+    "Kitakami Theme Pack": 139
+   },
+   "note": "vérification automatique : 139 entrées pour 44 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Kitakami Theme Pack (ATCG)",
+   "entrees": 139,
+   "couverture": {
+    "produitsNumerotes": 44,
+    "couverts": 44,
+    "numerosSetlist": 139,
+    "taux": 1
+   },
+   "ratio": 3.16,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSFC",
+  "exp": 6275,
+  "prod": 26,
+  "nom": "Dragon Resurgence",
+  "slugSet": "Return-of-the-Dragon",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dragon Resurgence (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dragon Resurgence",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Dragon Resurgence"
+   ]
+  },
+  "attendu": 26,
+  "controle": {
+   "entreesSection": 26,
+   "numerosSetlist": 26,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Dragon Resurgence",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSFC → CSF, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Dragon Resurgence », reconnue par son en-tête « image=SetSymbolCSF »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Dragon Resurgence (ATCG)",
+   "entrees": {
+    "Dragon Resurgence": 26
+   },
+   "note": "vérification automatique : 26 entrées pour 26 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Dragon Resurgence (ATCG)",
+   "entrees": 26,
+   "couverture": {
+    "produitsNumerotes": 26,
+    "couverts": 26,
+    "numerosSetlist": 26,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSDC",
+  "exp": 6348,
+  "prod": 25,
+  "nom": "Pikachu Legendary Celebration Gift Boxes",
+  "slugSet": "Pikachu-Legendary-Celebration",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pikachu Legendary Celebration Gift Boxes",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pikachu Legendary Celebration Gift Boxes"
+   ]
+  },
+  "attendu": 25,
+  "controle": {
+   "entreesSection": 25,
+   "numerosSetlist": 25,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pikachu Legendary Celebration Gift Boxes",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSDC → CSD, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pikachu Legendary Celebration Gift Boxes », reconnue par son en-tête « image=SetSymbolCSD »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
+   "entrees": {
+    "Pikachu Legendary Celebration Gift Boxes": 25
+   },
+   "note": "vérification automatique : 25 entrées pour 25 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pikachu Legendary Celebration Gift Boxes (ATCG)",
+   "entrees": 25,
+   "couverture": {
+    "produitsNumerotes": 25,
+    "couverts": 25,
+    "numerosSetlist": 25,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSNC",
+  "exp": 6398,
+  "prod": 24,
+  "nom": "Gallant Galaxy Deck Building Gift Box",
+  "slugSet": "Brave-Stars-Deck-Building-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Gallant Galaxy Deck Building Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Gallant Galaxy Deck Building Gift Box",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 24,
+  "controle": {
+   "entreesSection": 24,
+   "numerosSetlist": 24,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Gallant Galaxy Deck Building Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSNC → CSN, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Gallant Galaxy Deck Building Gift Box (ATCG)",
+   "entrees": {
+    "Gallant Galaxy Deck Building Gift Box": 24
+   },
+   "note": "vérification automatique : 24 entrées pour 24 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Gallant Galaxy Deck Building Gift Box (ATCG)",
+   "entrees": 24,
+   "couverture": {
+    "produitsNumerotes": 24,
+    "couverts": 24,
+    "numerosSetlist": 24,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSAC",
+  "exp": 6407,
+  "prod": 24,
+  "nom": "Dynamax Clash Deck Building Gift Box",
+  "slugSet": "Dynamax-Clash-Deck-Building-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Dynamax Clash Deck Building Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Dynamax Clash Deck Building Gift Box",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 24,
+  "controle": {
+   "entreesSection": 0,
+   "numerosSetlist": 0,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Dynamax Clash Deck Building Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSAC → CSA, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Dynamax Clash Deck Building Gift Box (ATCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Dynamax Clash Deck Building Gift Box »"
+   ]
+  }
+ },
+ {
+  "code": "CS4.1C",
+  "exp": 6272,
+  "prod": 23,
+  "nom": "Radiant Energy",
+  "slugSet": "Radiant-Energy-Vol-1",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Radiant Energy (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Radiant Energy",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Radiant Energy"
+   ]
+  },
+  "attendu": 23,
+  "controle": {
+   "entreesSection": 23,
+   "numerosSetlist": 23,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Radiant Energy",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS4.1C → CS41, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Radiant Energy », reconnue par son en-tête « image=SetSymbolCS41 »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Radiant Energy (ATCG)",
+   "entrees": {
+    "Radiant Energy": 23
+   },
+   "note": "vérification automatique : 23 entrées pour 23 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Radiant Energy (ATCG)",
+   "entrees": 23,
+   "couverture": {
+    "produitsNumerotes": 23,
+    "couverts": 23,
+    "numerosSetlist": 23,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSXC",
+  "exp": 6301,
+  "prod": 20,
+  "nom": "Giratina VSTAR Advanced Deck Building Gift Box",
+  "slugSet": "Giratina-VSTAR-Deck-Building-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Giratina VSTAR Advanced Deck Building Gift Box",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 20,
+  "controle": {
+   "entreesSection": 20,
+   "numerosSetlist": 20,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Giratina VSTAR Advanced Deck Building Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSXC → CSX, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
+   "entrees": {
+    "Giratina VSTAR Advanced Deck Building Gift Box": 20
+   },
+   "note": "vérification automatique : 20 entrées pour 20 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Giratina VSTAR Advanced Deck Building Gift Box (ATCG)",
+   "entrees": 20,
+   "couverture": {
+    "produitsNumerotes": 20,
+    "couverts": 20,
+    "numerosSetlist": 20,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSEC",
+  "exp": 6347,
+  "prod": 20,
+  "nom": "Connected Quartet Gift Boxes",
+  "slugSet": "Four-Party-Connection-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Connected Quartet Gift Boxes (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Connected Quartet Gift Boxes",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Connected Quartet Gift Boxes"
+   ]
+  },
+  "attendu": 20,
+  "controle": {
+   "entreesSection": 20,
+   "numerosSetlist": 0,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Connected Quartet Gift Boxes",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSEC → CSE, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Connected Quartet Gift Boxes », reconnue par son en-tête « image=SetSymbolCSE »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Connected Quartet Gift Boxes (ATCG)",
+   "entrees": 20,
+   "couverture": {
+    "produitsNumerotes": 20,
+    "couverts": 0,
+    "numerosSetlist": 0,
+    "taux": 0
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 0/20 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CSOC",
+  "exp": 6402,
+  "prod": 19,
+  "nom": "Fusion Strike Advanced Deck Building Gift Box",
+  "slugSet": "Mew-Confluence-Deck-Building-Advanced-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Fusion Strike Advanced Deck Building Gift Box",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 19,
+  "controle": {
+   "entreesSection": 19,
+   "numerosSetlist": 19,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Fusion Strike Advanced Deck Building Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSOC → CSO, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
+   "entrees": {
+    "Fusion Strike Advanced Deck Building Gift Box": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Fusion Strike Advanced Deck Building Gift Box (ATCG)",
+   "entrees": 19,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSMAC",
+  "exp": 6368,
+  "prod": 19,
+  "nom": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
+  "slugSet": "Arceus-Dialga-Palkia-GX-Premium-Deck-Building-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 19,
+  "controle": {
+   "entreesSection": 19,
+   "numerosSetlist": 19,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMAC → CSMA, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
+   "entrees": {
+    "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box": 19
+   },
+   "note": "vérification automatique : 19 entrées pour 19 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Arceus & Dialga & Palkia-GX Advanced Deck Building Gift Box (ATCG)",
+   "entrees": 19,
+   "couverture": {
+    "produitsNumerotes": 19,
+    "couverts": 19,
+    "numerosSetlist": 19,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSJC",
+  "exp": 6349,
+  "prod": 16,
+  "nom": "Pokémon Art Illustration Festival: Scene Gift Boxes",
+  "slugSet": "Pokemon-Art-Illustration-Celebration-Scene",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pokémon Art Illustration Festival: Scene Gift Boxes",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pokémon Art Illustration Festival: Scene"
+   ]
+  },
+  "attendu": 16,
+  "controle": {
+   "entreesSection": 16,
+   "numerosSetlist": 16,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pokémon Art Illustration Festival: Scene Gift Boxes",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSJC → CSJ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Art Illustration Festival: Scene », reconnue par son en-tête « image=SetSymbolCSJ »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
+   "entrees": {
+    "Pokémon Art Illustration Festival: Scene Gift Boxes": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Art Illustration Festival: Scene Gift Boxes (ATCG)",
+   "entrees": 16,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 16,
+    "numerosSetlist": 16,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSYC",
+  "exp": 6302,
+  "prod": 16,
+  "nom": "Pokémon Art Illustration Festival: Gather Gift Boxes",
+  "slugSet": "Pokemon-Art-Illustration-Celebration-Gathering",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pokémon Art Illustration Festival: Gather Gift Boxes",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pokémon Art Illustration Festival: Scene"
+   ]
+  },
+  "attendu": 16,
+  "controle": {
+   "entreesSection": 16,
+   "numerosSetlist": 16,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pokémon Art Illustration Festival: Gather Gift Boxes",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSYC → CSY, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Art Illustration Festival: Scene », reconnue par son en-tête « image=SetSymbolCSY »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
+   "entrees": {
+    "Pokémon Art Illustration Festival: Gather Gift Boxes": 16
+   },
+   "note": "vérification automatique : 16 entrées pour 16 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Art Illustration Festival: Gather Gift Boxes (ATCG)",
+   "entrees": 16,
+   "couverture": {
+    "produitsNumerotes": 16,
+    "couverts": 16,
+    "numerosSetlist": 16,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSMJC",
+  "exp": 6369,
+  "prod": 15,
+  "nom": "Shining Pokémon Poké Ball Gift Box",
+  "slugSet": "Shining-Pokemon-Poke-Ball-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Shining Pokémon Poké Ball Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Shining Pokémon Poké Ball Gift Box",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Shining Pokémon Poké Ball Box"
+   ]
+  },
+  "attendu": 15,
+  "controle": {
+   "entreesSection": 15,
+   "numerosSetlist": 15,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Shining Pokémon Poké Ball Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMJC → CSMJ, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Shining Pokémon Poké Ball Box », reconnue par son en-tête « image=SetSymbolCSMJ »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Shining Pokémon Poké Ball Gift Box (ATCG)",
+   "entrees": {
+    "Shining Pokémon Poké Ball Gift Box": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Shining Pokémon Poké Ball Gift Box (ATCG)",
+   "entrees": 15,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSMC",
+  "exp": 6357,
+  "prod": 13,
+  "nom": "Pokémon Card Display Set Gift Box Vol. 2",
+  "slugSet": "Pokemon-Card-Display-Set-Gift-Box-Charizard",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pokémon Card Display Set Gift Box Vol. 2",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pokémon Card Display Set Gift Box Vol. 2"
+   ]
+  },
+  "attendu": 13,
+  "controle": {
+   "entreesSection": 13,
+   "numerosSetlist": 13,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pokémon Card Display Set Gift Box Vol. 2",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMC → CSM, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box Vol. 2 », reconnue par son en-tête « image=SetSymbolCSM »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
+   "entrees": {
+    "Pokémon Card Display Set Gift Box Vol. 2": 13
+   },
+   "note": "vérification automatique : 13 entrées pour 13 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Card Display Set Gift Box Vol. 2 (ATCG)",
+   "entrees": 13,
+   "couverture": {
+    "produitsNumerotes": 13,
+    "couverts": 13,
+    "numerosSetlist": 13,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSUC",
+  "exp": 6350,
+  "prod": 13,
+  "nom": "Pokémon Card Display Set Gift Box Vol. 3",
+  "slugSet": "Display-Set-Gift-Box-Gengar",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pokémon Card Display Set Gift Box Vol. 3",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pokémon Card Display Set Gift Box Vol. 3"
+   ]
+  },
+  "attendu": 13,
+  "controle": {
+   "entreesSection": 13,
+   "numerosSetlist": 13,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pokémon Card Display Set Gift Box Vol. 3",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSUC → CSU, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box Vol. 3 », reconnue par son en-tête « image=SetSymbolCSU »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
+   "entrees": {
+    "Pokémon Card Display Set Gift Box Vol. 3": 13
+   },
+   "note": "vérification automatique : 13 entrées pour 13 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Card Display Set Gift Box Vol. 3 (ATCG)",
+   "entrees": 13,
+   "couverture": {
+    "produitsNumerotes": 13,
+    "couverts": 13,
+    "numerosSetlist": 13,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CS2.1C",
+  "exp": 6406,
+  "prod": 10,
+  "nom": "Meowth's Slick Trick",
+  "slugSet": "Meowths-Little-Tricks",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Meowth's Slick Trick (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Meowth's Slick Trick",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Meowth's Slick Trick"
+   ]
+  },
+  "attendu": 10,
+  "controle": {
+   "entreesSection": 10,
+   "numerosSetlist": 10,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Meowth's Slick Trick",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CS2.1C → CS21, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Meowth's Slick Trick », reconnue par son en-tête « image=SetSymbolCS21 »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Meowth's Slick Trick (ATCG)",
+   "entrees": {
+    "Meowth's Slick Trick": 10
+   },
+   "note": "vérification automatique : 10 entrées pour 10 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Meowth's Slick Trick (ATCG)",
+   "entrees": 10,
+   "couverture": {
+    "produitsNumerotes": 10,
+    "couverts": 10,
+    "numerosSetlist": 10,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSHC",
+  "exp": 6401,
+  "prod": 9,
+  "nom": "Eevee Advanced Gift Boxes",
+  "slugSet": "Eevee-Advanced-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Eevee Advanced Gift Boxes (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Eevee Advanced Gift Boxes",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Eevee Advanced Gift Boxes"
+   ]
+  },
+  "attendu": 9,
+  "controle": {
+   "entreesSection": 9,
+   "numerosSetlist": 0,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Eevee Advanced Gift Boxes",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSHC → CSH, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee Advanced Gift Boxes », reconnue par son en-tête « image=SetSymbolCSH »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Eevee Advanced Gift Boxes (ATCG)",
+   "entrees": 9,
+   "couverture": {
+    "produitsNumerotes": 9,
+    "couverts": 0,
+    "numerosSetlist": 0,
+    "taux": 0
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 0/9 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CSIC",
+  "exp": 6354,
+  "prod": 8,
+  "nom": "Trainer Collection Gift Box",
+  "slugSet": "Sword-Shield-Trainer-Collection-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Trainer Collection Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Trainer Collection Gift Box",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Trainer Collection Gift Box"
+   ]
+  },
+  "attendu": 8,
+  "controle": {
+   "entreesSection": 8,
+   "numerosSetlist": 8,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Trainer Collection Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSIC → CSI, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Trainer Collection Gift Box », reconnue par son en-tête « image=SetSymbolCSI »."
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Trainer Collection Gift Box (ATCG)",
+   "entrees": {
+    "Trainer Collection Gift Box": 8
+   },
+   "note": "vérification automatique : 8 entrées pour 8 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Trainer Collection Gift Box (ATCG)",
+   "entrees": 8,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 8,
+    "couverts": 8,
+    "numerosSetlist": 8,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSMYC",
+  "exp": 6367,
+  "prod": 8,
+  "nom": "Eevee-GX Gift Box Sets",
+  "slugSet": "Eeveelutions-GX-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Eevee-GX Gift Box Sets (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Eevee-GX Gift Box Sets",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Eevee-GX Boxes"
+   ]
+  },
+  "attendu": 8,
+  "controle": {
+   "entreesSection": 8,
+   "numerosSetlist": 0,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Eevee-GX Gift Box Sets",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMYC → CSMY, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Eevee-GX Boxes », reconnue par son en-tête « image=SetSymbolCSMY »."
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Eevee-GX Gift Box Sets (ATCG)",
+   "entrees": 8,
+   "couverture": {
+    "produitsNumerotes": 8,
+    "couverts": 0,
+    "numerosSetlist": 0,
+    "taux": 0
+   },
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 0/8 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "CSGC",
+  "exp": 6356,
+  "prod": 8,
+  "nom": "Pokémon Card Display Set Gift Box",
+  "slugSet": "Pokemon-Card-Display-Set-Gift-Box-Eevee",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Pokémon Card Display Set Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Pokémon Card Display Set Gift Box",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Pokémon Card Display Set Gift Box"
+   ]
+  },
+  "attendu": 8,
+  "controle": {
+   "entreesSection": 8,
+   "numerosSetlist": 8,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Pokémon Card Display Set Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSGC → CSG, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Pokémon Card Display Set Gift Box », reconnue par son en-tête « image=SetSymbolCSG »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Pokémon Card Display Set Gift Box (ATCG)",
+   "entrees": {
+    "Pokémon Card Display Set Gift Box": 8
+   },
+   "note": "vérification automatique : 8 entrées pour 8 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Pokémon Card Display Set Gift Box (ATCG)",
+   "entrees": 8,
+   "couverture": {
+    "produitsNumerotes": 8,
+    "couverts": 8,
+    "numerosSetlist": 8,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "CSMLC",
+  "exp": 6366,
+  "prod": 5,
+  "nom": "Lillie's Support Exclusive Gift Box",
+  "slugSet": "Lillies-Support-Gift-Box",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Lillie's Support Exclusive Gift Box (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Lillie's Support Exclusive Gift Box",
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Lillie's Support Box"
+   ]
+  },
+  "attendu": 5,
+  "controle": {
+   "entreesSection": 5,
+   "numerosSetlist": 5,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-24"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-24",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Lillie's Support Exclusive Gift Box",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSMLC → CSML, lu dans nom du fichier de symbole), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. section « Lillie's Support Box », reconnue par son en-tête « image=SetSymbolCSML »."
+  },
+  "verifie": {
+   "le": "2026-09-20",
+   "page": "Lillie's Support Exclusive Gift Box (ATCG)",
+   "entrees": {
+    "Lillie's Support Exclusive Gift Box": 5
+   },
+   "note": "vérification automatique : 5 entrées pour 5 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-20",
+   "pageResolue": "Lillie's Support Exclusive Gift Box (ATCG)",
+   "entrees": 5,
+   "couverture": {
+    "produitsNumerotes": 5,
+    "couverts": 5,
+    "numerosSetlist": 5,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "30C",
+  "exp": 6601,
+  "prod": 191,
+  "nom": "30th Celebration",
+  "slugSet": "30th-Celebration",
+  "region": "occidental",
+  "bulba": {
+   "titre": "30th Celebration (TCG)",
+   "tirage": "intl",
+   "expansion": "30th Celebration",
+   "setlist": [
+    "30th Celebration"
+   ],
+   "sectionOccurrence": 1
+  },
+  "attendu": 191,
+  "auto": {
+   "cle": "colonne-flexitem-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "30th Celebration",
+   "familleUnivers": "occidental",
+   "genereLe": "2026-09-24",
+   "aLaMain": "page à colonnes {{Flexitem}} : liste « English » (section « 30th Celebration » n°1) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "30th Celebration (TCG)",
+   "entrees": 161,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 161,
+    "couverts": 158,
+    "numerosSetlist": 161,
+    "taux": 0.981
+   },
+   "echantillon": "Gimmighoul (30th Celebration 81)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 0.84,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "30th Celebration (TCG)",
+   "entrees": {
+    "30th Celebration": 161
+   },
+   "note": "vérification automatique : 161 entrées pour 191 produits, échantillon « Gimmighoul (30th Celebration 81) » (intl)"
+  }
+ },
+ {
+  "code": "m6a",
+  "exp": 6602,
+  "prod": 176,
+  "nom": "30th Celebration JP",
+  "slugSet": "30th-Celebration-JP",
+  "region": "japonais",
+  "bulba": {
+   "titre": "30th Celebration (TCG)",
+   "tirage": "jp",
+   "expansion": "30th Celebration",
+   "setlist": [
+    "30th Celebration"
+   ],
+   "sectionOccurrence": 2
+  },
+  "attendu": 176,
+  "auto": {
+   "cle": "colonne-flexitem-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "30th Celebration",
+   "familleUnivers": "japonais",
+   "genereLe": "2026-09-24",
+   "aLaMain": "page à colonnes {{Flexitem}} : liste « Japanese » (section « 30th Celebration » n°2) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "30th Celebration (TCG)",
+   "entrees": 168,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 173,
+    "couverts": 135,
+    "numerosSetlist": 138,
+    "taux": 0.78
+   },
+   "echantillon": "Zacian (30th Celebration 106)",
+   "tiragesVus": [
+    "intl",
+    "jp"
+   ],
+   "ratio": 0.95,
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "30th Celebration (TCG)",
+   "entrees": {
+    "30th Celebration": 168
+   },
+   "note": "vérification automatique : 168 entrées pour 176 produits, échantillon « Zacian (30th Celebration 106) » (jp)"
+  }
+ },
+ {
+  "code": "MA6",
+  "exp": 6604,
+  "prod": 203,
+  "nom": "30th Celebration IDTH",
+  "slugSet": "30th-Celebration-IDTH",
+  "region": "idth",
+  "bulba": {
+   "titre": "30th Celebration (TCG)",
+   "tirage": "idth",
+   "expansion": "30th Celebration",
+   "setlist": [
+    "30th Celebration"
+   ],
+   "sectionOccurrence": 3,
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 203,
+  "auto": {
+   "cle": "colonne-flexitem-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "30th Celebration",
+   "familleUnivers": "autre-asiatique",
+   "genereLe": "2026-09-24",
+   "aLaMain": "page à colonnes {{Flexitem}} : liste « Thai / Indonesian » (section « 30th Celebration » n°3) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "30th Celebration (TCG)",
+   "entrees": 199,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 200,
+    "couverts": 187,
+    "numerosSetlist": 194,
+    "taux": 0.935
+   },
+   "ratio": 0.98,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 187/200 sous 0,95"
+   ]
+  }
+ },
+ {
+  "code": "30thC",
+  "exp": 6603,
+  "prod": 176,
+  "nom": "30th Celebration Simplified Chinese",
+  "slugSet": "30th-Celebration-Simplified-Chinese",
+  "region": "chinois",
+  "bulba": {
+   "titre": "30th Celebration (TCG)",
+   "tirage": "zh-hans",
+   "expansion": "30th Celebration",
+   "setlist": [
+    "30th Celebration"
+   ],
+   "sectionOccurrence": 4,
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 176,
+  "auto": {
+   "cle": "colonne-flexitem-2026-09-24",
+   "liste": "recherche intitle (2026-09-24)",
+   "nomBulbapedia": "30th Celebration",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-24",
+   "aLaMain": "page à colonnes {{Flexitem}} : liste « Simplified Chinese » (section « 30th Celebration » n°4) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "30th Celebration (TCG)",
+   "entrees": 168,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 169,
+    "couverts": 131,
+    "numerosSetlist": 138,
+    "taux": 0.775
+   },
+   "ratio": 0.95,
+   "etat": "À REGARDER",
+   "raisons": [
+    "couverture des numéros Cardmarket 131/169 sous 0,95"
+   ]
   }
  }
 ]

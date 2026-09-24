@@ -550,6 +550,44 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 60. LA GARDE DE LOT, ET CE QU'ELLE A PERMIS LE MÊME SOIR — 2026-09-24
+
+> 🔑 **LA RÈGLE DU TESTEUR : une recollecte RÉÉCRIT, elle n'est pas additive. Tout lot passe par `lot-additif.js`, qui compte
+> PAR GROUPE — fiches par expansion, illustrateurs par impression, images, cartes, noms par set — dans la SAUVEGARDE (avant) et
+> dans la base (après), par la même fonction (`collecte-cartes/garde-lot.js`).** Une baisse passe si elle est ANNONCÉE
+> (`--annonce=`, écrite par la simulation du lot avec cette même fonction) ou si c'est une baisse d'IMAGES dans un set où le
+> worker a écrit pendant la fenêtre (ses propres dates, `collecte_images_etat`). Tout le reste arrête le lot : relecture à
+> 20 s, restauration depuis la sauvegarde (champs du worker gardés), relecture, ligne ARRÊT au journal. Bancs : 19/19 purs,
+> 11/11 de bout en bout dans `test_scratch` — **et il échoue quand on casse la garde (6) ou la préservation du worker (1)**.
+> 🔴 **Et la sauvegarde perdait les types** : `JSON.stringify` rendait une Date en chaîne ; les 24 lignes restaurées le matin
+> portaient `verifieLe` en chaîne (18 encore, rétablies). Elle écrit désormais l'Extended JSON.
+
+**Ce que la garde a vu, le premier soir, sur 14 lots : de 3 845 à 3 881 groupes, aucune baisse non annoncée** — 5 fiches
+d'homonymie détachées (4 baisses annoncées, vues exactement), +3 097 images rendues visibles, **+1 028 fiches sur 9 lignes
+neuves par code** (S-P/ID 266, SM-P/ID 185, 30C 158, m6a 165, S-P/TH 144, MA4 58, mF 43, CSIC 8, CSVH5C 1 — ses 57 autres
+pages sont des liens rouges, §43), 9 sets nommés. Refusées par leur contrôle, seuil inchangé : MA6 187/200, 30thC 131/169,
+AC3 0/182 (deux moitiés renumérotées), Gem Pack Vol. 6 49/196.
+
+🔴 **« 10 contradictions » : 9 étaient fabriquées par MA sonde** — le motif en tête du catalogue, encore. Elle comparait
+« SWSH294 » à « 294 » sans retirer le préfixe que la jointure retire (4), et ne lisait pas les numéros que la jointure tire de
+la Setlist (5) ; la dixième (Iron Bundle) est jointe par le nom ET les attaques. Les deux où Cardmarket se contredit lui-même
+(titre 294 / URL SWSH295, titre 65 / URL SM72) : TCGdex donne raison au TITRE, donc à nos fiches. **0 correction, 0 détachement.**
+
+**Trois règles de production, chacune mesurée avant d'être câblée :**
+| règle | mesure | effet |
+|---|---|---|
+| une page sans nom n'est pas une carte (`joindre()`) | 6 documents sans nomEn : 4 pages `{{tcgdisambig}}`, 2 ébauches ; les lignes vers eux : 5, et ce sont elles | 5 fiches détachées, reste `carte-sans-nom` |
+| une clé d'image que plusieurs images partagent n'en désigne aucune (`images-cle-partagee.js`) | « Victory Ring » XY-P : 24 tournois, une clé ; la jointure gardait la dernière lue | 42 médailles SV-P refusées, nommées |
+| une Setlist dans une colonne `{{Flexitem}}` est une Setlist (`wikitext.js`) | 0 des 338 pages de set archivées n'a cette forme | « 30th Celebration (TCG) » : 2 entrées lues sur 750 → ses quatre listes par langue |
+
+⚠️ **`verifier-table.js --auto` REJUGE des lignes déjà vérifiées** : il a déclassé TK1 (EX Trainer Kit, collectée) en jugeant
+un bloc de lignes neuves. Ligne remise telle quelle ; **une vérification qui modifie un verdict existant est une écriture qui
+modifie**, et elle ne devrait juger que ce qu'on lui nomme. Dette nommée.
+⚠️ **La ponctuation des 32 noms n'est pas écrite** : sa seule source est `bulba.expansion` — Bulbapedia, pas une source
+officielle. Le site ne tire aucune URL de `nomAffichage` (l'URL d'un set est `sets._id`), la condition des URL tient.
+⚠️ **TCGdex « XY » refusé à tort** : 147 impressions, 146 numéros (Vivillon n°17, deux pages de motif), un seul fichier ;
+la concordance du collecteur compte les impressions, pas les fichiers.
+
 ## 59. CINQ ÉCRITURES QUI EFFAÇAIENT À CÔTÉ DE CE QU'ELLES AJOUTAIENT — 2026-09-24
 
 > 🔴 **LE MOTIF DU JOUR : UN GESTE ADDITIF QUI RETIRE AILLEURS, SANS UN MOT.** Chaque lot ajoutait ce qu'il annonçait, et son

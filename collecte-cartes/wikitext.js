@@ -417,10 +417,17 @@ function faitsDeSet(texte) {
  * @returns {Array<{titre: string, entrees: Array<{titre: string, a: string, nom: string, b: string|null, setReconstruit: string,
  *   forme: 'tcg-id'|'lien', references: Array<{titre: string, setReconstruit: string}>}>, ignorees: string[]}>}
  */
+// 🔴 UNE COLONNE DE MISE EN PAGE CACHAIT QUATRE SETLISTS (2026-09-24). « 30th Celebration (TCG) » range ses listes par langue
+// (anglais, japonais, thaï/indonésien, chinois) dans des `{{Flexitem|…}}` : `gabarits()` ne rend que le premier niveau, et la
+// page rendait 2 entrées sur 750, sans un mot (§21 n°8). On ouvre CETTE colonne, et elle seule (une garde s'écrit par ce
+// qu'elle autorise). Mesuré avant : 0 des 338 pages de set archivées n'a cette forme — le chemin n'est atteint que par elle.
+const COLONNES_DE_MISE_EN_PAGE = /^Flexitem$/i;
+const gabaritsDeLecture = texte => gabarits(texte).flatMap(g => COLONNES_DE_MISE_EN_PAGE.test(String(g.nom).trim()) ? gabaritsDeLecture(g.brut.slice(2, -2)) : [g]);
+
 function sectionsSetlist(texte) {
     const sections = [];
     let courante = null;
-    for (const g of gabarits(texte)) {
+    for (const g of gabaritsDeLecture(texte)) {
         if (/^Setlist\/\w*header$/i.test(g.nom)) { courante = { titre: plat(g.params.title) || '', entrees: [], ignorees: [] }; sections.push(courante); continue; }
         if (/^Setlist\/\w*footer$/i.test(g.nom)) { courante = null; continue; }
         if (/^Setlist\/\w*entry$/i.test(g.nom)) {
