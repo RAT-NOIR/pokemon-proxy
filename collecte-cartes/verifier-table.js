@@ -104,9 +104,10 @@ async function verifierAuto() {
     // NOMMER un code, c'est demander son verdict — même s'il en a déjà un. Sans cette règle, un critère qui
     // vient de changer ne peut pas être rejoué sur les lignes qu'il ADMETTAIT à tort : on ne sait relire que
     // les refus, jamais les admissions, et c'est le mauvais côté de la liste (§23).
-    const bloc = TABLE_AUTO
-        .filter(l => (codes ? codes.includes(l.code) : (rejuger ? !l.verifie : !l.verif)) && (!region || l.region === region))
-        .slice(0, taille);
+    // 🔴 Et un bloc ne prend JAMAIS une ligne admise qu'on ne lui a pas nommée : TK1, admise à la main sans fiche `verif`,
+    // passait pour « jamais jugée » et a été déclassée deux fois (2026-09-24). La règle vit dans selection-verification.js.
+    const { lignesAJuger, peutRetirerAdmission } = require('./selection-verification');
+    const bloc = lignesAJuger(TABLE_AUTO, { codes, rejuger, region, taille });
     console.log(`--auto${rejuger ? ' --rejuger' : ''} : ${TABLE_AUTO.length} lignes générées · ${TABLE_AUTO.filter(l => l.verifie).length} vérifiées · ${TABLE_AUTO.filter(l => l.verif && !l.verifie).length} à regarder · bloc de ${bloc.length}, ~${2 * Math.ceil(bloc.length / 50)} requêtes`);
     if (!bloc.length) return;
     // La production (LECTURE SEULE) est désormais nécessaire pour TOUTE ligne : la couverture des numéros se
@@ -238,7 +239,8 @@ async function verifierAuto() {
             // « À REGARDER » imprimé juste à côté. Un critère qui se resserre ne pouvait donc agir sur rien —
             // seule une liste de refus se relisait, c'est-à-dire le mauvais côté de la liste (§23). Effacer ne
             // touche que les lignes réellement rejugées, donc jamais celles que personne n'a nommées.
-            else if (l.verifie) { v.admissionRetiree = l.verifie.le; delete l.verifie; }
+            else if (l.verifie && peutRetirerAdmission(l, { codes })) { v.admissionRetiree = l.verifie.le; delete l.verifie; }
+            else if (l.verifie) v.admissionGardee = `ligne admise non nommée par --codes : son admission du ${l.verifie.le} n'est pas retirée par un bloc`;
             delete l._p; delete l._entrees;
             console.log(`${l.code.padEnd(10)} ${v.etat.padEnd(11)} ${String(l.attendu).padStart(4)} produits · ${String(v.entrees).padStart(4)} entrées (${v.ratio}) · ${l.bulba.tirage ?? '?'} · « ${l.bulba.titre} »${v.pageResolue && v.pageResolue !== l.bulba.titre ? ` → « ${v.pageResolue} »` : ''}${raisons.length ? ' — ' + raisons.join(' ; ') : ''}`);
         }

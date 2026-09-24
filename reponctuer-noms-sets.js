@@ -28,6 +28,11 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 
 const nu = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const aDeLaPonctuation = s => /[,&+:.'’!?()…-]/.test(String(s || ''));
+// 🔑 LA CONDITION DU FEU VERT (testeur, 2026-09-24) : « seuls la ponctuation et la casse changent, jamais un mot ». La forme
+// nue ci-dessus retire aussi les ACCENTS : elle laisserait passer « Pokemon » → « Pokémon », qui n'est ni l'une ni l'autre.
+// Les lettres et chiffres, accents COMPRIS, doivent être les mêmes dans le même ordre, à la casse près.
+const lettres = s => String(s || '').normalize('NFC').toLocaleLowerCase('en').replace(/[^\p{L}\p{N}]/gu, '');
+const seulementPonctuationEtCasse = (avant, apres) => lettres(avant) === lettres(apres);
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -38,17 +43,21 @@ const aDeLaPonctuation = s => /[,&+:.'’!?()…-]/.test(String(s || ''));
     console.log(`\n════ DÉNOMINATEUR : ${sets.length} sets portent un nomAffichage ════`);
 
     let memeNom = 0, sansBulba = 0, nuDifferent = 0;
-    const gagnes = [];
+    const gagnes = [], refuses = [];
     for (const s of sets) {
         const exps = [].concat(s.bulba?.expansion || []).filter(Boolean);
         if (!exps.length) { sansBulba++; continue; }
         const jumelle = exps.find(e => nu(e) === nu(s.nomAffichage));
         if (!jumelle) { nuDifferent++; continue; }
         memeNom++;
-        if (jumelle !== s.nomAffichage && aDeLaPonctuation(jumelle)) gagnes.push({ s, propose: jumelle });
+        if (jumelle === s.nomAffichage || !aDeLaPonctuation(jumelle)) continue;
+        if (seulementPonctuationEtCasse(s.nomAffichage, jumelle)) gagnes.push({ s, propose: jumelle });
+        else refuses.push({ s, propose: jumelle });
     }
     console.log(`   même forme nue chez Bulbapedia (même set, garanti) : ${memeNom}`);
     console.log(`   sans bulba.expansion : ${sansBulba} · forme nue différente, on ne touche pas : ${nuDifferent}`);
+    console.log(`\n   ⛔ ${refuses.length} REFUSÉS — une lettre change (accent, lettre), pas seulement la ponctuation ou la casse :`);
+    for (const g of refuses) console.log(`      ${String(g.s.code).padEnd(9)} « ${g.s.nomAffichage} »  ✗  « ${g.propose} »`);
     console.log(`\n   🔑 ${gagnes.length} SETS GAGNENT UNE PONCTUATION :`);
     for (const g of gagnes)
         console.log(`      ${String(g.s.code).padEnd(9)} ${String(g.s.region || '?').padEnd(10)} « ${g.s.nomAffichage} »  →  « ${g.propose} »`);

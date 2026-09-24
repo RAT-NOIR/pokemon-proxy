@@ -49,6 +49,8 @@ const { etatDuWorker } = require('./remettre-en-file');
             if (!d.set) { console.log(`   ⛔ ${slug} (${n}) : ${d.motif}`); continue; }
             const P = await planifier(M, cx.db, null, L, d.set);
             if (!P) { console.log(`   ⛔ ${slug} (${n}) → ${d.set.id} : cartes TCGdex absentes du cache`); continue; }
+            // une unité qui n'a aucun scan à prendre n'est pas du travail : elle passerait « faite » sans rien rapporter
+            if (!P.plan.length) { console.log(`   ⛔ ${slug} (${n}) → ${d.set.id} : 0 scan — TCGdex liste ces cartes sans image (${JSON.stringify(P.motifs)})`); continue; }
             U.push({ code: L.code, slug, tcgdexSet: d.set.id, tcgdexNom: d.set.name, vises: n, plan: P.plan.length });
         }
         console.log(`\n════ ${titre} : ${U.length} sets, ${U.reduce((s, u) => s + u.vises, 0)} ${quoi}, ${U.reduce((s, u) => s + u.plan, 0)} scans TCGdex à prendre ════`);
@@ -87,6 +89,20 @@ const { etatDuWorker } = require('./remettre-en-file');
         const nuls = await cx.db.collection('cartes').aggregate([{ $unwind: '$images' }, { $match: { 'images.source': 'bulbapedia', 'images.langue': null } },
             { $group: { _id: '$images.set', n: { $sum: 1 } } }, { $sort: { n: -1 } }]).toArray();
         await enTete(nuls, { titre: 'LANGUE NULLE', quoi: 'visuels Bulbapedia à langue null', motif: u => `langue null : ${u.vises} visuels Bulbapedia dont la langue n'est pas prouvée, remplacés par le scan anglais de TCGdex` });
+        await fermer(); return;
+    }
+    // ── --sans-visuel [--en-tete] (2026-09-24, « le worker ne doit jamais être à vide ») : les sets dont des cartes n'ont
+    // AUCUN visuel pour ce set — Supreme Victors, Platinum, Secret Wonders, Rising Rivals, refusés chez Bulbapedia sous la
+    // médiane de 350 px, et tous ceux qu'aucune route n'a servis. TCGdex ne sert que l'anglais : seules les lignes de
+    // tirage `intl` ÉCRIT sont candidates (le défaut du tirage n'est pas le même dans tous les outils : on ne s'y fie pas).
+    // Une unité déjà passée n'est pas remise ($setOnInsert) : ce qu'elle n'a pas pris, TCGdex ne l'a pas.
+    if (process.argv.includes('--sans-visuel')) {
+        const sans = await cx.db.collection('cartes').aggregate([{ $unwind: '$sets' },
+            { $project: { set: '$sets', a: { $in: ['$sets', { $ifNull: ['$images.set', []] }] } } }, { $match: { a: false } },
+            { $group: { _id: '$set', n: { $sum: 1 } } }, { $sort: { n: -1 } }]).toArray();
+        const intl = sans.filter(p => parSlug.get(p._id)?.bulba?.tirage === 'intl');
+        console.log(`\n   sets à cartes sans visuel : ${sans.length} (${sans.reduce((s, p) => s + p.n, 0)} cartes) · dont lignes de tirage intl écrit : ${intl.length} (${intl.reduce((s, p) => s + p.n, 0)} cartes)`);
+        await enTete(intl, { titre: 'SANS VISUEL', quoi: 'cartes sans visuel pour leur set', motif: u => `sans visuel : ${u.vises} cartes du set n'ont aucun visuel, TCGdex sert le scan anglais de celles qu'il a` });
         await fermer(); return;
     }
     const unites = [], refus = [], sansScan = [];
