@@ -40,9 +40,16 @@
 //
 // Export en FLUX (curseur -> fichier) plutôt qu'en mémoire : numeros_cartes fait ~70 000
 // documents. Format : tableau JSON valide, réimportable via `mongoimport --jsonArray`.
+//
+// 🔴 ET LE FORMAT PERDAIT LES TYPES JUSQU'AU 2026-09-24 : `JSON.stringify` rend une Date en chaîne et un ObjectId en
+// chaîne. Une restauration depuis ce fichier écrivait donc `verifieLe: "2026-…"` là où la base avait une Date — c'est
+// arrivé aux 24 lignes réinsérées par restaurer-lignes-perdues.js le 24/09. Le format est désormais l'Extended JSON
+// RELAXÉ : les nombres restent des nombres (les lecteurs `JSON.parse` d'avant lisent toujours les champs simples), une
+// Date devient {"$date": …} et revient Date par `EJSON.parse`. Les anciennes sauvegardes se relisent par `EJSON.parse`.
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { EJSON } = require('mongodb').BSON;
 const fs = require('fs');
 const path = require('path');
 const { connecterMongo } = require('./mongo-connexion');
@@ -90,7 +97,7 @@ async function exporter(db, nom) {
     await ecrire('[\n');
     let ecrits = 0;
     for await (const doc of db.collection(nom).find({})) {
-        await ecrire((ecrits ? ',\n' : '') + JSON.stringify(doc));
+        await ecrire((ecrits ? ',\n' : '') + EJSON.stringify(doc, { relaxed: true }));
         ecrits++;
         if (ecrits % 10000 === 0) process.stdout.write(`\r   ${nom} : ${ecrits}/${attendu}...`);
     }
@@ -168,7 +175,7 @@ async function main() {
     // autrement, et une sauvegarde illisible ne vaut rien.
     console.log('\nVérification de relecture :');
     for (const r of resultats) {
-        const relu = JSON.parse(fs.readFileSync(r.fichier, 'utf8'));
+        const relu = EJSON.parse(fs.readFileSync(r.fichier, 'utf8'), { relaxed: true });
         const ok = Array.isArray(relu) && relu.length === r.ecrits;
         if (!ok) incoherent = true;
         console.log(`  ${r.nom.padEnd(22)}${Array.isArray(relu) ? relu.length : '?'} documents relus ${ok ? '✅' : '❌'}`);

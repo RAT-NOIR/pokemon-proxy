@@ -13,6 +13,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { EJSON } = require('mongodb').BSON;
 const { CHAMPS_POSES_APRES, cleImpression } = require('./collecte-cartes/impressions-posees');
 
 const AUTORISES = [/^--depuis=backup-[\w-]+$/, /^--ecrire$/];
@@ -23,7 +24,7 @@ if (inconnus.length || !depuis) { console.error(`❌ ${inconnus.length ? `argume
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
     const fichier = path.join(__dirname, depuis, 'cartes.json');
-    const sauvegarde = JSON.parse(fs.readFileSync(fichier, 'utf8'));
+    const sauvegarde = EJSON.parse(fs.readFileSync(fichier, 'utf8'), { relaxed: true });   // lit l'ancien format et l'Extended JSON
     if (!sauvegarde.length) throw new Error(`${fichier} : sauvegarde VIDE — elle ne peut rien restaurer`);
     const parId = new Map(sauvegarde.map(c => [c._id, c]));
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });

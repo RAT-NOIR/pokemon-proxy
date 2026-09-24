@@ -13,6 +13,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { EJSON } = require('mongodb').BSON;
 
 const AUTORISES = [/^--depuis=backup-[\w-]+$/, /^--ecrire$/, /^--expansions=\d+(,\d+)*$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
@@ -22,7 +23,8 @@ if (inconnus.length || !depuis || !exps) { console.error(`❌ ${inconnus.length 
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
-    const avant = JSON.parse(fs.readFileSync(path.join(__dirname, depuis, 'cartes_produits.json'), 'utf8'));
+    // EJSON : une Date sauvée revient Date (backup-collections.js écrit l'Extended JSON depuis le 24/09 ; lit aussi l'ancien).
+    const avant = EJSON.parse(fs.readFileSync(path.join(__dirname, depuis, 'cartes_produits.json'), 'utf8'), { relaxed: true });
     if (!avant.length) throw new Error(`${depuis}/cartes_produits.json VIDE : rien ne peut s'en restaurer`);
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
     const CP = cx.db.collection('cartes_produits');
