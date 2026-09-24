@@ -67,7 +67,10 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
-    'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js'];
+    'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js',
+    // ➕ 2026-09-24 : ce que le worker fait d'une unité finie (une surcharge passagère n'est plus un refus) — une remise en
+    // file sous un commit antérieur retomberait en `refuse` au premier 503.
+    'collecte-cartes/issue-unite.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma

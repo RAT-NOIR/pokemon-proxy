@@ -124,7 +124,20 @@ const { etatDuWorker } = require('./remettre-en-file');
         const r = await F.updateOne({ _id: doc._id, etat: doc.etat }, { $set: { etat: 'attente', ordre: dernier + unites.length + 1 + remises, remisEnFileLe: new Date(), remisEnFileMotif: `galerie TCGdex jamais lue (${galeries.join(', ')}) : l'unité a tourné avant la route des galeries` }, $unset: { pris: 1 } });
         remises += r.modifiedCount;
     }
+    // 🔑 L'INCOMPLET PASSAGER (2026-09-24, LOR et CRE) : une unité sortie `refuse`/`incomplet` dont TOUTES les images en
+    // échec portent une erreur transitoire (5xx, réseau — collecte-cartes/issue-unite.js, la règle du worker) n'a pas
+    // reçu de verdict sur son set. Elle se remet en file ; la reprise ne redemande que ces images (sha256 : sautées).
+    const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+    const { ligne } = require('./collecte-cartes/table-sets');
+    let reprises = 0;
+    for (const doc of await F.find({ source: 'tcgdex', etat: 'refuse', resultat: 'incomplet' }).toArray()) {
+        const slug = ligne(doc.code)?.slugSet;
+        const echecs = slug ? await cx.db.collection('images').find({ source: 'tcgdex', set: slug, etat: 'echec' }, { projection: { numero: 1, erreur: 1 } }).toArray() : [];
+        if (!echecs.length || !echecs.every(e => echecTransitoire({ message: e.erreur }))) { console.log(`   ⏸️ ${doc._id} reste refusé : ${echecs.length ? 'un échec au moins n\'est pas transitoire' : 'aucune image en échec lue'}`); continue; }
+        const r = await F.updateOne({ _id: doc._id, etat: 'refuse' }, { $set: { etat: 'attente', ordre: dernier + unites.length + 1 + remises + reprises, remisEnFileLe: new Date(), remisEnFileMotif: `${echecs.length} image(s) en échec transitoire (${echecs.map(e => `n°${e.numero} ${String(e.erreur).split(' ')[0]}`).join(', ')}) : une surcharge n'est pas un verdict` }, $unset: { pris: 1 } });
+        reprises += r.modifiedCount;
+    }
     const enFile = await F.countDocuments({ source: 'tcgdex', etat: 'attente' });
-    console.log(`\n   ✅ insérées : ${inseres} sur ${unites.length} · remises pour leur galerie : ${remises} · unités tcgdex en attente, RELU : ${enFile}`);
+    console.log(`\n   ✅ insérées : ${inseres} sur ${unites.length} · remises pour leur galerie : ${remises} · reprises après échec transitoire : ${reprises} · unités tcgdex en attente, RELU : ${enFile}`);
     await fermer();
 })().catch(e => { console.error('❌', e.message); process.exit(1); });

@@ -36,6 +36,7 @@ const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
 const { cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion } = require('./collecte-cartes/tcgdex-appariement');
+const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 
 const SOURCE = 'tcgdex';
 const VERROU_SET_MS = 10 * 60 * 1000;
@@ -98,7 +99,7 @@ async function collecterSet(unite, M, { verrou }) {
         const P = await planifier(M, db, client, L, set);
         console.log(`\n══ ${L.code} « ${L.nom} » → TCGdex ${set.id} « ${set.name} » — ${P.impressions} impressions, ${P.plan.length} scans anglais · restes ${JSON.stringify(P.motifs)} ══`);
         const bucket = process.env.R2_BUCKET_IMAGES;
-        let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
+        let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0;
         for (const p of P.plan) {
             if (arretDemande || !verrou.tenu) break;
             const _id = `${SOURCE}/${slug}/${p.carte._id}/${cleNum(p.numero)}`;
@@ -130,6 +131,7 @@ async function collecterSet(unite, M, { verrou }) {
                 if (telecharges % 25 === 0) await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'originaux', derniereRequete: new Date(), requetes: client.compteRequetes() } });
             } catch (err) {
                 echecs++;
+                if (echecTransitoire(err)) echecsTransitoires++;
                 console.warn(`   ✗ ${_id} (${url}) : ${err.message}`);
                 await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carte._id, numero: p.numero, tcgdexId: p.tcg.id, urlOriginal: url, etat: 'echec', erreur: err.message } }, { upsert: true });
                 if (/verrou/.test(err.message)) break;                     // garde fermée : on ne continue pas sans verrou
@@ -154,7 +156,7 @@ async function collecterSet(unite, M, { verrou }) {
         const complet = {
             tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
             impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
-            telecharges, sautes, echecs, tropPetits, bulbaRemplacees: bulbaRetirees, restes: P.motifs, sansScanAnglais: P.restes,
+            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             concordance: images.length + tropPetits === P.plan.length && echecs === 0,
             verifieLe: new Date()
@@ -162,7 +164,11 @@ async function collecterSet(unite, M, { verrou }) {
         await M.Set.updateOne({ _id: slug }, { $set: { remplacementTcgdex: complet } });
         await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes() } });
         console.log(`   images ok ${images.length} + sous le seuil ${tropPetits} = à collecter ${P.plan.length} ${complet.concordance ? '✅' : '❌'} · ${bulbaRetirees} visuels Bulbapedia remplacés · ${P.restes.length} impressions sans scan anglais · requêtes ${client.compteRequetes()}`);
-        return { code: L.code, etat: complet.concordance ? 'verifie' : 'incomplet', ...complet };
+        // 🔑 INCOMPLET N'EST PAS UN VERDICT QUAND LE SEUL MANQUE EST UNE SURCHARGE (LOR, CRE, 2026-09-24) : si tout le
+        // plan est obtenu ou en échec TRANSITOIRE, le worker remet l'unité en file (collecte-cartes/issue-unite.js) ;
+        // la reprise ne redemande que les échecs (sha256 + même URL : sauté).
+        const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires && images.length + tropPetits + echecs === P.plan.length;
+        return { code: L.code, etat: complet.concordance ? 'verifie' : transitoire ? 'incomplet-transitoire' : 'incomplet', ...complet };
     } finally {
         await verrouSet.rendre();
     }

@@ -49,6 +49,7 @@ const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une dé
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
+const { issueDeLUnite } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
@@ -555,7 +556,8 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // minuit ne dit rien de 08:20. Non tenu = arrêt, Render relance, le neuf attend son tour.
             if (!await verrouGlobal.tient()) { console.error('⛔ verrou global non tenu avant de prendre un set : arrêt.'); process.exitCode = 1; break; }
             await reprendreEnCoursFiges(File, M);
-            const suivant = await File.findOneAndUpdate({ etat: 'attente' }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
+            // `pasAvant` : une unité remise en file après une surcharge de la source attend son délai (issue-unite.js).
+            const suivant = await File.findOneAndUpdate({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: new Date() } }] }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
             // 🔑 ON DORT SANS LE VERROU (2026-09-14). Le verrou global protège la CADENCE des requêtes chez la
             // source ; un worker qui dort n'en fait aucune. Le garder pendant dix minutes de sommeil — soit
             // en permanence sur une file vide — interdisait toute requête ponctuelle sous verrou : la
@@ -614,9 +616,16 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
             // « refuse » le sortait de la file pour toujours, et personne ne l'aurait repris.
-            const etat = b.etat === 'verifie' ? 'fait' : (/^(interrompu|refuse-verrou|refuse-texte-en-cours)$/.test(b.etat) ? 'attente' : 'refuse');
-            await File.updateOne({ _id: suivant._id }, { $set: { etat, resultat: b.etat, ...(etat === 'attente' ? {} : { fini: new Date() }) }, ...(etat === 'attente' ? { $unset: { pris: 1 } } : {}) });
-            if (etat === 'attente') { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
+            // 🔑 ET UN ÉCHEC PASSAGER N'EST PAS UN VERDICT NON PLUS (LOR, CRE, 2026-09-24) : la décision vit dans
+            // collecte-cartes/issue-unite.js (banc test-issue-unite.js) — en queue, pas avant 10 min, 3 passages au plus.
+            const I = issueDeLUnite(b, suivant);
+            const ordre = I.enQueue ? ((await File.find({}).sort({ ordre: -1 }).limit(1).lean())[0]?.ordre ?? 0) + 1 : undefined;
+            await File.updateOne({ _id: suivant._id }, {
+                $set: { etat: I.etat, resultat: b.etat, ...(I.etat === 'attente' ? {} : { fini: new Date() }), ...(I.tentatives ? { tentatives: I.tentatives } : {}), ...(I.pasAvant ? { pasAvant: I.pasAvant, ordre } : {}) },
+                ...(I.etat === 'attente' ? { $unset: { pris: 1 } } : {})
+            });
+            if (I.enQueue) console.log(`↩️ ${suivant._id} remis en file, en queue, pas avant ${I.pasAvant.toISOString()} (${b.etat}, passage ${I.tentatives}).`);
+            if (I.arreter) { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
         }
         clearInterval(minuterieBalise);
         await rendreVerrouGlobal(); await fermer(); return;
