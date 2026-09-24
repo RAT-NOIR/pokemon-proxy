@@ -22,7 +22,8 @@
 require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
-const { joindre, produitsDeLExpansion, normaliserNom } = require('./collecte-cartes/jointure');
+const { joindre, produitsDeLExpansion } = require('./collecte-cartes/jointure');
+const { gardeNomSeul } = require('./collecte-cartes/garde-nom-seul');
 const { ligne } = require('./collecte-cartes/table-sets');
 const pad = (v, n) => String(v).padStart(n);
 
@@ -66,11 +67,8 @@ const pad = (v, n) => String(v).padStart(n);
         let J;
         try { J = joindre(cartesSansNum, produitsSansNum, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, tirage, slugSet: S._id }); }
         finally { console.log = bruit; }
-        // ── multiplicités COMPTÉES, des deux côtés
-        const nProdNom = new Map();
-        for (const p of produits) { const k = normaliserNom(p.nom); nProdNom.set(k, (nProdNom.get(k) || 0) + 1); }
-        const nCarteNom = new Map();
-        for (const c of duSet) { const k = normaliserNom(String(c.nomEn || '').replace(/^Basic\s+/i, '')); nCarteNom.set(k, (nCarteNom.get(k) || 0) + 1); }
+        // ── multiplicités COMPTÉES, des deux côtés : la garde de la collecte, la même fonction (collecte-cartes/garde-nom-seul.js)
+        const gardes = new Set(gardeNomSeul({ lignes: J.lignes, produits, cartes: duSet }).gardees.map(l => l.idProduct));
         const parProduit = new Map();
         for (const l of J.lignes) (parProduit.get(l.idProduct) || parProduit.set(l.idProduct, []).get(l.idProduct)).push(l.carteId);
         const dansVerite = produits.filter(p => vraie.has(p.idProduct));
@@ -81,7 +79,7 @@ const pad = (v, n) => String(v).padStart(n);
             const juste = rendus.length === 1 && rendus[0] === v;
             if (juste) T.justes++; else T.fausses++;
             const c = parId.get(rendus[0]);
-            const bidir = rendus.length === 1 && nProdNom.get(normaliserNom(p.nom)) === 1 && nCarteNom.get(normaliserNom(String(c?.nomEn || '').replace(/^Basic\s+/i, ''))) === 1;
+            const bidir = gardes.has(p.idProduct);
             if (!bidir) { T.gardeRefuse++; continue; }
             if (estReimpr) { T.exclusReimpr++; continue; }
             if (juste) T.justesGardees++;

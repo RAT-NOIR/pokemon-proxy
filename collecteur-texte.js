@@ -32,6 +32,7 @@ const { joindre, produitsDeLExpansion, impressionsDepuisSetlist } = require('./c
 const { ecrireJointure } = require('./collecte-cartes/ecrire-jointure');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { reporterChampsPoses } = require('./collecte-cartes/impressions-posees');
+const { gardeNomSeul } = require('./collecte-cartes/garde-nom-seul');
 
 const arg = nom => { const a = process.argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3) : null; };
 const VERROU_MS = 10 * 60 * 1000;
@@ -128,7 +129,17 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
         const produits = await produitsDeLExpansion(prod, L.exp);
         console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
-        const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, tirage: TIRAGE, slugSet: slugCardmarket });
+        let J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, tirage: TIRAGE, slugSet: slugCardmarket });
+        // `nomSeul` : une expansion SANS AUCUN numéro (Unnumbered Promos) ne se joint que par le nom. La garde bidirectionnelle
+        // calibrée (collecte-cartes/garde-nom-seul.js : 21 925 justes, 0 faux) décide ; ce qu'elle refuse reste un produit sans
+        // carte, AVEC sa raison — un refus nommé, pas un silence.
+        if (L.bulba.nomSeul) {
+            const G = gardeNomSeul({ lignes: J.lignes, produits, cartes: cartesDuSet });
+            const nomDe = new Map(produits.map(p => [p.idProduct, p.nom]));
+            J = { ...J, lignes: G.gardees, restes: [...J.restes, ...G.refusees.map(r => ({ type: 'produit-sans-carte', detail: `${r.idProduct} « ${nomDe.get(r.idProduct)} » n°— — nom seul refusé : ${r.raison}` }))],
+                compte: { ...J.compte, produitsJoints: new Set(G.gardees.map(l => l.idProduct)).size } };
+            console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);
+        }
         const ecrit = await ecrireJointure(M, { slug, J, produits });
         // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
         // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
@@ -295,7 +306,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         // ⚠️ SEULEMENT les lignes de CE set (et de ses jumelles occidentales) : une carte partagée
         // entre deux sets (Dark Charizard, Rocket Gang ET Pokémon Web) perdait ses lignes de l'autre
         // set à chaque rejeu — H006 est sorti « faux affirmé » de la mesure du pont pour ça, 2026-09-12.
-        const expsDeCeSet = [L.exp, ...Object.values(EXPANSIONS_INTL)];
+        // 🔴 LES JUMELLES OCCIDENTALES NE S'EFFACENT QUE LÀ OÙ ELLES SE RÉÉCRIVENT (2026-09-24). Le bonus intl plus bas ne
+        // rejoint Base Set / Base Set 2 QUE depuis un set japonais ; ce `deleteMany` les effaçait pour TOUT set relu. La relecture
+        // de RS et de M-P/CT a ainsi retiré 24 lignes Base Set et Base Set 2 (énergies de base, dresseurs partagés) sans les
+        // rendre — restaurées depuis la sauvegarde du lot. La condition d'effacement est celle de la réécriture.
+        const expsDeCeSet = [L.exp, ...(TIRAGE === 'jp' ? Object.values(EXPANSIONS_INTL) : [])];
         const idsCartes = deja.map(c => c._id);
         await M.CarteProduit.deleteMany({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet } });
         // les liens dénormalisés se recomposent depuis ce qui RESTE en cartes_produits
