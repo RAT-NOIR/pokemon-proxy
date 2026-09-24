@@ -156,6 +156,12 @@ const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom |
     const nArt = artofpkm.autre + artofpkm.inconnu;
     console.log(`   ⚖️ artofpkm/ sous un set non jp : ${nArt} sur ${artofpkm.jp + nArt} entrées artofpkm/ lues ${!(artofpkm.jp + nArt) ? '— 🔴 AUCUNE entrée lue : le contrôle ne peut pas conclure' : nArt ? `— 🔴 ${artofpkm.autre} sous un set d'une autre région, ${artofpkm.inconnu} sous un set inconnu (${exemples.join(' · ')})` : '✅'}`);
     console.log(`   ⚖️ un nomAffichage par set     : ${nomsDoublons.length} nom(s) porté(s) par plusieurs sets ${nomsDoublons.length ? `— 🔴 ${nomsDoublons.slice(0, 3).map(x => `« ${x._id} » (${x.sets.join(', ')})`).join(' · ')}` : '✅'}`);
+    //   · UN SET QUI PORTE DES CARTES A UN NOM (2026-09-24). Sans `nomAffichage`, le site ne publie pas le set : ni page, ni
+    //     fiche, ni visuel servi. 151 sets l'ont été en silence, cinq jours, parce que seul un outil lancé une fois les
+    //     nommait (collecte-cartes/nom-affichage.js). Le dénominateur s'imprime : lu sur zéro set, le contrôle ne dirait rien.
+    const sansNom = (await cx.db.collection('sets').find({ nomAffichage: { $not: { $type: 'string' } } }, { projection: { _id: 1 } }).toArray()).map(s => s._id);
+    const sansNomAvecCartes = sansNom.length ? await cx.db.collection('cartes').distinct('sets', { sets: { $in: sansNom } }).then(l => l.filter(s => sansNom.includes(s))) : [];
+    console.log(`   ⚖️ set à cartes sans nom affiché : ${sansNomAvecCartes.length} sur ${sets.length} sets ${!sets.length ? '— 🔴 AUCUN set lu : le contrôle ne peut pas conclure' : sansNomAvecCartes.length ? `— 🔴 non publiés par le site (${sansNomAvecCartes.slice(0, 4).join(', ')}${sansNomAvecCartes.length > 4 ? '…' : ''}) : node rapatrier-noms-sets.js` : '✅'}`);
 
     if (process.argv.includes('--par-set')) {
         console.log(`\n   les 30 sets au plus gros écart (fiche sans visuel) :`);

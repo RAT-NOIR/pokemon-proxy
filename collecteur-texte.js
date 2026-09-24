@@ -455,6 +455,10 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     console.log(`      ${verdict(produits.length === J.compte.produitsJoints + produitsRestes, 'produits = joints + restes', 'un produit est compté deux fois ou perdu')}`);
     console.log(`   5. lien Cardmarket lignes de jointure : ${J.lignes.length}  ·  portant slug ET slugSet : ${avecDeuxSlugs}  ·  n'en portant AUCUN : ${avecAucunSlug}  (le catalogue en a ${produitsAvecSlug} / ${produits.length})`);
     console.log(`      ${verdict(avecAucunSlug === 0, 'toute ligne peut fabriquer son URL Cardmarket', `${avecAucunSlug} ligne(s) sans lien — produits appris par un chemin qui n'enregistre pas le slug (CLAUDE.md §6)`)}`);
+    // 6. LE NOM AFFICHÉ — la condition de publication du site. Ce collecteur crée des sets et ne les nomme pas : 151 sets
+    // sont restés sans nom, donc sans page, du 19 au 24/09, et rien ne le disait (collecte-cartes/nom-affichage.js).
+    const nomAffiche = (await M.Set.findById(slug).select('nomAffichage').lean())?.nomAffichage;
+    console.log(`   6. nom affiché     ${verdict(typeof nomAffiche === 'string', `« ${nomAffiche} » : le set est publiable`, 'AUCUN nomAffichage — le set n\'existe pas sur le site : node rapatrier-noms-sets.js (dry-run, puis --ecrire)')}`);
     await M.Set.updateOne({ _id: slug }, { $set: { denominateurs: {
         pagesParsees: D.pagesComptees || 0, entreesExpansionVues: D.entreesExp, impressionsRendues: D.impressionsRendues,
         pagesSansEntree: D.pagesSansEntree, entreesJeuVideo: D.jeuVideo, entreesNonRendues: Object.fromEntries(D.nonRendues),
