@@ -1,4 +1,4 @@
-// node test-userscript-apprentissage.js — banc du userscript 1.5 dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
+// node test-userscript-apprentissage.js — banc du userscript (1.6) dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
 // navigation avec une galerie fabriquée (la structure que le script lit : a.galleryBox, img data-echo, h2 « (CODE n°) »),
 // et bloque toute autre requête. GM_* et le serveur sont simulés : 503 → /ping → 429 (reset 2 s) → 200.
 const R = __dirname;
@@ -10,6 +10,9 @@ const carte = (id, slug, nom, n) => `<a class="galleryBox" href="/fr/Pokemon/Pro
 const HTML = `<!doctype html><html><head><title>30th Celebration</title></head><body>
 ${carte(907765, 'Exeggcute-30C001', 'Noeunoeuf', '001')}${carte(907766, 'Alolan-Exeggutor-V1-30C002', "Noadkoko d'Alola", '002')}${carte(907767, 'Volbeat-30C003?language=2', 'Muciole', '003')}
 <ul class="pagination"><li><a href="${URL1}?site=2">2</a></li><li><span>10</span></li></ul></body></html>`;
+// La DERNIÈRE page (site=10) : la pagination n'offre aucun « 11 », donc aucune page suivante.
+const URL_DERNIERE = `${URL1}?site=10`;
+const HTML_DERNIERE = HTML.replace(`<li><a href="${URL1}?site=2">2</a></li><li><span>10</span></li>`, `<li><a href="${URL1}?site=9">9</a></li><li><span>10</span></li>`);
 
 // Les shims : stockage GM en mémoire de la page, et un serveur scripté. Chaque appel est journalisé dans window.__appels.
 const SHIMS = (etatInitial, reponses) => `
@@ -23,21 +26,21 @@ window.GM_xmlhttpRequest = o => {
   const r = chemin === '/ping' ? { status: 200, corps: { ok: true, mongo: true } } : (window.__reponses.shift() || { status: 500, corps: { success: false } });
   setTimeout(() => o.onload({ status: r.status, responseText: JSON.stringify(r.corps), responseHeaders: r.entetes || '' }), 50);
 };`;
-const OK = (n) => ({ status: 200, entetes: 'ratelimit-remaining: 117\r\nratelimit-reset: 3500', corps: { success: true, recus: n, nouvelles: n, ameliorees: 0, dejaExactes: 0, completees: 0, sansNumero: 0, idExpansion: 6601, idExpansions: [6601], couverture: { produits: 191, avecNumero: 103, pourcent: 54 } } });
+const OK = (n, couverture = { produits: 191, avecNumero: 103, appris: 103, pourcent: 54 }) => ({ status: 200, entetes: 'ratelimit-remaining: 117\r\nratelimit-reset: 3500', corps: { success: true, recus: n, nouvelles: n, ameliorees: 0, dejaExactes: 0, completees: 0, sansNumero: 0, idExpansion: 6601, idExpansions: [6601], couverture } });
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
-async function charger(navigateur, etat, reponses, attenteMs) {
+async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html = HTML } = {}) {
     const page = await navigateur.newPage();
     const sorties = [];
     await page.setRequestInterception(true);
     page.on('request', req => {
-        if (req.isNavigationRequest() && req.url().startsWith('https://www.cardmarket.com/')) { sorties.push(req.url()); return req.respond({ status: 200, contentType: 'text/html', body: HTML }); }
+        if (req.isNavigationRequest() && req.url().startsWith('https://www.cardmarket.com/')) { sorties.push(req.url()); return req.respond({ status: 200, contentType: 'text/html', body: html }); }
         sorties.push('BLOQUÉE ' + req.url()); req.abort();
     });
     await page.evaluateOnNewDocument(SHIMS(etat, reponses));
-    await page.goto(URL1, { waitUntil: 'domcontentloaded' });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: SCRIPT });
     await new Promise(r => setTimeout(r, attenteMs));
     const res = await page.evaluate(() => ({ appels: window.__appels, store: window.__store, panneau: document.body.lastElementChild.innerText }));
@@ -61,8 +64,10 @@ async function charger(navigateur, etat, reponses, attenteMs) {
         verifier('   la file est vide au succès', A.store.rm_file, []);
         verifier('   la page est marquée apprise', Object.keys(A.store.rm_pagesFaites || {}), ['/fr/Pokemon/Products/Singles/30th-Celebration']);
         verifier('   l\'expansion apprise pour ce slug : 6601', A.store.rm_slugExp, { '30th-Celebration': 6601 });
-        verifier('   le panneau : rang dans la liste, couverture, budget', [/n° 1\/42/.test(A.panneau), /couverte à 54 %/.test(A.panneau), /reste 117 envoi/.test(A.panneau), /3 nouvelles/.test(A.panneau)], [true, true, true, true]);
+        verifier('   le panneau : rang dans la liste, appris, budget', [/n° 1\/42/.test(A.panneau), /103\/191 produits appris/.test(A.panneau), /reste 117 envoi/.test(A.panneau), /3 nouvelles/.test(A.panneau)], [true, true, true, true]);
         verifier('   la suivante de la liste est 6604 (filtre d\'expansion du site, sans perSite)', /suivante : 6604/.test(A.panneau), true);
+        // 1.6 : l'état d'envoi ne survit pas au succès, et la page qu'on VIENT d'envoyer n'est pas « déjà apprise ».
+        verifier('   après le succès : plus de « Envoi : », « page envoyée », pas de « déjà apprise »', [/Envoi :/.test(A.panneau), /page envoyée/.test(A.panneau), /déjà apprise/.test(A.panneau)], [false, true, false]);
 
         // 2. Page déjà apprise, rechargée : RIEN n'est envoyé (le budget de 120/h est gardé).
         const B = await charger(navigateur, A.store, [OK(3)], 1500);
@@ -78,6 +83,20 @@ async function charger(navigateur, etat, reponses, attenteMs) {
         // 4. Un 400 ARRÊTE (défaut à corriger, pas à marteler) et GARDE la page dans la file.
         const D = await charger(navigateur, {}, [{ status: 400, corps: { success: false, error: 'Identifiant utilisateur manquant' } }, OK(3)], 1500);
         verifier('4. 400 : un seul essai, la page reste en file, le message le dit', [D.appels.length, D.store.rm_file.length, /version du script/.test(D.panneau)], [1, 1, true]);
+
+        // 5. LE CAS RÉEL DU 2026-09-24 : dernière page de 30th Celebration, 191/191 appris, 161 numérotés (84 %).
+        //    La 1.5 disait « terminée ✅ » pour une mauvaise raison ; la 1.6 dit « complète » pour la bonne, et explique les 30.
+        const E = await charger(navigateur, {}, [OK(3, { produits: 191, avecNumero: 161, appris: 191, pourcent: 84 })], 1500, { url: URL_DERNIERE, html: HTML_DERNIERE });
+        verifier('5. 191/191 appris : « complète », les 30 sans numéro de titre expliqués, 1 faite dans la liste', [/191\/191 produits appris/.test(E.panneau), /30 sans numéro dans leur titre/.test(E.panneau), /expansion complète/.test(E.panneau), /1 faite\(s\)/.test(E.panneau)], [true, true, true, true]);
+        verifier('   dernière page : pas de page suivante, marquée « parcourue »', [/Dernière page/.test(E.panneau), E.store.rm_couv['6601'].parcourue], [true, true]);
+
+        // 6. Dernière page, mais 6 produits jamais vus : « parcourue », JAMAIS « complète ».
+        const F = await charger(navigateur, {}, [OK(3, { produits: 191, avecNumero: 161, appris: 185, pourcent: 84 })], 1500, { url: URL_DERNIERE, html: HTML_DERNIERE });
+        verifier('6. 185/191 : « galerie parcourue : 6 produit(s) … jamais vu(s) », pas « complète »', [/6 produit\(s\) du catalogue jamais vu/.test(F.panneau), /expansion complète/.test(F.panneau)], [true, false]);
+
+        // 7. Serveur pas encore redéployé (pas de champ `appris`) : repli sur le seuil des numéros, et c'est DIT.
+        const G = await charger(navigateur, {}, [OK(3, { produits: 191, avecNumero: 161, pourcent: 84 })], 1500);
+        verifier('7. sans `appris` : le panneau dit que le serveur n\'est pas redéployé', /pas encore redéployé/.test(G.panneau), true);
     } finally { await navigateur.close(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

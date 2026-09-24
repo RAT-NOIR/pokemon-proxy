@@ -6644,9 +6644,14 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
             const avecNumero = idsExp.length
                 ? await NumeroCarte.countDocuments({ idProduct: { $in: idsExp }, numero: { $type: 'string', $ne: '' } })
                 : 0;
+            // `appris` : ADDITIF (2026-09-24). Les produits APPRIS, numéro de titre ou non. 30th Celebration affichait 84 %
+            // « terminée » alors que ses 191 produits étaient appris : les 30 rééditions « Classic Collection » n'ont pas
+            // de numéro dans leur titre. Le client distingue enfin « tout est appris » de « tout est numéroté ».
+            const appris = idsExp.length ? await NumeroCarte.countDocuments({ idProduct: { $in: idsExp } }) : 0;
             couverture = {
                 produits: idsExp.length,
                 avecNumero,
+                appris,
                 pourcent: idsExp.length ? Math.round(100 * avecNumero / idsExp.length) : null
             };
         }

@@ -236,6 +236,24 @@ async function testerLesRoutes() {
     verifier('   ... le lot la compte « déjà exacte »', r.json?.dejaExactes, 1);
     verifier('   ... et « complétée »', r.json?.completees, 1);
 
+    // --- La couverture compte les APPRIS à part des NUMÉROTÉS (2026-09-24) ---
+    // 30th Celebration affichait 84 % « terminée » : ses 30 rééditions n'ont pas de numéro de titre mais SONT apprises.
+    // Deux produits d'une expansion fictive dans le catalogue de test_scratch, l'un numéroté, l'autre non.
+    const mgST = require('mongoose');
+    if (mgST.connection.readyState !== 1) await mgST.connect(process.env.MONGODB_URI, { dbName: BASE_SCRATCH });
+    if (mgST.connection.db.databaseName !== BASE_SCRATCH) { echecs++; console.log(`  ❌ base inattendue : ${mgST.connection.db.databaseName}`); }
+    else {
+        await mgST.connection.db.collection('catalogue_produits').insertMany([
+            { idProduct: 999000003, idExpansion: 999999, name: 'Smoke Numerotee' }, { idProduct: 999000004, idExpansion: 999999, name: 'Smoke Reedition' }]);
+        r = await appeler(port, 'POST', '/api/apprendre-lot', {
+            corps: { userId: 'SMOKE-TEST-USER', cartes: [
+                { idProduct: 999000003, numero: '1', codeSet: 'SMK', slug: 'Smoke-Numerotee-SMK1', slugSet: 'Smoke-Test' },
+                { idProduct: 999000004, numero: null, codeSet: 'SMK', slug: 'Smoke-Reedition-SMK7', slugSet: 'Smoke-Test' }] }
+        });
+        const cv = r.json?.couverture;
+        verifier('POST /api/apprendre-lot : couverture 2 produits, 1 numéroté, 2 appris', `${cv?.produits}/${cv?.avecNumero}/${cv?.appris}`, '2/1/2');
+    }
+
     r = await appeler(port, 'POST', '/api/apprendre-lot', { corps: { userId: 'SMOKE-TEST-USER', cartes: [] } });
     verifier('POST /api/apprendre-lot lot vide -> success:false', r.json?.success, false);
 
@@ -278,7 +296,8 @@ async function testerLesRoutes() {
         const complete = await N.findOne({ idProduct: 999000002 }).lean();
         verifier('   ligne complétée : slug posé', complete?.slug, 'Smoke-Complete-SMK12');
         verifier('   ligne complétée : numéro et code INTACTS (12, SMK)', `${complete?.numero}/${complete?.codeSet}`, '12/SMK');
-        const supprN = (await N.deleteMany({ idProduct: { $in: [999000001, 999000002] } })).deletedCount;
+        const supprN = (await N.deleteMany({ idProduct: { $in: [999000001, 999000002, 999000003, 999000004] } })).deletedCount;
+        await mongoose.connection.db.collection('catalogue_produits').deleteMany({ idProduct: { $in: [999000003, 999000004] } });
         const supprC = (await C.deleteMany({ userId: 'SMOKE-TEST-USER' })).deletedCount;
         console.log(`\n🧹 Nettoyage test_scratch : ${supprN} numéro(s), ${supprC} crédit(s) supprimé(s).`);
     }

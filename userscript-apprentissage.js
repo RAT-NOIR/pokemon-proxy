@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage manuel Cardmarket
 // @namespace    rat-market
-// @version      1.5
+// @version      1.6
 // @description  Apprend chaque page de galerie Singles dès son chargement. Lit UNIQUEMENT la page ouverte — ne navigue jamais.
 // @match        https://www.cardmarket.com/*/Pokemon/Products/Singles*
 // @grant        GM_xmlhttpRequest
@@ -10,6 +10,17 @@
 // @connect      pokemon-proxy-ratnoir666.onrender.com
 // @run-at       document-idle
 // ==/UserScript==
+
+// ============================================================
+// CE QUI A CHANGÉ EN 1.6 — 2026-09-24, LE PANNEAU DISAIT TROIS CHOSES FAUSSES SUR 30th Celebration
+// ============================================================
+// 1. « terminée ✅ » à 84 % : la 1.5 appelait « terminée » une galerie dont la dernière page était apprise. Ses 191
+//    produits l'étaient tous ; 30 rééditions « Classic Collection » (Charizard 30CBS-4…) n'ont simplement pas de numéro
+//    dans leur titre. Le panneau montre désormais DEUX nombres — appris / numérotés — et ne dit « complète » que si tous
+//    les produits du catalogue sont appris (champ `appris` de la couverture, serveur du 2026-09-24).
+// 2. « 📤 Envoi : 30 cartes… » restait affiché après le succès : on croyait la page renvoyée. Remplacé à l'envoi.
+// 3. « Page déjà apprise » s'affichait pour la page qu'on VENAIT d'envoyer. Il ne se dit plus que d'une page apprise
+//    avant ce chargement — c'est la seule qui n'est pas renvoyée.
 
 // ============================================================
 // CE QUI A CHANGÉ EN 1.5 — 2026-09-24, POUR LE PASSAGE DES 30 EXPANSIONS JAMAIS APPRISES
@@ -220,6 +231,8 @@
           reseau = 0; session.envois++;
           retirer(items.map(i => i.cle));
           noterSucces(items, r.corps);
+          // L'état « Envoi : … » ne doit pas survivre à l'envoi : il faisait croire à un renvoi en cours (2026-09-24).
+          ligneEtat = `✅ ${items.length > 1 ? `${items.length} pages envoyées` : 'page envoyée'} à ${new Date().toLocaleTimeString()}`;
           continue;
         }
         if (r.status === 503) { if (await attendreReveil()) continue; etat('😴 Serveur toujours endormi : nouvel essai dans 1 min.'); planifier(60000); break; }
@@ -246,9 +259,10 @@
       const slugExp = lire('rm_slugExp', {}); for (const it of items) slugExp[it.slugSet] = c.idExpansion; garder('rm_slugExp', slugExp);
       const couv = lire('rm_couv', {});
       const precedent = couv[c.idExpansion] || {};
-      // « terminée » : la couverture passe le seuil, OU la dernière page de la galerie vient d'être apprise.
-      const derniere = items.some(it => it.derniere);
-      couv[c.idExpansion] = { ...(c.couverture || {}), le: Date.now(), terminee: !!(precedent.terminee || derniere || (c.couverture && c.couverture.pourcent >= SEUIL_TERMINEE)) };
+      // « Parcourue » (la dernière page a été apprise) n'est PAS « complète » (tous les produits appris) : la 1.5 les
+      // confondait et affichait 30th Celebration « terminée ✅ » à 84 %. La complétude se calcule à l'affichage.
+      const parcourue = !!(precedent.parcourue || precedent.terminee || items.some(it => it.derniere));
+      couv[c.idExpansion] = { ...(c.couverture || {}), le: Date.now(), parcourue };
       garder('rm_couv', couv);
     }
     dernierBilan = { c, exps, pages: items.length };
@@ -269,27 +283,42 @@
   const etat = t => { ligneEtat = t; majPanneau(); };
 
   function idCourant() { return ctx.idUrl || lire('rm_slugExp', {})[ctx.slugSet] || null; }
+  // COMPLÈTE = tous les produits du catalogue appris, numéro de titre ou non (`appris`, renvoyé par le serveur depuis le
+  // 2026-09-24). Un serveur plus ancien ne le renvoie pas : on retombe alors sur le seuil des numéros.
+  const complete = cv => !!cv && (cv.appris != null ? cv.appris >= cv.produits : cv.pourcent >= SEUIL_TERMINEE);
+  const faite = cv => complete(cv) || !!(cv && (cv.parcourue || cv.terminee));
+  // « Déjà apprise » ne se dit que d'une page apprise AVANT ce chargement — pas de celle qu'on vient d'envoyer.
+  const faiteAvant = lire('rm_pagesFaites', {})[ctx.cle] || null;
 
   function majPanneau() {
     const couv = lire('rm_couv', {});
     const file = lire('rm_file', []);
     const id = idCourant();
     const rang = id != null ? LISTE.findIndex(([x]) => x === id) : -1;
-    const terminees = LISTE.filter(([x]) => couv[x] && couv[x].terminee).length;
-    const suivante = LISTE.find(([x]) => x !== id && !(couv[x] && couv[x].terminee));
+    const faites = LISTE.filter(([x]) => faite(couv[x])).length;
+    const suivante = LISTE.find(([x]) => x !== id && !faite(couv[x]));
     const avecNum = cartesPage.filter(c => c.numero).length;
-    const faite = lire('rm_pagesFaites', {})[ctx.cle];
+    const dejaFaite = lire('rm_pagesFaites', {})[ctx.cle];
     const auto = lire('rm_auto', true);
     const cv = id != null ? couv[id] : null;
     let h = `<div style="display:flex;justify-content:space-between;align-items:center"><b>🐀 Apprentissage</b>` +
       `<label style="font-size:11px;color:#aaa;cursor:pointer"><input id="rm-auto" type="checkbox" ${auto ? 'checked' : ''} style="vertical-align:middle"> auto</label></div>`;
     h += `<div style="color:#888;font-size:11px;margin:2px 0 6px">exp ${esc(id ?? '?')} · ${esc(ctx.slugSet)} · page ${ctx.page}${ctx.pages ? '/' + ctx.pages : ''} · ${cartesPage.length} cartes (${avecNum} numérotées)` +
       (avantPage ? ` · page précédente il y a ${Math.round((Date.now() - avantPage) / 1000)} s` : '') + '</div>';
-    h += `<div style="font-size:12px;margin-bottom:6px">📋 Liste du 25/09 : ${rang >= 0 ? `<b>n° ${rang + 1}/${LISTE.length}</b> — ${esc(LISTE[rang][1])}` : 'expansion hors liste'} · ${terminees} terminée(s)` +
+    h += `<div style="font-size:12px;margin-bottom:6px">📋 Liste du 25/09 : ${rang >= 0 ? `<b>n° ${rang + 1}/${LISTE.length}</b> — ${esc(LISTE[rang][1])}` : 'expansion hors liste'} · ${faites} faite(s)` +
       (suivante ? `<br>➡️ suivante : <a href="/${esc(ctx.langue)}/Pokemon/Products/Singles?idCategory=51&idExpansion=${suivante[0]}" style="color:#D4AF37">${suivante[0]} — ${esc(suivante[1])}</a>` : '<br>🎉 liste terminée') + '</div>';
-    if (cv && cv.pourcent != null) {
-      const coul = cv.pourcent >= SEUIL_TERMINEE ? '#67c23a' : cv.pourcent >= 50 ? '#e6a23c' : '#f56c6c';
-      h += `<div style="color:${coul}">📊 expansion couverte à ${cv.pourcent} % (${cv.avecNumero}/${cv.produits})${cv.terminee ? ' — terminée ✅' : ''}</div>`;
+    if (cv && cv.produits != null) {
+      if (cv.appris != null) {
+        // Deux nombres, pas un : ce qui est APPRIS (le but du passage) et ce qui porte un numéro de TITRE.
+        const sansNum = cv.appris - cv.avecNumero;
+        h += `<div style="color:${complete(cv) ? '#67c23a' : '#e6a23c'}">📊 ${cv.appris}/${cv.produits} produits appris · ${cv.avecNumero} avec numéro de titre` +
+          (sansNum > 0 ? `<br><span style="color:#888;font-size:11px">${sansNum} sans numéro dans leur titre (rééditions, énergies…) : appris quand même, slug compris.</span>` : '') +
+          (complete(cv) ? '<br>✅ expansion complète' : cv.parcourue ? `<br>galerie parcourue : ${cv.produits - cv.appris} produit(s) du catalogue jamais vu(s) dans la galerie` : '') + '</div>';
+      } else {
+        const coul = cv.pourcent >= SEUIL_TERMINEE ? '#67c23a' : cv.pourcent >= 50 ? '#e6a23c' : '#f56c6c';
+        h += `<div style="color:${coul}">📊 ${cv.avecNumero}/${cv.produits} avec numéro de titre (${cv.pourcent} %)${cv.parcourue || cv.terminee ? ' — galerie parcourue' : ''}` +
+          '<br><span style="color:#888;font-size:11px">(serveur pas encore redéployé : le nombre d\'appris n\'est pas connu)</span></div>';
+      }
     }
     if (dernierBilan) {
       const c = dernierBilan.c;
@@ -298,14 +327,14 @@
     }
     if (!cartesPage.length) h += `<div style="color:#e6a23c">${estPage1015() ? '🛑 Cardmarket te limite (erreur 1015). Arrête-toi un moment : ta file et ta liste sont gardées.' : 'Aucune carte lue : passe en vue GALERIE (icône grille).'}</div>`;
     else if (!avecNum) h += `<div style="color:#e6a23c">⚠️ aucune carte de la page n'a de numéro dans son titre.</div>`;
-    if (faite && !file.some(x => x.cle === ctx.cle)) h += `<div style="color:#888">Page déjà apprise (${new Date(faite.le).toLocaleString()}).</div>`;
+    if (faiteAvant && !file.some(x => x.cle === ctx.cle)) h += `<div style="color:#888">Page déjà apprise avant ce chargement (${new Date(faiteAvant.le).toLocaleString()}) : rien n'a été renvoyé.</div>`;
     if (ligneEtat) h += `<div style="margin-top:4px">${esc(ligneEtat)}</div>`;
     if (file.length) h += `<div style="color:#aaa;font-size:11px">📦 ${file.length} page(s) en attente d'envoi${repriseA ? ` · reprise ${new Date(repriseA).toLocaleTimeString()}` : ''}</div>`;
     if (session.envois || session.restant != null) h += `<div style="color:#777;font-size:11px">onglet : ${session.envois} envoi(s), ${session.nouvelles} nouvelles, ${session.ameliorees} améliorées${session.completees ? `, ${session.completees} complétées` : ''}` +
       (session.restant != null ? ` · reste ${session.restant} envoi(s) dans l'heure` : '') + '</div>';
     h += ctx.hrefSuivant ? `<div style="margin-top:6px"><a href="${esc(ctx.hrefSuivant)}" style="color:#D4AF37;font-weight:600">→ page suivante${ctx.pages ? ` (${ctx.page + 1}/${ctx.pages})` : ''}</a> <span style="color:#666;font-size:11px">touche N</span></div>`
       : (cartesPage.length ? '<div style="margin-top:6px;color:#888">Dernière page de cette galerie.</div>' : '');
-    h += `<div style="display:flex;gap:6px;margin-top:8px"><button id="rm-go" style="flex:1;padding:6px;background:#0c0c0e;color:#D4AF37;border:1px solid #D4AF37;border-radius:6px;cursor:pointer;font-weight:600">${faite ? 'Réapprendre' : 'Apprendre'}</button>` +
+    h += `<div style="display:flex;gap:6px;margin-top:8px"><button id="rm-go" style="flex:1;padding:6px;background:#0c0c0e;color:#D4AF37;border:1px solid #D4AF37;border-radius:6px;cursor:pointer;font-weight:600">${dejaFaite ? 'Réapprendre' : 'Apprendre'}</button>` +
       (file.length && !enCours ? '<button id="rm-vider" style="flex:1;padding:6px;background:#0c0c0e;color:#ccc;border:1px solid #555;border-radius:6px;cursor:pointer">Envoyer maintenant</button>' : '') + '</div>';
     panneau.innerHTML = h;
     panneau.querySelector('#rm-auto').addEventListener('change', e => { garder('rm_auto', e.target.checked); });
