@@ -30157,5 +30157,251 @@
    "etat": "OK",
    "raisons": []
   }
+ },
+ {
+  "code": "m6",
+  "exp": 6636,
+  "prod": 113,
+  "nom": "Storm Emeralda",
+  "slugSet": "Storm-Emeralda",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Storm Emeralda (TCG)",
+   "tirage": "jp",
+   "expansion": "Storm Emeralda"
+  },
+  "attendu": 113,
+  "auto": {
+   "cle": "slug exact",
+   "liste": "JP",
+   "nomBulbapedia": "Storm Emeralda",
+   "cartesListe": 76,
+   "sectionListe": "MEGA Series",
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Storm Emeralda (TCG)",
+   "entrees": {
+    "Storm Emeralda": 113
+   },
+   "note": "vérification automatique : 113 entrées pour 113 produits, échantillon « Kecleon (Storm Emeralda 57) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Storm Emeralda (TCG)",
+   "entrees": 113,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 113,
+    "couverts": 113,
+    "numerosSetlist": 113,
+    "taux": 1
+   },
+   "echantillon": "Kecleon (Storm Emeralda 57)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "advB",
+  "exp": 5875,
+  "prod": 19,
+  "nom": "Torchic Constructed Starter Deck",
+  "slugSet": "Torchic-Constructed-Starter-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Torchic Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Torchic Constructed Starter Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Torchic Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Torchic Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Torchic Constructed Starter Deck »"
+   ]
+  }
+ },
+ {
+  "code": "advC",
+  "exp": 5874,
+  "prod": 19,
+  "nom": "Mudkip Constructed Starter Deck",
+  "slugSet": "Mudkip-Constructed-Starter-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Mudkip Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Mudkip Constructed Starter Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Mudkip Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Mudkip Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Mudkip Constructed Starter Deck »"
+   ]
+  }
+ },
+ {
+  "code": "advA",
+  "exp": 5876,
+  "prod": 19,
+  "nom": "Treecko Constructed Starter Deck",
+  "slugSet": "Treecko-Constructed-Starter-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Treecko Constructed Starter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Treecko Constructed Starter Deck"
+  },
+  "attendu": 19,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Treecko Constructed Starter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Treecko Constructed Starter Deck (TCG)",
+   "entrees": 0,
+   "ratio": 0,
+   "etat": "À REGARDER",
+   "raisons": [
+    "aucune entrée de Setlist pour « Treecko Constructed Starter Deck »"
+   ]
+  }
+ },
+ {
+  "code": "pcgM",
+  "exp": 5717,
+  "prod": 15,
+  "nom": "Holon Research Tower Fire Quarter Deck",
+  "slugSet": "Holon-Research-Tower-Fire-Quarter-Deck",
+  "region": null,
+  "bulba": {
+   "titre": "Holon Research Tower Fire Quarter Deck (TCG)",
+   "tirage": null,
+   "expansion": "Holon Research Tower Fire Quarter Deck"
+  },
+  "attendu": 15,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Holon Research Tower Fire Quarter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": null,
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Holon Research Tower Fire Quarter Deck (TCG)",
+   "entrees": 15,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "echantillon": "Dual Ball (Expedition 139)",
+   "tiragesVus": [],
+   "ratio": 1,
+   "etat": "À REGARDER",
+   "raisons": [
+    "tirage non établi (vus : aucun)"
+   ]
+  }
+ },
+ {
+  "code": "pcgN",
+  "exp": 5716,
+  "prod": 15,
+  "nom": "Holon Research Tower Water Quarter Deck",
+  "slugSet": "Holon-Research-Tower-Water-Quarter-Deck",
+  "region": "japonais",
+  "bulba": {
+   "titre": "Holon Research Tower Water Quarter Deck (TCG)",
+   "tirage": "jp",
+   "expansion": "Holon Research Tower Water Quarter Deck"
+  },
+  "attendu": 15,
+  "auto": {
+   "cle": "page (TCG)",
+   "liste": null,
+   "nomBulbapedia": "Holon Research Tower Water Quarter Deck",
+   "cartesListe": null,
+   "sectionListe": null,
+   "regionCodesSet": null,
+   "genereLe": "2026-09-24"
+  },
+  "verifie": {
+   "le": "2026-09-24",
+   "page": "Holon Research Tower Water Quarter Deck (TCG)",
+   "entrees": {
+    "Holon Research Tower Water Quarter Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Potion (Base Set 94) » (jp)"
+  },
+  "verif": {
+   "le": "2026-09-24",
+   "pageResolue": "Holon Research Tower Water Quarter Deck (TCG)",
+   "entrees": 15,
+   "entreesSansPage": 0,
+   "couverture": {
+    "produitsNumerotes": 15,
+    "couverts": 15,
+    "numerosSetlist": 15,
+    "taux": 1
+   },
+   "echantillon": "Potion (Base Set 94)",
+   "tiragesVus": [
+    "jp"
+   ],
+   "tirageEtabli": "jp",
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  }
 ]

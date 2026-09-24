@@ -38,7 +38,7 @@ const { fabriquerVerrou } = require('./verrou-source');
 const bulba = require('./bulba');
 // TABLE_MAIN : les lignes à la main. Pas `TABLE`, qui contient aussi les automatiques déjà vérifiées —
 // le générateur les compterait « déjà dans la table » et les effacerait de sa propre sortie.
-const { TABLE_MAIN: TABLE, TABLE_AUTO: PRECEDENTES } = require('./table-sets');
+const { TABLE_MAIN: TABLE, TABLE_AUTO: PRECEDENTES, TABLE_SANS_PAGE } = require('./table-sets');
 
 const SORTIE = path.join(__dirname, 'table-sets-auto.json');
 const LISTES = { EN: 'List of Pokémon Trading Card Game expansions', JP: 'List of Japanese Pokémon Trading Card Game expansions' };
@@ -111,7 +111,9 @@ function lignesListe(wt, liste) {
         const index = (ls, f) => { const m = new Map(); for (const l of ls) { const k = f(l); if (!k) continue; (m.get(k) || m.set(k, []).get(k)).push(l); } return m; };
         const idx = { EN: { exact: index(EN, l => serre(l.nom)), norm: index(EN, l => norm(l.nom)), code: index(EN, l => l.code?.toUpperCase()) }, JP: { exact: index(JP, l => serre(l.nom)), norm: index(JP, l => norm(l.nom)) } };
 
-        const dejaTable = new Set(TABLE.map(l => l.exp));
+        // Une expansion déjà prise par une ligne « sans page » VÉRIFIÉE est dans la table (2026-09-24) : Aquapolis (AQ, identité
+        // `AQ`) recevait une seconde ligne par sa page, qui aurait fait naître un second set `Aquapolis` pour les mêmes cartes.
+        const dejaTable = new Set([...TABLE, ...TABLE_SANS_PAGE.filter(l => l.verifie)].map(l => l.exp));
         const compte = { 'déjà dans la table': 0, 'langue asiatique non jp': 0, 'slug exact': 0, 'nom normalisé': 0, 'code de set': 0, 'page (TCG)': 0, ambigu: 0, 'sans appariement': 0 };
         const aTitrer = [];
         for (const e of parExp) {
@@ -186,16 +188,21 @@ function lignesListe(wt, liste) {
     // ⚠️ UNE RÉGÉNÉRATION NE PERD PAS UNE VÉRIFICATION : pour le même `exp` et la même page, le résultat
     // de verifier-table.js (verif, verifie, tirage et région établis) est repris tel quel.
     const avant = new Map(PRECEDENTES.map(l => [l.exp, l]));
-    let reprises = 0;
-    for (const l of sortie) {
+    let reprises = 0, verifieesGardees = 0;
+    for (const [i, l] of sortie.entries()) {
         const p = avant.get(l.exp);
         if (p && p.bulba?.titre === l.bulba.titre && p.verif) {
             Object.assign(l, { code: p.code, verif: p.verif, verifie: p.verifie, region: p.region });
             l.bulba.tirage = p.bulba.tirage ?? l.bulba.tirage;
             reprises++;
         }
+        // 🔴 UNE LIGNE VÉRIFIÉE N'EST JAMAIS REMPLACÉE PAR UNE CANDIDATE SUR UN AUTRE TITRE (2026-09-24). Un titre qui change
+        // (« Black Bolt/White Flare » → « Black Bolt & White Flare ») ou une clé qui tombe sur une autre page (HSP renvoyé vers
+        // « HGSS Black Star Promos ») faisait perdre la vérification, ou rétablissait la mauvaise page corrigée à la main.
+        else if (p?.verifie) { sortie[i] = p; verifieesGardees++; }
     }
     if (reprises) console.log(`vérifications reprises du fichier précédent : ${reprises}`);
+    if (verifieesGardees) console.log(`lignes vérifiées gardées telles quelles (la clé proposait un autre titre) : ${verifieesGardees}`);
     // 🔴 ET UNE RÉGÉNÉRATION NE DOIT PAS NON PLUS PERDRE UNE LIGNE QUE LA CLÉ AUTOMATIQUE NE SAIT PAS
     // FABRIQUER. Les Trainer Kits, `Intro Pack Neo`, `Pokémon TCG Classic` et les Battle Academy ont une
     // page Bulbapedia — mais sous un titre que la clé « <slug> (TCG) » ne trouve jamais :
@@ -203,10 +210,15 @@ function lignesListe(wt, liste) {
     // une ÉNUMÉRATION (`intitle:"Trainer Kit"` — §30 : on liste la population, on ne devine pas un titre).
     // Sans cette reprise, la prochaine régénération les effacerait en silence, et c'est la forme du §21 :
     // un résultat plausible, aucune erreur, du travail disparu.
+    // 🔴 ET PAS SEULEMENT CELLES-LÀ (2026-09-24) : le filtre `auto.aLaMain` laissait tomber TOUTE ligne précédente que la clé
+    // ne refabrique plus — une liste Bulbapedia réécrite, un code de set réattribué, une ligne venue d'un autre générateur
+    // (ATCG, promos ID/TH). Rejoué ce jour-là : 84 lignes retirées, dont LOR, SIT, ASR, CRZ, les promos S-P, SM-P, SV-P…
+    // vérifiées et collectées, et le fichier réécrit sans un mot. Une régénération AJOUTE ; elle ne retire rien (§21 bis n°5,
+    // « on ne retire jamais », collecteur-texte.js). Retirer une ligne est une décision, prise à la main, avec sa raison.
     const codesSortie = new Set(sortie.map(l => l.exp));
-    const gardees = PRECEDENTES.filter(l => l.auto?.aLaMain && !codesSortie.has(l.exp));
+    const gardees = PRECEDENTES.filter(l => !codesSortie.has(l.exp));
     sortie.push(...gardees);
-    if (gardees.length) console.log(`lignes écrites à la main, conservées : ${gardees.length} (${gardees.map(l => l.code).join(', ')})`);
+    if (gardees.length) console.log(`lignes précédentes que la clé ne refabrique pas, CONSERVÉES : ${gardees.length} (dont ${gardees.filter(l => l.verifie).length} vérifiées, ${gardees.filter(l => l.auto?.aLaMain).length} écrites à la main)`);
     fs.writeFileSync(SORTIE, JSON.stringify(sortie, null, 1));
     const par = sortie.reduce((a, l) => (a[l.bulba.tirage ?? 'à établir'] = (a[l.bulba.tirage ?? 'à établir'] || 0) + 1, a), {});
     console.log(`\n${sortie.length} lignes écrites dans ${path.relative(process.cwd(), SORTIE)} · par tirage ${JSON.stringify(par)} · ${sortie.reduce((a, l) => a + l.prod, 0)} produits`);

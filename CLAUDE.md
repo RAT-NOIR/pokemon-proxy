@@ -550,6 +550,31 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 59. CINQ ÉCRITURES QUI EFFAÇAIENT À CÔTÉ DE CE QU'ELLES AJOUTAIENT — 2026-09-24
+
+> 🔴 **LE MOTIF DU JOUR : UN GESTE ADDITIF QUI RETIRE AILLEURS, SANS UN MOT.** Chaque lot ajoutait ce qu'il annonçait, et son
+> compte sur SA cible était juste ; la perte était sur une AUTRE cible, que personne ne comptait. **La parade est mécanique :
+> un lot compte aussi le TOTAL de ce qu'il touche** (59 315 → 59 307 alors que « +2 » était annoncé), **et se compare à sa
+> sauvegarde, ligne à ligne.** C'est ainsi que les cinq ont été vues ; aucune n'a levé d'erreur.
+
+| l'écriture | ce qu'elle effaçait | mesuré | réparé |
+|---|---|---|---|
+| recollecte de texte (`$set` du tableau `impressions`) | les illustrateurs posés APRÈS le parseur | 2 179 sur 244 cartes (xASC, HSP) | report par la clé (`impressions-posees.js`), restauré de la sauvegarde |
+| jointure d'images artofpkm (`$pull` par set) | toutes les images de la carte dans le set sauf la dernière | 3 499 jointes et invisibles, 156 sets | clé (carte, set, numéro) ; non rejouées : jamais regardées |
+| `--reparser` d'un set non japonais | ses lignes Base Set / Base Set 2, jamais réécrites | 24 (RS, M-P/CT) | effacement conditionné à la réécriture, restauré |
+| `generer-table-auto.js` en place | toute ligne que la clé ne refabrique plus | **84 lignes, vérifiées et collectées** (LOR, SIT, CRZ, promos) | une régénération ajoute, ne retire rien ; fichier = HEAD + ajouts |
+| `retirer-collecte-set.js` | rien — il cherchait l'état par le CODE, il vit sous le SLUG | LED (20/09) : 14 restes et l'état survivent | identité recopiée de collecteur-texte.js |
+
+⚠️ **La procédure du §56 disait « lancer generer-table-auto.js »** : lancée telle quelle, elle aurait effacé 84 lignes. Une procédure
+écrite hérite des défauts des outils qu'elle cite, et se relit quand l'outil change.
+
+**UNP (4170), « aucune population candidate » (§52), était le §30 une fois de plus** : on cherchait « Unnumbered Promos » (Cardmarket)
+chez Bulbapedia, qui écrit « Unnumbered Promotional cards » (136 cartes). Par le nom seul, sous la garde bidirectionnelle extraite
+en module (`garde-nom-seul.js`, calibration inchangée 21 925 / 0) : **74/208 fiches**. Et l'exclusion des sets de réimpressions,
+posée par prudence, ne protège rien une fois la garde passée : **9 031 justes, 0 faux** dans les 178 sets qu'elle écartait.
+**Trois « cartes sans nomEn » sont des pages d'HOMONYMIE** (`{{tcgdisambig}}`, 56 caractères) : Clefairy (M-P Promo 60) porte deux
+fiches aux attaques différentes — deux cartes fusionnées dans un document vide. Leur poser un nom aurait habillé l'erreur.
+
 ## 58. UNE SURCHARGE N'EST PAS UN VERDICT, UN NOM N'A QU'UNE LANGUE, ET QUATRE PAGES QUI DONNAIENT LE NUMÉRO DU VOISIN — 2026-09-24
 
 > 🔑 **LE FEU VERT PERMANENT (testeur, 2026-09-24) : les écritures ADDITIVES — images nouvelles, fiches nouvelles passées au
