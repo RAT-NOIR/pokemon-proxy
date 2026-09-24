@@ -1898,6 +1898,60 @@
   ],
   "cle": "nom-normalise"
  },
+ "m6": {
+  "ids": [
+   595
+  ],
+  "noms": [
+   "Storm Emeralda"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advB": {
+  "ids": [
+   67
+  ],
+  "noms": [
+   "Torchic Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advC": {
+  "ids": [
+   68
+  ],
+  "noms": [
+   "Mudkip Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "advA": {
+  "ids": [
+   66
+  ],
+  "noms": [
+   "Treecko Constructed Starter Deck"
+  ],
+  "cle": "nom-normalise"
+ },
+ "mF": {
+  "ids": [
+   594
+  ],
+  "noms": [
+   "30th CELEBRATION Premium Deck Set - Espeon & Umbreon"
+  ],
+  "cle": "nom-normalise"
+ },
+ "m6a": {
+  "ids": [
+   592
+  ],
+  "noms": [
+   "30th CELEBRATION"
+  ],
+  "cle": "nom-normalise"
+ },
  "sO": {
   "ids": [
    477

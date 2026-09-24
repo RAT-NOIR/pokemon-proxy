@@ -64,7 +64,10 @@ async function sousVerrouGlobal(M, travail) {
         const horsAuto = [...require('./table-sets').TABLE_MAIN, ...require('./table-sets').TABLE_SANS_PAGE]
             .filter(l => l.region === 'japonais' && (l.bulba?.tirage || 'jp') === 'jp' && !ARTOFPKM[l.code] && !codesAuto.has(l.code))
             .map(l => l.bulba?.deck ? { ...l, bulba: { ...l.bulba, expansion: l.bulba.deck } } : l);
-        const candidates = [...TABLE_AUTO.filter(l => l.bulba?.tirage !== 'intl' && !ARTOFPKM[l.code] && !additionals.includes(l)), ...horsAuto];
+        // 🔴 2026-09-24 : cette ligne filtrait `tirage !== 'intl'` — ce qu'elle refuse, pas ce qu'elle autorise — et la règle
+        // « japonaises seulement » écrite trois lignes plus haut ne s'appliquait qu'aux lignes à la main (§21 bis). Résultat :
+        // MA6 (indonésien-thaï) et 30thC (chinois) recevaient « 30th CELEBRATION », le set JAPONAIS d'artofpkm.
+        const candidates = [...TABLE_AUTO.filter(l => (l.bulba?.tirage || 'jp') === 'jp' && !ARTOFPKM[l.code] && !additionals.includes(l)), ...horsAuto];
         // 🔑 L'ÉGALITÉ EXACTE D'UN LIBELLÉ RATE LES RÉORDONNANCEMENTS (2026-09-19). artofpkm écrit « High Class Deck,
         // Inteleon VMAX » là où Cardmarket écrit « Inteleon VMAX High Class Deck », et « Starter Set VSTAR, Lucario » là
         // où Cardmarket ajoute l'ère (« Sword Shield Starter Set Lucario VSTAR »). Même famille que les crochets d'Unown,
