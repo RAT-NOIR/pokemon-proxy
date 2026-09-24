@@ -87,9 +87,14 @@ const JN = joindre([
 ], [produit(110, 'Fire Energy', '100'), produit(111, 'Magmortar LV.X', '101'), produit(112, 'Nidoran♂', '102')], { idExpansion: 2, expansionBulba: E, tirage: 'jp' });
 verifier('écritures normales : les trois fiches restent', paires(JN), ['100|110', '101|111', '102|112']);
 
-// 7. La carte sans nom : le témoin se TAIT, il ne refuse pas (il ne peut ni confirmer ni contredire).
+// 7. La carte sans nom n'est PAS une carte (2026-09-24) : les 6 documents sans nomEn de la base sont 4 pages d'homonymie
+// ({{tcgdisambig}} : Clefairy M-P 60, Pikachu SV-P 1 et 120, Eevee S-P 23) et 2 ébauches d'Énergie. Le témoin s'y tait, et
+// le numéro de la Setlist y posait 5 fiches (Clefairy TH/ID, Pikachu ID ×2, Eevee CS) sur des pages que le site n'affiche
+// jamais. Le cas disait jusqu'ici « le numéro seul décide » ; il dit désormais : aucune fiche, un reste nommé.
 const JS = joindre([{ _id: 120, nomEn: null, attaques: [], impressions: [{ tirage: 'jp', expansion: E, numero: '120' }] }, carte(121, 'Bill', E, 'jp', '121')], [produit(130, 'Bill', '120')], { idExpansion: 2, expansionBulba: E, tirage: 'jp' });
-verifier('carte sans nom : le numéro seul décide, comme avant', paires(JS), ['120|130']);
+verifier('carte sans nom : aucune fiche', paires(JS), []);
+verifier('carte sans nom : un reste qui la nomme, et le produit reste sans carte', JS.restes.map(r => `${r.type}|${r.carteId ?? r.idProduct}`).sort(), ['carte-sans-nom|120', 'carte-sans-produit|121', 'produit-sans-carte|130']);
+verifier('carte sans nom : produits = joints + restes', concordance(JS, [produit(130, 'Bill', '120')]), true);
 
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

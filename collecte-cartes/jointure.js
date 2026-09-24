@@ -293,6 +293,15 @@ function joindre(cartes, produits, cible) {
     const temoin = temoinDuNom(cartes);
     const contradictions = [];            // { carte, p, autres, detail } — le numéro désigne carte, le nom désigne autres
     for (const carte of cartes) {
+        // 🔴 UNE PAGE SANS NOM N'EST PAS UNE CARTE (2026-09-24). Les 6 documents sans nomEn de la base sont 4 pages
+        // d'HOMONYMIE ({{tcgdisambig}} : Clefairy M-P 60, Pikachu SV-P 1 et 120, Eevee S-P 23) et 2 ébauches d'Énergie. Le
+        // témoin du nom s'y tait, et le numéro de la Setlist y posait des fiches : 5, sur des pages que le site n'affiche
+        // jamais (FILTRE_CARTE_AFFICHABLE). Mesuré avant de câbler : les lignes vers une carte sans nom sont ces 5, et elles.
+        if (!carte.nomEn) {
+            restes.push({ type: 'carte-sans-nom', carteId: carte._id, detail: `« ${carte.bulba?.titre ?? carte._id} » n'a pas de nom (page d'homonymie ou ébauche) : ce n'est pas une carte, aucune fiche` });
+            etatDeCarte.set(carte, { imp: null, imps: [], source: 'setlist', numeros: [], joint: false, sansNom: true });
+            continue;
+        }
         // L'appartenance au set a DEUX sources : l'impression déclarée sur la page (jpexpansion=…),
         // ou, à défaut, le seul fait que la Setlist du set a lié cette page (cas des énergies de
         // base, dont la page est générique et ne liste pas chaque tirage). La preuve le dit :
@@ -402,7 +411,8 @@ function joindre(cartes, produits, cible) {
     const cartesJointes = new Set(lignes.map(l => l.carteId));
     for (const carte of cartes) {
         if (cartesJointes.has(carte._id)) continue;
-        const { imp } = etatDeCarte.get(carte);
+        const { imp, sansNom } = etatDeCarte.get(carte);
+        if (sansNom) continue;                                     // déjà nommée : « carte-sans-nom »
         restes.push({ type: 'carte-sans-produit', carteId: carte._id, detail: `« ${carte.nomEn ?? carte.bulba?.titre} » n°${imp?.numero ?? '—'} : aucun produit dans l'expansion ${cible.idExpansion}${imp ? '' : ' (page sans impression déclarée pour ce set)'}` });
         cartesSansProduit++;
     }
