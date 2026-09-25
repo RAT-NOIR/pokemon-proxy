@@ -24,7 +24,9 @@ const { fabriquerClient, VERROU_GLOBAL: VERROU_TCGDEX, VERROU_GLOBAL_MS } = requ
 // locale ici a déjà existé, et un fichier lu à l'œil sur un chemin ne l'était pas sur l'autre (M1, SV11 : 2026-09-24).
 const { deciderLangue, cle, refusDuCouple, logoGenerique } = require('./collecte-cartes/langue-logo');
 
-const DEMANDE = 'C:/Users/Yung/Desktop/rat-market-site/DEMANDE-LOGOS.md';
+// `--demande=<fichier.md>` (2026-09-25) : une liste au MÊME format, écrite par le serveur (logos TCGdex lus par l'API /sets/<id>) ;
+// chaque ligne repasse par les mêmes juges que celles du site.
+const DEMANDE = process.argv.find(a => a.startsWith('--demande='))?.slice(10) || 'C:/Users/Yung/Desktop/rat-market-site/DEMANDE-LOGOS.md';
 const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\*/;
 
 (async () => {

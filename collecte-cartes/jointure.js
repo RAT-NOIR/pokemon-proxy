@@ -82,7 +82,11 @@ async function produitsDeLExpansion(prod, idExpansion) {
     if (bruts.length !== produits.length) console.log(`   cartes-code écartées : ${bruts.length - produits.length} (ni fiche ni visuel possibles — ce ne sont pas des cartes)`);
     // `slugSet` autant que `slug` : les DEUX font l'URL Cardmarket
     // (/Pokemon/Products/Singles/<slugSet>/<slug>). N'en porter qu'un ne sert à rien.
-    const numeros = await NC.find({ idExpansion }, { projection: { _id: 0, idProduct: 1, numero: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray();
+    // 🔴 LE NUMÉRO SE CHERCHE PAR PRODUIT, PAS PAR EXPANSION (2026-09-25). `numeros_cartes.idExpansion` est ABSENT sur 367
+    // produits appris en septembre (Chasing Glory Together 287, Happy Set CSVH5C 78) et DIFFÉRENT du catalogue sur 24 autres
+    // (Cardmarket a déplacé le produit). Chercher `{ idExpansion }` rendait ZÉRO numéro pour l'expansion entière, sans un mot :
+    // la ligne ne pouvait ni être vérifiée ni joindre. Le catalogue fait autorité sur l'expansion ; `numeros_cartes` sur le numéro.
+    const numeros = await NC.find({ idProduct: { $in: bruts.map(p => p.idProduct) } }, { projection: { _id: 0, idProduct: 1, numero: 1, slug: 1, slugSet: 1, variante: 1 } }).toArray();
     const parId = new Map(numeros.map(n => [n.idProduct, n]));
     const avecNumero = numeros.filter(n => n.numero != null && String(n.numero).trim() !== '').length;
     const avecSlug = numeros.filter(n => n.slug && n.slugSet).length;

@@ -203,7 +203,10 @@ async function verifierAuto() {
                 // refusaient Journey Theme Pack à 133/141 alors que ses 133 numéros de carte concordent tous. Retirées du
                 // dénominateur — et imprimées : un retrait qu'on ne compte pas est un filtre silencieux (§39).
                 const CODE_ENERGIE = /^(GRA|FIR|WAT|LIG|PSY|FIG|DAR|MET|FAI|DRA)$/i;
-                const numerosBruts = (await prod.db.collection('numeros_cartes').find({ idExpansion: l.exp }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '');
+                // Par PRODUIT du catalogue, pas par `numeros_cartes.idExpansion` (absent sur 367 produits de septembre) : la même
+                // lecture que produitsDeLExpansion (jointure.js), sinon la vérification juge des numéros que la collecte ne voit pas.
+                const idsCatalogue = (await prod.db.collection('catalogue_produits').find({ idExpansion: l.exp }, { projection: { idProduct: 1 } }).toArray()).map(p => p.idProduct);
+                const numerosBruts = (await prod.db.collection('numeros_cartes').find({ idProduct: { $in: idsCatalogue } }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '');
                 v.codesEnergie = numerosBruts.filter(p => CODE_ENERGIE.test(String(p.numero).trim())).length;
                 const numsProduits = numerosBruts.filter(p => !CODE_ENERGIE.test(String(p.numero).trim())).map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;

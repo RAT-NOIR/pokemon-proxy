@@ -50,11 +50,25 @@ function familleAsiatique(codeSet, slugSet) {
         { $sort: { renseigne: -1, n: -1 } },
         { $group: { _id: '$_id.exp', slugSet: { $first: '$_id.slugSet' }, produits: { $sum: '$n' } } }
     ]).toArray();
+    // 🔴 UN PRODUIT APPRIS SANS `idExpansion` N'APPARTENAIT À AUCUNE EXPANSION (2026-09-25) : Chasing Glory Together, 287 produits
+    // appris avec slug, code et numéro, `idExpansion` absent — l'expansion n'existait pas pour cet univers, donc pour aucun
+    // générateur de lignes. Ces produits prennent l'expansion du CATALOGUE, qui fait autorité.
+    const sansExp = await prod.db.collection('numeros_cartes').find({ $or: [{ idExpansion: null }, { idExpansion: { $exists: false } }] }, { projection: { idProduct: 1, slugSet: 1, codeSet: 1 } }).toArray();
+    if (sansExp.length) {
+        const cat = new Map((await prod.db.collection('catalogue_produits').find({ idProduct: { $in: sansExp.map(n => n.idProduct) } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray()).map(p => [p.idProduct, p.idExpansion]));
+        const ajout = new Map();
+        for (const n of sansExp) { const exp = cat.get(n.idProduct); if (exp == null) continue; const a = ajout.get(exp) || ajout.set(exp, { produits: 0, slugSet: null, codeSet: null }).get(exp); a.produits++; a.slugSet ||= n.slugSet || null; a.codeSet ||= n.codeSet || null; }
+        for (const [exp, a] of ajout) {
+            const e = parExp.find(x => x._id === exp);
+            if (e) { e.produits += a.produits; e.slugSet ||= a.slugSet; } else { parExp.push({ _id: exp, slugSet: a.slugSet, produits: a.produits, codeAppris: a.codeSet }); }
+        }
+        console.log(`produits appris SANS idExpansion : ${sansExp.length} → rattachés par le catalogue à ${ajout.size} expansion(s) : ${[...ajout].map(([e, a]) => `${e} ${a.slugSet} (${a.produits})`).join(' · ')}`);
+    }
     const codes = new Map((await prod.db.collection('codes_set').find({}).toArray()).map(c => [c.idExpansion, c]));
     const main = new Map(TABLE_MAIN.map(l => [l.exp, l])), auto = new Map(TABLE_AUTO.map(l => [l.exp, l]));
     const univers = parExp.map(e => {
         const c = codes.get(e._id), m = main.get(e._id), a = auto.get(e._id), l = m || a;
-        const asia = familleAsiatique(c?.codeSet, e.slugSet);
+        const asia = familleAsiatique(c?.codeSet ?? e.codeAppris, e.slugSet);
         const famille = asia || (l?.region === 'japonais' || l?.bulba?.tirage === 'jp' ? 'japonais' : l?.region === 'occidental' || l?.bulba?.tirage === 'intl' ? 'occidental' : c?.region || 'inconnue');
         let etat, cause = null;
         if (m) etat = phases.get(m.slugSet) === 'verifie' ? 'collecte-ok' : (etat = 'verifiee-non-collectee', cause = `ligne à la main, texte ${phases.get(m.slugSet) || 'jamais collecté'}`, etat);
@@ -66,7 +80,7 @@ function familleAsiatique(codeSet, slugSet) {
             else if (a.verifie) etat = 'verifiee-non-collectee';
             else etat = 'non-verifiee';
         } else { etat = 'absente-des-tables'; cause = asia ? `langue ${asia}` : !e.slugSet ? 'sans slugSet' : 'non appariée (ambiguë ou sans page « <slug> (TCG) »)'; }
-        return { exp: e._id, slugSet: e.slugSet ?? null, codeSet: c?.codeSet ?? null, regionCodesSet: c?.region ?? null, produits: e.produits, code: l?.code ?? null, famille, etat, cause };
+        return { exp: e._id, slugSet: e.slugSet ?? null, codeSet: c?.codeSet ?? e.codeAppris ?? null, regionCodesSet: c?.region ?? null, produits: e.produits, code: l?.code ?? null, famille, etat, cause };
     });
     fs.writeFileSync(path.join(__dirname, 'univers-expansions.json'), JSON.stringify(univers, null, 1));
     const somme = xs => xs.reduce((t, x) => t + x.produits, 0);

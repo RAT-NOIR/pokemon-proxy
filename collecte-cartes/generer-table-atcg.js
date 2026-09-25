@@ -147,7 +147,9 @@ function sectionsDeLaPage(wt) {
     const mienne = l => /^atcg-code-/.test(l.auto?.cle || '');
     const autres = TABLE_AUTO.filter(l => !mienne(l));
     const avecLigne = new Set([...TABLE_MAIN, ...autres, ...TABLE_SANS_PAGE].map(l => l.exp).filter(Boolean));
-    const compte = new Map((await prod.db.collection('numeros_cartes').aggregate([
+    // Compté sur le CATALOGUE (2026-09-25) : `numeros_cartes.idExpansion` est absent sur 367 produits de septembre — Chasing Glory
+    // Together comptait 0 et ne pouvait pas devenir candidate (même défaut que produitsDeLExpansion, jointure.js).
+    const compte = new Map((await prod.db.collection('catalogue_produits').aggregate([
         { $match: { idExpansion: { $ne: null } } }, { $group: { _id: '$idExpansion', n: { $sum: 1 } } }]).toArray()).map(x => [x._id, x.n]));
     const cibles = UNIVERS
         .filter(u => (u.famille === 'chinois-simplifie' || u.famille === 'autre-asiatique') && !avecLigne.has(u.exp) && u.slugSet && compte.get(u.exp))
@@ -252,10 +254,20 @@ function sectionsDeLaPage(wt) {
     }
     if (reprises) console.log(`   vérifications reprises du fichier précédent : ${reprises}`);
 
+    // 🔴 UNE RÉGÉNÉRATION AJOUTE, ELLE NE REMPLACE PAS (2026-09-25, la règle du §59 pour generer-table-auto.js, ici oubliée —
+    // §21 bis). La fusion REMPLAÇAIT toute ligne de même expansion par sa version régénérée : les Happy Sets et Battle Party
+    // calés à la main la nuit du 24 (préfixes par liste mesurés, `prefixesParJeton`) seraient redevenus « section Happy Set »
+    // seule, en gardant leur admission — une recollecte aurait alors perdu trois listes sur quatre. Une ligne existante n'est
+    // jamais réécrite ici ; si sa version régénérée diffère, elle est IMPRIMÉE, à relire à la main.
+    const existantes = new Map(TABLE_AUTO.map(l => [l.exp, l]));
+    const differentes = lignes.filter(n => existantes.has(n.exp) && JSON.stringify(existantes.get(n.exp).bulba) !== JSON.stringify(n.bulba));
+    for (const n of differentes) console.log(`   ⚠️ ${n.code} : la ligne existante diffère de sa version régénérée — GARDÉE telle quelle (existante ${JSON.stringify(existantes.get(n.exp).bulba).slice(0, 120)} · régénérée ${JSON.stringify(n.bulba).slice(0, 120)})`);
+    const neuves = lignes.filter(n => !existantes.has(n.exp));
+    console.log(`   lignes NEUVES (expansion sans ligne) : ${neuves.length} ${neuves.map(n => n.code).join(' ')} · existantes gardées : ${lignes.length - neuves.length}`);
     if (ecrire) {
-        const fusion = [...TABLE_AUTO.filter(l => !lignes.some(n => n.exp === l.exp)), ...lignes];
+        const fusion = [...TABLE_AUTO, ...neuves];
         fs.writeFileSync(FICHIER_AUTO, JSON.stringify(fusion, null, 1));
-        console.log(`   ÉCRIT : ${path.relative(process.cwd(), FICHIER_AUTO)} — ${fusion.length} lignes`);
+        console.log(`   ÉCRIT : ${path.relative(process.cwd(), FICHIER_AUTO)} — ${fusion.length} lignes (${TABLE_AUTO.length} + ${neuves.length})`);
     } else console.log(`\n   (mesure seule — relancer avec --ecrire)`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });

@@ -14793,7 +14793,7 @@
   "slugSet": "White-Flare",
   "region": "occidental",
   "bulba": {
-   "titre": "Black Bolt/White Flare (TCG)",
+   "titre": "Black Bolt & White Flare (TCG)",
    "tirage": "intl",
    "expansion": "White Flare",
    "setlist": [
@@ -14829,7 +14829,9 @@
      },
      "raison": "l'expansion « Black Bolt & White Flare » n'est déclarée par AUCUNE page ; nos propres cartes, collectées par les demi-sets japonais sv11B/sv11W qui partagent la page, déclarent « Black Bolt » (172 impressions intl) et « White Flare » (173). Contrôle : 172/172 et 173/173 des numéros Cardmarket sont des numéros de ces impressions."
     }
-   ]
+   ],
+   "aLaMain": true,
+   "note": "2026-09-25 : idem : Litwick = White Flare 16 sur la page occidentale, 15 sur la japonaise"
   },
   "verifie": {
    "le": "2026-09-20",
@@ -14867,7 +14869,7 @@
   "slugSet": "Black-Bolt",
   "region": "occidental",
   "bulba": {
-   "titre": "Black Bolt/White Flare (TCG)",
+   "titre": "Black Bolt & White Flare (TCG)",
    "tirage": "intl",
    "expansion": "Black Bolt",
    "setlist": [
@@ -14903,7 +14905,9 @@
      },
      "raison": "l'expansion « Black Bolt & White Flare » n'est déclarée par AUCUNE page ; nos propres cartes, collectées par les demi-sets japonais sv11B/sv11W qui partagent la page, déclarent « Black Bolt » (172 impressions intl) et « White Flare » (173). Contrôle : 172/172 et 173/173 des numéros Cardmarket sont des numéros de ces impressions."
     }
-   ]
+   ],
+   "aLaMain": true,
+   "note": "2026-09-25 : « Black Bolt/White Flare (TCG) » porte les listes JAPONAISES ; la liste occidentale (Klink = Black Bolt 61) est sur « Black Bolt & White Flare (TCG) »"
   },
   "verifie": {
    "le": "2026-09-20",
@@ -31917,5 +31921,36 @@
     "couverture des numéros Cardmarket 131/169 sous 0,95"
    ]
   }
+ },
+ {
+  "code": "CSV10C",
+  "exp": 6633,
+  "prod": 287,
+  "nom": "Together in Pursuit of Glory",
+  "slugSet": "Chasing-Glory-Together",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Together in Pursuit of Glory (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Together in Pursuit of Glory",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 287,
+  "controle": {
+   "entreesSection": 287,
+   "numerosSetlist": 287,
+   "numerosAmbigus": 0,
+   "exemplesAmbigus": [],
+   "le": "2026-09-25"
+  },
+  "auto": {
+   "cle": "atcg-code-2026-09-25",
+   "liste": "énumération Bulbapedia (intitle:ATCG + insource:{{ATCG|), suffixes ATCG/SCTCG/TCTCG",
+   "nomBulbapedia": "Together in Pursuit of Glory",
+   "familleUnivers": "chinois-simplifie",
+   "genereLe": "2026-09-25",
+   "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV10C → CSV10, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
+  },
+  "verifie": null
  }
 ]
