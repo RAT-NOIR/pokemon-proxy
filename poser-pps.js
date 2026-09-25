@@ -24,7 +24,10 @@ const { cleNumero, normaliserNom } = require('./collecte-cartes/jointure');
 const MOTIF = /PPS(\d)([A-Za-z0-9]*?)-([0-9A-Za-z]+)$/;
 const PREUVE = 'pps+origine+numero';
 const EXPANSIONS = [5204, 5313, 5431, 5620, 5849, 6041, 6214, 6425, 6616];   // Play! Pokémon Prize Pack Series One … Nine
-const ATTENDU = 1132;   // la mesure du 2026-09-25 : si l'outil ne la retrouve pas, la base ou la clé a bougé — on ARRÊTE
+// La mesure : 1 132 à 00 h 30 ; 1 228 à 03 h 40 — l'outil s'est ARRÊTÉ sur l'écart, et il s'explique exactement : les 96
+// « origine sans carte » étaient des Énergies de base d'origine SVE (64) et MEE (32), dont les sets ont été collectés entre les deux
+// mesures (lot prioritaire). 20 tirés au sort PARMI ces 96, regardés : Metal = MEE 008 / SVE 016, Water = SVE 011, justes.
+const ATTENDU = 1228;   // si l'outil ne la retrouve pas, la base ou la clé a bougé — on ARRÊTE
 const pad = (v, n) => String(v).padStart(n);
 
 (async () => {

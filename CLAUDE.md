@@ -550,6 +550,35 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 62. LA TABLE PAR EXPANSION, LE WORKER QUI SE NOURRIT, ET CE QUE NOS MESURES PAR PRODUIT CACHAIENT — 2026-09-25 (nuit)
+
+> 🔴 **CHANGEMENT DE MÉTHODE (testeur) : l'unité de travail est l'EXPANSION, et la table se lit par le haut.** `table-maitresse.mjs`
+> (une ligne par idExpansion de l'export, règles du site importées, pages vérifiées en HTTP, cache 6 h) → TABLE-MAITRESSE.md. Un taux
+> global de 78 % cachait des expansions à 0 % : TK5/6/7/8 joints depuis le 21/09, **0 produit servi** (le site ne lit pas « 20S »).
+> 🔑 **LE WORKER SE NOURRIT LUI-MÊME** (`collecte-cartes/alimentateur.js`, banc 11/11) : sous 3 unités, plus gros manques d'abord,
+> toutes sources légales, reprise sur CAUSE NEUVE seulement (texte recollecté après l'unité, une fois par cause) ; file vide après
+> lui = alerte écrite en base (`alerte/file-vide`), lue par file-a-l-arret.js. Il lit les règles de SON commit : la garde du commit est
+> satisfaite par construction.
+
+**Cinq défauts trouvés en travaillant la table, tous de la même famille — une lecture qui ne voyait qu'une partie :**
+| lecture | ce qu'elle cachait | correctif |
+|---|---|---|
+| `numeros_cartes.find({ idExpansion })` (jointure, vérification, univers, générateur chinois — 4 lecteurs) | 367 produits appris SANS idExpansion : Chasing Glory Together (287) n'existait pour aucun générateur | par PRODUIT du catalogue, qui fait autorité |
+| BLK/WHT/xBLK/xWHT sur « Black Bolt/White Flare (TCG) » | la page porte les listes JAPONAISES ; l'occidentale est « Black Bolt & White Flare (TCG) » | 172/172, 173/173, 156/156, 157/157 |
+| Additionals japonais joints le 20/09 sous la clé (carte, set) | une image par carte ; le rejeu du 24 ne les voyait pas (leurs images appartiennent à la base) | rejeu : +308 images |
+| un échantillon de vérification unique | une page de Dresseur réimprimé se TAIT sur ses decks et promos (M-P, pcgO, pcgM refusés) | 3 échantillons au jeton du set ; un seul qui déclare suffit |
+| `generer-table-atcg.js --ecrire` | REMPLAÇAIT une ligne existante par sa version régénérée (les Happy Sets calés à la main) | une régénération ajoute, ne remplace pas (§59) |
+
+**Formes nouvelles, chacune MESURÉE par numéro ET nom avant d'être écrite :** préfixe par liste (`prefixesParJeton` : Happy Sets a/e/p,
+Battle Party p, Battle Party Set a…p), par demi-deck (`prefixesParDeck` : R30, P-21), par section (`prefixesParSection` : Tag Team
+Collection a/b), listes de deck `Halfdecklist` en opt-in (`listesDeDeck`), codes d'énergie hors couverture. **Réimpressions à code
+d'origine** (`Houndoom-PPS1BST-096`) : Prize Packs 1 132, SEA 80, PPP 50, Trick or Trade 90 — 20 tirés au sort regardés par famille ; les
+sets se créent SANS expansion Bulbapedia, et la règle du site (importée, testée) leur donne une fiche sans numéro. **`numeroFiche`** sur
+chaque ligne de jointure : le site devinait la fiche par le slug, la jointure la connaît (DEMANDE-SERVICE-PRODUITS.md).
+⚠️ **Tuer le lanceur d'une chaîne de lots tue le lot en cours** (CSAC, pendant sa sauvegarde : rien d'écrit, par chance) — arrêt par
+fichier STOP entre deux lots. ⚠️ **Une sauvegarde complète coûte ~80 Mo et 10-25 min sur une grappe bridée que le site lit aussi** :
+un lot pour N sets (collecter-plusieurs.js, enchainer-commandes.js), la garde compte chaque groupe de chaque set.
+
 ## 61. UN CONTRE-EXEMPLE, DEUX LISTES, ET LA CLÉ QUE LE SITE NE POUVAIT PAS LIRE — 2026-09-24 (soir)
 
 > 🔴 **« 286 faux signaux » était un raccourci : je jugeais par le numéro du TITRE, et le titre peut mentir.** Le testeur a vérifié
