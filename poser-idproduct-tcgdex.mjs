@@ -66,7 +66,7 @@ const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, 
 const sets = new Map((await lireMongo(cx.db.collection('sets'), { nomAffichage: { $type: 'string' } }, { nom: 'sets publiés', projection: { region: 1, tirage: 1, code: 1, 'bulba.expansion': 1 } }))
     .map(s => [s._id, { ...s, tirage: s.tirage ?? s.region, exps: [].concat(s.bulba?.expansion ?? []) }]));
 const docs = new Map(), pont = new Map();
-for (const d of await lireMongo(cx.db.collection('cartes'), { nomEn: { $type: 'string', $ne: '' } }, { nom: 'cartes', projection: { nomEn: 1, sets: 1, impressions: 1 } })) {
+for (const d of await lireMongo(cx.db.collection('cartes'), { nomEn: { $type: 'string', $ne: '' } }, { nom: 'cartes', projection: { nomEn: 1, sets: 1, impressions: 1, 'attaques.nom': 1 } })) {
     docs.set(d._id, d);
     for (const i of d.impressions ?? []) { const id = /TCGdex ([a-z0-9]+(?:\.[0-9]+)?[a-z]*-[A-Za-z0-9]+)/i.exec(i.illustrateurPreuve ?? '')?.[1]; if (id) pont.set(id, { docId: d._id, numero: i.numero, expansion: i.expansion }); }
 }
@@ -95,13 +95,20 @@ for (const l of lignes) {
     if (!numCm || !locaux.includes(cleNumero(numCm))) raisons.push(`numéro Cardmarket ${numCm ?? '—'} ≠ TCGdex ${locaux.join('/')}`);
     if (B && !(B.sets || []).includes(l.slugSet)) raisons.push(`le document TCGdex ${B._id} n'est pas membre de ${l.slugSet}`);
     if (B && nu(B.nomEn) !== nu(nomProduit)) raisons.push(`nom « ${B.nomEn} » ≠ produit « ${nomProduit} »`);
-    const x = { ligne: l, A: docs.get(l.carteId)?.nomEn, B: B?._id, nomB: B?.nomEn, tcgdex: cibles.map(c => c.id).join('/'), numCm, nomProduit, raisons };
+    // TÉMOIN DES ATTAQUES (indépendant des deux numéros) : les attaques que Cardmarket écrit entre crochets désignent-elles
+    // notre document (A) ou celui de TCGdex (B) ? Un détachement ne se justifie que si notre ligne est FAUSSE ; si les attaques
+    // confirment A, c'est TCGdex qui se trompe de produit, et détacher retirerait une fiche juste.
+    const attaques = decomposerNomCardmarket(nomCat.get(l.idProduct) || '').attaques.map(nu).filter(Boolean);
+    const score = d => (d?.attaques || []).filter(a => attaques.includes(nu(a.nom))).length;
+    const [sA, sB] = [score(docs.get(l.carteId)), B ? score(B) : 0];
+    const temoin = !attaques.length ? 'sans attaque' : sA > sB ? 'A (notre ligne)' : sB > sA ? 'B (TCGdex)' : 'égalité';
+    const x = { ligne: l, A: docs.get(l.carteId)?.nomEn, B: B?._id, nomB: B?.nomEn, tcgdex: cibles.map(c => c.id).join('/'), numCm, nomProduit, raisons, temoin };
     (raisons.length ? detacher : corriger).push(x);
 }
 // ── 4. Sans source (règles du site) → numeroFiche
 const groupes = new Map(); for (const l of lignes) { const k = `${l.carteId}|${l.slugSet}`; (groupes.get(k) || groupes.set(k, []).get(k)).push(l); }
 const fiche = [], ficheConflit = [], ficheContredit = [];
-let sansSource = 0;
+let sansSource = 0, ficheDejaEgale = 0;
 for (const [k, ps] of groupes) {
     const [carteId, slugSet] = k.split('|'); const set = sets.get(slugSet), d = docs.get(Number(carteId));
     if (!set || !d || !(d.sets ?? []).includes(slugSet)) continue;
@@ -121,16 +128,19 @@ for (const [k, ps] of groupes) {
         const x = { p, numero: numeros[rangs[0]], tcgdex: tc.map(c => c.id).join('/'), nom: d.nomEn, seg: segmentApresLeCode(p.slug, set.code) };
         if (p.numeroFiche != null && cleNumero(p.numeroFiche) !== cleNumero(x.numero)) ficheConflit.push({ ...x, deja: p.numeroFiche });
         else if (p.numeroFiche == null) fiche.push(x);
+        else ficheDejaEgale++;   // la jointure l'avait déjà posé, et TCGdex le confirme
     }
 }
 console.log(`\nidProduct communs ${cpt.communs} · concordent ${cpt.concordent} · sans pont ${cpt.sansPont} · CONTREDISENT ${corriger.length + detacher.length} → corriger ${corriger.length}, détacher ${detacher.length}`);
 const raisonsD = {}; for (const x of detacher) for (const r of x.raisons) { const k = r.replace(/\d+/g, '#').replace(/«[^»]*»/g, '«…»'); raisonsD[k] = (raisonsD[k] || 0) + 1; }
 console.log('   raisons de détacher :', JSON.stringify(raisonsD));
-console.log(`sans source (règles du site) ${sansSource} · départagés par TCGdex, numeroFiche à poser ${fiche.length} · déjà posé et DIFFÉRENT (listé, non touché) ${ficheConflit.length} · le slug désigne une autre fiche (non posé) ${ficheContredit.length}`);
+const tem = {}; for (const x of [...corriger, ...detacher]) tem[x.temoin] = (tem[x.temoin] || 0) + 1;
+console.log(`   TÉMOIN DES ATTAQUES sur les ${corriger.length + detacher.length} contradictions : ${JSON.stringify(tem)}`);
+console.log(`sans source (règles du site) ${sansSource} · départagés par TCGdex : numeroFiche à poser ${fiche.length} · déjà posé par la jointure et CONFIRMÉ par TCGdex ${ficheDejaEgale} · déjà posé et DIFFÉRENT (listé, non touché) ${ficheConflit.length} · le slug désigne une autre fiche (non posé) ${ficheContredit.length}`);
 let g = 20260925; const hasard = () => (g = (g * 1103515245 + 12345) % 2147483648) / 2147483648;
 const tirer = l => [...l].sort(() => hasard() - 0.5).slice(0, 20);
 console.log('\n20 CORRECTIONS tirées au sort :'); for (const x of tirer(corriger)) console.log(`   ${x.ligne.slug} « ${nomCat.get(x.ligne.idProduct)} » n°${x.numCm} (${x.ligne.slugSet}) : ${x.ligne.carteId} « ${x.A} » → ${x.B} « ${x.nomB} » · TCGdex ${x.tcgdex}`);
-console.log('\n20 DÉTACHEMENTS tirés au sort :'); for (const x of tirer(detacher)) console.log(`   ${x.ligne.slug} « ${nomCat.get(x.ligne.idProduct)} » (${x.ligne.slugSet}) : chez nous ${x.ligne.carteId} « ${x.A} » · TCGdex ${x.tcgdex} → ${x.B ?? '?'} « ${x.nomB ?? '?'} » · ${x.raisons.join(' ; ')}`);
+console.log('\n20 DÉTACHEMENTS tirés au sort :'); for (const x of tirer(detacher)) console.log(`   ${x.ligne.slug} « ${nomCat.get(x.ligne.idProduct)} » (${x.ligne.slugSet}) : chez nous ${x.ligne.carteId} « ${x.A} » · TCGdex ${x.tcgdex} → ${x.B ?? '?'} « ${x.nomB ?? '?'} » · ${x.raisons.join(' ; ')} · attaques → ${x.temoin}`);
 console.log('\n20 numeroFiche tirés au sort :'); for (const x of tirer(fiche)) console.log(`   ${x.p.slug} « ${nomCat.get(x.p.idProduct)} » (${x.p.slugSet}) → carte ${x.p.carteId} « ${x.nom} » fiche n°${x.numero} · TCGdex ${x.tcgdex} · segment du slug « ${x.seg ?? '—'} »`);
 fs.writeFileSync(`${R}/collecte-cartes/rapports/idproduct-tcgdex.json`, JSON.stringify({ corriger: corriger.map(x => ({ ...x, ligne: x.ligne._id })), detacher: detacher.map(x => ({ ...x, ligne: x.ligne._id })), fiche: fiche.map(x => ({ _id: x.p._id, numero: x.numero, tcgdex: x.tcgdex })), ficheConflit: ficheConflit.map(x => ({ _id: x.p._id, numero: x.numero, deja: x.deja })), ficheContredit: ficheContredit.map(x => ({ _id: x.p._id, numero: x.numero, lu: x.lu })) }, null, 1));
 
