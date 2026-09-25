@@ -96,7 +96,9 @@ const causeFiche = (idp, idExp) => {
     const ls = lignesDeExp.get(idExp) || [];
     if (!ls.length) return 'aucune ligne de table';
     const adm = ls.find(l => l.verifie);
-    if (!adm) { const L = ls.find(l => l.verif) || ls[0]; const r = L.verif?.raisons?.[0] || 'jamais jugée'; return `ligne refusée : ${r.replace(/\d+(\/\d+)?/g, '#').slice(0, 50)}`; }
+    // Une ligne « sans page » porte son refus dans `refus` (generer-table-sans-page.js), une ligne à page dans `verif.raisons` :
+    // lire l'un sans l'autre rangeait 311 produits refusés sur leur couverture en « jamais jugée » (2026-09-25).
+    if (!adm) { const L = ls.find(l => l.verif || l.refus) || ls[0]; const r = L.verif?.raisons?.[0] || (L.refus ? `sans page : ${L.refus}` : 'jamais jugée'); return `ligne refusée : ${r.replace(/\d+(\/\d+)?/g, '#').slice(0, 60)}`; }
     if (!etats.has(adm.slugSet)) return 'ligne admise jamais collectée';
     const r = resteDe.get(idp);
     if (!r) return 'collecté, reste non écrit';

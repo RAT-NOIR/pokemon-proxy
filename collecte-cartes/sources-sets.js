@@ -72,8 +72,9 @@ const ARTOFPKM = {
     // 2026-09-25 : lignes japonaises SANS source dont les cartes attendent un visuel (55 lignes, 1 920 cartes). --correspondre
     // se taisait : un mot de plus (« The Glory… », « PCG-P » contre « PCG »), une autre traduction du même titre japonais
     // (« Amazing » / « Astonishing Volt Tackle »), l'ère en préfixe (« Scarlet & Violet Starter set ex… »). Paires LUES une à
-    // une dans artofpkm-sets.json, jamais par inclusion (§31). Restent dehors, douteuses : svIba, MDB, HSP, MCRP, XYe, pcgN, sD,
-    // 20th, smA, les demi-decks de coffret (artofpkm renumérote le coffret entier) — et ADV4, « probable » depuis le 15/09.
+    // une dans artofpkm-sets.json, jamais par inclusion (§31). Les « douteuses » de ce jour (svIba, MDB, XYe, 20th, ADV4…) ont été
+    // PROUVÉES l'après-midi par la source (plus bas) ; restent dehors : sD (artofpkm renumérote chaque deck, prouvé), HSP, MCRP,
+    // smA, pcgM/N/O, les demi-decks de coffret (artofpkm renumérote le coffret entier).
     'PCG-P': { ids: [89], noms: ['PCG Promotional Cards'], note: 'Cardmarket « PCG Promos » ; 3 « PCG Players Promotional Cards » est un autre set' },
     'ADV-P': { ids: [64], noms: ['ADV Promotional cards'], note: 'Cardmarket « ADV Promos »' },
     'L-P': { ids: [202], noms: ['Legend Promos'], note: 'Cardmarket « L P Promos » (L-P Promotional cards)' },
@@ -95,7 +96,32 @@ const ARTOFPKM = {
     sp3: { ids: [430], noms: ['Jumbo Pack Set - Silver Lance & Jet-Black Poltergeist'], note: 'Cardmarket « Silver Lance Jet Black Spirit Jumbo Pack Set »' },
     's8a-P': { ids: [447], noms: ['25th Anniversary Promo Pack'], note: 'Cardmarket « 25th Anniversary Edition » (Promo Card Pack 25th Anniversary Edition)' },
     RtA: { ids: [152], noms: ['Constructed Half Deck Rampardos the Attacker'] },
-    BtD: { ids: [151], noms: ['Constructed Half Deck Bastiodon the Defender'] }
+    BtD: { ids: [151], noms: ['Constructed Half Deck Bastiodon the Defender'] },
+    // 2026-09-25 (après-midi) : paires « douteuses » PROUVÉES par la source elle-même, critère écrit avant la mesure : la liste
+    // artofpkm lue, puis 3 pages de carte (premier, milieu, dernier rang numéroté) ; le NUMÉRO imprimé de chaque page désigne chez
+    // nous une carte du set au MÊME nom — 3 sur 3, sinon rien. Une paire refusée par ce critère (sD : artofpkm renumérote chaque
+    // deck de « Starter Set V » depuis 001, nous de 1 à 127) reste dehors : ses images tomberaient sur les mauvaises cartes.
+    'M-P': { ids: [573], noms: ['MEGA Promos'], note: 'Cardmarket « M P Promos » (M-P Promotional cards) ; 3/3 : 001 Chikorita, 103 Squirtle, 154 Lucario' },
+    ADV4: { ids: [84], noms: ['The Broken Seal'], note: 'Cardmarket « Undone Seal » ; 3/3 : 001 Zubat, 042 Chinchou, 083 Magnetic Storm ; nom japonais du set identique au nôtre (とかれた封印)' },
+    // ⚠️ Les listes finissent par des Énergies de base SANS numéro imprimé : un échantillon qui en tombe une ne se JUGE pas (il
+    // recule jusqu'à un numéro, 10 rangs au plus), il ne compte jamais comme un succès. 3e échantillon au rang 80 % pour tous.
+    // Un kit dont les deux moitiés portent le même numéro (MG : 001 Tangela ET 001 Mewtwo, chez nous comme chez artofpkm) ne peut
+    // pas recevoir de faux visuel : la jointure refuse un numéro qui désigne deux cartes (`image-vers-plusieurs-cartes`).
+    svIba: { ids: [512], noms: ['Battle Academy'], note: 'Cardmarket « Scarlet Violet Battle Academy » ; 3/3 : 001 Celebi, 050 Potion, 061 Nemona' },
+    '20th': { ids: [529], noms: ['Starter Pack'], note: 'Cardmarket « BREAK Starter Pack » ; 3/3 : 001 Venusaur-EX, 043 Persian, 068 Lysandre' },
+    XYe: { ids: [310], noms: ['Tournament Starter Set 30 Emboar EX vs Togekiss EX'], note: '3/3 : 001 Growlithe, 017 Great Ball, 021 Tierno' },
+    MG: { ids: [278], noms: ['30-Card Battle Deck Set Mewtwo VS Genesect'], note: '3/3 : 001 Tangela, 009 Crushing Hammer, 016 Double Colorless Energy ; moitiés à numéros partagés, refusées par la jointure' },
+    advG: { ids: [81], noms: ['Team Aqua Deck W'], note: 'Cardmarket « Aqua Deck Kit » ; 3/3 : 001 Team Aqua\'s Carvanha, 017 Team Aqua\'s Electrike, 033 Aqua Energy' },
+    advF: { ids: [80], noms: ['Team Magma Deck W'], note: 'Cardmarket « Magma Deck Kit » ; 3/3 : 001 Entei ex, 017 Team Magma\'s Aggron, 033 Magma Energy' },
+    smD: { ids: [336], noms: ['30 Card Deck Match Set: Ash vs Team Rocket'], note: '3/3 : 001 Rowlet, 017 Stufful, 024 Poké Ball' },
+    smK: { ids: [374], noms: ['Trainer Battle Deck - Brock of Pewter City Gym & Misty of Cerulean City Gym'], note: 'Cardmarket « Trainer Battle Decks » ; 3/3 : 001 Psyduck, 017 Nest Ball, 031 Double Colorless Energy' },
+    smM: { ids: [385], noms: ['Starter Set Tag Team GX, Darkrai & Umbreon GX /  Espeon & Deoxys GX'], note: 'Cardmarket « Tag Team GX Starter Sets » ; 3/3 : 001 Espeon & Deoxys-GX, 017 Ultra Ball, 031 Double Colorless Energy' },
+    sB: { ids: [401], noms: ['Premium Trainer Box (2019)'], note: 'Cardmarket « Premium Trainer Box Sword Shield » ; 3/3 : 001 Energy Retrieval, 017 Metal Frying Pan, 024 Triple Acceleration Energy' },
+    smB: { ids: [327], noms: ['Premium Trainer Box (2016)'], note: 'Cardmarket « Premium Trainer Box » ; 3/3 : 001 Nest Ball, 014 Lysandre, 018 Mystery Energy' },
+    MDB: { ids: [262], noms: ['Master Deck Build Box'], note: 'Cardmarket « Master Deck Build Box EX » ; 3/3 : 001 Victini, 026 Tornadus, 041 N' },
+    PPB: { ids: [113], noms: ['PokéPark Premium File - Blue Version'], note: 'Cardmarket « PokePark Blue » ; 3/3 : 001 Entei, 005 Raikou, 009 Rayquaza' },
+    pcgD: { ids: [97], noms: ['Team Rocket Constructed Half Deck W -black-'], note: 'Cardmarket « Black Deck Kit » ; 3/3 : 001 Spinarak, 011 Dark Tyranitar, 020 R Energy' },
+    pcgE: { ids: [99], noms: ['Team Rocket Constructed Half Deck W -silver-'], note: 'Cardmarket « Silver Deck Kit » ; 3/3 : 001 Psyduck, 011 Dark Dragonair, 020 R Energy' }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,
