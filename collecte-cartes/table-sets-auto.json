@@ -31951,6 +31951,29 @@
    "genereLe": "2026-09-25",
    "aLaMain": "route « (ATCG) » : appariée par le CODE de set (CSV10C → CSV10, lu dans infobox alt=), le NOM ne peut pas servir — les deux sources traduisent le chinois indépendamment. AUCUN cadrage : 0 sections, aucune ne porte le code."
   },
-  "verifie": null
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "Together in Pursuit of Glory (ATCG)",
+   "entrees": {
+    "Together in Pursuit of Glory": 287
+   },
+   "note": "vérification automatique : 287 entrées pour 287 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-25",
+   "pageResolue": "Together in Pursuit of Glory (ATCG)",
+   "entrees": 287,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 287,
+    "couverts": 287,
+    "numerosSetlist": 287,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
  }
 ]

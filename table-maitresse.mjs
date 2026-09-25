@@ -159,19 +159,23 @@ for (const e of parExp.values()) {
     const logo = !set ? '—' : set.logo && !set.logoGenerique ? 'oui' : set.logoGenerique ? 'générique' : LOGO_SANS_SOURCE.test(set.logoRefus?.motif || '') ? 'sans source' : 'à chercher';
     const page = set?.publie ? cache[slug]?.code ?? '?' : '—';
     const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets' : logo === 'à chercher' ? 'logo à chercher' : null;
-    const verte = !problemesSet && !bloquants;
+    // Une expansion dont TOUT le manque est sans source légale (Setlist en liens rouges, visuels chinois…) n'a ni page ni set à
+    // exiger : elle n'est ni verte ni rouge, elle est « sans source » — comptée à part, jamais dans le haut de la table.
+    const toutSansSource = !bloquants && sansSource > 0 && sansSource === e.produits.length;
+    const verte = !toutSansSource && !problemesSet && !bloquants;
     const top = [...causes].filter(([c]) => !/SANS SOURCE/.test(c)).sort((a, b) => b[1] - a[1])[0];
     lignes.push({
         idExpansion: e.idExpansion, code: L?.code ?? ncs.find(n => n.codeSet)?.codeSet ?? '—', slug, nom: set?.nomAffichage || (slug ? slug.replace(/-/g, ' ') : `(expansion ${e.idExpansion} jamais apprise)`),
         annee: e.annee, anneeEstimee: !!e.anneeEstimee, region: TIRAGE[tirage] || tirage || '?', produits: e.produits.length,
         set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo,
         fiche: Math.round(1000 * nf / e.produits.length) / 10, visuel: Math.round(1000 * nv / e.produits.length) / 10,
-        bloquants, sansSource, verte, score: (bloquants || (problemesSet ? e.produits.length : 0)) * Math.max(1, e.annee - 1995),
+        bloquants, sansSource, verte, toutSansSource, score: toutSansSource ? 0 : (bloquants || (problemesSet ? e.produits.length : 0)) * Math.max(1, e.annee - 1995),
         cause: problemesSet || (top ? `${top[0]} (${top[1]})` : sansSource ? `restes sans source légale (${sansSource})` : '—')
     });
 }
-lignes.sort((a, b) => (a.verte - b.verte) || b.score - a.score || b.produits - a.produits);
-const vertes = lignes.filter(l => l.verte).length;
+const rangStatut = l => l.verte ? 2 : l.toutSansSource ? 1 : 0;
+lignes.sort((a, b) => rangStatut(a) - rangStatut(b) || b.score - a.score || b.produits - a.produits);
+const vertes = lignes.filter(l => l.verte).length, grises = lignes.filter(l => l.toutSansSource).length;
 const avant = fs.existsSync(ETAT) ? JSON.parse(fs.readFileSync(ETAT, 'utf8')) : null;
 const evol = avant ? `${vertes - avant.vertes >= 0 ? '+' : ''}${vertes - avant.vertes} depuis le ${new Date(avant.le).toISOString().slice(0, 16).replace('T', ' ')} UTC (${avant.vertes})` : 'première mesure';
 fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), vertes, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, l.verte])) }));
@@ -179,15 +183,16 @@ const fileTxt = fileEtat.map(x => `${x._id}×${x.n}`).join(' · ');
 const md = [];
 md.push('# Table maîtresse — une ligne par expansion Cardmarket', '');
 md.push(`Mesurée le ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · export \`${EXPORT}\` : ${ex.products.length} produits − ${ex.products.length - produits.length} cartes-code = **${produits.length} produits, ${parExp.size} expansions**. Règles de service du site importées (${S}). HTTP : /fr/sets (${dansListe.size} sets listés), /fr/catalogue → ${catalogue}, ${publies.length} pages de set (${requetes} requêtes ce passage, cache 6 h).`, '');
-md.push(`**Vertes : ${vertes} / ${parExp.size}** (${evol}). File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
+md.push(`**Vertes : ${vertes} / ${parExp.size}** (${evol}) · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
 md.push('Verte = set publié, page en 200, présent dans /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
 md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | % fiche | % visuel | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 const expTotales = new Set(ex.products.map(p => p.idExpansion));
 const codeSeul = [...expTotales].filter(id => !parExp.has(id));
 md.push(`L'export compte **${expTotales.size} expansions** ; ${codeSeul.length} ne contiennent que des cartes-code (hors périmètre : ni fiche ni visuel possibles) : ${codeSeul.map(id => `${id} (${ex.products.filter(p => p.idExpansion === id).length} p., « ${ex.products.find(p => p.idExpansion === id)?.name} »)`).join(' · ') || 'aucune'}.`, '');
-lignes.forEach((l, i) => md.push(`| ${i + 1} | ${l.idExpansion} | ${l.code} | ${l.verte ? '🟢' : '🔴'} ${l.nom} | ${l.anneeEstimee ? '~' : ''}${l.annee} | ${l.region} | ${l.produits} | ${l.set} | ${l.page} | ${l.liste} | ${l.logo} | ${l.fiche} | ${l.visuel} | ${l.bloquants} | ${l.sansSource || ''} | ${String(l.cause).replace(/\|/g, '/')} |`));
+lignes.forEach((l, i) => md.push(`| ${i + 1} | ${l.idExpansion} | ${l.code} | ${l.verte ? '🟢' : l.toutSansSource ? '⚪' : '🔴'} ${l.nom} | ${l.anneeEstimee ? '~' : ''}${l.annee} | ${l.region} | ${l.produits} | ${l.set} | ${l.page} | ${l.liste} | ${l.logo} | ${l.fiche} | ${l.visuel} | ${l.bloquants} | ${l.sansSource || ''} | ${String(l.cause).replace(/\|/g, '/')} |`));
 fs.writeFileSync(SORTIE, md.join('\n') + '\n');
 fs.writeFileSync(`${R}/table-maitresse-produits.json`, JSON.stringify(CAUSES_PRODUITS));
 console.log(`TABLE-MAITRESSE.md : ${lignes.length} expansions · vertes ${vertes} (${evol}) · /fr/catalogue ${catalogue} · /fr/sets ${dansListe.size} sets · requêtes HTTP ${requetes}`);
-console.log(`20 premières rouges :\n${lignes.filter(l => !l.verte).slice(0, 20).map((l, i) => `${String(i + 1).padStart(2)}. ${l.idExpansion} ${l.code} « ${l.nom} » ${l.anneeEstimee ? '~' : ''}${l.annee} ${l.region} · ${l.produits} p · fiche ${l.fiche} % · visuel ${l.visuel} % · bloquants ${l.bloquants} · ${l.cause}`).join('\n')}`);
+console.log(`sans source légale (entièrement) : ${grises}`);
+console.log(`20 premières rouges :\n${lignes.filter(l => !l.verte && !l.toutSansSource).slice(0, 20).map((l, i) => `${String(i + 1).padStart(2)}. ${l.idExpansion} ${l.code} « ${l.nom} » ${l.anneeEstimee ? '~' : ''}${l.annee} ${l.region} · ${l.produits} p · fiche ${l.fiche} % · visuel ${l.visuel} % · bloquants ${l.bloquants} · ${l.cause}`).join('\n')}`);
 await fermer();
