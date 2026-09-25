@@ -10169,9 +10169,16 @@
    "aLaMain": true,
    "note": "2026-09-25 : la carte déclare jp « Holon Research Tower Lightning Quarter Deck » (échantillon relu)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "Holon Research Tower Lightning Quarter Deck (TCG)",
+   "entrees": {
+    "Holon Research Tower Lightning Quarter Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Eevee (EX Delta Species 69) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-24",
+   "le": "2026-09-25",
    "pageResolue": "Holon Research Tower Lightning Quarter Deck (TCG)",
    "entrees": 15,
    "entreesSansPage": 0,
@@ -10182,13 +10189,18 @@
     "numerosSetlist": 15,
     "taux": 1
    },
-   "echantillon": "Great Ball (EX FireRed & LeafGreen 92)",
-   "tiragesVus": [],
+   "echantillon": "Eevee (EX Delta Species 69)",
+   "echantillons": [
+    "Great Ball (EX FireRed & LeafGreen 92)",
+    "Eevee (EX Delta Species 69)",
+    "Super Scoop Up (Neo Genesis 98)"
+   ],
+   "tiragesVus": [
+    "jp"
+   ],
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Holon Research Tower Lightning Quarter Deck » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T11:50:41.486Z",
@@ -24110,24 +24122,38 @@
    "note": "région posée à la main (codes_set sans région)",
    "genereLe": "2026-09-15"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "M-P Promotional cards (TCG)",
+   "entrees": {
+    "M-P Promotional cards": 162
+   },
+   "note": "vérification automatique : 162 entrées pour 138 produits, échantillon « Air Balloon (Sword & Shield 156) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-20",
+   "le": "2026-09-25",
    "pageResolue": "M-P Promotional cards (TCG)",
    "entrees": 162,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
-    "produitsNumerotes": 138,
-    "couverts": 130,
+    "produitsNumerotes": 143,
+    "couverts": 135,
     "numerosSetlist": 154,
-    "taux": 0.942
+    "taux": 0.944
    },
-   "echantillon": "Waitress (Ascended Heroes 215)",
-   "tiragesVus": [],
+   "echantillon": "Air Balloon (Sword & Shield 156)",
+   "echantillons": [
+    "Waitress (Ascended Heroes 215)",
+    "Air Balloon (Sword & Shield 156)",
+    "Brock's Scouting (Journey Together 146)"
+   ],
+   "tiragesVus": [
+    "jp"
+   ],
    "ratio": 1.17,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « M-P Promotional cards » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   },
   "collecte": {
    "le": "2026-09-15T19:36:27.826Z",
@@ -28747,9 +28773,16 @@
    "aLaMain": true,
    "note": "2026-09-25 : la carte déclare jp « Holon Research Tower Fire Quarter Deck » (échantillon relu)"
   },
-  "verifie": null,
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "Holon Research Tower Fire Quarter Deck (TCG)",
+   "entrees": {
+    "Holon Research Tower Fire Quarter Deck": 15
+   },
+   "note": "vérification automatique : 15 entrées pour 15 produits, échantillon « Eevee (EX Delta Species 69) » (jp)"
+  },
   "verif": {
-   "le": "2026-09-24",
+   "le": "2026-09-25",
    "pageResolue": "Holon Research Tower Fire Quarter Deck (TCG)",
    "entrees": 15,
    "entreesSansPage": 0,
@@ -28760,13 +28793,18 @@
     "numerosSetlist": 15,
     "taux": 1
    },
-   "echantillon": "Dual Ball (Expedition 139)",
-   "tiragesVus": [],
+   "echantillon": "Eevee (EX Delta Species 69)",
+   "echantillons": [
+    "Dual Ball (Expedition 139)",
+    "Eevee (EX Delta Species 69)",
+    "Switch (Base Set 95)"
+   ],
+   "tiragesVus": [
+    "jp"
+   ],
    "ratio": 1,
-   "etat": "À REGARDER",
-   "raisons": [
-    "l'échantillon n'a pas de tirage jp « Holon Research Tower Fire Quarter Deck » (vus : aucun)"
-   ]
+   "etat": "OK",
+   "raisons": []
   }
  },
  {

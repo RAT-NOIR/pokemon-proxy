@@ -134,10 +134,19 @@ async function verifierAuto() {
             const estEnergie = x => new RegExp(`^${ENERGIE_DE_BASE}$`, 'i').test(String(x.nom || '').trim());
             const milieu = Math.floor(l._entrees.length / 2);
             const ordre = l._entrees.map((x, i) => [x, Math.abs(i - milieu), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(a => a[0]);
-            const e = ordre.find(x => !estEnergie(x)) || l._entrees[milieu];
-            if (e && !l.bulba.numerosDepuisSetlist) echantillons.set(l.code, e.titre);
+            // 🔴 ET UNE CARTE QUI SE TAIT NE PROUVE RIEN (2026-09-25). « Great Ball (Holon Research Tower Lightning Quarter Deck 5) »
+            // redirige vers la page de Great Ball (EX FireRed & LeafGreen 92), qui ne liste pas toutes ses réimpressions en deck ;
+            // « Waitress (M-P Promo …) » vers Waitress (Ascended Heroes 215), muette sur la promo M-P. Un seul tirage au sort
+            // refusait pcgO, pcgM et M-P (174 produits). On lit TROIS échantillons (même requête), portant le jeton du set, hors
+            // énergies de base ; une seule carte qui DÉCLARE le tirage suffit à prouver l'appariement de la ligne — une carte qui
+            // se tait ne prouve pas le contraire. Le tirage « établi » reste celui que les cartes déclarent (union des vus).
+            const { jetonsDeSetlist: jds } = require('./jointure');
+            const jetonsDuSet = jds(l._entrees, [].concat(l.bulba.expansion, l.bulba.setlist || []));
+            const choisis = ordre.filter(x => !estEnergie(x) && jetonsDuSet.has(x.a)).slice(0, 3);
+            if (!choisis.length) { const e = ordre.find(x => !estEnergie(x)) || l._entrees[milieu]; if (e) choisis.push(e); }
+            if (choisis.length && !l.bulba.numerosDepuisSetlist) echantillons.set(l.code, [...new Set(choisis.map(x => x.titre))]);
         }
-        const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set(echantillons.values())]) : { pages: [], redirections: new Map() };
+        const { pages: pc, redirections: rc } = echantillons.size ? await bulba.revisionsDe([...new Set([...echantillons.values()].flat())]) : { pages: [], redirections: new Map() };
         const carteDe = t => pc.find(p => p.title === (rc.get(t) || t));
 
         // ============================================================
@@ -221,12 +230,15 @@ async function verifierAuto() {
                     else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}${v.codesEnergie ? ` (${v.codesEnergie} code(s) d'énergie hors dénominateur)` : ''}`);
                 }
             }
-            const c = echantillons.has(l.code) ? carteDe(echantillons.get(l.code)) : null;
+            const cs = (echantillons.get(l.code) || []).map(carteDe).filter(Boolean);
+            const c = cs[0] || null;
             if (l._p && v.entrees && !c && !l.bulba.numerosDepuisSetlist) raisons.push('carte-échantillon introuvable');
             if (c) {
-                const imps = faitsDeCarte(c.content).impressions.filter(i => i.expansion === l.bulba.expansion);
-                const tirages = [...new Set(imps.map(i => i.tirage))];
-                v.echantillon = c.title; v.tiragesVus = tirages;
+                const noms = [].concat(l.bulba.expansion);
+                const parCarte = cs.map(x => ({ x, tirs: [...new Set(faitsDeCarte(x.content).impressions.filter(i => noms.includes(i.expansion)).map(i => i.tirage))] }));
+                const tirages = [...new Set(parCarte.flatMap(p => p.tirs))];
+                const parlante = parCarte.find(p => l.bulba.tirage ? p.tirs.includes(l.bulba.tirage) : p.tirs.length) || parCarte[0];
+                v.echantillon = parlante.x.title; v.echantillons = cs.map(x => x.title); v.tiragesVus = tirages;
                 if (l.bulba.tirage) { if (!tirages.includes(l.bulba.tirage)) raisons.push(`l'échantillon n'a pas de tirage ${l.bulba.tirage} « ${l.bulba.expansion} » (vus : ${tirages.join(',') || 'aucun'})`); }
                 else if (tirages.length === 1 && ['jp', 'intl'].includes(tirages[0])) { v.tirageEtabli = tirages[0]; }
                 else raisons.push(`tirage non établi (vus : ${tirages.join(',') || 'aucun'})`);
