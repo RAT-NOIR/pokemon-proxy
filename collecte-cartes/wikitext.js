@@ -440,7 +440,9 @@ function sectionsSetlist(texte, { listesDeDeck = false } = {}) {
         if (ligne.test(g.nom)) {
             if (!courante) { courante = { titre: '', entrees: [], ignorees: [] }; sections.push(courante); }
             const e = entreeDeSetlist(g.brut);
-            if (e) courante.entrees.push(e); else courante.ignorees.push(g.brut);
+            // `section` (2026-09-25) : le titre de la section voyage avec l'entrée — deux moitiés renumérotées sous UN jeton (Tag
+            // Team Collection, Set A / Set B) ne se distinguent que par elle (`prefixesParSection`, jointure.js).
+            if (e) courante.entrees.push({ ...e, section: courante.titre }); else courante.ignorees.push(g.brut);
         }
     }
     return sections;

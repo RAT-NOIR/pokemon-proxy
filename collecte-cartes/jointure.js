@@ -111,7 +111,7 @@ function impressionsDepuisSetlist(entrees, pages, cible) {
     const noms = [].concat(cible.expansionBulba);
     const jetons = jetonsDeSetlist(entrees, noms);
     for (const e of entrees) {
-        const numero = numeroDeSetlist(e, jetons, cible.prefixesParJeton);
+        const numero = numeroDeSetlist(e, jetons, cible.prefixesParJeton, cible.prefixesParSection);
         if (numero == null) { sansNumero.push(e.titre); continue; }
         const id = pageDe.get(e.titre);
         if (id == null) { sansPage.push(e.titre); continue; }
@@ -149,8 +149,14 @@ function jetonsDeSetlist(entrees, nomsExpansion) {
  * un jeton absent suit la règle d'avant. Sans table, rien ne change.
  * @returns {string|null}
  */
-function numeroDeSetlist(e, jetonsOuNoms, prefixes = null) {
+function numeroDeSetlist(e, jetonsOuNoms, prefixes = null, prefixesSection = null) {
     if (e.b == null || String(e.b).trim() === '') return null;
+    // Le préfixe par SECTION (`bulba.prefixesParSection`, Tag Team Collection) passe avant le jeton : deux moitiés renumérotées
+    // sous le même jeton ne se distinguent que par leur section. L'entrée doit encore désigner ce set (jeton reconnu).
+    if (prefixesSection && e.section != null && Object.prototype.hasOwnProperty.call(prefixesSection, e.section)) {
+        const jetonsS = jetonsOuNoms instanceof Set ? jetonsOuNoms : new Set([].concat(jetonsOuNoms).filter(Boolean));
+        return (jetonsS.has(e.a) || (prefixes && Object.prototype.hasOwnProperty.call(prefixes, e.a))) && (e.forme === 'tcg-id' || e.forme === 'lien') ? `${prefixesSection[e.section]}${String(e.b).trim()}` : null;
+    }
     if (prefixes && Object.prototype.hasOwnProperty.call(prefixes, e.a))
         return e.forme === 'tcg-id' || e.forme === 'lien' ? `${prefixes[e.a]}${String(e.b).trim()}` : null;
     const jetons = jetonsOuNoms instanceof Set ? jetonsOuNoms : new Set([].concat(jetonsOuNoms).filter(Boolean));
@@ -240,7 +246,7 @@ function joindre(cartes, produits, cible) {
         const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.nom];
         if (alias) { const k = normaliserNom(alias); if (!parNom.has(k)) parNom.set(k, []); parNom.get(k).push(p); }
     }
-    const attache = (carte, p, preuve, detail) => {
+    const attache = (carte, p, preuve, detail, numeroFiche = null) => {
         // `slug` et `slugSet` VOYAGENT AVEC LA LIGNE : ils font l'URL Cardmarket, et le site n'a pas
         // accès à `numeros_cartes` (cluster de production). Sans eux il affichait « idProduct 557669 »
         // en texte nu. Ils n'ont jamais été spécifiés — ce n'était pas un rejeu manqué, c'était une
@@ -254,7 +260,10 @@ function joindre(cartes, produits, cible) {
         // ligne de table qui a amené la jointure. On le retient en dernier recours.
         // ⚠️ L'URL Cardmarket n'en devient pas constructible pour autant : elle exige `slug` ET
         // `slugSet`, et `slug` reste absent. Le champ sert ici au visuel, pas au lien.
-        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, slug: p.slug ?? null, slugSet: p.slugSet ?? cible.slugSet ?? null, verifieLe: new Date() });
+        // 🔑 `numeroFiche` (2026-09-25) : le `numero` de l'impression que la jointure a RETENUE pour ce produit — le site plaçait le
+        // produit en lisant son slug, et ne savait lire ni « R30 », ni « 20S », ni un slug que le titre contredit. `null` quand la
+        // jointure ne passe pas par un numéro (nom, attaques) : le site garde alors sa règle.
+        lignes.push({ _id: `${carte._id}|${p.idProduct}`, carteId: carte._id, idProduct: p.idProduct, idExpansion: cible.idExpansion, tirage: cible.tirage, preuve, detail, numeroFiche, slug: p.slug ?? null, slugSet: p.slugSet ?? cible.slugSet ?? null, verifieLe: new Date() });
         if (!produitsJoints.has(p.idProduct)) produitsJoints.set(p.idProduct, []);
         produitsJoints.get(p.idProduct).push(carte._id);
     };
@@ -279,7 +288,7 @@ function joindre(cartes, produits, cible) {
     // celle qui protège EC1 : le préfixe doit être COMMUN à toutes les impressions numérotées.
     // Une ligne qui DÉCLARE ses préfixes (`prefixesParJeton`, Happy Sets chinois) les a mesurés : ils désignent une liste, et
     // les retirer rendrait « a1 » au « 001 » d'une autre liste. Le retrait ne s'applique qu'aux lignes qui n'en déclarent pas.
-    const prefixeDuSet = !cible.prefixesParJeton && numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
+    const prefixeDuSet = !cible.prefixesParJeton && !cible.prefixesParSection && numsImp.length && prefixesImp.size === 1 && !prefixesImp.has(null) && numsProd.some(n => /^\d/.test(n)) ? [...prefixesImp][0] : null;
     // 🔑 LE SUFFIXE DE DEMI-DECK D'UN TRAINER KIT (2026-09-21). Cardmarket numérote « 1N »/« 1S » — la
     // LETTRE désigne la moitié du kit (N = Noivern, S = Sylveon ; a = Latias, o = Latios). Bulbapedia
     // numérote chaque demi-deck 1–30 sans lettre, et porte la moitié dans `deck`. La même donnée, deux
@@ -349,7 +358,11 @@ function joindre(cartes, produits, cible) {
             if (autres) contradictions.push({ carte, p, autres, detail });
             else retenus.push(p);
         }
-        for (const p of retenus) attache(carte, p, preuve, detail);
+        // La clé du produit → le numéro de l'impression qui la porte. Deux impressions de numéros différents sous une même clé : on
+        // ne choisit pas, `numeroFiche` reste null.
+        const numeroDeCle = new Map();
+        for (const i of imps) if (i.numero != null && String(i.numero).trim() !== '') for (const k of clesImpression(i.numero, i.deck)) numeroDeCle.set(k, numeroDeCle.has(k) && numeroDeCle.get(k) !== String(i.numero) ? null : String(i.numero));
+        for (const p of retenus) attache(carte, p, preuve, detail, p.numero != null && String(p.numero).trim() !== '' ? numeroDeCle.get(cleNumero(p.numero)) ?? null : null);
         etatDeCarte.set(carte, { imp, imps, source, numeros, joint: retenus.length > 0 });
     }
     // Une contradiction dont le produit a trouvé SA carte par le numéro ET le nom (EC1 n°059 : deux cartes, un numéro) est

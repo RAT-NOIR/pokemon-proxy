@@ -129,7 +129,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
         const produits = await produitsDeLExpansion(prod, L.exp);
         console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
-        let J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, tirage: TIRAGE, slugSet: slugCardmarket });
+        let J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket });
         // `nomSeul` : une expansion SANS AUCUN numéro (Unnumbered Promos) ne se joint que par le nom. La garde bidirectionnelle
         // calibrée (collecte-cartes/garde-nom-seul.js : 21 925 justes, 0 faux) décide ; ce qu'elle refuse reste un produit sans
         // carte, AVEC sa raison — un refus nommé, pas un silence.
@@ -371,7 +371,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // Cardmarket confirme sont ÉCRITES sur la carte (poser-impressions-setlist.js) : la virtuelle ne s'ajoute pas en double.
     if (L.bulba.numerosDepuisSetlist) {
         const etatPages = (await M.Etat.findById(slug).select('pages').lean())?.pages || [];
-        const V = impressionsDepuisSetlist(entrees, etatPages, { tirage: TIRAGE, expansionBulba: L.bulba.expansion, prefixesParJeton: L.bulba.prefixesParJeton || null });
+        const V = impressionsDepuisSetlist(entrees, etatPages, { tirage: TIRAGE, expansionBulba: L.bulba.expansion, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null });
         const cleImp = i => `${i.tirage}|${i.expansion}|${cleNumero(String(i.numero ?? ''))}`;
         cartesDuSet = cartesDuSet.map(c => {
             const v = V.parCarte.get(c._id); if (!v) return c;
@@ -383,7 +383,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     const produits = await produitsDeLExpansion(prod, L.exp);
     // `slugSet` : le set de la LIGNE, en dernier recours pour les produits qui n'en portent pas —
     // c'est lui qui désigne l'entrée de `cartes.images` (voir `attache` dans jointure.js).
-    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, tirage: TIRAGE, slugSet: slugCardmarket });
+    const J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket });
     // L'écriture vit dans `ecrire-jointure.js` : la collecte SANS PAGE écrit exactement la même chose,
     // et deux définitions du même geste divergent toujours (§21 bis).
     await ecrireJointure(M, { slug, J, produits });

@@ -197,7 +197,7 @@ async function verifierAuto() {
                 v.entreesSansPage = l._entrees.length - vivantes.length;
                 // `prefixesParJeton` : la MÊME lecture que la jointure (jointure.js, numeroDeSetlist) — sinon la vérification juge
                 // des numéros que la collecte n'écrira pas (§21 bis).
-                const numsSetlist = new Set(vivantes.map(x => numeroDeSetlist(x, jetons, l.bulba.prefixesParJeton || null)).filter(n => n != null).map(cleNumero));
+                const numsSetlist = new Set(vivantes.map(x => numeroDeSetlist(x, jetons, l.bulba.prefixesParJeton || null, l.bulba.prefixesParSection || null)).filter(n => n != null).map(cleNumero));
                 // 🔑 UN CODE D'ÉNERGIE N'EST PAS UN NUMÉRO (2026-09-25). Cardmarket « numérote » les Énergies de base d'un deck par un
                 // code de type (GRA, FIR, WAT…), et la Setlist ne les liste pas (`natureIgnoree` : energie-base). Comptées, elles
                 // refusaient Journey Theme Pack à 133/141 alors que ses 133 numéros de carte concordent tous. Retirées du

@@ -170,7 +170,8 @@ for (const e of parExp.values()) {
         set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo,
         fiche: Math.round(1000 * nf / e.produits.length) / 10, visuel: Math.round(1000 * nv / e.produits.length) / 10,
         bloquants, sansSource, verte, toutSansSource, score: toutSansSource ? 0 : (bloquants || (problemesSet ? e.produits.length : 0)) * Math.max(1, e.annee - 1995),
-        cause: problemesSet || (top ? `${top[0]} (${top[1]})` : sansSource ? `restes sans source légale (${sansSource})` : '—')
+        // Le problème de SET et la première cause de produits, les deux : « logo à chercher » seul masquait 0 % de fiches (TK6).
+        cause: [problemesSet, top ? `${top[0]} (${top[1]})` : null].filter(Boolean).join(' · ') || (sansSource ? `restes sans source légale (${sansSource})` : '—')
     });
 }
 const rangStatut = l => l.verte ? 2 : l.toutSansSource ? 1 : 0;

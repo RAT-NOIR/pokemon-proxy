@@ -131,5 +131,13 @@ const cTK = [{ _id: 420, nomEn: 'Pikachu Libre', attaques: [], impressions: [{ t
 const JTK = joindre(cTK, [produit(430, 'Pikachu Libre', 'P-14'), produit(431, 'Suicune', 'S-14')], { idExpansion: 1707, expansionBulba: 'XY Trainer Kit: Pikachu Libre & Suicune', tirage: 'intl', prefixesParDeck: { 'Pikachu Libre Half Deck': 'P-', 'Suicune Half Deck': 'S-' } });
 verifier('préfixe à tiret « P-14 »', paires(JTK), ['420|430']);
 
+// 🔑 `numeroFiche` (2026-09-25) : la ligne dit QUELLE impression la jointure a retenue — le site plaçait le produit en lisant son
+// slug, et ne savait lire ni « R30 », ni « 20S », ni un slug que le titre contredit (409 + 174 produits joints, jamais servis).
+const fiche = J => Object.fromEntries(J.lignes.map(l => [l.idProduct, l.numeroFiche ?? null]));
+verifier('numeroFiche : le numéro DANS le demi-deck, pas l\'affixe Cardmarket', fiche(JQC), { 410: '1', 411: '1', 412: '2' });
+verifier('numeroFiche : kit à préfixe à tiret', fiche(JTK), { 430: '14' });
+verifier('numeroFiche : promo à préfixe de set — l\'impression « SWSH002 » pour le produit « 002 »', fiche(JSW), { 10: 'SWSH002', 11: 'SWSH244', 12: 'SWSH012', 13: 'SWSH056' });
+verifier('numeroFiche : null quand la jointure passe par le nom (Gengar départagé par les attaques)', fiche(JATT), { 320: null });
+
 console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
 process.exit(ko ? 1 : 0);

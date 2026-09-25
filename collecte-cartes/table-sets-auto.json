@@ -29015,7 +29015,15 @@
    "titre": "Tag Team Collection (ATCG)",
    "tirage": "id",
    "expansion": "Tag Team Collection",
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "setlist": [
+    "Set A",
+    "Set B"
+   ],
+   "prefixesParSection": {
+    "Set A": "a",
+    "Set B": "b"
+   }
   },
   "attendu": 266,
   "auto": {
@@ -29024,23 +29032,25 @@
    "nomBulbapedia": "Tag Team Collection",
    "familleUnivers": "autre-asiatique",
    "genereLe": "2026-09-24",
-   "aLaMain": "route « ATCG » — ligne à la main du 2026-09-24 (page trouvée par recherche Bulbapedia intitle), à conserver : aucun générateur ne la refabrique."
+   "aLaMain": true,
+   "note": "2026-09-25 : deux moitiés renumérotées depuis 1 sous le même jeton « Tag Team Collection » ; Cardmarket préfixe a/b, mesuré numéro+nom (a 85/308, b 79/301, second choix 0) — préfixe par SECTION"
   },
   "verif": {
-   "le": "2026-09-24",
+   "le": "2026-09-25",
    "pageResolue": "Tag Team Collection (ATCG)",
    "entrees": 609,
    "entreesSansPage": 0,
+   "codesEnergie": 0,
    "couverture": {
     "produitsNumerotes": 182,
-    "couverts": 0,
-    "numerosSetlist": 308,
-    "taux": 0
+    "couverts": 164,
+    "numerosSetlist": 609,
+    "taux": 0.901
    },
    "ratio": 2.29,
    "etat": "À REGARDER",
    "raisons": [
-    "couverture des numéros Cardmarket 0/182 sous 0,95"
+    "couverture des numéros Cardmarket 164/182 sous 0,95"
    ]
   }
  },
@@ -31861,21 +31871,28 @@
    "aLaMain": "page à colonnes {{Flexitem}} : liste « Thai / Indonesian » (section « 30th Celebration » n°3) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
   },
   "verif": {
-   "le": "2026-09-24",
+   "le": "2026-09-25",
    "pageResolue": "30th Celebration (TCG)",
    "entrees": 199,
    "entreesSansPage": 0,
+   "codesEnergie": 8,
    "couverture": {
-    "produitsNumerotes": 200,
+    "produitsNumerotes": 192,
     "couverts": 187,
     "numerosSetlist": 194,
-    "taux": 0.935
+    "taux": 0.974
    },
    "ratio": 0.98,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 187/200 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "30th Celebration (TCG)",
+   "entrees": {
+    "30th Celebration": 199
+   },
+   "note": "vérification automatique : 199 entrées pour 203 produits, échantillon « undefined » (idth)"
   }
  },
  {
@@ -31893,7 +31910,11 @@
     "30th Celebration"
    ],
    "sectionOccurrence": 4,
-   "numerosDepuisSetlist": true
+   "numerosDepuisSetlist": true,
+   "prefixesParJeton": {
+    "30th Celebration": "",
+    "M6a": ""
+   }
   },
   "attendu": 176,
   "auto": {
@@ -31902,24 +31923,32 @@
    "nomBulbapedia": "30th Celebration",
    "familleUnivers": "chinois-simplifie",
    "genereLe": "2026-09-24",
-   "aLaMain": "page à colonnes {{Flexitem}} : liste « Simplified Chinese » (section « 30th Celebration » n°4) — ligne à la main du 2026-09-24, à conserver : aucun générateur ne la refabrique."
+   "aLaMain": true,
+   "note": "2026-09-25 : les 30 Pikachu 017-046 de la liste chinoise (4e « 30th Celebration », colonne « Simplified Chinese ») s'écrivent {{TCG ID|M6a|Pikachu|17}} : jeton « M6a », refusé comme autre set ; déclaré jeton du set, numéro nu"
   },
   "verif": {
-   "le": "2026-09-24",
+   "le": "2026-09-25",
    "pageResolue": "30th Celebration (TCG)",
    "entrees": 168,
    "entreesSansPage": 0,
+   "codesEnergie": 8,
    "couverture": {
-    "produitsNumerotes": 169,
-    "couverts": 131,
-    "numerosSetlist": 138,
-    "taux": 0.775
+    "produitsNumerotes": 161,
+    "couverts": 161,
+    "numerosSetlist": 168,
+    "taux": 1
    },
    "ratio": 0.95,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 131/169 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "30th Celebration (TCG)",
+   "entrees": {
+    "30th Celebration": 168
+   },
+   "note": "vérification automatique : 168 entrées pour 176 produits, échantillon « undefined » (zh-hans)"
   }
  },
  {
@@ -31969,6 +31998,49 @@
     "produitsNumerotes": 287,
     "couverts": 287,
     "numerosSetlist": 287,
+    "taux": 1
+   },
+   "ratio": 1,
+   "etat": "OK",
+   "raisons": []
+  }
+ },
+ {
+  "code": "151C",
+  "exp": 6099,
+  "prod": 192,
+  "nom": "Collection 151",
+  "slugSet": "Collect-151",
+  "region": "chinois",
+  "bulba": {
+   "titre": "Collection 151 (ATCG)",
+   "tirage": "zh-hans",
+   "expansion": "Collection 151",
+   "numerosDepuisSetlist": true
+  },
+  "attendu": 192,
+  "auto": {
+   "cle": "main-2026-09-25",
+   "aLaMain": "route « (ATCG) », appariée À LA MAIN le 2026-09-25 : la page « Collection 151 (ATCG) » ne porte AUCUN code (ni alt=, ni logo, ni symbole), le générateur par le code ne pouvait pas la voir ; « Collect 151 » (Cardmarket) est la traduction de « Collection 151 » (Bulbapedia), l'exemple même de l'en-tête de generer-table-atcg.js. L'admission est jugée par la couverture des numéros, la jointure par le témoin du nom."
+  },
+  "verifie": {
+   "le": "2026-09-25",
+   "page": "Collection 151 (ATCG)",
+   "entrees": {
+    "Collection 151": 192
+   },
+   "note": "vérification automatique : 192 entrées pour 192 produits, échantillon « undefined » (zh-hans)"
+  },
+  "verif": {
+   "le": "2026-09-25",
+   "pageResolue": "Collection 151 (ATCG)",
+   "entrees": 192,
+   "entreesSansPage": 0,
+   "codesEnergie": 0,
+   "couverture": {
+    "produitsNumerotes": 192,
+    "couverts": 192,
+    "numerosSetlist": 192,
     "taux": 1
    },
    "ratio": 1,

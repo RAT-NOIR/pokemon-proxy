@@ -78,6 +78,18 @@ const JH = joindre([{ _id: 31, nomEn: 'Chansey', attaques: [], impressions: SH.p
     [produit(40, 'Chansey', 'a001'), produit(41, 'Rowlet', '001')], { idExpansion: 6543, expansionBulba: 'Decidueye & Melmetal & Koraidon & Miraidon Happy Set', tirage: 'zh-hans', prefixesParJeton: prefixes });
 verifier('« a1 » de la Setlist joint « a001 » de Cardmarket, pas « 001 »', JH.lignes.map(l => `${l.carteId}|${l.idProduct}`), ['31|40']);
 
+// 🔑 LE PRÉFIXE PAR SECTION (2026-09-25) : Tag Team Collection (ID) renumérote « Set A » et « Set B » depuis 1 SOUS LE MÊME JETON ;
+// Cardmarket écrit « a001 », « b001 » (mesuré numéro+nom : a 85/308, b 79/301, second choix 0). Le jeton ne distingue rien :
+// c'est la SECTION qui porte la lettre, et l'entrée garde le titre de sa section.
+const { sectionsSetlist } = require('./collecte-cartes/wikitext');
+const pageTT = ['{{Setlist/header|title=Set A}}', '{{Setlist/entry|1|I|{{TCG ID|Tag Team Collection|Venusaur & Snivy-GX|1}}|Grass||RR}}', '{{Setlist/footer}}',
+    '{{Setlist/header|title=Set B}}', '{{Setlist/entry|1|I|{{TCG ID|Tag Team Collection|Reshiram & Charizard-GX|1}}|Fire||RR}}', '{{Setlist/footer}}'].join('\n');
+const eTT = sectionsSetlist(pageTT).flatMap(s => s.entrees);
+verifier('une entrée garde le titre de sa section', eTT.map(e => e.section), ['Set A', 'Set B']);
+const jTT = jetonsDeSetlist(eTT, ['Tag Team Collection']);
+verifier('préfixe par section : Set A → « a1 », Set B → « b1 »', eTT.map(e => numeroDeSetlist(e, jTT, null, { 'Set A': 'a', 'Set B': 'b' })), ['a1', 'b1']);
+verifier('sans table par section, rien ne change', eTT.map(e => numeroDeSetlist(e, jTT)), ['1', '1']);
+
 const carte = (id, nomEn) => ({ _id: id, nomEn, attaques: [], impressions: [{ tirage: 'intl', expansion: 'Twilight Masquerade', numero: '115' }, ...(S.parCarte.get(id) || [])] });
 const J = joindre([carte(11, 'Venipede'), carte(12, 'Pinsir')], [produit(20, 'Pinsir', '168'), produit(21, 'Pinsir', '201'), produit(22, 'Scream Tail ex', '200')], cible);
 verifier('SV6s : seuls les numéros présents chez Cardmarket joignent', J.lignes.map(l => `${l.carteId}|${l.idProduct}`), ['12|20', '12|21']);

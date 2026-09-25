@@ -65,7 +65,7 @@ const pad = (v, n) => String(v).padStart(n);
         const produitsSansNum = produits.map(p => ({ ...p, numero: null }));
         console.log = () => {};
         let J;
-        try { J = joindre(cartesSansNum, produitsSansNum, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, tirage, slugSet: S._id }); }
+        try { J = joindre(cartesSansNum, produitsSansNum, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage, slugSet: S._id }); }
         finally { console.log = bruit; }
         // ── multiplicités COMPTÉES, des deux côtés : la garde de la collecte, la même fonction (collecte-cartes/garde-nom-seul.js)
         const gardes = new Set(gardeNomSeul({ lignes: J.lignes, produits, cartes: duSet }).gardees.map(l => l.idProduct));
