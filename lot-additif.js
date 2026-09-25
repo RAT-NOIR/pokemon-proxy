@@ -167,7 +167,11 @@ function journaliser(t, dossier, combien, sortie) {
                 const r = await revaliderSets(touches.sets, { catalogue: touches.catalogue, especes: touches.especes });
                 revalidation = `revalidation ✅ ${r.sets} sets${touches.catalogue ? ' + catalogue' : ''}${touches.especes ? ' + espèces' : ''}`;
             } catch (e) {
-                revalidation = `🔴 revalidation ÉCHOUÉE (${e.message.slice(0, 90)}) : ${touches.sets.length} sets à revalider — ${liste(touches.sets, 8)}`;
+                // Les sets à revalider ne se perdent pas : ils attendent dans un fichier, rejoué par
+                // `node collecte-cartes/revalider-site.js --en-attente` quand la route répond.
+                const { mettreEnAttente } = require('./collecte-cartes/revalider-site');
+                const n = mettreEnAttente({ le: t, quoi, ...touches, erreur: e.message.slice(0, 200) });
+                revalidation = `🔴 revalidation ÉCHOUÉE (${e.message.slice(0, 90)}) : ${touches.sets.length} sets mis en attente (${n} en attente au total) — ${liste(touches.sets, 8)}`;
                 console.error(`   ${revalidation}`);
             }
         }
@@ -175,7 +179,10 @@ function journaliser(t, dossier, combien, sortie) {
         console.log(`   ✅ aucune baisse non annoncée · code de sortie ${c.status}`);
         await fermer();
         journaliser(t, dossier, combien, c.status);
-        process.exit(c.status ?? 1);
+        // Pas de process.exit ici : il coupe une connexion fetch en cours de fermeture et Node plante sous Windows (code 9
+        // au lieu de 0, lot des dates du 2026-09-25). Le code de sortie est posé, le processus finit de lui-même.
+        process.exitCode = c.status ?? 1;
+        return;
     }
 
     // ── ARRÊT : restauration depuis la sauvegarde

@@ -13,3 +13,5 @@ backup-*/
 # rapports du collecteur (relecture locale, jamais versionnés)
 collecte-cartes/rapports/
 verrou/couverture/
+# les revalidations du site qui n'ont pas pu partir (collecte-cartes/revalider-site.js) : l'état de CE poste
+revalidations-en-attente.json

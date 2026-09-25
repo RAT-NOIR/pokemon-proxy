@@ -30,7 +30,9 @@ async function revaliderSets(slugs, { catalogue = false, especes = false, journa
         const lot = uniques.slice(i, i + PAR_APPEL);
         const r = await fetch(URL_REVALIDER, {
             method: 'POST', signal: AbortSignal.timeout(60000),
-            headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json' },
+            // `Connection: close` : une connexion gardée ouverte fait planter `process.exit` sous Windows (assertion libuv
+            // UV_HANDLE_CLOSING, code 9 au lieu de 0 — vu à la fin du lot des dates, le 2026-09-25).
+            headers: { Authorization: `Bearer ${secret}`, 'Content-Type': 'application/json', Connection: 'close' },
             // catalogue et espèces une seule fois, au premier appel
             body: JSON.stringify({ sets: lot, catalogue: !!catalogue && i === 0, especes: !!especes && i === 0 })
         });
@@ -44,13 +46,29 @@ async function revaliderSets(slugs, { catalogue = false, especes = false, journa
     return { appels, sets: total, horsMotif };
 }
 
-module.exports = { revaliderSets, URL_REVALIDER, MOTIF_SLUG };
+// La file d'attente : les lots dont la revalidation a échoué (route pas encore en ligne, secret refusé, réseau). Un fichier
+// local, jamais commité — il décrit ce que CE poste doit encore demander au site.
+const fs = require('fs');
+const ATTENTE = require('path').join(__dirname, '..', 'revalidations-en-attente.json');
+const lireAttente = () => { try { return JSON.parse(fs.readFileSync(ATTENTE, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return []; throw e; } };
+function mettreEnAttente(entree) { const a = lireAttente(); a.push(entree); fs.writeFileSync(ATTENTE, JSON.stringify(a, null, 1)); return a.length; }
+async function viderAttente({ journal = console } = {}) {
+    const a = lireAttente();
+    if (!a.length) { journal.log('   aucune revalidation en attente'); return { sets: 0 }; }
+    const sets = [...new Set(a.flatMap(x => x.sets || []))];
+    const r = await revaliderSets(sets, { catalogue: a.some(x => x.catalogue), especes: a.some(x => x.especes), journal });
+    fs.writeFileSync(ATTENTE, '[]');   // seulement après un 200 : revaliderSets lève sinon, et le fichier reste intact
+    journal.log(`   ✅ ${a.length} lot(s) en attente revalidé(s) : ${sets.length} sets`);
+    return r;
+}
+
+module.exports = { revaliderSets, URL_REVALIDER, MOTIF_SLUG, mettreEnAttente, viderAttente, lireAttente };
 
 if (require.main === module) {
     const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
-    const inconnus = process.argv.slice(2).filter(a => !/^--(sets=|catalogue$|especes$)/.test(a));
-    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — --sets=A,B [--catalogue] [--especes]`); process.exit(2); }
-    revaliderSets(arg('sets').split(',').map(s => s.trim()).filter(Boolean), { catalogue: process.argv.includes('--catalogue'), especes: process.argv.includes('--especes') })
-        .then(r => console.log(`   ✅ ${r.appels} appel(s), ${r.sets} set(s) revalidé(s)`))
+    const inconnus = process.argv.slice(2).filter(a => !/^--(sets=|catalogue$|especes$|en-attente$)/.test(a));
+    if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — --sets=A,B [--catalogue] [--especes] | --en-attente`); process.exit(2); }
+    (process.argv.includes('--en-attente') ? viderAttente() : revaliderSets(arg('sets').split(',').map(s => s.trim()).filter(Boolean), { catalogue: process.argv.includes('--catalogue'), especes: process.argv.includes('--especes') }))
+        .then(r => console.log(`   ✅ ${r.appels ?? 0} appel(s), ${r.sets ?? 0} set(s) revalidé(s)`))
         .catch(e => { console.error(`❌ ${e.message}`); process.exit(1); });
 }

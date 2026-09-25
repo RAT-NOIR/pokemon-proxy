@@ -11,7 +11,8 @@
 // marteler le site à chaque fin de lot (`--http-neuf` force la relecture).
 // « Servi » = la règle du SITE importée telle quelle (lib/*.ts), comme t-tableau et mesurer-taux-servis.mjs du site.
 //
-// VERDICT : VERTE = set publié, page en 200, présent dans /fr/sets, logo posé (ou sans source légale), et AUCUN produit
+// VERDICT : VERTE = set publié, page en 200, présent dans /fr/sets, DATÉ ET RANGÉ SOUS SON ANNÉE sur /fr/sets (2026-09-25),
+// logo posé (ou sans source légale), et AUCUN produit
 // manquant BLOQUANT. Ne bloquent pas, et sont marqués « sans source légale » : les visuels des tirages chinois, indonésien et
 // thaï (§42, §56 : CGU TPC Asie, pokemon.cn ; TCGdex japonais seul) ; les fiches dont la Setlist ne liste que des liens rouges
 // (§43 : aucune page chez Bulbapedia) ; les versions V1/V2 inégales (§7 : Cardmarket ne dit pas laquelle manque).
@@ -134,6 +135,20 @@ async function statut(url) {
 }
 const L0 = await statut(`${SITE}/fr/sets`);
 const dansListe = new Set([...(L0.texte || '').matchAll(/href="\/fr\/sets\/([^"/?#]+)"/g)].map(m => decodeURIComponent(m[1])));
+// ➕ 2026-09-25 (testeur) : une expansion n'est verte que si son set est DATÉ et RANGÉ DANS SON ANNÉE sur /fr/sets. La page range
+// « Tout le catalogue » sous un <h2> par année, puis « Date non renseignée » : la section d'un set se LIT sur la page, jamais
+// ne se déduit de la base — la page peut être en retard sur la base (revalidation à la demande, 30 jours sans elle).
+const sectionDe = new Map();
+{
+    const t = L0.texte || '', i0 = t.indexOf('Tout le catalogue');
+    const h2 = [...t.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map(m => ({ i: m.index, titre: m[1].replace(/<[^>]+>/g, '').trim() })).filter(x => x.i > i0);
+    h2.forEach((s, k) => {
+        const bloc = t.slice(s.i, k + 1 < h2.length ? h2[k + 1].i : t.length);
+        for (const m of bloc.matchAll(/href="\/fr\/sets\/([^"/?#]+)"/g)) { const slug = decodeURIComponent(m[1]); if (!sectionDe.has(slug)) sectionDe.set(slug, s.titre); }
+    });
+    if (L0.texte && i0 < 0) throw new Error('/fr/sets : « Tout le catalogue » introuvable — la page a changé de forme, le rangement ne se lit plus');
+}
+const dateSite = s => { const d = s?.region === 'jp' ? s?.dateSortieJa : s?.region === 'intl' ? s?.dateSortieEn : null; const t = d ? Date.parse(d) : NaN; return Number.isNaN(t) ? null : new Date(t).getUTCFullYear(); };
 const catalogue = (await statut(`${SITE}/fr/catalogue`)).code;
 let requetes = 2;
 const publies = [...sets.values()].filter(s => s.publie).map(s => s._id);
@@ -164,7 +179,9 @@ for (const e of parExp.values()) {
     const sansSource = [...causes].filter(([c]) => /SANS SOURCE/.test(c)).reduce((s, [, n]) => s + n, 0);
     const logo = !set ? '—' : set.logo && !set.logoGenerique ? 'oui' : set.logoGenerique ? 'générique' : LOGO_SANS_SOURCE.test(set.logoRefus?.motif || '') ? 'sans source' : 'à chercher';
     const page = set?.publie ? cache[slug]?.code ?? '?' : '—';
-    const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets' : logo === 'à chercher' ? 'logo à chercher' : null;
+    const annee = set ? dateSite(set) : null, rangeSous = sectionDe.get(slug) ?? null;
+    const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets'
+        : annee == null ? 'set sans date (« Date non renseignée »)' : rangeSous !== String(annee) ? `daté ${annee}, rangé sous « ${rangeSous ?? '?'} » sur /fr/sets` : logo === 'à chercher' ? 'logo à chercher' : null;
     // Une expansion dont TOUT le manque est sans source légale (Setlist en liens rouges, visuels chinois…) n'a ni page ni set à
     // exiger : elle n'est ni verte ni rouge, elle est « sans source » — comptée à part, jamais dans le haut de la table.
     const toutSansSource = !bloquants && sansSource > 0 && sansSource === e.produits.length;
@@ -186,7 +203,7 @@ const vertes = lignes.filter(l => l.verte).length, grises = lignes.filter(l => l
 // L'évolution ne compare que deux mesures faites sous la MÊME définition du vert. Le 2026-09-25, 210 → 159 était la sortie des
 // expansions entièrement sans source (7f8e69a), pas une perte : 54 vertes passées en gris entre deux mesures (§62). La définition
 // porte un numéro ; un état précédent qui n'en porte pas, ou une autre, n'est pas comparé — et la table le DIT.
-const DEFINITION = 2;
+const DEFINITION = 3;   // 3 (2026-09-25) : daté ET rangé dans son année sur /fr/sets
 const statutDe = l => l.verte ? 'v' : l.toutSansSource ? 'g' : 'r';
 const avant = fs.existsSync(ETAT) ? JSON.parse(fs.readFileSync(ETAT, 'utf8')) : null;
 const comparable = avant?.definition === DEFINITION;
@@ -203,7 +220,7 @@ md.push('# Table maîtresse — une ligne par expansion Cardmarket', '');
 md.push(`Mesurée le ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · export \`${EXPORT}\` : ${ex.products.length} produits − ${ex.products.length - produits.length} cartes-code = **${produits.length} produits, ${parExp.size} expansions**. Règles de service du site importées (${S}). HTTP : /fr/sets (${dansListe.size} sets listés), /fr/catalogue → ${catalogue}, ${publies.length} pages de set (${requetes} requêtes ce passage, cache 6 h).`, '');
 md.push(`**Vertes : ${vertes} / ${parExp.size}** (${evol}) · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
 if (comparable) md.push(`Passées au vert : ${gagnees.map(nomme).join(' · ') || 'aucune'}. 🔴 Perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}.`, '');
-md.push('Verte = set publié, page en 200, présent dans /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
+md.push('Verte = set publié, page en 200, présent dans /fr/sets, daté et rangé sous SON année sur /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
 md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | % fiche | % visuel | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 const expTotales = new Set(ex.products.map(p => p.idExpansion));
 const codeSeul = [...expTotales].filter(id => !parExp.has(id));

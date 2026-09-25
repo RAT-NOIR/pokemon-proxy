@@ -550,6 +550,32 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 63. UNE ÉVOLUTION ENTRE DEUX DÉFINITIONS, DES ÉCHANTILLONS QUI NE JUGENT RIEN, ET LES DATES QUI RANGENT LE CATALOGUE — 2026-09-25
+
+> 🔴 **« 210 → 159 vertes » N'ÉTAIT PAS UNE PERTE : la mesure de 00:59 UTC avait précédé le commit qui sortait des vertes les
+> expansions entièrement sans source (54 passées en gris).** Une évolution ne compare que deux mesures faites sous la MÊME
+> définition : `table-maitresse.json` porte désormais `definition` (3 depuis « daté ET rangé sous son année sur /fr/sets ») et
+> dit « non comparée » plutôt qu'un écart. Et la table NOMME les expansions qui changent de statut.
+
+**LE MOTIF DOMINANT, DEUX FOIS DANS MES SONDES DU JOUR :** ma table rangeait 311 produits en « ligne jamais jugée » — les lignes
+« sans page » portent leur refus dans `refus`, les lignes à page dans `verif` ; et mon échantillonneur de paires artofpkm prenait
+le DERNIER rang d'une liste, qui est toujours une Énergie de base sans numéro : 7 paires à « 2/3 » qui étaient des paires à 3/3
+non JUGÉES. 🔑 **Un échantillon qui ne peut pas se juger ne compte ni pour ni contre** : il est remplacé (rang 80 %, recul
+jusqu'à un numéro), jamais compté comme un succès — ni comme un échec.
+
+**17 SOURCES artofpkm PROUVÉES PAR LA SOURCE (critère écrit avant) :** liste lue, 3 pages de carte, le numéro IMPRIMÉ désigne chez
+nous une carte du même nom, 3 sur 3. sD refusée par la preuve elle-même (artofpkm renumérote chaque deck de Starter Set V).
+**AQUAPOLIS :** le set vivait sous `_id: 'AQ'` (ligne écrite avant l'apprentissage du slug), ses 190 lignes sous `Aquapolis` ;
+et 24 lignes à `slugSet` null, écrites le 20/09 par le bonus « jumeau » des sets e-Card japonais, sont des HOMONYMES CROISÉS
+(24 sur 24 contredites par les attaques). Renommage et détachement : feu vert du testeur requis, non faits.
+**LES DATES (PRIORITÉ 0) :** le site range un set sans date tout en bas ; 434 publiés sur 683. `poser-dates-sets.js` : TCGdex
+(dépôt cloné, deux clés d'accord, témoin Bulbapedia) pour l'international, l'infobox archivée (valeur ÉTIQUETÉE du tirage) pour
+le japonais et le chinois ; une divergence de sources n'écrit rien (Black Bolt / White Flare : TCGdex 17/07, Bulbapedia 18/07).
+La collecte ne lisait ni `date` (promos) ni une valeur étiquetée : 225 dates dormaient dans l'archive.
+**LA REVALIDATION :** `lot-additif.js` compare les DOCUMENTS (pas les compteurs : une date n'en fait bouger aucun) et appelle
+`/api/revalider` pour les sets touchés ; un échec part dans `revalidations-en-attente.json`. ⚠️ Une route absente répond la page
+404 HTML du site ; la route elle-même répondrait « Introuvable » — c'est ce qui distingue « pas déployée » de « mauvais secret ».
+
 ## 62. LA TABLE PAR EXPANSION, LE WORKER QUI SE NOURRIT, ET CE QUE NOS MESURES PAR PRODUIT CACHAIENT — 2026-09-25 (nuit)
 
 > 🔴 **CHANGEMENT DE MÉTHODE (testeur) : l'unité de travail est l'EXPANSION, et la table se lit par le haut.** `table-maitresse.mjs`
