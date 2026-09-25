@@ -111,6 +111,10 @@ const causeVisuel = (idp) => {
     const ims = (d.images ?? []).filter(m => m.set === f.slugSet);
     if (!ims.length) {
         if (/^zh/.test(tir) || ['id', 'th', 'idth'].includes(tir)) return `SANS SOURCE LÉGALE : visuel ${tir}`;
+        // Une réimpression tamponnée (WCD, Prize Pack, SEA, Trick or Trade, Professor Program) n'a pas le visuel de son tirage
+        // d'origine (§19). Cherché le 2026-09-25 : TCGdex (liste anglaise en cache, 220 sets) n'a aucun de ces sets ; 30 pages de
+        // carte Bulbapedia archivées n'en portent aucun fichier. NON TROUVÉ n'est pas « sans source » : rien n'a été énuméré.
+        if (set.reimpressions) return `réimpression ${set.reimpressions} : visuel tamponné non trouvé (TCGdex, pages de carte)`;
         if (tir === 'jp') return sourceDe(set.code) ? 'jp : artofpkm n\'a pas ce numéro, ou pas encore collecté' : 'jp : aucune source artofpkm';
         return 'intl : aucune image collectée';
     }
@@ -177,14 +181,26 @@ for (const e of parExp.values()) {
 const rangStatut = l => l.verte ? 2 : l.toutSansSource ? 1 : 0;
 lignes.sort((a, b) => rangStatut(a) - rangStatut(b) || b.score - a.score || b.produits - a.produits);
 const vertes = lignes.filter(l => l.verte).length, grises = lignes.filter(l => l.toutSansSource).length;
+// L'évolution ne compare que deux mesures faites sous la MÊME définition du vert. Le 2026-09-25, 210 → 159 était la sortie des
+// expansions entièrement sans source (7f8e69a), pas une perte : 54 vertes passées en gris entre deux mesures (§62). La définition
+// porte un numéro ; un état précédent qui n'en porte pas, ou une autre, n'est pas comparé — et la table le DIT.
+const DEFINITION = 2;
+const statutDe = l => l.verte ? 'v' : l.toutSansSource ? 'g' : 'r';
 const avant = fs.existsSync(ETAT) ? JSON.parse(fs.readFileSync(ETAT, 'utf8')) : null;
-const evol = avant ? `${vertes - avant.vertes >= 0 ? '+' : ''}${vertes - avant.vertes} depuis le ${new Date(avant.le).toISOString().slice(0, 16).replace('T', ' ')} UTC (${avant.vertes})` : 'première mesure';
-fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), vertes, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, l.verte])) }));
+const comparable = avant?.definition === DEFINITION;
+const quand = avant ? new Date(avant.le).toISOString().slice(0, 16).replace('T', ' ') : null;
+const bascules = comparable ? lignes.filter(l => avant.parExp[l.idExpansion] !== undefined && avant.parExp[l.idExpansion] !== statutDe(l)) : [];
+const evol = !avant ? 'première mesure' : !comparable ? `mesure précédente (${quand} UTC, ${avant.vertes}) sous une AUTRE définition du vert : non comparée`
+    : `${vertes - avant.vertes >= 0 ? '+' : ''}${vertes - avant.vertes} depuis le ${quand} UTC (${avant.vertes})`;
+const nomme = l => `${l.code} ${l.nom}`;
+const gagnees = bascules.filter(l => l.verte), perdues = bascules.filter(l => avant.parExp[l.idExpansion] === 'v');
+fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), definition: DEFINITION, vertes, grises: lignes.filter(l => l.toutSansSource).length, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe(l)])) }));
 const fileTxt = fileEtat.map(x => `${x._id}×${x.n}`).join(' · ');
 const md = [];
 md.push('# Table maîtresse — une ligne par expansion Cardmarket', '');
 md.push(`Mesurée le ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · export \`${EXPORT}\` : ${ex.products.length} produits − ${ex.products.length - produits.length} cartes-code = **${produits.length} produits, ${parExp.size} expansions**. Règles de service du site importées (${S}). HTTP : /fr/sets (${dansListe.size} sets listés), /fr/catalogue → ${catalogue}, ${publies.length} pages de set (${requetes} requêtes ce passage, cache 6 h).`, '');
 md.push(`**Vertes : ${vertes} / ${parExp.size}** (${evol}) · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
+if (comparable) md.push(`Passées au vert : ${gagnees.map(nomme).join(' · ') || 'aucune'}. 🔴 Perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}.`, '');
 md.push('Verte = set publié, page en 200, présent dans /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
 md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | % fiche | % visuel | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 const expTotales = new Set(ex.products.map(p => p.idExpansion));
@@ -195,5 +211,6 @@ fs.writeFileSync(SORTIE, md.join('\n') + '\n');
 fs.writeFileSync(`${R}/table-maitresse-produits.json`, JSON.stringify(CAUSES_PRODUITS));
 console.log(`TABLE-MAITRESSE.md : ${lignes.length} expansions · vertes ${vertes} (${evol}) · /fr/catalogue ${catalogue} · /fr/sets ${dansListe.size} sets · requêtes HTTP ${requetes}`);
 console.log(`sans source légale (entièrement) : ${grises}`);
+if (comparable) console.log(`passées au vert : ${gagnees.map(nomme).join(' · ') || 'aucune'}\n🔴 perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}`);
 console.log(`20 premières rouges :\n${lignes.filter(l => !l.verte && !l.toutSansSource).slice(0, 20).map((l, i) => `${String(i + 1).padStart(2)}. ${l.idExpansion} ${l.code} « ${l.nom} » ${l.anneeEstimee ? '~' : ''}${l.annee} ${l.region} · ${l.produits} p · fiche ${l.fiche} % · visuel ${l.visuel} % · bloquants ${l.bloquants} · ${l.cause}`).join('\n')}`);
 await fermer();
