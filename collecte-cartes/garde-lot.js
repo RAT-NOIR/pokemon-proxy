@@ -121,4 +121,48 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
     return plan;
 }
 
-module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, canon };
+// ── LES SETS TOUCHÉS PAR UN LOT (2026-09-25) — ce que la revalidation à la demande du site attend (collecte-cartes/revalider-site.js).
+// Les compteurs ne suffisent pas : une date, un numeroFiche, une image remplacée à compte égal n'en font bouger aucun. On compare
+// donc les DOCUMENTS, avant (la sauvegarde) et après (la base), sur ce que le site lit — et par la MÊME fonction des deux côtés.
+// ⚠️ Pas `canon` : la sauvegarde relue en EJSON « relaxed » rend 12 en double quand la base le rend en int32 ; `canon` y verrait
+// une différence de TYPE, donc des sets « touchés » qui ne le sont pas. Ici, une valeur JSON (une Date devient sa chaîne ISO).
+const signature = v => JSON.stringify(trier(v ?? null));
+const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null,
+    impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
+    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null]) });
+const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null];
+
+/**
+ * @param {{avant: {cartes, cartesProduits, sets}, apres: {cartes, cartesProduits, sets}}} o — documents (projetés ou complets)
+ * @returns {{sets: string[], catalogue: boolean, especes: boolean}} sets triés ; `catalogue` : un nom, une date, un compte a pu
+ * changer sur /fr/sets ; `especes` : une carte est entrée dans un set ou en est sortie, ou son nom a changé.
+ */
+function setsTouches({ avant, apres }) {
+    const touches = new Set();
+    let catalogue = false, especes = false;
+    const parId = l => new Map((l || []).map(d => [cleDoc(d._id), d]));
+    const [cA, cB] = [parId(avant.cartes), parId(apres.cartes)];
+    for (const k of new Set([...cA.keys(), ...cB.keys()])) {
+        const a = cA.get(k), b = cB.get(k);
+        const pa = a ? PROJECTION_CARTES(a) : null, pb = b ? PROJECTION_CARTES(b) : null;
+        if (signature(pa) === signature(pb)) continue;
+        for (const s of [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])]) if (s) touches.add(s);
+        if (!pa || !pb || pa.nomEn !== pb.nomEn || signature(pa.sets) !== signature(pb.sets)) { especes = true; catalogue = true; }
+    }
+    const [lA, lB] = [parId(avant.cartesProduits), parId(apres.cartesProduits)];
+    for (const k of new Set([...lA.keys(), ...lB.keys()])) {
+        const a = lA.get(k), b = lB.get(k);
+        if (a && b && signature(PROJECTION_LIGNES(a)) === signature(PROJECTION_LIGNES(b))) continue;
+        for (const s of [a?.slugSet, b?.slugSet]) if (s) touches.add(s);
+        if (!a || !b) catalogue = true;   // une fiche de plus ou de moins : un compte du catalogue
+    }
+    const [sA, sB] = [parId(avant.sets), parId(apres.sets)];
+    for (const k of new Set([...sA.keys(), ...sB.keys()])) {
+        const a = sA.get(k), b = sB.get(k);
+        if (signature(a) === signature(b)) continue;
+        touches.add((a || b)._id); catalogue = true;
+    }
+    return { sets: [...touches].sort(), catalogue, especes };
+}
+
+module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, canon, setsTouches, PROJECTION_CARTES };

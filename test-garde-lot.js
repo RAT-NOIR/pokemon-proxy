@@ -81,5 +81,22 @@ verifier('un document supprimé par le lot est réinséré tel que sauvé (Date 
 verifier('clé de document : 12 et « 12 » ne se confondent pas', cleDoc(12) === cleDoc('12'), false);
 verifier('un document identique à l\'ordre des clés près n\'est pas réécrit', planRestauration(map([{ _id: 5, a: 1, b: { c: 1, d: 2 } }]), map([{ b: { d: 2, c: 1 }, a: 1, _id: 5 }])).remplacer.length, 0);
 
+// ── LES SETS TOUCHÉS (2026-09-25) : ce que la revalidation du site demande. Une date, un numeroFiche, une image remplacée ne
+// font bouger AUCUN compteur ; les documents, si. Un set dont un document a changé est touché, et lui seul.
+const { setsTouches } = require('./collecte-cartes/garde-lot');
+const docs0 = copie(etat0);
+verifier('rien n\'a changé : aucun set touché, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: copie(etat0) }), { sets: [], catalogue: false, especes: false });
+const lDate = copie(etat0); lDate.sets[0].dateSortieEn = 'May 30, 2025';
+verifier('une date posée sur un set : ce set, et le catalogue', setsTouches({ avant: docs0, apres: lDate }), { sets: ['Set-A'], catalogue: true, especes: false });
+const lFiche = copie(etat0); lFiche.cartesProduits[3].numeroFiche = '25'; lFiche.cartesProduits[3].slugSet = 'Set-B';
+const d0b = copie(etat0); d0b.cartesProduits[3].slugSet = 'Set-B';
+verifier('un numeroFiche posé sur une ligne : le set de la ligne, pas le catalogue', setsTouches({ avant: d0b, apres: lFiche }), { sets: ['Set-B'], catalogue: false, especes: false });
+const lImg = copie(etat0); lImg.cartes[0].images[0].cleR2 = 'a/2-bis';
+verifier('une image remplacée (même compte) : le set de l\'image', setsTouches({ avant: docs0, apres: lImg }), { sets: ['Set-A'], catalogue: false, especes: false });
+const lCarte = copie(etat0); lCarte.cartes[0].sets.push('Set-C');
+verifier('une carte qui entre dans un set : ses sets, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-A', 'Set-C'], catalogue: true, especes: true });
+const lLigne = copie(etat0); lLigne.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 1, slugSet: 'Set-C' });
+verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches({ avant: docs0, apres: lLigne }), { sets: ['Set-C'], catalogue: true, especes: false });
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

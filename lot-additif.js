@@ -28,7 +28,10 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { compterEtat, comparer, validerAnnonces, planRestauration, cleDoc } = require('./collecte-cartes/garde-lot');
+const { compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+// ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
+// réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
+// d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
 
 const GARDEES = ['cartes', 'cartes_produits', 'sets'];
 const RESTAURABLES = ['cartes', 'cartes_produits', 'sets', 'restes', 'collecte_etat'];
@@ -38,7 +41,7 @@ const sep = process.argv.indexOf('--');
 const options = sep < 0 ? process.argv.slice(2) : process.argv.slice(2, sep);
 const commande = sep < 0 ? [] : process.argv.slice(sep + 1);
 const AUTORISES = [/^--quoi=.+/, /^--collections=[\w,]+$/, /^--compte=\w+(:\w+=[^\s]+)?$/, /^--annonce=.+\.json$/,
-    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/];
+    /^--base=(cartes|test_scratch)$/, /^--journal=.+\.md$/, /^--confirmation=\d{1,3}$/, /^--sans-revalidation$/];
 const inconnus = options.filter(a => !AUTORISES.some(r => r.test(a)));
 const val = nom => options.find(a => a.startsWith(`--${nom}=`))?.slice(nom.length + 3);
 const quoi = val('quoi'), collections = val('collections'), BASE = val('base') || 'cartes';
@@ -86,14 +89,16 @@ async function compter(db) {
 const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(__dirname, dossier, `${coll}.json`), 'utf8'), { relaxed: true });
 
 // Les documents de la base, projetés sur ce que compterEtat lit : le « après » passe par la MÊME fonction que le « avant ».
+// La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
 async function etatDeLaBase(db) {
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'images.set': 1 }).toArray(),
-        db.collection('cartes_produits').find({}).project({ idExpansion: 1, idProduct: 1 }).toArray(),
-        db.collection('sets').find({}).project({ nomAffichage: 1 }).toArray()]);
+        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1 }).toArray(),
+        db.collection('cartes_produits').find({}).project({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1 }).toArray(),
+        db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])
         if (!l.length) throw new Error(`« ${n} » est VIDE : un compteur sur elle ne mesure rien (§41)`);
-    return compterEtat({ cartes, cartesProduits, sets });
+    const docs = { cartes, cartesProduits, sets };
+    return Object.assign(compterEtat(docs), { docs });
 }
 
 // Les sets où le worker a écrit pendant la fenêtre : prouvé par ses propres dates, jamais supposé.
@@ -124,7 +129,8 @@ function journaliser(t, dossier, combien, sortie) {
     console.log(`\n══ LOT : ${quoi}\n   1. sauvegarde ${aSauver.join(',')} → ${dossier} (base ${BASE})`);
     const s = spawnSync(process.execPath, ['backup-collections.js', `--base=${BASE}`, `--collections=${aSauver.join(',')}`, `--dossier=${dossier}`], { stdio: 'inherit', cwd: __dirname });
     if (s.status !== 0) { console.error(`❌ la sauvegarde a échoué (code ${s.status}) : la commande ne part pas.`); process.exit(1); }
-    const avant = compterEtat({ cartes: lireSauvegarde(dossier, 'cartes'), cartesProduits: lireSauvegarde(dossier, 'cartes_produits'), sets: lireSauvegarde(dossier, 'sets') });
+    const docsAvant = { cartes: lireSauvegarde(dossier, 'cartes'), cartesProduits: lireSauvegarde(dossier, 'cartes_produits'), sets: lireSauvegarde(dossier, 'sets') };
+    const avant = compterEtat(docsAvant);
     let { db, fermer } = await ouvrir();
     const comptesAvant = await compter(db);
     await fermer();
@@ -152,7 +158,20 @@ function journaliser(t, dossier, combien, sortie) {
     const legacy = comptes.map((x, i) => `${x.libelle} ${comptesAvant[i]} → ${comptesApres[i]}`).join(' ; ');
 
     if (!cmp.nonAutorisees.length) {
-        const combien = [legacy, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`].filter(Boolean).join(' ; ');
+        let revalidation = null;
+        if (BASE === 'cartes' && !options.includes('--sans-revalidation')) {
+            const touches = setsTouches({ avant: docsAvant, apres: apres.docs });
+            console.log(`   6. sets touchés (documents comparés) : ${touches.sets.length}${touches.sets.length ? ` — ${liste(touches.sets, 12)}` : ''} · catalogue ${touches.catalogue} · espèces ${touches.especes}`);
+            try {
+                const { revaliderSets } = require('./collecte-cartes/revalider-site');
+                const r = await revaliderSets(touches.sets, { catalogue: touches.catalogue, especes: touches.especes });
+                revalidation = `revalidation ✅ ${r.sets} sets${touches.catalogue ? ' + catalogue' : ''}${touches.especes ? ' + espèces' : ''}`;
+            } catch (e) {
+                revalidation = `🔴 revalidation ÉCHOUÉE (${e.message.slice(0, 90)}) : ${touches.sets.length} sets à revalider — ${liste(touches.sets, 8)}`;
+                console.error(`   ${revalidation}`);
+            }
+        }
+        const combien = [legacy, `garde ✅ ${cmp.groupes} groupes, 0 baisse non annoncée ; hausses ${hausses}${autorisees.length ? ` ; baisses autorisées ${liste(autorisees, 4)}` : ''}`, revalidation].filter(Boolean).join(' ; ');
         console.log(`   ✅ aucune baisse non annoncée · code de sortie ${c.status}`);
         await fermer();
         journaliser(t, dossier, combien, c.status);
