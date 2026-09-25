@@ -19,18 +19,20 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 
-const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+origine+numero': 'pps' };
+// `reimpression+origine+numero` (poser-reimpressions.js : Southeast Asia Promos, Professor Program, Trick or Trade) porte sa
+// famille dans `route` (le code du set) ; la route du set la reprend.
+const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+origine+numero': 'pps', 'reimpression+origine+numero': null };
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
-    const lignes = await lireMongo(cx.db.collection('cartes_produits'), { preuve: { $in: Object.keys(ROUTES) } }, { nom: 'cartes_produits (réimpressions)', projection: { carteId: 1, idProduct: 1, idExpansion: 1, slugSet: 1, preuve: 1 } });
+    const lignes = await lireMongo(cx.db.collection('cartes_produits'), { preuve: { $in: Object.keys(ROUTES) } }, { nom: 'cartes_produits (réimpressions)', projection: { carteId: 1, idProduct: 1, idExpansion: 1, slugSet: 1, preuve: 1, route: 1 } });
     // L'expansion d'un produit est celle du CATALOGUE : 21 produits WCD-2018 portent encore 1645 dans nos lignes, le catalogue dit 2396.
     const expCat = new Map((await prod.db.collection('catalogue_produits').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, idExpansion: 1 } }).toArray()).map(p => [p.idProduct, p.idExpansion]));
     const parSet = new Map();
     for (const l of lignes) {
         if (!l.slugSet) continue;
-        const e = parSet.get(l.slugSet) || parSet.set(l.slugSet, { slug: l.slugSet, exps: new Set(), cartes: new Set(), route: ROUTES[l.preuve], lignes: 0 }).get(l.slugSet);
+        const e = parSet.get(l.slugSet) || parSet.set(l.slugSet, { slug: l.slugSet, exps: new Set(), cartes: new Set(), route: ROUTES[l.preuve] || String(l.route || 'reimpression').toLowerCase(), lignes: 0 }).get(l.slugSet);
         e.exps.add(expCat.get(l.idProduct) ?? l.idExpansion); e.cartes.add(l.carteId); e.lignes++;
     }
     const existants = new Set((await cx.db.collection('sets').find({ _id: { $in: [...parSet.keys()] } }, { projection: { _id: 1 } }).toArray()).map(s => s._id));
@@ -56,7 +58,7 @@ const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+orig
         const r = await cx.db.collection('cartes').updateMany({ _id: { $in: [...e.cartes] } }, { $addToSet: { sets: e.slug } });
         poses += r.modifiedCount;
     }
-    const relus = await cx.db.collection('sets').countDocuments({ reimpressions: { $in: ['wcd', 'pps'] } });
+    const relus = await cx.db.collection('sets').countDocuments({ reimpressions: { $exists: true } });
     console.log(`\n   ✅ sets créés ${crees} (relus avec \`reimpressions\` : ${relus}) · cartes modifiées ${poses} (appartenances ajoutées, jamais retirées)`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });
