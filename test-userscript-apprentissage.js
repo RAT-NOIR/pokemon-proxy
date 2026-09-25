@@ -1,10 +1,15 @@
-// node test-userscript-apprentissage.js — banc du userscript (1.6) dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
+// node test-userscript-apprentissage.js — banc du userscript (1.8) dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
+// ⚠️ 2026-09-25 : trois assertions supposaient la liste de la 1.6 (« n° 1/42 », « suivante : 6604 ») et échouaient depuis la 1.7
+// sans que personne ne relance le banc — elles lisent désormais la liste DANS le script. Cas 10 à 13 : le journal de la 1.8.
 // navigation avec une galerie fabriquée (la structure que le script lit : a.galleryBox, img data-echo, h2 « (CODE n°) »),
 // et bloque toute autre requête. GM_* et le serveur sont simulés : 503 → /ping → 429 (reset 2 s) → 200.
 const R = __dirname;
 const fs = require('fs');
 const puppeteer = require(`${R}/node_modules/puppeteer`);
 const SCRIPT = fs.readFileSync(`${R}/userscript-apprentissage.js`, 'utf8');
+// La liste et les comptes de l'export, lus DANS le script : le banc ne suppose plus une liste figée.
+const LISTE = eval(/const LISTE = (\[[\s\S]*?\]\]);/.exec(SCRIPT)[1]);
+const PRODUITS_EXPORT = JSON.parse(/const PRODUITS_EXPORT = (\{.*?\});/.exec(SCRIPT)[1]);
 const URL1 = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration';
 const carte = (id, slug, nom, n) => `<a class="galleryBox" href="/fr/Pokemon/Products/Singles/30th-Celebration/${slug}"><img data-echo="https://product-images.s3.cardmarket.com/51/30C/${id}/${id}.jpg" alt="${nom}"><h2>${nom} (30C ${n})</h2></a>`;
 const HTML = `<!doctype html><html><head><title>30th Celebration</title></head><body>
@@ -64,8 +69,8 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         verifier('   la file est vide au succès', A.store.rm_file, []);
         verifier('   la page est marquée apprise', Object.keys(A.store.rm_pagesFaites || {}), ['/fr/Pokemon/Products/Singles/30th-Celebration']);
         verifier('   l\'expansion apprise pour ce slug : 6601', A.store.rm_slugExp, { '30th-Celebration': 6601 });
-        verifier('   le panneau : rang dans la liste, appris, budget', [/n° 1\/42/.test(A.panneau), /103\/191 produits appris/.test(A.panneau), /reste 117 envoi/.test(A.panneau), /3 nouvelles/.test(A.panneau)], [true, true, true, true]);
-        verifier('   la suivante de la liste est 6604 (filtre d\'expansion du site, sans perSite)', /suivante : 6604/.test(A.panneau), true);
+        verifier('   le panneau : place dans la liste (6601 hors liste), appris, budget', [/expansion hors liste/.test(A.panneau), /103\/191 produits appris/.test(A.panneau), /reste 117 envoi/.test(A.panneau), /3 nouvelles/.test(A.panneau)], [true, true, true, true]);
+        verifier(`   la suivante est la tête de la liste, ${LISTE[0][0]} (filtre d'expansion du site, sans perSite)`, new RegExp(`suivante : ${LISTE[0][0]}`).test(A.panneau), true);
         // 1.6 : l'état d'envoi ne survit pas au succès, et la page qu'on VIENT d'envoyer n'est pas « déjà apprise ».
         verifier('   après le succès : plus de « Envoi : », « page envoyée », pas de « déjà apprise »', [/Envoi :/.test(A.panneau), /page envoyée/.test(A.panneau), /déjà apprise/.test(A.panneau)], [false, true, false]);
 
@@ -87,7 +92,7 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         // 5. LE CAS RÉEL DU 2026-09-24 : dernière page de 30th Celebration, 191/191 appris, 161 numérotés (84 %).
         //    La 1.5 disait « terminée ✅ » pour une mauvaise raison ; la 1.6 dit « complète » pour la bonne, et explique les 30.
         const E = await charger(navigateur, {}, [OK(3, { produits: 191, avecNumero: 161, appris: 191, pourcent: 84 })], 1500, { url: URL_DERNIERE, html: HTML_DERNIERE });
-        verifier('5. 191/191 appris : « complète », les 30 sans numéro de titre expliqués, 1 faite dans la liste', [/191\/191 produits appris/.test(E.panneau), /30 sans numéro dans leur titre/.test(E.panneau), /expansion complète/.test(E.panneau), /1 faite\(s\)/.test(E.panneau)], [true, true, true, true]);
+        verifier('5. 191/191 appris : « complète », les 30 sans numéro de titre expliqués, le compte de la liste affiché', [/191\/191 produits appris/.test(E.panneau), /30 sans numéro dans leur titre/.test(E.panneau), /expansion complète/.test(E.panneau), /\d+ faite\(s\)/.test(E.panneau)], [true, true, true, true]);
         verifier('   dernière page : pas de page suivante, marquée « parcourue »', [/Dernière page/.test(E.panneau), E.store.rm_couv['6601'].parcourue], [true, true]);
 
         // 6. Dernière page, mais 6 produits jamais vus : « parcourue », JAMAIS « complète ».
@@ -112,6 +117,28 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         // 9. Une page NUMÉROTÉE marquée par la 1.6 reste apprise : la route d'avant l'avait bien écrite.
         const I = await charger(navigateur, { rm_pagesFaites: { '/fr/Pokemon/Products/Singles/30th-Celebration': { le: 1, n: 3 } } }, [OK(3)], 1500);
         verifier('9. page numérotée marquée par la 1.6 : 0 envoi', I.appels.length, 0);
+
+        // 10-13. LE JOURNAL DE LA 1.8, sur une page de DRI par le filtre d'expansion : une vignette ordinaire, une image chargée
+        //        par `data-src` en webp (lue, et dite), une image de remplacement sans idProduct (ÉCARTÉE, comptée, gardée) ;
+        //        Cardmarket annonce 240 résultats avec une case « onlyAvailable » cochée — moins que l'export.
+        const URL_DRI = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096';
+        const dri = (id, slug, nom, n, attr = 'data-echo', ext = 'jpg') => `<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Destined-Rivals/${slug}"><img ${attr}="https://product-images.s3.cardmarket.com/51/DRI/${id}/${id}.${ext}" alt="${nom}"><h2>${nom} (DRI ${n})</h2></a>`;
+        // `<meta charset>` : sans lui Chrome décode la page fabriquée en windows-1252 et « résultats » devient illisible.
+        const HTML_DRI = `<!doctype html><html><head><meta charset="utf-8"></head><body><div><span>240 résultats</span></div><form><input type="checkbox" name="onlyAvailable" value="Y" checked><input type="checkbox" name="isFoil" value="Y"></form>
+${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '002', 'data-src', 'webp')}<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003"><img src="https://static.cardmarket.com/img/noimage.png" alt="Ccc"><h2>Ccc (DRI 003)</h2></a></body></html>`;
+        const OK_DRI = { status: 200, entetes: 'ratelimit-remaining: 100', corps: { success: true, recus: 2, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0, idExpansion: 6096, idExpansions: [6096], couverture: { produits: 244, avecNumero: 240, appris: 243, pourcent: 98 } } };
+        const J = await charger(navigateur, {}, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI });
+        const lotJ = J.appels.filter(x => x.chemin === '/api/apprendre-lot');
+        verifier('10. 3 vignettes, 2 lues (dont le webp en data-src), 1 écartée : l\'envoi porte les 2 lues', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051]]);
+        const e = (J.store.rm_journal || [])[0] || {};
+        verifier('11. le journal : vignettes, lues, écartées (avec leur lien), lecture non standard dite', [e.vignettes, e.lues, e.ecartees, e.detailEcartees?.[0]?.href, e.lecturesAutres], [3, 2, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
+        verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles],
+            [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1]);
+        verifier('13. le panneau : écartée en rouge, total contre export, filtre nommé, bouton du journal',
+            [/1 écartée\(s\)/.test(J.panneau), new RegExp(`Cardmarket annonce 240 · l'export en compte ${PRODUITS_EXPORT['6096']}`).test(J.panneau), /onlyAvailable=Y/.test(J.panneau), /📥 1/.test(J.panneau)], [true, true, true, true]);
+        // 14. Un refus du serveur s'écrit au journal avec son statut, et la page reste en file.
+        const K = await charger(navigateur, {}, [{ status: 400, corps: { success: false, error: 'Identifiant utilisateur manquant' } }], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier('14. refus 400 : au journal (statut, message), page gardée en file', [K.store.rm_journal?.[0]?.envoi?.status, K.store.rm_journal?.[0]?.envoi?.erreur, K.store.rm_file.length], [400, 'Identifiant utilisateur manquant', 1]);
     } finally { await navigateur.close(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

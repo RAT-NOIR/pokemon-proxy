@@ -97,6 +97,8 @@ async function principal() {
         // AUCUNE de ses 177 lignes ne porte de slugSet (§6). Le nom vient de `catalogue_produits` :
         // « Arcanine [Extreme Speed | Fire Blow] » aux n° H02 et H19 — la série H est celle d'Aquapolis.
         // ⚠️ La ligne n'aura donc pas de slugSet : elle se désigne par son `exp`, pas par un slug inventé.
+        // ➕ 2026-09-25 : l'apprentissage du 24/09 a donné « Aquapolis » à ses 190 produits ; la ligne écrite porte ce slugSet
+        // (posé à la main, `slugSetPose`) et le set a été renommé AQ → Aquapolis (renommer-set.js, feu vert du testeur).
         1537: { nom: 'Aquapolis', pourquoi: 'aucune ligne Cardmarket ne porte de slugSet ; les n° de la série H désignent Aquapolis' },
         // Cardmarket insère « Flame » : « Explosive-Flame-Walker » contre « Explosive Walker ».
         3219: { nom: 'Explosive Walker', pourquoi: 'Cardmarket insère « Flame » dans le nom du set' },

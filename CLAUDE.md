@@ -550,6 +550,33 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 64. UNE PASSE À LA MAIN SANS JOURNAL NE SE DIAGNOSTIQUE PAS, ET UNE DATE PEUT ÊTRE CELLE D'UN AUTRE CANAL — 2026-09-25 (soir)
+
+> 🔴 **« J'ai parcouru toutes les pages, certains sets n'ont pas progressé » : 63 cibles faites sur 1 670, et rien, nulle part, ne
+> disait ce que chaque page avait porté.** Le serveur n'écrit que sa console Render ; la 1.7 ne gardait par page que l'heure et le
+> nombre de cartes LUES — et jetait sans un mot une vignette dont l'image ne répondait pas à son motif. Un compteur qui ne compte
+> que ce qui a réussi ne peut pas dire ce qui a échoué (§21 : le dénominateur imprimé, appliqué à un client). La 1.8 journalise
+> chaque page chargée (vignettes, lues, écartées, total annoncé par Cardmarket, filtres cochés, réponse du serveur) et l'exporte.
+
+**Ce que la base disait quand même, et qui ne tranche pas :** parmi les produits jamais appris des 184 expansions, **60 % n'ont
+aucune offre** au guide des prix (30/08), contre **10 %** parmi les appris — la signature d'un filtre « produits disponibles » ;
+mais la passe a appris sur XY-P trois produits sans offre au guide. Et sur DRI, ASC, POR, les cibles restantes sont les numéros
+de FIN de galerie (DRI 242/244, ASC 218–288) : dernières pages non atteintes, non envoyées, ou tronquées. Trois causes, une
+seule mesure capable de les séparer : la page elle-même — d'où le journal, avant toute correction de l'apprentissage.
+**LES DATES :** TCGdex date Black Bolt / White Flare du 17/07/2025, Bulbapedia du 18/07 — et la page officielle dit pourquoi :
+le 17 est la sortie sur **Pokémon TCG Live**, le 18 en boutique. Deux sources honnêtes, deux canaux ; la divergence se tranche
+PAR SET (`DIVERGENCES_TRANCHEES`), jamais par une règle générale. Un début de période au mois seul (« November 2016 ») ne
+fabrique pas un « 1er novembre » : le site affiche un jour complet, donc la période s'écrit à part (`periodeDistribution`).
+**AQUAPOLIS :** renommé (renommer-set.js : refuse si la cible existe, si le worker tient une référence, si une seule survit) ; la
+ligne de table porte le slugSet dans le même commit, sinon la collecte suivante refait naître « AQ ».
+🔴 **« SETS TOUCHÉS » : 336 annoncés pour un lot d'une soixantaine, et mon premier correctif en rendait 505.** Une carte changée
+faisait revalider TOUTES ses appartenances (une Énergie de base en a 57) quand seule une image, dans UN set, avait bougé. Corrigé
+par partie (nom ou impression → tous ses sets ; appartenance → le set entré ou sorti ; image → le set de l'entrée) — puis le repli
+prudent comparait la taille GLOBALE de l'ensemble : dès qu'une autre carte avait déjà touché le même set, la carte « n'attribuait
+rien » et revalidait tout. 🔑 **Un repli se décide sur ce que CETTE itération a trouvé, jamais sur un état que les itérations
+précédentes remplissent** ; et une fonction qui choisit ce qu'on envoie à un tiers (le quota Vercel du site) se rejoue sur un lot
+RÉEL avant d'être crue — le banc de six cas passait avec les deux versions fausses.
+
 ## 63. UNE ÉVOLUTION ENTRE DEUX DÉFINITIONS, DES ÉCHANTILLONS QUI NE JUGENT RIEN, ET LES DATES QUI RANGENT LE CATALOGUE — 2026-09-25
 
 > 🔴 **« 210 → 159 vertes » N'ÉTAIT PAS UNE PERTE : la mesure de 00:59 UTC avait précédé le commit qui sortait des vertes les

@@ -22,8 +22,17 @@
 //   une valeur SANS étiquette n'est prise que si la page est celle de ce tirage (suffixe (ATCG)/(SCTCG) pour le chinois
 //   simplifié, (TCTCG) traditionnel, (ITCG) indonésien, (TTCG) thaï ; pour le japonais, une page sans `enrelease`, qui n'est donc
 //   pas partagée avec un set occidental). Pour le japonais, TCGdex (data-asia, même code) est TÉMOIN.
-// • Jamais : une PÉRIODE de distribution (`period`, promos), plusieurs séries sans région (EXS), un jour incomplet, un set
-//   « Additionals » (catégorie Cardmarket qu'aucune source ne date), un set de réimpressions (aucune page).
+// • Jamais : plusieurs séries sans région (EXS), un jour incomplet, un set de réimpressions (aucune page).
+//
+// LES DÉCISIONS DU TESTEUR (2026-09-25, soir), écrites comme des règles et appliquées ici, jamais à la main en base :
+// • Une DIVERGENCE de sources se tranche PAR SET, avec la preuve qui départage (DIVERGENCES_TRANCHEES) — Black Bolt et White
+//   Flare : Bulbapedia (18/07/2025), confirmé par le communiqué de The Pokémon Company (en boutique le 18 juillet ; le 17 est la
+//   sortie sur Pokémon TCG Live, que TCGdex a retenue). Les autres divergences restent sans date.
+// • Un set « Additionals » prend la date de son set de BASE (même _id sans « -Additionals »), aucune source ne datant cette
+//   catégorie Cardmarket ; la source écrite le dit.
+// • Une PÉRIODE de distribution (`period`, promos) : la date de rangement est le DÉBUT de la période, quand il est un jour complet ;
+//   la période entière s'écrit dans `periodeDistribution` { texte, debut, fin, debutIso } pour que le site l'affiche. Un début au
+//   MOIS seul (« November 2016 ») ne fabrique pas de jour : pas de date, la période seule (`debutIso: "2016-11"`), et la raison.
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -76,6 +85,31 @@ function parties(valeur) {
 }
 const SUFFIXE_PAGE = { 'zh-hans': /\((ATCG|SCTCG)\)$/, 'zh-hant': /\(TCTCG\)$/, id: /\(ITCG\)$/, th: /\(TTCG\)$/ };
 
+// Divergences tranchées par le testeur, set par set, avec la preuve qui départage (2026-09-25).
+const PREUVE_BLK_WHT = 'pokemon.com et press.pokemon.com (recherche du 2026-09-25) : en boutique le 18 juillet 2025 ; le 17 juillet est la sortie sur Pokémon TCG Live';
+const DIVERGENCES_TRANCHEES = {
+    'Black-Bolt': { garder: 'bulbapedia', preuve: PREUVE_BLK_WHT },
+    'White-Flare': { garder: 'bulbapedia', preuve: PREUVE_BLK_WHT }
+};
+
+const MOIS_ISO = Object.fromEntries(MOIS.map((m, i) => [m.toLowerCase(), String(i + 1).padStart(2, '0')]));
+/** « November 18, 2022 » → « 2022-11-18 » ; « November 2016 » → « 2016-11 » ; « 2004 » → « 2004 » ; sinon null. La précision de la source, rien de plus. */
+function isoPartiel(texte) {
+    const t = String(texte || '').replace(/(\d)(st|nd|rd|th)\b/g, '$1').replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    let m = /^([A-Za-z]+) (\d{1,2}) (\d{4})$/.exec(t);
+    if (m && MOIS_ISO[m[1].toLowerCase()]) return `${m[3]}-${MOIS_ISO[m[1].toLowerCase()]}-${m[2].padStart(2, '0')}`;
+    m = /^([A-Za-z]+) (\d{4})$/.exec(t);
+    if (m && MOIS_ISO[m[1].toLowerCase()]) return `${m[2]}-${MOIS_ISO[m[1].toLowerCase()]}`;
+    return /^\d{4}$/.test(t) ? t : null;
+}
+/** Une valeur `period` → { texte, debut, fin, jourDebut, debutIso }. « From December 4, 2024 » : un début, pas de fin. */
+function periodeDe(brut) {
+    const texte = nettoyer(brut).replace(/'''?/g, '').replace(/\s+/g, ' ').trim();
+    const m = /^(?:from\s+)?(.+?)(?:\s*[-–—]\s*|\s+to\s+|\s+until\s+)(.+)$/i.exec(texte);
+    const debut = (m ? m[1] : texte.replace(/^from\s+/i, '')).trim(), fin = m ? m[2].trim() : null;
+    return { texte, debut, fin, jourDebut: jourComplet(debut), debutIso: isoPartiel(debut) };
+}
+
 /** La date d'un set depuis son infobox archivée, ou { raison }. */
 function dateBulbapedia(texte, set) {
     const ib = /\{\{\s*(\w*Infobox)([\s\S]*?)\n\}\}/.exec(texte);
@@ -86,27 +120,35 @@ function dateBulbapedia(texte, set) {
     const coupe = v => { let d = 0; for (let i = 0; i < v.length; i++) { const n2 = v.slice(i, i + 2); if (n2 === '{{' || n2 === '[[') { d++; i++; continue; } if (n2 === '}}' || n2 === ']]') { d--; i++; continue; } if (v[i] === '|' && d <= 0) return v.slice(0, i); } return v; };
     for (const m of ib[2].matchAll(/\|\s*([a-z]*(?:release|date|period)[a-z0-9]*)\s*=([^\n]*)/gi)) p[m[1].toLowerCase()] = coupe(m[2]).trim();
     const tir = set.tirage;
-    const candidats = [];
-    const cles = tir === 'jp' ? ['jarelease', 'release', 'date'] : tir === 'intl' ? ['enrelease', 'release', 'date'] : ['release', 'date'];
-    for (const k of cles) {
-        if (!p[k]) continue;
+    const code = String(set.code || ''), codeNu = code.replace(/C$/, '');
+    // La valeur d'une clé qui désigne CE tirage : l'étiquette du tirage ou du CODE du set (Cardmarket suffixe « C » les codes
+    // chinois que Bulbapedia écrit sans, §39) ; sinon une valeur unique sans étiquette, seulement si la page est celle du tirage.
+    const valeursDuTirage = k => {
         const ps = parties(p[k]);
-        // L'étiquette du tirage, ou celle du CODE du set (Cardmarket suffixe « C » les codes chinois que Bulbapedia écrit sans, §39).
-        const code = String(set.code || ''), codeNu = code.replace(/C$/, '');
         const etiq = ps.filter(x => x.etiquette === tir || (tir === 'idth' && ['id', 'th'].includes(x.etiquette)) || x.etiquette === `code:${code}` || x.etiquette === `code:${codeNu}`);
-        if (etiq.length) { for (const x of etiq) candidats.push({ jour: jourComplet(x.texte), de: `${k}:${x.etiquette}`, brut: x.texte }); continue; }
-        if (ps.length !== 1 || ps[0].etiquette) continue;   // plusieurs valeurs sans l'étiquette du tirage : rien ne désigne la nôtre
+        if (etiq.length) return etiq.map(x => ({ de: `${k}:${x.etiquette}`, brut: x.texte }));
+        if (ps.length !== 1 || ps[0].etiquette) return [];   // plusieurs valeurs sans l'étiquette du tirage : rien ne désigne la nôtre
         const sienne = k === 'jarelease' || k === 'enrelease'
             || (tir === 'jp' && !p.enrelease && !/\((ATCG|SCTCG|TCTCG|ITCG|TTCG)\)$/.test(set.bulba.titre || ''))
             || (tir === 'intl' && !p.jarelease && /\(TCG\)$/.test(set.bulba.titre || ''))
             || (SUFFIXE_PAGE[tir] && SUFFIXE_PAGE[tir].test(set.bulba.titre || ''));
-        if (sienne) candidats.push({ jour: jourComplet(ps[0].texte), de: k, brut: ps[0].texte });
-    }
+        return sienne ? [{ de: k, brut: ps[0].texte }] : [];
+    };
+    const candidats = [];
+    const cles = tir === 'jp' ? ['jarelease', 'release', 'date'] : tir === 'intl' ? ['enrelease', 'release', 'date'] : ['release', 'date'];
+    for (const k of cles) if (p[k]) for (const v of valeursDuTirage(k)) candidats.push({ ...v, jour: jourComplet(v.brut) });
     const jours = [...new Set(candidats.map(c => c.jour).filter(Boolean))];
     if (jours.length === 1) return { jour: jours[0], de: candidats.find(c => c.jour === jours[0]).de, brut: candidats.find(c => c.jour === jours[0]).brut };
     if (jours.length > 1) return { raison: `plusieurs jours pour ce tirage : ${jours.join(' / ')}` };
     if (candidats.length) return { raison: `pas un jour complet : « ${String(candidats[0].brut).slice(0, 80)} »` };
-    if (p.period) return { raison: `période de distribution, pas une date : « ${p.period.slice(0, 60)} »` };
+    if (p.period) {
+        // Décision du testeur (2026-09-25) : une période se range à son DÉBUT ; la période entière s'écrit pour l'affichage.
+        const v = valeursDuTirage('period');
+        if (v.length !== 1) return { raison: `période de distribution qui ne désigne pas ce tirage : « ${p.period.slice(0, 60)} »` };
+        const periode = { ...periodeDe(v[0].brut), de: v[0].de };
+        return periode.jourDebut ? { periode, raison: null }
+            : { periode, raison: `période « ${periode.texte.slice(0, 60)} » : son début (« ${periode.debut} ») n'est pas un jour complet — la période seule est écrite` };
+    }
     if (Object.keys(p).length) return { raison: `aucune valeur de ce tirage (${tir}) : ${Object.entries(p).map(([k, v]) => `${k}=« ${v.slice(0, 50)} »`).join(' ; ')}` };
     return { raison: 'aucun paramètre de date dans l\'infobox' };
 }
@@ -155,7 +197,7 @@ async function principal() {
     console.log(`TCGdex (clone) : ${tcgIntl.length} sets internationaux (${tcgIntl.filter(t => t.releaseDate).length} datés, ${tcgIntl.filter(t => t.cardmarket).length} avec idExpansion Cardmarket) · ${tcgAsie.length} sets asiatiques (${tcgAsie.filter(t => t.releaseDate).length} datés)`);
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_BRUT'] });
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
-    const sets = await lireMongo(cx.db.collection('sets'), { nomAffichage: { $type: 'string' } }, { nom: 'sets publiés', projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, dateSortieJa: 1, dateSortieEn: 1, reimpressions: 1, idExpansion: 1, bulba: 1 } });
+    const sets = await lireMongo(cx.db.collection('sets'), { nomAffichage: { $type: 'string' } }, { nom: 'sets publiés', projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, dateSortieJa: 1, dateSortieEn: 1, dateSortieJaSource: 1, dateSortieEnSource: 1, periodeDistribution: 1, reimpressions: 1, idExpansion: 1, bulba: 1 } });
     const champDe = s => s.region === 'jp' ? 'dateSortieJa' : s.region === 'intl' ? 'dateSortieEn' : null;
     // « N/A » n'est pas une date (le site l'écrit, DEMANDE du 2026-09-25 : Black Bolt, White Flare) : c'est l'absence écrite en
     // toutes lettres, traitée comme l'absence. Toute AUTRE valeur présente, même illisible, n'est jamais réécrite.
@@ -169,7 +211,9 @@ async function principal() {
         const d = { id: s._id, code: s.code, tirage: s.tirage, nom: s.nomAffichage, champ: champDe(s) };
         decisions.push(d);
         if (s.reimpressions) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page, aucune source ne le date`; continue; }
-        if (/-Additionals$/.test(s._id)) { d.raison = 'Additionals : catégorie Cardmarket qu\'aucune source ne date'; continue; }
+        // Aucune source ne date un Additionals : il prendra la date de son set de base, en seconde passe (la base peut être datée
+        // par ce même passage — Black Bolt pour xBLK).
+        if (/-Additionals$/.test(s._id)) { d.base = s._id.replace(/-Additionals$/, ''); continue; }
         let b = null;
         if (s.bulba?.cleR2) b = dateBulbapedia(await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2), s);
         else if (PAGES.has(s._id)) {
@@ -178,26 +222,52 @@ async function principal() {
             b = dateBulbapedia(pg.content, { ...s, bulba: { ...(s.bulba || {}), titre: pg.page } });
             if (b.jour) b.de = `${b.de} (page « ${pg.page} » rév. ${pg.revid})`;
         }
+        if (b?.periode) d.periode = b.periode;
+        // Le début d'une période, quand il est un jour complet, est la date de rangement (décision du testeur, 2026-09-25).
+        const debutPeriode = b?.periode?.jourDebut
+            ? { jour: b.periode.jourDebut, source: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} ») — décision du testeur 2026-09-25 : une période se range à son début` } : null;
         if (s.tirage === 'intl') {
             const p = pairerIntl(tcgIntl, s);
             const t = p.id && !p.uneCle ? tcgIntl.find(x => x.id === p.id) : null;
             const jourT = t ? depuisIso(t.releaseDate) : null;
-            if (jourT && b?.jour && b.jour !== jourT) { d.raison = `TCGdex ${t.id} ${jourT} contre Bulbapedia ${b.jour} : sources divergentes`; continue; }
+            if (jourT && b?.jour && b.jour !== jourT) {
+                const tr = DIVERGENCES_TRANCHEES[s._id];
+                if (tr?.garder === 'bulbapedia') { Object.assign(d, { jour: b.jour, source: `bulbapedia:${b.de} — divergence avec TCGdex ${t.id} (${jourT}) tranchée par le testeur le 2026-09-25`, temoin: tr.preuve }); continue; }
+                d.raison = `TCGdex ${t.id} ${jourT} contre Bulbapedia ${b.jour} : sources divergentes`; continue;
+            }
             if (jourT) { Object.assign(d, { jour: jourT, source: `tcgdex:${t.id}:${p.par}`, temoin: b?.jour ? `bulbapedia ${b.de} ${b.jour} ✅` : `bulbapedia : ${b?.raison ?? 'page non archivée'}` }); continue; }
+            if (debutPeriode) {
+                // TCGdex, désigné par une seule clé, n'est pas une source ici : il est TÉMOIN. S'il dit un autre jour, rien n'est écrit.
+                const t1 = p.uneCle ? tcgIntl.find(x => x.id === p.id) : null, j1 = t1 ? depuisIso(t1.releaseDate) : null;
+                if (j1 && j1 !== debutPeriode.jour) { d.raison = `début de période ${debutPeriode.jour} contre TCGdex ${t1.id} (une clé) ${j1} : sources divergentes`; continue; }
+                Object.assign(d, debutPeriode, { temoin: j1 ? `tcgdex ${t1.id} (une clé) ${j1} ✅` : `tcgdex : ${p.raison}` });
+                continue;
+            }
             d.raison = `TCGdex : ${p.raison}${t && !jourT ? ' (set sans releaseDate)' : ''} · Bulbapedia : ${b ? (b.jour ? `${b.jour} (${b.de}) — seule, non écrite pour un set intl` : b.raison) : 'page non archivée'}`;
             if (p.uneCle) d.uneCle = p.id;
             continue;
         }
         if (!b) { d.raison = s.bulba?.titre ? `page « ${s.bulba.titre} » non archivée` : 'aucune page Bulbapedia (voie sans page)'; continue; }
-        if (!b.jour) { d.raison = `Bulbapedia : ${b.raison}`; continue; }
+        const choix = b.jour ? { jour: b.jour, source: `bulbapedia:${b.de}` } : debutPeriode;
+        if (!choix) { d.raison = `Bulbapedia : ${b.raison}`; continue; }
         if (s.tirage === 'jp') {
             const t = tcgAsie.find(x => x.id.toLowerCase() === String(s.code || '').toLowerCase());
             const jourT = t ? depuisIso(t.releaseDate) : null;
-            if (jourT && jourT !== b.jour) { d.raison = `Bulbapedia ${b.jour} (${b.de}) contre TCGdex ${t.id} ${jourT} : sources divergentes`; continue; }
-            Object.assign(d, { jour: b.jour, source: `bulbapedia:${b.de}`, temoin: jourT ? `tcgdex ${t.id} ${jourT} ✅` : 'tcgdex : aucun set de ce code' });
+            if (jourT && jourT !== choix.jour) { d.raison = `Bulbapedia ${choix.jour} (${choix.source}) contre TCGdex ${t.id} ${jourT} : sources divergentes`; continue; }
+            Object.assign(d, choix, { temoin: jourT ? `tcgdex ${t.id} ${jourT} ✅` : 'tcgdex : aucun set de ce code' });
             continue;
         }
-        Object.assign(d, { jour: b.jour, source: `bulbapedia:${b.de}`, temoin: '—' });
+        Object.assign(d, choix, { temoin: '—' });
+    }
+    // Seconde passe : un Additionals prend la date de son set de base (décision du testeur, 2026-09-25) — celle que ce passage
+    // vient de décider, sinon celle déjà en base. Une base sans date laisse l'Additionals sans date, avec la raison.
+    for (const d of decisions.filter(x => x.base)) {
+        const sBase = sets.find(x => x._id === d.base), dBase = decisions.find(x => x.id === d.base && x.jour);
+        if (!sBase) { d.raison = `Additionals : set de base « ${d.base} » absent des sets publiés`; continue; }
+        const cb = champDe(sBase), enBase = ABSENT.includes(sBase[cb] ?? null) ? null : sBase[cb];
+        const jourBase = dBase?.jour ?? (enBase && jourComplet(enBase)) ?? null;
+        if (!jourBase) { d.raison = `Additionals : son set de base « ${d.base} » n'a pas de date${enBase ? ` lisible (« ${enBase} »)` : ''}`; continue; }
+        Object.assign(d, { jour: jourBase, source: `base:${d.base} (${dBase ? dBase.source : sBase[`${cb}Source`] ?? 'date déjà en base'}) — décision du testeur 2026-09-25 : un Additionals prend la date de son set de base`, temoin: '—' });
     }
     const poses = decisions.filter(d => d.jour), refus = decisions.filter(d => !d.jour);
     const parT = {}; for (const d of decisions) { const g = parT[d.tirage] || (parT[d.tirage] = { n: 0, date: 0 }); g.n++; if (d.jour) g.date++; }
@@ -206,6 +276,13 @@ async function principal() {
     console.log('RESTENT SANS DATE, par raison :'); for (const [k, n] of Object.entries(raisons).sort((a, b) => b[1] - a[1])) console.log(`   ${String(n).padStart(4)} · ${k}`);
     const temoins = { accord: poses.filter(d => /✅/.test(d.temoin)).length, sans: poses.filter(d => !/✅/.test(d.temoin)).length };
     console.log(`témoin d'accord ${temoins.accord} · sans témoin ${temoins.sans} · divergences refusées ${refus.filter(d => /divergentes/.test(d.raison)).length}`);
+    // Les décisions du testeur, imprimées une à une : c'est leur première application.
+    const periodes = decisions.filter(d => d.periode);
+    console.log(`\nDÉCISIONS DU TESTEUR (2026-09-25) :`);
+    for (const id of Object.keys(DIVERGENCES_TRANCHEES)) { const d = decisions.find(x => x.id === id); console.log(`   divergence tranchée ${id} : ${d ? (d.jour ? `${d.champ} = ${d.jour} · ${d.source}` : d.raison) : 'déjà daté ou non publié'}`); }
+    for (const d of decisions.filter(x => x.base)) console.log(`   Additionals ${String(d.code).padEnd(6)} ${d.id} → ${d.jour ? `${d.champ} = ${d.jour} (base ${d.base})` : d.raison}`);
+    console.log(`   PÉRIODES : ${periodes.length} lues · ${periodes.filter(d => d.jour).length} datées par leur début · ${periodes.filter(d => !d.jour).length} sans date (début au mois, ou témoin contraire)`);
+    for (const d of periodes) console.log(`   période ${String(d.code).padEnd(8)} « ${d.periode.texte} » → début ${d.periode.debut} (${d.periode.debutIso ?? '—'})${d.periode.fin ? ` · fin ${d.periode.fin}` : ''} · ${d.jour ? `${d.champ} = ${d.jour}` : d.raison}`);
     fs.writeFileSync(path.join(__dirname, 'collecte-cartes', 'rapports', 'dates-sets.json'), JSON.stringify(decisions, null, 1));
     let g = 20260925; const hasard = () => (g = (g * 1103515245 + 12345) % 2147483648) / 2147483648;
     console.log('\n20 TIRÉS AU SORT parmi les datés (graine 20260925) :');
@@ -216,11 +293,21 @@ async function principal() {
         const r = await cx.db.collection('sets').updateOne({ _id: d.id, [d.champ]: { $in: ABSENT } }, { $set: { [d.champ]: d.jour, [`${d.champ}Source`]: d.source, dateSortiePoseeLe: new Date() } });
         n += r.modifiedCount;
     }
+    // La période entière, pour l'affichage (le site la montre, la date ne sert qu'à ranger) — additive : jamais réécrite.
+    let np = 0;
+    for (const d of periodes) {
+        const { texte, debut, fin, debutIso, de } = d.periode;
+        const r = await cx.db.collection('sets').updateOne({ _id: d.id, periodeDistribution: { $exists: false } },
+            { $set: { periodeDistribution: { texte, debut, fin, debutIso, source: `bulbapedia:${de}`, le: new Date() } } });
+        np += r.modifiedCount;
+    }
     const relus = await cx.db.collection('sets').countDocuments({ dateSortiePoseeLe: { $exists: true } });
-    console.log(`\n   ✅ ${n} dates posées (attendu ${poses.length}) · relu : ${relus} sets portent dateSortiePoseeLe`);
+    const relusP = await cx.db.collection('sets').countDocuments({ periodeDistribution: { $exists: true } });
+    console.log(`\n   ✅ ${n} dates posées (attendu ${poses.length}) · ${np} périodes écrites (attendu ${periodes.length}) · relu : ${relus} sets portent dateSortiePoseeLe, ${relusP} portent periodeDistribution`);
     if (n !== poses.length) console.log(`   🔴 ${poses.length - n} non posées : le champ s'est rempli entre la mesure et l'écriture — à ouvrir`);
+    if (np !== periodes.length) console.log(`   🔴 ${periodes.length - np} périodes non écrites : le champ existait déjà — à ouvrir`);
     await fermer();
 }
 
-module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, depuisIso };
+module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, depuisIso, periodeDe, isoPartiel };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });

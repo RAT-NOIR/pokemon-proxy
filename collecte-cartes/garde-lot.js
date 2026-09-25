@@ -146,7 +146,25 @@ function setsTouches({ avant, apres }) {
         const a = cA.get(k), b = cB.get(k);
         const pa = a ? PROJECTION_CARTES(a) : null, pb = b ? PROJECTION_CARTES(b) : null;
         if (signature(pa) === signature(pb)) continue;
-        for (const s of [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])]) if (s) touches.add(s);
+        // 🔴 2026-09-25 (soir) : un lot de 60 sets en a revalidé 336 — toute carte changée faisait revalider TOUTES ses
+        // appartenances, et le worker, en posant une image dans UN set d'une promo réimprimée, en touchait vingt. Le set touché
+        // est celui de la PARTIE qui a changé : un nom ou une impression (qui ne porte qu'un NOM d'expansion) → tous les sets de
+        // la carte ; une appartenance → le set entré ou sorti ; une image → le set de l'entrée ajoutée, retirée ou remplacée.
+        const tous = [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])];
+        if (!pa || !pb || pa.nomEn !== pb.nomEn || signature(pa.impressions) !== signature(pb.impressions)) { for (const s of tous) if (s) touches.add(s); }
+        else {
+            // Ce que CETTE carte attribue — pas la taille de l'ensemble, qu'une autre carte a pu remplir avant elle (le premier
+            // correctif comparait la taille globale : 505 sets revalidés pour des images posées dans 3).
+            const attribues = new Set();
+            const [sa, sb] = [new Set(pa.sets), new Set(pb.sets)];
+            for (const s of sa) if (!sb.has(s)) attribues.add(s);
+            for (const s of sb) if (!sa.has(s)) attribues.add(s);
+            const [ia, ib] = [new Set(pa.images.map(signature)), new Set(pb.images.map(signature))];
+            for (const m of pa.images) if (!ib.has(signature(m)) && m[0]) attribues.add(m[0]);
+            for (const m of pb.images) if (!ia.has(signature(m)) && m[0]) attribues.add(m[0]);
+            // Une différence qu'aucune partie n'attribue (une entrée d'image en double retirée) : repli prudent sur tous les sets.
+            for (const s of attribues.size ? attribues : tous) if (s) touches.add(s);
+        }
         if (!pa || !pb || pa.nomEn !== pb.nomEn || signature(pa.sets) !== signature(pb.sets)) { especes = true; catalogue = true; }
     }
     const [lA, lB] = [parId(avant.cartesProduits), parId(apres.cartesProduits)];

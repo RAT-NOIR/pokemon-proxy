@@ -70,8 +70,9 @@
   "code": "AQ",
   "exp": 1537,
   "prod": 177,
-  "nom": "null",
-  "slugSet": null,
+  "nom": "Aquapolis",
+  "slugSet": "Aquapolis",
+  "slugSetPose": "2026-09-25 à la main, feu vert du testeur (renommage AQ → Aquapolis) : les 190 produits portent ce slugSet depuis l'apprentissage du 24/09 ; sans lui, l'identité du set (slugSet || code) redevenait « AQ »",
   "region": "occidental",
   "bulba": {
    "titre": null,

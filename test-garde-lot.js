@@ -93,8 +93,22 @@ const d0b = copie(etat0); d0b.cartesProduits[3].slugSet = 'Set-B';
 verifier('un numeroFiche posé sur une ligne : le set de la ligne, pas le catalogue', setsTouches({ avant: d0b, apres: lFiche }), { sets: ['Set-B'], catalogue: false, especes: false });
 const lImg = copie(etat0); lImg.cartes[0].images[0].cleR2 = 'a/2-bis';
 verifier('une image remplacée (même compte) : le set de l\'image', setsTouches({ avant: docs0, apres: lImg }), { sets: ['Set-A'], catalogue: false, especes: false });
+// 🔴 2026-09-25 (soir) : un lot de 60 sets en a revalidé 336. Une carte qui changeait faisait revalider TOUTES ses appartenances ;
+// or une image posée par le worker dans UN set ne change que la page de ce set — et une carte de promo réimprimée appartient à
+// 20 sets. Le quota du site (Vercel) paie chaque revalidation : le set touché est celui de la PARTIE qui a changé.
 const lCarte = copie(etat0); lCarte.cartes[0].sets.push('Set-C');
-verifier('une carte qui entre dans un set : ses sets, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-A', 'Set-C'], catalogue: true, especes: true });
+verifier('une carte qui entre dans un set : CE set seulement, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-C'], catalogue: true, especes: true });
+const lImgB = copie(etat0); lImgB.cartes[1].images.push({ set: 'Set-B', numero: '99', cleR2: 'b/99' });
+verifier('une image ajoutée dans UN set d\'une carte à deux sets : ce set seulement, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: lImgB }), { sets: ['Set-B'], catalogue: false, especes: false });
+// Le repli prudent ne doit pas se déclencher parce qu'une AUTRE carte a déjà touché le même set (mesuré sur le lot du soir :
+// 505 sets pour des images posées dans 3).
+const lImg2 = copie(etat0); lImg2.cartes[0].images.push({ set: 'Set-B', numero: '7', cleR2: 'b/7' }); lImg2.cartes[1].images.push({ set: 'Set-B', numero: '99', cleR2: 'b/99' });
+const d0c = copie(etat0); d0c.cartes[0].sets.push('Set-D'); lImg2.cartes[0].sets.push('Set-D');
+verifier('deux cartes, une image chacune dans le MÊME set : ce set seulement', setsTouches({ avant: d0c, apres: lImg2 }), { sets: ['Set-B'], catalogue: false, especes: false });
+const lNom = copie(etat0); lNom.cartes[1].nomEn = 'Pikachu ex';
+verifier('un nom de carte changé : tous ses sets, le catalogue et les espèces', setsTouches({ avant: docs0, apres: lNom }), { sets: ['Set-A', 'Set-B'], catalogue: true, especes: true });
+const lIll = copie(etat0); lIll.cartes[1].impressions[0].illustrateur = 'Atsuko Nishida';
+verifier('une impression changée (illustrateur) : tous les sets de la carte (prudent : l\'impression ne porte qu\'un NOM d\'expansion)', setsTouches({ avant: docs0, apres: lIll }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: false });
 const lLigne = copie(etat0); lLigne.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 1, slugSet: 'Set-C' });
 verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches({ avant: docs0, apres: lLigne }), { sets: ['Set-C'], catalogue: true, especes: false });
 
