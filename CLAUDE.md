@@ -550,6 +550,35 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 65. LE RANG DES SOURCES, LA CLÉ OÙ LE NOM N'ENTRE PAS, ET UNE ALERTE QUI DATAIT LA MAUVAISE PANNE — 2026-09-26
+
+> 🔑 **RÈGLE DU TESTEUR (dates) : la sortie EN BOUTIQUE dans la région du set ; OFFICIELLE > BULBAPEDIA > TCGdex.** Une divergence ne
+> bloque plus : le rang décide, le témoin contraire est ÉCRIT (`temoin`). Mesuré avant d'y croire : pokemon-card.com donne raison à
+> Bulbapedia contre TCGdex sur Champion Road (3 mai, pas 30 mai 2018) et Thunderclap Spark (6 juillet, pas 3 août) ; pokemon.com dit
+> 26/09/2025 en boutique pour Mega Evolution, 25 sur TCG Live — la date de TCGdex. Le rang ne dispense pas de l'IDENTITÉ : TCGdex
+> désigné par une seule clé reste témoin. `(General release)` / `(Commercial release)` se lisent ; une avant-première seule, jamais.
+
+🔴 **« LES 107 QUI NE MANQUENT QUE D'UNE DATE » ÉTAIENT 12.** La table n'imprime que la PREMIÈRE cause d'une ligne : 107 « sans date »
+= 12 où c'est tout, 8 où il manque aussi le logo, 87 où des produits bloquent. Un compte par cause affichée n'est pas un compte des
+lignes qui n'ont QUE cette cause — le rapport doit donner les deux.
+
+**BATTLE ACADEMY : LA SOURCE DE L'APPARTENANCE N'ÉTAIT PAS LA PAGE DE CARTE.** 0 impression « Battle Academy » sur 15 550 cartes : la
+jointure du collecteur ne pouvait rien. La page du PRODUIT liste chaque deck par tirage d'origine — et, pour deux decks sur trois,
+l'ORDRE IMPRIMÉ (1…60), qui est exactement le numéro Cardmarket (C01). 🔑 **La clé (deck, position) laisse le NOM hors de la clé :
+il redevient témoin, et il a parlé au premier passage** — Cardmarket porte DEUX produits « C42 » (Hop et Potion), la position dit
+Potion : Hop est refusé. La clé (deck, nom), gardée pour les decks sans ordre, n'aurait rien vu. 300 fiches (98/100/102), 60 tirés
+au sort regardés ; aucun visuel (les pages de carte ne portent pas le tirage Battle Academy : 3 unités « rien à collecter »).
+⚠️ **Et la « forme de Setlist à ajouter au parseur » pour Gem Pack 3 était un faux diagnostic** : 40 pages échantillonnées sur les
+Gem Packs 3 à 6, 0 existe. Liens rouges, comme Gem Pack 2 (§43) — aucune lecture ne les fera exister.
+**AC3 (Tag Team Collection)** : 18 produits « D » ne sont ni dans Set A ni dans Set B (0/18 noms concordants au même numéro) — une
+troisième numérotation absente de la page. Déclarée `prefixesHorsPage` avec sa preuve, retirée du dénominateur ET imprimée, comme
+les codes d'énergie ; le seuil de 0,95 ne bouge pas (§23).
+
+🔴 **L'ALERTE « FILE VIDE » DATAIT LA PREMIÈRE PANNE.** `depuis` n'était posé que par `$setOnInsert` : résolue à 19:03, réouverte après
+21:31, l'alerte affichait « depuis 05:02 » — seize heures de trop, sur l'instrument écrit pour que personne n'ait à constater le
+sommeil du worker. 🔑 **Une date qui décrit un ÉTAT se pose à chaque transition vers cet état, jamais une seule fois à la création
+du document** (`ecrireAlerte`, banc 14/14). Et le « sommeil » n'en était pas un : le worker a pris les 3 unités insérées en deux minutes.
+
 ## 64. UNE PASSE À LA MAIN SANS JOURNAL NE SE DIAGNOSTIQUE PAS, ET UNE DATE PEUT ÊTRE CELLE D'UN AUTRE CANAL — 2026-09-25 (soir)
 
 > 🔴 **« J'ai parcouru toutes les pages, certains sets n'ont pas progressé » : 63 cibles faites sur 1 670, et rien, nulle part, ne

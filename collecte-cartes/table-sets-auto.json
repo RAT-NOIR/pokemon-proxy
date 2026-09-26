@@ -29151,6 +29151,9 @@
    "prefixesParSection": {
     "Set A": "a",
     "Set B": "b"
+   },
+   "prefixesHorsPage": {
+    "D": "2026-09-26 : 18 produits D001…D140 (tous GX : Celebi & Venusaur GX, Vileplume GX…) ; 0/18 portent le nom de l'entrée Set A ou Set B de même numéro (A1 Venusaur & Snivy-GX, B1 Reshiram & Charizard-GX) ; la page « Tag Team Collection (ATCG) » ne liste que Set A (308) et Set B (301) — une troisième numérotation absente de la source, laissée sans fiche"
    }
   },
   "attendu": 266,
@@ -29164,22 +29167,29 @@
    "note": "2026-09-25 : deux moitiés renumérotées depuis 1 sous le même jeton « Tag Team Collection » ; Cardmarket préfixe a/b, mesuré numéro+nom (a 85/308, b 79/301, second choix 0) — préfixe par SECTION"
   },
   "verif": {
-   "le": "2026-09-25",
+   "le": "2026-09-26",
    "pageResolue": "Tag Team Collection (ATCG)",
    "entrees": 609,
    "entreesSansPage": 0,
    "codesEnergie": 0,
+   "horsPage": 18,
    "couverture": {
-    "produitsNumerotes": 182,
+    "produitsNumerotes": 164,
     "couverts": 164,
     "numerosSetlist": 609,
-    "taux": 0.901
+    "taux": 1
    },
    "ratio": 2.29,
-   "etat": "À REGARDER",
-   "raisons": [
-    "couverture des numéros Cardmarket 164/182 sous 0,95"
-   ]
+   "etat": "OK",
+   "raisons": []
+  },
+  "verifie": {
+   "le": "2026-09-26",
+   "page": "Tag Team Collection (ATCG)",
+   "entrees": {
+    "Tag Team Collection": 609
+   },
+   "note": "vérification automatique : 609 entrées pour 266 produits, échantillon « undefined » (id)"
   }
  },
  {

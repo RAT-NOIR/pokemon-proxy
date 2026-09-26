@@ -461,4 +461,4 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, temoinDuNom, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero };
+module.exports = { joindre, temoinDuNom, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero, nomJointDe, clesNom, cleAttaque };

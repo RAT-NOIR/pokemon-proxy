@@ -21,7 +21,9 @@ const { lireMongo } = require('./collecte-cartes/lecture-sure');
 
 // `reimpression+origine+numero` (poser-reimpressions.js : Southeast Asia Promos, Professor Program, Trick or Trade) porte sa
 // famille dans `route` (le code du set) ; la route du set la reprend.
-const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+origine+numero': 'pps', 'reimpression+origine+numero': null };
+// Les decks Battle Academy (poser-listes-de-deck.js, 2026-09-26) : la carte d'origine lue dans la liste de deck de la page du produit.
+const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+origine+numero': 'pps', 'reimpression+origine+numero': null, 'deck+section+position': null, 'deck+section+nom': null };
+const PAR_LISTE_DE_DECK = new Set(['deck+section+position', 'deck+section+nom']);
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -32,8 +34,8 @@ const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+orig
     const parSet = new Map();
     for (const l of lignes) {
         if (!l.slugSet) continue;
-        const e = parSet.get(l.slugSet) || parSet.set(l.slugSet, { slug: l.slugSet, exps: new Set(), cartes: new Set(), route: ROUTES[l.preuve] || String(l.route || 'reimpression').toLowerCase(), lignes: 0 }).get(l.slugSet);
-        e.exps.add(expCat.get(l.idProduct) ?? l.idExpansion); e.cartes.add(l.carteId); e.lignes++;
+        const e = parSet.get(l.slugSet) || parSet.set(l.slugSet, { slug: l.slugSet, exps: new Set(), cartes: new Set(), route: ROUTES[l.preuve] || String(l.route || 'reimpression').toLowerCase(), lignes: 0, parDeck: false }).get(l.slugSet);
+        e.exps.add(expCat.get(l.idProduct) ?? l.idExpansion); e.cartes.add(l.carteId); e.lignes++; if (PAR_LISTE_DE_DECK.has(l.preuve)) e.parDeck = true;
     }
     const existants = new Set((await cx.db.collection('sets').find({ _id: { $in: [...parSet.keys()] } }, { projection: { _id: 1 } }).toArray()).map(s => s._id));
     const codeDe = new Map();
@@ -50,7 +52,7 @@ const ROUTES = { 'wcd+origine+numero': 'wcd', 'wcd+nom+numero': 'wcd', 'pps+orig
     for (const e of aCreer) {
         const r = await cx.db.collection('sets').updateOne({ _id: e.slug }, { $setOnInsert: {
             code: codeDe.get(e.slug) ?? e.slug, idExpansion: [...e.exps], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: 'intl', totalImprime: null,
-            reimpressions: e.route, bulba: { titre: null, expansion: null, motifTitres: `réimpressions (${e.route}) : produits joints à leur carte d'origine par le slug Cardmarket — fiche sans numéro, sans visuel` },
+            reimpressions: e.route, bulba: { titre: null, expansion: null, motifTitres: `réimpressions (${e.route}) : produits joints à leur carte d'origine ${e.parDeck ? 'par la liste de deck de la page du produit' : 'par le slug Cardmarket'} — fiche sans numéro, sans visuel` },
             collecteLe: new Date(), version: 1 } }, { upsert: true });
         crees += r.upsertedCount;
     }

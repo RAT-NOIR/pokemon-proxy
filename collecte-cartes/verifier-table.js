@@ -217,7 +217,14 @@ async function verifierAuto() {
                 const idsCatalogue = (await prod.db.collection('catalogue_produits').find({ idExpansion: l.exp }, { projection: { idProduct: 1 } }).toArray()).map(p => p.idProduct);
                 const numerosBruts = (await prod.db.collection('numeros_cartes').find({ idProduct: { $in: idsCatalogue } }, { projection: { numero: 1 } }).toArray()).filter(p => p.numero != null && String(p.numero).trim() !== '');
                 v.codesEnergie = numerosBruts.filter(p => CODE_ENERGIE.test(String(p.numero).trim())).length;
-                const numsProduits = numerosBruts.filter(p => !CODE_ENERGIE.test(String(p.numero).trim())).map(p => cleNumero(p.numero));
+                // 🔑 UNE NUMÉROTATION QUE LA PAGE NE PORTE PAS (2026-09-26, `bulba.prefixesHorsPage`, une PREUVE écrite par préfixe).
+                // Tag Team Collection : Cardmarket numérote Set A « a », Set B « b » — et 18 produits « D » (D001 Celebi & Venusaur GX…),
+                // dont AUCUN ne porte le nom de l'entrée A ou B de même numéro : une troisième liste, absente de la page. Comme les codes
+                // d'énergie, ils sortent du dénominateur ET s'impriment ; ils restent sans fiche (reste), jamais joints à autre chose.
+                const horsPage = Object.keys(l.bulba.prefixesHorsPage || {});
+                const estHorsPage = n => horsPage.some(x => new RegExp(`^${x}\\d`, 'i').test(String(n).trim()));
+                v.horsPage = horsPage.length ? numerosBruts.filter(p => estHorsPage(p.numero)).length : undefined;
+                const numsProduits = numerosBruts.filter(p => !CODE_ENERGIE.test(String(p.numero).trim()) && !estHorsPage(p.numero)).map(p => cleNumero(p.numero));
                 const couverts = numsProduits.filter(n => numsSetlist.has(n)).length;
                 v.couverture = { produitsNumerotes: numsProduits.length, couverts, numerosSetlist: numsSetlist.size, taux: numsProduits.length ? Number((couverts / numsProduits.length).toFixed(3)) : null };
                 // La garde des liens rouges vaut pour TOUTE ligne, pas seulement `numerosDepuisSetlist` :
@@ -227,7 +234,7 @@ async function verifierAuto() {
                     raisons.push(`les ${l._entrees.length} entrées de Setlist sont des LIENS ROUGES (aucune page chez Bulbapedia) : rien à collecter`);
                 if (l.bulba.numerosDepuisSetlist) {
                     if (!numsProduits.length) raisons.push('aucun numéro Cardmarket : la clé setlist+numéro ne peut rien joindre');
-                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}${v.codesEnergie ? ` (${v.codesEnergie} code(s) d'énergie hors dénominateur)` : ''}`);
+                    else if (couverts / numsProduits.length < 0.95) raisons.push(`couverture des numéros Cardmarket ${couverts}/${numsProduits.length} sous 0,95${v.entreesSansPage ? ` (${v.entreesSansPage} entrée(s) écartée(s) : page manquante)` : ''}${v.codesEnergie ? ` (${v.codesEnergie} code(s) d'énergie hors dénominateur)` : ''}${v.horsPage ? ` (${v.horsPage} numéro(s) hors page hors dénominateur)` : ''}`);
                 }
             }
             const cs = (echantillons.get(l.code) || []).map(carteDe).filter(Boolean);

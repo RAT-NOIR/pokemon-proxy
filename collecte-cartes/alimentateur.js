@@ -115,14 +115,22 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
     const apres = await F.countDocuments({ etat: { $in: ['attente', 'en-cours'] } });
     const raisons = {}; for (const e of R.ecartes) { const k = e.raison.replace(/\(.*\)/, '(…)'); raisons[k] = (raisons[k] || 0) + 1; }
     const E = db.collection('collecte_images_etat');
-    if (!apres) {
-        await E.updateOne({ _id: 'alerte/file-vide' }, { $set: { active: true, constateLe: new Date(), setsSansVisuelComplet: manques.length, cartesSansVisuel: manques.reduce((s, m) => s + m.sans, 0), raisons }, $setOnInsert: { depuis: new Date() } }, { upsert: true });
-        journal.error(`🔴 FILE VIDE — l'alimentateur n'a rien pu enfiler : ${manques.length} sets, ${manques.reduce((s, m) => s + m.sans, 0)} cartes sans visuel, toutes écartées avec leur raison : ${JSON.stringify(raisons)}`);
-    } else {
-        await E.updateOne({ _id: 'alerte/file-vide', active: true }, { $set: { active: false, resolueLe: new Date() } });
-        if (inseres || repris) journal.log(`🍽️ alimentateur : ${inseres} unité(s) insérée(s), ${repris} reprise(s) sur cause neuve — file : ${apres} (seuil ${seuil}) · écartés : ${JSON.stringify(raisons)}`);
-    }
+    await ecrireAlerte(E, { vide: !apres, setsSans: manques.length, cartesSans: manques.reduce((s, m) => s + m.sans, 0), raisons });
+    if (!apres) journal.error(`🔴 FILE VIDE — l'alimentateur n'a rien pu enfiler : ${manques.length} sets, ${manques.reduce((s, m) => s + m.sans, 0)} cartes sans visuel, toutes écartées avec leur raison : ${JSON.stringify(raisons)}`);
+    else if (inseres || repris) journal.log(`🍽️ alimentateur : ${inseres} unité(s) insérée(s), ${repris} reprise(s) sur cause neuve — file : ${apres} (seuil ${seuil}) · écartés : ${JSON.stringify(raisons)}`);
     return { enAttente: apres, inseres, repris, ecartes: R.ecartes.length, raisons };
 }
 
-module.exports = { choisirUnites, manquesParSet, alimenter };
+/**
+ * L'ALERTE « file vide » : ouverte tant que la file reste vide après le passage de l'alimentateur, fermée dès qu'elle se remplit.
+ * 🔴 `depuis` DATE L'ÉPISODE EN COURS (2026-09-26). Posé par `$setOnInsert` seul, il gardait la PREMIÈRE panne (25/09 05:02) après
+ * sa résolution (19:03) : le second épisode, file vide vers 21:26, s'affichait « depuis 05:02 » — une durée fausse de 16 heures.
+ * Une alerte absente ou fermée qui s'ouvre repart donc de maintenant ; ouverte, elle garde son début.
+ */
+async function ecrireAlerte(E, { vide, setsSans = null, cartesSans = null, raisons = null, maintenant = new Date() }) {
+    if (!vide) { await E.updateOne({ _id: 'alerte/file-vide', active: true }, { $set: { active: false, resolueLe: maintenant } }); return; }
+    await E.updateOne({ _id: 'alerte/file-vide', active: { $ne: true } }, { $set: { depuis: maintenant } });
+    await E.updateOne({ _id: 'alerte/file-vide' }, { $set: { active: true, constateLe: maintenant, setsSansVisuelComplet: setsSans, cartesSansVisuel: cartesSans, raisons }, $setOnInsert: { depuis: maintenant } }, { upsert: true });
+}
+
+module.exports = { choisirUnites, manquesParSet, alimenter, ecrireAlerte };

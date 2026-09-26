@@ -54,5 +54,25 @@ const unitesDejaReprises = new Map([...unites, ['tcgdex/en1', { _id: 'tcgdex/en1
 verifier('une cause ne sert qu\'UNE fois : pas de boucle', choisirUnites({ ...base, manques, unites: unitesDejaReprises, texteFini: slug => slug === 'Set-EN' ? K : null }).reprendre.length, 0);
 verifier('le plafond `max` est tenu', choisirUnites({ ...base, manques, unites: new Map(), max: 1 }).inserer.length, 1);
 
-console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
-process.exit(ko ? 1 : 0);
+// ── L'ALERTE « file vide » (2026-09-26) : `depuis` datait la PREMIÈRE panne (25/09 05:02) et survivait à sa résolution (19:03) ;
+// le second épisode (file vide vers 21:26) s'affichait « depuis 05:02 ». Une collection minimale, les seuls opérateurs utilisés.
+const { ecrireAlerte } = require('./collecte-cartes/alimentateur');
+const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u, o = {}) {
+    let d = docs.get(f._id);
+    const passe = x => !x || f.active === undefined || (f.active === true ? x.active === true : (f.active && f.active.$ne === true ? x.active !== true : x.active === f.active));
+    if (d && !passe(d)) return { matchedCount: 0 };
+    if (!d) { if (!o.upsert || f.active !== undefined) return { matchedCount: 0 }; d = { _id: f._id, ...(u.$setOnInsert || {}) }; docs.set(f._id, d); }
+    Object.assign(d, u.$set || {}); return { matchedCount: 1 };
+} }; };
+(async () => {
+    const E = faux(), t = h => new Date(`2026-09-25T${h}:00Z`);
+    await ecrireAlerte(E, { vide: true, setsSans: 5, cartesSans: 50, raisons: {}, maintenant: t('05:02') });
+    await ecrireAlerte(E, { vide: true, setsSans: 5, cartesSans: 50, raisons: {}, maintenant: t('06:00') });
+    verifier('un épisode qui dure garde son début', E.docs.get('alerte/file-vide').depuis.toISOString(), t('05:02').toISOString());
+    await ecrireAlerte(E, { vide: false, maintenant: t('19:03') });
+    verifier('la file se remplit : alerte fermée, résolution datée', [E.docs.get('alerte/file-vide').active, E.docs.get('alerte/file-vide').resolueLe.toISOString()], [false, t('19:03').toISOString()]);
+    await ecrireAlerte(E, { vide: true, setsSans: 3, cartesSans: 30, raisons: {}, maintenant: t('21:30') });
+    verifier('un NOUVEL épisode repart de son propre début', [E.docs.get('alerte/file-vide').active, E.docs.get('alerte/file-vide').depuis.toISOString()], [true, t('21:30').toISOString()]);
+    console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
+    process.exit(ko ? 1 : 0);
+})();

@@ -24,10 +24,17 @@
 //   pas partagée avec un set occidental). Pour le japonais, TCGdex (data-asia, même code) est TÉMOIN.
 // • Jamais : plusieurs séries sans région (EXS), un jour incomplet, un set de réimpressions (aucune page).
 //
-// LES DÉCISIONS DU TESTEUR (2026-09-25, soir), écrites comme des règles et appliquées ici, jamais à la main en base :
-// • Une DIVERGENCE de sources se tranche PAR SET, avec la preuve qui départage (DIVERGENCES_TRANCHEES) — Black Bolt et White
-//   Flare : Bulbapedia (18/07/2025), confirmé par le communiqué de The Pokémon Company (en boutique le 18 juillet ; le 17 est la
-//   sortie sur Pokémon TCG Live, que TCGdex a retenue). Les autres divergences restent sans date.
+// LES DÉCISIONS DU TESTEUR (2026-09-25, soir, et 2026-09-26), écrites comme des règles et appliquées ici, jamais à la main en base :
+// • 🔑 LA DATE RETENUE EST LA SORTIE EN BOUTIQUE DANS LA RÉGION DU SET, et les sources ont un RANG : OFFICIELLE > BULBAPEDIA >
+//   TCGdex (règle du 2026-09-26, pour toute divergence présente et future). La source du rang le plus haut qui date le set décide ;
+//   les autres sont TÉMOINS, et un témoin contraire est ÉCRIT (`temoin`), jamais tu. TCGdex retient souvent la date de Pokémon TCG
+//   Live (Black Bolt, White Flare, Mega Evolution : le 17/07 et le 25/09 au lieu du 18/07 et du 26/09 en boutique) ; et sur
+//   Champion Road / Thunderclap Spark, pokemon-card.com donne raison à Bulbapedia (3 mai, 6 juillet 2018) contre TCGdex.
+//   ⚠️ Le rang ne dispense pas de l'IDENTITÉ : TCGdex n'est une source que si deux clés désignent son set (`pairerIntl`) ; désigné
+//   par une seule (le code japonais, un nom), il reste témoin. La source officielle est une LIGNE relevée à la main, page lue, citée.
+// • Une mention de sortie dans la valeur Bulbapedia se LIT : « (General release) », « (Commercial release) » sont la sortie en
+//   boutique ; « (Early release) », une avant-première, une sortie en salle ne le sont pas. Une valeur à plusieurs VERSIONS
+//   (« Standard versions », « Pikachu version ») ne se lit que pour un set dont la version est nommée ici (VERSION_DU_SET).
 // • Un set « Additionals » prend la date de son set de BASE (même _id sans « -Additionals »), aucune source ne datant cette
 //   catégorie Cardmarket ; la source écrite le dit.
 // • Une PÉRIODE de distribution (`period`, promos) : la date de rangement est le DÉBUT de la période, quand il est un jour complet ;
@@ -67,16 +74,32 @@ const ETIQUETTES = [
 ];
 // Une annotation <small>…</small>, un commentaire HTML (même non fermé : « November 22, 2024<!-- ») ne sont pas la date.
 const nettoyer = v => String(v || '').replace(/<!--[\s\S]*?(-->|$)/g, '').replace(/<small>[\s\S]*?<\/small>/gi, '').trim();
+// La NATURE d'une date, dite par sa parenthèse : la sortie en boutique, ou ce qui la précède (avant-première, salle de cinéma).
+// « (Standard versions) », « (Pikachu version) » : la version d'un produit à plusieurs sorties.
+const NATURES = [[/^(general|commercial|retail) release$/i, 'boutique'], [/(early release|pre-?release|theatrical release)/i, 'avant']];
+function natureDe(annotation) {
+    const a = String(annotation || '').trim();
+    const n = NATURES.find(([re]) => re.test(a));
+    if (n) return n[1];
+    const v = /^(.+?) versions?$/i.exec(a);
+    return v ? `version:${v[1].trim().toLowerCase()}` : null;
+}
 function parties(valeur) {
-    return nettoyer(valeur).split(/<br\s*\/?>/i).map(p => p.trim()).filter(Boolean).map(p => {
+    // Une parenthèse dans <small> (« August 3, 2007 <small>(Commercial release)</small> ») dit la nature de la date : elle est
+    // gardée comme parenthèse avant que `nettoyer` retire le reste des <small>.
+    const brut = String(valeur || '').replace(/<small>\s*(\([^)]*\))\s*<\/small>/gi, ' $1');
+    return nettoyer(brut).split(/<br\s*\/?>/i).map(p => p.trim()).filter(Boolean).map(p => {
         // « January 16, 2026 (CSVM1) » : une parenthèse qui porte un CODE de set est une étiquette (comparée au code de la ligne).
         const pc = /^([\s\S]+?)\s*\(([A-Za-z0-9.+-]{2,12})\)$/.exec(p);
         if (pc && /\d/.test(pc[2]) && /[A-Z]/.test(pc[2])) return { etiquette: `code:${pc[2]}`, texte: pc[1] };
-        // « March 8, 2024 (Japan) » : une parenthèse qui nomme une RÉGION connue est une étiquette ; toute autre (« (Early
-        // release) », « (Part 1) ») reste dans le texte, qui n'est alors plus un jour complet — rien n'est deviné.
+        // « March 8, 2024 (Japan) » : une parenthèse qui nomme une RÉGION connue est une étiquette ; une NATURE (« (General
+        // release) », « (Standard versions) ») est lue à part ; toute autre (« (Part 1) ») reste dans le texte, qui n'est alors plus
+        // un jour complet — rien n'est deviné.
         const pr = /^([\s\S]+?)\s*\(([A-Za-z .]+)\)$/.exec(p);
         const er = pr && ETIQUETTES.find(([re]) => re.test(pr[2].trim()));
         if (er) return { etiquette: er[1], texte: pr[1] };
+        const na = pr && natureDe(pr[2]);
+        if (na) return { etiquette: null, texte: pr[1], nature: na, annotation: pr[2].trim() };
         const m = /^(?:'''?)?([A-Za-z .]+?)(?:'''?)?\s*:\s*(?:'''?)?\s*([\s\S]+)$/.exec(p);
         if (!m) return { etiquette: null, texte: p };
         const e = ETIQUETTES.find(([re]) => re.test(m[1].trim()));
@@ -85,12 +108,41 @@ function parties(valeur) {
 }
 const SUFFIXE_PAGE = { 'zh-hans': /\((ATCG|SCTCG)\)$/, 'zh-hant': /\(TCTCG\)$/, id: /\(ITCG\)$/, th: /\(TTCG\)$/ };
 
-// Divergences tranchées par le testeur, set par set, avec la preuve qui départage (2026-09-25).
-const PREUVE_BLK_WHT = 'pokemon.com et press.pokemon.com (recherche du 2026-09-25) : en boutique le 18 juillet 2025 ; le 17 juillet est la sortie sur Pokémon TCG Live';
-const DIVERGENCES_TRANCHEES = {
-    'Black-Bolt': { garder: 'bulbapedia', preuve: PREUVE_BLK_WHT },
-    'White-Flare': { garder: 'bulbapedia', preuve: PREUVE_BLK_WHT }
+// LES SOURCES OFFICIELLES, une ligne par set : la page LUE, la phrase citée, le jour qu'elle donne. Relevées à la main (une requête
+// par page, espacées), jamais déduites. Elles passent avant toute autre source (règle du testeur, 2026-09-26).
+const BLK_WHT = { jour: 'July 18, 2025', url: 'https://press.pokemon.com/en/releases/Pokemon-Reveals-New-Split-Expansion-Launching-Soon-for-the-Pokemon-Tra', citation: 'en boutique le 18 juillet 2025 ; le 17 juillet est la sortie sur Pokémon TCG Live', lu: '2026-09-25' };
+const OFFICIELLES = {
+    'Black-Bolt': BLK_WHT,
+    'White-Flare': BLK_WHT,
+    'Champion-Road': { jour: 'May 3, 2018', url: 'https://www.pokemon-card.com/products/sm/sm6b.html', citation: '発売日 2018年5月3日（祝・木）', lu: '2026-09-26' },
+    'Thunderclap-Spark': { jour: 'July 6, 2018', url: 'https://www.pokemon-card.com/products/sm/sm7a.html', citation: '発売日 2018年7月6日（金）', lu: '2026-09-26' },
+    'Scarlet-Violet-ex-Special-Set': { jour: 'May 19, 2023', url: 'https://www.pokemon-card.com/products/sv/svp1.html', citation: '発売日 2023年5月19日（金）', lu: '2026-09-26' },
+    // Une page pour les trois « スターターセットex » (ニャオハ＆ルカリオex, ホゲータ＆デンリュウex, クワッス＆ミミッキュex), un seul jour.
+    'ex-Starter-Set-Sprigatito-Lucario-ex': { jour: 'January 20, 2023', url: 'https://www.pokemon-card.com/ex/sva/index.html', citation: '発売日 2023年1月20日（金）', lu: '2026-09-26' },
+    'ex-Starter-Set-Quaxly-Mimikyu-ex': { jour: 'January 20, 2023', url: 'https://www.pokemon-card.com/ex/sva/index.html', citation: '発売日 2023年1月20日（金）', lu: '2026-09-26' },
+    'Play-Pokemon-Prize-Pack-Series-Three': { jour: 'August 14, 2023', url: 'https://www.pokemon.com/us/pokemon-news/visit-your-local-game-store-to-receive-play-pokemon-prize-packs', citation: 'the Prize Pack Series Three will be available starting August 14, 2023', lu: '2026-09-26' }
 };
+// La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
+// ou le set est le produit de base (« Standard »).
+const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
+
+const RANGS = ['officielle', 'bulbapedia', 'tcgdex'];
+/**
+ * LA HIÉRARCHIE DES SOURCES (testeur, 2026-09-26) : la source du rang le plus haut qui donne un jour décide ; chaque autre est un
+ * témoin, d'accord (✅) ou contraire (⚠️, écarté par son rang) — et un témoin qui n'est pas une source (TCGdex désigné par une seule
+ * clé) s'imprime de même, sans jamais décider.
+ * @param {{officielle?: {jour, source}|null, bulbapedia?: {jour, source}|null, tcgdex?: {jour, source}|null}} sources
+ * @param {Array<{nom: string, jour: string}>} temoins
+ * @returns {{jour, source, rang, temoin: string, divergence: boolean}|null}
+ */
+function arbitrer(sources, temoins = []) {
+    const presents = RANGS.filter(r => sources[r]?.jour);
+    if (!presents.length) return null;
+    const g = sources[presents[0]];
+    const avis = [...presents.slice(1).map(r => ({ nom: r, jour: sources[r].jour })), ...temoins];
+    const temoin = avis.map(a => `${a.nom} ${a.jour} ${a.jour === g.jour ? '✅' : '⚠️ contraire, écarté par le rang'}`).join(' · ') || '—';
+    return { jour: g.jour, source: g.source, rang: presents[0], temoin, divergence: avis.some(a => a.jour !== g.jour) };
+}
 
 const MOIS_ISO = Object.fromEntries(MOIS.map((m, i) => [m.toLowerCase(), String(i + 1).padStart(2, '0')]));
 /** « November 18, 2022 » → « 2022-11-18 » ; « November 2016 » → « 2016-11 » ; « 2004 » → « 2004 » ; sinon null. La précision de la source, rien de plus. */
@@ -127,12 +179,22 @@ function dateBulbapedia(texte, set) {
         const ps = parties(p[k]);
         const etiq = ps.filter(x => x.etiquette === tir || (tir === 'idth' && ['id', 'th'].includes(x.etiquette)) || x.etiquette === `code:${code}` || x.etiquette === `code:${codeNu}`);
         if (etiq.length) return etiq.map(x => ({ de: `${k}:${x.etiquette}`, brut: x.texte }));
-        if (ps.length !== 1 || ps[0].etiquette) return [];   // plusieurs valeurs sans l'étiquette du tirage : rien ne désigne la nôtre
+        // Plusieurs valeurs sans étiquette de région : leur NATURE peut désigner la sortie en boutique (une seule « boutique », toutes
+        // les autres AVANT elle), ou la VERSION que ce set est (VERSION_DU_SET). Sinon rien ne désigne la nôtre.
+        let retenues = ps;
+        if (ps.length > 1 && ps.every(x => !x.etiquette)) {
+            const boutique = ps.filter(x => x.nature === 'boutique');
+            const version = VERSION_DU_SET[set._id] ? ps.filter(x => x.nature === `version:${VERSION_DU_SET[set._id]}`) : [];
+            if (boutique.length === 1 && ps.every(x => x === boutique[0] || x.nature === 'avant')) retenues = boutique;
+            else if (version.length === 1) retenues = version;
+        }
+        if (retenues.length !== 1 || retenues[0].etiquette) return [];   // plusieurs valeurs sans l'étiquette du tirage : rien ne désigne la nôtre
+        if (retenues[0].nature === 'avant') return [];                   // une avant-première seule n'est pas la sortie en boutique
         const sienne = k === 'jarelease' || k === 'enrelease'
             || (tir === 'jp' && !p.enrelease && !/\((ATCG|SCTCG|TCTCG|ITCG|TTCG)\)$/.test(set.bulba.titre || ''))
             || (tir === 'intl' && !p.jarelease && /\(TCG\)$/.test(set.bulba.titre || ''))
             || (SUFFIXE_PAGE[tir] && SUFFIXE_PAGE[tir].test(set.bulba.titre || ''));
-        return sienne ? [{ de: k, brut: ps[0].texte }] : [];
+        return sienne ? [{ de: retenues[0].annotation ? `${k} « ${retenues[0].annotation} »` : k, brut: retenues[0].texte }] : [];
     };
     const candidats = [];
     const cles = tir === 'jp' ? ['jarelease', 'release', 'date'] : tir === 'intl' ? ['enrelease', 'release', 'date'] : ['release', 'date'];
@@ -208,56 +270,47 @@ async function principal() {
     console.log(`DÉNOMINATEUR : ${sets.length} sets publiés · sans date (règle du site) ${sans.length} · date présente mais illisible par Date.parse ${illisibles.length} (non touchées) : ${illisibles.map(s => `${s.code} « ${s[champDe(s)]} »`).join(' · ')}`);
     const decisions = [];
     for (const s of sans) {
-        const d = { id: s._id, code: s.code, tirage: s.tirage, nom: s.nomAffichage, champ: champDe(s) };
+        // Un set de réimpressions (Prize Packs, WCD…) n'a pas de tirage propre écrit ; il est occidental par sa région.
+        const tirage = s.tirage ?? (s.reimpressions && s.region === 'intl' ? 'intl' : null);
+        const d = { id: s._id, code: s.code, tirage, nom: s.nomAffichage, champ: champDe(s) };
         decisions.push(d);
-        if (s.reimpressions) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page, aucune source ne le date`; continue; }
         // Aucune source ne date un Additionals : il prendra la date de son set de base, en seconde passe (la base peut être datée
         // par ce même passage — Black Bolt pour xBLK).
         if (/-Additionals$/.test(s._id)) { d.base = s._id.replace(/-Additionals$/, ''); continue; }
+        const off = OFFICIELLES[s._id];
+        const o = off ? { jour: off.jour, source: `officielle:${off.url} (« ${off.citation} », lu le ${off.lu})` } : null;
+        // Un set de réimpressions n'a pas de page de SET archivée ; la page du PRODUIT (« Play! Pokémon Prize Pack Series One (TCG) »,
+        // « Trick or Trade 2023 (TCG) ») est lue par la sonde et fournie par --pages, avec sa révision.
+        if (s.reimpressions && !PAGES.has(s._id) && !o) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
         let b = null;
-        if (s.bulba?.cleR2) b = dateBulbapedia(await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2), s);
+        if (s.bulba?.cleR2) b = dateBulbapedia(await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2), { ...s, tirage });
         else if (PAGES.has(s._id)) {
             // Un set « sans page » : la page de son expansion (déclarée par ses cartes), lue par la sonde et gardée avec sa révision.
             const pg = PAGES.get(s._id);
-            b = dateBulbapedia(pg.content, { ...s, bulba: { ...(s.bulba || {}), titre: pg.page } });
+            b = dateBulbapedia(pg.content, { ...s, tirage, bulba: { ...(s.bulba || {}), titre: pg.page } });
             if (b.jour) b.de = `${b.de} (page « ${pg.page} » rév. ${pg.revid})`;
+            if (b.periode) b.periode.de = `${b.periode.de} (page « ${pg.page} » rév. ${pg.revid})`;
         }
         if (b?.periode) d.periode = b.periode;
         // Le début d'une période, quand il est un jour complet, est la date de rangement (décision du testeur, 2026-09-25).
-        const debutPeriode = b?.periode?.jourDebut
-            ? { jour: b.periode.jourDebut, source: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} ») — décision du testeur 2026-09-25 : une période se range à son début` } : null;
-        if (s.tirage === 'intl') {
+        const bj = b?.jour ? { jour: b.jour, source: `bulbapedia:${b.de}` }
+            : b?.periode?.jourDebut ? { jour: b.periode.jourDebut, source: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} ») — décision du testeur 2026-09-25 : une période se range à son début` } : null;
+        // TCGdex : une SOURCE seulement désigné par deux clés (occidental) ; par une seule (le code japonais, un nom), un témoin.
+        let t = null; const temoins = [];
+        if (tirage === 'intl') {
             const p = pairerIntl(tcgIntl, s);
-            const t = p.id && !p.uneCle ? tcgIntl.find(x => x.id === p.id) : null;
-            const jourT = t ? depuisIso(t.releaseDate) : null;
-            if (jourT && b?.jour && b.jour !== jourT) {
-                const tr = DIVERGENCES_TRANCHEES[s._id];
-                if (tr?.garder === 'bulbapedia') { Object.assign(d, { jour: b.jour, source: `bulbapedia:${b.de} — divergence avec TCGdex ${t.id} (${jourT}) tranchée par le testeur le 2026-09-25`, temoin: tr.preuve }); continue; }
-                d.raison = `TCGdex ${t.id} ${jourT} contre Bulbapedia ${b.jour} : sources divergentes`; continue;
-            }
-            if (jourT) { Object.assign(d, { jour: jourT, source: `tcgdex:${t.id}:${p.par}`, temoin: b?.jour ? `bulbapedia ${b.de} ${b.jour} ✅` : `bulbapedia : ${b?.raison ?? 'page non archivée'}` }); continue; }
-            if (debutPeriode) {
-                // TCGdex, désigné par une seule clé, n'est pas une source ici : il est TÉMOIN. S'il dit un autre jour, rien n'est écrit.
-                const t1 = p.uneCle ? tcgIntl.find(x => x.id === p.id) : null, j1 = t1 ? depuisIso(t1.releaseDate) : null;
-                if (j1 && j1 !== debutPeriode.jour) { d.raison = `début de période ${debutPeriode.jour} contre TCGdex ${t1.id} (une clé) ${j1} : sources divergentes`; continue; }
-                Object.assign(d, debutPeriode, { temoin: j1 ? `tcgdex ${t1.id} (une clé) ${j1} ✅` : `tcgdex : ${p.raison}` });
-                continue;
-            }
-            d.raison = `TCGdex : ${p.raison}${t && !jourT ? ' (set sans releaseDate)' : ''} · Bulbapedia : ${b ? (b.jour ? `${b.jour} (${b.de}) — seule, non écrite pour un set intl` : b.raison) : 'page non archivée'}`;
-            if (p.uneCle) d.uneCle = p.id;
-            continue;
+            const ts = p.id ? tcgIntl.find(x => x.id === p.id) : null, jt = ts ? depuisIso(ts.releaseDate) : null;
+            if (jt && !p.uneCle) t = { jour: jt, source: `tcgdex:${ts.id}:${p.par}` };
+            else if (jt) temoins.push({ nom: `tcgdex ${ts.id} (une clé, témoin)`, jour: jt });
+            d.tcgdex = p.raison ?? (jt ? null : `${ts?.id ?? '?'} sans releaseDate`);
+        } else if (tirage === 'jp') {
+            const ta = tcgAsie.find(x => x.id.toLowerCase() === String(s.code || '').toLowerCase()), jt = ta ? depuisIso(ta.releaseDate) : null;
+            if (jt) temoins.push({ nom: `tcgdex ${ta.id} (code seul, témoin)`, jour: jt });
         }
-        if (!b) { d.raison = s.bulba?.titre ? `page « ${s.bulba.titre} » non archivée` : 'aucune page Bulbapedia (voie sans page)'; continue; }
-        const choix = b.jour ? { jour: b.jour, source: `bulbapedia:${b.de}` } : debutPeriode;
-        if (!choix) { d.raison = `Bulbapedia : ${b.raison}`; continue; }
-        if (s.tirage === 'jp') {
-            const t = tcgAsie.find(x => x.id.toLowerCase() === String(s.code || '').toLowerCase());
-            const jourT = t ? depuisIso(t.releaseDate) : null;
-            if (jourT && jourT !== choix.jour) { d.raison = `Bulbapedia ${choix.jour} (${choix.source}) contre TCGdex ${t.id} ${jourT} : sources divergentes`; continue; }
-            Object.assign(d, choix, { temoin: jourT ? `tcgdex ${t.id} ${jourT} ✅` : 'tcgdex : aucun set de ce code' });
-            continue;
-        }
-        Object.assign(d, choix, { temoin: '—' });
+        const r = arbitrer({ officielle: o, bulbapedia: bj, tcgdex: t }, temoins);
+        if (r) { Object.assign(d, { jour: r.jour, source: r.source, rang: r.rang, temoin: r.temoin }, r.divergence ? { divergence: true } : {}); continue; }
+        d.raison = [`Bulbapedia : ${b ? b.raison : s.bulba?.titre ? `page « ${s.bulba.titre} » non archivée` : 'aucune page (voie sans page)'}`,
+            tirage === 'intl' ? `TCGdex : ${d.tcgdex ?? 'sans date'}` : null, 'aucune source officielle relevée'].filter(Boolean).join(' · ');
     }
     // Seconde passe : un Additionals prend la date de son set de base (décision du testeur, 2026-09-25) — celle que ce passage
     // vient de décider, sinon celle déjà en base. Une base sans date laisse l'Additionals sans date, avec la raison.
@@ -275,11 +328,12 @@ async function principal() {
     const raisons = {}; for (const d of refus) { const k = d.raison.replace(/«[^»]*»/g, '«…»').replace(/\b\d{4}\b|\d+/g, '#').slice(0, 90); raisons[k] = (raisons[k] || 0) + 1; }
     console.log('RESTENT SANS DATE, par raison :'); for (const [k, n] of Object.entries(raisons).sort((a, b) => b[1] - a[1])) console.log(`   ${String(n).padStart(4)} · ${k}`);
     const temoins = { accord: poses.filter(d => /✅/.test(d.temoin)).length, sans: poses.filter(d => !/✅/.test(d.temoin)).length };
-    console.log(`témoin d'accord ${temoins.accord} · sans témoin ${temoins.sans} · divergences refusées ${refus.filter(d => /divergentes/.test(d.raison)).length}`);
+    console.log(`témoin d'accord ${temoins.accord} · sans témoin ${temoins.sans} · par rang ${RANGS.map(r => `${r} ${poses.filter(d => d.rang === r).length}`).join(' · ')}`);
     // Les décisions du testeur, imprimées une à une : c'est leur première application.
     const periodes = decisions.filter(d => d.periode);
-    console.log(`\nDÉCISIONS DU TESTEUR (2026-09-25) :`);
-    for (const id of Object.keys(DIVERGENCES_TRANCHEES)) { const d = decisions.find(x => x.id === id); console.log(`   divergence tranchée ${id} : ${d ? (d.jour ? `${d.champ} = ${d.jour} · ${d.source}` : d.raison) : 'déjà daté ou non publié'}`); }
+    console.log(`\nDÉCISIONS DU TESTEUR (2026-09-25 et 2026-09-26) :`);
+    for (const id of Object.keys(OFFICIELLES)) { const d = decisions.find(x => x.id === id); console.log(`   source officielle ${id} : ${d ? (d.jour ? `${d.champ} = ${d.jour} · témoins ${d.temoin}` : d.raison) : 'déjà daté ou non publié'}`); }
+    for (const d of poses.filter(x => x.divergence)) console.log(`   DIVERGENCE tranchée par le rang ${String(d.code).padEnd(7)} ${d.champ} = ${d.jour} (${d.rang}) · témoins ${d.temoin}`);
     for (const d of decisions.filter(x => x.base)) console.log(`   Additionals ${String(d.code).padEnd(6)} ${d.id} → ${d.jour ? `${d.champ} = ${d.jour} (base ${d.base})` : d.raison}`);
     console.log(`   PÉRIODES : ${periodes.length} lues · ${periodes.filter(d => d.jour).length} datées par leur début · ${periodes.filter(d => !d.jour).length} sans date (début au mois, ou témoin contraire)`);
     for (const d of periodes) console.log(`   période ${String(d.code).padEnd(8)} « ${d.periode.texte} » → début ${d.periode.debut} (${d.periode.debutIso ?? '—'})${d.periode.fin ? ` · fin ${d.periode.fin}` : ''} · ${d.jour ? `${d.champ} = ${d.jour}` : d.raison}`);
@@ -309,5 +363,5 @@ async function principal() {
     await fermer();
 }
 
-module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, depuisIso, periodeDe, isoPartiel };
+module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, depuisIso, periodeDe, isoPartiel, arbitrer, OFFICIELLES };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });

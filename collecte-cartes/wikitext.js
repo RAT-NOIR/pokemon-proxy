@@ -442,7 +442,9 @@ function sectionsSetlist(texte, { listesDeDeck = false } = {}) {
             const e = entreeDeSetlist(g.brut);
             // `section` (2026-09-25) : le titre de la section voyage avec l'entrée — deux moitiés renumérotées sous UN jeton (Tag
             // Team Collection, Set A / Set B) ne se distinguent que par elle (`prefixesParSection`, jointure.js).
-            if (e) courante.entrees.push({ ...e, section: courante.titre }); else courante.ignorees.push(g.brut);
+            // `rang` (2026-09-26) : la première colonne du gabarit, telle quelle (« 043/264 », « 01 01/07 », ou la POSITION « 1 »…« 60 »
+            // d'une liste d'ordre imprimé de Battle Academy) — lue par listes-de-deck.js seul ; seuls les titres sont écrits en base.
+            if (e) courante.entrees.push({ ...e, section: courante.titre, rang: g.positionnels[0] ?? null }); else courante.ignorees.push(g.brut);
         }
     }
     return sections;
