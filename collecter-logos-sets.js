@@ -51,26 +51,34 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
 
-    const tous = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1 } }).toArray();
+    const tous = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1, logoRefus: 1 } }).toArray();
     // 🔴 UN LOGO D'UNE AUTRE SOURCE N'EST PAS À CET OUTIL (2026-09-23). Il juge le paramètre `setlogo` et RETIRE le logo
     // de tout set qu'il refuse — donc il effaçait, en silence et avec un « ✍️ refus écrits » parfaitement normal, les
     // logos posés par collecter-logos-demande.js, précisément sur des sets dont il refuse le `setlogo`. Une ligne qu'un
     // outil ne sait pas refabriquer porte sa marque (`logo.source`) et cet outil ne la touche pas.
     const sets = tous.filter(s => !s.logo?.source || s.logo.source === 'bulbapedia:setlogo');
     if (tous.length > sets.length) console.log(`   (${tous.length - sets.length} sets portent un logo d'une autre source : ni jugés ni touchés ici)`);
-    const avecArchive = sets.filter(s => s.bulba?.cleR2);
-    console.log(`\n════ DÉNOMINATEUR : ${sets.length} sets · ${avecArchive.length} ont leur page archivée (${sets.length - avecArchive.length} sans : rien à lire) ════`);
+    // `--pages=<json>` (2026-09-26) : les pages lues HORS de l'archive R2 (sonde revisionsDe, avec leur révision) pour les sets de la
+    // voie « sans page » et les réimpressions — la même forme que poser-dates-sets.js --pages. Sans elles, 116 sets restaient
+    // « aucune page archivée : jamais interrogés » alors que leur page avait été LUE le matin même pour leur date.
+    const argPages = process.argv.find(a => a.startsWith('--pages='))?.slice(8);
+    const PAGES = new Map(argPages ? JSON.parse(require('fs').readFileSync(argPages, 'utf8')).filter(x => x.content).map(x => [x.id, x]) : []);
+    const avecArchive = sets.filter(s => s.bulba?.cleR2 || PAGES.has(s._id));
+    console.log(`\n════ DÉNOMINATEUR : ${sets.length} sets · ${avecArchive.length} ont leur page archivée ou lue (${sets.filter(s => !s.bulba?.cleR2 && PAGES.has(s._id)).length} par --pages ; ${sets.length - avecArchive.length} sans : rien à lire) ════`);
 
     const retenus = [], refuses = [];
-    for (const s of avecArchive) {
-        let txt; try { txt = await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2); } catch { refuses.push({ s, motif: 'page illisible sur R2' }); continue; }
+    for (const s0 of avecArchive) {
+        const pg = s0.bulba?.cleR2 ? null : PAGES.get(s0._id);
+        const s = pg ? { ...s0, bulba: { ...(s0.bulba || {}), titre: pg.page } } : s0;
+        const lue = pg ? ` (page « ${pg.page} » rév. ${pg.revid}, lue le 2026-09-26)` : '';
+        let txt; try { txt = pg ? pg.content : await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2); } catch { refuses.push({ s, motif: 'page illisible sur R2' }); continue; }
         const box = gabarits(txt).find(g => /infobox/i.test(g.nom));
         const logo = String(box?.params?.setlogo ?? box?.params?.logo ?? '').trim().replace(/-->\s*$/, '');
-        if (!logo) { refuses.push({ s, motif: 'aucun `setlogo` dans l\'infobox' }); continue; }
+        if (!logo) { refuses.push({ s, motif: `aucun \`setlogo\` dans l'infobox${lue}` }); continue; }
         const couple = refusDuCouple(logo);                           // lu à l'œil : passe avant la langue (§21 bis)
         if (couple) { refuses.push({ s, logo, motif: couple }); continue; }
         const d = deciderLangue(s, logo);
-        (d.ok ? retenus : refuses).push({ s, logo, ...d });
+        (d.ok ? retenus : refuses).push({ s, logo, ...d, ...(d.ok ? { preuve: `${d.preuve}${lue}` } : { motif: `${d.motif}${lue}` }) });
     }
     const parMotif = {};
     for (const r of refuses) parMotif[r.motif] = (parMotif[r.motif] || 0) + 1;
@@ -103,8 +111,18 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
     // une décision qu'on ne peut pas relire ne se rouvre jamais (§23).
     // ⚠️ ILS S'ÉCRIVENT EN PREMIER, parce qu'ils ne coûtent aucune requête : si le téléchargement
     // échoue ou si le verrou n'est jamais obtenu, la base porte quand même la cause de chaque refus.
-    let nRefus = 0;
+    let nRefus = 0, nAutres = 0;
+    const retraits = [];
     for (const r of refuses) {
+        // Un refus écrit par un AUTRE outil (collecter-logos-demande.js : un logo du couple lu à l'œil sur un fichier que le site
+        // a trouvé) n'est pas à cet outil — la même règle que `logo.source`. Le réécrire effaçait la seule trace de l'œil.
+        if (r.s.logoRefus?.instrument && r.s.logoRefus.instrument !== 'collecter-logos-sets.js') { nAutres++; continue; }
+        // 🔴 RETIRER UN LOGO POSÉ EST UNE ÉCRITURE QUI SUPPRIME : elle attend le feu vert du testeur (2026-09-26). La règle du
+        // tirage a refusé d'un coup les 7 logos « Indonesian Thai » de SV4s…SV10s, dont la ligne dit chinois traditionnel — le
+        // doute est sur la LIGNE autant que sur le logo. Listés, pas appliqués.
+        if (r.s.logo?.cleR2) { retraits.push(r); continue; }
+        // Le même refus, déjà écrit : ne rien réécrire (un document réécrit est un set revalidé chez le site, 2026-09-26).
+        if (r.s.logoRefus?.motif === r.motif && (r.s.logoRefus?.fichier ?? null) === (r.logo ?? null)) continue;
         await cx.db.collection('sets').updateOne({ _id: r.s._id }, {
             $set: { logoRefus: { motif: r.motif, fichier: r.logo ?? null, le: new Date(), instrument: 'collecter-logos-sets.js', source: 'bulbapedia:setlogo' } },
             $unset: { logo: 1 }                       // un refus RETIRE un logo devenu faux : sinon la base garde un visuel que la règle d'aujourd'hui rejette
@@ -114,7 +132,8 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
     // Et le PENDANT, qui manquait aussi : un set retenu ne doit pas garder le refus d'hier.
     const nNettoyes = (await cx.db.collection('sets').updateMany(
         { _id: { $in: retenus.map(r => r.s._id) }, logoRefus: { $exists: true } }, { $unset: { logoRefus: 1 } })).modifiedCount;
-    console.log(`\n   ✍️  ${nRefus} refus écrits avec leur motif · ${nNettoyes} refus périmés retirés des sets désormais retenus`);
+    console.log(`\n   ✍️  ${nRefus} refus écrits avec leur motif · ${nAutres} refus d'un autre outil laissés tels quels · ${nNettoyes} refus périmés retirés des sets désormais retenus`);
+    if (retraits.length) console.log(`   ⏸️  ${retraits.length} logo(s) posé(s) que la règle d'aujourd'hui refuse — NON retirés, en attente du feu vert :\n${retraits.map(r => `      ${String(r.s.code).padEnd(9)} ${r.s._id} (${r.s.logo.fichier ?? r.s.logo.cleR2}) : ${r.motif}`).join('\n')}`);
     // ⚠️ Les sets SANS page archivée n'apparaissent ni dans `retenus` ni dans `refuses` : ils n'ont
     // pas été jugés, et écrire « refusé » sur eux serait mentir. Ils portent leur propre cause.
     const codesJuges = new Set([...retenus, ...refuses].map(r => String(r.s._id)));
@@ -162,7 +181,7 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
             objets.set(f, { cleR2: cleObjet, w: info.width ?? null, h: info.height ?? null, urlOriginal: info.url, sha1: info.sha1 ?? null });
             n++;
         }
-        let ecrits = 0, sansFichier = 0;
+        let ecrits = 0, sansFichier = 0, inchanges = 0;
         for (const r of retenus) {
             const o = objets.get(r.logo);
             // 🔴 UN SET RETENU DONT LE FICHIER NE SE TÉLÉCHARGE PAS TOMBAIT ENTRE LES DEUX ÉCRITURES :
@@ -180,12 +199,15 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
                 continue;
             }
             const gen = logoGenerique(o.sha1);
+            // 🔴 2026-09-26 : ce passage réécrivait les 219 logos DÉJÀ posés (leur date `le`), et le lot a revalidé 156 sets pour 12
+            // changés. Un logo identique (même objet R2, même fichier, même généricité) ne se réécrit pas.
+            if (r.s.logo?.cleR2 === o.cleR2 && r.s.logo?.fichier === r.logo && !!r.s.logoGenerique === !!gen) { inchanges++; continue; }
             await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() }, logoGenerique: !!gen, ...(gen ? { logoGeneriquePreuve: gen } : {}) }, ...(gen ? {} : { $unset: { logoGeneriquePreuve: 1 } }) });
             ecrits++;
         }
         if (sansFichier) console.log(`   ✍️  ${sansFichier} set(s) retenu(s) dont le FICHIER est introuvable — cause écrite, pas laissée vide`);
         const relu = await cx.db.collection('sets').countDocuments({ 'logo.cleR2': { $nin: [null, ''] } });
-        console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans imageinfo) · ÉCRITS : ${ecrits} sets · relu en base : ${relu} sets portent un logo`);
+        console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans imageinfo) · ÉCRITS : ${ecrits} sets · inchangés (non réécrits) : ${inchanges} · relu en base : ${relu} sets portent un logo`);
     } finally { await verrou.rendre(); console.log(`🔓 verrou rendu.`); }
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });

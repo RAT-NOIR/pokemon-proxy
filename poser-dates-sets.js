@@ -25,16 +25,18 @@
 // • Jamais : plusieurs séries sans région (EXS), un jour incomplet, un set de réimpressions (aucune page).
 //
 // LES DÉCISIONS DU TESTEUR (2026-09-25, soir, et 2026-09-26), écrites comme des règles et appliquées ici, jamais à la main en base :
-// • 🔑 LA DATE RETENUE EST LA SORTIE EN BOUTIQUE DANS LA RÉGION DU SET, et les sources ont un RANG : OFFICIELLE > BULBAPEDIA >
-//   TCGdex (règle du 2026-09-26, pour toute divergence présente et future). La source du rang le plus haut qui date le set décide ;
-//   les autres sont TÉMOINS, et un témoin contraire est ÉCRIT (`temoin`), jamais tu. TCGdex retient souvent la date de Pokémon TCG
-//   Live (Black Bolt, White Flare, Mega Evolution : le 17/07 et le 25/09 au lieu du 18/07 et du 26/09 en boutique) ; et sur
-//   Champion Road / Thunderclap Spark, pokemon-card.com donne raison à Bulbapedia (3 mai, 6 juillet 2018) contre TCGdex.
-//   ⚠️ Le rang ne dispense pas de l'IDENTITÉ : TCGdex n'est une source que si deux clés désignent son set (`pairerIntl`) ; désigné
-//   par une seule (le code japonais, un nom), il reste témoin. La source officielle est une LIGNE relevée à la main, page lue, citée.
-// • Une mention de sortie dans la valeur Bulbapedia se LIT : « (General release) », « (Commercial release) » sont la sortie en
-//   boutique ; « (Early release) », une avant-première, une sortie en salle ne le sont pas. Une valeur à plusieurs VERSIONS
-//   (« Standard versions », « Pikachu version ») ne se lit que pour un set dont la version est nommée ici (VERSION_DU_SET).
+// • 🔑 « ON ARRÊTE DE BLOQUER LÀ-DESSUS » (2026-09-26, après-midi) : LA DATE DONNÉE PAR LA MAJORITÉ DES SOURCES ; À ÉGALITÉ, LA
+//   PLUS TÔT (`majorite`). Une source compte une voix par jour qu'elle donne pour CE tirage (une page IDTH donne l'indonésienne
+//   et la thaïe ; deux « parties », deux boîtes) ; un jour connu passe avant un mois seul ; un MOIS seul garde sa précision au
+//   mois, sans jour inventé (« 2016-11 ») — il suffit pour ranger. Les sources qui votent : la source officielle (une LIGNE
+//   relevée à la main, page lue, citée), l'infobox Bulbapedia, TCGdex désigné par deux clés (`pairerIntl`) ; TCGdex désigné par
+//   une seule clé reste TÉMOIN (l'identité du set n'est pas établie) et ne vote pas. Les voix contraires sont ÉCRITES avec la date.
+//   Elle remplace le rang du matin (officielle > Bulbapedia > TCGdex), qui ne s'applique plus qu'aux dates déjà posées : un set
+//   déjà daté n'est jamais réécrit ici.
+// • La sortie EN BOUTIQUE (règle du matin, inchangée) : « (General release) », « (Commercial release) » la disent ; « (Early
+//   release) », une avant-première, une sortie en salle ne le sont pas et ne votent pas quand une sortie en boutique existe. Une
+//   valeur à plusieurs VERSIONS (« Standard versions », « Pikachu version ») ne se lit que pour un set dont la version est nommée
+//   ici (VERSION_DU_SET) : la date d'un AUTRE produit n'est pas une voix.
 // • Un set « Additionals » prend la date de son set de BASE (même _id sans « -Additionals »), aucune source ne datant cette
 //   catégorie Cardmarket ; la source écrite le dit.
 // • Une PÉRIODE de distribution (`period`, promos) : la date de rangement est le DÉBUT de la période, quand il est un jour complet ;
@@ -56,8 +58,9 @@ const MOIS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'A
 const RE_JOUR = new RegExp(`^(${MOIS.join('|')})\\s+(\\d{1,2})(?:st|nd|rd|th)?,?\\s+(\\d{4})$`);
 
 /** Un texte de date Bulbapedia → « Month D, YYYY » (le format des 249 dates en base), ou null s'il n'est pas un jour complet. */
+const texteNet = texte => String(texte || '').replace(/<ref[\s\S]*?(<\/ref>|\/>)/g, '').replace(/'''?/g, '').replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/\{\{[^}]*\}\}/g, '').replace(/\s+/g, ' ').trim();
 function jourComplet(texte) {
-    const t = String(texte || '').replace(/<ref[\s\S]*?(<\/ref>|\/>)/g, '').replace(/'''?/g, '').replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/\{\{[^}]*\}\}/g, '').replace(/\s+/g, ' ').trim();
+    const t = texteNet(texte);
     const m = RE_JOUR.exec(t);
     if (!m) return null;
     const j = Number(m[2]), a = Number(m[3]);
@@ -76,7 +79,8 @@ const ETIQUETTES = [
 const nettoyer = v => String(v || '').replace(/<!--[\s\S]*?(-->|$)/g, '').replace(/<small>[\s\S]*?<\/small>/gi, '').trim();
 // La NATURE d'une date, dite par sa parenthèse : la sortie en boutique, ou ce qui la précède (avant-première, salle de cinéma).
 // « (Standard versions) », « (Pikachu version) » : la version d'un produit à plusieurs sorties.
-const NATURES = [[/^(general|commercial|retail) release$/i, 'boutique'], [/(early release|pre-?release|theatrical release)/i, 'avant']];
+// « (Part 1) », « (Part 2) » : les sorties successives d'un même produit en parties — chacune une sortie en boutique, chacune une voix.
+const NATURES = [[/^(general|commercial|retail) release$/i, 'boutique'], [/(early release|pre-?release|theatrical release)/i, 'avant'], [/^part \d+$/i, 'partie']];
 function natureDe(annotation) {
     const a = String(annotation || '').trim();
     const n = NATURES.find(([re]) => re.test(a));
@@ -95,15 +99,20 @@ function parties(valeur) {
         // « March 8, 2024 (Japan) » : une parenthèse qui nomme une RÉGION connue est une étiquette ; une NATURE (« (General
         // release) », « (Standard versions) ») est lue à part ; toute autre (« (Part 1) ») reste dans le texte, qui n'est alors plus
         // un jour complet — rien n'est deviné.
-        const pr = /^([\s\S]+?)\s*\(([A-Za-z .]+)\)$/.exec(p);
+        const pr = /^([\s\S]+?)\s*\(([A-Za-z0-9 .]+)\)$/.exec(p);
         const er = pr && ETIQUETTES.find(([re]) => re.test(pr[2].trim()));
         if (er) return { etiquette: er[1], texte: pr[1] };
         const na = pr && natureDe(pr[2]);
         if (na) return { etiquette: null, texte: pr[1], nature: na, annotation: pr[2].trim() };
-        const m = /^(?:'''?)?([A-Za-z .]+?)(?:'''?)?\s*:\s*(?:'''?)?\s*([\s\S]+)$/.exec(p);
+        // Une autre parenthèse (« (Journey) », « (Scare) ») : le nom d'un sous-produit — elle ne vote que si TOUTES les valeurs de la
+        // clé en portent une (une liste de boîtes), jamais seule (« (tentative) » n'est pas une sortie).
+        if (pr && jourComplet(pr[1])) return { etiquette: null, texte: pr[1], nature: 'sous-produit', annotation: pr[2].trim() };
+        // « '''Leafeon Box '''/''' Glaceon Box:''' January 11, 2023 » (CSMYC) : une étiquette peut nommer deux boîtes.
+        const m = /^(?:'''?)?([A-Za-z][A-Za-z0-9 ./']*?)(?:'''?)?\s*:\s*(?:'''?)?\s*([\s\S]+)$/.exec(p);
         if (!m) return { etiquette: null, texte: p };
-        const e = ETIQUETTES.find(([re]) => re.test(m[1].trim()));
-        return { etiquette: e ? e[1] : `?${m[1].trim()}`, texte: m[2] };
+        const lib = m[1].replace(/'+/g, '').replace(/\s+/g, ' ').trim();
+        const e = ETIQUETTES.find(([re]) => re.test(lib));
+        return { etiquette: e ? e[1] : `?${lib}`, texte: m[2] };
     });
 }
 const SUFFIXE_PAGE = { 'zh-hans': /\((ATCG|SCTCG)\)$/, 'zh-hant': /\(TCTCG\)$/, id: /\(ITCG\)$/, th: /\(TTCG\)$/ };
@@ -126,23 +135,29 @@ const OFFICIELLES = {
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
 
-const RANGS = ['officielle', 'bulbapedia', 'tcgdex'];
 /**
- * LA HIÉRARCHIE DES SOURCES (testeur, 2026-09-26) : la source du rang le plus haut qui donne un jour décide ; chaque autre est un
- * témoin, d'accord (✅) ou contraire (⚠️, écarté par son rang) — et un témoin qui n'est pas une source (TCGdex désigné par une seule
- * clé) s'imprime de même, sans jamais décider.
- * @param {{officielle?: {jour, source}|null, bulbapedia?: {jour, source}|null, tcgdex?: {jour, source}|null}} sources
- * @param {Array<{nom: string, jour: string}>} temoins
- * @returns {{jour, source, rang, temoin: string, divergence: boolean}|null}
+ * LA MAJORITÉ DES SOURCES, LA PLUS TÔT À ÉGALITÉ (testeur, 2026-09-26, après-midi). Une voix = (source, date) : une source qui
+ * donne deux dates pour ce tirage vote pour les deux. Un jour connu passe avant un mois seul ; sans aucun jour, le mois décide.
+ * @param {Array<{source: string, iso: string, de?: string}>} votes   iso « AAAA-MM-JJ » ou « AAAA-MM »
+ * @returns {{iso, precision: 'jour'|'mois', voix: number, sources: string[], de: string[], egalite: boolean, contre: string[]}|null}
  */
-function arbitrer(sources, temoins = []) {
-    const presents = RANGS.filter(r => sources[r]?.jour);
-    if (!presents.length) return null;
-    const g = sources[presents[0]];
-    const avis = [...presents.slice(1).map(r => ({ nom: r, jour: sources[r].jour })), ...temoins];
-    const temoin = avis.map(a => `${a.nom} ${a.jour} ${a.jour === g.jour ? '✅' : '⚠️ contraire, écarté par le rang'}`).join(' · ') || '—';
-    return { jour: g.jour, source: g.source, rang: presents[0], temoin, divergence: avis.some(a => a.jour !== g.jour) };
+function majorite(votes) {
+    const lus = votes.filter(v => /^\d{4}-\d{2}(-\d{2})?$/.test(v.iso || ''));
+    if (!lus.length) return null;
+    const jours = lus.filter(v => v.iso.length === 10);
+    const retenus = jours.length ? jours : lus;
+    const parIso = new Map();
+    for (const v of retenus) { const g = parIso.get(v.iso) || parIso.set(v.iso, { iso: v.iso, sources: new Set(), de: [] }).get(v.iso); g.sources.add(v.source); if (v.de) g.de.push(v.de); }
+    const classes = [...parIso.values()].sort((a, b) => b.sources.size - a.sources.size || a.iso.localeCompare(b.iso));
+    const g = classes[0];
+    return {
+        iso: g.iso, precision: g.iso.length === 10 ? 'jour' : 'mois', voix: g.sources.size, sources: [...g.sources], de: g.de,
+        egalite: classes.length > 1 && classes[1].sources.size === g.sources.size,
+        contre: [...classes.slice(1).map(c => `${c.iso} (${[...c.sources].join('+')})`), ...(jours.length ? lus.filter(v => v.iso.length === 7).map(v => `${v.iso} (${v.source}, au mois)`) : [])]
+    };
 }
+/** « 2016-11-04 » → « November 4, 2016 » (le format des dates en base) ; « 2016-11 » → « November 2016 », sans jour. */
+const texteDeIso = iso => { const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(String(iso || '')); return !m ? null : m[3] ? `${MOIS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}` : `${MOIS[Number(m[2]) - 1]} ${m[1]}`; };
 
 const MOIS_ISO = Object.fromEntries(MOIS.map((m, i) => [m.toLowerCase(), String(i + 1).padStart(2, '0')]));
 /** « November 18, 2022 » → « 2022-11-18 » ; « November 2016 » → « 2016-11 » ; « 2004 » → « 2004 » ; sinon null. La précision de la source, rien de plus. */
@@ -179,30 +194,39 @@ function dateBulbapedia(texte, set) {
         const ps = parties(p[k]);
         const etiq = ps.filter(x => x.etiquette === tir || (tir === 'idth' && ['id', 'th'].includes(x.etiquette)) || x.etiquette === `code:${code}` || x.etiquette === `code:${codeNu}`);
         if (etiq.length) return etiq.map(x => ({ de: `${k}:${x.etiquette}`, brut: x.texte }));
-        // Plusieurs valeurs sans étiquette de région : leur NATURE peut désigner la sortie en boutique (une seule « boutique », toutes
-        // les autres AVANT elle), ou la VERSION que ce set est (VERSION_DU_SET). Sinon rien ne désigne la nôtre.
-        let retenues = ps;
-        if (ps.length > 1 && ps.every(x => !x.etiquette)) {
-            const boutique = ps.filter(x => x.nature === 'boutique');
-            const version = VERSION_DU_SET[set._id] ? ps.filter(x => x.nature === `version:${VERSION_DU_SET[set._id]}`) : [];
-            if (boutique.length === 1 && ps.every(x => x === boutique[0] || x.nature === 'avant')) retenues = boutique;
-            else if (version.length === 1) retenues = version;
-        }
-        if (retenues.length !== 1 || retenues[0].etiquette) return [];   // plusieurs valeurs sans l'étiquette du tirage : rien ne désigne la nôtre
-        if (retenues[0].nature === 'avant') return [];                   // une avant-première seule n'est pas la sortie en boutique
+        // Des valeurs étiquetées, aucune de ce tirage : elles datent un AUTRE tirage — sauf si AUCUNE étiquette n'est une région
+        // (« Sylveon Box: … », « Series 1: … ») : ce sont les sous-produits de CE set, et chacun vote (majorité, la plus tôt).
+        const sousProduits = ps.length > 1 && ps.every(x => /^\?/.test(x.etiquette || '') || (!x.etiquette && x.nature === 'sous-produit'));
+        if (!sousProduits && ps.some(x => x.etiquette)) return [];
+        // Des valeurs sans étiquette : la sortie en BOUTIQUE vote (« General release », « Part N », ou sans mention), jamais une
+        // avant-première ni une salle ; la VERSION d'un autre produit ne vote pas (VERSION_DU_SET nomme celle de ce set).
+        let retenues = ps.filter(x => x.nature !== 'avant' && (sousProduits || x.nature !== 'sous-produit'));
+        if (retenues.some(x => /^version:/.test(x.nature || ''))) retenues = VERSION_DU_SET[set._id] ? retenues.filter(x => x.nature === `version:${VERSION_DU_SET[set._id]}`) : [];
+        if (!retenues.length) return [];
         const sienne = k === 'jarelease' || k === 'enrelease'
             || (tir === 'jp' && !p.enrelease && !/\((ATCG|SCTCG|TCTCG|ITCG|TTCG)\)$/.test(set.bulba.titre || ''))
             || (tir === 'intl' && !p.jarelease && /\(TCG\)$/.test(set.bulba.titre || ''))
             || (SUFFIXE_PAGE[tir] && SUFFIXE_PAGE[tir].test(set.bulba.titre || ''));
-        return sienne ? [{ de: retenues[0].annotation ? `${k} « ${retenues[0].annotation} »` : k, brut: retenues[0].texte }] : [];
+        return sienne ? retenues.map(x => ({ de: x.annotation ? `${k} « ${x.annotation} »` : /^\?/.test(x.etiquette || '') ? `${k} « ${x.etiquette.slice(1)} »` : k, brut: x.texte })) : [];
     };
     const candidats = [];
     const cles = tir === 'jp' ? ['jarelease', 'release', 'date'] : tir === 'intl' ? ['enrelease', 'release', 'date'] : ['release', 'date'];
-    for (const k of cles) if (p[k]) for (const v of valeursDuTirage(k)) candidats.push({ ...v, jour: jourComplet(v.brut) });
-    const jours = [...new Set(candidats.map(c => c.jour).filter(Boolean))];
-    if (jours.length === 1) return { jour: jours[0], de: candidats.find(c => c.jour === jours[0]).de, brut: candidats.find(c => c.jour === jours[0]).brut };
-    if (jours.length > 1) return { raison: `plusieurs jours pour ce tirage : ${jours.join(' / ')}` };
-    if (candidats.length) return { raison: `pas un jour complet : « ${String(candidats[0].brut).slice(0, 80)} »` };
+    for (const k of cles) if (p[k]) for (const v of valeursDuTirage(k)) {
+        const jour = jourComplet(v.brut), iso = isoPartiel(jour || texteNet(v.brut));
+        // un jour ou un mois : la précision de la source ; une année seule, un texte libre ne votent pas
+        candidats.push({ ...v, jour, iso: iso && iso.length >= 7 ? iso : null });
+    }
+    const lisibles = candidats.filter(c => c.iso);
+    // Des sorties du MÊME set à plus d'un an d'écart ne sont pas des parties ni des boîtes : une coquille (« July 18, 2015 (Scare) »
+    // dans une série de 2025, 151C) — « la plus tôt » la choisirait. Rien n'est écrit, et la raison le dit.
+    const annees = lisibles.map(c => Number(c.iso.slice(0, 4)));
+    if (annees.length > 1 && Math.max(...annees) - Math.min(...annees) > 1) return { raison: `sorties à plus d'un an d'écart pour ce tirage (coquille probable) : ${lisibles.map(c => `« ${texteNet(c.brut)} »`).join(' / ')}` };
+    if (lisibles.length) {
+        const jours = [...new Set(lisibles.map(c => c.jour).filter(Boolean))];
+        const u = jours.length === 1 && lisibles.every(c => c.jour === jours[0]) ? lisibles[0] : null;
+        return { candidats: lisibles.map(c => ({ iso: c.iso, de: c.de, brut: c.brut })), ...(u ? { jour: u.jour, de: u.de, brut: u.brut } : {}) };
+    }
+    if (candidats.length) return { raison: `ni un jour ni un mois : « ${String(candidats[0].brut).slice(0, 80)} »` };
     if (p.period) {
         // Décision du testeur (2026-09-25) : une période se range à son DÉBUT ; la période entière s'écrit pour l'affichage.
         const v = valeursDuTirage('period');
@@ -278,7 +302,7 @@ async function principal() {
         // par ce même passage — Black Bolt pour xBLK).
         if (/-Additionals$/.test(s._id)) { d.base = s._id.replace(/-Additionals$/, ''); continue; }
         const off = OFFICIELLES[s._id];
-        const o = off ? { jour: off.jour, source: `officielle:${off.url} (« ${off.citation} », lu le ${off.lu})` } : null;
+        const o = off ? { iso: isoPartiel(off.jour), de: `officielle:${off.url} (« ${off.citation} », lu le ${off.lu})` } : null;
         // Un set de réimpressions n'a pas de page de SET archivée ; la page du PRODUIT (« Play! Pokémon Prize Pack Series One (TCG) »,
         // « Trick or Trade 2023 (TCG) ») est lue par la sonde et fournie par --pages, avec sa révision.
         if (s.reimpressions && !PAGES.has(s._id) && !o) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
@@ -288,29 +312,39 @@ async function principal() {
             // Un set « sans page » : la page de son expansion (déclarée par ses cartes), lue par la sonde et gardée avec sa révision.
             const pg = PAGES.get(s._id);
             b = dateBulbapedia(pg.content, { ...s, tirage, bulba: { ...(s.bulba || {}), titre: pg.page } });
-            if (b.jour) b.de = `${b.de} (page « ${pg.page} » rév. ${pg.revid})`;
+            for (const c of b.candidats || []) c.de = `${c.de} (page « ${pg.page} » rév. ${pg.revid})`;
             if (b.periode) b.periode.de = `${b.periode.de} (page « ${pg.page} » rév. ${pg.revid})`;
         }
-        if (b?.periode) d.periode = b.periode;
-        // Le début d'une période, quand il est un jour complet, est la date de rangement (décision du testeur, 2026-09-25).
-        const bj = b?.jour ? { jour: b.jour, source: `bulbapedia:${b.de}` }
-            : b?.periode?.jourDebut ? { jour: b.periode.jourDebut, source: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} ») — décision du testeur 2026-09-25 : une période se range à son début` } : null;
-        // TCGdex : une SOURCE seulement désigné par deux clés (occidental) ; par une seule (le code japonais, un nom), un témoin.
-        let t = null; const temoins = [];
+        if (b?.periode) { d.periode = b.periode; d.periodeDejaEcrite = !!s.periodeDistribution; }
+        // LES VOIX (majorité, la plus tôt à égalité — testeur, 2026-09-26 après-midi). Le début d'une période vote à sa précision
+        // (jour ou mois) : une période se range à son début (décision du 2026-09-25).
+        const votes = [];
+        if (o) votes.push({ source: 'officielle', ...o });
+        for (const c of b?.candidats || []) votes.push({ source: 'bulbapedia', iso: c.iso, de: `bulbapedia:${c.de}` });
+        if (!b?.candidats?.length && b?.periode?.debutIso && b.periode.debutIso.length >= 7) votes.push({ source: 'bulbapedia', iso: b.periode.debutIso, de: `bulbapedia:${b.periode.de} (début de la période « ${b.periode.texte} »)` });
+        // TCGdex : une voix seulement désigné par deux clés (occidental) ; par une seule (le code japonais, un nom), un témoin.
+        const temoins = [];
         if (tirage === 'intl') {
             const p = pairerIntl(tcgIntl, s);
-            const ts = p.id ? tcgIntl.find(x => x.id === p.id) : null, jt = ts ? depuisIso(ts.releaseDate) : null;
-            if (jt && !p.uneCle) t = { jour: jt, source: `tcgdex:${ts.id}:${p.par}` };
-            else if (jt) temoins.push({ nom: `tcgdex ${ts.id} (une clé, témoin)`, jour: jt });
-            d.tcgdex = p.raison ?? (jt ? null : `${ts?.id ?? '?'} sans releaseDate`);
+            const ts = p.id ? tcgIntl.find(x => x.id === p.id) : null, it = ts && /^\d{4}-\d{2}-\d{2}$/.test(ts.releaseDate || '') ? ts.releaseDate : null;
+            if (it && !p.uneCle) votes.push({ source: 'tcgdex', iso: it, de: `tcgdex:${ts.id}:${p.par}` });
+            else if (it) temoins.push(`tcgdex ${ts.id} ${it} (une clé, témoin sans voix)`);
+            d.tcgdex = p.raison ?? (it ? null : `${ts?.id ?? '?'} sans releaseDate`);
         } else if (tirage === 'jp') {
-            const ta = tcgAsie.find(x => x.id.toLowerCase() === String(s.code || '').toLowerCase()), jt = ta ? depuisIso(ta.releaseDate) : null;
-            if (jt) temoins.push({ nom: `tcgdex ${ta.id} (code seul, témoin)`, jour: jt });
+            const ta = tcgAsie.find(x => x.id.toLowerCase() === String(s.code || '').toLowerCase()), it = ta && /^\d{4}-\d{2}-\d{2}$/.test(ta.releaseDate || '') ? ta.releaseDate : null;
+            if (it) temoins.push(`tcgdex ${ta.id} ${it} (code seul, témoin sans voix)`);
         }
-        const r = arbitrer({ officielle: o, bulbapedia: bj, tcgdex: t }, temoins);
-        if (r) { Object.assign(d, { jour: r.jour, source: r.source, rang: r.rang, temoin: r.temoin }, r.divergence ? { divergence: true } : {}); continue; }
+        const r = majorite(votes);
+        if (r) {
+            const voix = `${r.voix} voix sur ${new Set(votes.map(v => v.source)).size} source(s) (${r.sources.join('+')})${r.egalite ? ', égalité : la plus tôt' : ''}`;
+            Object.assign(d, { iso: r.iso, precision: r.precision, jour: r.precision === 'jour' ? texteDeIso(r.iso) : null, mois: r.precision === 'mois' ? texteDeIso(r.iso) : null,
+                source: `majorité — ${voix} : ${r.de.join(' | ')}${r.contre.length ? ` · CONTRE : ${r.contre.join(', ')}` : ''} — règle du testeur 2026-09-26 : la majorité des sources, la plus tôt à égalité`,
+                temoin: temoins.join(' · ') || '—' }, r.contre.length ? { divergence: true } : {}, r.egalite ? { egalite: true } : {});
+            if (r.precision === 'jour') continue;
+        }
+        if (d.mois) continue;
         d.raison = [`Bulbapedia : ${b ? b.raison : s.bulba?.titre ? `page « ${s.bulba.titre} » non archivée` : 'aucune page (voie sans page)'}`,
-            tirage === 'intl' ? `TCGdex : ${d.tcgdex ?? 'sans date'}` : null, 'aucune source officielle relevée'].filter(Boolean).join(' · ');
+            tirage === 'intl' ? `TCGdex : ${d.tcgdex ?? 'sans date'}` : null, temoins.length ? `témoins sans voix : ${temoins.join(' · ')}` : null, 'aucune source officielle relevée'].filter(Boolean).join(' · ');
     }
     // Seconde passe : un Additionals prend la date de son set de base (décision du testeur, 2026-09-25) — celle que ce passage
     // vient de décider, sinon celle déjà en base. Une base sans date laisse l'Additionals sans date, avec la raison.
@@ -318,22 +352,25 @@ async function principal() {
         const sBase = sets.find(x => x._id === d.base), dBase = decisions.find(x => x.id === d.base && x.jour);
         if (!sBase) { d.raison = `Additionals : set de base « ${d.base} » absent des sets publiés`; continue; }
         const cb = champDe(sBase), enBase = ABSENT.includes(sBase[cb] ?? null) ? null : sBase[cb];
+        const moisBase = dBase ? null : decisions.find(x => x.id === d.base && x.mois)?.mois ?? null;
         const jourBase = dBase?.jour ?? (enBase && jourComplet(enBase)) ?? null;
-        if (!jourBase) { d.raison = `Additionals : son set de base « ${d.base} » n'a pas de date${enBase ? ` lisible (« ${enBase} »)` : ''}`; continue; }
-        Object.assign(d, { jour: jourBase, source: `base:${d.base} (${dBase ? dBase.source : sBase[`${cb}Source`] ?? 'date déjà en base'}) — décision du testeur 2026-09-25 : un Additionals prend la date de son set de base`, temoin: '—' });
+        if (!jourBase && !moisBase) { d.raison = `Additionals : son set de base « ${d.base} » n'a pas de date${enBase ? ` lisible (« ${enBase} »)` : ''}`; continue; }
+        Object.assign(d, { jour: jourBase, mois: jourBase ? null : moisBase, iso: isoPartiel(jourBase || moisBase), precision: jourBase ? 'jour' : 'mois', source: `base:${d.base} (${dBase ? dBase.source : sBase[`${cb}Source`] ?? 'date déjà en base'}) — décision du testeur 2026-09-25 : un Additionals prend la date de son set de base`, temoin: '—' });
     }
-    const poses = decisions.filter(d => d.jour), refus = decisions.filter(d => !d.jour);
-    const parT = {}; for (const d of decisions) { const g = parT[d.tirage] || (parT[d.tirage] = { n: 0, date: 0 }); g.n++; if (d.jour) g.date++; }
-    console.log(`\nDATÉS PAR CET OUTIL : ${poses.length} / ${decisions.length} · par tirage ${Object.entries(parT).map(([k, g]) => `${k} ${g.date}/${g.n}`).join(' · ')}`);
+    const poses = decisions.filter(d => d.jour), auMois = decisions.filter(d => !d.jour && d.mois), refus = decisions.filter(d => !d.jour && !d.mois);
+    const parT = {}; for (const d of decisions) { const g = parT[d.tirage] || (parT[d.tirage] = { n: 0, date: 0, mois: 0 }); g.n++; if (d.jour) g.date++; else if (d.mois) g.mois++; }
+    console.log(`\nDATÉS PAR CET OUTIL : ${poses.length} au jour, ${auMois.length} au mois (dont ${auMois.filter(d => d.periode).length} périodes), sur ${decisions.length} · par tirage ${Object.entries(parT).map(([k, g]) => `${k} ${g.date}+${g.mois}/${g.n}`).join(' · ')}`);
     const raisons = {}; for (const d of refus) { const k = d.raison.replace(/«[^»]*»/g, '«…»').replace(/\b\d{4}\b|\d+/g, '#').slice(0, 90); raisons[k] = (raisons[k] || 0) + 1; }
     console.log('RESTENT SANS DATE, par raison :'); for (const [k, n] of Object.entries(raisons).sort((a, b) => b[1] - a[1])) console.log(`   ${String(n).padStart(4)} · ${k}`);
-    const temoins = { accord: poses.filter(d => /✅/.test(d.temoin)).length, sans: poses.filter(d => !/✅/.test(d.temoin)).length };
-    console.log(`témoin d'accord ${temoins.accord} · sans témoin ${temoins.sans} · par rang ${RANGS.map(r => `${r} ${poses.filter(d => d.rang === r).length}`).join(' · ')}`);
+    for (const d of refus) console.log(`      ${String(d.code).padEnd(9)} ${d.id} : ${d.raison.slice(0, 220)}`);
+    const unanimes = poses.filter(d => !d.divergence && /voix/.test(d.source)).length;
+    console.log(`majorité : unanimes ${unanimes} · avec voix contraire ${poses.filter(d => d.divergence).length} (dont égalités tranchées par la plus tôt ${poses.filter(d => d.egalite).length}) · Additionals par leur base ${poses.filter(d => d.base).length}`);
     // Les décisions du testeur, imprimées une à une : c'est leur première application.
     const periodes = decisions.filter(d => d.periode);
     console.log(`\nDÉCISIONS DU TESTEUR (2026-09-25 et 2026-09-26) :`);
-    for (const id of Object.keys(OFFICIELLES)) { const d = decisions.find(x => x.id === id); console.log(`   source officielle ${id} : ${d ? (d.jour ? `${d.champ} = ${d.jour} · témoins ${d.temoin}` : d.raison) : 'déjà daté ou non publié'}`); }
-    for (const d of poses.filter(x => x.divergence)) console.log(`   DIVERGENCE tranchée par le rang ${String(d.code).padEnd(7)} ${d.champ} = ${d.jour} (${d.rang}) · témoins ${d.temoin}`);
+    for (const id of Object.keys(OFFICIELLES)) { const d = decisions.find(x => x.id === id); console.log(`   source officielle ${id} : ${d ? (d.jour ? `${d.champ} = ${d.jour}` : d.raison ?? d.mois) : 'déjà daté ou non publié'}`); }
+    for (const d of [...poses, ...auMois].filter(x => x.divergence || x.egalite)) console.log(`   MAJORITÉ ${String(d.code).padEnd(8)} ${d.champ} = ${d.jour ?? d.mois} · ${d.source.replace(/ — règle du testeur.*$/, '')}`);
+    for (const d of auMois.filter(x => !x.periode)) console.log(`   AU MOIS (hors période) ${String(d.code).padEnd(8)} ${d.id} → ${d.mois} · ${d.source.replace(/ — règle du testeur.*$/, '')}`);
     for (const d of decisions.filter(x => x.base)) console.log(`   Additionals ${String(d.code).padEnd(6)} ${d.id} → ${d.jour ? `${d.champ} = ${d.jour} (base ${d.base})` : d.raison}`);
     console.log(`   PÉRIODES : ${periodes.length} lues · ${periodes.filter(d => d.jour).length} datées par leur début · ${periodes.filter(d => !d.jour).length} sans date (début au mois, ou témoin contraire)`);
     for (const d of periodes) console.log(`   période ${String(d.code).padEnd(8)} « ${d.periode.texte} » → début ${d.periode.debut} (${d.periode.debutIso ?? '—'})${d.periode.fin ? ` · fin ${d.periode.fin}` : ''} · ${d.jour ? `${d.champ} = ${d.jour}` : d.raison}`);
@@ -347,9 +384,20 @@ async function principal() {
         const r = await cx.db.collection('sets').updateOne({ _id: d.id, [d.champ]: { $in: ABSENT } }, { $set: { [d.champ]: d.jour, [`${d.champ}Source`]: d.source, dateSortiePoseeLe: new Date() } });
         n += r.modifiedCount;
     }
+    // UN MOIS SEUL, hors période (testeur, 2026-09-26 : « garde la précision au mois sans inventer de jour : c'est suffisant pour
+    // ranger ») : jamais dans `dateSortie*`, que le site affiche au jour (`dateFrancaise`) — un champ à part, { iso « 2014-11 », texte }.
+    let nm = 0;
+    const moisHorsPeriode = auMois.filter(x => !x.periode);
+    for (const d of moisHorsPeriode) {
+        const r = await cx.db.collection('sets').updateOne({ _id: d.id, [d.champ]: { $in: ABSENT }, dateSortieMois: { $exists: false } },
+            { $set: { dateSortieMois: { iso: d.iso, texte: d.mois, source: d.source, le: new Date() }, dateSortiePoseeLe: new Date() } });
+        nm += r.modifiedCount;
+    }
+    console.log(`   ${nm} dates au mois écrites dans dateSortieMois (attendu ${moisHorsPeriode.length})`);
     // La période entière, pour l'affichage (le site la montre, la date ne sert qu'à ranger) — additive : jamais réécrite.
     let np = 0;
-    for (const d of periodes) {
+    const periodesNeuves = periodes.filter(d => !d.periodeDejaEcrite);   // une période déjà écrite n'est jamais réécrite : elle n'est pas « attendue »
+    for (const d of periodesNeuves) {
         const { texte, debut, fin, debutIso, de } = d.periode;
         const r = await cx.db.collection('sets').updateOne({ _id: d.id, periodeDistribution: { $exists: false } },
             { $set: { periodeDistribution: { texte, debut, fin, debutIso, source: `bulbapedia:${de}`, le: new Date() } } });
@@ -357,11 +405,11 @@ async function principal() {
     }
     const relus = await cx.db.collection('sets').countDocuments({ dateSortiePoseeLe: { $exists: true } });
     const relusP = await cx.db.collection('sets').countDocuments({ periodeDistribution: { $exists: true } });
-    console.log(`\n   ✅ ${n} dates posées (attendu ${poses.length}) · ${np} périodes écrites (attendu ${periodes.length}) · relu : ${relus} sets portent dateSortiePoseeLe, ${relusP} portent periodeDistribution`);
+    console.log(`\n   ✅ ${n} dates posées (attendu ${poses.length}) · ${np} périodes écrites (attendu ${periodesNeuves.length} ; ${periodes.length - periodesNeuves.length} déjà en base) · relu : ${relus} sets portent dateSortiePoseeLe, ${relusP} portent periodeDistribution`);
     if (n !== poses.length) console.log(`   🔴 ${poses.length - n} non posées : le champ s'est rempli entre la mesure et l'écriture — à ouvrir`);
-    if (np !== periodes.length) console.log(`   🔴 ${periodes.length - np} périodes non écrites : le champ existait déjà — à ouvrir`);
+    if (np !== periodesNeuves.length) console.log(`   🔴 ${periodesNeuves.length - np} périodes non écrites : le champ s'est rempli entre la mesure et l'écriture — à ouvrir`);
     await fermer();
 }
 
-module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, depuisIso, periodeDe, isoPartiel, arbitrer, OFFICIELLES };
+module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });

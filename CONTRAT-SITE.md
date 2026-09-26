@@ -104,6 +104,35 @@ les efface pas (`collecte-cartes/impressions-posees.js`).
 
 ---
 
+## `cartes_produits.visuelSubstitut` — le visuel de la carte d'ORIGINE d'une réimpression (2026-09-26)
+
+**3 219 lignes** : Prize Packs 1 218 / 1 228, WCD 1 729 / 1 769, Battle Academy 272 / 300. Décision du testeur : une réimpression
+tamponnée n'a pas de visuel de SON tirage ; le site peut montrer celui de la carte d'origine, AVEC la mention.
+
+| champ | exemple | usage |
+|---|---|---|
+| `cleR2` | `"tcgdex/Scarlet-Violet/180-279036.webp"` | à concaténer après `R2_IMAGES_BASE_URL`, comme `cartes.images` |
+| `mention` | `"Visuel de la carte d'origine, sans le tampon Prize Pack"` | 🔑 **à afficher avec l'image, toujours** |
+| `set`, `numero` | `"Scarlet-Violet"`, `"180"` | le tirage d'origine dont c'est le scan |
+| `w`, `h`, `langue`, `source` | | comme une entrée de `cartes.images` |
+| `preuve`, `le` | | traçabilité |
+
+Les trois mentions : « …sans le tampon Prize Pack » · « …l'impression WCD a une bordure dorée, une signature et un dos
+différent » · « …sans la marque Battle Academy ».
+
+🔴 **Ce n'est PAS le visuel du produit.** Il vit sur la ligne produit, jamais dans `cartes.images` : aucun lecteur existant ne le
+voit sans l'avoir demandé par son nom. **L'index de reconnaissance ne doit JAMAIS l'utiliser comme identité de la réimpression**
+(il montrerait la carte d'origine sans tampon — l'autre produit). La table maîtresse ne le compte pas comme visuel.
+
+## `sets.dateSortieMois` — une sortie connue au MOIS seulement (2026-09-26)
+
+`{ iso: "2014-11", texte: "November 2014", source, le }`, sur un set qui n'a ni `dateSortie*` ni `periodeDistribution` (5 sets :
+s8a-G, PCCP, sN, TK7, TK1). Règle du testeur : garder la précision au mois, sans inventer de jour — assez pour ranger. **Jamais dans
+`dateSortieEn`/`dateSortieJa`**, que `dateFrancaise` imprime au jour. Ranger par `iso` (premier jour du mois, jamais affiché), afficher
+« novembre 2014 » — la même logique que `periodeDistribution.debutIso`.
+
+---
+
 ## Dettes connues, à ne pas rediagnostiquer
 
 - **La DATE manque sur 11 sets de 38** : SI-JP, VS, WEB, IPB, MCDP, EXS (japonais) et PBL, ASC,

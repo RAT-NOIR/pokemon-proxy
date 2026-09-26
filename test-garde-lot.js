@@ -111,6 +111,17 @@ const lIll = copie(etat0); lIll.cartes[1].impressions[0].illustrateur = 'Atsuko 
 verifier('une impression changée (illustrateur) : tous les sets de la carte (prudent : l\'impression ne porte qu\'un NOM d\'expansion)', setsTouches({ avant: docs0, apres: lIll }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: false });
 const lLigne = copie(etat0); lLigne.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 1, slugSet: 'Set-C' });
 verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches({ avant: docs0, apres: lLigne }), { sets: ['Set-C'], catalogue: true, especes: false });
+// 🔴 2026-09-26 : le lot des logos a revalidé 156 sets pour 12 changés — le collecteur réécrivait chaque logo (sa date `le`) et
+// chaque motif de refus. Un set ne se revalide que pour ce que le SITE lit (PROJECTION_SET de lib/cartes.ts).
+const lRefus = copie(etat0); lRefus.sets[0].logoRefus = { motif: 'aucun `setlogo` dans l\'infobox', le: new Date('2026-09-26') };
+verifier('un motif de refus de logo réécrit : rien (le site ne le lit pas)', setsTouches({ avant: docs0, apres: lRefus }).sets, []);
+const d0l = copie(etat0); d0l.sets[0].logo = { cleR2: 'l/a.png', w: 200, h: 80, le: new Date('2026-09-20'), preuve: 'x' };
+const lLogoLe = copie(d0l); lLogoLe.sets[0].logo = { ...lLogoLe.sets[0].logo, le: new Date('2026-09-26'), preuve: 'y' };
+verifier('le même logo réécrit (date, preuve) : rien', setsTouches({ avant: d0l, apres: lLogoLe }).sets, []);
+const lLogo = copie(d0l); lLogo.sets[0].logo = { ...lLogo.sets[0].logo, cleR2: 'l/b.png' };
+verifier('un logo changé : ce set, et le catalogue', setsTouches({ avant: d0l, apres: lLogo }), { sets: ['Set-A'], catalogue: true, especes: false });
+const lMois = copie(etat0); lMois.sets[0].dateSortieMois = { iso: '2014-11', texte: 'November 2014' };
+verifier('une date au mois posée : ce set (le site la lira)', setsTouches({ avant: docs0, apres: lMois }).sets, ['Set-A']);
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

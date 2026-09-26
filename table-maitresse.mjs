@@ -11,12 +11,16 @@
 // marteler le site à chaque fin de lot (`--http-neuf` force la relecture).
 // « Servi » = la règle du SITE importée telle quelle (lib/*.ts), comme t-tableau et mesurer-taux-servis.mjs du site.
 //
-// VERDICT : VERTE = set publié, page en 200, présent dans /fr/sets, DATÉ ET RANGÉ SOUS SON ANNÉE sur /fr/sets (2026-09-25),
-// logo posé (ou sans source légale), et AUCUN produit
+// VERDICT : VERTE = set publié, page en 200, présent dans /fr/sets, logo posé (ou sans source légale), et AUCUN produit
 // manquant BLOQUANT. Ne bloquent pas, et sont marqués « sans source légale » : les visuels des tirages chinois, indonésien et
 // thaï (§42, §56 : CGU TPC Asie, pokemon.cn ; TCGdex japonais seul) ; les fiches dont la Setlist ne liste que des liens rouges
 // (§43 : aucune page chez Bulbapedia) ; les versions V1/V2 inégales (§7 : Cardmarket ne dit pas laquelle manque).
 // TRI : manquants bloquants × récence (année − 1995), les rouges d'abord.
+// ➖ 2026-09-26 (testeur) : « une date ne doit plus jamais empêcher une ligne de passer au vert » (définition 4). La date reste
+// une COLONNE (jour, mois, période, ou sans date) ; la définition 3 (datée ET rangée sous son année) est encore comptée à côté,
+// pour que l'évolution se lise sous la même définition que la mesure précédente.
+// ➕ 2026-09-26 : le VISUEL DE SUBSTITUTION d'une réimpression (`cartes_produits.visuelSubstitut`) ne compte PAS comme visuel ;
+// il a sa colonne (% des produits sans visuel qui en portent un).
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
@@ -59,7 +63,8 @@ const regionCodes = new Map((await prod.db.collection('codes_set').find({}, { pr
 const setsDocs = await cx.db.collection('sets').find({}).toArray();
 const sets = new Map(setsDocs.map(s => [s._id, { ...s, publie: typeof s.nomAffichage === 'string', exps: new Set([].concat(s.bulba?.expansion ?? [])) }]));
 const docs = new Map(); for await (const d of cx.db.collection('cartes').find({}, { projection: { sets: 1, impressions: 1, images: 1, nomEn: 1 } })) docs.set(d._id, d);
-const lignesJ = await cx.db.collection('cartes_produits').find({}, { projection: { carteId: 1, slugSet: 1, slug: 1, idProduct: 1 } }).toArray();
+const lignesJ = await cx.db.collection('cartes_produits').find({}, { projection: { carteId: 1, slugSet: 1, slug: 1, idProduct: 1, 'visuelSubstitut.cleR2': 1 } }).toArray();
+const substitut = new Set(lignesJ.filter(l => l.visuelSubstitut?.cleR2).map(l => l.idProduct));
 const resteDe = new Map(); for (const r of await cx.db.collection('restes').find({ idProduct: { $ne: null } }, { projection: { idProduct: 1, type: 1, set: 1 } }).toArray()) if (!resteDe.has(r.idProduct)) resteDe.set(r.idProduct, r);
 const etats = new Map((await cx.db.collection('collecte_etat').find({}, { projection: { pages: 1 } }).toArray()).map(e => [String(e._id), e]));
 const alerte = await cx.db.collection('collecte_images_etat').findOne({ _id: 'alerte/file-vide', active: true });
@@ -181,17 +186,22 @@ for (const e of parExp.values()) {
     const page = set?.publie ? cache[slug]?.code ?? '?' : '—';
     const annee = set ? dateSite(set) : null, rangeSous = sectionDe.get(slug) ?? null;
     const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets'
-        : annee == null ? 'set sans date (« Date non renseignée »)' : rangeSous !== String(annee) ? `daté ${annee}, rangé sous « ${rangeSous ?? '?'} » sur /fr/sets` : logo === 'à chercher' ? 'logo à chercher' : null;
+        : logo === 'à chercher' ? 'logo à chercher' : null;
+    // La définition 3 (2026-09-25), comptée à côté pour l'évolution : datée ET rangée sous son année.
+    const problemeDate3 = !set ? null : annee == null ? 'set sans date' : rangeSous !== String(annee) ? `daté ${annee}, rangé sous « ${rangeSous ?? '?'} »` : null;
+    const date = !set ? '—' : annee != null ? 'jour' : set.dateSortieMois?.iso ? `mois ${set.dateSortieMois.iso}` : set.periodeDistribution?.debutIso ? `période ${set.periodeDistribution.debutIso}` : 'sans date';
     // Une expansion dont TOUT le manque est sans source légale (Setlist en liens rouges, visuels chinois…) n'a ni page ni set à
     // exiger : elle n'est ni verte ni rouge, elle est « sans source » — comptée à part, jamais dans le haut de la table.
     const toutSansSource = !bloquants && sansSource > 0 && sansSource === e.produits.length;
     const verte = !toutSansSource && !problemesSet && !bloquants;
+    const verte3 = verte && !problemeDate3;
     const top = [...causes].filter(([c]) => !/SANS SOURCE/.test(c)).sort((a, b) => b[1] - a[1])[0];
+    const ns = e.produits.filter(id => !visuel.has(id) && substitut.has(id)).length;
     lignes.push({
         idExpansion: e.idExpansion, code: L?.code ?? ncs.find(n => n.codeSet)?.codeSet ?? '—', slug, nom: set?.nomAffichage || (slug ? slug.replace(/-/g, ' ') : `(expansion ${e.idExpansion} jamais apprise)`),
         annee: e.annee, anneeEstimee: !!e.anneeEstimee, region: TIRAGE[tirage] || tirage || '?', produits: e.produits.length,
-        set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo,
-        fiche: Math.round(1000 * nf / e.produits.length) / 10, visuel: Math.round(1000 * nv / e.produits.length) / 10,
+        set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo, date, verte3,
+        fiche: Math.round(1000 * nf / e.produits.length) / 10, visuel: Math.round(1000 * nv / e.produits.length) / 10, substitut: ns ? Math.round(1000 * ns / e.produits.length) / 10 : '',
         bloquants, sansSource, verte, toutSansSource, score: toutSansSource ? 0 : (bloquants || (problemesSet ? e.produits.length : 0)) * Math.max(1, e.annee - 1995),
         // Le problème de SET et la première cause de produits, les deux : « logo à chercher » seul masquait 0 % de fiches (TK6).
         cause: [problemesSet, top ? `${top[0]} (${top[1]})` : null].filter(Boolean).join(' · ') || (sansSource ? `restes sans source légale (${sansSource})` : '—')
@@ -203,32 +213,38 @@ const vertes = lignes.filter(l => l.verte).length, grises = lignes.filter(l => l
 // L'évolution ne compare que deux mesures faites sous la MÊME définition du vert. Le 2026-09-25, 210 → 159 était la sortie des
 // expansions entièrement sans source (7f8e69a), pas une perte : 54 vertes passées en gris entre deux mesures (§62). La définition
 // porte un numéro ; un état précédent qui n'en porte pas, ou une autre, n'est pas comparé — et la table le DIT.
-const DEFINITION = 3;   // 3 (2026-09-25) : daté ET rangé dans son année sur /fr/sets
+const DEFINITION = 4;   // 4 (2026-09-26) : la date ne bloque plus ; 3 (2026-09-25) : daté ET rangé dans son année sur /fr/sets
 const statutDe = l => l.verte ? 'v' : l.toutSansSource ? 'g' : 'r';
+const statutDe3 = l => l.verte3 ? 'v' : l.toutSansSource ? 'g' : 'r';
+const vertes3 = lignes.filter(l => l.verte3).length;
 const avant = fs.existsSync(ETAT) ? JSON.parse(fs.readFileSync(ETAT, 'utf8')) : null;
-const comparable = avant?.definition === DEFINITION;
+// L'état précédent est relu dans SA définition : une mesure en définition 3 se compare au compte en définition 3 d'aujourd'hui.
+const avantDef = avant?.definition ?? null;
+const comparable = avantDef === DEFINITION || avantDef === 3;
+const vertesComparees = avantDef === 3 ? vertes3 : vertes, statutCompare = avantDef === 3 ? statutDe3 : statutDe;
 const quand = avant ? new Date(avant.le).toISOString().slice(0, 16).replace('T', ' ') : null;
-const bascules = comparable ? lignes.filter(l => avant.parExp[l.idExpansion] !== undefined && avant.parExp[l.idExpansion] !== statutDe(l)) : [];
+const bascules = comparable ? lignes.filter(l => avant.parExp[l.idExpansion] !== undefined && avant.parExp[l.idExpansion] !== statutCompare(l)) : [];
 const evol = !avant ? 'première mesure' : !comparable ? `mesure précédente (${quand} UTC, ${avant.vertes}) sous une AUTRE définition du vert : non comparée`
-    : `${vertes - avant.vertes >= 0 ? '+' : ''}${vertes - avant.vertes} depuis le ${quand} UTC (${avant.vertes})`;
+    : `sous la définition ${avantDef} de la mesure précédente : ${vertesComparees} (${vertesComparees - avant.vertes >= 0 ? '+' : ''}${vertesComparees - avant.vertes} depuis le ${quand} UTC, ${avant.vertes})`;
 const nomme = l => `${l.code} ${l.nom}`;
-const gagnees = bascules.filter(l => l.verte), perdues = bascules.filter(l => avant.parExp[l.idExpansion] === 'v');
-fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), definition: DEFINITION, vertes, grises: lignes.filter(l => l.toutSansSource).length, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe(l)])) }));
+const gagnees = bascules.filter(l => statutCompare(l) === 'v'), perdues = bascules.filter(l => avant.parExp[l.idExpansion] === 'v');
+fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), definition: DEFINITION, vertes, vertes3, grises: lignes.filter(l => l.toutSansSource).length, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe(l)])), parExp3: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe3(l)])) }));
 const fileTxt = fileEtat.map(x => `${x._id}×${x.n}`).join(' · ');
 const md = [];
 md.push('# Table maîtresse — une ligne par expansion Cardmarket', '');
 md.push(`Mesurée le ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · export \`${EXPORT}\` : ${ex.products.length} produits − ${ex.products.length - produits.length} cartes-code = **${produits.length} produits, ${parExp.size} expansions**. Règles de service du site importées (${S}). HTTP : /fr/sets (${dansListe.size} sets listés), /fr/catalogue → ${catalogue}, ${publies.length} pages de set (${requetes} requêtes ce passage, cache 6 h).`, '');
-md.push(`**Vertes : ${vertes} / ${parExp.size}** (${evol}) · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
-if (comparable) md.push(`Passées au vert : ${gagnees.map(nomme).join(' · ') || 'aucune'}. 🔴 Perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}.`, '');
-md.push('Verte = set publié, page en 200, présent dans /fr/sets, daté et rangé sous SON année sur /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
-md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | % fiche | % visuel | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+md.push(`**Vertes : ${vertes} / ${parExp.size}** (définition ${DEFINITION} : la date ne bloque plus) · ${evol} · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
+if (comparable) md.push(`Passées au vert (définition ${avantDef}) : ${gagnees.map(nomme).join(' · ') || 'aucune'}. 🔴 Perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}.`, '');
+md.push('Verte = set publié, page en 200, présent dans /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. La date ne bloque plus (testeur, 2026-09-26) : sa colonne dit jour, mois, période ou sans date. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. « % substitut » : produits sans visuel qui portent le visuel de la carte d\'origine (réimpressions, avec sa mention) — il ne compte PAS comme visuel. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
+md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | date | % fiche | % visuel | % substitut | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 const expTotales = new Set(ex.products.map(p => p.idExpansion));
 const codeSeul = [...expTotales].filter(id => !parExp.has(id));
 md.push(`L'export compte **${expTotales.size} expansions** ; ${codeSeul.length} ne contiennent que des cartes-code (hors périmètre : ni fiche ni visuel possibles) : ${codeSeul.map(id => `${id} (${ex.products.filter(p => p.idExpansion === id).length} p., « ${ex.products.find(p => p.idExpansion === id)?.name} »)`).join(' · ') || 'aucune'}.`, '');
-lignes.forEach((l, i) => md.push(`| ${i + 1} | ${l.idExpansion} | ${l.code} | ${l.verte ? '🟢' : l.toutSansSource ? '⚪' : '🔴'} ${l.nom} | ${l.anneeEstimee ? '~' : ''}${l.annee} | ${l.region} | ${l.produits} | ${l.set} | ${l.page} | ${l.liste} | ${l.logo} | ${l.fiche} | ${l.visuel} | ${l.bloquants} | ${l.sansSource || ''} | ${String(l.cause).replace(/\|/g, '/')} |`));
+lignes.forEach((l, i) => md.push(`| ${i + 1} | ${l.idExpansion} | ${l.code} | ${l.verte ? '🟢' : l.toutSansSource ? '⚪' : '🔴'} ${l.nom} | ${l.anneeEstimee ? '~' : ''}${l.annee} | ${l.region} | ${l.produits} | ${l.set} | ${l.page} | ${l.liste} | ${l.logo} | ${l.date} | ${l.fiche} | ${l.visuel} | ${l.substitut} | ${l.bloquants} | ${l.sansSource || ''} | ${String(l.cause).replace(/\|/g, '/')} |`));
 fs.writeFileSync(SORTIE, md.join('\n') + '\n');
 fs.writeFileSync(`${R}/table-maitresse-produits.json`, JSON.stringify(CAUSES_PRODUITS));
-console.log(`TABLE-MAITRESSE.md : ${lignes.length} expansions · vertes ${vertes} (${evol}) · /fr/catalogue ${catalogue} · /fr/sets ${dansListe.size} sets · requêtes HTTP ${requetes}`);
+console.log(`TABLE-MAITRESSE.md : ${lignes.length} expansions · vertes ${vertes} (définition ${DEFINITION}) · ${evol} · /fr/catalogue ${catalogue} · /fr/sets ${dansListe.size} sets · requêtes HTTP ${requetes}`);
+console.log(`dates : ${['jour', 'mois', 'période', 'sans date'].map(k => `${k} ${lignes.filter(l => String(l.date).startsWith(k)).length}`).join(' · ')} · substituts : ${substitut.size} produits`);
 console.log(`sans source légale (entièrement) : ${grises}`);
 if (comparable) console.log(`passées au vert : ${gagnees.map(nomme).join(' · ') || 'aucune'}\n🔴 perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}`);
 console.log(`20 premières rouges :\n${lignes.filter(l => !l.verte && !l.toutSansSource).slice(0, 20).map((l, i) => `${String(i + 1).padStart(2)}. ${l.idExpansion} ${l.code} « ${l.nom} » ${l.anneeEstimee ? '~' : ''}${l.annee} ${l.region} · ${l.produits} p · fiche ${l.fiche} % · visuel ${l.visuel} % · bloquants ${l.bloquants} · ${l.cause}`).join('\n')}`);

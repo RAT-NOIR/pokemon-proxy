@@ -131,6 +131,16 @@ const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nom
     impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
     images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null]) });
 const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null];
+// 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
+// la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
+// SITE lit : `PROJECTION_SET` de lib/cartes.ts (rat-market-site), recopiée ici — plus `dateSortieMois`, demandé au site le même
+// jour — et, du logo, ce qui s'affiche (la date et la preuve n'en font pas partie). Un champ que le site ajoute se reporte ICI.
+const CHAMPS_SET_LUS = ['code', 'nomJa', 'nomAffichage', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn', 'periodeDistribution', 'totalImprime', 'idExpansion', 'symbole', 'dateSortieMois'];
+const PROJECTION_SET = s => !s ? null : {
+    ...Object.fromEntries(CHAMPS_SET_LUS.map(k => [k, s[k] ?? null])),
+    bulba: { expansion: s.bulba?.expansion ?? null, titre: s.bulba?.titre ?? null, pageid: s.bulba?.pageid ?? null },
+    logo: s.logo ? Object.fromEntries(Object.entries(s.logo).filter(([k]) => !['le', 'preuve'].includes(k))) : null
+};
 
 /**
  * @param {{avant: {cartes, cartesProduits, sets}, apres: {cartes, cartesProduits, sets}}} o — documents (projetés ou complets)
@@ -177,7 +187,7 @@ function setsTouches({ avant, apres }) {
     const [sA, sB] = [parId(avant.sets), parId(apres.sets)];
     for (const k of new Set([...sA.keys(), ...sB.keys()])) {
         const a = sA.get(k), b = sB.get(k);
-        if (signature(a) === signature(b)) continue;
+        if (signature(PROJECTION_SET(a)) === signature(PROJECTION_SET(b))) continue;
         touches.add((a || b)._id); catalogue = true;
     }
     return { sets: [...touches].sort(), catalogue, especes };

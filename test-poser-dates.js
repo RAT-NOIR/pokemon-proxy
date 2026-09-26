@@ -1,7 +1,7 @@
 // BANC — les règles de poser-dates-sets.js sur des valeurs RÉELLES de l'infobox (collecte-cartes/rapports/dates-sets.json, 2026-09-25) :
 // une période se range à son début quand il est un jour complet, jamais à un jour fabriqué.
 //   node test-poser-dates.js
-const { periodeDe, isoPartiel, dateBulbapedia, arbitrer, OFFICIELLES, jourComplet } = require('./poser-dates-sets');
+const { periodeDe, isoPartiel, dateBulbapedia, majorite, texteDeIso, OFFICIELLES, jourComplet } = require('./poser-dates-sets');
 let ok = 0, ko = 0;
 const verifier = (quoi, obtenu, attendu) => {
     const a = JSON.stringify(obtenu), b = JSON.stringify(attendu);
@@ -43,16 +43,29 @@ const BEGINNING = 'release=October 29, 2010 <small>(Standard versions)</small><b
 verifier('Beginning Set Pikachu : la « Pikachu version »', dateBulbapedia(page([BEGINNING]), { ...set('jp', 'Beginning Set (TCG)'), _id: 'Beginning-Set-Pikachu' }).jour, 'November 18, 2011');
 verifier('Beginning Set : les « Standard versions »', dateBulbapedia(page([BEGINNING]), { ...set('jp', 'Beginning Set (TCG)'), _id: 'Beginning-Set' }).jour, 'October 29, 2010');
 verifier('un set dont la version n\'est pas nommée : rien', dateBulbapedia(page([BEGINNING]), { ...set('jp', 'Beginning Set (TCG)'), _id: 'Beginning-Set-Plus' }).jour ?? null, null);
-verifier('deux sorties en boutique : rien n\'est choisi', dateBulbapedia(page(['release=May 1, 2010 (General release)<br>May 8, 2010 (General release)']), set('jp', 'X (TCG)')).jour ?? null, null);
-verifier('« (Part 1) » reste une valeur illisible, jamais un jour choisi', dateBulbapedia(page(['release=July 18, 2025 (Part 1)<br>October 17, 2025 (Part 2)']), set('zh-hans', 'Battle Party: Shining Dream (ATCG)')).jour ?? null, null);
-
-// ── LE RANG DES SOURCES : officielle > Bulbapedia > TCGdex (testeur, 2026-09-26).
-const A = (o, b, t, tem) => { const r = arbitrer({ officielle: o && { jour: o, source: 'o' }, bulbapedia: b && { jour: b, source: 'b' }, tcgdex: t && { jour: t, source: 't' } }, tem || []); return r && [r.jour, r.rang, r.divergence]; };
-verifier('Champion Road : l\'officielle et Bulbapedia contre TCGdex', A('May 3, 2018', 'May 3, 2018', 'May 30, 2018'), ['May 3, 2018', 'officielle', true]);
-verifier('Great Encounters : Bulbapedia contre TCGdex, sans officielle', A(null, 'February 13, 2008', 'February 1, 2008'), ['February 13, 2008', 'bulbapedia', true]);
-verifier('TCGdex seul (deux clés) date encore', A(null, null, 'May 1, 2008'), ['May 1, 2008', 'tcgdex', false]);
-verifier('un témoin (TCGdex à une clé) ne décide jamais', A(null, null, null, [{ nom: 'tcgdex x', jour: 'May 1, 2008' }]), null);
-verifier('un témoin contraire se dit', A(null, 'September 26, 2025', null, [{ nom: 'tcgdex mee (une clé)', jour: 'September 25, 2025' }]), ['September 26, 2025', 'bulbapedia', true]);
+// ── LA MAJORITÉ DES SOURCES, LA PLUS TÔT À ÉGALITÉ (testeur, 2026-09-26 après-midi) : une date n'empêche plus rien.
+const C = (params, s) => (dateBulbapedia(page(params), s).candidats || []).map(c => c.iso);
+verifier('deux sorties en boutique : les deux sont candidates', C(['release=May 1, 2010 (General release)<br>May 8, 2010 (General release)'], set('jp', 'X (TCG)')), ['2010-05-01', '2010-05-08']);
+verifier('« (Part 1) », « (Part 2) » : deux sorties, deux candidates', C(['release=July 18, 2025 (Part 1)<br>October 17, 2025 (Part 2)'], set('zh-hans', 'Battle Party: Shining Dream (ATCG)')), ['2025-07-18', '2025-10-17']);
+verifier('IDTH : l\'indonésienne et la thaïe sont candidates', C(['release=Indonesia: March 8, 2024<br>Thailand: March 15, 2024'], set('idth', 'X (TCG)')), ['2024-03-08', '2024-03-15']);
+verifier('une avant-première reste écartée quand une sortie en boutique existe', C(['release=September 30, 2005 (Early release)<br>October 7, 2005 (General release)'], set('jp', 'X (TCG)')), ['2005-10-07']);
+verifier('un mois seul est candidat, à sa précision', C(['release=November 2016'], set('jp', 'X (TCG)')), ['2016-11']);
+verifier('une sortie en salle seule ne l\'est toujours pas', C(['date=July 19, 2008 <small>(Theatrical release)</small>'], set('jp', 'X (TCG)')), []);
+verifier('CSMYC : trois boîtes étiquetées, trois candidates', C(["release='''Sylveon Box:''' January 6, 2023<br>'''Leafeon Box:''' February 3, 2023<br>'''Glaceon Box:''' March 3, 2023"], set('zh-hans', 'Eeveelutions GX Gift Box (ATCG)')), ['2023-01-06', '2023-02-03', '2023-03-03']);
+verifier('CSMYC réel : une étiquette qui nomme deux boîtes', C(["release='''Sylveon Box:''' January 6, 2023<br>'''Leafeon Box '''/''' Glaceon Box:''' January 11, 2023<br>'''Espeon Box '''/''' Umbreon Box:''' January 13, 2023"], set('zh-hans', 'Eevee-GX Gift Box Sets (ATCG)')), ['2023-01-06', '2023-01-11', '2023-01-13']);
+verifier('EXS : « Series 1: … » est un sous-produit', C(['release=Series 1: March 23rd, 1998<br>Series 2: May 1998'], set('jp', 'Expansion Sheet (TCG)')), ['1998-03-23', '1998-05']);
+verifier('une étiquette de RÉGION parmi elles : ce sont d\'autres tirages', C(["release='''Thai:''' June 13, 2025<br>'''Indonesian:''' May 30, 2025"], set('zh-hant', 'X (TCG)')), []);
+verifier('151C : une coquille à dix ans d\'écart refuse tout, et le dit', (() => { const r = dateBulbapedia(page(['release=January 17, 2025 (Journey)<br>July 18, 2015 (Scare)']), set('zh-hans', 'Collect 151 (ATCG)')); return [r.candidats ?? null, /coquille/.test(r.raison)]; })(), [null, true]);
+verifier('une annotation SEULE (« (tentative) ») ne vote pas', C(['release=July 18, 2025 (tentative)'], set('jp', 'X (TCG)')), []);
+const V = (...vs) => { const r = majorite(vs.map(([source, iso]) => ({ source, iso }))); return r && [r.iso, r.precision, r.voix]; };
+verifier('Champion Road : officielle et Bulbapedia (2) contre TCGdex (1)', V(['officielle', '2018-05-03'], ['bulbapedia', '2018-05-03'], ['tcgdex', '2018-05-30']), ['2018-05-03', 'jour', 2]);
+verifier('une contre une : la plus tôt', V(['bulbapedia', '2008-02-13'], ['tcgdex', '2008-02-01']), ['2008-02-01', 'jour', 1]);
+verifier('une source à deux dates (IDTH) : la plus tôt', V(['bulbapedia', '2024-03-15'], ['bulbapedia', '2024-03-08']), ['2024-03-08', 'jour', 1]);
+verifier('une source à deux dates, une autre confirme la seconde : la majorité', V(['bulbapedia', '2024-03-08'], ['bulbapedia', '2024-03-15'], ['tcgdex', '2024-03-15']), ['2024-03-15', 'jour', 2]);
+verifier('un jour connu passe avant un mois seul', V(['bulbapedia', '2016-11'], ['tcgdex', '2016-11-04']), ['2016-11-04', 'jour', 1]);
+verifier('un mois seul : la précision au mois, aucun jour', V(['bulbapedia', '2016-11']), ['2016-11', 'mois', 1]);
+verifier('aucune voix : rien', majorite([]), null);
+verifier('la date affichable d\'un mois ne porte pas de jour', [texteDeIso('2016-11'), texteDeIso('2016-11-04')], ['November 2016', 'November 4, 2016']);
 verifier('les sources officielles citent leur page', Object.values(OFFICIELLES).every(x => /^https:\/\//.test(x.url) && x.citation && x.lu && jourComplet(x.jour) === x.jour), true);
 
 console.log(`\n${ok} passés, ${ko} en échec`);

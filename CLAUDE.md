@@ -550,6 +550,35 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 66. LA RÉGION A MENTI UNE CINQUIÈME FOIS, UN SUBSTITUT QUI N'EST PAS UNE IDENTITÉ, ET TCGDEX NOMME DES SETS ENTIERS — 2026-09-26 (après-midi)
+
+> 🔴 **`region` VAUT « intl » POUR UN SET CHINOIS, INDONÉSIEN OU THAÏ (§61) — ET LA RÈGLE DE LANGUE DES LOGOS LA LISAIT.** « Set
+> occidental : le logo lui revient » aurait donné à 30thC (chinois) et MA6 (IDTH) « 30th Celebration Logo EN.png », le logo ANGLAIS
+> de la page commune ; `collecter-logos-demande.js` acceptait un logo TCGdex anglais sous tout set `intl`. Caché jusqu'ici parce que
+> leurs fichiers étaient « introuvables ». 🔑 **Toute règle qui dit « occidental » lit `tirage ?? region`** : un tirage asiatique ne
+> reçoit un logo que si le FICHIER nomme son tirage (« … SC », « … Indonesian Thai ») ou si la PAGE est la sienne (« (ATCG) »…)
+> (`test-langue-logo.js`, 15/15). La même règle refuse d'un coup les 7 logos « Indonesian Thai » de SV4s…SV10s, dont la ligne dit
+> chinois traditionnel : **retirer un logo posé est une suppression — listée, jamais appliquée sans feu vert**, et le doute est sur
+> la LIGNE (leurs dates aussi sont « Indonesian/Thai »). Six fichiers « sans preuve de langue » ont été REGARDÉS : un seul logo
+> japonais (xsv8a) ; les autres sont un logo anglais (SI-JP), le logo générique du jeu (EXP), des photos de boosters, de planche,
+> de blister (DP4d/m, 11M, sm0) — la table `LOGOS_LUS_A_L_OEIL` les porte.
+
+**DATES — « on arrête de bloquer » (testeur) : la majorité des sources, la plus tôt à égalité, le mois quand on ne connaît que le
+mois.** Une source vote pour chaque date qu'elle donne pour CE tirage (IDTH, « Part 1/2 », les boîtes de CSMYC, les séries d'EXS) ;
+TCGdex à une seule clé reste témoin sans voix. ⚠️ « La plus tôt » choisit une COQUILLE avec aplomb (151C : « July 18, 2015 » dans
+une série de 2025) : des sorties d'un même tirage à plus d'un an d'écart ne votent pas, et la raison le dit. Le mois seul vit dans
+`sets.dateSortieMois`, jamais dans `dateSortie*` que le site imprime au jour. La date ne bloque plus le vert (définition 4 de la
+table) ; la définition 3 est comptée à côté pour que l'évolution reste comparable (§63).
+**VISUEL DE SUBSTITUTION (décision du testeur)** : `cartes_produits.visuelSubstitut` (+ `mention`), jamais `cartes.images` — le
+catalogue sert aussi la reconnaissance, et ce scan est celui de l'AUTRE produit, sans tampon. 3 219 posés (PPS 1 218, WCD 1 729,
+BA 272), deux regardés (Nemona SVI 180, Colress Machine PLS 119). La table ne le compte pas comme visuel : sa propre colonne.
+**APPRENDRE PAR L'idProduct DE TCGDEX : 109 des 1 155 produits jamais appris portés, 26 appris** (xm2a 22, 30thC 4), sous des
+gardes sur ce que la clé n'a pas utilisé — dont la numérotation CALIBRÉE par expansion sur ce que Cardmarket nous a déjà appris
+(212/212, 169/169 ; SWSH291 contre 291 ailleurs) et de FORME déjà vue (« Museum » de MEP : refusé). 🔑 **Le vrai gisement n'est pas
+au produit, il est au SET : `thirdParty.cardmarket` d'un fichier de set TCGdex NOMME l'expansion Cardmarket** — 1551 est EX Holon
+Phantoms (112 produits, aucun set chez nous, « nom inconnu » dans la table), et 1605, 2361, 4347 aussi. Les 192 désaccords
+`numeroFiche` du site : 191 confirmés par le numéro du TITRE Cardmarket, 0 à corriger.
+
 ## 65. LE RANG DES SOURCES, LA CLÉ OÙ LE NOM N'ENTRE PAS, ET UNE ALERTE QUI DATAIT LA MAUVAISE PANNE — 2026-09-26
 
 > 🔑 **RÈGLE DU TESTEUR (dates) : la sortie EN BOUTIQUE dans la région du set ; OFFICIELLE > BULBAPEDIA > TCGdex.** Une divergence ne

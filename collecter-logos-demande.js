@@ -37,7 +37,7 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
     if (!demandes.length) throw new Error('aucune source lue dans la demande — le motif de ligne ne mord sur rien');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
     const M = modeles(cx);
-    const sets = new Map((await cx.db.collection('sets').find({ _id: { $in: demandes.map(d => d.slug) } }, { projection: { code: 1, region: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, logo: 1 } }).toArray()).map(s => [s._id, s]));
+    const sets = new Map((await cx.db.collection('sets').find({ _id: { $in: demandes.map(d => d.slug) } }, { projection: { code: 1, region: 1, tirage: 1, 'bulba.titre': 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, logo: 1 } }).toArray()).map(s => [s._id, s]));
     const retenus = [], refus = [];
     for (const d of demandes) {
         const s = sets.get(d.slug);
@@ -53,7 +53,8 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
             const v = deciderLangue(s, fichier);
             (v.ok ? retenus : refus).push({ d, s, hote: 'bulbagarden', fichier, ...(v.ok ? { preuve: `archive Bulbagarden « ${fichier} » : ${v.preuve}` } : { motif: v.motif }) });
         } else if (u.hostname === 'assets.tcgdex.net' && /^\/en\//.test(u.pathname)) {
-            if (s.region !== 'intl') { refus.push({ d, motif: 'logo TCGdex anglais sous un set non occidental' }); continue; }
+            // le TIRAGE, pas la région : un set chinois, indonésien ou thaï est rangé `intl` (§61) et n'a pas le logo anglais
+            if ((s.tirage ?? s.region) !== 'intl') { refus.push({ d, motif: `logo TCGdex anglais sous un set de tirage ${s.tirage ?? s.region}` }); continue; }
             retenus.push({ d, s, hote: 'tcgdex', fichier: u.pathname, preuve: `TCGdex en ${u.pathname} : logo de l'édition anglaise, sous un set occidental` });
         } else refus.push({ d, motif: `hôte non autorisé : ${u.hostname}` });
     }
