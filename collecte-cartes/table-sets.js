@@ -194,6 +194,48 @@ const TABLE = [
     // cherchait le nom CARDMARKET chez Bulbapedia (§30). Bulbapedia écrit « Unnumbered Promotional cards » : 136 cartes
     // le déclarent en jp. Mesuré avant d'écrire : 127 produits joints par joindre(), 74 gardés, paires lues une à une.
     { code: 'UNP', exp: 4170, prod: 208, nom: 'Unnumbered Promos', slugSet: 'Unnumbered-Promos', region: 'japonais', bulba: { titre: null, sansPage: true, nomSeul: true, tirage: 'jp', expansion: ['Unnumbered Promotional cards', 'Unnumbered Promotional Cards'] }, attendu: 208, controle: { couverture: null, numerosDeclares: 0, gardeNomSeul: { joints: 127, gardes: 74 }, le: '2026-09-24' }, verifie: { le: '2026-09-24', page: null, note: 'sans page, clé NOM SEUL sous garde bidirectionnelle : 74/208 produits, 0 numéro nulle part' } },
+
+    // ════ LES SÉRIES NON NUMÉROTÉES, PAR LE NOM COMME UNP — 2026-09-26 (testeur : « apprises mais sans aucun numéro ») ═══════════════
+    // 57 expansions apprises n'ont AUCUN numéro chez Cardmarket ; la plupart sont déjà jointes par leur page (EXS, DP2, N1…) ou par leur
+    // code d'origine (Prize Packs, WCD). Restaient 13 séries À ZÉRO produit joint dont nos cartes DÉCLARENT l'expansion (vote de leurs
+    // produits par le nom ; DP1 tranché par la région de codes_set : « Space-Time Creation » jp, pas « Diamond & Pearl » intl). Même
+    // voie qu'UNP : `nomSeul`, sous la garde bidirectionnelle calibrée (garde-nom-seul.js : 21 925 justes, 0 faux). MESURÉ AVANT
+    // D'ÉCRIRE (joindre() + garde rejoués, toutes les paires imprimées, 24 lues au hasard) : 348 produits gardés sur 386. Les refus sont
+    // deux cartes du même nom aux attaques différentes (les deux « Brock's Geodude ») ou deux produits identiques : la garde du nom seul
+    // les refuse, et c'est dit. 🕳️ Non retenues, faute d'une expansion propre déclarée : My First Battle, Burger King 2008/2009,
+    // Pikachu World Collection, SM Trainer Kit Alolan Sandslash/Ninetales.
+    ...[
+        ['DP1', 4318, 122, 'Space-Time Creation', 'Space-Time-Creation', 'japonais', 'jp', 'Space-Time Creation', 121],
+        ['EP08', 4306, 42, "Entry Pack '08", 'Entry-Pack-08', 'japonais', 'jp', "Entry Pack '08", 42],
+        ['MEDK', 4307, 28, 'Magmortar vs Electivire Deck Kit', 'Magmortar-vs-Electivire-Deck-Kit', 'japonais', 'jp', 'Magmortar vs Electivire Deck Kit', 24],
+        ['HRDK', 4303, 24, 'Heatran vs Regigigas Deck Kit', 'Heatran-vs-Regigigas-Deck-Kit', 'japonais', 'jp', 'Heatran vs Regigigas Deck Kit', 24],
+        ['CGN', 5681, 25, 'Nivi City Gym', 'Nivi-City-Gym', 'japonais', 'jp', 'Nivi City Gym', 21],
+        ['CGH', 5682, 22, 'Hanada City Gym', 'Hanada-City-Gym', 'japonais', 'jp', 'Hanada City Gym', 18],
+        ['CGT', 5684, 22, 'Tamamushi City Gym', 'Tamamushi-City-Gym', 'japonais', 'jp', 'Tamamushi City Gym', 18],
+        ['GTG', 5686, 20, 'Guren Town Gym', 'Guren-Town-Gym', 'japonais', 'jp', 'Guren Town Gym', 14],
+        ['CGK', 5683, 19, 'Kuchiba City Gym', 'Kuchiba-City-Gym', 'japonais', 'jp', 'Kuchiba City Gym', 13],
+        ['CGY', 5685, 19, 'Yamabuki City Gym', 'Yamabuki-City-Gym', 'japonais', 'jp', 'Yamabuki City Gym', 15],
+        ['DP3p', 4311, 19, 'Palkia LV.X Constructed Standard Deck', 'Palkia-LVX-Constructed-Standard-Deck', 'japonais', 'jp', 'Palkia LV.X Constructed Standard Deck', 15],
+        ['DP3d', 4312, 19, 'Dialga LV.X Constructed Standard Deck', 'Dialga-LVX-Constructed-Standard-Deck', 'japonais', 'jp', 'Dialga LV.X Constructed Standard Deck', 16],
+        ['WPR', 1606, 7, 'W Promos', 'W-Promos', 'occidental', 'intl', 'W Promotional cards', 7]
+    ].map(([code, exp, prod, nom, slugSet, region, tirage, expansion, gardes]) => ({ code, exp, prod, nom, slugSet, region, bulba: { titre: null, sansPage: true, nomSeul: true, tirage, expansion }, attendu: prod,
+        controle: { couverture: null, numerosDeclares: 0, gardeNomSeul: { gardes }, le: '2026-09-26' },
+        verifie: { le: '2026-09-26', page: null, note: `sans page, clé NOM SEUL sous garde bidirectionnelle (comme UNP) : ${gardes}/${prod} produits gardés au rejeu, aucun numéro chez Cardmarket` } })),
+
+    // ════ EX HOLON PHANTOMS — 2026-09-26 (« crée-le maintenant, en priorité ») ═══════════════════════════════════════════
+    // 🔴 L'EXPANSION 1551 ÉTAIT « NOM INCONNU » : 112 produits (7 185 € au guide, dont Gyarados ☆ δ et Pikachu ☆ δ), aucun appris
+    // par Cardmarket, donc ni code ni slug, et aucune ligne. Seul le JUMEAU japonais PCG7 « Holon Phantom » était collecté, sur la
+    // MÊME page — c'est pourquoi 77 cartes déclaraient déjà « EX Holon Phantoms » en intl sans qu'aucun set les porte.
+    // L'identité : le fichier de set TCGdex ex13 (thirdParty.cardmarket 1551), le code « HP » posé par poser-codes-tcgdex.js
+    // (TCGdex + 17/17 slugs WCD de Cardmarket à ce code). La section occidentale se lit par `setlist` : la page porte aussi
+    // « Holon Phantom » (52, la ligne PCG7) et « Additional cards » (4, des renvois aux mêmes titres).
+    // ⚠️ `slugSet` EST CONSTRUIT, PAS APPRIS : aucun produit de 1551 n'a de slug. Les 14 expansions EX voisines (1539 → 1554) sont
+    // toutes « EX-<Nom> » chez Cardmarket (EX-Delta-Species, EX-Legend-Maker, EX-Crystal-Guardians…) ; c'est l'identifiant du set
+    // chez NOUS, jamais écrit dans numeros_cartes, et aucun lien Cardmarket n'en naît (le lien exige aussi le slug du produit).
+    // Si Cardmarket l'écrit autrement le jour où la passe Tampermonkey l'apprend : renommer-set.js.
+    // MESURÉ avant d'écrire, sur la page archivée (zéro requête) : section « EX Holon Phantoms » 111 entrées = encards 111 ;
+    // 77 cartes déclarent déjà l'impression intl, 77/77 au nom de la carte TCGdex du même numéro (δ mis à part : nos noms l'omettent).
+    { code: 'HP', exp: 1551, prod: 112, nom: 'EX Holon Phantoms', slugSet: 'EX-Holon-Phantoms', slugSetConstruit: 'forme des 14 expansions EX voisines (EX-<Nom>), aucun produit de 1551 appris par Cardmarket (2026-09-26)', region: 'occidental', bulba: { titre: 'EX Holon Phantoms (TCG)', tirage: 'intl', setlist: ['EX Holon Phantoms'], expansion: 'EX Holon Phantoms' }, attendu: 112, verifie: { le: '2026-09-26', page: 'EX Holon Phantoms (TCG)', entrees: { 'EX Holon Phantoms': 111, 'Holon Phantom': 52, 'Additional cards': 4 }, note: 'page archivée (celle de PCG7) : section occidentale 111 entrées = encards 111 ; 77 cartes déclarent « EX Holon Phantoms » intl, 77/77 au nom TCGdex du même numéro ; code HP (TCGdex ex13 + 17/17 slugs WCD)' } },
 ].map(l => {
     if (l.exp || l.region === 'occidental') return l;   // une ligne qui porte son `exp` porte toutes ses colonnes
     const s = parCode[l.code];

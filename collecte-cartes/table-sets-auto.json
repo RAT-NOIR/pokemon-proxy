@@ -26022,10 +26022,11 @@
   "prod": 63,
   "nom": "Stellar Guidance",
   "slugSet": "Stellar-Guidance",
-  "region": "chinois",
+  "region": "idth",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Stellar Guidance (ATCG) » : release « Thai: August 30, 2024 / Indonesian: September 20, 2024 », logo « … Logo Indonesian Thai.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Stellar Guidance (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "idth",
    "expansion": "Stellar Guidance",
    "numerosDepuisSetlist": true
   },
@@ -26097,10 +26098,11 @@
   "prod": 62,
   "nom": "Stellar Lightning",
   "slugSet": "Stellar-Lightning",
-  "region": "chinois",
+  "region": "idth",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Stellar Lightning (ATCG) » : release « Indonesian: November 29, 2024 / Thai: December 13, 2024 », logo « … Logo Indonesian Thai.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Stellar Lightning (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "idth",
    "expansion": "Stellar Lightning",
    "numerosDepuisSetlist": true
   },
@@ -26172,10 +26174,11 @@
   "prod": 62,
   "nom": "Transfiguration Mask",
   "slugSet": "Transfiguration-Mask",
-  "region": "chinois",
+  "region": "id",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Transfiguration Mask (ATCG) » : release « Indonesian: May 31, 2024 » seule, setname {{tt|Topeng Transfigurasi|…}} (indonésien), logo « … Logo Indonesian.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Transfiguration Mask (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "id",
    "expansion": "Transfiguration Mask",
    "numerosDepuisSetlist": true
   },
@@ -26247,10 +26250,11 @@
   "prod": 58,
   "nom": "Paradox Encounters",
   "slugSet": "Paradox-Encounters",
-  "region": "chinois",
+  "region": "id",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Paradox Encounters (ATCG) » : release « Indonesian: December 15, 2023 » seule, setname {{tt|Pertemuan Paradoks|…}} (indonésien), logo « Paradox Encounters Logo Indonesian.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Paradox Encounters (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "id",
    "expansion": "Paradox Encounters",
    "numerosDepuisSetlist": true
   },
@@ -26322,10 +26326,11 @@
   "prod": 58,
   "nom": "Ace Paradox",
   "slugSet": "Ace-Paradox",
-  "region": "chinois",
+  "region": "id",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Ace Paradox (ATCG) » : release « Indonesian: March 29, 2024 » seule, setname {{tt|Paradoks Andalan|…}} (indonésien), logo « … Logo Indonesian.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Ace Paradox (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "id",
    "expansion": "Ace Paradox",
    "numerosDepuisSetlist": true
   },
@@ -26472,10 +26477,11 @@
   "prod": 51,
   "nom": "Presence of Champions",
   "slugSet": "Presence-of-Champions",
-  "region": "chinois",
+  "region": "idth",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Presence of Champions (ATCG) » : release « Thai: June 13, 2025 / Indonesian: May 30, 2025 », logo « … Logo Indonesian Thai.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Presence of Champions (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "idth",
    "expansion": "Presence of Champions",
    "numerosDepuisSetlist": true
   },
@@ -26521,10 +26527,11 @@
   "prod": 46,
   "nom": "Bonds of Destiny",
   "slugSet": "Bonds-of-Destiny",
-  "region": "chinois",
+  "region": "idth",
+  "tirageCorrige": { "le": "2026-09-26", "de": "zh-hant", "preuve": "page « Bonds of Destiny (ATCG) » : release « Thai: April 11, 2025 / Indonesian: April 18, 2025 », logo « … Logo Indonesian Thai.png » ; aucune sortie en chinois traditionnel nommée ; le zh-hant de la ligne (15/09) n'avait pas de preuve" },
   "bulba": {
    "titre": "Bonds of Destiny (ATCG)",
-   "tirage": "zh-hant",
+   "tirage": "idth",
    "expansion": "Bonds of Destiny",
    "numerosDepuisSetlist": true
   },

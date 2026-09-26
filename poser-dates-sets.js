@@ -283,7 +283,7 @@ async function principal() {
     console.log(`TCGdex (clone) : ${tcgIntl.length} sets internationaux (${tcgIntl.filter(t => t.releaseDate).length} datés, ${tcgIntl.filter(t => t.cardmarket).length} avec idExpansion Cardmarket) · ${tcgAsie.length} sets asiatiques (${tcgAsie.filter(t => t.releaseDate).length} datés)`);
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_BRUT'] });
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
-    const sets = await lireMongo(cx.db.collection('sets'), { nomAffichage: { $type: 'string' } }, { nom: 'sets publiés', projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, dateSortieJa: 1, dateSortieEn: 1, dateSortieJaSource: 1, dateSortieEnSource: 1, periodeDistribution: 1, reimpressions: 1, idExpansion: 1, bulba: 1 } });
+    const sets = await lireMongo(cx.db.collection('sets'), { nomAffichage: { $type: 'string' } }, { nom: 'sets publiés', projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, dateSortieJa: 1, dateSortieEn: 1, dateSortieJaSource: 1, dateSortieEnSource: 1, periodeDistribution: 1, dateSortieMois: 1, reimpressions: 1, idExpansion: 1, bulba: 1 } });
     const champDe = s => s.region === 'jp' ? 'dateSortieJa' : s.region === 'intl' ? 'dateSortieEn' : null;
     // « N/A » n'est pas une date (le site l'écrit, DEMANDE du 2026-09-25 : Black Bolt, White Flare) : c'est l'absence écrite en
     // toutes lettres, traitée comme l'absence. Toute AUTRE valeur présente, même illisible, n'est jamais réécrite.
@@ -316,6 +316,9 @@ async function principal() {
             if (b.periode) b.periode.de = `${b.periode.de} (page « ${pg.page} » rév. ${pg.revid})`;
         }
         if (b?.periode) { d.periode = b.periode; d.periodeDejaEcrite = !!s.periodeDistribution; }
+        // Un mois déjà écrit (dateSortieMois) n'est jamais réécrit : il n'est pas « attendu » (2026-09-26 soir : « attendu 2, écrit 0 »
+        // — s8a-G et PCCP portaient leur mois depuis le matin, le filtre d'écriture les protégeait, l'attendu les comptait encore).
+        d.moisDejaEcrit = !!s.dateSortieMois;
         // LES VOIX (majorité, la plus tôt à égalité — testeur, 2026-09-26 après-midi). Le début d'une période vote à sa précision
         // (jour ou mois) : une période se range à son début (décision du 2026-09-25).
         const votes = [];
@@ -387,7 +390,7 @@ async function principal() {
     // UN MOIS SEUL, hors période (testeur, 2026-09-26 : « garde la précision au mois sans inventer de jour : c'est suffisant pour
     // ranger ») : jamais dans `dateSortie*`, que le site affiche au jour (`dateFrancaise`) — un champ à part, { iso « 2014-11 », texte }.
     let nm = 0;
-    const moisHorsPeriode = auMois.filter(x => !x.periode);
+    const moisHorsPeriode = auMois.filter(x => !x.periode && !x.moisDejaEcrit);
     for (const d of moisHorsPeriode) {
         const r = await cx.db.collection('sets').updateOne({ _id: d.id, [d.champ]: { $in: ABSENT }, dateSortieMois: { $exists: false } },
             { $set: { dateSortieMois: { iso: d.iso, texte: d.mois, source: d.source, le: new Date() }, dateSortiePoseeLe: new Date() } });
