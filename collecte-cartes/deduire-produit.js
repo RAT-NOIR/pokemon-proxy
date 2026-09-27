@@ -53,9 +53,12 @@ function lireVignette({ href, titre }) {
 function teteDuSlug(slug, code, numero = null) {
     const jetons = String(slug || '').split('-').filter(Boolean);
     const c = String(code || '').replace(/[^A-Za-z0-9]/g, '');
-    const dernier = (jetons[jetons.length - 1] || '').replace(/[^A-Za-z0-9]/g, '');
+    // un code À TIRET occupe autant de jetons dans le lien (« S-P/ID » → « S-PID183 » : « S », « PID183 ») — journal 1.9, 2026-09-27 :
+    // 36 promos indonésiennes cherchaient le nom « yamper-s-pid183 ». Un code sans tiret : un jeton, comme avant.
+    const k = String(code || '').replace(/\//g, '').split('-').filter(Boolean).length || 1;
+    const dernier = jetons.slice(-k).join('').replace(/[^A-Za-z0-9]/g, '');
     const n = String(numero || '').replace(/[^A-Za-z0-9]/g, '');
-    if (c && jetons.length > 1 && (new RegExp(`^${c}[A-Za-z]?\\d`, 'i').test(dernier) || (n && dernier.toLowerCase() === `${c}${n}`.toLowerCase()))) jetons.pop();
+    if (c && jetons.length > k && (new RegExp(`^${c}[A-Za-z]?\\d`, 'i').test(dernier) || (n && dernier.toLowerCase() === `${c}${n}`.toLowerCase()))) jetons.splice(-k, k);
     return jetons.filter(j => !/^V\d+$/i.test(j)).join('-').toLowerCase();
 }
 

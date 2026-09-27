@@ -105,12 +105,13 @@ const prixTri = p => (typeof p === 'number' && p > 0) ? p : Infinity;
 
 // ── LE SCORE SOUS UN AUTRE TERME DE PRIX, COMME LA PRODUCTION LE CALCULERAIT — une seule écriture pour toutes les mesures qui
 // rejouent un régime (revue du 2026-09-27 : les mesures 5 et 6 recomptaient sur le score RELEVÉ, sans le relèvement — §21 bis dans
-// l'instrument). Le terme s'applique au score d'AVANT le relèvement de choisirMeilleur, puis le relèvement de la PRODUCTION est rejoué
-// (S.releverLectures, jamais une copie) : une lecture relevée par le prix ne l'est peut-être plus sous un autre terme.
-const scoreAvantReleveDe = s => (s.detail?.releve ? Number(String(s.detail.releve).split('→')[0]) : s.score);
+// l'instrument). Le terme s'applique au score d'AVANT le placement de choisirMeilleur, puis le placement de la PRODUCTION est rejoué
+// (S.placerDerriereLectures, jamais une copie) : une déduite placée sous sa lecture par le prix ne l'est peut-être plus sous un autre
+// terme. (Décision du testeur, 2026-09-27 soir : le relèvement de la lecture est retiré, la déduite passe juste sous elle.)
+const scoreAvantReleveDe = s => (s.detail?.derriereLecture ? Number(String(s.detail.derriereLecture).split('→')[0]) : s.score);
 const expOuNull = e => (Number.isFinite(e) && e > 0 ? e : null);   // Number(null) vaut 0 : il fabriquerait une clé « 0#n »
 function rescorer(scores, terme) {
-    return S.releverLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + terme(s.branche),
+    return S.placerDerriereLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + terme(s.branche),
         candidat: { idExpansion: expOuNull(s.idExpansion), numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })));
 }
 // la clé 1 bis du tri de choisirMeilleur : à score égal, une ligne DÉDUITE passe après une lecture (décision du testeur, 2026-09-27)
@@ -226,11 +227,11 @@ function rejouerRegime(scores, attendu, regime) {
         x.numeroUtile = cardInfo.number;   // le numéro tel que le scoring l'a vu (Pokédex neutralisé)
         x.scores = scores.map(s => ({
             id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail),
-            // le score AVANT le relèvement de choisirMeilleur (scoring.js, `releverLectures`) : c'est lui qui est la somme du barème
+            // le score AVANT le placement de choisirMeilleur (scoring.js, `placerDerriereLectures`) : c'est lui qui est la somme du barème
             scoreAvantReleve: scoreAvantReleveDe(s),
             numeroCardmarket: s.candidat.numeroCardmarket ?? null, certitudeNumero: s.candidat.certitudeNumero ?? null,
-            // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif). `releve` n'en est pas une.
-            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'releve').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
+            // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif). `derriereLecture` n'en est pas une.
+            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'derriereLecture').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
             codeSet: s.candidat.codeSet ?? null, region: s.candidat.region ?? null,
             // Pour les tris de la mesure 5 : la place dans le vivier tel que rendu par Mongo
             // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.
@@ -262,8 +263,8 @@ function rejouerRegime(scores, attendu, regime) {
             neutralise: null
         };
         if (d.rarete == null) {
-            // (depuis le score d'avant le relèvement, puis le relèvement de la production, et la clé 1 bis)
-            const re = S.releverLectures(scores.map(s => ({ id: s.candidat.idProduct, candidat: s.candidat, detail: {}, score: scoreAvantReleveDe(s) - contributionPrix(s.detail) })))
+            // (depuis le score d'avant le placement, puis le placement de la production, et la clé 1 bis)
+            const re = S.placerDerriereLectures(scores.map(s => ({ id: s.candidat.idProduct, candidat: s.candidat, detail: {}, score: scoreAvantReleveDe(s) - contributionPrix(s.detail) })))
                 .sort((a, b) => (b.score - a.score) || deduiteApres(a.candidat, b.candidat));
             const jv = re.findIndex(s => s.id === x.attendu);
             const eg = re.length > 1 && S.sontExAequo(re[0].score, re[1].score);

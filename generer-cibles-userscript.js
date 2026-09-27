@@ -15,7 +15,9 @@
 // n'est écrit. L'écriture passe par Node en UTF-8 — jamais par Set-Content (CLAUDE.md §3).
 const fs = require('fs');
 const path = require('path');
-const AUTORISES = [/^--liste=.+\.json$/, /^--ecrire$/, /^--export=.+\.json$/];
+// (1.10, 2026-09-28) --pages=PAGES-UTILES-<date>.json (generer-pages-utiles.js) : la liste ordonnée des PAGES à visiter, écrite dans
+// le même bloc (`PAGES_UTILES`) — l'userscript montre la prochaine et dit si la page ouverte en fait partie.
+const AUTORISES = [/^--liste=.+\.json$/, /^--ecrire$/, /^--export=.+\.json$/, /^--pages=.+\.json$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -24,6 +26,9 @@ if (!LISTE_F || !fs.existsSync(LISTE_F)) { console.error('❌ --liste=<LISTE-SEU
 const SCRIPT = path.join(__dirname, 'userscript-apprentissage.js');
 
 const L = JSON.parse(fs.readFileSync(LISTE_F, 'utf8'));
+const PAGES = arg('pages') ? JSON.parse(fs.readFileSync(arg('pages'), 'utf8')) : null;
+if (PAGES && (!Array.isArray(PAGES.pages) || !PAGES.pages.every(x => x.ordre && x.idExpansion && x.site && x.url && Array.isArray(x.cibles)))) { console.error(`❌ ${arg('pages')} : « pages » illisible (ordre, idExpansion, site, url, cibles)`); process.exit(1); }
+if (PAGES) console.log(`PAGES UTILES : ${PAGES.pages.length} pages (${PAGES.pages.filter(x => x.sure).length} sûres) · ${PAGES.cibles} cibles · liste ${PAGES.liste}`);
 if (!L.pourTaPasse || !L.sansSlug) throw new Error(`${LISTE_F} : ni « pourTaPasse » ni « sansSlug » — liste d'avant le 2026-09-26 soir, régénérer par apprendre-par-tcgdex.js`);
 const cibles = [...L.pourTaPasse.produits.map(p => ({ ...p, k: 'J' })), ...L.sansSlug.produits.filter(p => p.visibleDansLesListes).map(p => ({ ...p, k: 'V' }))];
 const parExp = new Map();
@@ -54,6 +59,10 @@ const bloc = [
     '  // Les produits CIBLES, par expansion : [idProduct, « J » jamais appris | « V » slug vide, nom du catalogue], les plus chers d\'abord.',
     `  const CIBLES = ${JSON.stringify(Object.fromEntries(exps.map(e => [e.idExpansion, e.produits.sort((a, b) => (b.prixTendance ?? -1) - (a.prixTendance ?? -1)).map(p => [p.idProduct, p.k, nomDe.get(p.idProduct) ?? p.nom ?? null])])))};`,
     '',
+    `  // Les PAGES UTILES (${PAGES ? path.basename(arg('pages')) : 'aucune liste de pages'}, generer-pages-utiles.js) : [ordre, idExpansion, page, sûre (1/0/null), voisine de marge (1/0),`,
+    '  // [idProduct des cibles], code, slugSet, chemin] — la page où chaque produit à apprendre se trouve, triée par nom, dans l\'ordre de valeur.',
+    `  const PAGES_UTILES = ${JSON.stringify((PAGES?.pages || []).map(x => [x.ordre, x.idExpansion, x.site, x.sure == null ? null : x.sure ? 1 : 0, x.voisine ? 1 : 0, x.cibles.map(c => c.idProduct), x.code ?? null, x.slugSet, x.url]))};`,
+    '',
     '  // Le nombre de produits de chaque expansion de la liste dans l\'export Cardmarket du 24/09 (TOUS les Singles, cartes-code',
     '  // comprises : c\'est ce que la galerie montre). Comparé au total que Cardmarket annonce sur la page : s\'il est plus petit, un',
     '  // filtre ou une limite de la page masque des produits.',
@@ -69,8 +78,9 @@ if (debut < 0 || !mFin || mFin.index < debut || !mMesure) { console.error('❌ A
 // La zone remplacée doit être EXACTEMENT le bloc attendu : LISTE, CIBLES et PRODUITS_EXPORT, une fois chacun, et rien du code autour.
 const zone = src.slice(debut, mFin.index + mFin[0].length);
 const compte = re => (zone.match(re) || []).length;
-if (compte(/^  const LISTE = /gm) !== 1 || compte(/^  const CIBLES = /gm) !== 1 || compte(/^  const PRODUITS_EXPORT = /gm) !== 1 || compte(/^  (?:function|async function|const (?!LISTE|CIBLES|PRODUITS_EXPORT)\w+ =)/gm) !== 0) {
-    console.error('❌ ARRÊT : la zone entre les bornes ne contient pas exactement LISTE, CIBLES et PRODUITS_EXPORT — rien n\'est écrit'); process.exit(1);
+// PAGES_UTILES : 0 fois dans un bloc d'avant la 1.10, 1 fois après — jamais plus
+if (compte(/^  const LISTE = /gm) !== 1 || compte(/^  const CIBLES = /gm) !== 1 || compte(/^  const PRODUITS_EXPORT = /gm) !== 1 || compte(/^  const PAGES_UTILES = /gm) > 1 || compte(/^  (?:function|async function|const (?!LISTE |CIBLES |PRODUITS_EXPORT |PAGES_UTILES )\w+ =)/gm) !== 0) {
+    console.error('❌ ARRÊT : la zone entre les bornes ne contient pas exactement LISTE, CIBLES, PRODUITS_EXPORT (et au plus un PAGES_UTILES) — rien n\'est écrit'); process.exit(1);
 }
 let neuf = src.slice(0, debut) + bloc.split('\n').join(fin) + src.slice(mFin.index + mFin[0].length);
 neuf = neuf.replace(/^  const MESURE_LISTE = Date\.parse\('[^']+'\);(\r?)$/m, `  const MESURE_LISTE = Date.parse('${maintenant}');$1`);

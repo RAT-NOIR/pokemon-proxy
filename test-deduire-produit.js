@@ -47,6 +47,11 @@ const ctx = o => ({ slugsPortes: new Set(), horsCatalogue: [], ...o });
     verifier('G. teteDuSlug : code + chiffre, ou code + numéro du titre ; « Professor-Shoji » sous sH reste « professor-shoji »',
         [teteDuSlug('Professor-Shoji', 'sH', '12'), teteDuSlug('Shiinotic-V2-SUM17', 'SUM', '17'), teteDuSlug('Muk-Alolan-Muk-GX-V4-AC3a276', 'AC3', 'a276'), teteDuSlug('Basic-Fighting-Energy-CSVH3CFIG', 'CSVH3C', 'FIG')],
         ['professor-shoji', 'shiinotic', 'muk-alolan-muk-gx', 'basic-fighting-energy']);
+    // journal 1.9 (2026-09-27) : un code À TIRET (« S-P/ID » → « S-PID » dans le lien) occupe DEUX jetons du slug ; seul le dernier
+    // était comparé au code, et « Yamper-V2-S-PID183 » cherchait le nom « yamper-s-pid183 » (36 promos indonésiennes refusées)
+    verifier('G bis. teteDuSlug : un code à tiret (S-P/ID, SV-P/ID) se retire sur ses deux jetons ; un nom qui porte la lettre du code reste entier',
+        [teteDuSlug('Yamper-V2-S-PID183', 'S-P/ID', '183'), teteDuSlug('Charizard-V-V2-S-PID159', 'S-P/ID', '159'), teteDuSlug('Hilda-SV-PID281', 'SV-P/ID', '281'), teteDuSlug('Professor-Shoji', 'sH', '12'), teteDuSlug('Pikachu-V-S-PID5', 'S-P/ID', '5')],
+        ['yamper', 'charizard-v', 'hilda', 'professor-shoji', 'pikachu-v']);
     verifier('H. une Énergie de base (« CSVH3C FIG ») seule de son nom → déduite',
         deduireProduit(vig('Happy-Set', 'Basic-Fighting-Energy-CSVH3CFIG', 'Énergie Combat de base (CSVH3C FIG)'), ctx({ produits: famille('Basic Fighting Energy', [852132]), appris: new Map() })).idProduct, 852132);
 

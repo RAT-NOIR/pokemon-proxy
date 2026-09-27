@@ -143,7 +143,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         verifier('10. 3 vignettes, 3 lues (le webp en data-src, et la sans-image par son lien) : l\'envoi porte les 3', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051, null]]);
         verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true });
         const e = (J.store.rm_journal || [])[0] || {};
-        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.9', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
+        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.10', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
         verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles, e.envoi?.deduites],
             [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1, 1]);
         verifier('13. le panneau : la sans-image dite (envoyée par son lien), la déduction du serveur, total contre export, filtre nommé, bouton du journal',
@@ -163,7 +163,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         // 18. L'export du journal et le panneau portent la version et la date RÉELLE de la liste.
         verifier('18. le panneau dit la date de la liste générée, pas « 25/09 »', [/Liste du 25\/09/.test(J.panneau), new RegExp(`Liste du ${new Date(Date.parse(/MESURE_LISTE = Date\.parse\('([^']+)'\)/.exec(SCRIPT)[1])).toISOString().slice(8, 10)}/`).test(J.panneau)], [false, true]);
         // Une seule écriture de la version (la constante VERSION, égale à l'en-tête) : l'export, le journal et le panneau la lisent.
-        verifier('   l\'export du journal se déclare 1.9 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.9', '1.9', true]);
+        verifier('   l\'export du journal se déclare 1.10 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.10', '1.10', true]);
         // 19-21. POINT 6 (seconde relecture) : un ÉCHEC de la déduction ne marque pas la page ; l'erreur et les raisons sont dites et
         //        journalisées ; une cible sans image DÉDUITE est marquée faite (le serveur rend les idProduct déduits).
         const ERR = { status: 200, entetes: 'ratelimit-remaining: 99', corps: { success: true, recus: 3, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0,
@@ -202,6 +202,24 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
             [m1.v, m1.sansImageRefusees, ...[P2, P3, P4].map(P => P.appels.filter(x => x.chemin === '/api/apprendre-lot').length), P3.store.rm_pagesFaites[CLE_DRI]?.reprises], [19, 1, 0, 1, 0, 1]);
         // 14. Un refus du serveur s'écrit au journal avec son statut, et la page reste en file.
         const K = await charger(navigateur, {}, [{ status: 400, corps: { success: false, error: 'Identifiant utilisateur manquant' } }], 1500, { url: URL_DRI, html: HTML_DRI });
+        // 24. (1.10) 202 : le serveur GARDE l'envoi dans sa file — la page sort de la file locale, marquée apprise (v:19, serveur: 'file'),
+        //     le journal dit 202 et la position, le panneau le dit ; rien n'est renvoyé.
+        const Q = await charger(navigateur, {}, [{ status: 202, corps: { success: true, enFile: true, position: 3, recus: 3 } }], 1500);
+        verifier('24. (1.10) 202 en file serveur : file locale vidée, page marquée (v 19, serveur file), journal 202 + position, panneau, un seul envoi',
+            [Q.store.rm_file, Q.store.rm_pagesFaites?.['/fr/Pokemon/Products/Singles/30th-Celebration']?.serveur, Q.store.rm_pagesFaites?.['/fr/Pokemon/Products/Singles/30th-Celebration']?.v, Q.store.rm_journal?.[0]?.envoi?.status, Q.store.rm_journal?.[0]?.envoi?.position, /gardée par le serveur/.test(Q.panneau), Q.appels.filter(x => x.chemin === '/api/apprendre-lot').length],
+            [[], 'file', 19, 202, 3, true, 1]);
+        // 25. (1.10) PAGES UTILES : la page n°1 de la liste du script, ouverte avec les cartes d'une AUTRE expansion (les cibles n'y sont
+        //     pas) → « cette page est la n°1 », 0 cible lue, la voisine proposée ; après l'envoi, la page utile est marquée faite, ses
+        //     cibles absentes gardées ; la prochaine proposée est la n°2.
+        const PU = JSON.parse(/^  const PAGES_UTILES = (.*);\s*$/m.exec(SCRIPT)[1]);
+        const [o1, e1, s1, , , ids1, , slug1, url1] = PU[0];
+        const R1 = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1}` });
+        verifier(`25. (1.10) page utile n°1 (${slug1} p.${s1}, ${ids1.length} cible(s)) : reconnue, 0 cible lue, la voisine proposée ; marquée faite après l'envoi avec ses absentes ; prochaine n°2`,
+            [new RegExp(`cette page est la n°${o1}\\b`).test(R1.panneau), new RegExp(`0/${ids1.length} cible`).test(R1.panneau), new RegExp(`page ${s1 + 1}`).test(R1.panneau), R1.store.rm_pagesUtilesFaites?.[o1]?.absentes?.length, /prochaine : n°2\b/.test(R1.panneau)],
+            [true, true, true, ids1.length, true]);
+        // 26. (1.10) une page HORS de la liste (la galerie 30th Celebration, sans tri par nom) : dite hors liste, la prochaine est la n°1
+        const H1 = await charger(navigateur, {}, [OK(3)], 1500);
+        verifier('26. (1.10) page hors liste : dite, la prochaine est la n°1, aucune page utile marquée', [/n'est pas dans la liste/.test(H1.panneau), /prochaine : n°1\b/.test(H1.panneau), H1.store.rm_pagesUtilesFaites || {}], [true, true, {}]);
         verifier('14. refus 400 : au journal (statut, message), page gardée en file', [K.store.rm_journal?.[0]?.envoi?.status, K.store.rm_journal?.[0]?.envoi?.erreur, K.store.rm_file.length], [400, 'Identifiant utilisateur manquant', 1]);
     } finally { await navigateur.close(); }
     console.log(`\n${ok} passés, ${ko} en échec`);

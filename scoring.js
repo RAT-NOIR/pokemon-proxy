@@ -1924,7 +1924,8 @@ function scorerCandidat(candidat, lu) {
         // n'a PAS le poids plein, et une vraie lecture la bat toujours à preuves égales (départage dans `choisirMeilleur`). Le poids
         // plein s'écrit par ce qu'il AUTORISE (§51) : un numéro LU chez Cardmarket (`exacte`, ou une ligne d'avant le champ).
         // 🔴 revue du 2026-09-27 : une déduite CORROBORÉE (`numeroCorrobore`, posé par `choisirMeilleur` : une variante LUE porte le même
-        // (expansion, numéro)) garde le poids plein — le numéro n'est pas en doute, seul le produit l'est, et c'est l'ex aequo qui le dit.
+        // (expansion, numéro)) garde le poids plein face aux AUTRES cartes — le numéro n'est pas en doute, seul le produit l'est ; face à la
+        // lecture de son numéro, `placerDerriereLectures` la met juste dessous (décision du testeur, 2026-09-27 soir).
         const deduite = candidat.certitudeNumero === 'deduite';
         const corrobore = deduite && candidat.numeroCorrobore === true;
         const fiable = candidat.certitudeNumero == null || candidat.certitudeNumero === 'exacte' || corrobore;
@@ -2097,25 +2098,27 @@ function cleNumeroExpansion(c) {
 }
 
 /**
- * DÉCISION DU TESTEUR : « une ligne déduite est toujours battue par une vraie lecture ». Si un autre terme (le prix) met une déduite
- * AU-DESSUS de la meilleure ligne LUE de son (expansion, numéro), la lecture est RELEVÉE à son niveau — jamais la déduite abaissée :
- * abaisser changeait le rang du groupe face aux AUTRES cartes (revue du 2026-09-27 : une carte d'une autre expansion attendue, ex
- * aequo avec la déduite, gagnait seule ; un motif TCGdex pouvait être renversé). Relever garde le maximum du groupe : la lecture et
- * la déduite finissent à égalité — l'ex aequo refuse et rembourse — et la lecture est ordonnée devant (clé 1 bis du tri).
+ * 🔑 DÉCISION DU TESTEUR (2026-09-27, soir) : « une vraie lecture passe TOUJOURS devant une déduite : jamais relevée ni abaissée à son
+ * niveau, et à score égal c'est la lecture qui gagne ». Dans un même (expansion, numéro), la meilleure ligne LUE garde son score ; toute
+ * déduite qui l'ÉGALE ou la DÉPASSE (le poids plein d'une déduite corroborée, un autre terme comme le prix) est placée JUSTE SOUS elle
+ * (lecture − 1). Jamais à son niveau : aucun ex aequo lecture/déduite ne peut naître, donc aucun refus ; et la tête du classement est
+ * celle qu'il aurait SANS la déduite (une carte X qui bat la lecture par son propre score gagne comme avant).
+ * ⚠️ Remplace le relèvement du matin (la lecture montée au niveau de la déduite → ex aequo → refus), que la décision retire.
  * Modifie `scores` EN PLACE ({ score, candidat, detail }) ; exportée pour que les instruments rejouent la production, pas une copie.
- * `detail.releve` n'est PAS une contribution du barème : un lecteur qui additionne `detail` doit l'ignorer.
+ * `detail.derriereLecture` n'est PAS une contribution du barème : un lecteur qui additionne `detail` doit l'ignorer.
  */
-function releverLectures(scores) {
+function placerDerriereLectures(scores) {
     const groupes = new Map();
     for (const s of scores) { const k = cleNumeroExpansion(s.candidat); if (k) (groupes.get(k) || groupes.set(k, []).get(k)).push(s); }
     for (const membres of groupes.values()) {
         const lues = membres.filter(s => s.candidat.certitudeNumero == null || s.candidat.certitudeNumero === 'exacte');
         const deduites = membres.filter(s => s.candidat.certitudeNumero === 'deduite');
         if (!lues.length || !deduites.length) continue;
-        const meilleureLue = lues.reduce((a, b) => (b.score > a.score ? b : a)), maxDeduite = Math.max(...deduites.map(s => s.score));
-        if (maxDeduite > meilleureLue.score) {
-            meilleureLue.detail = { ...meilleureLue.detail, releve: `${meilleureLue.score} → ${maxDeduite} (une ligne déduite de ce numéro la dépassait : à égalité, jamais derrière)` };
-            meilleureLue.score = maxDeduite;
+        const meilleureLue = Math.max(...lues.map(s => s.score));
+        for (const d of deduites) {
+            if (d.score < meilleureLue) continue;
+            d.detail = { ...d.detail, derriereLecture: `${d.score} → ${meilleureLue - 1} (une lecture de ce numéro passe toujours devant une déduite)` };
+            d.score = meilleureLue - 1;
         }
     }
     return scores;
@@ -2146,7 +2149,7 @@ function choisirMeilleur(candidats, lu) {
         strategie: strategies.get(c.idProduct) ?? null,
         ...scorerCandidat(c.certitudeNumero === 'deduite' && numerosLus.has(cleNumeroExp(c)) ? { ...c, numeroCorrobore: true } : c, lu)
     }));
-    releverLectures(scores);
+    placerDerriereLectures(scores);
 
     // Tri par score décroissant. À SCORE ÉGAL, on prend le MOINS CHER.
     // ⚠️ DÉCISION PRODUIT ASSUMÉE, pas un effet de bord. Quand plusieurs variantes V
@@ -2258,7 +2261,7 @@ function sontExAequo(scoreA, scoreB) {
 }
 
 module.exports = {
-    scorerCandidat, choisirMeilleur, POIDS, certitudeDuNumero, releverLectures, cleNumeroExpansion,
+    scorerCandidat, choisirMeilleur, POIDS, certitudeDuNumero, placerDerriereLectures, cleNumeroExpansion,
     normaliserCodeSet, codesApparentes,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
     prixDeReference, impressionEstReverse,
@@ -3231,36 +3234,46 @@ if (require.main === module) {
             JSON.stringify([certitudeDuNumero({ certitude: 'deduite', certitudeAvantDeduction: 'exacte' }), certitudeDuNumero({ certitude: 'deduite', certitudeAvantDeduction: 'heuristique' }),
                 certitudeDuNumero({ certitude: 'deduite', source: 'cardmarket-deduit' }), certitudeDuNumero({}), certitudeDuNumero(null)]),
             JSON.stringify(['exacte', 'heuristique', 'deduite', 'exacte', null]));
-        // revue du 2026-09-27 (MINEUR 1) : corroborée, la déduite reprend le poids plein — et un AUTRE terme (le prix) pouvait alors la
-        // faire passer DEVANT la lecture (Shiinotic SUM 17 : V1 lue 0,46 €, V2 déduite 3,05 €, rareté élevée). Plafond : jamais au-dessus
-        // de la meilleure lecture de son (expansion, numéro) — l'ex aequo reste, la déduite ne gagne jamais.
-        const plafond = choisirMeilleur([
-            { idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' },
-            { idProduct: 1, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'exacte', prix: 0.46, region: 'occidental' }
-        ], { numero: 17, total: 12, idExpansionsAttendues: [1745], rareteElevee: true, regionAttendue: 'occidental' });
-        const sLue = plafond.scores.find(s => s.candidat.idProduct === 1).score, sDed = plafond.scores.find(s => s.candidat.idProduct === 2).score;
-        verifier('déduite corroborée, le prix la favorise : la lecture à égalité (relevée), la lecture d\'abord',
-            JSON.stringify([sDed === sLue, plafond.gagnant.candidat.idProduct]), JSON.stringify([true, 1]));
-        // revue du plafond (2026-09-27) : ABAISSER la déduite changeait le rang du groupe face aux AUTRES cartes — une carte X d'une autre
-        // expansion attendue, ex aequo avec la déduite, gagnait seule. On RELÈVE la lecture : le maximum du groupe ne bouge pas.
-        const avecX = choisirMeilleur([
+        // 🔑 DÉCISION DU TESTEUR (2026-09-27, soir) : « une vraie lecture passe TOUJOURS devant une déduite : jamais relevée ni abaissée à
+        // son niveau, et à score égal c'est la lecture qui gagne ». Le relèvement (la lecture montée au niveau de la déduite → ex aequo →
+        // refus) est RETIRÉ ; la lecture garde son score, et une déduite de son (expansion, numéro) qui l'égale ou la dépasse est placée
+        // JUSTE SOUS elle (lecture − 1) : jamais à son niveau, donc jamais d'ex aequo entre une lecture et sa déduite.
+        const scoreSeul = (c, l) => scorerCandidat(c, l).score;
+        const luLeafeon = { numero: 11, idExpansionsAttendues: [1745], rareteElevee: false, regionAttendue: 'occidental', rarete: null };
+        const lueLeafeon = { idProduct: 1, idExpansion: 1745, numeroCardmarket: '11', certitudeNumero: 'exacte', prix: 9.43, region: 'occidental' };
+        verifier('Leafeon (corroborée, scores égaux avant la règle) : la lecture GAGNE seule — plus d\'ex aequo, lecture intacte, déduite juste dessous et dit pourquoi',
+            JSON.stringify([leafeon.scores.map(s => s.candidat.idProduct).join(','), leafeon.scores[0].score === scoreSeul(lueLeafeon, luLeafeon), leafeon.scores[1].score === leafeon.scores[0].score - 1, !!leafeon.scores[1].detail.derriereLecture, !leafeon.scores[0].detail.releve]),
+            JSON.stringify(['1,2', true, true, true, true]));
+        // le prix favorise la déduite (Shiinotic SUM 17 : V1 lue 0,46 €, V2 déduite 3,05 €, rareté élevée) : la lecture n'est PAS relevée
+        const luShii = { numero: 17, total: 12, idExpansionsAttendues: [1745], rareteElevee: true, regionAttendue: 'occidental' };
+        const lueShii = { idProduct: 1, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'exacte', prix: 0.46, region: 'occidental' };
+        const shii = choisirMeilleur([{ idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' }, lueShii], luShii);
+        const sLue = shii.scores.find(s => s.candidat.idProduct === 1).score, sDed = shii.scores.find(s => s.candidat.idProduct === 2).score;
+        verifier('le prix favorise la déduite : la lecture gagne, à SON score (jamais relevée), la déduite à lecture − 1',
+            JSON.stringify([shii.gagnant.candidat.idProduct, sLue === scoreSeul(lueShii, luShii), sDed === sLue - 1]), JSON.stringify([1, true, true]));
+        // une carte X d'une autre expansion attendue, qui bat la lecture PAR SON PROPRE score : elle gagne — exactement comme si la déduite
+        // n'était pas au vivier (la déduite ne fait plus bouger la lecture)
+        const luX = { numero: 17, total: 12, idExpansionsAttendues: [1745, 1746], rareteElevee: true, regionAttendue: 'occidental' };
+        const candX = [
             { idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' },
             { idProduct: 1, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'exacte', prix: 0.46, region: 'occidental' },
             { idProduct: 3, idExpansion: 1746, numeroCardmarket: '17', certitudeNumero: 'exacte', prix: 3.05, region: 'occidental' }
-        ], { numero: 17, total: 12, idExpansionsAttendues: [1745, 1746], rareteElevee: true, regionAttendue: 'occidental' });
+        ];
+        const avecX = choisirMeilleur(candX, luX), sansDed = choisirMeilleur(candX.slice(1), luX);
         const sc = id => avecX.scores.find(s => s.candidat.idProduct === id).score;
-        verifier('une carte X d\'une autre expansion ex aequo avec la déduite le RESTE (le groupe n\'est pas abaissé)',
-            JSON.stringify([sc(3) === sc(2), sc(1) === sc(2), avecX.scores[0].score === sc(3)]), JSON.stringify([true, true, true]));
-        // (le `verifier` de ce fichier compare par ===, donc sur une chaîne)
-        verifier('déduite corroborée par une variante lue : scores ÉGAUX (l\'ex aequo refuse), la lecture d\'abord',
-            JSON.stringify([leafeon.scores[0].score === leafeon.scores[1].score, leafeon.scores.map(s => s.candidat.idProduct).join(','), /corroboré/.test(leafeon.scores[1].detail.numero)]), JSON.stringify([true, '1,2', true]));
-        // à SCORE ÉGAL (le reste du barème compense l'écart du numéro), la lecture passe encore devant
+        verifier('une carte X qui bat la lecture par son propre score : même tête qu\'SANS la déduite, la déduite sous la lecture',
+            JSON.stringify([avecX.gagnant.candidat.idProduct, sansDed.gagnant.candidat.idProduct, sc(2) === sc(1) - 1, sc(1) === scoreSeul(candX[1], luX)]), JSON.stringify([3, 3, true, true]));
+        // à SCORE ÉGAL (le reste du barème compense l'écart du numéro) : la lecture gagne, la déduite juste dessous
         // (la déduite porte le PLUS PETIT idProduct et vient la première au vivier : le dernier départage l'aurait mise devant)
         const egaux = choisirMeilleur([
             { idProduct: 1, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', region: 'occidental' },
             { idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'exacte', region: 'occidental' }
         ], { numero: null, idExpansionsAttendues: [1745], rareteElevee: false, regionAttendue: 'occidental' });
-        verifier('à score égal : la lecture d\'abord, la déduite ensuite', egaux.scores.map(s => s.candidat.idProduct).join(','), '2,1');
+        verifier('à score égal : la lecture d\'abord, la déduite à lecture − 1 (plus d\'ex aequo)',
+            JSON.stringify([egaux.scores.map(s => s.candidat.idProduct).join(','), egaux.scores[1].score === egaux.scores[0].score - 1]), JSON.stringify(['2,1', true]));
+        // une déduite SANS lecture de son (expansion, numéro) au vivier n'est pas touchée
+        const seule = choisirMeilleur([{ idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' }], luShii);
+        verifier('une déduite seule de son numéro garde son score', seule.scores[0].score === scoreSeul({ idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' }, luShii), true);
     }
 
     console.log(`\n${echecs === 0 ? '🎉 Tous les tests passent.' : `⚠️ ${echecs} test(s) en échec.`}`);

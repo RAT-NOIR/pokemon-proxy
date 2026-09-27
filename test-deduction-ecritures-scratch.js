@@ -6,8 +6,8 @@
 // 🔴 SECONDE RELECTURE (2026-09-26, nuit) : le banc écrivait par le PILOTE ce que la route écrivait par MONGOOSE — dont le schéma strict
 // avalait les `$unset` de `deduitLe` et `preuveJournal` (reproduit) — et la branche « lot sans aucune carte lue » n'était exercée par
 // personne. Les cas 8 à 17 appellent `apprendreLot` et `apprendreUneLecture`, c'est-à-dire EXACTEMENT ce que /api/apprendre-lot et
-// /api/apprendre appellent, avec les lecteurs de la route (`lecteursMongo`) sur un catalogue de test ; `decoderCodeSet` est la fonction
-// d'index.js elle-même (lue dans le fichier, pas recopiée) ; seul `memoriserCodeSet` (codes_set) est remplacé par un témoin.
+// /api/apprendre appellent, avec les lecteurs de la route (`lecteursMongo`) sur un catalogue de test ; `decoderCodeSet` est celle que la
+// route importe (collecte-cartes/codes-set.js) ; seul `memoriserCodeSet` (codes_set) est remplacé par un témoin.
 // MODULE_DEDUCTION=<chemin> rejoue le banc sur une autre copie du module (celle d'avant la relecture : c'est ainsi qu'on l'a vu échouer).
 require('dotenv').config();
 const fs = require('fs');
@@ -20,8 +20,9 @@ let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 // Un cas qui lève (fonction absente de la copie d'avant, par exemple) est un ÉCHEC, pas un arrêt du banc.
 const cas = async (nom, f) => { try { await f(); } catch (e) { ko++; console.log(`❌ ${nom}\n   a levé : ${e.message}`); } };
-// La VRAIE fonction de la route, lue dans index.js (le banc ne peut pas charger index.js : il démarre le serveur).
-const decoderCodeSet = (() => { const m = /function decoderCodeSet\(codeSet\) \{[\s\S]*?\n\}/.exec(fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8')); if (!m) throw new Error('decoderCodeSet introuvable dans index.js'); return new Function(`${m[0]}; return decoderCodeSet;`)(); })();
+// La VRAIE fonction de la route (2026-09-27, soir : elle vit dans collecte-cartes/codes-set.js, que la route importe ; le banc ne peut
+// pas charger index.js, il démarre le serveur).
+const { decoderCodeSet } = require('./collecte-cartes/codes-set');
 
 (async () => {
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();

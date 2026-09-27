@@ -54,6 +54,7 @@ const {
 // 🔴 SECONDE RELECTURE (2026-09-26, nuit) : les deux routes d'apprentissage écrivent par `apprendreLot` et `apprendreUneLecture`, sur
 // le PILOTE — les mêmes fonctions que le banc test-deduction-ecritures-scratch.js exerce sur test_scratch.
 const { apprendreLot, apprendreUneLecture } = require('./collecte-cartes/deduire-produit');
+const { mettreEnFile: mettreEnFileApprentissage, traiterUn: traiterUnApprentissage, reprendreBloques: reprendreApprentissagesBloques, COLLECTION: FILE_APPRENTISSAGE } = require('./collecte-cartes/file-apprentissage');
 const { estCarteCode } = require('./collecte-cartes/jointure');
 
 // Journal des scans : une ligne par identification, en base. Les logs Render sont
@@ -220,6 +221,17 @@ const limiteurApprentissage = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: 'Trop de requêtes d\'apprentissage, réessaie plus tard.' }
+});
+// /api/apprendre-lot (l'userscript) : la MÊME limite, mais elle ne REFUSE plus — au-delà, la requête est MARQUÉE et la route met le
+// lot en file côté serveur (collecte-cartes/file-apprentissage.js), vidé à la même cadence (testeur, 2026-09-27 : 3 envois refusés en
+// 429 au journal 1.9, des lectures que Cardmarket avait déjà facturées). Le limiteur reste AVANT le jeton : une requête non authentifiée
+// marquée est refusée par `verifierJeton` comme avant, et rien d'elle n'entre en file.
+const limiteurLot = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (req, res, next) => { req.enFileServeur = true; next(); }
 });
 
 // Limiteur dédié à /api/retour-live. Il partageait l'INSTANCE `limiteurIA` : chaque prix
@@ -541,49 +553,16 @@ async function lireRegions(idsExpansion) {
 // TOUS les chemins d'écriture (/api/apprendre, /api/apprendre-lot, memoriserCodeSet).
 // Une séquence malformée ("100%") est laissée telle quelle plutôt que de faire échouer
 // l'apprentissage. Voir nettoyer-codeset.js pour le rattrapage de l'existant.
-function decoderCodeSet(codeSet) {
-    if (!codeSet) return codeSet;
-    const s = String(codeSet);
-    if (!s.includes('%')) return s;
-    try { return decodeURIComponent(s); } catch (_) { return s; }
-}
-
-async function memoriserCodeSet(idExpansion, codeSetBrut) {
-    const codeSet = decoderCodeSet(codeSetBrut);
-    try {
-        // ⚠️ MONGO PAS PRÊT : ON LÈVE, ON NE SAUTE PLUS — 2026-09-07. Cette fonction ÉCRIT
-        // `codes_set`, l'une des deux tables non régénérables. Un `return` muet ici faisait
-        // croire à l'appelant que le code avait été mémorisé : il n'y avait ni écriture, ni
-        // erreur, ni trace. Les deux appelants (`/api/apprendre` et `/api/apprendre-lot`)
-        // portent désormais leur propre garde 503 en tête, donc ce chemin ne devrait jamais
-        // se déclencher — et s'il se déclenche, c'est qu'un TROISIÈME appelant est apparu
-        // sans garde, ce qu'on veut savoir bruyamment plutôt que découvrir dans les données.
-        // 🔑 `idExpansion`/`codeSet` absents restent un `return` muet : ce n'est pas une
-        // panne, c'est une carte sans code — le cas ordinaire, et il n'a rien à signaler.
-        if (mongoose.connection.readyState !== 1) {
-            throw new Error('memoriserCodeSet appelée sans connexion Mongo — l\'appelant doit refuser en amont (503)');
-        }
-        if (!idExpansion || !codeSet) return;
-        // ⚠️ UNE LIGNE APPRISE NE S'ÉCRASE PAS — 2026-09-06. `codes_set` est l'une des deux
-        // tables non régénérables, et cet upsert remplaçait sans condition le code d'une
-        // expansion déjà connue, sur la seule foi d'un appel porteur du jeton partagé. Un
-        // code DIFFÉRENT pour une expansion déjà apprise est refusé et tracé ; le même code
-        // est réécrit comme avant (apprisLe se rafraîchit, rien ne change).
-        const existant = await CodeSet.findOne({ idExpansion }, { codeSet: 1 }).lean();
-        if (existant && existant.codeSet && existant.codeSet !== codeSet) {
-            console.warn(`🚫 [codes_set] idExpansion ${idExpansion} porte déjà « ${existant.codeSet} » : « ${codeSet} » n'écrase pas une ligne apprise.`);
-            return;
-        }
-        await CodeSet.findOneAndUpdate(
-            { idExpansion },
-            { idExpansion, codeSet, apprisLe: new Date() },
-            { upsert: true }
-        );
-        console.log(`🧠 Code set appris et mémorisé : idExpansion ${idExpansion} -> ${codeSet}`);
-    } catch (e) {
-        console.error("Erreur mémorisation codeSet:", e.message);
-    }
-}
+// ⚠️ `decoderCodeSet` et la RÈGLE de `memoriserCodeSet` (une ligne apprise ne s'écrase pas ; Mongo pas prêt → on lève, attrapé et
+// tracé) vivent dans collecte-cartes/codes-set.js depuis le 2026-09-27 (soir) : l'intégration de la file en attente de l'userscript
+// (integrer-file-attente.js) appelle `apprendreLot` hors du serveur, et une copie de la règle divergerait (§21 bis). La route garde
+// son modèle mongoose — mêmes conversions de schéma, même upsert qu'avant —, injecté ici.
+const { decoderCodeSet, fabriquerMemoriserCodeSet } = require('./collecte-cartes/codes-set');
+const memoriserCodeSet = fabriquerMemoriserCodeSet({
+    lire: idExpansion => CodeSet.findOne({ idExpansion }, { codeSet: 1 }).lean(),
+    ecrire: (idExpansion, codeSet) => CodeSet.findOneAndUpdate({ idExpansion }, { idExpansion, codeSet, apprisLe: new Date() }, { upsert: true }),
+    pret: () => mongoose.connection.readyState === 1
+});
 
 // ════════════════════════════════════════════════════════════════════════════
 // 📌 CE CACHE EST BRANCHÉ SUR LA ROUTE QUE PERSONNE N'EMPRUNTE — 2026-09-02
@@ -6504,7 +6483,7 @@ app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res
 //    -> ÉCRASÉ par la lecture exacte Cardmarket (nomFr/variante/slug en bonus)
 //  - absent -> inséré
 // On ignore les cartes sans numéro lisible (elles n'aident pas le scoring).
-app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req, res) => {
+app.post('/api/apprendre-lot', limiteurLot, verifierJeton, async (req, res) => {
     try {
         // Même garde que /api/apprendre : ⚠️ CONTRAT MODIFIÉ, `userId` obligatoire (400).
         const userId = req.body && req.body.userId ? String(req.body.userId).slice(0, 80) : null;
@@ -6532,6 +6511,13 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         if (!Array.isArray(cartes) || cartes.length === 0) {
             return res.json({ success: false, error: "Aucune carte reçue" });
         }
+        // Au-delà de la limite (req.enFileServeur, posé par `limiteurLot`) : EN FILE, 202 — jamais un refus pour un envoi authentifié et
+        // bien formé ; le plafond par utilisateur de la file reste la seule réponse 429 (un abus du jeton, pas une passe).
+        if (req.enFileServeur) {
+            const { status, corps } = await mettreEnFileApprentissage(mongoose.connection.db.collection(FILE_APPRENTISSAGE), { userId, cartes });
+            console.log(`📥 [apprendre-lot] au-delà de la limite -> ${status === 202 ? `EN FILE (position ${corps.position}, ${cartes.length} carte(s))` : `REFUS ${status} : ${corps.error}`} (userId=${userId})`);
+            return res.status(status).json(corps);
+        }
 
         // ════════════════════════════════════════════════════════════════════
         // LE LOT LUI-MÊME : `apprendreLot` (collecte-cartes/deduire-produit.js) — seconde relecture du 2026-09-26 (nuit)
@@ -6556,6 +6542,24 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
+// LA FILE D'APPRENTISSAGE SE VIDE ICI, UN LOT TOUTES LES 30 S (120/h, la limite d'avant) — par `apprendreLot`, exactement ce que la
+// route appelle. Mongo pas prêt : on attend le tour suivant (la garde 503 de la route, appliquée au rejeu). Un lot pris par un
+// processus mort (redéploiement) revient en attente au bout de 10 min ; trois échecs → `erreur`, gardé en base.
+let fileApprentissageEnCours = false;
+setInterval(async () => {
+    if (fileApprentissageEnCours || mongoose.connection.readyState !== 1) return;
+    fileApprentissageEnCours = true;
+    try {
+        const C = mongoose.connection.db.collection(FILE_APPRENTISSAGE);
+        await reprendreApprentissagesBloques(C);
+        const r = await traiterUnApprentissage(C, { apprendre: (cartes, userId) => apprendreLot(cartes, { numeros: NumeroCarte.collection, catalogue: CatalogueProduit.collection, decoderCodeSet, memoriserCodeSet, userId }) });
+        if (r.traite) console.log(`📥 [file apprentissage] lot ${r.id} -> ${r.etat}${r.resultat ? ` (${r.resultat.nouvelles ?? 0} nouvelles, ${r.resultat.dejaExactes ?? 0} déjà exactes, ${r.resultat.deduites ?? 0} déduites)` : ''}${r.erreur ? ` : ${r.erreur}` : ''}`);
+    } catch (e) {
+        console.error('❌ [file apprentissage]', e.message);
+    } finally {
+        fileApprentissageEnCours = false;
+    }
+}, 30 * 1000).unref();
 // ============================================================
 // PAIEMENT — recharges de scans via Stripe Checkout
 // ============================================================
