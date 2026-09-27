@@ -103,13 +103,23 @@ const REGIMES = {
 const SEUIL_MARGE = 30;   // SEUIL_MARGE_CONFORTABLE de choisirMeilleur — pour un PROXY, voir plus bas
 const prixTri = p => (typeof p === 'number' && p > 0) ? p : Infinity;
 
-/** Rejoue un régime sur les scores d'une ligne : même tri que choisirMeilleur (score desc, puis le moins cher). */
+// ── LE SCORE SOUS UN AUTRE TERME DE PRIX, COMME LA PRODUCTION LE CALCULERAIT — une seule écriture pour toutes les mesures qui
+// rejouent un régime (revue du 2026-09-27 : les mesures 5 et 6 recomptaient sur le score RELEVÉ, sans le relèvement — §21 bis dans
+// l'instrument). Le terme s'applique au score d'AVANT le relèvement de choisirMeilleur, puis le relèvement de la PRODUCTION est rejoué
+// (S.releverLectures, jamais une copie) : une lecture relevée par le prix ne l'est peut-être plus sous un autre terme.
+const scoreAvantReleveDe = s => (s.detail?.releve ? Number(String(s.detail.releve).split('→')[0]) : s.score);
+const expOuNull = e => (Number.isFinite(e) && e > 0 ? e : null);   // Number(null) vaut 0 : il fabriquerait une clé « 0#n »
+function rescorer(scores, terme) {
+    return S.releverLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + terme(s.branche),
+        candidat: { idExpansion: expOuNull(s.idExpansion), numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })));
+}
+// la clé 1 bis du tri de choisirMeilleur : à score égal, une ligne DÉDUITE passe après une lecture (décision du testeur, 2026-09-27)
+const deduiteApres = (a, b) => (a?.certitudeNumero === 'deduite' ? 1 : 0) - (b?.certitudeNumero === 'deduite' ? 1 : 0);
+
+/** Rejoue un régime sur les scores d'une ligne : score desc, la déduite après la lecture, puis le moins cher. */
 function rejouerRegime(scores, attendu, regime) {
-    // le régime s'applique au score d'AVANT le relèvement, puis le relèvement de la PRODUCTION est rejoué (S.releverLectures, jamais
-    // une copie) : une lecture relevée par le prix ne l'est peut-être plus sous un autre régime
-    const re = S.releverLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + regime(s.branche),
-        candidat: { idExpansion: s.idExpansion, numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })))
-        .sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix)));
+    const re = rescorer(scores, regime)
+        .sort((a, b) => (b.score - a.score) || deduiteApres(a, b) || (prixTri(a.prix) - prixTri(b.prix)));
     const top = re[0], second = re[1];
     const tailleSommet = re.filter(s => s.score === top.score).length;
     const iv = re.findIndex(s => s.id === attendu);
@@ -217,7 +227,7 @@ function rejouerRegime(scores, attendu, regime) {
         x.scores = scores.map(s => ({
             id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail),
             // le score AVANT le relèvement de choisirMeilleur (scoring.js, `releverLectures`) : c'est lui qui est la somme du barème
-            scoreAvantReleve: s.detail?.releve ? Number(String(s.detail.releve).split('→')[0]) : s.score,
+            scoreAvantReleve: scoreAvantReleveDe(s),
             numeroCardmarket: s.candidat.numeroCardmarket ?? null, certitudeNumero: s.candidat.certitudeNumero ?? null,
             // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif). `releve` n'en est pas une.
             contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'releve').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
@@ -252,8 +262,9 @@ function rejouerRegime(scores, attendu, regime) {
             neutralise: null
         };
         if (d.rarete == null) {
-            const re = scores.map(s => ({ id: s.candidat.idProduct, score: s.score - contributionPrix(s.detail) }))
-                .sort((a, b) => b.score - a.score);
+            // (depuis le score d'avant le relèvement, puis le relèvement de la production, et la clé 1 bis)
+            const re = S.releverLectures(scores.map(s => ({ id: s.candidat.idProduct, candidat: s.candidat, detail: {}, score: scoreAvantReleveDe(s) - contributionPrix(s.detail) })))
+                .sort((a, b) => (b.score - a.score) || deduiteApres(a.candidat, b.candidat));
             const jv = re.findIndex(s => s.id === x.attendu);
             const eg = re.length > 1 && S.sontExAequo(re[0].score, re[1].score);
             const rg = jv >= 0 ? 1 + re.filter(s => s.score > re[jv].score).length : null;
@@ -424,8 +435,8 @@ function rejouerRegime(scores, attendu, regime) {
         for (const [nomTri, tri] of Object.entries(TRIS)) {
             let pos1 = 0, top3 = 0, plusCher = 0, moinsCher = 0, sansPrix = 0, sommet = 0; const prix1 = [];
             for (const x of presentes) {
-                const re = x.scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + terme(s.branche) }))
-                    .sort((a, b) => (b.score - a.score) || tri(a, b));
+                const re = rescorer(x.scores, terme)
+                    .sort((a, b) => (b.score - a.score) || deduiteApres(a, b) || tri(a, b));
                 const iv = re.findIndex(s => s.id === x.attendu);
                 if (iv === 0) pos1++;
                 if (iv >= 0 && iv < 3) top3++;
@@ -479,7 +490,7 @@ function rejouerRegime(scores, attendu, regime) {
     const trierMixte = (liste, cle) => {
         const rangGroupe = new Map();
         for (const s of liste) { const k = cle(s); rangGroupe.set(k, Math.min(rangGroupe.get(k) ?? Infinity, s.ordreVivier)); }
-        return [...liste].sort((a, b) => (b.score - a.score) || (rangGroupe.get(cle(a)) - rangGroupe.get(cle(b))) || (prixTri(a.prix) - prixTri(b.prix)) || (a.id - b.id));
+        return [...liste].sort((a, b) => (b.score - a.score) || deduiteApres(a, b) || (rangGroupe.get(cle(a)) - rangGroupe.get(cle(b))) || (prixTri(a.prix) - prixTri(b.prix)) || (a.id - b.id));
     };
     // Le test 16, rejoué sur le tri mixte : les deux xASC 153 (même expansion, même numéro, même
     // métacarte) doivent rester « le moins cher en tête ».
@@ -494,7 +505,7 @@ function rejouerRegime(scores, attendu, regime) {
         console.log(`\n   ── ${nomTerme} ──`);
         console.log(`   ${'tri'.padEnd(44)} pos.1  top3  | 1er faux ET plus cher : total / dont MÊME carte que la vérité (variante) / carte différente | prix médian du 1er`);
         const tris = {
-            'moins cher d\'abord (production)': l => [...l].sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix))),
+            'moins cher d\'abord (production)': l => [...l].sort((a, b) => (b.score - a.score) || deduiteApres(a, b) || (prixTri(a.prix) - prixTri(b.prix))),
             'mixte E+N : même exp.+numéro -> prix, sinon vivier': l => trierMixte(l, cleEN),
             'mixte M : même idMetacard -> prix, sinon vivier': l => trierMixte(l, cleM)
         };
@@ -502,7 +513,7 @@ function rejouerRegime(scores, attendu, regime) {
             let pos1 = 0, top3 = 0, fauxCher = 0, fauxCherVariante = 0; const prix1 = [];
             const cle = nomTri.startsWith('mixte M') ? cleM : cleEN;
             for (const x of presentes) {
-                const re = tri(x.scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + terme(s.branche) })));
+                const re = tri(rescorer(x.scores, terme));
                 const iv = re.findIndex(s => s.id === x.attendu);
                 if (iv === 0) pos1++;
                 if (iv >= 0 && iv < 3) top3++;
