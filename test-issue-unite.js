@@ -32,6 +32,10 @@ verifier('ECONNRESET → transitoire', echecTransitoire(err('ECONNRESET https://
 verifier('ETIMEDOUT / ECONNABORTED → transitoire', [echecTransitoire(err('ETIMEDOUT https://x')), echecTransitoire(err('ECONNABORTED https://x'))], [true, true]);
 verifier('l\'erreur ÉCRITE en base (message seul, sans status) : « 503 https://… » → transitoire', echecTransitoire({ message: '503 https://assets.tcgdex.net/en/swsh/swsh11/178/high.png' }), true);
 verifier('   « 404 https://… » écrit en base → définitif', echecTransitoire({ message: '404 https://x' }), false);
+// troisième relecture de l'occidental : un 429 (« trop de requêtes »), une résolution DNS ratée, une coupure réseau d'axios sont des
+// causes PASSAGÈRES — les ranger en verdict définitif sortait l'impression du manque pour toujours
+verifier('429, ENOTFOUND, ERR_NETWORK (vivants et écrits en base) → transitoires',
+    [echecTransitoire(err('429 https://x', 429)), echecTransitoire({ message: '429 https://x' }), echecTransitoire(err('ENOTFOUND https://x')), echecTransitoire(err('ERR_NETWORK https://x'))], [true, true, true, true]);
 verifier('404 « absent chez TCGdex » → définitif', echecTransitoire(err('absent chez TCGdex (404)')), false);
 verifier('une image illisible (sharp) → définitif', echecTransitoire(err('Input buffer contains unsupported image format')), false);
 verifier('un verrou perdu → définitif pour ce passage (l\'unité est interrompue, pas incomplète)', echecTransitoire(err('TCGdex : verrou global PERDU — pas de requête sans verrou')), false);

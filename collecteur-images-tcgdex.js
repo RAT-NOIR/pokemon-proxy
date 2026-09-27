@@ -33,10 +33,13 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { normaliserNom } = require('./collecte-cartes/jointure');
-const { fabriquerClient, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
+const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
 const { cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion } = require('./collecte-cartes/tcgdex-appariement');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+// l'identifiant d'un document `images` TCGdex vit dans le module du manque réel : l'alimentateur y cherche ce que ce
+// collecteur a TENTÉ, et une seconde écriture de la forme divergerait un jour (§21 bis)
+const { idImageTcgdex } = require('./collecte-cartes/manque-reel');
 
 const SOURCE = 'tcgdex';
 const VERROU_SET_MS = 10 * 60 * 1000;
@@ -66,7 +69,8 @@ function releve(unite, sets) {
  *  Le set TCGdex et ses GALERIES (compagnonsDuSet : Trainer Gallery, Galarian Gallery), que Bulbapedia range dans la même
  *  expansion. Sans client, une galerie absente du cache n'est pas lue — et ses restes le DISENT (`compagnonsNonLus`). */
 async function planifier(M, db, client, L, set) {
-    const lire = async id => client ? (await cartesEn(db, client, id)).cartes : (await db.collection('tcgdex_sets').findOne({ _id: `en/${id}` }))?.cartes;
+    // le set EXACT, à la lecture aussi : le cache garde des cartes écrites par l'ancien filtre « contient » (`en/30th` porte 30 `30th-c`)
+    const lire = async id => { const cs = client ? (await cartesEn(db, client, id)).cartes : (await db.collection('tcgdex_sets').findOne({ _id: `en/${id}` }))?.cartes; return cs && cs.filter(c => estDuSet(id, c)); };
     const principal = await lire(set.id);
     if (!principal) return null;
     const liste = (await db.collection('tcgdex_sets').findOne({ _id: 'en/__liste__' }))?.sets;
@@ -102,7 +106,7 @@ async function collecterSet(unite, M, { verrou }) {
         let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0;
         for (const p of P.plan) {
             if (arretDemande || !verrou.tenu) break;
-            const _id = `${SOURCE}/${slug}/${p.carte._id}/${cleNum(p.numero)}`;
+            const _id = idImageTcgdex(slug, p.carte._id, p.numero);   // la MÊME forme que le manque réel de l'alimentateur
             const url = `${p.tcg.image}/high.png`;
             const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
             if (deja?.sha256 && deja.urlOriginal === url) { sautes++; continue; }

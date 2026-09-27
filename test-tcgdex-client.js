@@ -60,6 +60,14 @@ const erreur = status => Object.assign(new Error(`HTTP ${status}`), { status });
     const cartes = await c5.cartesDuSet('sm1');
     verifier('pagination : 237 cartes du set, l\'intrus d\'un autre set écarté', [cartes.length, cartes.some(x => x.id === 'sm1a-1')], [237, false]);
     verifier('pagination : trois requêtes', t5.appels.length, 3);
+    // 2026-09-26 (soir) : le filtre est un « contient », et `startsWith('30th-')` prenait `30th-c-001` (le set 30th-c) :
+    // le cache `en/30th` portait 188 cartes pour 158. Une carte est du set quand son id est EXACTEMENT « <set>-<localId> ».
+    const t6 = faux([{ data: { cards: [{ id: '30th-001', localId: '001', name: 'A' }, { id: '30th-c-001', localId: '001', name: 'B' }, { id: 'tk-xy-p-1', localId: '1', name: 'C' }] } }]);
+    const c6 = fabriquerClient({ transport: t6, cadenceMs: 1, cadenceGraphqlMs: 1, reessaiMs: 1, verrou: tenu });
+    verifier('« 30th » ne prend pas les cartes de « 30th-c »', (await c6.cartesDuSet('30th')).map(x => x.id), ['30th-001']);
+    const t7 = faux([{ data: { cards: [{ id: 'tk-xy-p-1', localId: '1', name: 'C' }, { id: 'tk-xy-p-2', localId: '2', name: 'D' }] } }]);
+    const c7 = fabriquerClient({ transport: t7, cadenceMs: 1, cadenceGraphqlMs: 1, reessaiMs: 1, verrou: tenu });
+    verifier('un id de set à tirets (tk-xy-p) garde ses cartes', (await c7.cartesDuSet('tk-xy-p')).map(x => x.id), ['tk-xy-p-1', 'tk-xy-p-2']);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);

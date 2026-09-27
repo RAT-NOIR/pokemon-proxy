@@ -36,5 +36,25 @@ const R = apparierExpansion('Brilliant Stars', cartes, tcg);
 verifier('TG07 → swsh9tg-TG07, 068 → swsh9-068, 017 → swsh9-017', R.map(r => `${r.numero}→${r.tcg?.id ?? r.motif}`), ['068→swsh9-068', 'TG07→swsh9tg-TG07', '017→swsh9-017']);
 verifier('sans la galerie, TG07 est un reste nommé, pas un silence', apparierExpansion('Brilliant Stars', cartes, tcg.slice(0, 2)).map(r => r.tcg?.id ?? r.motif), ['swsh9-068', 'absente-de-tcgdex', 'swsh9-017']);
 
+// ── 2026-09-26 (soir) : l'audit occidental a trouvé deux autres découpages de TCGdex, rangés en « aucune source » (§30).
+// Le Shiny Vault (SV1…SV94) est un set TCGdex À PART (« Hidden Fates Shiny Vault », « Shining Fates Shiny Vault ») que Bulbapedia
+// range dans l'expansion ; et Bulbapedia écrit « Platinum: Arceus » quand TCGdex écrit « Arceus » (pl4). Noms recopiés du cache.
+const { fabriquerAppariement } = require('./collecte-cartes/tcgdex-cache');
+const liste2 = [
+    { id: 'sm115', name: 'Hidden Fates' }, { id: 'sma', name: 'Hidden Fates Shiny Vault' },
+    { id: 'swsh4.5', name: 'Shining Fates' }, { id: 'swsh4.5sv', name: 'Shining Fates Shiny Vault' },
+    { id: 'pl4', name: 'Arceus' }, { id: 'pl1', name: 'Platinum' }, { id: 'ex13', name: 'Holon Phantoms' }
+];
+verifier('Hidden Fates → son Shiny Vault', compagnonsDuSet(liste2[0], liste2).map(c => c.id), ['sma']);
+verifier('Shining Fates → son Shiny Vault', compagnonsDuSet(liste2[2], liste2).map(c => c.id), ['swsh4.5sv']);
+verifier('un Shiny Vault n\'a pas lui-même de compagnon', compagnonsDuSet(liste2[1], liste2).map(c => c.id), []);
+const ap2 = fabriquerAppariement(liste2);
+verifier('« Platinum: Arceus » → pl4, et la variante se DIT', ap2('Platinum: Arceus'), { set: liste2[4], variante: 'sans le préfixe « Platinum: »' });
+verifier('« Platinum » seul reste le set Platinum (égalité exacte d\'abord)', ap2('Platinum')?.set?.id, 'pl1');
+verifier('« EX Holon Phantoms » → ex13 (la variante EX inchangée)', ap2('EX Holon Phantoms'), { set: liste2[6], variante: 'sans le préfixe « EX »' });
+verifier('« Platinum: Inconnu » → rien', ap2('Platinum: Inconnu'), null);
+const cartesHif = [{ _id: 9, nomEn: 'Fisherman', impressions: [{ tirage: 'intl', expansion: 'Hidden Fates', numero: 'SV83' }] }];
+verifier('SV83 → sma-SV83 sur la liste fusionnée', apparierExpansion('Hidden Fates', cartesHif, [{ id: 'sma-SV83', localId: 'SV83', name: 'Fisherman', image: 'i/SV83' }]).map(r => r.tcg?.id ?? r.motif), ['sma-SV83']);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

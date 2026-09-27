@@ -39,6 +39,11 @@ const transportAxios = {
 // tard — une surcharge passagère, pas une panne). Le GraphQL prend donc 5 s, les fichiers du CDN restent à 2 s.
 const CADENCE_GRAPHQL_MS = 5000;
 
+// UNE carte appartient au set EXACT quand son id vaut « <set>-<localId> » (2026-09-26 : le filtre GraphQL est un « contient »,
+// `30th` prenait `30th-c-001`). La MÊME règle filtre ce que l'API rend ET ce qu'on relit du cache, qui garde des cartes écrites
+// par l'ancien filtre (`en/30th` : 30 cartes de `30th-c`) — les retirer du cache est une suppression, elle attend son feu vert.
+const estDuSet = (id, c) => String(c?.id) === `${id}-${c?.localId}`;
+
 function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null } = {}) {
     let lie = verrou, file = Promise.resolve(), dernierDepart = 0, compte = 0;
     const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -72,14 +77,18 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
 
     /** Toutes les cartes d'un set anglais, ILLUSTRATEUR COMPRIS : la liste d'un set ne le porte pas, `cards(filters)` si. */
     async function cartesDuSet(id) {
-        if (!/^[\w.]+$/.test(id)) throw new Error(`identifiant de set TCGdex inattendu : « ${id} »`);
+        // l'identifiant entre dans une chaîne GraphQL : lettres, chiffres, point — et le TIRET (2026-09-26 : les demi-decks des
+        // Trainer Kits s'appellent `tk-xy-n`, `tk-sm-l`…) ; ni guillemet ni accolade, rien qui ferme la chaîne
+        if (!/^[\w.-]+$/.test(id)) throw new Error(`identifiant de set TCGdex inattendu : « ${id} »`);
         const toutes = [];
         for (let p = 1; ; p++) {
             if (p > PAGES_MAX) throw new Error(`${id} : plus de ${PAGES_MAX} pages — une boucle, pas un set`);
             const r = await graphql(`{ cards(filters: { id: "${id}-" }, pagination: { page: ${p}, count: ${PAGE} }) { id localId name illustrator image rarity } }`);
             if (r?.errors?.length) throw new Error(`${id} : GraphQL ${JSON.stringify(r.errors).slice(0, 200)}`);
             const lot = r?.data?.cards || [];
-            toutes.push(...lot.filter(c => String(c.id).startsWith(`${id}-`)));   // le filtre est un « contient » : on garde le set exact
+            // le filtre est un « contient » : on garde le set EXACT, par l'égalité id = « <set>-<localId> » — `startsWith('30th-')`
+            // prenait aussi `30th-c-001` (2026-09-26 : le cache `en/30th` portait 188 cartes pour 158)
+            toutes.push(...lot.filter(c => estDuSet(id, c)));
             if (lot.length < PAGE) break;
         }
         return toutes;
@@ -93,4 +102,4 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
     };
 }
 
-module.exports = { fabriquerClient, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_MS, CADENCE_GRAPHQL_MS, API };
+module.exports = { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_MS, CADENCE_GRAPHQL_MS, API };

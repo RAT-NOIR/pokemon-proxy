@@ -23,7 +23,7 @@ const { modeles } = require('./collecte-cartes/schemas');
 const { cleNumero } = require('./collecte-cartes/jointure');
 const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { fabriquerClient, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_GRAPHQL_MS } = require('./collecte-cartes/tcgdex');
+const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_GRAPHQL_MS } = require('./collecte-cartes/tcgdex');
 const { listeEn, cartesEn, fabriquerAppariement } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion } = require('./collecte-cartes/tcgdex-appariement');
 
@@ -83,7 +83,8 @@ const DATE = new Date().toISOString().slice(0, 10);
             console.log(`   ✅ lu : ${aLire.length} sets, ${client.compteRequetes()} requêtes`);
         } finally { await verrou.rendre(); }
     }
-    const tcgDe = new Map((await cx.db.collection('tcgdex_sets').find({ _id: { $in: idsVoulus.map(id => `en/${id}`) } }).toArray()).map(d => [d._id.slice(3), d.cartes]));
+    // le set EXACT (collecte-cartes/tcgdex.js, `estDuSet`) : le cache brut garde des cartes de l'ancien filtre « contient » (`en/30th`)
+    const tcgDe = new Map((await cx.db.collection('tcgdex_sets').find({ _id: { $in: idsVoulus.map(id => `en/${id}`) } }).toArray()).map(d => [d._id.slice(3), Array.isArray(d.cartes) ? d.cartes.filter(x => estDuSet(d._id.slice(3), x)) : d.cartes]));
     // 🔑 DEPUIS LA VERSION TCGdex DU FICHIER DU SITE (2026-09-23), CE QUI SUIT EST UN TÉMOIN, PLUS UNE SOURCE : le site a
     // apparié par l'IDENTIFIANT TCGdex, moi par le NUMÉRO avec le nom en témoin. Même source, deux appariements
     // indépendants : s'ils rendent deux illustrateurs pour une impression, l'un des deux a pris la mauvaise carte.

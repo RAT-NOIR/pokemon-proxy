@@ -49,7 +49,10 @@ function fausseCx(docs, { collectionVide = false } = {}) {
 }
 
 const cas = [];
-const ajouter = (nom, cx, attenduBloque) => cas.push({ nom, cx, attenduBloque });
+// l'arbre de travail est comparé par une fonction INJECTÉE : « identique » par défaut dans ce banc (il juge la balise), et le cas 9
+// fabrique un arbre qui diffère — la garde doit alors bloquer, même balise parfaite.
+const arbreIdentique = () => [], arbreDifferent = () => ['collecteur-images.js'];
+const ajouter = (nom, cx, attenduBloque, comparerArbre = arbreIdentique) => cas.push({ nom, cx, attenduBloque, comparerArbre });
 
 // ── LES SEPT ÉTATS QUI DOIVENT BLOQUER ───────────────────────────────────────────────────────────
 ajouter('1. la collection est VIDE (ou mal nommée : c\'est le même symptôme)',
@@ -76,6 +79,9 @@ ajouter('6. une balise dont le commit vaut « local » — un arbre de travail n
 ajouter('7. un commit INCONNU de ce dépôt — on ne peut pas dire ce qu\'il contient',
     fausseCx([{ _id: `${PREFIXE}pod-a/52`, balise: { pid: 52, hote: 'pod-a', commit: '0123456789abcdef0123456789abcdef01234567', etat: 'travail', depuis: ilYA(0.2) } }]), true);
 
+ajouter('9. balise parfaite, mais l\'ARBRE DE TRAVAIL diffère du commit du worker sur une règle (§21 bis, troisième relecture)',
+    fausseCx([{ _id: `${PREFIXE}pod-a/52`, balise: { pid: 52, hote: 'pod-a', commit: HEAD, etat: 'repos', depuis: ilYA(0.2) } }]), true, arbreDifferent);
+
 // ── LE SEUL ÉTAT QUI DOIT PASSER ─────────────────────────────────────────────────────────────────
 ajouter('8. une balise fraîche, unique, sur HEAD — qui contient les trois règles',
     fausseCx([{ _id: `${PREFIXE}pod-a/52`, balise: { pid: 52, hote: 'pod-a', commit: HEAD, etat: 'repos', depuis: ilYA(0.2) } }]), false);
@@ -85,7 +91,7 @@ ajouter('8. une balise fraîche, unique, sur HEAD — qui contient les trois rè
     let ok = 0, ko = 0;
     for (const c of cas) {
         let r;
-        try { r = await etatDuWorker(c.cx); }
+        try { r = await etatDuWorker(c.cx, { comparerArbre: c.comparerArbre }); }
         catch (e) { r = { bloque: null, phrase: `EXCEPTION NON RATTRAPÉE : ${e.message}` }; }
         const juste = r.bloque === c.attenduBloque;
         if (juste) ok++; else ko++;

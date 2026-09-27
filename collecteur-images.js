@@ -28,6 +28,10 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const r2 = require('./collecte-cartes/r2');
 const src = require('./collecte-cartes/artofpkm');
 const { ligne: ligneDeTable, TABLE } = require('./collecte-cartes/table-sets');
+const { revaliderSets } = require('./collecte-cartes/revalider-site');   // une unité passée par la jointure revalide la page de son set
+// les issues d'unité ATTEINTES APRÈS la jointure des images (les trois collecteurs) — les seules où une page peut avoir changé.
+// Écrit par ce qu'il autorise (§51) : un refus précoce, un arrêt, une mesure n'ont rien joint et ne coûtent pas un appel au quota Vercel.
+const APRES_JOINTURE = /^(verifie|incomplet|incomplet-transitoire|non-concordant)$/;
 const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
@@ -51,7 +55,7 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
-const { issueDeLUnite } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
@@ -583,7 +587,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // test-alimentateur.js). Il lit les règles de CE commit : ce qu'il enfile est exécuté par le code qui l'a choisi.
             // Une file encore vide après lui est une ALERTE écrite en base, jamais un sommeil muet. Son échec ne tue pas la
             // boucle (la file déjà pleine continue de tourner) — mais il crie.
-            try { await alimenter(cx.db, { journal: console }); }
+            try { await alimenter(cx.db, { journal: console, M }); }   // M : le manque réel lit les cartes par le plan du collecteur TCGdex
             catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
             // `pasAvant` : une unité remise en file après une surcharge de la source attend son délai (issue-unite.js).
             const suivant = await File.findOneAndUpdate({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: new Date() } }] }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
@@ -640,6 +644,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 }
                 if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
                 try { b = await tcgImg.collecterSet(suivant, M, { verrou: vt }); }
+                catch (e) {
+                    // 🔴 relecture du 2026-09-26 (nuit) : une exception (`cartesDuSet` en 503 après son réessai, un GraphQL en erreur)
+                    // TUAIT le worker — et le manque réel enfile des sets « jamais lus ». L'unité sort avec une issue : passagère, elle
+                    // revient en file (issue-unite.js, 3 passages au plus) ; sinon refusée, la cause ÉCRITE sur l'unité.
+                    b = { code: suivant.code, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    console.error(`🔴 ${suivant._id} : exception pendant la collecte TCGdex — ${e.message}`);
+                }
                 finally { await vt.rendre(); }
             } else b = await collecterSet(suivant._id, M, dossierRapport);
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
@@ -650,11 +661,30 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             const I = issueDeLUnite(b, suivant);
             const ordre = I.enQueue ? ((await File.find({}).sort({ ordre: -1 }).limit(1).lean())[0]?.ordre ?? 0) + 1 : undefined;
             await File.updateOne({ _id: suivant._id }, {
-                $set: { etat: I.etat, resultat: b.etat, ...(I.etat === 'attente' ? {} : { fini: new Date() }), ...(I.tentatives ? { tentatives: I.tentatives } : {}), ...(I.pasAvant ? { pasAvant: I.pasAvant, ordre } : {}) },
+                $set: { etat: I.etat, resultat: b.etat, ...(I.etat === 'attente' ? {} : { fini: new Date() }), ...(I.tentatives ? { tentatives: I.tentatives } : {}), ...(I.pasAvant ? { pasAvant: I.pasAvant, ordre } : {}), ...(b.erreur ? { erreur: b.erreur } : {}) },
                 ...(I.etat === 'attente' ? { $unset: { pris: 1 } } : {})
             });
             if (I.enQueue) console.log(`↩️ ${suivant._id} remis en file, en queue, pas avant ${I.pasAvant.toISOString()} (${b.etat}, passage ${I.tentatives}).`);
             if (I.arreter) { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
+            // 🔴 LE SITE NE SE RÉGÉNÈRE PLUS TOUT SEUL (2026-09-25, quota Vercel) : une image collectée ici restait invisible jusqu'à
+            // 30 jours — la case a) de l'audit occidental (2026-09-26 soir : White Flare, 11 images en base, page ancienne, revalidée
+            // à la main). Une unité revalide son set dès qu'elle est passée par la JOINTURE — pas seulement quand elle est « faite » :
+            // une unité incomplète (un 404 sur 106, EM) a joint 105 images (revue du 2026-09-26). Un échec ne tue pas la boucle, il
+            // CRIE et il s'ÉCRIT sur l'unité (`revalidation`) : un compte qui ne vit que dans un log n'est pas une mesure (§21 n°7).
+            // `REVALIDATION_SECRET` doit exister dans l'environnement du worker.
+            if (APRES_JOINTURE.test(String(b?.etat)) && !b.sansJointure) {
+                const slugUnite = ligneDeTable(suivant.code || String(suivant._id).replace(/^tcgdex\//, ''))?.slugSet;
+                let rv;
+                // ⚠️ « rien téléchargé » ne veut pas dire « rien joint » : un passage qui suit un passage INTERROMPU joint des images
+                // téléchargées avant — sauter sa revalidation laisserait la page ancienne. Coût borné : 1 appel par passage joint,
+                // 3 passages au plus par enfilement (issue-unite.js), 3 reprises au plus par version (manque-reel.js).
+                if (!slugUnite) rv = { ok: false, erreur: 'aucune ligne de table pour cette unité : set à revalider inconnu' };
+                else {
+                    try { const r = await revaliderSets([slugUnite], { journal: console }); rv = { ok: true, slug: slugUnite, appels: r.appels }; }
+                    catch (e) { rv = { ok: false, slug: slugUnite, erreur: e.message }; console.error(`🔴 revalidation de ${slugUnite} impossible : ${e.message} — la page reste ancienne tant que personne ne la revalide`); }
+                }
+                await File.updateOne({ _id: suivant._id }, { $set: { revalidation: { le: new Date(), ...rv } } });
+            }
         }
         clearInterval(minuterieBalise);
         await rendreVerrouGlobal(); await fermer(); return;

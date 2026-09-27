@@ -109,7 +109,10 @@ const COLLECTION_VERROUS = 'collecte_images_etat';
  * Le worker porte-t-il les règles ? Rend { bloque, phrase, etat }.
  * 🔑 `bloque: false` est le cas PARTICULIER, et il n'a qu'un seul chemin. Tout le reste bloque.
  */
-async function etatDuWorker(cx) {
+// `comparerArbre(commit, fichiers)` → les fichiers de l'ARBRE DE TRAVAIL qui diffèrent du commit (tables-du-commit.js) ; injectable
+// pour le banc. 🔴 troisième relecture (§21 bis) : l'histoire commitée ne dit rien d'une règle modifiée et NON commitée — la mesure
+// tournait avec elle, le worker non. Le trou n'était fermé que dans alimenter-maintenant.js ; il l'est ici, pour tous les outils.
+async function etatDuWorker(cx, { comparerArbre = require('./collecte-cartes/tables-du-commit').reglesDifferentes } = {}) {
     const lignes = [];
     const bloquer = (...l) => ({ bloque: true, phrase: [...lignes, ...l].join('\n   '), etat: 'bloque' });
     try {
@@ -157,11 +160,17 @@ async function etatDuWorker(cx) {
             if (r.etat === 'a-jour') { lignes.push(`✅ ${f} : ${b.commit} contient ${r.dernier}`); continue; }
             lignes.push(`🔴 ${f} : ${r.raison || `état « ${r.etat} »`}`);
         }
+        // bloqué, mais le commit est CONNU : il se rend (information seule — `bloque` reste vrai) pour que l'outil à la main
+        // puisse comparer ses lignes et ses règles à celles du worker et dire lesquelles l'attendent
         if (resultats.some(x => x.r.etat !== 'a-jour'))
-            return bloquer(`🔴 une règle au moins n'est pas portée par le worker — enfiler maintenant fabriquerait des refus.`);
+            return { ...bloquer(`🔴 une règle au moins n'est pas portée par le worker — enfiler maintenant fabriquerait des refus.`), commit: b.commit };
+        // ── ET L'ARBRE DE TRAVAIL : ce que j'enfile se décide avec les règles d'ICI. Une seule issue : aucune ne diffère du worker.
+        const diffArbre = comparerArbre(b.commit, REGLES);
+        if (diffArbre.length)
+            return { ...bloquer(`🔴 l'ARBRE DE TRAVAIL diffère du commit du worker ${b.commit} sur ${diffArbre.length} règle(s) : ${diffArbre.join(', ')} — ce que je mesure ici n'est pas ce que le worker exécutera (§21 bis).`), commit: b.commit };
 
         // ✅ LE SEUL CHEMIN QUI AUTORISE.
-        return { bloque: false, phrase: [...lignes, `✅ worker ${b.hote}/${b.pid}, état « ${b.etat} », sur ${b.commit} — les ${REGLES.length} règles sont portées.`].join('\n   '), etat: 'a-jour' };
+        return { bloque: false, phrase: [...lignes, `✅ worker ${b.hote}/${b.pid}, état « ${b.etat} », sur ${b.commit} — les ${REGLES.length} règles sont portées.`].join('\n   '), etat: 'a-jour', commit: b.commit };
     } catch (e) {
         // ⚠️ UNE EXCEPTION EST UN DOUTE, DONC UN BLOCAGE. La version précédente n'avait pas de `catch`
         // du tout, ce qui revenait à faire tomber l'outil — mieux qu'un passage, mais moins lisible.

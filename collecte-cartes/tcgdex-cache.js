@@ -7,6 +7,7 @@
 // 🔑 L'APPARIEMENT EST L'ÉGALITÉ DU NOM NORMALISÉ, JAMAIS L'INCLUSION (§31 : « M-P Promotional cards » contient
 // « P Promotional Cards »). Un nom qui désigne deux sets TCGdex ne désigne rien.
 const { normaliserNom } = require('./jointure');
+const { estDuSet } = require('./tcgdex');
 
 const COLLECTION = 'tcgdex_sets';
 
@@ -24,7 +25,9 @@ async function listeEn(db, client, { rafraichir = false } = {}) {
 async function cartesEn(db, client, id) {
     const c = db.collection(COLLECTION);
     const d = await c.findOne({ _id: `en/${id}` });
-    if (Array.isArray(d?.cartes)) return { cartes: d.cartes, cache: true };
+    // le set EXACT à la relecture aussi (collecte-cartes/tcgdex.js, `estDuSet`) : le cache garde des cartes écrites par l'ancien
+    // filtre « contient » (`en/30th` porte 30 `30th-c`) — les retirer du cache est une suppression, elle attend son feu vert
+    if (Array.isArray(d?.cartes)) return { cartes: d.cartes.filter(x => estDuSet(id, x)), cache: true };
     const cartes = await client.cartesDuSet(id);
     await c.updateOne({ _id: `en/${id}` }, { $set: { cartes, n: cartes.length, lu: new Date() } }, { upsert: true });
     return { cartes, cache: false };
@@ -38,12 +41,16 @@ function fabriquerAppariement(sets) {
     // 2 640 impressions sans set au premier passage (§30 : l'orthographe d'une source cherchée chez l'autre rend un vide).
     // Elle ne joue que si l'égalité exacte a échoué, exige l'unicité, et se DIT dans le résultat (`variante`).
     const essayer = k => { const l = parNom.get(k) || []; return l.length === 1 ? { set: l[0] } : l.length ? { ambigu: l.map(s => s.id) } : null; };
+    // ➕ 2026-09-26 (soir) : la seconde, NOMMÉE elle aussi — Bulbapedia écrit « Platinum: Arceus », TCGdex « Arceus » (pl4) ;
+    // l'audit occidental rangeait ses 111 cartes en « aucun set TCGdex » (§30). Mesuré : une seule ligne porte ce préfixe (AR).
+    const PREFIXES = [{ re: /^EX\s+(?=\S)/i, dit: 'sans le préfixe « EX »' }, { re: /^Platinum:\s*(?=\S)/i, dit: 'sans le préfixe « Platinum: »' }];
     return nom => {
         const exact = essayer(normaliserNom(nom));
         if (exact) return exact;
-        if (!/^EX\s+\S/i.test(nom)) return null;
-        const v = essayer(normaliserNom(nom.replace(/^EX\s+/i, '')));
-        return v ? { ...v, variante: 'sans le préfixe « EX »' } : null;
+        const p = PREFIXES.find(x => x.re.test(nom));
+        if (!p) return null;
+        const v = essayer(normaliserNom(nom.replace(p.re, '')));
+        return v ? { ...v, variante: p.dit } : null;
     };
 }
 
@@ -64,7 +71,9 @@ function setDeLaLigne(L, apparier) {
 // Lost Origin (2026-09-23). L'orthographe d'une source cherchée chez l'autre rend un vide (§30) : c'était celle-là.
 // Énumérés par ce qu'ils SONT (le petit ensemble stable des suffixes), et par le nom EXACT « <set> <suffixe> » — jamais
 // par l'inclusion (§31) : « Stars » ne prend pas « Brilliant Stars Trainer Gallery ».
-const SUFFIXES_COMPAGNONS = ['Trainer Gallery', 'Galarian Gallery'];
+// ➕ 2026-09-26 (soir) : « Shiny Vault » (SV1…SV94) — Hidden Fates (sma) et Shining Fates (swsh4.5sv), mesurés : ce sont les
+// deux seuls noms de la liste qui le portent, et Bulbapedia range ces cartes dans l'expansion (HIF : 69 + 94 = 163/163).
+const SUFFIXES_COMPAGNONS = ['Trainer Gallery', 'Galarian Gallery', 'Shiny Vault'];
 function compagnonsDuSet(set, sets) {
     const voulus = new Set(SUFFIXES_COMPAGNONS.map(s => normaliserNom(`${set.name} ${s}`)));
     return sets.filter(s => s.id !== set.id && voulus.has(normaliserNom(s.name)));
