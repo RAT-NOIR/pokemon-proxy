@@ -11,9 +11,11 @@
 require('dotenv').config();
 //   [--sans-revalidation]  (par défaut les sets touchés SONT revalidés ici : la garde de lot ne voit pas `images[].vignette` et n'en
 //                           revaliderait aucun — revue du 2026-09-27, 501 sets revalidés à la main après le premier rattrapage)
-const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
+//   node generer-vignettes.js --ecrire --logos --champ=logoFr   (les logos français, 2026-09-28 ; le site ne lit pas encore `logoFr`)
+const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--champ=(logo|logoFr)$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos, --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos [--champ=logo|logoFr], --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
+if (process.argv.some(a => a.startsWith('--champ=')) && !process.argv.includes('--logos')) { console.error('❌ --champ ne vaut qu\'avec --logos'); process.exit(2); }
 if (process.argv.includes('--logos') && process.argv.some(a => /^--(slug|limite|parallele)=/.test(a))) { console.error('❌ --logos traite tous les logos sans vignette : --slug, --limite et --parallele ne s\'y appliquent pas'); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 // le secret se vérifie AVANT d'écrire : découvert après deux heures d'écriture, il laissait des sets changés sans revalidation, et une
@@ -29,8 +31,9 @@ const { assurerVignettes, assurerVignettesLogos } = require('./collecte-cartes/v
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
     const db = cx.db, t0 = Date.now();
     if (logos) {
-        const L = await assurerVignettesLogos(db, { bucket, ecrire });
-        console.log(`LOGOS : ${L.sets} sets à logo sans vignette${ecrire ? ` · fabriquées ${L.fabriquees} · déjà sur R2 ${L.deja} · écrites ${L.touches.length} · échecs ${L.echecs.length} · poids ${(L.octetsAvant / 1e6).toFixed(1)} Mo → ${(L.octetsApres / 1e6).toFixed(1)} Mo` : ' (mesure seule)'}`);
+        const champ = arg('champ') || 'logo';
+        const L = await assurerVignettesLogos(db, { bucket, ecrire, champ });
+        console.log(`LOGOS (${champ}) : ${L.sets} sets à logo sans vignette${ecrire ? ` · fabriquées ${L.fabriquees} · déjà sur R2 ${L.deja} · écrites ${L.touches.length} · échecs ${L.echecs.length} · poids ${(L.octetsAvant / 1e6).toFixed(1)} Mo → ${(L.octetsApres / 1e6).toFixed(1)} Mo` : ' (mesure seule)'}`);
         await fermer(); return;
     }
     const totalEntrees = (await db.collection('cartes').aggregate([{ $unwind: '$images' }, { $group: { _id: null, n: { $sum: 1 }, avec: { $sum: { $cond: [{ $ifNull: ['$images.vignette', false] }, 1, 0] } } } }]).toArray())[0] || { n: 0, avec: 0 };

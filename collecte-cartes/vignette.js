@@ -101,11 +101,13 @@ async function assurerVignettes(db, { bucket, slug = null, parallele = 6, limite
     return { ...B, cles: cles.length, traitees: Math.min(i, cles.length), interrompu: i < cles.length, sets: [...B.sets] };
 }
 
-/** Les vignettes des LOGOS de sets (400 px). Même règle, même bucket ; `sets.logo.vignette`. */
-async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = true } = {}) {
+/** Les vignettes des LOGOS de sets (400 px). Même règle, même bucket ; `sets.<champ>.vignette` — `logo` (ce que le site lit) ou
+ *  `logoFr` (logos déposés à la main, 2026-09-28 ; le site ne le lit pas encore). */
+async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = true, champ = 'logo' } = {}) {
+    if (!['logo', 'logoFr'].includes(champ)) throw new Error(`assurerVignettesLogos : champ « ${champ} » inconnu (logo, logoFr)`);
     const r2 = require('./r2');
     const S = db.collection('sets');
-    const sets = await S.find({ 'logo.cleR2': { $type: 'string' }, 'logo.vignette': { $exists: false } }, { projection: { logo: 1 } }).toArray();
+    const sets = (await S.find({ [`${champ}.cleR2`]: { $type: 'string' }, [`${champ}.vignette`]: { $exists: false } }, { projection: { [champ]: 1 } }).toArray()).map(s => ({ _id: s._id, logo: s[champ] }));
     const B = { sets: sets.length, fabriquees: 0, deja: 0, echecs: [], touches: [], octetsAvant: 0, octetsApres: 0 };
     if (!ecrire) return B;
     await r2.verifierBucket(bucket);   // juridiction UE (voir assurerVignettes)
@@ -117,7 +119,7 @@ async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = t
             const w = await r2.deposerBinaire(bucket, cv, f.buffer, 'image/webp');
             if (w.ecrit) B.fabriquees++; else B.deja++;
             B.octetsAvant += orig.length; B.octetsApres += f.octets;
-            const u = await S.updateOne({ _id: s._id, 'logo.cleR2': s.logo.cleR2, 'logo.vignette': { $exists: false } }, { $set: { 'logo.vignette': { cleR2: cv, w: f.w, h: f.h } } });
+            const u = await S.updateOne({ _id: s._id, [`${champ}.cleR2`]: s.logo.cleR2, [`${champ}.vignette`]: { $exists: false } }, { $set: { [`${champ}.vignette`]: { cleR2: cv, w: f.w, h: f.h } } });
             if (u.modifiedCount) B.touches.push(s._id);
         } catch (e) { B.echecs.push({ set: s._id, erreur: e.message }); }
     }
