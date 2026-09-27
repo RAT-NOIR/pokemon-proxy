@@ -550,6 +550,42 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 67. UNE CLÉ QUI NE VOIT PAS LA VRAIE CARTE, UNE CALIBRATION QUI NE POUVAIT PAS ÉCHOUER, ET LA BASE QUI AVAIT TORT — 2026-09-26 (soir)
+
+> 🔴 **MA PREMIÈRE CALIBRATION « VRAIE CARTE RETIRÉE » RENDAIT 100 % DE SILENCE PAR CONSTRUCTION.** Je ne la rejouais que sur les
+> désignations JUSTES — et une clé qui ne rend que la vraie carte ne rend rien sans elle. Le risque réel est dans les produits où la
+> vraie carte avait une RIVALE (deux pages « Koffing [Foul Gas] ») : rejouée sur TOUS les produits, la clé nom + attaques seule
+> désigne un autre texte **1,3 %** du temps. C'est le §41 retourné : un vide parfait sur une mesure que je venais d'écrire. 🔑 **Un
+> contrôle « et si la vérité manquait ? » se fait sur la population entière, jamais sur celle que la clé a déjà réussie.**
+
+**LA DÉSIGNATION CROISÉE (Gem Packs, `poser-par-metacarte.js`)** : métacarte Cardmarket ∧ nom + attaques ∧ carte déjà imprimée dans
+le tirage ∧ produit à crochets. Calibrée sur 63 129 produits joints par le numéro : **31 702 justes, 0 faux de la clé** — les 17
+« contradictions », ouvertes une à une, sont **17 jointures par le numéro FAUSSES chez nous** (Umbreon ex → Energy Sticker, Lumineon V
+→ Mareep, tout Garchomp SP Half Deck joint au deck de Dragons Exalted, Espeon ex 30thC → Sylveon ex). 🔑 **Quand une calibration
+« échoue », la vérité qu'elle suppose peut être fausse : le témoin croisé a trouvé des fiches fausses affirmées que le témoin du nom,
+limité au set, ne pouvait pas voir** (le nom « Umbreon ex » ne désigne aucune autre carte des promos SV). Détachement : feu vert du
+testeur. Et deux vrais faux : des Dresseurs sans attaque (« Honey » = Sweet Honey) → un produit sans crochets ne se désigne pas.
+⚠️ **Le numéro d'un Gem Pack est un GROUPE** (« 01 01/15 » … « 01 15/15 » : Eevee, Eevee V, Eevee VMAX) : ma garde « un numéro = une
+carte » refusait 59 produits justes — une garde qui suppose une forme de numérotation se vérifie sur la forme réelle.
+**LA VOIE « FAMILLE » REJETÉE PAR SA CALIBRATION** (5 499 justes, 10 487 faux) : deux produits au même nom complet dans un set sont
+souvent deux impressions à deux numéros (Trevenant EX n°19 et n°145). Rien n'a été écrit par elle.
+
+**HOLON PHANTOMS, ET TROIS SOURCES QUI SE SONT CONFIRMÉES APRÈS COUP** : code HP (TCGdex + 17/17 slugs WCD) ; 43 numéros appris par
+TCGdex, calibrés sur NOS cartes faute de produit appris par Cardmarket — **43/43** au numéro que la passe Cardmarket du testeur a lu
+ensuite ; 5 orphelins appariés par nom + attaques dans le set (les trois ☆) — **5/5** ; le slugSet construit « EX-Holon-Phantoms »
+(forme des 14 EX voisines) — **exactement celui de Cardmarket**. 112/112 joints.
+**LE JOURNAL 1.8** : 218 vignettes « cardImageNotAvailable » ÉCARTÉES alors que lien et titre portent slug et numéro ; l'idProduct se
+DÉDUIT (seul produit non appris de l'expansion au nom du slug ; frères au même numéro, ou variantes V1…Vn épuisées) : 171 appris,
+règle unique `collecte-cartes/deduire-produit.js` pour l'outil et pour le serveur (userscript 1.9, banc 9/9 et 31/31).
+**LES TOTAUX CARDMARKET < EXPORT** : deux causes, pas une — un PLAFOND d'affichage à 300 (16 expansions, dont Paldea Evolved, tous
+avec offre) et les produits SANS OFFRE, absents des listes (BREAKthrough 36 jamais vus, 36 sans offre au guide). Battle Party Set
+« 18/315 » était une recherche « basic ».
+**LE TIRAGE « zh-hant » DE SV4s…SV10s N'AVAIT PAS DE PREUVE** (posé le 15/09) ; la page source ne nomme que des sorties indonésiennes
+et thaïes → `id`/`idth` (`tirageCorrige` sur la ligne, `corriger-tirage.js`), logos gardés, 7 dates débloquées. ⚠️ Et **212 sets
+revalidés** : 310 cartes aux impressions changées appartiennent à d'autres sets, et la règle revalide tous les sets d'une carte.
+🔴 **Les 4 corrections des fusions étaient DÉJÀ en base depuis le 24/09** (table du parseur appliquée à une relecture) : mon rapport
+les disait « en attente ». Un état se relit en base avant d'être rapporté.
+
 ## 66. LA RÉGION A MENTI UNE CINQUIÈME FOIS, UN SUBSTITUT QUI N'EST PAS UNE IDENTITÉ, ET TCGDEX NOMME DES SETS ENTIERS — 2026-09-26 (après-midi)
 
 > 🔴 **`region` VAUT « intl » POUR UN SET CHINOIS, INDONÉSIEN OU THAÏ (§61) — ET LA RÈGLE DE LANGUE DES LOGOS LA LISAIT.** « Set

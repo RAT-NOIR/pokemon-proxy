@@ -131,6 +131,41 @@ s8a-G, PCCP, sN, TK7, TK1). Règle du testeur : garder la précision au mois, sa
 `dateSortieEn`/`dateSortieJa`**, que `dateFrancaise` imprime au jour. Ranger par `iso` (premier jour du mois, jamais affiché), afficher
 « novembre 2014 » — la même logique que `periodeDistribution.debutIso`.
 
+## `cartes_produits.preuve: 'metacarte+nom+attaques'` et `sets.reimpressions: 'metacarte'` — les Gem Packs (2026-09-26, soir)
+
+Gem Pack Vol. 1, 3, 4, 5 et 6 (`Gem-Pack-Vol-1`, `-3`, `-4`, `Gem-Pack-Vol5`, `-6`, tirage `zh-hans`) sont des réimpressions
+chinoises dont la Setlist n'est faite que de liens rouges. Leurs 579 produits sont joints par la **désignation croisée** : la
+métacarte Cardmarket, le nom + les attaques, et une carte déjà imprimée en `zh-hans`, calibrée à 0 faux de la clé. Comme pour les
+WCD et les Prize Packs :
+- `numeroFiche: null` et `bulba.expansion: null` : la fiche est **sans numéro** (le numéro Cardmarket d'un Gem Pack est un GROUPE,
+  « 01 01/15 », pas un numéro de carte), selon la règle `fichesDuDocument([])` du site ;
+- aucune image.
+
+## `sets.tirage` corrigé : SV4s…SV10s ne sont pas en chinois traditionnel (2026-09-26, soir)
+
+Paradox Encounters, Ace Paradox et Transfiguration Mask passent en **`id`** ; Stellar Guidance, Stellar Lightning, Bonds of Destiny
+et Presence of Champions en **`idth`**. Leur page source ne nomme que des sorties indonésiennes et thaïes, et le `zh-hant` posé le
+15/09 n'avait pas de preuve. Les impressions `source: 'setlist'` et les lignes de jointure ont suivi dans le même lot. L'appariement
+`imp.tirage === set.tirage` reste donc vrai.
+
+## `numeros_cartes` : `source: 'cardmarket-deduit'`, `certitude: 'deduite'` (2026-09-26, soir)
+
+Un produit lu chez Cardmarket par son LIEN et son TITRE, sans image, dont l'**idProduct est déduit** (`collecte-cartes/deduire-produit.js`)
+— les 171 du journal 1.8, et ce que l'userscript 1.9 enverra. La preuve est dans `preuveDeduction` (et `deduitLe` sur une ligne
+complétée). **Une déduction n'est jamais « exacte »** : `certitude: 'deduite'`, y compris sur une ligne `cardmarket` dont seul le slug a
+été complété. Toute vraie lecture — l'userscript avec l'id de l'image (`/api/apprendre-lot`) comme l'extension (`/api/apprendre`) — la
+réécrit `cardmarket` / `exacte` et retire `preuveDeduction`, `deduitLe` et `preuveJournal` (seconde relecture du 2026-09-26 : les deux
+derniers survivaient, et `/api/apprendre` rendait « exacte » une ligne déduite en gardant son slug). **Un slug ne se garde que s'il est
+LU** : une ligne déduite dit ce que la déduction y a écrit (`champsDeduits`, et `certitudeAvantDeduction` sur une ligne complétée) ;
+une lecture qui ne relit pas l'un de ces champs le RETIRE, et garde les autres (un `nomFr` lu avant la déduction reste). Une ligne
+`cardmarket`/`exacte` peut donc perdre son slug déduit et redevenir sans slug, jusqu'à la prochaine lecture de sa vignette. Les deux
+champs disparaissent avec les autres marques à la vraie lecture. `variante` est relue du slug par le serveur (un « -V3 » en FIN de
+slug, « Mewtwo-V-UNION-V3 », est une variante), jamais prise du client.
+⚠️ **Deux lignes peuvent porter le même `slugSet|slug`** quand une déduction s'est trompée de produit (produit neuf absent du
+catalogue) et que le vrai produit a été lu depuis avec son image : la route le détecte et le rend (`deductionsContredites`, journal de
+l'userscript), mais ne défait pas la ligne déduite — un détachement attend le feu vert. Une fiche qui lit un produit par son slug
+préfère la ligne `certitude: 'exacte'`.
+
 ---
 
 ## Dettes connues, à ne pas rediagnostiquer
