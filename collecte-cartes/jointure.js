@@ -461,4 +461,6 @@ function joindre(cartes, produits, cible) {
     };
 }
 
-module.exports = { joindre, temoinDuNom, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero, nomJointDe, clesNom, cleAttaque };
+// `estCarteCode` : LA définition du filtre des cartes-code (2026-09-26 soir : 9 copies mot pour mot dans le dépôt, « une seule copie »,
+// demande du testeur) — mesure-catalogue.js, la table maîtresse, les outils et le serveur l'importent d'ici.
+module.exports = { joindre, temoinDuNom, impressionsDepuisSetlist, numeroDeSetlist, jetonsDeSetlist, produitsDeLExpansion, decomposerNomCardmarket, normaliserNom, chiffresDuNumero, cleNumero, nomJointDe, clesNom, cleAttaque, estCarteCode };

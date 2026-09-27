@@ -36,10 +36,10 @@ const {
     // le temps de mesurer la fréquence réelle du rang 3 avant le point 4.
     rangDuNumero, bilanDesRangs, normaliserCodeSet, codesApparentes,
     regionDuCodeSet,
-    // numeroDepuisSlug : /api/apprendre-lot recalcule le numeroUrl lui-même plutôt que
-    // de faire confiance au client. L'oubli de cet import a cassé l'endpoint en
-    // production — node --check ne valide que la SYNTAXE, pas la résolution des noms.
-    numeroDepuisSlug,
+    // numeroDepuisSlug n'est plus importé ici (seconde relecture du 2026-09-26) : /api/apprendre-lot recalcule toujours le numeroUrl
+    // plutôt que de faire confiance au client, mais par `apprendreLot` (collecte-cartes/deduire-produit.js), qui l'importe lui-même.
+    // ⚠️ L'oubli de cet import avait cassé l'endpoint en production — node --check ne valide que la SYNTAXE : la route a été
+    // rejouée de bout en bout sur test_scratch (serveur réel) après ce retrait.
     // ALIAS_CODES_LUS : le marquage physique e-Reader (E1..E5) n'est pas le code
     // Cardmarket (EC1..EC5). L'alias porte sur le code LU, jamais sur celui de la base.
     // nomConcorde : moitié PURE du veto par le nom, voir nomOpposeUnVeto plus bas.
@@ -49,6 +49,12 @@ const {
     numeroAmbiguDansPerimetre,
     MOTIFS_CIBLABLES
 } = require('./scoring');
+// 1.9 (2026-09-26) : l'idProduct d'une vignette sans image, déduit par la règle que l'outil du journal applique aussi ; et la
+// réécriture d'une ligne déduite par une vraie lecture. Le prédicat des cartes-code : sa seule définition (jointure.js).
+// 🔴 SECONDE RELECTURE (2026-09-26, nuit) : les deux routes d'apprentissage écrivent par `apprendreLot` et `apprendreUneLecture`, sur
+// le PILOTE — les mêmes fonctions que le banc test-deduction-ecritures-scratch.js exerce sur test_scratch.
+const { apprendreLot, apprendreUneLecture } = require('./collecte-cartes/deduire-produit');
+const { estCarteCode } = require('./collecte-cartes/jointure');
 
 // Journal des scans : une ligne par identification, en base. Les logs Render sont
 // éphémères ; les seuils qu'on pose (ratio, rangs, fiabilité du setCode) ont besoin de
@@ -386,7 +392,21 @@ const numeroCarteSchema = new mongoose.Schema({
     // Un champ qui vit en base, qu'on lit dans une décision, et qu'aucun schéma ne nomme,
     // est invisible à toute relecture du code — c'est la même dette que `strategieReverse`
     // avant sa journalisation.
-    setTcgdex: String
+    setTcgdex: String,
+    // ➕ 2026-09-26 (userscript 1.9) : une ligne dont l'idProduct a été DÉDUIT (vignette sans image, `source: 'cardmarket-deduit'`)
+    // porte sa preuve. DÉCLARÉS ici parce que le schéma est strict : non déclarés, `updateOne` les jetterait sans un mot.
+    preuveDeduction: String,
+    // 🔴 SECONDE RELECTURE (2026-09-26, nuit) : `deduitLe` (écrit par la déduction) et `preuveJournal` (les 171 du journal 1.8, avant
+    // migration) vivaient en base SANS être déclarés — et le `$unset` que la vraie lecture en fait était AVALÉ par ce schéma strict
+    // (reproduit sur test_scratch : les deux survivaient). Les routes écrivent désormais par le pilote (`NumeroCarte.collection`) ;
+    // déclarés quand même, pour qu'aucune autre écriture mongoose ne les taise.
+    deduitLe: Date,
+    preuveJournal: String,
+    // Ce que la déduction a écrit sur la ligne, et la certitude d'une ligne qu'elle a complétée (relecture par sous-agent) : une vraie
+    // lecture ne retire que ces champs-là — un nomFr LU avant la déduction ne se perd plus.
+    champsDeduits: [String],
+    certitudeAvantDeduction: String,
+    apprisLe: Date
 });
 // ⚠️ DEUX INDEX AJOUTÉS LE 2026-08-30, ET LA MESURE QUI LES JUSTIFIE EST ICI POUR QU'ON
 // NE LES SUPPRIME PAS « PARCE QU'ON NE VOIT PAS À QUOI ILS SERVENT ». Avant eux, mesuré
@@ -407,6 +427,9 @@ const numeroCarteSchema = new mongoose.Schema({
 // voulait pas pour `idMetacard_1`.
 numeroCarteSchema.index({ idExpansion: 1 });
 numeroCarteSchema.index({ setTcgdex: 1 });
+// ➕ 2026-09-26 (userscript 1.9) : la déduction d'une vignette sans image cherche l'expansion par `distinct('idExpansion', { slugSet })`
+// — sans index, un parcours de toute la collection à chaque lot (relecture par sous-agent). Recréé au démarrage par `autoIndex`.
+numeroCarteSchema.index({ slugSet: 1 });
 const NumeroCarte = mongoose.model('NumeroCarte', numeroCarteSchema, 'numeros_cartes');
 
 // Événements Stripe déjà traités. Stripe REJOUE ses webhooks (retry sur timeout, ou
@@ -1890,11 +1913,12 @@ function normaliserNom(nom) {
 // d'attaques. Hors Code Card, les motifs Display/Playmat/Portfolio/Figurine ne ramènent
 // AUCUN produit. Un filtre par mots-clés « booster / tin / coin » jetterait des cartes
 // réelles : « Code Card » est le seul critère juste, et il suffit.
-const EST_CODE_CARD = /code\s*card/i;
-
+// 🔑 SECONDE RELECTURE (2026-09-26, nuit) : le prédicat est `estCarteCode` (collecte-cartes/jointure.js, sa SEULE définition), plus
+// `/code\s*card/i` recopié ici. Mesuré AVANT de remplacer, lecture seule, sur les 74 188 noms de catalogue_produits : les deux
+// prédicats retiennent les MÊMES 1 262 produits, 0 divergent — l'identification n'en change sur aucun produit réel.
 function ecarterNonCartes(produits, contexte) {
     if (!Array.isArray(produits) || produits.length === 0) return produits;
-    const gardes = produits.filter(p => !EST_CODE_CARD.test(String(p?.name || '')));
+    const gardes = produits.filter(p => !estCarteCode(p?.name));
     const ecartes = produits.length - gardes.length;
     if (ecartes > 0) {
         console.log(`🚮 ${ecartes} Code Card écartée(s) du vivier (${contexte}) — reste ${gardes.length} candidat(s).`);
@@ -2718,7 +2742,8 @@ async function scorerCandidatsLocal(produits, cardInfo, imageUrlVinted, idExpans
             idProduct: p.idProduct,
             idExpansion: p.idExpansion,
             numeroCardmarket: infoNum ? (infoNum.numero || infoNum.numeroUrl) : null,
-            certitudeNumero: infoNum ? (infoNum.certitude || 'exacte') : null,
+            // la certitude du NUMÉRO (scoring.js) : une ligne complétée par une déduction garde celle de son numéro d'avant
+            certitudeNumero: SCORING.certitudeDuNumero(infoNum),
             // ⚠️ SUFFIXE DU SLUG CARDMARKET (V1…V6), SANS SÉMANTIQUE STABLE. Ce commentaire
             // disait « V1/V2/V3 = normale/reverse/illustration » : scoring.js:200-202 fait
             // autorité et dit l'inverse, et POIDS.variante y est un override manuel que plus
@@ -6437,33 +6462,21 @@ app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res
         if (codeSet && idExpansion) await memoriserCodeSet(idExpansion, codeSet);
 
         if (numero) {
-            // ⚠️ UNE LIGNE EXACTE NE S'ÉCRASE PAS. Le `$set` ci-dessous remplaçait numéro,
-            // code et expansion quelle que soit la source existante. Une ligne déjà
-            // `source: 'cardmarket'` est la vérité apprise : on la CONFIRME si l'appel dit
-            // la même chose (le cas ordinaire, l'extension relit les mêmes fiches), on
-            // REFUSE s'il dit autre chose — refus tracé avec le userId, jamais fusion.
-            const existant = await NumeroCarte.findOne({ idProduct }, { source: 1, numero: 1, codeSet: 1, idExpansion: 1 }).lean();
-            if (existant && existant.source === 'cardmarket') {
-                const identique = String(existant.numero ?? '') === String(numero)
-                    && String(existant.codeSet ?? '') === String(codeSet ?? '')
-                    && (idExpansion == null || existant.idExpansion == null || Number(existant.idExpansion) === Number(idExpansion));
-                if (identique) return res.json({ success: true, dejaExacte: true });
-                console.warn(`🚫 [apprendre] userId=${userId} idProduct ${idProduct} : ligne EXACTE existante (n°${existant.numero}, ${existant.codeSet || '?'}) — refus d'écraser par n°${numero} (${codeSet || '?'}).`);
-                return res.json({ success: false, refuse: 'ligne-exacte-existante', error: "Ce produit porte déjà un numéro exact appris de Cardmarket : il ne s'écrase pas." });
+            // ⚠️ UNE LIGNE EXACTE NE S'ÉCRASE PAS. Une ligne déjà `source: 'cardmarket'` est la vérité apprise : on la CONFIRME si
+            // l'appel dit la même chose (le cas ordinaire, l'extension relit les mêmes fiches), on REFUSE s'il dit autre chose —
+            // refus tracé avec le userId, jamais fusion.
+            // 🔴 SECONDE RELECTURE (2026-09-26, nuit) : une ligne DÉDUITE (userscript 1.9, `certitude: 'deduite'`, même `cardmarket`)
+            // n'est PAS une vérité apprise — cette route la disait « déjà exacte », ou la passait `cardmarket`/`exacte` en gardant le
+            // slug déduit et `preuveDeduction`. La règle est celle du lot, dans le module et nulle part ailleurs (`apprendreUneLecture` :
+            // `aReecrireParLecture`, `majLectureExacte`) : une vraie lecture réécrit une ligne déduite, retire toutes les marques de
+            // déduction, et ne garde un slug que s'il est LU. Écrite par le PILOTE, comme le banc (test-deduction-ecritures-scratch.js).
+            const r = await apprendreUneLecture({ idProduct, idExpansion, numero, codeSet }, { numeros: NumeroCarte.collection });
+            if (r.dejaExacte) return res.json({ success: true, dejaExacte: true });
+            if (r.refuse) {
+                console.warn(`🚫 [apprendre] userId=${userId} idProduct ${idProduct} : ligne EXACTE existante (n°${r.existant.numero}, ${r.existant.codeSet || '?'}) — refus d'écraser par n°${numero} (${codeSet || '?'}).`);
+                return res.json({ success: false, refuse: r.refuse, error: "Ce produit porte déjà un numéro exact appris de Cardmarket : il ne s'écrase pas." });
             }
-            await NumeroCarte.findOneAndUpdate(
-                { idProduct },
-                {
-                    $set: {
-                        idProduct, idExpansion, numero: String(numero), codeSet,
-                        source: 'cardmarket',   // vu en direct = fait foi
-                        certitude: 'exacte',
-                        apprisLe: new Date()
-                    }
-                },
-                { upsert: true }
-            );
-            console.log(`🧠 [apprendre] idProduct ${idProduct} -> n°${numero} (${codeSet || '?'})`);
+            console.log(`🧠 [apprendre] idProduct ${idProduct} -> n°${numero} (${codeSet || '?'})${r.reecritDeduite ? ' — ligne DÉDUITE réécrite par la lecture (marques de déduction et slug déduit retirés)' : ''}`);
         }
         res.json({ success: true });
     } catch (e) {
@@ -6472,6 +6485,19 @@ app.post('/api/apprendre', limiteurApprentissage, verifierJeton, async (req, res
         res.json({ success: false, error: "Erreur serveur interne" });
     }
 });
+// ════════════════════════════════════════════════════════════════════
+// LES VIGNETTES SANS IMAGE (userscript 1.9, 2026-09-26) — idProduct DÉDUIT, jamais inventé
+// ════════════════════════════════════════════════════════════════════
+// La déduction ET son écriture vivent dans collecte-cartes/deduire-produit.js (bancs test-deduire-produit.js et
+// test-deduction-ecritures-scratch.js), que l'outil du journal appelle aussi : une seule définition (§21 bis). Une déduction n'est
+// jamais « exacte » (`certitude: 'deduite'`) et une vraie lecture la réécrit toujours (`aReecrireParLecture`, `majLectureExacte`).
+// 🔴 RELECTURE DU 2026-09-26 (soir) : la déduction tourne APRÈS l'écriture des cartes lues du même lot, leurs idProduct EXCLUS des
+// candidats (un frère lu avec son image, pas encore écrit, faisait « 2 produits non appris ») ; et elle ne lève JAMAIS : un échec
+// se journalise et se rend (`erreurDeduction`), il ne fait pas tomber les cartes lues.
+// 🔴 SECONDE RELECTURE (2026-09-26, nuit) : `apprendreLesSansImage` et `couvertureDe` vivaient ICI, écrits par mongoose, et la branche
+// « lot sans carte lue » n'était exercée par aucun banc. Tout le lot est désormais `apprendreLot` (collecte-cartes/deduire-produit.js),
+// sur le pilote : ce que la route fait, le banc le fait — lecteurs compris.
+
 // Apprentissage par LOT depuis le userscript. Règle de priorité :
 //  - déjà source:'cardmarket' (exact) -> INTACT, on ne le retouche pas
 //  - source:'tcgdex' (heuristique) ou sans source (vieux Puppeteer allégé)
@@ -6508,168 +6534,22 @@ app.post('/api/apprendre-lot', limiteurApprentissage, verifierJeton, async (req,
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // LE numeroUrl EST RECALCULÉ ICI — le client ne décide plus
+        // LE LOT LUI-MÊME : `apprendreLot` (collecte-cartes/deduire-produit.js) — seconde relecture du 2026-09-26 (nuit)
         // ════════════════════════════════════════════════════════════════════
-        // Le client envoyait son propre `numeroUrl` et on le stockait tel quel. Or il
-        // existe DEUX clients (le userscript Tampermonkey et live-cardmarket.js), chacun
-        // avec sa copie de la règle d'extraction, donc chacun capable de réintroduire les
-        // bugs qu'on vient de corriger sur 20 917 documents : la query string prise pour un
-        // numéro ("?language=2" -> "2") et les chiffres du code de set avalés
-        // ("sI100340" -> "100340" au lieu de 340).
-        // La règle vit maintenant à UN seul endroit (scoring.numeroDepuisSlug) et c'est le
-        // serveur qui l'applique. Un client resté à l'ancienne version ne peut plus abîmer
-        // la base : son numeroUrl est ignoré, et le slug est nettoyé de sa query string.
-        let numeroUrlRecalcules = 0;
-        for (const c of cartes) {
-            if (typeof c.slug === 'string' && c.slug) c.slug = c.slug.split('?')[0];
-            const recalcule = numeroDepuisSlug(c.slug, c.codeSet);
-            if (String(recalcule ?? '') !== String(c.numeroUrl ?? '')) numeroUrlRecalcules++;
-            c.numeroUrl = recalcule;
-        }
-        if (numeroUrlRecalcules) {
-            console.log(`🔧 [apprendre-lot] ${numeroUrlRecalcules}/${cartes.length} numeroUrl recalculés depuis le slug — la règle du serveur fait foi.`);
-        }
-
-        // Cartes exploitables = un numéro (titre ou URL) OU, à défaut, un SLUG.
-        // 🔴 2026-09-24 : UNE EXPANSION SANS AUCUN NUMÉRO NE S'APPRENAIT PAS. Unnumbered Promos (4170, 208 produits, slugs
-        // « Venusaur-V1-UNP ») : ni le titre ni le slug ne portent de numéro, et la route jetait le lot entier — les 3
-        // produits nouveaux de l'export ne pouvaient pas entrer. L'apprenant Puppeteer (apprentissage-commun.js) écrit ces
-        // lignes depuis toujours : 2 729 lignes `cardmarket` sans numéro en base. Deux règles pour le même geste (§21 bis) :
-        // la route s'aligne. Le slug est ce qui fabrique l'URL et porte le nom ; le numéro reste null, jamais inventé.
-        // `sansNumero` compte désormais les cartes SANS numéro (apprises par leur slug ou non) ; `ignorees`, celles qui
-        // n'ont ni l'un ni l'autre et ne sont PAS écrites.
-        const lisibles = cartes.filter(c => c.idProduct && (c.numero || c.numeroUrl || c.slug));
-        const sansNumero = cartes.filter(c => !(c.numero || c.numeroUrl)).length;
-        const ignorees = cartes.length - lisibles.length;
-
-        const ids = [...new Set(lisibles.map(c => Number(c.idProduct)).filter(Boolean))];
-        if (ids.length === 0) {
-            return res.json({ success: true, recus: cartes.length, nouvelles: 0, ameliorees: 0, dejaExactes: 0, sansNumero, ignorees });
-        }
-
-        // ════════════════════════════════════════════════════════════════════
-        // L'idExpansion EST LU PAR CARTE — 2026-09-06
-        // ════════════════════════════════════════════════════════════════════
-        // L'ancienne version prenait l'expansion du PREMIER produit trouvé au catalogue et
-        // l'appliquait à TOUT le lot : un lot mêlant deux galeries étiquetait toutes ses
-        // cartes de la première, et une table apprise portait une expansion fausse sans
-        // qu'aucune ligne ne le dise. Chaque entrée porte désormais la sienne ; un
-        // idProduct inconnu du catalogue garde `null`, comme avant.
-        // ⚠️ LA CONDITION `readyState === 1` EST RETIRÉE ICI — 2026-09-07. C'était elle, le
-        // défaut : une LECTURE qui se saute en silence, mais dont l'absence CORROMPT une
-        // écriture (chaque carte partait avec `idExpansion: null`). La route refuse
-        // maintenant en 503 avant d'arriver ici ; laisser la condition en place ferait
-        // survivre le chemin muet derrière une garde qui, elle, est bruyante — et masquerait
-        // le jour où quelqu'un retire la garde du dessus.
-        const expParId = new Map();
-        {
-            const refs = await CatalogueProduit.find({ idProduct: { $in: ids } }, { idProduct: 1, idExpansion: 1 }).lean();
-            for (const r of refs) if (r.idExpansion != null) expParId.set(Number(r.idProduct), Number(r.idExpansion));
-        }
-        const expansionsDuLot = [...new Set(expParId.values())];
-        // `idExpansion` unique quand le lot n'en a qu'une (le cas ordinaire : une page de
-        // galerie) — c'est ce que le client lit déjà. null dès qu'il y en a plusieurs.
-        const idExpansion = expansionsDuLot.length === 1 ? expansionsDuLot[0] : null;
-        if (expansionsDuLot.length > 1) {
-            console.warn(`⚠️ [apprendre-lot] userId=${userId} : lot sur ${expansionsDuLot.length} expansions (${expansionsDuLot.join(', ')}) — chaque carte garde la sienne.`);
-        }
-
-        // Source actuelle de chaque idProduct déjà en base
-        const existants = await NumeroCarte.find({ idProduct: { $in: ids } }, { idProduct: 1, source: 1, slug: 1, slugSet: 1, nomFr: 1, variante: 1 }).lean();
-        const sourceParId = new Map(existants.map(d => [d.idProduct, d.source || null]));
-        const existantParId = new Map(existants.map(d => [d.idProduct, d]));
-
-        // Classement : exact -> intact ; reste -> à écrire
-        // 🔑 2026-09-24 : « INTACT » NE VEUT PAS DIRE « INCOMPLET À VIE ». 246 lignes `source: 'cardmarket'` n'ont pas de
-        // slug (apprises par un chemin qui ne l'enregistrait pas, CLAUDE.md §6) : aucune URL ne peut les désigner, et cette
-        // route les sautait comme « déjà exactes » à chaque passage. On COMPLÈTE désormais leurs champs VIDES — slug,
-        // slugSet, nomFr, variante — sans jamais toucher numéro, code ni expansion : une ligne exacte ne s'écrase toujours pas.
-        const aEcrire = [], aCompleter = [];
-        let nouvelles = 0, ameliorees = 0, dejaExactes = 0;
-        for (const c of lisibles) {
-            const id = Number(c.idProduct);
-            if (!sourceParId.has(id))                        { aEcrire.push(c); nouvelles++; }
-            else if (sourceParId.get(id) !== 'cardmarket')   { aEcrire.push(c); ameliorees++; }
-            else {
-                dejaExactes++; // déjà exact -> numéro, code, expansion intacts
-                const ex = existantParId.get(id) || {};
-                const manquants = {};
-                for (const champ of ['slug', 'slugSet', 'nomFr', 'variante']) if (!ex[champ] && c[champ]) manquants[champ] = c[champ];
-                if (Object.keys(manquants).length) aCompleter.push({ id, manquants });
-            }
-        }
-        if (aCompleter.length) {
-            // Le filtre porte la source : une ligne devenue autre chose entre la lecture et l'écriture n'est pas touchée.
-            await NumeroCarte.bulkWrite(aCompleter.map(({ id, manquants }) => ({ updateOne: { filter: { idProduct: id, source: 'cardmarket' }, update: { $set: manquants } } })), { ordered: false });
-        }
-        const completees = aCompleter.length;
-
-        if (aEcrire.length > 0) {
-            const ops = aEcrire.map(c => ({
-                updateOne: {
-                    filter: { idProduct: Number(c.idProduct) },
-                    // $set (pas $setOnInsert) : on VEUT écraser une entrée heuristique
-                    // par la donnée exacte. Les entrées 'cardmarket' sont déjà exclues.
-                    update: {
-                        $set: {
-                            idProduct:   Number(c.idProduct),
-                            idExpansion: expParId.get(Number(c.idProduct)) ?? null,
-                            numero:      c.numero    != null ? String(c.numero)    : null,
-                            numeroUrl:   c.numeroUrl != null ? String(c.numeroUrl) : null,
-                            // Décodé à l'entrée : le lot vient d'URLs d'images (voir decoderCodeSet)
-                            codeSet:     decoderCodeSet(c.codeSet) || null,
-                            nomFr:       c.nomFr    || null,
-                            variante:    c.variante || null,
-                            slug:        c.slug     || null,
-                            slugSet:     c.slugSet  || null,
-                            source:      'cardmarket',
-                            certitude:   'exacte'
-                        }
-                    },
-                    upsert: true
-                }
-            }));
-            await NumeroCarte.bulkWrite(ops, { ordered: false });
-
-            // Le code de set, PAR EXPANSION : le premier code porté par une carte de chaque
-            // expansion du lot. `memoriserCodeSet` refuse d'écraser un code déjà appris.
-            const codeParExp = new Map();
-            for (const c of aEcrire) {
-                const e = expParId.get(Number(c.idProduct));
-                if (e != null && c.codeSet && !codeParExp.has(e)) codeParExp.set(e, c.codeSet);
-            }
-            for (const [e, cs] of codeParExp) await memoriserCodeSet(e, cs);
-        }
-
-        // COUVERTURE DE L'EXPANSION, renvoyée au client. Sans elle, l'utilisateur qui
-        // tourne les pages d'une galerie ne sait pas quand il a fini — et c'est justement
-        // la couverture des numéros qui décide si le chemin local peut identifier une
-        // carte : 43 expansions à 0 % sont la cause de tous les échecs récents.
-        let couverture = null;
-        if (idExpansion != null && mongoose.connection.readyState === 1) {
-            const idsExp = (await CatalogueProduit.find({ idExpansion: Number(idExpansion) }, { idProduct: 1 }).lean())
-                .map(x => x.idProduct);
-            const avecNumero = idsExp.length
-                ? await NumeroCarte.countDocuments({ idProduct: { $in: idsExp }, numero: { $type: 'string', $ne: '' } })
-                : 0;
-            // `appris` : ADDITIF (2026-09-24). Les produits APPRIS, numéro de titre ou non. 30th Celebration affichait 84 %
-            // « terminée » alors que ses 191 produits étaient appris : les 30 rééditions « Classic Collection » n'ont pas
-            // de numéro dans leur titre. Le client distingue enfin « tout est appris » de « tout est numéroté ».
-            const appris = idsExp.length ? await NumeroCarte.countDocuments({ idProduct: { $in: idsExp } }) : 0;
-            couverture = {
-                produits: idsExp.length,
-                avecNumero,
-                appris,
-                pourcent: idsExp.length ? Math.round(100 * avecNumero / idsExp.length) : null
-            };
-        }
-
-        console.log(`🧠 [apprendre-lot] userId=${userId} ${nouvelles} nouv. / ${ameliorees} améliorées / ${dejaExactes} déjà exactes${completees ? ` dont ${completees} complétées (slug…)` : ''} (exp ${idExpansion ?? (expansionsDuLot.length ? expansionsDuLot.join('/') : '?')})`
-            + (couverture ? ` — couverture ${couverture.avecNumero}/${couverture.produits} (${couverture.pourcent} %)` : ''));
-        // `idExpansions` : ADDITIF. Les expansions réellement vues dans le lot, pour que le
-        // client sache pourquoi `idExpansion` et `couverture` sont nuls sur un lot mixte.
-        // `completees` : ADDITIF (2026-09-24), les lignes exactes dont un champ vide a été rempli.
-        res.json({ success: true, recus: cartes.length, nouvelles, ameliorees, dejaExactes, completees, sansNumero, ignorees, idExpansion, idExpansions: expansionsDuLot, couverture });
+        // Tout ce que cette route faisait après ses gardes y vit désormais, écrit par le PILOTE (`NumeroCarte.collection`) : le schéma
+        // strict de mongoose AVALAIT les `$unset` de `deduitLe` et `preuveJournal` (reproduit sur test_scratch), et le banc, qui écrivait
+        // par le pilote, ne voyait pas ce que la route faisait. Les règles qui y vivent, avec leur histoire :
+        //  · le numeroUrl ET la variante sont RECALCULÉS depuis le slug (scoring.numeroDepuisSlug, varianteDuSlug) — deux clients
+        //    (l'userscript, live-cardmarket.js) portaient chacun leur copie ; « Mewtwo-V-UNION-V3 » rendait une variante nulle ;
+        //  · une carte sans numéro s'apprend par son slug (2026-09-24, Unnumbered Promos) ;
+        //  · l'idExpansion est LU PAR CARTE au catalogue (2026-09-06) ; à défaut, l'expansion de la RÉPONSE vient du slugSet de la page
+        //    (une page de sans-image toutes refusées n'était jamais « parcourue ») ;
+        //  · une ligne exacte n'est jamais écrasée, ses champs vides se complètent (2026-09-24) ; une ligne déduite se réécrit ;
+        //  · les vignettes sans image se déduisent APRÈS l'écriture des cartes lues, sans jamais faire tomber le lot, et la réponse
+        //    dit ce qui a été ÉCRIT (`deduites`, `idsDeduits`), pas ce qui a été tenté.
+        // ⚠️ La garde 503 ci-dessus reste LA condition : une lecture qui se saute en silence corrompait une écriture (2026-09-07).
+        const corps = await apprendreLot(cartes, { numeros: NumeroCarte.collection, catalogue: CatalogueProduit.collection, decoderCodeSet, memoriserCodeSet, userId });
+        res.json({ success: true, ...corps });
     } catch (e) {
         console.error("❌ [apprendre-lot]", e.message);
         // Message brut au log, jamais dans la réponse — voir /api/identifier.

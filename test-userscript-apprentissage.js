@@ -1,4 +1,6 @@
-// node test-userscript-apprentissage.js — banc du userscript (1.8) dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
+// node test-userscript-apprentissage.js — banc du userscript (1.9) dans un VRAI Chrome (Puppeteer), SANS UNE REQUÊTE vers Cardmarket : l'interception répond à la
+// ⚠️ 2026-09-26 (1.9) : cas 10, 11, 13 réécrits — une vignette sans image n'est plus écartée, elle part par son lien et son titre ;
+// cas 15 : une vignette SANS lien reste écartée, et deux sans-image ne se fondent pas en une à l'envoi.
 // ⚠️ 2026-09-25 : trois assertions supposaient la liste de la 1.6 (« n° 1/42 », « suivante : 6604 ») et échouaient depuis la 1.7
 // sans que personne ne relance le banc — elles lisent désormais la liste DANS le script. Cas 10 à 13 : le journal de la 1.8.
 // navigation avec une galerie fabriquée (la structure que le script lit : a.galleryBox, img data-echo, h2 « (CODE n°) »),
@@ -65,7 +67,12 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         verifier('   séquence : lot 503 → /ping → lot 429 → lot 200', A.appels.map(x => x.chemin === '/ping' ? 'ping' : 'lot'), ['lot', 'ping', 'lot', 'lot']);
         verifier('   chaque lot porte le userId', lots.every(l => /^rm-/.test(l.corps.userId)), true);
         verifier('   un seul envoi pour la page entière (3 cartes), pas de lots de 25', lots.map(l => l.corps.cartes.length), [3, 3, 3]);
-        verifier('   slug nettoyé de sa query string, numéro du titre, code décodé', lots[0].corps.cartes[2], { idProduct: 907767, numero: '003', codeSet: '30C', nomFr: 'Muciole', variante: null, slug: 'Volbeat-30C003', slugSet: '30th-Celebration' });
+        // Seconde relecture (2026-09-26, nuit) : la variante n'est plus envoyée — le serveur la relit du slug (une seule règle, la sienne ;
+        // la copie du script exigeait un tiret après « Vk » et ratait « Mewtwo-V-UNION-V3 »).
+        verifier('   slug nettoyé de sa query string, numéro du titre, code décodé, AUCUNE variante envoyée', lots[0].corps.cartes[2], { idProduct: 907767, numero: '003', codeSet: '30C', nomFr: 'Muciole', slug: 'Volbeat-30C003', slugSet: '30th-Celebration' });
+        verifier('   (point 1) aucune carte du lot ne porte de variante calculée par le client', lots[0].corps.cartes.some(c => 'variante' in c), false);
+        // Point 8 : le panneau dit sa version (l'export et le journal la disaient, le panneau non).
+        verifier('   (point 8) le panneau affiche la version du script', new RegExp(`Apprentissage ${/@version\s+(\S+)/.exec(SCRIPT)[1].replace('.', '\\.')}`).test(A.panneau), true);
         verifier('   la file est vide au succès', A.store.rm_file, []);
         verifier('   la page est marquée apprise', Object.keys(A.store.rm_pagesFaites || {}), ['/fr/Pokemon/Products/Singles/30th-Celebration']);
         verifier('   l\'expansion apprise pour ce slug : 6601', A.store.rm_slugExp, { '30th-Celebration': 6601 });
@@ -124,18 +131,75 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
         const URL_DRI = 'https://www.cardmarket.com/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096';
         const dri = (id, slug, nom, n, attr = 'data-echo', ext = 'jpg') => `<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Destined-Rivals/${slug}"><img ${attr}="https://product-images.s3.cardmarket.com/51/DRI/${id}/${id}.${ext}" alt="${nom}"><h2>${nom} (DRI ${n})</h2></a>`;
         // `<meta charset>` : sans lui Chrome décode la page fabriquée en windows-1252 et « résultats » devient illisible.
+        // La forme RÉELLE du visuel de remplacement, lue dans le journal 1.8 du 2026-09-26 : `src=//static.cardmarket.com/img/<hash>/cardImageNotAvailable.png`.
+        const INDISPONIBLE = '//static.cardmarket.com/img/3660af732e89ee7bfadc4b521fe525c1/cardImageNotAvailable.png';
         const HTML_DRI = `<!doctype html><html><head><meta charset="utf-8"></head><body><div><span>240 résultats</span></div><form><input type="checkbox" name="onlyAvailable" value="Y" checked><input type="checkbox" name="isFoil" value="Y"></form>
-${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '002', 'data-src', 'webp')}<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003"><img src="https://static.cardmarket.com/img/noimage.png" alt="Ccc"><h2>Ccc (DRI 003)</h2></a></body></html>`;
-        const OK_DRI = { status: 200, entetes: 'ratelimit-remaining: 100', corps: { success: true, recus: 2, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0, idExpansion: 6096, idExpansions: [6096], couverture: { produits: 244, avecNumero: 240, appris: 243, pourcent: 98 } } };
+${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '002', 'data-src', 'webp')}<a class="galleryBox" href="/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003"><img src="${INDISPONIBLE}" alt="Ccc"><h2>Ccc (DRI 003)</h2></a></body></html>`;
+        const OK_DRI = { status: 200, entetes: 'ratelimit-remaining: 100', corps: { success: true, recus: 3, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0, deduites: 1, nonDeduites: 0, idExpansion: 6096, idExpansions: [6096], couverture: { produits: 244, avecNumero: 240, appris: 243, pourcent: 98 } } };
         const J = await charger(navigateur, {}, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI });
         const lotJ = J.appels.filter(x => x.chemin === '/api/apprendre-lot');
-        verifier('10. 3 vignettes, 2 lues (dont le webp en data-src), 1 écartée : l\'envoi porte les 2 lues', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051]]);
+        // 1.9 (testeur, 2026-09-26) : un produit n'est plus JAMAIS écarté à cause de son image — il part par son lien et son titre,
+        // sans idProduct, et c'est le serveur qui le déduit (collecte-cartes/deduire-produit.js).
+        verifier('10. 3 vignettes, 3 lues (le webp en data-src, et la sans-image par son lien) : l\'envoi porte les 3', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051, null]]);
+        verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true });
         const e = (J.store.rm_journal || [])[0] || {};
-        verifier('11. le journal : vignettes, lues, écartées (avec leur lien), lecture non standard dite', [e.vignettes, e.lues, e.ecartees, e.detailEcartees?.[0]?.href, e.lecturesAutres], [3, 2, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
-        verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles],
-            [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1]);
-        verifier('13. le panneau : écartée en rouge, total contre export, filtre nommé, bouton du journal',
-            [/1 écartée\(s\)/.test(J.panneau), new RegExp(`Cardmarket annonce 240 · l'export en compte ${PRODUITS_EXPORT['6096']}`).test(J.panneau), /onlyAvailable=Y/.test(J.panneau), /📥 1/.test(J.panneau)], [true, true, true, true]);
+        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.9', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
+        verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles, e.envoi?.deduites],
+            [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1, 1]);
+        verifier('13. le panneau : la sans-image dite (envoyée par son lien), la déduction du serveur, total contre export, filtre nommé, bouton du journal',
+            [/1 sans image : envoyée\(s\) par son lien/.test(J.panneau), /1 déduite\(s\) par le serveur/.test(J.panneau), /écartée/.test(J.panneau), new RegExp(`Cardmarket annonce 240 · l'export en compte ${PRODUITS_EXPORT['6096']}`).test(J.panneau), /onlyAvailable=Y/.test(J.panneau), /📥 1/.test(J.panneau)], [true, true, false, true, true, true]);
+        // 15. Une vignette SANS lien ni image ne peut rien apprendre : elle reste écartée, et deux sans-image ne se fondent pas en une.
+        const sansImage = (slug, nom, n, src = INDISPONIBLE) => `<a class="galleryBox"${slug ? ` href="/fr/Pokemon/Products/Singles/Destined-Rivals/${slug}"` : ''}><img src="${src}" alt="${nom}"><h2>${nom} (DRI ${n})</h2></a>`;
+        const HTML_DRI2 = `<!doctype html><html><head><meta charset="utf-8"></head><body>${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${sansImage('Ccc-DRI003', 'Ccc', '003')}${sansImage('Ddd-DRI004', 'Ddd', '004')}${sansImage(null, 'Zzz', '099')}${sansImage('Eee-DRI005', 'Eee', '005', 'https://static.cardmarket.com/img/noimage.png')}</body></html>`;
+        const L2 = await charger(navigateur, {}, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI2 });
+        const e2 = (L2.store.rm_journal || [])[0] || {};
+        verifier('15. sans lien : écartée ; deux « cardImageNotAvailable » : deux cartes envoyées, pas fondues en une', [L2.appels.filter(x => x.chemin === '/api/apprendre-lot').map(l => l.corps.cartes.filter(c => c.sansImage).map(c => c.slug))[0]], [['Ccc-DRI003', 'Ddd-DRI004']]);
+        verifier('16. une AUTRE image illisible (noimage.png) ne part pas en déduction : écartée, au journal avec ses attributs', [e2.ecartees, e2.detailEcartees?.map(x => x.href), /noimage\.png/.test(JSON.stringify(e2.detailEcartees?.[1]?.image))], [2, ['', '/fr/Pokemon/Products/Singles/Destined-Rivals/Eee-DRI005'], true]);
+        // 17. Une page MARQUÉE par la 1.8 (sans `v: 19`) qui porte une sans-image repart d'elle-même : la 1.8 l'avait écartée.
+        const M = await charger(navigateur, { rm_pagesFaites: { [`/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096`]: { le: 1, n: 2, v: 17 } } }, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier('17. page marquée par la 1.8 avec une sans-image : RENVOYÉE sans « Réapprendre », puis marquée v:19', [M.appels.filter(x => x.chemin === '/api/apprendre-lot').length, M.store.rm_pagesFaites['/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096']?.v], [1, 19]);
+        const M2 = await charger(navigateur, M.store, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier('   et marquée v:19, elle ne repart plus', M2.appels.filter(x => x.chemin === '/api/apprendre-lot').length, 0);
+        // 18. L'export du journal et le panneau portent la version et la date RÉELLE de la liste.
+        verifier('18. le panneau dit la date de la liste générée, pas « 25/09 »', [/Liste du 25\/09/.test(J.panneau), new RegExp(`Liste du ${new Date(Date.parse(/MESURE_LISTE = Date\.parse\('([^']+)'\)/.exec(SCRIPT)[1])).toISOString().slice(8, 10)}/`).test(J.panneau)], [false, true]);
+        // Une seule écriture de la version (la constante VERSION, égale à l'en-tête) : l'export, le journal et le panneau la lisent.
+        verifier('   l\'export du journal se déclare 1.9 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.9', '1.9', true]);
+        // 19-21. POINT 6 (seconde relecture) : un ÉCHEC de la déduction ne marque pas la page ; l'erreur et les raisons sont dites et
+        //        journalisées ; une cible sans image DÉDUITE est marquée faite (le serveur rend les idProduct déduits).
+        const ERR = { status: 200, entetes: 'ratelimit-remaining: 99', corps: { success: true, recus: 3, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0,
+            deduites: 0, nonDeduites: 1, raisonsNonDeduites: { 'erreur du serveur pendant la déduction (rien d\'écrit)': 1 }, erreurDeduction: 'déduction impossible (voir la console du serveur) — rien n\'a été écrit', idsDeduits: [],
+            idExpansion: 6096, idExpansions: [6096], couverture: { produits: 244, avecNumero: 240, appris: 243, pourcent: 98 } } };
+        const N1 = await charger(navigateur, {}, [ERR], 1500, { url: URL_DRI, html: HTML_DRI });
+        const eN = (N1.store.rm_journal || [])[0] || {};
+        verifier('19. (point 6) erreurDeduction : la page n\'est PAS marquée (ses sans-image repartiront), la file est vidée (les cartes lues sont écrites)',
+            [Object.keys(N1.store.rm_pagesFaites || {}).includes('/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096'), (N1.store.rm_file || []).length], [false, 0]);
+        verifier('   l\'erreur et les raisons sont dans le panneau ET au journal',
+            [/déduction impossible/.test(N1.panneau), /erreur du serveur pendant la déduction/.test(N1.panneau), eN.envoi?.erreurDeduction, eN.envoi?.raisonsNonDeduites],
+            [true, true, ERR.corps.erreurDeduction, ERR.corps.raisonsNonDeduites]);
+        const N2 = await charger(navigateur, N1.store, [OK_DRI], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier('20. (point 6) la page non marquée repart au chargement suivant, puis est marquée v:19', [N2.appels.filter(x => x.chemin === '/api/apprendre-lot').length, N2.store.rm_pagesFaites['/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096']?.v], [1, 19]);
+        const CIBLES = JSON.parse(/const CIBLES = (\{.*?\});/.exec(SCRIPT)[1]);
+        const [expCible, [[idCible, , nomCible]]] = Object.entries(CIBLES)[0];
+        const DED = { status: 200, entetes: 'ratelimit-remaining: 98', corps: { ...OK_DRI.corps, deduites: 1, nonDeduites: 1, raisonsNonDeduites: { 'lien sans variante, # produits au nom «…»': 1 }, erreurDeduction: null,
+            idsDeduits: [{ idProduct: idCible, slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals' }], deductionsContredites: [{ idProduct: 111, par: 826050, slug: 'Destined-Rivals/Aaa-DRI001' }] } };
+        const N3 = await charger(navigateur, {}, [DED], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier(`21. (point 6) la cible ${idCible} (« ${nomCible} », exp ${expCible}) DÉDUITE par le serveur est marquée faite ; les raisons des non déduites sont dites`,
+            [!!(N3.store.rm_ciblesFaites || {})[idCible], /lien sans variante/.test(N3.panneau), (N3.store.rm_journal || [])[0]?.envoi?.idsDeduits], [true, true, [idCible]]);
+        verifier('22. (relecture par sous-agent) une déduction CONTREDITE par une carte lue est gardée au journal et dite au panneau',
+            [(N3.store.rm_journal || [])[0]?.envoi?.deductionsContredites, /1 déduction\(s\) contredite\(s\)/.test(N3.panneau)], [DED.corps.deductionsContredites, true]);
+        // 23. TROISIÈME RELECTURE : une sans-image REFUSÉE pour une raison d'ordre (« 2 produits non appris » : le V1 de sa famille est sur
+        //     une page suivante) marquait la page v:19 pour toujours. Elle garde son refus dans sa marque, et repart UNE fois quand
+        //     l'expansion a appris quelque chose depuis — pas avant, pas deux fois.
+        const CLE_DRI = '/fr/Pokemon/Products/Singles?idCategory=51&idExpansion=6096';
+        const REFUS = { status: 200, entetes: 'ratelimit-remaining: 97', corps: { ...OK_DRI.corps, deduites: 0, nonDeduites: 1, raisonsNonDeduites: { '# produits non appris au nom «…»': 1 }, erreurDeduction: null, idsDeduits: [] } };
+        const P1 = await charger(navigateur, {}, [REFUS], 1500, { url: URL_DRI, html: HTML_DRI });
+        const m1 = P1.store.rm_pagesFaites?.[CLE_DRI] || {};
+        const P2 = await charger(navigateur, P1.store, [REFUS], 1500, { url: URL_DRI, html: HTML_DRI });
+        const apprisDepuis = s => ({ ...s, rm_couv: { ...s.rm_couv, 6096: { ...s.rm_couv[6096], le: (s.rm_pagesFaites[CLE_DRI].leCouv ?? s.rm_pagesFaites[CLE_DRI].le) + 60000 } } });
+        const P3 = await charger(navigateur, apprisDepuis(P2.store), [REFUS], 1500, { url: URL_DRI, html: HTML_DRI });
+        const P4 = await charger(navigateur, apprisDepuis(P3.store), [REFUS], 1500, { url: URL_DRI, html: HTML_DRI });
+        verifier('23. sans-image refusée : marquée avec son refus ; ne repart pas sans apprentissage neuf ; repart UNE fois quand l\'expansion a appris depuis ; puis plus',
+            [m1.v, m1.sansImageRefusees, ...[P2, P3, P4].map(P => P.appels.filter(x => x.chemin === '/api/apprendre-lot').length), P3.store.rm_pagesFaites[CLE_DRI]?.reprises], [19, 1, 0, 1, 0, 1]);
         // 14. Un refus du serveur s'écrit au journal avec son statut, et la page reste en file.
         const K = await charger(navigateur, {}, [{ status: 400, corps: { success: false, error: 'Identifiant utilisateur manquant' } }], 1500, { url: URL_DRI, html: HTML_DRI });
         verifier('14. refus 400 : au journal (statut, message), page gardée en file', [K.store.rm_journal?.[0]?.envoi?.status, K.store.rm_journal?.[0]?.envoi?.erreur, K.store.rm_file.length], [400, 'Identifiant utilisateur manquant', 1]);

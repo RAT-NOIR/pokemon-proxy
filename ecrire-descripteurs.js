@@ -61,7 +61,10 @@ const { ReferenceImage, N_POINTS, LARGEUR } = require('./departage-image');
 const PTS = Number(option('pts')) || N_POINTS;
 const RACINE = 'C:\\Users\\Yung\\Desktop\\CARDMARKET IMAGE';
 const EST_CARTE = /^(\d+)\.(jpe?g|png|webp)$/i;
-const EST_CODE_CARD = /code\s*card/i;
+// Le filtre des cartes-code : sa SEULE définition (collecte-cartes/jointure.js). Seconde relecture du 2026-09-26 : `/code\s*card/i`
+// recopié ici ; mesuré avant de remplacer sur les 74 188 noms de catalogue_produits, 0 produit divergent. Il s'applique désormais en
+// JavaScript sur les noms lus (un prédicat n'est pas une requête Mongo : la même fonction partout).
+const { estCarteCode } = require('./collecte-cartes/jointure');
 const LOT = 500;
 
 let arret = false;
@@ -90,7 +93,7 @@ process.on('SIGINT', () => {
 
     // 2. Les Code Card, écartées d'avance : la chaîne ne les tarife jamais.
     const cc = new Set((await db.collection('catalogue_produits')
-        .find({ name: EST_CODE_CARD }, { projection: { idProduct: 1 } }).toArray()).map(x => x.idProduct));
+        .find({}, { projection: { idProduct: 1, name: 1 } }).toArray()).filter(x => estCarteCode(x.name)).map(x => x.idProduct));
 
     // 3. 🔑 L'AVANCEMENT EST LA COLLECTION ELLE-MÊME.
     const deja = new Set((await ReferenceImage.find({ pts: PTS }, { idProduct: 1 }).lean()).map(d => d.idProduct));

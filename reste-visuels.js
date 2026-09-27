@@ -13,7 +13,7 @@ const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { ligne } = require('./collecte-cartes/table-sets');
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
-const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));   // mesure-catalogue.js:24, mot pour mot
+const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });

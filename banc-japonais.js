@@ -164,7 +164,9 @@ const { interrogerPont } = require('./pont-cartes');
 const J = mongoose.model('Jb', new mongoose.Schema({}, { strict: false }), 'journal_scans');
 const Cat = mongoose.model('Pb', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
 const Num = mongoose.model('Nb', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
-const EST_CODE_CARD = /code\s*card/i;
+// Le filtre des cartes-code de la ROUTE (index.js, `ecarterNonCartes`) : sa seule définition, collecte-cartes/jointure.js — règle de
+// symétrie. Seconde relecture du 2026-09-26 : `/code\s*card/i` recopié ici ; 0 produit divergent sur les 74 188 noms du catalogue.
+const { estCarteCode } = require('./collecte-cartes/jointure');
 
 // ---- LA VÉRITÉ DU BANC ---------------------------------------------------
 // Fournie par le testeur sous forme d'URL Cardmarket, résolue en idProduct via les slugs
@@ -368,7 +370,7 @@ function celluleDe(d) {
     // ⚠️ LA ROUTE N'A JAMAIS EU CE DÉFAUT : elle lit `p.idMetacard` sur des documents non
     // projetés (index.js, `metacartes`). L'asymétrie était du seul côté du banc.
     const produits = (await Cat.find({}, { idProduct: 1, idExpansion: 1, name: 1, idMetacard: 1 }).lean())
-        .filter(p => !EST_CODE_CARD.test(String(p.name || '')));
+        .filter(p => !estCarteCode(p.name));
     const catById = new Map(produits.map(p => [p.idProduct, p]));
     const numDocs = await Num.find({}, { idProduct: 1, numero: 1, numeroUrl: 1, nomFr: 1 }).lean();
     const numParId = new Map(numDocs.map(d => [d.idProduct, d]));

@@ -39,7 +39,7 @@ const { visuelAdmisPourLaRegion } = await site('langueDuVisuel.ts');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));   // mesure-catalogue.js:24
+const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 // ── l'export : produits (hors cartes-code) et année par expansion
 const ex = JSON.parse(fs.readFileSync(`${R}/${EXPORT}`, 'utf8'));

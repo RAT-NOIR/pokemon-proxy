@@ -21,7 +21,9 @@
 require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 
-const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));
+// Le filtre des cartes-code vit dans collecte-cartes/jointure.js depuis le 2026-09-26 (soir) : une seule définition, que ce fichier,
+// la table maîtresse, les outils et le serveur importent — il y en avait neuf copies mot pour mot.
+const { estCarteCode } = require('./collecte-cartes/jointure');
 
 (async () => {
     const tout = process.argv.includes('--tout');

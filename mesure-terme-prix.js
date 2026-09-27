@@ -51,7 +51,9 @@ const J = mongoose.model('Jm', new mongoose.Schema({}, { strict: false }), 'jour
 const Cat = mongoose.model('Pm', new mongoose.Schema({}, { strict: false }), 'catalogue_produits');
 const G = mongoose.model('Gm', new mongoose.Schema({}, { strict: false }), 'guide_prix');
 const Num = mongoose.model('Nm', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
-const EST_CODE_CARD = /code\s*card/i;
+// Le filtre des cartes-code : sa SEULE définition (collecte-cartes/jointure.js). Seconde relecture du 2026-09-26 : `/code\s*card/i`
+// recopié ici ; mesuré avant de remplacer sur les 74 188 noms de catalogue_produits, 0 produit divergent.
+const { estCarteCode } = require('./collecte-cartes/jointure');
 const SEAUX_VERITES_CODEES = new Set(['entrainement', 'verification']);
 const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
 const SEUIL_CHER = 3; // le seuil du critère 5, recopié pour l'AFFICHAGE seulement
@@ -103,7 +105,10 @@ const prixTri = p => (typeof p === 'number' && p > 0) ? p : Infinity;
 
 /** Rejoue un régime sur les scores d'une ligne : même tri que choisirMeilleur (score desc, puis le moins cher). */
 function rejouerRegime(scores, attendu, regime) {
-    const re = scores.map(s => ({ ...s, score: s.score - REGIMES['référence'](s.branche) + regime(s.branche) }))
+    // le régime s'applique au score d'AVANT le relèvement, puis le relèvement de la PRODUCTION est rejoué (S.releverLectures, jamais
+    // une copie) : une lecture relevée par le prix ne l'est peut-être plus sous un autre régime
+    const re = S.releverLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + regime(s.branche),
+        candidat: { idExpansion: s.idExpansion, numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })))
         .sort((a, b) => (b.score - a.score) || (prixTri(a.prix) - prixTri(b.prix)));
     const top = re[0], second = re[1];
     const tailleSommet = re.filter(s => s.score === top.score).length;
@@ -125,7 +130,7 @@ function rejouerRegime(scores, attendu, regime) {
 
     const VERITE = tableDuBanc('VERITE'), VERITE_PAR_NOM = tableDuBanc('VERITE_PAR_NOM');
     const catById = new Map((await Cat.find({}, { idProduct: 1, name: 1 }).lean())
-        .filter(p => !EST_CODE_CARD.test(String(p.name || ''))).map(p => [p.idProduct, p]));
+        .filter(p => !estCarteCode(p.name)).map(p => [p.idProduct, p]));
 
     // ── LE JOURNAL, PUIS LES LIGNES DU BANC — mêmes règles que banc-japonais.js ──
     const docs = await J.find({}).sort({ le: 1 }).lean();
@@ -211,8 +216,11 @@ function rejouerRegime(scores, attendu, regime) {
         x.numeroUtile = cardInfo.number;   // le numéro tel que le scoring l'a vu (Pokédex neutralisé)
         x.scores = scores.map(s => ({
             id: s.candidat.idProduct, score: s.score, prix: s.candidat.prix, branche: brancheDe(s.detail),
-            // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif).
-            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
+            // le score AVANT le relèvement de choisirMeilleur (scoring.js, `releverLectures`) : c'est lui qui est la somme du barème
+            scoreAvantReleve: s.detail?.releve ? Number(String(s.detail.releve).split('→')[0]) : s.score,
+            numeroCardmarket: s.candidat.numeroCardmarket ?? null, certitudeNumero: s.candidat.certitudeNumero ?? null,
+            // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif). `releve` n'en est pas une.
+            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'releve').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
             codeSet: s.candidat.codeSet ?? null, region: s.candidat.region ?? null,
             // Pour les tris de la mesure 5 : la place dans le vivier tel que rendu par Mongo
             // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.

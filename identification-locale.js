@@ -31,7 +31,7 @@
 
 const mongoose = require('mongoose');
 const {
-    choisirMeilleur, comparerNumeros, prixDeReference, regionDuCodeSet, bilanDesRangs
+    choisirMeilleur, comparerNumeros, prixDeReference, regionDuCodeSet, bilanDesRangs, certitudeDuNumero
 } = require('./scoring');
 
 // Modèles guardés : ce module est requis par index.js, qui déclare déjà les siens sur les
@@ -47,7 +47,9 @@ const GuidePrix = mongoose.models.GuidePrix || mongoose.model('GuidePrixIL', lib
 // le chemin nominal ne verraient pas les mêmes candidats.
 const normaliserNom = n => String(n || '').toLowerCase().replace(/[\s\-'.&]/g, '');
 const echapperRegex = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const EST_CODE_CARD = /code\s*card/i;
+// Le filtre des cartes-code : sa SEULE définition (collecte-cartes/jointure.js). Seconde relecture du 2026-09-26 : `/code\s*card/i`
+// recopié ici ; mesuré avant de remplacer sur les 74 188 noms de catalogue_produits, 0 produit divergent.
+const { estCarteCode } = require('./collecte-cartes/jointure');
 
 /**
  * Identifie une carte dans le SEUL catalogue local, sans TCGdex.
@@ -97,7 +99,7 @@ async function identifierEnLocal({
 
     const parId = new Map();
     for (const p of [...parAnglais, ...parFrancais]) {
-        if (!EST_CODE_CARD.test(String(p.name || ''))) parId.set(p.idProduct, p);
+        if (!estCarteCode(p.name)) parId.set(p.idProduct, p);
     }
     const candidatsNom = [...parId.values()];
     if (!candidatsNom.length) return null;
@@ -137,7 +139,7 @@ async function identifierEnLocal({
             idProduct: p.idProduct,
             idExpansion: p.idExpansion,
             numeroCardmarket: d.numero || d.numeroUrl || null,
-            certitudeNumero: d.certitude || 'exacte',
+            certitudeNumero: certitudeDuNumero(d),   // scoring.js : une ligne complétée par une déduction garde la certitude de son numéro
             variante: d.variante || null,
             codeSet: code,
             // estReverse=false : sans variantsDetailed on ne sait pas viser une reverse.

@@ -27,6 +27,9 @@ const path = require('path');
 require('dotenv').config();
 const { connecterMongo } = require('./mongo-connexion');
 const mongoose = require('mongoose');
+// Le filtre des cartes-code : sa SEULE définition (collecte-cartes/jointure.js). Seconde relecture du 2026-09-26 : la ligne 139 en
+// portait une copie mot pour mot, que rien n'aurait fait suivre si la règle changeait.
+const { estCarteCode } = require('./collecte-cartes/jointure');
 
 const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const NOUVEAU = args[0];
@@ -134,9 +137,9 @@ function lireExport(f) {
     const lignes = [...parExp].map(([id, ps]) => {
         const tous = neuf.produits.filter(p => p.idExpansion === id);
         const dates = tous.map(dateDe).filter(Boolean).sort();
-        // `cartesCode` : combien de ces nouveaux sont des cartes-code (prédicat de production, mesure-catalogue.js:24) —
+        // `cartesCode` : combien de ces nouveaux sont des cartes-code (le prédicat de production, importé en tête) —
         // une expansion qui n'en porte pas d'autres n'a rien à apprendre ni à collecter
-        const cartesCode = ps.filter(p => /\b(online|live)\s+code\s+card\b/i.test(String(p.name || ''))).length;
+        const cartesCode = ps.filter(p => estCarteCode(p.name)).length;
         return { id, n: ps.length, cartesCode, total: tous.length, neuve: !expEnBase.has(id), code: codeDe.get(id) ?? null, slug: slugDe(id), creee: dates[0] ?? null, derniere: dates.slice(-1)[0] ?? null, ex: ps.slice(0, 2).map(p => p.name) };
     });
     const neuves = lignes.filter(l => l.neuve).sort((a, b) => String(b.creee).localeCompare(String(a.creee)));
@@ -156,9 +159,8 @@ function lireExport(f) {
     console.log(`   (détail : collecte-cartes/rapports/${path.basename(rapport)})`);
 
     // ── LES CARTES-CODE : CE QUE LE FILTRE DE PRODUCTION RETIRE, DE CHAQUE CÔTÉ ──
-    // Le prédicat est RECOPIÉ de la production (mesure-catalogue.js:24, §21 bis) ; « code card » tout court est imprimé
-    // à côté pour qu'un libellé que le filtre raterait se voie (le filtre dit « online|live », l'export dit autre chose ?).
-    const estCarteCode = nom => /\b(online|live)\s+code\s+card\b/i.test(String(nom || ''));
+    // Le prédicat est CELUI de la production (collecte-cartes/jointure.js, sa seule définition depuis le 2026-09-26) ; « code card »
+    // tout court est imprimé à côté pour qu'un libellé que le filtre raterait se voie (le filtre dit « online|live », l'export dit autre chose ?).
     const large = nom => /code\s*card/i.test(String(nom || ''));
     const codesFichier = neuf.produits.filter(p => large(p.name));
     const libelle = n => n.nom || n.nomFr || n.nomEn || n.slug || '';
