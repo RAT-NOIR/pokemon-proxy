@@ -32,6 +32,7 @@ const { revaliderSets } = require('./collecte-cartes/revalider-site');   // une 
 // les issues d'unité ATTEINTES APRÈS la jointure des images (les trois collecteurs) — les seules où une page peut avoir changé.
 // Écrit par ce qu'il autorise (§51) : un refus précoce, un arrêt, une mesure n'ont rien joint et ne coûtent pas un appel au quota Vercel.
 const APRES_JOINTURE = /^(verifie|incomplet|incomplet-transitoire|non-concordant)$/;
+const { assurerVignettes } = require('./collecte-cartes/vignette');   // les vignettes de 200 px des images neuves, après la jointure
 const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
@@ -652,7 +653,16 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte TCGdex — ${e.message}`);
                 }
                 finally { await vt.rendre(); }
-            } else b = await collecterSet(suivant._id, M, dossierRapport);
+            } else if (sourceDuSet === SOURCE) b = await collecterSet(suivant._id, M, dossierRapport);
+            else {
+                // 🔴 PLAN-POKECARDEX.md §5 (demande du testeur, 2026-09-27) : le `else` final envoyait TOUTE source inconnue chez artofpkm —
+                // une unité d'une source neuve, lue par un worker antérieur, aurait frappé le mauvais serveur sous le mauvais verrou.
+                // L'aiguillage s'écrit par ce qu'il AUTORISE (§51) : artofpkm, bulbapedia, tcgdex ; tout le reste attend un worker qui
+                // la connaît (une heure, puis relue), la cause ÉCRITE sur l'unité — ni refus définitif, ni boucle.
+                console.error(`🔴 ${suivant._id} : source « ${sourceDuSet} » inconnue de ce worker — remise en attente (1 h), rien n'est demandé à personne.`);
+                await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-inconnue', pasAvant: new Date(Date.now() + 60 * 60 * 1000), erreur: `source « ${sourceDuSet} » inconnue de ce worker` }, $unset: { pris: 1 } });
+                continue;
+            }
             // ⚠️ UN SET INTERROMPU RETOURNE EN ATTENTE, JAMAIS EN « REFUSÉ ». Un arrêt (SIGINT,
             // redéploiement, verrou d'un autre) n'est pas un verdict sur le set : le marquer
             // « refuse » le sortait de la file pour toujours, et personne ne l'aurait repris.
@@ -660,9 +670,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // collecte-cartes/issue-unite.js (banc test-issue-unite.js) — en queue, pas avant 10 min, 3 passages au plus.
             const I = issueDeLUnite(b, suivant);
             const ordre = I.enQueue ? ((await File.find({}).sort({ ordre: -1 }).limit(1).lean())[0]?.ordre ?? 0) + 1 : undefined;
+            // une erreur d'un passage précédent ne survit pas à un passage sans erreur (revue du 2026-09-27) ; un `$unset` vide est
+            // refusé par MongoDB : il n'est posé que s'il a un champ
+            const aRetirer = { ...(I.etat === 'attente' ? { pris: 1 } : {}), ...(b.erreur ? {} : { erreur: 1 }) };
             await File.updateOne({ _id: suivant._id }, {
                 $set: { etat: I.etat, resultat: b.etat, ...(I.etat === 'attente' ? {} : { fini: new Date() }), ...(I.tentatives ? { tentatives: I.tentatives } : {}), ...(I.pasAvant ? { pasAvant: I.pasAvant, ordre } : {}), ...(b.erreur ? { erreur: b.erreur } : {}) },
-                ...(I.etat === 'attente' ? { $unset: { pris: 1 } } : {})
+                ...(Object.keys(aRetirer).length ? { $unset: aRetirer } : {})
             });
             if (I.enQueue) console.log(`↩️ ${suivant._id} remis en file, en queue, pas avant ${I.pasAvant.toISOString()} (${b.etat}, passage ${I.tentatives}).`);
             if (I.arreter) { console.log(`↩️ ${suivant._id} remis en attente (${b.etat}).`); break; }
@@ -680,8 +693,22 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 // 3 passages au plus par enfilement (issue-unite.js), 3 reprises au plus par version (manque-reel.js).
                 if (!slugUnite) rv = { ok: false, erreur: 'aucune ligne de table pour cette unité : set à revalider inconnu' };
                 else {
-                    try { const r = await revaliderSets([slugUnite], { journal: console }); rv = { ok: true, slug: slugUnite, appels: r.appels }; }
-                    catch (e) { rv = { ok: false, slug: slugUnite, erreur: e.message }; console.error(`🔴 revalidation de ${slugUnite} impossible : ${e.message} — la page reste ancienne tant que personne ne la revalide`); }
+                    // 🔑 LES VIGNETTES D'ABORD (demande du site, collecte-cartes/vignette.js) : les images neuves du set reçoivent leur
+                    // réduction de 200 px AVANT la revalidation, pour que la page régénérée les serve. Relues sur R2 (0 requête aux sources) ;
+                    // un échec est compté et écrit sur l'unité, il n'empêche ni la revalidation ni la suite de la boucle.
+                    // interruptible (SIGTERM) : la revalidation qui suit doit partir dans la grâce de Render (revue du 2026-09-27)
+                    let vg = null, setsVignettes = [];
+                    try {
+                        const V = await assurerVignettes(cx.db, { bucket: process.env.R2_BUCKET_IMAGES, slug: slugUnite, parallele: 4, arreter: () => arretDemande });
+                        vg = { entrees: V.entrees, images: V.cles, traitees: V.traitees, fabriquees: V.fabriquees, deja: V.deja, depuisDocument: V.depuisDocument, echecs: V.echecs.length, interrompu: V.interrompu };
+                        setsVignettes = V.sets;
+                    } catch (e) { vg = { erreur: e.message }; console.error(`🔴 vignettes de ${slugUnite} : ${e.message}`); }
+                    await File.updateOne({ _id: suivant._id }, { $set: { vignettes: { le: new Date(), ...vg } } });
+                    // une image partagée (un set et ses Additionals : même cleR2) a reçu sa vignette sur les DEUX entrées — les deux
+                    // pages se revalident (revue du 2026-09-27 : 1 045 cartes dans ce cas)
+                    const aRevalider = [...new Set([slugUnite, ...setsVignettes])];
+                    try { const r = await revaliderSets(aRevalider, { journal: console }); rv = { ok: true, slug: slugUnite, sets: aRevalider, appels: r.appels }; }
+                    catch (e) { rv = { ok: false, slug: slugUnite, sets: aRevalider, erreur: e.message }; console.error(`🔴 revalidation de ${slugUnite} impossible : ${e.message} — la page reste ancienne tant que personne ne la revalide`); }
                 }
                 await File.updateOne({ _id: suivant._id }, { $set: { revalidation: { le: new Date(), ...rv } } });
             }

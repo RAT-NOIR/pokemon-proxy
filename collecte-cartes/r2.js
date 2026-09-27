@@ -74,6 +74,12 @@ async function lireTexte(bucket, cle) {
     return await r.Body.transformToString('utf8');
 }
 
+/** Relit un binaire (une image) depuis R2 — les vignettes se fabriquent depuis l'original archivé, jamais depuis la source. */
+async function lireBinaire(bucket, cle) {
+    const r = await client().send(new GetObjectCommand({ Bucket: bucket, Key: cle }));
+    return Buffer.from(await r.Body.transformToByteArray());
+}
+
 /** Toutes les clés sous un préfixe (pour l'effacement demandé, jamais pour autre chose). */
 async function listerPrefixe(bucket, prefixe) {
     const cles = [];
@@ -99,4 +105,4 @@ async function supprimer(bucket, cles) {
 
 const cleWikitext = (pageid, revid) => `bulba/${pageid}/${revid}.wikitext`;
 
-module.exports = { verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, listerPrefixe, supprimer, cleWikitext };
+module.exports = { verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };

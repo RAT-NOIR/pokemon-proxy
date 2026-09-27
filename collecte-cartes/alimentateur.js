@@ -99,7 +99,12 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
     const permise = u => { if (!unitePermise) return true; const r = unitePermise(u.code || String(u._id).replace(/^tcgdex\//, '')); if (r && !refusees.some(x => x._id === u._id)) refusees.push({ _id: u._id, slug: u.slug, raison: r }); return !r; };
     const F = db.collection('file_images');
     const E = db.collection('collecte_images_etat');
-    const enAttente = await F.countDocuments({ etat: { $in: ['attente', 'en-cours'] } });
+    // les unités PRENABLES, comme le worker les prend (collecteur-images.js : `attente` sans `pasAvant` futur) plus celle en cours —
+    // une unité différée (surcharge, source inconnue de ce worker) n'est pas du travail : trois suffisaient à affamer la file sans
+    // alerte (revue du 2026-09-27)
+    const pretes = async () => (await F.countDocuments({ etat: 'en-cours' }))
+        + (await F.countDocuments({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: maintenant } }] }));
+    const enAttente = await pretes();
     if (enAttente >= seuil && !simuler) return { enAttente, rien: true };
     let R, RM = { inserer: [], reprendre: [], ecartes: [] }, mesure = null, erreurManque = null, manques;
     if (plan) {
@@ -178,7 +183,7 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
     // mesure attend une heure (0) ou se refait tout de suite — un choix qui n'a rien écrit ne doit pas compter comme un succès
     if (mesure) await E.updateOne({ _id: 'alimentateur/manque-reel' }, { $set: { le: maintenant, version, lignes: mesure.examinees, avecSetTcgdex: mesure.avecSet, setsLus: mesure.lues, setsAvecManque: mesure.manques.length, impressionsJamaisTentees: mesure.manques.reduce((s, m) => s + m.n, 0), enfilees: enfileesManque }, $unset: { erreur: 1, erreurLe: 1, erreurVersion: 1 } }, { upsert: true });
     else if (erreurManque) await E.updateOne({ _id: 'alimentateur/manque-reel' }, { $set: { erreur: erreurManque, erreurLe: maintenant, erreurVersion: version } }, { upsert: true });
-    const apres = await F.countDocuments({ etat: { $in: ['attente', 'en-cours'] } });
+    const apres = await pretes();
     const raisons = {}; for (const e of [...R.ecartes, ...RM.ecartes, ...refusees]) { const k = e.raison.replace(/\(.*\)/, '(…)'); raisons[k] = (raisons[k] || 0) + 1; }
     if (mesure) raisons[`manque réel TCGdex : ${mesure.manques.length} set(s), ${mesure.manques.reduce((s, m) => s + m.n, 0)} impression(s) jamais tentée(s) sur ${mesure.lues} set(s) lu(s)`] = enfileesManque;
     if (erreurManque) raisons[`manque réel NON MESURÉ : ${erreurManque}`] = 0;

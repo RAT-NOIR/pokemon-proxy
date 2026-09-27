@@ -131,8 +131,10 @@ const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u
     const { alimenter, tirageDe } = require('./collecte-cartes/alimentateur');
     const { TABLE } = require('./collecte-cartes/table-sets');
     const L = TABLE.find(l => l.slugSet && l.code && tirageDe(l) === 'intl');
-    const accepte = (d, f) => Object.entries(f).every(([k, v]) => v && typeof v === 'object' && !(v instanceof Date)
-        ? ('$in' in v ? v.$in.includes(d[k]) : '$ne' in v ? d[k] !== v.$ne : false) : d[k] === v);
+    const accepte = (d, f) => Object.entries(f).every(([k, v]) => k === '$or' ? v.some(g => accepte(d, g))
+        : v && typeof v === 'object' && !(v instanceof Date)
+            ? ('$in' in v ? v.$in.includes(d[k]) : '$ne' in v ? d[k] !== v.$ne : '$exists' in v ? (d[k] !== undefined) === v.$exists : '$lte' in v ? d[k] != null && d[k] <= v.$lte : false)
+            : d[k] === v);
     const collection = docs => ({
         docs,
         async countDocuments(f) { return [...docs.values()].filter(d => accepte(d, f)).length; },
@@ -165,6 +167,14 @@ const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u
     cols.cartes.aggregate = () => { throw new Error('seconde mesure : le plan devait suffire'); };
     const Bp = await alimenter(db, { plan: Pl, M: null, journal: silencieux, version: 'v-test', maintenant: K, seuil: 99 });
     verifier('un PLAN s\'écrit tel quel, sans relire les manques (aucune seconde mesure)', [Pl.reprendre.length, Bp.repris, cols.file_images.docs.get(L.code).etat], [1, 1, 'attente']);
+    // revue du 2026-09-27 : trois unités en attente DIFFÉRÉE (pasAvant futur : une source inconnue du worker, une surcharge) ne sont pas
+    // prenables — les compter dans le seuil affamait la file sans alerte. Seules les unités PRÊTES comptent.
+    cols.file_images.docs.clear();
+    for (let n = 0; n < 3; n++) cols.file_images.docs.set(`x/${n}`, { _id: `x/${n}`, etat: 'attente', pasAvant: new Date(K.getTime() + 3600e3), resultat: 'source-inconnue', ordre: n });
+    cols.file_images.docs.set(L.code, { _id: L.code, etat: 'refuse', source: 'bulbapedia', fini: J, ordre: 9 });
+    cols.cartes.aggregate = () => ({ toArray: async () => [{ slug: L.slugSet, n: 10, sans: 4 }] });
+    const Bd = await alimenter(db, { M: null, journal: silencieux, version: 'v-test', maintenant: K });
+    verifier('trois unités différées ne bloquent pas l\'alimentateur : il reprend ce qui manque', [Bd.rien ?? false, Bd.repris], [false, 1]);
     verifier('l\'échec du manque réel s\'écrit (état et raison), sans compter comme une mesure', [/liste TCGdex absente/.test(etatManque?.erreur || ''), etatManque?.enfilees, Object.keys(B.raisons).some(k => k.startsWith('manque réel NON MESURÉ'))], [true, undefined, true]);
     console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
     process.exit(ko ? 1 : 0);
