@@ -46,11 +46,19 @@ const { decoderCodeSet, fabriquerMemoriserCodeSet, accesNatif } = require('./col
     if (Number(arg('attendu')) !== cartes.length) { console.error(`❌ ARRÊT : ${cartes.length} cartes dans la file contre ${arg('attendu')} attendues`); process.exit(1); }
     const sauvegarde = arg('sauvegarde');
     if (!sauvegarde || !fs.existsSync(path.join(__dirname, sauvegarde, 'numeros_cartes.json'))) { console.error(`❌ ARRÊT : --sauvegarde=<dossier> doit contenir numeros_cartes.json (backup-collections.js --base=test --collections=numeros_cartes,codes_set --dossier=…)`); process.exit(1); }
+    // relecture du 2026-09-28 : une sauvegarde VIEILLE passait (seule son existence était vérifiée) — elle doit dater de moins de 2 h
+    const ageSauvegardeMin = (Date.now() - fs.statSync(path.join(__dirname, sauvegarde, 'numeros_cartes.json')).mtimeMs) / 60000;
+    if (ageSauvegardeMin > 120) { console.error(`❌ ARRÊT : ${sauvegarde}/numeros_cartes.json date de ${Math.round(ageSauvegardeMin)} min — une sauvegarde de moins de 2 h est exigée`); process.exit(1); }
     const mongoose = require('mongoose');
     const { connecterMongo } = require('./mongo-connexion');
     const base = await connecterMongo({ script: 'integrer-file-attente.js', ecrit: true });
     if (base !== 'test') { console.error(`❌ ARRÊT : les numéros appris vivent dans « test », pas dans « ${base} »`); await mongoose.disconnect(); process.exit(1); }
     const db = mongoose.connection.db;
+    // relecture du 2026-09-28 : la garde photographie la table ENTIÈRE avant et après ; si la file serveur (ou une passe) écrit pendant
+    // ce temps, elle crie « restaurer » à tort. On n'écrit que quand la file serveur est vide — et l'userscript doit être arrêté (dit).
+    const fileServeur = await db.collection(require('./collecte-cartes/file-apprentissage').COLLECTION).countDocuments({ etat: { $in: ['attente', 'en-cours'] } });
+    if (fileServeur) { console.error(`❌ ARRÊT : la file serveur d'apprentissage porte ${fileServeur} lot(s) en cours — elle écrirait pendant la garde ; attendre qu'elle soit vide`); await mongoose.disconnect(); process.exit(1); }
+    console.log('   file serveur vide ; ⚠️ aucune passe Tampermonkey ne doit tourner pendant l\'écriture (la garde compterait ses lignes comme hors du lot)');
     const N = db.collection('numeros_cartes'), K = db.collection('catalogue_produits');
     const memoriserCodeSet = fabriquerMemoriserCodeSet({ ...accesNatif(db.collection('codes_set')), pret: () => mongoose.connection.readyState === 1 });
     const photo = async () => new Map((await N.find({}, { projection: { _id: 0 } }).toArray()).map(l => [l.idProduct, JSON.stringify(l)]));

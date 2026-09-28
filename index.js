@@ -6512,7 +6512,13 @@ app.post('/api/apprendre-lot', limiteurLot, verifierJeton, async (req, res) => {
             return res.json({ success: false, error: "Aucune carte reçue" });
         }
         // Au-delà de la limite (req.enFileServeur, posé par `limiteurLot`) : EN FILE, 202 — jamais un refus pour un envoi authentifié et
-        // bien formé ; le plafond par utilisateur de la file reste la seule réponse 429 (un abus du jeton, pas une passe).
+        // bien formé ; les plafonds de la file (par utilisateur, global) restent les seules réponses 429 (un abus du jeton, pas une passe).
+        // 🔴 RELECTURE DU 2026-09-28 : un client qui ne connaît pas le 202 (userscript 1.9) le lisait comme un refus, gardait sa page et la
+        // RENVOYAIT — un doublon en file. Le 202 n'est rendu qu'à un client qui le DÉCLARE (`fileServeur: true`, userscript 1.11) ;
+        // les autres reçoivent le 429 d'avant, qu'ils savent reprendre.
+        if (req.enFileServeur && req.body.fileServeur !== true) {
+            return res.status(429).json({ success: false, error: 'Trop de requêtes d\'apprentissage, réessaie plus tard.' });
+        }
         if (req.enFileServeur) {
             const { status, corps } = await mettreEnFileApprentissage(mongoose.connection.db.collection(FILE_APPRENTISSAGE), { userId, cartes });
             console.log(`📥 [apprendre-lot] au-delà de la limite -> ${status === 202 ? `EN FILE (position ${corps.position}, ${cartes.length} carte(s))` : `REFUS ${status} : ${corps.error}`} (userId=${userId})`);
