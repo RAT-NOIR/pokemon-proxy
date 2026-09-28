@@ -38,7 +38,7 @@ const OK = (n, couverture = { produits: 191, avecNumero: 103, appris: 103, pourc
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
-async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html = HTML } = {}) {
+async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html = HTML, action = null } = {}) {
     const page = await navigateur.newPage();
     const sorties = [];
     await page.setRequestInterception(true);
@@ -50,7 +50,9 @@ async function charger(navigateur, etat, reponses, attenteMs, { url = URL1, html
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: SCRIPT });
     await new Promise(r => setTimeout(r, attenteMs));
-    const res = await page.evaluate(() => ({ appels: window.__appels, store: window.__store, panneau: document.body.lastElementChild.innerText }));
+    // 1.11 : un geste dans le panneau (un clic), puis le temps que le panneau se redessine
+    if (action) { await action(page); await new Promise(r => setTimeout(r, 300)); }
+    const res = await page.evaluate(() => ({ appels: window.__appels, store: window.__store, panneau: document.body.lastElementChild.innerText, panneauHTML: document.body.lastElementChild.innerHTML }));
     await page.close();
     return { ...res, sorties };
 }
@@ -143,7 +145,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         verifier('10. 3 vignettes, 3 lues (le webp en data-src, et la sans-image par son lien) : l\'envoi porte les 3', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051, null]]);
         verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true });
         const e = (J.store.rm_journal || [])[0] || {};
-        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.10', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
+        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.11', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
         verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles, e.envoi?.deduites],
             [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1, 1]);
         verifier('13. le panneau : la sans-image dite (envoyée par son lien), la déduction du serveur, total contre export, filtre nommé, bouton du journal',
@@ -163,7 +165,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         // 18. L'export du journal et le panneau portent la version et la date RÉELLE de la liste.
         verifier('18. le panneau dit la date de la liste générée, pas « 25/09 »', [/Liste du 25\/09/.test(J.panneau), new RegExp(`Liste du ${new Date(Date.parse(/MESURE_LISTE = Date\.parse\('([^']+)'\)/.exec(SCRIPT)[1])).toISOString().slice(8, 10)}/`).test(J.panneau)], [false, true]);
         // Une seule écriture de la version (la constante VERSION, égale à l'en-tête) : l'export, le journal et le panneau la lisent.
-        verifier('   l\'export du journal se déclare 1.10 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.10', '1.10', true]);
+        verifier('   l\'export du journal se déclare 1.11 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.11', '1.11', true]);
         // 19-21. POINT 6 (seconde relecture) : un ÉCHEC de la déduction ne marque pas la page ; l'erreur et les raisons sont dites et
         //        journalisées ; une cible sans image DÉDUITE est marquée faite (le serveur rend les idProduct déduits).
         const ERR = { status: 200, entetes: 'ratelimit-remaining: 99', corps: { success: true, recus: 3, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0,
@@ -211,15 +213,63 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         // 25. (1.10) PAGES UTILES : la page n°1 de la liste du script, ouverte avec les cartes d'une AUTRE expansion (les cibles n'y sont
         //     pas) → « cette page est la n°1 », 0 cible lue, la voisine proposée ; après l'envoi, la page utile est marquée faite, ses
         //     cibles absentes gardées ; la prochaine proposée est la n°2.
+        //     1.11 : la page choisie est la première page CROISSANTE sous la page 10 (ses deux voisines existent) ; sa marque se range sous
+        //     sa clé (expansion|a|page), plus sous son numéro d'ordre.
         const PU = JSON.parse(/^  const PAGES_UTILES = (.*);\s*$/m.exec(SCRIPT)[1]);
-        const [o1, e1, s1, , , ids1, , slug1, url1] = PU[0];
+        const cleDe = ([, e, s, , , , , , , tri, q]) => tri === 'q' ? `${e}|q|${String(q).trim().toLowerCase()}` : `${e}|${tri}|${s}`;
+        const pA = PU.find(p => p[9] === 'a' && p[2] >= 2 && p[2] <= 9), pD = PU.find(p => p[9] === 'd'), pQ = PU.find(p => p[9] === 'q');
+        verifier('   (1.11) la liste du script porte des pages croissantes, décroissantes et des recherches, et AUCUNE au-delà de la page 10', [!!pA, !!pD, !!pQ, PU.filter(p => p[9] !== 'q' && p[2] > 10).length, PU.filter(p => !['a', 'd', 'q'].includes(p[9])).length], [true, true, true, 0, 0]);
+        const [o1, , s1, , , ids1, , slug1, url1] = pA;
+        const suivanteDe = o => PU.find(p => p[0] !== o)[0];
         const R1 = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1}` });
-        verifier(`25. (1.10) page utile n°1 (${slug1} p.${s1}, ${ids1.length} cible(s)) : reconnue, 0 cible lue, la voisine proposée ; marquée faite après l'envoi avec ses absentes ; prochaine n°2`,
-            [new RegExp(`cette page est la n°${o1}\\b`).test(R1.panneau), new RegExp(`0/${ids1.length} cible`).test(R1.panneau), new RegExp(`page ${s1 + 1}`).test(R1.panneau), R1.store.rm_pagesUtilesFaites?.[o1]?.absentes?.length, /prochaine : n°2\b/.test(R1.panneau)],
-            [true, true, true, ids1.length, true]);
+        verifier(`25. page utile n°${o1} (${slug1} p.${s1}, ${ids1.length} cible(s)) : reconnue, 0 cible lue, les voisines proposées ; marquée faite (sous sa clé) après l'envoi avec ses absentes ; prochaine n°${suivanteDe(o1)}`,
+            [new RegExp(`cette page est la n°${o1}\\b`).test(R1.panneau), new RegExp(`0/${ids1.length} cible`).test(R1.panneau), new RegExp(`page ${s1 + 1}`).test(R1.panneau), new RegExp(`page ${s1 - 1}`).test(R1.panneau), R1.store.rm_pagesUtilesFaites?.[cleDe(pA)]?.absentes?.length, new RegExp(`prochaine : n°${suivanteDe(o1)}\\b`).test(R1.panneau)],
+            [true, true, true, true, ids1.length, true]);
+        verifier('   (1.11) l\'envoi DÉCLARE qu\'il sait lire le 202 (fileServeur: true)', R1.appels.filter(x => x.chemin === '/api/apprendre-lot').map(l => l.corps.fileServeur), [true]);
         // 26. (1.10) une page HORS de la liste (la galerie 30th Celebration, sans tri par nom) : dite hors liste, la prochaine est la n°1
         const H1 = await charger(navigateur, {}, [OK(3)], 1500);
         verifier('26. (1.10) page hors liste : dite, la prochaine est la n°1, aucune page utile marquée', [/n'est pas dans la liste/.test(H1.panneau), /prochaine : n°1\b/.test(H1.panneau), H1.store.rm_pagesUtilesFaites || {}], [true, true, {}]);
+        // 27. (1.11) une page DÉCROISSANTE de la liste (au-delà des 300 produits que Cardmarket montre) : reconnue, ses voisines dans le
+        //     MÊME tri (sortBy=name_desc), jamais au-delà de la page 10
+        const R2 = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${pD[8]}` });
+        const voisD = [pD[2] + 1, pD[2] - 1].filter(s => s >= 1 && s <= 10);
+        const liensVoisins = [...R2.panneauHTML.matchAll(/<a href="([^"]*)"[^>]*>↓page (\d+)<\/a>/g)].map(m => [m[1].replace(/&amp;/g, '&'), Number(m[2])]);
+        verifier(`27. (1.11) page décroissante n°${pD[0]} (↓p.${pD[2]}) : reconnue, voisines ↓${voisD.join(' et ↓')} en name_desc, aucune au-delà de 10, marquée sous ${cleDe(pD)}`,
+            [new RegExp(`cette page est la n°${pD[0]} \\(↓p\\.${pD[2]}\\)`).test(R2.panneau), liensVoisins.map(([, s]) => s), liensVoisins.every(([l, s]) => /sortBy=name_desc/.test(l) && (s === 1 ? !/site=/.test(l) : l.includes(`site=${s}`))), !!R2.store.rm_pagesUtilesFaites?.[cleDe(pD)]],
+            [true, voisD, true, true]);
+        // 28. (1.11) une RECHERCHE de la liste (au milieu d'une liste de plus de 600) : reconnue par le nom cherché, marquée sous sa clé
+        const R3 = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${pQ[8]}` });
+        verifier(`28. (1.11) recherche n°${pQ[0]} (« ${pQ[10]} ») : reconnue, marquée sous ${cleDe(pQ)} après l'envoi`,
+            [new RegExp(`cette page est la n°${pQ[0]} \\(🔍`).test(R3.panneau), !!R3.store.rm_pagesUtilesFaites?.[cleDe(pQ)]], [true, true]);
+        // 29. (1.11) LE CAS DU JOURNAL 1.10 : une page utile où Cardmarket ne montre RIEN (0 vignette) — dite, un bouton la passe ; passée,
+        //     elle compte faite (« vide ») et la prochaine avance ; rien n'est envoyé
+        //     La vraie page vide de Cardmarket porte son formulaire de filtres (5 filtres au journal 1.10) ; une vérification Cloudflare n'en
+        //     porte aucun (73 pages du journal) — et la vue LISTE a ses produits sans vignette.
+        const FORM = '<form><select name="minCondition"><option value="7" selected>EX</option></select><input type="checkbox" name="extra[isSigned]" value="0" checked></form>';
+        const HTML_VIDE = `<!doctype html><html><head><meta charset="utf-8"></head><body>${FORM}<p>No results</p></body></html>`;
+        const V = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1}`, html: HTML_VIDE, action: p => p.click('#rm-passer') });
+        verifier(`29. (1.11) page utile vide : dite (pas « passe en vue galerie »), passée d'un clic → faite « vide », prochaine n°${suivanteDe(o1)}, 0 envoi`,
+            [/aucun produit sur cette page/.test(V.panneau) || /passée : vide/.test(V.panneau), /passe en vue GALERIE/.test(V.panneau), V.store.rm_pagesUtilesFaites?.[cleDe(pA)]?.vide, new RegExp(`prochaine : n°${suivanteDe(o1)}\\b`).test(V.panneau), V.appels.filter(x => x.chemin === '/api/apprendre-lot').length],
+            [true, false, true, true, 0]);
+        // 29 bis. (relecture) une VÉRIFICATION CLOUDFLARE à l'URL d'une page utile (jeton dans l'URL, aucun formulaire) : PAS de bouton, rien de marqué
+        const CF = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1}&__cf_chl_rt_tk=abc`, html: '<!doctype html><html><body><p>Just a moment...</p></body></html>' });
+        verifier('29 bis. (1.11) vérification Cloudflare : ni bouton « passer » ni marque, la consigne d\'attendre', [/rm-passer/.test(CF.panneauHTML), CF.store.rm_pagesUtilesFaites || {}, /Vérification Cloudflare/.test(CF.panneau)], [false, {}, true]);
+        // 29 ter. (relecture) la page utile en VUE LISTE (ses produits en liens, sans vignette, le formulaire présent) : PAS de bouton
+        const HTML_LISTE = `<!doctype html><html><head><meta charset="utf-8"></head><body>${FORM}<table><tr><td><a href="/en/Pokemon/Products/Singles/${slug1}/Pikachu-V1">Pikachu</a></td></tr></table></body></html>`;
+        const LV = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1}`, html: HTML_LISTE });
+        verifier('29 ter. (1.11) vue liste : pas de bouton « passer », rien de marqué, la consigne « passe en vue galerie »', [/rm-passer/.test(LV.panneauHTML), LV.store.rm_pagesUtilesFaites || {}, /passe en vue GALERIE/.test(LV.panneau)], [false, {}, true]);
+        // 30. (1.11) la même page en /fr/ : n'est PAS une page utile (la liste est calculée sur les listes anglaises), rien de marqué
+        const F1 = await charger(navigateur, {}, [OK(3)], 1500, { url: `https://www.cardmarket.com${url1.replace('/en/', '/fr/')}` });
+        verifier('30. (1.11) la page utile ouverte en /fr/ : hors liste, rien de marqué', [/n'est pas dans la liste/.test(F1.panneau), F1.store.rm_pagesUtilesFaites || {}], [true, {}]);
+        // 31. (1.11) RELECTURE : une page utile DÉJÀ APPRISE, sans cible ouverte, ne repart pas — elle se marque à l'ouverture (elle restait
+        //     « prochaine » pour toujours) ; rien n'est envoyé
+        const u1 = new URL(`https://www.cardmarket.com${url1}`);
+        const W = await charger(navigateur, { rm_pagesFaites: { [u1.pathname + u1.search]: { le: 1, n: 3, v: 19 } } }, [OK(3)], 1500, { url: u1.href });
+        verifier(`31. (1.11) page utile déjà apprise, sans cible ouverte : 0 envoi, marquée « déjà apprise », prochaine n°${suivanteDe(o1)}`,
+            [W.appels.filter(x => x.chemin === '/api/apprendre-lot').length, W.store.rm_pagesUtilesFaites?.[cleDe(pA)]?.dejaApprise, new RegExp(`prochaine : n°${suivanteDe(o1)}\\b`).test(W.panneau)], [0, true, true]);
+        // 32. (1.11) une marque de la 1.10 (rangée sous le NUMÉRO d'ordre) ne compte pas : la page n°1 reste à faire
+        const Z = await charger(navigateur, { rm_pagesUtilesFaites: { [PU[0][0]]: { le: 1, absentes: [] } } }, [OK(3)], 1500);
+        verifier('32. (1.11) une marque 1.10 sous le numéro d\'ordre ne fait rien : prochaine n°1, 0 page utile faite', [/prochaine : n°1\b/.test(Z.panneau), new RegExp(`Pages utiles : 0/${new Set(PU.map(cleDe)).size} faites`).test(Z.panneau)], [true, true]);
         verifier('14. refus 400 : au journal (statut, message), page gardée en file', [K.store.rm_journal?.[0]?.envoi?.status, K.store.rm_journal?.[0]?.envoi?.erreur, K.store.rm_file.length], [400, 'Identifiant utilisateur manquant', 1]);
     } finally { await navigateur.close(); }
     console.log(`\n${ok} passés, ${ko} en échec`);

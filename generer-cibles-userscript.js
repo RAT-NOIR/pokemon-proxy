@@ -26,8 +26,16 @@ if (!LISTE_F || !fs.existsSync(LISTE_F)) { console.error('❌ --liste=<LISTE-SEU
 const SCRIPT = path.join(__dirname, 'userscript-apprentissage.js');
 
 const L = JSON.parse(fs.readFileSync(LISTE_F, 'utf8'));
+// relecture du 2026-09-28 : sans --pages, l'écriture posait `PAGES_UTILES = []` sans un mot — le panneau perdait sa liste de pages.
+// L'écriture exige la liste de pages ; la mesure seule peut s'en passer.
+if (ecrire && !arg('pages')) { console.error('❌ --ecrire exige --pages=PAGES-UTILES-<date>.json (generer-pages-utiles.js) : sans elle, PAGES_UTILES serait vidé'); process.exit(2); }
 const PAGES = arg('pages') ? JSON.parse(fs.readFileSync(arg('pages'), 'utf8')) : null;
 if (PAGES && (!Array.isArray(PAGES.pages) || !PAGES.pages.every(x => x.ordre && x.idExpansion && x.site && x.url && Array.isArray(x.cibles)))) { console.error(`❌ ${arg('pages')} : « pages » illisible (ordre, idExpansion, site, url, cibles)`); process.exit(1); }
+// (1.11, 2026-09-28) le TRI de chaque page : « a » nom croissant, « d » nom décroissant (au-delà des 300 que Cardmarket montre), « q »
+// recherche du nom (au milieu d'une liste de plus de 600). Une liste de pages d'avant (sans `tri`) est refusée : elle envoyait au-delà
+// de la page 10, où Cardmarket ne montre rien — c'est ce qu'on corrige.
+const TRI_COURT = { name_asc: 'a', name_desc: 'd', recherche: 'q' };
+if (PAGES && !PAGES.pages.every(x => TRI_COURT[x.tri] && (x.tri !== 'recherche' || x.recherche) && (x.tri === 'recherche' || x.site <= 10))) { console.error(`❌ ${arg('pages')} : une page sans tri connu, recherche sans nom, ou au-delà de la page 10 — régénérer par generer-pages-utiles.js`); process.exit(1); }
 if (PAGES) console.log(`PAGES UTILES : ${PAGES.pages.length} pages (${PAGES.pages.filter(x => x.sure).length} sûres) · ${PAGES.cibles} cibles · liste ${PAGES.liste}`);
 if (!L.pourTaPasse || !L.sansSlug) throw new Error(`${LISTE_F} : ni « pourTaPasse » ni « sansSlug » — liste d'avant le 2026-09-26 soir, régénérer par apprendre-par-tcgdex.js`);
 const cibles = [...L.pourTaPasse.produits.map(p => ({ ...p, k: 'J' })), ...L.sansSlug.produits.filter(p => p.visibleDansLesListes).map(p => ({ ...p, k: 'V' }))];
@@ -60,8 +68,9 @@ const bloc = [
     `  const CIBLES = ${JSON.stringify(Object.fromEntries(exps.map(e => [e.idExpansion, e.produits.sort((a, b) => (b.prixTendance ?? -1) - (a.prixTendance ?? -1)).map(p => [p.idProduct, p.k, nomDe.get(p.idProduct) ?? p.nom ?? null])])))};`,
     '',
     `  // Les PAGES UTILES (${PAGES ? path.basename(arg('pages')) : 'aucune liste de pages'}, generer-pages-utiles.js) : [ordre, idExpansion, page, sûre (1/0/null), voisine de marge (1/0),`,
-    '  // [idProduct des cibles], code, slugSet, chemin] — la page où chaque produit à apprendre se trouve, triée par nom, dans l\'ordre de valeur.',
-    `  const PAGES_UTILES = ${JSON.stringify((PAGES?.pages || []).map(x => [x.ordre, x.idExpansion, x.site, x.sure == null ? null : x.sure ? 1 : 0, x.voisine ? 1 : 0, x.cibles.map(c => c.idProduct), x.code ?? null, x.slugSet, x.url]))};`,
+    '  // [idProduct des cibles], code, slugSet, chemin, tri (« a » nom croissant, « d » décroissant, « q » recherche), nom cherché (« q » seulement)]',
+    '  // — la page où chaque produit à apprendre se trouve, dans l\'ordre de valeur.',
+    `  const PAGES_UTILES = ${JSON.stringify((PAGES?.pages || []).map(x => [x.ordre, x.idExpansion, x.site, x.sure == null ? null : x.sure ? 1 : 0, x.voisine ? 1 : 0, x.cibles.map(c => c.idProduct), x.code ?? null, x.slugSet, x.url, TRI_COURT[x.tri], x.recherche ?? null]))};`,
     '',
     '  // Le nombre de produits de chaque expansion de la liste dans l\'export Cardmarket du 24/09 (TOUS les Singles, cartes-code',
     '  // comprises : c\'est ce que la galerie montre). Comparé au total que Cardmarket annonce sur la page : s\'il est plus petit, un',
