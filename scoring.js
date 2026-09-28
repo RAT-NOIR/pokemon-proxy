@@ -1925,7 +1925,8 @@ function scorerCandidat(candidat, lu) {
         // plein s'écrit par ce qu'il AUTORISE (§51) : un numéro LU chez Cardmarket (`exacte`, ou une ligne d'avant le champ).
         // 🔴 revue du 2026-09-27 : une déduite CORROBORÉE (`numeroCorrobore`, posé par `choisirMeilleur` : une variante LUE porte le même
         // (expansion, numéro)) garde le poids plein face aux AUTRES cartes — le numéro n'est pas en doute, seul le produit l'est ; face à la
-        // lecture de son numéro, `placerDerriereLectures` la met juste dessous (décision du testeur, 2026-09-27 soir).
+        // lecture de son numéro, `placerDerriereLectures` la met juste dessous (décision du testeur, 2026-09-27 soir) — sauf si le MOTIF lu
+        // la désigne, elle seule : ex aequo avec la lecture, sous réserve (décision du 2026-09-28).
         const deduite = candidat.certitudeNumero === 'deduite';
         const corrobore = deduite && candidat.numeroCorrobore === true;
         const fiable = candidat.certitudeNumero == null || candidat.certitudeNumero === 'exacte' || corrobore;
@@ -2104,18 +2105,35 @@ function cleNumeroExpansion(c) {
  * (lecture − 1). Jamais à son niveau : aucun ex aequo lecture/déduite ne peut naître, donc aucun refus ; et la tête du classement est
  * celle qu'il aurait SANS la déduite (une carte X qui bat la lecture par son propre score gagne comme avant).
  * ⚠️ Remplace le relèvement du matin (la lecture montée au niveau de la déduite → ex aequo → refus), que la décision retire.
+ * 🔑 SAUF QUAND LE MOTIF DÉSIGNE LA DÉDUITE (décision du testeur, 2026-09-28) : le motif lu sur la photo (`lu.motif.vises`, arbitré
+ * par le catalogue TCGdex) est une lecture visuelle plus précise que le numéro — une déduite qu'il désigne n'est pas abaissée, et c'est
+ * le comportement d'avant da717a3 qui revient : la meilleure lecture est RELEVÉE à son niveau, l'ex aequo met la carte sous réserve
+ * (ou refuse, si l'écart de prix décide du verdict). Cas reproduit : reverse Poké Ball désignée, la lecture gagnait seule 90 contre 89.
+ * `vises` : les idProduct que le motif désigne (vide ou absent : aucune exception).
  * Modifie `scores` EN PLACE ({ score, candidat, detail }) ; exportée pour que les instruments rejouent la production, pas une copie.
- * `detail.derriereLecture` n'est PAS une contribution du barème : un lecteur qui additionne `detail` doit l'ignorer.
+ * `detail.derriereLecture` et `detail.releve` ne sont PAS des contributions du barème : un lecteur qui additionne `detail` les ignore.
  */
-function placerDerriereLectures(scores) {
+function placerDerriereLectures(scores, vises = []) {
+    const parMotif = new Set(vises || []);
     const groupes = new Map();
     for (const s of scores) { const k = cleNumeroExpansion(s.candidat); if (k) (groupes.get(k) || groupes.set(k, []).get(k)).push(s); }
     for (const membres of groupes.values()) {
         const lues = membres.filter(s => s.candidat.certitudeNumero == null || s.candidat.certitudeNumero === 'exacte');
         const deduites = membres.filter(s => s.candidat.certitudeNumero === 'deduite');
         if (!lues.length || !deduites.length) continue;
-        const meilleureLue = Math.max(...lues.map(s => s.score));
+        // la déduite que le motif désigne : la lecture monte à son niveau (jamais la déduite abaissée) — ex aequo, sous réserve. Un motif
+        // qui désigne AUSSI une lecture du groupe ne sépare rien (relecture du 2026-09-28) : la règle ordinaire s'applique alors.
+        const motifSurUneLecture = lues.some(s => parMotif.has(s.candidat.idProduct));
+        const designees = motifSurUneLecture ? [] : deduites.filter(s => parMotif.has(s.candidat.idProduct));
+        const lue = lues.reduce((a, b) => (b.score > a.score ? b : a));
+        const maxDesignee = designees.length ? Math.max(...designees.map(s => s.score)) : -Infinity;
+        if (maxDesignee > lue.score) {
+            lue.detail = { ...lue.detail, releve: `${lue.score} → ${maxDesignee} (le motif lu désigne une ligne déduite de ce numéro : ex aequo, sous réserve)` };
+            lue.score = maxDesignee;
+        }
+        const meilleureLue = lue.score;
         for (const d of deduites) {
+            if (designees.includes(d)) continue;
             if (d.score < meilleureLue) continue;
             d.detail = { ...d.detail, derriereLecture: `${d.score} → ${meilleureLue - 1} (une lecture de ce numéro passe toujours devant une déduite)` };
             d.score = meilleureLue - 1;
@@ -2149,7 +2167,7 @@ function choisirMeilleur(candidats, lu) {
         strategie: strategies.get(c.idProduct) ?? null,
         ...scorerCandidat(c.certitudeNumero === 'deduite' && numerosLus.has(cleNumeroExp(c)) ? { ...c, numeroCorrobore: true } : c, lu)
     }));
-    placerDerriereLectures(scores);
+    placerDerriereLectures(scores, lu.motif?.vises);
 
     // Tri par score décroissant. À SCORE ÉGAL, on prend le MOINS CHER.
     // ⚠️ DÉCISION PRODUIT ASSUMÉE, pas un effet de bord. Quand plusieurs variantes V
@@ -3274,6 +3292,38 @@ if (require.main === module) {
         // une déduite SANS lecture de son (expansion, numéro) au vivier n'est pas touchée
         const seule = choisirMeilleur([{ idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' }], luShii);
         verifier('une déduite seule de son numéro garde son score', seule.scores[0].score === scoreSeul({ idProduct: 2, idExpansion: 1745, numeroCardmarket: '17', certitudeNumero: 'deduite', prix: 3.05, region: 'occidental' }, luShii), true);
+        // 🔑 DÉCISION DU TESTEUR (2026-09-28) : quand le MOTIF lu sur la photo désigne la déduite, la règle ci-dessus ne s'applique pas —
+        // le motif est une lecture visuelle plus précise que le numéro. On revient au comportement d'avant da717a3 : la lecture est
+        // RELEVÉE au niveau de la déduite, l'ex aequo met la carte sous réserve (ou refuse, si l'écart de prix décide du verdict).
+        // Cas reproduit par la relecture du 2026-09-28 : reverse Poké Ball désignée par le motif, 90 contre 89 la lecture gagnait seule.
+        const lueMotif = { idProduct: 805422, idExpansion: 5944, numeroCardmarket: '33', certitudeNumero: 'exacte', prix: 0.3, region: 'occidental' };
+        const dedMotif = { idProduct: 806448, idExpansion: 5944, numeroCardmarket: '33', certitudeNumero: 'deduite', prix: 0.3, region: 'occidental' };
+        const luMotif = { numero: 33, total: 131, idExpansionsAttendues: [5944], rareteElevee: false, regionAttendue: 'occidental', rarete: null,
+            motif: { cible: 'ball', vises: [806448], autresVariantes: [805422] } };
+        const motifDed = choisirMeilleur([lueMotif, dedMotif], luMotif);
+        const sm = id => motifDed.scores.find(s => s.candidat.idProduct === id);
+        verifier('motif sur la déduite : la déduite garde son score, la lecture relevée à son niveau (ex aequo → sous réserve), la lecture d\'abord',
+            JSON.stringify([sm(806448).score === scoreSeul({ ...dedMotif, numeroCorrobore: true }, luMotif), sm(805422).score === sm(806448).score,
+                sontExAequo(motifDed.scores[0].score, motifDed.scores[1].score), motifDed.gagnant.candidat.idProduct, !!sm(805422).detail.releve, !sm(806448).detail.derriereLecture]),
+            JSON.stringify([true, true, true, 805422, true, true]));
+        // le motif sur la LECTURE (la déduite est une autre variante connue) : la règle s'applique comme avant, la lecture gagne seule
+        const motifLue = choisirMeilleur([lueMotif, dedMotif], { ...luMotif, motif: { cible: 'aucun', vises: [805422], autresVariantes: [806448] } });
+        verifier('motif sur la lecture : elle gagne seule, pas d\'ex aequo',
+            JSON.stringify([motifLue.gagnant.candidat.idProduct, sontExAequo(motifLue.scores[0].score, motifLue.scores[1].score)]), JSON.stringify([805422, false]));
+        // deux déduites au même numéro, le motif n'en désigne qu'UNE : l'autre reste sous la lecture (relevée), jamais à son niveau
+        const autreDed = { idProduct: 806449, idExpansion: 5944, numeroCardmarket: '33', certitudeNumero: 'deduite', prix: 0.3, region: 'occidental' };
+        const trois = choisirMeilleur([lueMotif, dedMotif, autreDed], luMotif);
+        const st = id => trois.scores.find(s => s.candidat.idProduct === id).score;
+        verifier('deux déduites, le motif en désigne une : lecture = désignée, l\'autre sous la lecture',
+            JSON.stringify([st(805422) === st(806448), st(806449) < st(805422)]), JSON.stringify([true, true]));
+        // égalité STRICTE avant la règle (motif sur la déduite, et le même score que la lecture) : rien ne bouge, l'ex aequo reste
+        const e = placerDerriereLectures([{ score: 100, candidat: lueMotif, detail: {} }, { score: 100, candidat: dedMotif, detail: {} }], [806448]);
+        verifier('égalité stricte, motif sur la déduite : ni relevée ni abaissée',
+            JSON.stringify([e[0].score, e[1].score, !!e[0].detail.releve, !!e[1].detail.derriereLecture]), JSON.stringify([100, 100, false, false]));
+        // le motif désigne la lecture ET la déduite (il ne sépare rien) : la règle ordinaire, la déduite sous la lecture
+        const deux = placerDerriereLectures([{ score: 90, candidat: lueMotif, detail: {} }, { score: 120, candidat: dedMotif, detail: {} }], [805422, 806448]);
+        verifier('motif sur la lecture ET la déduite : la règle ordinaire (déduite à lecture − 1, lecture intacte)',
+            JSON.stringify([deux[0].score, deux[1].score]), JSON.stringify([90, 89]));
     }
 
     console.log(`\n${echecs === 0 ? '🎉 Tous les tests passent.' : `⚠️ ${echecs} test(s) en échec.`}`);

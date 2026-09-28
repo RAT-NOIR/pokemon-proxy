@@ -108,11 +108,15 @@ const prixTri = p => (typeof p === 'number' && p > 0) ? p : Infinity;
 // l'instrument). Le terme s'applique au score d'AVANT le placement de choisirMeilleur, puis le placement de la PRODUCTION est rejoué
 // (S.placerDerriereLectures, jamais une copie) : une déduite placée sous sa lecture par le prix ne l'est peut-être plus sous un autre
 // terme. (Décision du testeur, 2026-09-27 soir : le relèvement de la lecture est retiré, la déduite passe juste sous elle.)
-const scoreAvantReleveDe = s => (s.detail?.derriereLecture ? Number(String(s.detail.derriereLecture).split('→')[0]) : s.score);
+// (2026-09-28 : une lecture peut aussi être RELEVÉE au niveau d'une déduite que le motif désigne — `detail.releve`, même forme)
+const scoreAvantReleveDe = s => { const t = s.detail?.derriereLecture ?? s.detail?.releve; return t ? Number(String(t).split('→')[0]) : s.score; };
+// les idProduct que le motif désigne : ceux qui ont reçu le bonus de motif du barème (scorerCandidat : +POIDS.motif ⇔ `lu.motif.vises`)
+const visesDuMotif = entrees => entrees.filter(e => e.motifPlus).map(e => e.id);
 const expOuNull = e => (Number.isFinite(e) && e > 0 ? e : null);   // Number(null) vaut 0 : il fabriquerait une clé « 0#n »
 function rescorer(scores, terme) {
     return S.placerDerriereLectures(scores.map(s => ({ ...s, score: (s.scoreAvantReleve ?? s.score) - REGIMES['référence'](s.branche) + terme(s.branche),
-        candidat: { idExpansion: expOuNull(s.idExpansion), numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })));
+        candidat: { idProduct: s.id, idExpansion: expOuNull(s.idExpansion), numeroCardmarket: s.numeroCardmarket, certitudeNumero: s.certitudeNumero }, detail: {} })),
+        visesDuMotif(scores.map(s => ({ id: s.id, motifPlus: (s.contribs?.motif ?? 0) > 0 }))));
 }
 // la clé 1 bis du tri de choisirMeilleur : à score égal, une ligne DÉDUITE passe après une lecture (décision du testeur, 2026-09-27)
 const deduiteApres = (a, b) => (a?.certitudeNumero === 'deduite' ? 1 : 0) - (b?.certitudeNumero === 'deduite' ? 1 : 0);
@@ -231,7 +235,7 @@ function rejouerRegime(scores, attendu, regime) {
             scoreAvantReleve: scoreAvantReleveDe(s),
             numeroCardmarket: s.candidat.numeroCardmarket ?? null, certitudeNumero: s.candidat.certitudeNumero ?? null,
             // Toutes les contributions du barème, lues dans `detail` (mesure 9 : le signal décisif). `derriereLecture` n'en est pas une.
-            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'derriereLecture').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
+            contribs: Object.fromEntries(Object.entries(s.detail ?? {}).filter(([k]) => k !== 'derriereLecture' && k !== 'releve').map(([k, v]) => [k, (String(v).match(/^([+-]?\d+)/) || [0, 0])[1] * 1])),
             codeSet: s.candidat.codeSet ?? null, region: s.candidat.region ?? null,
             // Pour les tris de la mesure 5 : la place dans le vivier tel que rendu par Mongo
             // (ordre naturel, aucun tri demandé), l'expansion, et l'appartenance à la table close.
@@ -264,7 +268,8 @@ function rejouerRegime(scores, attendu, regime) {
         };
         if (d.rarete == null) {
             // (depuis le score d'avant le placement, puis le placement de la production, et la clé 1 bis)
-            const re = S.placerDerriereLectures(scores.map(s => ({ id: s.candidat.idProduct, candidat: s.candidat, detail: {}, score: scoreAvantReleveDe(s) - contributionPrix(s.detail) })))
+            const re = S.placerDerriereLectures(scores.map(s => ({ id: s.candidat.idProduct, candidat: s.candidat, detail: {}, score: scoreAvantReleveDe(s) - contributionPrix(s.detail) })),
+                visesDuMotif(scores.map(s => ({ id: s.candidat.idProduct, motifPlus: /^\+/.test(String(s.detail?.motif ?? '')) }))))
                 .sort((a, b) => (b.score - a.score) || deduiteApres(a.candidat, b.candidat));
             const jv = re.findIndex(s => s.id === x.attendu);
             const eg = re.length > 1 && S.sontExAequo(re[0].score, re[1].score);
