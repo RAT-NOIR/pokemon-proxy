@@ -550,6 +550,30 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 68. LA PAGE 11 N'EXISTE PAS — UNE LIMITE ÉCRITE LA VEILLE, QUE L'OUTIL DU LENDEMAIN N'A PAS LUE — 2026-09-28
+
+> 🔴 **LE PLAFOND DE 300 PRODUITS PAR LISTE CARDMARKET ÉTAIT ÉCRIT AU §67 (« totaux plafonnés à 300, 16 expansions »).**
+> `generer-pages-utiles.js`, écrit le lendemain pour que la passe ne visite QUE les pages utiles, calculait la page par rang / 30 sans
+> borne : 19 des 256 pages étaient au-delà de la page 10, et le testeur (journal 1.10) a tourné entre les pages 10 et 11 de
+> Sun-Moon-Promos — la 11 vide, et « prochaine » pour toujours faute de pouvoir être envoyée. C'est le §21 bis entre un PARAGRAPHE et
+> un OUTIL : **une limite mesurée ne protège que le code qui la lit.** 🔑 Règle unique `collecte-cartes/pages-du-rang.js` (banc 14/14) :
+> au-delà du rang 300, le tri par nom DÉCROISSANT — calibré sur les pages ANGLAISES du journal (l'userscript n'accepte plus que
+> /en/ : 85,6 % à la page calculée en /fr/ contre 96,6 % en /en/), 89,9 % sur 56 pages décroissantes, 97,1 % sur 74 croissantes ; au milieu d'une liste de plus de 600 (MEGA Start Deck 100 Battle Collection, 774), la RECHERCHE du nom nu ; et
+> une garde écrite par ce qu'elle autorise (pages 1 à 10, ou une recherche). Userscript 1.11 : une page utile vide se passe d'un clic.
+
+**LA RELECTURE D'UN COMMIT DÉJÀ DÉPLOYÉ (da717a3, coupée la veille par une limite d'usage, relancée) :** la file serveur de
+`/api/apprendre-lot` n'était bornée que par un `userId` lu dans le CORPS — avant elle, un 429 n'écrivait rien ; un lot fait gardait ses
+cartes ; un échec de la déduction (`erreurDeduction`, qui ne lève pas) passait « fait » ; une reprise de lot bloqué ne comptait pas
+comme un essai. Corrigés (plafond global de 800 lots porteurs de cartes, fin d'un lot sous son jeton de prise, banc 13/13 — les cas neufs échouent sur
+l'ancien module). La seconde relecture (du correctif) a trouvé que le bouton « passer une page vide » s'affichait sur les 73 pages de
+vérification Cloudflare du journal : « vide » s'écrit désormais par ce qui est sûr (le formulaire de filtres de Cardmarket présent). Un
+client qui ne DÉCLARE pas lire le 202 reçoit le 429 d'avant (la 1.9 renvoyait sa page : un doublon). ⚠️ **Et une question posée au
+testeur, pas tranchée** : « une lecture passe toujours devant une déduite » bat aussi le MOTIF du catalogue — cas construit, la reverse
+Poké Ball désignée par le motif est une ligne déduite, la lecture non reverse gagne seule (90 contre 89) là où la veille c'était un
+ex aequo, donc une réserve.
+**Le journal 1.10** (12 min) : 44 envois, 1 305 reçus, 1 177 déjà exacts, 106 améliorés, 3 nouveaux ; 15 sans-image, 0 déductible (les
+gardes : ambiguïtés, slug déjà pris) ; cibles 759 → 652.
+
 ## 67. UNE CLÉ QUI NE VOIT PAS LA VRAIE CARTE, UNE CALIBRATION QUI NE POUVAIT PAS ÉCHOUER, ET LA BASE QUI AVAIT TORT — 2026-09-26 (soir)
 
 > 🔴 **MA PREMIÈRE CALIBRATION « VRAIE CARTE RETIRÉE » RENDAIT 100 % DE SILENCE PAR CONSTRUCTION.** Je ne la rejouais que sur les
