@@ -95,7 +95,9 @@ async function main() {
     console.log("Connexion à MongoDB...");
     // Base nommée explicitement, sinon refus (voir mongo-connexion.js) : ce script
     // ÉCRIT, et la base de production s'appelle `test`.
-    await connecterMongo({ script: 'import-price-guide.js', ecrit: true, confirmationProduction: true });
+    const base = await connecterMongo({ script: 'import-price-guide.js', ecrit: true, confirmationProduction: true });
+    // la base RÉELLEMENT connectée, pas seulement l'argument (relecture du 2026-09-28 : MONGODB_BASE du .env passait sans --base=)
+    if (!['test', 'test_scratch'].includes(base)) { console.error(`❌ le guide des prix vit dans « test » (ou « test_scratch » pour le banc), pas dans « ${base} » : rien n'est importé`); await mongoose.disconnect(); process.exit(2); }
     console.log("✅ Connecté.");
 
     console.log(`Lecture de ${cheminFichier}...`);
@@ -111,9 +113,11 @@ async function main() {
     const META = mongoose.connection.db.collection('guide_prix_meta');
     const avant = await META.findOne({ _id: 'dernier' });
     const lignesAvant = await GuidePrix.countDocuments({});
-    // seul un guide PLUS RÉCENT que celui en base passe ; sans méta (imports d'avant le 2026-09-28), le guide en base date au plus
-    // tard de son import (`majAt`), et le fichier doit être postérieur au plus ancien `majAt`
-    const reference = avant?.guideDu ?? (await GuidePrix.find({}, { majAt: 1 }).sort({ majAt: 1 }).limit(1).lean())[0]?.majAt ?? null;
+    // seul un guide PLUS RÉCENT que celui en base passe ; sans méta (imports d'avant le 2026-09-28), la date du guide en base n'est
+    // pas connue : la borne prudente est le DERNIER import (le plus récent `majAt` DATÉ — un document sans `majAt` ne l'efface pas)
+    const dernierImport = (await GuidePrix.find({ majAt: { $type: 'date' } }, { majAt: 1 }).sort({ majAt: -1 }).limit(1).lean())[0]?.majAt ?? null;
+    const reference = avant?.guideDu ?? dernierImport;
+    if (!reference && lignesAvant > 0) { console.error(`❌ ${lignesAvant} lignes en base et aucune date (ni méta, ni majAt) : je ne sais pas si le fichier est plus récent — rien n'est importé`); await mongoose.disconnect(); process.exit(1); }
     if (reference && guideDu <= new Date(reference)) {
         console.error(`❌ le fichier est du ${guideDu.toISOString()}, pas plus récent que le guide en base (${new Date(reference).toISOString()}) : rien n'est importé`);
         await mongoose.disconnect(); process.exit(1);
@@ -147,9 +151,11 @@ async function main() {
 
     const lignesApres = await GuidePrix.countDocuments({});
     const aJour = await GuidePrix.countDocuments({ guideDu });
-    await META.updateOne({ _id: 'dernier' }, { $set: { guideDu, importeLe: new Date(), fichier: require('path').basename(cheminFichier), lignesDuFichier: guides.length } }, { upsert: true });
-    console.log(`✅ Import terminé. RELU : ${lignesApres} lignes (avant ${lignesAvant}) · ${aJour} au guide du ${guideDu.toISOString()} · ${lignesApres - aJour} absentes de ce guide, gardées avec leur date (prix périmés, lisibles)`);
-    if (aJour !== guides.length) { console.error(`🔴 ${aJour} lignes au guide du jour pour ${guides.length} dans le fichier`); process.exitCode = 1; }
+    const idsDistincts = new Set(guides.map(g => g.idProduct)).size;   // un idProduct en double dans le fichier n'écrit qu'une ligne
+    console.log(`RELU : ${lignesApres} lignes (avant ${lignesAvant}) · ${aJour} au guide du ${guideDu.toISOString()} (${idsDistincts} idProduct distincts dans le fichier) · ${lignesApres - aJour} absentes de ce guide, gardées avec leur date (prix périmés, lisibles)`);
+    // la méta ne se pose qu'après le contrôle : un import incomplet ne se déclare pas « dernier guide » (relecture du 2026-09-28)
+    if (aJour !== idsDistincts) { console.error(`🔴 ${aJour} lignes au guide du jour pour ${idsDistincts} idProduct dans le fichier : la méta n'est PAS mise à jour`); process.exitCode = 1; }
+    else { await META.updateOne({ _id: 'dernier' }, { $set: { guideDu, importeLe: new Date(), fichier: require('path').basename(cheminFichier), lignesDuFichier: guides.length } }, { upsert: true }); console.log('✅ Import terminé.'); }
     await mongoose.disconnect();
 }
 

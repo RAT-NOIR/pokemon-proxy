@@ -41,6 +41,18 @@ const importer = (...args) => spawnSync(process.execPath, [path.join(__dirname, 
         verifier('argument inconnu : refusé avant toute connexion', importer(B, '--base=test_scratch', '--vite').status, 2);
         verifier('sans fichier : refusé', importer('--base=test_scratch').status, 2);
         verifier('une autre base que test / test_scratch : refusée', importer(B, '--base=cartes').status, 2);
+        // la base venue de l'ENVIRONNEMENT (MONGODB_BASE), sans --base= : c'est la base connectée qui est contrôlée
+        const rEnv = spawnSync(process.execPath, [path.join(__dirname, 'import-price-guide.js'), B], { encoding: 'utf8', env: { ...process.env, MONGODB_BASE: 'cartes' } });
+        verifier('MONGODB_BASE=cartes sans --base= : refusé, rien d\'importé', [rEnv.status, /vit dans « test »/.test(rEnv.stderr)], [2, true]);
+        // le chemin SANS méta (imports d'avant le 2026-09-28) : la borne est le DERNIER import daté ; un document sans majAt ne l'efface pas
+        await vider();
+        await G.insertMany([{ idProduct: 1, trend: 5, majAt: new Date('2026-09-05T00:00:00Z') }, { idProduct: 2, trend: 6, majAt: new Date('2026-09-20T00:00:00Z') }, { idProduct: 3, trend: 7 }]);
+        verifier('sans méta : un guide antérieur au DERNIER import (20/09) est refusé', [importer(B, '--base=test_scratch').status, (await G.findOne({ idProduct: 1 })).trend], [1, 5]);
+        const D = guide('price_guide_D.json', '2026-09-25T02:00:00+0200', [{ idProduct: 1, trend: 8 }]);
+        verifier('sans méta : un guide postérieur passe, et pose la méta', [importer(D, '--base=test_scratch').status, (await G.findOne({ idProduct: 1 })).trend, !!(await M.findOne({ _id: 'dernier' }))], [0, 8, true]);
+        await vider();
+        await G.insertMany([{ idProduct: 1, trend: 5 }]);
+        verifier('des lignes sans aucune date (ni méta ni majAt) : refusé — je ne sais pas', importer(D, '--base=test_scratch').status, 1);
     } finally {
         await vider();
         await mongoose.disconnect();

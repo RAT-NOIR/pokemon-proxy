@@ -12,8 +12,9 @@
 // 🔑 LA TABLE DE DÉCISION (`--table`) est écrite APRÈS avoir regardé chaque logo (collecte-cartes/logos-manuels-lus.json) : pour chaque
 // fichier, le set, la LANGUE LUE, le champ visé. L'écriture ne fait que ce qu'elle dit, et refuse :
 //   · `logoFr` déjà présent (« à côté du logo actuel, sans le remplacer ») — listé, jamais écrasé ;
-//   · `logo` déjà présent, sauf une ligne `remplacer` portant sa RAISON (logo anglais d'une série sortie seulement en anglais, « s'il
-//     n'en a pas ou si celui-ci est meilleur » : générique, plus petit, ou d'une autre langue) ;
+//   · `logo` déjà présent, sauf une ligne `remplacer` portant sa RAISON, dans DEUX cas seulement : un logo anglais d'une série sortie
+//     seulement en anglais (« s'il n'en a pas ou si celui-ci est meilleur »), ou un logo actuel GÉNÉRIQUE (`logoGenerique`, refusés par
+//     le testeur le 2026-09-28) ; une ligne `remplacer` hors de ces cas REFUSE (rien n'est écrit) ;
 //   · un set qui n'existe pas, un fichier absent, un fichier qui a changé depuis la table (sha1).
 // Le fichier va sur R2 sous `logos/manuel/<dossier>/<fichier>-<sha1>.png` (l'empreinte dans la clé depuis la revue du 2026-09-28 ; les
 // 192 premiers sont sans elle) ; le champ porte `source: 'manuel'`, le dossier, le fichier, la langue
@@ -167,7 +168,11 @@ function planifier(lignes, { parFichier, parSlug }) {
         const actuel = s[l.champ];
         if (!actuel?.cleR2) { out.push({ ...base, action: 'ecrire' }); continue; }
         if (actuel.sha1 && actuel.sha1 === l.sha1) { out.push({ ...base, action: 'deja-identique' }); continue; }
-        if (l.champ === 'logo' && l.remplacer && l.langue === 'en') { out.push({ ...base, action: 'remplacer', raison: l.remplacer, ancienSha1: actuel.sha1 ?? null, ancienneCle: actuel.cleR2 }); continue; }
+        // remplacer : le logo anglais d'une série sortie seulement en anglais, ou un logo GÉNÉRIQUE (le même fichier pour plusieurs sets) —
+        // « les logos génériques sont refusés » (testeur, 2026-09-28 : les trois 横空出世 des Storming Emergence)
+        if (l.champ === 'logo' && l.remplacer && (l.langue === 'en' || s.logoGenerique === true)) { out.push({ ...base, action: 'remplacer', raison: l.remplacer, ancienSha1: actuel.sha1 ?? null, ancienneCle: actuel.cleR2 }); continue; }
+        // une ligne qui DEMANDE un remplacement hors de ces deux cas n'est pas gardée en silence : elle refuse (et rien n'est écrit)
+        if (l.remplacer) { out.push({ ...base, action: 'refus', raison: `« remplacer » demandé, mais le ${l.champ} actuel n'est ni générique ni remplaçable par un logo ${l.langue}` }); continue; }
         out.push({ ...base, action: l.champ === 'logoFr' ? 'garde-logoFr' : (s.logoGenerique ? 'garde-logo-generique' : 'garde-logo'), raison: `${l.champ} actuel : ${actuel.source} ${actuel.w ?? '?'} px` });
     }
     return out;

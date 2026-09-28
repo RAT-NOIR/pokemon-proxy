@@ -166,6 +166,23 @@ catalogue) et que le vrai produit a été lu depuis avec son image : la route le
 l'userscript), mais ne défait pas la ligne déduite — un détachement attend le feu vert. Une fiche qui lit un produit par son slug
 préfère la ligne `certitude: 'exacte'`.
 
+## `sets.symbole` — le symbole du set, à afficher (2026-09-28)
+
+```js
+const url = set.symbole?.cleR2 && `${process.env.R2_IMAGES_BASE_URL}/${set.symbole.cleR2}`;   // comme une image de carte
+```
+| champ | exemple | usage |
+|---|---|---|
+| `cleR2` | `"symboles/ptcg-assets/ja_sv4a-….png"` | à concaténer après `R2_IMAGES_BASE_URL` |
+| `w`, `h` | `30`, `17` | taille NATIVE, en pixels — ne pas agrandir au-delà de ×2 (les boîtes de code modernes font 30×17) |
+| `source` | `"bulbapedia:convention-infobox"` · `"ptcg-assets"` | d'où vient le fichier ; `preuve` dit pourquoi c'est celui de CE set |
+
+200 sets en portent un : 121 Bulbapedia (depuis le 2026-09-20) et 79 ptcg-assets, posés le 2026-09-28 sur les sets qui n'en avaient pas
+(décision du testeur ; un symbole Bulbapedia n'est jamais remplacé). Un symbole moderne est la boîte du CODE imprimé (« sv4a »), un
+symbole de promos peut être PARTAGÉ (l'étoile PROMO : 8 séries) — c'est ce que la carte porte, il s'affiche tel quel.
+⚠️ **`sets.symbolesIdentification` n'est PAS à afficher** : ce sont les images que l'identification compare (index
+`collecte-cartes/index-symboles.json`), et une entrée peut y exister sans `symbole`.
+
 ---
 
 ## Dettes connues, à ne pas rediagnostiquer

@@ -124,13 +124,17 @@ function deciderSymbole(s, box) {
             objets.set(f, { cleR2: co, w: info.width ?? null, h: info.height ?? null, urlOriginal: info.url, sha1: info.sha1 ?? null });
             n++;
         }
-        let ecrits = 0;
+        let ecrits = 0, gardes = 0;
         for (const r of retenus) {
             const o = objets.get(r.fichier);
             if (!o) continue;
-            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { symbole: { ...o, fichier: r.fichier, source: 'bulbapedia:convention-infobox', preuve: r.preuve, le: new Date() } } });
-            ecrits++;
+            // un symbole posé par une AUTRE source (ptcg-assets, 2026-09-28) n'est jamais écrasé en relançant cet outil : le remplacer est
+            // une modification, qui attend son feu vert (relecture du 2026-09-28) — la garde s'écrit par ce qu'elle autorise
+            const u = await cx.db.collection('sets').updateOne({ _id: r.s._id, $or: [{ 'symbole.cleR2': { $exists: false } }, { 'symbole.source': 'bulbapedia:convention-infobox' }] },
+                { $set: { symbole: { ...o, fichier: r.fichier, source: 'bulbapedia:convention-infobox', preuve: r.preuve, le: new Date() } } });
+            if (u.matchedCount) ecrits++; else gardes++;
         }
+        if (gardes) console.log(`   = ${gardes} set(s) gardent un symbole d'une autre source (non écrasé)`);
         const relu = await cx.db.collection('sets').countDocuments({ 'symbole.cleR2': { $nin: [null, ''] } });
         console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans fichier) · ÉCRITS : ${ecrits} sets · relu en base : ${relu} sets portent un symbole`);
     } finally { await verrou.rendre(); console.log(`🔓 verrou rendu.`); await fermer(); }

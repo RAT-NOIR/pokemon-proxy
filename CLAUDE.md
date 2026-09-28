@@ -550,6 +550,30 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 69. LE MOTIF DEVANT LA RÈGLE, UN GUIDE DE PRIX DATÉ, ET UN HACHAGE QUE SON BANC A REFUSÉ — 2026-09-28 (soir)
+
+> 🔑 **DÉCISION DU TESTEUR (scoring) : quand le MOTIF lu sur la photo désigne la ligne déduite — elle seule —, « une lecture passe
+> toujours devant une déduite » ne s'applique pas** : retour au comportement d'avant da717a3 (la lecture relevée au niveau de la
+> déduite, ex aequo, sous réserve). Le motif est une lecture visuelle plus précise que le numéro. La relecture a trouvé le cas que la
+> lettre de la décision laissait passer : un motif qui désigne AUSSI la lecture ne sépare rien — la règle ordinaire s'y applique.
+
+**LE GUIDE DES PRIX (feu vert : API et extension, jamais le site)** : `majAt` disait l'heure de l'IMPORT, jamais la date du GUIDE — un
+prix n'avait pas d'âge. Chaque ligne porte `guideDu`, `guide_prix_meta` le dernier guide, un produit absent du dernier guide garde son
+prix daté ; un guide pas plus récent est refusé (banc 9/9). **Première mesure de volatilité (28 jours, 66 194 produits) : 22,6 % des
+cartes à 10–50 € et 16,5 % au-delà de 50 € ont bougé de plus de 20 %** — le mensuel est trop lent ; l'API ne rend pas encore l'âge.
+**LES LOGOS** : les trois 横空出世 génériques des Storming Emergence (un fichier pour trois sets) sont REFUSÉS (testeur) et remplacés par
+les logos déposés, qui portent le caractère du set (赫 / 苍 / 泽, lus à l'œil). **LES SYMBOLES** : 79 ptcg-assets posés dans
+`sets.symbole` là où il n'y en avait pas (200 sets) ; format dans CONTRAT-SITE.md. **L'index des symboles pour l'API**
+(`collecte-cartes/index-symboles.js`, rien de branché) : un hachage dHash 64 bits a été écrit d'abord et **REFUSÉ PAR SON BANC** — sur
+une boîte noire à texte blanc, ses bits se tirent dans les aplats (une réduction à 60×40 l'éloignait de 16 bits de lui-même) ; la
+corrélation normalisée 32×32 tient. Mesuré PAR SET sur l'index (200 sets, 309 images) : 26 portent le MÊME fichier qu'un autre set
+(un set et ses Additionals, l'étoile PROMO), 18 ont un voisin DIFFÉRENT à ≥ 0,97 que la signature ne sépare pas (« sv4a »/« sv6a »,
+« PAL »/« PBL » : des boîtes de code de 30×17 — une boîte de code se LIT, elle ne se reconnaît pas en 32×32), 102 sont sous 0,80.
+La relecture a trouvé que la recherche disait « partagé » pour ces 18 : l'instrument prenait sa propre myopie pour un fait du monde
+(le motif en tête du catalogue) — les deux causes se disent désormais séparément. Seuils non calibrés, rien de branché.
+⚠️ **TCGdex thaï/indonésien, mesuré avant d'être codé** : images complètes pour SV7s, SV8s, SV9s seulement (nos trois sets IDTH), 20
+sur ~190 pour SV4s et SV5s, 0 pour SV6s — et le témoin du nom ne lit pas le thaï.
+
 ## 68. LA PAGE 11 N'EXISTE PAS — UNE LIMITE ÉCRITE LA VEILLE, QUE L'OUTIL DU LENDEMAIN N'A PAS LUE — 2026-09-28
 
 > 🔴 **LE PLAFOND DE 300 PRODUITS PAR LISTE CARDMARKET ÉTAIT ÉCRIT AU §67 (« totaux plafonnés à 300, 16 expansions »).**
