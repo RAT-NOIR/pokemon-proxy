@@ -1,9 +1,11 @@
 // Script d'import du guide des prix Cardmarket dans MongoDB.
 // Complète le catalogue produits déjà importé (jointure par idProduct).
 //
-// Usage (PowerShell, comme la dernière fois) :
-//   $env:MONGODB_URI="ta_connection_string"
-//   node import-price-guide.js price_guide_6.json
+// Usage (le fichier : téléchargé par le testeur depuis Cardmarket — price_guide_6.json, « 6 » = Pokémon —, jamais par un script) :
+//   node backup-collections.js --base=test --collections=guide_prix
+//   node import-price-guide.js price_guide_JJMMAA.json --base=test --confirmer-production
+// (--base=test_scratch : le banc test-import-price-guide.js, jamais un import)
+// Le guide sert l'API et l'extension, JAMAIS le site : il vit dans la base `test` ; le site lit `cartes`, où aucun outil ne l'écrit.
 //
 // ════════════════════════════════════════════════════════════════════════════
 // 📌 À QUELLE CADENCE FAUT-IL RÉIMPORTER ? — LA MÉTHODE, PAS LA RÉPONSE
@@ -31,17 +33,38 @@
 // ⚠️ ET LA MÊME MESURE RÉPOND À UNE AUTRE QUESTION : si le guide bouge peu, la lecture
 // live Cardmarket — un onglet ouvert chez l'utilisateur à chaque scan abouti, sur le seul
 // mur qui ne s'achète pas — devient un raffinement coûteux plutôt qu'une nécessité.
+//
+// ✅ LA PREMIÈRE MESURE, 2026-09-28 (le second import, feu vert du testeur : « pour l'API et
+// l'extension uniquement, JAMAIS affiché sur le site ») — guide en base du 30/08 contre le
+// fichier du 27/09, 28 jours, `trend` produit par produit, écart |Δ|/ancien :
+//   < 1 € (32 743)  médiane 10,8 % · > 20 % pour 37,9 % · > 50 % pour 13,0 %
+//   1–10 € (19 738) médiane  6,1 % · > 20 % pour 22,2 % · > 50 % pour  6,8 %
+//   10–50 € (8 019) médiane  5,8 % · > 20 % pour 22,6 % · > 50 % pour  7,1 %
+//   ≥ 50 € (5 694)  médiane  1,8 % · > 20 % pour 16,5 % · > 50 % pour  4,8 %
+// La queue haute est LARGE à 28 jours : une carte sur six au-dessus de 50 € a bougé de plus de 20 %.
+// Un seul intervalle mesuré : la vitesse à 7 jours se mesurera au prochain import.
+//
+// LA DATE DU GUIDE (2026-09-28) : `majAt` disait l'heure de l'IMPORT, jamais celle du GUIDE.
+// Chaque ligne porte désormais `guideDu` (le `createdAt` du fichier), et `guide_prix_meta`
+// (`_id: 'dernier'`) le guide le plus récent importé. Une ligne dont `guideDu` est antérieur
+// à celui de `guide_prix_meta` est un produit ABSENT du dernier guide (plus d'offre) : son prix
+// est périmé, et c'est lisible. Un produit n'est jamais retiré : son dernier prix connu reste,
+// daté. Un guide plus ANCIEN que celui en base est refusé (il réécrirait des prix plus frais).
 
 require('dotenv').config();
 const { connecterMongo } = require('./mongo-connexion');
 const fs = require('fs');
 const mongoose = require('mongoose');
 
-const cheminFichier = process.argv[2];
-if (!cheminFichier) {
-    console.error("Usage : node import-price-guide.js chemin/vers/price_guide_6.json");
-    process.exit(1);
+// la ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : le fichier, la base, la confirmation de production
+const AUTORISES = [/^--base=(test|test_scratch)$/, /^--confirmer-production$/];
+const positionnels = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const inconnus = process.argv.slice(2).filter(a => a.startsWith('--') && !AUTORISES.some(r => r.test(a)));
+if (inconnus.length || positionnels.length !== 1 || !/\.json$/i.test(positionnels[0])) {
+    console.error(`Usage : node import-price-guide.js <price_guide_*.json> --base=test --confirmer-production${inconnus.length ? `\n❌ argument inconnu : ${inconnus.join(' ')}` : ''}`);
+    process.exit(2);
 }
+const cheminFichier = positionnels[0];
 
 const guidePrixSchema = new mongoose.Schema({
     idProduct: { type: Number, required: true, unique: true },
@@ -57,6 +80,7 @@ const guidePrixSchema = new mongoose.Schema({
     avg1Holo: Number,
     avg7Holo: Number,
     avg30Holo: Number,
+    guideDu: Date,
     majAt: { type: Date, default: Date.now }
 });
 
@@ -78,7 +102,23 @@ async function main() {
     const brut = fs.readFileSync(cheminFichier, 'utf-8');
     const data = JSON.parse(brut);
     const guides = data.priceGuides;
+    const guideDu = new Date(data.createdAt);
+    if (!Array.isArray(guides) || !guides.length || Number.isNaN(guideDu.getTime())) {
+        console.error(`❌ fichier sans priceGuides ou sans createdAt lisible (${data.createdAt}) : rien n'est importé`);
+        await mongoose.disconnect(); process.exit(1);
+    }
     console.log(`${guides.length} prix trouvés dans le fichier (créé le ${data.createdAt}).`);
+    const META = mongoose.connection.db.collection('guide_prix_meta');
+    const avant = await META.findOne({ _id: 'dernier' });
+    const lignesAvant = await GuidePrix.countDocuments({});
+    // seul un guide PLUS RÉCENT que celui en base passe ; sans méta (imports d'avant le 2026-09-28), le guide en base date au plus
+    // tard de son import (`majAt`), et le fichier doit être postérieur au plus ancien `majAt`
+    const reference = avant?.guideDu ?? (await GuidePrix.find({}, { majAt: 1 }).sort({ majAt: 1 }).limit(1).lean())[0]?.majAt ?? null;
+    if (reference && guideDu <= new Date(reference)) {
+        console.error(`❌ le fichier est du ${guideDu.toISOString()}, pas plus récent que le guide en base (${new Date(reference).toISOString()}) : rien n'est importé`);
+        await mongoose.disconnect(); process.exit(1);
+    }
+    console.log(`DÉNOMINATEUR : ${lignesAvant} lignes en base avant (guide ${avant?.guideDu ? `du ${avant.guideDu.toISOString()}` : `importé le ${reference ? new Date(reference).toISOString() : '—'}, date du fichier non gardée`})`);
 
     const TAILLE_LOT = 2000;
     let traites = 0;
@@ -94,7 +134,7 @@ async function main() {
                         avg1: g.avg1, avg7: g.avg7, avg30: g.avg30,
                         avgHolo: g['avg-holo'], lowHolo: g['low-holo'], trendHolo: g['trend-holo'],
                         avg1Holo: g['avg1-holo'], avg7Holo: g['avg7-holo'], avg30Holo: g['avg30-holo'],
-                        majAt: new Date()
+                        guideDu, majAt: new Date()
                     }
                 },
                 upsert: true
@@ -105,7 +145,11 @@ async function main() {
         console.log(`... ${traites}/${guides.length} importés`);
     }
 
-    console.log("✅ Import terminé.");
+    const lignesApres = await GuidePrix.countDocuments({});
+    const aJour = await GuidePrix.countDocuments({ guideDu });
+    await META.updateOne({ _id: 'dernier' }, { $set: { guideDu, importeLe: new Date(), fichier: require('path').basename(cheminFichier), lignesDuFichier: guides.length } }, { upsert: true });
+    console.log(`✅ Import terminé. RELU : ${lignesApres} lignes (avant ${lignesAvant}) · ${aJour} au guide du ${guideDu.toISOString()} · ${lignesApres - aJour} absentes de ce guide, gardées avec leur date (prix périmés, lisibles)`);
+    if (aJour !== guides.length) { console.error(`🔴 ${aJour} lignes au guide du jour pour ${guides.length} dans le fichier`); process.exitCode = 1; }
     await mongoose.disconnect();
 }
 
