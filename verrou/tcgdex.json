@@ -1,365 +1,16 @@
 {
-  "enregistreLe": "2026-09-05T07:30:49.686Z",
-  "nb": 24,
+  "enregistreLe": "2026-09-29T09:43:51.252Z",
+  "nb": 8,
   "chargesCouvertes": [
-    "6a9938822d1b97d8f5f9f73d",
-    "6a9058b9e8a3767d791bd5cd",
-    "6a99b33d2299c8c4d466c373",
-    "6a9055c6e8a3767d791bd542",
-    "6a9bb95ec42f77333734173e",
-    "6a99b3092299c8c4d466c35d",
-    "6a97e8e31ad2139e3029f440"
+    "6a9fcde7e019222f81e4a59c",
+    "6a9fcd6fe019222f81e4a4d6",
+    "6a9fcdf4e019222f81e4a5b1",
+    "6a9fccace019222f81e4a46c",
+    "6a9fcdb3e019222f81e4a540",
+    "6a9fd0f2205b2fd829b454e9",
+    "6a9fcdd8e019222f81e4a586"
   ],
   "reponses": {
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%99%E3%83%88%E3%83%99%E3%82%BF%E3%83%BC": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "PMCG3-003",
-          "localId": "003",
-          "name": "ベトベター"
-        },
-        {
-          "id": "PMCG4-004",
-          "localId": "004",
-          "name": "ベトベター"
-        },
-        {
-          "id": "CP1-007",
-          "localId": "007",
-          "name": "アクア団のベトベター"
-        },
-        {
-          "id": "PMCG6-007",
-          "localId": "007",
-          "name": "キョウのベトベター"
-        },
-        {
-          "id": "SM8a-018",
-          "localId": "018",
-          "name": "アローラベトベター"
-        },
-        {
-          "id": "SM1M-022",
-          "localId": "022",
-          "name": "アローラベトベター"
-        },
-        {
-          "id": "SM3H-032",
-          "localId": "032",
-          "name": "アローラベトベター"
-        },
-        {
-          "id": "SM4p-034",
-          "localId": "034",
-          "name": "アローラベトベター"
-        },
-        {
-          "id": "SM11a-041",
-          "localId": "041",
-          "name": "アローラベトベター"
-        },
-        {
-          "id": "SM9-047",
-          "localId": "047",
-          "name": "ベトベター"
-        },
-        {
-          "id": "SV1S-051",
-          "localId": "051",
-          "name": "ベトベター",
-          "image": "https://assets.tcgdex.net/ja/SV/SV1S/051"
-        },
-        {
-          "id": "S9-060",
-          "localId": "060",
-          "name": "ベトベター",
-          "image": "https://assets.tcgdex.net/ja/S/S9/060"
-        },
-        {
-          "id": "SV10-067",
-          "localId": "067",
-          "name": "ロケット団のベトベター",
-          "image": "https://assets.tcgdex.net/ja/SV/SV10/067"
-        },
-        {
-          "id": "SV2a-088",
-          "localId": "088",
-          "name": "ベトベター",
-          "image": "https://assets.tcgdex.net/ja/SV/SV2a/088"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards/PMCG3-003": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "PMCG3-003",
-        "illustrator": "Mitsuhiro Arita",
-        "localId": "003",
-        "name": "ベトベター",
-        "rarity": "Common",
-        "set": {
-          "cardCount": {
-            "official": 48,
-            "total": 48
-          },
-          "id": "PMCG3",
-          "name": "化石の秘密"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": false,
-          "normal": true,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "normal",
-            "size": "standard",
-            "thirdParty": {
-              "tcgplayer": 575667
-            },
-            "variantId": "endfynwn4n10gzq",
-            "pricing": {
-              "cardmarket": null,
-              "tcgplayer": null
-            }
-          }
-        ],
-        "dexId": [
-          88
-        ],
-        "hp": 50,
-        "types": [
-          "Grass"
-        ],
-        "stage": "Basic",
-        "attacks": [
-          {
-            "cost": [
-              "Colorless"
-            ],
-            "name": "厄介なグー",
-            "effect": "コインをひっくり返します。頭の場合、防御ポケモンは麻痺しています。",
-            "damage": 10
-          },
-          {
-            "cost": [
-              "Grass"
-            ],
-            "name": "最小化します",
-            "effect": "相手の次のターン中にグリマーへの攻撃によって与えられたすべての損害は、衰弱と抵抗を適用した後）20増加します。"
-          }
-        ],
-        "retreat": 1,
-        "legal": {
-          "standard": false,
-          "expanded": false
-        },
-        "updated": "2026-09-03T15:29:09.738Z",
-        "pricing": {
-          "cardmarket": null,
-          "tcgplayer": null
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%87%E3%83%AB%E3%83%93%E3%83%AB": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "SV6a-007",
-          "localId": "007",
-          "name": "デルビル",
-          "image": "https://assets.tcgdex.net/ja/SV/SV6a/007"
-        },
-        {
-          "id": "SV10-016",
-          "localId": "016",
-          "name": "ロケット団のデルビル",
-          "image": "https://assets.tcgdex.net/ja/SV/SV10/016"
-        },
-        {
-          "id": "SV1V-017",
-          "localId": "017",
-          "name": "デルビル",
-          "image": "https://assets.tcgdex.net/ja/SV/SV1V/017"
-        },
-        {
-          "id": "SM8-020",
-          "localId": "020",
-          "name": "デルビル"
-        },
-        {
-          "id": "SM4A-028",
-          "localId": "028",
-          "name": "デルビル"
-        },
-        {
-          "id": "S5I-044",
-          "localId": "044",
-          "name": "デルビル"
-        },
-        {
-          "id": "SV3-071",
-          "localId": "071",
-          "name": "デルビル",
-          "image": "https://assets.tcgdex.net/ja/SV/SV3/071"
-        },
-        {
-          "id": "SV-P-077",
-          "localId": "077",
-          "name": "デルビル"
-        },
-        {
-          "id": "MC-097",
-          "localId": "097",
-          "name": "デルビル"
-        },
-        {
-          "id": "MC-099",
-          "localId": "099",
-          "name": "ロケット団のデルビル"
-        },
-        {
-          "id": "S8b-102",
-          "localId": "102",
-          "name": "デルビル"
-        },
-        {
-          "id": "SV3-115",
-          "localId": "115",
-          "name": "デルビル",
-          "image": "https://assets.tcgdex.net/ja/SV/SV3/115"
-        },
-        {
-          "id": "MC-449",
-          "localId": "449",
-          "name": "デルビル"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards/SV6a-007": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "SV6a-007",
-        "illustrator": "REND",
-        "image": "https://assets.tcgdex.net/ja/SV/SV6a/007",
-        "localId": "007",
-        "name": "デルビル",
-        "rarity": "Common",
-        "set": {
-          "cardCount": {
-            "official": 64,
-            "total": 94
-          },
-          "id": "SV6a",
-          "name": "ナイトワンダラー"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": false,
-          "normal": true,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "normal",
-            "size": "standard",
-            "thirdParty": {
-              "cardmarket": 773756,
-              "tcgplayer": 566258
-            },
-            "variantId": "endfynwn4n10gzq",
-            "pricing": {
-              "cardmarket": {
-                "updated": "2026-09-04T10:05:09.376Z",
-                "unit": "EUR",
-                "idProduct": 773756,
-                "avg": 0.11,
-                "low": 0.02,
-                "trend": 0.07,
-                "avg1": 0.28,
-                "avg7": 0.07,
-                "avg30": 0.03,
-                "avg-holo": null,
-                "low-holo": null,
-                "trend-holo": 0,
-                "avg1-holo": null,
-                "avg7-holo": null,
-                "avg30-holo": null
-              },
-              "tcgplayer": null
-            }
-          }
-        ],
-        "dexId": [
-          228
-        ],
-        "hp": 70,
-        "types": [
-          "Fire"
-        ],
-        "description": "仲間に 連絡するときと 獲物を 追いつめるときでは 鳴き声の 種類が 違うのだ。",
-        "stage": "Basic",
-        "attacks": [
-          {
-            "cost": [
-              "Colorless",
-              "Colorless"
-            ],
-            "name": "かじる",
-            "damage": 20
-          },
-          {
-            "cost": [
-              "Fire",
-              "Colorless",
-              "Colorless"
-            ],
-            "name": "うしろげり",
-            "damage": 50
-          }
-        ],
-        "weaknesses": [
-          {
-            "type": "Water",
-            "value": "x2"
-          }
-        ],
-        "resistances": [],
-        "retreat": 1,
-        "regulationMark": "H",
-        "legal": {
-          "standard": true,
-          "expanded": false
-        },
-        "updated": "2026-09-03T15:29:10.857Z",
-        "pricing": {
-          "cardmarket": {
-            "updated": "2026-09-04T10:05:09.376Z",
-            "unit": "EUR",
-            "idProduct": 773756,
-            "avg": 0.11,
-            "low": 0.02,
-            "trend": 0.07,
-            "avg1": 0.28,
-            "avg7": 0.07,
-            "avg30": 0.03,
-            "avg-holo": null,
-            "low-holo": null,
-            "trend-holo": 0,
-            "avg1-holo": null,
-            "avg7-holo": null,
-            "avg30-holo": null
-          },
-          "tcgplayer": null
-        }
-      }
-    },
     "https://api.tcgdex.net/v2/ja/sets": {
       "statut": 200,
       "data": [
@@ -624,16 +275,16 @@
           }
         },
         {
-          "id": "L1a",
-          "name": "ハートゴールドコレクション",
+          "id": "L1b",
+          "name": "ソウルシルバーコレクション",
           "cardCount": {
             "total": 70,
             "official": 70
           }
         },
         {
-          "id": "L1b",
-          "name": "ソウルシルバーコレクション",
+          "id": "L1a",
+          "name": "ハートゴールドコレクション",
           "cardCount": {
             "total": 70,
             "official": 70
@@ -840,16 +491,16 @@
           }
         },
         {
-          "id": "SM1S",
-          "name": "コレクションサン",
+          "id": "SM1M",
+          "name": "コレクションムーン",
           "cardCount": {
             "total": 73,
             "official": 60
           }
         },
         {
-          "id": "SM1M",
-          "name": "コレクションムーン",
+          "id": "SM1S",
+          "name": "コレクションサン",
           "cardCount": {
             "total": 73,
             "official": 60
@@ -888,16 +539,16 @@
           }
         },
         {
-          "id": "SM3H",
-          "name": "闘う虹を見たか",
+          "id": "SM3N",
+          "name": "光を喰らう闇",
           "cardCount": {
             "total": 64,
             "official": 51
           }
         },
         {
-          "id": "SM3N",
-          "name": "光を喰らう闇",
+          "id": "SM3H",
+          "name": "闘う虹を見たか",
           "cardCount": {
             "total": 64,
             "official": 51
@@ -1016,19 +667,19 @@
           }
         },
         {
-          "id": "SM8b",
-          "name": "GXウルトラシャイニー",
-          "cardCount": {
-            "total": 250,
-            "official": 150
-          }
-        },
-        {
           "id": "SM8a",
           "name": "ダークオーダー",
           "cardCount": {
             "total": 65,
             "official": 52
+          }
+        },
+        {
+          "id": "SM8b",
+          "name": "GXウルトラシャイニー",
+          "cardCount": {
+            "total": 250,
+            "official": 150
           }
         },
         {
@@ -1176,7 +827,7 @@
           }
         },
         {
-          "id": "CS2b",
+          "id": "CS3.5",
           "name": "トリプレットビート",
           "cardCount": {
             "total": 101,
@@ -1192,47 +843,7 @@
           }
         },
         {
-          "id": "CS4",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS1.5",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS3.5",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS3b",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS2a",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS3a",
+          "id": "CS2b",
           "name": "トリプレットビート",
           "cardCount": {
             "total": 101,
@@ -1248,23 +859,7 @@
           }
         },
         {
-          "id": "CS1a",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS1b",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 101,
-            "official": 101
-          }
-        },
-        {
-          "id": "CS4b",
+          "id": "CS1.5",
           "name": "トリプレットビート",
           "cardCount": {
             "total": 101,
@@ -1288,6 +883,38 @@
           }
         },
         {
+          "id": "CS3a",
+          "name": "トリプレットビート",
+          "cardCount": {
+            "total": 101,
+            "official": 101
+          }
+        },
+        {
+          "id": "CS1b",
+          "name": "トリプレットビート",
+          "cardCount": {
+            "total": 101,
+            "official": 101
+          }
+        },
+        {
+          "id": "CS2a",
+          "name": "トリプレットビート",
+          "cardCount": {
+            "total": 101,
+            "official": 101
+          }
+        },
+        {
+          "id": "CS3b",
+          "name": "トリプレットビート",
+          "cardCount": {
+            "total": 101,
+            "official": 101
+          }
+        },
+        {
           "id": "CS4Da",
           "name": "トリプレットビート",
           "cardCount": {
@@ -1296,224 +923,56 @@
           }
         },
         {
-          "id": "S5a",
-          "name": "双璧のファイター",
+          "id": "CS1a",
+          "name": "トリプレットビート",
           "cardCount": {
-            "total": 70,
-            "official": 70
+            "total": 101,
+            "official": 101
           }
         },
         {
-          "id": "S6K",
-          "name": "漆黒のガイスト",
+          "id": "CS4b",
+          "name": "トリプレットビート",
           "cardCount": {
-            "total": 95,
-            "official": 70
+            "total": 101,
+            "official": 101
           }
         },
         {
-          "id": "S8b",
-          "name": "VMAXクライマックス",
+          "id": "CS4",
+          "name": "トリプレットビート",
           "cardCount": {
-            "total": 285,
-            "official": 184
+            "total": 101,
+            "official": 101
           }
         },
         {
-          "id": "S4a",
-          "name": "シャイニースターV",
-          "cardCount": {
-            "total": 190,
-            "official": 190
-          }
-        },
-        {
-          "id": "S10b",
-          "name": "Pokémon GO",
-          "cardCount": {
-            "total": 71,
-            "official": 71
-          }
-        },
-        {
-          "id": "S10D",
-          "name": "タイムゲイザー",
-          "cardCount": {
-            "total": 67,
-            "official": 67
-          }
-        },
-        {
-          "id": "S12a",
-          "name": "VSTARユニバース",
-          "cardCount": {
-            "total": 258,
-            "official": 172
-          }
-        },
-        {
-          "id": "S9a",
-          "name": "バトルリージョン",
-          "cardCount": {
-            "total": 93,
-            "official": 67
-          }
-        },
-        {
-          "id": "S5I",
-          "name": "一撃マスター",
-          "cardCount": {
-            "total": 91,
-            "official": 70
-          }
-        },
-        {
-          "id": "S10a",
-          "name": "ダークファンタズマ",
-          "cardCount": {
-            "total": 99,
-            "official": 71
-          }
-        },
-        {
-          "id": "S8a",
-          "name": "25th アニバーサリーコレクション",
-          "cardCount": {
-            "total": 28,
-            "official": 28
-          }
-        },
-        {
-          "id": "S6H",
-          "name": "白銀のランス",
-          "cardCount": {
-            "total": 95,
-            "official": 70
-          }
-        },
-        {
-          "id": "S11",
-          "name": "ロストアビス",
-          "cardCount": {
-            "total": 127,
-            "official": 100
-          }
-        },
-        {
-          "id": "S11a",
-          "name": "白熱のアルカナ",
+          "id": "SV7a",
+          "name": "楽園ドラゴーナ",
           "cardCount": {
             "total": 94,
-            "official": 68
+            "official": 64
           }
         },
         {
-          "id": "S7R",
-          "name": "蒼空ストリーム",
+          "id": "SV5a",
+          "name": "クリムゾンヘイズ",
           "cardCount": {
-            "total": 67,
-            "official": 67
+            "total": 96,
+            "official": 66
           }
         },
         {
-          "id": "S9",
-          "name": "スターバース",
+          "id": "SV6a",
+          "name": "ナイトワンダラー",
           "cardCount": {
-            "total": 127,
-            "official": 100
+            "total": 94,
+            "official": 64
           }
         },
         {
-          "id": "S5R",
-          "name": "連撃マスター",
-          "cardCount": {
-            "total": 70,
-            "official": 70
-          }
-        },
-        {
-          "id": "S2a",
-          "name": "爆炎ウォーカー",
-          "cardCount": {
-            "total": 70,
-            "official": 70
-          }
-        },
-        {
-          "id": "S7D",
-          "name": "摩天パーフェクト",
-          "cardCount": {
-            "total": 90,
-            "official": 67
-          }
-        },
-        {
-          "id": "S4",
-          "name": "仰天のボルテッカー",
-          "cardCount": {
-            "total": 100,
-            "official": 100
-          }
-        },
-        {
-          "id": "S6a",
-          "name": "イーブイヒーローズ",
-          "cardCount": {
-            "total": 69,
-            "official": 69
-          }
-        },
-        {
-          "id": "S8",
-          "name": "フュージョンアーツ",
-          "cardCount": {
-            "total": 129,
-            "official": 100
-          }
-        },
-        {
-          "id": "S12",
-          "name": "パラダイムトリガー",
-          "cardCount": {
-            "total": 125,
-            "official": 98
-          }
-        },
-        {
-          "id": "S10P",
-          "name": "スペースジャグラー",
-          "cardCount": {
-            "total": 88,
-            "official": 67
-          }
-        },
-        {
-          "id": "SV1V",
-          "name": "バイオレットex",
-          "cardCount": {
-            "total": 108,
-            "official": 78
-          }
-        },
-        {
-          "id": "SV9",
-          "name": "バトルパートナーズ",
-          "cardCount": {
-            "total": 132,
-            "official": 100
-          }
-        },
-        {
-          "id": "SV11B",
-          "name": "ブラックボルト",
-          "cardCount": {
-            "total": 174,
-            "official": 174
-          }
-        },
-        {
-          "id": "SV4M",
-          "name": "未来の一閃",
+          "id": "SV4K",
+          "name": "古代の咆哮",
           "cardCount": {
             "total": 95,
             "official": 66
@@ -1528,43 +987,11 @@
           }
         },
         {
-          "id": "SV-P",
-          "name": "スカーレット&バイオレット プロモカード",
+          "id": "SVLN",
+          "name": "スターターセット テラスタイプ：ステラ ニンフィアex",
           "cardCount": {
-            "total": 288,
-            "official": 0
-          }
-        },
-        {
-          "id": "SV6",
-          "name": "変幻の仮面",
-          "cardCount": {
-            "total": 133,
-            "official": 101
-          }
-        },
-        {
-          "id": "SV3a",
-          "name": "レイジングサーフ",
-          "cardCount": {
-            "total": 92,
-            "official": 62
-          }
-        },
-        {
-          "id": "SV6a",
-          "name": "ナイトワンダラー",
-          "cardCount": {
-            "total": 94,
-            "official": 64
-          }
-        },
-        {
-          "id": "SV9a",
-          "name": "熱風のアリーナ",
-          "cardCount": {
-            "total": 92,
-            "official": 63
+            "total": 22,
+            "official": 22
           }
         },
         {
@@ -1576,70 +1003,6 @@
           }
         },
         {
-          "id": "SV5a",
-          "name": "クリムゾンヘイズ",
-          "cardCount": {
-            "total": 96,
-            "official": 66
-          }
-        },
-        {
-          "id": "SV8a",
-          "name": "テラスタルフェスex",
-          "cardCount": {
-            "total": 237,
-            "official": 187
-          }
-        },
-        {
-          "id": "SV1a",
-          "name": "トリプレットビート",
-          "cardCount": {
-            "total": 103,
-            "official": 73
-          }
-        },
-        {
-          "id": "SVLN",
-          "name": "スターターセット テラスタイプ：ステラ ニンフィアex",
-          "cardCount": {
-            "total": 22,
-            "official": 22
-          }
-        },
-        {
-          "id": "SVLS",
-          "name": "スターターセット テラスタイプ：ステラ ソウブレイズex",
-          "cardCount": {
-            "total": 22,
-            "official": 22
-          }
-        },
-        {
-          "id": "SVK",
-          "name": "デッキビルドBOX ステラミラクル",
-          "cardCount": {
-            "total": 44,
-            "official": 44
-          }
-        },
-        {
-          "id": "SV2P",
-          "name": "スノーハザード",
-          "cardCount": {
-            "total": 99,
-            "official": 71
-          }
-        },
-        {
-          "id": "SV7",
-          "name": "ステラミラクル",
-          "cardCount": {
-            "total": 135,
-            "official": 102
-          }
-        },
-        {
           "id": "SV2a",
           "name": "ポケモンカード151",
           "cardCount": {
@@ -1648,10 +1011,18 @@
           }
         },
         {
-          "id": "SV5M",
-          "name": "サイバージャッジ",
+          "id": "SV6",
+          "name": "変幻の仮面",
           "cardCount": {
-            "total": 100,
+            "total": 133,
+            "official": 101
+          }
+        },
+        {
+          "id": "SV2D",
+          "name": "クレイバースト",
+          "cardCount": {
+            "total": 99,
             "official": 71
           }
         },
@@ -1664,6 +1035,22 @@
           }
         },
         {
+          "id": "SV11B",
+          "name": "ブラックボルト",
+          "cardCount": {
+            "total": 174,
+            "official": 174
+          }
+        },
+        {
+          "id": "SV-P",
+          "name": "スカーレット&バイオレット プロモカード",
+          "cardCount": {
+            "total": 288,
+            "official": 0
+          }
+        },
+        {
           "id": "SV8",
           "name": "超電ブレイカー",
           "cardCount": {
@@ -1672,43 +1059,35 @@
           }
         },
         {
-          "id": "SV7a",
-          "name": "楽園ドラゴーナ",
+          "id": "SV1a",
+          "name": "トリプレットビート",
           "cardCount": {
-            "total": 94,
-            "official": 64
+            "total": 103,
+            "official": 73
           }
         },
         {
-          "id": "SV1S",
-          "name": "スカーレットex",
+          "id": "SV3a",
+          "name": "レイジングサーフ",
           "cardCount": {
-            "total": 108,
-            "official": 78
+            "total": 92,
+            "official": 62
           }
         },
         {
-          "id": "SV4K",
-          "name": "古代の咆哮",
+          "id": "SVLS",
+          "name": "スターターセット テラスタイプ：ステラ ソウブレイズex",
           "cardCount": {
-            "total": 95,
-            "official": 66
+            "total": 22,
+            "official": 22
           }
         },
         {
-          "id": "SV11W",
-          "name": "ホワイトフレア",
+          "id": "SV8a",
+          "name": "テラスタルフェスex",
           "cardCount": {
-            "total": 174,
-            "official": 86
-          }
-        },
-        {
-          "id": "SV2D",
-          "name": "クレイバースト",
-          "cardCount": {
-            "total": 99,
-            "official": 71
+            "total": 237,
+            "official": 187
           }
         },
         {
@@ -1720,27 +1099,275 @@
           }
         },
         {
-          "id": "SM2p",
-          "name": "新たなる試練の向こう",
+          "id": "SV9",
+          "name": "バトルパートナーズ",
           "cardCount": {
-            "total": 65,
-            "official": 49
+            "total": 132,
+            "official": 100
           }
         },
         {
-          "id": "SM3p",
-          "name": "ひかる伝説",
+          "id": "SV4M",
+          "name": "未来の一閃",
           "cardCount": {
-            "total": 82,
-            "official": 72
+            "total": 95,
+            "official": 66
           }
         },
         {
-          "id": "SM1p",
-          "name": "サン＆ムーン",
+          "id": "SV1S",
+          "name": "スカーレットex",
           "cardCount": {
-            "total": 68,
-            "official": 51
+            "total": 108,
+            "official": 78
+          }
+        },
+        {
+          "id": "SVK",
+          "name": "デッキビルドBOX ステラミラクル",
+          "cardCount": {
+            "total": 44,
+            "official": 44
+          }
+        },
+        {
+          "id": "SV9a",
+          "name": "熱風のアリーナ",
+          "cardCount": {
+            "total": 92,
+            "official": 63
+          }
+        },
+        {
+          "id": "SV2P",
+          "name": "スノーハザード",
+          "cardCount": {
+            "total": 99,
+            "official": 71
+          }
+        },
+        {
+          "id": "SV11W",
+          "name": "ホワイトフレア",
+          "cardCount": {
+            "total": 174,
+            "official": 86
+          }
+        },
+        {
+          "id": "SV7",
+          "name": "ステラミラクル",
+          "cardCount": {
+            "total": 135,
+            "official": 102
+          }
+        },
+        {
+          "id": "SV5M",
+          "name": "サイバージャッジ",
+          "cardCount": {
+            "total": 100,
+            "official": 71
+          }
+        },
+        {
+          "id": "SV1V",
+          "name": "バイオレットex",
+          "cardCount": {
+            "total": 108,
+            "official": 78
+          }
+        },
+        {
+          "id": "S12",
+          "name": "パラダイムトリガー",
+          "cardCount": {
+            "total": 125,
+            "official": 98
+          }
+        },
+        {
+          "id": "S7R",
+          "name": "蒼空ストリーム",
+          "cardCount": {
+            "total": 67,
+            "official": 67
+          }
+        },
+        {
+          "id": "S7D",
+          "name": "摩天パーフェクト",
+          "cardCount": {
+            "total": 90,
+            "official": 67
+          }
+        },
+        {
+          "id": "S9",
+          "name": "スターバース",
+          "cardCount": {
+            "total": 127,
+            "official": 100
+          }
+        },
+        {
+          "id": "S10D",
+          "name": "タイムゲイザー",
+          "cardCount": {
+            "total": 67,
+            "official": 67
+          }
+        },
+        {
+          "id": "S8a",
+          "name": "25th アニバーサリーコレクション",
+          "cardCount": {
+            "total": 28,
+            "official": 28
+          }
+        },
+        {
+          "id": "S5R",
+          "name": "連撃マスター",
+          "cardCount": {
+            "total": 70,
+            "official": 70
+          }
+        },
+        {
+          "id": "S5a",
+          "name": "双璧のファイター",
+          "cardCount": {
+            "total": 70,
+            "official": 70
+          }
+        },
+        {
+          "id": "S11",
+          "name": "ロストアビス",
+          "cardCount": {
+            "total": 127,
+            "official": 100
+          }
+        },
+        {
+          "id": "S5I",
+          "name": "一撃マスター",
+          "cardCount": {
+            "total": 91,
+            "official": 70
+          }
+        },
+        {
+          "id": "S11a",
+          "name": "白熱のアルカナ",
+          "cardCount": {
+            "total": 94,
+            "official": 68
+          }
+        },
+        {
+          "id": "S6K",
+          "name": "漆黒のガイスト",
+          "cardCount": {
+            "total": 95,
+            "official": 70
+          }
+        },
+        {
+          "id": "S8",
+          "name": "フュージョンアーツ",
+          "cardCount": {
+            "total": 129,
+            "official": 100
+          }
+        },
+        {
+          "id": "S6H",
+          "name": "白銀のランス",
+          "cardCount": {
+            "total": 95,
+            "official": 70
+          }
+        },
+        {
+          "id": "S8b",
+          "name": "VMAXクライマックス",
+          "cardCount": {
+            "total": 285,
+            "official": 184
+          }
+        },
+        {
+          "id": "S6a",
+          "name": "イーブイヒーローズ",
+          "cardCount": {
+            "total": 69,
+            "official": 69
+          }
+        },
+        {
+          "id": "S10a",
+          "name": "ダークファンタズマ",
+          "cardCount": {
+            "total": 99,
+            "official": 71
+          }
+        },
+        {
+          "id": "S10P",
+          "name": "スペースジャグラー",
+          "cardCount": {
+            "total": 88,
+            "official": 67
+          }
+        },
+        {
+          "id": "S4",
+          "name": "仰天のボルテッカー",
+          "cardCount": {
+            "total": 100,
+            "official": 100
+          }
+        },
+        {
+          "id": "S2a",
+          "name": "爆炎ウォーカー",
+          "cardCount": {
+            "total": 70,
+            "official": 70
+          }
+        },
+        {
+          "id": "S9a",
+          "name": "バトルリージョン",
+          "cardCount": {
+            "total": 93,
+            "official": 67
+          }
+        },
+        {
+          "id": "S4a",
+          "name": "シャイニースターV",
+          "cardCount": {
+            "total": 190,
+            "official": 190
+          }
+        },
+        {
+          "id": "S12a",
+          "name": "VSTARユニバース",
+          "cardCount": {
+            "total": 258,
+            "official": 172
+          }
+        },
+        {
+          "id": "S10b",
+          "name": "Pokémon GO",
+          "cardCount": {
+            "total": 71,
+            "official": 71
           }
         },
         {
@@ -1752,6 +1379,14 @@
           }
         },
         {
+          "id": "SM1p",
+          "name": "サン＆ムーン",
+          "cardCount": {
+            "total": 68,
+            "official": 51
+          }
+        },
+        {
           "id": "SM4p",
           "name": "GXバトルブースト",
           "cardCount": {
@@ -1760,43 +1395,19 @@
           }
         },
         {
-          "id": "M1L",
-          "name": "メガブレイブ",
+          "id": "SM3p",
+          "name": "ひかる伝説",
           "cardCount": {
-            "total": 92,
-            "official": 63
+            "total": 82,
+            "official": 72
           }
         },
         {
-          "id": "M2a",
-          "name": "MEGAドリームex",
+          "id": "SM2p",
+          "name": "新たなる試練の向こう",
           "cardCount": {
-            "total": 250,
-            "official": 193
-          }
-        },
-        {
-          "id": "M3",
-          "name": "ムニキスゼロ",
-          "cardCount": {
-            "total": 117,
-            "official": 80
-          }
-        },
-        {
-          "id": "M6",
-          "name": "ストームエメラルダ",
-          "cardCount": {
-            "total": 113,
-            "official": 76
-          }
-        },
-        {
-          "id": "M5",
-          "name": "アビスアイ",
-          "cardCount": {
-            "total": 118,
-            "official": 81
+            "total": 65,
+            "official": 49
           }
         },
         {
@@ -1808,11 +1419,51 @@
           }
         },
         {
-          "id": "M-P",
-          "name": "メガ プロモカード",
+          "id": "M5",
+          "name": "アビスアイ",
           "cardCount": {
-            "total": 132,
-            "official": 0
+            "total": 118,
+            "official": 81
+          }
+        },
+        {
+          "id": "M2a",
+          "name": "MEGAドリームex",
+          "cardCount": {
+            "total": 250,
+            "official": 193
+          }
+        },
+        {
+          "id": "M6a",
+          "name": "30th CELEBRATION",
+          "cardCount": {
+            "total": 176,
+            "official": 103
+          }
+        },
+        {
+          "id": "MF",
+          "name": "30th CELEBRATION プレミアムデッキセット エーフィ・ブラッキー",
+          "cardCount": {
+            "total": 49,
+            "official": 40
+          }
+        },
+        {
+          "id": "M6",
+          "name": "ストームエメラルダ",
+          "cardCount": {
+            "total": 113,
+            "official": 76
+          }
+        },
+        {
+          "id": "M1S",
+          "name": "メガシンフォニア",
+          "cardCount": {
+            "total": 92,
+            "official": 63
           }
         },
         {
@@ -1824,8 +1475,8 @@
           }
         },
         {
-          "id": "M1S",
-          "name": "メガシンフォニア",
+          "id": "M1L",
+          "name": "メガブレイブ",
           "cardCount": {
             "total": 92,
             "official": 63
@@ -1838,2197 +1489,24 @@
             "total": 120,
             "official": 83
           }
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%A4%E3%82%B7%E3%82%BA%E3%83%9E%E3%82%A4&localId=eq:135": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%A4%E3%82%B7%E3%82%BA%E3%83%9E%E3%82%A4&localId=135": {
-      "statut": 200,
-      "data": [
+        },
         {
-          "id": "SV11B-135",
-          "localId": "135",
-          "name": "イシズマイ"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/sets/PCG5": {
-      "statut": 200,
-      "data": {
-        "cardCount": {
-          "firstEd": 0,
-          "holo": 18,
-          "normal": 154,
-          "official": 86,
-          "reverse": 0,
-          "total": 86
-        },
-        "cards": [
-          {
-            "id": "PCG5-001",
-            "localId": "001",
-            "name": "ベルスプラウト"
-          },
-          {
-            "id": "PCG5-002",
-            "localId": "002",
-            "name": "weepinbell"
-          },
-          {
-            "id": "PCG5-003",
-            "localId": "003",
-            "name": "Victreebel"
-          },
-          {
-            "id": "PCG5-004",
-            "localId": "004",
-            "name": "グリマー"
-          },
-          {
-            "id": "PCG5-005",
-            "localId": "005",
-            "name": "Muk"
-          },
-          {
-            "id": "PCG5-006",
-            "localId": "006",
-            "name": "タンゲラ"
-          },
-          {
-            "id": "PCG5-007",
-            "localId": "007",
-            "name": "ピンシル"
-          },
-          {
-            "id": "PCG5-008",
-            "localId": "008",
-            "name": "Wurmple"
-          },
-          {
-            "id": "PCG5-009",
-            "localId": "009",
-            "name": "気まぐれ"
-          },
-          {
-            "id": "PCG5-010",
-            "localId": "010",
-            "name": "Dustox Ex"
-          },
-          {
-            "id": "PCG5-011",
-            "localId": "011",
-            "name": "種子"
-          },
-          {
-            "id": "PCG5-012",
-            "localId": "012",
-            "name": "ローゼリア"
-          },
-          {
-            "id": "PCG5-013",
-            "localId": "013",
-            "name": "lileep"
-          },
-          {
-            "id": "PCG5-014",
-            "localId": "014",
-            "name": "ゆっくりと"
-          },
-          {
-            "id": "PCG5-015",
-            "localId": "015",
-            "name": "うなり声"
-          },
-          {
-            "id": "PCG5-016",
-            "localId": "016",
-            "name": "アルカニンEx"
-          },
-          {
-            "id": "PCG5-017",
-            "localId": "017",
-            "name": "マグマー"
-          },
-          {
-            "id": "PCG5-018",
-            "localId": "018",
-            "name": "マグビー"
-          },
-          {
-            "id": "PCG5-019",
-            "localId": "019",
-            "name": "トルコール"
-          },
-          {
-            "id": "PCG5-020",
-            "localId": "020",
-            "name": "Tentacool"
-          },
-          {
-            "id": "PCG5-021",
-            "localId": "021",
-            "name": "テンタクルエル"
-          },
-          {
-            "id": "PCG5-022",
-            "localId": "022",
-            "name": "ラプラス"
-          },
-          {
-            "id": "PCG5-023",
-            "localId": "023",
-            "name": "オマニテ"
-          },
-          {
-            "id": "PCG5-024",
-            "localId": "024",
-            "name": "Omastar"
-          },
-          {
-            "id": "PCG5-025",
-            "localId": "025",
-            "name": "ウェイルマー"
-          },
-          {
-            "id": "PCG5-026",
-            "localId": "026",
-            "name": "ウェイロード"
-          },
-          {
-            "id": "PCG5-027",
-            "localId": "027",
-            "name": "スフィアル"
-          },
-          {
-            "id": "PCG5-028",
-            "localId": "028",
-            "name": "シーレオ"
-          },
-          {
-            "id": "PCG5-029",
-            "localId": "029",
-            "name": "Walrein Ex"
-          },
-          {
-            "id": "PCG5-030",
-            "localId": "030",
-            "name": "clamperl"
-          },
-          {
-            "id": "PCG5-031",
-            "localId": "031",
-            "name": "ハンテイル"
-          },
-          {
-            "id": "PCG5-032",
-            "localId": "032",
-            "name": "ゴアビー"
-          },
-          {
-            "id": "PCG5-033",
-            "localId": "033",
-            "name": "領土スター"
-          },
-          {
-            "id": "PCG5-034",
-            "localId": "034",
-            "name": "マグナイト"
-          },
-          {
-            "id": "PCG5-035",
-            "localId": "035",
-            "name": "マグネトン"
-          },
-          {
-            "id": "PCG5-036",
-            "localId": "036",
-            "name": "チンチョウ"
-          },
-          {
-            "id": "PCG5-037",
-            "localId": "037",
-            "name": "ラントン"
-          },
-          {
-            "id": "PCG5-038",
-            "localId": "038",
-            "name": "ガストリー"
-          },
-          {
-            "id": "PCG5-039",
-            "localId": "039",
-            "name": "ハンター"
-          },
-          {
-            "id": "PCG5-040",
-            "localId": "040",
-            "name": "ジェンガー"
-          },
-          {
-            "id": "PCG5-041",
-            "localId": "041",
-            "name": "Mew Ex"
-          },
-          {
-            "id": "PCG5-042",
-            "localId": "042",
-            "name": "ミスレアヴァス"
-          },
-          {
-            "id": "PCG5-043",
-            "localId": "043",
-            "name": "ウォブバフェット"
-          },
-          {
-            "id": "PCG5-044",
-            "localId": "044",
-            "name": "Girafarig"
-          },
-          {
-            "id": "PCG5-045",
-            "localId": "045",
-            "name": "ルナトン"
-          },
-          {
-            "id": "PCG5-046",
-            "localId": "046",
-            "name": "wynaut"
-          },
-          {
-            "id": "PCG5-047",
-            "localId": "047",
-            "name": "マチョップ"
-          },
-          {
-            "id": "PCG5-048",
-            "localId": "048",
-            "name": "マチョーク"
-          },
-          {
-            "id": "PCG5-049",
-            "localId": "049",
-            "name": "マチャンプ"
-          },
-          {
-            "id": "PCG5-050",
-            "localId": "050",
-            "name": "ジオドード"
-          },
-          {
-            "id": "PCG5-051",
-            "localId": "051",
-            "name": "砂利"
-          },
-          {
-            "id": "PCG5-052",
-            "localId": "052",
-            "name": "ゴーレム"
-          },
-          {
-            "id": "PCG5-053",
-            "localId": "053",
-            "name": "カブト"
-          },
-          {
-            "id": "PCG5-054",
-            "localId": "054",
-            "name": "カブトップス"
-          },
-          {
-            "id": "PCG5-055",
-            "localId": "055",
-            "name": "トラピンチ"
-          },
-          {
-            "id": "PCG5-056",
-            "localId": "056",
-            "name": "ソロック"
-          },
-          {
-            "id": "PCG5-057",
-            "localId": "057",
-            "name": "アノリス"
-          },
-          {
-            "id": "PCG5-058",
-            "localId": "058",
-            "name": "Armaldo Ex"
-          },
-          {
-            "id": "PCG5-059",
-            "localId": "059",
-            "name": "レジロックスター"
-          },
-          {
-            "id": "PCG5-060",
-            "localId": "060",
-            "name": "アエロダクチル"
-          },
-          {
-            "id": "PCG5-061",
-            "localId": "061",
-            "name": "ダンズパース"
-          },
-          {
-            "id": "PCG5-062",
-            "localId": "062",
-            "name": "スキッティ"
-          },
-          {
-            "id": "PCG5-063",
-            "localId": "063",
-            "name": "delcatty"
-          },
-          {
-            "id": "PCG5-064",
-            "localId": "064",
-            "name": "スピンダ"
-          },
-          {
-            "id": "PCG5-065",
-            "localId": "065",
-            "name": "ビブラバ"
-          },
-          {
-            "id": "PCG5-066",
-            "localId": "066",
-            "name": "Flygon Ex"
-          },
-          {
-            "id": "PCG5-067",
-            "localId": "067",
-            "name": "Swablu"
-          },
-          {
-            "id": "PCG5-068",
-            "localId": "068",
-            "name": "Altaria Ex"
-          },
-          {
-            "id": "PCG5-069",
-            "localId": "069",
-            "name": "ケクレオン"
-          },
-          {
-            "id": "PCG5-070",
-            "localId": "070",
-            "name": "ヌズリーフ"
-          },
-          {
-            "id": "PCG5-071",
-            "localId": "071",
-            "name": "シフトリー"
-          },
-          {
-            "id": "PCG5-072",
-            "localId": "072",
-            "name": "絶対"
-          },
-          {
-            "id": "PCG5-073",
-            "localId": "073",
-            "name": "アロン"
-          },
-          {
-            "id": "PCG5-074",
-            "localId": "074",
-            "name": "レイロン"
-          },
-          {
-            "id": "PCG5-075",
-            "localId": "075",
-            "name": "アグロン"
-          },
-          {
-            "id": "PCG5-076",
-            "localId": "076",
-            "name": "Registeel Star"
-          },
-          {
-            "id": "PCG5-077",
-            "localId": "077",
-            "name": "爪の化石"
-          },
-          {
-            "id": "PCG5-078",
-            "localId": "078",
-            "name": "神秘的な化石"
-          },
-          {
-            "id": "PCG5-079",
-            "localId": "079",
-            "name": "根の化石"
-          },
-          {
-            "id": "PCG5-080",
-            "localId": "080",
-            "name": "フィールドワーカー"
-          },
-          {
-            "id": "PCG5-081",
-            "localId": "081",
-            "name": "奇妙な洞窟"
-          },
-          {
-            "id": "PCG5-082",
-            "localId": "082",
-            "name": "フルフレーム"
-          },
-          {
-            "id": "PCG5-083",
-            "localId": "083",
-            "name": "巨大な切り株"
-          },
-          {
-            "id": "PCG5-084",
-            "localId": "084",
-            "name": "呪われた石"
-          },
-          {
-            "id": "PCG5-085",
-            "localId": "085",
-            "name": "パワーツリー"
-          },
-          {
-            "id": "PCG5-086",
-            "localId": "086",
-            "name": "エネルギーを反応させます"
-          }
-        ],
-        "id": "PCG5",
-        "legal": {
-          "expanded": false,
-          "standard": false
-        },
-        "name": "まぼろしの森",
-        "releaseDate": "2005-06-30",
-        "serie": {
-          "id": "PCG",
-          "name": "PCG"
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/sets/PCG6": {
-      "statut": 200,
-      "data": {
-        "cardCount": {
-          "firstEd": 0,
-          "holo": 20,
-          "normal": 152,
-          "official": 86,
-          "reverse": 0,
-          "total": 86
-        },
-        "cards": [
-          {
-            "id": "PCG6-001",
-            "localId": "001",
-            "name": "雑草"
-          },
-          {
-            "id": "PCG6-002",
-            "localId": "002",
-            "name": "カクナ"
-          },
-          {
-            "id": "PCG6-003",
-            "localId": "003",
-            "name": "Zubat"
-          },
-          {
-            "id": "PCG6-004",
-            "localId": "004",
-            "name": "ゴルバット"
-          },
-          {
-            "id": "PCG6-005",
-            "localId": "005",
-            "name": "Koffing"
-          },
-          {
-            "id": "PCG6-006",
-            "localId": "006",
-            "name": "おしっこ"
-          },
-          {
-            "id": "PCG6-007",
-            "localId": "007",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-008",
-            "localId": "008",
-            "name": "volbeat"
-          },
-          {
-            "id": "PCG6-009",
-            "localId": "009",
-            "name": "照らされます"
-          },
-          {
-            "id": "PCG6-010",
-            "localId": "010",
-            "name": "beedrill（デルタ種）"
-          },
-          {
-            "id": "PCG6-011",
-            "localId": "011",
-            "name": "クロバット（デルタ種）"
-          },
-          {
-            "id": "PCG6-012",
-            "localId": "012",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-013",
-            "localId": "013",
-            "name": "larvitar（デルタ種）"
-          },
-          {
-            "id": "PCG6-014",
-            "localId": "014",
-            "name": "Pupitar（デルタ種）"
-          },
-          {
-            "id": "PCG6-015",
-            "localId": "015",
-            "name": "日当たりの良いキャストフォーム"
-          },
-          {
-            "id": "PCG6-016",
-            "localId": "016",
-            "name": "バゴン（デルタ種）"
-          },
-          {
-            "id": "PCG6-017",
-            "localId": "017",
-            "name": "シェルゴン（デルタ種）"
-          },
-          {
-            "id": "PCG6-018",
-            "localId": "018",
-            "name": "フレレオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-019",
-            "localId": "019",
-            "name": "mewtwo（デルタ種）"
-          },
-          {
-            "id": "PCG6-020",
-            "localId": "020",
-            "name": "ティラニター（デルタ種）"
-          },
-          {
-            "id": "PCG6-021",
-            "localId": "021",
-            "name": "サラメンス（デルタ種）"
-          },
-          {
-            "id": "PCG6-022",
-            "localId": "022",
-            "name": "slowpoke"
-          },
-          {
-            "id": "PCG6-023",
-            "localId": "023",
-            "name": "staryu"
-          },
-          {
-            "id": "PCG6-024",
-            "localId": "024",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-025",
-            "localId": "025",
-            "name": "スローキング"
-          },
-          {
-            "id": "PCG6-026",
-            "localId": "026",
-            "name": "雨のキャストフォーム"
-          },
-          {
-            "id": "PCG6-027",
-            "localId": "027",
-            "name": "スノークラウドキャストフォーム"
-          },
-          {
-            "id": "PCG6-028",
-            "localId": "028",
-            "name": "Kyogre Star"
-          },
-          {
-            "id": "PCG6-029",
-            "localId": "029",
-            "name": "スターミー（デルタ種）"
-          },
-          {
-            "id": "PCG6-030",
-            "localId": "030",
-            "name": "Vaporeon（デルタ種）"
-          },
-          {
-            "id": "PCG6-031",
-            "localId": "031",
-            "name": "ホロンのヴォルトーブ"
-          },
-          {
-            "id": "PCG6-032",
-            "localId": "032",
-            "name": "ホロンの電極"
-          },
-          {
-            "id": "PCG6-033",
-            "localId": "033",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-034",
-            "localId": "034",
-            "name": "ドラチーニ（デルタ種）"
-          },
-          {
-            "id": "PCG6-035",
-            "localId": "035",
-            "name": "ドラゴンエア（デルタ種）"
-          },
-          {
-            "id": "PCG6-036",
-            "localId": "036",
-            "name": "ベルダム（デルタ種）"
-          },
-          {
-            "id": "PCG6-037",
-            "localId": "037",
-            "name": "メタン（デルタ種）"
-          },
-          {
-            "id": "PCG6-038",
-            "localId": "038",
-            "name": "ジョルテオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-039",
-            "localId": "039",
-            "name": "ドラゴナイト（デルタ種）"
-          },
-          {
-            "id": "PCG6-040",
-            "localId": "040",
-            "name": "メタグロス（デルタ種）"
-          },
-          {
-            "id": "PCG6-041",
-            "localId": "041",
-            "name": "ラティアス（デルタ種）"
-          },
-          {
-            "id": "PCG6-042",
-            "localId": "042",
-            "name": "ラティオス（デルタ種）"
-          },
-          {
-            "id": "PCG6-043",
-            "localId": "043",
-            "name": "レイカザ（デルタ種）"
-          },
-          {
-            "id": "PCG6-044",
-            "localId": "044",
-            "name": "ドロージー"
-          },
-          {
-            "id": "PCG6-045",
-            "localId": "045",
-            "name": "催眠"
-          },
-          {
-            "id": "PCG6-046",
-            "localId": "046",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-047",
-            "localId": "047",
-            "name": "ラルト"
-          },
-          {
-            "id": "PCG6-048",
-            "localId": "048",
-            "name": "キルリア"
-          },
-          {
-            "id": "PCG6-049",
-            "localId": "049",
-            "name": "エスペオン（デルタ種）"
-          },
-          {
-            "id": "PCG6-050",
-            "localId": "050",
-            "name": "gardevoir（デルタ種）"
-          },
-          {
-            "id": "PCG6-051",
-            "localId": "051",
-            "name": "サンドシュー"
-          },
-          {
-            "id": "PCG6-052",
-            "localId": "052",
-            "name": "キューボン"
-          },
-          {
-            "id": "PCG6-053",
-            "localId": "053",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-054",
-            "localId": "054",
-            "name": "マクヒタ"
-          },
-          {
-            "id": "PCG6-055",
-            "localId": "055",
-            "name": "麻山"
-          },
-          {
-            "id": "PCG6-056",
-            "localId": "056",
-            "name": "グルードンスター"
-          },
-          {
-            "id": "PCG6-057",
-            "localId": "057",
-            "name": "サンドスラッシュ（デルタ種）"
-          },
-          {
-            "id": "PCG6-058",
-            "localId": "058",
-            "name": "マロワク（デルタ種）"
-          },
-          {
-            "id": "PCG6-059",
-            "localId": "059",
-            "name": "meowth"
-          },
-          {
-            "id": "PCG6-060",
-            "localId": "060",
-            "name": "ペルシャ語"
-          },
-          {
-            "id": "PCG6-061",
-            "localId": "061",
-            "name": "同上"
-          },
-          {
-            "id": "PCG6-062",
-            "localId": "062",
-            "name": "ポリゴン"
-          },
-          {
-            "id": "PCG6-063",
-            "localId": "063",
-            "name": "Porygon2"
-          },
-          {
-            "id": "PCG6-064",
-            "localId": "064",
-            "name": "テイロウ"
-          },
-          {
-            "id": "PCG6-065",
-            "localId": "065",
-            "name": "スウラー"
-          },
-          {
-            "id": "PCG6-066",
-            "localId": "066",
-            "name": "アズリル"
-          },
-          {
-            "id": "PCG6-067",
-            "localId": "067",
-            "name": "castform"
-          },
-          {
-            "id": "PCG6-068",
-            "localId": "068",
-            "name": "プーチエナ"
-          },
-          {
-            "id": "PCG6-069",
-            "localId": "069",
-            "name": "Umbreon（デルタ種）"
-          },
-          {
-            "id": "PCG6-070",
-            "localId": "070",
-            "name": "マイティエナ（デルタ種）"
-          },
-          {
-            "id": "PCG6-071",
-            "localId": "071",
-            "name": "ホロンのマグナイト"
-          },
-          {
-            "id": "PCG6-072",
-            "localId": "072",
-            "name": "ホロンのマグネトン"
-          },
-          {
-            "id": "PCG6-073",
-            "localId": "073",
-            "name": "Eevee（デルタ種）"
-          },
-          {
-            "id": "PCG6-074",
-            "localId": "074",
-            "name": "スカルモリー"
-          },
-          {
-            "id": "PCG6-075",
-            "localId": "075",
-            "name": "メタグロススター"
-          },
-          {
-            "id": "PCG6-076",
-            "localId": "076",
-            "name": "ホロントランシーバー"
-          },
-          {
-            "id": "PCG6-077",
-            "localId": "077",
-            "name": "ホロン科学者"
-          },
-          {
-            "id": "PCG6-078",
-            "localId": "078",
-            "name": "ホロン研究者"
-          },
-          {
-            "id": "PCG6-079",
-            "localId": "079",
-            "name": "ホロンメンター"
-          },
-          {
-            "id": "PCG6-080",
-            "localId": "080",
-            "name": "ホロン農家"
-          },
-          {
-            "id": "PCG6-081",
-            "localId": "081",
-            "name": "ホロン・ラス"
-          },
-          {
-            "id": "PCG6-082",
-            "localId": "082",
-            "name": "ホロン研究塔"
-          },
-          {
-            "id": "PCG6-083",
-            "localId": "083",
-            "name": "ホロン遺跡"
-          },
-          {
-            "id": "PCG6-084",
-            "localId": "084",
-            "name": "ホロンエネルギーGL"
-          },
-          {
-            "id": "PCG6-085",
-            "localId": "085",
-            "name": "ホロンエネルギーff"
-          },
-          {
-            "id": "PCG6-086",
-            "localId": "086",
-            "name": "ホロンエネルギーwp"
-          }
-        ],
-        "id": "PCG6",
-        "legal": {
-          "expanded": false,
-          "standard": false
-        },
-        "name": "ホロンの研究塔",
-        "releaseDate": "2005-10-28",
-        "serie": {
-          "id": "PCG",
-          "name": "PCG"
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/sets/SV11W": {
-      "statut": 200,
-      "data": {
-        "cardCount": {
-          "firstEd": 0,
-          "holo": 102,
-          "normal": 72,
-          "official": 86,
-          "reverse": 152,
-          "total": 174
-        },
-        "cards": [
-          {
-            "id": "SV11W-001",
-            "localId": "001",
-            "name": "クルミル"
-          },
-          {
-            "id": "SV11W-002",
-            "localId": "002",
-            "name": "クルマユ"
-          },
-          {
-            "id": "SV11W-003",
-            "localId": "003",
-            "name": "ハハコモリ"
-          },
-          {
-            "id": "SV11W-004",
-            "localId": "004",
-            "name": "モンメン"
-          },
-          {
-            "id": "SV11W-005",
-            "localId": "005",
-            "name": "エルフーンex"
-          },
-          {
-            "id": "SV11W-006",
-            "localId": "006",
-            "name": "シキジカ"
-          },
-          {
-            "id": "SV11W-007",
-            "localId": "007",
-            "name": "メブキジカ"
-          },
-          {
-            "id": "SV11W-008",
-            "localId": "008",
-            "name": "チョボマキ"
-          },
-          {
-            "id": "SV11W-009",
-            "localId": "009",
-            "name": "アギルダー"
-          },
-          {
-            "id": "SV11W-010",
-            "localId": "010",
-            "name": "ビリジオン"
-          },
-          {
-            "id": "SV11W-011",
-            "localId": "011",
-            "name": "ポカブ"
-          },
-          {
-            "id": "SV11W-012",
-            "localId": "012",
-            "name": "チャオブー"
-          },
-          {
-            "id": "SV11W-013",
-            "localId": "013",
-            "name": "エンブオー"
-          },
-          {
-            "id": "SV11W-014",
-            "localId": "014",
-            "name": "バオップ"
-          },
-          {
-            "id": "SV11W-015",
-            "localId": "015",
-            "name": "バオッキー"
-          },
-          {
-            "id": "SV11W-016",
-            "localId": "016",
-            "name": "クイタラン"
-          },
-          {
-            "id": "SV11W-017",
-            "localId": "017",
-            "name": "レシラムex"
-          },
-          {
-            "id": "SV11W-018",
-            "localId": "018",
-            "name": "ミジュマル"
-          },
-          {
-            "id": "SV11W-019",
-            "localId": "019",
-            "name": "フタチマル"
-          },
-          {
-            "id": "SV11W-020",
-            "localId": "020",
-            "name": "ダイケンキ"
-          },
-          {
-            "id": "SV11W-021",
-            "localId": "021",
-            "name": "バスラオ"
-          },
-          {
-            "id": "SV11W-022",
-            "localId": "022",
-            "name": "コアルヒー"
-          },
-          {
-            "id": "SV11W-023",
-            "localId": "023",
-            "name": "スワンナ"
-          },
-          {
-            "id": "SV11W-024",
-            "localId": "024",
-            "name": "バニプッチ"
-          },
-          {
-            "id": "SV11W-025",
-            "localId": "025",
-            "name": "バニリッチ"
-          },
-          {
-            "id": "SV11W-026",
-            "localId": "026",
-            "name": "バイバニラ"
-          },
-          {
-            "id": "SV11W-027",
-            "localId": "027",
-            "name": "ケルディオex"
-          },
-          {
-            "id": "SV11W-028",
-            "localId": "028",
-            "name": "シママ"
-          },
-          {
-            "id": "SV11W-029",
-            "localId": "029",
-            "name": "ゼブライカ"
-          },
-          {
-            "id": "SV11W-030",
-            "localId": "030",
-            "name": "バチュル"
-          },
-          {
-            "id": "SV11W-031",
-            "localId": "031",
-            "name": "デンチュラ"
-          },
-          {
-            "id": "SV11W-032",
-            "localId": "032",
-            "name": "マッギョ"
-          },
-          {
-            "id": "SV11W-033",
-            "localId": "033",
-            "name": "コロモリ"
-          },
-          {
-            "id": "SV11W-034",
-            "localId": "034",
-            "name": "ココロモリ"
-          },
-          {
-            "id": "SV11W-035",
-            "localId": "035",
-            "name": "シンボラー"
-          },
-          {
-            "id": "SV11W-036",
-            "localId": "036",
-            "name": "デスマス"
-          },
-          {
-            "id": "SV11W-037",
-            "localId": "037",
-            "name": "デスカーン"
-          },
-          {
-            "id": "SV11W-038",
-            "localId": "038",
-            "name": "ゴチム"
-          },
-          {
-            "id": "SV11W-039",
-            "localId": "039",
-            "name": "ゴチミル"
-          },
-          {
-            "id": "SV11W-040",
-            "localId": "040",
-            "name": "ゴチルゼル"
-          },
-          {
-            "id": "SV11W-041",
-            "localId": "041",
-            "name": "プルリル"
-          },
-          {
-            "id": "SV11W-042",
-            "localId": "042",
-            "name": "ブルンゲルex"
-          },
-          {
-            "id": "SV11W-043",
-            "localId": "043",
-            "name": "ダンゴロ"
-          },
-          {
-            "id": "SV11W-044",
-            "localId": "044",
-            "name": "ガントル"
-          },
-          {
-            "id": "SV11W-045",
-            "localId": "045",
-            "name": "ギガイアス"
-          },
-          {
-            "id": "SV11W-046",
-            "localId": "046",
-            "name": "ダゲキ"
-          },
-          {
-            "id": "SV11W-047",
-            "localId": "047",
-            "name": "アーケン"
-          },
-          {
-            "id": "SV11W-048",
-            "localId": "048",
-            "name": "アーケオス"
-          },
-          {
-            "id": "SV11W-049",
-            "localId": "049",
-            "name": "コジョフー"
-          },
-          {
-            "id": "SV11W-050",
-            "localId": "050",
-            "name": "コジョンド"
-          },
-          {
-            "id": "SV11W-051",
-            "localId": "051",
-            "name": "テラキオン"
-          },
-          {
-            "id": "SV11W-052",
-            "localId": "052",
-            "name": "チョロネコ"
-          },
-          {
-            "id": "SV11W-053",
-            "localId": "053",
-            "name": "レパルダス"
-          },
-          {
-            "id": "SV11W-054",
-            "localId": "054",
-            "name": "ズルッグ"
-          },
-          {
-            "id": "SV11W-055",
-            "localId": "055",
-            "name": "ズルズキン"
-          },
-          {
-            "id": "SV11W-056",
-            "localId": "056",
-            "name": "ヤブクロン"
-          },
-          {
-            "id": "SV11W-057",
-            "localId": "057",
-            "name": "ダストダス"
-          },
-          {
-            "id": "SV11W-058",
-            "localId": "058",
-            "name": "ゾロア"
-          },
-          {
-            "id": "SV11W-059",
-            "localId": "059",
-            "name": "ゾロアーク"
-          },
-          {
-            "id": "SV11W-060",
-            "localId": "060",
-            "name": "モノズ"
-          },
-          {
-            "id": "SV11W-061",
-            "localId": "061",
-            "name": "ジヘッド"
-          },
-          {
-            "id": "SV11W-062",
-            "localId": "062",
-            "name": "サザンドラex"
-          },
-          {
-            "id": "SV11W-063",
-            "localId": "063",
-            "name": "テッシード"
-          },
-          {
-            "id": "SV11W-064",
-            "localId": "064",
-            "name": "ナットレイ"
-          },
-          {
-            "id": "SV11W-065",
-            "localId": "065",
-            "name": "ギアル"
-          },
-          {
-            "id": "SV11W-066",
-            "localId": "066",
-            "name": "ギギアル"
-          },
-          {
-            "id": "SV11W-067",
-            "localId": "067",
-            "name": "ギギギアル"
-          },
-          {
-            "id": "SV11W-068",
-            "localId": "068",
-            "name": "アイアント"
-          },
-          {
-            "id": "SV11W-069",
-            "localId": "069",
-            "name": "クリムガン"
-          },
-          {
-            "id": "SV11W-070",
-            "localId": "070",
-            "name": "ミネズミ"
-          },
-          {
-            "id": "SV11W-071",
-            "localId": "071",
-            "name": "ミルホッグ"
-          },
-          {
-            "id": "SV11W-072",
-            "localId": "072",
-            "name": "ヨーテリー"
-          },
-          {
-            "id": "SV11W-073",
-            "localId": "073",
-            "name": "ハーデリア"
-          },
-          {
-            "id": "SV11W-074",
-            "localId": "074",
-            "name": "ムーランド"
-          },
-          {
-            "id": "SV11W-075",
-            "localId": "075",
-            "name": "バッフロンex"
-          },
-          {
-            "id": "SV11W-076",
-            "localId": "076",
-            "name": "ワシボン"
-          },
-          {
-            "id": "SV11W-077",
-            "localId": "077",
-            "name": "ウォーグル"
-          },
-          {
-            "id": "SV11W-078",
-            "localId": "078",
-            "name": "トルネロス"
-          },
-          {
-            "id": "SV11W-079",
-            "localId": "079",
-            "name": "エネルギー回収"
-          },
-          {
-            "id": "SV11W-080",
-            "localId": "080",
-            "name": "ツールスクラッパー"
-          },
-          {
-            "id": "SV11W-081",
-            "localId": "081",
-            "name": "古びたはねの化石"
-          },
-          {
-            "id": "SV11W-082",
-            "localId": "082",
-            "name": "ブレイブバングル"
-          },
-          {
-            "id": "SV11W-083",
-            "localId": "083",
-            "name": "クラウン"
-          },
-          {
-            "id": "SV11W-084",
-            "localId": "084",
-            "name": "チェレン"
-          },
-          {
-            "id": "SV11W-085",
-            "localId": "085",
-            "name": "トウコ"
-          },
-          {
-            "id": "SV11W-086",
-            "localId": "086",
-            "name": "イグニッションエネルギー"
-          },
-          {
-            "id": "SV11W-087",
-            "localId": "087",
-            "name": "クルミル"
-          },
-          {
-            "id": "SV11W-088",
-            "localId": "088",
-            "name": "クルマユ"
-          },
-          {
-            "id": "SV11W-089",
-            "localId": "089",
-            "name": "ハハコモリ"
-          },
-          {
-            "id": "SV11W-090",
-            "localId": "090",
-            "name": "モンメン"
-          },
-          {
-            "id": "SV11W-091",
-            "localId": "091",
-            "name": "シキジカ"
-          },
-          {
-            "id": "SV11W-092",
-            "localId": "092",
-            "name": "メブキジカ"
-          },
-          {
-            "id": "SV11W-093",
-            "localId": "093",
-            "name": "チョボマキ"
-          },
-          {
-            "id": "SV11W-094",
-            "localId": "094",
-            "name": "アギルダー"
-          },
-          {
-            "id": "SV11W-095",
-            "localId": "095",
-            "name": "ビリジオン"
-          },
-          {
-            "id": "SV11W-096",
-            "localId": "096",
-            "name": "ポカブ"
-          },
-          {
-            "id": "SV11W-097",
-            "localId": "097",
-            "name": "チャオブー"
-          },
-          {
-            "id": "SV11W-098",
-            "localId": "098",
-            "name": "エンブオー"
-          },
-          {
-            "id": "SV11W-099",
-            "localId": "099",
-            "name": "バオップ"
-          },
-          {
-            "id": "SV11W-100",
-            "localId": "100",
-            "name": "バオッキー"
-          },
-          {
-            "id": "SV11W-101",
-            "localId": "101",
-            "name": "クイタラン"
-          },
-          {
-            "id": "SV11W-102",
-            "localId": "102",
-            "name": "ミジュマル"
-          },
-          {
-            "id": "SV11W-103",
-            "localId": "103",
-            "name": "フタチマル"
-          },
-          {
-            "id": "SV11W-104",
-            "localId": "104",
-            "name": "ダイケンキ"
-          },
-          {
-            "id": "SV11W-105",
-            "localId": "105",
-            "name": "バスラオ"
-          },
-          {
-            "id": "SV11W-106",
-            "localId": "106",
-            "name": "コアルヒー"
-          },
-          {
-            "id": "SV11W-107",
-            "localId": "107",
-            "name": "スワンナ"
-          },
-          {
-            "id": "SV11W-108",
-            "localId": "108",
-            "name": "バニプッチ"
-          },
-          {
-            "id": "SV11W-109",
-            "localId": "109",
-            "name": "バニリッチ"
-          },
-          {
-            "id": "SV11W-110",
-            "localId": "110",
-            "name": "バイバニラ"
-          },
-          {
-            "id": "SV11W-111",
-            "localId": "111",
-            "name": "シママ"
-          },
-          {
-            "id": "SV11W-112",
-            "localId": "112",
-            "name": "ゼブライカ"
-          },
-          {
-            "id": "SV11W-113",
-            "localId": "113",
-            "name": "バチュル"
-          },
-          {
-            "id": "SV11W-114",
-            "localId": "114",
-            "name": "デンチュラ"
-          },
-          {
-            "id": "SV11W-115",
-            "localId": "115",
-            "name": "マッギョ"
-          },
-          {
-            "id": "SV11W-116",
-            "localId": "116",
-            "name": "コロモリ"
-          },
-          {
-            "id": "SV11W-117",
-            "localId": "117",
-            "name": "ココロモリ"
-          },
-          {
-            "id": "SV11W-118",
-            "localId": "118",
-            "name": "シンボラー"
-          },
-          {
-            "id": "SV11W-119",
-            "localId": "119",
-            "name": "デスマス"
-          },
-          {
-            "id": "SV11W-120",
-            "localId": "120",
-            "name": "デスカーン"
-          },
-          {
-            "id": "SV11W-121",
-            "localId": "121",
-            "name": "ゴチム"
-          },
-          {
-            "id": "SV11W-122",
-            "localId": "122",
-            "name": "ゴチミル"
-          },
-          {
-            "id": "SV11W-123",
-            "localId": "123",
-            "name": "ゴチルゼル"
-          },
-          {
-            "id": "SV11W-124",
-            "localId": "124",
-            "name": "プルリル"
-          },
-          {
-            "id": "SV11W-125",
-            "localId": "125",
-            "name": "ダンゴロ"
-          },
-          {
-            "id": "SV11W-126",
-            "localId": "126",
-            "name": "ガントル"
-          },
-          {
-            "id": "SV11W-127",
-            "localId": "127",
-            "name": "ギガイアス"
-          },
-          {
-            "id": "SV11W-128",
-            "localId": "128",
-            "name": "ダゲキ"
-          },
-          {
-            "id": "SV11W-129",
-            "localId": "129",
-            "name": "アーケン"
-          },
-          {
-            "id": "SV11W-130",
-            "localId": "130",
-            "name": "アーケオス"
-          },
-          {
-            "id": "SV11W-131",
-            "localId": "131",
-            "name": "コジョフー"
-          },
-          {
-            "id": "SV11W-132",
-            "localId": "132",
-            "name": "コジョンド"
-          },
-          {
-            "id": "SV11W-133",
-            "localId": "133",
-            "name": "テラキオン"
-          },
-          {
-            "id": "SV11W-134",
-            "localId": "134",
-            "name": "チョロネコ"
-          },
-          {
-            "id": "SV11W-135",
-            "localId": "135",
-            "name": "レパルダス"
-          },
-          {
-            "id": "SV11W-136",
-            "localId": "136",
-            "name": "ズルッグ"
-          },
-          {
-            "id": "SV11W-137",
-            "localId": "137",
-            "name": "ズルズキン"
-          },
-          {
-            "id": "SV11W-138",
-            "localId": "138",
-            "name": "ヤブクロン"
-          },
-          {
-            "id": "SV11W-139",
-            "localId": "139",
-            "name": "ダストダス"
-          },
-          {
-            "id": "SV11W-140",
-            "localId": "140",
-            "name": "ゾロア"
-          },
-          {
-            "id": "SV11W-141",
-            "localId": "141",
-            "name": "ゾロアーク"
-          },
-          {
-            "id": "SV11W-142",
-            "localId": "142",
-            "name": "モノズ"
-          },
-          {
-            "id": "SV11W-143",
-            "localId": "143",
-            "name": "ジヘッド"
-          },
-          {
-            "id": "SV11W-144",
-            "localId": "144",
-            "name": "テッシード"
-          },
-          {
-            "id": "SV11W-145",
-            "localId": "145",
-            "name": "ナットレイ"
-          },
-          {
-            "id": "SV11W-146",
-            "localId": "146",
-            "name": "ギアル"
-          },
-          {
-            "id": "SV11W-147",
-            "localId": "147",
-            "name": "ギギアル"
-          },
-          {
-            "id": "SV11W-148",
-            "localId": "148",
-            "name": "ギギギアル"
-          },
-          {
-            "id": "SV11W-149",
-            "localId": "149",
-            "name": "アイアント"
-          },
-          {
-            "id": "SV11W-150",
-            "localId": "150",
-            "name": "クリムガン"
-          },
-          {
-            "id": "SV11W-151",
-            "localId": "151",
-            "name": "ミネズミ"
-          },
-          {
-            "id": "SV11W-152",
-            "localId": "152",
-            "name": "ミルホッグ"
-          },
-          {
-            "id": "SV11W-153",
-            "localId": "153",
-            "name": "ヨーテリー"
-          },
-          {
-            "id": "SV11W-154",
-            "localId": "154",
-            "name": "ハーデリア"
-          },
-          {
-            "id": "SV11W-155",
-            "localId": "155",
-            "name": "ムーランド"
-          },
-          {
-            "id": "SV11W-156",
-            "localId": "156",
-            "name": "ワシボン"
-          },
-          {
-            "id": "SV11W-157",
-            "localId": "157",
-            "name": "ウォーグル"
-          },
-          {
-            "id": "SV11W-158",
-            "localId": "158",
-            "name": "トルネロス"
-          },
-          {
-            "id": "SV11W-159",
-            "localId": "159",
-            "name": "エルフーンex"
-          },
-          {
-            "id": "SV11W-160",
-            "localId": "160",
-            "name": "レシラムex"
-          },
-          {
-            "id": "SV11W-161",
-            "localId": "161",
-            "name": "ケルディオex"
-          },
-          {
-            "id": "SV11W-162",
-            "localId": "162",
-            "name": "ブルンゲルex"
-          },
-          {
-            "id": "SV11W-163",
-            "localId": "163",
-            "name": "サザンドラex"
-          },
-          {
-            "id": "SV11W-164",
-            "localId": "164",
-            "name": "バッフロンex"
-          },
-          {
-            "id": "SV11W-165",
-            "localId": "165",
-            "name": "クラウン"
-          },
-          {
-            "id": "SV11W-166",
-            "localId": "166",
-            "name": "トウコ"
-          },
-          {
-            "id": "SV11W-167",
-            "localId": "167",
-            "name": "エルフーンex"
-          },
-          {
-            "id": "SV11W-168",
-            "localId": "168",
-            "name": "レシラムex"
-          },
-          {
-            "id": "SV11W-169",
-            "localId": "169",
-            "name": "ケルディオex"
-          },
-          {
-            "id": "SV11W-170",
-            "localId": "170",
-            "name": "ブルンゲルex"
-          },
-          {
-            "id": "SV11W-171",
-            "localId": "171",
-            "name": "サザンドラex"
-          },
-          {
-            "id": "SV11W-172",
-            "localId": "172",
-            "name": "バッフロンex"
-          },
-          {
-            "id": "SV11W-173",
-            "localId": "173",
-            "name": "トウコ"
-          },
-          {
-            "id": "SV11W-174",
-            "localId": "174",
-            "name": "レシラムex"
-          }
-        ],
-        "id": "SV11W",
-        "legal": {
-          "expanded": false,
-          "standard": false
-        },
-        "name": "ホワイトフレア",
-        "releaseDate": "2025-06-06",
-        "serie": {
-          "id": "SV",
-          "name": "ポケモンカードゲーム スカーレット&バイオレット"
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards/SV11W-135": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "SV11W-135",
-        "illustrator": "matazo",
-        "localId": "135",
-        "name": "レパルダス",
-        "rarity": "Illustration rare",
-        "set": {
+          "id": "M-P",
+          "name": "メガ プロモカード",
           "cardCount": {
-            "official": 86,
-            "total": 174
-          },
-          "id": "SV11W",
-          "name": "ホワイトフレア"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": true,
-          "normal": false,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "holo",
-            "size": "standard",
-            "variantId": "jr7oetx1mqug9"
+            "total": 132,
+            "official": 0
           }
-        ],
-        "dexId": [
-          510
-        ],
-        "hp": 110,
-        "types": [
-          "Darkness"
-        ],
-        "evolveFrom": "チョロネコ",
-        "description": "神出鬼没な ポケモン。 美しい スタイルと 毛並みが 多くの トレーナーを ひきつける。",
-        "stage": "Stage1",
-        "attacks": [
-          {
-            "cost": [
-              "Darkness"
-            ],
-            "name": "はたきおとす",
-            "effect": "相手の手札からオモテを見ないで1枚選び、トラッシュする。",
-            "damage": 50
-          }
-        ],
-        "weaknesses": [
-          {
-            "type": "Grass",
-            "value": "x2"
-          }
-        ],
-        "retreat": 1,
-        "regulationMark": "I",
-        "legal": {
-          "standard": true,
-          "expanded": false
         },
-        "updated": "2026-09-03T15:29:33.032Z",
-        "thirdParty": {
-          "cardmarket": 829494,
-          "tcgplayer": 636688
-        },
-        "pricing": {
-          "cardmarket": {
-            "updated": "2026-09-04T10:05:09.367Z",
-            "unit": "EUR",
-            "idProduct": 829494,
-            "avg": 10.39,
-            "low": 8.4,
-            "trend": 10.33,
-            "avg1": 10.99,
-            "avg7": 9.78,
-            "avg30": 10.32,
-            "avg-holo": null,
-            "low-holo": null,
-            "trend-holo": 0,
-            "avg1-holo": null,
-            "avg7-holo": null,
-            "avg30-holo": null
-          },
-          "tcgplayer": null
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%81%E3%83%AB%E3%82%BF%E3%83%AA%E3%82%B9ex&localId=eq:019": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%81%E3%83%AB%E3%82%BF%E3%83%AA%E3%82%B9ex&localId=19": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=Altaria%20ex&localId=eq:019": {
-      "statut": 200,
-      "data": []
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=Altaria%20ex&localId=19": {
-      "statut": 200,
-      "data": [
         {
-          "id": "PCG9-019",
-          "localId": "019",
-          "name": "altaria ex（デルタ種）"
+          "id": "M3",
+          "name": "ムニキスゼロ",
+          "cardCount": {
+            "total": 117,
+            "official": 80
+          }
         }
       ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards/PCG9-019": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "PCG9-019",
-        "localId": "019",
-        "name": "altaria ex（デルタ種）",
-        "rarity": "Holo Rare",
-        "set": {
-          "cardCount": {
-            "official": 68,
-            "total": 68
-          },
-          "id": "PCG9",
-          "name": "さいはての攻防"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": false,
-          "normal": true,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "normal",
-            "subtype": "unlimited",
-            "size": "standard",
-            "variantId": "3a83wf50tz7q114spsx7dw6v5"
-          },
-          {
-            "type": "normal",
-            "size": "standard",
-            "stamp": [
-              "1st edition"
-            ],
-            "variantId": "2fnyg4g532wu18r396n1ly75loy"
-          }
-        ],
-        "dexId": [
-          334
-        ],
-        "hp": 100,
-        "types": [
-          "Water"
-        ],
-        "stage": "Stage1",
-        "abilities": [
-          {
-            "type": "Ability",
-            "name": "余分なブースト",
-            "effect": "ターン中（攻撃の前）に一度、手からステージ2のPokã©Mon-Exの1つに基本的なエネルギーカードを添付することができます。 Altaria Exが特別な状態の影響を受ける場合、この電力は使用できません。"
-          }
-        ],
-        "attacks": [
-          {
-            "cost": [
-              "Water",
-              "Colorless",
-              "Colorless"
-            ],
-            "name": "癒しの光",
-            "effect": "各ポケモンから1つのダメージカウンターを取り外します。",
-            "damage": 60
-          }
-        ],
-        "retreat": 1,
-        "legal": {
-          "standard": false,
-          "expanded": false
-        },
-        "updated": "2026-09-03T15:29:12.724Z",
-        "pricing": {
-          "cardmarket": null,
-          "tcgplayer": null
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%9B%E3%82%A6%E3%82%AA%E3%82%A6": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "SVLS-003",
-          "localId": "003",
-          "name": "ホウオウ",
-          "image": "https://assets.tcgdex.net/ja/SV/SVLS/003"
-        },
-        {
-          "id": "M4-010",
-          "localId": "010",
-          "name": "ホウオウ"
-        },
-        {
-          "id": "SM3H-012",
-          "localId": "012",
-          "name": "ホウオウGX"
-        },
-        {
-          "id": "SM4p-013",
-          "localId": "013",
-          "name": "ホウオウGX"
-        },
-        {
-          "id": "SV9a-020",
-          "localId": "020",
-          "name": "ヒビキのホウオウex",
-          "image": "https://assets.tcgdex.net/ja/SV/SV9a/020"
-        },
-        {
-          "id": "M2a-021",
-          "localId": "021",
-          "name": "ヒビキのホウオウex"
-        },
-        {
-          "id": "SM6b-048",
-          "localId": "048",
-          "name": "ホウオウ"
-        },
-        {
-          "id": "SM3H-053",
-          "localId": "053",
-          "name": "ホウオウGX"
-        },
-        {
-          "id": "S11a-055",
-          "localId": "055",
-          "name": "ホウオウV",
-          "image": "https://assets.tcgdex.net/ja/S/S11a/055"
-        },
-        {
-          "id": "SM3H-059",
-          "localId": "059",
-          "name": "ホウオウGX"
-        },
-        {
-          "id": "SV9a-077",
-          "localId": "077",
-          "name": "ヒビキのホウオウex",
-          "image": "https://assets.tcgdex.net/ja/SV/SV9a/077"
-        },
-        {
-          "id": "S11a-080",
-          "localId": "080",
-          "name": "ホウオウV",
-          "image": "https://assets.tcgdex.net/ja/S/S11a/080"
-        },
-        {
-          "id": "SV9a-086",
-          "localId": "086",
-          "name": "ヒビキのホウオウex",
-          "image": "https://assets.tcgdex.net/ja/SV/SV9a/086"
-        },
-        {
-          "id": "SV9a-090",
-          "localId": "090",
-          "name": "ヒビキのホウオウex",
-          "image": "https://assets.tcgdex.net/ja/SV/SV9a/090"
-        },
-        {
-          "id": "SM8b-210",
-          "localId": "210",
-          "name": "ホウオウGX"
-        },
-        {
-          "id": "SV-P-254",
-          "localId": "254",
-          "name": "ヒビキのホウオウex"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards/SVLS-003": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "SVLS-003",
-        "illustrator": "kodama",
-        "image": "https://assets.tcgdex.net/ja/SV/SVLS/003",
-        "localId": "003",
-        "name": "ホウオウ",
-        "rarity": "None",
-        "set": {
-          "cardCount": {
-            "official": 22,
-            "total": 22
-          },
-          "id": "SVLS",
-          "name": "スターターセット テラスタイプ：ステラ ソウブレイズex"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": false,
-          "normal": true,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "normal",
-            "size": "standard",
-            "variantId": "generated"
-          }
-        ],
-        "dexId": [
-          250
-        ],
-        "hp": 130,
-        "types": [
-          "Fire"
-        ],
-        "description": "体は 七色に 輝き 飛んだあとは 虹が できると 神話に 残されている ポケモン。",
-        "stage": "Basic",
-        "attacks": [
-          {
-            "cost": [
-              "Fire",
-              "Colorless"
-            ],
-            "name": "はばたく",
-            "damage": 50
-          },
-          {
-            "cost": [
-              "Fire",
-              "Fire",
-              "Colorless"
-            ],
-            "name": "シャインブレイズ",
-            "effect": "自分のベンチに「テラスタル」のポケモンがいるなら、100ダメージ追加。",
-            "damage": "100＋"
-          }
-        ],
-        "weaknesses": [
-          {
-            "type": "Lightning",
-            "value": "×2"
-          }
-        ],
-        "resistances": [
-          {
-            "type": "Fighting",
-            "value": "－30"
-          }
-        ],
-        "retreat": 2,
-        "legal": {
-          "standard": false,
-          "expanded": false
-        },
-        "updated": "2026-09-03T15:29:09.899Z",
-        "pricing": {
-          "cardmarket": null,
-          "tcgplayer": null
-        }
-      }
     },
     "https://api.tcgdex.net/v2/en/sets": {
       "statut": 200,
@@ -4331,16 +1809,6 @@
           }
         },
         {
-          "id": "pop1",
-          "name": "POP Series 1",
-          "logo": "https://assets.tcgdex.net/en/pop/pop1/logo",
-          "symbol": "https://assets.tcgdex.net/univ/pop/pop1/symbol",
-          "cardCount": {
-            "total": 17,
-            "official": 17
-          }
-        },
-        {
           "id": "ex6",
           "name": "FireRed & LeafGreen",
           "logo": "https://assets.tcgdex.net/en/ex/ex6/logo",
@@ -4348,6 +1816,16 @@
           "cardCount": {
             "total": 116,
             "official": 112
+          }
+        },
+        {
+          "id": "pop1",
+          "name": "POP Series 1",
+          "logo": "https://assets.tcgdex.net/en/pop/pop1/logo",
+          "symbol": "https://assets.tcgdex.net/univ/pop/pop1/symbol",
+          "cardCount": {
+            "total": 17,
+            "official": 17
           }
         },
         {
@@ -4391,6 +1869,14 @@
           }
         },
         {
+          "id": "exu",
+          "name": "Unseen Forces Unown Collection",
+          "cardCount": {
+            "total": 28,
+            "official": 28
+          }
+        },
+        {
           "id": "ex10",
           "name": "Unseen Forces",
           "logo": "https://assets.tcgdex.net/en/ex/ex10/logo",
@@ -4398,14 +1884,6 @@
           "cardCount": {
             "total": 117,
             "official": 115
-          }
-        },
-        {
-          "id": "exu",
-          "name": "Unseen Forces Unown Collection",
-          "cardCount": {
-            "total": 28,
-            "official": 28
           }
         },
         {
@@ -4429,17 +1907,17 @@
           }
         },
         {
-          "id": "tk-ex-m",
-          "name": "EX trainer Kit 2 (Minun)",
+          "id": "tk-ex-p",
+          "name": "EX trainer Kit 2 (Plusle)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-ex-p/symbol",
           "cardCount": {
             "total": 12,
             "official": 12
           }
         },
         {
-          "id": "tk-ex-p",
-          "name": "EX trainer Kit 2 (Plusle)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-ex-p/symbol",
+          "id": "tk-ex-m",
+          "name": "EX trainer Kit 2 (Minun)",
           "cardCount": {
             "total": 12,
             "official": 12
@@ -4546,16 +2024,6 @@
           }
         },
         {
-          "id": "pop6",
-          "name": "POP Series 6",
-          "logo": "https://assets.tcgdex.net/en/pop/pop6/logo",
-          "symbol": "https://assets.tcgdex.net/univ/pop/pop6/symbol",
-          "cardCount": {
-            "total": 17,
-            "official": 17
-          }
-        },
-        {
           "id": "tk-dp-l",
           "name": "DP trainer Kit (Lucario)",
           "symbol": "https://assets.tcgdex.net/univ/tk/tk-dp-l/symbol",
@@ -4571,6 +2039,16 @@
           "cardCount": {
             "total": 12,
             "official": 12
+          }
+        },
+        {
+          "id": "pop6",
+          "name": "POP Series 6",
+          "logo": "https://assets.tcgdex.net/en/pop/pop6/logo",
+          "symbol": "https://assets.tcgdex.net/univ/pop/pop6/symbol",
+          "cardCount": {
+            "total": 17,
+            "official": 17
           }
         },
         {
@@ -4944,14 +2422,6 @@
           }
         },
         {
-          "id": "rc",
-          "name": "Radiant Collection",
-          "cardCount": {
-            "total": 25,
-            "official": 25
-          }
-        },
-        {
           "id": "bw11",
           "name": "Legendary Treasures",
           "logo": "https://assets.tcgdex.net/en/bw/bw11/logo",
@@ -4959,6 +2429,14 @@
           "cardCount": {
             "total": 140,
             "official": 113
+          }
+        },
+        {
+          "id": "rc",
+          "name": "Radiant Collection",
+          "cardCount": {
+            "total": 25,
+            "official": 25
           }
         },
         {
@@ -4990,18 +2468,18 @@
           }
         },
         {
-          "id": "tk-xy-n",
-          "name": "XY trainer Kit (Noivern)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-n/symbol",
+          "id": "tk-xy-sy",
+          "name": "XY trainer Kit (Sylveon)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-sy/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
           }
         },
         {
-          "id": "tk-xy-sy",
-          "name": "XY trainer Kit (Sylveon)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-sy/symbol",
+          "id": "tk-xy-n",
+          "name": "XY trainer Kit (Noivern)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-n/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
@@ -5084,18 +2562,18 @@
           }
         },
         {
-          "id": "tk-xy-latio",
-          "name": "XY trainer Kit (Latios)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-latio/symbol",
+          "id": "tk-xy-latia",
+          "name": "XY trainer Kit (Latias)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-latia/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
           }
         },
         {
-          "id": "tk-xy-latia",
-          "name": "XY trainer Kit (Latias)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-latia/symbol",
+          "id": "tk-xy-latio",
+          "name": "XY trainer Kit (Latios)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-latio/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
@@ -5160,18 +2638,18 @@
           }
         },
         {
-          "id": "tk-xy-p",
-          "name": "XY trainer Kit (Pikachu Libre)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-p/symbol",
+          "id": "tk-xy-su",
+          "name": "XY trainer Kit (Suicune)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-su/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
           }
         },
         {
-          "id": "tk-xy-su",
-          "name": "XY trainer Kit (Suicune)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-su/symbol",
+          "id": "tk-xy-p",
+          "name": "XY trainer Kit (Pikachu Libre)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-xy-p/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
@@ -5216,16 +2694,6 @@
           }
         },
         {
-          "id": "sm1",
-          "name": "Sun & Moon",
-          "logo": "https://assets.tcgdex.net/en/sm/sm1/logo",
-          "symbol": "https://assets.tcgdex.net/univ/sm/sm1/symbol",
-          "cardCount": {
-            "total": 172,
-            "official": 149
-          }
-        },
-        {
           "id": "smp",
           "name": "SM Black Star Promos",
           "logo": "https://assets.tcgdex.net/en/sm/smp/logo",
@@ -5236,18 +2704,28 @@
           }
         },
         {
-          "id": "tk-sm-r",
-          "name": "SM trainer Kit (Alolan Raichu)",
-          "symbol": "https://assets.tcgdex.net/univ/tk/tk-sm-r/symbol",
+          "id": "sm1",
+          "name": "Sun & Moon",
+          "logo": "https://assets.tcgdex.net/en/sm/sm1/logo",
+          "symbol": "https://assets.tcgdex.net/univ/sm/sm1/symbol",
           "cardCount": {
-            "total": 30,
-            "official": 30
+            "total": 172,
+            "official": 149
           }
         },
         {
           "id": "tk-sm-l",
           "name": "SM trainer Kit (Lycanroc)",
           "symbol": "https://assets.tcgdex.net/univ/tk/tk-sm-l/symbol",
+          "cardCount": {
+            "total": 30,
+            "official": 30
+          }
+        },
+        {
+          "id": "tk-sm-r",
+          "name": "SM trainer Kit (Alolan Raichu)",
+          "symbol": "https://assets.tcgdex.net/univ/tk/tk-sm-r/symbol",
           "cardCount": {
             "total": 30,
             "official": 30
@@ -5396,15 +2874,6 @@
           }
         },
         {
-          "id": "sma",
-          "name": "Hidden Fates Shiny Vault",
-          "symbol": "https://assets.tcgdex.net/univ/sm/sma/symbol",
-          "cardCount": {
-            "total": 94,
-            "official": 94
-          }
-        },
-        {
           "id": "sm115",
           "name": "Hidden Fates",
           "logo": "https://assets.tcgdex.net/en/sm/sm115/logo",
@@ -5412,6 +2881,15 @@
           "cardCount": {
             "total": 69,
             "official": 68
+          }
+        },
+        {
+          "id": "sma",
+          "name": "Hidden Fates Shiny Vault",
+          "symbol": "https://assets.tcgdex.net/univ/sm/sma/symbol",
+          "cardCount": {
+            "total": 94,
+            "official": 94
           }
         },
         {
@@ -5512,6 +2990,14 @@
           }
         },
         {
+          "id": "swsh4.5sv",
+          "name": "Shining Fates Shiny Vault",
+          "cardCount": {
+            "total": 122,
+            "official": 122
+          }
+        },
+        {
           "id": "swsh4.5",
           "name": "Shining Fates",
           "logo": "https://assets.tcgdex.net/en/swsh/swsh4.5/logo",
@@ -5519,14 +3005,6 @@
           "cardCount": {
             "total": 73,
             "official": 72
-          }
-        },
-        {
-          "id": "swsh4.5sv",
-          "name": "Shining Fates Shiny Vault",
-          "cardCount": {
-            "total": 122,
-            "official": 122
           }
         },
         {
@@ -5560,18 +3038,18 @@
           }
         },
         {
-          "id": "cel25cc",
-          "name": "Celebrations Classic Collection",
+          "id": "cel25",
+          "name": "Celebrations",
+          "logo": "https://assets.tcgdex.net/en/swsh/cel25/logo",
+          "symbol": "https://assets.tcgdex.net/univ/swsh/cel25/symbol",
           "cardCount": {
             "total": 25,
             "official": 25
           }
         },
         {
-          "id": "cel25",
-          "name": "Celebrations",
-          "logo": "https://assets.tcgdex.net/en/swsh/cel25/logo",
-          "symbol": "https://assets.tcgdex.net/univ/swsh/cel25/symbol",
+          "id": "cel25cc",
+          "name": "Celebrations Classic Collection",
           "cardCount": {
             "total": 25,
             "official": 25
@@ -5606,6 +3084,14 @@
           }
         },
         {
+          "id": "swsh10tg",
+          "name": "Astral Radiance Trainer Gallery",
+          "cardCount": {
+            "total": 30,
+            "official": 30
+          }
+        },
+        {
           "id": "swsh10",
           "name": "Astral Radiance",
           "logo": "https://assets.tcgdex.net/en/swsh/swsh10/logo",
@@ -5613,14 +3099,6 @@
           "cardCount": {
             "total": 216,
             "official": 189
-          }
-        },
-        {
-          "id": "swsh10tg",
-          "name": "Astral Radiance Trainer Gallery",
-          "cardCount": {
-            "total": 30,
-            "official": 30
           }
         },
         {
@@ -5660,6 +3138,14 @@
           }
         },
         {
+          "id": "swsh12tg",
+          "name": "Silver Tempest Trainer Gallery",
+          "cardCount": {
+            "total": 30,
+            "official": 30
+          }
+        },
+        {
           "id": "swsh12",
           "name": "Silver Tempest",
           "logo": "https://assets.tcgdex.net/en/swsh/swsh12/logo",
@@ -5670,11 +3156,11 @@
           }
         },
         {
-          "id": "swsh12tg",
-          "name": "Silver Tempest Trainer Gallery",
+          "id": "swsh12.5gg",
+          "name": "Crown Zenith Galarian Gallery",
           "cardCount": {
-            "total": 30,
-            "official": 30
+            "total": 70,
+            "official": 70
           }
         },
         {
@@ -5685,14 +3171,6 @@
           "cardCount": {
             "total": 160,
             "official": 159
-          }
-        },
-        {
-          "id": "swsh12.5gg",
-          "name": "Crown Zenith Galarian Gallery",
-          "cardCount": {
-            "total": 70,
-            "official": 70
           }
         },
         {
@@ -5826,15 +3304,6 @@
           }
         },
         {
-          "id": "P-A",
-          "name": "Promos-A",
-          "logo": "https://assets.tcgdex.net/en/tcgp/P-A/logo",
-          "cardCount": {
-            "total": 100,
-            "official": 0
-          }
-        },
-        {
           "id": "A1",
           "name": "Genetic Apex",
           "logo": "https://assets.tcgdex.net/en/tcgp/A1/logo",
@@ -5842,6 +3311,15 @@
           "cardCount": {
             "total": 286,
             "official": 226
+          }
+        },
+        {
+          "id": "P-A",
+          "name": "Promos-A",
+          "logo": "https://assets.tcgdex.net/en/tcgp/P-A/logo",
+          "cardCount": {
+            "total": 100,
+            "official": 0
           }
         },
         {
@@ -5954,22 +3432,22 @@
           }
         },
         {
-          "id": "sv10.5b",
-          "name": "Black Bolt",
-          "logo": "https://assets.tcgdex.net/en/sv/sv10.5b/logo",
-          "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5b/symbol",
-          "cardCount": {
-            "total": 172,
-            "official": 86
-          }
-        },
-        {
           "id": "sv10.5w",
           "name": "White Flare",
           "logo": "https://assets.tcgdex.net/en/sv/sv10.5w/logo",
           "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5w/symbol",
           "cardCount": {
             "total": 173,
+            "official": 86
+          }
+        },
+        {
+          "id": "sv10.5b",
+          "name": "Black Bolt",
+          "logo": "https://assets.tcgdex.net/en/sv/sv10.5b/logo",
+          "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5b/symbol",
+          "cardCount": {
+            "total": 172,
             "official": 86
           }
         },
@@ -5996,8 +3474,16 @@
           "id": "mee",
           "name": "Mega Evolution Energy",
           "cardCount": {
-            "total": 8,
-            "official": 8
+            "total": 16,
+            "official": 16
+          }
+        },
+        {
+          "id": "mep",
+          "name": "MEP Black Star Promos",
+          "cardCount": {
+            "total": 112,
+            "official": 0
           }
         },
         {
@@ -6008,14 +3494,6 @@
           "cardCount": {
             "total": 188,
             "official": 132
-          }
-        },
-        {
-          "id": "mep",
-          "name": "MEP Black Star Promos",
-          "cardCount": {
-            "total": 89,
-            "official": 0
           }
         },
         {
@@ -6102,46 +3580,1566 @@
             "total": 120,
             "official": 84
           }
+        },
+        {
+          "id": "30th-c",
+          "name": "30th Classic Collection",
+          "cardCount": {
+            "total": 30,
+            "official": 30
+          }
+        },
+        {
+          "id": "30th",
+          "name": "30th Celebration",
+          "cardCount": {
+            "total": 161,
+            "official": 128
+          }
         }
       ]
     },
-    "https://api.tcgdex.net/v2/fr/cards?name=Crabicoque&localId=eq:129": {
+    "https://api.tcgdex.net/v2/fr/cards?name=Tropius&localId=eq:001": {
       "statut": 200,
       "data": []
     },
-    "https://api.tcgdex.net/v2/fr/cards?name=Crabicoque&localId=129": {
+    "https://api.tcgdex.net/v2/fr/cards?name=Tropius&localId=1": {
       "statut": 200,
       "data": [
         {
-          "id": "sv10.5b-129",
-          "localId": "129",
-          "name": "Crabicoque",
-          "image": "https://assets.tcgdex.net/fr/sv/sv10.5b/129"
+          "id": "me05-001",
+          "localId": "001",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/me/me05/001"
+        },
+        {
+          "id": "A3b-001",
+          "localId": "001",
+          "name": "Tropius"
+        },
+        {
+          "id": "xy6-12",
+          "localId": "12",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/xy/xy6/12"
+        },
+        {
+          "id": "sm12-12",
+          "localId": "12",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/sm/sm12/12"
+        },
+        {
+          "id": "sm7-21",
+          "localId": "21",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/sm/sm7/21"
+        },
+        {
+          "id": "sv09-123",
+          "localId": "123",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/sv/sv09/123"
+        },
+        {
+          "id": "sv02-195",
+          "localId": "195",
+          "name": "Tropius",
+          "image": "https://assets.tcgdex.net/fr/sv/sv02/195"
         }
       ]
     },
-    "https://api.tcgdex.net/v2/fr/cards/sv10.5b-129": {
+    "https://api.tcgdex.net/v2/en/sets/base2": {
       "statut": 200,
       "data": {
-        "category": "Pokémon",
-        "id": "sv10.5b-129",
-        "illustrator": "Shimaris Yukichi",
-        "image": "https://assets.tcgdex.net/fr/sv/sv10.5b/129",
-        "localId": "129",
-        "name": "Crabicoque",
-        "rarity": "Illustration rare",
+        "cardCount": {
+          "firstEd": 64,
+          "holo": 50,
+          "normal": 100,
+          "official": 64,
+          "reverse": 0,
+          "total": 64
+        },
+        "cards": [
+          {
+            "id": "base2-1",
+            "image": "https://assets.tcgdex.net/en/base/base2/1",
+            "localId": "1",
+            "name": "Clefable"
+          },
+          {
+            "id": "base2-2",
+            "image": "https://assets.tcgdex.net/en/base/base2/2",
+            "localId": "2",
+            "name": "Electrode"
+          },
+          {
+            "id": "base2-3",
+            "image": "https://assets.tcgdex.net/en/base/base2/3",
+            "localId": "3",
+            "name": "Flareon"
+          },
+          {
+            "id": "base2-4",
+            "image": "https://assets.tcgdex.net/en/base/base2/4",
+            "localId": "4",
+            "name": "Jolteon"
+          },
+          {
+            "id": "base2-5",
+            "image": "https://assets.tcgdex.net/en/base/base2/5",
+            "localId": "5",
+            "name": "Kangaskhan"
+          },
+          {
+            "id": "base2-6",
+            "image": "https://assets.tcgdex.net/en/base/base2/6",
+            "localId": "6",
+            "name": "Mr. Mime"
+          },
+          {
+            "id": "base2-7",
+            "image": "https://assets.tcgdex.net/en/base/base2/7",
+            "localId": "7",
+            "name": "Nidoqueen"
+          },
+          {
+            "id": "base2-8",
+            "image": "https://assets.tcgdex.net/en/base/base2/8",
+            "localId": "8",
+            "name": "Pidgeot"
+          },
+          {
+            "id": "base2-9",
+            "image": "https://assets.tcgdex.net/en/base/base2/9",
+            "localId": "9",
+            "name": "Pinsir"
+          },
+          {
+            "id": "base2-10",
+            "image": "https://assets.tcgdex.net/en/base/base2/10",
+            "localId": "10",
+            "name": "Scyther"
+          },
+          {
+            "id": "base2-11",
+            "image": "https://assets.tcgdex.net/en/base/base2/11",
+            "localId": "11",
+            "name": "Snorlax"
+          },
+          {
+            "id": "base2-12",
+            "image": "https://assets.tcgdex.net/en/base/base2/12",
+            "localId": "12",
+            "name": "Vaporeon"
+          },
+          {
+            "id": "base2-13",
+            "image": "https://assets.tcgdex.net/en/base/base2/13",
+            "localId": "13",
+            "name": "Venomoth"
+          },
+          {
+            "id": "base2-14",
+            "image": "https://assets.tcgdex.net/en/base/base2/14",
+            "localId": "14",
+            "name": "Victreebel"
+          },
+          {
+            "id": "base2-15",
+            "image": "https://assets.tcgdex.net/en/base/base2/15",
+            "localId": "15",
+            "name": "Vileplume"
+          },
+          {
+            "id": "base2-16",
+            "image": "https://assets.tcgdex.net/en/base/base2/16",
+            "localId": "16",
+            "name": "Wigglytuff"
+          },
+          {
+            "id": "base2-17",
+            "image": "https://assets.tcgdex.net/en/base/base2/17",
+            "localId": "17",
+            "name": "Clefable"
+          },
+          {
+            "id": "base2-18",
+            "image": "https://assets.tcgdex.net/en/base/base2/18",
+            "localId": "18",
+            "name": "Electrode"
+          },
+          {
+            "id": "base2-19",
+            "image": "https://assets.tcgdex.net/en/base/base2/19",
+            "localId": "19",
+            "name": "Flareon"
+          },
+          {
+            "id": "base2-20",
+            "image": "https://assets.tcgdex.net/en/base/base2/20",
+            "localId": "20",
+            "name": "Jolteon"
+          },
+          {
+            "id": "base2-21",
+            "image": "https://assets.tcgdex.net/en/base/base2/21",
+            "localId": "21",
+            "name": "Kangaskhan"
+          },
+          {
+            "id": "base2-22",
+            "image": "https://assets.tcgdex.net/en/base/base2/22",
+            "localId": "22",
+            "name": "Mr. Mime"
+          },
+          {
+            "id": "base2-23",
+            "image": "https://assets.tcgdex.net/en/base/base2/23",
+            "localId": "23",
+            "name": "Nidoqueen"
+          },
+          {
+            "id": "base2-24",
+            "image": "https://assets.tcgdex.net/en/base/base2/24",
+            "localId": "24",
+            "name": "Pidgeot"
+          },
+          {
+            "id": "base2-25",
+            "image": "https://assets.tcgdex.net/en/base/base2/25",
+            "localId": "25",
+            "name": "Pinsir"
+          },
+          {
+            "id": "base2-26",
+            "image": "https://assets.tcgdex.net/en/base/base2/26",
+            "localId": "26",
+            "name": "Scyther"
+          },
+          {
+            "id": "base2-27",
+            "image": "https://assets.tcgdex.net/en/base/base2/27",
+            "localId": "27",
+            "name": "Snorlax"
+          },
+          {
+            "id": "base2-28",
+            "image": "https://assets.tcgdex.net/en/base/base2/28",
+            "localId": "28",
+            "name": "Vaporeon"
+          },
+          {
+            "id": "base2-29",
+            "image": "https://assets.tcgdex.net/en/base/base2/29",
+            "localId": "29",
+            "name": "Venomoth"
+          },
+          {
+            "id": "base2-30",
+            "image": "https://assets.tcgdex.net/en/base/base2/30",
+            "localId": "30",
+            "name": "Victreebel"
+          },
+          {
+            "id": "base2-31",
+            "image": "https://assets.tcgdex.net/en/base/base2/31",
+            "localId": "31",
+            "name": "Vileplume"
+          },
+          {
+            "id": "base2-32",
+            "image": "https://assets.tcgdex.net/en/base/base2/32",
+            "localId": "32",
+            "name": "Wigglytuff"
+          },
+          {
+            "id": "base2-33",
+            "image": "https://assets.tcgdex.net/en/base/base2/33",
+            "localId": "33",
+            "name": "Butterfree"
+          },
+          {
+            "id": "base2-34",
+            "image": "https://assets.tcgdex.net/en/base/base2/34",
+            "localId": "34",
+            "name": "Dodrio"
+          },
+          {
+            "id": "base2-35",
+            "image": "https://assets.tcgdex.net/en/base/base2/35",
+            "localId": "35",
+            "name": "Exeggutor"
+          },
+          {
+            "id": "base2-36",
+            "image": "https://assets.tcgdex.net/en/base/base2/36",
+            "localId": "36",
+            "name": "Fearow"
+          },
+          {
+            "id": "base2-37",
+            "image": "https://assets.tcgdex.net/en/base/base2/37",
+            "localId": "37",
+            "name": "Gloom"
+          },
+          {
+            "id": "base2-38",
+            "image": "https://assets.tcgdex.net/en/base/base2/38",
+            "localId": "38",
+            "name": "Lickitung"
+          },
+          {
+            "id": "base2-39",
+            "image": "https://assets.tcgdex.net/en/base/base2/39",
+            "localId": "39",
+            "name": "Marowak"
+          },
+          {
+            "id": "base2-40",
+            "image": "https://assets.tcgdex.net/en/base/base2/40",
+            "localId": "40",
+            "name": "Nidorina"
+          },
+          {
+            "id": "base2-41",
+            "image": "https://assets.tcgdex.net/en/base/base2/41",
+            "localId": "41",
+            "name": "Parasect"
+          },
+          {
+            "id": "base2-42",
+            "image": "https://assets.tcgdex.net/en/base/base2/42",
+            "localId": "42",
+            "name": "Persian"
+          },
+          {
+            "id": "base2-43",
+            "image": "https://assets.tcgdex.net/en/base/base2/43",
+            "localId": "43",
+            "name": "Primeape"
+          },
+          {
+            "id": "base2-44",
+            "image": "https://assets.tcgdex.net/en/base/base2/44",
+            "localId": "44",
+            "name": "Rapidash"
+          },
+          {
+            "id": "base2-45",
+            "image": "https://assets.tcgdex.net/en/base/base2/45",
+            "localId": "45",
+            "name": "Rhydon"
+          },
+          {
+            "id": "base2-46",
+            "image": "https://assets.tcgdex.net/en/base/base2/46",
+            "localId": "46",
+            "name": "Seaking"
+          },
+          {
+            "id": "base2-47",
+            "image": "https://assets.tcgdex.net/en/base/base2/47",
+            "localId": "47",
+            "name": "Tauros"
+          },
+          {
+            "id": "base2-48",
+            "image": "https://assets.tcgdex.net/en/base/base2/48",
+            "localId": "48",
+            "name": "Weepinbell"
+          },
+          {
+            "id": "base2-49",
+            "image": "https://assets.tcgdex.net/en/base/base2/49",
+            "localId": "49",
+            "name": "Bellsprout"
+          },
+          {
+            "id": "base2-50",
+            "image": "https://assets.tcgdex.net/en/base/base2/50",
+            "localId": "50",
+            "name": "Cubone"
+          },
+          {
+            "id": "base2-51",
+            "image": "https://assets.tcgdex.net/en/base/base2/51",
+            "localId": "51",
+            "name": "Eevee"
+          },
+          {
+            "id": "base2-52",
+            "image": "https://assets.tcgdex.net/en/base/base2/52",
+            "localId": "52",
+            "name": "Exeggcute"
+          },
+          {
+            "id": "base2-53",
+            "image": "https://assets.tcgdex.net/en/base/base2/53",
+            "localId": "53",
+            "name": "Goldeen"
+          },
+          {
+            "id": "base2-54",
+            "image": "https://assets.tcgdex.net/en/base/base2/54",
+            "localId": "54",
+            "name": "Jigglypuff"
+          },
+          {
+            "id": "base2-55",
+            "image": "https://assets.tcgdex.net/en/base/base2/55",
+            "localId": "55",
+            "name": "Mankey"
+          },
+          {
+            "id": "base2-56",
+            "image": "https://assets.tcgdex.net/en/base/base2/56",
+            "localId": "56",
+            "name": "Meowth"
+          },
+          {
+            "id": "base2-57",
+            "image": "https://assets.tcgdex.net/en/base/base2/57",
+            "localId": "57",
+            "name": "Nidoran♀"
+          },
+          {
+            "id": "base2-58",
+            "image": "https://assets.tcgdex.net/en/base/base2/58",
+            "localId": "58",
+            "name": "Oddish"
+          },
+          {
+            "id": "base2-59",
+            "image": "https://assets.tcgdex.net/en/base/base2/59",
+            "localId": "59",
+            "name": "Paras"
+          },
+          {
+            "id": "base2-60",
+            "image": "https://assets.tcgdex.net/en/base/base2/60",
+            "localId": "60",
+            "name": "Pikachu"
+          },
+          {
+            "id": "base2-61",
+            "image": "https://assets.tcgdex.net/en/base/base2/61",
+            "localId": "61",
+            "name": "Rhyhorn"
+          },
+          {
+            "id": "base2-62",
+            "image": "https://assets.tcgdex.net/en/base/base2/62",
+            "localId": "62",
+            "name": "Spearow"
+          },
+          {
+            "id": "base2-63",
+            "image": "https://assets.tcgdex.net/en/base/base2/63",
+            "localId": "63",
+            "name": "Venonat"
+          },
+          {
+            "id": "base2-64",
+            "image": "https://assets.tcgdex.net/en/base/base2/64",
+            "localId": "64",
+            "name": "Poké Ball"
+          }
+        ],
+        "id": "base2",
+        "legal": {
+          "expanded": false,
+          "standard": false
+        },
+        "logo": "https://assets.tcgdex.net/en/base/base2/logo",
+        "name": "Jungle",
+        "releaseDate": "1999-06-16",
+        "serie": {
+          "id": "base",
+          "name": "Base"
+        },
+        "symbol": "https://assets.tcgdex.net/univ/base/base2/symbol",
+        "tcgOnline": "JU",
+        "abbreviation": {
+          "official": "JU"
+        }
+      }
+    },
+    "https://api.tcgdex.net/v2/en/sets/neo3": {
+      "statut": 200,
+      "data": {
+        "cardCount": {
+          "firstEd": 66,
+          "holo": 32,
+          "normal": 100,
+          "official": 64,
+          "reverse": 0,
+          "total": 66
+        },
+        "cards": [
+          {
+            "id": "neo3-1",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/1",
+            "localId": "1",
+            "name": "Ampharos"
+          },
+          {
+            "id": "neo3-2",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/2",
+            "localId": "2",
+            "name": "Blissey"
+          },
+          {
+            "id": "neo3-3",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/3",
+            "localId": "3",
+            "name": "Celebi"
+          },
+          {
+            "id": "neo3-4",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/4",
+            "localId": "4",
+            "name": "Crobat"
+          },
+          {
+            "id": "neo3-5",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/5",
+            "localId": "5",
+            "name": "Delibird"
+          },
+          {
+            "id": "neo3-6",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/6",
+            "localId": "6",
+            "name": "Entei"
+          },
+          {
+            "id": "neo3-7",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/7",
+            "localId": "7",
+            "name": "Ho-oh"
+          },
+          {
+            "id": "neo3-8",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/8",
+            "localId": "8",
+            "name": "Houndoom"
+          },
+          {
+            "id": "neo3-9",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/9",
+            "localId": "9",
+            "name": "Jumpluff"
+          },
+          {
+            "id": "neo3-10",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/10",
+            "localId": "10",
+            "name": "Magneton"
+          },
+          {
+            "id": "neo3-11",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/11",
+            "localId": "11",
+            "name": "Misdreavus"
+          },
+          {
+            "id": "neo3-12",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/12",
+            "localId": "12",
+            "name": "Porygon2"
+          },
+          {
+            "id": "neo3-13",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/13",
+            "localId": "13",
+            "name": "Raikou"
+          },
+          {
+            "id": "neo3-14",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/14",
+            "localId": "14",
+            "name": "Suicune"
+          },
+          {
+            "id": "neo3-15",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/15",
+            "localId": "15",
+            "name": "Aerodactyl"
+          },
+          {
+            "id": "neo3-16",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/16",
+            "localId": "16",
+            "name": "Celebi"
+          },
+          {
+            "id": "neo3-17",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/17",
+            "localId": "17",
+            "name": "Entei"
+          },
+          {
+            "id": "neo3-18",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/18",
+            "localId": "18",
+            "name": "Ho-oh"
+          },
+          {
+            "id": "neo3-19",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/19",
+            "localId": "19",
+            "name": "Kingdra"
+          },
+          {
+            "id": "neo3-20",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/20",
+            "localId": "20",
+            "name": "Lugia"
+          },
+          {
+            "id": "neo3-21",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/21",
+            "localId": "21",
+            "name": "Raichu"
+          },
+          {
+            "id": "neo3-22",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/22",
+            "localId": "22",
+            "name": "Raikou"
+          },
+          {
+            "id": "neo3-23",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/23",
+            "localId": "23",
+            "name": "Skarmory"
+          },
+          {
+            "id": "neo3-24",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/24",
+            "localId": "24",
+            "name": "Sneasel"
+          },
+          {
+            "id": "neo3-25",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/25",
+            "localId": "25",
+            "name": "Starmie"
+          },
+          {
+            "id": "neo3-26",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/26",
+            "localId": "26",
+            "name": "Sudowoodo"
+          },
+          {
+            "id": "neo3-27",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/27",
+            "localId": "27",
+            "name": "Suicune"
+          },
+          {
+            "id": "neo3-28",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/28",
+            "localId": "28",
+            "name": "Flaaffy"
+          },
+          {
+            "id": "neo3-29",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/29",
+            "localId": "29",
+            "name": "Golbat"
+          },
+          {
+            "id": "neo3-30",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/30",
+            "localId": "30",
+            "name": "Graveler"
+          },
+          {
+            "id": "neo3-31",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/31",
+            "localId": "31",
+            "name": "Jynx"
+          },
+          {
+            "id": "neo3-32",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/32",
+            "localId": "32",
+            "name": "Lanturn"
+          },
+          {
+            "id": "neo3-33",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/33",
+            "localId": "33",
+            "name": "Magcargo"
+          },
+          {
+            "id": "neo3-34",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/34",
+            "localId": "34",
+            "name": "Octillery"
+          },
+          {
+            "id": "neo3-35",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/35",
+            "localId": "35",
+            "name": "Parasect"
+          },
+          {
+            "id": "neo3-36",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/36",
+            "localId": "36",
+            "name": "Piloswine"
+          },
+          {
+            "id": "neo3-37",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/37",
+            "localId": "37",
+            "name": "Seaking"
+          },
+          {
+            "id": "neo3-38",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/38",
+            "localId": "38",
+            "name": "Stantler"
+          },
+          {
+            "id": "neo3-39",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/39",
+            "localId": "39",
+            "name": "Unown [B]"
+          },
+          {
+            "id": "neo3-40",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/40",
+            "localId": "40",
+            "name": "Unown [Y]"
+          },
+          {
+            "id": "neo3-41",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/41",
+            "localId": "41",
+            "name": "Aipom"
+          },
+          {
+            "id": "neo3-42",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/42",
+            "localId": "42",
+            "name": "Chinchou"
+          },
+          {
+            "id": "neo3-43",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/43",
+            "localId": "43",
+            "name": "Farfetch'd"
+          },
+          {
+            "id": "neo3-44",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/44",
+            "localId": "44",
+            "name": "Geodude"
+          },
+          {
+            "id": "neo3-45",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/45",
+            "localId": "45",
+            "name": "Goldeen"
+          },
+          {
+            "id": "neo3-46",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/46",
+            "localId": "46",
+            "name": "Murkrow"
+          },
+          {
+            "id": "neo3-47",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/47",
+            "localId": "47",
+            "name": "Paras"
+          },
+          {
+            "id": "neo3-48",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/48",
+            "localId": "48",
+            "name": "Quagsire"
+          },
+          {
+            "id": "neo3-49",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/49",
+            "localId": "49",
+            "name": "Qwilfish"
+          },
+          {
+            "id": "neo3-50",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/50",
+            "localId": "50",
+            "name": "Remoraid"
+          },
+          {
+            "id": "neo3-51",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/51",
+            "localId": "51",
+            "name": "Shuckle"
+          },
+          {
+            "id": "neo3-52",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/52",
+            "localId": "52",
+            "name": "Skiploom"
+          },
+          {
+            "id": "neo3-53",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/53",
+            "localId": "53",
+            "name": "Slugma"
+          },
+          {
+            "id": "neo3-54",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/54",
+            "localId": "54",
+            "name": "Smoochum"
+          },
+          {
+            "id": "neo3-55",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/55",
+            "localId": "55",
+            "name": "Snubbull"
+          },
+          {
+            "id": "neo3-56",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/56",
+            "localId": "56",
+            "name": "Staryu"
+          },
+          {
+            "id": "neo3-57",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/57",
+            "localId": "57",
+            "name": "Swinub"
+          },
+          {
+            "id": "neo3-58",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/58",
+            "localId": "58",
+            "name": "Unown [K]"
+          },
+          {
+            "id": "neo3-59",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/59",
+            "localId": "59",
+            "name": "Zubat"
+          },
+          {
+            "id": "neo3-60",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/60",
+            "localId": "60",
+            "name": "Balloon Berry"
+          },
+          {
+            "id": "neo3-61",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/61",
+            "localId": "61",
+            "name": "Healing Field"
+          },
+          {
+            "id": "neo3-62",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/62",
+            "localId": "62",
+            "name": "Pokémon Breeder Fields"
+          },
+          {
+            "id": "neo3-63",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/63",
+            "localId": "63",
+            "name": "Rocket's Hideout"
+          },
+          {
+            "id": "neo3-64",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/64",
+            "localId": "64",
+            "name": "Old Rod"
+          },
+          {
+            "id": "neo3-65",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/65",
+            "localId": "65",
+            "name": "Shining Gyarados"
+          },
+          {
+            "id": "neo3-66",
+            "image": "https://assets.tcgdex.net/en/neo/neo3/66",
+            "localId": "66",
+            "name": "Shining Magikarp"
+          }
+        ],
+        "id": "neo3",
+        "legal": {
+          "expanded": false,
+          "standard": false
+        },
+        "logo": "https://assets.tcgdex.net/en/neo/neo3/logo",
+        "name": "Neo Revelation",
+        "releaseDate": "2001-09-21",
+        "serie": {
+          "id": "neo",
+          "name": "Neo"
+        },
+        "symbol": "https://assets.tcgdex.net/univ/neo/neo3/symbol",
+        "tcgOnline": "N3",
+        "abbreviation": {
+          "official": "N3"
+        }
+      }
+    },
+    "https://api.tcgdex.net/v2/en/sets/sv06.5": {
+      "statut": 200,
+      "data": {
+        "cardCount": {
+          "firstEd": 0,
+          "holo": 59,
+          "normal": 48,
+          "official": 64,
+          "reverse": 55,
+          "total": 99
+        },
+        "cards": [
+          {
+            "id": "sv06.5-001",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/001",
+            "localId": "001",
+            "name": "Joltik"
+          },
+          {
+            "id": "sv06.5-002",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/002",
+            "localId": "002",
+            "name": "Galvantula"
+          },
+          {
+            "id": "sv06.5-003",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/003",
+            "localId": "003",
+            "name": "Rowlet"
+          },
+          {
+            "id": "sv06.5-004",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/004",
+            "localId": "004",
+            "name": "Dartrix"
+          },
+          {
+            "id": "sv06.5-005",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/005",
+            "localId": "005",
+            "name": "Decidueye"
+          },
+          {
+            "id": "sv06.5-006",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/006",
+            "localId": "006",
+            "name": "Tapu Bulu"
+          },
+          {
+            "id": "sv06.5-007",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/007",
+            "localId": "007",
+            "name": "Houndour"
+          },
+          {
+            "id": "sv06.5-008",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/008",
+            "localId": "008",
+            "name": "Houndoom"
+          },
+          {
+            "id": "sv06.5-009",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/009",
+            "localId": "009",
+            "name": "Iron Moth"
+          },
+          {
+            "id": "sv06.5-010",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/010",
+            "localId": "010",
+            "name": "Horsea"
+          },
+          {
+            "id": "sv06.5-011",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/011",
+            "localId": "011",
+            "name": "Seadra"
+          },
+          {
+            "id": "sv06.5-012",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/012",
+            "localId": "012",
+            "name": "Kingdra ex"
+          },
+          {
+            "id": "sv06.5-013",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/013",
+            "localId": "013",
+            "name": "Sneasel"
+          },
+          {
+            "id": "sv06.5-014",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/014",
+            "localId": "014",
+            "name": "Weavile"
+          },
+          {
+            "id": "sv06.5-015",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/015",
+            "localId": "015",
+            "name": "Revavroom ex"
+          },
+          {
+            "id": "sv06.5-016",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/016",
+            "localId": "016",
+            "name": "Drowzee"
+          },
+          {
+            "id": "sv06.5-017",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/017",
+            "localId": "017",
+            "name": "Hypno"
+          },
+          {
+            "id": "sv06.5-018",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/018",
+            "localId": "018",
+            "name": "Duskull"
+          },
+          {
+            "id": "sv06.5-019",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/019",
+            "localId": "019",
+            "name": "Dusclops"
+          },
+          {
+            "id": "sv06.5-020",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/020",
+            "localId": "020",
+            "name": "Dusknoir"
+          },
+          {
+            "id": "sv06.5-021",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/021",
+            "localId": "021",
+            "name": "Cresselia"
+          },
+          {
+            "id": "sv06.5-022",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/022",
+            "localId": "022",
+            "name": "Sylveon"
+          },
+          {
+            "id": "sv06.5-023",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/023",
+            "localId": "023",
+            "name": "Croagunk"
+          },
+          {
+            "id": "sv06.5-024",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/024",
+            "localId": "024",
+            "name": "Toxicroak"
+          },
+          {
+            "id": "sv06.5-025",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/025",
+            "localId": "025",
+            "name": "Bloodmoon Ursaluna"
+          },
+          {
+            "id": "sv06.5-026",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/026",
+            "localId": "026",
+            "name": "Slither Wing"
+          },
+          {
+            "id": "sv06.5-027",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/027",
+            "localId": "027",
+            "name": "Zubat"
+          },
+          {
+            "id": "sv06.5-028",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/028",
+            "localId": "028",
+            "name": "Golbat"
+          },
+          {
+            "id": "sv06.5-029",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/029",
+            "localId": "029",
+            "name": "Crobat"
+          },
+          {
+            "id": "sv06.5-030",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/030",
+            "localId": "030",
+            "name": "Absol"
+          },
+          {
+            "id": "sv06.5-031",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/031",
+            "localId": "031",
+            "name": "Zorua"
+          },
+          {
+            "id": "sv06.5-032",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/032",
+            "localId": "032",
+            "name": "Zoroark"
+          },
+          {
+            "id": "sv06.5-033",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/033",
+            "localId": "033",
+            "name": "Inkay"
+          },
+          {
+            "id": "sv06.5-034",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/034",
+            "localId": "034",
+            "name": "Malamar"
+          },
+          {
+            "id": "sv06.5-035",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/035",
+            "localId": "035",
+            "name": "Yveltal"
+          },
+          {
+            "id": "sv06.5-036",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/036",
+            "localId": "036",
+            "name": "Okidogi ex"
+          },
+          {
+            "id": "sv06.5-037",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/037",
+            "localId": "037",
+            "name": "Munkidori ex"
+          },
+          {
+            "id": "sv06.5-038",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/038",
+            "localId": "038",
+            "name": "Fezandipiti ex"
+          },
+          {
+            "id": "sv06.5-039",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/039",
+            "localId": "039",
+            "name": "Pecharunt ex"
+          },
+          {
+            "id": "sv06.5-040",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/040",
+            "localId": "040",
+            "name": "Genesect"
+          },
+          {
+            "id": "sv06.5-041",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/041",
+            "localId": "041",
+            "name": "Cufant"
+          },
+          {
+            "id": "sv06.5-042",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/042",
+            "localId": "042",
+            "name": "Copperajah"
+          },
+          {
+            "id": "sv06.5-043",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/043",
+            "localId": "043",
+            "name": "Varoom"
+          },
+          {
+            "id": "sv06.5-044",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/044",
+            "localId": "044",
+            "name": "Axew"
+          },
+          {
+            "id": "sv06.5-045",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/045",
+            "localId": "045",
+            "name": "Fraxure"
+          },
+          {
+            "id": "sv06.5-046",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/046",
+            "localId": "046",
+            "name": "Haxorus"
+          },
+          {
+            "id": "sv06.5-047",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/047",
+            "localId": "047",
+            "name": "Kyurem"
+          },
+          {
+            "id": "sv06.5-048",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/048",
+            "localId": "048",
+            "name": "Meowth"
+          },
+          {
+            "id": "sv06.5-049",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/049",
+            "localId": "049",
+            "name": "Persian"
+          },
+          {
+            "id": "sv06.5-050",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/050",
+            "localId": "050",
+            "name": "Eevee"
+          },
+          {
+            "id": "sv06.5-051",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/051",
+            "localId": "051",
+            "name": "Furfrou"
+          },
+          {
+            "id": "sv06.5-052",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/052",
+            "localId": "052",
+            "name": "Stufful"
+          },
+          {
+            "id": "sv06.5-053",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/053",
+            "localId": "053",
+            "name": "Bewear"
+          },
+          {
+            "id": "sv06.5-054",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/054",
+            "localId": "054",
+            "name": "Academy at Night"
+          },
+          {
+            "id": "sv06.5-055",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/055",
+            "localId": "055",
+            "name": "Binding Mochi"
+          },
+          {
+            "id": "sv06.5-056",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/056",
+            "localId": "056",
+            "name": "Cassiopeia"
+          },
+          {
+            "id": "sv06.5-057",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/057",
+            "localId": "057",
+            "name": "Colress's Tenacity"
+          },
+          {
+            "id": "sv06.5-058",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/058",
+            "localId": "058",
+            "name": "Dangerous Laser"
+          },
+          {
+            "id": "sv06.5-059",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/059",
+            "localId": "059",
+            "name": "Janine's Secret Art"
+          },
+          {
+            "id": "sv06.5-060",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/060",
+            "localId": "060",
+            "name": "Neutralization Zone"
+          },
+          {
+            "id": "sv06.5-061",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/061",
+            "localId": "061",
+            "name": "Night Stretcher"
+          },
+          {
+            "id": "sv06.5-062",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/062",
+            "localId": "062",
+            "name": "Poké Vital A"
+          },
+          {
+            "id": "sv06.5-063",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/063",
+            "localId": "063",
+            "name": "Powerglass"
+          },
+          {
+            "id": "sv06.5-064",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/064",
+            "localId": "064",
+            "name": "Xerosic's Machinations"
+          },
+          {
+            "id": "sv06.5-065",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/065",
+            "localId": "065",
+            "name": "Tapu Bulu"
+          },
+          {
+            "id": "sv06.5-066",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/066",
+            "localId": "066",
+            "name": "Houndoom"
+          },
+          {
+            "id": "sv06.5-067",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/067",
+            "localId": "067",
+            "name": "Horsea"
+          },
+          {
+            "id": "sv06.5-068",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/068",
+            "localId": "068",
+            "name": "Duskull"
+          },
+          {
+            "id": "sv06.5-069",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/069",
+            "localId": "069",
+            "name": "Dusclops"
+          },
+          {
+            "id": "sv06.5-070",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/070",
+            "localId": "070",
+            "name": "Dusknoir"
+          },
+          {
+            "id": "sv06.5-071",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/071",
+            "localId": "071",
+            "name": "Cresselia"
+          },
+          {
+            "id": "sv06.5-072",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/072",
+            "localId": "072",
+            "name": "Munkidori"
+          },
+          {
+            "id": "sv06.5-073",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/073",
+            "localId": "073",
+            "name": "Fezandipiti"
+          },
+          {
+            "id": "sv06.5-074",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/074",
+            "localId": "074",
+            "name": "Okidogi"
+          },
+          {
+            "id": "sv06.5-075",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/075",
+            "localId": "075",
+            "name": "Zorua"
+          },
+          {
+            "id": "sv06.5-076",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/076",
+            "localId": "076",
+            "name": "Cufant"
+          },
+          {
+            "id": "sv06.5-077",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/077",
+            "localId": "077",
+            "name": "Fraxure"
+          },
+          {
+            "id": "sv06.5-078",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/078",
+            "localId": "078",
+            "name": "Persian"
+          },
+          {
+            "id": "sv06.5-079",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/079",
+            "localId": "079",
+            "name": "Bewear"
+          },
+          {
+            "id": "sv06.5-080",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/080",
+            "localId": "080",
+            "name": "Kingdra ex"
+          },
+          {
+            "id": "sv06.5-081",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/081",
+            "localId": "081",
+            "name": "Revavroom ex"
+          },
+          {
+            "id": "sv06.5-082",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/082",
+            "localId": "082",
+            "name": "Okidogi ex"
+          },
+          {
+            "id": "sv06.5-083",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/083",
+            "localId": "083",
+            "name": "Munkidori ex"
+          },
+          {
+            "id": "sv06.5-084",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/084",
+            "localId": "084",
+            "name": "Fezandipiti ex"
+          },
+          {
+            "id": "sv06.5-085",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/085",
+            "localId": "085",
+            "name": "Pecharunt ex"
+          },
+          {
+            "id": "sv06.5-086",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/086",
+            "localId": "086",
+            "name": "Cassiopeia"
+          },
+          {
+            "id": "sv06.5-087",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/087",
+            "localId": "087",
+            "name": "Colress's Tenacity"
+          },
+          {
+            "id": "sv06.5-088",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/088",
+            "localId": "088",
+            "name": "Janine's Secret Art"
+          },
+          {
+            "id": "sv06.5-089",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/089",
+            "localId": "089",
+            "name": "Xerosic's Machinations"
+          },
+          {
+            "id": "sv06.5-090",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/090",
+            "localId": "090",
+            "name": "Okidogi ex"
+          },
+          {
+            "id": "sv06.5-091",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/091",
+            "localId": "091",
+            "name": "Munkidori ex"
+          },
+          {
+            "id": "sv06.5-092",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/092",
+            "localId": "092",
+            "name": "Fezandipiti ex"
+          },
+          {
+            "id": "sv06.5-093",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/093",
+            "localId": "093",
+            "name": "Pecharunt ex"
+          },
+          {
+            "id": "sv06.5-094",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/094",
+            "localId": "094",
+            "name": "Cassiopeia"
+          },
+          {
+            "id": "sv06.5-095",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/095",
+            "localId": "095",
+            "name": "Pecharunt ex"
+          },
+          {
+            "id": "sv06.5-096",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/096",
+            "localId": "096",
+            "name": "Earthen Vessel"
+          },
+          {
+            "id": "sv06.5-097",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/097",
+            "localId": "097",
+            "name": "Powerglass"
+          },
+          {
+            "id": "sv06.5-098",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/098",
+            "localId": "098",
+            "name": "Basic Darkness Energy"
+          },
+          {
+            "id": "sv06.5-099",
+            "image": "https://assets.tcgdex.net/en/sv/sv06.5/099",
+            "localId": "099",
+            "name": "Basic Metal Energy"
+          }
+        ],
+        "id": "sv06.5",
+        "legal": {
+          "expanded": true,
+          "standard": false
+        },
+        "logo": "https://assets.tcgdex.net/en/sv/sv06.5/logo",
+        "name": "Shrouded Fable",
+        "releaseDate": "2024-08-02",
+        "serie": {
+          "id": "sv",
+          "name": "Scarlet & Violet"
+        },
+        "symbol": "https://assets.tcgdex.net/univ/sv/sv06.5/symbol",
+        "abbreviation": {
+          "official": "SFA"
+        }
+      }
+    },
+    "https://api.tcgdex.net/v2/en/cards/base2-1": {
+      "statut": 200,
+      "data": {
+        "category": "Pokemon",
+        "id": "base2-1",
+        "illustrator": "Mitsuhiro Arita",
+        "image": "https://assets.tcgdex.net/en/base/base2/1",
+        "localId": "1",
+        "name": "Clefable",
+        "rarity": "Rare",
         "set": {
           "cardCount": {
-            "official": 86,
-            "total": 172
+            "official": 64,
+            "total": 64
           },
-          "id": "sv10.5b",
-          "logo": "https://assets.tcgdex.net/fr/sv/sv10.5b/logo",
-          "name": "Foudre Noire",
-          "symbol": "https://assets.tcgdex.net/univ/sv/sv10.5b/symbol"
+          "id": "base2",
+          "logo": "https://assets.tcgdex.net/en/base/base2/logo",
+          "name": "Jungle",
+          "symbol": "https://assets.tcgdex.net/univ/base/base2/symbol"
         },
         "variants": {
-          "firstEdition": false,
+          "firstEdition": true,
           "holo": true,
           "normal": false,
           "reverse": false,
@@ -6149,267 +5147,202 @@
         },
         "variants_detailed": [
           {
-            "type": "Holo",
-            "size": "Standard",
+            "type": "holo",
+            "size": "standard",
             "thirdParty": {
-              "cardmarket": 836174,
-              "tcgplayer": 642584
+              "cardmarket": 273798,
+              "tcgplayer": 45120
             },
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-04T10:05:09.379Z",
+                "updated": "2026-09-28T09:52:36.567Z",
                 "unit": "EUR",
-                "idProduct": 836174,
-                "avg": 36.92,
-                "low": 13.99,
-                "trend": 35.55,
-                "avg1": 38.39,
-                "avg7": 36.56,
-                "avg30": 36.71,
+                "idProduct": 273798,
+                "avg": 38.37,
+                "low": 4,
+                "trend": 30.92,
+                "avg1": 25,
+                "avg7": 31.33,
+                "avg30": 34.49,
                 "avg-holo": null,
                 "low-holo": null,
-                "trend-holo": 0,
-                "avg1-holo": null,
-                "avg7-holo": null,
-                "avg30-holo": null
+                "trend-holo": 11.78,
+                "avg1-holo": 6.86,
+                "avg7-holo": 10.87,
+                "avg30-holo": 11.63
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-09-04T10:05:11.028Z",
-                "holofoil": {
-                  "productId": 642584,
-                  "lowPrice": 46.63,
-                  "midPrice": 57.65,
-                  "highPrice": 461.88,
-                  "marketPrice": 51.32,
-                  "directLowPrice": 54.07
+                "updated": "2026-09-28T09:52:37.739Z",
+                "1st-edition-holofoil": {
+                  "productId": 45120,
+                  "lowPrice": 74.99,
+                  "midPrice": 117.07,
+                  "highPrice": 1045.46,
+                  "marketPrice": 119.1,
+                  "directLowPrice": null
+                },
+                "unlimited-holofoil": {
+                  "productId": 45120,
+                  "lowPrice": 19.87,
+                  "midPrice": 28.79,
+                  "highPrice": 192.34,
+                  "marketPrice": 38.1,
+                  "directLowPrice": null
                 }
               }
             }
-          }
-        ],
-        "dexId": [
-          557
-        ],
-        "hp": 70,
-        "types": [
-          "Combat"
-        ],
-        "stage": "Base",
-        "attacks": [
-          {
-            "cost": [
-              "Incolore"
-            ],
-            "name": "Gigotage",
-            "effect": "Cette attaque inflige 10 dégâts pour chaque marqueur de dégâts sur ce Pokémon.",
-            "damage": "10×"
           },
           {
-            "cost": [
-              "Incolore",
-              "Incolore"
-            ],
-            "name": "Creusogriffes",
-            "damage": 20
-          }
-        ],
-        "retreat": 2,
-        "regulationMark": "I",
-        "legal": {
-          "standard": true,
-          "expanded": true
-        },
-        "updated": "2026-04-14T17:41:47Z",
-        "pricing": {
-          "cardmarket": {
-            "updated": "2026-09-04T10:05:09.379Z",
-            "unit": "EUR",
-            "idProduct": 836174,
-            "avg": 36.92,
-            "low": 13.99,
-            "trend": 35.55,
-            "avg1": 38.39,
-            "avg7": 36.56,
-            "avg30": 36.71,
-            "avg-holo": null,
-            "low-holo": null,
-            "trend-holo": 0,
-            "avg1-holo": null,
-            "avg7-holo": null,
-            "avg30-holo": null
-          },
-          "tcgplayer": {
-            "unit": "USD",
-            "updated": "2026-09-04T10:05:11.028Z",
-            "holofoil": {
-              "productId": 642584,
-              "lowPrice": 46.63,
-              "midPrice": 57.65,
-              "highPrice": 461.88,
-              "marketPrice": 51.32,
-              "directLowPrice": 54.07
-            }
-          }
-        }
-      }
-    },
-    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%AF%E3%83%8B%E3%83%8E%E3%82%B3": {
-      "statut": 200,
-      "data": [
-        {
-          "id": "SV5K-013",
-          "localId": "013",
-          "name": "ワニノコ",
-          "image": "https://assets.tcgdex.net/ja/SV/SV5K/013"
-        },
-        {
-          "id": "SM6b-015",
-          "localId": "015",
-          "name": "ワニノコ"
-        },
-        {
-          "id": "SM3p-019",
-          "localId": "019",
-          "name": "ワニノコ"
-        },
-        {
-          "id": "S8-020",
-          "localId": "020",
-          "name": "ワニノコ"
-        },
-        {
-          "id": "SV8a-032",
-          "localId": "032",
-          "name": "ワニノコ",
-          "image": "https://assets.tcgdex.net/ja/SV/SV8a/032"
-        },
-        {
-          "id": "M-P-106",
-          "localId": "106",
-          "name": "ワニノコ"
-        },
-        {
-          "id": "MC-164",
-          "localId": "164",
-          "name": "ワニノコ"
-        },
-        {
-          "id": "MC-165",
-          "localId": "165",
-          "name": "ワニノコ"
-        }
-      ]
-    },
-    "https://api.tcgdex.net/v2/ja/cards/SV5K-013": {
-      "statut": 200,
-      "data": {
-        "category": "Pokemon",
-        "id": "SV5K-013",
-        "illustrator": "MINAMINAMI Take",
-        "image": "https://assets.tcgdex.net/ja/SV/SV5K/013",
-        "localId": "013",
-        "name": "ワニノコ",
-        "rarity": "Common",
-        "set": {
-          "cardCount": {
-            "official": 71,
-            "total": 100
-          },
-          "id": "SV5K",
-          "name": "ワイルドフォース"
-        },
-        "variants": {
-          "firstEdition": false,
-          "holo": false,
-          "normal": true,
-          "reverse": false,
-          "wPromo": false
-        },
-        "variants_detailed": [
-          {
-            "type": "normal",
+            "type": "holo",
             "size": "standard",
+            "stamp": [
+              "1st-edition"
+            ],
             "thirdParty": {
-              "cardmarket": 752767,
-              "tcgplayer": 568347
+              "cardmarket": 273798,
+              "tcgplayer": 45120
             },
-            "variantId": "endfynwn4n10gzq",
+            "variantId": "3a83wf50ts0izj268xwv3crwi",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-04T10:05:09.367Z",
+                "updated": "2026-09-28T09:52:36.567Z",
                 "unit": "EUR",
-                "idProduct": 752767,
-                "avg": 0.06,
-                "low": 0.02,
-                "trend": 0.08,
-                "avg1": 0.02,
-                "avg7": 0.09,
-                "avg30": 0.05,
+                "idProduct": 273798,
+                "avg": 38.37,
+                "low": 4,
+                "trend": 30.92,
+                "avg1": 25,
+                "avg7": 31.33,
+                "avg30": 34.49,
                 "avg-holo": null,
                 "low-holo": null,
-                "trend-holo": 0,
-                "avg1-holo": null,
-                "avg7-holo": null,
-                "avg30-holo": null
+                "trend-holo": 11.78,
+                "avg1-holo": 6.86,
+                "avg7-holo": 10.87,
+                "avg30-holo": 11.63
               },
-              "tcgplayer": null
+              "tcgplayer": {
+                "unit": "USD",
+                "updated": "2026-09-28T09:52:37.739Z",
+                "1st-edition-holofoil": {
+                  "productId": 45120,
+                  "lowPrice": 74.99,
+                  "midPrice": 117.07,
+                  "highPrice": 1045.46,
+                  "marketPrice": 119.1,
+                  "directLowPrice": null
+                },
+                "unlimited-holofoil": {
+                  "productId": 45120,
+                  "lowPrice": 19.87,
+                  "midPrice": 28.79,
+                  "highPrice": 192.34,
+                  "marketPrice": 38.1,
+                  "directLowPrice": null
+                }
+              }
             }
+          },
+          {
+            "type": "holo",
+            "subtype": "missing-expansion-symbol",
+            "size": "standard",
+            "variantId": "gx8bq2hegsxhnvfqms0phyvkpdvo2pfej4uii"
+          },
+          {
+            "type": "holo",
+            "size": "standard",
+            "stamp": [
+              "pre-release"
+            ],
+            "variantId": "3a83wf50typ2p5qsrlm6y3f8o"
           }
         ],
         "dexId": [
-          158
+          36
         ],
         "hp": 70,
         "types": [
-          "Water"
+          "Colorless"
         ],
-        "description": "小さいながらも 暴れん坊。 目の前で 動くものが あれば とにかく かみついてくる。",
-        "stage": "Basic",
+        "evolveFrom": "Clefairy",
+        "description": "A timid fairy Pokémon that is rarely seen. It will run and hide the moment it senses people.",
+        "stage": "Stage1",
         "attacks": [
           {
             "cost": [
-              "Water"
+              "Colorless"
             ],
-            "name": "かじりつく",
-            "effect": "次の相手の番、このワザを受けたポケモンは、にげられない。",
-            "damage": 10
+            "name": "Metronome",
+            "effect": "Choose 1 of the Defending Pokémon's attacks. Metronome copies that attack except for its Energy costs and anything else required in order to use that attack, such as discarding Energy cards. (No matter what type the Defending Pokémon is, Clefable's type is still Colorless.)"
+          },
+          {
+            "cost": [
+              "Colorless",
+              "Colorless"
+            ],
+            "name": "Minimize",
+            "effect": "All damage done by attacks to Clefable during your opponent's next turn is reduce by 20 (after applying Weakness and Resistance)."
           }
         ],
         "weaknesses": [
           {
-            "type": "Lightning",
-            "value": "x2"
+            "type": "Fighting",
+            "value": "×2"
           }
         ],
-        "resistances": [],
-        "retreat": 1,
-        "regulationMark": "H",
+        "resistances": [
+          {
+            "type": "Psychic",
+            "value": "-30"
+          }
+        ],
+        "retreat": 2,
         "legal": {
-          "standard": true,
+          "standard": false,
           "expanded": false
         },
-        "updated": "2026-09-03T15:29:11.583Z",
+        "updated": "2026-08-14T19:45:37+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-04T10:05:09.367Z",
+            "updated": "2026-09-28T09:52:36.567Z",
             "unit": "EUR",
-            "idProduct": 752767,
-            "avg": 0.06,
-            "low": 0.02,
-            "trend": 0.08,
-            "avg1": 0.02,
-            "avg7": 0.09,
-            "avg30": 0.05,
+            "idProduct": 273798,
+            "avg": 38.37,
+            "low": 4,
+            "trend": 30.92,
+            "avg1": 25,
+            "avg7": 31.33,
+            "avg30": 34.49,
             "avg-holo": null,
             "low-holo": null,
-            "trend-holo": 0,
-            "avg1-holo": null,
-            "avg7-holo": null,
-            "avg30-holo": null
+            "trend-holo": 11.78,
+            "avg1-holo": 6.86,
+            "avg7-holo": 10.87,
+            "avg30-holo": 11.63
           },
-          "tcgplayer": null
+          "tcgplayer": {
+            "unit": "USD",
+            "updated": "2026-09-28T09:52:37.739Z",
+            "1st-edition-holofoil": {
+              "productId": 45120,
+              "lowPrice": 74.99,
+              "midPrice": 117.07,
+              "highPrice": 1045.46,
+              "marketPrice": 119.1,
+              "directLowPrice": null
+            },
+            "unlimited-holofoil": {
+              "productId": 45120,
+              "lowPrice": 19.87,
+              "midPrice": 28.79,
+              "highPrice": 192.34,
+              "marketPrice": 38.1,
+              "directLowPrice": null
+            }
+          }
         }
       }
     }

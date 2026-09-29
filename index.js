@@ -95,6 +95,7 @@ const { interrogerPont } = require('./pont-cartes');
 // de bord, exprès : voir nom-de-set.js pour la raison (cycle avec candidats-fiche.js, et
 // le smoke test qui a vu une connexion s'ouvrir sur `test` à cause d'un require paresseux).
 const { nomDeSet } = require('./nom-de-set');
+const { blocGuidePrix, iso } = require('./guide-prix-date');
 
 // Identification de repli, dans le SEUL catalogue local, quand TCGdex ne connaît pas la
 // carte (les e-Series japonaises en sont absentes) ou quand le nom n'est pas fiable.
@@ -365,7 +366,9 @@ const CatalogueProduit = mongoose.model('CatalogueProduit', catalogueProduitSche
 const guidePrixSchema = new mongoose.Schema({
     idProduct: Number, avg: Number, low: Number, trend: Number,
     avg1: Number, avg7: Number, avg30: Number,
-    avgHolo: Number, lowHolo: Number, trendHolo: Number
+    avgHolo: Number, lowHolo: Number, trendHolo: Number,
+    // la date du GUIDE dont vient la ligne (createdAt du fichier, import-price-guide.js, 2026-09-28) — lue par lireDatesGuide
+    guideDu: Date
 });
 // Requêtes réelles sur idProduct : getPrixGuideLocal/getPrixGuideLocalLot, à chaque identification.
 guidePrixSchema.index({ idProduct: 1 });
@@ -2648,6 +2651,25 @@ async function getPrixGuideLocalLot(idsProducts, estReverse = false) {
     }
 }
 
+// LA DATE DU GUIDE de chaque produit demandé, et celle du dernier guide importé (guide_prix_meta) — un aller-retour, deux lectures
+// en parallèle. Décision du testeur (2026-09-28) : l'API renvoie la date du guide ; la règle de ce qu'on en dit vit dans
+// guide-prix-date.js. Échec de lecture = dates inconnues (null), jamais une date inventée.
+async function lireDatesGuide(idsProducts) {
+    const vide = { parId: new Map(), dernier: null };
+    try {
+        if (mongoose.connection.readyState !== 1) return vide;
+        const uniques = [...new Set(idsProducts.filter(id => id != null).map(Number))];
+        const [docs, meta] = await Promise.all([
+            uniques.length ? GuidePrix.find({ idProduct: { $in: uniques } }, { idProduct: 1, guideDu: 1 }).lean() : [],
+            mongoose.connection.db.collection('guide_prix_meta').findOne({ _id: 'dernier' })
+        ]);
+        return { parId: new Map(docs.map(d => [Number(d.idProduct), d.guideDu ?? null])), dernier: meta?.guideDu ?? null };
+    } catch (e) {
+        console.error("Erreur lecture dates du guide :", e.message);
+        return vide;
+    }
+}
+
 // Libellés des stratégies reverse renvoyées par scoring.js. Uniquement pour les logs :
 // la valeur transmise à l'extension reste le code court ('produit-distinct'|'filtre-url').
 const LIBELLES_STRATEGIE_REVERSE = {
@@ -3896,7 +3918,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 { region: regionAttendue(cardInfo), setCodeCompatible: compatPont.compatible === true }
             );
             if (pont.source === 'base-cartes' && pont.produits.length) {
-                const docs = ecarterNonCartes(await CatalogueProduit.find({ idProduct: { $in: pont.produits } }).lean(), '[pont]');
+                // 🔴 2026-09-29 : cette lecture du catalogue n'était pas enveloppée (écrite le 2026-09-12, après le dernier verrou
+                // vert) — une panne du catalogue sortait par le catch de la route (« Erreur serveur interne ») au lieu d'être
+                // constatée et requalifiée. La 7e cellule du verrou le disait ; elle passe par `interrogerSource` comme les autres.
+                const { liste: docsPont } = await interrogerSource('catalogue/pont', () => CatalogueProduit.find({ idProduct: { $in: pont.produits } }).lean());
+                const docs = ecarterNonCartes(docsPont, '[pont]');
                 if (docs.length) {
                     produitsImposes = docs;
                     voieImposee = 'base-cartes';
@@ -5859,6 +5885,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                 photoUrl: null
             };
         });
+        // ➕ 2026-09-29 (testeur : « API : renvoie la date du guide des prix ») — champs ADDITIFS, aucun champ existant ne change :
+        // `prixGuideDu` sur chaque candidat, et le bloc `guidePrix` de la réponse (guide-prix-date.js : des faits, aucun seuil).
+        const datesGuide = await lireDatesGuide(candidats.map(c => c.idProduct));
+        // une date n'accompagne qu'un PRIX : un candidat sans prix n'a pas de « date de son prix » (relecture du 2026-09-29)
+        for (const c of candidats) c.prixGuideDu = c.prix != null ? iso(datesGuide.parId.get(Number(c.idProduct)) ?? null) : null;
+        const guidePrix = blocGuidePrix({ guideDuGagnant: Number.isFinite(prixGuideRetenu) ? (datesGuide.parId.get(Number(classement[0]?.idProduct)) ?? null) : null, dernierGuide: datesGuide.dernier });
 
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
         // C'est ICI que se joue la mesure qui compte : /api/identifier est le flux RÉEL,
@@ -5903,6 +5935,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Le prix guide du gagnant, tel que la chaîne l'a utilisé. Sans lui, le prix
             // live renvoyé plus tard n'aurait rien à quoi se comparer.
             prixGuideRetenu,
+            // la date du guide dont vient ce prix (2026-09-29) : la ligne de guide_prix sera réécrite au prochain import, elle
+            // n'est donc PAS recalculable après coup — elle s'écrit au moment du scan, comme le prix.
+            prixGuideDu: guidePrix.guideDuGagnant ? new Date(guidePrix.guideDuGagnant) : null,
             sourceIdentification: trouvaille.source || 'nom',
             identifieeEnLocal: identificationLocale,
             nomConfiance: cardInfo.nomConfiance,
@@ -6165,6 +6200,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // pas une panne. Aucun score : voir le bloc de construction, au-dessus du journal.
             candidats,
             classement,
+            // ➕ 2026-09-29, champ ADDITIF : la date du guide des prix (guide-prix-date.js). { dernierGuide, guideDuGagnant,
+            // ageJours, absentDuDernierGuide } — des faits, aucun seuil ; `null` = on ne sait pas, jamais « à jour ».
+            guidePrix,
             // Champ ADDITIF (l'extension actuelle l'ignore, aucun champ existant ne
             // change) : dit à l'extension COMMENT lire le prix d'une reverse.
             //   'produit-distinct' -> le produit visé EST la reverse, lecture normale.

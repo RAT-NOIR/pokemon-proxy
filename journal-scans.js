@@ -663,6 +663,9 @@ const journalScanSchema = new mongoose.Schema({
     // divergerait de celle-ci au premier changement de `prixDeReference` : deuxième
     // principe, appliqué à une mesure.
     prixGuideRetenu: Number,
+    // ➕ 2026-09-29 : la date du GUIDE dont vient `prixGuideRetenu` (guide_prix.guideDu). Même raison que le prix : la ligne du
+    // guide est réécrite au prochain import, la date ne se recalcule pas après coup. null = ligne de guide sans date, ou pas de prix.
+    prixGuideDu: Date,
     prixLive: Number,
     // ════════════════════════════════════════════════════════════════════════
     // 🔑 D'OÙ VIENT `prixLive` — sans ce champ, la mesure de l'écart est FAUSSE
@@ -1152,6 +1155,7 @@ function enregistrerScan(d = {}) {
                 ? { min: d.fourchette.min, max: d.fourchette.max, n: Number.isFinite(d.fourchette.n) ? d.fourchette.n : null }
                 : null,
             prixGuideRetenu: Number.isFinite(d.prixGuideRetenu) ? d.prixGuideRetenu : null,
+            prixGuideDu: d.prixGuideDu instanceof Date && !Number.isNaN(d.prixGuideDu.getTime()) ? d.prixGuideDu : null,
             prixLive: Number.isFinite(d.prixLive) ? d.prixLive : null,
             prixLiveEtat: d.prixLiveEtat || null,
             prixLiveCodeLangue: Number.isFinite(d.prixLiveCodeLangue) ? d.prixLiveCodeLangue : null,
