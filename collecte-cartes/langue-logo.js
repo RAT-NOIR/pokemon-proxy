@@ -55,12 +55,15 @@ const LOGOS_DU_COUPLE = new Map([
     ['Primordial Arts Logo.png', '洪荒演武 激 + 茂'], ['Dynamax Clash Logo.png', '极巨争锋 雷 + 焰'], ['CSM2 Logo.png', '交相辉映 沐 + 魁 + 唤']
 ]);
 // ⚪ LE LOGO GÉNÉRIQUE (2026-09-24) : vrai, mais il ne distingue pas un set d'un autre — le MÊME fichier (empreinte sha1)
-// est le logo de plusieurs sets distincts sans en nommer aucun. Gardé, et marqué `logoGenerique`, pour que le site le
-// traite autrement qu'un logo de set.
+// est le logo de plusieurs sets distincts sans en nommer aucun.
+// 🔴 REFUSÉ DEPUIS LE 2026-09-28 (décision du testeur : « les logos génériques sont retirés : ils recevront un logo composé ») —
+// il était gardé et marqué `logoGenerique`, et le site ne l'affichait déjà pas. Les collecteurs écrivent désormais un `logoRefus`
+// à sa place (`refusGenerique`), et `appliquer-logos-lus.js` retire ceux qui sont en base.
 const LOGOS_GENERIQUES = new Map([
     ['7ac9fe9c0a8af5830919f0ff6a6d7f1d3d94ee9b', 'l\'étoile « PROMO » de TCGdex, identique sur 8 sets de Black Star Promos'],
-    ['7fddb7ca48982f5d551f4bd725e9abba0ac47ed4', '« Pokémon Organized Play » de TCGdex, identique sur les 8 POP Series'],
-    ['27ac5482620baf27d98f6fb6396a5e3c28073a7e', '« 横空出世 » (CSM1 Logo A SC.png), le nom de la famille, identique sur ses 3 moitiés']
+    ['7fddb7ca48982f5d551f4bd725e9abba0ac47ed4', '« Pokémon Organized Play » de TCGdex, identique sur les 9 POP Series'],
+    ['27ac5482620baf27d98f6fb6396a5e3c28073a7e', '« 横空出世 » (CSM1 Logo A SC.png), le nom de la famille, identique sur ses 3 moitiés'],
+    ['8e87ff264e631834e8a44248675c594e6e36252b', 'le logo McDonald\'s du dépôt ptcg-assets, identique sur 6 McDonald\'s Collection en base le 2026-09-28 (la marque, pas le set)']
 ]);
 // 👁️ LES FICHIERS « SANS PREUVE DE LANGUE », LUS À L'ŒIL le 2026-09-26 (téléchargés dans le bac, jamais sur R2 avant verdict) :
 // le nom du fichier ne disait rien, l'image le dit. Valable pour un set JAPONAIS seulement — c'est la question qui était posée.
@@ -79,5 +82,8 @@ const luALOeil = (s, fichier) => {
 const refusDuCouple = fichier => LOGOS_DU_COUPLE.has(fichier)
     ? `logo du COUPLE « ${LOGOS_DU_COUPLE.get(fichier)} » : le fichier nomme plusieurs sets (lu à l'œil)` : null;
 const logoGenerique = sha1 => LOGOS_GENERIQUES.get(sha1) || null;
+/** Le motif du refus d'un logo générique (écrit dans `logoRefus.motif`), ou null. */
+const refusGenerique = sha1 => LOGOS_GENERIQUES.has(sha1)
+    ? `logo GÉNÉRIQUE refusé (décision du testeur, 2026-09-28 : il recevra un logo composé) — ${LOGOS_GENERIQUES.get(sha1)}` : null;
 
-module.exports = { deciderLangue, cle, LOGOS_DU_COUPLE, LOGOS_GENERIQUES, LOGOS_LUS_A_L_OEIL, refusDuCouple, logoGenerique };
+module.exports = { deciderLangue, cle, LOGOS_DU_COUPLE, LOGOS_GENERIQUES, LOGOS_LUS_A_L_OEIL, refusDuCouple, logoGenerique, refusGenerique };

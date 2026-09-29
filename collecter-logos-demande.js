@@ -22,7 +22,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { fabriquerClient, VERROU_GLOBAL: VERROU_TCGDEX, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
 // La table du COUPLE et celle des GÉNÉRIQUES vivent dans langue-logo.js, partagées avec collecter-logos-sets.js : une copie
 // locale ici a déjà existé, et un fichier lu à l'œil sur un chemin ne l'était pas sur l'autre (M1, SV11 : 2026-09-24).
-const { deciderLangue, cle, refusDuCouple, logoGenerique } = require('./collecte-cartes/langue-logo');
+const { deciderLangue, cle, refusDuCouple, refusGenerique } = require('./collecte-cartes/langue-logo');
 
 // `--demande=<fichier.md>` (2026-09-25) : une liste au MÊME format, écrite par le serveur (logos TCGdex lus par l'API /sets/<id>) ;
 // chaque ligne repasse par les mêmes juges que celles du site.
@@ -75,13 +75,20 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
     await r2.verifierBucket(bucket);   // le point d'accès UE : sans lui, R2 répond « UnknownError » (§52, et ici le 2026-09-23)
     const objets = new Map();
     // On écrit APRÈS CHAQUE HÔTE : un verrou tenu chez l'un ne doit pas faire perdre ce que l'autre a déjà rendu.
-    let ecrits = 0;
+    let ecrits = 0, generiquesRefuses = 0;
     const ecrireCeQuiEstObtenu = async () => {
         for (const r of retenus) {
             const o = objets.get(r.d.url);
             if (!o || r.ecrit) continue;
-            const gen = logoGenerique(o.sha1);
-            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.fichier, source: r.hote === 'tcgdex' ? 'tcgdex:en' : 'bulbagarden:demande-site', preuve: r.preuve, le: new Date() }, logoGenerique: !!gen, ...(gen ? { logoGeneriquePreuve: gen } : {}) }, $unset: { logoRefus: 1, ...(gen ? {} : { logoGeneriquePreuve: 1 }) } });
+            // 🔴 2026-09-28 (testeur) : un logo GÉNÉRIQUE est refusé — le refus s'écrit (§46), jamais le logo.
+            const refusGen = refusGenerique(o.sha1);
+            if (refusGen) {
+                await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logoRefus: { motif: refusGen, fichier: r.fichier, sha1: o.sha1, le: new Date(), instrument: 'collecter-logos-demande.js', source: r.hote === 'tcgdex' ? 'tcgdex:en' : 'bulbagarden:demande-site' } },
+                    $unset: { logo: 1, logoGenerique: 1, logoGeneriquePreuve: 1 } });
+                r.ecrit = true; generiquesRefuses++;
+                continue;
+            }
+            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.fichier, source: r.hote === 'tcgdex' ? 'tcgdex:en' : 'bulbagarden:demande-site', preuve: r.preuve, le: new Date() }, logoGenerique: false }, $unset: { logoRefus: 1, logoGeneriquePreuve: 1 } });
             r.ecrit = true; ecrits++;
         }
     };
@@ -115,6 +122,6 @@ const LIGNE = /^- ([^\s(]+) \((jp|intl), ([^)]+)\) → \*\*(https?:\/\/[^*]+)\*\
     }
     for (const r of retenus) if (!r.ecrit) console.warn(`   ⚠️ ${r.d.slug} : fichier non obtenu`);
     const relu = await cx.db.collection('sets').countDocuments({ 'logo.cleR2': { $nin: [null, ''] } });
-    console.log(`\n   ✅ ${objets.size} fichiers déposés · ${ecrits} sets écrits · RELU : ${relu} sets portent un logo`);
+    console.log(`\n   ✅ ${objets.size} fichiers déposés · ${ecrits} sets écrits · génériques refusés (cause écrite) : ${generiquesRefuses} · RELU : ${relu} sets portent un logo`);
     await fermer();
 })().catch(e => { console.error('❌', e.message); process.exit(1); });

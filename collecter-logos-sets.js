@@ -33,7 +33,7 @@ const bulba = require('./collecte-cartes/bulba');
 const { gabarits } = require('./collecte-cartes/wikitext');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 
-const { deciderLangue, cle, refusDuCouple, logoGenerique } = require('./collecte-cartes/langue-logo');   // la règle, une seule fois (2026-09-23)
+const { deciderLangue, cle, refusDuCouple, refusGenerique } = require('./collecte-cartes/langue-logo');   // la règle, une seule fois (2026-09-23)
 // 🔴 L'INTERVALLE D'ATTENTE DOIT ÊTRE PLUS COURT QUE LA FENÊTRE QU'IL ATTEND — mesuré le 2026-09-20.
 // Ce script a attendu le verrou global pendant des dizaines de cycles sans jamais l'obtenir, et j'ai
 // d'abord lu ça comme « le worker le tient en continu ». Le champ `depuis` dit le contraire : le worker
@@ -51,7 +51,7 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
     await r2.verifierBucket(process.env.R2_BUCKET_BRUT);
     await r2.verifierBucket(process.env.R2_BUCKET_IMAGES);
 
-    const tous = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1, logoRefus: 1 } }).toArray();
+    const tous = await cx.db.collection('sets').find({}, { projection: { code: 1, region: 1, tirage: 1, nomAffichage: 1, nomEn: 1, nomJaTraduit: 1, bulba: 1, logo: 1, logoRefus: 1, logoGenerique: 1 } }).toArray();
     // 🔴 UN LOGO D'UNE AUTRE SOURCE N'EST PAS À CET OUTIL (2026-09-23). Il juge le paramètre `setlogo` et RETIRE le logo
     // de tout set qu'il refuse — donc il effaçait, en silence et avec un « ✍️ refus écrits » parfaitement normal, les
     // logos posés par collecter-logos-demande.js, précisément sur des sets dont il refuse le `setlogo`. Une ligne qu'un
@@ -129,9 +129,12 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
         });
         nRefus++;
     }
-    // Et le PENDANT, qui manquait aussi : un set retenu ne doit pas garder le refus d'hier.
+    // Et le PENDANT, qui manquait aussi : un set retenu ne doit pas garder le refus d'hier — SES refus seulement (un refus d'un autre
+    // outil n'est pas à lui, l.119), et pas un refus de logo GÉNÉRIQUE : la généricité ne se sait qu'après le téléchargement (empreinte),
+    // et la retirer ici pour la réécrire plus bas changeait le document à chaque passage (relecture 2026-09-29).
     const nNettoyes = (await cx.db.collection('sets').updateMany(
-        { _id: { $in: retenus.map(r => r.s._id) }, logoRefus: { $exists: true } }, { $unset: { logoRefus: 1 } })).modifiedCount;
+        { _id: { $in: retenus.map(r => r.s._id) }, 'logoRefus.instrument': 'collecter-logos-sets.js', 'logoRefus.motif': { $not: /^logo GÉNÉRIQUE refusé/ } },
+        { $unset: { logoRefus: 1 } })).modifiedCount;
     console.log(`\n   ✍️  ${nRefus} refus écrits avec leur motif · ${nAutres} refus d'un autre outil laissés tels quels · ${nNettoyes} refus périmés retirés des sets désormais retenus`);
     if (retraits.length) console.log(`   ⏸️  ${retraits.length} logo(s) posé(s) que la règle d'aujourd'hui refuse — NON retirés, en attente du feu vert :\n${retraits.map(r => `      ${String(r.s.code).padEnd(9)} ${r.s._id} (${r.s.logo.fichier ?? r.s.logo.cleR2}) : ${r.motif}`).join('\n')}`);
     // ⚠️ Les sets SANS page archivée n'apparaissent ni dans `retenus` ni dans `refuses` : ils n'ont
@@ -181,7 +184,8 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
             objets.set(f, { cleR2: cleObjet, w: info.width ?? null, h: info.height ?? null, urlOriginal: info.url, sha1: info.sha1 ?? null });
             n++;
         }
-        let ecrits = 0, sansFichier = 0, inchanges = 0;
+        let ecrits = 0, sansFichier = 0, inchanges = 0, generiquesRefuses = 0, generiquesIgnores = 0;
+        const retraitsGeneriques = [];
         for (const r of retenus) {
             const o = objets.get(r.logo);
             // 🔴 UN SET RETENU DONT LE FICHIER NE SE TÉLÉCHARGE PAS TOMBAIT ENTRE LES DEUX ÉCRITURES :
@@ -198,16 +202,31 @@ const VERROU_MS = 3 * 60 * 1000, ATTENTE_MS = 2 * 1000;
                 });
                 continue;
             }
-            const gen = logoGenerique(o.sha1);
+            // 🔴 2026-09-28 (testeur) : un logo GÉNÉRIQUE est refusé — le refus s'écrit (§46), jamais le logo. Relecture du 2026-09-29 :
+            // ce chemin ne RETIRE rien — un logo posé (celui-ci ou celui d'une autre source) se liste, son retrait attend le feu vert
+            // (l.120) ; un refus d'un autre outil n'est pas réécrit ; le même refus, déjà écrit, non plus (un document réécrit est un
+            // set revalidé).
+            const refusGen = refusGenerique(o.sha1);
+            if (refusGen) {
+                if (r.s.logo?.cleR2) { if (r.s.logo.sha1 === o.sha1) retraitsGeneriques.push(r); else generiquesIgnores++; continue; }
+                if (r.s.logoRefus?.instrument && r.s.logoRefus.instrument !== 'collecter-logos-sets.js') { generiquesIgnores++; continue; }
+                if (r.s.logoRefus?.motif === refusGen && (r.s.logoRefus?.fichier ?? null) === r.logo) { inchanges++; continue; }
+                const w = await cx.db.collection('sets').updateOne({ _id: r.s._id, 'logo.cleR2': { $exists: false } },
+                    { $set: { logoRefus: { motif: refusGen, fichier: r.logo, sha1: o.sha1, le: new Date(), instrument: 'collecter-logos-sets.js', source: 'bulbapedia:setlogo' } } });
+                generiquesRefuses += w.modifiedCount;
+                continue;
+            }
             // 🔴 2026-09-26 : ce passage réécrivait les 219 logos DÉJÀ posés (leur date `le`), et le lot a revalidé 156 sets pour 12
-            // changés. Un logo identique (même objet R2, même fichier, même généricité) ne se réécrit pas.
-            if (r.s.logo?.cleR2 === o.cleR2 && r.s.logo?.fichier === r.logo && !!r.s.logoGenerique === !!gen) { inchanges++; continue; }
-            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() }, logoGenerique: !!gen, ...(gen ? { logoGeneriquePreuve: gen } : {}) }, ...(gen ? {} : { $unset: { logoGeneriquePreuve: 1 } }) });
+            // changés. Un logo identique (même objet R2, même fichier) ne se réécrit pas.
+            if (r.s.logo?.cleR2 === o.cleR2 && r.s.logo?.fichier === r.logo && !r.s.logoGenerique) { inchanges++; continue; }
+            // un logo retenu efface le refus d'hier, générique compris (le nettoyage, plus haut, ne touche pas aux génériques)
+            await cx.db.collection('sets').updateOne({ _id: r.s._id }, { $set: { logo: { ...o, fichier: r.logo, source: 'bulbapedia:setlogo', preuve: r.preuve, le: new Date() }, logoGenerique: false }, $unset: { logoGeneriquePreuve: 1, logoRefus: 1 } });
             ecrits++;
         }
         if (sansFichier) console.log(`   ✍️  ${sansFichier} set(s) retenu(s) dont le FICHIER est introuvable — cause écrite, pas laissée vide`);
         const relu = await cx.db.collection('sets').countDocuments({ 'logo.cleR2': { $nin: [null, ''] } });
-        console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans imageinfo) · ÉCRITS : ${ecrits} sets · inchangés (non réécrits) : ${inchanges} · relu en base : ${relu} sets portent un logo`);
+        console.log(`\n   TÉLÉCHARGÉS : ${n} fichiers (${sans} sans imageinfo) · ÉCRITS : ${ecrits} sets · inchangés (non réécrits) : ${inchanges} · génériques refusés (cause écrite) : ${generiquesRefuses} · génériques laissés (autre logo ou refus d'un autre outil) : ${generiquesIgnores} · relu en base : ${relu} sets portent un logo`);
+        if (retraitsGeneriques.length) console.log(`   ⏸️  ${retraitsGeneriques.length} logo(s) GÉNÉRIQUE(S) posé(s) — NON retirés, en attente du feu vert (appliquer-logos-lus.js --ecrire) :\n${retraitsGeneriques.map(r => `      ${String(r.s.code).padEnd(9)} ${r.s._id} (${r.logo})`).join('\n')}`);
     } finally { await verrou.rendre(); console.log(`🔓 verrou rendu.`); }
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });
