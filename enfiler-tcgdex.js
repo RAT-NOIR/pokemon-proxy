@@ -31,15 +31,18 @@ const { etatDuWorker } = require('./remettre-en-file');
     // ── --langue=id --sets=A,B [--ecrire] (2026-09-29, testeur : « sets IDTH : indonésien ») : une unité `tcgdex-id/<code>` par set
     // qui a au moins un scan à prendre. Le set TCGdex est celui du CODE (la garde du collecteur, `releve`, la même fonction) ; le
     // plan lit le cache (lire-tcgdex-langue.js le remplit). Même garde du commit : un worker qui ne connaît pas `langue` la refuserait.
+    // ➕ 2026-10-03 : `th` (SV7s, promos thaïes — contrôle par l'image, voir collecteur-images-tcgdex.js) et les promos « <code>/ID »,
+    // « <code>/TH » (code TCGdex sans le suffixe, `codeTcgdexDeLaLigne` — la fonction de la garde). Une langue s'écrit par ce qu'elle autorise.
     const langueArg = process.argv.find(a => a.startsWith('--langue='))?.slice(9);
+    if (langueArg && !['id', 'th'].includes(langueArg)) { console.error(`❌ --langue=${langueArg} : autorisées id, th`); await fermer(); process.exit(2); }
     if (langueArg) {
-        const { releve } = require('./collecteur-images-tcgdex');
+        const { releve, codeTcgdexDeLaLigne, CONTROLE_PAR_IMAGE } = require('./collecteur-images-tcgdex');
         const codes = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',') || [];
         if (!codes.length) { console.error('❌ --langue exige --sets=A,B'); await fermer(); process.exit(2); }
         const listeL = (await cx.db.collection('tcgdex_sets').findOne({ _id: `${langueArg}/__liste__` }))?.sets || [];
         const U = [];
         for (const code of codes) {
-            const G = releve({ code, langue: langueArg, tcgdexSet: code }, listeL);
+            const G = releve({ code, langue: langueArg, tcgdexSet: codeTcgdexDeLaLigne(code, langueArg) }, listeL);
             if (!G.ok) { console.log(`   ⛔ ${code} : ${G.motif}`); continue; }
             const P = await planifier(M, cx.db, null, G.L, G.set, langueArg);
             if (!P) { console.log(`   ⛔ ${code} : cartes TCGdex « ${langueArg}/${code} » absentes du cache (lire-tcgdex-langue.js)`); continue; }
@@ -56,7 +59,7 @@ const { etatDuWorker } = require('./remettre-en-file');
         const dernier = (await F.find({}).sort({ ordre: -1 }).limit(1).toArray())[0]?.ordre ?? 0;
         let n = 0;
         for (const [i, u] of U.entries()) n += (await F.updateOne({ _id: idDe(u) }, { $setOnInsert: { code: u.code, source: 'tcgdex', langue: langueArg, tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: dernier + 1 + i, etat: 'attente', ajouteLe: new Date(),
-            motif: `TCGdex « ${langueArg} » (décision du testeur 2026-09-28 : sets IDTH en indonésien) : ${u.plan} scans pour ${u.impressions} impressions du tirage` } }, { upsert: true })).upsertedCount;
+            motif: `TCGdex « ${langueArg} » (${langueArg === 'th' ? 'décision du testeur 2026-10-03 : SV7s et promos en thaï, contrôle par l\'image' : 'décision du testeur 2026-09-28 : sets IDTH en indonésien'}) : ${u.plan} scans pour ${u.impressions} impressions du tirage${CONTROLE_PAR_IMAGE.has(langueArg) ? ' — téléchargés sans jointure, joints après le contrôle au labo' : ''}` } }, { upsert: true })).upsertedCount;
         console.log(`   ✅ insérées : ${n} sur ${U.length} · RELU en attente : ${await F.countDocuments({ _id: { $in: U.map(idDe) }, etat: 'attente' })}`);
         await fermer(); return;
     }

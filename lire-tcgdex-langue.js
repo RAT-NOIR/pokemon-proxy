@@ -10,11 +10,12 @@
 // `tcgdex/__collecteur__` — sans lui tenu, le client refuse (garde fermée). Un set déjà en cache ne se redemande pas (reprise).
 // Écriture : ajouts dans `tcgdex_sets` (base `cartes`), un document par set lu.
 require('dotenv').config();
-const AUTORISES = [/^--langue=id$/, /^--sets=[\w.-]+(,[\w.-]+)*$/];
+// ➕ 2026-10-03 : th et ja ; sans --sets, la LISTE seule (1 requête) — de quoi mesurer ce qu'une langue apporterait avant d'y toucher.
+const AUTORISES = [/^--langue=(id|th|ja)$/, /^--sets=[\w.-]+(,[\w.-]+)*$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 const LANGUE = process.argv.find(a => a.startsWith('--langue='))?.slice(9);
-const SETS = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',');
-if (inconnus.length || !LANGUE || !SETS) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}usage : --langue=id --sets=A,B`); process.exit(2); }
+const SETS = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',') ?? [];
+if (inconnus.length || !LANGUE) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}usage : --langue=id|th|ja [--sets=A,B]`); process.exit(2); }
 
 (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');

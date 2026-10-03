@@ -47,7 +47,10 @@ const estDuSet = (id, c) => String(c?.id) === `${id}-${c?.localId}`;
 // ➕ 2026-09-29 (testeur : « sets IDTH : indonésien ») — les LANGUES autres que l'anglais que ce client a le droit de lire, écrites
 // par ce qu'elles AUTORISENT (§51) : une langue absente d'ici lève avant toute requête. Le thaï s'ajoutera par une ligne, quand un
 // témoin saura le lire (le nom thaï ne se compare à rien de chez nous).
-const LANGUES = new Set(['id']);
+// ➕ 2026-10-03 : `th` (testeur : « SV7s en thaï : oui, mais le contrôle par le nom est remplacé par un contrôle par l'image » ; le site
+// accepte les visuels thaïs) et `ja` (les sets japonais modernes sans source artofpkm). LIRE une langue n'autorise pas à en COLLECTER :
+// la garde du collecteur (`releve`, TIRAGES_DE_LA_LANGUE) décide par ses propres règles.
+const LANGUES = new Set(['id', 'th', 'ja']);
 const verifierLangue = langue => { if (!LANGUES.has(langue)) throw new Error(`TCGdex : langue « ${langue} » non autorisée (autorisées : en, ${[...LANGUES].join(', ')})`); };
 const verifierIdSet = id => { if (!/^[\w.-]+$/.test(String(id))) throw new Error(`identifiant de set TCGdex inattendu : « ${id} »`); };
 

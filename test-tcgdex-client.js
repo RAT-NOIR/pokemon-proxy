@@ -75,7 +75,8 @@ const erreur = status => Object.assign(new Error(`HTTP ${status}`), { status });
     verifier('langue id : l\'URL est /v2/id/sets/SV8s', [await c8.setLangue('id', 'SV8s').then(r => r.id), t8.appels[0]?.endsWith('/v2/id/sets/SV8s')], ['SV8s', true]);
     const t9 = faux([{}]);
     const c9 = fabriquerClient({ transport: t9, cadenceMs: 1, reessaiMs: 1, verrou: tenu });
-    verifier('langue non autorisée (th) : refusée, aucune requête', [await c9.setLangue('th', 'SV8s').then(() => 'passe', e => /non autorisée/.test(e.message) ? 'refus' : e.message), t9.appels.length], ['refus', 0]);
+    // (th et ja sont autorisées à la LECTURE depuis le 2026-10-03 : la langue refusée du banc est désormais le coréen)
+    verifier('langue non autorisée (ko) : refusée, aucune requête', [await c9.setLangue('ko', 'SV8s').then(() => 'passe', e => /non autorisée/.test(e.message) ? 'refus' : e.message), t9.appels.length], ['refus', 0]);
     verifier('identifiant de set qui fermerait l\'URL : refusé, aucune requête', [await c9.setLangue('id', '../x').then(() => 'passe', e => /inattendu/.test(e.message) ? 'refus' : e.message), t9.appels.length], ['refus', 0]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);

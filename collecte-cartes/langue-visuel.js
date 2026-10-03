@@ -32,6 +32,8 @@ function langueDuVisuel(im) {
     // ➕ 2026-09-29 : la langue de l'API INDONÉSIENNE (assets.tcgdex.net/id), déclarée de la même façon — par ce qu'elle autorise :
     // une langue source inconnue n'est pas de l'anglais, elle n'a pas de règle (null).
     if (im.source === 'tcgdex' && im.langueSource === 'id') return { langue: 'id', preuve: 'TCGdex, API indonésienne (assets.tcgdex.net/id) : le scan de l\'impression indonésienne' };
+    // ➕ 2026-10-03 (testeur : SV7s en thaï ; le site accepte `th` sur un set th ou idth)
+    if (im.source === 'tcgdex' && im.langueSource === 'th') return { langue: 'th', preuve: 'TCGdex, API thaïe (assets.tcgdex.net/th) : le scan de l\'impression thaïe' };
     if (im.source === 'tcgdex' && im.langueSource != null && im.langueSource !== 'en') return { langue: null, preuve: `TCGdex, langue source « ${im.langueSource} » sans règle` };
     if (im.source === 'tcgdex') return { langue: 'en', preuve: 'TCGdex, API anglaise (assets.tcgdex.net/en) : le scan de l\'impression anglaise' };
     if (im.source === 'bulbapedia') {

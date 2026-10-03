@@ -30,7 +30,8 @@ const idthL = TABLE.find(l => l.bulba?.tirage === 'idth');
 if (!idthL) throw new Error('table sans ligne idth : le banc ne peut pas conclure');
 const listeId = [{ id: idthL.code, name: 'Nom Traduit' }, { id: 'AUTRE', name: 'Autre' }];
 const etatId = u => releve(u, listeId).etat ?? 'autorise';
-verifier('langue sans règle (th) : refuse', etatId({ code: idthL.code, langue: 'th', tcgdexSet: idthL.code }), 'refuse-langue');
+// (le thaï a SA règle depuis le 2026-10-03 : la langue sans règle du banc est désormais le coréen)
+verifier('langue sans règle (ko) : refuse', etatId({ code: idthL.code, langue: 'ko', tcgdexSet: idthL.code }), 'refuse-langue');
 verifier('langue id sur une ligne intl : refuse', etatId({ code: intl.code, langue: 'id', tcgdexSet: intl.code }), 'refuse-region');
 verifier('langue id sur une ligne jp : refuse', etatId({ code: jp.code, langue: 'id', tcgdexSet: jp.code }), 'refuse-region');
 verifier('langue id, set TCGdex d\'un autre CODE : refuse', etatId({ code: idthL.code, langue: 'id', tcgdexSet: 'AUTRE' }), 'refuse-tcgdex-set');
@@ -38,6 +39,19 @@ verifier('langue id, unité sans set : refuse', etatId({ code: idthL.code, langu
 verifier('langue id, code absent de la liste : refuse', releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, [{ id: 'AUTRE' }]).etat, 'refuse-tcgdex-set');
 verifier('langue id, le seul chemin : ligne idth, set du même code, dans la liste', [releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, listeId).ok, releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, listeId).langue], [true, 'id']);
 verifier('l\'anglais rend sa langue (en)', releve({ code: intl.code, tcgdexSet: 'bon' }, seul).langue, 'en');
+
+// ➕ 2026-10-03 — le THAÏ (contrôle par l'image) et les promos « <code>/ID|TH » (le code TCGdex sans le suffixe, dans la liste de la langue)
+const { codeTcgdexDeLaLigne, CONTROLE_PAR_IMAGE } = require('./collecteur-images-tcgdex');
+verifier('thaï sur une ligne idth, set du même code : autorise, langue th', [releve({ code: idthL.code, langue: 'th', tcgdexSet: idthL.code }, listeId).ok, releve({ code: idthL.code, langue: 'th', tcgdexSet: idthL.code }, listeId).langue], [true, 'th']);
+verifier('thaï sur une ligne intl : refuse', etatId({ code: intl.code, langue: 'th', tcgdexSet: intl.code }), 'refuse-region');
+verifier('le thaï se contrôle par l\'image, l\'indonésien par le nom', [CONTROLE_PAR_IMAGE.has('th'), CONTROLE_PAR_IMAGE.has('id'), CONTROLE_PAR_IMAGE.has('en')], [true, false, false]);
+verifier('code TCGdex d\'une promo : suffixe de SA langue retiré, rien d\'autre', [codeTcgdexDeLaLigne('SV-P/ID', 'id'), codeTcgdexDeLaLigne('SV-P/TH', 'th'), codeTcgdexDeLaLigne('SV-P/TH', 'id'), codeTcgdexDeLaLigne('sv8a', 'ja'), codeTcgdexDeLaLigne('SV7s', 'th')], ['SV-P', 'SV-P', 'SV-P/TH', 'sv8a', 'SV7s']);
+const promoTh = TABLE.find(l => /\/TH$/.test(l.code) && l.bulba?.tirage === 'th');
+if (promoTh) {
+    const base = codeTcgdexDeLaLigne(promoTh.code, 'th'), listeTh = [{ id: base, name: 'Promo' }];
+    verifier(`promo ${promoTh.code} : le set TCGdex « ${base} » de la liste th autorise`, releve({ code: promoTh.code, langue: 'th', tcgdexSet: base }, listeTh).ok, true);
+    verifier(`promo ${promoTh.code} : le code AVEC son suffixe ne désigne aucun set TCGdex — refuse`, releve({ code: promoTh.code, langue: 'th', tcgdexSet: promoTh.code }, [{ id: promoTh.code }]).etat, 'refuse-tcgdex-set');
+} else console.log('⚠️ aucune ligne de promos thaïes dans la table : les deux cas de promo ne sont pas exercés');
 
 console.log(`\n${ok} passés, ${ko} en échec (ligne intl ${intl.code}, ligne jp ${jp.code}, ligne idth ${idthL.code})`);
 process.exit(ko ? 1 : 0);
