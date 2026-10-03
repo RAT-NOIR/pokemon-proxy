@@ -159,7 +159,10 @@ async function collecterSet(unite, M, { verrou }) {
         let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0;
         for (const p of P.plan) {
             if (arretDemande || !verrou.tenu) break;
-            const _id = idImageTcgdex(slug, p.carte._id, p.numero);   // la MÊME forme que le manque réel de l'alimentateur
+            // la MÊME forme que le manque réel de l'alimentateur ; ➕ 2026-10-03 (relecture) : pour une langue contrôlée par l'image, la
+            // LANGUE suffixe l'identifiant — sans elle, une unité thaïe sur un set idth reprenait le document (et la clé R2) du visuel
+            // indonésien de la même carte et réécrivait le fichier SERVI par un scan non contrôlé. L'anglais et l'indonésien gardent leur forme.
+            const _id = idImageTcgdex(slug, p.carte._id, p.numero) + (CONTROLE_PAR_IMAGE.has(langue) ? `/${langue}` : '');
             const url = `${p.tcg.image}/high.png`;
             const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
             if (deja?.sha256 && deja.urlOriginal === url) { sautes++; continue; }
@@ -173,7 +176,11 @@ async function collecterSet(unite, M, { verrou }) {
                     continue;
                 }
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
-                const cleR2 = `${SOURCE}/${slug}/${cleNum(p.numero)}-${p.carte._id}.webp`;
+                // une langue contrôlée par l'image : la clé porte la langue ET l'empreinte du fichier — un fichier déjà accepté et servi
+                // n'est jamais écrasé par un retéléchargement (URL changée chez TCGdex) ; le nouveau attend son contrôle sous sa propre clé
+                const cleR2 = CONTROLE_PAR_IMAGE.has(langue)
+                    ? `${SOURCE}/${slug}/${cleNum(p.numero)}-${p.carte._id}-${langue}-${sha('sha256', webp.data).slice(0, 10)}.webp`
+                    : `${SOURCE}/${slug}/${cleNum(p.numero)}-${p.carte._id}.webp`;
                 await r2.deposerBinaire(bucket, cleR2, webp.data, 'image/webp');   // R2 AVANT la ligne
                 await M.Image.updateOne({ _id }, {
                     $set: {

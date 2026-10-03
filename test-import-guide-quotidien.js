@@ -17,10 +17,13 @@ const FICHIERS = {
     '/B.json': JSON.stringify({ version: 1, createdAt: '2026-10-02T02:00:00+0200', priceGuides: lignes(100) }),
     '/tronque.json': JSON.stringify({ version: 1, createdAt: '2026-10-03T02:00:00+0200', priceGuides: lignes(50) }),
     '/sansprix.json': JSON.stringify({ version: 1, createdAt: '2026-10-03T02:00:00+0200', priceGuides: [...lignes(30), ...lignes(80, false).map((l, i) => ({ idProduct: 5000 + i }))] }),
-    '/pasjson.json': '<html>Cloudflare</html>'
+    '/pasjson.json': '<html>Cloudflare</html>',
+    '/futur.json': JSON.stringify({ version: 1, createdAt: '2099-01-01T02:00:00+0200', priceGuides: lignes(100) }),
+    '/C.json': JSON.stringify({ version: 1, createdAt: '2026-10-04T02:00:00+0200', priceGuides: lignes(100) })
 };
-const lancer = (...args) => new Promise(resolve => {
-    const p = spawn(process.execPath, [path.join(__dirname, 'import-guide-quotidien.js'), ...args], { env: process.env });
+const lancer = (...args) => lancerAvec({}, ...args);
+const lancerAvec = (env, ...args) => new Promise(resolve => {
+    const p = spawn(process.execPath, [path.join(__dirname, 'import-guide-quotidien.js'), ...args], { env: { ...process.env, ...env } });
     let out = '', err = '';
     p.stdout.on('data', d => out += d); p.stderr.on('data', d => err += d);
     p.on('close', status => resolve({ status, out, err }));
@@ -45,8 +48,11 @@ const lancer = (...args) => new Promise(resolve => {
         const G = db.collection('guide_prix'), M = db.collection('guide_prix_meta');
         const rA = await lancer('--base=test_scratch', url('/A.json'));
         verifier('guide A : téléchargé et importé par la commande de toujours', [rA.status, await G.countDocuments({}), (await M.findOne({ _id: 'dernier' }))?.lignesDuFichier], [0, 100, 100]);
+        const majAtA = (await G.findOne({ idProduct: 1000 })).majAt.toISOString();
         const rA2 = await lancer('--base=test_scratch', url('/A.json'));
-        verifier('le même guide une seconde fois : « rien de neuf », sortie 0, rien d\'écrit', [rA2.status, /rien de neuf/.test(rA2.out)], [0, true]);
+        verifier('le même guide une seconde fois : « rien de neuf », sortie 0, rien d\'écrit', [rA2.status, /rien de neuf/.test(rA2.out), (await G.findOne({ idProduct: 1000 })).majAt.toISOString() === majAtA], [0, true, true]);
+        const rF = await lancer('--base=test_scratch', url('/futur.json'));
+        verifier('un guide daté du FUTUR : refusé, la méta ne bouge pas', [rF.status, /FUTUR/.test(rF.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
         const rT = await lancer('--base=test_scratch', url('/tronque.json'));
         verifier('fichier tronqué (50 lignes contre 100) : refusé, la méta ne bouge pas', [rT.status, /tronqué/.test(rT.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
         const rS = await lancer('--base=test_scratch', url('/sansprix.json'));
@@ -57,9 +63,17 @@ const lancer = (...args) => new Promise(resolve => {
         verifier('fichier absent (404) : sortie 1, le statut est dit', [r404.status, /HTTP 404/.test(r404.err)], [1, true]);
         const rB = await lancer('--base=test_scratch', url('/B.json'));
         verifier('guide B, plus récent : importé', [rB.status, (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [0, '2026-10-02T00:00:00.000Z']);
-        verifier('argument inconnu : refusé', (await lancer('--base=test_scratch', '--vite')).status, 2);
-        verifier('production sans --confirmer-production : refusée', (await lancer('--base=test')).status, 2);
-        verifier('production avec une autre URL que celle de Cardmarket : refusée', (await lancer('--base=test', '--confirmer-production', url('/B.json'))).status, 2);
+        // la SAUVEGARDE IMPOSSIBLE (bucket absent) : RIEN n'est importé — le cœur de l'ordre, vérifié sur la base et la méta
+        const rS0 = await lancerAvec({ R2_BUCKET_BRUT: '' }, '--base=test_scratch', url('/C.json'));
+        verifier('sauvegarde impossible : sortie 1, le guide C n\'est PAS importé', [rS0.status, /pas de sauvegarde possible/.test(rS0.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString(), await G.countDocuments({ guideDu: new Date('2026-10-04T00:00:00Z') })], [1, true, '2026-10-02T00:00:00.000Z', 0]);
+        // LES ARGUMENTS : testés SANS lancer le script (lireArguments est pure) — aucun cas ne peut atteindre la base de production ni
+        // Cardmarket, même si une garde régressait (relecture du 2026-10-03)
+        const { lireArguments, URL_GUIDE } = require('./import-guide-quotidien');
+        verifier('argument inconnu : refusé', !!lireArguments(['--base=test_scratch', '--vite']).erreur, true);
+        verifier('production sans --confirmer-production : refusée', !!lireArguments(['--base=test']).erreur, true);
+        verifier('production avec une autre URL que celle de Cardmarket : refusée', !!lireArguments(['--base=test', '--confirmer-production', '--url=http://127.0.0.1:1/B.json']).erreur, true);
+        verifier('production avec la confirmation : l\'URL de Cardmarket, et elle seule', lireArguments(['--base=test', '--confirmer-production']), { base: 'test', url: URL_GUIDE });
+        verifier('sans base : refusé', !!lireArguments(['--confirmer-production']).erreur, true);
         // la SAUVEGARDE : une par import arrivé à l'étape 3 (A et B), relisible, sous le préfixe de la base du banc
         const cles = await r2.listerPrefixe(process.env.R2_BUCKET_BRUT, PREFIXE);
         verifier('deux sauvegardes écrites sur R2 (une avant chaque écriture), aucune pour les refus', cles.length, 2);

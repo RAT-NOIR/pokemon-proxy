@@ -60,6 +60,21 @@ const { etatDuWorker } = require('./remettre-en-file');
         let n = 0;
         for (const [i, u] of U.entries()) n += (await F.updateOne({ _id: idDe(u) }, { $setOnInsert: { code: u.code, source: 'tcgdex', langue: langueArg, tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: dernier + 1 + i, etat: 'attente', ajouteLe: new Date(),
             motif: `TCGdex « ${langueArg} » (${langueArg === 'th' ? 'décision du testeur 2026-10-03 : SV7s et promos en thaï, contrôle par l\'image' : 'décision du testeur 2026-09-28 : sets IDTH en indonésien'}) : ${u.plan} scans pour ${u.impressions} impressions du tirage${CONTROLE_PAR_IMAGE.has(langueArg) ? ' — téléchargés sans jointure, joints après le contrôle au labo' : ''}` } }, { upsert: true })).upsertedCount;
+        // ➕ 2026-10-03 (relecture) : `--reprendre` — la JOINTURE d'une langue contrôlée par l'image se fait à la remise en file de l'unité,
+        // et `$setOnInsert` ne touche jamais une unité qui existe : sans ce geste, les visuels acceptés n'auraient jamais été joints. Seule
+        // une unité TERMINÉE (ni en attente, ni en cours) dont le set porte au moins un visuel `accepte` est remise ; le motif le dit.
+        if (process.argv.includes('--reprendre') && CONTROLE_PAR_IMAGE.has(langueArg)) {
+            let remises = 0;
+            for (const u of U) {
+                const unite = await F.findOne({ _id: idDe(u) });
+                if (!unite || ['attente', 'en-cours'].includes(unite.etat)) continue;
+                const slug = releve({ code: u.code, langue: langueArg, tcgdexSet: u.tcgdexSet }, listeL).L?.slugSet;
+                const acceptes = await cx.db.collection('images').countDocuments({ source: 'tcgdex', set: slug, langue: langueArg, etat: 'ok', 'controle.etat': 'accepte' });
+                if (!acceptes) { console.log(`   ⛔ ${idDe(u)} : aucun visuel accepté par le contrôle — rien à joindre`); continue; }
+                remises += (await F.updateOne({ _id: idDe(u), etat: unite.etat }, { $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `jointure des ${acceptes} visuel(s) ${langueArg} acceptés par le contrôle d'image (état précédent ${unite.etat}/${unite.resultat ?? '—'})` }, $unset: { resultat: '', pris: '', fini: '' } })).modifiedCount;
+            }
+            console.log(`   ✅ remises en file pour jointure : ${remises}`);
+        }
         console.log(`   ✅ insérées : ${n} sur ${U.length} · RELU en attente : ${await F.countDocuments({ _id: { $in: U.map(idDe) }, etat: 'attente' })}`);
         await fermer(); return;
     }

@@ -151,9 +151,19 @@ async function assurerVignettesSymboles(db, { bucket, journal = console, ecrire 
             if (!r.info.width || !r.info.height) throw new Error('dimensions nulles');
             const cv = cleVignette(cle);
             const w = await r2.deposerBinaire(bucket, cv, r.data, 'image/webp');
-            if (w.ecrit) B.fabriquees++; else B.deja++;
+            let dims = { w: r.info.width, h: r.info.height };
+            if (w.ecrit) B.fabriquees++;
+            else {
+                // LA CLÉ EXISTAIT DÉJÀ (relecture du 2026-10-03) : le dépôt est idempotent, il n'écrase rien. On enregistre les dimensions du
+                // fichier RÉELLEMENT présent, et un fichier qui n'est pas une vignette de symbole (plus haut que 64 px : celle d'un logo ou
+                // d'une carte sous une clé voisine) est refusé plutôt que servi. Mesuré ce jour : 0 collision sur 47 491 clés.
+                const m = await sharp(await lireBinaire(bucket, cv)).metadata();
+                if (!m.height || m.height > HAUTEUR_VIGNETTE_SYMBOLE) throw new Error(`la clé ${cv} existe déjà et porte un fichier de ${m.width}×${m.height} : pas une vignette de symbole`);
+                dims = { w: m.width, h: m.height };
+                B.deja++;
+            }
             B.octetsAvant += orig.length; B.octetsApres += r.data.length;
-            faites.set(cle, { cleR2: cv, w: r.info.width, h: r.info.height });
+            faites.set(cle, { cleR2: cv, ...dims });
         } catch (e) { B.echecs.push({ cleR2: cle, erreur: e.message }); }
     }
     for (const s of sets) {
