@@ -1,0 +1,74 @@
+// Banc de import-guide-quotidien.js — base `test_scratch` UNIQUEMENT, fichiers servis par un serveur HTTP LOCAL (aucune requête à
+// Cardmarket), collections du guide vidées avant et après.
+//   node test-import-guide-quotidien.js
+process.argv.push('--base=test_scratch');
+require('dotenv').config();
+const http = require('http');
+const path = require('path');
+const { spawn } = require('child_process');
+const mongoose = require('mongoose');
+const { connecterMongo } = require('./mongo-connexion');
+
+let echecs = 0, n = 0;
+const verifier = (nom, obtenu, attendu) => { n++; const ok = JSON.stringify(obtenu) === JSON.stringify(attendu); if (!ok) echecs++; console.log(`${ok ? '✅' : '❌'} ${nom} : ${JSON.stringify(obtenu)}${ok ? '' : ` (attendu ${JSON.stringify(attendu)})`}`); };
+const lignes = (k, prix = true) => Array.from({ length: k }, (_, i) => ({ idProduct: 1000 + i, ...(prix ? { trend: 1 + i / 100, avg: 1 } : {}) }));
+const FICHIERS = {
+    '/A.json': JSON.stringify({ version: 1, createdAt: '2026-10-01T02:00:00+0200', priceGuides: lignes(100) }),
+    '/B.json': JSON.stringify({ version: 1, createdAt: '2026-10-02T02:00:00+0200', priceGuides: lignes(100) }),
+    '/tronque.json': JSON.stringify({ version: 1, createdAt: '2026-10-03T02:00:00+0200', priceGuides: lignes(50) }),
+    '/sansprix.json': JSON.stringify({ version: 1, createdAt: '2026-10-03T02:00:00+0200', priceGuides: [...lignes(30), ...lignes(80, false).map((l, i) => ({ idProduct: 5000 + i }))] }),
+    '/pasjson.json': '<html>Cloudflare</html>'
+};
+const lancer = (...args) => new Promise(resolve => {
+    const p = spawn(process.execPath, [path.join(__dirname, 'import-guide-quotidien.js'), ...args], { env: process.env });
+    let out = '', err = '';
+    p.stdout.on('data', d => out += d); p.stderr.on('data', d => err += d);
+    p.on('close', status => resolve({ status, out, err }));
+});
+
+(async () => {
+    const base = await connecterMongo({ script: 'test-import-guide-quotidien.js', ecrit: true });
+    if (base !== 'test_scratch') { console.error(`❌ banc sur « ${base} » : refusé, test_scratch seulement`); process.exit(1); }
+    const db = mongoose.connection.db;
+    const vider = async () => { await db.collection('guide_prix').deleteMany({}); await db.collection('guide_prix_meta').deleteMany({}); };
+    await vider();
+    // le préfixe R2 du banc, vidé AVANT aussi : un passage interrompu laisse ses sauvegardes, et le compte suivant serait faux
+    const r2 = require('./collecte-cartes/r2');
+    await r2.verifierBucket(process.env.R2_BUCKET_BRUT);   // fixe le point d'accès UE — sans lui, « AccessDenied » (§52)
+    const PREFIXE = 'sauvegardes/guide_prix/test_scratch/';
+    const restes = await r2.listerPrefixe(process.env.R2_BUCKET_BRUT, PREFIXE);
+    if (restes.length) await r2.supprimer(process.env.R2_BUCKET_BRUT, restes);
+    const srv = http.createServer((req, res) => { const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
+    await new Promise(r => srv.listen(0, '127.0.0.1', r));
+    const url = f => `--url=http://127.0.0.1:${srv.address().port}${f}`;
+    try {
+        const G = db.collection('guide_prix'), M = db.collection('guide_prix_meta');
+        const rA = await lancer('--base=test_scratch', url('/A.json'));
+        verifier('guide A : téléchargé et importé par la commande de toujours', [rA.status, await G.countDocuments({}), (await M.findOne({ _id: 'dernier' }))?.lignesDuFichier], [0, 100, 100]);
+        const rA2 = await lancer('--base=test_scratch', url('/A.json'));
+        verifier('le même guide une seconde fois : « rien de neuf », sortie 0, rien d\'écrit', [rA2.status, /rien de neuf/.test(rA2.out)], [0, true]);
+        const rT = await lancer('--base=test_scratch', url('/tronque.json'));
+        verifier('fichier tronqué (50 lignes contre 100) : refusé, la méta ne bouge pas', [rT.status, /tronqué/.test(rT.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
+        const rS = await lancer('--base=test_scratch', url('/sansprix.json'));
+        verifier('fichier où moins de 90 % des lignes ont un prix : refusé', [rS.status, /portent un prix/.test(rS.err)], [1, true]);
+        const rJ = await lancer('--base=test_scratch', url('/pasjson.json'));
+        verifier('une page HTML à la place du fichier : refusée', [rJ.status, /illisible/.test(rJ.err)], [1, true]);
+        const r404 = await lancer('--base=test_scratch', url('/absent.json'));
+        verifier('fichier absent (404) : sortie 1, le statut est dit', [r404.status, /HTTP 404/.test(r404.err)], [1, true]);
+        const rB = await lancer('--base=test_scratch', url('/B.json'));
+        verifier('guide B, plus récent : importé', [rB.status, (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [0, '2026-10-02T00:00:00.000Z']);
+        verifier('argument inconnu : refusé', (await lancer('--base=test_scratch', '--vite')).status, 2);
+        verifier('production sans --confirmer-production : refusée', (await lancer('--base=test')).status, 2);
+        verifier('production avec une autre URL que celle de Cardmarket : refusée', (await lancer('--base=test', '--confirmer-production', url('/B.json'))).status, 2);
+        // la SAUVEGARDE : une par import arrivé à l'étape 3 (A et B), relisible, sous le préfixe de la base du banc
+        const cles = await r2.listerPrefixe(process.env.R2_BUCKET_BRUT, PREFIXE);
+        verifier('deux sauvegardes écrites sur R2 (une avant chaque écriture), aucune pour les refus', cles.length, 2);
+        if (cles.length) await r2.supprimer(process.env.R2_BUCKET_BRUT, cles);
+    } finally {
+        await vider();
+        srv.close();
+        await mongoose.disconnect();
+    }
+    console.log(`\n${echecs ? `⚠️ ${echecs}/${n} en échec` : `🎉 ${n}/${n} passés`} (test_scratch vidé, aucune requête hors de la machine)`);
+    process.exit(echecs ? 1 : 0);
+})().catch(async e => { console.error(e); try { await mongoose.disconnect(); } catch (_) {} process.exit(1); });
