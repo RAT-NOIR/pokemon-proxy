@@ -69,6 +69,15 @@ const erreur = status => Object.assign(new Error(`HTTP ${status}`), { status });
     const c7 = fabriquerClient({ transport: t7, cadenceMs: 1, cadenceGraphqlMs: 1, reessaiMs: 1, verrou: tenu });
     verifier('un id de set à tirets (tk-xy-p) garde ses cartes', (await c7.cartesDuSet('tk-xy-p')).map(x => x.id), ['tk-xy-p-1', 'tk-xy-p-2']);
 
+    // ➕ 2026-09-29 — une AUTRE langue : autorisée par la liste (id), refusée AVANT toute requête sinon ; l'URL est celle de la langue
+    const t8 = faux([{ id: 'SV8s', cards: [] }]);
+    const c8 = fabriquerClient({ transport: t8, cadenceMs: 1, reessaiMs: 1, verrou: tenu });
+    verifier('langue id : l\'URL est /v2/id/sets/SV8s', [await c8.setLangue('id', 'SV8s').then(r => r.id), t8.appels[0]?.endsWith('/v2/id/sets/SV8s')], ['SV8s', true]);
+    const t9 = faux([{}]);
+    const c9 = fabriquerClient({ transport: t9, cadenceMs: 1, reessaiMs: 1, verrou: tenu });
+    verifier('langue non autorisée (th) : refusée, aucune requête', [await c9.setLangue('th', 'SV8s').then(() => 'passe', e => /non autorisée/.test(e.message) ? 'refus' : e.message), t9.appels.length], ['refus', 0]);
+    verifier('identifiant de set qui fermerait l\'URL : refusé, aucune requête', [await c9.setLangue('id', '../x').then(() => 'passe', e => /inattendu/.test(e.message) ? 'refus' : e.message), t9.appels.length], ['refus', 0]);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

@@ -35,7 +35,8 @@ const { compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, setsTo
 
 const GARDEES = ['cartes', 'cartes_produits', 'sets'];
 const RESTAURABLES = ['cartes', 'cartes_produits', 'sets', 'restes', 'collecte_etat'];
-const CHAMPS_DU_WORKER = { cartes: ['images', 'image'], sets: ['completImages', 'cartesSansImage', 'remplacementTcgdex'] };
+// ➕ 2026-09-29 : `visuelsTcgdex` (bilan d'une unité TCGdex d'une autre langue, collecteur-images-tcgdex.js) — écrit par le worker
+const CHAMPS_DU_WORKER = { cartes: ['images', 'image'], sets: ['completImages', 'cartesSansImage', 'remplacementTcgdex', 'visuelsTcgdex'] };
 
 const sep = process.argv.indexOf('--');
 const options = sep < 0 ? process.argv.slice(2) : process.argv.slice(2, sep);

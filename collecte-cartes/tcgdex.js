@@ -44,6 +44,13 @@ const CADENCE_GRAPHQL_MS = 5000;
 // par l'ancien filtre (`en/30th` : 30 cartes de `30th-c`) — les retirer du cache est une suppression, elle attend son feu vert.
 const estDuSet = (id, c) => String(c?.id) === `${id}-${c?.localId}`;
 
+// ➕ 2026-09-29 (testeur : « sets IDTH : indonésien ») — les LANGUES autres que l'anglais que ce client a le droit de lire, écrites
+// par ce qu'elles AUTORISENT (§51) : une langue absente d'ici lève avant toute requête. Le thaï s'ajoutera par une ligne, quand un
+// témoin saura le lire (le nom thaï ne se compare à rien de chez nous).
+const LANGUES = new Set(['id']);
+const verifierLangue = langue => { if (!LANGUES.has(langue)) throw new Error(`TCGdex : langue « ${langue} » non autorisée (autorisées : en, ${[...LANGUES].join(', ')})`); };
+const verifierIdSet = id => { if (!/^[\w.-]+$/.test(String(id))) throw new Error(`identifiant de set TCGdex inattendu : « ${id} »`); };
+
 function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, cadenceGraphqlMs = CADENCE_GRAPHQL_MS, reessaiMs = REESSAI_MS, verrou = null } = {}) {
     let lie = verrou, file = Promise.resolve(), dernierDepart = 0, compte = 0;
     const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -98,8 +105,12 @@ function fabriquerClient({ transport = transportAxios, cadenceMs = CADENCE_MS, c
         lier(v) { lie = v; },
         getJSON, telecharger, graphql, cartesDuSet,
         setsEn: () => getJSON(`${API}/en/sets`),
+        // une autre langue : la liste des sets, et UN set (sa fiche REST porte ses cartes avec `image` — une requête par set, pas
+        // de GraphQL : l'illustrateur n'est pas demandé, il est déjà écrit par tirage)
+        setsLangue: async langue => { verifierLangue(langue); return getJSON(`${API}/${langue}/sets`); },
+        setLangue: async (langue, id) => { verifierLangue(langue); verifierIdSet(id); return getJSON(`${API}/${langue}/sets/${id}`); },
         compteRequetes: () => compte
     };
 }
 
-module.exports = { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_MS, CADENCE_GRAPHQL_MS, API };
+module.exports = { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS, CADENCE_MS, CADENCE_GRAPHQL_MS, API, LANGUES };

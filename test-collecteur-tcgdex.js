@@ -25,5 +25,19 @@ verifier('nom porté par DEUX sets TCGdex : refuse (un nom qui désigne deux set
 const seul = [{ id: 'bon', name: intl.bulba.expansion }, { id: 'autre', name: 'Un Tout Autre Set' }];
 verifier('le seul chemin qui autorise : ligne intl, set nommé, nom unique', releve({ code: intl.code, tcgdexSet: 'bon' }, seul).ok, true);
 
-console.log(`\n${ok} passés, ${ko} en échec (ligne intl ${intl.code}, ligne jp ${jp.code})`);
+// ➕ 2026-09-29 — une AUTRE langue (TCGdex indonésien, sets IDTH) : la clé est le CODE, et le tirage doit être celui de la langue
+const idthL = TABLE.find(l => l.bulba?.tirage === 'idth');
+if (!idthL) throw new Error('table sans ligne idth : le banc ne peut pas conclure');
+const listeId = [{ id: idthL.code, name: 'Nom Traduit' }, { id: 'AUTRE', name: 'Autre' }];
+const etatId = u => releve(u, listeId).etat ?? 'autorise';
+verifier('langue sans règle (th) : refuse', etatId({ code: idthL.code, langue: 'th', tcgdexSet: idthL.code }), 'refuse-langue');
+verifier('langue id sur une ligne intl : refuse', etatId({ code: intl.code, langue: 'id', tcgdexSet: intl.code }), 'refuse-region');
+verifier('langue id sur une ligne jp : refuse', etatId({ code: jp.code, langue: 'id', tcgdexSet: jp.code }), 'refuse-region');
+verifier('langue id, set TCGdex d\'un autre CODE : refuse', etatId({ code: idthL.code, langue: 'id', tcgdexSet: 'AUTRE' }), 'refuse-tcgdex-set');
+verifier('langue id, unité sans set : refuse', etatId({ code: idthL.code, langue: 'id' }), 'refuse-tcgdex-set');
+verifier('langue id, code absent de la liste : refuse', releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, [{ id: 'AUTRE' }]).etat, 'refuse-tcgdex-set');
+verifier('langue id, le seul chemin : ligne idth, set du même code, dans la liste', [releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, listeId).ok, releve({ code: idthL.code, langue: 'id', tcgdexSet: idthL.code }, listeId).langue], [true, 'id']);
+verifier('l\'anglais rend sa langue (en)', releve({ code: intl.code, tcgdexSet: 'bon' }, seul).langue, 'en');
+
+console.log(`\n${ok} passés, ${ko} en échec (ligne intl ${intl.code}, ligne jp ${jp.code}, ligne idth ${idthL.code})`);
 process.exit(ko ? 1 : 0);

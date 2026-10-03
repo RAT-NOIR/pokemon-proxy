@@ -33,6 +33,31 @@ async function cartesEn(db, client, id) {
     return { cartes, cache: false };
 }
 
+// ➕ 2026-09-29 : une AUTRE langue (client.setsLangue / setLangue, langues autorisées dans tcgdex.js). Même reprise : `<langue>/__liste__`
+// et `<langue>/<set>`, lus une fois. Un set sans carte n'est pas un vide à croire : il lève (§41), il ne s'écrit pas.
+async function listeLangue(db, client, langue) {
+    const c = db.collection(COLLECTION);
+    const d = await c.findOne({ _id: `${langue}/__liste__` });
+    if (d?.sets?.length) return d.sets;
+    if (!client) return null;
+    const sets = await client.setsLangue(langue);
+    if (!Array.isArray(sets) || !sets.length) throw new Error(`TCGdex : la liste des sets « ${langue} » est vide — je ne conclus rien sur un vide`);
+    const propres = sets.map(s => ({ id: s.id, name: s.name, cardCount: s.cardCount ?? null }));
+    await c.updateOne({ _id: `${langue}/__liste__` }, { $set: { sets: propres, lu: new Date() } }, { upsert: true });
+    return propres;
+}
+async function cartesLangue(db, client, langue, id) {
+    const c = db.collection(COLLECTION);
+    const d = await c.findOne({ _id: `${langue}/${id}` });
+    if (Array.isArray(d?.cartes)) return { cartes: d.cartes.filter(x => estDuSet(id, x)), cache: true };
+    if (!client) return null;
+    const set = await client.setLangue(langue, id);
+    const cartes = (set?.cards || []).map(x => ({ id: x.id, localId: x.localId, name: x.name, image: x.image ?? null })).filter(x => estDuSet(id, x));
+    if (!cartes.length) throw new Error(`TCGdex ${langue}/${id} : aucune carte — je ne conclus rien sur un vide`);
+    await c.updateOne({ _id: `${langue}/${id}` }, { $set: { cartes, n: cartes.length, nom: set.name ?? null, lu: new Date() } }, { upsert: true });
+    return { cartes, cache: false };
+}
+
 /** nom d'expansion (Bulbapedia) → set TCGdex, par égalité du nom normalisé ; `ambigu` si deux sets portent ce nom. */
 function fabriquerAppariement(sets) {
     const parNom = new Map();
@@ -79,4 +104,4 @@ function compagnonsDuSet(set, sets) {
     return sets.filter(s => s.id !== set.id && voulus.has(normaliserNom(s.name)));
 }
 
-module.exports = { COLLECTION, listeEn, cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet, SUFFIXES_COMPAGNONS };
+module.exports = { COLLECTION, listeEn, cartesEn, listeLangue, cartesLangue, fabriquerAppariement, setDeLaLigne, compagnonsDuSet, SUFFIXES_COMPAGNONS };

@@ -29,6 +29,10 @@ function langueDuVisuel(im) {
     if (im.source === 'artofpkm') return { langue: 'ja', preuve: 'artofpkm ne sert que le japonais' };
     // TCGdex : le scan est pris sous `assets.tcgdex.net/en/…`, la langue est DÉCLARÉE par la source, dans le chemin même.
     // C'est la seule preuve d'anglais du dépôt — un format de fichier n'en est jamais une.
+    // ➕ 2026-09-29 : la langue de l'API INDONÉSIENNE (assets.tcgdex.net/id), déclarée de la même façon — par ce qu'elle autorise :
+    // une langue source inconnue n'est pas de l'anglais, elle n'a pas de règle (null).
+    if (im.source === 'tcgdex' && im.langueSource === 'id') return { langue: 'id', preuve: 'TCGdex, API indonésienne (assets.tcgdex.net/id) : le scan de l\'impression indonésienne' };
+    if (im.source === 'tcgdex' && im.langueSource != null && im.langueSource !== 'en') return { langue: null, preuve: `TCGdex, langue source « ${im.langueSource} » sans règle` };
     if (im.source === 'tcgdex') return { langue: 'en', preuve: 'TCGdex, API anglaise (assets.tcgdex.net/en) : le scan de l\'impression anglaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };

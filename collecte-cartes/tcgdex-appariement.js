@@ -14,20 +14,23 @@ const { cleNumero, temoinDuNom } = require('./jointure');
  * @param {string} expansion   nom Bulbapedia de l'expansion (celui des impressions)
  * @param {object[]} cartes    nos cartes ; seules leurs impressions `intl` de cette expansion sont traitées
  * @param {object[]} tcg       cartes du set TCGdex { id, localId, name, illustrator, image }
+ * @param {string} [tirage]    le tirage des impressions traitées — `intl` par défaut (l'anglais) ; ➕ 2026-09-29 : `idth`/`id` pour
+ *                             le set TCGdex indonésien du même CODE. Le témoin reste le nom : TCGdex indonésien garde le nom anglais
+ *                             des Pokémon ; un Dresseur traduit ne désigne aucune autre carte du set, le témoin se tait (écart de forme).
  * @returns {{carte, index, numero, tcg?, motif?, detail?}[]}  `index` = position de l'impression dans `carte.impressions`
  */
-function apparierExpansion(expansion, cartes, tcg) {
-    const concernees = cartes.filter(c => (c.impressions || []).some(i => i.tirage === 'intl' && i.expansion === expansion));
+function apparierExpansion(expansion, cartes, tcg, tirage = 'intl') {
+    const concernees = cartes.filter(c => (c.impressions || []).some(i => i.tirage === tirage && i.expansion === expansion));
     const temoin = temoinDuNom(concernees);
     const parNumTcg = new Map();
     for (const t of tcg) { const k = cleNumero(t.localId); if (k) (parNumTcg.get(k) || parNumTcg.set(k, []).get(k)).push(t); }
     const parNumNous = new Map();
-    for (const c of concernees) for (const i of c.impressions) if (i.tirage === 'intl' && i.expansion === expansion) {
+    for (const c of concernees) for (const i of c.impressions) if (i.tirage === tirage && i.expansion === expansion) {
         const k = cleNumero(i.numero); if (k) (parNumNous.get(k) || parNumNous.set(k, new Set()).get(k)).add(c._id);
     }
     const R = [];
     for (const c of concernees) c.impressions.forEach((i, index) => {
-        if (i.tirage !== 'intl' || i.expansion !== expansion) return;
+        if (i.tirage !== tirage || i.expansion !== expansion) return;
         const base = { carte: c, index, numero: i.numero };
         const k = cleNumero(i.numero);
         if (!k) return R.push({ ...base, motif: 'impression-sans-numero' });

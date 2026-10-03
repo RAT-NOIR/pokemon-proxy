@@ -28,6 +28,39 @@ const { etatDuWorker } = require('./remettre-en-file');
     const W = await etatDuWorker(cx);
     console.log(`\n════ LE COMMIT DU WORKER ════\n   ${W.phrase}`);
 
+    // ── --langue=id --sets=A,B [--ecrire] (2026-09-29, testeur : « sets IDTH : indonésien ») : une unité `tcgdex-id/<code>` par set
+    // qui a au moins un scan à prendre. Le set TCGdex est celui du CODE (la garde du collecteur, `releve`, la même fonction) ; le
+    // plan lit le cache (lire-tcgdex-langue.js le remplit). Même garde du commit : un worker qui ne connaît pas `langue` la refuserait.
+    const langueArg = process.argv.find(a => a.startsWith('--langue='))?.slice(9);
+    if (langueArg) {
+        const { releve } = require('./collecteur-images-tcgdex');
+        const codes = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',') || [];
+        if (!codes.length) { console.error('❌ --langue exige --sets=A,B'); await fermer(); process.exit(2); }
+        const listeL = (await cx.db.collection('tcgdex_sets').findOne({ _id: `${langueArg}/__liste__` }))?.sets || [];
+        const U = [];
+        for (const code of codes) {
+            const G = releve({ code, langue: langueArg, tcgdexSet: code }, listeL);
+            if (!G.ok) { console.log(`   ⛔ ${code} : ${G.motif}`); continue; }
+            const P = await planifier(M, cx.db, null, G.L, G.set, langueArg);
+            if (!P) { console.log(`   ⛔ ${code} : cartes TCGdex « ${langueArg}/${code} » absentes du cache (lire-tcgdex-langue.js)`); continue; }
+            if (!P.plan.length) { console.log(`   ⛔ ${code} : 0 scan — ${JSON.stringify(P.motifs)}`); continue; }
+            U.push({ code, tcgdexSet: G.set.id, tcgdexNom: G.set.name, plan: P.plan.length, impressions: P.impressions });
+            console.log(`   ${code.padEnd(8)} → ${langueArg}/${G.set.id} « ${G.set.name} » · scans ${P.plan.length}/${P.impressions} · restes ${JSON.stringify(P.motifs)}`);
+        }
+        const F = cx.db.collection('file_images');
+        const idDe = u => `tcgdex-${langueArg}/${u.code}`;
+        const existants = await F.find({ _id: { $in: U.map(idDe) } }, { projection: { etat: 1 } }).toArray();
+        console.log(`\n════ LANGUE « ${langueArg} » : ${U.length} unités, ${U.reduce((s, u) => s + u.plan, 0)} scans · déjà en file : ${existants.map(e => `${e._id} (${e.etat})`).join(', ') || 'aucune'} ════`);
+        if (!ecrire) { console.log('   (dry-run — --ecrire insère, si la garde du commit passe)'); await fermer(); return; }
+        if (W.bloque) { console.error('\n❌ ÉCRITURE REFUSÉE : la garde du commit bloque.'); await fermer(); process.exit(1); }
+        const dernier = (await F.find({}).sort({ ordre: -1 }).limit(1).toArray())[0]?.ordre ?? 0;
+        let n = 0;
+        for (const [i, u] of U.entries()) n += (await F.updateOne({ _id: idDe(u) }, { $setOnInsert: { code: u.code, source: 'tcgdex', langue: langueArg, tcgdexSet: u.tcgdexSet, tcgdexNom: u.tcgdexNom, ordre: dernier + 1 + i, etat: 'attente', ajouteLe: new Date(),
+            motif: `TCGdex « ${langueArg} » (décision du testeur 2026-09-28 : sets IDTH en indonésien) : ${u.plan} scans pour ${u.impressions} impressions du tirage` } }, { upsert: true })).upsertedCount;
+        console.log(`   ✅ insérées : ${n} sur ${U.length} · RELU en attente : ${await F.countDocuments({ _id: { $in: U.map(idDe) }, etat: 'attente' })}`);
+        await fermer(); return;
+    }
+
     const regionDe = new Map((await lireMongo(cx.db.collection('sets'), {}, { nom: 'sets', projection: { region: 1 } })).map(s => [s._id, s.region]));
     const ja = await cx.db.collection('cartes').aggregate([{ $unwind: '$images' }, { $match: { 'images.langue': 'ja' } },
         { $project: { _id: 0, carteId: '$_id', set: '$images.set', numero: '$images.numero' } }]).toArray();

@@ -20,6 +20,8 @@
 // Et une file qui reste VIDE après son passage est une ALERTE écrite en base (`collecte_images_etat` « alerte/file-vide »),
 // relue par file-a-l-arret.js et la table maîtresse.
 
+// ⚠️ 2026-09-29 : VOULU — l'indonésien (TCGdex `id`, sets idth) ne s'enfile PAS tout seul : enfiler-tcgdex.js --langue=id --sets=…,
+// à la main, set par set (décision du testeur, trois sets mesurés). Un set idth reste ici « sans source légale » pour l'alimentateur.
 const TIRAGES_SOURCES = { jp: 'artofpkm', intl: 'tcgdex+bulbapedia' };
 const { manqueTcgdex, choisirManqueReel } = require('./manque-reel');
 // 🔑 LE MANQUE RÉEL (2026-09-26, soir, collecte-cartes/manque-reel.js) : quand la règle par SET ne remplit pas la file, on

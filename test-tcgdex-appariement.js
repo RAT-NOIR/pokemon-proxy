@@ -23,6 +23,13 @@ verifier('numéros croisés : contredits par le nom', resume(apparierExpansion(E
 verifier('écart de forme : accepté', resume(apparierExpansion(E, [carte(5, "Professor's Research", '147')], [tcg('147', "Professor's Research (Professor Rowan)")])), ['5@1:swsh7-147']);
 // 5. absente de TCGdex
 verifier('absente de TCGdex', resume(apparierExpansion(E, [carte(6, 'Hoppip', '2')], [])), ['6@1:absente-de-tcgdex']);
+// ➕ 2026-09-29 — le TIRAGE en paramètre (sets IDTH, TCGdex indonésien) : `intl` par défaut, rien ne change pour l'anglais
+const idth = (id, nomEn, numero) => ({ _id: id, nomEn, attaques: [], impressions: [{ tirage: 'intl', expansion: E, numero: '9' }, { tirage: 'idth', expansion: E, numero }] });
+verifier('tirage idth : seule l\'impression idth est traitée (index 1), pas l\'intl', resume(apparierExpansion(E, [idth(7, 'Durant ex', '4')], [tcg('4', 'Durant ex')], 'idth')), ['7@1:swsh7-4']);
+verifier('sans paramètre : l\'intl seule, comme avant', resume(apparierExpansion(E, [idth(7, 'Durant ex', '4')], [tcg('9', 'Durant ex')])), ['7@0:swsh7-9']);
+verifier('tirage idth, un Dresseur traduit (le nom indonésien ne désigne aucune autre carte) : le témoin se tait',
+    resume(apparierExpansion(E, [idth(8, 'Night Stretcher', '241'), idth(9, 'Counter Gain', '242')], [tcg('241', 'Tandu Malam'), tcg('242', 'Penambah Serangan')], 'idth')), ['8@1:swsh7-241', '9@1:swsh7-242']);
+verifier('tirage idth, numéros croisés : contredits par le nom', resume(apparierExpansion(E, [idth(10, 'Feebas', '189'), idth(11, 'Magneton', '193')], [tcg('189', 'Magneton'), tcg('193', 'Feebas')], 'idth')), ['10@1:contredite-par-le-nom', '11@1:contredite-par-le-nom']);
 // 6. un numéro porté par deux cartes TCGdex : ambigu, même si les noms concordent
 verifier('numéro double chez TCGdex', resume(apparierExpansion(E, [carte(7, 'Eevee', '125')], [tcg('125', 'Eevee'), { ...tcg('125', 'Eevee'), id: 'swsh7-125a' }])), ['7@1:numero-ambigu-chez-tcgdex']);
 // 7. un numéro porté par deux de NOS cartes : ambigu (un numéro qui désigne deux cartes ne désigne rien)

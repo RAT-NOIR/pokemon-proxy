@@ -21,6 +21,11 @@
 //      illustrateurs). Chaque impression reçoit un scan ou un MOTIF — les motifs s'écrivent dans `sets.remplacementTcgdex`.
 //   4. TÉLÉCHARGEMENT `<image>/high.png` (cadence 2 s, verrou global lié au client), seuil de largeur, WebP -> R2 AVANT
 //      la ligne `images` (`langue: 'en'`). Reprise : une ligne portant sha256 et la même URL ne se retélécharge pas.
+// ➕ 2026-09-29 — UNE AUTRE LANGUE (testeur : « sets IDTH : indonésien ») : une unité `tcgdex-id/<code>` porte `langue: 'id'`. La
+//   garde autorise un tirage de la langue (id, idth) et un set TCGdex du MÊME CODE que la ligne (le nom est traduit, un code non :
+//   §39) ; les cartes viennent de la fiche REST du set (cache `id/<code>`, lire-tcgdex-langue.js) ; l'appariement prend les impressions
+//   du tirage de la ligne ; le visuel porte `langue: 'id'` (le site l'accepte sur un set idth) ; le bilan va dans
+//   `sets.visuelsTcgdex.id`, jamais dans `remplacementTcgdex` (celui de l'anglais).
 //   5. JOINTURE, et c'est le REMPLACEMENT : pour chaque (carte, set, numéro) servi par TCGdex, l'entrée Bulbapedia est
 //      retirée de `cartes.images` (le document `images` et l'objet R2 restent : un retour arrière est un rejeu). La
 //      préséance est aussi dans collecteur-images-bulba.js : sa jointure saute un numéro que TCGdex sert (§21 bis).
@@ -34,7 +39,7 @@ const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/s
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
-const { cartesEn, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
+const { cartesEn, cartesLangue, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
 const { apparierExpansion } = require('./collecte-cartes/tcgdex-appariement');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 // l'identifiant d'un document `images` TCGdex vit dans le module du manque réel : l'alimentateur y cherche ce que ce
@@ -45,7 +50,12 @@ const SOURCE = 'tcgdex';
 const VERROU_SET_MS = 10 * 60 * 1000;
 const sha = (algo, buf) => crypto.createHash(algo).update(buf).digest('hex');
 const cleNum = n => String(n ?? '').replace(/[^0-9A-Za-z]/g, '') || 'sans-numero';   // TG01 ≠ 1 : le numéro ENTIER
-const LANGUE = langueDuVisuel({ source: SOURCE });
+const langueDe = langue => langueDuVisuel({ source: SOURCE, langueSource: langue });
+// ➕ 2026-09-29 (testeur : « sets IDTH : indonésien ») — une AUTRE langue que l'anglais, et les tirages qu'elle sert, écrits par ce qu'ils
+// AUTORISENT (§51). Une unité qui porte `langue: 'id'` ne se rattache pas par le NOM (le nom TCGdex est indonésien : « Bimbingan Rasi »)
+// mais par le CODE — un code ne se traduit pas (§39) : SV7s chez nous, SV7s chez TCGdex. Le site accepte `id` sur un set idth
+// (rat-market-site/lib/langueDuVisuel.ts, LANGUES_DES_TIRAGES_ASIATIQUES, 2026-09-28).
+const TIRAGES_DE_LA_LANGUE = { id: ['id', 'idth'] };
 
 let arretDemande = false;
 process.on('SIGINT', () => { arretDemande = true; });
@@ -56,19 +66,41 @@ const surPerte = () => { arretDemande = true; process.exitCode = 1; };
 function releve(unite, sets) {
     const L = ligne(unite?.code);
     if (!L) return { ok: false, etat: 'refuse-table', motif: `« ${unite?.code} » absent de la table` };
+    const langue = unite.langue ?? 'en';
+    if (langue !== 'en') {
+        const tirages = TIRAGES_DE_LA_LANGUE[langue];
+        if (!tirages) return { ok: false, etat: 'refuse-langue', motif: `langue « ${langue} » : aucune règle de tirage` };
+        if (!tirages.includes(L.bulba?.tirage)) return { ok: false, etat: 'refuse-region', motif: `tirage ${L.bulba?.tirage ?? 'intl'} : TCGdex ${langue} ne sert que ${tirages.join(' / ')}` };
+        if (!unite.tcgdexSet) return { ok: false, etat: 'refuse-tcgdex-set', motif: 'l\'unité ne nomme pas de set TCGdex' };
+        if (unite.tcgdexSet !== L.code) return { ok: false, etat: 'refuse-tcgdex-set', motif: `${unite.tcgdexSet} n'est pas le CODE de la ligne (${L.code}) — en ${langue}, le code est la seule clé (le nom est traduit)` };
+        const s = sets.find(x => x.id === unite.tcgdexSet);
+        if (!s) return { ok: false, etat: 'refuse-tcgdex-set', motif: `${unite.tcgdexSet} absent de la liste TCGdex « ${langue} » en cache` };
+        return { ok: true, L, set: s, langue };
+    }
     if ((L.bulba?.tirage || 'intl') !== 'intl') return { ok: false, etat: 'refuse-region', motif: `tirage ${L.bulba?.tirage} : TCGdex en ne sert que l'anglais` };
     if (!unite.tcgdexSet) return { ok: false, etat: 'refuse-tcgdex-set', motif: 'l\'unité ne nomme pas de set TCGdex' };
     const s = sets.find(x => x.id === unite.tcgdexSet);
     if (!s) return { ok: false, etat: 'refuse-tcgdex-set', motif: `${unite.tcgdexSet} absent de la liste TCGdex en cache` };
     const d = setDeLaLigne(L, fabriquerAppariement(sets));
     if (d.set?.id !== s.id) return { ok: false, etat: 'refuse-tcgdex-set', motif: `${s.id} « ${s.name} » n'est pas le set que nomme la ligne (${d.set?.id ?? d.motif})` };
-    return { ok: true, L, set: s };
+    return { ok: true, L, set: s, langue: 'en' };
 }
 
 /** Étapes 2-3 : ce que la collecte ferait. Zéro requête si le cache a le set ; sinon le client (verrou tenu) le lit.
  *  Le set TCGdex et ses GALERIES (compagnonsDuSet : Trainer Gallery, Galarian Gallery), que Bulbapedia range dans la même
  *  expansion. Sans client, une galerie absente du cache n'est pas lue — et ses restes le DISENT (`compagnonsNonLus`). */
-async function planifier(M, db, client, L, set) {
+async function planifier(M, db, client, L, set, langue = 'en') {
+    if (langue !== 'en') {
+        // une autre langue : UN set, lu par sa fiche REST (cache `<langue>/<set>`) ; pas de galerie ; les impressions du TIRAGE de la ligne
+        const r = await cartesLangue(db, client, langue, set.id);
+        if (!r) return null;
+        const cartes = await M.Carte.find({ sets: L.slugSet }).select('nomEn niveau attaques impressions').lean();
+        const R = [].concat(L.bulba.expansion).flatMap(nom => apparierExpansion(nom, cartes, r.cartes, L.bulba.tirage));
+        const plan = R.filter(x => x.tcg?.image);
+        const restes = R.filter(x => !x.tcg?.image).map(x => ({ carteId: x.carte._id, nomEn: x.carte.nomEn, numero: x.numero, motif: x.motif || 'tcgdex-sans-image', ...(x.detail ? { detail: x.detail } : {}) }));
+        const motifs = {}; for (const x of restes) motifs[x.motif] = (motifs[x.motif] || 0) + 1;
+        return { cartes, tcg: r.cartes, plan, restes, motifs, impressions: R.length, compagnons: [], compagnonsNonLus: [] };
+    }
     // le set EXACT, à la lecture aussi : le cache garde des cartes écrites par l'ancien filtre « contient » (`en/30th` porte 30 `30th-c`)
     const lire = async id => { const cs = client ? (await cartesEn(db, client, id)).cartes : (await db.collection('tcgdex_sets').findOne({ _id: `en/${id}` }))?.cartes; return cs && cs.filter(c => estDuSet(id, c)); };
     const principal = await lire(set.id);
@@ -89,10 +121,12 @@ async function planifier(M, db, client, L, set) {
 
 async function collecterSet(unite, M, { verrou }) {
     const db = M.Carte.db.db;
-    const liste = (await db.collection('tcgdex_sets').findOne({ _id: 'en/__liste__' }))?.sets || [];
+    const langueUnite = unite?.langue ?? 'en';
+    const liste = (await db.collection('tcgdex_sets').findOne({ _id: `${langueUnite}/__liste__` }))?.sets || [];
     const G = releve(unite, liste);
     if (!G.ok) { console.error(`❌ ${unite?.code} : ${G.motif}.`); return { code: unite?.code, etat: G.etat }; }
-    const { L, set } = G;
+    const { L, set, langue } = G;
+    const LANGUE = langueDe(langue);
     const slug = L.slugSet;
     const client = fabriquerClient({ verrou });                       // la garde FERMÉE vit dans le client
     const idEtat = `${SOURCE}/${slug}`;
@@ -100,8 +134,9 @@ async function collecterSet(unite, M, { verrou }) {
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${L.code} : ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: L.code, etat: 'refuse-verrou' }; }
     try {
-        const P = await planifier(M, db, client, L, set);
-        console.log(`\n══ ${L.code} « ${L.nom} » → TCGdex ${set.id} « ${set.name} » — ${P.impressions} impressions, ${P.plan.length} scans anglais · restes ${JSON.stringify(P.motifs)} ══`);
+        const P = await planifier(M, db, client, L, set, langue);
+        if (!P) throw new Error(`${L.code} : cartes TCGdex « ${langue}/${set.id} » ni en cache ni lisibles`);
+        console.log(`\n══ ${L.code} « ${L.nom} » → TCGdex ${langue}/${set.id} « ${set.name} » — ${P.impressions} impressions, ${P.plan.length} scans (${langue}) · restes ${JSON.stringify(P.motifs)} ══`);
         const bucket = process.env.R2_BUCKET_IMAGES;
         let telecharges = 0, sautes = 0, echecs = 0, echecsTransitoires = 0, tropPetits = 0;
         for (const p of P.plan) {
@@ -152,20 +187,25 @@ async function collecterSet(unite, M, { verrou }) {
             const numeros = ims.map(im => im.numero);
             const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() }));
             const avant = await M.Carte.findById(carteId).select('images').lean();
-            bulbaRetirees += (avant?.images || []).filter(e => e.set === slug && e.source === 'bulbapedia' && numeros.includes(e.numero)).length;
             await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
-            await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: 'bulbapedia', numero: { $in: numeros } } } });
+            // le REMPLACEMENT de Bulbapedia est celui de l'anglais (la strate à risque) ; une autre langue n'a rien prouvé sur le tirage
+            // d'une entrée Bulbapedia du même numéro : elle n'y touche pas (relecture du 2026-09-29)
+            if (langue === 'en') {
+                bulbaRetirees += (avant?.images || []).filter(e => e.set === slug && e.source === 'bulbapedia' && numeros.includes(e.numero)).length;
+                await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: 'bulbapedia', numero: { $in: numeros } } } });
+            }
             await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
         }
         const complet = {
-            tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
+            langue, tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
             impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
             telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             concordance: images.length + tropPetits === P.plan.length && echecs === 0,
             verifieLe: new Date()
         };
-        await M.Set.updateOne({ _id: slug }, { $set: { remplacementTcgdex: complet } });
+        // l'anglais garde son champ (lu par l'alimentateur et la table) ; une autre langue écrit le sien, rien n'est confondu
+        await M.Set.updateOne({ _id: slug }, { $set: langue === 'en' ? { remplacementTcgdex: complet } : { [`visuelsTcgdex.${langue}`]: complet } });
         await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'verifie', fini: new Date(), requetes: client.compteRequetes() } });
         console.log(`   images ok ${images.length} + sous le seuil ${tropPetits} = à collecter ${P.plan.length} ${complet.concordance ? '✅' : '❌'} · ${bulbaRetirees} visuels Bulbapedia remplacés · ${P.restes.length} impressions sans scan anglais · requêtes ${client.compteRequetes()}`);
         // 🔑 INCOMPLET N'EST PAS UN VERDICT QUAND LE SEUL MANQUE EST UNE SURCHARGE (LOR, CRE, 2026-09-24) : si tout le
@@ -184,10 +224,11 @@ module.exports = { SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS, collecterSet, planif
 if (require.main !== module) return;
 
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : --plan, --verrou, --sets=… ; rien ne télécharge.
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/];
+const AUTORISES = [/^--plan$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/, /^--langue=id$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--verrou')) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=A,B], --verrou. La collecte est celle du worker.`);
+const LANGUE_CLI = process.argv.find(a => a.startsWith('--langue='))?.slice(9) ?? 'en';
+if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--verrou') || (LANGUE_CLI !== 'en' && !process.argv.some(a => a.startsWith('--sets=')))) {
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=A,B] [--langue=id, avec --sets], --verrou. La collecte est celle du worker.`);
     process.exit(2);
 }
 (async () => {
@@ -198,6 +239,23 @@ if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === 
     if (process.argv.includes('--verrou')) {
         const v = (await M.EtatImages.findById(VERROU_GLOBAL).lean())?.verrou;
         console.log(v ? `🔒 ${VERROU_GLOBAL} : pid ${v.pid} sur ${v.hote}, commit ${v.commit}, battement il y a ${Math.round((Date.now() - new Date(v.depuis)) / 1000)} s` : `${VERROU_GLOBAL} : libre`);
+        await fermer(); return;
+    }
+    if (LANGUE_CLI !== 'en') {
+        // une autre langue : le set TCGdex est celui du CODE de la ligne, comme dans la garde (`releve`) — la même fonction décide
+        const listeL = (await cx.db.collection('tcgdex_sets').findOne({ _id: `${LANGUE_CLI}/__liste__` }))?.sets || [];
+        if (!listeL.length) throw new Error(`liste TCGdex « ${LANGUE_CLI} » absente du cache — lire-tcgdex-langue.js la lit`);
+        let total = 0, scans = 0;
+        for (const code of process.argv.find(a => a.startsWith('--sets=')).slice(7).split(',')) {
+            const G = releve({ code, langue: LANGUE_CLI, tcgdexSet: code }, listeL);
+            if (!G.ok) { console.log(`${code} : ${G.motif}`); continue; }
+            const P = await planifier(M, cx.db, null, G.L, G.set, LANGUE_CLI);
+            if (!P) { console.log(`${code} → ${LANGUE_CLI}/${G.set.id} : cartes absentes du cache`); continue; }
+            total += P.impressions; scans += P.plan.length;
+            console.log(`${code.padEnd(8)} → ${LANGUE_CLI}/${G.set.id.padEnd(7)} ${String(P.plan.length).padStart(4)} scans / ${String(P.impressions).padStart(4)} impressions (tirage ${G.L.bulba.tirage}, TCGdex ${P.tcg.length} cartes) · ${JSON.stringify(P.motifs)}`);
+            for (const x of P.restes.filter(r => r.motif === 'contredite-par-le-nom').slice(0, 5)) console.log(`      ⚠️ ${x.numero} « ${x.nomEn} » : ${x.detail}`);
+        }
+        console.log(`\nPLAN : ${scans} scans (${LANGUE_CLI}) sur ${total} impressions · ≈ ${scans} requêtes à 2 s ≈ ${Math.round(scans * 2 / 60)} min · requêtes faites : 0`);
         await fermer(); return;
     }
     const liste = (await cx.db.collection('tcgdex_sets').findOne({ _id: 'en/__liste__' }))?.sets || [];
