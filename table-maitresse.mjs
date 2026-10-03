@@ -72,7 +72,7 @@ const fileEtat = await cx.db.collection('file_images').aggregate([{ $group: { _i
 const toutes = [...TABLE, ...TABLE_AUTO, ...TABLE_SANS_PAGE];
 const lignesDeExp = new Map(); for (const l of toutes) if (l.exp != null) (lignesDeExp.get(l.exp) || lignesDeExp.set(l.exp, []).get(l.exp)).push(l);
 
-// ── la boucle de service du site (celle de t-tableau.mjs, clé `set.region` : le site d'aujourd'hui)
+// ── la boucle de service du site (celle de t-tableau.mjs ; clé `tirage ?? region` depuis le 2026-10-03, comme le site)
 const groupes = new Map(); for (const p of lignesJ) { const k = `${p.carteId}|${p.slugSet}`; (groupes.get(k) || groupes.set(k, []).get(k)).push(p); }
 const fiche = new Map(), visuel = new Set(), pourquoi = new Map();
 for (const [k, ps] of groupes) {
@@ -82,9 +82,13 @@ for (const [k, ps] of groupes) {
     if (!set.publie) { note('set non publié (sans nomAffichage)'); continue; }
     const d = docs.get(Number(carteId));
     if (!d || !d.nomEn || !(d.sets ?? []).includes(slugSet)) { note(!d?.nomEn ? 'carte sans nomEn' : 'set absent de cartes.sets'); continue; }
-    const fs_ = fichesDuDocument((d.impressions ?? []).filter(i => i.tirage === set.region && set.exps.has(i.expansion)));
+    // ⚠️ LA CLÉ DU SITE EST `tirage ?? region` (lib/entreesDuSet.ts, tirageDuSet ; CONTRAT-SITE.md depuis le 2026-09-24) : `region` vaut
+    // « intl » pour un set chinois, indonésien ou thaï (§61). Cette boucle lisait `set.region` — elle comptait « refusés par le site » les
+    // 108 visuels indonésiens que le site affiche (2026-10-03 : l'instrument ne lisait pas la même chose que la production).
+    const tirageSite = set.tirage ?? set.region;
+    const fs_ = fichesDuDocument((d.impressions ?? []).filter(i => i.tirage === tirageSite && set.exps.has(i.expansion)));
     const numeros = fs_.map(f => f.numero);
-    const images = (d.images ?? []).filter(m => m.set === slugSet && visuelAdmisPourLaRegion(m, set.region));
+    const images = (d.images ?? []).filter(m => m.set === slugSet && visuelAdmisPourLaRegion(m, tirageSite));
     for (const [rang, f] of fs_.entries()) {
         const v = !!imageDeLImpression(images, f.numero)?.cleR2;
         for (const p of produitsDeLaFiche(ps, rang, numeros, set.code)) { if (!fiche.has(p.idProduct)) fiche.set(p.idProduct, { carteId: Number(carteId), slugSet, numero: f.numero }); if (v) visuel.add(p.idProduct); }
@@ -126,7 +130,7 @@ const causeVisuel = (idp) => {
         if (tir === 'jp') return sourceDe(set.code) ? 'jp : artofpkm n\'a pas ce numéro, ou pas encore collecté' : 'jp : aucune source artofpkm';
         return 'intl : aucune image collectée';
     }
-    const admis = ims.filter(m => visuelAdmisPourLaRegion(m, set.region));
+    const admis = ims.filter(m => visuelAdmisPourLaRegion(m, tir));
     if (!admis.length) return ims[0].langue === 'ja' ? 'scan japonais refusé sur set intl' : 'image refusée par le site (langue/format)';
     return 'images du set, aucune au numéro de la fiche';
 };
@@ -185,8 +189,10 @@ for (const e of parExp.values()) {
     const logo = !set ? '—' : set.logo && !set.logoGenerique ? 'oui' : set.logoGenerique ? 'générique' : LOGO_SANS_SOURCE.test(set.logoRefus?.motif || '') ? 'sans source' : 'à chercher';
     const page = set?.publie ? cache[slug]?.code ?? '?' : '—';
     const annee = set ? dateSite(set) : null, rangeSous = sectionDe.get(slug) ?? null;
-    const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets'
-        : logo === 'à chercher' ? 'logo à chercher' : null;
+    // ➖ 2026-10-03 (testeur, règle permanente) : « une publication n'est JAMAIS bloquée par un logo ou une date ; le logo vient après »
+    // (définition 5). Le logo reste une COLONNE ; la définition 4 (le logo bloquait) est comptée à côté pour l'évolution.
+    const problemesSet = !slug ? 'expansion jamais apprise (nom inconnu)' : !set ? 'set absent de la base' : !set.publie ? 'set non publié' : page !== 200 ? `page du site en ${page}` : !dansListe.has(slug) ? 'absent de /fr/sets' : null;
+    const problemeLogo4 = logo === 'à chercher' ? 'logo à chercher' : null;
     // La définition 3 (2026-09-25), comptée à côté pour l'évolution : datée ET rangée sous son année.
     const problemeDate3 = !set ? null : annee == null ? 'set sans date' : rangeSous !== String(annee) ? `daté ${annee}, rangé sous « ${rangeSous ?? '?'} »` : null;
     const date = !set ? '—' : annee != null ? 'jour' : set.dateSortieMois?.iso ? `mois ${set.dateSortieMois.iso}` : set.periodeDistribution?.debutIso ? `période ${set.periodeDistribution.debutIso}` : 'sans date';
@@ -194,13 +200,14 @@ for (const e of parExp.values()) {
     // exiger : elle n'est ni verte ni rouge, elle est « sans source » — comptée à part, jamais dans le haut de la table.
     const toutSansSource = !bloquants && sansSource > 0 && sansSource === e.produits.length;
     const verte = !toutSansSource && !problemesSet && !bloquants;
-    const verte3 = verte && !problemeDate3;
+    const verte4 = verte && !problemeLogo4;
+    const verte3 = verte4 && !problemeDate3;
     const top = [...causes].filter(([c]) => !/SANS SOURCE/.test(c)).sort((a, b) => b[1] - a[1])[0];
     const ns = e.produits.filter(id => !visuel.has(id) && substitut.has(id)).length;
     lignes.push({
         idExpansion: e.idExpansion, code: L?.code ?? ncs.find(n => n.codeSet)?.codeSet ?? '—', slug, nom: set?.nomAffichage || (slug ? slug.replace(/-/g, ' ') : `(expansion ${e.idExpansion} jamais apprise)`),
         annee: e.annee, anneeEstimee: !!e.anneeEstimee, region: TIRAGE[tirage] || tirage || '?', produits: e.produits.length,
-        set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo, date, verte3,
+        set: !set ? 'non' : set.publie ? 'oui' : 'non publié', page, liste: set?.publie ? (dansListe.has(slug) ? 'oui' : 'NON') : '—', logo, date, verte3, verte4,
         fiche: Math.round(1000 * nf / e.produits.length) / 10, visuel: Math.round(1000 * nv / e.produits.length) / 10, substitut: ns ? Math.round(1000 * ns / e.produits.length) / 10 : '',
         bloquants, sansSource, verte, toutSansSource, score: toutSansSource ? 0 : (bloquants || (problemesSet ? e.produits.length : 0)) * Math.max(1, e.annee - 1995),
         // Le problème de SET et la première cause de produits, les deux : « logo à chercher » seul masquait 0 % de fiches (TK6).
@@ -213,29 +220,30 @@ const vertes = lignes.filter(l => l.verte).length, grises = lignes.filter(l => l
 // L'évolution ne compare que deux mesures faites sous la MÊME définition du vert. Le 2026-09-25, 210 → 159 était la sortie des
 // expansions entièrement sans source (7f8e69a), pas une perte : 54 vertes passées en gris entre deux mesures (§62). La définition
 // porte un numéro ; un état précédent qui n'en porte pas, ou une autre, n'est pas comparé — et la table le DIT.
-const DEFINITION = 4;   // 4 (2026-09-26) : la date ne bloque plus ; 3 (2026-09-25) : daté ET rangé dans son année sur /fr/sets
+const DEFINITION = 5;   // 5 (2026-10-03) : ni la date ni le logo ne bloquent ; 4 (2026-09-26) : la date ne bloque plus ; 3 (2026-09-25) : daté ET rangé dans son année
 const statutDe = l => l.verte ? 'v' : l.toutSansSource ? 'g' : 'r';
 const statutDe3 = l => l.verte3 ? 'v' : l.toutSansSource ? 'g' : 'r';
-const vertes3 = lignes.filter(l => l.verte3).length;
+const statutDe4 = l => l.verte4 ? 'v' : l.toutSansSource ? 'g' : 'r';
+const vertes3 = lignes.filter(l => l.verte3).length, vertes4 = lignes.filter(l => l.verte4).length;
 const avant = fs.existsSync(ETAT) ? JSON.parse(fs.readFileSync(ETAT, 'utf8')) : null;
-// L'état précédent est relu dans SA définition : une mesure en définition 3 se compare au compte en définition 3 d'aujourd'hui.
+// L'état précédent est relu dans SA définition : une mesure en définition 3 (ou 4) se compare au compte en définition 3 (ou 4) d'aujourd'hui.
 const avantDef = avant?.definition ?? null;
-const comparable = avantDef === DEFINITION || avantDef === 3;
-const vertesComparees = avantDef === 3 ? vertes3 : vertes, statutCompare = avantDef === 3 ? statutDe3 : statutDe;
+const comparable = avantDef === DEFINITION || avantDef === 3 || avantDef === 4;
+const vertesComparees = avantDef === 3 ? vertes3 : avantDef === 4 ? vertes4 : vertes, statutCompare = avantDef === 3 ? statutDe3 : avantDef === 4 ? statutDe4 : statutDe;
 const quand = avant ? new Date(avant.le).toISOString().slice(0, 16).replace('T', ' ') : null;
 const bascules = comparable ? lignes.filter(l => avant.parExp[l.idExpansion] !== undefined && avant.parExp[l.idExpansion] !== statutCompare(l)) : [];
 const evol = !avant ? 'première mesure' : !comparable ? `mesure précédente (${quand} UTC, ${avant.vertes}) sous une AUTRE définition du vert : non comparée`
     : `sous la définition ${avantDef} de la mesure précédente : ${vertesComparees} (${vertesComparees - avant.vertes >= 0 ? '+' : ''}${vertesComparees - avant.vertes} depuis le ${quand} UTC, ${avant.vertes})`;
 const nomme = l => `${l.code} ${l.nom}`;
 const gagnees = bascules.filter(l => statutCompare(l) === 'v'), perdues = bascules.filter(l => avant.parExp[l.idExpansion] === 'v');
-fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), definition: DEFINITION, vertes, vertes3, grises: lignes.filter(l => l.toutSansSource).length, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe(l)])), parExp3: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe3(l)])) }));
+fs.writeFileSync(ETAT, JSON.stringify({ le: Date.now(), definition: DEFINITION, vertes, vertes3, vertes4, grises: lignes.filter(l => l.toutSansSource).length, rouges: lignes.length - vertes, parExp: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe(l)])), parExp3: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe3(l)])), parExp4: Object.fromEntries(lignes.map(l => [l.idExpansion, statutDe4(l)])) }));
 const fileTxt = fileEtat.map(x => `${x._id}×${x.n}`).join(' · ');
 const md = [];
 md.push('# Table maîtresse — une ligne par expansion Cardmarket', '');
 md.push(`Mesurée le ${new Date().toISOString().slice(0, 16).replace('T', ' ')} UTC · export \`${EXPORT}\` : ${ex.products.length} produits − ${ex.products.length - produits.length} cartes-code = **${produits.length} produits, ${parExp.size} expansions**. Règles de service du site importées (${S}). HTTP : /fr/sets (${dansListe.size} sets listés), /fr/catalogue → ${catalogue}, ${publies.length} pages de set (${requetes} requêtes ce passage, cache 6 h).`, '');
-md.push(`**Vertes : ${vertes} / ${parExp.size}** (définition ${DEFINITION} : la date ne bloque plus) · ${evol} · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
+md.push(`**Vertes : ${vertes} / ${parExp.size}** (définition ${DEFINITION} : ni la date ni le logo ne bloquent ; en définition 4, où le logo bloquait : ${vertes4}) · ${evol} · rouges ${parExp.size - vertes - grises} · entièrement sans source légale ${grises}. File d'images : ${fileTxt}${alerte ? ` · 🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()}` : ''}.`, '');
 if (comparable) md.push(`Passées au vert (définition ${avantDef}) : ${gagnees.map(nomme).join(' · ') || 'aucune'}. 🔴 Perdues : ${perdues.map(nomme).join(' · ') || 'aucune'}.`, '');
-md.push('Verte = set publié, page en 200, présent dans /fr/sets, logo posé ou sans source légale, et aucun produit manquant bloquant. La date ne bloque plus (testeur, 2026-09-26) : sa colonne dit jour, mois, période ou sans date. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. « % substitut » : produits sans visuel qui portent le visuel de la carte d\'origine (réimpressions, avec sa mention) — il ne compte PAS comme visuel. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
+md.push('Verte = set publié, page en 200, présent dans /fr/sets, et aucun produit manquant bloquant. Ni la date (testeur, 2026-09-26) ni le logo (testeur, 2026-10-03 : « le logo vient après ») ne bloquent : leurs colonnes disent jour, mois, période ou sans date, et logo posé, générique, sans source ou à chercher. Ne bloquent pas (« sans source légale ») : visuels chinois, indonésiens, thaïs ; fiches en liens rouges de Setlist ; versions V1/V2 inégales. « % substitut » : produits sans visuel qui portent le visuel de la carte d\'origine (réimpressions, avec sa mention) — il ne compte PAS comme visuel. Tri : manquants bloquants × (année − 1995). « ~ » : année estimée par l\'expansion Cardmarket voisine.', '');
 md.push('| # | idExp | code | expansion | année | région | produits | set | page | /fr/sets | logo | date | % fiche | % visuel | % substitut | bloquants | sans source | cause du manque |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
 const expTotales = new Set(ex.products.map(p => p.idExpansion));
 const codeSeul = [...expTotales].filter(id => !parExp.has(id));
