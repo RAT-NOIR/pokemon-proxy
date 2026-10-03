@@ -63,7 +63,10 @@ const LOGOS_GENERIQUES = new Map([
     ['7ac9fe9c0a8af5830919f0ff6a6d7f1d3d94ee9b', 'l\'étoile « PROMO » de TCGdex, identique sur 8 sets de Black Star Promos'],
     ['7fddb7ca48982f5d551f4bd725e9abba0ac47ed4', '« Pokémon Organized Play » de TCGdex, identique sur les 9 POP Series'],
     ['27ac5482620baf27d98f6fb6396a5e3c28073a7e', '« 横空出世 » (CSM1 Logo A SC.png), le nom de la famille, identique sur ses 3 moitiés'],
-    ['8e87ff264e631834e8a44248675c594e6e36252b', 'le logo McDonald\'s du dépôt ptcg-assets, identique sur 6 McDonald\'s Collection en base le 2026-09-28 (la marque, pas le set)']
+    ['8e87ff264e631834e8a44248675c594e6e36252b', 'le logo McDonald\'s du dépôt ptcg-assets, identique sur 6 McDonald\'s Collection en base le 2026-09-28 (la marque, pas le set)'],
+    // décision du testeur du 2026-10-03 : « les 2 logos McDonald's Match Battle qui partagent un fichier : retirés, comme les autres
+    // génériques » — chaque set reçoit un logo composé (logo commun + étiquette propre au set).
+    ['da4e941e5fdcff642bed1c478e7ea59d42fe16fb', '« Match Battle logo.png » de Bulbagarden, identique sur McDonald\'s Collection 2022 et Match Battle 2023']
 ]);
 // 👁️ LES FICHIERS « SANS PREUVE DE LANGUE », LUS À L'ŒIL le 2026-09-26 (téléchargés dans le bac, jamais sur R2 avant verdict) :
 // le nom du fichier ne disait rien, l'image le dit. Valable pour un set JAPONAIS seulement — c'est la question qui était posée.

@@ -12,18 +12,21 @@ require('dotenv').config();
 //   [--sans-revalidation]  (par défaut les sets touchés SONT revalidés ici : la garde de lot ne voit pas `images[].vignette` et n'en
 //                           revaliderait aucun — revue du 2026-09-27, 501 sets revalidés à la main après le premier rattrapage)
 //   node generer-vignettes.js --ecrire --logos --champ=logoFr   (les logos français, 2026-09-28 ; le site ne lit pas encore `logoFr`)
-const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--champ=(logo|logoFr)$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
+//   node generer-vignettes.js --ecrire --symboles   (symboles de sets, 64 px de haut — demande du site du 2026-09-28 ; sans revalidation :
+//                                                    le site ne lit pas encore `vignette` sur les symboles)
+const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--symboles$/, /^--champ=(logo|logoFr)$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos [--champ=logo|logoFr], --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos [--champ=logo|logoFr], --symboles, --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
+if (process.argv.includes('--symboles') && (process.argv.includes('--logos') || process.argv.some(a => /^--(slug|limite|parallele|champ)=/.test(a)))) { console.error('❌ --symboles traite tous les symboles sans vignette, seul'); process.exit(2); }
 if (process.argv.some(a => a.startsWith('--champ=')) && !process.argv.includes('--logos')) { console.error('❌ --champ ne vaut qu\'avec --logos'); process.exit(2); }
 if (process.argv.includes('--logos') && process.argv.some(a => /^--(slug|limite|parallele)=/.test(a))) { console.error('❌ --logos traite tous les logos sans vignette : --slug, --limite et --parallele ne s\'y appliquent pas'); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 // le secret se vérifie AVANT d'écrire : découvert après deux heures d'écriture, il laissait des sets changés sans revalidation, et une
 // relance ne les retrouve plus (tout est déjà vignetté) — revue du 2026-09-27
-const revalider = process.argv.includes('--ecrire') && !process.argv.includes('--logos') && !process.argv.includes('--sans-revalidation');
+const revalider = process.argv.includes('--ecrire') && !process.argv.includes('--logos') && !process.argv.includes('--symboles') && !process.argv.includes('--sans-revalidation');
 if (revalider && !process.env.REVALIDATION_SECRET) { console.error('❌ REVALIDATION_SECRET absent : les sets vignettés ne pourraient pas être revalidés — rien écrit (ou --sans-revalidation, en le disant)'); process.exit(2); }
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
-const { assurerVignettes, assurerVignettesLogos } = require('./collecte-cartes/vignette');
+const { assurerVignettes, assurerVignettesLogos, assurerVignettesSymboles } = require('./collecte-cartes/vignette');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire'), logos = process.argv.includes('--logos');
@@ -34,6 +37,17 @@ const { assurerVignettes, assurerVignettesLogos } = require('./collecte-cartes/v
         const champ = arg('champ') || 'logo';
         const L = await assurerVignettesLogos(db, { bucket, ecrire, champ });
         console.log(`LOGOS (${champ}) : ${L.sets} sets à logo sans vignette${ecrire ? ` · fabriquées ${L.fabriquees} · déjà sur R2 ${L.deja} · écrites ${L.touches.length} · échecs ${L.echecs.length} · poids ${(L.octetsAvant / 1e6).toFixed(1)} Mo → ${(L.octetsApres / 1e6).toFixed(1)} Mo` : ' (mesure seule)'}`);
+        await fermer(); return;
+    }
+    if (process.argv.includes('--symboles')) {
+        const Y = await assurerVignettesSymboles(db, { bucket, ecrire });
+        console.log(`SYMBOLES : ${Y.sets} sets, ${Y.fichiers} fichiers sans vignette${ecrire ? ` · fabriquées ${Y.fabriquees} · déjà sur R2 ${Y.deja} · sets écrits ${Y.touches.length} · échecs ${Y.echecs.length} · poids ${(Y.octetsAvant / 1e6).toFixed(2)} Mo → ${(Y.octetsApres / 1e6).toFixed(2)} Mo` : ' (mesure seule)'}`);
+        if (ecrire) {
+            const S = db.collection('sets');
+            const reste = await S.countDocuments({ $or: [{ symbolesIdentification: { $elemMatch: { cleR2: { $type: 'string' }, vignette: { $exists: false } } } }, { 'symbole.cleR2': { $type: 'string' }, 'symbole.vignette': { $exists: false } }] });
+            console.log(`   RELU : ${reste} sets portent encore un symbole sans vignette`);
+            if (Y.echecs.length || reste) process.exitCode = 1;
+        }
         await fermer(); return;
     }
     const totalEntrees = (await db.collection('cartes').aggregate([{ $unwind: '$images' }, { $group: { _id: null, n: { $sum: 1 }, avec: { $sum: { $cond: [{ $ifNull: ['$images.vignette', false] }, 1, 0] } } } }]).toArray())[0] || { n: 0, avec: 0 };

@@ -127,4 +127,49 @@ async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = t
     return B;
 }
 
-module.exports = { cleVignette, fabriquerVignette, lireBinaire, assurerVignettes, assurerVignettesLogos, LARGEUR_VIGNETTE, LARGEUR_VIGNETTE_LOGO };
+/**
+ * Les vignettes des SYMBOLES de sets (demande du site, 2026-09-28 : « 64 px de haut au plus, WebP » — affichés à 16 px, les fichiers
+ * vont de 0,8 à 48 Ko). Deux champs, le même geste : `symbolesIdentification[].vignette` (ce que le site affiche d'abord) et
+ * `symbole.vignette` (son repli). Hauteur bornée, jamais agrandie ; même clé (`vignettes/…webp`), même bucket. Un fichier partagé par
+ * plusieurs sets ne se fabrique qu'une fois. Additif : un champ neuf, rien d'autre ne bouge.
+ */
+const HAUTEUR_VIGNETTE_SYMBOLE = 64;
+async function assurerVignettesSymboles(db, { bucket, journal = console, ecrire = true } = {}) {
+    const r2 = require('./r2');
+    const S = db.collection('sets');
+    const sets = await S.find({ $or: [{ symbolesIdentification: { $elemMatch: { cleR2: { $type: 'string' }, vignette: { $exists: false } } } }, { 'symbole.cleR2': { $type: 'string' }, 'symbole.vignette': { $exists: false } }] }, { projection: { symbolesIdentification: 1, symbole: 1 } }).toArray();
+    const cles = new Set();
+    for (const s of sets) { for (const e of s.symbolesIdentification || []) if (typeof e.cleR2 === 'string' && !e.vignette) cles.add(e.cleR2); if (typeof s.symbole?.cleR2 === 'string' && !s.symbole.vignette) cles.add(s.symbole.cleR2); }
+    const B = { sets: sets.length, fichiers: cles.size, fabriquees: 0, deja: 0, echecs: [], touches: new Set(), octetsAvant: 0, octetsApres: 0 };
+    if (!ecrire) return { ...B, touches: [] };
+    await r2.verifierBucket(bucket);   // juridiction UE (voir assurerVignettes)
+    const faites = new Map();   // cleR2 -> vignette
+    for (const cle of cles) {
+        try {
+            const orig = await lireBinaire(bucket, cle);
+            const r = await sharp(orig).resize({ height: HAUTEUR_VIGNETTE_SYMBOLE, withoutEnlargement: true }).webp({ quality: 85, alphaQuality: 90 }).toBuffer({ resolveWithObject: true });
+            if (!r.info.width || !r.info.height) throw new Error('dimensions nulles');
+            const cv = cleVignette(cle);
+            const w = await r2.deposerBinaire(bucket, cv, r.data, 'image/webp');
+            if (w.ecrit) B.fabriquees++; else B.deja++;
+            B.octetsAvant += orig.length; B.octetsApres += r.data.length;
+            faites.set(cle, { cleR2: cv, w: r.info.width, h: r.info.height });
+        } catch (e) { B.echecs.push({ cleR2: cle, erreur: e.message }); }
+    }
+    for (const s of sets) {
+        for (const e of s.symbolesIdentification || []) {
+            const v = faites.get(e.cleR2); if (!v || e.vignette) continue;
+            const u = await S.updateOne({ _id: s._id }, { $set: { 'symbolesIdentification.$[x].vignette': v } }, { arrayFilters: [{ 'x.cleR2': e.cleR2, 'x.vignette': { $exists: false } }] });
+            if (u.modifiedCount) B.touches.add(s._id);
+        }
+        const v = faites.get(s.symbole?.cleR2);
+        if (v && !s.symbole.vignette) {
+            const u = await S.updateOne({ _id: s._id, 'symbole.cleR2': s.symbole.cleR2, 'symbole.vignette': { $exists: false } }, { $set: { 'symbole.vignette': v } });
+            if (u.modifiedCount) B.touches.add(s._id);
+        }
+    }
+    if (B.echecs.length) journal.error(`🔴 vignettes de symboles : ${B.echecs.length} échec(s) — ${B.echecs.slice(0, 3).map(x => `${x.cleR2} (${x.erreur})`).join(' ; ')}`);
+    return { ...B, touches: [...B.touches] };
+}
+
+module.exports = { cleVignette, fabriquerVignette, lireBinaire, assurerVignettes, assurerVignettesLogos, assurerVignettesSymboles, LARGEUR_VIGNETTE, LARGEUR_VIGNETTE_LOGO, HAUTEUR_VIGNETTE_SYMBOLE };
