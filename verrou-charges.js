@@ -557,6 +557,7 @@ const SONDE_MAX_CANDIDATES = 6;
         console.error('❌ Mongo non connecté côté serveur d\'enregistrement.');
         srv.enfant.kill(); process.exit(1);
     }
+    await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });   // un compteur d'une exécution précédente fausserait celle-ci
     const poster = c => appeler(srv.port, 'POST', '/api/identifier', {
         userId: USER_VERROU, imageUrls: [c.imageUrl], title: null, vintedEtat: null
     }, JETON);
@@ -596,12 +597,24 @@ const SONDE_MAX_CANDIDATES = 6;
     // La 7e cellule rejoue ces charges catalogue coupé. Ce que la route demande alors à TCGdex
     // (le pont tombé, elle repart vers TCGdex) doit être sur la cassette, sinon la cellule
     // mesure une URL manquante et pas la parade.
+    // ⚠️ LE PLAFOND DE 5 REMBOURSEMENTS PAR JOUR (relecture du 2026-10-03) : la sonde, la charge
+    // d'échec et les pannes sont des refus remboursés. Vidé avant les pannes, sans quoi le 6e
+    // remboursement serait refusé et la cassette décrirait une autre sortie que celle du verrou.
+    await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
     for (const c of charges.filter(x => x.panne)) {
+        // ⚠️ LUES DEPUIS `avant` (relecture du 2026-10-03) : à la deuxième charge, la ligne
+        // d'armement de la première est déjà dans la sortie, et le POST partirait catalogue debout.
+        const avant = srv.lire().length;
         srv.enfant.send('panne-catalogue');
-        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire()); i++) await new Promise(r => setTimeout(r, 50));
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire().slice(avant)); i++) await new Promise(r => setTimeout(r, 50));
+        if (!/PANNE-CATALOGUE ARMEE/.test(srv.lire().slice(avant))) {
+            console.error(`❌ panne non armée pour « ${c.lecture.name} » : l'enregistrement de ce chemin serait faux — arrêt.`);
+            srv.enfant.kill(); process.exit(1);
+        }
         const r = await poster(c);
+        const apres = srv.lire().length;
         srv.enfant.send('panne-catalogue-off');
-        for (let i = 0; i < 40 && !/PANNE-CATALOGUE LEVEE/.test(srv.lire().slice(-400)); i++) await new Promise(r => setTimeout(r, 50));
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE LEVEE/.test(srv.lire().slice(apres)); i++) await new Promise(r => setTimeout(r, 50));
         console.log(`   ${c.lecture.name.padEnd(18)} -> catalogue coupé : ${r.json?.success ? 'succès ⚠️' : `refus (${r.json?.natureRefus ?? '?'})`}`);
     }
     ecrireCharges(charges);
