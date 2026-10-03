@@ -143,6 +143,33 @@ const couvertes = [...compteur.entries()].filter(([, c]) => c > 0).map(([n]) => 
 const jamais = [...compteur.entries()].filter(([, c]) => c === 0).map(([n]) => n).sort();
 
 if (poser) {
+    // 🔴 REPOSER LE PLANCHER NE PEUT PAS BAISSER LA PROTECTION EN SILENCE (2026-10-03, ordre du
+    // testeur : « le seuil se recalcule sans baisser la protection »). Le pont a fait perdre trois
+    // fonctions aux charges ; `--poser-plancher` les aurait retirées sans un mot, et le cliquet
+    // aurait reverdi en protégeant MOINS. Une fonction du plancher actuel qui n'est plus couverte
+    // bloque la pose, sauf si elle est NOMMÉE dans `--retirer=a,b` (fonction supprimée ou
+    // renommée) — le coût du contournement est une liste qu'on doit pouvoir écrire (§41).
+    const argRetirer = process.argv.find(a => a.startsWith('--retirer='));
+    const retirees = new Set(argRetirer ? argRetirer.slice('--retirer='.length).split(',').map(s => s.trim()).filter(Boolean) : []);
+    if (fs.existsSync(PLANCHER)) {
+        const ancien = JSON.parse(fs.readFileSync(PLANCHER, 'utf8'));
+        const ensemble = new Set(couvertes);
+        const perdues = (ancien.couvertes || []).filter(n => !ensemble.has(n));
+        const nonNommees = perdues.filter(n => !retirees.has(n));
+        const nommeesEnTrop = [...retirees].filter(n => !perdues.includes(n));
+        if (ancien.avecVerrou && !DOSSIER_EXTERNE) {
+            console.log(`\n⛔ POSE REFUSÉE — le plancher actuel inclut la couverture du verrou, pas cette mesure.`);
+            console.log(`   Lance d'abord node verrou-avant-push.js, puis : node couverture-index.js --poser-plancher --avec=verrou/couverture`);
+            process.exit(1);
+        }
+        if (nonNommees.length || nommeesEnTrop.length) {
+            if (nonNommees.length) console.log(`\n⛔ POSE REFUSÉE — ${nonNommees.length} fonction(s) du plancher actuel ne sont plus couvertes : ${nonNommees.join(', ')}`);
+            if (nommeesEnTrop.length) console.log(`⛔ --retirer nomme des fonctions qui ne sont pas perdues : ${nommeesEnTrop.join(', ')}`);
+            console.log(`   Rends-leur une charge, ou nomme-les si elles ont été supprimées : --retirer=${perdues.join(',')}`);
+            process.exit(1);
+        }
+        console.log(`\n   plancher actuel ${ancien.couvertes.length} -> ${couvertes.length} ; perdues ${perdues.length}${perdues.length ? ` (nommées : ${perdues.join(', ')})` : ''}`);
+    }
     fs.writeFileSync(PLANCHER, JSON.stringify({
         poseLe: new Date().toISOString(),
         suites: SUITES_HORS_LIGNE,

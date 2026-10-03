@@ -1,14 +1,14 @@
 {
-  "extraitLe": "2026-09-29T09:43:36.293Z",
+  "extraitLe": "2026-10-03T09:24:27.495Z",
   "extraitDe": "test",
   "lignesAuJournal": 280,
   "lignesEligibles": {
     "avecPhoto": 231,
     "abouties": 181
   },
-  "cellulesVoulues": 7,
+  "cellulesVoulues": 8,
   "cellulesManquantes": [],
-  "cartesDistinctes": 7,
+  "cartesDistinctes": 8,
   "empreintePrompt": {
     "hash": "c88c58e2d1573c66",
     "modele": "google/gemini-3-flash-preview",
@@ -50,7 +50,8 @@
         "etatEstime",
         "etatConfiance",
         "title"
-      ]
+      ],
+      "panne": true
     },
     {
       "cellule": "asiatique · setCode HORS table close",
@@ -267,6 +268,43 @@
         "etatConfiance",
         "title"
       ]
+    },
+    {
+      "cellule": "vivier par le nom (ni code, ni pont)",
+      "pourquoi": "le chemin TCGdex -> vivier par le nom -> rangs, que le pont avait laissé sans aucune charge (2026-10-03)",
+      "profondeurExigee": "perimetre-vintage",
+      "source": {
+        "_id": "6a9d3e325830de45d3b38c77",
+        "le": "2026-09-06T10:19:30.173Z",
+        "version": "21a809855af4",
+        "idProduct": 698770
+      },
+      "imageUrl": "https://images1.vinted.net/t/02_0036e_7X6emhygFz51c9v8Xw3kcoVC/f800/66051e0d.webp?s=6e7bb2648e6819a2d74cb7c1edd862feb7185c29",
+      "lecture": {
+        "name": "Ivysaur",
+        "number": "002",
+        "total": null,
+        "setCode": "DP3",
+        "language": "JP",
+        "rarete": "normale",
+        "nomBrut": "フシギソウ",
+        "nomConfiance": "haute",
+        "symboleSet": "illisible",
+        "motif": null,
+        "reverse": null,
+        "rareteElevee": null,
+        "etatEstime": null,
+        "etatConfiance": null
+      },
+      "champsAbsentsDuJournal": [
+        "motif",
+        "reverse",
+        "rareteElevee",
+        "etatEstime",
+        "etatConfiance",
+        "title"
+      ],
+      "panne": true
     }
   ]
 }

@@ -87,6 +87,7 @@ const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 const SEAUX = require('./banc-seaux');
 const { empreintePrompt } = require('./verrou/empreinte');
 const { demarrer, appeler } = require('./verrou/serveur');
+const { profondeurAtteinte, profondeurSuffisante } = require('./verrou/jalons');
 // ⚠️ UNE SEULE DÉFINITION DE LA TRANCHE, partagée avec verrou-avant-push.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
 
@@ -117,8 +118,9 @@ const codesTable = SETS_VINTAGE_JAPONAIS.map(s => S.normaliserCodeSet(s.code));
 //   - Celles dont la profondeur est `verdict`, ou qui attendent un ÉCHEC, encodent une
 //     ISSUE : « cette carte-là sort avec ce résultat-là ». Toute amélioration de
 //     l'identification peut légitimement les périmer.
-// AUJOURD'HUI : 3 du premier type (les trois `perimetre-vintage`), 3 du second
-// (« égalité départagée par le symbole », « réserve FAIBLE », « aucun prix »).
+// AUJOURD'HUI : 4 du premier type (les trois `perimetre-vintage` d'origine et « vivier par le
+// nom », ajoutée le 2026-10-03 et choisie par une SONDE), 4 du second (« égalité départagée par
+// le symbole », « réserve FAIBLE », « aucun prix », « départage par l'image »).
 //
 // ⚠️ ET LES TROIS FRAGILES SONT MENACÉES PAR LE MÊME CHANTIER — celui qui fera du NOM un
 // critère de scoring. Elles reposent toutes sur une ÉGALITÉ : Vileplume sur une égalité
@@ -222,8 +224,33 @@ const CELLULES = [
         // vivier journalisé et retient les lignes qui empruntent le chemin AUJOURD'HUI.
         // On sélectionne sur ce que la chaîne FAIT, jamais sur une étiquette d'époque.
         test: d => d.__imageDepartage === true
+    },
+    {
+        // 🔴 AJOUTÉE LE 2026-10-03 (feu vert du testeur pour adapter le verrou). Depuis le PONT
+        // (2026-09-12), les sept charges passent par la base `cartes` ou par le chemin du code :
+        // AUCUNE ne construisait plus son vivier par le NOM. Le cliquet l'a dit — `rangsDe`,
+        // `viviersAvecRangs`, `viviersUnis` n'étaient plus exécutées. Reposer le plancher aurait
+        // retiré trois fonctions de la protection ; on rend le chemin à une charge.
+        // ⚠️ SÉLECTIONNÉE PAR UNE SONDE, PAS PAR UNE ÉTIQUETTE. `voieCatalogue === 'nom'` dit le
+        // chemin AU MOMENT DU SCAN ; le pont l'a changé depuis pour une partie des lignes. Le
+        // filtre ci-dessous ne fait que des CANDIDATES : chacune traverse la vraie route (phase 2,
+        // enregistreur) et la première dont la sortie dit « pont -> TCGdex » ET « vivier via le nom »
+        // devient la charge. Même doctrine que le départage par l'image : on sélectionne sur ce
+        // que la chaîne FAIT aujourd'hui, jamais sur ce qu'elle a fait (ni sur sa justesse).
+        nom: 'vivier par le nom (ni code, ni pont)',
+        pourquoi: 'le chemin TCGdex -> vivier par le nom -> rangs, que le pont avait laissé sans aucune charge (2026-10-03)',
+        profondeurExigee: 'perimetre-vintage',
+        sonde: true,
+        // Elle sert aussi de deuxième charge à la 7e cellule : la panne du catalogue sur un scan
+        // qui n'a JAMAIS touché le pont, comme la cellule a été écrite à l'origine.
+        panne: true,
+        test: d => d.voieCatalogue === 'nom'
     }
 ];
+// LA SONDE : ce qu'une candidate doit montrer dans la sortie du serveur pour devenir la charge.
+const SONDE_PONT_VERS_TCGDEX = /🌉 \[pont\] .* -> TCGdex\./;
+const SONDE_VIVIER_PAR_NOM = /🗂️ \[identifier\] \d+ candidat\(s\) via le nom/;
+const SONDE_MAX_CANDIDATES = 6;
 
 (async () => {
     const prod = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
@@ -372,7 +399,26 @@ const CELLULES = [
     // Deux lignes de journal de la même carte sont la MÊME carte : dédoublonner par `_id`
     // laisserait passer deux scans du même Hitmontop et ne réglerait rien.
     const prises = new Set();
-    for (const { c, vivier } of servables) {
+    // Les cellules à SONDE passent après toutes les autres : elles ne choisissent qu'à la phase 2,
+    // parmi les lignes que les cellules ordinaires n'ont pas prises (règle de distinction intacte).
+    const aSonder = [];
+    for (const { c, vivier } of [...servables.filter(s => !s.c.sonde), ...servables.filter(s => s.c.sonde)]) {
+        if (c.sonde) {
+            // Plusieurs lignes de la MÊME carte ne font qu'une candidate (identité de banc-seaux.js).
+            const vues = new Set();
+            const candidates = vivier.filter(x => {
+                const id = SEAUX.identiteDe(x);
+                if (prises.has(id) || vues.has(id)) return false;
+                vues.add(id); return true;
+            }).slice(0, SONDE_MAX_CANDIDATES);
+            console.log(`🔎 ${c.nom} : ${vivier.length} ligne(s) éligibles, ${candidates.length} candidate(s) à sonder en phase 2`);
+            if (!candidates.length) {
+                const cause = vivier.length ? `ses ${vivier.length} ligne(s) éligibles sont déjà prises par d'autres cellules` : 'aucune ligne au journal';
+                console.log(`⚠️ ${c.nom} : ${cause} — cellule vide`);
+                raisonVide.set(c.nom, cause);
+            } else aSonder.push({ c, candidates });
+            continue;
+        }
         const d = vivier.find(x => !prises.has(SEAUX.identiteDe(x)));
         if (!d) {
             // Une cellule vide n'est pas une panne du code : c'est un manque de données.
@@ -386,28 +432,7 @@ const CELLULES = [
             continue;
         }
         prises.add(SEAUX.identiteDe(d));
-        charges.push({
-            cellule: c.nom,
-            pourquoi: c.pourquoi,
-            profondeurExigee: c.profondeurExigee,
-            source: { _id: String(d._id), le: d.le, version: d.version ?? null, idProduct: d.idProduct },
-            imageUrl: d.imageUrl,
-            lecture: {
-                name: d.nom,
-                number: d.numero ?? null,
-                total: d.total ?? null,
-                setCode: d.setCode ?? null,
-                language: d.langue ?? 'EN',
-                rarete: d.rarete ?? null,
-                nomBrut: d.nomBrut ?? null,
-                nomConfiance: d.nomConfiance ?? null,
-                symboleSet: d.symboleSet ?? null,
-                // ⚠️ ABSENTS DU JOURNAL — null EXPLICITE, jamais une valeur inventée.
-                motif: null, reverse: null, rareteElevee: null,
-                etatEstime: null, etatConfiance: null
-            },
-            champsAbsentsDuJournal: ['motif', 'reverse', 'rareteElevee', 'etatEstime', 'etatConfiance', 'title']
-        });
+        charges.push(chargeDe(c, d));
         console.log(`✅ ${c.nom}`);
         console.log(`     "${d.nom}" n°${d.numero ?? '—'} setCode=${d.setCode ?? '—'} ${d.langue} -> ${d.idProduct}  (${d.le?.toISOString?.().slice(0, 16)})`);
         console.log(`     profondeur exigée : ${c.profondeurExigee}`);
@@ -416,6 +441,13 @@ const CELLULES = [
         console.error('\n❌ Aucune charge extractible. Scanne quelques cartes, puis relance.');
         process.exit(1);
     }
+    // LA 7e CELLULE (verrou-avant-push.js) rejoue en panne les charges marquées `panne` : la
+    // première charge, comme depuis l'origine, et la charge de la cellule à sonde si elle sort.
+    charges[0].panne = true;
+    // Les candidates de la sonde voyagent avec les charges jusqu'à la phase 2 : la tranche doit
+    // contenir leur vivier et l'enregistreur leur lecture. Celles qui ne passent pas la sonde
+    // sont retirées du fichier avant la fin.
+    const candidatesSonde = aSonder.flatMap(({ c, candidates }) => candidates.map(d => ({ ...chargeDe(c, d), sonde: true })));
 
     // ── LA TRANCHE DE CATALOGUE ──────────────────────────────────────────────
     // Copiée depuis la production, jamais fabriquée : vrais produits, vrais numéros,
@@ -432,7 +464,9 @@ const CELLULES = [
     // sortant (règle du dépôt, correctement appliquée), il détruisait ce que l'étape
     // suivante attendait. Le verrou n'a pas pu passer au vert pendant trois jours pour
     // cette raison. Voir l'en-tête de verrou/tranche.js — l'incident y est écrit en entier.
-    const comptes = await copierTranche(prod, bac, charges);
+    // Les candidates de la sonde y entrent aussi : sans leur vivier, la sonde verrait « aucun
+    // candidat » et refuserait une ligne pour une raison qui tient au bac, pas à la route.
+    const comptes = await copierTranche(prod, bac, [...charges, ...candidatesSonde]);
     for (const [nom, n] of Object.entries(comptes)) console.log(`   ${nom.padEnd(20)} ${n}`);
     // La garde est-elle franchissable dans le bac ? Si un candidat manque, la cellule
     // s'abstiendra — et il vaut mieux le savoir ici que dans un verrou rouge sans cause.
@@ -466,9 +500,13 @@ const CELLULES = [
     }
 
     const empreinte = empreintePrompt();
-    fs.writeFileSync(SORTIE, JSON.stringify({
-        extraitLe: new Date().toISOString(),
-        extraitDe: prod.db.databaseName,
+    const extraitDe = prod.db.databaseName;
+    const extraitLe = new Date().toISOString();
+    // Écrit deux fois : AVANT la phase 2 avec les candidates de la sonde (l'enregistreur lit les
+    // lectures dans ce fichier), APRÈS avec les seules charges retenues.
+    const ecrireCharges = liste => fs.writeFileSync(SORTIE, JSON.stringify({
+        extraitLe,
+        extraitDe,
         // ⚠️ DE QUOI DIRE SI DEUX EXÉCUTIONS SONT COMPARABLES, sans avoir à le déduire.
         // Une réextraction sur un journal plus long rend des charges DIFFÉRENTES : le
         // 2026-08-11, passer de 131 à 142 lignes a changé quatre charges sur six. Deux
@@ -489,21 +527,22 @@ const CELLULES = [
         //      d'aller chercher une charge qui passe — ce qui serait sélectionner sur le
         //      résultat.
         cellulesManquantes: CELLULES
-            .filter(c => !charges.some(ch => ch.cellule === c.nom))
+            .filter(c => !liste.some(ch => ch.cellule === c.nom))
             .map(c => `${c.nom} — ${raisonVide.get(c.nom) ?? 'raison inconnue'}`),
         // ⚠️ LE CHIFFRE QUI DÉCRIT LA COUVERTURE RÉELLE. Le nombre de cellules dit combien
         // de situations on VOULAIT couvrir ; celui-ci dit combien de cartes différentes
         // traversent réellement la route. Quand les deux divergent, c'est le second qui a
         // raison — et c'est arrivé : six cellules pour cinq cartes, le 2026-08-11.
-        cartesDistinctes: new Set(charges.map(ch => SEAUX.identiteDe({
+        cartesDistinctes: new Set(liste.map(ch => SEAUX.identiteDe({
             nom: ch.lecture.name, numero: ch.lecture.number,
             setCode: ch.lecture.setCode, total: ch.lecture.total
         }))).size,
         empreintePrompt: empreinte,
         commentRafraichir: 'node verrou-charges.js --base=test',
-        charges
+        charges: liste
     }, null, 2), 'utf8');
-    console.log(`\n📝 ${SORTIE} — ${charges.length}/${CELLULES.length} cellules · empreinte ${empreinte.hash}`);
+    ecrireCharges([...charges, ...candidatesSonde]);
+    console.log(`\n📝 ${SORTIE} — ${charges.length} charge(s) + ${candidatesSonde.length} candidate(s) à sonder · empreinte ${empreinte.hash}`);
     await prod.close();
 
     // ── PHASE 2 : ENREGISTREMENT DE TCGdex ───────────────────────────────────
@@ -518,12 +557,55 @@ const CELLULES = [
         console.error('❌ Mongo non connecté côté serveur d\'enregistrement.');
         srv.enfant.kill(); process.exit(1);
     }
+    const poster = c => appeler(srv.port, 'POST', '/api/identifier', {
+        userId: USER_VERROU, imageUrls: [c.imageUrl], title: null, vintedEtat: null
+    }, JETON);
+
+    // ── LA SONDE : la première candidate dont la sortie montre le chemin devient la charge ──
+    // ⚠️ On lit le CHEMIN dans la sortie du serveur (les mêmes logs que les jalons), jamais la
+    // réponse : le résultat de la carte n'entre pas dans le choix.
+    for (const { c, candidates } of aSonder) {
+        let retenue = null;
+        for (const d of candidates) {
+            const ch = candidatesSonde.find(x => x.source._id === String(d._id));
+            const avant = srv.lire().length;
+            const r = await poster(ch);
+            const sortie = srv.lire().slice(avant);
+            const pontVersTcgdex = SONDE_PONT_VERS_TCGDEX.test(sortie);
+            const parNom = SONDE_VIVIER_PAR_NOM.test(sortie);
+            const prof = profondeurSuffisante(profondeurAtteinte(sortie, r.json).atteint, c.profondeurExigee).ok;
+            console.log(`   🔎 ${ch.lecture.name} n°${ch.lecture.number ?? '—'} (${ch.lecture.language}) : pont -> TCGdex ${pontVersTcgdex ? 'oui' : 'non'} · vivier par le nom ${parNom ? 'oui' : 'non'} · profondeur ${prof ? 'atteinte' : 'non atteinte'}`);
+            if (pontVersTcgdex && parNom && prof) { retenue = ch; break; }
+        }
+        if (retenue) {
+            const { sonde, ...charge } = retenue;
+            charges.push({ ...charge, panne: c.panne === true });
+            console.log(`✅ ${c.nom} : « ${charge.lecture.name} » retenue par la sonde`);
+        } else {
+            const cause = `aucune des ${candidates.length} candidate(s) ne prend ce chemin aujourd'hui (sonde)`;
+            console.log(`⚠️ ${c.nom} : ${cause} — cellule vide`);
+            raisonVide.set(c.nom, cause);
+        }
+    }
+
     for (const c of charges) {
-        const r = await appeler(srv.port, 'POST', '/api/identifier', {
-            userId: USER_VERROU, imageUrls: [c.imageUrl], title: null, vintedEtat: null
-        }, JETON);
+        const r = await poster(c);
         console.log(`   ${c.lecture.name.padEnd(18)} -> ${r.json?.success ? 'succès' : `échec : ${r.json?.error ?? r.status}`}`);
     }
+    // ── ET LE CHEMIN DE PANNE, ENREGISTRÉ AUSSI (2026-10-03) ──
+    // La 7e cellule rejoue ces charges catalogue coupé. Ce que la route demande alors à TCGdex
+    // (le pont tombé, elle repart vers TCGdex) doit être sur la cassette, sinon la cellule
+    // mesure une URL manquante et pas la parade.
+    for (const c of charges.filter(x => x.panne)) {
+        srv.enfant.send('panne-catalogue');
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire()); i++) await new Promise(r => setTimeout(r, 50));
+        const r = await poster(c);
+        srv.enfant.send('panne-catalogue-off');
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE LEVEE/.test(srv.lire().slice(-400)); i++) await new Promise(r => setTimeout(r, 50));
+        console.log(`   ${c.lecture.name.padEnd(18)} -> catalogue coupé : ${r.json?.success ? 'succès ⚠️' : `refus (${r.json?.natureRefus ?? '?'})`}`);
+    }
+    ecrireCharges(charges);
+    console.log(`📝 ${SORTIE} — ${charges.length}/${CELLULES.length} cellules (candidates non retenues retirées)`);
     // Vidage explicite : sur Windows, SIGTERM n'est pas toujours délivré au processus Node.
     await new Promise(resolve => {
         srv.enfant.once('message', m => { if (m === 'vide') resolve(); });
@@ -542,7 +624,14 @@ const CELLULES = [
     // Nettoyage du bac : les lignes de journal et le crédit créés par l'enregistrement.
     const nj = await bac.collection('journal_scans').deleteMany({ userId: USER_VERROU });
     const nc = await bac.collection('credits').deleteMany({ userId: USER_VERROU });
-    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s) supprimés.`);
+    // ⚠️ `remboursements` ET `quotas_semaine` AUSSI (2026-10-03) : l'enregistrement rejoue
+    // désormais des scans refusés (la charge d'échec, les pannes) et chacun est REMBOURSÉ. Le
+    // compteur anti-abus est par (userId, JOUR), plafonné à 5 : laissé ici, il ferait refuser au
+    // verrou lancé ensuite le remboursement de sa 7e cellule — l'incident du 2026-08-19, déplacé
+    // d'un outil (voir l'en-tête de verrou-avant-push.js).
+    const nr = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
+    const nq = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
+    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nq.deletedCount} quota(s) hebdo supprimés.`);
 
     // ════════════════════════════════════════════════════════════════════════
     // 🔴 ET LA TRANCHE, QUI NE L'ÉTAIT PAS — CORRIGÉ LE 2026-08-30
@@ -570,3 +659,30 @@ const CELLULES = [
 })();
 
 function echapper(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Une charge, depuis une ligne de journal : la MÊME construction pour les cellules ordinaires et
+// pour les candidates de la sonde (deux constructions divergeraient au premier champ ajouté).
+function chargeDe(c, d) {
+    return {
+        cellule: c.nom,
+        pourquoi: c.pourquoi,
+        profondeurExigee: c.profondeurExigee,
+        source: { _id: String(d._id), le: d.le, version: d.version ?? null, idProduct: d.idProduct },
+        imageUrl: d.imageUrl,
+        lecture: {
+            name: d.nom,
+            number: d.numero ?? null,
+            total: d.total ?? null,
+            setCode: d.setCode ?? null,
+            language: d.langue ?? 'EN',
+            rarete: d.rarete ?? null,
+            nomBrut: d.nomBrut ?? null,
+            nomConfiance: d.nomConfiance ?? null,
+            symboleSet: d.symboleSet ?? null,
+            // ⚠️ ABSENTS DU JOURNAL — null EXPLICITE, jamais une valeur inventée.
+            motif: null, reverse: null, rareteElevee: null,
+            etatEstime: null, etatConfiance: null
+        },
+        champsAbsentsDuJournal: ['motif', 'reverse', 'rareteElevee', 'etatEstime', 'etatConfiance', 'title']
+    };
+}

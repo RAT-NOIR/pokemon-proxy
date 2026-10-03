@@ -380,19 +380,38 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     //
     // ELLE NE CONSOMME AUCUNE CHARGE NOUVELLE : elle rejoue la première, avec le
     // catalogue coupé. Ce qu'on mesure n'est pas la carte, c'est la sortie.
+    //
+    // 🔴 ADAPTÉE LE 2026-10-03 (feu vert du testeur). Sa charge passait par TCGdex quand elle a été
+    // écrite ; depuis le pont (2026-09-12) elle passe par la base `cartes`, dont la lecture du
+    // catalogue n'était pas enveloppée — c'est cette cellule qui l'a dit, seize jours après. Elle
+    // rejoue désormais CHAQUE charge marquée `panne` par verrou-charges.js : la première (le pont)
+    // et celle de la cellule « vivier par le nom » (le chemin TCGdex d'origine). Les assertions
+    // n'ont pas bougé d'une ligne ; ce qui a changé, c'est que la cassette contient ce que la route
+    // demande à TCGdex quand le catalogue est tombé (verrou/panne-catalogue.js, enregistré aussi).
+    // Preuve qu'elle sait encore dire non : la lecture du pont désenveloppée à la main (la panne
+    // d'origine) la fait repasser au ROUGE — rejoué le 2026-10-03, voir CLAUDE.md §71.
     console.log('\n=== 3 bis. 7e cellule : le catalogue tombe pendant un scan ===');
+    const chargesPanne = donnees.charges.filter(c => c.panne === true);
+    if (!chargesPanne.length && donnees.charges.length) {
+        avertir('aucune charge marquée `panne` (charges extraites avant le 2026-10-03)',
+            'la cellule rejoue la première charge seule -> node verrou-charges.js --base=test');
+        chargesPanne.push(donnees.charges[0]);
+    }
     if (!donnees.charges.length) {
         console.log('  ⛔ aucune charge disponible — cellule non exercée.');
-    } else {
-        const c7 = donnees.charges[0];
+    }
+    for (const c7 of chargesPanne) {
+        console.log(`  ── « ${c7.lecture.name} » (${c7.cellule})`);
         const avant7 = srv.lire().length;
         srv.enfant.send('panne-catalogue');
         // L'IPC est asynchrone : sans cette attente, la requête pourrait partir avant que
         // le serveur ait armé la panne, et la cellule passerait au vert en n'exerçant rien.
-        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire()); i++) {
+        // ⚠️ LUE DEPUIS `avant7` : à la deuxième charge, la ligne d'armement de la première est
+        // déjà dans la sortie, et l'attente passerait sans que la nouvelle panne soit armée.
+        for (let i = 0; i < 40 && !/PANNE-CATALOGUE ARMEE/.test(srv.lire().slice(avant7)); i++) {
             await new Promise(r => setTimeout(r, 50));
         }
-        verifier('[7e] la panne est armée côté serveur', /PANNE-CATALOGUE ARMEE/.test(srv.lire()));
+        verifier('[7e] la panne est armée côté serveur', /PANNE-CATALOGUE ARMEE/.test(srv.lire().slice(avant7)));
 
         const r7 = await appeler(srv.port, 'POST', '/api/identifier', {
             userId: USER_VERROU, imageUrls: [c7.imageUrl], title: null, vintedEtat: null
@@ -401,6 +420,12 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         const logs7 = srv.lire().slice(avant7);
 
         verifier('[7e] réponse HTTP', r7.status === 200, `status ${r7.status}`);
+        // 🔴 LA CASSETTE COUVRE LE CHEMIN DE PANNE (2026-10-03). Sans elle, TCGdex tombe AUSSI
+        // (URL non enregistrée), le refus sort en échec technique pour une raison qui tient au faux
+        // réseau, et la cellule passe ou casse sans avoir mesuré la parade du catalogue.
+        verifier('[7e] toutes les URL TCGdex du chemin de panne sont enregistrées',
+            !/URL-TCGDEX-NON-ENREGISTREE/.test(logs7),
+            'cassette à trou sur le chemin de panne -> node verrou-charges.js --base=test');
         // ⚠️ PAS SORTIE PAR LE CATCH. Une panne de source doit produire un REFUS PROPRE,
         // pas une exception : si la route sortait par son catch, l'utilisateur verrait
         // « Erreur serveur interne » et la parade n'aurait servi à rien.

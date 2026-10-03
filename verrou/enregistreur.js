@@ -16,6 +16,10 @@
 
 const axios = require('axios');
 const fs = require('fs');
+// 🔑 LA MÊME PANNE QUE CELLE QUE LE VERROU REJOUERA (2026-10-03). Sans elle, ce que la route
+// demande à TCGdex quand le catalogue est tombé n'était jamais enregistré : la 7e cellule
+// rejouait la panne sur une cassette à trou. Voir verrou/panne-catalogue.js.
+require('./panne-catalogue').poserPanneCatalogue();
 
 const CHARGES = process.env.VERROU_CHARGES;
 const SORTIE = process.env.VERROU_ENREGISTRER;

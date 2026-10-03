@@ -1,6 +1,6 @@
 {
-  "enregistreLe": "2026-09-29T09:43:51.252Z",
-  "nb": 8,
+  "enregistreLe": "2026-10-03T09:24:37.268Z",
+  "nb": 12,
   "chargesCouvertes": [
     "6a9fcde7e019222f81e4a59c",
     "6a9fcd6fe019222f81e4a4d6",
@@ -8,9 +8,182 @@
     "6a9fccace019222f81e4a46c",
     "6a9fcdb3e019222f81e4a540",
     "6a9fd0f2205b2fd829b454e9",
-    "6a9fcdd8e019222f81e4a586"
+    "6a9fcdd8e019222f81e4a586",
+    "6a9d3e325830de45d3b38c77",
+    "6a9d243a88d0b8dd4478d0f5",
+    "6a9938932d1b97d8f5f9f752",
+    "6a95dc5d17ae78dd8190cae4",
+    "6a90568ae8a3767d791bd55c",
+    "6a905558e8a3767d791bd52e"
   ],
   "reponses": {
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%83%95%E3%82%B7%E3%82%AE%E3%82%BD%E3%82%A6": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "SM8b-002",
+          "localId": "002",
+          "name": "フシギソウ"
+        },
+        {
+          "id": "SM3p-002",
+          "localId": "002",
+          "name": "フシギソウ"
+        },
+        {
+          "id": "M1L-002",
+          "localId": "002",
+          "name": "フシギソウ"
+        },
+        {
+          "id": "SV2a-002",
+          "localId": "002",
+          "name": "フシギソウ",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/002"
+        },
+        {
+          "id": "PMCG1-008",
+          "localId": "008",
+          "name": "フシギソウ"
+        },
+        {
+          "id": "PMCG6-010",
+          "localId": "010",
+          "name": "エリカのフシギソウ"
+        },
+        {
+          "id": "M1L-065",
+          "localId": "065",
+          "name": "フシギソウ"
+        },
+        {
+          "id": "SV2a-167",
+          "localId": "167",
+          "name": "フシギソウ",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/167"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/ja/cards/SM8b-002": {
+      "statut": 200,
+      "data": {
+        "category": "Pokemon",
+        "id": "SM8b-002",
+        "illustrator": "Kouki Saitou",
+        "localId": "002",
+        "name": "フシギソウ",
+        "rarity": "None",
+        "set": {
+          "cardCount": {
+            "official": 150,
+            "total": 250
+          },
+          "id": "SM8b",
+          "name": "GXウルトラシャイニー"
+        },
+        "variants": {
+          "firstEdition": false,
+          "holo": false,
+          "normal": true,
+          "reverse": false,
+          "wPromo": false
+        },
+        "variants_detailed": [
+          {
+            "type": "normal",
+            "size": "standard",
+            "thirdParty": {
+              "cardmarket": 550496
+            },
+            "variantId": "endfynwn4n10gzq",
+            "pricing": {
+              "cardmarket": {
+                "updated": "2026-10-02T09:52:36.557Z",
+                "unit": "EUR",
+                "idProduct": 550496,
+                "avg": null,
+                "low": 0.4,
+                "trend": 1.01,
+                "avg1": 0.4,
+                "avg7": 1.01,
+                "avg30": 0.88,
+                "avg-holo": 0.5,
+                "low-holo": 0.4,
+                "trend-holo": 1.96,
+                "avg1-holo": 0.49,
+                "avg7-holo": 1.83,
+                "avg30-holo": 1.41
+              },
+              "tcgplayer": null
+            }
+          }
+        ],
+        "dexId": [
+          2
+        ],
+        "hp": 100,
+        "types": [
+          "Grass"
+        ],
+        "evolveFrom": "フシギダネ",
+        "description": "つぼみが 背中に ついていて 養分を 吸収していくと 大きな 花が 咲くという。",
+        "stage": "Stage1",
+        "attacks": [
+          {
+            "cost": [
+              "Grass",
+              "Colorless"
+            ],
+            "name": "はっぱカッター",
+            "damage": 30
+          },
+          {
+            "cost": [
+              "Grass",
+              "Grass",
+              "Colorless",
+              "Colorless"
+            ],
+            "name": "もうどくのムチ",
+            "effect": "相手のバトルポケモンをどくとこんらんにする。",
+            "damage": 50
+          }
+        ],
+        "weaknesses": [
+          {
+            "type": "Fire",
+            "value": "x2"
+          }
+        ],
+        "resistances": [],
+        "retreat": 4,
+        "legal": {
+          "standard": false,
+          "expanded": false
+        },
+        "updated": "2026-09-25T23:45:16.431Z",
+        "pricing": {
+          "cardmarket": {
+            "updated": "2026-10-02T09:52:36.557Z",
+            "unit": "EUR",
+            "idProduct": 550496,
+            "avg": null,
+            "low": 0.4,
+            "trend": 1.01,
+            "avg1": 0.4,
+            "avg7": 1.01,
+            "avg30": 0.88,
+            "avg-holo": 0.5,
+            "low-holo": 0.4,
+            "trend-holo": 1.96,
+            "avg1-holo": 0.49,
+            "avg7-holo": 1.83,
+            "avg30-holo": 1.41
+          },
+          "tcgplayer": null
+        }
+      }
+    },
     "https://api.tcgdex.net/v2/ja/sets": {
       "statut": 200,
       "data": [
@@ -5156,12 +5329,12 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-28T09:52:36.567Z",
+                "updated": "2026-10-02T09:52:46.077Z",
                 "unit": "EUR",
                 "idProduct": 273798,
-                "avg": 38.37,
+                "avg": 28.91,
                 "low": 4,
-                "trend": 30.92,
+                "trend": 21.97,
                 "avg1": 25,
                 "avg7": 31.33,
                 "avg30": 34.49,
@@ -5174,22 +5347,22 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-09-28T09:52:37.739Z",
+                "updated": "2026-10-02T09:52:46.005Z",
                 "1st-edition-holofoil": {
                   "productId": 45120,
-                  "lowPrice": 74.99,
-                  "midPrice": 117.07,
-                  "highPrice": 1045.46,
+                  "lowPrice": 98.99,
+                  "midPrice": 113.56,
+                  "highPrice": 1045.44,
                   "marketPrice": 119.1,
                   "directLowPrice": null
                 },
                 "unlimited-holofoil": {
                   "productId": 45120,
-                  "lowPrice": 19.87,
-                  "midPrice": 28.79,
+                  "lowPrice": 19.92,
+                  "midPrice": 27,
                   "highPrice": 192.34,
-                  "marketPrice": 38.1,
-                  "directLowPrice": null
+                  "marketPrice": 38.06,
+                  "directLowPrice": 38.08
                 }
               }
             }
@@ -5207,12 +5380,12 @@
             "variantId": "3a83wf50ts0izj268xwv3crwi",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-09-28T09:52:36.567Z",
+                "updated": "2026-10-02T09:52:46.077Z",
                 "unit": "EUR",
                 "idProduct": 273798,
-                "avg": 38.37,
+                "avg": 28.91,
                 "low": 4,
-                "trend": 30.92,
+                "trend": 21.97,
                 "avg1": 25,
                 "avg7": 31.33,
                 "avg30": 34.49,
@@ -5225,22 +5398,22 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-09-28T09:52:37.739Z",
+                "updated": "2026-10-02T09:52:46.005Z",
                 "1st-edition-holofoil": {
                   "productId": 45120,
-                  "lowPrice": 74.99,
-                  "midPrice": 117.07,
-                  "highPrice": 1045.46,
+                  "lowPrice": 98.99,
+                  "midPrice": 113.56,
+                  "highPrice": 1045.44,
                   "marketPrice": 119.1,
                   "directLowPrice": null
                 },
                 "unlimited-holofoil": {
                   "productId": 45120,
-                  "lowPrice": 19.87,
-                  "midPrice": 28.79,
+                  "lowPrice": 19.92,
+                  "midPrice": 27,
                   "highPrice": 192.34,
-                  "marketPrice": 38.1,
-                  "directLowPrice": null
+                  "marketPrice": 38.06,
+                  "directLowPrice": 38.08
                 }
               }
             }
@@ -5307,12 +5480,12 @@
         "updated": "2026-08-14T19:45:37+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-09-28T09:52:36.567Z",
+            "updated": "2026-10-02T09:52:46.077Z",
             "unit": "EUR",
             "idProduct": 273798,
-            "avg": 38.37,
+            "avg": 28.91,
             "low": 4,
-            "trend": 30.92,
+            "trend": 21.97,
             "avg1": 25,
             "avg7": 31.33,
             "avg30": 34.49,
@@ -5325,24 +5498,242 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-09-28T09:52:37.739Z",
+            "updated": "2026-10-02T09:52:46.005Z",
             "1st-edition-holofoil": {
               "productId": 45120,
-              "lowPrice": 74.99,
-              "midPrice": 117.07,
-              "highPrice": 1045.46,
+              "lowPrice": 98.99,
+              "midPrice": 113.56,
+              "highPrice": 1045.44,
               "marketPrice": 119.1,
               "directLowPrice": null
             },
             "unlimited-holofoil": {
               "productId": 45120,
-              "lowPrice": 19.87,
-              "midPrice": 28.79,
+              "lowPrice": 19.92,
+              "midPrice": 27,
               "highPrice": 192.34,
-              "marketPrice": 38.1,
-              "directLowPrice": null
+              "marketPrice": 38.06,
+              "directLowPrice": 38.08
             }
           }
+        }
+      }
+    },
+    "https://api.tcgdex.net/v2/ja/cards?name=%E3%82%AB%E3%83%A1%E3%83%BC%E3%83%AB": {
+      "statut": 200,
+      "data": [
+        {
+          "id": "SV2a-008",
+          "localId": "008",
+          "name": "カメール",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/008"
+        },
+        {
+          "id": "SM9b-009",
+          "localId": "009",
+          "name": "カメール"
+        },
+        {
+          "id": "PMCG4-021",
+          "localId": "021",
+          "name": "わるいカメール"
+        },
+        {
+          "id": "SM9-022",
+          "localId": "022",
+          "name": "カメール"
+        },
+        {
+          "id": "PMCG1-027",
+          "localId": "027",
+          "name": "カメール"
+        },
+        {
+          "id": "SM12a-030",
+          "localId": "030",
+          "name": "カメール"
+        },
+        {
+          "id": "SV2a-171",
+          "localId": "171",
+          "name": "カメール",
+          "image": "https://assets.tcgdex.net/ja/SV/SV2a/171"
+        }
+      ]
+    },
+    "https://api.tcgdex.net/v2/ja/cards/SV2a-008": {
+      "statut": 200,
+      "data": {
+        "category": "Pokemon",
+        "id": "SV2a-008",
+        "illustrator": "kantaro",
+        "image": "https://assets.tcgdex.net/ja/SV/SV2a/008",
+        "localId": "008",
+        "name": "カメール",
+        "rarity": "Uncommon",
+        "set": {
+          "cardCount": {
+            "official": 165,
+            "total": 210
+          },
+          "id": "SV2a",
+          "name": "ポケモンカード151"
+        },
+        "variants": {
+          "firstEdition": false,
+          "holo": false,
+          "normal": true,
+          "reverse": true,
+          "wPromo": false
+        },
+        "variants_detailed": [
+          {
+            "type": "normal",
+            "size": "standard",
+            "thirdParty": {
+              "cardmarket": 719450
+            },
+            "variantId": "endfynwn4n10gzq",
+            "pricing": {
+              "cardmarket": {
+                "updated": "2026-10-02T09:52:36.557Z",
+                "unit": "EUR",
+                "idProduct": 719450,
+                "avg": 0.15,
+                "low": 0.02,
+                "trend": 0.08,
+                "avg1": 0.03,
+                "avg7": 0.18,
+                "avg30": 0.14,
+                "avg-holo": 4.5,
+                "low-holo": 0.1,
+                "trend-holo": 4.88,
+                "avg1-holo": 1.9,
+                "avg7-holo": 3.52,
+                "avg30-holo": 3.91
+              },
+              "tcgplayer": null
+            }
+          },
+          {
+            "type": "reverse",
+            "size": "standard",
+            "foil": "pokeball",
+            "thirdParty": {
+              "cardmarket": 837240
+            },
+            "variantId": "3739bbtj3i910y5ynn9xc6ryf",
+            "pricing": {
+              "cardmarket": {
+                "updated": "2026-10-02T09:52:36.557Z",
+                "unit": "EUR",
+                "idProduct": 837240,
+                "avg": null,
+                "low": 5,
+                "trend": 12,
+                "avg1": 12,
+                "avg7": 12,
+                "avg30": 12,
+                "avg-holo": 20.56,
+                "low-holo": 5,
+                "trend-holo": 15.48,
+                "avg1-holo": 11,
+                "avg7-holo": 20.56,
+                "avg30-holo": 13.46
+              },
+              "tcgplayer": null
+            }
+          },
+          {
+            "type": "reverse",
+            "size": "standard",
+            "foil": "masterball",
+            "thirdParty": {
+              "cardmarket": 837241
+            },
+            "variantId": "2asus05yghmpd1ud1sdmlq3as4e",
+            "pricing": {
+              "cardmarket": {
+                "updated": "2026-10-02T09:52:36.557Z",
+                "unit": "EUR",
+                "idProduct": 837241,
+                "avg": null,
+                "low": 0.1,
+                "trend": 0,
+                "avg1": null,
+                "avg7": null,
+                "avg30": null,
+                "avg-holo": 0.91,
+                "low-holo": 0.1,
+                "trend-holo": 1.03,
+                "avg1-holo": 0.93,
+                "avg7-holo": 0.86,
+                "avg30-holo": 0.74
+              },
+              "tcgplayer": null
+            }
+          }
+        ],
+        "dexId": [
+          8
+        ],
+        "hp": 100,
+        "types": [
+          "Water"
+        ],
+        "evolveFrom": "ゼニガメ",
+        "description": "ふさふさの 耳と しっぽを たくみに 操って 水中での バランスを たもつ。",
+        "stage": "Stage1",
+        "attacks": [
+          {
+            "cost": [
+              "Water"
+            ],
+            "name": "すもぐり",
+            "effect": "自分のトラッシュから「基本[W]エネルギー」を3枚まで選び、相手に見せて、手札に加える。"
+          },
+          {
+            "cost": [
+              "Water",
+              "Water"
+            ],
+            "name": "かいてんアタック",
+            "damage": 50
+          }
+        ],
+        "weaknesses": [
+          {
+            "type": "Lightning",
+            "value": "x2"
+          }
+        ],
+        "resistances": [],
+        "retreat": 2,
+        "regulationMark": "G",
+        "legal": {
+          "standard": false,
+          "expanded": false
+        },
+        "updated": "2026-09-25T23:45:19.162Z",
+        "pricing": {
+          "cardmarket": {
+            "updated": "2026-10-02T09:52:36.557Z",
+            "unit": "EUR",
+            "idProduct": 719450,
+            "avg": 0.15,
+            "low": 0.02,
+            "trend": 0.08,
+            "avg1": 0.03,
+            "avg7": 0.18,
+            "avg30": 0.14,
+            "avg-holo": 4.5,
+            "low-holo": 0.1,
+            "trend-holo": 4.88,
+            "avg1-holo": 1.9,
+            "avg7-holo": 3.52,
+            "avg30-holo": 3.91
+          },
+          "tcgplayer": null
         }
       }
     }
