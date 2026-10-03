@@ -550,6 +550,24 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 70. LE VERROU ÉTAIT ROUGE SUR `main` DEPUIS SEIZE JOURS — PERSONNE NE L'AVAIT LANCÉ — 2026-09-29 → 2026-10-03
+
+> 🔴 **Ajouter la date du guide à la réponse a fait relancer `verrou-avant-push.js` : 5 échecs — sur HEAD aussi, sans le changement.**
+> La lecture du catalogue par le PONT (2026-09-12) n'était pas enveloppée par `interrogerSource` : une panne du catalogue sortait par
+> le catch (« Erreur serveur interne ») au lieu d'être constatée. Le dernier verrou vert datait du 2026-09-05 ; le scoring, le pont,
+> la file serveur sont partis en production entre-temps, verrou jamais rejoué. 🔑 **Un verrou qu'on ne lance pas n'est pas vert, il
+> est muet** — et la règle de l'en-tête (branche, verrou, puis merge) n'a pas été appliquée aux commits de route de ces deux
+> semaines. Corrigé sur la branche `api-date-guide` (enveloppe `catalogue/pont`) ; restent 2 échecs qui tiennent au VERROU (sa 7e
+> cellule passe par le pont, qui n'appelle pas TCGdex ; le cliquet perd 3 fonctions) — son adaptation attend le testeur, pas de merge.
+
+**Écrit (feux verts du 2026-09-28)** : xm2a, 20 lignes rendues à `tcgdex` après double preuve (`retablir-source-tcgdex.js`, juge 12/12) ;
+23 logos génériques retirés, et les trois collecteurs refusent désormais un générique (son refus s'écrit, il ne retire jamais un logo
+posé d'une autre source — relecture). ⚠️ La table maîtresse a perdu 9 vertes (WP, NP, POP1-9) : « logo à chercher », que le logo
+composé rendra. **TCGdex indonésien** pour les sets IDTH : la clé est le CODE (le nom est traduit, §39) ; plan sur le cache : SV8s
+62/62, SV9s 46/46, **SV7s 0/63** (nos produits portent 172-229, l'indonésien s'arrête au 166). **Premier banc dense sur 66 photos
+réelles** : impression au rang 1 sur 23/58, **36/58 une fois la photo redressée** — la détection de la carte est la première étape
+(PLAN-IDENTIFICATION.md). Les sous-agents tournent en `sonnet` (testeur, 2026-09-29).
+
 ## 69. LE MOTIF DEVANT LA RÈGLE, UN GUIDE DE PRIX DATÉ, ET UN HACHAGE QUE SON BANC A REFUSÉ — 2026-09-28 (soir)
 
 > 🔑 **DÉCISION DU TESTEUR (scoring) : quand le MOTIF lu sur la photo désigne la ligne déduite — elle seule —, « une lecture passe
