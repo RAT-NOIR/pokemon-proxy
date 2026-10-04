@@ -550,6 +550,43 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 71. L'AUTO-BANC : UN INDEX QUI NE LISAIT PAS LE CODE IMPRIMÉ, UNE COMPARAISON EN DEUX COPIES, ET « INCONNU » PRIS POUR « MOINS BIEN » — 2026-10-03 (nuit)
+
+> 🔴 **212 FAUX AFFIRMÉS EN LECTURE PARFAITE, TOUS DANS DES SETS « ADDITIONALS » (xASC 134, xBLK 77, xPRE 1).** L'index du labo comparait
+> le code Cardmarket « xASC » au « ASC » imprimé et CONTREDISAIT la vraie carte. La simulation lisait le code imprimé ; la production le
+> sait depuis août (`memeCodeParConventionX`). Le motif en tête du catalogue, dans le labo : la règle vivait dans l'instrument ET dans la
+> production, pas dans l'index. Code imprimé dans l'index (17 codes « x » sur 781, tous des Additionals à base existante) : sans autre
+> donnée, ASC001 et xASC001 V1/V2 (même nom, numéro, code, VISUEL) ne s'affirment plus — **ce qui les sépare est le MOTIF**.
+
+**L'INDEX DES MOTIFS** (`pokemon-proxy-labo/index-motifs.js`) : `variants_detailed` de TCGdex, classé par `analyserVariantes` IMPORTÉE de
+scoring.js. Le GraphQL n'a pas l'idProduct (introspection : type, subtype, size, stamp, foil) → REST, une requête par carte. Le japonais
+n'était « pas vérifié » : témoin (2 requêtes) — SV2a porte l'idProduct de ses reverses, SV8a non. Restent des groupes où deux produits
+portent « aucun » : des TAMPONS (`stamp` : set-logo, player-rewards-program…) — le prochain champ, sans risque d'ici là (la règle n'y
+affirme rien). ⚠️ TCGdex a répondu 503 par intermittence (~1 requête sur 25, à 2 s comme à 5 s ; témoin : 200 sur la même carte peu après) ;
+et l'outil n'écrivait son cache que toutes les 20 cartes — les lectures d'avant un 503 étaient perdues (§38 : une REPRISE). Réessai unique
+après 60 s, cache écrit même sur erreur.
+**LA COMPARAISON LECTURE ↔ PRODUIT VIVAIT EN DEUX COPIES** (concordance dans `chercherTexte`, contradiction dans `candidats`, §21 bis) et
+comparait à la lettre : le banc réel perdait des affirmations justes sur « XY141 »/141, « TG16 » code « TG », « e1 »/EC1. Réunie en
+`comparer` sur les fonctions de la production. 🔴 **Et la relecture (sous-agent) y a trouvé quatre contradictions MANQUANTES — le sens qui
+fait affirmer à tort** : le Pokédex retirait la contradiction de numéro même quand le produit en a un (« Pikachu » lu « 025 » ne contredisait
+aucun Pikachu) ; « 001C »/« 001L » restaient neutres ; « SV1 »/« SV10 » (parenté par un CHIFFRE) ne se contredisaient pas ; l'exemption
+« code = préfixe du numéro » valait sans numéro exact. Banc `test-motif-code.js` 27/27.
+**« INCONNU N'EST NI CONTRADICTION NI CONCORDANCE »** : Lacey xPRE 175, dont la ligne n'a pas de code (13 produits sur 73 393), perdait le
+palier contre PRE 175 au MÊME visuel — le palier mesurait un trou de données. Garde : un autre produit non contredit au même visuel
+(< 0,02) empêche l'affirmation. Coût sur le banc réel : 0.
+🔑 **LE JUMEAU NE SE RÈGLE PAS PAR UN SEUIL** : 74 % de ses faux affirmés (3 372 / 4 581) sont un MÊME DESSIN — l'image ne sépare rien (écart
+< 0,02). Le remède est une SECONDE LECTURE indépendante (code et numéro), là où un autre produit est à < 0,02 : 31,5 % des affirmations
+justes ne reposent que sur la lecture. La calibration vise désormais 0 faux en lecture parfaite et 0 faux SÉPARABLE ; elle se rejouait
+sur des listes tronquées aux 8 premiers (garde de lecture permissive par construction) — la liste stockée garde aussi les 3 meilleurs
+visuels et le meilleur visuel non contredit.
+⚠️ **Et la simulation lisait « EN » sur 108 visuels indonésiens** (produits rangés « japonais » par codes_set) : 0 affirmé sur 108, tous
+« contredit (langue) » — la langue lue est désormais celle du TIRAGE ; rejoués : 105/108.
+**MESURÉ (auto-banc v2, 46 649 visuels, file à l'arrêt, décisions rejouées par la règle actuelle)** : image seule, impression au rang 1
+65,8 %, carte 95,0 % · lecture parfaite : rang 1 99,3 %, **affirmés justes 90,3 %, 0 faux** (v1 : 278 faux) · jumeau : 5 597 faux / 28 513,
+dont 1 322 séparables et 4 275 même dessin. Garde de lecture à 0,02 : 0 séparable, mais 81,1 % d'affirmés — et sur les PHOTOS RÉELLES
+47 affirmés au lieu de 59 (testeur 8/20 au lieu de 14/20), pour aucun faux évité : **le seuil reste à 0,05, l'arbitrage va au testeur**.
+Banc réel (82 photos à fiche) : rang 1 74, top 3 79, **59 affirmés, 0 faux**, ~0,5 s par photo.
+
 ## 70. LE VERROU ÉTAIT ROUGE SUR `main` DEPUIS SEIZE JOURS — PERSONNE NE L'AVAIT LANCÉ — 2026-09-29 → 2026-10-03
 
 > 🔴 **Ajouter la date du guide à la réponse a fait relancer `verrou-avant-push.js` : 5 échecs — sur HEAD aussi, sans le changement.**
