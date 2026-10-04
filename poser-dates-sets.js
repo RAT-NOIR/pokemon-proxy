@@ -131,6 +131,37 @@ const OFFICIELLES = {
     'ex-Starter-Set-Quaxly-Mimikyu-ex': { jour: 'January 20, 2023', url: 'https://www.pokemon-card.com/ex/sva/index.html', citation: '発売日 2023年1月20日（金）', lu: '2026-09-26' },
     'Play-Pokemon-Prize-Pack-Series-Three': { jour: 'August 14, 2023', url: 'https://www.pokemon.com/us/pokemon-news/visit-your-local-game-store-to-receive-play-pokemon-prize-packs', citation: 'the Prize Pack Series Three will be available starting August 14, 2023', lu: '2026-09-26' }
 };
+// ➕ 2026-10-04 (« il reste 35 sets que toi seul peux dater — mois et année suffisent ») : Bulbapedia répond 403 (2026-10-03 et
+// 04, 2 requêtes, témoin robots.txt 403 aussi) — les pages de ces sets, jamais archivées chez nous (voie « sans page »), ont été lues
+// dans leur COPIE de la Wayback Machine (archive.org, 47 requêtes séquentielles à 5 s), infobox rendue, À L'ŒIL. C'est la source
+// Bulbapedia (elle vote comme elle), à la date de sa copie ; la ligne cite la valeur lue. `remplace` : la page archivée chez nous
+// est lue, mais sa valeur ne passait pas la règle pour une raison relue ici (dite dans `pourquoi`).
+const W = 'http://web.archive.org/web/';
+const RELEVES_BULBAPEDIA = {
+    'Space-Time-Creation': { jour: 'November 30, 2006', url: `${W}20260901065003/https://bulbapedia.bulbagarden.net/wiki/Space-Time_Creation_(TCG)`, citation: 'Release date — Japanese: November 30, 2006 (page commune « Diamond & Pearl (TCG) »)' },
+    'Entry-Pack-08': { jour: 'November 30, 2007', url: `${W}20260831214743/https://bulbapedia.bulbagarden.net/wiki/Entry_Pack_%2708_(TCG)`, citation: 'Release date November 30, 2007 (Japanese-exclusive)' },
+    'Heatran-vs-Regigigas-Deck-Kit': { jour: 'March 14, 2008', url: `${W}20260831214748/https://bulbapedia.bulbagarden.net/wiki/Heatran_vs_Regigigas_Deck_Kit_(TCG)`, citation: 'Release date March 14, 2008 (Japanese-exclusive)' },
+    'Magmortar-vs-Electivire-Deck-Kit': { jour: 'October 26, 2007', url: `${W}20260723055242/https://bulbapedia.bulbagarden.net/wiki/Magmortar_vs_Electivire_Deck_Kit_(TCG)`, citation: 'Release date October 26, 2007 (Japanese-exclusive)' },
+    'Dialga-LVX-Constructed-Standard-Deck': { jour: 'July 5, 2007', url: `${W}20260831214743/https://bulbapedia.bulbagarden.net/wiki/Dialga_LV.X_Constructed_Standard_Deck_(TCG)`, citation: 'Release date July 5, 2007 (Japanese-exclusive)' },
+    'Palkia-LVX-Constructed-Standard-Deck': { jour: 'July 5, 2007', url: `${W}20260831214743/https://bulbapedia.bulbagarden.net/wiki/Palkia_LV.X_Constructed_Standard_Deck_(TCG)`, citation: 'Release date July 5, 2007 (Japanese-exclusive)' },
+    'Nivi-City-Gym': { jour: 'April 26, 1998', url: `${W}20260826022011/https://bulbapedia.bulbagarden.net/wiki/Nivi_City_Gym_(TCG)`, citation: 'Release date April 26, 1998 (Japanese-exclusive)' },
+    'Kuchiba-City-Gym': { jour: 'July 25, 1998', url: `${W}20260805185541/https://bulbapedia.bulbagarden.net/wiki/Kuchiba_City_Gym_(TCG)`, citation: 'Release date July 25, 1998 (Japanese-exclusive)' },
+    'Tamamushi-City-Gym': { jour: 'July 25, 1998', url: `${W}20260731125139/https://bulbapedia.bulbagarden.net/wiki/Tamamushi_City_Gym_(TCG)`, citation: 'Release date July 25, 1998 (Japanese-exclusive)' },
+    'Yamabuki-City-Gym': { jour: 'February 26, 1999', url: `${W}20260511084421/https://bulbapedia.bulbagarden.net/wiki/Yamabuki_City_Gym_(TCG)`, citation: 'Release date February 26, 1999 (Japanese-exclusive)' },
+    'Guren-Town-Gym': { jour: 'February 26, 1999', url: `${W}20260825183720/https://bulbapedia.bulbagarden.net/wiki/Guren_Town_Gym_(TCG)`, citation: 'Release date February 26, 1999 (Japanese-exclusive)' },
+    // deux sorties japonaises, deux voix : la plus tôt à égalité (règle du testeur)
+    'ex-Start-Decks': { jours: ['July 7, 2023', 'November 24, 2023'], url: `${W}20260125033233/https://bulbapedia.bulbagarden.net/wiki/Ex_Start_Decks_(TCG)`, citation: 'Release date — Japanese: July 7, 2023 (basic and Random decks), November 24, 2023 (Tera decks)' },
+    'Gem-Pack-Vol-1': { jour: 'January 17, 2025', url: `${W}20260722202107/https://bulbapedia.bulbagarden.net/wiki/Gem_Pack_Vol._1_(ATCG)`, citation: 'Release date January 17, 2025 (Simplified Chinese)' },
+    'Gem-Pack-Vol-4': { jour: 'February 6, 2026', url: `${W}20260720153007/https://bulbapedia.bulbagarden.net/wiki/Gem_Pack_Vol._4_(ATCG)`, citation: 'Release date February 6, 2026 (Simplified Chinese)' },
+    'Gem-Pack-Vol5': { jour: 'April 24, 2026', url: `${W}20260810102221/https://bulbapedia.bulbagarden.net/wiki/Gem_Pack_Vol._5_(ATCG)`, citation: 'Release date April 24, 2026 (Simplified Chinese)' },
+    'Gem-Pack-Vol-6': { jour: 'August 7, 2026', url: `${W}20260813035327/https://bulbapedia.bulbagarden.net/wiki/Gem_Pack_Vol._6_(ATCG)`, citation: 'Release date August 7, 2026 (Simplified Chinese)' },
+    'Tag-Team-Collection': { jour: 'July 10, 2020', remplace: true, url: `${W}20260810072644/https://bulbapedia.bulbagarden.net/wiki/Tag_Team_Collection_(ATCG)`, citation: 'Release date July 10, 2020 — « (Indonesian: Matahari & Bulan: Koleksi TAG TEAM) … exclusively available » in Indonesia', pourquoi: 'la page « (ATCG) » est celle du tirage indonésien (elle le dit) : la règle du suffixe la réservait au chinois' },
+    // le début n'a pas d'année : celle de la fin (règle du site, DEMANDE-SERVICE-PRODUITS.md du 2026-10-03, McDonald's Minimum Pack)
+    'McDonalds-Collection-2013': { periode: { texte: 'October 13 - November 26, 2013', debut: 'October 13, 2013', fin: 'November 26, 2013', debutIso: '2013-10-13' }, remplace: true, url: 'archive R2 de « McDonald\'s Collection 2013 (TCG) »', citation: 'date=October 13th-November 26th, 2013', pourquoi: 'le début de la période n\'écrit pas son année : c\'est celle de la fin' },
+    'W-Promos': { periode: { texte: 'September 1999 - March 2001', debut: 'September 1999', fin: 'March 2001', debutIso: '1999-09' }, url: `${W}20260802004115/https://bulbapedia.bulbagarden.net/wiki/W_Promotional_cards_(TCG)`, citation: 'Release period September 1999 - March 2001' },
+    'Collect-151': { jour: 'January 17, 2025', remplace: true, url: 'archive R2 de « Collection 151 (ATCG) »', citation: 'release=January 17, 2025 (Journey)<br>April 18, 2025 (Hope)<br>July 18, 2015 (Scare)<br>October 17, 2025 (Gather)', pourquoi: 'quatre boîtes ; « July 18, 2015 (Scare) » est une COQUILLE (entre avril et octobre 2025, dans une série de 2025) — la plus tôt des vraies sorties est le 17 janvier 2025' }
+};
+for (const v of Object.values(RELEVES_BULBAPEDIA)) v.lu = '2026-10-04';
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
@@ -305,7 +336,7 @@ async function principal() {
         const o = off ? { iso: isoPartiel(off.jour), de: `officielle:${off.url} (« ${off.citation} », lu le ${off.lu})` } : null;
         // Un set de réimpressions n'a pas de page de SET archivée ; la page du PRODUIT (« Play! Pokémon Prize Pack Series One (TCG) »,
         // « Trick or Trade 2023 (TCG) ») est lue par la sonde et fournie par --pages, avec sa révision.
-        if (s.reimpressions && !PAGES.has(s._id) && !o) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
+        if (s.reimpressions && !PAGES.has(s._id) && !o && !RELEVES_BULBAPEDIA[s._id]) { d.raison = `set de réimpressions (${s.reimpressions}) : aucune page du produit fournie (--pages), aucune source officielle relevée`; continue; }
         let b = null;
         if (s.bulba?.cleR2) b = dateBulbapedia(await r2.lireTexte(process.env.R2_BUCKET_BRUT, s.bulba.cleR2), { ...s, tirage });
         else if (PAGES.has(s._id)) {
@@ -314,6 +345,14 @@ async function principal() {
             b = dateBulbapedia(pg.content, { ...s, tirage, bulba: { ...(s.bulba || {}), titre: pg.page } });
             for (const c of b.candidats || []) c.de = `${c.de} (page « ${pg.page} » rév. ${pg.revid})`;
             if (b.periode) b.periode.de = `${b.periode.de} (page « ${pg.page} » rév. ${pg.revid})`;
+        }
+        // UNE LIGNE RELEVÉE À LA MAIN (copie Wayback, ou valeur de l'archive relue) : elle tient lieu de page quand il n'y en a pas, ou
+        // REMPLACE la lecture de la page quand la règle la refusait pour une raison relue (`pourquoi`, écrit dans la source)
+        const rb = RELEVES_BULBAPEDIA[s._id];
+        if (rb && (rb.remplace || !(b?.candidats?.length || b?.periode?.debutIso))) {
+            const de = `${rb.url} (« ${rb.citation} », lu à l'œil le ${rb.lu}${rb.pourquoi ? ` ; ${rb.pourquoi}` : ''})`;
+            b = { candidats: (rb.jours ?? (rb.jour ? [rb.jour] : [])).map(j => ({ iso: isoPartiel(j), de })), raison: 'relevé à la main' };
+            if (rb.periode) b.periode = { ...rb.periode, de };
         }
         if (b?.periode) { d.periode = b.periode; d.periodeDejaEcrite = !!s.periodeDistribution; }
         // Un mois déjà écrit (dateSortieMois) n'est jamais réécrit : il n'est pas « attendu » (2026-09-26 soir : « attendu 2, écrit 0 »
