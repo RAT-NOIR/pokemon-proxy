@@ -104,7 +104,8 @@ async function assurerVignettes(db, { bucket, slug = null, parallele = 6, limite
 /** Les vignettes des LOGOS de sets (400 px). Même règle, même bucket ; `sets.<champ>.vignette` — `logo` (ce que le site lit) ou
  *  `logoFr` (logos déposés à la main, 2026-09-28 ; le site ne le lit pas encore). */
 async function assurerVignettesLogos(db, { bucket, journal = console, ecrire = true, champ = 'logo' } = {}) {
-    if (!['logo', 'logoFr'].includes(champ)) throw new Error(`assurerVignettesLogos : champ « ${champ} » inconnu (logo, logoFr)`);
+    // ➕ 2026-10-04 : `logoCompose` (poser-logos-composes.js), que le site lit entre logoFr et logo
+    if (!['logo', 'logoFr', 'logoCompose'].includes(champ)) throw new Error(`assurerVignettesLogos : champ « ${champ} » inconnu (logo, logoFr, logoCompose)`);
     const r2 = require('./r2');
     const S = db.collection('sets');
     const sets = (await S.find({ [`${champ}.cleR2`]: { $type: 'string' }, [`${champ}.vignette`]: { $exists: false } }, { projection: { [champ]: 1 } }).toArray()).map(s => ({ _id: s._id, logo: s[champ] }));

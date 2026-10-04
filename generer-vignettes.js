@@ -14,9 +14,10 @@ require('dotenv').config();
 //   node generer-vignettes.js --ecrire --logos --champ=logoFr   (les logos français, 2026-09-28 ; le site ne lit pas encore `logoFr`)
 //   node generer-vignettes.js --ecrire --symboles   (symboles de sets, 64 px de haut — demande du site du 2026-09-28 ; sans revalidation :
 //                                                    le site ne lit pas encore `vignette` sur les symboles)
-const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--symboles$/, /^--champ=(logo|logoFr)$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
+//   node generer-vignettes.js --ecrire --logos --champ=logoCompose   (les logos composés, 2026-10-04 ; poser-logos-composes.js)
+const AUTORISES = [/^--ecrire$/, /^--logos$/, /^--symboles$/, /^--champ=(logo|logoFr|logoCompose)$/, /^--slug=[\w.-]+$/, /^--limite=\d+$/, /^--parallele=\d+$/, /^--sans-revalidation$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos [--champ=logo|logoFr], --symboles, --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --ecrire, --logos [--champ=logo|logoFr|logoCompose], --symboles, --slug=, --limite=, --parallele=, --sans-revalidation`); process.exit(2); }
 if (process.argv.includes('--symboles') && (process.argv.includes('--logos') || process.argv.some(a => /^--(slug|limite|parallele|champ)=/.test(a)))) { console.error('❌ --symboles traite tous les symboles sans vignette, seul'); process.exit(2); }
 if (process.argv.some(a => a.startsWith('--champ=')) && !process.argv.includes('--logos')) { console.error('❌ --champ ne vaut qu\'avec --logos'); process.exit(2); }
 if (process.argv.includes('--logos') && process.argv.some(a => /^--(slug|limite|parallele)=/.test(a))) { console.error('❌ --logos traite tous les logos sans vignette : --slug, --limite et --parallele ne s\'y appliquent pas'); process.exit(2); }
