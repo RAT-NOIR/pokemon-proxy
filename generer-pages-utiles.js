@@ -21,7 +21,11 @@ const fs = require('fs');
 const path = require('path');
 //   [--guide=price_guide_<jjmmaa>.json]  un guide des prix Cardmarket plus récent que celui de la base (30/08) : un produit sans offre
 //                                        n'est pas dans les listes, et le guide de la base est trop vieux pour le dire (testeur, 2026-09-28)
-const AUTORISES = [/^--liste=.+\.json$/, /^--journal=.+\.json(,.+\.json)*$/, /^--export=.+\.json$/, /^--marge=\d+$/, /^--guide=.+\.json$/];
+//   [--en-tete=<idExpansion,…>]           ces expansions EN TÊTE de la liste (testeur, 2026-10-04 : « les 42 expansions sans région, 1 423
+//                                        produits jamais appris : en tête de ma prochaine liste ») — chacun de leurs produits de l'export
+//                                        ABSENT de numeros_cartes est une cible ; sans slugSet appris, la page est celle du FILTRE
+//                                        (`Singles?idCategory=51&idExpansion=N`, que l'userscript lit déjà : il apprend le slug sur les cartes)
+const AUTORISES = [/^--liste=.+\.json$/, /^--journal=.+\.json(,.+\.json)*$/, /^--export=.+\.json$/, /^--marge=\d+$/, /^--guide=.+\.json$/, /^--en-tete=\d+(,\d+)*$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -35,6 +39,11 @@ const cmpNom = (a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base
 const param = (u, k) => { const m = new RegExp(`[?&]${k}=([^&]*)`).exec(u); return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : null; };
 const urlPage = (slugSet, idExpansion, tri, site) => `/en/Pokemon/Products/Singles/${slugSet}?searchMode=v2&idCategory=51&idExpansion=${idExpansion}&idRarity=0&sortBy=${tri}${site > 1 ? `&site=${site}` : ''}`;
 const urlRecherche = (slugSet, idExpansion, nom) => `/en/Pokemon/Products/Singles/${slugSet}?searchMode=v2&idCategory=51&idExpansion=${idExpansion}&searchString=${encodeURIComponent(nom)}&idRarity=0&sortBy=name_asc`;
+// sans slugSet appris : le chemin s'arrête à « Singles », le filtre d'expansion fait la liste (l'userscript lit le slug sur les cartes)
+const cheminListe = slugSet => slugSet ? `/en/Pokemon/Products/Singles/${slugSet}` : '/en/Pokemon/Products/Singles';
+const urlPageOuFiltre = (slugSet, idExpansion, tri, site) => `${cheminListe(slugSet)}?searchMode=v2&idCategory=51&idExpansion=${idExpansion}&idRarity=0&sortBy=${tri}${site > 1 ? `&site=${site}` : ''}`;
+const urlRechercheOuFiltre = (slugSet, idExpansion, nom) => `${cheminListe(slugSet)}?searchMode=v2&idCategory=51&idExpansion=${idExpansion}&searchString=${encodeURIComponent(nom)}&idRarity=0&sortBy=name_asc`;
+const EN_TETE = new Set((arg('en-tete') || '').split(',').filter(Boolean).map(Number));
 // La page d'un rang (croissant, décroissant, ou `principale: null` → recherche par le nom) : collecte-cartes/pages-du-rang.js.
 
 let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au guide le plus récent décide de l'ORDRE (pages sûres d'abord)
@@ -44,6 +53,8 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
     const parExp = new Map(); for (const p of tous) (parExp.get(p.idExpansion) || parExp.set(p.idExpansion, []).get(p.idExpansion)).push(p);
     const { prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const guide = await lireMongo(prod.db.collection('guide_prix'), {}, { nom: 'guide_prix', projection: { idProduct: 1, low: 1 } });
+    // --en-tete : ce que numeros_cartes connaît déjà de ces expansions (un produit appris n'est pas une cible ; un slugSet appris fait l'URL)
+    const appris = EN_TETE.size ? await prod.db.collection('numeros_cartes').find({ idExpansion: { $in: [...EN_TETE] } }, { projection: { idProduct: 1, idExpansion: 1, slugSet: 1 } }).toArray() : [];
     await fermer();
     const auGuide = new Set(guide.map(g => g.idProduct)), avecOffre = new Set(guide.filter(g => g.low > 0).map(g => g.idProduct));
     // les univers candidats : qui est DANS une liste Cardmarket triée par nom
@@ -117,6 +128,19 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
     // = invisible » (journal 1.8, sur des listes à filtres) ne tient pas ici. Un produit sans offre reste une cible, marqué comme tel.
     const cibles = [...(L.pourTaPasse?.produits || []).map(p => ({ ...p, k: 'jamais appris' })), ...(L.invisibles?.produits || []).map(p => ({ ...p, k: 'jamais appris (sans offre au 30/08)' })),
         ...(L.sansSlug?.produits || []).map(p => ({ ...p, k: p.visibleDansLesListes ? 'slug vide' : 'slug vide (sans offre au 30/08)' }))];
+    // --en-tete : les produits de l'EXPORT de ces expansions absents de numeros_cartes (une cible de la liste déjà présente n'est pas doublée)
+    if (EN_TETE.size) {
+        const dejaAppris = new Set(appris.map(a => a.idProduct)), dejaCible = new Set(cibles.map(c => c.idProduct));
+        const slugDe = new Map(); for (const a of appris) if (a.slugSet && !slugDe.has(a.idExpansion)) slugDe.set(a.idExpansion, a.slugSet);
+        let n = 0;
+        for (const e of EN_TETE) for (const p of parExp.get(e) || []) {
+            if (dejaAppris.has(p.idProduct)) continue;
+            if (dejaCible.has(p.idProduct)) { const c = cibles.find(c => c.idProduct === p.idProduct); c.enTete = true; continue; }
+            cibles.push({ idProduct: p.idProduct, idExpansion: e, slugSet: slugDe.get(e) ?? null, nom: p.name, k: 'jamais appris (en tête)', enTete: true }); n++;
+        }
+        const absentes = [...EN_TETE].filter(e => !parExp.has(e));
+        console.log(`EN TÊTE : ${EN_TETE.size} expansions · ${n} cibles ajoutées depuis l'export (${appris.length} produits déjà appris écartés) · ${[...EN_TETE].filter(e => slugDe.has(e)).length} avec un slugSet appris, ${[...EN_TETE].filter(e => !slugDe.has(e)).length} par l'URL du FILTRE${absentes.length ? ` · 🔴 absentes de l'export ${EXPORT} : ${absentes.join(', ')}` : ''}`);
+    }
     // la recherche se fait sur le nom NU (« Houndoom », pas « Houndoom [Call to Muster | Pitch-Black Fangs] ») : les crochets et le « | »
     // sont la désambiguïsation de Cardmarket, rien ne dit que sa recherche les lit ; le nom nu rend tous les produits de ce nom dans
     // l'expansion, la cible parmi eux (leur nombre est imprimé : au-delà de 30, la recherche a plus d'une page)
@@ -126,7 +150,8 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
     const pages = new Map(), sansPage = [];
     for (const c of cibles) {
         const rg = R.get(c.idExpansion), r = rg?.get(c.idProduct);
-        if (r == null || !c.slugSet) { sansPage.push({ ...c, raison: !c.slugSet ? 'expansion sans slugSet appris : l\'URL de sa liste est inconnue' : 'hors de l\'univers retenu (pas dans les listes)' }); continue; }
+        // une cible EN TÊTE sans slugSet passe par l'URL du filtre ; les autres exigent toujours leur slugSet
+        if (r == null || (!c.slugSet && !c.enTete)) { sansPage.push({ ...c, raison: !c.slugSet && !c.enTete ? 'expansion sans slugSet appris : l\'URL de sa liste est inconnue' : 'hors de l\'univers retenu (pas dans les listes)' }); continue; }
         const pl = pagesDuRang(r, rg.size, marge);
         const nom = nomExport.get(c.idProduct);
         if (!pl.principale && !nom) { sansPage.push({ ...c, raison: `rang ${r + 1} sur ${rg.size} : au-delà de 300 dans les deux sens, et pas de nom au catalogue pour la recherche` }); continue; }
@@ -137,7 +162,7 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
         for (const t of entrees) {
             const k = t.tri === 'recherche' ? `${c.idExpansion}|recherche|${t.q.toLowerCase()}` : `${c.idExpansion}|${t.tri}|${t.site}`;
             const x = pages.get(k) || pages.set(k, { idExpansion: c.idExpansion, code: c.code ?? null, slugSet: c.slugSet, tri: t.tri, site: t.site, recherche: t.q ?? null,
-                url: t.tri === 'recherche' ? urlRecherche(c.slugSet, c.idExpansion, t.q) : urlPage(c.slugSet, c.idExpansion, t.tri, t.site), cibles: [], valeur: 0, voisine: !t.principale,
+                url: t.tri === 'recherche' ? urlRechercheOuFiltre(c.slugSet, c.idExpansion, t.q) : urlPageOuFiltre(c.slugSet, c.idExpansion, t.tri, t.site), cibles: [], valeur: 0, voisine: !t.principale, enTete: !!c.enTete,
                 // la recherche de Cardmarket rend les noms qui CONTIENNENT le texte (« Miraidon » rend aussi « Miraidon ex ») : on compte ainsi
                 ...(t.tri === 'recherche' ? { produitsAuNom: [...rg.keys()].filter(id => (nomComplet.get(id) || '').includes(t.q.toLowerCase())).length } : {}) }).get(k);
             x.cibles.push({ idProduct: c.idProduct, nom: c.nom, k: c.k, prixTendance: c.prixTendance ?? null, rang: r + 1, produitsDansLaListe: rg.size,
@@ -155,7 +180,8 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
     const valeurExp = new Map(); for (const x of pages.values()) valeurExp.set(groupe(x), (valeurExp.get(groupe(x)) || 0) + x.valeur);
     const nExpansions = new Set([...pages.values()].map(x => x.idExpansion)).size;
     const RANG_TRI = { name_asc: 0, name_desc: 1, recherche: 2 };
-    const liste = [...pages.values()].sort((a, b) => ((b.sure ? 1 : 0) - (a.sure ? 1 : 0)) || ((a.tri === 'recherche') - (b.tri === 'recherche'))
+    // --en-tete d'abord (demande du testeur), puis l'ordre d'avant
+    const liste = [...pages.values()].sort((a, b) => ((b.enTete ? 1 : 0) - (a.enTete ? 1 : 0)) || ((b.sure ? 1 : 0) - (a.sure ? 1 : 0)) || ((a.tri === 'recherche') - (b.tri === 'recherche'))
         || (valeurExp.get(groupe(b)) - valeurExp.get(groupe(a))) || a.idExpansion - b.idExpansion
         || RANG_TRI[a.tri] - RANG_TRI[b.tri] || a.site - b.site || String(a.recherche).localeCompare(String(b.recherche)));
     // la garde du plafond, écrite par ce qu'elle AUTORISE : une page de liste entre 1 et 10, ou une recherche — rien d'autre ne sort
@@ -170,7 +196,7 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
         offreRecente ? `D'abord les ${liste.filter(x => x.sure).length} pages SÛRES (une cible au moins a une offre au guide du ${dateGuide}), puis les ${liste.filter(x => !x.sure).length} dont aucune cible n'a d'offre.` : '', '',
         `Cardmarket ne montre que 300 produits par liste (10 pages) : au-delà, la page se lit dans le tri par nom DÉCROISSANT (« ↓ »), et au milieu d'une liste de plus de 600, par la RECHERCHE du nom (« 🔍 »).`, '',
         '| # | sûre | expansion | page | cibles | valeur (€) | lien |', '|---|---|---|---|---|---|---|',
-        ...liste.map(x => `| ${x.ordre} | ${x.sure === null ? '' : x.sure ? 'oui' : 'non'} | ${x.code ?? ''} ${x.slugSet} | ${x.tri === 'recherche' ? `🔍 « ${x.recherche} »${x.produitsAuNom > PAR_PAGE ? ` (${x.produitsAuNom} produits à ce nom : plus d'une page)` : ''}` : `${x.tri === 'name_desc' ? '↓ ' : ''}${x.site}`}${x.voisine ? ' (voisine)' : ''} | ${x.cibles.length} | ${Math.round(x.valeur)} | https://www.cardmarket.com${x.url} |`)];
+        ...liste.map(x => `| ${x.ordre} | ${x.sure === null ? '' : x.sure ? 'oui' : 'non'} | ${x.enTete ? '⭐ ' : ''}${x.code ?? ''} ${x.slugSet ?? `(filtre ${x.idExpansion})`} | ${x.tri === 'recherche' ? `🔍 « ${x.recherche} »${x.produitsAuNom > PAR_PAGE ? ` (${x.produitsAuNom} produits à ce nom : plus d'une page)` : ''}` : `${x.tri === 'name_desc' ? '↓ ' : ''}${x.site}`}${x.voisine ? ' (voisine)' : ''} | ${x.cibles.length} | ${Math.round(x.valeur)} | https://www.cardmarket.com${x.url} |`)];
     fs.writeFileSync(path.join(__dirname, `PAGES-UTILES-${date}.md`), md.join('\n'));
     if (offreRecente) console.log(`\n   pages SÛRES (une cible avec offre au guide du ${dateGuide}) : ${liste.filter(x => x.sure).length} · pages dont aucune cible n'a d'offre : ${liste.filter(x => !x.sure).length}`);
     const parTri = liste.reduce((o, x) => (o[x.tri] = (o[x.tri] || 0) + 1, o), {});

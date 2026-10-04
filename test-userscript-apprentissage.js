@@ -9,6 +9,8 @@ const R = __dirname;
 const fs = require('fs');
 const puppeteer = require(`${R}/node_modules/puppeteer`);
 const SCRIPT = fs.readFileSync(`${R}/userscript-apprentissage.js`, 'utf8');
+// la version de l'en-tête (@version) : le banc vérifie que la constante et l'export la disent, sans l'écrire en dur (1.12, 2026-10-04)
+const VERSION_ENTETE = /@version\s+(\S+)/.exec(SCRIPT)[1];
 // La liste et les comptes de l'export, lus DANS le script : le banc ne suppose plus une liste figée.
 const LISTE = eval(/const LISTE = (\[[\s\S]*?\]\]);/.exec(SCRIPT)[1]);
 const PRODUITS_EXPORT = JSON.parse(/const PRODUITS_EXPORT = (\{.*?\});/.exec(SCRIPT)[1]);
@@ -145,7 +147,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         verifier('10. 3 vignettes, 3 lues (le webp en data-src, et la sans-image par son lien) : l\'envoi porte les 3', lotJ.map(l => l.corps.cartes.map(c => c.idProduct)), [[826050, 826051, null]]);
         verifier('   la sans-image part avec son slug, son numéro et son code de TITRE, marquée', lotJ[0]?.corps.cartes[2], { idProduct: null, numero: '003', codeSet: 'DRI', nomFr: 'Ccc', slug: 'Ccc-DRI003', slugSet: 'Destined-Rivals', sansImage: true });
         const e = (J.store.rm_journal || [])[0] || {};
-        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], ['1.11', 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
+        verifier('11. le journal : vignettes, lues, 0 écartée, 1 sans image (avec son lien), lecture non standard dite', [e.v, e.vignettes, e.lues, e.ecartees, e.sansImage, e.detailSansImage?.[0]?.href, e.lecturesAutres], [VERSION_ENTETE, 3, 3, 0, 1, '/fr/Pokemon/Products/Singles/Destined-Rivals/Ccc-DRI003', ['826051:data-src:webp']]);
         verifier('12. le journal : total annoncé, export, filtres COCHÉS seulement, paramètres, réponse du serveur', [e.totalAnnonce?.n, e.produitsExport, e.filtres, e.params, e.envoi?.status, e.envoi?.nouvelles, e.envoi?.deduites],
             [240, PRODUITS_EXPORT['6096'], ['onlyAvailable=Y'], ['idCategory=51', 'idExpansion=6096'], 200, 1, 1]);
         verifier('13. le panneau : la sans-image dite (envoyée par son lien), la déduction du serveur, total contre export, filtre nommé, bouton du journal',
@@ -165,7 +167,7 @@ ${dri(826050, 'Aaa-DRI001', 'Aaa', '001')}${dri(826051, 'Bbb-DRI002', 'Bbb', '00
         // 18. L'export du journal et le panneau portent la version et la date RÉELLE de la liste.
         verifier('18. le panneau dit la date de la liste générée, pas « 25/09 »', [/Liste du 25\/09/.test(J.panneau), new RegExp(`Liste du ${new Date(Date.parse(/MESURE_LISTE = Date\.parse\('([^']+)'\)/.exec(SCRIPT)[1])).toISOString().slice(8, 10)}/`).test(J.panneau)], [false, true]);
         // Une seule écriture de la version (la constante VERSION, égale à l'en-tête) : l'export, le journal et le panneau la lisent.
-        verifier('   l\'export du journal se déclare 1.11 (constante VERSION = en-tête @version, lue par l\'export)', [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /@version\s+(\S+)/.exec(SCRIPT)[1], /script: VERSION/.test(SCRIPT)], ['1.11', '1.11', true]);
+        verifier(`   l'export du journal se déclare ${VERSION_ENTETE} (constante VERSION = en-tête @version, lue par l'export)`, [/const VERSION = '([^']+)'/.exec(SCRIPT)?.[1], /script: VERSION/.test(SCRIPT)], [VERSION_ENTETE, true]);
         // 19-21. POINT 6 (seconde relecture) : un ÉCHEC de la déduction ne marque pas la page ; l'erreur et les raisons sont dites et
         //        journalisées ; une cible sans image DÉDUITE est marquée faite (le serveur rend les idProduct déduits).
         const ERR = { status: 200, entetes: 'ratelimit-remaining: 99', corps: { success: true, recus: 3, nouvelles: 1, ameliorees: 0, dejaExactes: 1, completees: 0, sansNumero: 0, ignorees: 0,
