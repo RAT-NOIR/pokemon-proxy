@@ -292,8 +292,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // C'est l'assurance contre le champ oublié, exercée : un défaut de parse se corrige en
     // relisant l'archive épurée (les faits y sont tous), pas en redemandant les pages.
     if (process.argv.includes('--reparser')) {
-        const deja = await M.Carte.find({ sets: slug }).select('_id bulba impressions').lean();
-        console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia.`);
+        const tous = await M.Carte.find({ sets: slug }).select('_id bulba impressions').lean();
+        // une carte SANS page archivée (une fiche simple de creer-sets-sans-page.js, 2026-10-04) n'a rien à reparser : elle se compte
+        // et se saute — sans cette garde, `c.bulba.cleR2` levait et arrêtait le reparse du set entier (relecture du 2026-10-04)
+        const deja = tous.filter(c => c.bulba?.cleR2);
+        console.log(`   --reparser : ${deja.length} cartes relues depuis R2, 0 requête Bulbapedia${tous.length - deja.length ? ` · ${tous.length - deja.length} sans page archivée (fiches simples), sautées` : ''}.`);
         for (const c of deja) {
             const epure = await r2.lireTexte(process.env.R2_BUCKET_BRUT, c.bulba.cleR2);
             const faits = faitsDeCarte(epure, c.bulba?.titre);
