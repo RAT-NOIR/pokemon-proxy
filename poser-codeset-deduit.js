@@ -16,12 +16,15 @@ const AUTORISES = [/^--ecrire$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisé : --ecrire`); process.exit(2); }
 
+const UNANIMITE_MIN = 10;
 /** La décision pour un produit sans code : { code, preuves } ou { refus }. Pure. */
 function decider(produit, autresLignes) {
     const codes = new Set(autresLignes.map(l => l.codeSet).filter(Boolean));
     const sansCode = autresLignes.filter(l => !l.codeSet).length;
     if (codes.size !== 1) return { refus: codes.size ? `l'expansion porte ${codes.size} codes (${[...codes].join(', ')})` : 'aucune autre ligne de l\'expansion ne porte de code' };
     const code = [...codes][0];
+    // un PLANCHER à l'unanimité (relecture du 2026-10-04) : une ou deux lignes concordantes ne font pas une expansion unanime
+    if (autresLignes.length - sansCode < UNANIMITE_MIN) return { refus: `unanimité trop mince : ${autresLignes.length - sansCode} ligne(s) portent « ${code} » (au moins ${UNANIMITE_MIN})` };
     const unanimite = `unanimité de l'expansion ${produit.idExpansion} : ${autresLignes.length - sansCode} lignes portent « ${code} »${sansCode ? ` (${sansCode} autres sans code)` : ''}`;
     const n = String(produit.numero ?? '');
     const prefixe = n.toUpperCase().startsWith(code.toUpperCase()) && /^\d/.test(n.slice(code.length));
