@@ -55,10 +55,14 @@ const LANGUES_DU_LOGO = { jp: ['ja'], intl: ['en', 'fr'], 'zh-hans': ['zh-hans']
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
     const S = cx.db.collection('sets');
     const docs = new Map((await S.find({ _id: { $in: Object.keys(LUS) } }, { projection: { logo: 1, tirage: 1, region: 1 } }).toArray()).map(d => [d._id, d]));
+    // relecture du 2026-10-05 : le site exige que TOUTES les preuves présentes disent la même chose — une `region` structurée ou une phrase
+    // de preuve qui contredit la région du set laisserait le logo refusé malgré la langue (regionDeLaPreuve du site, recopiée)
+    const regionDeLaPreuve = p => { const x = String(p ?? '').toLowerCase(); return /suffixé\s+«\s*jp\s*»|nom japonais|code japonais/.test(x) ? 'jp' : /set occidental/.test(x) ? 'intl' : undefined; };
     const plan = [];
     for (const [slug, l] of Object.entries(LUS)) {
         const d = docs.get(slug), t = d?.tirage ?? d?.region;
-        const refus = !d ? 'set absent' : d.logo?.cleR2 !== l.cle ? `le logo en base n'est plus celui qui a été lu (${d.logo?.cleR2})` : d.logo?.langue ? `logo.langue déjà posée (${d.logo.langue})` : !(LANGUES_DU_LOGO[t] ?? []).includes(l.langue) ? `« ${l.langue} » n'est pas admise pour le tirage ${t}` : null;
+        const regionLogo = d?.logo?.region ?? regionDeLaPreuve(d?.logo?.preuve);
+        const refus = !d ? 'set absent' : d.logo?.cleR2 !== l.cle ? `le logo en base n'est plus celui qui a été lu (${d.logo?.cleR2})` : d.logo?.langue ? `logo.langue déjà posée (${d.logo.langue})` : !(LANGUES_DU_LOGO[t] ?? []).includes(l.langue) ? `« ${l.langue} » n'est pas admise pour le tirage ${t}` : (regionLogo !== undefined && regionLogo !== d.region) ? `la preuve déjà posée dit « ${regionLogo} », le set est « ${d.region} » : le site refuserait quand même` : null;
         plan.push({ slug, ...l, tirage: t, refus });
         console.log(`${refus ? '✗' : '✓'} ${slug.padEnd(40)} ${String(t).padEnd(8)} → ${l.langue.padEnd(8)} ${refus ?? l.lu}`);
     }
