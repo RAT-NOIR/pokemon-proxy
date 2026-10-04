@@ -56,7 +56,7 @@ require('./panne-catalogue').poserPanneCatalogue();
 // 🔒 CINQUIÈME RÈGLE (2026-10-04) — LES PHOTOS : le départage par l'image télécharge par `fetch`, que ce fichier ne patchait pas ;
 // le rejeu allait chercher la photo chez Vinted. Elle vient désormais du jeu fixe local, et une photo hors du jeu rend un 404 local
 // (verrou/photos-locales.js) — Vinted n'est jamais contacté.
-require('./photos-locales').installer({ etiquette: 'faux-reseau' });
+const JEU = require('./photos-locales').installer({ etiquette: 'faux-reseau' });
 
 const CHARGES = process.env.VERROU_CHARGES;
 if (!CHARGES) {
@@ -64,6 +64,14 @@ if (!CHARGES) {
     process.exit(1);
 }
 const donnees = JSON.parse(fs.readFileSync(CHARGES, 'utf8'));
+// 🔒 LE REJEU SE FAIT SUR LE JEU DE L'EXTRACTION, OU PAS DU TOUT (relecture du 2026-10-04 : l'empreinte était écrite, jamais relue). Un
+// autre jeu — ou aucun : verrou/photos/ n'est pas commité — rendrait d'autres photos, donc peut-être d'autres décisions, sous des
+// charges qui ne les décrivent pas. Des charges d'avant le jeu fixe (sans jeuPhotos) refusent aussi : elles ont été extraites en
+// téléchargeant chez Vinted.
+if (!donnees.jeuPhotos || donnees.jeuPhotos.empreinte !== JEU.empreinte || donnees.jeuPhotos.n !== JEU.n) {
+    console.error(`❌ [faux-reseau] JEU-PHOTOS-DIFFERENT : charges extraites sur ${donnees.jeuPhotos ? `${donnees.jeuPhotos.n} photos (empreinte ${donnees.jeuPhotos.empreinte})` : 'AUCUN jeu fixe déclaré'}, jeu présent ${JEU.n} photos (empreinte ${JEU.empreinte}) — refus de rejouer (node verrou/constituer-photos.js, ou réextraire les charges).`);
+    process.exit(1);
+}
 
 // Clé = l'URL d'image de l'annonce, telle qu'enregistrée au journal. C'est ce qui permet
 // de rendre LA lecture qui correspond à LA photo, sur un serveur qui reçoit les charges à

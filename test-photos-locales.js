@@ -50,6 +50,10 @@ const cas = [
         const autre = { ...idx.photos, [urls[0]]: { ...idx.photos[urls[0]], sha256: '0'.repeat(64) } };
         assert.notStrictEqual(P.empreinteJeu(autre), P.empreinteJeu(idx.photos));
     }],
+    ['la liste des hôtes photo est celle de departage-image.js', async () => {
+        const { HOTES_PHOTO_AUTORISES } = require('./departage-image');
+        assert.deepStrictEqual(P.HOTES_PHOTO.map(r => r.toString()), HOTES_PHOTO_AUTORISES.map(r => r.toString()));
+    }],
     ['le dossier des photos n\'est pas commité', async () => {
         assert.ok(/^verrou\/photos\/$/m.test(fs.readFileSync(path.join(__dirname, '.gitignore'), 'utf8')));
     }],

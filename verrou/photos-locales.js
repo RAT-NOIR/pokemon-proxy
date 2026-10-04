@@ -20,7 +20,10 @@ const crypto = require('crypto');
 
 const DOSSIER = path.join(__dirname, 'photos');
 const INDEX = path.join(DOSSIER, 'index.json');
-// la même liste que departage-image.js (HOTES_PHOTO_AUTORISES) : les seuls hôtes que la chaîne télécharge
+// la même liste que departage-image.js (HOTES_PHOTO_AUTORISES) : les seuls hôtes que la chaîne télécharge. RECOPIÉE, parce que ce
+// module se précharge AVANT index.js (requérir departage-image.js ici chargerait mongoose et ses modèles hors de l'ordre du serveur) —
+// et test-photos-locales.js ÉCHOUE si les deux listes divergent (relecture du 2026-10-04 : un hôte ajouté d'un seul côté partirait au
+// vrai réseau sans un mot).
 const HOTES_PHOTO = [/(^|\.)vinted\.net$/i];
 
 function lireIndex() {
@@ -55,6 +58,8 @@ function installer({ journal = console, etiquette = 'photos-locales' } = {}) {
         }
         const buf = fs.readFileSync(path.join(DOSSIER, p.fichier));
         const sha = crypto.createHash('sha256').update(buf).digest('hex');
+        // bruyant AVANT de lever : la chaîne avale l'exception (interrogerSource) et en ferait un « photo injoignable » ordinaire
+        if (sha !== p.sha256) journal.log(`🔴 [${etiquette}] EMPREINTE-DIFFERENTE ${p.fichier} — le jeu fixe a changé sous son index`);
         if (sha !== p.sha256) throw new Error(`[${etiquette}] ${p.fichier} : empreinte ${sha.slice(0, 12)} ≠ index ${String(p.sha256).slice(0, 12)} — le jeu fixe a changé`);
         servies.add(url);
         return new Response(buf, { status: 200, headers: { 'content-type': p.type || 'application/octet-stream', 'content-length': String(buf.length) } });

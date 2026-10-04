@@ -46,8 +46,12 @@ const { DOSSIER, INDEX, lireIndex, empreinteJeu } = require('./photos-locales');
     } else console.log(`   photos-66 : ${f66} absent`);
     const dj = path.join(LABO, 'photos-journal');
     if (fs.existsSync(dj)) {
+        // LA RÈGLE QUI A NOMMÉ CES FICHIERS (pokemon-proxy-labo/temoin-rendu.js, la requête et non le seul nommage — relecture du
+        // 2026-10-04) : lignes occidentales seulement (langue hors JP, ZH, KR), avec photo et produit, triées par date, la première par
+        // produit
+        const AS = ['JP', 'ZH', 'KR'];
         const premiere = new Map();
-        for (const d of docs) if (d.imageUrl && d.idProduct != null && !premiere.has(d.idProduct)) premiere.set(d.idProduct, d);
+        for (const d of docs) if (d.imageUrl && d.idProduct != null && !AS.includes(String(d.langue ?? '').toUpperCase()) && !premiere.has(d.idProduct)) premiere.set(d.idProduct, d);
         const fichiers = fs.readdirSync(dj).filter(f => /^\d+\.jpg$/.test(f));
         let n = 0;
         for (const f of fichiers) { const d = premiere.get(Number(f.slice(0, -4))); if (d) { candidates.push({ url: d.imageUrl, chemin: path.join(dj, f), source: 'labo photos-journal', ligne: String(d._id) }); n++; } }

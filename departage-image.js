@@ -552,6 +552,6 @@ async function departager({ imageUrl, langue, total, classement }) {
 }
 
 module.exports = {
-    departager, conditionDeclenchement, chargerVecteurs, decrire, inliers, outils, lireBorne,
+    departager, conditionDeclenchement, chargerVecteurs, decrire, inliers, outils, lireBorne, HOTES_PHOTO_AUTORISES,
     ReferenceImage, N_POINTS, LARGEUR, RATIO_LOWE, SEUIL_RANSAC, GARDE_PERIMETRE_ASIATIQUE
 };
