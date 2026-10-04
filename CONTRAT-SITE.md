@@ -183,6 +183,30 @@ symbole de promos peut être PARTAGÉ (l'étoile PROMO : 8 séries) — c'est ce
 ⚠️ **`sets.symbolesIdentification` n'est PAS à afficher** : ce sont les images que l'identification compare (index
 `collecte-cartes/index-symboles.json`), et une entrée peut y exister sans `symbole`.
 
+## `sets.logoFr` — le logo FRANÇAIS du set, à afficher sur le site français (2026-10-04)
+
+Même format que `sets.logo` : un objet porté par le document du set, le fichier sur le bucket images, sa réduction à côté.
+```js
+const l = set.logoFr;                                     // absent sur les sets sans logo français
+const cle = l?.vignette?.cleR2 ?? l?.cleR2;               // la vignette d'abord (400 px de large au plus), comme sets.logo
+const url = cle && `${process.env.R2_IMAGES_BASE_URL}/${cle}`;
+```
+| champ | exemple | usage |
+|---|---|---|
+| `cleR2` | `"tcgdex/logos-fr/base5.png"` · `"logos/manuel/Logo-FR/…png"` | le fichier pleine résolution, à concaténer après `R2_IMAGES_BASE_URL` |
+| `w`, `h` | `409`, `142` | taille du fichier |
+| `vignette` | `{ cleR2: "vignettes/tcgdex/logos-fr/base5.webp", w: 400, h: 139 }` | la réduction WebP (400 px de large au plus, jamais agrandie) — même règle que `sets.logo.vignette` |
+| `region` | `"intl"` | **preuve de langue STRUCTURÉE** : un logo français n'existe que sur un set occidental (tirage `intl`) |
+| `langue` | `"fr"` | le logo est en français, par construction du champ |
+| `sha1` | `"e2ce46…"` | l'empreinte du fichier (règle des logos génériques) ; aucun fichier n'est partagé par deux sets le 2026-10-04 |
+| `source`, `preuve`, `le` | `"tcgdex:assets-fr"` · `"manuel"` | d'où vient le fichier et pourquoi c'est celui de CE set |
+
+**117 sets en portent un, tous occidentaux et tous publiés** : 111 servis par TCGdex en langue française (SHA-256 vérifié distinct
+de l'anglais, 2026-09-20), 6 déposés à la main par le testeur (dossier « Logo FR », lus à l'œil, 2026-09-28). `logoFr` ne remplace
+jamais `sets.logo` : un set peut porter les deux, et le français est celui de la page française. `region`, `langue` et `sha1` ont été
+posés le 2026-10-04 (`exposer-logos-fr.js`, clés absentes seulement) : la phrase de `preuve` de ces logos n'est pas de celles que
+`lib/visuelSet.ts` reconnaît, et sans `region` la règle du site les aurait tous refusés.
+
 ---
 
 ## Dettes connues, à ne pas rediagnostiquer

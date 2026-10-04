@@ -1,0 +1,331 @@
+{
+ "lu": "2026-09-28",
+ "par": "agent du site (planches regardées le 2026-09-28)",
+ "valide": "2026-10-04, feu vert du testeur (« les 46 visuels japonais : marqués ja »)",
+ "source": "rat-market-site/LISTE-VISUELS-JAPONAIS-REGARDES.json",
+ "preuve": "lu japonais à l'œil par l'agent du site le 2026-09-28 (planches), feu vert du testeur le 2026-10-04",
+ "images": [
+  {
+   "cleR2": "bulbapedia/Shining-Legends/45-224068.webp",
+   "set": "Shining-Legends",
+   "numero": "45",
+   "nom": "Marshadow",
+   "format": "496×693"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/28-224069.webp",
+   "set": "Shining-Legends",
+   "numero": "28",
+   "nom": "Pikachu",
+   "format": "496×693"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/63-224373.webp",
+   "set": "Shining-Legends",
+   "numero": "63",
+   "nom": "Pokémon Breeder",
+   "format": "496×693"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/58-224452.webp",
+   "set": "Shining-Legends",
+   "numero": "58",
+   "nom": "Damage Mover",
+   "format": "496×693"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/76-228720.webp",
+   "set": "Dragon-Majesty",
+   "numero": "76",
+   "nom": "Fiery Flint",
+   "format": "430×600"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/74-228316.webp",
+   "set": "Dragon-Majesty",
+   "numero": "74",
+   "nom": "White Kyurem-GX",
+   "format": "430×600"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/75-228454.webp",
+   "set": "Dragon-Majesty",
+   "numero": "75",
+   "nom": "Dragon Talon",
+   "format": "430×600"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/77-228719.webp",
+   "set": "Dragon-Majesty",
+   "numero": "77",
+   "nom": "Switch Raft",
+   "format": "430×600"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/146-226728.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM146",
+   "nom": "Leafeon-GX",
+   "format": "573×800"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/147-226732.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM147",
+   "nom": "Glaceon-GX",
+   "format": "573×800"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/41-230000.webp",
+   "set": "Dragon-Majesty",
+   "numero": "41",
+   "nom": "Altaria-GX",
+   "format": "573×800"
+  },
+  {
+   "cleR2": "bulbapedia/SWSH-Black-Star-Promos/155-262664.webp",
+   "set": "SWSH-Black-Star-Promos",
+   "numero": "SWSH155 (Top Left)",
+   "nom": "Greninja V-UNION",
+   "format": "1168×1622"
+  },
+  {
+   "cleR2": "bulbapedia/SWSH-Black-Star-Promos/159-262665.webp",
+   "set": "SWSH-Black-Star-Promos",
+   "numero": "SWSH159 (Top Left)",
+   "nom": "Mewtwo V-UNION",
+   "format": "1168×1622"
+  },
+  {
+   "cleR2": "bulbapedia/SWSH-Black-Star-Promos/163-262666.webp",
+   "set": "SWSH-Black-Star-Promos",
+   "numero": "SWSH163 (Top Left)",
+   "nom": "Zacian V-UNION",
+   "format": "1168×1622"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/77-224190.webp",
+   "set": "Shining-Legends",
+   "numero": "77",
+   "nom": "Zoroark-GX",
+   "format": "366×512"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/74-224120.webp",
+   "set": "Shining-Legends",
+   "numero": "74",
+   "nom": "Entei-GX",
+   "format": "366×512"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/241-237807.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM241",
+   "nom": "Umbreon & Darkrai-GX",
+   "format": "866×1206"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/233-233773.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM233",
+   "nom": "Eevee-GX",
+   "format": "866×1206"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/45-228453.webp",
+   "set": "Dragon-Majesty",
+   "numero": "45",
+   "nom": "Druddigon",
+   "format": "372×519"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/59-228454.webp",
+   "set": "Dragon-Majesty",
+   "numero": "59",
+   "nom": "Dragon Talon",
+   "format": "372×519"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/33-225250.webp",
+   "set": "Dragon-Majesty",
+   "numero": "33",
+   "nom": "Hydreigon",
+   "format": "868×1207"
+  },
+  {
+   "cleR2": "bulbapedia/Lost-Origin/17-255447.webp",
+   "set": "Lost-Origin",
+   "numero": "TG17",
+   "nom": "Pikachu VMAX",
+   "format": "750×1047"
+  },
+  {
+   "cleR2": "bulbapedia/Lost-Origin/29-255447.webp",
+   "set": "Lost-Origin",
+   "numero": "TG29",
+   "nom": "Pikachu VMAX",
+   "format": "558×800"
+  },
+  {
+   "cleR2": "bulbapedia/Brilliant-Stars/29-259237.webp",
+   "set": "Brilliant-Stars",
+   "numero": "TG29",
+   "nom": "Single Strike Urshifu VMAX",
+   "format": "575×800"
+  },
+  {
+   "cleR2": "bulbapedia/Brilliant-Stars/30-259239.webp",
+   "set": "Brilliant-Stars",
+   "numero": "TG30",
+   "nom": "Rapid Strike Urshifu VMAX",
+   "format": "568×800"
+  },
+  {
+   "cleR2": "bulbapedia/SWSH-Black-Star-Promos/215-266207.webp",
+   "set": "SWSH-Black-Star-Promos",
+   "numero": "SWSH215 (Top Left)",
+   "nom": "Morpeko V-UNION",
+   "format": "1162×1616"
+  },
+  {
+   "cleR2": "bulbapedia/Lost-Origin/30-263498.webp",
+   "set": "Lost-Origin",
+   "numero": "TG30",
+   "nom": "Mew VMAX",
+   "format": "574×800"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/76-224122.webp",
+   "set": "Shining-Legends",
+   "numero": "76",
+   "nom": "Mewtwo-GX",
+   "format": "364×510"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/78-224122.webp",
+   "set": "Shining-Legends",
+   "numero": "78",
+   "nom": "Mewtwo-GX",
+   "format": "504×712"
+  },
+  {
+   "cleR2": "bulbapedia/Forbidden-Light/134-226949.webp",
+   "set": "Forbidden-Light",
+   "numero": "134",
+   "nom": "Naganadel-GX",
+   "format": "462×650"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/125-226949.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM125",
+   "nom": "Naganadel-GX",
+   "format": "550×768"
+  },
+  {
+   "cleR2": "bulbapedia/Forbidden-Light/140-227767.webp",
+   "set": "Forbidden-Light",
+   "numero": "140",
+   "nom": "Ultra Necrozma-GX",
+   "format": "423×600"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/78-227767.webp",
+   "set": "Dragon-Majesty",
+   "numero": "78",
+   "nom": "Ultra Necrozma-GX",
+   "format": "500×730"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/71-228603.webp",
+   "set": "Dragon-Majesty",
+   "numero": "71",
+   "nom": "Reshiram-GX",
+   "format": "428×600"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/72-230000.webp",
+   "set": "Dragon-Majesty",
+   "numero": "72",
+   "nom": "Altaria-GX",
+   "format": "427×600"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/248-231941.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM248",
+   "nom": "Pikachu & Zekrom-GX",
+   "format": "400×558"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/247-235767.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM247",
+   "nom": "Reshiram & Charizard-GX",
+   "format": "571×800"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/73-228899.webp",
+   "set": "Dragon-Majesty",
+   "numero": "73",
+   "nom": "Salamence-GX",
+   "format": "424×600"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/156-228315.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM156",
+   "nom": "Dragonite-GX",
+   "format": "431×600"
+  },
+  {
+   "cleR2": "bulbapedia/SM-Black-Star-Promos/155-228665.webp",
+   "set": "SM-Black-Star-Promos",
+   "numero": "SM155",
+   "nom": "Kingdra-GX",
+   "format": "429×600"
+  },
+  {
+   "cleR2": "bulbapedia/SWSH-Black-Star-Promos/139-263328.webp",
+   "set": "SWSH-Black-Star-Promos",
+   "numero": "SWSH139 (Top Left)",
+   "nom": "Pikachu V-UNION",
+   "format": "623×870"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/29-224191.webp",
+   "set": "Shining-Legends",
+   "numero": "29",
+   "nom": "Raichu-GX",
+   "format": "399×556"
+  },
+  {
+   "cleR2": "bulbapedia/Shining-Legends/75-224191.webp",
+   "set": "Shining-Legends",
+   "numero": "75",
+   "nom": "Raichu-GX",
+   "format": "500×712"
+  },
+  {
+   "cleR2": "bulbapedia/Forbidden-Light/90-228001.webp",
+   "set": "Forbidden-Light",
+   "numero": "90",
+   "nom": "Xerneas-GX",
+   "format": "648×900"
+  },
+  {
+   "cleR2": "bulbapedia/Dragon-Majesty/12-221235.webp",
+   "set": "Dragon-Majesty",
+   "numero": "12",
+   "nom": "Litten",
+   "format": "500×698"
+  },
+  {
+   "cleR2": "bulbapedia/Diamond-Pearl/122-26196.webp",
+   "set": "Diamond-Pearl",
+   "numero": "122",
+   "nom": "Torterra LV.X",
+   "format": "394×551"
+  }
+ ]
+}

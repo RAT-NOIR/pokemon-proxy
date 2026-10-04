@@ -28,6 +28,9 @@ const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --proposer, --table=<json>, --ecrire`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+// ➕ 2026-10-04 : une copie de Pokécardex (par empreinte, collecte-cartes/langue-logo.js) n'est jamais rattachée, même si la table
+// lue la rattache (décision du testeur : « les 22 logos copiés de Pokécardex : retirés »).
+const { refusCopie } = require('./collecte-cartes/langue-logo');
 
 const DOSSIERS = { 'Logo FR': ['intl'], 'Logo JP': ['jp'], 'Logo ZH': ['zh-hans', 'zh-hant'] };
 const plat = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' et ').toLowerCase().replace(/[^a-z0-9]+/g, '');
@@ -155,6 +158,7 @@ function planifier(lignes, { parFichier, parSlug }) {
     const out = [];
     for (const l of lignes) {
         const base = { dossier: l.dossier, fichier: l.fichier, slug: l.slug, champ: l.champ, langue: l.langue, w: l.w, h: l.h, sha1: l.sha1, parQuoi: l.parQuoi, memeTexteEnAnglais: l.memeTexteEnAnglais, montage: l.montage };
+        if (refusCopie(l.sha1)) { out.push({ ...base, action: 'non-rattache', raison: refusCopie(l.sha1) }); continue; }
         if (l.decision !== 'rattache') { out.push({ ...base, action: 'non-rattache', raison: l.raison }); continue; }
         const f = parFichier.get(`${l.dossier}/${l.fichier}`);
         if (!f) { out.push({ ...base, action: 'refus', raison: 'fichier absent du dossier' }); continue; }

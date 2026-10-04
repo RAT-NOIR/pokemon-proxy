@@ -27,24 +27,42 @@ const LUS_JAPONAIS = [
     ['Crimson-Invasion', 'SeaofNothingnessCrimsonInvasion99.jpg']
 ];
 const PREUVE_OEIL = 'lu japonais à l\'œil le 2026-09-23 sur la copie R2 (le format ne tranchait pas)';
+// ➕ 2026-10-04 : les 46 visuels que l'agent du site a regardés le 2026-09-28 (planches) — japonais sous un nom de fichier anglais —,
+// marqués `ja` sur feu vert du testeur. Par CLÉ R2 (c'est ainsi que la liste les désigne) ; même règle de durée : un verdict lu vaut
+// pour CE fichier, et tombe si le fichier est remplacé.
+const LUS_SITE = require('./collecte-cartes/visuels-japonais-lus.json');
+const lusSite = new Map(LUS_SITE.images.map(i => [i.cleR2, LUS_SITE.preuve]));
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
-    const docs = await lireMongo(cx.db.collection('images'), { etat: 'ok' }, { nom: 'images (ok)', projection: { source: 1, set: 1, fichier: 1, cleR2: 1, wOriginal: 1, hOriginal: 1, langue: 1 } });
+    // 🔴 2026-10-04 : la projection ne portait ni `langueSource` ni `languePreuve`. Sans `langueSource`, la règle (langue-visuel.js)
+    // rendait « en » pour les 108 visuels indonésiens de TCGdex (et en rendrait autant pour le thaï) : relancé, l'outil les aurait
+    // RÉÉCRITS en anglais. La règle lit le document : la projection doit porter tout ce qu'elle lit.
+    const docs = await lireMongo(cx.db.collection('images'), { etat: 'ok' }, { nom: 'images (ok)', projection: { source: 1, set: 1, fichier: 1, cleR2: 1, wOriginal: 1, hOriginal: 1, langue: 1, languePreuve: 1, langueSource: 1, urlOriginal: 1 } });
     champSur(docs, 'cleR2', { collection: 'images (ok)' });
     const oeil = new Map(LUS_JAPONAIS.map(([s, f]) => [`${s}|${f}`, true]));
     const verdict = new Map();    // cleR2 -> { langue, preuve }
-    const C = { parSource: {}, oeil: 0 };
+    const C = { parSource: {}, oeil: 0, site: 0 };
+    const docsAEcrire = [];
+    // 🔴 et `langueSource` n'est pas STOCKÉ sur le document : le collecteur TCGdex le passe à la règle au téléchargement, puis ne
+    // l'écrit pas. Il vit dans `urlOriginal` (assets.tcgdex.net/<langue>/…), là où la règle dit que la source le déclare. Relu ici
+    // depuis le chemin — sans toucher la règle, que la garde du commit du worker surveille.
+    const langueDuChemin = d => d.source === 'tcgdex' && d.langueSource == null ? (/^https:\/\/assets\.tcgdex\.net\/([a-z-]+)\//.exec(d.urlOriginal ?? '')?.[1] ?? null) : d.langueSource;
     for (const d of docs) {
-        let v = langueDuVisuel(d);
+        let v = langueDuVisuel({ ...d, langueSource: langueDuChemin(d) });
         if (d.source === 'bulbapedia' && oeil.has(`${d.set}|${d.fichier}`)) { v = { langue: 'ja', preuve: PREUVE_OEIL }; C.oeil++; }
+        else if (lusSite.has(d.cleR2)) { v = { langue: 'ja', preuve: lusSite.get(d.cleR2) }; C.site++; }
         verdict.set(d.cleR2, v);
+        if (d.langue !== v.langue || d.languePreuve !== v.preuve) docsAEcrire.push(d);
         const k = `${d.source} → ${v.langue ?? 'null'}`; C.parSource[k] = (C.parSource[k] || 0) + 1;
     }
     console.log(`\n════ DOCUMENTS images (etat ok) : ${docs.length} ════`);
     for (const [k, n] of Object.entries(C.parSource).sort()) console.log(`   ${k.padEnd(22)} ${n}`);
     console.log(`   dont lus à l'œil : ${C.oeil} / ${LUS_JAPONAIS.length} ${C.oeil === LUS_JAPONAIS.length ? '✅' : '🔴 un fichier lu n\'est plus en base — à ouvrir'}`);
+    console.log(`   dont lus par le site (2026-09-28) : ${C.site} / ${lusSite.size} ${C.site === lusSite.size ? '✅' : '🔴 un fichier lu n\'est plus en base (etat ok) — à ouvrir'}`);
+    const changes = {}; for (const d of docsAEcrire) { const k = `${d.langue === undefined ? '(absent)' : d.langue ?? 'null'} → ${verdict.get(d.cleR2).langue ?? 'null'}`; changes[k] = (changes[k] || 0) + 1; }
+    console.log(`   documents dont le verdict change : ${docsAEcrire.length} ${JSON.stringify(changes)}`);
     console.log(`   formats du scanner japonais : ${[...FORMATS_JAPONAIS.keys()].join(', ')}`);
 
     // Les entrées de cartes.images, et la région du set qui les affiche
@@ -70,11 +88,12 @@ const PREUVE_OEIL = 'lu japonais à l\'œil le 2026-09-23 sur la copie R2 (le fo
     console.log(`   déjà justes : ${E.dejaJustes} · à écrire : ${ops.length}`);
 
     if (!ecrire) { console.log('\n   (mesure seule — --ecrire après la sauvegarde réelle de cartes et images)'); await fermer(); return; }
-    const d1 = await cx.db.collection('images').bulkWrite(docs.map(d => ({ updateOne: { filter: { _id: d._id }, update: { $set: { langue: verdict.get(d.cleR2).langue, languePreuve: verdict.get(d.cleR2).preuve } } } })), { ordered: false });
+    // seuls les documents dont le verdict CHANGE (2026-10-04 : on ne réécrit plus 40 000 documents pour en changer 46)
+    const d1 = docsAEcrire.length ? await cx.db.collection('images').bulkWrite(docsAEcrire.map(d => ({ updateOne: { filter: { _id: d._id }, update: { $set: { langue: verdict.get(d.cleR2).langue, languePreuve: verdict.get(d.cleR2).preuve } } } })), { ordered: false }) : { modifiedCount: 0 };
     const d2 = ops.length ? await cx.db.collection('cartes').bulkWrite(ops, { ordered: false }) : { modifiedCount: 0 };
     // Relu en base, pas déduit de ce qu'on a envoyé
     const relu = await cx.db.collection('cartes').aggregate([{ $unwind: '$images' }, { $group: { _id: { $cond: [{ $eq: [{ $type: '$images.langue' }, 'missing'] }, '(absent)', { $ifNull: ['$images.langue', 'null'] }] }, n: { $sum: 1 } } }]).toArray();
-    console.log(`\n   ✅ images : ${d1.modifiedCount} modifiés sur ${docs.length} · cartes.images : ${d2.modifiedCount} cartes modifiées pour ${ops.length} entrées`);
+    console.log(`\n   ✅ images : ${d1.modifiedCount} modifiés sur ${docsAEcrire.length} à écrire (${docs.length} documents) · cartes.images : ${d2.modifiedCount} cartes modifiées pour ${ops.length} entrées`);
     console.log(`   RELU en base, entrées de cartes.images par langue : ${relu.map(x => `${x._id} ${x.n}`).join(' · ')}`);
     await fermer();
 })().catch(e => { console.error(e); process.exit(1); });
