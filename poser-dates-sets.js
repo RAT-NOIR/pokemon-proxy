@@ -137,7 +137,48 @@ const OFFICIELLES = {
 // Bulbapedia (elle vote comme elle), à la date de sa copie ; la ligne cite la valeur lue. `remplace` : la page archivée chez nous
 // est lue, mais sa valeur ne passait pas la règle pour une raison relue ici (dite dans `pourquoi`).
 const W = 'http://web.archive.org/web/';
+// ➕ 2026-10-05 (demande du site, feu vert du testeur : « date les 38 sets créés ce soir, mois et année suffisent ») : les sets créés par
+// creer-sets-sans-page.js n'ont aucune page chez nous. Leurs pages Bulbapedia ont été TROUVÉES par l'API CDX d'archive.org (préfixe
+// d'adresse : une énumération des pages archivées, pas un titre deviné — cdx-decouverte.js, 30 requêtes) et LUES dans leur copie (47
+// requêtes à 5–10 s). Chaque ligne dit pourquoi la page est CELLE de ce produit ; ce qui ne le prouve pas n'est pas ici : Intro Pack (la
+// page ne nomme pas Squirtle), les trois « MEGA Starter Set » 2026 (la page des ex Starter Sets 2026 ne les nomme pas), Premium Trainer
+// Box (la page est celle de 2016, pas la VSTAR), Family Pokémon Card Game (la copie est une page de défi Cloudflare).
+const RELEVES_SETS_CREES = {
+    'SM-Trainer-Kit-Alolan-Sandslash-Alolan-Ninetales': { jour: 'June 1, 2018', url: `${W}20260818123040/https://bulbapedia.bulbagarden.net/wiki/Sun_%26_Moon_Trainer_Kit:_Alolan_Sandslash_%26_Alolan_Ninetales_(TCG)`, citation: 'Release date June 1, 2018 — « It was released on June 1, 2018 »' },
+    'Movie-Commemoration-VS-Pack-Auras-Lucario': { jour: 'July 16, 2005', url: `${W}20260704122610/https://bulbapedia.bulbagarden.net/wiki/Movie_Commemoration_VS_Pack:_Aura%27s_Lucario_(TCG)`, citation: 'Release date July 16, 2005 — « first released on July 16, 2005 exclusively to the Pokémon Center stores in Japan »' },
+    'Movie-Commemoration-VS-Pack-Sky-Splitting-Deoxys': { jour: 'July 17, 2004', url: `${W}20260820044150/https://bulbapedia.bulbagarden.net/wiki/Movie_Commemoration_VS_Pack:_Sky-Splitting_Deoxys_(TCG)`, citation: 'Release date July 17, 2004 (Japanese-exclusive Half Deck)' },
+    'Starter-Set-ex-Marnies-Morpeko-Grimmsnarl-ex': { jour: 'February 21, 2025', url: `${W}20260802171213/https://bulbapedia.bulbagarden.net/wiki/Ex_Starter_Set_Marnie%27s_Morpeko_%26_Grimmsnarl_ex_(TCG)`, citation: 'Release date — Japanese: February 21, 2025 (Traditional Chinese: March 7, 2025)' },
+    'Starter-Set-ex-Stevens-Beldum-Metagross-ex': { jour: 'February 21, 2025', url: `${W}20260619184441/https://bulbapedia.bulbagarden.net/wiki/Ex_Starter_Set_Steven%27s_Beldum_%26_Metagross_ex_(TCG)`, citation: 'Release date — Japanese: February 21, 2025 (Traditional Chinese: March 7, 2025)' },
+    'ex-Starter-Set-Pikachu-ex-Pawmot': { jour: 'March 24, 2023', url: `${W}20260618045746/https://bulbapedia.bulbagarden.net/wiki/Ex_Starter_Set_Pikachu_ex_%26_Pawmot_(TCG)`, citation: 'Release date — Japanese: March 24, 2023 (Korean: April 22, 2023 ; Traditional Chinese: April 28, 2023)' },
+    // le titre du deck redirige vers la page commune des trois ex Starter Sets de janvier 2023 (ses deux voisins sont datés du même jour
+    // par pokemon-card.com, plus haut)
+    'ex-Starter-Set-Fuecoco-Ampharos-ex': { jour: 'January 20, 2023', url: `${W}20251102162135/https://bulbapedia.bulbagarden.net/wiki/Ex_Starter_Set_Fuecoco_%26_Ampharos_ex_(TCG)`, citation: 'redirige vers « ex Starter Sets (TCG) » — Release date Japanese: January 20, 2023' },
+    'Eevee-GX-Starter-Sets': { jour: 'November 23, 2018', url: `${W}20260826235949/https://bulbapedia.bulbagarden.net/wiki/Eevee-GX_Starter_Sets_(TCG)`, citation: 'Release date November 23, 2018 — « a trio of Japanese-exclusive Standard Decks … released on November 23, 2018 »' },
+    'V-UNION-Special-Card-Sets': { jour: 'August 20, 2021', url: `${W}20260714034052/https://bulbapedia.bulbagarden.net/wiki/V-UNION_Special_Card_Sets_(TCG)`, citation: 'Release date — Japanese: August 20, 2021' },
+    // la page nomme les deux boîtes : Overgrow (茂, Florizarre) et Torrent (激, Tortank), une même sortie, exclusivité chinois simplifié
+    'Primordial-Arts-Deck-Building-Gift-Box-Blastoise': { jour: 'November 17, 2023', url: `${W}20260825024441/https://bulbapedia.bulbagarden.net/wiki/Primordial_Arts_Deck_Building_Gift_Boxes_(ATCG)`, citation: 'Release date November 17, 2023 — « Deck Building Box Torrent (卡牌构筑礼盒 洪荒演武 激) », Simplified Chinese-exclusive' },
+    'Primordial-Arts-Deck-Building-Gift-Box-Venusaur': { jour: 'November 17, 2023', url: `${W}20260825024441/https://bulbapedia.bulbagarden.net/wiki/Primordial_Arts_Deck_Building_Gift_Boxes_(ATCG)`, citation: 'Release date November 17, 2023 — « Deck Building Box Overgrow (卡牌构筑礼盒 洪荒演武 茂) », Simplified Chinese-exclusive' },
+    // deux collections 2018, deux pays : la France (MCD18F ; TCGdex « 2018sm-fr » 2018-06-13, témoin concordant) et les États-Unis (MCD18 ;
+    // TCGdex « 2018sm » 2018-10-19)
+    'McDonalds-Collection-2018': { periode: { texte: 'June 13 - July 10, 2018 (France)', debut: 'June 13, 2018', fin: 'July 10, 2018', debutIso: '2018-06-13' }, url: `${W}20260618083654/https://bulbapedia.bulbagarden.net/wiki/McDonald%27s_Collection_2018_(TCG)`, citation: 'Release period June 13 - July 10, 2018 (France)' },
+    'McDonald-s-Collection-2018-2': { periode: { texte: 'October 16 - November 12, 2018 (US)', debut: 'October 16, 2018', fin: 'November 12, 2018', debutIso: '2018-10-16' }, url: `${W}20260618083654/https://bulbapedia.bulbagarden.net/wiki/McDonald%27s_Collection_2018_(TCG)`, citation: 'Release period October 16 - November 12, 2018 (US)' },
+    'McDonalds-Collection-2011': { jour: 'June 17, 2011', url: `${W}20260614221654/https://bulbapedia.bulbagarden.net/wiki/McDonald%27s_Collection_2011_(TCG)`, citation: 'Release date — English: June 17, 2011 (« from 17 June to 7 July, 2011 »)' },
+    // la MÊME page donne la sortie japonaise de la collection : « コレクションシート 旅立ちの仲間 Collection Sheet Journey Partners »
+    'Collection-Sheet-Journey-Partners': { jour: 'September 18, 2010', url: `${W}20260614221654/https://bulbapedia.bulbagarden.net/wiki/McDonald%27s_Collection_2011_(TCG)`, citation: 'Release date — Japanese: September 18, 2010 (« Japanese: コレクションシート 旅立ちの仲間 Collection Sheet Journey Partners »)' },
+    'McDonalds-Collection-25th-Anniversary': { periode: { texte: 'From February 9, 2021', debut: 'February 9, 2021', fin: null, debutIso: '2021-02-09' }, url: `${W}20260813145141/https://bulbapedia.bulbagarden.net/wiki/McDonald%27s_Collection_2021_(TCG)`, citation: 'Release period From February 9, 2021 — « to celebrate Pokémon 25th Anniversary », U.S.' },
+    // le titre « PokéPark Forest » redirige vers les PokéPark Premium Files : deux classeurs de 9 cartes, sortis le même jour
+    'PokePark-Forest': { jour: 'March 18, 2005', url: `${W}20260908202012/https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9Park_Forest_(TCG)`, citation: 'redirige vers « PokéPark Premium Files (TCG) » — Release date March 18, 2005 (« a special pair of promotional file folders … Each file folder contains 9 exclusive cards »)' },
+    // « Sword Shield Starter Decks » de Cardmarket, code sA = « スターターセットV Starter Set V »
+    'Sword-Shield-Starter-Decks': { jour: 'November 29, 2019', url: `${W}20260825022048/https://bulbapedia.bulbagarden.net/wiki/V_Starter_Sets_(TCG)`, citation: 'Release date November 29, 2019 — « The V Starter Sets (Japanese: スターターセットV Starter Set V) … five Japanese & Korean Standard Decks »' },
+    'DP-Trainer-Kit': { jour: 'September 24, 2007', url: `${W}20260904223627/https://bulbapedia.bulbagarden.net/wiki/Diamond_%26_Pearl_Trainer_Kit_(TCG)`, citation: 'Release date September 24, 2007 — « released in English and European languages only »' },
+    // le Gift Box japonais de 2003 : deux demi-decks, Latias ex et Latios ex (« Latias ex and Latios ex differ from their Rulers of the
+    // Heavens counterparts by featuring alternate artwork »)
+    'Gift-Box-Latias-ex': { jour: 'November 17, 2003', url: `${W}20141028085019/https://bulbapedia.bulbagarden.net/wiki/Latias_%26_Latios_Gift_Set_(TCG)`, citation: 'redirige vers « Gift Box (TCG) » — Release date November 17, 2003 ; la boîte contient les demi-decks Latias ex et Latios ex' },
+    'Gift-Box-Latios-ex': { jour: 'November 17, 2003', url: `${W}20141028085019/https://bulbapedia.bulbagarden.net/wiki/Latias_%26_Latios_Gift_Set_(TCG)`, citation: 'redirige vers « Gift Box (TCG) » — Release date November 17, 2003 ; la boîte contient les demi-decks Latias ex et Latios ex' },
+    'M-P-Simplified-Chinese-Promos': { periode: { texte: 'August 7, 2026 - present', debut: 'August 7, 2026', fin: null, debutIso: '2026-08-07' }, url: `${W}20260804205126/https://bulbapedia.bulbagarden.net/wiki/M-P_Promotional_cards_(SCTCG)`, citation: 'Release period August 7, 2026 - present (Simplified Chinese M-P promos)' }
+};
 const RELEVES_BULBAPEDIA = {
+    ...RELEVES_SETS_CREES,
     'Space-Time-Creation': { jour: 'November 30, 2006', url: `${W}20260901065003/https://bulbapedia.bulbagarden.net/wiki/Space-Time_Creation_(TCG)`, citation: 'Release date — Japanese: November 30, 2006 (page commune « Diamond & Pearl (TCG) »)' },
     'Entry-Pack-08': { jour: 'November 30, 2007', url: `${W}20260831214743/https://bulbapedia.bulbagarden.net/wiki/Entry_Pack_%2708_(TCG)`, citation: 'Release date November 30, 2007 (Japanese-exclusive)' },
     'Heatran-vs-Regigigas-Deck-Kit': { jour: 'March 14, 2008', url: `${W}20260831214748/https://bulbapedia.bulbagarden.net/wiki/Heatran_vs_Regigigas_Deck_Kit_(TCG)`, citation: 'Release date March 14, 2008 (Japanese-exclusive)' },

@@ -550,6 +550,46 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 73. UNE RÉPONSE COMMUNE EST UNE AFFIRMATION DE PRIX, UN SIMULATEUR TROP PAUVRE CHIFFRE UN FAUX COÛT, ET UN 403 DE CLOUDFLARE EST UN DÉFI — 2026-10-04 (soir)
+
+> 🔴 **« RÉPONSE COMMUNE » N'AFFIRME PAS LE PRODUIT, MAIS ELLE AFFIRME UN PRIX — ET LE « 0 FAUX » NE LA COMPTAIT PAS.** Décision du testeur :
+> quand aucun champ ne sépare les candidats, une réponse commune s'ils valent le même prix, sinon une question en images. Écrite, elle
+> n'était jugée par aucun compteur (relecture par sous-agent). Comptée (`auto-banc-rapport.js` : la vérité est-elle parmi les candidats ?),
+> elle a rendu **2 faux prix sur 7 en lecture du jumeau** : la seconde lecture lisait le vrai numéro et CONTREDISAIT le produit lu, et la
+> question partait en réponse commune entre les produits du jumeau. 🔑 **Une issue qui n'est pas une affirmation reste un mensonge
+> possible : tout ce qui donne un chiffre au client se compte dans les faux.** Deux lectures en conflit → jamais de réponse commune
+> (`conflitDeLecture`) ; et elle exige que ses 3 candidats couvrent TOUS les indiscernables (un 4e au même visuel, à un autre prix).
+
+**LE VRAI COÛT DU DÉCLENCHEMENT LARGE (ordre du testeur : photos simulées « en définition réaliste, celle d'une annonce Vinted »).**
+Mesuré sur les photos d'annonce du labo et du jeu fixe : 600 × 800, WebP, carte à 730 px de haut en médiane (91 % du grand côté). La
+simulation v1 faisait 480 × 640, carte de 370 à 560 px — **un quart à la moitié plus basse que la réalité**. Mêmes 881 lectures
+parfaites occidentales : règle stricte 83,7 % (v1) / **86,9 %** (Vinted) ; seconde lecture large 74,6 % (−9,1 points, 83 retirés) /
+**83,5 % (−3,4 points, 36 retirés)** ; 0 faux ; jumeau 30 → 2 / 29 → 2. 🔑 **Un instrument plus pauvre que le monde fabrique un coût :
+le « −9 points » venait du simulateur.** ⚠️ L'échantillon tiré au sort dépend de la POPULATION : retirer deux visuels a changé les
+2 000 tirés ; un rejeu se fait désormais par les CLÉS (`--cles`), pas par la graine.
+**L'OCR LOCAL (RapidOCR, PaddleOCR en ONNX) : gratuit, et il n'apporte rien** — banc réel 47 affirmés (= la règle stricte) contre 52 au
+modèle, 0 faux ; numéro lu sur 24 photos sur 75, code sur 0 ; auto-banc 82,6 % contre 83,5 %. La relecture y a trouvé deux défauts qui
+auraient fait mentir la mesure : n'importe quel mot connu de la bande passait pour un code (« HP », « EX » sont des codes de set), et
+« IO2 » se lisait 2. **Coût OpenRouter mesuré** (usage du compte) : 7,15 $ consommés sur 10 $ ; une identification de production
+0,0032 $ (1 photo) à 0,0037 $ (2, la médiane du journal) — le prompt seul fait ~4 400 jetons ; une bande de seconde lecture ~0,0008 $.
+**LES « 3 FAUX DU CATALOGUE » ÉTAIENT 2** : SM147 et SM226 sont des scans japonais (« 269/SM-P », « 366/SM-P », regardés), retirés
+(`retirer-visuels.js` : document `images` à l'état « retire », que ni le rejeu ni la recollecte ne reprennent) ; **Base Set 2 n°65 imprime
+65/130 — c'est la seconde lecture qui avait lu 67, deux essais d'accord** : des essais du même modèle sur la même photo se trompent
+ensemble. La famille des deux premiers : 221 scans `ja` sous des sets occidentaux, tous Bulbapedia — présentés, pas retirés.
+**LES SETS SANS PAGE (34 créés, 811 fiches simples)** : le TIRAGE ne se devine pas — table énumérée, une preuve par set (codes_set,
+famille de code, nom, CS…C, asymétrie de la désignation) ; 33 sans preuve proposés au testeur. La relecture (avant écriture) a trouvé
+deux défauts graves : une fiche simple dans un set qui a une ligne de table ferait doublon avec la vraie page, et `--reparser` levait
+sur une carte sans page. **BULBAPEDIA : un seul essai, 403, `server: cloudflare`, `cf-mitigated: challenge`** — un défi anti-robot, pas
+une cadence (aucun 429, 3 requêtes dans la journée, worker sans unité Bulbapedia depuis 3 jours). Contourner un défi serait de
+l'évasion : plus aucune requête ; copies d'archive seulement ; un accès se demande à Bulbagarden.
+**LES DEMANDES DU SITE (feu vert du testeur, nuit du 4 au 5)** : 28 des 31 logos sans preuve portent `logo.langue`, LUE sur le fichier
+(`poser-langue-logos.js`) — et 3 ne sont pas des logos : les Radiant Energy sont des **photos de booster** ; poser leur langue les aurait
+affichées. 🔑 **Une demande « pose la preuve » se lit comme « regarde d'abord » : la preuve qu'on pose sans regarder certifie le fichier,
+quel qu'il soit.** Dates : **22 des 34 sets créés**, pages trouvées par l'**API CDX d'archive.org** (préfixe d'adresse — une énumération
+des pages archivées, pas un titre deviné) et lues dans leur copie ; 12 sans date, chacun avec sa raison (une page qui ne nomme pas le
+produit ne le date pas : « Intro Pack » sans Squirtle, les ex Starter Sets 2026 sans Zorua). Aucune date tirée d'un nom ni d'une date
+d'ajout chez Cardmarket.
+
 ## 72. UNE SECONDE LECTURE QUI SE CONFIRMAIT ELLE-MÊME, UN LOGO QUE LE SITE NE POUVAIT PAS LIRE, ET UNE PROJECTION QUI AURAIT RÉÉCRIT L'INDONÉSIEN — 2026-10-04
 
 > 🔑 **DÉCISIONS DU TESTEUR : garde de lecture STRICTE (0,02) — « 0 faux affirmé est non négociable : un faux prix coûte plus cher qu'une
