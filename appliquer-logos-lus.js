@@ -30,7 +30,7 @@ const { refusDuCouple, logoGenerique, refusCopie } = require('./collecte-cartes/
     const avecLogo = await lireMongo(S, { 'logo.cleR2': { $nin: [null, ''] } }, { nom: 'sets à logo', projection: { logo: 1, logoGenerique: 1, logoGeneriquePreuve: 1 } });
     const couple = [], generiques = [], copies = [], autres = [];
     for (const s of avecLogo) {
-        const k = refusCopie(s.logo.sha1);
+        const k = refusCopie(s.logo.sha1, s.logo.fichier);
         if (k) { copies.push({ s, motif: k }); continue; }
         const c = refusDuCouple(s.logo.fichier);
         if (c) { couple.push({ s, motif: c }); continue; }

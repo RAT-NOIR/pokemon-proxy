@@ -97,9 +97,13 @@ const LOGOS_COPIES = new Map([
     ['a687325820e9599e448e32018b78a467d42e8e50', 'Logo FR/WCD/jap_094.png (WCD-2024)'],
     ['abe29418fa4fa1cfa0e172bf22c0ec6f094c49c7', 'Logo FR/WCD/jap_095.png (WCD-2025)']
 ]);
-/** Le motif du refus d'une copie de Pokécardex (écrit dans `logoRefus.motif`), ou null. */
-const refusCopie = sha1 => LOGOS_COPIES.has(sha1)
-    ? `logo COPIÉ de Pokécardex, retiré (décision du testeur, 2026-10-04 : son gabarit est une inspiration, jamais un fichier à reprendre ; il recevra un logo composé) — ${LOGOS_COPIES.get(sha1)}` : null;
+/** Le motif du refus d'une copie de Pokécardex (écrit dans `logoRefus.motif`), ou null. Par l'empreinte, et — pour un logo posé sans
+ *  empreinte — par le fichier déposé (« Logo FR/…/jap_NNN.png »), qui est celui de la table (relecture du 2026-10-04). */
+const FICHIERS_COPIES = new Map([...LOGOS_COPIES].map(([sha1, v]) => [v.replace(/ \(.*\)$/, ''), sha1]));
+const refusCopie = (sha1, fichier) => {
+    const s = LOGOS_COPIES.has(sha1) ? sha1 : (fichier && FICHIERS_COPIES.get(fichier)) || null;
+    return s ? `logo COPIÉ de Pokécardex, retiré (décision du testeur, 2026-10-04 : son gabarit est une inspiration, jamais un fichier à reprendre ; il recevra un logo composé) — ${LOGOS_COPIES.get(s)}` : null;
+};
 // 👁️ LES FICHIERS « SANS PREUVE DE LANGUE », LUS À L'ŒIL le 2026-09-26 (téléchargés dans le bac, jamais sur R2 avant verdict) :
 // le nom du fichier ne disait rien, l'image le dit. Valable pour un set JAPONAIS seulement — c'est la question qui était posée.
 const LOGOS_LUS_A_L_OEIL = new Map([

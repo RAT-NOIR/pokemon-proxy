@@ -75,7 +75,8 @@ if (require.main === module) (async () => {
     for (const p of aPoser) {
         // la condition d'écriture est celle du plan, relue dans la requête : une clé apparue entre-temps n'est pas écrasée
         const filtre = { _id: p.s._id, 'logoFr.cleR2': p.s.logoFr.cleR2 };
-        for (const k of Object.keys(p.poser)) filtre[`logoFr.${k}`] = { $exists: false };
+        // `null` en filtre trouve la clé absente OU nulle — comme le plan (`== null`), sinon une clé stockée à null ferait échouer à tort
+        for (const k of Object.keys(p.poser)) filtre[`logoFr.${k}`] = null;
         const u = await S.updateOne(filtre, { $set: Object.fromEntries(Object.entries(p.poser).map(([k, v]) => [`logoFr.${k}`, v])) });
         if (u.modifiedCount === 1) ecrits++; else console.log(`   ⚠️ ${p.s._id} : non écrit — logoFr a changé depuis le plan`);
     }

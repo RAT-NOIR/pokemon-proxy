@@ -48,7 +48,9 @@ const lusSite = new Map(LUS_SITE.images.map(i => [i.cleR2, LUS_SITE.preuve]));
     // 🔴 et `langueSource` n'est pas STOCKÉ sur le document : le collecteur TCGdex le passe à la règle au téléchargement, puis ne
     // l'écrit pas. Il vit dans `urlOriginal` (assets.tcgdex.net/<langue>/…), là où la règle dit que la source le déclare. Relu ici
     // depuis le chemin — sans toucher la règle, que la garde du commit du worker surveille.
-    const langueDuChemin = d => d.source === 'tcgdex' && d.langueSource == null ? (/^https:\/\/assets\.tcgdex\.net\/([a-z-]+)\//.exec(d.urlOriginal ?? '')?.[1] ?? null) : d.langueSource;
+    // Un chemin NON reconnu (autre hôte, urlOriginal absent) n'est pas de l'anglais : il porte une langue source « inconnue », que la
+    // règle rend `null` avec sa preuve (relecture du 2026-10-04 : `null` faisait rendre « en, API anglaise » — une langue prouvée sans preuve).
+    const langueDuChemin = d => d.source === 'tcgdex' && d.langueSource == null ? (/^https:\/\/assets\.tcgdex\.net\/([a-z-]+)\//.exec(d.urlOriginal ?? '')?.[1] ?? 'chemin-non-reconnu') : d.langueSource;
     for (const d of docs) {
         let v = langueDuVisuel({ ...d, langueSource: langueDuChemin(d) });
         if (d.source === 'bulbapedia' && oeil.has(`${d.set}|${d.fichier}`)) { v = { langue: 'ja', preuve: PREUVE_OEIL }; C.oeil++; }

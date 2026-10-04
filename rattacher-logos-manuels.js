@@ -158,7 +158,8 @@ function planifier(lignes, { parFichier, parSlug }) {
     const out = [];
     for (const l of lignes) {
         const base = { dossier: l.dossier, fichier: l.fichier, slug: l.slug, champ: l.champ, langue: l.langue, w: l.w, h: l.h, sha1: l.sha1, parQuoi: l.parQuoi, memeTexteEnAnglais: l.memeTexteEnAnglais, montage: l.montage };
-        if (refusCopie(l.sha1)) { out.push({ ...base, action: 'non-rattache', raison: refusCopie(l.sha1) }); continue; }
+        const copie = refusCopie(l.sha1, `${l.dossier}/${l.fichier}`);
+        if (copie) { out.push({ ...base, action: 'non-rattache', raison: copie }); continue; }
         if (l.decision !== 'rattache') { out.push({ ...base, action: 'non-rattache', raison: l.raison }); continue; }
         const f = parFichier.get(`${l.dossier}/${l.fichier}`);
         if (!f) { out.push({ ...base, action: 'refus', raison: 'fichier absent du dossier' }); continue; }

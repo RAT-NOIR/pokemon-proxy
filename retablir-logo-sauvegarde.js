@@ -29,7 +29,8 @@ const { refusCopie, refusDuCouple, logoGenerique } = require('./collecte-cartes/
     if (!avant) throw new Error(`le set « ${slug} » n'est pas dans la sauvegarde`);
     const logo = avant.logo;
     if (!logo || typeof logo.cleR2 !== 'string') throw new Error(`la sauvegarde ne porte aucun logo pour « ${slug} »`);
-    const refus = refusCopie(logo.sha1) || refusDuCouple(logo.fichier) || logoGenerique(logo.sha1);
+    const refus = refusCopie(logo.sha1, logo.fichier) || refusDuCouple(logo.fichier) || logoGenerique(logo.sha1)
+        || (avant.logoGenerique === true ? `marqué générique dans la sauvegarde (${avant.logoGeneriquePreuve ?? 'sans preuve écrite'})` : null);
     if (refus) throw new Error(`le logo de la sauvegarde est lui-même refusé par les tables : ${refus}`);
     const bucket = process.env.R2_BUCKET_IMAGES;
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
