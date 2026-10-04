@@ -133,9 +133,12 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
         const dejaAppris = new Set(appris.map(a => a.idProduct)), dejaCible = new Set(cibles.map(c => c.idProduct));
         const slugDe = new Map(); for (const a of appris) if (a.slugSet && !slugDe.has(a.idExpansion)) slugDe.set(a.idExpansion, a.slugSet);
         let n = 0;
+        // une cible DÉJÀ dans la liste (slug vide, jamais appris) d'une expansion de tête passe en tête — avant le test « déjà appris »,
+        // qui l'écarterait (une ligne « slug vide » est dans numeros_cartes) : relecture du 2026-10-04
+        for (const c of cibles) if (EN_TETE.has(c.idExpansion)) c.enTete = true;
         for (const e of EN_TETE) for (const p of parExp.get(e) || []) {
+            if (dejaCible.has(p.idProduct)) continue;
             if (dejaAppris.has(p.idProduct)) continue;
-            if (dejaCible.has(p.idProduct)) { const c = cibles.find(c => c.idProduct === p.idProduct); c.enTete = true; continue; }
             cibles.push({ idProduct: p.idProduct, idExpansion: e, slugSet: slugDe.get(e) ?? null, nom: p.name, k: 'jamais appris (en tête)', enTete: true }); n++;
         }
         const absentes = [...EN_TETE].filter(e => !parExp.has(e));
@@ -168,6 +171,8 @@ let offreRecente = null, dateGuide = null;   // posés par --guide : l'offre au 
             x.cibles.push({ idProduct: c.idProduct, nom: c.nom, k: c.k, prixTendance: c.prixTendance ?? null, rang: r + 1, produitsDansLaListe: rg.size,
                 pageCalculee: pl.principale ? `${pl.principale.tri} ${pl.principale.site}` : 'recherche', ...(offreRecente ? { offre } : {}) });
             if (t.principale) { x.voisine = false; x.valeur += c.prixTendance || 0; if (offre) x.sure = true; }
+            // une page est EN TÊTE dès qu'UNE de ses cibles l'est — pas seulement celle qui l'a créée (relecture du 2026-10-04)
+            if (c.enTete) x.enTete = true;
         }
     }
     // ordre : d'abord les pages SÛRES (une cible au moins a une offre au guide le plus récent : elle est dans la liste), puis les autres ;

@@ -36,14 +36,17 @@ const plat = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLow
         const noms = new Set([s.bulba?.expansion, s.nomEn, s.nomCardmarket, s.nomAffichage].filter(Boolean).map(plat));
         return (carte.impressions || []).some(i => i.tirage === tirage && noms.has(plat(i.expansion)));
     };
-    const aPoser = new Map(), parSet = {}, parPreuve = {}, temoins = {};
+    // ⚠️ PORTÉE DU TÉMOIN (relecture du 2026-10-04) : il est indépendant d'une jointure par le NUMÉRO ; pour un set de la voie « sans
+    // page », jointe par l'expansion que la carte déclare, il relit la même donnée — il confirme alors la cohérence, pas une seconde preuve
+    const aPoser = new Map(), parSet = {}, parPreuve = {}, temoins = {}, vus = new Set();
     let horsSets = 0, sansCarte = 0, horsPerimetre = 0;
     for (const l of lignes) {
         if (!l.slugSet || !setsConnus.has(l.slugSet)) { horsSets++; continue; }
         if (SEULS && !SEULS.includes(l.slugSet)) { horsPerimetre++; continue; }
         const c = cartes.get(l.carteId); if (!c) { sansCarte++; continue; }
         if ((c.sets || []).includes(l.slugSet)) continue;
-        const k = `${l.carteId}|${l.slugSet}`; if (aPoser.has(k)) continue;
+        const k = `${l.carteId}|${l.slugSet}`; if (aPoser.has(k) || vus.has(k)) continue;
+        vus.add(k);   // une carte à plusieurs produits ne compte qu'une fois au témoin (relecture du 2026-10-04)
         const t = temoin(c, l.slugSet);
         (temoins[l.slugSet] ??= { avec: 0, sans: 0 })[t ? 'avec' : 'sans']++;
         if (EXIGER && !t) continue;
