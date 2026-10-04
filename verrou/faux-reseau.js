@@ -53,6 +53,10 @@ const path = require('path');
 // 🔑 LA DÉFINITION VIT DANS verrou/panne-catalogue.js (2026-10-03), partagée avec
 // l'enregistreur : la panne rejouée ici doit être celle que la cassette a enregistrée.
 require('./panne-catalogue').poserPanneCatalogue();
+// 🔒 CINQUIÈME RÈGLE (2026-10-04) — LES PHOTOS : le départage par l'image télécharge par `fetch`, que ce fichier ne patchait pas ;
+// le rejeu allait chercher la photo chez Vinted. Elle vient désormais du jeu fixe local, et une photo hors du jeu rend un 404 local
+// (verrou/photos-locales.js) — Vinted n'est jamais contacté.
+require('./photos-locales').installer({ etiquette: 'faux-reseau' });
 
 const CHARGES = process.env.VERROU_CHARGES;
 if (!CHARGES) {

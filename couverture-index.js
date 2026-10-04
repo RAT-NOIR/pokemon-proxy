@@ -52,7 +52,10 @@ const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
     // interdit, c'est de faire dépendre une barrière avant push de la base de PROD ou d'un
     // service tiers. test-webhook-stripe n'appelle jamais Stripe : `constructEvent` et
     // `generateTestHeaderString` sont de la cryptographie locale.
-    'test-sources.js', 'test-webhook-stripe.js'];
+    'test-sources.js', 'test-webhook-stripe.js',
+    // ➕ 2026-10-04 : le calcul du départage par l'image (decrire, inliers, outils, lireBorne), sur des images SYNTHÉTIQUES — le verrou
+    // ne télécharge plus de photo chez Vinted (décision du testeur), et sa cellule image, seule à les exercer, est vide sur le jeu fixe.
+    'test-departage-image.js'];
 // Le banc est inclus dans la mesure COMPLÈTE : c'est lui qui affichait vert pendant que la
 // production était morte, et la question « que couvre l'instrument » n'a de sens que s'il
 // est dedans.

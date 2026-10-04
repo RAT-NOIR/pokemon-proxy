@@ -253,6 +253,8 @@ const SONDE_VIVIER_PAR_NOM = /🗂️ \[identifier\] \d+ candidat\(s\) via le no
 const SONDE_MAX_CANDIDATES = 6;
 
 (async () => {
+    // 🔒 AVANT toute autre chose : aucun `fetch` de ce processus ne doit atteindre Vinted (décision du testeur, 2026-10-04)
+    const PHOTOS = require('./verrou/photos-locales').installer({ etiquette: 'verrou-charges' });
     const prod = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
     console.log(`lecture  : ${prod.db.databaseName} (aucune écriture)`);
     if (prod.db.databaseName === SCRATCH) {
@@ -295,6 +297,11 @@ const SONDE_MAX_CANDIDATES = 6;
     // de la même façon, et c'est cette carte-là que `raisonVide` porte.
     const raisonVide = new Map();
     let imageDispo = 0;
+    // 🔒 2026-10-04 (décision du testeur : « le verrou travaille sur un jeu de photos fixe, conservé en local, et ne contacte jamais
+    // Vinted ») : la pré-passe téléchargeait la photo de chaque ligne chez Vinted (departage-image.js, par `fetch`). Elle ne rejoue
+    // désormais que les lignes dont la photo est AU JEU FIXE (verrou/photos-locales.js) ; une ligne hors du jeu ne peut pas devenir
+    // la charge de cette cellule, puisque le rejeu n'aurait pas sa photo. Comptées et imprimées.
+    let horsJeu = 0;
     try {
         const IMG = require('./departage-image');
         // 🔴 IL FAUT LA CONNEXION mongoose PAR DÉFAUT, ET C'EST LE PIÈGE QUI A FAIT RENDRE
@@ -315,13 +322,15 @@ const SONDE_MAX_CANDIDATES = 6;
         console.log(`   pré-passe : ${dispo} vecteurs lisibles dans "${BASE}"`);
         for (const d of abouties) {
             if (!Array.isArray(d.vivierIds) || d.vivierIds.length < 2) continue;
+            if (!PHOTOS.aPhoto(d.imageUrl)) { horsJeu++; continue; }
             const avis = await IMG.departager({
                 imageUrl: d.imageUrl, langue: d.langue, total: d.total,
                 classement: d.vivierIds.map(id => ({ idProduct: id, score: 0 }))
             });
             if (avis.departage) { d.__imageDepartage = true; imageDispo++; }
         }
-        console.log(`   pré-passe départage par l'image : ${imageDispo} ligne(s) empruntent le chemin aujourd'hui`);
+        console.log(`   pré-passe départage par l'image : ${imageDispo} ligne(s) empruntent le chemin aujourd'hui · ${horsJeu} ligne(s) à vivier écartées, photo hors du jeu fixe (${PHOTOS.n} photos)`);
+        if (!imageDispo && horsJeu) raisonVide.set('départage par l\'image', `aucune ligne du JEU DE PHOTOS FIXE n'emprunte le chemin (${horsJeu} lignes à vivier ont leur photo hors du jeu ; le verrou ne contacte jamais Vinted)`);
     } catch (e) {
         // Une pré-passe impossible ne doit pas faire croire à une cellule vide « parce
         // qu'aucune ligne ne convient ». La distinction est écrite dans `raisonVide`.
@@ -424,9 +433,11 @@ const SONDE_MAX_CANDIDATES = 6;
             // Une cellule vide n'est pas une panne du code : c'est un manque de données.
             // Le verrou le dira en AVERTISSEMENT, jamais en échec — un verrou rouge en
             // permanence est un verrou qu'on apprend à ignorer.
+            // ⚠️ une raison posée par la PRÉ-PASSE (impossible, ou photos hors du jeu fixe) n'est pas écrasée par « aucune ligne au
+            // journal » : la cellule est vide pour CETTE raison-là (2026-10-04 — l'écrasement perdait déjà « PRÉ-PASSE IMPOSSIBLE »)
             const cause = vivier.length
                 ? `ses ${vivier.length} ligne(s) éligibles sont déjà prises par des cellules plus contraintes`
-                : 'aucune ligne au journal';
+                : (raisonVide.get(c.nom) ?? 'aucune ligne au journal');
             console.log(`⚠️ ${c.nom} : ${cause} — cellule vide`);
             raisonVide.set(c.nom, cause);
             continue;
@@ -514,6 +525,8 @@ const SONDE_MAX_CANDIDATES = 6;
         // à ligne, et rien ne le disait. Ces deux nombres le disent.
         lignesAuJournal: journal.length,
         lignesEligibles: { avecPhoto: avecPhoto.length, abouties: abouties.length },
+        // 🔒 le jeu de photos fixe sur lequel ces charges ont été extraites (2026-10-04) : un rejeu sur un autre jeu ne se compare pas
+        jeuPhotos: { n: PHOTOS.n, empreinte: PHOTOS.empreinte },
         // Le nombre de cellules VOULUES, pour que le verrou sache combien manquent sans
         // avoir à connaître la liste. Un nombre en dur des deux côtés divergerait.
         cellulesVoulues: CELLULES.length,

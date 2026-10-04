@@ -20,6 +20,9 @@ const fs = require('fs');
 // demande à TCGdex quand le catalogue est tombé n'était jamais enregistré : la 7e cellule
 // rejouait la panne sur une cassette à trou. Voir verrou/panne-catalogue.js.
 require('./panne-catalogue').poserPanneCatalogue();
+// 🔒 LES PHOTOS DU JEU FIXE, jamais Vinted (2026-10-04) : l'extraction doit voir les MÊMES photos que le rejeu, sinon la charge
+// enregistrée ne décrit pas ce que le verrou rejouera (verrou/photos-locales.js).
+require('./photos-locales').installer({ etiquette: 'enregistreur' });
 
 const CHARGES = process.env.VERROU_CHARGES;
 const SORTIE = process.env.VERROU_ENREGISTRER;
