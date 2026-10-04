@@ -550,6 +550,53 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 72. UNE SECONDE LECTURE QUI SE CONFIRMAIT ELLE-MÊME, UN LOGO QUE LE SITE NE POUVAIT PAS LIRE, ET UNE PROJECTION QUI AURAIT RÉÉCRIT L'INDONÉSIEN — 2026-10-04
+
+> 🔑 **DÉCISIONS DU TESTEUR : garde de lecture STRICTE (0,02) — « 0 faux affirmé est non négociable : un faux prix coûte plus cher qu'une
+> question » ; ce que la règle n'affirme pas devient une QUESTION DE DÉPARTAGE (2 ou 3 candidats et le premier champ qui les sépare, liste
+> fermée : numéro, code, motif, langue, carte, visuel) ; puis une SECONDE LECTURE du code et du numéro (bas de la carte recadré, plusieurs
+> essais) pour remonter le taux.** Labo : decision.js (deciderAvecSeconde, besoinSeconde, questionDeDepartage), seconde-lecture.js.
+
+**LA SECONDE LECTURE, ET CE QUE LES RELECTURES Y ONT TROUVÉ.** Même modèle que la production, sur le bas de la carte redressé depuis la
+photo ORIGINALE (le redressé de la chaîne vient d'une image réduite à 640 px), trois recadrages distincts, un champ retenu seulement si deux
+essais le lisent à l'identique. Trois corrections, chacune mesurée :
+· **le jumeau qu'elle doit attraper n'est pas celui qu'on croit** : la première version exigeait une confirmation dès qu'un produit au même
+  visuel portait un autre code — 10 des 12 affirmations justes perdues sur les photos réelles avaient un voisin que la première lecture
+  écartait DÉJÀ par la langue (le tirage japonais du même dessin). La confirmation n'est due que pour un voisin écarté SEULEMENT par le code
+  ou le numéro — la forme exacte du jumeau ;
+· **la carte imprime un autre code que Cardmarket** (Start Deck 100 « SI » pour sI100, les promos « PROMO » pour SM-P, les coffrets le code
+  de leur set d'origine) : 54 refus à tort sur 1 743. Le code lu confirme ; il ne retire seul que si un AUTRE candidat, avec ou sans visuel,
+  porte ce code (sinon le jumeau dont la vraie carte n'a pas de visuel s'affirmait — relecture) ;
+· 🔴 **elle se CONFIRMAIT ELLE-MÊME** (relecture par sous-agent) : elle comblait les champs absents de la première lecture, puis
+  « confirmait » le produit qu'elle venait de désigner. Elle ne comble plus rien et ne confirme que les champs que la première a LUS. Ce
+  chemin était INVISIBLE à l'auto-banc : ses lectures parfaites portent toujours code et numéro, et sa vérité a toujours un visuel — une
+  mesure ne voit pas le cas que sa construction exclut.
+⚠️ La première lecture et la seconde sont le même modèle sur la même photo : leurs erreurs sont corrélées, « deux lectures d'accord » est
+plus faible que deux sources. **MESURÉ — banc réel (82 photos à fiche) : 47 → 52 affirmés, 0 faux** (testeur 8 → 12/20), quel que soit le
+déclenchement. **Auto-banc (échantillon uniforme de 2 000 visuels, graine 20261004, 1 920 lectures parfaites)** : règle stricte 80,3 %
+affirmés justes, 0 faux, jumeau 133 faux / 1 239 ; seconde lecture au déclenchement ÉTROIT (voisin au même visuel) 81,2 %, 0 faux, jumeau
+19 ; au déclenchement LARGE (aussi un candidat SANS visuel écarté par le seul code ou numéro — 15 des 19 restants) 75,7 %, 0 faux, jumeau
+**5** — dont 3 où la seconde lecture lit sur la photo le numéro du jumeau : ce sont nos VISUELS qui sont faux (SM147 imprime « 269/SM-P »).
+Le large coûte à l'occidental (83,7 → 74,4 %) : sur ces photos SIMULÉES depuis des visuels de basse définition, elle lit mal des numéros.
+Questions de départage (non affirmés) : numéro 245, code 105, visuel 61, aucune 52. ~4 600 requêtes OpenRouter.
+
+**LE LOGO QUE LE SITE NE POUVAIT PAS LIRE** : `logoFr` (117 sets) portait cleR2 et vignette, pas de `region` ; la règle du site
+(`lib/visuelSet.ts`) exige une preuve de langue STRUCTURÉE ou une phrase qu'elle reconnaît — elle les aurait tous refusés. Posé
+(`exposer-logos-fr.js`, clés absentes). Et rejouée sur les 450 `sets.logo` : **221 refusés**, dont les 189 déposés par le testeur — témoin
+HTTP : la page de Pokemon-Jungle ne sert pas son logo. 🔑 **Un champ « au même format » n'est pas un champ que le lecteur ACCEPTE : on rejoue
+la règle du lecteur avant de dire qu'il est servi.**
+**UNE PROJECTION QUI AURAIT RÉÉCRIT L'INDONÉSIEN** : `poser-langue-images.js` ne projetait ni `langueSource` ni `languePreuve` ; la règle
+rendait « en » pour les 108 visuels indonésiens (67 178 documents « changeaient »). Le document TCGdex ne STOCKE pas `langueSource` : il se
+relit dans `urlOriginal`. 🔑 **Une règle qui lit un document ne vaut que par la projection qui le lui donne** — un champ manquant à la
+projection est un `undefined` que la règle prend pour une valeur (le §41, côté lecture).
+**LE VERROU ET VINTED** (décision : « un jeu de photos fixe, local, jamais Vinted ») : le faux réseau ne patchait qu'axios, le départage
+par l'image télécharge par `fetch`. Jeu fixe de 80 photos du labo ; la cellule image s'est VIDÉE (aucune ligne du jeu dans le périmètre
+asiatique) et le cliquet perdait 4 fonctions, gardées par un banc synthétique ; l'empreinte du jeu était écrite et jamais relue — le rejeu
+refuse désormais un autre jeu. Ce que le verrou ne protège plus : la décision du départage sur une vraie photo.
+**LES DATES QUAND BULBAPEDIA DIT 403** : 19 jours et 2 périodes lus dans les COPIES Wayback des pages (archive.org, 5 s), citées ligne à
+ligne (`RELEVES_BULBAPEDIA`). **Les « 42 expansions sans région » n'étaient pas « jamais apprises »** : 1 421 de leurs 1 428 produits sont
+dans numeros_cartes ; il leur manque le SET. Le nom d'une colonne (« ? ») avait été lu comme une cause.
+
 ## 71. L'AUTO-BANC : UN INDEX QUI NE LISAIT PAS LE CODE IMPRIMÉ, UNE COMPARAISON EN DEUX COPIES, ET « INCONNU » PRIS POUR « MOINS BIEN » — 2026-10-03 (nuit)
 
 > 🔴 **212 FAUX AFFIRMÉS EN LECTURE PARFAITE, TOUS DANS DES SETS « ADDITIONALS » (xASC 134, xBLK 77, xPRE 1).** L'index du labo comparait
