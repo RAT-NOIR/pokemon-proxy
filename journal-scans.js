@@ -165,6 +165,13 @@ const journalScanSchema = new mongoose.Schema({
     // déjà pleine, semaine ISO changée ou Mongo indisponible. Un échec non remboursé est
     // un scan payé pour rien — c'est exactement ce qu'il faut pouvoir compter.
     rembourse: Boolean,
+    // LA QUESTION ET SON RÈGLEMENT (2026-10-05, seconde décision du testeur — acces.js) : une réponse avec réserve sur
+    // /api/identifier n'est plus remboursée à l'émission. `questionEtat` naît 'en-attente' ; /api/repondre-question et le
+    // balayage des questions abandonnées (24 h) le réécrivent ('repondue', 'remboursee', 'non-remboursee', 'annulee') ET
+    // `rembourse` avec lui. 'remboursee' / 'non-remboursee' dès l'écriture = le repli (la question n'a pas pu attendre).
+    // Absent sur les lignes antérieures : celles-là portaient la règle du matin (rembourse à l'émission).
+    questionEtat: String,
+    reponseQuestion: { idProduct: Number, aucune: Boolean, le: Date },
 
     // --- CE QUE L'IA A LU (l'entrée du problème) ---
     nom: String,
@@ -972,8 +979,9 @@ function enregistrerScan(d = {}) {
     // cache, repli TCGdex) — ce n'est pas à la statistique de le faire échouer.
     if (mongoose.connection.readyState !== 1) return null;
 
-    // L'identifiant est décidé ICI, avant l'écriture, et rendu à l'appelant.
-    const _id = new mongoose.Types.ObjectId();
+    // L'identifiant est décidé ICI, avant l'écriture, et rendu à l'appelant — ou PRÉ-TIRÉ par lui (`d._id`, 2026-10-05) quand
+    // une écriture doit le porter avant la ligne : la question en attente (acces.js) a pour _id le scanId.
+    const _id = d._id instanceof mongoose.Types.ObjectId ? d._id : new mongoose.Types.ObjectId();
 
     (async () => {
         let numeroGagnant = d.numeroGagnant ?? null;
@@ -1109,6 +1117,7 @@ function enregistrerScan(d = {}) {
             resultat: d.motifEchec ? 'echec' : 'succes',
             motifEchec: d.motifEchec || null,
             rembourse: d.rembourse != null ? Boolean(d.rembourse) : null,
+            questionEtat: d.questionEtat || null,
             aucunCandidatAuNumero: d.aucunCandidatAuNumero != null ? Boolean(d.aucunCandidatAuNumero) : null,
             nomNumeroIncoherents: d.nomNumeroIncoherents != null ? Boolean(d.nomNumeroIncoherents) : null,
             totalHorsTailleDeSet: d.totalHorsTailleDeSet != null ? Boolean(d.totalHorsTailleDeSet) : null,

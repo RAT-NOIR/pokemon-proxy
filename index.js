@@ -13,6 +13,7 @@ const Stripe = require('stripe');
 const {
     Credit, QuotaSemaine,
     exigerImage, verifierAcces, rembourserScan, signalerIncertain,
+    poserQuestion, repondreQuestion, rembourserQuestionsAbandonnees, QUESTION_DELAI_MS,
     semaineISO, SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE
 } = require('./acces');
 
@@ -5550,8 +5551,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                                                     : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
                                                         : numeroContredit ? 'tcgdex-numero-incoherent'
                                                             : 'tcgdex-ambigu';
-        // Une QUESTION ne se facture pas (décision du 2026-10-05, acces.js) : rembourse si `carteAmbigue`. null = pas de question.
-        const questionRemboursee = carteAmbigue ? await signalerIncertain(req, raisonReserve) : null;
+        // Une QUESTION se pose plus bas, une fois ses candidats construits (poserQuestion, juste avant le journal) : répondue, elle est
+        // facturée une fois ; abandonnée (24 h, ou « aucune »), elle est remboursée — seconde décision du 2026-10-05, acces.js.
 
         // ════════════════════════════════════════════════════════════════════
         // LE NIVEAU DE LA RÉSERVE — deux valeurs, et la table vit ICI
@@ -5936,6 +5937,12 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         for (const c of candidats) c.prixGuideDu = c.prix != null ? iso(datesGuide.parId.get(Number(c.idProduct)) ?? null) : null;
         const guidePrix = blocGuidePrix({ guideDuGagnant: Number.isFinite(prixGuideRetenu) ? (datesGuide.parId.get(Number(classement[0]?.idProduct)) ?? null) : null, dernierGuide: datesGuide.dernier });
 
+        // LA QUESTION (seconde décision du 2026-10-05, acces.js) : le crédit RESTE pris, la question attend la réponse de
+        // l'utilisateur parmi CES candidats (ceux qu'il voit). Son identifiant EST le scanId, tiré ici pour qu'elle s'écrive avant
+        // la ligne de journal ; sans journal (Mongo absent), pas d'identifiant : poserQuestion rembourse à l'émission (repli).
+        const scanIdPrevu = mongoose.connection.readyState === 1 ? new mongoose.Types.ObjectId() : null;
+        const question = carteAmbigue ? await poserQuestion(req, { scanId: scanIdPrevu, raison: raisonReserve, candidats: candidats.map(c => c.idProduct) }) : null;
+
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
         // C'est ICI que se joue la mesure qui compte : /api/identifier est le flux RÉEL,
         // celui de l'extension. Les prix restent vides sur cette route (c'est le
@@ -5947,6 +5954,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // c'est-à-dire par une jointure approximative sur la seule donnée qui doit rester
         // exacte. Vaut null si Mongo n'est pas connecté — il n'y aura alors pas de ligne.
         const scanId = enregistrerScan({
+            _id: scanIdPrevu,
             // CE QUE L'UTILISATEUR VOIT, et rien d'autre : les `idProduct` du tableau
             // `candidats` construit juste au-dessus, DANS SON ORDRE. Un seul si le verdict
             // est ferme, trois sous réserve. Voir journal-scans.js pour pourquoi ce champ
@@ -5969,9 +5977,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // comme des marges.
             margeConfortable: identificationConfiante,
             carteIncertaine: carteAmbigue,
-            // la question a-t-elle été remboursée (2026-10-05) : null = pas de question (affirmé, facturé). `false` ne veut PAS dire
-            // « plafond » (code maître, semaine changée…) : la cause est `raisonNonRembourse`, et c'est `plafond-jour` qu'on compte.
-            rembourse: questionRemboursee,
+            // la question a-t-elle été remboursée : null = pas de question (affirmé, facturé) ; false à l'émission d'une question
+            // EN ATTENTE — /api/repondre-question et le balayage réécrivent ce champ avec `questionEtat` (journal-scans.js).
+            rembourse: question ? question.etat === 'remboursee' : null,
+            questionEtat: question?.etat ?? null,
             // ⚠️ LE PRIX DEMANDÉ, SUR LES SCANS ABOUTIS AUSSI — et pas seulement sur les
             // refus. C'est sur ces lignes-là qu'on pourra un jour rapprocher un prix
             // d'annonce du prix live du produit retenu, donc mesurer ce que vaut le guide.
@@ -6118,6 +6127,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // Il n'est PAS un secret, mais il n'est pas devinable : c'est ce qui empêche
             // d'attacher un prix à un scan qu'on ne possède pas.
             scanId,
+            // ➕ 2026-10-05 (seconde décision du testeur, acces.js), champ ADDITIF : null quand le verdict est ferme (facturé). Sinon
+            // la question attend la réponse — /api/repondre-question { userId, scanId, idProduct (un des `candidats`) | aucune: true }
+            // dans les `delaiHeures` ; répondue, le scan est facturé UNE fois ; « aucune », ou sans réponse dans le délai, remboursé.
+            // `etat` 'remboursee' / 'non-remboursee' dès ici = la question n'a pas pu attendre (repli) : rien à répondre.
+            question: question ? { etat: question.etat, delaiHeures: QUESTION_DELAI_MS / 3600000 } : null,
             carte: {
                 // ⚠️ LE GAGNANT EST NOMMÉ, PAS DÉDUIT D'UN ORDRE DE TABLEAU.
                 // Il n'était lisible que dans `classement[0]`, c'est-à-dire par un contrat
@@ -6275,15 +6289,27 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // `natureRefus: 'echec-technique'` reste juste : c'est une panne, pas un refus
         // délibéré. Mais une panne n'a jamais eu à être facturée.
         const rendu = await rembourserSiRienLivre(req, res, 'erreur-serveur');
+        const messageErreur = `${e?.message ?? e} @ ${String(e?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`;
+        // UNE QUESTION AVAIT ÉTÉ POSÉE (acces.js, poserQuestion), et sa ligne de journal peut déjà être partie (même _id, `succes`,
+        // `en-attente`) : on la CORRIGE plutôt que d'en écrire une seconde — un scan, une ligne (relecture du 2026-10-05). La question
+        // elle-même est annulée par rembourserScan. ⚠️ Fenêtre restante : la ligne s'écrit sans attente (enregistrerScan) ; si elle
+        // n'est pas encore en base, la ligne d'échec ci-dessous s'écrit, et la ligne de succès peut arriver après — deux lignes.
+        let ligneCorrigee = false;
+        if (req.questionId && !res.headersSent) {
+            try {
+                const m = await JournalScan.updateOne({ _id: req.questionId }, { $set: { resultat: 'echec', motifEchec: 'erreur-serveur', questionEtat: 'annulee', rembourse: rendu, messageErreur } });
+                ligneCorrigee = m.matchedCount > 0;
+            } catch (e2) { console.error(`❌ [identifier] correction de la ligne ${req.questionId} : ${e2.message}`); }
+        }
         // ⚠️ LE MESSAGE VA AU JOURNAL, ET SEULEMENT LÀ. Les deux Dragonite du 2026-08-03
         // sont indiagnosticables parce que leur exception n'existait que dans les logs
         // Render. La PREMIÈRE LIGNE DE PILE accompagne le message : sans elle on saurait
         // « quoi » sans savoir « où ». La réponse HTTP, elle, garde son texte générique.
-        enregistrerEchec({
+        if (!ligneCorrigee) enregistrerEchec({
             route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
             // `req.scanRendu` : une QUESTION déjà remboursée avant l'exception (2026-10-06) — le scan EST remboursé, le journal le dit
             motifEchec: 'erreur-serveur', rembourse: rendu || Boolean(req.scanRendu),
-            messageErreur: `${e?.message ?? e} @ ${String(e?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`
+            messageErreur
         });
         // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il reste au log ; la réponse ne porte qu'un texte
         // générique. Le 4 août, un utilisateur a lu dans son extension
@@ -6493,6 +6519,47 @@ app.post('/api/retour-live', limiteurRetourLive, verifierJeton, async (req, res)
         res.status(500).json({ success: false, error: "Erreur serveur interne" });
     }
 });
+
+// ════════════════════════════════════════════════════════════════════════════
+// LA RÉPONSE À UNE QUESTION — seconde décision du testeur, 2026-10-05 (acces.js)
+// ════════════════════════════════════════════════════════════════════════════
+// « Quand l'utilisateur répond à la question, l'analyse est complète et facturée UNE fois. Seule une question abandonnée est
+// remboursée. » Corps : { userId, scanId, idProduct } (un des `candidats` rendus) ou { userId, scanId, aucune: true }.
+// ⚠️ AUCUN CRÉDIT N'EST DÉBITÉ ICI (`verifierJeton` seul, pas `verifierAcces`) : le scan l'a déjà été, et c'est ce débit-là qui
+// est la facture. Répondre ne coûte rien de plus ; « aucune » rembourse. Les gardes rendent un code HTTP distinct (comme
+// /api/retour-live) : 400 entrée ou idProduct hors des candidats · 403 la question d'un autre · 404 inconnue · 409 déjà réglée ·
+// 410 délai passé (abandonnée, le balayage la rembourse).
+app.post('/api/repondre-question', limiteurRetourLive, verifierJeton, async (req, res) => {
+    try {
+        if (mongoose.connection.readyState !== 1) return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
+        const userId = req.body?.userId ? String(req.body.userId).slice(0, 80) : null;
+        const scanId = req.body?.scanId ? String(req.body.scanId) : null;
+        const r = await repondreQuestion({ scanId, userId, idProduct: req.body?.idProduct, aucune: req.body?.aucune === true });
+        if (r.statut !== 200) return res.status(r.statut).json({ success: false, etat: r.etat ?? null, error: r.erreur });
+        const q = r.question;
+        // le journal suit la question : son état, et le remboursement quand « aucune » a rendu le crédit. La question est DÉJÀ réglée :
+        // un échec du journal se dit au log, il ne change pas la réponse (sinon le client réessaierait et lirait un 409). La ligne
+        // s'écrit sans attente au scan : absente (réponse très rapide), on retente une fois après 3 s.
+        const $set = { questionEtat: q?.etat ?? r.etat, rembourse: q?.rembourse === true, reponseQuestion: q?.reponse ?? null };
+        try {
+            let m = await JournalScan.updateOne({ _id: scanId, userId }, { $set });
+            if (!m.matchedCount) { await new Promise(ok => setTimeout(ok, 3000)); m = await JournalScan.updateOne({ _id: scanId, userId }, { $set }); }
+            if (!m.matchedCount) console.warn(`⚠️ [repondre-question] scan ${scanId} : aucune ligne de journal à mettre à jour (la question, elle, est réglée : ${$set.questionEtat})`);
+        } catch (e) { console.error(`❌ [repondre-question] journal de ${scanId} : ${e.message} (la question est réglée : ${$set.questionEtat})`); }
+        res.json({ success: true, etat: r.etat, rembourse: q?.rembourse === true, idProduct: q?.reponse?.idProduct ?? null });
+    } catch (e) {
+        console.error("❌ [repondre-question]", e.message);
+        res.status(500).json({ success: false, error: "Erreur serveur interne" });
+    }
+});
+
+// LE BALAYAGE DES QUESTIONS ABANDONNÉES : toutes les 10 min, celles restées sans réponse 24 h sont remboursées (acces.js), et le
+// journal suit. Hors requête : chaque question est PRISE par une écriture conditionnelle, deux instances ne rendent jamais deux fois.
+setInterval(() => {
+    rembourserQuestionsAbandonnees({
+        apres: q => JournalScan.updateOne({ _id: q._id }, { $set: { questionEtat: q.etat, rembourse: q.rembourse === true } })
+    }).catch(e => console.error(`❌ [question-balayage] ${e.message}`));
+}, 10 * 60 * 1000).unref();
 
 // Enregistre ce que l'extension a lu en live : le code set et le numéro réel d'un
 // idProduct. C'est ainsi que la base s'enrichit — depuis les navigateurs des
