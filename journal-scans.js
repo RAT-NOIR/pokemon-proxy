@@ -113,6 +113,10 @@ const journalScanSchema = new mongoose.Schema({
     // scoring, ni le banc, ni une garde ne le consultent. Un champ neuf qui change un
     // comportement le jour de sa naissance ne peut plus servir à mesurer ce comportement.
     versionExtension: String,
+    // LA PANNE DU SERVICE DE LECTURE (2026-10-05, lecture-de-secours.js) : 'credit' | 'quota' | 'cle' | 'serveur' | 'reseau' — null quand
+    // le service a répondu. Une ligne qui la porte a été lue par le TITRE de l'annonce (succès, toujours en question) ou refusée faute de
+    // numéro dans le titre. Sans ce champ, une nuit sans crédit se confondrait avec des photos illisibles.
+    panneIA: String,
 
     // --- SUCCÈS OU ÉCHEC ------------------------------------------------------
     // Le trou le plus grave du dispositif jusqu'ici : `enregistrerScan` n'était appelée
@@ -1011,6 +1015,7 @@ function enregistrerScan(d = {}) {
             // Borné : c'est une valeur de manifeste, pas un champ libre. Un client peut
             // envoyer n'importe quoi ; on garde ce qu'il dit, tronqué.
             versionExtension: d.versionExtension ? String(d.versionExtension).slice(0, 32) : null,
+            panneIA: d.panneIA || null,
             nom: d.nom || null,
             numero: d.numero != null ? String(d.numero) : null,
             total: d.total != null ? String(d.total) : null,
@@ -1248,6 +1253,8 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // un scan refusé a DÉJÀ payé son appel IA. Sans `msIA` et `nbPhotos` sur ces lignes,
     // le coût des refus — 17,6 % du flux — resterait invisible dans la facture.
     msIA, msCatalogue, nbPhotos,
+    // la panne du service de lecture (2026-10-05) : passe par `...annonce`, donc NOMMÉE ici, sinon elle se perd (voir l'en-tête)
+    panneIA,
     // ⚠️ LES ONZE CHAMPS DE L'IMAGE, SUR LES REFUS AUSSI — ajoutés le 2026-09-01.
     // Ils manquaient, et c'était le trou le plus coûteux du lot : les refus
     // `egalite-parfaite` sont EXACTEMENT la population que le départage par l'image vise.
@@ -1259,7 +1266,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     champsImage } = {}) {
     const c = cardInfo || {};
     enregistrerScan({
-        route, userId, motifEchec, imageUrl, vintedUrl, versionExtension,
+        route, userId, motifEchec, imageUrl, vintedUrl, versionExtension, panneIA,
         ...(champsImage || {}),
         rembourse: rembourse != null ? Boolean(rembourse) : null,
         // ⚠️ LES REFUS ÉTAIENT BEAUCOUP PLUS PAUVRES QUE LES SUCCÈS, alors que ce sont eux

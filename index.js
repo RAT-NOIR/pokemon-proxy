@@ -27,6 +27,7 @@ const {
 // ne recevaient pas le même objet. On passe le module, jamais un extrait : ajouter une
 // fonction dans sets-vintage-japonais.js ne peut plus casser index.js.
 const SCORING = require('./scoring');
+const { classerPanneIA, panneDansLeCorps, lectureDuTitre } = require('./lecture-de-secours');
 const {
     choisirMeilleur,
     analyserVariantes, resoudreMotif, motifDuTitre, normaliserTotal,
@@ -653,7 +654,11 @@ async function ecrireCache(name, number, language, price, url) {
 // ÉTAPE 1 — Identification de la carte par l'IA (vision)
 // ============================================================
 
-async function getCardIdFromAI(imageUrls, title) {
+// `secours` (2026-10-05, demande du testeur : « si le crédit est épuisé ou que le service ne répond pas, l'API ne tombe pas ») : un objet
+// que la ROUTE passe quand elle sait transformer une lecture incertaine en question (/api/identifier). Sur une PANNE DU SERVICE
+// (lecture-de-secours.js : crédit, quota, clé, serveur, réseau), la lecture vient alors du TITRE de l'annonce — même forme, même
+// normalisation ci-dessous — et `secours.panne` dit pourquoi. Sans cet objet (/api/analyser), rien ne change : une panne rend null.
+async function getCardIdFromAI(imageUrls, title, secours = null) {
     // Accepte une URL unique ou un tableau d'URLs (recto, verso, gros plans).
     const images = Array.isArray(imageUrls) ? imageUrls.filter(Boolean) : [imageUrls].filter(Boolean);
     if (images.length === 0) return null;
@@ -792,32 +797,53 @@ Pour "language", déduis-la du TEXTE VISIBLE SUR LA CARTE elle-même (pas du tit
 
 Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
 
+    // LA LECTURE DE SECOURS : la réponse « comme si l'IA avait lu », fabriquée depuis le titre — ou null si le titre ne donne rien
+    const secourir = (panne, detail) => {
+        secours.panne = panne;
+        const lu = lectureDuTitre(title);
+        console.error(`❌ IA INDISPONIBLE (${panne} : ${detail}) — ${lu ? `lecture de SECOURS par le titre : « ${lu.name} » n°${lu.number}${lu.total ? '/' + lu.total : ''}` : 'le titre ne donne ni nom ni numéro : aucune lecture'}`);
+        return lu ? { data: { choices: [{ message: { content: JSON.stringify(lu) } }] } } : null;
+    };
     try {
-        const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
-            model: MODELE_IA,
-            // Température 0 : lire un numéro sur une carte n'est pas une tâche
-            // créative. Sans ça, le modèle "improvise" et donne des résultats
-            // différents sur la MÊME photo (vu en conditions réelles : rareté AR
-            // puis "normale", total TG30 puis absent -> 25 points d'écart au
-            // scoring et la confiance qui bascule de HAUTE à BASSE).
-            temperature: 0,
-            messages: [{
-                role: "user",
-                content: [
-                    { type: "text", text: prompt },
-                    // Toutes les photos de l'annonce : le verso et les gros plans sont
-                    // indispensables pour juger l'état (l'usure s'y voit le mieux).
-                    ...images.map(url => ({ type: "image_url", image_url: { url } }))
-                ]
-            }]
-        }, {
-            headers: {
-                "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-                "HTTP-Referer": "https://render.com",
-                "Content-Type": "application/json"
-            },
-            timeout: 30000
-        });
+        let response;
+        try {
+            response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                model: MODELE_IA,
+                // Température 0 : lire un numéro sur une carte n'est pas une tâche
+                // créative. Sans ça, le modèle "improvise" et donne des résultats
+                // différents sur la MÊME photo (vu en conditions réelles : rareté AR
+                // puis "normale", total TG30 puis absent -> 25 points d'écart au
+                // scoring et la confiance qui bascule de HAUTE à BASSE).
+                temperature: 0,
+                messages: [{
+                    role: "user",
+                    content: [
+                        { type: "text", text: prompt },
+                        // Toutes les photos de l'annonce : le verso et les gros plans sont
+                        // indispensables pour juger l'état (l'usure s'y voit le mieux).
+                        ...images.map(url => ({ type: "image_url", image_url: { url } }))
+                    ]
+                }]
+            }, {
+                headers: {
+                    "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+                    "HTTP-Referer": "https://render.com",
+                    "Content-Type": "application/json"
+                },
+                timeout: 30000
+            });
+        } catch (e) {
+            // LA PANNE DU SERVICE, et elle seule, ouvre la lecture de secours ; tout le reste repart au catch d'avant (null)
+            const panne = secours ? classerPanneIA(e) : null;
+            if (!panne) throw e;
+            response = secourir(panne, e.response?.status ?? e.code ?? e.message);
+            if (!response) return null;
+        }
+        // relecture du 2026-10-05 : un 200 dont le CORPS porte l'erreur (fournisseur amont tombé, crédit) est la même panne
+        if (secours && !secours.panne) {
+            const panne = panneDansLeCorps(response.data);
+            if (panne) { response = secourir(panne, `200, corps d'erreur ${response.data?.error?.code}`); if (!response) return null; }
+        }
 
         const content = response.data?.choices?.[0]?.message?.content;
         if (typeof content !== "string") {
@@ -825,7 +851,7 @@ Titre de l'annonce (contexte) : ${title || "(non fourni)"}`;
             return null;
         }
 
-        console.log("🤖 Réponse brute IA:", content);
+        console.log(secours?.panne ? "🆘 Lecture de SECOURS (titre, pas l'IA):" : "🤖 Réponse brute IA:", content);
 
         const clean = content.replace(/```json|```/g, "").trim();
         const parsed = JSON.parse(clean);
@@ -3716,7 +3742,11 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 
         // 1. Lecture de la carte par l'IA
         const debutIA = Date.now();
-        cardInfo = await getCardIdFromAI(photos, title);
+        // la route sait transformer une lecture incertaine en question : elle accepte la lecture de SECOURS (titre) si le service tombe
+        const secoursIA = {};
+        cardInfo = await getCardIdFromAI(photos, title, secoursIA);
+        // la panne voyage dans `annonce`, donc jusqu'aux DEUX voies du journal (succès et refus)
+        annonce.panneIA = secoursIA.panne ?? null;
         // ⚓ JALON DU VERROU (« ia-lue ») — voir verrou/jalons.js.
         // ⚠️ CAPTURÉ DANS UNE VARIABLE, PAS SEULEMENT AFFICHÉ. Cette durée n'existait que
         // dans ce `console.log` : elle partait dans les logs Render et nulle part ailleurs.
@@ -5320,7 +5350,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // Les deux signaux de rang entrent dans l'incertitude, chacun avec SON motif —
         // un motif générique empêcherait de mesurer lequel se déclenche.
         const carteAmbigue = Boolean(
-            trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
+            // LA LECTURE DE SECOURS (2026-10-05) : le service de lecture est tombé, la carte a été cherchée par le TITRE de l'annonce.
+            // Un titre n'est pas une lecture de la carte : la sortie est une QUESTION (les candidats), jamais un verdict ferme.
+            cardInfo?.lectureDeSecours
+            || trouvaille.ambigu || numeroContredit || motifResolution.etat === 'non-resolu'
             || aucunCandidatAuNumero || gagnantContreditNumero || localIncertain || nomPeuFiable
             || nomNumeroIncoherents || egaliteSansEnjeu || lienAmbigu
             // La clé code+numéro a rendu PLUSIEURS produits (convention X) : le scoring les
@@ -5451,6 +5484,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // ancienne étiquette ; les statistiques par raison ne sont pas additionnables de
         // part et d'autre de cette date pour les scans qui déclenchent la contradiction A.
         const raisonReserve = !carteAmbigue ? null
+            // 2026-10-05 : DEVANT TOUT, c'est la prémisse la plus faible — la carte n'a pas été LUE, seulement cherchée par le titre
+            : cardInfo?.lectureDeSecours ? 'lecture-de-secours'
             : impressionCorrigee ? 'impression-corrigee'
             : impressionContredite ? 'impression-contredite'
             // Devant tout le reste par la RÈGLE 1 : ce repli dit que le vivier lui-même
@@ -5673,7 +5708,10 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // qu'une source a contredit. Même si la justesse se mesurait haute demain, une
             // sortie « forte » dirait « j'affirme sur un nom que je viens de déclarer
             // suspect » — une phrase qui ne peut pas être vraie.
-            'nom-repli-suspect': 'faible'
+            'nom-repli-suspect': 'faible',
+            // La lecture de secours (2026-10-05) : la carte n'a pas été LUE, le service de lecture était tombé ; on l'a cherchée par
+            // le titre de l'annonce. Faiblesse CONSTITUTIVE : un titre écrit par un vendeur n'est pas la carte photographiée.
+            'lecture-de-secours': 'faible'
         };
         // ════════════════════════════════════════════════════════════════════
         // 📌 NOTE — NON DEMANDÉE AUJOURD'HUI, ÉCRITE POUR NE PAS ÊTRE REDÉCOUVERTE
