@@ -120,7 +120,11 @@ const pad = (v, n) => String(v).padStart(n);
     // §41 — le coût du contournement n'est pas un effort, c'est une phrase qu'on doit pouvoir
     // écrire. 🔑 AJOUTS OUVERTS LE 2026-09-21 : **1, et un seul** — « Basic Fire Energy » (carte
     // 13682) sur `Beginning-Set`, déjà membre de 43 sets, lien `preuve: 'set+nom'`. Juste.
-    const AJOUTS_ACCEPTES = 1;
+    // ➕ 2026-10-05, CINQ DE PLUS, OUVERTS UN À UN (smG Ultra-Sun-Ultra-Moon-Deck-Build-Boxes, lignes `set+numero` de l'expansion 4252) :
+    // Float Stone 022, Trainers' Mail 017, Max Elixir 021, Fighting Fury Belt 024, Bursting Balloon 023 — chaque carte DÉCLARE l'impression
+    // « Ultra Sun & Ultra Moon Deck Build Boxes » au numéro exact de sa jointure, nom identique. Justes (ce passage ne les écrit pas : smG
+    // est déjà peuplé ; ce sont des appartenances qui manquent au set, dette nommée).
+    const AJOUTS_ACCEPTES = 6;
     if (temoinAjouts > AJOUTS_ACCEPTES) {
         console.error(`\n❌ le critère ajouterait ${temoinAjouts} appartenance(s) sur des sets qui marchent, et ${AJOUTS_ACCEPTES} seulement ont été OUVERTES et acceptées — on n'écrit pas.`);
         process.exit(1);

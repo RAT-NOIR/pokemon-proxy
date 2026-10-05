@@ -127,8 +127,13 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     // sont couverts par les impressions déclarées.
     if (L.bulba.sansPage) {
         const cartesDuSet = await M.Carte.find({ impressions: { $elemMatch: { tirage: TIRAGE, expansion: { $in: nomsCibles } } } }).lean();
-        const produits = await produitsDeLExpansion(prod, L.exp);
-        console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket · 0 requête`);
+        const produitsLus = await produitsDeLExpansion(prod, L.exp);
+        // `nomSeul` = LE NOM SEUL, numéros MASQUÉS (2026-10-05) : c'est la situation que la garde a calibrée (rejouer-nom-seul.js, « numéros
+        // masqués des deux côtés »). Sans masque, un kit à deux decks (Master Kit) ne joignait RIEN — ses numéros désignent deux cartes —
+        // et Celebrations perdait sa Classic Collection, numérotée comme ses sets d'origine. Sans effet sur UNP et les séries du 2026-09-26 :
+        // leurs produits n'ont aucun numéro.
+        const produits = L.bulba.nomSeul ? produitsLus.map(p => ({ ...p, numero: null })) : produitsLus;
+        console.log(`0. sans page : ${cartesDuSet.length} cartes de la base déclarent ${JSON.stringify(nomsCibles)} en ${TIRAGE} · ${produits.length} produits Cardmarket${L.bulba.nomSeul ? ' (numéros masqués : nom seul)' : ''} · 0 requête`);
         let J = joindre(cartesDuSet, produits, { idExpansion: L.exp, expansionBulba: L.bulba.expansion, deck: L.bulba.deck || null, suffixesParDeck: L.bulba.suffixesParDeck || null, prefixesParDeck: L.bulba.prefixesParDeck || null, prefixesParJeton: L.bulba.prefixesParJeton || null, prefixesParSection: L.bulba.prefixesParSection || null, tirage: TIRAGE, slugSet: slugCardmarket });
         // `nomSeul` : une expansion SANS AUCUN numéro (Unnumbered Promos) ne se joint que par le nom. La garde bidirectionnelle
         // calibrée (collecte-cartes/garde-nom-seul.js : 21 925 justes, 0 faux) décide ; ce qu'elle refuse reste un produit sans
@@ -136,6 +141,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         if (L.bulba.nomSeul) {
             const G = gardeNomSeul({ lignes: J.lignes, produits, cartes: cartesDuSet });
             const nomDe = new Map(produits.map(p => [p.idProduct, p.nom]));
+            // `numeroFiche` (relecture du 2026-10-05) : le masque le laissait vide, et le site retombait sur la devinette par le slug pour
+            // une carte présente dans plusieurs sets. Il se RESTITUE quand la carte n'a qu'UNE impression dans ce set : c'est alors
+            // l'impression retenue, sans choix à faire. Deux impressions (une carte des deux decks d'un kit) : null, comme avant.
+            const impsDe = new Map(cartesDuSet.map(c => [c._id, c.impressions.filter(x => x.tirage === TIRAGE && nomsCibles.includes(x.expansion) && (!L.bulba.deck || x.deck === L.bulba.deck))]));
+            for (const l of G.gardees) { const imps = impsDe.get(l.carteId) || []; if (l.numeroFiche == null && imps.length === 1 && imps[0].numero != null) l.numeroFiche = imps[0].numero; }
             J = { ...J, lignes: G.gardees, restes: [...J.restes, ...G.refusees.map(r => ({ type: 'produit-sans-carte', detail: `${r.idProduct} « ${nomDe.get(r.idProduct)} » n°— — nom seul refusé : ${r.raison}` }))],
                 compte: { ...J.compte, produitsJoints: new Set(G.gardees.map(l => l.idProduct)).size } };
             console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);

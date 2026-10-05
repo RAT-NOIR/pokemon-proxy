@@ -222,6 +222,20 @@ const TABLE = [
         controle: { couverture: null, numerosDeclares: 0, gardeNomSeul: { gardes }, le: '2026-09-26' },
         verifie: { le: '2026-09-26', page: null, note: `sans page, clé NOM SEUL sous garde bidirectionnelle (comme UNP) : ${gardes}/${prod} produits gardés au rejeu, aucun numéro chez Cardmarket` } })),
 
+    // ════ LE NOM DANS LA CLÉ : MASTER KIT ET CELEBRATIONS — 2026-10-05 (testeur : « jointure par le nom sous garde calibrée, comme pour UNP,
+    // avec 20 regardés au hasard ») ═══ Refusées par le numéro, et à raison : Master Kit est un kit à DEUX decks numérotés chacun depuis 1
+    // (9 des 10 numéros déclarés désignent deux cartes) ; la Classic Collection de Celebrations porte les numéros de ses sets d'origine
+    // (couverture 61 %). Même voie que UNP : `nomSeul`, numéros masqués (collecteur-texte.js), garde bidirectionnelle calibrée (21 925 justes,
+    // 0 faux). MESURÉ AVANT D'ÉCRIRE (joindre() + garde rejoués, numéros masqués) et TOUTES les paires gardées lues (63, pas 20) : nom identique,
+    // attaques identiques quand Cardmarket les écrit. Refusés et dits : deux produits au même nom (Fire Energy, Potion ; Charizard et les trois
+    // Pikachu de Celebrations, Mew, Reshiram, Zekrom), et les énergies de base sans carte déclarante.
+    ...[
+        ['pcgL', 5718, 42, 'Master Kit', 'Master-Kit', 'japonais', 'jp', 'Master Kit', 27],
+        ['CEL', 4347, 53, 'Celebrations', 'Celebrations', 'occidental', 'intl', 'Celebrations', 36]
+    ].map(([code, exp, prod, nom, slugSet, region, tirage, expansion, gardes]) => ({ code, exp, prod, nom, slugSet, region, bulba: { titre: null, sansPage: true, nomSeul: true, tirage, expansion }, attendu: prod,
+        controle: { couverture: null, gardeNomSeul: { gardes }, le: '2026-10-05' },
+        verifie: { le: '2026-10-05', page: null, note: `sans page, clé NOM SEUL (numéros masqués) sous garde bidirectionnelle : ${gardes}/${prod} produits gardés au rejeu, paires lues une à une` } })),
+
     // ════ EX HOLON PHANTOMS — 2026-09-26 (« crée-le maintenant, en priorité ») ═══════════════════════════════════════════
     // 🔴 L'EXPANSION 1551 ÉTAIT « NOM INCONNU » : 112 produits (7 185 € au guide, dont Gyarados ☆ δ et Pikachu ☆ δ), aucun appris
     // par Cardmarket, donc ni code ni slug, et aucune ligne. Seul le JUMEAU japonais PCG7 « Holon Phantom » était collecté, sur la
