@@ -571,6 +571,7 @@ const SONDE_MAX_CANDIDATES = 6;
         srv.enfant.kill(); process.exit(1);
     }
     await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });   // un compteur d'une exécution précédente fausserait celle-ci
+    await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });   // celui des questions (2026-10-06), idem
     const poster = c => appeler(srv.port, 'POST', '/api/identifier', {
         userId: USER_VERROU, imageUrls: [c.imageUrl], title: null, vintedEtat: null
     }, JETON);
@@ -656,8 +657,10 @@ const SONDE_MAX_CANDIDATES = 6;
     // verrou lancé ensuite le remboursement de sa 7e cellule — l'incident du 2026-08-19, déplacé
     // d'un outil (voir l'en-tête de verrou-avant-push.js).
     const nr = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
+    // `remboursements_questions` (2026-10-06) : le compteur des QUESTIONS remboursées (acces.js), même raison que ci-dessus
+    const nrq = await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });
     const nq = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
-    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nq.deletedCount} quota(s) hebdo supprimés.`);
+    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions, ${nq.deletedCount} quota(s) hebdo supprimés.`);
 
     // ════════════════════════════════════════════════════════════════════════
     // 🔴 ET LA TRANCHE, QUI NE L'ÉTAIT PAS — CORRIGÉ LE 2026-08-30

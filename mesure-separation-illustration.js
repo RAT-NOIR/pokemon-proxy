@@ -67,7 +67,9 @@ const cos = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] 
     const NUM = c.collection('numeros_cartes');
 
     // ── LES REQUÊTES : photos d'annonce réelles, hors périmètre vintage ──
-    const abouties = await J.find({ route: 'identifier', idProduct: { $ne: null }, motifEchec: null, imageUrl: { $ne: null } }).sort({ le: -1 }).toArray();
+    // `panneIA: null` (2026-10-06) : une ligne de LECTURE DE SECOURS aboutit sans que l'IA ait lu la photo — un incident technique,
+    // pas une identification (la règle : estIncidentTechnique, banc-seaux.js ; ici en filtre Mongo, qui prend aussi le champ absent)
+    const abouties = await J.find({ route: 'identifier', idProduct: { $ne: null }, motifEchec: null, panneIA: null, imageUrl: { $ne: null } }).sort({ le: -1 }).toArray();
     const ids = [...new Set(abouties.map(l => Number(l.idProduct)))];
     const prods = new Map((await CAT.find({ idProduct: { $in: ids } }).toArray()).map(p => [Number(p.idProduct), p]));
 

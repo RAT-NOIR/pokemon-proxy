@@ -1,5 +1,5 @@
 {
-  "enregistreLe": "2026-10-05T07:49:53.493Z",
+  "enregistreLe": "2026-10-05T20:11:04.696Z",
   "nb": 12,
   "chargesCouvertes": [
     "6a9fcde7e019222f81e4a59c",
@@ -97,7 +97,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:39.917Z",
+                "updated": "2026-10-05T09:52:36.444Z",
                 "unit": "EUR",
                 "idProduct": 550496,
                 "avg": null,
@@ -163,7 +163,7 @@
         "updated": "2026-09-25T23:45:16.431Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-04T09:52:39.917Z",
+            "updated": "2026-10-05T09:52:36.444Z",
             "unit": "EUR",
             "idProduct": 550496,
             "avg": null,
@@ -5328,7 +5328,7 @@
             "variantId": "jr7oetx1mqug9",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:39.917Z",
+                "updated": "2026-10-05T09:52:39.560Z",
                 "unit": "EUR",
                 "idProduct": 273798,
                 "avg": 28.91,
@@ -5346,21 +5346,21 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-10-04T09:52:39.749Z",
+                "updated": "2026-10-05T09:52:39.420Z",
                 "1st-edition-holofoil": {
                   "productId": 45120,
                   "lowPrice": 75.98,
-                  "midPrice": 113.56,
-                  "highPrice": 1045.44,
+                  "midPrice": 113.63,
+                  "highPrice": 1045.42,
                   "marketPrice": 119.1,
                   "directLowPrice": null
                 },
                 "unlimited-holofoil": {
                   "productId": 45120,
                   "lowPrice": 19.92,
-                  "midPrice": 30,
+                  "midPrice": 28.5,
                   "highPrice": 192.34,
-                  "marketPrice": 37.41,
+                  "marketPrice": 37.45,
                   "directLowPrice": null
                 }
               }
@@ -5379,7 +5379,7 @@
             "variantId": "3a83wf50ts0izj268xwv3crwi",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:39.917Z",
+                "updated": "2026-10-05T09:52:39.560Z",
                 "unit": "EUR",
                 "idProduct": 273798,
                 "avg": 28.91,
@@ -5397,21 +5397,21 @@
               },
               "tcgplayer": {
                 "unit": "USD",
-                "updated": "2026-10-04T09:52:39.749Z",
+                "updated": "2026-10-05T09:52:39.420Z",
                 "1st-edition-holofoil": {
                   "productId": 45120,
                   "lowPrice": 75.98,
-                  "midPrice": 113.56,
-                  "highPrice": 1045.44,
+                  "midPrice": 113.63,
+                  "highPrice": 1045.42,
                   "marketPrice": 119.1,
                   "directLowPrice": null
                 },
                 "unlimited-holofoil": {
                   "productId": 45120,
                   "lowPrice": 19.92,
-                  "midPrice": 30,
+                  "midPrice": 28.5,
                   "highPrice": 192.34,
-                  "marketPrice": 37.41,
+                  "marketPrice": 37.45,
                   "directLowPrice": null
                 }
               }
@@ -5479,7 +5479,7 @@
         "updated": "2026-08-14T19:45:37+01:00",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-04T09:52:39.917Z",
+            "updated": "2026-10-05T09:52:39.560Z",
             "unit": "EUR",
             "idProduct": 273798,
             "avg": 28.91,
@@ -5497,21 +5497,21 @@
           },
           "tcgplayer": {
             "unit": "USD",
-            "updated": "2026-10-04T09:52:39.749Z",
+            "updated": "2026-10-05T09:52:39.420Z",
             "1st-edition-holofoil": {
               "productId": 45120,
               "lowPrice": 75.98,
-              "midPrice": 113.56,
-              "highPrice": 1045.44,
+              "midPrice": 113.63,
+              "highPrice": 1045.42,
               "marketPrice": 119.1,
               "directLowPrice": null
             },
             "unlimited-holofoil": {
               "productId": 45120,
               "lowPrice": 19.92,
-              "midPrice": 30,
+              "midPrice": 28.5,
               "highPrice": 192.34,
-              "marketPrice": 37.41,
+              "marketPrice": 37.45,
               "directLowPrice": null
             }
           }
@@ -5595,7 +5595,7 @@
             "variantId": "endfynwn4n10gzq",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:36.633Z",
+                "updated": "2026-10-05T09:52:36.444Z",
                 "unit": "EUR",
                 "idProduct": 719450,
                 "avg": 0.15,
@@ -5624,7 +5624,7 @@
             "variantId": "3739bbtj3i910y5ynn9xc6ryf",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:36.633Z",
+                "updated": "2026-10-05T09:52:36.444Z",
                 "unit": "EUR",
                 "idProduct": 837240,
                 "avg": null,
@@ -5653,7 +5653,7 @@
             "variantId": "2asus05yghmpd1ud1sdmlq3as4e",
             "pricing": {
               "cardmarket": {
-                "updated": "2026-10-04T09:52:36.633Z",
+                "updated": "2026-10-05T09:52:36.444Z",
                 "unit": "EUR",
                 "idProduct": 837241,
                 "avg": null,
@@ -5716,7 +5716,7 @@
         "updated": "2026-09-25T23:45:19.162Z",
         "pricing": {
           "cardmarket": {
-            "updated": "2026-10-04T09:52:36.633Z",
+            "updated": "2026-10-05T09:52:36.444Z",
             "unit": "EUR",
             "idProduct": 719450,
             "avg": 0.15,

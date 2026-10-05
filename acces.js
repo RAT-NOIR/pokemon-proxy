@@ -36,12 +36,22 @@ const CODE_ILLIMITE = process.env.CODE_ILLIMITE || null;
 // illisibles en boucle : au-delà, on log et on ne rembourse plus, mais le scan reste
 // débité, donc l'attaque coûte des crédits à celui qui la mène.
 const REMBOURSEMENTS_MAX_JOUR = parseInt(process.env.REMBOURSEMENTS_MAX_JOUR || '5', 10);
-// Politique élargissable SANS redéploiement de code : rembourser aussi les résultats
-// livrés « avec réserve ». Défaut FALSE, et volontairement : un résultat incertain
-// reste un résultat, et rembourser dessus offrirait des scans gratuits illimités à qui
-// envoie des photos volontairement illisibles — chacune brûlant un appel IA payant.
-// Le log [scan-incertain] sert précisément à mesurer le taux réel avant d'y toucher.
-const REMBOURSER_SI_INCERTAIN = String(process.env.REMBOURSER_SI_INCERTAIN || 'false').toLowerCase() === 'true';
+// ════════════════════════════════════════════════════════════════════════════
+// LA FACTURATION — DÉCISION DU TESTEUR, 2026-10-05
+// ════════════════════════════════════════════════════════════════════════════
+// « Seule une identification AFFIRMÉE est facturée, quelle que soit sa preuve (image, titre ou Gemini). Une question ou une
+// panne est remboursée. »
+// Une réponse livrée AVEC RÉSERVE est une QUESTION : `signalerIncertain` la rembourse toujours. La variable
+// REMBOURSER_SI_INCERTAIN (défaut false, « un résultat incertain reste un résultat ») est RETIRÉE, pas remise à true : une
+// valeur oubliée sur Render rétablirait en silence la facturation des questions. test-acces.js (bloc L) la pose à 'false' et
+// prouve qu'elle est ignorée.
+// 🔴 LES QUESTIONS ONT LEUR PROPRE COMPTEUR, ET C'EST LE POINT (relecture du 2026-10-06, verrou-avant-push rouge en 7e cellule) :
+// partagé, le plafond des pannes (REMBOURSEMENTS_MAX_JOUR, 5) était mangé par le cas FRÉQUENT — une question, où l'utilisateur a
+// reçu des candidats — et la PANNE suivante, où il n'a rien reçu, restait facturée. Les questions se comptent donc à part
+// (collection `remboursements_questions`, même forme), sous un plafond anti-abus plus large : des photos ambiguës en boucle pour
+// obtenir des candidats gratuits. REMBOURSEMENTS_QUESTIONS_MAX_JOUR, 30 par défaut : le plus gros utilisateur-jour du journal au
+// 2026-10-05 compte 8 questions. Au-delà, la question reste facturée et la cause s'écrit (`plafond-jour`, sources.js).
+const REMBOURSEMENTS_QUESTIONS_MAX_JOUR = parseInt(process.env.REMBOURSEMENTS_QUESTIONS_MAX_JOUR || '30', 10);
 
 // ============================================================
 // MODÈLES
@@ -82,6 +92,10 @@ const remboursementSchema = new mongoose.Schema({
 });
 remboursementSchema.index({ userId: 1, jour: 1 }, { unique: true });
 const Remboursement = mongoose.models.Remboursement || mongoose.model('Remboursement', remboursementSchema, 'remboursements');
+// Le compteur des QUESTIONS remboursées (2026-10-06) : même forme, autre collection — un plafond ne doit pas manger l'autre (voir
+// l'en-tête). Une collection plutôt qu'un champ `type` dans la clé : l'index unique (userId, jour) de `remboursements` existe en
+// production, l'élargir demanderait une migration.
+const RemboursementQuestion = mongoose.models.RemboursementQuestion || mongoose.model('RemboursementQuestion', remboursementSchema, 'remboursements_questions');
 
 // ============================================================
 // OUTILS
@@ -284,8 +298,14 @@ async function verifierAcces(req, res, next) {
  *               passer sous zéro. Hors de la semaine d'origine on ne rembourse pas :
  *               ça offrirait un scan de plus sur la semaine suivante, c'est-à-dire la
  *               cumulation « W29 épuisée -> W30 = 3 » que le test 30/30 interdit.
+ *
+ * @param {object} [options.compteur]  'question' : le compteur et le plafond des QUESTIONS (signalerIncertain). Toute autre valeur,
+ *                 ou rien, prend le compteur des pannes — le plus étroit : une garde s'écrit par ce qu'elle autorise.
  */
-async function rembourserScan(req, motif) {
+async function rembourserScan(req, motif, { compteur: quelCompteur } = {}) {
+    const question = quelCompteur === 'question';
+    const Compteur = question ? RemboursementQuestion : Remboursement;
+    const plafond = question ? REMBOURSEMENTS_QUESTIONS_MAX_JOUR : REMBOURSEMENTS_MAX_JOUR;
     // ⚠️ CHAQUE `return false` NOMME SA CAUSE. Il y en a neuf, et le journal n'en gardait
     // qu'un booléen : « non remboursé » couvrait aussi bien « il n'y avait rien à rendre »
     // que « le plafond du jour est atteint », c'est-à-dire un utilisateur qui a payé une
@@ -307,13 +327,13 @@ async function rembourserScan(req, motif) {
     try {
         // Plafond anti-abus : incrément atomique PUIS vérification, avec rollback en cas
         // de dépassement (même mécanique que le quota hebdo, donc pas de course).
-        const compteur = await Remboursement.findOneAndUpdate(
+        const compteur = await Compteur.findOneAndUpdate(
             { userId, jour }, { $inc: { count: 1 } }, { upsert: true, new: true }
         );
         plafondPris = true;
-        if (compteur.count > REMBOURSEMENTS_MAX_JOUR) {
-            await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
-            console.warn(`🚫 [remboursement-plafond] userId=${userId} poche=${poche} motif=${motif} plafond=${REMBOURSEMENTS_MAX_JOUR} -> scan NON rembourse`);
+        if (compteur.count > plafond) {
+            await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            console.warn(`🚫 [remboursement-plafond] userId=${userId} poche=${poche} motif=${motif} plafond=${plafond}${question ? ' (questions)' : ''} -> scan NON rembourse`);
             // 🔴 LA SEULE DES NEUF CAUSES OÙ L'UTILISATEUR PERD RÉELLEMENT QUELQUE CHOSE.
             // Les autres disent « il n'y avait rien à rendre » ; celle-ci dit « il y avait
             // quelque chose à rendre et on a refusé ». C'est elle qu'on veut pouvoir
@@ -352,7 +372,7 @@ async function rembourserScan(req, motif) {
         if (!rendu) {
             // Rien n'a été rendu : on libère le jeton du plafond, sinon un non-
             // remboursement consommerait quand même le quota de remboursements.
-            await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } });
+            await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } });
             // Les deux branches ci-dessus ont déjà nommé leur cause ; celle qui reste est
             // « l'écriture n'a modifié aucun document » — poche payante sans compte, ou
             // compteur hebdo déjà à zéro. `noterNonRemboursement` n'écrit qu'une fois,
@@ -361,30 +381,32 @@ async function rembourserScan(req, motif) {
             return false;
         }
         console.log(`💸 [scan-rembourse] userId=${userId} poche=${poche} motif=${motif}`);
+        // ce que le verrou `scanRembourse` ne dit pas : la tentative a-t-elle RENDU ? (rembourserSiRienLivre le relit, 2026-10-06)
+        req.scanRendu = true;
         return true;
     } catch (e) {
-        if (plafondPris) { try { await Remboursement.updateOne({ userId, jour }, { $inc: { count: -1 } }); } catch (_) { } }
+        if (plafondPris) { try { await Compteur.updateOne({ userId, jour }, { $inc: { count: -1 } }); } catch (_) { } }
         console.error(`❌ [scan-rembourse] echec userId=${userId} poche=${poche} motif=${motif} : ${e.message}`);
         noterNonRemboursement('erreur');
         return false;
     }
 }
 
-// Trace des résultats livrés AVEC RÉSERVE. Ne rembourse rien par défaut : sert à
-// mesurer le taux réel de carteIncertaine avant de décider d'élargir la politique
-// (voir REMBOURSER_SI_INCERTAIN).
+// Un résultat livré AVEC RÉSERVE est une QUESTION, et une question ne se facture pas (décision du 2026-10-05, en tête de
+// fichier). Trace la réserve, la rembourse, et rend ce que rend `rembourserScan` : true si un crédit a réellement été rendu
+// (false : code maître, déjà remboursé, plafond du jour… — la cause est notée par rembourserScan).
 async function signalerIncertain(req, raison) {
     const userId = (req.credit && req.credit.userId) || (req.body && req.body.userId) || '?';
     console.warn(`⚠️ [scan-incertain] userId=${userId} raison=${raison}`);
-    if (REMBOURSER_SI_INCERTAIN) await rembourserScan(req, `incertain:${raison}`);
+    return await rembourserScan(req, `question:${raison}`, { compteur: 'question' });
 }
 
 module.exports = {
     // Modèles — index.js les réutilise pour /api/solde et le webhook Stripe
-    Credit, QuotaSemaine, Remboursement,
+    Credit, QuotaSemaine, Remboursement, RemboursementQuestion,
     // Middlewares et fonctions
     exigerImage, verifierAcces, rembourserScan, signalerIncertain,
     // Outils et constantes
     semaineISO,
-    SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR, REMBOURSER_SI_INCERTAIN
+    SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR, REMBOURSEMENTS_QUESTIONS_MAX_JOUR
 };

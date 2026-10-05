@@ -543,8 +543,11 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
             // si ce chemin n'est pas emprunté : la règle porte sur ce que l'outil peut
             // écrire, pas sur ce qu'on l'a vu écrire.
             const q = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
+            // `remboursements_questions` (2026-10-06) : le compteur des QUESTIONS remboursées, à part de celui des pannes (acces.js).
+            // Même raison que `remboursements` ci-dessus : plafonné par (userId, jour), il survivrait sinon d'un passage à l'autre.
+            const rq = await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });
             console.log(`\n🧹 test_scratch : ${n.deletedCount} crédit(s), ${j.deletedCount} ligne(s) de journal,` +
-                ` ${rb.deletedCount} compteur(s) de remboursement, ${q.deletedCount} quota(s) hebdo supprimés.`);
+                ` ${rb.deletedCount} compteur(s) de remboursement, ${rq.deletedCount} de questions, ${q.deletedCount} quota(s) hebdo supprimés.`);
         }
         // ⚠️ ET LA TRANCHE, PAR CE FICHIER, PARCE QUE C'EST LUI QUI L'A COPIÉE.
         // Chaque outil range ce qu'il a construit : aucun des deux ne dépend de l'ordre

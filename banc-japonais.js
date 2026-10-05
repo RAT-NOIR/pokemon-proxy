@@ -277,7 +277,7 @@ const VERITE_PAR_NOM = [
 const {
     DATE_HOLDOUT, FENETRES_HORS_SERVICE, estHorsService,
     VERIFICATION, estVerification, FENETRES_LOTS, fenetreDe,
-    seauDe, numeroter, identiteDe, rattacherVerites
+    seauDe, numeroter, identiteDe, rattacherVerites, estIncidentTechnique
 } = require('./banc-seaux');
 
 // Les vérités saisies à la main par saisir-verites.js, indexées par clé. Elles portent leur
@@ -923,10 +923,10 @@ function celluleDe(d) {
     // Ils sortent donc dans une catégorie à eux, comptée et nommée.
     // (Un quota épuisé ou un serveur endormi, eux, ne laissent AUCUNE ligne : `verifierAcces`
     //  et le timeout agissent avant toute écriture au journal. Rien à exclure dans ce cas.)
-    const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
+    // La définition vit dans banc-seaux.js (estIncidentTechnique) : elle compte aussi la lecture de secours (`panneIA`).
 
     function verite(cle, d) {
-        if (MOTIFS_TECHNIQUES.has(d.motifEchec)) return { valeur: null, source: 'TECHNIQUE' };
+        if (estIncidentTechnique(d)) return { valeur: null, source: 'TECHNIQUE' };
         // Les deux tables codées en dur, ancrées par IDENTITÉ et bornées aux seaux
         // d'entraînement et de vérification — voir leur en-tête pour la contamination
         // « Raichu » que cette borne supprime.

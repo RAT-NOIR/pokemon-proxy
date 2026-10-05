@@ -113,5 +113,16 @@ console.log('\n--- 5. LES ABSENCES NE SE CONFONDENT PAS ENTRE ELLES ---');
     verifier('une vérité sans champ `lu` ne rend aucune identité', identiteDeVerite({}), null);
 }
 
+console.log('\n--- 6. UN INCIDENT TECHNIQUE N\'EST PAS UNE IDENTIFICATION (une seule définition, 2026-10-05) ---');
+{
+    const { estIncidentTechnique } = SEAUX;
+    verifier('l\'IA n\'a rien rendu -> incident', estIncidentTechnique({ motifEchec: 'ia-echec' }), true);
+    verifier('exception serveur -> incident', estIncidentTechnique({ motifEchec: 'erreur-serveur' }), true);
+    // la lecture de secours : une ligne ABOUTIE (une question), sans motifEchec — l'IA n'a jamais lu la photo
+    verifier('lecture de secours (panneIA, sans motifEchec) -> incident', estIncidentTechnique({ ...ligne(), panneIA: 'credit' }), true);
+    verifier('une identification ordinaire -> pas un incident', estIncidentTechnique(ligne()), false);
+    verifier('un refus d\'identification -> pas un incident', estIncidentTechnique({ motifEchec: 'carte-introuvable', panneIA: null }), false);
+}
+
 console.log(`\n${echecs === 0 ? '✅ tout passe' : `❌ ${echecs} échec(s)`}`);
 process.exit(echecs === 0 ? 0 : 1);

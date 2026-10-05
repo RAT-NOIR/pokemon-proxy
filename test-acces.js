@@ -22,6 +22,9 @@
 process.env.SCANS_ACCUEIL = '25';
 process.env.SCANS_GRATUITS_SEMAINE = '2';
 process.env.REMBOURSEMENTS_MAX_JOUR = '5';
+process.env.REMBOURSEMENTS_QUESTIONS_MAX_JOUR = '30';
+// ⚠️ GARDÉE À 'false' EXPRÈS (bloc L) : la variable n'existe plus, et une valeur oubliée sur Render ne doit pas pouvoir rétablir
+// la facturation des questions. Le bloc L prouve qu'elle est ignorée.
 process.env.REMBOURSER_SI_INCERTAIN = 'false';
 delete process.env.CODE_ILLIMITE;
 
@@ -31,9 +34,9 @@ mongoose.set('strictQuery', false);
 
 const { connecterMongo } = require('./mongo-connexion');
 const {
-    Credit, QuotaSemaine, Remboursement,
-    exigerImage, verifierAcces, rembourserScan,
-    semaineISO, SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR
+    Credit, QuotaSemaine, Remboursement, RemboursementQuestion,
+    exigerImage, verifierAcces, rembourserScan, signalerIncertain,
+    semaineISO, SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR, REMBOURSEMENTS_QUESTIONS_MAX_JOUR
 } = require('./acces');
 
 const BASE_TEST = 'test_scratch';
@@ -264,11 +267,62 @@ async function main() {
         v('   hebdo n\'a pas dépassé son plafond', await compteurHebdo(u), SCANS_GRATUITS_SEMAINE);
     }
 
+    // ---------- L. Une QUESTION n'est pas facturée (décision du testeur, 2026-10-05) ----------
+    // « Seule une identification AFFIRMÉE est facturée, quelle que soit sa preuve (image, titre ou Gemini). Une question ou une
+    // panne est remboursée. » Une réponse livrée avec réserve (`carteAmbigue`) EST une question : signalerIncertain la rembourse,
+    // quelle que soit REMBOURSER_SI_INCERTAIN (posée à 'false' en tête de fichier).
+    console.log('\n--- L. Une question est remboursée ---');
+    {
+        const u = neuf('question-accueil');
+        const r = await appelerAcces(u);
+        v('débité accueil -> 24', (await solde(u)).gratuit, 24);
+        v('une question est remboursée', await signalerIncertain(r.req, 'egalite-sans-enjeu'), true);
+        v('   solde accueil restauré à 25', (await solde(u)).gratuit, 25);
+    }
+    {
+        const u = neuf('question-payant');
+        await poser(u, 0, 5);
+        await appelerAcces(u); await appelerAcces(u);   // vide l'hebdo
+        const r = await appelerAcces(u);
+        v('débité payant -> 4', (await solde(u)).payant, 4);
+        v('une lecture de secours (question) est remboursée', await signalerIncertain(r.req, 'lecture-de-secours'), true);
+        v('   solde payant restauré à 5', (await solde(u)).payant, 5);
+        v('   et jamais deux fois (verrou req)', await rembourserScan(r.req, 'ia-echec'), false);
+    }
+    {
+        // 🔴 LES QUESTIONS NE MANGENT PAS LE PLAFOND DES PANNES (relecture du 2026-10-06 ; verrou-avant-push rouge en 7e cellule).
+        // Un compteur partagé faisait passer le cas FRÉQUENT (une question, l'utilisateur a reçu des candidats) devant le cas GRAVE
+        // (une panne, il n'a rien reçu) : au 6e remboursement du jour, la panne restait facturée.
+        const u = neuf('question-puis-panne');
+        let questions = 0;
+        for (let i = 0; i < REMBOURSEMENTS_MAX_JOUR + 2; i++) {
+            const r = await appelerAcces(u);
+            if (r.passe && await signalerIncertain(r.req, 'perimetre-vintage-suggestion')) questions++;
+        }
+        v(`${REMBOURSEMENTS_MAX_JOUR + 2} questions dans la journée, toutes remboursées`, questions, REMBOURSEMENTS_MAX_JOUR + 2);
+        const r = await appelerAcces(u);
+        v('   puis une PANNE : remboursée quand même', await rembourserScan(r.req, 'ia-echec'), true);
+    }
+    {
+        // Les questions ont leur PROPRE plafond (anti-abus : des photos ambiguës en boucle pour des candidats gratuits)
+        // poche HEBDO : chaque question remboursée rend le jeton de la semaine, le scan suivant le reprend — aucune dotation à
+        // dépasser (l'accueil plafonne ses remboursements à SCANS_ACCUEIL, il fausserait ce compte)
+        const u = neuf('question-plafond');
+        await poser(u, 0, 0);
+        let rendues = 0;
+        for (let i = 0; i < REMBOURSEMENTS_QUESTIONS_MAX_JOUR + 2; i++) {
+            const r = await appelerAcces(u);
+            if (r.passe && await signalerIncertain(r.req, 'perimetre-vintage-suggestion')) rendues++;
+        }
+        v(`questions remboursées plafonnées à ${REMBOURSEMENTS_QUESTIONS_MAX_JOUR}/jour`, rendues, REMBOURSEMENTS_QUESTIONS_MAX_JOUR);
+    }
+
     // ---------- Nettoyage ----------
     console.log('\n--- Nettoyage ---');
     const f = { userId: { $in: ids } };
     const d1 = await Credit.deleteMany(f), d2 = await QuotaSemaine.deleteMany(f), d3 = await Remboursement.deleteMany(f);
-    console.log(`   supprimés : ${d1.deletedCount} credits, ${d2.deletedCount} quotas, ${d3.deletedCount} remboursements`);
+    const d4 = RemboursementQuestion ? await RemboursementQuestion.deleteMany(f) : { deletedCount: 0 };
+    console.log(`   supprimés : ${d1.deletedCount} credits, ${d2.deletedCount} quotas, ${d3.deletedCount} remboursements, ${d4.deletedCount} remboursements de questions`);
     v('aucun document de test résiduel', await Credit.countDocuments({ userId: /^TEST-/ }), 0);
 
     console.log(`\n${ko === 0 ? '🎉' : '⚠️'} ${ok}/${ok + ko} assertions passées.`);

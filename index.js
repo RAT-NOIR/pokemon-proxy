@@ -3133,6 +3133,9 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         // (où vivent candidats, scores et motif) mais écrite APRÈS, une fois les prix
         // connus. Reste null quand le cache a répondu — il n'y a alors pas eu de scan.
         let ligneJournal = null;
+        // Une QUESTION (résultat livré avec réserve) n'est pas facturée (décision du 2026-10-05, acces.js) : true si un crédit a
+        // réellement été rendu, false sinon (plafond du jour, code maître…), null quand il n'y avait pas de question.
+        let questionRemboursee = null;
         if (debug) console.log("🐛 Mode debug : lecture du cache sautée.");
 
         // 2. Flux combiné orienté JUSTESSE :
@@ -3287,10 +3290,10 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             // Marquer incertain si l'identification TCGdex l'était
             if (trouvailleTCGdex.ambigu) resultat.carteIncertaine = true;
 
-            // Résultat LIVRÉ mais avec réserve : on le trace (et on ne rembourse que si
-            // la politique a été élargie explicitement).
+            // Résultat LIVRÉ mais avec réserve : c'est une QUESTION, on la trace et on la
+            // rembourse (décision du 2026-10-05 : seule une identification affirmée est facturée).
             if (resultat.carteIncertaine) {
-                await signalerIncertain(req, motifResolution.etat === 'non-resolu'
+                questionRemboursee = await signalerIncertain(req, motifResolution.etat === 'non-resolu'
                     ? `motif-${motifResolution.raison}`
                     : (trouvailleTCGdex.ambigu ? 'tcgdex-ambigu' : 'plusieurs-candidats'));
             }
@@ -3331,6 +3334,7 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
             enregistrerScan({
                 ...ligneJournal,
                 carteIncertaine: Boolean(resultat.carteIncertaine),
+                rembourse: questionRemboursee,
                 prixVinted: prixVintedNombre,
                 prixReference: resultat.price,
                 sourcePrix: resultat.source || null
@@ -3384,7 +3388,8 @@ app.post('/api/analyser', verifierJeton, exigerImage, verifierAcces, async (req,
         // ⚠️ Le message part au JOURNAL, jamais dans la réponse — voir `messageErreur`.
         enregistrerEchec({
             route: 'analyser', userId: req.credit?.userId, ...annonce, cardInfo,
-            motifEchec: 'erreur-serveur', rembourse: rendu,
+            // `req.scanRendu` : une QUESTION déjà remboursée avant l'exception (2026-10-06) — le scan EST remboursé, le journal le dit
+            motifEchec: 'erreur-serveur', rembourse: rendu || Boolean(req.scanRendu),
             messageErreur: `${error?.message ?? error} @ ${String(error?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`
         });
         if (!res.headersSent) res.json({ success: false, error: "Erreur serveur interne" });
@@ -5545,7 +5550,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
                                                     : motifResolution.etat === 'non-resolu' ? `motif-${motifResolution.raison}`
                                                         : numeroContredit ? 'tcgdex-numero-incoherent'
                                                             : 'tcgdex-ambigu';
-        if (carteAmbigue) await signalerIncertain(req, raisonReserve);
+        // Une QUESTION ne se facture pas (décision du 2026-10-05, acces.js) : rembourse si `carteAmbigue`. null = pas de question.
+        const questionRemboursee = carteAmbigue ? await signalerIncertain(req, raisonReserve) : null;
 
         // ════════════════════════════════════════════════════════════════════
         // LE NIVEAU DE LA RÉSERVE — deux valeurs, et la table vit ICI
@@ -5963,6 +5969,9 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
             // comme des marges.
             margeConfortable: identificationConfiante,
             carteIncertaine: carteAmbigue,
+            // la question a-t-elle été remboursée (2026-10-05) : null = pas de question (affirmé, facturé). `false` ne veut PAS dire
+            // « plafond » (code maître, semaine changée…) : la cause est `raisonNonRembourse`, et c'est `plafond-jour` qu'on compte.
+            rembourse: questionRemboursee,
             // ⚠️ LE PRIX DEMANDÉ, SUR LES SCANS ABOUTIS AUSSI — et pas seulement sur les
             // refus. C'est sur ces lignes-là qu'on pourra un jour rapprocher un prix
             // d'annonce du prix live du produit retenu, donc mesurer ce que vaut le guide.
@@ -6272,7 +6281,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // « quoi » sans savoir « où ». La réponse HTTP, elle, garde son texte générique.
         enregistrerEchec({
             route: 'identifier', userId: req.credit?.userId, ...annonce, cardInfo,
-            motifEchec: 'erreur-serveur', rembourse: rendu,
+            // `req.scanRendu` : une QUESTION déjà remboursée avant l'exception (2026-10-06) — le scan EST remboursé, le journal le dit
+            motifEchec: 'erreur-serveur', rembourse: rendu || Boolean(req.scanRendu),
             messageErreur: `${e?.message ?? e} @ ${String(e?.stack ?? '').split('\n')[1]?.trim() ?? '?'}`
         });
         // ⚠️ LE MESSAGE BRUT NE SORT PAS. Il reste au log ; la réponse ne porte qu'un texte

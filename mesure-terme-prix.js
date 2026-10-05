@@ -43,7 +43,7 @@ const mongoose = require('mongoose');
 const S = require('./scoring.js');
 const { trouverProduitsLocaux, scorerCandidatsLocal, lireCodeSets } = require('./index');
 const { numeroEstUnDexId } = require('./pokedex');
-const { seauDe, numeroter, identiteDe, rattacherVerites } = require('./banc-seaux');
+const { seauDe, numeroter, identiteDe, rattacherVerites, estIncidentTechnique } = require('./banc-seaux');
 // Pour le tri « table vintage d'abord » (mesure 5) : la table close, celle du périmètre.
 const { EXPANSIONS_VINTAGE, SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
 
@@ -55,7 +55,6 @@ const Num = mongoose.model('Nm', new mongoose.Schema({}, { strict: false }), 'nu
 // recopié ici ; mesuré avant de remplacer sur les 74 188 noms de catalogue_produits, 0 produit divergent.
 const { estCarteCode } = require('./collecte-cartes/jointure');
 const SEAUX_VERITES_CODEES = new Set(['entrainement', 'verification']);
-const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
 const SEUIL_CHER = 3; // le seuil du critère 5, recopié pour l'AFFICHAGE seulement
 
 /** Une table littérale de banc-japonais.js, lue dans sa source (le banc s'exécute au require). */
@@ -160,7 +159,7 @@ function rejouerRegime(scores, attendu, regime) {
     const rattachement = rattacherVerites(lignes, VERITES_SAISIES);
 
     function verite(d) {
-        if (MOTIFS_TECHNIQUES.has(d.motifEchec)) return { valeur: null, source: 'TECHNIQUE' };
+        if (estIncidentTechnique(d)) return { valeur: null, source: 'TECHNIQUE' };
         if (SEAUX_VERITES_CODEES.has(seauDe(d))) {
             const ident = identiteDe(d);
             const parCle = VERITE.find(v => identiteDe({ ...v.lu }) === ident);

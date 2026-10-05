@@ -31,6 +31,7 @@ const BASE = process.argv.find(a => a.startsWith('--base='))?.split('=')[1];
 if (!BASE) { console.error('❌ --base=<nom> obligatoire.'); process.exit(1); }
 const mongoose = require('mongoose');
 const { numeroEstUnDexId } = require('./pokedex');
+const { estIncidentTechnique } = require('./banc-seaux');
 
 const pc = (n, d) => d ? `${(100 * n / d).toFixed(1)} %` : '—';
 const hhmm = d => String(d?.toISOString?.() ?? d).slice(0, 19).replace('T', ' ');
@@ -155,7 +156,8 @@ const hhmm = d => String(d?.toISOString?.() ?? d).slice(0, 19).replace('T', ' ')
     console.log('\n' + '═'.repeat(78));
     console.log('MUTETÉ ABSORBÉE EN SILENCE — identifieeEnLocal sur les SUCCÈS');
     console.log('═'.repeat(78));
-    const succes = toutes.filter(l => l.motifEchec == null);
+    // une LECTURE DE SECOURS (panneIA) aboutit sans lecture de la photo : incident technique, pas un succès (banc-seaux.js, 2026-10-06)
+    const succes = toutes.filter(l => l.motifEchec == null && !estIncidentTechnique(l));
     const locales = succes.filter(l => l.identifieeEnLocal === true);
     console.log(`   succès : ${succes.length}   ·   dont identifiés SANS TCGdex : ${locales.length}  (${pc(locales.length, succes.length)})`);
     const parJour = new Map();

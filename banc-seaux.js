@@ -243,7 +243,18 @@ function rattacherVerites(lignes, verites) {
     return { parIdentite, parCle, exclusParDate, desaccords, orphelines, rattachees: parIdentite.size };
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// UN INCIDENT TECHNIQUE N'EST PAS UNE IDENTIFICATION — UNE SEULE DÉFINITION (2026-10-05)
+// ════════════════════════════════════════════════════════════════════════════
+// Deux copies de MOTIFS_TECHNIQUES vivaient dans banc-japonais.js et mesure-terme-prix.js (§21 bis). La lecture de secours
+// ajoute un cas qui n'a PAS de `motifEchec` : OpenRouter tombé, la route cherche la carte par le TITRE de l'annonce et rend une
+// QUESTION — une ligne « aboutie » où l'IA n'a jamais lu la photo. `panneIA` la marque ; sans lui, le banc la jugerait comme une
+// identification, et porterait au tableau la disponibilité d'un fournisseur.
+const MOTIFS_TECHNIQUES = new Set(['ia-echec', 'erreur-serveur']);
+function estIncidentTechnique(d) { return MOTIFS_TECHNIQUES.has(d?.motifEchec) || Boolean(d?.panneIA); }
+
 module.exports = {
+    MOTIFS_TECHNIQUES, estIncidentTechnique,
     DATE_HOLDOUT, PREFIXE,
     FENETRES_HORS_SERVICE, estHorsService,
     VERIFICATION, estVerification,
