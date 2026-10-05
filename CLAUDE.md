@@ -550,6 +550,25 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 74. RATMARKET V1 : LE CADRE RESSEMBLE PLUS QUE LE DESSIN, UNE ZONE MOYENNE NOIE LE NUMÉRO, ET L'IMAGE AFFIRME SANS LECTURE — 2026-10-05
+
+> 🔑 **DÉCISION DU TESTEUR : l'identification ne doit plus dépendre d'un appel payant ; Gemini n'est qu'un professeur pour mesurer, jamais
+> une étiquette d'entraînement.** Labo : `pokemon-proxy-labo/rm/` (cache local des 46 704 visuels, empreintes, bancs, décision, entraînement,
+> RunPod). **Mesuré, modèles tels quels, carte ENTIÈRE en entrée** (le recadrage carré de DINOv2 coupe le nom et le numéro : −3,8 points) :
+> SigLIP 2 base meilleur sur le banc réel (80,5 % au rang 1 contre 63,6 % pour l'actuel) et sur la famille Dracaufeu (58/60).
+
+🔴 **LE COSINUS DE LA CARTE ENTIÈRE NE GROUPE PAS UN DESSIN** : dans la famille Dracaufeu (9 visuels REGARDÉS — trois « Charizard » de
+la même fiche ont un AUTRE dessin), le pire cosinus interne vaut 0,634, le meilleur vers les autres Charizard 0,828. Le cadre d'une ère
+ressemble plus que l'illustration. SIFT sur la fenêtre d'illustration, puis similitude RANSAC — et une garde contre la superposition
+DÉGÉNÉRÉE (Base Set 2 « liée » à 129 points au Charizard de Pokémon GO : le scintillement holo, groupé dans un coin, à une échelle absurde).
+🔴 **UNE ZONE MOYENNE NOIE LE NUMÉRO** : « bas ≥ 0,9 » laissait passer Zorua Dark Rush 048 pour Master Deck 022 — l'illustrateur et le
+copyright, identiques, pèsent plus que deux chiffres. 🔑 La garde compare la photo aux deux jumeaux **sur les seuls pixels où LEURS SCANS
+diffèrent** (la carte des différences) : 0 faux sur l'auto-banc (1 470 / 1 922 affirmés), sur le banc réel (27/83) et sur la famille (43/60).
+⚠️ **L'auto-banc ne peut pas juger le « reste »** : sa vérité a toujours un visuel. C'est le banc réel (7 vérités sans visuel) qui a jugé la
+garde absolue de la zone clé. ⚠️ **Le PC s'est mis en veille 8 h 40** au milieu des calculs : un long calcul sur ce poste se lance avec
+`rm/eveil.ps1` (aucun réglage modifié). DirectML : `one_hot` (scatter) refusé, `torch.eye` rendu vide, `lerp` d'Adam replié sur le CPU — ~17 images/s.
+**Lecture de secours** (branche `secours-ia`) : OpenRouter en panne → le titre de l'annonce, toujours une question.
+
 ## 73. UNE RÉPONSE COMMUNE EST UNE AFFIRMATION DE PRIX, UN SIMULATEUR TROP PAUVRE CHIFFRE UN FAUX COÛT, ET UN 403 DE CLOUDFLARE EST UN DÉFI — 2026-10-04 (soir)
 
 > 🔴 **« RÉPONSE COMMUNE » N'AFFIRME PAS LE PRODUIT, MAIS ELLE AFFIRME UN PRIX — ET LE « 0 FAUX » NE LA COMPTAIT PAS.** Décision du testeur :
