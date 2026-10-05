@@ -1,7 +1,8 @@
 // ============================================================
 // MARQUER LES IMAGES ORPHELINES — aucun objet R2 sans décision écrite
 // ============================================================
-//   node marquer-orphelines.js
+//   node marquer-orphelines.js                                                       (plan : rien d'écrit)
+//   node lot-additif.js --quoi="…" --collections=images -- node marquer-orphelines.js --ecrire
 //
 // Une image sans `carteId` occupe R2 et ne s'affichera jamais. Elle ne doit pas rester là SANS
 // DÉCISION : ou on la supprime, ou on la garde en disant pourquoi. La décision est GARDER, et elle
@@ -25,18 +26,33 @@ const { modeles } = require('./collecte-cartes/schemas');
 // sets n'avaient pas été recollectés depuis. La recollecte les a trouvées (3 + 2 redirections vers les pages EX Delta
 // Species / Dragon Frontiers), et les cinq objets R2 GARDÉS ici ont joint sans une requête. C'est exactement le cas
 // pour lequel on les avait gardés. Le §24 écrivait « aucune page » ; il fallait écrire « aucune page LUE ».
+// 🔴 ET LES DEUX « PI » SONT TOMBÉS LE 2026-10-05 : ce sont des PIDGEOT (ピジョット, regardés à l'œil), titrés « Pi, … » par artofpkm —
+// un nom TRONQUÉ. Joints par collecte-cartes/corrections-images.js. « Irréductible » voulait dire « titre illisible pour nous ».
 const IRREDUCTIBLES = new Set([
-    'artofpkm/8/34', 'artofpkm/27/2',                          // « Pi » (Jungle, Southern Islands)
     'artofpkm/18/54',                                          // Team Rocket's Hitmonchan (G1)
     'artofpkm/25/85'                                           // Blaine's Quiz #3 (G2)
 ]);
 
+// 🔴 L'OUTIL A MARQUÉ 828 IMAGES À TORT LE 2026-10-05 (défait par restaurer-marqueurs-orphelines.js) : il prenait pour orpheline toute
+// image SANS `carteId`. Écrit quand `images` ne contenait que des fichiers artofpkm, il ne savait pas que la jointure n'écrit pas de
+// `carteId` sur une image partagée avec un set de base — servie pourtant. Une orpheline se définit par ce qu'elle EST : un fichier
+// à l'état « ok » qu'AUCUNE carte ne sert (`cartes.images.cleR2`). Et l'outil n'écrit plus que sur `--ecrire`.
+const AUTORISES = [/^--ecrire$/];
+const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisé : [--ecrire]`); process.exit(2); }
+
 (async () => {
     const { cartes: cx, fermer } = await ouvrirConnexions();
     const M = modeles(cx);
-    const orph = await M.Image.find({ $or: [{ carteId: null }, { carteId: { $exists: false } }] }).lean();
+    const servies = new Set(await cx.db.collection('cartes').distinct('images.cleR2'));
+    const candidates = await M.Image.find({ etat: 'ok', $or: [{ carteId: null }, { carteId: { $exists: false } }] }).lean();
+    const orph = candidates.filter(im => !servies.has(im.cleR2));
     const total = await M.Image.countDocuments({});
-    console.log(`dénominateur : ${total} entrées source · ${orph.length} sans carteId`);
+    console.log(`dénominateur : ${total} entrées source · ${candidates.length} à l'état « ok » sans carteId · dont ${orph.length} servies par AUCUNE carte (orphelines)`);
+    if (!process.argv.includes('--ecrire')) {
+        for (const im of orph.slice(0, 30)) console.log(`   ${im.cleR2} « ${im.titre ?? '—'} » ${im.set ?? '—'}`);
+        console.log('(plan seul — --ecrire sous lot-additif.js)'); await fermer(); return;
+    }
     let irr = 0, amb = 0;
     for (const im of orph) {
         const motif = IRREDUCTIBLES.has(im._id) ? 'irreductible' : 'ambigue';
@@ -44,7 +60,7 @@ const IRREDUCTIBLES = new Set([
         await M.Image.updateOne({ _id: im._id }, { $set: { orpheline: true, orphelineMotif: motif, decisionLe: new Date(), decision: 'garder' } });
     }
     // et on RETIRE le marqueur de celles qui ont fini par joindre — sinon il vieillit en mensonge.
-    const nettoyees = await M.Image.updateMany({ orpheline: true, carteId: { $ne: null, $exists: true } }, { $unset: { orpheline: 1, orphelineMotif: 1, decision: 1, decisionLe: 1 } });
+    const nettoyees = await M.Image.updateMany({ orpheline: true, $or: [{ carteId: { $ne: null, $exists: true } }, { cleR2: { $in: [...servies] } }] }, { $unset: { orpheline: 1, orphelineMotif: 1, decision: 1, decisionLe: 1 } });
     console.log(`   marquées « garder » : ${orph.length}  ·  irréductibles (aucune page Bulbapedia) : ${irr}  ·  ambiguës (plusieurs cartes, rien ne les sépare) : ${amb}`);
     console.log(`   marqueurs périmés retirés (elles ont joint depuis) : ${nettoyees.modifiedCount}`);
     console.log(`   ${irr === IRREDUCTIBLES.size ? '✅' : '❌'} les ${IRREDUCTIBLES.size} irréductibles nommées sont toutes présentes : ${irr} trouvées`);

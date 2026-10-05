@@ -3154,5 +3154,38 @@
    },
    "note": "sans page : 6 cartes de la base déclarent « Silver Lance & Jet-Black Spirit Jumbo Pack Set » ; 6 des 6 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
   }
+ },
+ {
+  "code": "ADV1",
+  "exp": 5877,
+  "prod": 55,
+  "nom": "ADV Expansion Pack",
+  "slugSet": "ADV-Expansion-Pack",
+  "region": "japonais",
+  "bulba": {
+   "titre": null,
+   "sansPage": true,
+   "tirage": "jp",
+   "expansion": "ADV Expansion Pack"
+  },
+  "attendu": 55,
+  "controle": {
+   "cartesDeclarantes": 55,
+   "numerosCardmarket": 55,
+   "couverts": 55,
+   "taux": 1,
+   "inverse": 1,
+   "numerosDeclares": 55,
+   "numerosAmbigus": 0,
+   "le": "2026-10-05"
+  },
+  "verifie": {
+   "le": "2026-10-05",
+   "page": null,
+   "entrees": {
+    "ADV Expansion Pack": 55
+   },
+   "note": "sans page : 55 cartes de la base déclarent « ADV Expansion Pack » ; 55 des 55 numéros Cardmarket sont des numéros de ces impressions (100 %). Contrôle mesuré en base, 0 requête."
+  }
  }
 ]

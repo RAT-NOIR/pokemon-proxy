@@ -224,6 +224,17 @@ async function collecterSet(code, M, dossierRapport) {
         }
     }
 
+    // 🔴 UNE LISTE VIDE N'EST PAS UN SET VÉRIFIÉ (2026-10-05). Sans entrée, il n'y a aucune mesure, donc aucun refus de
+    // résolution, aucun téléchargement — et l'unité finissait « verifie » en 4 s, comme un set complet. 8 sets sur 339 dans ce
+    // cas, dont MAL et MSD (artofpkm 121 et 95 : « lues 0 »). Le motif du haut du catalogue : un vide qui ressemble à un
+    // travail fini. Le set se refuse et le dit ; l'état garde la liste vide comme preuve.
+    const nListees = S.ids.reduce((a, id) => a + (entrees[id]?.length || 0), 0);
+    if (!nListees) {
+        console.error(`❌ ${code} : la source ${SOURCE} ${JSON.stringify(S.ids)} a listé 0 entrée — set REFUSÉ (une liste vide n'est pas « rien à faire »).`);
+        await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste-vide', fini: new Date() } });
+        await liberer(); return { code, etat: 'refuse-liste-vide' };
+    }
+
     // ---- 3. originaux, reprise au premier n sans sha256 -------------------------------------
     const bucket = process.env.R2_BUCKET_IMAGES;
     // `tropPetits` est la MOITIÉ MANQUANTE du geste ci-dessus : admettre un set sur sa médiane sans
