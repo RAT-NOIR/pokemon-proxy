@@ -317,12 +317,148 @@ async function main() {
         v(`questions remboursées plafonnées à ${REMBOURSEMENTS_QUESTIONS_MAX_JOUR}/jour`, rendues, REMBOURSEMENTS_QUESTIONS_MAX_JOUR);
     }
 
+    // ---------- M. Une question RÉPONDUE est facturée une fois ; seule une question ABANDONNÉE est remboursée ----------
+    // Décision du testeur (2026-10-05, seconde) : « une question remboursée ne doit pas devenir un résultat gratuit. Quand
+    // l'utilisateur répond à la question, l'analyse est complète et facturée UNE fois. Seule une question abandonnée est
+    // remboursée. » Abandonnée = sans réponse 24 h, ou « aucune de celles-ci ». Plafond : 30 questions remboursées par jour.
+    console.log('\n--- M. Question en attente, répondue, abandonnée ---');
+    const acces = require('./acces');
+    const { Question, poserQuestion, repondreQuestion, rembourserQuestionsAbandonnees, QUESTION_DELAI_MS } = acces;
+    v('le module expose le circuit des questions', [typeof poserQuestion, typeof repondreQuestion, typeof rembourserQuestionsAbandonnees, QUESTION_DELAI_MS], ['function', 'function', 'function', 24 * 3600 * 1000]);
+    const oid = () => new mongoose.Types.ObjectId();
+    const vieillir = async (scanId, heures) => Question.updateOne({ _id: scanId }, { $set: { poseeLe: new Date(Date.now() - heures * 3600 * 1000) } });
+    const etatDe = async scanId => (await Question.findById(scanId).lean())?.etat ?? null;
+    {
+        const u = neuf('q-repondue');
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        const q = await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [101, 102, 103] });
+        v('une question posée reste EN ATTENTE, rien n\'est rendu', [q.etat, (await solde(u)).gratuit], ['en-attente', 24]);
+        v('   la poche débitée est retenue', (await Question.findById(scanId).lean())?.credit?.poche, 'accueil');
+        v('réponse par un autre utilisateur : 403', (await repondreQuestion({ scanId, userId: 'TEST-autre', idProduct: 101 })).statut, 403);
+        v('réponse hors des candidats : 400', (await repondreQuestion({ scanId, userId: u, idProduct: 999 })).statut, 400);
+        const rep = await repondreQuestion({ scanId, userId: u, idProduct: 102 });
+        v('réponse par un candidat : 200, « répondue », facturée UNE fois', [rep.statut, rep.etat, (await solde(u)).gratuit], [200, 'repondue', 24]);
+        v('   une seconde réponse : 409, rien ne bouge', [(await repondreQuestion({ scanId, userId: u, idProduct: 101 })).statut, (await solde(u)).gratuit], [409, 24]);
+        await vieillir(scanId, 25);
+        await rembourserQuestionsAbandonnees();
+        v('   le balayage ne rembourse pas une question répondue', [await etatDe(scanId), (await solde(u)).gratuit], ['repondue', 24]);
+        v('scanId inconnu : 404', (await repondreQuestion({ scanId: oid(), userId: u, idProduct: 101 })).statut, 404);
+    }
+    {
+        const u = neuf('q-aucune');
+        await poser(u, 0, 5);
+        await appelerAcces(u); await appelerAcces(u);   // vide l'hebdo
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'perimetre-vintage-suggestion', candidats: [201, 202] });
+        v('débité payant -> 4, question en attente', [(await solde(u)).payant, await etatDe(scanId)], [4, 'en-attente']);
+        const rep = await repondreQuestion({ scanId, userId: u, aucune: true });
+        v('« aucune de celles-ci » : abandon, remboursé tout de suite', [rep.statut, rep.etat, (await solde(u)).payant], [200, 'remboursee', 5]);
+    }
+    {
+        const u = neuf('q-abandon');
+        const r1 = await appelerAcces(u), r2 = await appelerAcces(u);
+        const vieille = oid(), recente = oid();
+        await poserQuestion(r1.req, { scanId: vieille, raison: 'tcgdex-ambigu', candidats: [301, 302] });
+        await poserQuestion(r2.req, { scanId: recente, raison: 'tcgdex-ambigu', candidats: [301, 302] });
+        await vieillir(vieille, 25);
+        await vieillir(recente, 1);
+        v('deux questions en attente -> accueil 23', (await solde(u)).gratuit, 23);
+        const vus = [];
+        await rembourserQuestionsAbandonnees({ apres: q => vus.push(String(q._id)) });
+        v('le balayage rembourse la question de plus de 24 h, et elle seule', [await etatDe(vieille), await etatDe(recente), (await solde(u)).gratuit], ['remboursee', 'en-attente', 24]);
+        v('   et rappelle `apres` pour elle (le journal)', vus.includes(String(vieille)) && !vus.includes(String(recente)), true);
+        await rembourserQuestionsAbandonnees();
+        v('   un second balayage ne rend rien de plus', (await solde(u)).gratuit, 24);
+        v('répondre à une question abandonnée (remboursée) : 409', (await repondreQuestion({ scanId: vieille, userId: u, idProduct: 301 })).statut, 409);
+        await vieillir(recente, 25);
+        const tardive = await repondreQuestion({ scanId: recente, userId: u, idProduct: 301 });
+        await rembourserQuestionsAbandonnees();
+        v('répondre APRÈS 24 h, avant le balayage : 410, et le balayage la rembourse', [tardive.statut, await etatDe(recente), (await solde(u)).gratuit], [410, 'remboursee', 25]);
+    }
+    {
+        // une PANNE dans la même requête, après la question (l'exception avant la réponse) : la panne rembourse et ANNULE la
+        // question — sinon le balayage rendrait un second crédit 24 h plus tard
+        // poche PAYANTE : sans plafond de dotation, c'est la seule où un second remboursement se VERRAIT (relecture du 2026-10-05 :
+        // sur l'accueil, borné à 25, le test passait même sans annulation)
+        const u = neuf('q-panne');
+        await poser(u, 0, 5);
+        await appelerAcces(u); await appelerAcces(u);   // vide l'hebdo
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [401, 402] });
+        v('une panne après la question : remboursée (payant 4 -> 5)', [await rembourserScan(r.req, 'erreur-serveur'), (await solde(u)).payant], [true, 5]);
+        await vieillir(scanId, 25);
+        await rembourserQuestionsAbandonnees();
+        v('   la question est annulée, jamais remboursée deux fois (payant reste 5)', [await etatDe(scanId), (await solde(u)).payant], ['annulee', 5]);
+    }
+    {
+        // « aucune » puis le balayage : un seul crédit rendu (poche payante, pour qu'un double se voie)
+        const u = neuf('q-aucune-balayage');
+        await poser(u, 0, 5);
+        await appelerAcces(u); await appelerAcces(u);
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [451, 452] });
+        await repondreQuestion({ scanId, userId: u, aucune: true });
+        await vieillir(scanId, 25);
+        await rembourserQuestionsAbandonnees();
+        v('« aucune » puis le balayage : payant 5, une seule fois', [await etatDe(scanId), (await solde(u)).payant], ['remboursee', 5]);
+    }
+    {
+        // deux réponses SIMULTANÉES : une seule est prise
+        const u = neuf('q-concurrence');
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [461, 462] });
+        const rs = await Promise.all([repondreQuestion({ scanId, userId: u, idProduct: 461 }), repondreQuestion({ scanId, userId: u, idProduct: 462 }), repondreQuestion({ scanId, userId: u, aucune: true })]);
+        v('trois réponses simultanées : une seule passe, les autres 409', rs.map(x => x.statut).sort(), [200, 409, 409]);
+        v('   et le crédit n\'est rendu que si c\'est « aucune » qui a gagné', (await solde(u)).gratuit, (await etatDe(scanId)) === 'remboursee' ? 25 : 24);
+    }
+    {
+        // une question restée « en-reglement » (processus tué entre la prise et l'état final) : JAMAIS reprise seule, mais comptée
+        const u = neuf('q-bloquee');
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [471, 472] });
+        await Question.updateOne({ _id: scanId }, { $set: { etat: 'en-reglement', priseLe: new Date(Date.now() - 3600 * 1000), poseeLe: new Date(Date.now() - 26 * 3600 * 1000) } });
+        const bal = await rembourserQuestionsAbandonnees();
+        v('une question bloquée « en-reglement » : comptée, jamais reprise (accueil reste 24)', [bal.bloquees >= 1, await etatDe(scanId), (await solde(u)).gratuit], [true, 'en-reglement', 24]);
+    }
+    {
+        // sans identifiant de scan (le journal n'écrit pas : Mongo absent), la question ne peut pas attendre : remboursée tout de suite
+        const u = neuf('q-sans-scan');
+        const r = await appelerAcces(u);
+        const q = await poserQuestion(r.req, { scanId: null, raison: 'tcgdex-ambigu', candidats: [501, 502] });
+        v('sans scanId : remboursée tout de suite (repli)', [q.etat, (await solde(u)).gratuit], ['remboursee', 25]);
+    }
+    {
+        // le plafond des questions (30/jour) vaut aussi pour le balayage : au-delà, la question reste facturée et la cause s'écrit
+        const u = neuf('q-plafond');
+        const r = await appelerAcces(u);
+        const scanId = oid();
+        await poserQuestion(r.req, { scanId, raison: 'tcgdex-ambigu', candidats: [601, 602] });
+        await vieillir(scanId, 25);
+        // le plafond compte au jour où la question a été POSÉE (« 30 questions par jour »), pas au jour du balayage
+        const jourPose = (await Question.findById(scanId).lean()).poseeLe.toISOString().slice(0, 10);
+        await RemboursementQuestion.updateOne({ userId: u, jour: jourPose }, { $set: { count: REMBOURSEMENTS_QUESTIONS_MAX_JOUR } }, { upsert: true });
+        await rembourserQuestionsAbandonnees();
+        const q = await Question.findById(scanId).lean();
+        v('plafond du jour de POSE atteint : non remboursée, cause écrite', [q.etat, q.raisonNonRembourse, (await solde(u)).gratuit], ['non-remboursee', 'plafond-jour', 24]);
+    }
+    {
+        const req = { body: { userId: 'peu-importe' } };   // code maître : aucun débit
+        v('code maître : aucune question à régler', (await poserQuestion(req, { scanId: oid(), raison: 'x', candidats: [1, 2] })).etat, null);
+    }
+
     // ---------- Nettoyage ----------
     console.log('\n--- Nettoyage ---');
     const f = { userId: { $in: ids } };
     const d1 = await Credit.deleteMany(f), d2 = await QuotaSemaine.deleteMany(f), d3 = await Remboursement.deleteMany(f);
     const d4 = RemboursementQuestion ? await RemboursementQuestion.deleteMany(f) : { deletedCount: 0 };
-    console.log(`   supprimés : ${d1.deletedCount} credits, ${d2.deletedCount} quotas, ${d3.deletedCount} remboursements, ${d4.deletedCount} remboursements de questions`);
+    const d5 = Question ? await Question.deleteMany({ userId: { $in: [...ids, 'peu-importe'] } }) : { deletedCount: 0 };
+    console.log(`   supprimés : ${d1.deletedCount} credits, ${d2.deletedCount} quotas, ${d3.deletedCount} remboursements, ${d4.deletedCount} remboursements de questions, ${d5.deletedCount} questions`);
     v('aucun document de test résiduel', await Credit.countDocuments({ userId: /^TEST-/ }), 0);
 
     console.log(`\n${ko === 0 ? '🎉' : '⚠️'} ${ok}/${ok + ko} assertions passées.`);

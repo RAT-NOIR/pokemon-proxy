@@ -572,6 +572,7 @@ const SONDE_MAX_CANDIDATES = 6;
     }
     await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });   // un compteur d'une exécution précédente fausserait celle-ci
     await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });   // celui des questions (2026-10-06), idem
+    await bac.collection('questions').deleteMany({ userId: USER_VERROU });   // une question en attente d'un passage précédent : _id = scanId, idem
     const poster = c => appeler(srv.port, 'POST', '/api/identifier', {
         userId: USER_VERROU, imageUrls: [c.imageUrl], title: null, vintedEtat: null
     }, JETON);
@@ -659,8 +660,11 @@ const SONDE_MAX_CANDIDATES = 6;
     const nr = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
     // `remboursements_questions` (2026-10-06) : le compteur des QUESTIONS remboursées (acces.js), même raison que ci-dessus
     const nrq = await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });
+    // `questions` (2026-10-05, seconde décision) : les questions EN ATTENTE posées par un scan avec réserve (acces.js) — laissées, le
+    // balayage du serveur suivant les rembourserait 24 h plus tard sur un compte qui n'existe plus
+    const nqu = await bac.collection('questions').deleteMany({ userId: USER_VERROU });
     const nq = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
-    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions, ${nq.deletedCount} quota(s) hebdo supprimés.`);
+    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions remboursées, ${nqu.deletedCount} question(s), ${nq.deletedCount} quota(s) hebdo supprimés.`);
 
     // ════════════════════════════════════════════════════════════════════════
     // 🔴 ET LA TRANCHE, QUI NE L'ÉTAIT PAS — CORRIGÉ LE 2026-08-30

@@ -18,7 +18,7 @@ const mongoose = require('mongoose');
 // appelants lisent le booléen de `rembourserScan` ; en faire un objet les casserait tous,
 // et un huitième appelant qui oublierait de transmettre la raison ne signalerait rien.
 // Le contexte est déjà le porteur de `sourcesEnPanne`, pour exactement ce motif.
-const { noterNonRemboursement } = require('./sources');
+const { noterNonRemboursement, dansUnScan, raisonNonRemboursement } = require('./sources');
 
 // --- Accès aux scans : crédits d'accueil, allocation hebdo, crédits achetés ---
 // SCANS_ACCUEIL         : scans offerts UNE SEULE FOIS à la création du compte (sans expiration).
@@ -52,6 +52,23 @@ const REMBOURSEMENTS_MAX_JOUR = parseInt(process.env.REMBOURSEMENTS_MAX_JOUR || 
 // obtenir des candidats gratuits. REMBOURSEMENTS_QUESTIONS_MAX_JOUR, 30 par défaut : le plus gros utilisateur-jour du journal au
 // 2026-10-05 compte 8 questions. Au-delà, la question reste facturée et la cause s'écrit (`plafond-jour`, sources.js).
 const REMBOURSEMENTS_QUESTIONS_MAX_JOUR = parseInt(process.env.REMBOURSEMENTS_QUESTIONS_MAX_JOUR || '30', 10);
+// ════════════════════════════════════════════════════════════════════════════
+// UNE QUESTION RÉPONDUE EST FACTURÉE, UNE QUESTION ABANDONNÉE EST REMBOURSÉE — DÉCISION DU TESTEUR, 2026-10-05 (seconde)
+// ════════════════════════════════════════════════════════════════════════════
+// « Une question remboursée ne doit pas devenir un résultat gratuit. Quand l'utilisateur répond à la question, l'analyse est
+// complète et facturée UNE fois. Seule une question abandonnée est remboursée. Le plafond de 30 questions par jour me va. »
+// Rembourser à l'émission (la règle du matin) rendait gratuits les candidats ET le choix qu'en fait l'utilisateur. Le crédit
+// débité par verifierAcces RESTE donc pris, et la question s'écrit en attente (`questions`, _id = scanId, avec la poche débitée) :
+//   · RÉPONDUE par un de ses candidats (/api/repondre-question) -> close, le débit initial EST la facture, rien de plus ;
+//   · « AUCUNE DE CELLES-CI », ou SANS RÉPONSE 24 h (QUESTION_DELAI_MS, choix du testeur) -> ABANDONNÉE : remboursée par
+//     rembourserScan, au compteur et sous le plafond des questions ; au-delà, elle reste facturée et la cause s'écrit ;
+//   · une PANNE dans la même requête (l'exception après la question, avant la réponse) -> la panne rembourse et ANNULE la question :
+//     un crédit ne se rend jamais deux fois.
+// ⚠️ /api/analyser ne rend qu'UN résultat, sans candidats : on ne peut pas y répondre. Il garde `signalerIncertain` (remboursement
+// à l'émission), ce qui revient au même — une question sans réponse possible est abandonnée par construction.
+// ⚠️ Poche HEBDO : un remboursement ne vaut que dans la semaine ISO du débit (règle H). Une question posée le dimanche et
+// abandonnée le lundi n'est pas rendue — le scan offert de la semaine passée aurait de toute façon expiré.
+const QUESTION_DELAI_MS = 24 * 3600 * 1000;
 
 // ============================================================
 // MODÈLES
@@ -96,6 +113,27 @@ const Remboursement = mongoose.models.Remboursement || mongoose.model('Rembourse
 // l'en-tête). Une collection plutôt qu'un champ `type` dans la clé : l'index unique (userId, jour) de `remboursements` existe en
 // production, l'élargir demanderait une migration.
 const RemboursementQuestion = mongoose.models.RemboursementQuestion || mongoose.model('RemboursementQuestion', remboursementSchema, 'remboursements_questions');
+// Les QUESTIONS en attente de réponse (2026-10-05, seconde décision — voir l'en-tête). `_id` = le scanId de la ligne de journal :
+// c'est l'identifiant que l'extension tient déjà (/api/retour-live). `credit` est la poche débitée par verifierAcces, la seule
+// chose dont rembourserScan a besoin pour rendre CE débit, 24 h plus tard, hors de la requête.
+// États : en-attente -> repondue | en-reglement -> remboursee | non-remboursee ; en-attente -> annulee (une panne a déjà rendu).
+const questionSchema = new mongoose.Schema({
+    _id:        { type: mongoose.Schema.Types.ObjectId, required: true },
+    userId:     { type: String, required: true },
+    credit:     { poche: String, semaineIso: String },
+    raison:     { type: String, default: null },
+    candidats:  { type: [Number], default: [] },
+    poseeLe:    { type: Date, required: true },
+    etat:       { type: String, required: true },
+    reponse:    { idProduct: Number, aucune: Boolean, le: Date },
+    priseLe:    { type: Date, default: null },   // la prise « en-reglement » : une question bloquée là se voit (rembourserQuestionsAbandonnees)
+    regleeLe:   { type: Date, default: null },
+    rembourse:  { type: Boolean, default: null },
+    raisonNonRembourse: { type: String, default: null },
+    annuleePar: { type: String, default: null }
+}, { collection: 'questions' });
+questionSchema.index({ etat: 1, poseeLe: 1 });
+const Question = mongoose.models.Question || mongoose.model('Question', questionSchema, 'questions');
 
 // ============================================================
 // OUTILS
@@ -301,8 +339,10 @@ async function verifierAcces(req, res, next) {
  *
  * @param {object} [options.compteur]  'question' : le compteur et le plafond des QUESTIONS (signalerIncertain). Toute autre valeur,
  *                 ou rien, prend le compteur des pannes — le plus étroit : une garde s'écrit par ce qu'elle autorise.
+ * @param {Date} [options.jourDe]  le jour (UTC) dont le plafond compte ce remboursement — par défaut aujourd'hui ; une question
+ *                 abandonnée compte au jour où elle a été POSÉE (« 30 questions par jour »), pas au jour où le balayage la règle.
  */
-async function rembourserScan(req, motif, { compteur: quelCompteur } = {}) {
+async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe } = {}) {
     const question = quelCompteur === 'question';
     const Compteur = question ? RemboursementQuestion : Remboursement;
     const plafond = question ? REMBOURSEMENTS_QUESTIONS_MAX_JOUR : REMBOURSEMENTS_MAX_JOUR;
@@ -315,6 +355,19 @@ async function rembourserScan(req, motif, { compteur: quelCompteur } = {}) {
     if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }  // un seul par requête
     req.scanRembourse = true;
 
+    // UNE PANNE APRÈS LA QUESTION, dans la même requête (l'exception avant la réponse) : l'utilisateur n'a jamais vu la question,
+    // elle est ANNULÉE — D'ABORD, avant de rendre quoi que ce soit (relecture du 2026-10-05) : annuler après aurait laissé, sur un
+    // échec de l'annulation, une question en attente que le balayage rendrait une seconde fois. Annulée même si la panne n'est pas
+    // remboursée (plafond) : le remboursement d'une panne suit la règle des pannes, pas celle des questions.
+    if (req.questionId && !question) {
+        try { await Question.updateOne({ _id: req.questionId, etat: 'en-attente' }, { $set: { etat: 'annulee', annuleePar: motif, regleeLe: new Date() } }); }
+        catch (e) {
+            console.error(`🔴 [question-annulation] scan ${req.questionId} : ${e.message} — la panne n'est PAS remboursée ici : la question en attente le sera par le balayage, une seule fois`);
+            noterNonRemboursement('erreur');
+            return false;
+        }
+    }
+
     if (mongoose.connection.readyState !== 1) {
         console.error(`❌ [scan-rembourse] impossible (Mongo indisponible) userId=${credit.userId} poche=${credit.poche} motif=${motif}`);
         noterNonRemboursement('mongo-absent');
@@ -322,7 +375,7 @@ async function rembourserScan(req, motif, { compteur: quelCompteur } = {}) {
     }
 
     const { userId, poche } = credit;
-    const jour = new Date().toISOString().slice(0, 10);
+    const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : new Date()).toISOString().slice(0, 10);
     let plafondPris = false;
     try {
         // Plafond anti-abus : incrément atomique PUIS vérification, avec rollback en cas
@@ -401,12 +454,117 @@ async function signalerIncertain(req, raison) {
     return await rembourserScan(req, `question:${raison}`, { compteur: 'question' });
 }
 
+/**
+ * Pose une QUESTION en attente de réponse (/api/identifier) : le crédit débité RESTE pris (voir l'en-tête).
+ * @param {object} req  porte req.credit (la poche débitée) ; reçoit req.questionId
+ * @param {{scanId, raison: string, candidats: number[]}} q  scanId = l'_id de la ligne de journal, pré-tiré par l'appelant
+ * @returns {Promise<{etat: 'en-attente'|'remboursee'|'non-remboursee'|null, repli?: string}>}
+ *   null : rien à régler (code maître, ou un crédit déjà rendu dans la requête) ; 'remboursee' / 'non-remboursee' : REPLI, la
+ *   question n'a pas pu s'écrire (pas de scanId : Mongo absent ; ou l'insertion a échoué) — elle ne peut pas attendre une réponse
+ *   qu'on ne saurait pas rattacher, elle est remboursée tout de suite, comme avant.
+ */
+async function poserQuestion(req, { scanId, raison, candidats }) {
+    const credit = req && req.credit;
+    const userId = (credit && credit.userId) || (req && req.body && req.body.userId) || '?';
+    console.warn(`⚠️ [scan-incertain] userId=${userId} raison=${raison} -> question en attente`);
+    if (!credit) { noterNonRemboursement('aucun-debit'); return { etat: null }; }
+    if (req.scanRembourse) return { etat: null };
+    const repli = async cause => {
+        console.warn(`⚠️ [question-repli] userId=${userId} : ${cause} -> remboursée à l'émission`);
+        const rendu = await rembourserScan(req, `question:${raison}`, { compteur: 'question' });
+        return { etat: rendu ? 'remboursee' : 'non-remboursee', repli: cause };
+    };
+    if (!scanId || mongoose.connection.readyState !== 1) return repli('aucun identifiant de scan');
+    try {
+        await Question.create({ _id: scanId, userId: credit.userId, credit: { poche: credit.poche, semaineIso: credit.semaineIso ?? null }, raison, candidats: (candidats || []).filter(Number.isFinite), poseeLe: new Date(), etat: 'en-attente' });
+    } catch (e) {
+        return repli(`écriture refusée (${e.message})`);
+    }
+    req.questionId = scanId;
+    return { etat: 'en-attente' };
+}
+
+/** Rend le crédit d'une question ABANDONNÉE, hors requête : la poche est celle que la question a retenue. Pose l'état final. */
+async function reglerAbandon(q, motif) {
+    const faux = { credit: { userId: q.userId, poche: q.credit?.poche, semaineIso: q.credit?.semaineIso ?? undefined }, body: { userId: q.userId } };
+    // le contexte de scan porte la cause d'un non-remboursement (sources.js) : on l'ouvre ici, il n'y a pas de requête autour
+    const { rendu, cause } = await dansUnScan(async () => {
+        const r = await rembourserScan(faux, motif, { compteur: 'question', jourDe: q.poseeLe });
+        return { rendu: r, cause: raisonNonRemboursement() };
+    });
+    const fin = await Question.findOneAndUpdate({ _id: q._id, etat: 'en-reglement' },
+        { $set: { etat: rendu ? 'remboursee' : 'non-remboursee', rembourse: rendu, raisonNonRembourse: rendu ? null : (cause ?? null), regleeLe: new Date() } }, { new: true }).lean();
+    return fin;
+}
+
+/**
+ * La réponse de l'utilisateur à une question (/api/repondre-question).
+ * @param {{scanId, userId: string, idProduct?: number, aucune?: boolean, maintenant?: Date}} r
+ * @returns {Promise<{statut: number, etat?: string, erreur?: string, question?: object}>}
+ *   200 répondue (un candidat : facturée, rien ne bouge) ou abandonnée (« aucune » : remboursée si le plafond le permet) ;
+ *   400 entrée invalide ou idProduct hors des candidats · 403 la question d'un autre · 404 inconnue · 409 déjà réglée · 410 délai passé
+ */
+async function repondreQuestion({ scanId, userId, idProduct, aucune, maintenant = new Date() }) {
+    if (!userId || !scanId || !mongoose.Types.ObjectId.isValid(String(scanId))) return { statut: 400, erreur: 'userId et scanId valides sont requis' };
+    const choix = aucune === true ? null : Number(idProduct);
+    if (aucune !== true && !Number.isInteger(choix)) return { statut: 400, erreur: 'idProduct (un candidat) ou aucune: true est requis' };
+    const limite = new Date(maintenant.getTime() - QUESTION_DELAI_MS);
+    const filtre = { _id: scanId, userId: String(userId), etat: 'en-attente', poseeLe: { $gt: limite }, ...(choix != null ? { candidats: choix } : {}) };
+    const maj = choix != null
+        ? { $set: { etat: 'repondue', reponse: { idProduct: choix, aucune: false, le: maintenant }, regleeLe: maintenant, rembourse: false } }
+        : { $set: { etat: 'en-reglement', priseLe: maintenant, reponse: { aucune: true, le: maintenant } } };
+    const q = await Question.findOneAndUpdate(filtre, maj, { new: true }).lean();
+    if (q) {
+        if (choix != null) { console.log(`🧾 [question-repondue] scan ${scanId} userId=${userId} idProduct=${choix} -> facturée`); return { statut: 200, etat: 'repondue', question: q }; }
+        const fin = await reglerAbandon(q, 'question-aucune');
+        return { statut: 200, etat: fin?.etat ?? 'en-reglement', question: fin };
+    }
+    // l'écriture conditionnelle n'a rien pris : on relit pour dire LAQUELLE des gardes a mordu (comme /api/retour-live)
+    const l = await Question.findById(scanId).lean();
+    if (!l) return { statut: 404, erreur: 'question inconnue' };
+    if (l.userId !== String(userId)) return { statut: 403, erreur: 'cette question appartient à un autre utilisateur' };
+    if (l.etat !== 'en-attente') return { statut: 409, etat: l.etat, erreur: `question déjà réglée (${l.etat})` };
+    if (!(l.poseeLe > limite)) return { statut: 410, etat: l.etat, erreur: 'délai de réponse passé (24 h) : la question est abandonnée' };
+    return { statut: 400, erreur: `idProduct ${choix} n'est pas un des candidats` };
+}
+
+/**
+ * LE BALAYAGE : rembourse les questions restées sans réponse QUESTION_DELAI_MS. Une à une, chacune PRISE par une écriture
+ * conditionnelle (en-attente -> en-reglement) avant d'être remboursée : deux balayages concurrents ne rendent jamais deux fois.
+ * ⚠️ UNE QUESTION RESTÉE « en-reglement » N'EST JAMAIS REPRISE AUTOMATIQUEMENT (relecture du 2026-10-05) : un processus tué entre la
+ * prise et l'état final peut avoir rendu le crédit ou non, et le reprendre risquerait de le rendre deux fois. On préfère perdre un
+ * remboursement à en doubler un — et le DIRE : chaque balayage compte celles bloquées depuis plus de 15 min (`bloquees`).
+ * @param {{maintenant?: Date, max?: number, apres?: (q: object) => any}} o  `apres` reçoit chaque question réglée (le journal)
+ * @returns {Promise<{reglees: number, remboursees: number, nonRemboursees: number, erreurs: number, bloquees: number}>}
+ */
+async function rembourserQuestionsAbandonnees({ maintenant = new Date(), max = 500, apres = null } = {}) {
+    const bilan = { reglees: 0, remboursees: 0, nonRemboursees: 0, erreurs: 0, bloquees: 0 };
+    if (mongoose.connection.readyState !== 1) return bilan;
+    const limite = new Date(maintenant.getTime() - QUESTION_DELAI_MS);
+    for (let i = 0; i < max; i++) {
+        const q = await Question.findOneAndUpdate({ etat: 'en-attente', poseeLe: { $lte: limite } }, { $set: { etat: 'en-reglement', priseLe: maintenant } }, { sort: { poseeLe: 1 }, new: true }).lean();
+        if (!q) break;
+        // une question qui lève ne coupe pas la passe : elle reste « en-reglement », comptée, et la suivante est traitée
+        let fin = null;
+        try { fin = await reglerAbandon(q, 'question-abandonnee'); }
+        catch (e) { bilan.erreurs++; console.error(`🔴 [question-balayage] ${q._id} : ${e.message} — reste « en-reglement », à vérifier à la main`); continue; }
+        bilan.reglees++;
+        if (fin?.rembourse) bilan.remboursees++; else bilan.nonRemboursees++;
+        if (apres && fin) { try { await apres(fin); } catch (e) { console.error(`❌ [question-balayage] après ${q._id} : ${e.message}`); } }
+    }
+    bilan.bloquees = await Question.countDocuments({ etat: 'en-reglement', priseLe: { $lt: new Date(maintenant.getTime() - 15 * 60 * 1000) } });
+    if (bilan.reglees || bilan.erreurs) console.log(`🧾 [question-balayage] ${bilan.reglees} question(s) abandonnée(s) : ${bilan.remboursees} remboursée(s), ${bilan.nonRemboursees} non${bilan.erreurs ? ` · 🔴 ${bilan.erreurs} en erreur` : ''}`);
+    if (bilan.bloquees) console.error(`🔴 [question-balayage] ${bilan.bloquees} question(s) bloquée(s) « en-reglement » depuis plus de 15 min : crédit rendu ou non, à vérifier à la main (jamais repris seul)`);
+    return bilan;
+}
+
 module.exports = {
     // Modèles — index.js les réutilise pour /api/solde et le webhook Stripe
-    Credit, QuotaSemaine, Remboursement, RemboursementQuestion,
+    Credit, QuotaSemaine, Remboursement, RemboursementQuestion, Question,
     // Middlewares et fonctions
     exigerImage, verifierAcces, rembourserScan, signalerIncertain,
+    poserQuestion, repondreQuestion, rembourserQuestionsAbandonnees,
     // Outils et constantes
     semaineISO,
-    SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR, REMBOURSEMENTS_QUESTIONS_MAX_JOUR
+    SCANS_ACCUEIL, SCANS_GRATUITS_SEMAINE, REMBOURSEMENTS_MAX_JOUR, REMBOURSEMENTS_QUESTIONS_MAX_JOUR, QUESTION_DELAI_MS
 };
