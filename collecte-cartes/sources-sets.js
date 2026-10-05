@@ -121,7 +121,11 @@ const ARTOFPKM = {
     MDB: { ids: [262], noms: ['Master Deck Build Box'], note: 'Cardmarket « Master Deck Build Box EX » ; 3/3 : 001 Victini, 026 Tornadus, 041 N' },
     PPB: { ids: [113], noms: ['PokéPark Premium File - Blue Version'], note: 'Cardmarket « PokePark Blue » ; 3/3 : 001 Entei, 005 Raikou, 009 Rayquaza' },
     pcgD: { ids: [97], noms: ['Team Rocket Constructed Half Deck W -black-'], note: 'Cardmarket « Black Deck Kit » ; 3/3 : 001 Spinarak, 011 Dark Tyranitar, 020 R Energy' },
-    pcgE: { ids: [99], noms: ['Team Rocket Constructed Half Deck W -silver-'], note: 'Cardmarket « Silver Deck Kit » ; 3/3 : 001 Psyduck, 011 Dark Dragonair, 020 R Energy' }
+    pcgE: { ids: [99], noms: ['Team Rocket Constructed Half Deck W -silver-'], note: 'Cardmarket « Silver Deck Kit » ; 3/3 : 001 Psyduck, 011 Dark Dragonair, 020 R Energy' },
+    // 2026-10-05 (nuit), prouver-sources-artofpkm.js : trois pages DISTINCTES, même critère. Refusées la même nuit : LED → 206 (le set
+    // porte les DEUX decks du kit en sous-sections, la ligne un seul : n°008 « Dual Ball » du deck Metagross est chez nous Good Rod du
+    // deck Leafeon) et HXY → 223 (n°038 : trois cartes « Poké Ball » chez nous, le numéro ne désigne pas UNE carte).
+    svC: { ids: [483], noms: ['Scarlet & Violet Starter set ex Pikachu ex & Pawmot'], note: 'Cardmarket « ex Starter Set Pikachu ex Pawmot » ; 3/3 : 001 Pikachu ex, 010 Lechonk, 017 Pokémon Catcher' }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,
