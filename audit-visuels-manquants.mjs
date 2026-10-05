@@ -35,6 +35,7 @@ const { fichesDuDocument, setParImpression } = await site('impressionsDuSet.ts')
 const { refusDuVisuel } = await site('langueDuVisuel.ts');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
+const { codeTcgdexDeLaLigne, TIRAGES_DE_LA_LANGUE } = require('./collecteur-images-tcgdex');
 
 /** Recopiée MOT POUR MOT de rat-market-site/scripts/auditer-visuels-non-servis.mjs (le script s'exécute à l'import : on ne peut
  *  pas l'importer). Le rang d'une rareté : SR, SAR, AR, alternatives d'abord (demande du testeur). */
@@ -91,7 +92,8 @@ const orphelinesParSet = new Map();
 const servies = new Set(await db.collection('cartes').distinct('images.cleR2'));
 for await (const im of db.collection('images').find({ etat: 'ok', $or: [{ carteId: null }, { carteId: { $exists: false } }] }, { projection: { cleR2: 1, set: 1 } }))
     if (!servies.has(im.cleR2)) orphelinesParSet.set(im.set, (orphelinesParSet.get(im.set) ?? 0) + 1);
-const tcg = new Map((await db.collection('tcgdex_sets').find({ _id: { $regex: '^(id|th)/' } }, { projection: { cartes: 1 } }).toArray()).map(x => [x._id, x.cartes || []]));
+const tcg = new Map((await db.collection('tcgdex_sets').find({ _id: { $regex: '^(id|th)/(?!__liste__$)' } }, { projection: { cartes: 1 } }).toArray()).map(x => [x._id, x.cartes || []]));
+const listesTcg = new Map((await db.collection('tcgdex_sets').find({ _id: { $in: ['id/__liste__', 'th/__liste__'] } }, { projection: { sets: 1, lu: 1 } }).toArray()).map(x => [x._id.split('/')[0], x]));
 let occ = new Map(), occLe = null;
 if (fs.existsSync(`${R}/audit-occidental.json`)) {
     const A = JSON.parse(fs.readFileSync(`${R}/audit-occidental.json`, 'utf8'));
@@ -123,11 +125,30 @@ function classer({ set, e }) {
         return { cas: 'b-a-confirmer:occidental-hors-audit', preuve: `fiche absente de l'audit occidental du ${occLe ?? '?'} (set ou carte postérieurs)` };
     }
     if (['id', 'th', 'idth'].includes(set.tirage)) {
-        const lang = set.tirage === 'th' ? 'th' : 'id', cartes = tcg.get(`${lang}/${set.code}`);
-        if (!cartes) return { cas: 'b-a-confirmer:tcgdex-jamais-lu', preuve: `TCGdex ${lang}/${set.code} absent du cache (lus : ${[...tcg.keys()].join(', ')})` };
-        const c = cartes.find(x => normaliserNumero(x.localId) === voulu);
-        if (c?.image) return { cas: 'b-tcgdex', preuve: `TCGdex ${lang}/${set.code} n°${c.localId} porte une image` };
-        return { cas: 'c-tcgdex-sans-image', preuve: `TCGdex ${lang}/${set.code} : ${c ? `n°${c.localId} sans image` : `n°${e.numero} absent`} (cache)` };
+        // 🔴 LA CLÉ DU CACHE EST CELLE DE LA PRODUCTION (2026-10-05) : `codeTcgdexDeLaLigne` retire le suffixe « /ID », « /TH » des promos
+        // régionales (TCGdex les range sous `th/SV-P`) — la première version lisait `th/SV-P/TH` et rangeait en « jamais lu » des sets
+        // DÉJÀ en cache. Et un tirage IDTH se lit dans les DEUX langues (TIRAGES_DE_LA_LANGUE) : la première qui porte l'image décide.
+        const langues = Object.entries(TIRAGES_DE_LA_LANGUE).filter(([, t]) => t.includes(set.tirage)).map(([l]) => l);
+        // chaque langue du tirage a SON état (relecture du 2026-10-05) : un set IDTH lu en id et jamais en th n'est pas « sans source »
+        //   lu (cache non vide) · vide (listé à cardCount.total 0 — un objet, jamais un null) · absent (pas dans la liste) · a-lire
+        //   (listé avec des cartes, ou cardCount inconnu, jamais lu) · liste-non-lue
+        const date = d => d ? new Date(d).toISOString().slice(0, 10) : '?';
+        const etats = langues.map(l => {
+            const c = codeTcgdexDeLaLigne(set.code, l), k = `${l}/${c}`, L = listesTcg.get(l);
+            if ((tcg.get(k) || []).length) return { l, c, k, etat: 'lu' };
+            if (tcg.has(k)) return { l, c, k, etat: 'vide' };                     // lu, et rendu SANS carte : un vide de la source, pas un « jamais lu »
+            const s = L?.sets?.find(x => x.id === c);
+            return { l, c, k, lu: L?.lu, etat: !L?.sets ? 'liste-non-lue' : !s ? 'absent' : (s.cardCount && typeof s.cardCount === 'object' && s.cardCount.total === 0) ? 'vide' : 'a-lire' };
+        });
+        for (const x of etats.filter(x => x.etat === 'lu')) {
+            const c = tcg.get(x.k).find(y => normaliserNumero(y.localId) === voulu);
+            if (c?.image) return { cas: 'b-tcgdex', preuve: `TCGdex ${x.k} n°${c.localId} porte une image` };
+        }
+        const dire = x => x.etat === 'lu' ? (() => { const c = tcg.get(x.k).find(y => normaliserNumero(y.localId) === voulu); return `TCGdex ${x.k} : ${c ? `n°${c.localId} sans image` : `n°${e.numero} absent`} (cache)`; })()
+            : `TCGdex ${x.k} : ${x.etat === 'vide' ? 'listé, 0 carte' : x.etat === 'absent' ? 'absent de la liste' : x.etat}${x.lu ? ` (liste « ${x.l} » lue le ${date(x.lu)})` : ''}`;
+        if (etats.some(x => x.etat === 'a-lire' || x.etat === 'liste-non-lue')) return { cas: 'b-a-confirmer:tcgdex-jamais-lu', preuve: etats.map(dire).join(' · ') };
+        const cas = etats.some(x => x.etat === 'lu') ? 'c-tcgdex-sans-image' : etats.some(x => x.etat === 'vide') ? 'c-tcgdex-set-vide' : 'c-tcgdex-absent-de-la-liste';
+        return { cas, preuve: etats.map(dire).join(' · ') };
     }
     return { cas: `c-tirage-${set.tirage}`, preuve: 'tirage sans source connue' };
 }

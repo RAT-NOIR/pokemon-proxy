@@ -315,7 +315,9 @@ const normaliserRarete = v => String(v ?? '').replace(/\([^)]*\)/g, '').trim().t
 // deux n'utilise les crochets pour autre chose que la lettre.
 const nomImage = n => normaliserNom(String(n ?? '').replace(/[\[\]]/g, ' '));
 
-async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false } = {}) {
+async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false, simuler = false } = {}) {
+    // `simuler` (2026-10-05) : la passe 1 (quelle carte pour chaque image) tourne, RIEN ne s'écrit — ni image, ni carte, ni reste, ni
+    // complétude, ni rapport. C'est la mesure d'une règle de jointure AVANT de la rejouer : `preuves` et `resolues` disent ce qu'elle ferait.
     const code = L.code;
     const dire = (...a) => { if (!silencieux) console.log(...a); };
     // ---- 4. jointure image -> carte --------------------------------------------------------
@@ -371,6 +373,18 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const corr = correctionDe(im.cleR2);
         if (corr) { cands = cartes.filter(c => c._id === corr.carteId); preuve = `correction lue à l'œil le ${corr.le} (« ${corr.lu} »)`; }
         else if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
+        // 🔑 UN NUMÉRO QUI DÉSIGNE PLUSIEURS CARTES : LE NOM DE L'IMAGE DÉPARTAGE (2026-10-05, audit des visuels, cas A). Deux familles
+        // y tombaient en reste « image-vers-plusieurs-cartes », l'image en base et servie à personne : les kits à deux decks que la
+        // source et nous numérotons chacun depuis 1 (Gift Box Emerald : 001 Feebas ET 001 Volbeat), et les numéros que DEUX cartes de
+        // la base réclament (Nihil Zero 103 : Poké Pad et Wondrous Patch — l'une des deux pages déclare un numéro faux). Le nom de
+        // l'image doit être ÉGAL (nomImage, la clé du repli par nom) à celui d'UNE SEULE des cartes du numéro ; sinon rien ne change.
+        // ⚠️ STRICTEMENT ADDITIF, comme la rareté plus bas : il ne s'exécute que sur `cands.length > 1`, donc il ne déplace aucune
+        // jointure qui marche. Le témoin du nom sur les images a été mesuré et refusé (§55 : le nom anglais d'artofpkm se trompe
+        // ~0,3 % du temps) — ici le nom ne CONTREDIT rien, il CHOISIT entre des cartes que le numéro désigne déjà toutes.
+        if (!corr && cands.length > 1 && im.nomEn) {
+            const parNomExact = cands.filter(c => nomImage(c.nomEn) === nomImage(im.nomEn));
+            if (parNomExact.length === 1) { cands = parNomExact; preuve = 'numero+nom'; }
+        }
         if (!corr && !cands.length && im.nomEn) {
             cands = parNom.get(nomImage(im.nomEn)) || [];
             preuve = 'nom';
@@ -400,6 +414,22 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // « Victory Ring » porte le « numéro » XY-P sur 24 images de 24 tournois ; la clé (carte, set, numéro) n'en gardait que
     // la dernière lue, affichée comme LE visuel. Refusées et nommées ; une entrée déjà affichée n'est pas retirée ici.
     const refusees = clesPartagees(resolues);
+    if (simuler) {
+        const parPreuve = {};
+        for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) parPreuve[r.preuve] = (parPreuve[r.preuve] || 0) + 1;
+        // CE QUE LE REJEU AJOUTERAIT, par la clé qu'il écrit : (carte, set, numéro), la dernière image lue l'emportant (le $pull/$push
+        // ci-dessous). Compter les IMAGES absentes de la carte rendait 1 568 « ajouts » qui n'en étaient pas : deux images par numéro
+        // chez la source (Terastal Festival ex 552/1 et 552/2 pour Budew 001), et la carte porte déjà l'une des deux (2026-10-05).
+        const cle = (carteId, numero) => `${carteId}|${numero ?? null}`;
+        // et ce qu'il REMPLACERAIT : une clé déjà portée dont l'image (cleR2) changerait — un visuel affiché qui bouge (relecture du 2026-10-05)
+        const deja = new Map(cartes.flatMap(c => (c.images || []).filter(m => m.set === slug).map(m => [cle(c._id, m.numero), m.cleR2])));
+        const finales = new Map();
+        for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) finales.set(cle(r.c._id, r.im.numero), r);
+        const decrire = r => ({ cleR2: r.im.cleR2, numero: r.im.numero ?? null, nomImage: r.im.nomEn ?? r.im.titre, carteId: r.c._id, nomCarte: r.c.nomEn, preuve: r.preuve });
+        return { simule: true, imagesOk: images.length, preuves: parPreuve, restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
+            nouvelles: [...finales].filter(([k]) => !deja.has(k)).map(([, r]) => decrire(r)),
+            remplacees: [...finales].filter(([k, r]) => deja.has(k) && deja.get(k) !== r.im.cleR2).map(([k, r]) => ({ ...decrire(r), avant: deja.get(k) })) };
+    }
     for (const { im, c, preuve } of resolues) {
         if (refusees.has(`${c._id}|${String(im.numero).trim()}`)) {
             clesRefusees++;
@@ -480,6 +510,21 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     return complet;
 }
 
+// 🔴 LA LIGNE DE COMMANDE DU REJEU S'ÉCRIT PAR CE QU'ELLE AUTORISE (relecture du 2026-10-05, §54) : `--simuler` n'est qu'un drapeau ;
+// mal écrit (« --simule », « --simuler=1 »), il n'était pas vu, et le rejeu ÉCRIVAIT. Sur le chemin `--rejouer-jointure`, un argument
+// inconnu refuse avant toute connexion ; partout, une variante de `--simuler`, ou `--simuler` sans rejeu, refuse. Le chemin du worker
+// (sans `--rejouer-jointure`) garde sa tolérance : sa commande de démarrage vit sur Render, pas dans le dépôt.
+{
+    const args = process.argv.slice(2);
+    const REJEU = [/^--rejouer-jointure=[^\s]+$/, /^--simuler$/, /^--rapport=.+$/, /^--source=[a-z]+$/];
+    const faux = args.filter(a => /^--simul/.test(a) && a !== '--simuler');
+    if (faux.length || (args.includes('--simuler') && !args.some(a => a.startsWith('--rejouer-jointure=')))) {
+        console.error(`❌ ${faux.length ? `argument inconnu : ${faux.join(' ')}` : '--simuler ne vaut qu\'avec --rejouer-jointure=<CODE|tous>'} — rien n'est lancé`); process.exit(2);
+    }
+    const inconnus = args.some(a => a.startsWith('--rejouer-jointure=')) ? args.filter(a => !REJEU.some(r => r.test(a))) : [];
+    if (inconnus.length) { console.error(`❌ rejeu : argument inconnu ${inconnus.join(' ')} — autorisés : --rejouer-jointure=<CODE|tous> [--simuler] [--rapport=<dossier>] [--source=<source>] ; rien n'est lancé`); process.exit(2); }
+}
+
 (async () => {
     const { cartes: cx, fermer } = await ouvrirConnexions({ buckets: ['R2_BUCKET_IMAGES'], production: false });
     const M = modeles(cx);
@@ -490,13 +535,31 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // rien ne sort d'ici. C'est ce qui permet de corriger un schéma sans retélécharger 400 images.
     if (arg('rejouer-jointure')) {
         const codes = arg('rejouer-jointure') === 'tous' ? TABLE_CODES : arg('rejouer-jointure').split(',').map(s => s.trim());
+        // `--simuler` (2026-10-05) : la jointure tourne, rien ne s'écrit ; les images qu'elle AJOUTERAIT vont dans un fichier à lire
+        const simuler = process.argv.includes('--simuler');
+        const nouvelles = [], remplacees = [], totaux = {};
+        let simules = 0;
         for (const code of codes) {
             const L = ligneDeTable(code);
             if (!L) { console.error(`  ${code} : absent de la table`); continue; }
             const e = await M.EtatImages.findById(`${SOURCE}/${L.slugSet}`).lean();
-            if (!e?.entrees) { console.log(`  ${code} : jamais collecté, rien à rejouer`); continue; }
-            const r = await joindreImages(M, L, L.slugSet, sourceDe(code, SOURCE), e.entrees, e.mesures || {}, dossierRapport, { silencieux: true });
+            if (!e?.entrees) { if (!simuler) console.log(`  ${code} : jamais collecté, rien à rejouer`); continue; }
+            const r = await joindreImages(M, L, L.slugSet, sourceDe(code, SOURCE), e.entrees, e.mesures || {}, dossierRapport, { silencieux: true, simuler });
+            if (simuler) {
+                simules++;
+                for (const [p, n] of Object.entries(r.preuves)) totaux[p] = (totaux[p] || 0) + n;
+                for (const x of r.nouvelles) nouvelles.push({ code, set: L.slugSet, ...x });
+                for (const x of r.remplacees) remplacees.push({ code, set: L.slugSet, ...x });
+                if (r.nouvelles.length || r.remplacees.length) console.log(`  ${code.padEnd(7)} ${r.nouvelles.length} image(s) nouvellement jointe(s) ${JSON.stringify(r.nouvelles.reduce((a, x) => (a[x.preuve] = (a[x.preuve] || 0) + 1, a), {}))} · ${r.remplacees.length} remplacée(s)`);
+                continue;
+            }
             console.log(`  ${code.padEnd(7)} ${r.imagesOk} images · ${r.cartesCouvertes} carte(s) couverte(s) / ${r.cartesDuSet}${r.emplacements ? ` (deck : ${r.rattachements} rattachements)` : ''} · ${r.cartesSansImage} sans image · ${JSON.stringify(r.restes)} ${r.concordance ? '✅' : '❌'}`);
+        }
+        if (simuler) {
+            const f = path.join(dossierRapport, `simulation-jointure-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+            fs.mkdirSync(dossierRapport, { recursive: true });
+            fs.writeFileSync(f, JSON.stringify({ codes: codes.length, simules, preuves: totaux, nouvelles, remplacees }, null, 1));
+            console.log(`SIMULATION (rien d'écrit en base) : ${simules} codes simulés sur ${codes.length} demandés (les autres jamais collectés) · jointures par preuve ${JSON.stringify(totaux)} · ${nouvelles.length} image(s) qui seraient AJOUTÉES · ${remplacees.length} REMPLACÉE(S) — ${f}`);
         }
         await fermer(); return;
     }
