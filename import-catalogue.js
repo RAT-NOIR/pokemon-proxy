@@ -14,10 +14,6 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 
 const cheminFichier = process.argv[2];
-if (!cheminFichier) {
-    console.error("Usage : node import-catalogue.js chemin/vers/products_singles_6.json");
-    process.exit(1);
-}
 
 const catalogueProduitSchema = new mongoose.Schema({
     idProduct: { type: Number, required: true, unique: true },
@@ -64,6 +60,10 @@ catalogueProduitSchema.index({ idExpansion: 1 });
 const CatalogueProduit = mongoose.model('CatalogueProduit', catalogueProduitSchema, 'catalogue_produits');
 
 async function main() {
+    if (!cheminFichier) {
+        console.error("Usage : node import-catalogue.js chemin/vers/products_singles_6.json");
+        process.exit(1);
+    }
     if (!process.env.MONGODB_URI) {
         console.error("MONGODB_URI n'est pas défini (variable d'environnement ou fichier .env).");
         process.exit(1);
@@ -123,7 +123,9 @@ async function main() {
     await mongoose.disconnect();
 }
 
-main().catch(err => {
+// la règle des dates, sa SEULE définition : l'import quotidien (import-catalogue-quotidien.js) la lit ici
+module.exports = { estDateValide };
+if (require.main === module) main().catch(err => {
     console.error("❌ Erreur import :", err);
     process.exit(1);
 });
