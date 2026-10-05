@@ -9,13 +9,15 @@
 //   1. LISTES TRONQUÉES (§21 n°7, résolu le 2026-09-15 : le serveur ignore `?page=`, la suite vient d'un cadre Turbo) :
 //      une liste d'ANCIENNE forme (relevé absent ou par `page`) dont la longueur est un multiple de 100 est retirée de
 //      l'état (mesures gardées) et son set REMIS en file, avec `remisEnFileLe` et `remisEnFileMotif` (§23). Une liste
-//      de NOUVELLE forme (relevé par `lot`, dernier lot sans suite) est complète : gardée.
+//      de NOUVELLE forme (relevé par `lot`) est jugée par son relevé (artofpkm.js, releveComplet) : complète, gardée ;
+//      incomplète, retirée et remise en file quelle que soit sa longueur.
 //   2. ENFILE tout set dont le texte est `verifie` et concordant, et qui a une source (sourceDe). Sans source : LISTÉ.
 // Un `refuse` d'une autre cause n'est jamais remis en attente ici (§23 : on relit la liste, on ne la vide pas).
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const { ouvrirConnexions } = require('./garde');
 const { TABLE, TABLE_AUTO } = require('./table-sets');
 const { sourceDe } = require('./sources-sets');
+const { releveComplet } = require('./artofpkm');
 const { sourcesDeployees, aiguillageDeploye, lignesDeployees } = require('./sources-deployees');
 
 const aBlanc = process.argv.includes('--a-blanc');
@@ -32,8 +34,12 @@ const aBlanc = process.argv.includes('--a-blanc');
     for (const d of etats) {
         for (const [id, liste] of Object.entries(d.entrees || {})) {
             const releve = d.pagesListe?.[id];
-            const nouvelleForme = Array.isArray(releve) && releve.length && releve.every(p => 'lot' in p) && releve.at(-1).suite === null;
-            if (nouvelleForme || !liste.length || liste.length % 100 !== 0) continue;
+            // la complétude se lit dans le RELEVÉ par la règle du lecteur (artofpkm.js, releveComplet) — relecture du 2026-10-06 : ce test
+            // exigeait `suite === null`, la forme du 2026-09-15 ; le relevé du nouveau gabarit porte `suites`, et toute liste neuve de 100
+            // ou 200 entrées aurait été effacée et remise en file à chaque passage. Sans relevé de lots (forme ancienne) : un multiple de
+            // 100 reste suspect, comme avant.
+            const complet = releveComplet(releve);
+            if (complet === true || !liste.length || (complet === null && liste.length % 100 !== 0)) continue;
             const code = codeDeSlug.get(d._id.slice('artofpkm/'.length));
             if (d.verrou?.depuis) { console.log(`   ⚠️ ${d._id} liste ${id} (${liste.length}) tronquée mais VERROU présent : non touchée`); continue; }
             console.log(`   TRONQUÉE ${String(code).padEnd(7)} ${d._id} liste ${id} : ${liste.length} entrées · relevé ${JSON.stringify(releve ?? null)}`);

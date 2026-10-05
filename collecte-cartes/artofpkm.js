@@ -69,10 +69,43 @@ const compteRequetes = () => _compte;
  * ignore le paramètre rend la page 1 : 0 nouvelle, arrêt, UNE requête perdue). Chaque page imprime son
  * compte : un paramètre ignoré se VOIT, il ne se devine pas.
  */
-async function listerSet(id) {
+// 🔴 LE SITE A CHANGÉ DE GABARIT (constaté le 2026-10-05, date de la refonte inconnue) — et le lecteur rendait ZÉRO entrée pour TOUS les
+// sets, sans erreur : l'original est passé de `href` à `data-lightbox-src`, `href` pointe la page de la carte, l'ordre des attributs a
+// changé ; les lots suivants se chargent par des cadres dont l'adresse porte d'autres paramètres (`card_batches?direction=asc&amp;…
+// &amp;offset=100&amp;sort=number`) et des SOUS-SECTIONS (`subset=625`). Le collecteur a refusé ces sets (« liste vide », garde du
+// 2026-10-05) au lieu de les déclarer vérifiés, et l'audit les a rangés « liste vide chez artofpkm » : la sonde fabriquait le défaut.
+// Les deux gabarits se lisent ci-dessous ; une entrée sans original reconnaissable est COMPTÉE et dite, jamais avalée.
+// `(?:^|\s)` : le PREMIER attribut d'une balise suit `<a ` et n'a pas d'espace devant lui dans la chaîne capturée (le titre de l'ancien
+// gabarit, premier attribut, sortait vide — trouvé par le banc le 2026-10-06)
+const attribut = (s, nom) => { const m = s.match(new RegExp(`(?:^|\\s)${nom}="([^"]*)"`)); return m ? m[1] : null; };
+const ORIGINAL = /^https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+$/;
+
+/** Les entrées d'UNE page de liste (les deux gabarits) et ses cadres de lots suivants — pur, testé sur des extraits réels. */
+function lireListe(html) {
+    const entrees = [];
+    let sansOriginal = 0;
+    for (const m of String(html).matchAll(/<a\s([^>]*data-lightbox-url="\/sets\/(\d+)\/card\/(\d+)"[^>]*)>([\s\S]*?)<\/a>/g)) {
+        const a = m[1];
+        const original = [attribut(a, 'data-lightbox-src'), attribut(a, 'href')].find(u => ORIGINAL.test(u || ''));
+        if (!original) { sansOriginal++; continue; }
+        const vignette = (m[4].match(/<img[^>]*\s(?:src|data-src)="([^"]+)"/) || [])[1] || null;
+        entrees.push({ titre: decode(attribut(a, 'data-lightbox-title') || ''), sourceSetId: Number(m[2]), n: Number(m[3]), original, cleCdn: original.split('/').pop(), vignette });
+    }
+    const cadres = [...String(html).matchAll(/<turbo-frame[^>]*\ssrc="\/(sets\/\d+\/card_batches\?[^"]+)"/g)].map(m => decode(m[1]));
+    return { entrees, cadres, sansOriginal };
+}
+
+// 🔴 UNE SOUS-SECTION EST UN SET À PART (relu le 2026-10-06). Un kit à deux decks (206, Leafeon vs Metagross Expert Deck) n'a AUCUNE
+// carte à sa racine ; ses deux decks se chargent par des cadres `subset=642` / `subset=643`, et leurs liens pointent
+// `/sets/643/card/1` — un AUTRE identifiant de set, les mêmes n que le premier deck. La clé d'une entrée est donc (sourceSetId, n) :
+// par n seul, le second deck était jeté comme « déjà vu », et sa page demandée sous l'id du parent rendait 404 (ou une autre carte).
+// Mesuré avant de changer : sur les 27 969 entrées des 346 listes en base, 0 porte un sourceSetId différent de sa liste.
+const cleEntree = e => `${e.sourceSetId}/${e.n}`;
+
+/** Le parcours d'une liste, lot après lot — pur : `lire(chemin)` rend le HTML d'une page (testé sans requête). */
+async function parcourirListe(id, lire, { maxLots = 60, journal = console.log } = {}) {
     const entrees = [];
     const vuesN = new Set();
-    const re = /<a [^>]*data-lightbox-title="([^"]*)"[^>]*data-lightbox-url="\/sets\/(\d+)\/card\/(\d+)"[^>]*href="(https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+)"[^>]*>\s*<img[^>]*(?:src|data-src)="([^"]+)"/g;
     // ⚠️ La taille de page est celle OBSERVÉE (4 listes arrêtées à 100 pile), pas celle de la page 1 : sinon
     // un set de 48 cartes, page « pleine » par définition, demanderait une page 2 pour rien.
     const taillePage = TAILLE_PAGE;
@@ -85,43 +118,74 @@ async function listerSet(id) {
     // arrêt quand un lot n'apporte aucun n nouveau, ou quand il n'y a plus de cadre. Chaque lot imprime son compte.
     const releve = [];
     Object.defineProperty(entrees, 'pages', { value: releve, enumerable: false });
-    let chemin = `sets/${id}/cards`;
-    for (let lot = 1; chemin && lot <= 60; lot++) {
-        const html = (await requete(`${BASE}${chemin}`)).data;
-        let lues = 0, nouvelles = 0;
-        for (const m of html.matchAll(re)) {
-            lues++;
-            const n = Number(m[3]);
-            if (vuesN.has(n)) continue;
-            vuesN.add(n); nouvelles++;
-            entrees.push({ titre: decode(m[1]), sourceSetId: Number(m[2]), n, original: m[4], cleCdn: m[4].split('/').pop(), vignette: m[5] });
-        }
-        const suite = html.match(/<turbo-frame[^>]*\ssrc="\/(sets\/\d+\/card_batches\?offset=\d+)"/);
-        releve.push({ lot, chemin, lues, nouvelles, suite: suite ? suite[1] : null });
-        console.log(`   liste ${id} lot ${lot} (${chemin}) : ${lues} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})${suite ? ` → ${suite[1]}` : ' · pas de lot suivant'}`);
-        chemin = nouvelles && suite ? suite[1] : null;
+    // une FILE de cadres (le lot suivant ET les sous-sections), chacun lu une fois ; un cadre qui n'apporte aucun n nouveau n'ouvre pas
+    // les siens (un serveur qui ignorerait un paramètre rendrait la même page : 0 nouvelle, arrêt de cette branche) ; 60 lots au plus
+    const file = [`sets/${id}/cards`], vus = new Set(file);
+    let sansOriginal = 0;
+    for (let lot = 1; file.length && lot <= maxLots; lot++) {
+        const chemin = file.shift();
+        const L = lireListe(await lire(chemin));
+        let nouvelles = 0;
+        for (const e of L.entrees) { if (vuesN.has(cleEntree(e))) continue; vuesN.add(cleEntree(e)); nouvelles++; entrees.push(e); }
+        sansOriginal += L.sansOriginal;
+        // la page RACINE ouvre toujours ses cadres : un kit à deux decks n'y montre AUCUNE carte, seulement ses sous-sections
+        const suites = (nouvelles || lot === 1) ? L.cadres.filter(c => !vus.has(c)) : [];
+        for (const c of suites) { vus.add(c); file.push(c); }
+        releve.push({ lot, chemin, lues: L.entrees.length, nouvelles, sansOriginal: L.sansOriginal, suites });
+        journal(`   liste ${id} lot ${lot} (${chemin}) : ${L.entrees.length} entrées lues, ${nouvelles} nouvelles (cumul ${entrees.length})${L.sansOriginal ? ` · ⚠️ ${L.sansOriginal} lien(s) sans original reconnaissable` : ''}${suites.length ? ` → ${suites.length} cadre(s) à suivre` : ' · pas de lot suivant'}`);
     }
-    if (entrees.length && entrees.length % taillePage === 0) console.warn(`   ⚠️ liste ${id} : ${entrees.length} entrées, un multiple de ${taillePage} — un compte rond se vérifie (§21 n°7)`);
+    // Les cadres NON LUS voyagent avec la liste, comme le relevé : l'appelant refuse une liste tronquée au lieu de la « vérifier ».
+    Object.defineProperty(entrees, 'cadresNonLus', { value: file.length, enumerable: false });
+    if (file.length) journal(`   ⚠️ liste ${id} : arrêt à ${maxLots} lots, ${file.length} cadre(s) non lus — la liste est INCOMPLÈTE`);
+    if (sansOriginal) journal(`   ⚠️ liste ${id} : ${sansOriginal} lien(s) de carte sans original reconnaissable — gabarit à relire`);
+    if (entrees.length && entrees.length % taillePage === 0) journal(`   ⚠️ liste ${id} : ${entrees.length} entrées, un multiple de ${taillePage} — un compte rond se vérifie (§21 n°7)`);
     return entrees;
 }
+const listerSet = id => parcourirListe(id, async chemin => (await requete(`${BASE}${chemin}`)).data);
 
-/** Les faits de la page d'une carte. */
-async function pageCarte(id, n) {
-    const html = (await requete(`${BASE}sets/${id}/card/${n}`)).data;
+/** La liste est-elle COMPLÈTE, relu dans son RELEVÉ — la seule trace qui survit au passage par l'état Mongo (`cadresNonLus`, propriété non
+ *  énumérable, s'y perd). true : chaque cadre ouvert a été lu et chaque lot suivant a apporté des cartes ; false : un cadre non lu, ou un
+ *  lot suivant SANS RIEN DE NOUVEAU — vide (page anti-robot) ou répété (un serveur qui ignore le paramètre rend la page 1) : la page
+ *  précédente annonçait une suite, et la branche s'est arrêtée sans la lire ; null : pas un relevé de lots (inconnu).
+ *  La forme du 2026-09-15 (`suite`, un cadre par lot) reste lue : complète si le dernier lot n'a pas de suite. */
+function releveComplet(releve) {
+    if (!Array.isArray(releve) || !releve.length || !releve.every(p => p && 'lot' in p)) return null;
+    if (!releve.some(p => 'suites' in p)) return releve.at(-1).suite === null;
+    const lus = new Set(releve.map(p => p.chemin));
+    const nonLus = releve.flatMap(p => p.suites || []).filter(c => !lus.has(c));
+    const steriles = releve.filter(p => p.lot > 1 && !p.nouvelles);
+    return !nonLus.length && !steriles.length;
+}
+
+/** Les faits de la page d'une carte, les DEUX gabarits (voir lireListe) — pur, testé sur des extraits réels.
+ *  Nouveau gabarit : le numéro n'est plus dans `div.italic`, il ouvre le <title> (« 001/187 Budew | The Art of Pokémon ») ; le nom
+ *  japonais est un h2 ; l'illustrateur un lien direct ; l'original l'image de la galerie (index 0) ; le set le lien de retour. La RARETÉ
+ *  n'y figure plus : null, jamais devinée (elle ne sert qu'au dernier départage des sets Gym). */
+function lirePageCarte(html) {
+    html = String(html);
     const prendre = re => { const m = html.match(re); return m ? decode(m[1].replace(/<[^>]+>/g, '')).trim() : null; };
-    const numTot = prendre(/<div class="italic">([^<]+)<\/div>/);
+    const premier = (...res) => { for (const re of res) { const v = prendre(re); if (v) return v; } return null; };
+    let numTot = prendre(/<div class="italic">([^<]+)<\/div>/);
+    // le numéro du <title> doit porter un CHIFFRE : « Pikachu/Raichu LEGEND » n'est pas un numéro sur un total
+    if (!numTot) { const t = prendre(/<title>([^<]+)<\/title>/); const m = t && t.match(/^\s*([A-Za-z-]*\d+[A-Za-z]*\/\S+)\s/); numTot = m ? m[1] : null; }
     const [numero, total] = numTot ? numTot.split('/').map(s => s.trim()) : [null, null];
+    // L'image de la GALERIE d'abord (nouveau gabarit) : une page de carte peut porter des tuiles d'AUTRES cartes, rendues par le composant
+    // de la liste — l'ancien sélecteur, essayé en premier, aurait pris la première d'entre elles (relecture du 2026-10-06).
+    const galerie = (html.match(/<img[^>]*data-gallery-overlay-index-param="0"[^>]*>/) || [])[0];
+    const original = (galerie && ORIGINAL.test(attribut(galerie, 'src') || '') ? attribut(galerie, 'src') : null)
+        || (!galerie && (html.match(/<img class="w-full card-cut card-ratio[^"]*"[^>]*src="(https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+)"/) || [])[1]) || null;
     return {
         numero: numero || null, total: total || null,
         nomEn: prendre(/<h1[^>]*>([^<]+)<\/h1>/),
-        nomJa: prendre(/<h3 class="ja[^"]*"[^>]*>([^<]+)<\/h3>/),
-        illustrateur: prendre(/Illus\.\s*<\/span>\s*<a[^>]*href="\/illustrators\/[^"]*"[^>]*>\s*<span>([^<]+)<\/span>/),
+        nomJa: premier(/<h3 class="ja[^"]*"[^>]*>([^<]+)<\/h3>/, /<h2 class="ja[^"]*"[^>]*>([^<]+)<\/h2>/),
+        illustrateur: premier(/Illus\.\s*<\/span>\s*<a[^>]*href="\/illustrators\/[^"]*"[^>]*>\s*<span>([^<]+)<\/span>/, /Illus\.\s*<span[^>]*>\s*<a[^>]*href="\/illustrators\/[^"]*"[^>]*>([^<]+)<\/a>/),
         rarete: prendre(/href="\/rarities\/\d+"[^>]*>[\s\S]*?<span class="font-bold">([^<]+)<\/span>/),
-        setNomSource: prendre(/<div class="font-bold">([^<]+)<\/div><div class="ja[^"]*">/),
+        setNomSource: premier(/<div class="font-bold">([^<]+)<\/div><div class="ja[^"]*">/, /<a[^>]*href="\/sets\/\d+"[^>]*><svg[\s\S]*?<\/svg>([^<]+)<\/a>/),
         setNomJa: prendre(/<div class="font-bold">[^<]+<\/div><div class="ja[^"]*">([^<]+)<\/div>/),
-        original: (html.match(/<img class="w-full card-cut card-ratio[^"]*"[^>]*src="(https:\/\/cdn\.artofpkm\.com\/[a-z0-9]+)"/) || [])[1] || null
+        original: original || null
     };
 }
+async function pageCarte(id, n) { return lirePageCarte((await requete(`${BASE}sets/${id}/card/${n}`)).data); }
 
 /** Dimensions d'une image depuis ses premiers octets (WebP, PNG, JPEG). */
 function dimensions(buf) {
@@ -160,4 +224,4 @@ async function telecharger(url) {
     return { buffer: buf, octets: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), ...dimensions(buf), type: r.headers['content-type'] || null };
 }
 
-module.exports = { listerSet, pageCarte, enTeteImage, telecharger, dimensions, compteRequetes, BASE, UA };
+module.exports = { listerSet, parcourirListe, releveComplet, cleEntree, pageCarte, lireListe, lirePageCarte, enTeteImage, telecharger, dimensions, compteRequetes, BASE, UA };

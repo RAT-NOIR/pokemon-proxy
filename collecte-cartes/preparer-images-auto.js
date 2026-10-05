@@ -149,6 +149,8 @@ async function sousVerrouGlobal(M, travail) {
                 const w = [];
                 for (const id of S.ids) {
                     const entrees = etat?.entrees?.[id]?.length ? etat.entrees[id] : await src.listerSet(id);
+                    // une liste fraîche INCOMPLÈTE ne s'écrit pas : le collecteur la reprendrait de l'état sans la relire (relecture du 2026-10-06)
+                    if (!etat?.entrees?.[id]?.length && src.releveComplet(entrees.pages) !== true) { bilan.push(`${code.padEnd(7)} ${String(id).padStart(4)} ❌ liste INCOMPLÈTE (${entrees.cadresNonLus} cadre(s) non lus, ou un lot suivant vide) : rien d'écrit`); continue; }
                     const mesures = etat?.mesures?.[id]?.length ? etat.mesures[id] : [];
                     if (!mesures.length) for (const e of entrees.slice(0, 3)) mesures.push({ url: e.original, ...(await src.enTeteImage(e.original)) });
                     await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees, [`pagesListe.${id}`]: entrees.pages || etat?.pagesListe?.[id] || null, [`mesures.${id}`]: mesures, phase: 'mesure', derniereRequete: new Date() }, $setOnInsert: { debute: new Date() } }, { upsert: true });

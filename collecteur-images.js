@@ -54,6 +54,7 @@ const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une dé
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
+const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
@@ -191,7 +192,18 @@ async function collecterSet(code, M, dossierRapport) {
     // ---- 1. liste + 2. mesure, par set source ------------------------------------------------
     for (const id of S.ids) {
         if (!entrees[id]?.length) {
-            entrees[id] = await src.listerSet(id);
+            const liste = await src.listerSet(id);
+            // une liste TRONQUÉE (cadre non lu, lot suivant vide ou répété) ne se vérifie pas : elle n'est pas écrite comme liste du set,
+            // son relevé l'est — relecture du 2026-10-06 ; la règle est celle du relevé (src.releveComplet), la même que
+            // remplir-file-images.js lit en base. Une page vide peut être passagère (anti-robot) : l'unité REVIENT en file, en queue, pas
+            // avant 10 min, 3 passages au plus (issue-unite.js), puis refuse — la cause écrite sur l'unité. Rien n'est joint.
+            if (src.releveComplet(liste.pages) !== true) {
+                const cause = `liste artofpkm ${id} incomplète : ${liste.cadresNonLus} cadre(s) non lus, ou un lot suivant vide ou répété (relevé dans pagesListe.${id})`;
+                console.error(`❌ ${code} : ${cause} — rien n'est téléchargé, l'unité repasse en file.`);
+                await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`pagesListe.${id}`]: liste.pages || null, phase: 'liste-incomplete', fini: new Date() } });
+                await liberer(); return { code, etat: 'incomplet-transitoire', erreur: cause, sansJointure: true };
+            }
+            entrees[id] = liste;
             // `pagesListe` : page, entrées lues, nouvelles — la preuve d'une pagination, en base et pas en log.
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], [`pagesListe.${id}`]: entrees[id].pages || null, phase: 'liste', derniereRequete: new Date() } });
         }
@@ -244,29 +256,39 @@ async function collecterSet(code, M, dossierRapport) {
     // largeur : `joindreImages` ne lit que `etat: 'ok'`, donc elle ne joint rien, et le jour où la vue
     // pleine carte existera on saura lesquelles reprendre sans redemander un octet au tiers.
     let telecharges = 0, sautes = 0, echecs = 0, tropPetits = 0;
+    // 🔴 CHAQUE ENTRÉE SOUS SON SET SOURCE (relecture du 2026-10-06) : une sous-section de kit est un set à part chez artofpkm
+    // (/sets/643/card/1 sous la liste 206). L'id de la LISTE ne désigne pas la carte — sa page, sa clé et son document se prennent sous
+    // `e.sourceSetId`. Sur les 27 969 entrées déjà en base, les deux sont égaux : rien ne change pour elles.
+    const sidDe = (e, id) => e.sourceSetId ?? id;
     for (const id of S.ids) {
-        const faites = new Set((await M.Image.find({ source: SOURCE, sourceSetId: id, sha256: { $ne: null } }).select('n').lean()).map(x => x.n));
+        const sids = [...new Set(entrees[id].map(e => sidDe(e, id)))];
+        const faites = new Set((await M.Image.find({ source: SOURCE, sourceSetId: { $in: sids }, sha256: { $ne: null } }).select('sourceSetId n').lean()).map(x => `${x.sourceSetId}/${x.n}`));
         for (const e of entrees[id]) {
             if (arretDemande) break;
-            if (faites.has(e.n)) { sautes++; continue; }
-            const _id = `${SOURCE}/${id}/${e.n}`;
+            const sid = sidDe(e, id);
+            if (faites.has(`${sid}/${e.n}`)) { sautes++; continue; }
+            const _id = `${SOURCE}/${sid}/${e.n}`;
             try {
                 const deja = await M.Image.findById(_id).lean();
                 if (deja && deja.cleCdn && deja.cleCdn !== e.cleCdn) console.warn(`   ⚠️ ${_id} : clé CDN changée (${deja.cleCdn} -> ${e.cleCdn}) — mise à jour de la source, journalisée.`);
-                const faits = await src.pageCarte(id, e.n);
+                const faits = await src.pageCarte(sid, e.n);
+                // L'original de la page est celui de sa GALERIE (lirePageCarte la lit avant tout autre sélecteur : une page qui porte des
+                // tuiles d'autres cartes ne fait plus prendre l'une d'elles) — et il est à jour même quand la liste est une liste ancienne
+                // reprise de l'état. Un désaccord avec la liste se DIT : il ne doit pas arriver sur une liste fraîche (mesuré égal sur 552/1).
+                if (faits.original && faits.original !== e.original) console.warn(`   ⚠️ ${_id} : l'original de la page (${faits.original.split('/').pop()}) n'est pas celui de la liste (${e.cleCdn}).`);
                 const img = await src.telecharger(faits.original || e.original);
                 if (!img.w || img.w < LARGEUR_MIN) {
                     tropPetits++;
                     console.warn(`   ⤵️ ${_id} « ${e.titre} » : ${img.w ?? '?'} px de large < ${LARGEUR_MIN} — ÉCARTÉE, comptée, non servie.`);
-                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: id, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit' } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit' } }, { upsert: true });
                     continue;
                 }
                 const ext = img.fmt === 'webp' ? 'webp' : img.fmt === 'png' ? 'png' : 'jpg';
-                const cleR2 = `${SOURCE}/${id}/${e.n}.${ext}`;
+                const cleR2 = `${SOURCE}/${sid}/${e.n}.${ext}`;
                 await r2.deposerBinaire(bucket, cleR2, img.buffer, img.type || `image/${ext}`);   // R2 AVANT la ligne
                 await M.Image.updateOne({ _id }, {
                     $set: {
-                        source: SOURCE, sourceSetId: id, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, cleR2,
+                        source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, cleR2,
                         sha256: img.sha256, octets: img.octets, w: img.w, h: img.h, fmt: img.fmt,
                         numero: faits.numero, total: faits.total, nomEn: faits.nomEn, nomJa: faits.nomJa, illustrateur: faits.illustrateur, rarete: faits.rarete,
                         setNomSource: faits.setNomSource, setNomJa: faits.setNomJa, set: slug, telechargeLe: new Date(), etat: 'ok',
@@ -279,7 +301,7 @@ async function collecterSet(code, M, dossierRapport) {
             } catch (err) {
                 echecs++;
                 console.warn(`   ✗ ${_id} : ${err.message}`);
-                await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: id, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, etat: 'echec', erreur: err.message } }, { upsert: true });
+                await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, etat: 'echec', erreur: err.message } }, { upsert: true });
             }
         }
     }
@@ -353,7 +375,9 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // par leur set SOURCE, qui est la vraie clé ; et on ne réécrit PAS le document image (l. suivante), qui appartient à
     // la base — lui poser la mention « motif non distingué » la ferait porter à la base.
     const partagees = !!S?.setDeBase;
-    const images = await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: S.ids }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean();
+    // les sous-sections de kit sont des sets source à part (2026-10-06) : leurs ids viennent des entrées de la liste
+    const idsSource = [...new Set([...S?.ids || [], ...(S?.ids || []).flatMap(id => (entrees?.[id] || []).map(e => e.sourceSetId).filter(x => x != null))])];
+    const images = await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: idsSource }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean();
     // 🔑 LA MENTION VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
     // (motifs Master Ball, Poké Ball) qui partagent le numéro du set de base ; artofpkm, lui, ne publie qu'UNE image par
     // NUMÉRO — mesuré : Terastal Festival ex, 381 numéros distincts, aucun doublon. Leur visuel est donc le bon numéro du
@@ -406,6 +430,14 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 if (parRarete.length === 1) { cands = parRarete; preuve = 'nom+rarete'; }
             }
         }
+        // une image de SOUS-SECTION (set source hors des ids de la ligne) ne se joint que par le numéro ET le nom — collecte-cartes/
+        // sous-section-image.js (2026-10-06 : un deck numéroté depuis 1 désignait par le numéro seul une carte de l'autre deck)
+        const gss = jointureSousSection(im, cands, preuve, S?.ids, nomImage, { correction: !!corr });
+        if (cands.length && !gss.cands.length) {
+            restes.push({ set: slug, type: 'image-sous-section-non-confirmee', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'} (sous-section ${im.sourceSetId}) -> ${cands.map(c => `${c._id} « ${c.nomEn} »`).join(', ')} : ${gss.raison}`, le: new Date() });
+            continue;
+        }
+        cands = gss.cands; preuve = gss.preuve;
         if (cands.length === 1) resolues.push({ im, carteId: cands[0]._id, c: cands[0], preuve });
         else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
         else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
