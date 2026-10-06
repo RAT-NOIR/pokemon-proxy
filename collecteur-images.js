@@ -58,6 +58,7 @@ const { jointureSousSection } = require('./collecte-cartes/sous-section-image');
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
+const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
@@ -724,6 +725,17 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // de TEXTE prend aussi depuis le 2026-09-14, donc les deux ne peuvent pas doubler la cadence.
             const sourceDuSet = suivant.source || SOURCE;
             let b;
+            // 🔴 BULBAPEDIA EST SUSPENDU (2026-10-04, 403 Cloudflare `cf-mitigated: challenge` : un défi anti-robot, pas une cadence — §73).
+            // Plus AUCUNE requête à Bulbagarden, ni l'API ni les fichiers : la règle s'écrit par les sources EN SERVICE (§51). Une unité
+            // Bulbapedia attend 24 h, sa cause écrite, sans rien demander à personne. 🔴 Et elle faisait TOMBER le worker (2026-10-06) :
+            // l'appel ci-dessous n'a qu'un `finally` ; l'unité CEL (Celebrations, sans page) levait dans sa résolution, le worker
+            // redémarrait, l'unité « figée » était reprise 10 min plus tard — en boucle depuis le 2026-10-05 22:12 UTC.
+            // la décision vit dans collecte-cartes/sources-en-service.js, lue aussi par l'alimentateur (une seule adresse, §21 bis)
+            if (SOURCES_SUSPENDUES[sourceDuSet]) {
+                console.error(`⏸️ ${suivant._id} : source ${sourceDuSet} SUSPENDUE — remise en attente 24 h, aucune requête.`);
+                await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-suspendue', pasAvant: new Date(Date.now() + 24 * 3600 * 1000), erreur: `${sourceDuSet} ${SOURCES_SUSPENDUES[sourceDuSet]}` }, $unset: { pris: 1 } });
+                continue;
+            }
             if (sourceDuSet === 'bulbapedia') {
                 const bulbaImg = require('./collecteur-images-bulba');
                 await verrouGlobal.rendre();

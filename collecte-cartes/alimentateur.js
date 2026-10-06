@@ -24,6 +24,7 @@
 // à la main, set par set (décision du testeur, trois sets mesurés). Un set idth reste ici « sans source légale » pour l'alimentateur.
 const TIRAGES_SOURCES = { jp: 'artofpkm', intl: 'tcgdex+bulbapedia' };
 const { manqueTcgdex, choisirManqueReel } = require('./manque-reel');
+const { SOURCES_EN_SERVICE } = require('./sources-en-service');   // injectable dans choisirUnites et alimenter (les bancs)
 // 🔑 LE MANQUE RÉEL (2026-09-26, soir, collecte-cartes/manque-reel.js) : quand la règle par SET ne remplit pas la file, on
 // demande à la SOURCE ce qu'elle sert et que nous n'avons jamais tenté, carte par carte. La mesure lit les cartes de chaque
 // set occidental (grappe bridée : quelques minutes) — elle ne se refait donc qu'après ce délai quand la précédente n'a rien
@@ -37,7 +38,8 @@ const tirageDe = L => L.bulba?.tirage || (L.region === 'japonais' ? 'jp' : 'intl
  * La décision, pure. `manques` : [{ slug, n, sans }] ; `unites` : Map _id → unité de file_images.
  * @returns {{ inserer: object[], reprendre: object[], ecartes: Array<{slug, raison}> }}
  */
-function choisirUnites({ manques, ligneDe, sourceArtofpkm, setTcgdex, unites, texteFini, max = 10 }) {
+function choisirUnites({ manques, ligneDe, sourceArtofpkm, setTcgdex, unites, texteFini, max = 10, sourcesEnService = SOURCES_EN_SERVICE }) {
+    const enService = s => sourcesEnService.has(s);
     const inserer = [], reprendre = [], ecartes = [];
     const date = u => u.fini || u.pris || u.ajouteLe || null;
     for (const m of [...manques].sort((a, b) => b.sans - a.sans || b.n - a.n)) {
@@ -53,7 +55,9 @@ function choisirUnites({ manques, ligneDe, sourceArtofpkm, setTcgdex, unites, te
         } else {
             const t = setTcgdex(L);
             if (t) candidats.push({ _id: `tcgdex/${L.code}`, code: L.code, source: 'tcgdex', tcgdexSet: t.id, tcgdexNom: t.name, slug: m.slug, sans: m.sans });
-            candidats.push({ _id: L.code, source: 'bulbapedia', slug: m.slug, sans: m.sans });
+            // une source hors service (Bulbapedia depuis le 2026-10-04) ne reçoit plus d'unité : le worker la suspendrait aussitôt
+            if (enService('bulbapedia')) candidats.push({ _id: L.code, source: 'bulbapedia', slug: m.slug, sans: m.sans });
+            if (!candidats.length) { ecartes.push({ slug: m.slug, raison: 'occidental : aucun set TCGdex, et Bulbapedia est suspendu' }); continue; }
         }
         const passees = [];
         let decide = false;
@@ -95,7 +99,7 @@ async function manquesParSet(db) {
 // sien (version-code.js) ; l'outil à la main passe celui du worker lu dans sa balise, jamais le sien.
 // `plan` (outil à la main) : le résultat d'une simulation — il est ÉCRIT tel quel, sans seconde mesure (§31 : ce qui est écrit est ce
 // qui a été imprimé). Les écritures restent conditionnelles : insertion `$setOnInsert`, reprise filtrée sur l'état lu.
-async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler = false, M = null, maintenant = new Date(), forcerManque = false, unitePermise = null, version = require('../version-code').VERSION, plan = null } = {}) {
+async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler = false, M = null, maintenant = new Date(), forcerManque = false, unitePermise = null, version = require('../version-code').VERSION, plan = null, sourcesEnService = SOURCES_EN_SERVICE } = {}) {
     const refusees = [];
     // une unité refusée par la règle par set peut être rechoisie par le manque réel : elle ne se liste qu'une fois
     const permise = u => { if (!unitePermise) return true; const r = unitePermise(u.code || String(u._id).replace(/^tcgdex\//, '')); if (r && !refusees.some(x => x._id === u._id)) refusees.push({ _id: u._id, slug: u.slug, raison: r }); return !r; };
@@ -130,7 +134,8 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
         ligneDe: slug => parSlug.get(slug) || null,
         sourceArtofpkm: code => !!sourceDe(code),
         setTcgdex: L => { if (!apparier) return null; const d = setDeLaLigne(L, apparier); return d.set ? { id: d.set.id, name: d.set.name } : null; },
-        texteFini: slug => texte.get(slug) || null
+        texteFini: slug => texte.get(slug) || null,
+        sourcesEnService
     });
     R.inserer = R.inserer.filter(permise); R.reprendre = R.reprendre.filter(permise);
     // ── le manque réel, quand la règle par set laisse de la place

@@ -18,12 +18,16 @@ const lignes = {
     'Set-ZH': { code: 'zh1', slugSet: 'Set-ZH', region: null, bulba: { tirage: 'zh-hans' } },
     'Set-TH': { code: 'th1', slugSet: 'Set-TH', region: null, bulba: { tirage: 'th' } }
 };
+// 2026-10-06 : Bulbapedia est SUSPENDU (collecte-cartes/sources-en-service.js). Les cas ci-dessous éprouvent la logique de la file avec les
+// TROIS sources ouvertes — elle sert le jour où Bulbapedia rouvre ; le cas « par défaut » plus bas prouve qu'aujourd'hui rien ne naît pour lui.
+const TOUTES = new Set(['artofpkm', 'tcgdex', 'bulbapedia']);
 const base = {
     ligneDe: slug => lignes[slug] || null,
     sourceArtofpkm: code => code === 'jp1',
     setTcgdex: L => L.code === 'en1' ? { id: 'sv1', name: 'Set EN' } : null,
     texteFini: () => null,
-    max: 10
+    max: 10,
+    sourcesEnService: TOUTES
 };
 const manques = [
     { slug: 'Set-EN', n: 100, sans: 5 }, { slug: 'Set-JP', n: 80, sans: 80 }, { slug: 'Set-ZH', n: 200, sans: 200 },
@@ -53,6 +57,11 @@ verifier('texte recollecté APRÈS l\'unité : cause neuve, reprise de la 1re so
 const unitesDejaReprises = new Map([...unites, ['tcgdex/en1', { _id: 'tcgdex/en1', etat: 'fait', fini: new Date('2026-09-24T01:00:00Z'), alimCause: K.toISOString() }], ['en1', { _id: 'en1', etat: 'fait', fini: new Date('2026-09-24T02:00:00Z'), alimCause: K.toISOString() }]]);
 verifier('une cause ne sert qu\'UNE fois : pas de boucle', choisirUnites({ ...base, manques, unites: unitesDejaReprises, texteFini: slug => slug === 'Set-EN' ? K : null }).reprendre.length, 0);
 verifier('le plafond `max` est tenu', choisirUnites({ ...base, manques, unites: new Map(), max: 1 }).inserer.length, 1);
+// PAR DÉFAUT (les sources en service du module) : aucune unité Bulbapedia ne naît, et un occidental sans set TCGdex est écarté, NOMMÉ
+const { sourcesEnService: _, ...parDefaut } = base;
+const RD = choisirUnites({ ...parDefaut, manques, unites: new Map() });
+verifier('par défaut, Bulbapedia suspendu : aucune unité bulbapedia', RD.inserer.filter(u => u.source === 'bulbapedia').map(u => u._id), []);
+verifier('par défaut, un occidental sans set TCGdex est écarté avec sa raison', RD.ecartes.find(e => e.slug === 'Set-EN-sansTcg')?.raison, 'occidental : aucun set TCGdex, et Bulbapedia est suspendu');
 
 // ── LE MANQUE RÉEL, CARTE PAR CARTE (2026-09-26, soir) : « la file ne doit pas rester vide tant qu'un b) existe ». Le compte
 // par SET (`images.set`) laissait passer White Flare pour servi (Victini n°172 : une image dans le set, à un AUTRE numéro) ;
@@ -157,15 +166,15 @@ const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u
     };
     const db = { collection: n => { if (!cols[n]) throw new Error(`collection inattendue ${n}`); return cols[n]; } };
     const silencieux = { log() { }, error() { } };
-    const B = await alimenter(db, { M: {}, journal: silencieux, version: 'v-test', maintenant: K });
+    const B = await alimenter(db, { M: {}, journal: silencieux, version: 'v-test', maintenant: K, sourcesEnService: TOUTES });
     const u = cols.file_images.docs.get(L.code), etatManque = cols.collecte_images_etat.docs.get('alimentateur/manque-reel');
     verifier('manque réel en échec : la reprise de la règle par set a quand même lieu', [B.repris, u.etat], [1, 'attente']);
     verifier('une reprise efface tentatives et pasAvant, et garde sa clé dans l\'historique (alimCauses)', ['tentatives' in u, 'pasAvant' in u, u.alimCauses], [false, false, [K.toISOString()]]);
     // l'outil à la main écrit son PLAN (ce qu'il a imprimé), sans seconde mesure : la reprise du plan est appliquée telle quelle
     cols.file_images.docs.set(L.code, { _id: L.code, etat: 'fait', source: 'bulbapedia', fini: J, ordre: 1 });
-    const Pl = await alimenter(db, { simuler: true, M: null, journal: silencieux, version: 'v-test', maintenant: K, seuil: 99 });
+    const Pl = await alimenter(db, { simuler: true, M: null, journal: silencieux, version: 'v-test', maintenant: K, seuil: 99, sourcesEnService: TOUTES });
     cols.cartes.aggregate = () => { throw new Error('seconde mesure : le plan devait suffire'); };
-    const Bp = await alimenter(db, { plan: Pl, M: null, journal: silencieux, version: 'v-test', maintenant: K, seuil: 99 });
+    const Bp = await alimenter(db, { plan: Pl, M: null, journal: silencieux, version: 'v-test', maintenant: K, seuil: 99, sourcesEnService: TOUTES });
     verifier('un PLAN s\'écrit tel quel, sans relire les manques (aucune seconde mesure)', [Pl.reprendre.length, Bp.repris, cols.file_images.docs.get(L.code).etat], [1, 1, 'attente']);
     // revue du 2026-09-27 : trois unités en attente DIFFÉRÉE (pasAvant futur : une source inconnue du worker, une surcharge) ne sont pas
     // prenables — les compter dans le seuil affamait la file sans alerte. Seules les unités PRÊTES comptent.
@@ -173,7 +182,7 @@ const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u
     for (let n = 0; n < 3; n++) cols.file_images.docs.set(`x/${n}`, { _id: `x/${n}`, etat: 'attente', pasAvant: new Date(K.getTime() + 3600e3), resultat: 'source-inconnue', ordre: n });
     cols.file_images.docs.set(L.code, { _id: L.code, etat: 'refuse', source: 'bulbapedia', fini: J, ordre: 9 });
     cols.cartes.aggregate = () => ({ toArray: async () => [{ slug: L.slugSet, n: 10, sans: 4 }] });
-    const Bd = await alimenter(db, { M: null, journal: silencieux, version: 'v-test', maintenant: K });
+    const Bd = await alimenter(db, { M: null, journal: silencieux, version: 'v-test', maintenant: K, sourcesEnService: TOUTES });
     verifier('trois unités différées ne bloquent pas l\'alimentateur : il reprend ce qui manque', [Bd.rien ?? false, Bd.repris], [false, 1]);
     verifier('l\'échec du manque réel s\'écrit (état et raison), sans compter comme une mesure', [/liste TCGdex absente/.test(etatManque?.erreur || ''), etatManque?.enfilees, Object.keys(B.raisons).some(k => k.startsWith('manque réel NON MESURÉ'))], [true, undefined, true]);
     console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);

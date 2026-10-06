@@ -70,7 +70,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js',
     // ➕ 2026-09-24 : ce que le worker fait d'une unité finie (une surcharge passagère n'est plus un refus) — une remise en
     // file sous un commit antérieur retomberait en `refuse` au premier 503.
-    'collecte-cartes/issue-unite.js'];
+    'collecte-cartes/issue-unite.js',
+    // ➕ 2026-10-06 : les sources en service (Bulbapedia suspendu) — une unité enfilée sous un worker qui ne la connaît pas frapperait Bulbagarden
+    'collecte-cartes/sources-en-service.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma
