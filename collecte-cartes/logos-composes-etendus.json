@@ -1,5 +1,5 @@
 {
- "genere": "2026-10-06T22:54:02.711Z",
+ "genere": "2026-10-06T23:36:07.227Z",
  "par": "generer-logos-composes-etendus.js",
  "regle": "voir l'en-tête du générateur",
  "compositions": {
@@ -1655,6 +1655,18 @@
    "logo": null,
    "etiquette": "Zygarde-EX Perfect Battle Deck",
    "sous": "Japon"
+  },
+  "Master-Strategy-Deck-Building-Sets-Vol-2": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Master Strategy Deck Building Sets Vol 2",
+   "sous": "Chine · simplifié"
+  },
+  "Sky-Ruler": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sky Ruler",
+   "sous": "Chine · simplifié"
   }
  }
 }

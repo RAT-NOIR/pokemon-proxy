@@ -68,7 +68,12 @@ const TIRAGES = {
     6405: ['zh-hans', 'CS…C : CSCC'], 6404: ['zh-hans', 'CS…C : CSBC'],
     4339: ['jp', 'asymétrie : désignés en jp 1, en intl 0'], 4340: ['jp', 'asymétrie : désignés en jp 1, en intl 0'], 6638: ['jp', 'asymétrie : désignés en jp 1, en intl 0'],
     6637: ['jp', 'asymétrie : désignés en jp 1, en intl 0'], 6639: ['jp', 'asymétrie : désignés en jp 3, en intl 0'], 4343: ['jp', 'asymétrie : désignés en jp 8, en intl 0'],
-    5060: ['jp', 'asymétrie : désignés en jp 2, en intl 0']
+    5060: ['jp', 'asymétrie : désignés en jp 2, en intl 0'],
+    // (2026-10-07, testeur : « les sets sans page : propose toi-même la meilleure preuve de tirage pour chacun et applique-la ») — lues sur
+    // nos données, zéro requête : l'asymétrie CHINOISE (les cartes désignées sont imprimées en zh-hans, jamais en zh-hant) et la famille
+    6700: ['zh-hans', 'asymétrie : 57 désignés, 49 imprimés en zh-hans seul, 0 en zh-hant (Storming Emergence, Battle Elite) (AS4)'],
+    6635: ['zh-hans', 'famille : CSVM1C est zh-hans (CSVM2) ; asymétrie : 30 désignés, 25 en zh-hans seul, 1 en zh-hant seul'],
+    3354: ['intl', 'famille : MCD14, MCD16, MCD17, MCD22 sont intl (MCD19F)']
 };
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -123,6 +128,22 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
             const g = simples.get(k) || simples.set(k, { nom, numero: p.numero ?? null, attaques: p.attaques || [], produits: [] }).get(k);
             g.produits.push(p);
         }
+        // (2026-10-07) UNE RÉIMPRESSION DÉSIGNÉE A `numeroFiche: null` : si une même carte reçoit dans CE set des produits de DEUX numéros
+        // (Sky Ruler : Zygarde GX b098 et b206), le site lui montre une fiche sans numéro dont les liens ouvrent deux cartes — une fiche
+        // mélangée de plus, contre le cliquet du site (rat-market-site scripts/mesurer-liens-multiples.mjs : il ne peut que baisser). Ces
+        // produits ne sont pas désignés : ils deviennent des fiches simples, une par (nom, numéro), comme ce que la désignation ne rattache pas.
+        if (!existant) {
+            const parCarte = new Map(); for (const d of designes) (parCarte.get(d.carte._id) || parCarte.set(d.carte._id, []).get(d.carte._id)).push(d);
+            for (const [, ds] of parCarte) {
+                if (new Set(ds.map(d => nuNum(d.p.numero) ?? `p${d.p.idProduct}`)).size < 2) continue;
+                for (const d of ds) {
+                    designes.splice(designes.indexOf(d), 1);
+                    const nom = (d.p.nom || decomposerNomCardmarket(d.p.name ?? '').nom || '').trim(); if (!nom) continue;
+                    const k = `${nuNom(nom)}|${nuNum(d.p.numero) ?? `p${d.p.idProduct}`}`;
+                    (simples.get(k) || simples.set(k, { nom, numero: d.p.numero ?? null, attaques: d.p.attaques || [], produits: [], horsDesignation: 'la carte désignée aurait reçu plusieurs numéros dans ce set' }).get(k)).produits.push(d.p);
+                }
+            }
+        }
         // une fiche simple porte une impression (tirage, nom d'expansion) : refusée si une carte en base déclare déjà ce couple — elle
         // ferait naître ses fiches dans le set (sauf un set existant, dont le nom d'expansion est déjà le sien)
         const conflit = !existant && nomExp && declare.has(`${tirage}|${nomExp}`);
@@ -163,7 +184,10 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
             const parCarte = new Map(); for (const d of x.designes) { const v = parCarte.get(d.carte._id) || parCarte.set(d.carte._id, { ids: [], metas: new Set() }).get(d.carte._id); v.ids.push(d.p.idProduct); if (metaDe.get(d.p.idProduct) != null) v.metas.add(metaDe.get(d.p.idProduct)); }
             await C.bulkWrite([...parCarte].map(([id, v]) => ({ updateOne: { filter: { _id: id }, update: { $addToSet: { 'liens.idProduct': { $each: v.ids }, 'liens.idMetacards': { $each: [...v.metas] }, sets: x.slug } } } })), { ordered: false });
             const r = await CP.bulkWrite(x.designes.map(d => ({ updateOne: { filter: { _id: `${d.carte._id}|${d.p.idProduct}` }, update: { $setOnInsert: {
-                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: null,
+                // (2026-10-07) dans un set NEUF, le numéro Cardmarket du produit — le numéro de CE set, celui que la règle anti-mélange
+                // ci-dessus compare : sans lui, le site lit le slug, et un « Caterpie-V2 » sans numéro y comptait pour une autre carte que
+                // « Caterpie-V1-MCD19F2 » (14 fiches mélangées sur McDonald's 2019-2). Un set existant garde la règle d'avant (null).
+                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: x.existant ? null : (d.p.numero ?? null),
                 detail: `exp ${x.exp} n°${d.p.numero ?? '—'} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : métacarte Cardmarket ${metaDe.get(d.p.idProduct)} (une seule carte chez nous) = nom + attaques · carte déjà imprimée en ${x.tirage} · ${RISQUE}`,
                 verifieLe: le, route: `sans-page:${x.exp}` } }, upsert: true } })), { ordered: false });
             lignesPosees += r.upsertedCount;
