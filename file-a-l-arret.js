@@ -49,8 +49,18 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
     const alerte = await db.collection('collecte_images_etat').findOne({ _id: 'alerte/file-vide', active: true });
     if (alerte) console.log(`🔴 ALERTE FILE VIDE depuis ${new Date(alerte.depuis).toISOString()} (constatée ${new Date(alerte.constateLe).toISOString()}) : ${alerte.setsSansVisuelComplet} sets, ${alerte.cartesSansVisuel} cartes sans visuel, rien d'enfilable — ${JSON.stringify(alerte.raisons)}`);
     else if (!attente && !enCours.length) console.log(`⚠️ file vide et AUCUNE alerte écrite : le worker tourne sur un commit sans alimentateur, ou ne tourne pas`);
+    // Les imports quotidiens lancés par le worker (collecte-cartes/imports-quotidiens.js) : leur état, et leur alerte s'ils échouent.
+    const imports = await db.collection('collecte_images_etat').find({ _id: /^import-quotidien\// }).toArray();
+    // (relecture) un import en cours depuis moins de 45 min est du travail : la base de production bouge
+    const importEnCours = imports.some(i => i.enCours && Date.now() - new Date(i.dernierEssai) < 45 * 60000);
+    for (const imp of imports)
+        console.log(`import quotidien ${imp._id.slice(17)} : dernier passage ${imp.dernierEssai ? new Date(imp.dernierEssai).toISOString() : '—'} · ${imp.dernierResultat ?? '—'} (code ${imp.dernierCode ?? '—'}) · dernier import ${imp.succesLe ?? 'jamais'}`
+            + (imp.enCours ? (Date.now() - new Date(imp.dernierEssai) > 45 * 60000 ? ' · 🔴 « en cours » depuis plus de 45 min : interrompu (conteneur tué ?)' : ' · EN COURS') : ''));
+    for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/import-/, active: true }).toArray())
+        console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : code ${al.code}, essai ${al.essais} — ${String(al.extrait || '').split('\n').filter(Boolean).slice(-1)[0] ?? ''}`);
 
-    const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS);
+    const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS) || importEnCours;
+    if (importEnCours) console.log('🔴 un import quotidien est EN COURS (catalogue ou guide des prix) : la base de production écrit');
     console.log(bouge
         ? `\n🔴 LA FILE ÉCRIT. Toute mesure sur \`cartes\`, \`cartes_produits\` ou \`images\` prise maintenant est un INSTANTANÉ, pas un dénominateur. Attendre, ou dire dans le rapport que la file tournait.`
         : `\n✅ FILE À L'ARRÊT (rien en cours, aucun verrou de set frais, aucune écriture depuis plus de ${FRAIS_MS / 60000} min${frais.length ? ' ; un collecteur vivant dort sur son verrou global' : ''}). La mesure vaut, et le rapport doit le DIRE.`);

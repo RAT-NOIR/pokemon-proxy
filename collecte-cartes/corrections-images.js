@@ -29,6 +29,17 @@ const CORRECTIONS = [
     {
         cleR2: 'artofpkm/27/2.webp', carteId: 23766, nomEn: 'Pidgeot', lu: 'ピジョット LV.39 HP70, Illus. Keiko Fukuyama, No. 018', le: '2026-10-05',
         cause: 'Southern Islands : artofpkm titre « Pi, Southern Islands » (nom tronqué), classée irréductible au §24'
+    },
+    // (2026-10-07) LE NUMÉRO, quand la source ne l'écrit pas : `numero` est porté sur l'entrée de cartes.images (collecteur-images.js),
+    // jamais sur le document `images` (la source, telle qu'elle est). Lu sur le fichier R2, zone agrandie ×4 : « J m6a B/RGB », Illus.
+    // YOSHIROTTEN ; ⚠️ le Mew est VERT sur fond bleu — la couleur aurait dit « G », le numéro imprimé dit « B ».
+    {
+        cleR2: 'artofpkm/592/168.webp', carteId: 358696, nomEn: 'Mew', numero: 'B', lu: 'ミュウ HP60, J m6a B/RGB, Illus. YOSHIROTTEN', le: '2026-10-07',
+        cause: '30th Celebration (JP) : artofpkm ne numérote pas ce Mew ; une image du set sans numéro faisait passer tout le set en une fiche par document chez le site (31 fiches mélangées)'
+    },
+    {
+        cleR2: 'artofpkm/592/167.webp', carteId: 358696, nomEn: 'Mew', numero: 'G', lu: 'ミュウ, J m6a G/RGB, Illus. YOSHIROTTEN (fond vert)', le: '2026-10-07',
+        cause: '30th Celebration (JP) : le second Mew sans numéro chez artofpkm (le « R » n\'y est pas)'
     }
 ];
 const PAR_CLE = new Map(CORRECTIONS.map(c => [c.cleR2, c]));

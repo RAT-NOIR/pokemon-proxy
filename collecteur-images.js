@@ -53,6 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
+const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
@@ -390,7 +391,12 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     let jointes = 0, clesRefusees = 0;
     const preuves = {};
     const resolues = [];                  // passe 1 : la carte de chaque image ; passe 2 (plus bas) : l'écriture
-    for (const im of images) {
+    for (const imSource of images) {
+        // (2026-10-07) une correction lue à l'œil peut porter le NUMÉRO que la source n'écrit pas (artofpkm ne numérote pas le Mew
+        // « B/RGB » de 30th Celebration : une image du set sans numéro faisait passer TOUT le set en « une fiche par document » chez le
+        // site — 31 fiches mélangées). Seulement là où la source n'a rien : un numéro de la source n'est jamais remplacé.
+        const corrNumero = correctionDe(imSource.cleR2)?.numero;
+        const im = corrNumero != null && imSource.numero == null ? { ...imSource, numero: corrNumero, numeroLu: true } : imSource;
         let cands = [], preuve = null;
         const num = cleNumero(im.numero);
         // Une correction LUE À L'ŒIL passe avant le numéro (collecte-cartes/corrections-images.js : les deux témoins par
@@ -491,6 +497,9 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // 184, VSTAR Universe 163. Le §32 bis et le §45 l'avaient écrit ; la jointure du TEXTE et celle de Bulbapedia le
             // faisaient, celle-ci non (§21 bis). `numero: null` (sources sans numéro, Gym) reste une entrée par carte.
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, numero: entree.numero } } });
+            // un numéro LU À L'ŒIL (corrections-images.js) : la MÊME image (même cleR2), posée avant sans numéro, quitte cette place
+            // pour la sienne — sinon elle resterait deux fois, et l'entrée sans numéro garderait le set « une fiche par document »
+            if (im.numeroLu) await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, cleR2: im.cleR2, numero: null } } });
             await M.Carte.updateOne({ _id: c._id }, { $push: { images: entree }, $unset: { image: 1 } });
             cartesAvecImage.add(c._id); jointes++; preuves[preuve] = (preuves[preuve] || 0) + 1;
         }
@@ -697,6 +706,25 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // boucle (la file déjà pleine continue de tourner) — mais il crie.
             try { await alimenter(cx.db, { journal: console, M }); }   // M : le manque réel lit les cartes par le plan du collecteur TCGdex
             catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
+            // 🔑 LES IMPORTS QUOTIDIENS (testeur, 2026-10-06 : « sans cron Render payant, le worker lance lui-même, une fois par jour vers
+            // 5 h UTC, l'import du catalogue et celui du guide des prix ») — ENTRE deux unités, aucune image en cours ; les gardes de l'import
+            // vivent dans les deux scripts, lancés tels qu'à la main (collecte-cartes/imports-quotidiens.js, banc test-imports-quotidiens.js).
+            // (relecture) jamais sur un arrêt demandé ; et le verrou artofpkm est RENDU pendant l'import (il protège une cadence que l'import
+            // ne touche pas) — la tête de boucle le reprend, comme au réveil d'un sommeil
+            const etatImports = cx.db.collection('collecte_images_etat');
+            let importsDus = false;
+            try { importsDus = !arretDemande && importsActifs() && await aFaireImports({ E: etatImports }); }
+            catch (e) { console.error(`🔴 imports quotidiens : état illisible (${e.message})`); }
+            if (importsDus) {
+                await verrouGlobal.rendre();
+                try { await importsQuotidiens({ E: etatImports, journal: console }); }
+                catch (e) {
+                    console.error(`🔴 imports quotidiens en échec : ${e.message} — l'alerte n'a peut-être pas pu s'écrire`);
+                    // (relecture) une écriture d'état en échec laisserait l'import « à faire » : sans pause, la boucle reprendrait aussitôt
+                    await new Promise(r => setTimeout(r, 60 * 1000));
+                }
+                continue;
+            }
             // `pasAvant` : une unité remise en file après une surcharge de la source attend son délai (issue-unite.js).
             const suivant = await File.findOneAndUpdate({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: new Date() } }] }, { $set: { etat: 'en-cours', pris: new Date() } }, { sort: { ordre: 1 }, new: true }).lean();
             // 🔑 ON DORT SANS LE VERROU (2026-09-14). Le verrou global protège la CADENCE des requêtes chez la

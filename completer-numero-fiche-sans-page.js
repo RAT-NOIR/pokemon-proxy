@@ -27,10 +27,22 @@ const nu = n => String(n ?? '').trim().toUpperCase().replace(/^0+(?=\d)/, '') ||
     const lignes = await L.find({ slugSet: { $in: SETS }, preuve: 'metacarte+nom+attaques' }, { projection: { carteId: 1, idProduct: 1, slugSet: 1, numeroFiche: 1 } }).toArray();
     const NC = new Map((await prod.db.collection('numeros_cartes').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, numero: 1 } }).toArray()).map(n => [n.idProduct, n.numero]));
     const groupes = new Map(); for (const l of lignes) { const k = `${l.slugSet}|${l.carteId}`; (groupes.get(k) || groupes.set(k, []).get(k)).push(l); }
+    // 🔴 (2026-10-07) UNE CARTE QUI A DES FICHES NUMÉROTÉES DANS LE SET N'EST PAS TOUCHÉE : le site y PLACE le produit par son numeroFiche
+    // (lib/cardmarket.ts, placementParNumeroFiche) — un numéro Cardmarket qui ne serait aucune de ces fiches (« sans-fiche ») ferait
+    // DISPARAÎTRE le produit de la page, en silence (le cliquet des fiches mélangées ne le verrait pas). Ici, seulement les cartes sans
+    // aucune impression de l'expansion du set : le site ne s'y sert du champ que pour l'étiquette du lien.
+    const sets = new Map((await cx.db.collection('sets').find({ _id: { $in: SETS } }, { projection: { tirage: 1, region: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
+    const impsDe = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { 'impressions.tirage': 1, 'impressions.expansion': 1 } }).toArray()).map(c => [c._id, c.impressions || []]));
+    // (relecture) un set SANS nom d'expansion (Gem Packs) : le site y rapproche les impressions à expansion NULLE — la garde les compte
+    const aImpressionsDansLeSet = l => { const s = sets.get(l.slugSet); if (!s) return true; const t = s.tirage ?? s.region, e = [].concat(s.bulba?.expansion ?? []).filter(Boolean); return (impsDe.get(l.carteId) || []).some(i => i && i.tirage === t && (e.length ? e.includes(i.expansion) : i.expansion == null)); };
     const aPoser = [], causes = {};
     for (const [k, ls] of groupes) {
+        if (aImpressionsDansLeSet(ls[0])) { causes['la carte a des fiches numérotées dans le set (le site y placerait le produit)'] = (causes['la carte a des fiches numérotées dans le set (le site y placerait le produit)'] || 0) + ls.length; continue; }
         const nums = new Set(ls.map(l => nu(NC.get(l.idProduct))));
         if (nums.has(null)) { causes['un produit sans numéro Cardmarket'] = (causes['un produit sans numéro Cardmarket'] || 0) + ls.length; continue; }
+        // (relecture) un « numéro » sans chiffre n'en est pas un (Traditional-Chinese-Products : « SV-P », un code de set) — la règle du site
+        // (porteUnChiffre) ne le lirait pas non plus comme un numéro
+        if ([...nums].some(n => !/\d/.test(n))) { causes['numéro Cardmarket sans chiffre'] = (causes['numéro Cardmarket sans chiffre'] || 0) + ls.length; continue; }
         if (nums.size > 1) { causes['la carte a plusieurs numéros dans le set'] = (causes['la carte a plusieurs numéros dans le set'] || 0) + ls.length; continue; }
         for (const l of ls) if (l.numeroFiche == null || l.numeroFiche === '') aPoser.push({ _id: l._id, numeroFiche: String(NC.get(l.idProduct)).trim(), set: l.slugSet });
     }

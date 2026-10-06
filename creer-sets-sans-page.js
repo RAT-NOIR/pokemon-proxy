@@ -137,8 +137,9 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
             for (const [, ds] of parCarte) {
                 if (new Set(ds.map(d => nuNum(d.p.numero) ?? `p${d.p.idProduct}`)).size < 2) continue;
                 for (const d of ds) {
-                    designes.splice(designes.indexOf(d), 1);
+                    // (relecture) un produit sans nom lisible ne peut pas devenir une fiche simple : il reste désigné, jamais perdu en silence
                     const nom = (d.p.nom || decomposerNomCardmarket(d.p.name ?? '').nom || '').trim(); if (!nom) continue;
+                    designes.splice(designes.indexOf(d), 1);
                     const k = `${nuNom(nom)}|${nuNum(d.p.numero) ?? `p${d.p.idProduct}`}`;
                     (simples.get(k) || simples.set(k, { nom, numero: d.p.numero ?? null, attaques: d.p.attaques || [], produits: [], horsDesignation: 'la carte désignée aurait reçu plusieurs numéros dans ce set' }).get(k)).produits.push(d.p);
                 }
