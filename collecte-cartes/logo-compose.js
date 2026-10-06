@@ -28,7 +28,12 @@ const SOURCES = {
 
 const promoSerie = (tete, sous) => ({ famille: 'promos', logo: { serie: tete }, etoile: true, etiquette: 'PROMOS', ...(sous ? { sous } : {}) });
 const promoAsie = sous => ({ famille: 'promos', logo: null, etoile: true, etiquette: 'PROMOS', sous });
-const COMPOSITIONS = {
+// (2026-10-07) la TABLE ÉTENDUE : les 272 sets publiés sans logo propre que la table à la main ne nomme pas, un par ligne, écrits par
+// generer-logos-composes-etendus.js (ses règles dans son en-tête) et relus au commit. Lue sans repli : un fichier absent est une panne.
+const ETENDUES = require('./logos-composes-etendus.json').compositions;
+// (relecture) un fichier présent mais tronqué — sans `compositions`, ou vide — ferait perdre 272 sets au plan SANS une erreur
+if (!ETENDUES || typeof ETENDUES !== 'object' || !Object.keys(ETENDUES).length) throw new Error('logos-composes-etendus.json : `compositions` absent ou vide — table étendue illisible');
+const A_LA_MAIN = {
     ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => [`POP-Series-${n}`, { famille: 'pop', logo: { source: 'pop' }, etiquette: `POP Série ${n}` }])),
     'Battle-Academy-2020': { famille: 'battle-academy', logo: { source: 'battle-academy' }, etiquette: 'Édition 2020', sous: 'Dracaufeu-GX · Raichu-GX · Mewtwo-GX' },
     'Battle-Academy-2022': { famille: 'battle-academy', logo: { source: 'battle-academy' }, etiquette: 'Édition 2022', sous: 'Pikachu V · Pyrobut V · Évoli V' },
@@ -59,6 +64,8 @@ const COMPOSITIONS = {
     'Sword-Shield-Indonesian-Promos': promoAsie('Épée et Bouclier · indonésien'),
     'Sword-Shield-Thai-Promos': promoAsie('Épée et Bouclier · thaï')
 };
+// la table à la main l'emporte sur l'étendue (le générateur ne liste pas ses sets, mais une régénération ne la remplace jamais)
+const COMPOSITIONS = { ...ETENDUES, ...A_LA_MAIN };
 
 /** Le logo d'un set est-il générique ? Le marquage du serveur, ou un sha1 porté par des sets de deux pages (la règle du site). */
 function generiquesDe(sets) {
@@ -146,7 +153,36 @@ async function transparentiserFond(buf, { seuil = 225, liseré = 170 } = {}) {
 }
 
 // ── LE RENDU : celui de la planche validée (PROPOSITION-3), à l'identique ──────────────────────────────────────────────────────────
+// (2026-10-07) au-delà de 22 caractères — 175 des 272 sets sans logo, jusqu'à 61 — l'étiquette passe sur DEUX lignes, coupées à l'espace
+// qui équilibre le mieux, la taille réduite pour tenir dans la largeur. Une étiquette de 22 caractères au plus rend le SVG d'avant au
+// caractère près (banc : le rendu validé ne bouge pas).
+function lignesEtiquette(texte, max = 22) {
+    if (texte.length <= max) return [texte];
+    let mieux = null;
+    for (let i = texte.indexOf(' '); i > 0; i = texte.indexOf(' ', i + 1)) {
+        const l = [texte.slice(0, i), texte.slice(i + 1)];
+        if (/&$/.test(l[0])) continue;      // (relecture) jamais une ligne qui finit sur « & » : la coupe se fait avant
+        if (!mieux || Math.max(...l.map(x => x.length)) < Math.max(...mieux.map(x => x.length))) mieux = l;
+    }
+    // (relecture) une étiquette longue SANS espace déborderait en silence sur une ligne : elle lève
+    if (!mieux) throw new Error(`étiquette « ${texte} » : ${texte.length} caractères sans espace où couper`);
+    return mieux;
+}
 function svgEtiquette(texte, sous, { largeur = 400, haut = sous ? 84 : 66 } = {}) {
+    const lignes = lignesEtiquette(texte);
+    if (lignes.length === 2) {
+        const f = Math.min(24, Math.floor((largeur - 48) / (0.62 * Math.max(...lignes.map(l => l.length)))));
+        // (relecture) sous 14 px, l'étiquette ne se lit plus : on lève plutôt que de rendre un logo illisible
+        if (f < 14) throw new Error(`étiquette « ${texte} » : ${f} px sur deux lignes — trop longue pour ${largeur} px`);
+        const lh = Math.round(f * 1.18), h = Math.max(haut, 18 + f + lh + (sous ? 30 : 0) + 20);
+        const y1 = Math.round((h - (f + lh + (sous ? 30 : 0))) / 2 + f * 0.85), y2 = y1 + lh;
+        return { haut: h, largeur, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${largeur}" height="${h}">
+      <rect x="0" y="0" width="${largeur}" height="${h}" rx="16" fill="#151922" stroke="#e8b23a" stroke-width="2"/>
+      <rect x="0" y="0" width="9" height="${h}" rx="4" fill="#e8b23a"/>
+      ${lignes.map((l, i) => `<text x="${largeur / 2}" y="${i ? y2 : y1}" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="${f}" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">${esc(l)}</text>`).join('\n      ')}
+      ${sous ? `<text x="${largeur / 2}" y="${y2 + 28}" font-family="Segoe UI, Arial, sans-serif" font-weight="600" font-size="17" fill="#e8b23a" text-anchor="middle">${esc(sous)}</text>` : ''}
+      <text x="${largeur - 12}" y="${h - 7}" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#7d8696" text-anchor="end">RAT-MARKET</text></svg>` };
+    }
     const t = texte.length > 22 ? 24 : 30;
     const y = sous ? 36 : haut / 2 + t / 3;
     return { haut, largeur, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${largeur}" height="${haut}">
@@ -196,4 +232,4 @@ async function composer({ logo, etiquette, sous, etoile = false, maxLogoH = 190 
 const sha1 = buf => crypto.createHash('sha1').update(buf).digest('hex');
 const cleDe = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9.-]+/g, '-').replace(/-+/g, '-');
 
-module.exports = { COMPOSITIONS, SOURCES, planifier, collisions, composer, transparentiserFond, fondBlancOpaque, generiquesDe, sha1, cleDe };
+module.exports = { COMPOSITIONS, A_LA_MAIN, SOURCES, planifier, collisions, composer, transparentiserFond, fondBlancOpaque, generiquesDe, sha1, cleDe, lignesEtiquette, svgEtiquette };

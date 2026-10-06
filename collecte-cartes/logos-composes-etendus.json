@@ -1,0 +1,1660 @@
+{
+ "genere": "2026-10-06T22:54:02.711Z",
+ "par": "generer-logos-composes-etendus.js",
+ "regle": "voir l'en-tête du générateur",
+ "compositions": {
+  "10th-Movie-Commemoration-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "10th Movie Commemoration Set",
+   "sous": "Japon"
+  },
+  "11th-Movie-Commemoration-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "11th Movie Commemoration Set",
+   "sous": "Japon"
+  },
+  "25th-Anniversary-Golden-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "25th Anniversary Golden Box",
+   "sous": "Japon"
+  },
+  "30th-Anniversary-Celebration-Simplified-Chinese": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "30th Anniversary Celebration Simplified Chinese",
+   "sous": "Chine · simplifié"
+  },
+  "30th-Celebration-IDTH": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "30th Celebration",
+   "sous": "Indonésie · Thaïlande"
+  },
+  "30th-Celebration-Premium-Deck-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "30th Celebration Premium Deck Set",
+   "sous": "Japon"
+  },
+  "30th-Celebration-Simplified-Chinese-Premium-Deck-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "30th Celebration Simplified Chinese Premium Deck Set",
+   "sous": "Chine · simplifié"
+  },
+  "ADV-Expansion-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ADV Expansion Pack",
+   "sous": "Japon"
+  },
+  "Aqua-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Aqua Deck Kit",
+   "sous": "Japon"
+  },
+  "Arceus-Dialga-Palkia-GX-Premium-Deck-Building-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Arceus Dialga Palkia GX Premium Deck Building Box",
+   "sous": "Chine · simplifié"
+  },
+  "Ash-vs-Team-Rocket-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Ash vs Team Rocket Deck Kit",
+   "sous": "Japon"
+  },
+  "Base-Expansion-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Base Expansion Pack",
+   "sous": "Japon"
+  },
+  "Bastiodon-the-Defender": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Bastiodon the Defender",
+   "sous": "Japon"
+  },
+  "Battle-Gift-Set-Thundurus-vs-Tornadus": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Gift Set: Thundurus vs Tornadus",
+   "sous": "Japon"
+  },
+  "Battle-Master-Deck-Chien-Pao-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Master Deck Chien-Pao ex",
+   "sous": "Japon"
+  },
+  "Battle-Master-Deck-Tera-Charizard-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Master Deck Tera Charizard ex",
+   "sous": "Japon"
+  },
+  "Battle-Partners-Deck-Build-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Partners Deck Build Box",
+   "sous": "Japon"
+  },
+  "Battle-Party-Dream-Together": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Party Dream Together",
+   "sous": "Chine · simplifié"
+  },
+  "Battle-Party-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Party Set",
+   "sous": "Chine · simplifié"
+  },
+  "Battle-Party-Shining-Dream": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Party Shining Dream",
+   "sous": "Chine · simplifié"
+  },
+  "Battle-Strength-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Strength Decks",
+   "sous": "Japon"
+  },
+  "Battle-Theme-Deck-Victini": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Battle Theme Deck: Victini",
+   "sous": "Japon"
+  },
+  "Beginning-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Beginning Set",
+   "sous": "Japon"
+  },
+  "Beginning-Set-Pikachu": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Beginning Set Pikachu",
+   "sous": "Japon"
+  },
+  "Black-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Black Deck Kit",
+   "sous": "Japon"
+  },
+  "Black-Kyurem-EX-Battle-Strength-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Black Kyurem-EX Battle Strength Deck",
+   "sous": "Japon"
+  },
+  "Blastoise-Battle-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Blastoise Battle Starter Deck",
+   "sous": "Japon"
+  },
+  "Blastoise-Kyurem-EX-Combo-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Blastoise + Kyurem-EX Combo Deck",
+   "sous": "Japon"
+  },
+  "Brave-Stars-Deck-Building-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Brave Stars Deck Building Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Brave-Stars-V-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Brave Stars V Starter Deck",
+   "sous": "Chine · simplifié"
+  },
+  "BREAK-Starter-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "BREAK Starter Pack",
+   "sous": "Japon"
+  },
+  "BW-Trainer-Kit": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Black-White"
+   },
+   "etiquette": "Kit du Dresseur"
+  },
+  "Celebrations": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Sword-Shield"
+   },
+   "etiquette": "Celebrations"
+  },
+  "Charizard-SP-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Charizard SP Half Deck",
+   "sous": "Japon"
+  },
+  "Chimchar-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Chimchar DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Collection-Sheet-Journey-Partners": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Collection Sheet Journey Partners",
+   "sous": "Japon"
+  },
+  "Deoxys-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Deoxys Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Dialga-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Dialga DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Dialga-LVX-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Dialga LVX Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Display-Set-Gift-Box-Gengar": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Display Set Gift Box Gengar",
+   "sous": "Chine · simplifié"
+  },
+  "DP-Trainer-Kit": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Diamond-Pearl"
+   },
+   "etiquette": "Kit du Dresseur"
+  },
+  "Dynamax-Clash-Deck-Building-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Dynamax Clash Deck Building Box",
+   "sous": "Chine · simplifié"
+  },
+  "Dynamax-Clash-V-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Dynamax Clash V Starter Deck",
+   "sous": "Chine · simplifié"
+  },
+  "Earths-Groudon-ex-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Earth's Groudon ex Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Eevee-Advanced-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Eevee Advanced Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Eevee-GX-Starter-Sets": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Eevee GX Starter Sets",
+   "sous": "Japon"
+  },
+  "Eevee-Heroes-VMAX-Special-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Eevee Heroes VMAX Special Set",
+   "sous": "Japon"
+  },
+  "Eeveelutions-GX-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Eeveelutions GX Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Emboar-EX-vs-Togekiss-EX-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Emboar-EX vs Togekiss-EX Deck Kit",
+   "sous": "Japon"
+  },
+  "Entry-Pack-08": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Entry Pack 08",
+   "sous": "Japon"
+  },
+  "ex-Start-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ex Start Decks",
+   "sous": "Japon"
+  },
+  "ex-Starter-Set-Fuecoco-Ampharos-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ex Starter Set Fuecoco Ampharos ex",
+   "sous": "Japon"
+  },
+  "ex-Starter-Set-Pikachu-ex-Pawmot": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ex Starter Set Pikachu ex Pawmot",
+   "sous": "Japon"
+  },
+  "ex-Starter-Set-Quaxly-Mimikyu-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ex Starter Set Quaxly Mimikyu ex",
+   "sous": "Japon"
+  },
+  "ex-Starter-Set-Sprigatito-Lucario-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "ex Starter Set Sprigatito Lucario ex",
+   "sous": "Japon"
+  },
+  "EX-Trainer-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "EX Trainer Kit"
+  },
+  "Expansion-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Expansion Pack",
+   "sous": "Japon"
+  },
+  "Expansion-Pack-20th-Anniversary": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Expansion Pack 20th Anniversary",
+   "sous": "Japon"
+  },
+  "Expansion-Sheet": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Expansion Sheet",
+   "sous": "Japon"
+  },
+  "Extra-Regulation-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Extra Regulation Box",
+   "sous": "Japon"
+  },
+  "Feraligatr-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Feraligatr Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Flygon-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Flygon Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Four-Party-Connection-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Four Party Connection Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Gallade-SP-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Gallade SP Half Deck",
+   "sous": "Japon"
+  },
+  "Garchomp-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Garchomp Half Deck",
+   "sous": "Japon"
+  },
+  "Garchomp-SP-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Garchomp SP Half Deck",
+   "sous": "Japon"
+  },
+  "Generations-Start-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Generations Start Decks",
+   "sous": "Japon"
+  },
+  "Gengar-VMAX-High-Class-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Gengar VMAX High-Class Deck",
+   "sous": "Japon"
+  },
+  "Gift-Box-Emerald": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Gift Box Emerald",
+   "sous": "Japon"
+  },
+  "Gift-Box-Latias-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Gift Box Latias ex",
+   "sous": "Japon"
+  },
+  "Gift-Box-Latios-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Gift Box Latios ex",
+   "sous": "Japon"
+  },
+  "Giratina-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Giratina DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Giratina-VSTAR-Deck-Building-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Giratina VSTAR Deck Building Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Golduck-BREAK-Palkia-EX-Combo-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Golduck BREAK + Palkia-EX Combo Deck",
+   "sous": "Japon"
+  },
+  "Guren-Town-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Guren Town Gym",
+   "sous": "Japon"
+  },
+  "GX-Starter-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "GX Starter Decks",
+   "sous": "Japon"
+  },
+  "Hanada-City-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Hanada City Gym",
+   "sous": "Japon"
+  },
+  "Happy-Set-Altaria-Latios-Infernape-Maushold": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Happy Set Altaria Latios Infernape Maushold",
+   "sous": "Chine · simplifié"
+  },
+  "Happy-Set-Decidueye-Melmetal-Koraidon-Miraidon": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Happy Set Decidueye Melmetal Koraidon Miraidon",
+   "sous": "Chine · simplifié"
+  },
+  "Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Happy Set Lucario Greninja Zamazenta Mabosstiff",
+   "sous": "Chine · simplifié"
+  },
+  "Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Happy Set Mewtwo Dragonite Camerupt Sinistcha",
+   "sous": "Chine · simplifié"
+  },
+  "Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Happy Set Pikachu Clefairy Turtwig Gimmighoul",
+   "sous": "Chine · simplifié"
+  },
+  "Heatran-vs-Regigigas-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Heatran vs Regigigas Deck Kit",
+   "sous": "Japon"
+  },
+  "Holon-Research-Tower-Fire-Quarter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Holon Research Tower Fire Quarter Deck",
+   "sous": "Japon"
+  },
+  "Holon-Research-Tower-Lightning-Quarter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Holon Research Tower Lightning Quarter Deck",
+   "sous": "Japon"
+  },
+  "Holon-Research-Tower-Water-Quarter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Holon Research Tower Water Quarter Deck",
+   "sous": "Japon"
+  },
+  "HS-Trainer-Kit": {
+   "famille": "serie",
+   "logo": {
+    "serie": "HeartGold-SoulSilver"
+   },
+   "etiquette": "Kit du Dresseur"
+  },
+  "Hydreigon-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Hydreigon Half Deck",
+   "sous": "Japon"
+  },
+  "Hyper-Metal-Chain-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Hyper Metal Chain Deck",
+   "sous": "Japon"
+  },
+  "Imprison-Gardevoir-ex-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Imprison! Gardevoir ex Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Indigo-Flame": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Indigo Flame",
+   "sous": "Indonésie · Thaïlande"
+  },
+  "Infernape-SP-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Infernape SP Half Deck",
+   "sous": "Japon"
+  },
+  "Inteleon-VMAX-High-Class-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Inteleon VMAX High-Class Deck",
+   "sous": "Japon"
+  },
+  "Intro-Pack-Bulbasaur": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Intro Pack Bulbasaur",
+   "sous": "Japon"
+  },
+  "Intro-Pack-Neo-Chikorita": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Intro Pack Neo Chikorita",
+   "sous": "Japon"
+  },
+  "Intro-Pack-Neo-Totodile": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Intro Pack Neo Totodile",
+   "sous": "Japon"
+  },
+  "Intro-Pack-Squirtle": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Intro Pack Squirtle",
+   "sous": "Japon"
+  },
+  "Keldeo-Battle-Strength-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Keldeo Battle Strength Deck",
+   "sous": "Japon"
+  },
+  "Kuchiba-City-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Kuchiba City Gym",
+   "sous": "Japon"
+  },
+  "Land-of-Kitakami-Special-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Land of Kitakami Special Pack",
+   "sous": "Chine · simplifié"
+  },
+  "Leafeon-vs-Metagross-Expert-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Leafeon vs Metagross Expert Deck",
+   "sous": "Japon"
+  },
+  "Lillies-Support-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Lillies Support Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "M-Master-Deck-Build-Box-Power-Style": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "M Master Deck Build Box Power Style",
+   "sous": "Japon"
+  },
+  "M-Master-Deck-Build-Box-Speed-Style": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "M Master Deck Build Box Speed Style",
+   "sous": "Japon"
+  },
+  "M-P-Simplified-Chinese-Promos": {
+   "famille": "promos",
+   "logo": null,
+   "etoile": true,
+   "etiquette": "PROMOS",
+   "sous": "Méga-Évolution · chinois simplifié"
+  },
+  "Magma-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Magma Deck Kit",
+   "sous": "Japon"
+  },
+  "Magmortar-Battle-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Magmortar Battle Starter Deck",
+   "sous": "Japon"
+  },
+  "Magmortar-vs-Electivire-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Magmortar vs Electivire Deck Kit",
+   "sous": "Japon"
+  },
+  "Master-Deck-Build-Box-EX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Master Deck Build Box EX",
+   "sous": "Japon"
+  },
+  "Master-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Master Kit",
+   "sous": "Japon"
+  },
+  "Master-Strategy-Deck-Building-Sets": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Master Strategy Deck Building Sets",
+   "sous": "Chine · simplifié"
+  },
+  "MAudino-EX-Mega-Battle-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "M Audino-EX Mega Battle Deck",
+   "sous": "Japon"
+  },
+  "McDonald-s-Collection-2018-2": {
+   "famille": "mcdonalds",
+   "logo": {
+    "source": "mcdonalds"
+   },
+   "etiquette": "Promo 2018",
+   "sous": "octobre 2018"
+  },
+  "McDonalds-Collection-2011": {
+   "famille": "mcdonalds",
+   "logo": {
+    "source": "mcdonalds"
+   },
+   "etiquette": "Promo 2011"
+  },
+  "McDonalds-Collection-2018": {
+   "famille": "mcdonalds",
+   "logo": {
+    "source": "mcdonalds"
+   },
+   "etiquette": "Promo 2018",
+   "sous": "juin 2018"
+  },
+  "McDonalds-Collection-25th-Anniversary": {
+   "famille": "mcdonalds",
+   "logo": {
+    "source": "mcdonalds"
+   },
+   "etiquette": "Promo 2021",
+   "sous": "25e anniversaire"
+  },
+  "MCharizard-EX-Mega-Battle-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "M Charizard-EX Mega Battle Deck",
+   "sous": "Japon"
+  },
+  "Mega-Evolution-Energies": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Mega-Evolution"
+   },
+   "etiquette": "Énergies"
+  },
+  "MEGA-Start-Deck-100-Battle-Collection-Corociao-Version": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "MEGA Start Deck 100 Battle Collection Corociao Version",
+   "sous": "Japon"
+  },
+  "MEGA-Starter-Set-Eevee-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "MEGA Starter Set Eevee ex",
+   "sous": "Japon"
+  },
+  "MEGA-Starter-Set-Sprigatito-Meowscarada-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "MEGA Starter Set Sprigatito Meowscarada ex",
+   "sous": "Japon"
+  },
+  "MEGA-Starter-Set-Zorua-Zoroark-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "MEGA Starter Set Zorua Zoroark ex",
+   "sous": "Japon"
+  },
+  "Meganium-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Meganium Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Metagross-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Metagross Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Mew-Confluence-Deck-Building-Advanced-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Mew Confluence Deck Building Advanced Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Mewtwo-LVX-Collection-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Mewtwo LV.X Collection Pack",
+   "sous": "Japon"
+  },
+  "Mewtwo-vs-Genesect-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Mewtwo vs Genesect Deck Kit",
+   "sous": "Japon"
+  },
+  "Mirages-Mew-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Mirages Mew Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Movie-Commemoration-Random-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Movie Commemoration Random Pack",
+   "sous": "Japon"
+  },
+  "Movie-Commemoration-VS-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Movie Commemoration VS Pack",
+   "sous": "Japon"
+  },
+  "Movie-Commemoration-VS-Pack-Auras-Lucario": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Movie Commemoration VS Pack Auras Lucario",
+   "sous": "Japon"
+  },
+  "Movie-Commemoration-VS-Pack-Sky-Splitting-Deoxys": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Movie Commemoration VS Pack Sky Splitting Deoxys",
+   "sous": "Japon"
+  },
+  "MRayquaza-EX-Mega-Battle-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "M Rayquaza-EX Mega Battle Deck",
+   "sous": "Japon"
+  },
+  "Mudkip-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Mudkip Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "National-Pokedex-Beginning-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "National Pokedex Beginning Set",
+   "sous": "Japon"
+  },
+  "Nivi-City-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Nivi City Gym",
+   "sous": "Japon"
+  },
+  "Noivern-BREAK-Evolution-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Noivern BREAK Evolution Pack",
+   "sous": "Japon"
+  },
+  "Oceans-Kyogre-ex-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Ocean's Kyogre ex Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Palkia-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Palkia DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Palkia-LVX-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Palkia LVX Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Pikachu-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pikachu DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Pikachu-Legendary-Celebration": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pikachu Legendary Celebration",
+   "sous": "Chine · simplifié"
+  },
+  "Piplup-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Piplup DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Pokemon-Art-Illustration-Celebration-Gathering": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pokemon Art Illustration Celebration Gathering",
+   "sous": "Chine · simplifié"
+  },
+  "Pokemon-Art-Illustration-Celebration-Scene": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pokemon Art Illustration Celebration Scene",
+   "sous": "Chine · simplifié"
+  },
+  "Pokemon-Card-151-Additionals": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pokemon Card 151 Additionals",
+   "sous": "Japon"
+  },
+  "Pokemon-Card-Display-Set-Gift-Box-Charizard": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pokemon Card Display Set Gift Box Charizard",
+   "sous": "Chine · simplifié"
+  },
+  "Pokemon-Card-Display-Set-Gift-Box-Eevee": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Pokemon Card Display Set Gift Box Eevee",
+   "sous": "Chine · simplifié"
+  },
+  "PokePark-Forest": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "PokePark Forest",
+   "sous": "Japon"
+  },
+  "Premium-Trainer-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Premium Trainer Box",
+   "sous": "Japon"
+  },
+  "Premium-Trainer-Box-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Premium Trainer Box ex",
+   "sous": "Japon"
+  },
+  "Premium-Trainer-Box-MEGA": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Premium Trainer Box MEGA",
+   "sous": "Japon"
+  },
+  "Premium-Trainer-Box-Sword-Shield": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Premium Trainer Box Sword Shield",
+   "sous": "Japon"
+  },
+  "Premium-Trainer-Box-VSTAR": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Premium Trainer Box VSTAR",
+   "sous": "Japon"
+  },
+  "Primordial-Arts-Deck-Building-Gift-Box-Blastoise": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Primordial Arts Deck Building Gift Box Blastoise",
+   "sous": "Chine · simplifié"
+  },
+  "Primordial-Arts-Deck-Building-Gift-Box-Venusaur": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Primordial Arts Deck Building Gift Box Venusaur",
+   "sous": "Chine · simplifié"
+  },
+  "Primordial-Arts-V-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Primordial Arts V Starter Deck",
+   "sous": "Chine · simplifié"
+  },
+  "Professor-Program": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Professor Program"
+  },
+  "Raichu-Battle-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Raichu Battle Starter Deck",
+   "sous": "Japon"
+  },
+  "Raichu-BREAK-Evolution-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Raichu BREAK Evolution Pack",
+   "sous": "Japon"
+  },
+  "Raid-Battle": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Raid Battle"
+  },
+  "Rampardos-the-Attacker": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Rampardos the Attacker",
+   "sous": "Japon"
+  },
+  "Rapid-Strike-Master": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Rapid Strike Master",
+   "sous": "Japon"
+  },
+  "Rayquaza-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Rayquaza Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Regigigas-LVX-Collection-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Regigigas LV.X Collection Pack",
+   "sous": "Japon"
+  },
+  "Reshiram-EX-Battle-Strength-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Reshiram-EX Battle Strength Deck",
+   "sous": "Japon"
+  },
+  "Rockruff-Full-Power-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Rockruff Full Power Deck",
+   "sous": "Japon"
+  },
+  "Ruler-of-the-Black-Flame-Deck-Build-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Ruler of the Black Flame Deck Build Box",
+   "sous": "Japon"
+  },
+  "Salamence-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Salamence Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Scarlet-Violet-Energies": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Scarlet-Violet"
+   },
+   "etiquette": "Énergies"
+  },
+  "Scarlet-Violet-ex-Special-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Scarlet Violet ex Special Set",
+   "sous": "Japon"
+  },
+  "Shadow-Threat": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Shadow Threat",
+   "sous": "Indonésie · Thaïlande"
+  },
+  "Shaymin-LVX-Collection-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Shaymin LV.X Collection Pack",
+   "sous": "Japon"
+  },
+  "Shining-Pokemon-Poke-Ball-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Shining Pokemon Poke Ball Box",
+   "sous": "Chine · simplifié"
+  },
+  "Shining-Synergy-GX-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Shining Synergy GX Starter Deck",
+   "sous": "Chine · simplifié"
+  },
+  "Shockwave-Tyranitar-ex-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Shockwave! Tyranitar ex Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Silver-Deck-Kit": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Silver Deck Kit",
+   "sous": "Japon"
+  },
+  "Silver-Lance-Jet-Black-Spirit-Jumbo-Pack-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Silver Lance & Jet-Black Spirit Jumbo Pack Set",
+   "sous": "Japon"
+  },
+  "Single-Strike-Master": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Single Strike Master",
+   "sous": "Japon"
+  },
+  "Single-Strike-Rapid-Strike-Premium-Trainer-Boxes": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Single Strike & Rapid Strike Premium Trainer Boxes",
+   "sous": "Japon"
+  },
+  "SM-Trainer-Kit-Alolan-Sandslash-Alolan-Ninetales": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Sun-Moon"
+   },
+   "etiquette": "Kit du Dresseur",
+   "sous": "Alolan Sandslash & Alolan Ninetales"
+  },
+  "SM-Trainer-Kit-Lycanroc-Alolan-Raichu": {
+   "famille": "serie",
+   "logo": {
+    "serie": "Sun-Moon"
+   },
+   "etiquette": "Kit du Dresseur",
+   "sous": "Lycanroc & Alolan Raichu"
+  },
+  "Solgaleo-GX-Lunala-GX-Legendary-Starter-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Solgaleo-GX & Lunala-GX Legendary Starter Set",
+   "sous": "Japon"
+  },
+  "Southern-Islands-JP": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Southern Islands JP",
+   "sous": "Japon"
+  },
+  "Special-Battle-Set-Charizard-VSTAR-vs-Rayquaza-VMAX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Special Battle Set Charizard VSTAR vs Rayquaza VMAX",
+   "sous": "Japon"
+  },
+  "Special-Deck-Set-Zacian-Zamazenta-vs-Eternatus": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Special Deck Set Zacian Zamazenta vs Eternatus",
+   "sous": "Japon"
+  },
+  "Start-Deck-100": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Start Deck 100",
+   "sous": "Japon"
+  },
+  "Start-Deck-100-CoroCoro-Comic-Version": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Start Deck 100 CoroCoro Comic Version",
+   "sous": "Japon"
+  },
+  "Starter-Deck-Build-Set-Ancient-Koraidon-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Starter Deck Build Set Ancient Koraidon ex",
+   "sous": "Japon"
+  },
+  "Starter-Deck-Build-Set-Future-Miraidon-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Starter Deck Build Set Future Miraidon ex",
+   "sous": "Japon"
+  },
+  "Starter-Set-ex-Marnies-Morpeko-Grimmsnarl-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Starter Set ex Marnies Morpeko Grimmsnarl ex",
+   "sous": "Japon"
+  },
+  "Starter-Set-ex-Stevens-Beldum-Metagross-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Starter Set ex Stevens Beldum Metagross ex",
+   "sous": "Japon"
+  },
+  "Steelix-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Steelix Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Stellar-Miracle-Deck-Build-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Stellar Miracle Deck Build Box",
+   "sous": "Japon"
+  },
+  "Stellar-Tera-Type-Starter-Set-Ceruledge-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Stellar Tera Type Starter Set Ceruledge ex",
+   "sous": "Japon"
+  },
+  "Stellar-Tera-Type-Starter-Set-Sylveon-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Stellar Tera Type Starter Set Sylveon ex",
+   "sous": "Japon"
+  },
+  "Storming-Emergence-GX-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Storming Emergence GX Starter Deck",
+   "sous": "Chine · simplifié"
+  },
+  "Sun-Moon-Family-Pokemon-Card-Game": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sun Moon Family Pokemon Card Game",
+   "sous": "Japon"
+  },
+  "Sun-Moon-Starter-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sun & Moon Starter Set",
+   "sous": "Japon"
+  },
+  "Super-Legend-Set-Xerneas-EX-Yveltal-EX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Super Legend Set: Xerneas-EX & Yveltal-EX",
+   "sous": "Japon"
+  },
+  "Sword-Shield-Family-Pokemon-Card-Game": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sword Shield Family Pokemon Card Game",
+   "sous": "Japon"
+  },
+  "Sword-Shield-Starter-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sword Shield Starter Decks",
+   "sous": "Japon"
+  },
+  "Sword-Shield-Starter-Set-Darkrai-VSTAR": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sword Shield Starter Set Darkrai VSTAR",
+   "sous": "Japon"
+  },
+  "Sword-Shield-Starter-Set-Lucario-VSTAR": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sword Shield Starter Set Lucario VSTAR",
+   "sous": "Japon"
+  },
+  "Sword-Shield-Trainer-Collection-Gift-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Sword Shield Trainer Collection Gift Box",
+   "sous": "Chine · simplifié"
+  },
+  "Tag-Team-Collection": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tag Team Collection",
+   "sous": "Indonésie"
+  },
+  "Tag-Team-GX-Deck-Build-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tag Team GX Deck Build Box",
+   "sous": "Japon"
+  },
+  "Tag-Team-GX-Premium-Trainer-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tag Team GX Premium Trainer Box",
+   "sous": "Japon"
+  },
+  "Tag-Team-GX-Starter-Sets": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tag Team GX Starter Sets",
+   "sous": "Japon"
+  },
+  "Tamamushi-City-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tamamushi City Gym",
+   "sous": "Japon"
+  },
+  "Tapu-Bulu-GX-Enhanced-Starter-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tapu Bulu-GX Enhanced Starter Set",
+   "sous": "Japon"
+  },
+  "Team-Plasma-Battle-Gift-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Team Plasma Battle Gift Set",
+   "sous": "Japon"
+  },
+  "Team-Plasmas-Powered-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Team Plasma's Powered Half Deck",
+   "sous": "Japon"
+  },
+  "Terastal-Starter-Set-Mewtwo-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Terastal Starter Set Mewtwo ex",
+   "sous": "Japon"
+  },
+  "Terastal-Starter-Set-Skeledirge-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Terastal Starter Set Skeledirge ex",
+   "sous": "Japon"
+  },
+  "Theater-Limited-VS-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Theater Limited VS Pack",
+   "sous": "Japon"
+  },
+  "Torchic-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Torchic Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Torterra-Battle-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Torterra Battle Starter Deck",
+   "sous": "Japon"
+  },
+  "Traditional-Chinese-Products": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Traditional Chinese Products",
+   "sous": "Chine · traditionnel"
+  },
+  "Trainer-Battle-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Trainer Battle Decks",
+   "sous": "Japon"
+  },
+  "Travel-Special-Pack": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Travel Special Pack",
+   "sous": "Chine · simplifié"
+  },
+  "Treecko-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Treecko Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Trick-or-Trade": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Trick or Trade"
+  },
+  "Turtwig-DPt-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Turtwig DPt Half Deck",
+   "sous": "Japon"
+  },
+  "Typhlosion-Constructed-Starter-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Typhlosion Constructed Starter Deck",
+   "sous": "Japon"
+  },
+  "Tyranitar-Constructed-Standard-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Tyranitar Constructed Standard Deck",
+   "sous": "Japon"
+  },
+  "Ultra-Sun-Ultra-Moon-Deck-Build-Boxes": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Ultra Sun & Ultra Moon Deck Build Boxes",
+   "sous": "Japon"
+  },
+  "Ultra-Sun-Ultra-Moon-Premium-Trainer-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Ultra Sun & Ultra Moon Premium Trainer Box",
+   "sous": "Japon"
+  },
+  "V-Starter-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "V Starter Decks",
+   "sous": "Japon"
+  },
+  "V-UNION-Special-Card-Sets": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "V UNION Special Card Sets",
+   "sous": "Japon"
+  },
+  "Variety-Treasure-Box": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Variety Treasure Box",
+   "sous": "Chine · simplifié"
+  },
+  "Venusaur-Charizard-Blastoise-Random-Constructed-Starter-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Venusaur Charizard Blastoise Random Constructed Starter Decks",
+   "sous": "Japon"
+  },
+  "Venusaur-Charizard-Blastoise-Special-Deck-Set-ex": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Venusaur & Charizard & Blastoise Special Deck Set ex",
+   "sous": "Japon"
+  },
+  "VMAX-Special-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VMAX Special Set",
+   "sous": "Japon"
+  },
+  "VMAX-Starter-Deck-Blastoise-VMAX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VMAX Starter Deck Blastoise VMAX",
+   "sous": "Japon"
+  },
+  "VMAX-Starter-Deck-Venusaur-VMAX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VMAX Starter Deck Venusaur VMAX",
+   "sous": "Japon"
+  },
+  "VMAX-Starter-Decks": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VMAX Starter Decks",
+   "sous": "Japon"
+  },
+  "VMAX-VSTAR-High-Class-Decks-Deoxys": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VMAX VSTAR High Class Decks Deoxys",
+   "sous": "Japon"
+  },
+  "VSTAR-Special-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VSTAR Special Set",
+   "sous": "Japon"
+  },
+  "VSTAR-VMAX-High-Class-Deck-Zeraora": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "VSTAR VMAX High Class Deck Zeraora",
+   "sous": "Japon"
+  },
+  "WCD-2004": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2004",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2005": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2005",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2006": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2006",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2007": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2007",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2008": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2008",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2009": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2009",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2010": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2010",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2011": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2011",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2012": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2012",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2013": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2013",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2014": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2014",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2015": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2015",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2016": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2016",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2017": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2017",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2018": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2018",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2019": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2019",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2022": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2022",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2023": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2023",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2024": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2024",
+   "sous": "Championnats du monde"
+  },
+  "WCD-2025": {
+   "famille": "wcd",
+   "logo": null,
+   "etiquette": "WCD 2025",
+   "sous": "Championnats du monde"
+  },
+  "White-Kyurem-EX-Battle-Strength-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "White Kyurem-EX Battle Strength Deck",
+   "sous": "Japon"
+  },
+  "Xerneas-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Xerneas Half Deck",
+   "sous": "Japon"
+  },
+  "XY-Beginning-Set": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "XY Beginning Set",
+   "sous": "Japon"
+  },
+  "XY-Trainer-Kit": {
+   "famille": "serie",
+   "logo": {
+    "serie": "XY"
+   },
+   "etiquette": "Kit du Dresseur"
+  },
+  "XY-Trainer-Kit-Bisharp-Wigglytuff": {
+   "famille": "serie",
+   "logo": {
+    "serie": "XY"
+   },
+   "etiquette": "Kit du Dresseur",
+   "sous": "Bisharp & Wigglytuff"
+  },
+  "XY-Trainer-Kit-Latias-Latios": {
+   "famille": "serie",
+   "logo": {
+    "serie": "XY"
+   },
+   "etiquette": "Kit du Dresseur",
+   "sous": "Latias & Latios"
+  },
+  "XY-Trainer-Kit-Pikachu-Libre-Suicune": {
+   "famille": "serie",
+   "logo": {
+    "serie": "XY"
+   },
+   "etiquette": "Kit du Dresseur",
+   "sous": "Pikachu Libre & Suicune"
+  },
+  "Yamabuki-City-Gym": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Yamabuki City Gym",
+   "sous": "Japon"
+  },
+  "Yveltal-Half-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Yveltal Half Deck",
+   "sous": "Japon"
+  },
+  "Zacian-Zamazenta-BOX": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Zacian + Zamazenta Box",
+   "sous": "Japon"
+  },
+  "Zekrom-EX-Battle-Strength-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Zekrom-EX Battle Strength Deck",
+   "sous": "Japon"
+  },
+  "Zygarde-EX-Perfect-Battle-Deck": {
+   "famille": "etiquette",
+   "logo": null,
+   "etiquette": "Zygarde-EX Perfect Battle Deck",
+   "sous": "Japon"
+  }
+ }
+}

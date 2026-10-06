@@ -59,5 +59,33 @@ const t = async (nom, f) => { try { await f(); ok++; } catch (e) { ko++; console
         const b = await M.composer({ logo: null, etoile: true, etiquette: 'PROMOS', sous: 'Épée et Bouclier · indonésien' });
         assert.notEqual(M.sha1(a), M.sha1(b));
     });
+    // (2026-10-07) les 272 sets sans logo : 175 noms de plus de 22 caractères, jusqu'à 61 — l'étiquette passe sur DEUX lignes
+    await t('nom long : deux lignes, chacune courte ; nom court : une ligne', () => {
+        assert.deepEqual(M.lignesEtiquette('POP Série 1'), ['POP Série 1']);
+        const l = M.lignesEtiquette('Venusaur Charizard Blastoise Random Constructed Starter Decks');
+        assert.equal(l.length, 2); assert.ok(Math.max(...l.map(x => x.length)) <= Math.ceil(61 / 2) + 4, `coupe équilibrée : ${JSON.stringify(l)}`);
+        assert.equal(l.join(' '), 'Venusaur Charizard Blastoise Random Constructed Starter Decks');
+    });
+    await t('le rendu VALIDÉ ne bouge pas : une étiquette de 22 caractères au plus rend le SVG d\'avant, au caractère près', () => {
+        const avant = (texte, sous, { largeur = 400, haut = sous ? 84 : 66 } = {}) => {     // la fonction de la planche du 2026-10-04, recopiée
+            const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const tt = texte.length > 22 ? 24 : 30, y = sous ? 36 : haut / 2 + tt / 3;
+            return { haut, largeur, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${largeur}" height="${haut}">
+      <rect x="0" y="0" width="${largeur}" height="${haut}" rx="16" fill="#151922" stroke="#e8b23a" stroke-width="2"/>
+      <rect x="0" y="0" width="9" height="${haut}" rx="4" fill="#e8b23a"/>
+      <text x="${largeur / 2}" y="${y}" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="${tt}" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">${esc(texte)}</text>
+      ${sous ? `<text x="${largeur / 2}" y="${y + 28}" font-family="Segoe UI, Arial, sans-serif" font-weight="600" font-size="17" fill="#e8b23a" text-anchor="middle">${esc(sous)}</text>` : ''}
+      <text x="${largeur - 12}" y="${haut - 7}" font-family="Segoe UI, Arial, sans-serif" font-size="10" fill="#7d8696" text-anchor="end">RAT-MARKET</text></svg>` };
+        };
+        for (const [e, s, o] of [['POP Série 1', null], ['Édition 2020', 'Dracaufeu-GX · Raichu-GX · Mewtwo-GX'], ['PROMOS', 'Épée et Bouclier · thaï'], ['Battle Academy', 'Écarlate et Violet · Japon', { largeur: 440, haut: 120 }]])
+            assert.deepEqual(M.svgEtiquette(e, s, o), avant(e, s, o));
+    });
+    await t('étiquette sur deux lignes : la hauteur s\'agrandit, le sous-titre reste sous les deux lignes', () => {
+        const e = M.svgEtiquette('Starter Set ex Marnie\'s Morpeko & Grimmsnarl ex', 'Japon', { largeur: 440, haut: 120 });
+        const ys = [...e.svg.matchAll(/<text x="[^"]+" y="([\d.]+)"/g)].map(m => Number(m[1]));
+        assert.equal(ys.length, 4, 'deux lignes, le sous-titre, la marque');
+        assert.ok(ys[0] < ys[1] && ys[1] < ys[2] && ys[2] < e.haut, JSON.stringify({ ys, haut: e.haut }));
+        assert.ok(/&amp;/.test(e.svg) && /Marnie&#39;s|Marnie's/.test(e.svg));
+    });
     console.log(`${ok}/${ok + ko}`); process.exit(ko ? 1 : 0);
 })();

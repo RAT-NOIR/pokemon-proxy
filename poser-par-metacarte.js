@@ -29,20 +29,25 @@ const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { ligne } = require('./collecte-cartes/table-sets');
 
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/];
+// --sans-fiche-melangee (2026-10-07, SV-P/CS) : une ligne posée a `numeroFiche: null` ; si la carte reçoit dans ce set des produits de
+// DEUX numéros (Xatu n°078 et n°085), ou y porte déjà des impressions de l'expansion, le site lui montre UNE fiche sans numéro dont les
+// liens ouvrent deux cartes — une fiche mélangée de plus, contre le cliquet du site (scripts/mesurer-liens-multiples.mjs : il ne peut
+// que baisser). Ces produits sont écartés, nommés, et attendent leur impression par numéro (poser-impressions-par-numero.js).
+const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
 const CODES = (arg('codes') || '').split(',').filter(Boolean), EXPORT = arg('export') || 'products_singles_24092026.json';
 const ATTENDUS = Object.fromEntries((arg('attendu') || '').split(',').filter(Boolean).map(x => { const [c, n] = x.split(':'); return [c, Number(n)]; }));
 const ecrire = process.argv.includes('--ecrire');
+const SANS_MELANGE = process.argv.includes('--sans-fiche-melangee');
 if (!CODES.length) { console.error('❌ --codes=<CODE>[,…] obligatoire'); process.exit(2); }
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 
 (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
-    const cartes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, niveau: 1, 'attaques.nom': 1, 'impressions.tirage': 1, 'bulba.titre': 1 } });
-    const lignes = await lireMongo(cx.db.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { idProduct: 1, carteId: 1 } });
+    const cartes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, niveau: 1, 'attaques.nom': 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'bulba.titre': 1 } });
+    const lignes = await lireMongo(cx.db.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1 } });
     const catalogue = JSON.parse(fs.readFileSync(path.join(__dirname, EXPORT), 'utf8')).products;
     const metaDe = new Map(catalogue.map(p => [p.idProduct, p.idMetacard ?? null]));
     const ctx = { index: indexer(cartes), parMeta: indexerMetacartes(lignes, id => metaDe.get(id)), metacarteDe: id => metaDe.get(id) };
@@ -51,9 +56,29 @@ const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par l
     for (const CODE of CODES) {
         const L = ligne(CODE);
         if (!L || !L.slugSet || !L.exp || !L.bulba?.tirage) { console.log(`\n■ ${CODE} : ligne absente ou incomplète — refusé`); continue; }
-        const produits = (await produitsDeLExpansion(prod, L.exp)).filter(p => !dejaJoints.has(p.idProduct));
+        const tousProduits = await produitsDeLExpansion(prod, L.exp);
+        const produits = tousProduits.filter(p => !dejaJoints.has(p.idProduct));
         const res = produits.map(p => ({ p, d: designerCroise(ctx, p, { tirage: L.bulba.tirage }) }));
-        const passent = res.filter(x => x.d.carte), raisons = {};
+        let passent = res.filter(x => x.d.carte); const raisons = {};
+        if (SANS_MELANGE) {
+            // les numéros que la carte montrerait dans CE set : ses produits neufs et ceux déjà joints (numeroFiche, sinon numéro Cardmarket)
+            const numDe = new Map(tousProduits.map(p => [p.idProduct, p.numero]));
+            const nu = n => String(n ?? '?').replace(/^0+(?=\d)/, '');
+            const parCarte = new Map(); for (const x of passent) (parCarte.get(x.d.carte._id) || parCarte.set(x.d.carte._id, []).get(x.d.carte._id)).push(x);
+            const ecartes = new Set();
+            for (const [id, xs] of parCarte) {
+                const deja = lignes.filter(l => l.carteId === id && l.slugSet === L.slugSet).map(l => l.numeroFiche ?? numDe.get(l.idProduct));
+                const numeros = new Set([...xs.map(x => x.p.numero), ...deja].map(nu));
+                const imps = (xs[0].d.carte.impressions || []).filter(i => i && i.tirage === L.bulba.tirage && [].concat(L.bulba.expansion ?? []).includes(i.expansion)).length;
+                if (numeros.size > 1 || imps) {
+                    for (const x of xs) ecartes.add(x.p.idProduct);
+                    const k = numeros.size > 1 ? `écarté (--sans-fiche-melangee) : la carte montrerait # numéros dans ce set` : 'écarté (--sans-fiche-melangee) : la carte porte déjà des impressions de l\'expansion';
+                    raisons[k] = (raisons[k] || 0) + xs.length;
+                    console.log(`   ⚠️ ${k.replace('#', numeros.size)} — ${id} « ${xs[0].d.carte.bulba?.titre ?? xs[0].d.carte.nomEn} » : ${xs.map(x => `n°${x.p.numero}`).join(', ')}${deja.length ? ` · déjà joints n°${deja.join(', ')}` : ''}`);
+                }
+            }
+            passent = passent.filter(x => !ecartes.has(x.p.idProduct));
+        }
         for (const x of res) if (!x.d.carte) { const k = x.d.raison.replace(/\(.*\)/, '(…)').replace(/n°\S+/, 'n°#').replace(/\d+ cartes/, '# cartes'); raisons[k] = (raisons[k] || 0) + 1; }
         console.log(`\n■ ${CODE} (exp ${L.exp}, ${L.slugSet}, tirage ${L.bulba.tirage}) · DÉNOMINATEUR : ${produits.length} produits non joints · PASSENT ${passent.length} · cartes distinctes ${new Set(passent.map(x => x.d.carte._id)).size}`);
         for (const [k, v] of Object.entries(raisons).sort((a, b) => b[1] - a[1])) console.log(`   ${String(v).padStart(4)} · ${k}`);
