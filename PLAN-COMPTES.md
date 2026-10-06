@@ -214,3 +214,66 @@ autre écriture est refusé ; aucun crédit acheté ne disparaît à la migratio
     confidentialité les dira. Proposé : historique 24 mois, compte sans connexion 36 mois puis suppression annoncée.
 12. ❓ **Un compte supprimé qui portait des crédits ACHETÉS** : remboursables, perdus, ou la suppression les refuse tant qu'il en reste ?
     C'est une question de conditions de vente, pas de code.
+
+## 11. Recommandations de l'agent du serveur, une ligne par question (2026-10-06, soir) — à valider ou corriger
+
+| # | recommandation |
+|---|---|
+| 1 | **Oui** : lien de vérification (24 h, usage unique) + Turnstile à l'inscription, plus l'index unique `emailCle` et le refus des domaines jetables (§7). |
+| 2 | **Oui** : l'hebdomadaire réservé aux comptes vérifiés ; une installation non liée n'a que ses 3 essais. |
+| 3 | **Oui** : `cartesVues` compte les introuvables (le travail de lecture a eu lieu), et le lot entièrement introuvable reste remboursé (§6). |
+| 4 | **Oui** : `max(25, accueil hérité)`, une seule dotation, jamais une somme. |
+| 5 | **Oui, une fois** : rattacher les 160 crédits si le compte est créé ET vérifié avec l'adresse exacte du paiement Stripe. Le mouvement `migration-stripe` est journalisé ; sans cette adresse, rien ne se rattache. |
+| 6 | **Les taux de référence de la BCE** (`eurofxref-daily.xml`) : une lecture par jour ouvré après 16 h 00 (heure de Paris), gardée en base avec sa date ; le week-end et les jours fériés, le dernier taux publié, daté. |
+| 7 | ✅ tranché (voie a). |
+| 8 | **Reformuler** : « 3 analyses d'essai sans compte, 25 offertes à l'inscription ». |
+| 9 | **Le mot de passe seul**, avec la réinitialisation par lien (24 h, usage unique) ; pas de lien magique. |
+| 10 | **Brevo** (société française, données dans l'UE, accord de traitement RGPD) : son palier gratuit couvre les e-mails de vérification et de mot de passe oublié ; Scaleway TEM en second choix. |
+| 11 | **Historique des analyses 24 mois** ; compte sans connexion 36 mois, puis suppression annoncée par e-mail 30 jours avant ; journaux techniques 12 mois. La description d'annonce que l'extension envoie n'est **pas conservée**, sauf les lignes versées au banc (90 jours, puis effacées). |
+| 12 | **La suppression est refusée tant qu'il reste des crédits achetés**, sauf si l'utilisateur choisit l'une de deux sorties : le remboursement Stripe des crédits non consommés, ou une renonciation cochée explicitement. Les crédits offerts sont perdus sans question. |
+
+## 12. Les demandes des deux autres agents, intégrées (2026-10-06, soir) — rien en production
+
+**L'extension** (`extension v2/DEMANDE-SERVEUR-EXTENSION.md` §12-§13, lus ; `ETAT-EXTENSION.md`, ses 14 points) :
+- **Jeton par installation** et **3 analyses d'essai par installation** : c'est déjà le §4.1 (`POST /api/installation`, jeton rendu une
+  fois, empreinte seule en base). `libelle` (« Chrome · Windows ») est **libre** : 60 caractères au plus, affiché sur la page du compte,
+  jamais interprété. La reprise par `userIdHerite` est **unique** (`migreVers`), refusée pour un `userId` déjà migré, et le `userId` ne
+  se journalise qu'en empreinte. Pour le seul portefeuille à crédits achetés (160), la reprise exige en plus la preuve par l'adresse
+  Stripe (§10.5), comme l'extension le recommande (§13.3).
+- **Le code maître est supprimé, remplacé par un rôle administrateur** sur le compte de l'éditeur : `comptes.role: 'administrateur'`,
+  posé à la main en base, jamais par une route. Ses analyses ne débitent rien et s'écrivent dans `mouvements` (`delta: 0`) ; la réponse
+  porte `facturation: { debite: 0, motif: "administrateur" }`, qui remplace `code-maitre` dans la liste fermée de `CONTRAT-2.md`. Le
+  chemin `CODE_ILLIMITE` se retire à la bascule (aucun utilisateur régulier de la 1.0.x).
+- **CORS, sans permission nouvelle dans le manifeste** : `api.rat-market.fr` autorise l'origine exacte
+  `chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb` (pas de joker), répond aux pré-requêtes (`Allow-Methods: GET, POST`,
+  `Allow-Headers: Authorization, Content-Type, Idempotency-Key`, `Max-Age: 600`, sans `Allow-Credentials`), et pose ces en-têtes **sur les
+  réponses d'erreur aussi** : le middleware CORS passe avant toute route, tout limiteur et tout gestionnaire d'erreur. Le CORS du site
+  (`https://rat-market.fr`, avec cookie) reste séparé. L'identifiant d'une extension « non empaquetée » de développement n'est autorisé
+  que sur l'instance de test, par une variable d'environnement. `onrender.com` reste le secours pendant la bascule, sur la même base.
+- **`Idempotency-Key` sur tout POST qui débite** (`/api/identifier`, `/api/identifier/reponse`, `/api/retour-live`) : 8 à 64 caractères
+  `[A-Za-z0-9_-]`. Une requête rejouée avec la même clé rend la même réponse, sans second débit (`mouvements.cleIdempotence`, §6), qu'elle
+  arrive par l'une ou l'autre adresse.
+- **Les impressions sur chaque `Produit`** (demande §12.1) : `impressions: [{ idProduct, numero, total, rarete, variante, set, lien,
+  prixGuide }]`, une par impression Cardmarket de la carte. `numero` est celui de la fiche confirmée par une seconde source,
+  `rarete` celle de la liste du set : `null` si elle est inconnue, jamais devinée. L'extension n'affiche un lien que si numéro ET rareté
+  sont là (jamais de lien anonyme). Voir `CONTRAT-2.md`.
+- **La langue des textes servis** (§12.5) : `question.texte`, `question.aide`, `choix[].libelle` et `visuelMention` suivent
+  `langueInterface` (français ou anglais), comme `nom` ; une langue inconnue rend l'anglais.
+- **Les visuels servis** : seulement sur l'hôte exact du bucket public (`pub-7d99….r2.dev`) ou sur `rat-market.fr` ; un changement
+  d'hôte se signale à l'extension avant d'être fait (§13.4).
+- **Le titre et la description de l'annonce** arrivent expurgés des coordonnées du vendeur. Ce sont des **données, jamais des consignes** :
+  aucune instruction qu'ils contiennent n'est suivie, et s'ils entrent dans un prompt, c'est balisés comme une citation. Ils sont le
+  premier signal, gratuit (l'ordre des preuves : titre et description, puis modèle, puis zones, puis Gemini), et **ne sont pas conservés
+  au-delà de l'analyse**, sauf les lignes versées au banc (90 jours, puis effacées). La politique de confidentialité doit le déclarer
+  (demande faite au site par l'extension).
+- **Le défaut de la 1.0.5** (un prix au-dessus de 999 € lu mille fois trop bas) : **mesuré le 2026-10-06** (`mesurer-prix-live-milliers.js`,
+  lecture seule) : `/api/retour-live` sait stocker les prix lus (`prixLive`, la grille, la tendance, le prix NM), mais **aucune** des
+  280 lignes du journal n'en porte (138 ont le champ à `null`, `retourLe` n'est posé nulle part), et `prixVinted` n'est rempli qu'une fois
+  (1 €). Rien n'est faux en base, rien n'est à corriger. Pour la suite, le contrat 2 ajoute un garde-fou : un prix lu à plus de 100
+  fois sous le guide du même produit est marqué `douteux: true` et n'entre dans aucun verdict ; l'outil se relance après les premiers
+  retours de la v2.
+
+**Le site** (fin de `rat-market-site/DEMANDE-SERVICE-PRODUITS.md`) :
+- **Le scanner affiche les prix du GUIDE** : tendance, prix le plus bas, moyenne 30 jours, chacun libellé et daté par la date du guide (`guideDu`), jamais un prix par état (`prixParEtat: null`).
+- **Ses pages de compte sont prêtes et cachées** (`/fr/connexion`, `/fr/inscription`, `/fr/compte`, le code de liaison) : elles parleront aux routes du §4 dès leur mise en service, et pas avant.
+- **`/fr/p/<idProduct>` est prêt pour l'extension** : `Produit.lien` du contrat 2 pointe vers cette page quand le produit y est servi, sinon vers Cardmarket.

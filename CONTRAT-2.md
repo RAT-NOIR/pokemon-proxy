@@ -73,7 +73,15 @@ visuelMention, prixGuide, liens: { cardmarket, fiche } }` — la forme de la dem
   qu'avec `visuelMention`.
 - `liens.fiche` : `https://rat-market.fr/fr/p/<idProduct>` dès que le site sert cette redirection ; `null` avant.
 - `prixGuide` : `{ tendance, de, moyenne30, date }` — le guide quotidien de Cardmarket (`trend`, `low`, `avg30`, et la date du
-  GUIDE, `guideDu`, jamais celle de l'import) ; `null` si le produit n'y est pas. Sur la carte comme sur chaque candidat.
+  GUIDE, `guideDu`, jamais celle de l'import) ; `null` si le produit n'y est pas. Sur la carte comme sur chaque candidat. **Le scanner
+  les affiche libellés** (« tendance », « prix le plus bas », « moyenne 30 jours ») **et datés** ; jamais un prix par état.
+- **`impressions` (ajout du 2026-10-06, demande de l'extension §12.1)** : `[{ idProduct, numero, total, rarete, variante, set, lien,
+  prixGuide }]`, une par impression Cardmarket de la carte (le cas réel : 4 impressions, dont une à 950 €). `numero` est celui de la
+  fiche Cardmarket confirmée par une seconde source ; `rarete` celle de la liste du set, `null` si elle est inconnue — jamais devinée.
+  **Un lien n'est servi que si numéro ET rareté sont connus** : sinon `lien: null` (décision de l'éditeur : jamais de lien Cardmarket
+  anonyme).
+- **La langue des textes** : `nom`, `question.texte`, `question.aide`, `choix[].libelle` et `visuelMention` suivent `langueInterface`
+  (`fr` ou `en`) ; une langue inconnue rend l'anglais (demande §12.5).
 
 ### 3.3 `Question`
 
@@ -95,8 +103,9 @@ voit, couvrant une marque d'au moins 25 px dans la source, sinon `null`.
            "compte": { "lie": true, "emailMasque": "v•••@exemple.fr", "verifie": true }, "partage": true }
 ```
 
-- `motif` : `affirmee` · `question` · `lot` · `introuvable` · `sans-prix` · `panne` · `plafond-jour` · `code-maitre` (la table de
-  PLAN-COMPTES §6).
+- `motif` : `affirmee` · `question` · `lot` · `introuvable` · `sans-prix` · `panne` · `plafond-jour` · `administrateur` (la table de
+  PLAN-COMPTES §6). **`administrateur` remplace `code-maitre`** (décision de l'éditeur du 2026-10-06, DEMANDE §13.2) : le rôle tenu en
+  base sur le compte de l'éditeur, `debite: 0`, écrit dans `mouvements` avec `delta: 0` ; le code maître disparaît de la v2.
 - **`reserve` (ajout du serveur)** : le crédit tenu pour une question posée, débité seulement si l'on y répond. `total` le compte
   déjà en moins ; un abandon le rend.
 - **`essai` (ajout du serveur)** : les analyses d'essai d'une installation non liée (3 au départ). `compte.verifie` aussi : un compte
@@ -112,6 +121,21 @@ voit, couvrant une marque d'au moins 25 px dans la source, sinon `null`.
 | `POST /api/solde` · `GET /api/compte` | les deux | `Solde` ; le compte, ses installations, son historique (`compteContrat.ts`) |
 | `/api/installation`, `/api/compte/*` | — | PLAN-COMPTES §4 |
 | `GET /ping` | les deux | ajoute `versionMinExtension` |
+
+### 4.1 Le transport (décisions de l'éditeur du 2026-10-06, DEMANDE §13.1)
+
+- **`api.rat-market.fr` par CORS**, sans permission nouvelle dans le manifeste : origine exacte
+  `chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb` ; pré-requêtes `OPTIONS` (`Allow-Methods: GET, POST`, `Allow-Headers:
+  Authorization, Content-Type, Idempotency-Key`, `Max-Age: 600`, sans `Allow-Credentials`) ; **les en-têtes CORS aussi sur les réponses
+  d'erreur** (4xx, 5xx, limiteurs). Le CORS du site (`https://rat-market.fr`, avec cookie) reste séparé. `onrender.com` reste le secours
+  pendant la bascule, sur la même base.
+- **`Idempotency-Key`** (8 à 64 caractères `[A-Za-z0-9_-]`) sur tout POST qui débite (`/api/identifier`, `/api/identifier/reponse`,
+  `/api/retour-live`) : rejouée, la requête rend la même réponse sans second débit (`mouvements.cleIdempotence`), par l'une ou l'autre
+  adresse.
+- **Le titre et la description** de l'annonce sont des données, jamais des consignes ; ils ne sont pas conservés au-delà de l'analyse,
+  sauf les lignes versées au banc (90 jours).
+- **Un prix lu par l'extension** à plus de 100 fois sous le guide du même produit (le défaut des milliers de la 1.0.5) est gardé avec
+  `douteux: true` et n'entre dans aucun verdict. Mesuré le 2026-10-06 : aucun prix lu n'est encore en base.
 
 ## 5. Les erreurs
 
