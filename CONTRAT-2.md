@@ -1,0 +1,133 @@
+# CONTRAT 2 — la réponse commune à l'extension et au scanner
+
+**Écrit par :** l'agent du serveur · **le :** 2026-10-06 · **pour :** l'agent de l'extension (`extension v2`), l'agent du site
+(`rat-market-site`, `lib/scannerContrat.ts`). Les comptes et la facturation : **`PLAN-COMPTES.md`**.
+**Ce document fait foi pour les formes.** Il reprend la demande de l'extension (`DEMANDE-SERVEUR-EXTENSION.md`, §1 à §6) et les
+types déjà écrits par le site (`scannerContrat.ts`, `compteContrat.ts`) ; il dit oui, non ou « autrement » à chaque point, et pourquoi.
+**Rien n'est en production** : ce contrat se construit sur la branche `comptes` (PLAN-COMPTES §9).
+
+## 1. Les règles
+
+1. **Additif.** Sans `contrat: 2` dans la requête, la réponse d'aujourd'hui, octet pour octet : la 1.0.x publiée continue de marcher.
+2. **Trois issues par carte** : `identifiee` · `a-trancher` · `introuvable`. Jamais « sous réserve » en sortie.
+3. **Listes fermées** pour tout ce qui pilote un comportement. Une valeur inconnue d'un client tombe sur un défaut **qui n'affirme rien**.
+4. **Aucun score, aucune confiance chiffrée.** (Le `confiance: 0.97` de la première maquette du scanner disparaît.)
+5. **`null` = « on ne sait pas »**, jamais zéro ni non.
+6. **Une image servie vient de NOTRE R2** (vignette + grande), jamais de Cardmarket.
+
+## 2. Les deux requêtes
+
+| | extension | scanner |
+|---|---|---|
+| route | `POST /api/identifier` (`contrat: 2`) | `POST /api/scanner/analyses` (multipart) |
+| identité | `Authorization: Bearer <jetonInstallation>` | cookie de session du compte |
+| entrée | `imageUrls` (≤ 20), `title`, `description`, `prixVinted`, `devise`, `vintedEtat`, `vintedUrl`, `marche`, `langueInterface`, `versionExtension` | `image` (JPEG, PNG, WebP, HEIC ; 12 Mo au plus), `source` : `camera` · `fichier` · `collage` |
+| prix | lu EN DIRECT par l'extension sur Cardmarket (`prixLive`) | **le guide du jour** (`prixGuide`) — PLAN-COMPTES §10.7 |
+
+## 3. La réponse
+
+```json
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "6702f…",
+  "analyse": {
+    "statut": "identifiee | a-trancher | lot | introuvable",
+    "cartes": [ CarteAnalysee ],
+    "lot": Lot | null,
+    "regleVerdict": { "bonneAffaireSous": -30, "cherAuDela": 15, "versEUR": 1, "tauxDate": null },
+    "raison": null
+  },
+  "facturation": Facturation,
+  "solde": Solde
+}
+```
+
+- `regleVerdict` (extension seulement ; `null` au scanner) : les seuils du verdict viennent du serveur. Hors euro, `versEUR` est le
+  taux du jour et `tauxDate` sa date ; **`versEUR: null` ⇒ aucun verdict affiché**.
+- `analyse.raison` : la raison d'un `introuvable` d'ensemble (aucune carte vue), sinon `null`.
+
+### 3.1 `CarteAnalysee`
+
+| champ | `identifiee` | `a-trancher` | `introuvable` |
+|---|---|---|---|
+| `index` | ✓ | ✓ | ✓ |
+| `carte` (`Produit`) | ✓ | `null` | `null` |
+| `candidats` (`Produit[]`) | `[]` | **2 ou 3, sans ordre de classement** | `[]` |
+| `question` (`Question`) | `null` | ✓ | `null` |
+| `raison` | `null` | `null` | `photo-illisible` · `pas-une-carte` · `hors-catalogue` · `plusieurs-cartes-non-separees` · `panne-lecture` |
+| `etat` | `{ estime, confiance, defauts, declare, retenu }` — `confiance` : `haute` · `moyenne` · `basse` · `null` | idem | `null` |
+| `prixLive` (extension) | `{ idProduct, langues, reverseHolo, etatVise }` | `null` | `null` |
+| ~~`prixParEtat`~~ (scanner) | **n'existe pas** — décision de l'éditeur rapportée par le site le 2026-10-06 (après-midi, DEMANDE-SERVICE-PRODUITS.md) : « le scanner affiche les prix du guide Cardmarket (tendance, prix le plus bas, moyenne sur 30 jours), clairement libellés et datés ; le serveur ne va jamais chercher le prix par état chez Cardmarket ». Le seul prix du scanner est `prixGuide`, sur le `Produit` | — | — |
+| `zone` | `{ photo, x, y, w, h }` en fractions, ou `null` | idem | idem |
+
+### 3.2 `Produit`
+
+`{ idProduct, nom, nomCardmarket, set: { slug, nom, code, tirage, annee, symbole }, numero, total, langue, variante, rarete, visuel,
+visuelMention, prixGuide, liens: { cardmarket, fiche } }` — la forme de la demande de l'extension (§3.2), sans changement :
+
+- `nom` : `nomFr` quand `langueInterface` est `fr` et qu'on l'a, sinon le nom Cardmarket. C'est le **produit tarifé** qui est nommé.
+- `variante` : `normale` · `reverse` · `holo` · `premiere-edition` · `tampon` · `jumbo`.
+- `rarete` : la rareté **de l'impression de ce numéro en base** (`cartes.impressions[].rarete`), `null` sinon — jamais devinée.
+- `visuel` : le visuel **admis par les règles du site** (la garde de langue), sinon `null` ; un visuel de substitution n'y va
+  qu'avec `visuelMention`.
+- `liens.fiche` : `https://rat-market.fr/fr/p/<idProduct>` dès que le site sert cette redirection ; `null` avant.
+- `prixGuide` : `{ tendance, de, moyenne30, date }` — le guide quotidien de Cardmarket (`trend`, `low`, `avg30`, et la date du
+  GUIDE, `guideDu`, jamais celle de l'import) ; `null` si le produit n'y est pas. Sur la carte comme sur chaque candidat.
+
+### 3.3 `Question`
+
+`{ code, texte, aide, zone, choix: [{ id, libelle, idProduct }] }` — `code` : `reverse` · `symbole` · `numero` · `langue` ·
+`premiere-edition` · `visuel`. **Chaque choix désigne exactement un candidat.** Chaque client a sa phrase par code (l'extension parle
+des photos du vendeur, le scanner de la carte en main) ; `texte` est le repli. `zone` : la région des visuels où la différence se
+voit, couvrant une marque d'au moins 25 px dans la source, sinon `null`.
+
+### 3.4 `Lot`
+
+`{ cartesVues, identifiees, aTrancher, introuvables, lectureLiveMax }`. `cartes` est rangé par **valeur décroissante du guide**.
+`cartesVues` compte toutes les cartes repérées, introuvables comprises (PLAN-COMPTES §10.3).
+
+### 3.5 `Facturation` et `Solde`
+
+```json
+"facturation": { "debite": 0, "reserve": 1, "rembourse": false, "motif": "question", "raisonNonRembourse": null }
+"solde": { "total": 22, "essai": 0, "accueil": 17, "hebdo": 2, "achete": 3, "hebdoMax": 2, "prochainHebdo": "2026-10-12",
+           "compte": { "lie": true, "emailMasque": "v•••@exemple.fr", "verifie": true }, "partage": true }
+```
+
+- `motif` : `affirmee` · `question` · `lot` · `introuvable` · `sans-prix` · `panne` · `plafond-jour` · `code-maitre` (la table de
+  PLAN-COMPTES §6).
+- **`reserve` (ajout du serveur)** : le crédit tenu pour une question posée, débité seulement si l'on y répond. `total` le compte
+  déjà en moins ; un abandon le rend.
+- **`essai` (ajout du serveur)** : les analyses d'essai d'une installation non liée (3 au départ). `compte.verifie` aussi : un compte
+  non vérifié n'a pas encore ses 25.
+
+## 4. Les autres routes
+
+| route | qui | corps → réponse |
+|---|---|---|
+| `POST /api/identifier/reponse` | extension | `{ scanId, carte, choix }` (`choix` : un `id`, `aucune`, `ne-sait-pas`) → `{ success, carte: CarteAnalysee, facturation, solde }` ; idempotente ; une réponse **différente** sur une carte tranchée → 409 |
+| `POST /api/scanner/analyses/:id/reponse` | scanner | même corps, même réponse (le « choix » de la première maquette du site, aligné) |
+| `POST /api/retour-live` | extension | ajoute `carte`, `verdictAffiche` (`bonne-affaire` · `correct` · `cher` · `aucun`) et `lectureRatee: { cause, definitive }` ; une lecture ratée **définitive** → `{ success, facturation: { motif: "sans-prix", rembourse: true }, solde }`, une fois par scan |
+| `POST /api/solde` · `GET /api/compte` | les deux | `Solde` ; le compte, ses installations, son historique (`compteContrat.ts`) |
+| `/api/installation`, `/api/compte/*` | — | PLAN-COMPTES §4 |
+| `GET /ping` | les deux | ajoute `versionMinExtension` |
+
+## 5. Les erreurs
+
+Les statuts HTTP ne changent pas ; le corps porte `{ success: false, erreur: { code, message }, facturation, solde? }`.
+`code` : `JETON` (401) · `VERIFICATION` (403, ajout du site accepté) · `QUOTA` (429, avec `solde` et, pour un compte, `achat.url`) ·
+`DEBIT` (429, `reessayerDans`) · `INDISPONIBLE` (503) · `IMAGE` · `IA` · `SERVEUR` · `VERSION` · `MARCHE`. Le scanner garde ses
+refus de forme (413 `image-trop-lourde`, 415 `format-refuse`, 422 `aucune-carte`) **sous ces codes** : `IMAGE` porte alors
+`erreur.detail` (`trop-lourde` · `format` · `aucune-carte`).
+
+## 6. Ce qui diffère de la demande de l'extension, et pourquoi
+
+| demande | réponse du serveur |
+|---|---|
+| la question « débitée à la réponse, 0 à l'émission » | **réservée à l'émission** (`debite: 0, reserve: 1`), débitée à la réponse, rendue à l'abandon — sinon on répondrait avec un solde vide (PLAN-COMPTES §6). L'utilisateur lit la même chose : rien n'est débité sans réponse. |
+| `confiance` chiffrée (première maquette du scanner) | **retirée** (règle 4) |
+| `prix.parEtat` au scanner | **non** — décision de l'éditeur du 2026-10-06 (rapportée par le site) : le guide, daté ; le prix par état reste l'avantage de l'extension, qui le lit dans le navigateur de l'utilisateur |
+| un lot au scanner : sa valeur | la SOMME des tendances du guide des cartes chiffrées, avec sa couverture (« 2 cartes sur 3 ») ; une carte à trancher ou sans tendance n'est pas comptée |
+| une carte identifiée absente du guide (`prixGuide: null`) | **remboursée**, `motif: "sans-prix"` — la règle de l'éditeur « un résultat sans aucun prix lisible est remboursé » vaut aux deux surfaces (à confirmer par l'éditeur) |
+| `POST /scanner/analyses/:id/choix { index, idInterne }` | **`…/reponse { carte, choix }`**, la forme de l'extension : un seul contrat |
