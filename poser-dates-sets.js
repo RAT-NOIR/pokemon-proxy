@@ -175,7 +175,13 @@ const RELEVES_SETS_CREES = {
     // Heavens counterparts by featuring alternate artwork »)
     'Gift-Box-Latias-ex': { jour: 'November 17, 2003', url: `${W}20141028085019/https://bulbapedia.bulbagarden.net/wiki/Latias_%26_Latios_Gift_Set_(TCG)`, citation: 'redirige vers « Gift Box (TCG) » — Release date November 17, 2003 ; la boîte contient les demi-decks Latias ex et Latios ex' },
     'Gift-Box-Latios-ex': { jour: 'November 17, 2003', url: `${W}20141028085019/https://bulbapedia.bulbagarden.net/wiki/Latias_%26_Latios_Gift_Set_(TCG)`, citation: 'redirige vers « Gift Box (TCG) » — Release date November 17, 2003 ; la boîte contient les demi-decks Latias ex et Latios ex' },
-    'M-P-Simplified-Chinese-Promos': { periode: { texte: 'August 7, 2026 - present', debut: 'August 7, 2026', fin: null, debutIso: '2026-08-07' }, url: `${W}20260804205126/https://bulbapedia.bulbagarden.net/wiki/M-P_Promotional_cards_(SCTCG)`, citation: 'Release period August 7, 2026 - present (Simplified Chinese M-P promos)' }
+    'M-P-Simplified-Chinese-Promos': { periode: { texte: 'August 7, 2026 - present', debut: 'August 7, 2026', fin: null, debutIso: '2026-08-07' }, url: `${W}20260804205126/https://bulbapedia.bulbagarden.net/wiki/M-P_Promotional_cards_(SCTCG)`, citation: 'Release period August 7, 2026 - present (Simplified Chinese M-P promos)' },
+    // ➕ 2026-10-06 (testeur : « date ADV-Expansion-Pack, Celebrations et Master-Kit ») : pages trouvées par l'API CDX (préfixe d'adresse,
+    // une seule adresse archivée chacune) et lues dans leur copie — 6 requêtes à archive.org, aucune à Bulbapedia
+    // ⚠️ la copie de Celebrations date du 31/07/2021, AVANT la sortie : c'est la date ANNONCÉE à ce jour-là (la sortie a eu lieu à cette date)
+    'Celebrations': { jour: 'October 8, 2021', url: `${W}20210731122832/https://bulbapedia.bulbagarden.net/wiki/Celebrations_(TCG)`, citation: 'Release date — English: October 8, 2021 (Japanese: October 22, 2021, « 25th Anniversary Collection »)' },
+    'ADV-Expansion-Pack': { jour: 'January 31, 2003', url: `${W}20111022084705/http://bulbapedia.bulbagarden.net:80/wiki/ADV_Expansion_Pack_(TCG)`, citation: 'Release date — Japanese: January 31, 2003 (English, EX Ruby & Sapphire: June 18, 2003)' },
+    'Master-Kit': { jour: 'July 15, 2005', url: `${W}20110410123512/http://bulbapedia.bulbagarden.net:80/wiki/Master_Kit_(TCG)`, citation: 'Release date July 15, 2005 — « a special deck kit … released in Japan only »' }
 };
 const RELEVES_BULBAPEDIA = {
     ...RELEVES_SETS_CREES,
