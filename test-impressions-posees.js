@@ -35,5 +35,11 @@ const R5 = reporterChampsPoses([zh('136')], [{ ...zh('136'), source: undefined, 
 verifier('si le parseur rend désormais la même clé, c\'est la sienne qui vaut (pas de doublon)', [R5.impressions.length, R5.impressions[0].rarete, R5.gardees], [1, 'SR', 0]);
 verifier('une impression SANS source posée qui disparaît n\'est pas gardée (le parseur fait foi)', reporterChampsPoses([imp('099')], [imp('011')]).impressions.map(i => i.numero), ['011']);
 
+// 2026-10-06 : une impression par NUMÉRO CARDMARKET (poser-impressions-par-numero.js : AC3 Gengar & Mimikyu GX a53, a228, a229, a277,
+// mélangés sur une fiche sans numéro). La page de carte ne déclare pas ce tirage : une relecture les perdait comme les « setlist ».
+const ac3 = n => ({ tirage: 'id', expansion: 'Tag Team Collection', numero: n, total: null, deck: null, rarete: 'RR', source: 'numero-cardmarket', preuveNumero: 'Cardmarket ; Setlist' });
+const R6 = reporterChampsPoses([imp('011'), ac3('a53'), ac3('a228')], [imp('011')]);
+verifier('une impression « numero-cardmarket », absente du parseur, est GARDÉE avec sa preuve', R6.impressions.map(i => `${i.tirage}|${i.numero}|${i.preuveNumero ?? ''}`), ['jp|011|', 'id|a53|Cardmarket ; Setlist', 'id|a228|Cardmarket ; Setlist']);
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

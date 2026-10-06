@@ -14,8 +14,9 @@
 // poser-impressions-setlist.js) et les lignes de jointure (`cartes_produits.tirage`) suivent donc dans le même lot.
 // Ce qui est touché, et rien d'autre (tout le reste refuse) :
 //   · le set dont la ligne porte `tirageCorrige`, s'il porte encore le tirage `de` ;
-//   · les impressions `source: 'setlist'`, au tirage `de`, au nom d'expansion de la ligne — une impression lue sur une PAGE DE
-//     CARTE (sans `source`) n'est jamais réécrite : elle dit ce que la page dit ;
+//   · les impressions POSÉES APRÈS LE PARSEUR (`source` dans SOURCES_POSEES_APRES : 'setlist', et depuis le 2026-10-06
+//     'numero-cardmarket'), au tirage `de`, au nom d'expansion de la ligne — une impression lue sur une PAGE DE CARTE (sans
+//     `source`) n'est jamais réécrite : elle dit ce que la page dit ;
 //   · les lignes de jointure de l'expansion Cardmarket de la ligne, au tirage `de`.
 // C'est une MODIFICATION (feu vert du testeur, 2026-09-26) : la garde de lot voit baisser `impressions imp:<de>|<expansion>` —
 // l'annonce écrite par la simulation, par la même fonction que la garde (compterEtat), la rend exacte, ni plus ni moins.
@@ -25,6 +26,10 @@ const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
+// la liste des sources posées vit dans impressions-posees.js : une copie ici divergerait au prochain ajout (§21 bis)
+const { SOURCES_POSEES_APRES } = require('./collecte-cartes/impressions-posees');
+const POSEE = { $in: SOURCES_POSEES_APRES };
+const posee = i => SOURCES_POSEES_APRES.includes(i.source);
 
 const AUTORISES = [/^--ecrire$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
@@ -45,8 +50,8 @@ const TIRAGES = new Set(['jp', 'intl', 'zh-hans', 'zh-hant', 'id', 'th', 'idth']
     for (const l of lignes) {
         const de = l.tirageCorrige.de, vers = l.bulba.tirage, nom = [].concat(l.bulba.expansion)[0];
         const s = await S.findOne({ _id: l.slugSet }, { projection: { tirage: 1, region: 1 } });
-        const imps = await C.find({ impressions: { $elemMatch: { tirage: de, expansion: nom, source: 'setlist' } } }, { projection: { impressions: 1, sets: 1 } }).toArray();
-        const nImp = imps.reduce((n, c) => n + c.impressions.filter(i => i && i.tirage === de && i.expansion === nom && i.source === 'setlist').length, 0);
+        const imps = await C.find({ impressions: { $elemMatch: { tirage: de, expansion: nom, source: POSEE } } }, { projection: { impressions: 1, sets: 1 } }).toArray();
+        const nImp = imps.reduce((n, c) => n + c.impressions.filter(i => i && i.tirage === de && i.expansion === nom && posee(i)).length, 0);
         const lirePage = await C.countDocuments({ impressions: { $elemMatch: { tirage: de, expansion: nom, source: { $exists: false } } } });
         const nCp = await CP.countDocuments({ idExpansion: l.exp, tirage: de });
         const etat = !s ? 'set ABSENT' : s.tirage === vers ? 'déjà corrigé' : s.tirage !== de ? `set au tirage ${s.tirage} (ni ${de} ni ${vers}) : REFUSÉ` : s.region !== 'intl' ? `région ${s.region} : REFUSÉ` : 'à corriger';
@@ -55,7 +60,7 @@ const TIRAGES = new Set(['jp', 'intl', 'zh-hans', 'zh-hant', 'id', 'th', 'idth']
     }
     // L'annonce, par la fonction de la garde : l'état des cartes touchées avant, et tel qu'il sera après.
     const avant = compterEtat({ cartes: plan.flatMap(p => p.cartes) });
-    const apres = compterEtat({ cartes: plan.flatMap(p => p.cartes.map(c => ({ ...c, impressions: c.impressions.map(i => i && i.tirage === p.de && i.expansion === p.nom && i.source === 'setlist' ? { ...i, tirage: p.vers } : i) }))) });
+    const apres = compterEtat({ cartes: plan.flatMap(p => p.cartes.map(c => ({ ...c, impressions: c.impressions.map(i => i && i.tirage === p.de && i.expansion === p.nom && posee(i) ? { ...i, tirage: p.vers } : i) }))) });
     const { baisses } = comparer(avant, apres);
     const annonce = Object.fromEntries(baisses.map(b => [b.cle, b.baisse]));
     const fichier = path.join(__dirname, 'collecte-cartes', 'rapports', `annonce-corriger-tirage-${new Date().toISOString().slice(0, 10)}.json`);
@@ -69,12 +74,12 @@ const TIRAGES = new Set(['jp', 'intl', 'zh-hans', 'zh-hant', 'id', 'th', 'idth']
     let nS = 0, nI = 0, nL = 0;
     for (const p of plan) {
         if (p.set) nS += (await S.updateOne({ _id: p.l.slugSet, tirage: p.de }, { $set: { tirage: p.vers, tirageCorrige: { de: p.de, le, preuve: p.l.tirageCorrige.preuve } } })).modifiedCount;
-        nI += (await C.updateMany({ impressions: { $elemMatch: { tirage: p.de, expansion: p.nom, source: 'setlist' } } }, { $set: { 'impressions.$[i].tirage': p.vers } }, { arrayFilters: [{ 'i.tirage': p.de, 'i.expansion': p.nom, 'i.source': 'setlist' }] })).modifiedCount;
+        nI += (await C.updateMany({ impressions: { $elemMatch: { tirage: p.de, expansion: p.nom, source: POSEE } } }, { $set: { 'impressions.$[i].tirage': p.vers } }, { arrayFilters: [{ 'i.tirage': p.de, 'i.expansion': p.nom, 'i.source': POSEE }] })).modifiedCount;
         nL += (await CP.updateMany({ idExpansion: p.l.exp, tirage: p.de }, { $set: { tirage: p.vers } })).modifiedCount;
     }
     // Relu : plus rien au tirage `de` sur ces expansions, et le tirage `vers` au compte.
     let reste = 0;
-    for (const p of plan) reste += await C.countDocuments({ impressions: { $elemMatch: { tirage: p.de, expansion: p.nom, source: 'setlist' } } }) + await CP.countDocuments({ idExpansion: p.l.exp, tirage: p.de }) + await S.countDocuments({ _id: p.l.slugSet, tirage: p.de });
+    for (const p of plan) reste += await C.countDocuments({ impressions: { $elemMatch: { tirage: p.de, expansion: p.nom, source: POSEE } } }) + await CP.countDocuments({ idExpansion: p.l.exp, tirage: p.de }) + await S.countDocuments({ _id: p.l.slugSet, tirage: p.de });
     console.log(`\n   ✅ sets ${nS} · cartes modifiées ${nI} · lignes de jointure ${nL} · relu : ${reste} document(s) encore à l'ancien tirage`);
     if (reste) { console.error('❌ la relecture trouve encore l\'ancien tirage'); await fermer(); process.exit(1); }
     await fermer();

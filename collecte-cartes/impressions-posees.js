@@ -17,7 +17,9 @@ const CHAMPS_POSES_APRES = ['illustrateur', 'illustrateurPreuve'];
 // déclarés par la page de carte : la jointure les fabrique depuis la Setlist (`source: 'setlist'`, jointure.js) et
 // poser-impressions-setlist.js les écrit sur la carte quand l'URL Cardmarket confirme le numéro. Le parseur ne sait pas
 // les refabriquer : elles portent la marque de leur conservation, posée dans le même geste que l'écriture.
-const SOURCES_POSEES_APRES = ['setlist'];
+// ➕ 2026-10-06 : `numero-cardmarket` (poser-impressions-par-numero.js) — une impression par numéro Cardmarket confirmé par une seconde
+// source, posée pour qu'une fiche ne mélange plus plusieurs impressions. Le parseur ne la refabrique pas non plus.
+const SOURCES_POSEES_APRES = ['setlist', 'numero-cardmarket'];
 const cleImpression = i => `${i.tirage}|${i.expansion}|${i.numero ?? ''}|${i.deck ?? ''}`;
 
 /**
