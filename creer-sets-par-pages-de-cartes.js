@@ -28,14 +28,18 @@
 // image (le worker est le seul collecteur), aucune fiche simple.
 require('dotenv').config();
 const fs = require('fs');
-const AUTORISES = [/^--liste=.+\.json$/, /^--attendu=\d+:\d+$/, /^--ecrire$/, /^--calibrer$/];
+const AUTORISES = [/^--liste=.+\.json$/, /^--attendu=\d+:\d+$/, /^--ecrire$/, /^--calibrer$/, /^--existants$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --calibrer, --liste=<fichier.json>, --attendu=<sets>:<lignes>, --ecrire`); process.exit(2); }
+if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')} — autorisés : --calibrer, --existants, --liste=<fichier.json>, --attendu=<sets>:<lignes>, --ecrire`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
-const LISTE = arg('liste'), ECRIRE = process.argv.includes('--ecrire'), CALIBRER = process.argv.includes('--calibrer');
+const LISTE = arg('liste'), ECRIRE = process.argv.includes('--ecrire'), CALIBRER = process.argv.includes('--calibrer'), EXISTANTS = process.argv.includes('--existants');
 const ATTENDU = arg('attendu')?.split(':').map(Number) ?? null;
-if (!LISTE && !CALIBRER) { console.error('❌ --liste=<fichier.json> ou --calibrer requis'); process.exit(2); }
+if ([!!LISTE, CALIBRER, EXISTANTS].filter(Boolean).length !== 1) { console.error('❌ un mode et un seul : --liste=<fichier.json>, --calibrer ou --existants'); process.exit(2); }
 if (ECRIRE && (!ATTENDU || CALIBRER)) { console.error('❌ --ecrire exige --attendu=<sets>:<lignes> (le compte du plan, relu), et jamais --calibrer'); process.exit(2); }
+// --existants : les sets EN BASE où la clé, nom du set caché, retrouve SON nom (T, E) — ses produits qui n'ont AUCUNE ligne de jointure
+// (ni vraie carte ni fiche simple) et aucun reste qui dit qu'ils ont été détachés ou refusés exprès reçoivent leur ligne. Les sets ne sont
+// pas touchés. La clé est celle que la calibration a mesurée sur ces mêmes sets (0 fausse).
+const RESTES_EXCLUS = ['fiche-contredite-par-le-nom', 'fiche-contredite-par-la-metacarte', 'fiche-contredite-par-les-attaques', 'produit-vers-plusieurs-cartes', 'nom-ambigu', 'carte-sans-nom'];
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { decomposerNomCardmarket, estCarteCode } = require('./collecte-cartes/jointure');
@@ -96,7 +100,7 @@ function designer({ produits, parNom, tenus, setsParNom, slugSet }) {
 
 (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
-    const toutes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, ficheSimple: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1 } });
+    const toutes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, ficheSimple: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1, 'images.set': 1, 'images.numero': 1 } });
     const parNom = new Map(), tenus = new Map();
     for (const c of toutes) {
         c.numeroLu = new Map();
@@ -148,6 +152,59 @@ function designer({ produits, parNom, tenus, setsParNom, slugSet }) {
         // les produits que la clé joindrait dans un set EXISTANT et qui n'y ont aucune ligne : du travail, pas une mesure (rien n'est écrit)
         for (const [s, l] of Object.entries(sansVerite).sort((a, b) => b[1].length - a[1].length)) console.log(`   sans vérité · ${s} ${l.length} : ${l.slice(0, 3).join(' ; ')}`);
         await fermer(); return;
+    }
+
+    if (EXISTANTS) {
+        const lignesExistantes = new Set(await cx.db.collection('cartes_produits').distinct('idProduct'));
+        const exclus = new Set(await cx.db.collection('restes').distinct('idProduct', { type: { $in: RESTES_EXCLUS } }));
+        console.log(`produits déjà joints (toute ligne) : ${lignesExistantes.size} · exclus par un reste (${RESTES_EXCLUS.join(', ')}) : ${exclus.size}`);
+        if (!exclus.size) throw new Error('0 produit exclu par un reste : clé fausse ? (collection ou champ mal nommé)');
+        const plan = [], refusesEntree = [];
+        for (const s of sets) {
+            const propres = [].concat(s.bulba?.expansion ?? []).filter(Boolean); const ids = [].concat(s.idExpansion ?? []).filter(x => x != null);
+            if (!propres.length || !ids.length) continue;
+            const T0 = s.tirage ?? s.region;
+            const sansLui = new Map([...setsParNom].filter(([k]) => !propres.some(n => k === `${T0}|${n}`)));
+            const P = await produitsDe(ids);
+            const r = designer({ produits: P, parNom, tenus, setsParNom: sansLui, slugSet: s._id });
+            if (r.refus || r.T !== T0 || !propres.includes(r.E)) continue;
+            const candidats = r.joints.filter(j => !lignesExistantes.has(j.p.idProduct) && !exclus.has(j.p.idProduct) && !j.carte.ficheSimple && j.carte._id > 0);
+            // (relecture) une carte qui ENTRE dans le set y apporte TOUTES ses impressions sous les noms du set : chacune doit recevoir un
+            // produit (pas de fiche vide), et aucune image du set sans numéro ne doit la porter (le set basculerait en une fiche par document)
+            const joints = [];
+            for (const j of candidats) {
+                if ((j.carte.sets || []).includes(s._id)) { joints.push(j); continue; }
+                const fiches = new Set((j.carte.impressions || []).filter(i => i && i.tirage === T0 && propres.includes(i.expansion)).map(i => cle(i.numero) ?? '∅'));
+                const servis = new Set(r.joints.filter(k => k.carte._id === j.carte._id).map(k => cle(k.p.numero)));
+                const imageSansNumero = (j.carte.images || []).some(m => m.set === s._id && (m.numero == null || String(m.numero).trim() === ''));
+                if ([...fiches].every(f => servis.has(f)) && !imageSansNumero) joints.push(j); else refusesEntree.push(`${s._id} n°${j.p.numero} « ${j.p.name} » → ${j.carte._id} : fiches [${[...fiches].join(',')}] servies [${[...servis].join(',')}]${imageSansNumero ? ', image sans numéro' : ''}`);
+            }
+            if (joints.length) plan.push({ slug: s._id, T: r.T, E: r.E, votes: r.votes, joints });
+        }
+        const nLignes = plan.reduce((t, x) => t + x.joints.length, 0);
+        console.log(`\nDÉNOMINATEUR : ${sets.length} sets · ${plan.length} sets où la clé retrouve son nom et joint des produits sans ligne · ${nLignes} lignes`);
+        for (const x of plan) console.log(`   ${x.slug} « ${x.E} » (${x.T}) · ${x.joints.length} : ${x.joints.slice(0, 4).map(j => `n°${j.p.numero} « ${j.p.name} » → ${j.carte._id} « ${j.carte.nomEn} »`).join(' ; ')}`);
+        console.log(`   refusés (la carte entrerait avec une fiche vide ou une image sans numéro) : ${refusesEntree.length}${refusesEntree.slice(0, 5).map(r => `\n      ${r}`).join('')}`);
+        // les autres restes de ces produits, tous types : un produit « détaché » autrement se verrait ici
+        const autres = await cx.db.collection('restes').aggregate([{ $match: { idProduct: { $in: plan.flatMap(x => x.joints.map(j => j.p.idProduct)) } } }, { $group: { _id: '$type', n: { $sum: 1 } } }]).toArray();
+        console.log(`   restes de ces produits, tous types : ${autres.map(a => `${a._id} ${a.n}`).join(' · ') || 'aucun'}`);
+        if (autres.some(a => a._id !== 'produit-sans-carte')) { console.error('🔴 ARRÊT : un produit du plan porte un reste autre que « produit-sans-carte »'); await fermer(); process.exit(1); }
+        if (!ECRIRE) { console.log(`(plan seul — --existants --ecrire --attendu=${plan.length}:${nLignes} sous lot-additif.js)`); await fermer(); return; }
+        if (ATTENDU[0] !== plan.length || ATTENDU[1] !== nLignes) { console.error(`❌ ARRÊT : le plan rend ${plan.length}:${nLignes}, attendu ${ATTENDU.join(':')}`); await fermer(); process.exit(1); }
+        const le = new Date(), CP = cx.db.collection('cartes_produits'), C = cx.db.collection('cartes');
+        let posees = 0;
+        for (const x of plan) {
+            const parCarte = new Map(); for (const j of x.joints) { const v = parCarte.get(j.carte._id) || parCarte.set(j.carte._id, { ids: [], metas: new Set() }).get(j.carte._id); v.ids.push(j.p.idProduct); if (j.p.idMetacard != null) v.metas.add(j.p.idMetacard); }
+            await C.bulkWrite([...parCarte].map(([id, v]) => ({ updateOne: { filter: { _id: id }, update: { $addToSet: { 'liens.idProduct': { $each: v.ids }, 'liens.idMetacards': { $each: [...v.metas] }, sets: x.slug } } } })), { ordered: false });
+            posees += (await CP.bulkWrite(x.joints.map(j => ({ updateOne: { filter: { _id: `${j.carte._id}|${j.p.idProduct}` }, update: { $setOnInsert: {
+                carteId: j.carte._id, idProduct: j.p.idProduct, idExpansion: j.p.idExpansion, tirage: x.T, preuve: 'nom-carte+numero', slug: j.p.slug ?? null, slugSet: x.slug, numeroFiche: j.numeroFiche,
+                detail: `exp ${j.p.idExpansion} n°${j.p.numero} « ${j.p.name} » → « ${j.carte.nomEn} » : la page de carte déclare « ${x.E} » n°${j.numeroFiche} (${x.T}), seule carte à ce numéro, du même nom ; la clé, nom du set caché, retrouve « ${x.E} » (${x.votes} numéros distincts, 0 contradiction)`,
+                verifieLe: le, route: `pages-de-cartes-existant:${x.slug}` } }, upsert: true } })), { ordered: false })).upsertedCount;
+        }
+        // (relecture) relu par les _id du PLAN, pas par la route : une reprise après panne partielle ne compte que ce qu'elle a posé
+        const relu = await CP.countDocuments({ _id: { $in: plan.flatMap(x => x.joints.map(j => `${j.carte._id}|${j.p.idProduct}`)) } });
+        console.log(`${relu === nLignes ? '✅' : '🔴'} lignes posées ${posees} · RELU ${relu} lignes du plan présentes (attendu ${nLignes})`);
+        await fermer(); process.exit(relu === nLignes ? 0 : 1);
     }
 
     const liste = JSON.parse(fs.readFileSync(LISTE, 'utf8'));
