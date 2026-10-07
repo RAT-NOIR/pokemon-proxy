@@ -217,7 +217,10 @@ async function aligner(gris, sc) {
     // une homographie aberrante (écrasement, retournement) est pire que pas d'alignement — l'aire du quadrilatère des coins (contourArea)
     const c = [[0, 0], [L, 0], [L, H], [0, H]].map(([x, y]) => projeter(Hh, x, y));
     const aire = Math.abs(c.reduce((s, [x, y], i) => { const [x2, y2] = c[(i + 1) % 4]; return s + x * y2 - x2 * y; }, 0)) / 2;
-    if (inl < 12 || !(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: inl };
+    // (2026-10-07) une homographie ABERRANTE n'aligne rien : ses points ne comptent pas (garde_zones.py, même règle) — sinon deux scans non
+    // alignés passaient pour alignés (≥ 12) et la carte des différences était fausse. v1 : l'ancien compte, pour rejouer le 2026-10-06.
+    if (inl < 12) return { mat: copie(), inliers: inl };
+    if (!(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: ALIGNEMENT === 'v1' ? inl : 0 };
     const al = new cv.Mat(), Hm = cv.matFromArray(3, 3, cv.CV_64F, Hh);
     cv.warpPerspective(gris, al, Hm, new cv.Size(L, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
     Hm.delete();
