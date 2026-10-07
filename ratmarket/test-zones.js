@@ -10,8 +10,11 @@
 const fs = require('fs'), path = require('path');
 const Z = require('./zones'), G = require('./decision-g');
 const LABO = 'C:/Users/Yung/Desktop/labo-embedding';
-const FIX = `${LABO}/rm/fixtures-g`;
 const arg = (n, d) => { const a = process.argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : d; };
+// --fixtures=<dossier> : d'autres fixtures que celles du jour (une variante de la garde exportée à côté, ex. fixtures-g-identite-020) ;
+// --ecarts=<fichier.json> : TOUTES les décisions qui diffèrent du labo, par jeu (la console n'en imprime que les 10 premières)
+const FIX = arg('fixtures', `${LABO}/rm/fixtures-g`), SORTIE_ECARTS = arg('ecarts', null);
+const tousEcarts = {};
 const jeux = arg('jeux', 'reel,dracaufeu,auto').split(','), limite = Number(arg('limite', 0));
 let echecs = 0, faites = 0;
 const verif = (cond, quoi) => { faites++; if (!cond) echecs++; console.log(`${cond ? '✅' : '🔴'} ${quoi}`); };
@@ -91,6 +94,8 @@ const f4 = x => Number.isFinite(x) ? x.toFixed(4) : '—';
         for (const x of franchis.slice(0, 10)) console.log(`   ⚠️ ${x}`);
         console.log(`   décisions identiques ${pareil}/${lignes.length} · affirmés API ${aff} (labo ${affLabo}) · faux API ${faux}`);
         for (const x of ecarts.slice(0, 10)) console.log(`   🔴 ${x}`);
+        tousEcarts[jeu] = ecarts;
+        if (SORTIE_ECARTS) fs.writeFileSync(SORTIE_ECARTS, JSON.stringify({ fixtures: FIX, identiteMax: Z.IDENTITE_MAX, ecarts: tousEcarts }, null, 1));
         verif(pareil === lignes.length, `${jeu} : avec les mesures de l'API, la règle rend les décisions du labo (${pareil}/${lignes.length})`);
         verif(faux === 0, `${jeu} : 0 faux affirmé avec les mesures de l'API (${aff} affirmés, labo ${affLabo})`);
         verif(Z._scans.size <= Z.CACHE_SCANS && Z._paires.size <= Z.CACHE_PAIRES,
