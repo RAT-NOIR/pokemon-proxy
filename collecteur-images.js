@@ -60,6 +60,7 @@ const balise = require('./collecte-cartes/balise-worker');           // « quel 
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
+const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
 const SOURCE = arg('source') || 'artofpkm';
 const LANGUE = langueDuVisuel({ source: SOURCE });                     // artofpkm ne sert que le japonais : par construction
 
@@ -799,11 +800,30 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte TCGdex — ${e.message}`);
                 }
                 finally { await vt.rendre(); }
+            } else if (SOURCES_TPC.includes(sourceDuSet)) {
+                // 🔑 LES SOURCES OFFICIELLES TPC (décision de l'éditeur, 2026-10-07 soir) : TPC Asie et pokemon-card.com, un verrou global
+                // PAR SITE (ce ne sont pas les mêmes serveurs, §17), lié au client — sans lui, aucune requête (collecte-cartes/tpc.js).
+                const tpcImg = require('./collecteur-images-tpc');
+                await verrouGlobal.rendre();
+                const vp = fabriquerVerrou({ Modele: M.EtatImages, id: SITES_TPC[sourceDuSet].verrou, dureeMs: VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${sourceDuSet}` });
+                let tenuPar = await vp.prendre();
+                for (let essai = 0; tenuPar && !arretDemande; essai++) {
+                    if (essai === 0) console.log(`⏳ verrou global ${sourceDuSet} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — j'attends, ${ATTENTE_VERROU_MS / 1000} s entre deux essais.`);
+                    await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
+                    tenuPar = await vp.prendre();
+                }
+                if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
+                try { b = await tpcImg.collecterSet(suivant, M, { verrou: vp }); }
+                catch (e) {
+                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
+                }
+                finally { await vp.rendre(); }
             } else if (sourceDuSet === SOURCE) b = await collecterSet(suivant._id, M, dossierRapport);
             else {
                 // 🔴 PLAN-POKECARDEX.md §5 (demande du testeur, 2026-09-27) : le `else` final envoyait TOUTE source inconnue chez artofpkm —
                 // une unité d'une source neuve, lue par un worker antérieur, aurait frappé le mauvais serveur sous le mauvais verrou.
-                // L'aiguillage s'écrit par ce qu'il AUTORISE (§51) : artofpkm, bulbapedia, tcgdex ; tout le reste attend un worker qui
+                // L'aiguillage s'écrit par ce qu'il AUTORISE (§51) : artofpkm, bulbapedia, tcgdex, tpc-asie, pokemon-card-com ; tout le reste attend un worker qui
                 // la connaît (une heure, puis relue), la cause ÉCRITE sur l'unité — ni refus définitif, ni boucle.
                 console.error(`🔴 ${suivant._id} : source « ${sourceDuSet} » inconnue de ce worker — remise en attente (1 h), rien n'est demandé à personne.`);
                 await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-inconnue', pasAvant: new Date(Date.now() + 60 * 60 * 1000), erreur: `source « ${sourceDuSet} » inconnue de ce worker` }, $unset: { pris: 1 } });
@@ -832,7 +852,8 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // CRIE et il s'ÉCRIT sur l'unité (`revalidation`) : un compte qui ne vit que dans un log n'est pas une mesure (§21 n°7).
             // `REVALIDATION_SECRET` doit exister dans l'environnement du worker.
             if (APRES_JOINTURE.test(String(b?.etat)) && !b.sansJointure) {
-                const slugUnite = ligneDeTable(suivant.code || String(suivant._id).replace(/^tcgdex\//, ''))?.slugSet;
+                // une unité TPC porte son set (`slugSet`) : ses sets n'ont pas toujours de ligne de table (fiches simples, promos régionales)
+                const slugUnite = SOURCES_TPC.includes(sourceDuSet) ? suivant.slugSet : ligneDeTable(suivant.code || String(suivant._id).replace(/^tcgdex\//, ''))?.slugSet;
                 let rv;
                 // ⚠️ « rien téléchargé » ne veut pas dire « rien joint » : un passage qui suit un passage INTERROMPU joint des images
                 // téléchargées avant — sauter sa revalidation laisserait la page ancienne. Coût borné : 1 appel par passage joint,

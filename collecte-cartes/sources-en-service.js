@@ -7,7 +7,9 @@
 // seulement ; un accès se demande à Bulbagarden. Le worker remettait pourtant des unités Bulbapedia en file (l'alimentateur) et les
 // collectait (relecture du 2026-10-06) — rien, dans le code, ne portait la décision.
 // Rouvrir Bulbapedia = l'ajouter ici, dans un commit qui dit pourquoi : la décision a une seule adresse.
-const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex']));
+// ➕ 2026-10-07 (soir) — LES SOURCES OFFICIELLES TPC, sur décision de l'éditeur : TPC Asie et pokemon-card.com (impression exacte,
+// rien de protégé, robots.txt respecté, cadence lente, arrêt au premier blocage — collecte-cartes/tpc.js). TPC Chine reste fermé.
+const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex', 'tpc-asie', 'pokemon-card-com']));
 const SOURCES_SUSPENDUES = Object.freeze({ bulbapedia: 'suspendu depuis le 2026-10-04 (403 Cloudflare, défi anti-robot) : plus aucune requête' });
 const enService = source => SOURCES_EN_SERVICE.has(source);
 module.exports = { SOURCES_EN_SERVICE, SOURCES_SUSPENDUES, enService };

@@ -1,0 +1,34 @@
+{
+ "result": 1,
+ "errMsg": "",
+ "thisPage": 1,
+ "maxPage": 4,
+ "hitCnt": 127,
+ "cardStart": 1,
+ "cardEnd": 39,
+ "searchCondition": [
+  "",
+  "レギュレーション：すべてのカード"
+ ],
+ "regulation": "all",
+ "cardList": [
+  {
+   "cardID": "38273",
+   "cardThumbFile": "/assets/images/card_images/large/SD/038273_P_FUSHIGIBANAV.jpg",
+   "cardNameAltText": "フシギバナV",
+   "cardNameViewText": "フシギバナV"
+  },
+  {
+   "cardID": "38274",
+   "cardThumbFile": "/assets/images/card_images/large/SD/038274_P_BIDORU.jpg",
+   "cardNameAltText": "ビードル",
+   "cardNameViewText": "ビードル"
+  },
+  {
+   "cardID": "38275",
+   "cardThumbFile": "/assets/images/card_images/large/SD/038275_P_KOKUN.jpg",
+   "cardNameAltText": "コクーン",
+   "cardNameViewText": "コクーン"
+  }
+ ]
+}

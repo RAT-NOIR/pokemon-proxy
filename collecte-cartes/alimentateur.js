@@ -77,6 +77,32 @@ function choisirUnites({ manques, ligneDe, sourceArtofpkm, setTcgdex, unites, te
     return { inserer, reprendre, ecartes };
 }
 
+/**
+ * ➕ 2026-10-07 (soir) — LES SOURCES OFFICIELLES TPC (décision de l'éditeur : TPC Asie et pokemon-card.com ; TPC Chine fermé). Pure.
+ * Les sets ne viennent pas de la règle par set (beaucoup n'ont pas de ligne de table : fiches simples, promos régionales) mais de
+ * collecte-cartes/tpc-sets.js, écrite par ce qu'elle AUTORISE. Chaque ligne s'enfile UNE fois, plus gros trous d'abord ; une unité déjà
+ * passée ne revient pas d'elle-même (le cache des fiches rend un rejeu gratuit : il se décide) ; un site qui a BLOQUÉ (alerte active)
+ * ne reçoit plus rien — « si une source bloque, on s'arrête ».
+ */
+// un ARRÊT n'est pas un verdict (§17, relecture du 2026-10-07) : une unité refusée parce que la source bloquait ou que la base passait
+// 400 Mo revient quand l'arrêt est levé — par une DÉCISION (l'alerte désactivée à la main), jamais d'elle-même
+const ARRETS_TPC = new Set(['refuse-source-bloquee', 'refuse-taille-base']);
+function choisirUnitesTpc({ table, unites, max, bloquees, sourcesEnService = SOURCES_EN_SERVICE, stopTaille = false }) {
+    const { uniteDeLaLigne } = require('./tpc-sets');
+    const inserer = [], reprendre = [], ecartes = [];
+    if (stopTaille) return { inserer, reprendre, ecartes: [{ slug: '*', raison: 'base au-delà de 400 Mo (alerte/taille-base active) : STOP, aucune unité TPC' }] };
+    for (const L of [...table].sort((a, b) => (b.trous ?? 0) - (a.trous ?? 0))) {
+        if (inserer.length + reprendre.length >= max) break;
+        if (!sourcesEnService.has(L.site)) continue;
+        if (bloquees.has(L.site)) { ecartes.push({ slug: L.slug, raison: `${L.site} a bloqué : plus aucune unité (alerte active)` }); continue; }
+        const u = uniteDeLaLigne(L);
+        const deja = unites.get(u._id);
+        if (!deja) { inserer.push({ ...u, slug: L.slug, sans: L.trous, ajouteMotif: `alimentateur : source officielle ${L.site} (${L.langue}, ${L.code}) — ${L.trous} trous mesurés le 2026-10-07` }); continue; }
+        if (deja.etat === 'refuse' && ARRETS_TPC.has(deja.resultat)) reprendre.push({ _id: u._id, source: L.site, slug: L.slug, sans: L.trous, resultatAvant: deja.resultat });
+    }
+    return { inserer, reprendre, ecartes };
+}
+
 /** Les sets dont des cartes n'ont pas de visuel pour CE set — la même définition que remettre-en-file.js (`images.set`). */
 async function manquesParSet(db) {
     return db.collection('cartes').aggregate([
@@ -112,10 +138,11 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
         + (await F.countDocuments({ etat: 'attente', $or: [{ pasAvant: { $exists: false } }, { pasAvant: { $lte: maintenant } }] }));
     const enAttente = await pretes();
     if (enAttente >= seuil && !simuler) return { enAttente, rien: true };
-    let R, RM = { inserer: [], reprendre: [], ecartes: [] }, mesure = null, erreurManque = null, manques;
+    let R, RM = { inserer: [], reprendre: [], ecartes: [] }, RT = { inserer: [], reprendre: [], ecartes: [] }, mesure = null, erreurManque = null, manques;
     if (plan) {
         if (simuler) throw new Error('alimenter : `plan` et `simuler` ensemble — un plan se simule une fois, puis s\'écrit');
         R = { inserer: plan.inserer, reprendre: plan.reprendre, ecartes: plan.ecartes }; RM = plan.choixManqueReel; mesure = plan.manqueReel; manques = plan.manques; erreurManque = plan.erreurManque ?? null;
+        RT = plan.choixTpc || RT;
         refusees.push(...(plan.refusees || []));
     } else {
     const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./table-sets');
@@ -162,8 +189,18 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
             journal.error(`🔴 alimentateur : le manque réel n'a pas pu se mesurer — ${e.message}`);
         }
     }
+    // ── les sources officielles TPC, dans la place qui reste (choisirUnitesTpc)
+    const placeTpc = max - R.inserer.length - R.reprendre.length - RM.inserer.length - RM.reprendre.length;
+    if (placeTpc > 0) {
+        const { TABLE_TPC } = require('./tpc-sets');
+        const { SOURCES_TPC, idAlerteBloquee } = require('./tpc');
+        const ids = SOURCES_TPC.map(idAlerteBloquee);
+        const alertes = (await E.find({ _id: { $in: [...ids, 'alerte/taille-base'] } }).toArray()).filter(d => d.active === true);
+        const bloquees = new Set(alertes.filter(d => ids.includes(d._id)).map(d => SOURCES_TPC[ids.indexOf(d._id)]));
+        RT = choisirUnitesTpc({ table: TABLE_TPC, unites, max: placeTpc, bloquees, sourcesEnService, stopTaille: alertes.some(d => d._id === 'alerte/taille-base') });
     }
-    if (simuler) return { enAttente, ...R, manques, manqueReel: mesure, choixManqueReel: RM, refusees, erreurManque };
+    }
+    if (simuler) return { enAttente, ...R, manques, manqueReel: mesure, choixManqueReel: RM, choixTpc: RT, refusees, erreurManque };
     let ordre = ((await F.find({}).sort({ ordre: -1 }).limit(1).toArray())[0]?.ordre ?? 0) + 1;
     let inseres = 0, repris = 0, enfileesManque = 0;
     for (const u of R.inserer) {
@@ -175,6 +212,16 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
         const { _id, slug, sans, ajouteMotif, ...champs } = u;
         const r = await F.updateOne({ _id }, { $setOnInsert: { ...champs, ordre: ordre++, etat: 'attente', ajouteLe: new Date(), ajouteMotif } }, { upsert: true });
         inseres += r.upsertedCount; enfileesManque += r.upsertedCount;
+    }
+    for (const u of RT.inserer) {
+        const { _id, slug, sans, ajouteMotif, ...champs } = u;
+        const r = await F.updateOne({ _id }, { $setOnInsert: { ...champs, ordre: ordre++, etat: 'attente', ajouteLe: new Date(), ajouteMotif } }, { upsert: true });
+        inseres += r.upsertedCount;
+    }
+    for (const u of RT.reprendre || []) {
+        // filtrée sur l'état LU : une unité qui a bougé entre-temps n'est pas touchée
+        const r = await F.updateOne({ _id: u._id, etat: 'refuse', resultat: u.resultatAvant }, { $set: { etat: 'attente', ordre: ordre++, remisEnFileLe: new Date(), remisEnFileMotif: `alimentateur : l'arrêt « ${u.resultatAvant} » est levé (alerte désactivée)` }, $unset: { pris: 1, fini: 1, tentatives: 1, pasAvant: 1, resultat: 1 } });
+        repris += r.modifiedCount;
     }
     const reprisesManque = new Set(RM.reprendre.map(u => String(u._id)));
     for (const u of [...R.reprendre, ...RM.reprendre]) {
@@ -191,7 +238,7 @@ async function alimenter(db, { seuil = 3, max = 10, journal = console, simuler =
     if (mesure) await E.updateOne({ _id: 'alimentateur/manque-reel' }, { $set: { le: maintenant, version, lignes: mesure.examinees, avecSetTcgdex: mesure.avecSet, setsLus: mesure.lues, setsAvecManque: mesure.manques.length, impressionsJamaisTentees: mesure.manques.reduce((s, m) => s + m.n, 0), enfilees: enfileesManque }, $unset: { erreur: 1, erreurLe: 1, erreurVersion: 1 } }, { upsert: true });
     else if (erreurManque) await E.updateOne({ _id: 'alimentateur/manque-reel' }, { $set: { erreur: erreurManque, erreurLe: maintenant, erreurVersion: version } }, { upsert: true });
     const apres = await pretes();
-    const raisons = {}; for (const e of [...R.ecartes, ...RM.ecartes, ...refusees]) { const k = e.raison.replace(/\(.*\)/, '(…)'); raisons[k] = (raisons[k] || 0) + 1; }
+    const raisons = {}; for (const e of [...R.ecartes, ...RM.ecartes, ...RT.ecartes, ...refusees]) { const k = e.raison.replace(/\(.*\)/, '(…)'); raisons[k] = (raisons[k] || 0) + 1; }
     if (mesure) raisons[`manque réel TCGdex : ${mesure.manques.length} set(s), ${mesure.manques.reduce((s, m) => s + m.n, 0)} impression(s) jamais tentée(s) sur ${mesure.lues} set(s) lu(s)`] = enfileesManque;
     if (erreurManque) raisons[`manque réel NON MESURÉ : ${erreurManque}`] = 0;
     await ecrireAlerte(E, { vide: !apres, setsSans: manques.length, cartesSans: manques.reduce((s, m) => s + m.sans, 0), raisons });
@@ -212,4 +259,4 @@ async function ecrireAlerte(E, { vide, setsSans = null, cartesSans = null, raiso
     await E.updateOne({ _id: 'alerte/file-vide' }, { $set: { active: true, constateLe: maintenant, setsSansVisuelComplet: setsSans, cartesSansVisuel: cartesSans, raisons }, $setOnInsert: { depuis: maintenant } }, { upsert: true });
 }
 
-module.exports = { choisirUnites, manquesParSet, alimenter, ecrireAlerte, tirageDe };
+module.exports = { choisirUnites, choisirUnitesTpc, manquesParSet, alimenter, ecrireAlerte, tirageDe };

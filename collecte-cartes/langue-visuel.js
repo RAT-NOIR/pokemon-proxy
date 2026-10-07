@@ -36,6 +36,13 @@ function langueDuVisuel(im) {
     if (im.source === 'tcgdex' && im.langueSource === 'th') return { langue: 'th', preuve: 'TCGdex, API thaïe (assets.tcgdex.net/th) : le scan de l\'impression thaïe' };
     if (im.source === 'tcgdex' && im.langueSource != null && im.langueSource !== 'en') return { langue: null, preuve: `TCGdex, langue source « ${im.langueSource} » sans règle` };
     if (im.source === 'tcgdex') return { langue: 'en', preuve: 'TCGdex, API anglaise (assets.tcgdex.net/en) : le scan de l\'impression anglaise' };
+    // ➕ 2026-10-07 (soir) — LES SOURCES OFFICIELLES TPC : la langue est celle du SITE, déclarée par l'adresse (asia.pokemon-card.com/<l>,
+    // pokemon-card.com), par ce qu'elle AUTORISE ; une langue de site inconnue n'a pas de règle (null)
+    if (im.source === 'tpc-asie') {
+        const l = { id: 'id', th: 'th', tw: 'zh-hant' }[im.langueSource];
+        return l ? { langue: l, preuve: `TPC Asie, site « ${im.langueSource} » (asia.pokemon-card.com/${im.langueSource}) : le scan de l'impression ${l}` } : { langue: null, preuve: `TPC Asie, site « ${im.langueSource} » sans règle` };
+    }
+    if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };
         const f = `${im.wOriginal}×${im.hOriginal}`;

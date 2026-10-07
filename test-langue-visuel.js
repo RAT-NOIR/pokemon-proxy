@@ -28,6 +28,13 @@ verifier('bulbapedia sans wOriginal → null', langue({ source: 'bulbapedia' }),
 verifier('source inconnue → null', langue({ source: 'pokellector', wOriginal: 868, hOriginal: 1212 }), null);
 // 4 bis. TCGdex anglais : la source déclare la langue — la seule preuve d'anglais, même sur un format « japonais ».
 verifier('tcgdex → en', langue({ source: 'tcgdex', wOriginal: 600, hOriginal: 825 }), 'en');
+// 4 ter. Les sources officielles TPC (2026-10-07, soir) : la langue est celle du SITE de la source, déclarée par l'adresse même
+// (asia.pokemon-card.com/id|th|tw, pokemon-card.com) — un rejeu (poser-langue-images.js) ne doit pas la réécrire en null.
+verifier('tpc-asie id → id', langue({ source: 'tpc-asie', langueSource: 'id' }), 'id');
+verifier('tpc-asie th → th', langue({ source: 'tpc-asie', langueSource: 'th' }), 'th');
+verifier('tpc-asie tw → zh-hant', langue({ source: 'tpc-asie', langueSource: 'tw' }), 'zh-hant');
+verifier('tpc-asie, langue source inconnue → null', langue({ source: 'tpc-asie', langueSource: 'ko' }), null);
+verifier('pokemon-card-com → ja', langue({ source: 'pokemon-card-com' }), 'ja');
 // 5. La preuve est toujours écrite, verdict ou pas.
 verifier('la preuve du format nomme le format', langueDuVisuel(bulba(868, 1212)).preuve.includes('868×1212'), true);
 verifier('un null porte aussi sa preuve', typeof langueDuVisuel(bulba(734, 1024)).preuve, 'string');

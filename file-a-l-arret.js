@@ -58,6 +58,10 @@ const FRAIS_MS = 3 * 60 * 1000;   // le battement du verrou global : trois minut
             + (imp.enCours ? (Date.now() - new Date(imp.dernierEssai) > 45 * 60000 ? ' · 🔴 « en cours » depuis plus de 45 min : interrompu (conteneur tué ?)' : ' · EN COURS') : ''));
     for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/import-/, active: true }).toArray())
         console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : code ${al.code}, essai ${al.essais} — ${String(al.extrait || '').split('\n').filter(Boolean).slice(-1)[0] ?? ''}`);
+    // ➕ 2026-10-07 (soir) — les sources officielles TPC (collecteur-images-tpc.js) : un site qui a BLOQUÉ (ou retiré en un lot), et la base
+    // au-delà de 400 Mo (consigne de l'éditeur : STOP)
+    for (const al of await db.collection('collecte_images_etat').find({ _id: /^alerte\/(source-bloquee\/|taille-base)/, active: true }).toArray())
+        console.log(`🔴 ALERTE ${al._id} depuis ${new Date(al.depuis).toISOString()} : ${al.motif}`);
 
     const bouge = enCours.length > 0 || fraisSet.length > 0 || (age != null && age < FRAIS_MS) || importEnCours;
     if (importEnCours) console.log('🔴 un import quotidien est EN COURS (catalogue ou guide des prix) : la base de production écrit');

@@ -185,6 +185,36 @@ const faux = () => { const docs = new Map(); return { docs, async updateOne(f, u
     const Bd = await alimenter(db, { M: null, journal: silencieux, version: 'v-test', maintenant: K, sourcesEnService: TOUTES });
     verifier('trois unités différées ne bloquent pas l\'alimentateur : il reprend ce qui manque', [Bd.rien ?? false, Bd.repris], [false, 1]);
     verifier('l\'échec du manque réel s\'écrit (état et raison), sans compter comme une mesure', [/liste TCGdex absente/.test(etatManque?.erreur || ''), etatManque?.enfilees, Object.keys(B.raisons).some(k => k.startsWith('manque réel NON MESURÉ'))], [true, undefined, true]);
+
+    // ── LES SOURCES OFFICIELLES TPC (décision de l'éditeur, 2026-10-07 soir) : chaque ligne de collecte-cartes/tpc-sets.js s'enfile UNE
+    // fois, plus gros trous d'abord, sous la forme que la garde du collecteur accepte ; un site qui a BLOQUÉ ne reçoit plus rien.
+    const { choisirUnitesTpc } = require('./collecte-cartes/alimentateur');
+    const tableT = [{ slug: 'A', site: 'tpc-asie', langue: 'id', code: 'SV-P', tirage: 'id', trous: 10 }, { slug: 'B', site: 'pokemon-card-com', langue: 'ja', code: 'sD', tirage: 'jp', trous: 50 }, { slug: 'C', site: 'tpc-asie', langue: 'th', code: 'S-P', tirage: 'th', trous: 5 }];
+    const TPC = new Set(['tpc-asie', 'pokemon-card-com']);
+    let RT = choisirUnitesTpc({ table: tableT, unites: new Map(), max: 10, bloquees: new Set(), sourcesEnService: TPC });
+    verifier('TPC : chaque ligne absente de la file s\'insère, plus gros trous d\'abord', RT.inserer.map(u => u._id), ['pokemon-card-com/B', 'tpc-asie/A', 'tpc-asie/C']);
+    verifier('   l\'unité porte source, slugSet, code, langue (la ligne, mot pour mot)', [RT.inserer[1].source, RT.inserer[1].slugSet, RT.inserer[1].code, RT.inserer[1].langue], ['tpc-asie', 'A', 'SV-P', 'id']);
+    RT = choisirUnitesTpc({ table: tableT, unites: new Map([['tpc-asie/A', { etat: 'fait' }]]), max: 10, bloquees: new Set(), sourcesEnService: TPC });
+    verifier('TPC : une unité déjà passée ne revient pas d\'elle-même', RT.inserer.map(u => u._id), ['pokemon-card-com/B', 'tpc-asie/C']);
+    RT = choisirUnitesTpc({ table: tableT, unites: new Map(), max: 10, bloquees: new Set(['tpc-asie']), sourcesEnService: TPC });
+    verifier('TPC : un site qui a BLOQUÉ ne reçoit plus d\'unité, et la raison s\'écrit', [RT.inserer.map(u => u._id), RT.ecartes.filter(e => /bloqu/.test(e.raison)).length], [['pokemon-card-com/B'], 2]);
+    verifier('TPC : borné par la place', choisirUnitesTpc({ table: tableT, unites: new Map(), max: 1, bloquees: new Set(), sourcesEnService: TPC }).inserer.length, 1);
+    // relecture du 2026-10-07 : un BLOCAGE ou la garde de TAILLE ne sont pas des verdicts sur le set (§17) — l'unité revient quand l'arrêt
+    // est levé (alerte désactivée par une décision) ; un vrai refus, lui, ne revient pas
+    const arretees = new Map([['tpc-asie/A', { etat: 'refuse', resultat: 'refuse-source-bloquee' }], ['pokemon-card-com/B', { etat: 'refuse', resultat: 'refuse-taille-base' }], ['tpc-asie/C', { etat: 'refuse', resultat: 'incomplet' }]]);
+    RT = choisirUnitesTpc({ table: tableT, unites: arretees, max: 10, bloquees: new Set(), sourcesEnService: TPC });
+    verifier('TPC : une unité arrêtée par un blocage ou la taille revient, l\'arrêt levé ; un refus « incomplet » non', [RT.reprendre.map(u => u._id).sort(), RT.inserer.length], [['pokemon-card-com/B', 'tpc-asie/A'], 0]);
+    RT = choisirUnitesTpc({ table: tableT, unites: arretees, max: 10, bloquees: new Set(['tpc-asie']), sourcesEnService: TPC });
+    verifier('   tant que le site est bloqué, son unité reste arrêtée', RT.reprendre.map(u => u._id), ['pokemon-card-com/B']);
+    RT = choisirUnitesTpc({ table: tableT, unites: new Map(), max: 10, bloquees: new Set(), sourcesEnService: TPC, stopTaille: true });
+    verifier('TPC : la base au-delà de 400 Mo (alerte active) → aucune unité, et la raison s\'écrit', [RT.inserer.length, RT.ecartes.some(e => /400 Mo/.test(e.raison))], [0, true]);
+    verifier('TPC : hors de la liste des sources en service → rien', choisirUnitesTpc({ table: tableT, unites: new Map(), max: 10, bloquees: new Set(), sourcesEnService: TOUTES }).inserer.length, 0);
+    cols.file_images.docs.clear();
+    cols.collecte_images_etat.docs.set('alerte/source-bloquee/pokemon-card-com', { _id: 'alerte/source-bloquee/pokemon-card-com', active: true });
+    const Bt = await alimenter(db, { M: null, journal: silencieux, version: 'v-test', maintenant: K, sourcesEnService: new Set([...TOUTES, ...TPC]) });
+    const idsT = [...cols.file_images.docs.keys()];
+    verifier('alimenter : la file vide reçoit les unités TPC de la table réelle, dans la place restante', [idsT.includes('tpc-asie/Scarlet-Violet-Indonesian-Promos'), idsT.length <= 10, Bt.inseres === idsT.length], [true, true, true]);
+    verifier('alimenter : l\'alerte de blocage de pokemon-card.com est lue — aucune de ses unités', idsT.some(i => i.startsWith('pokemon-card-com/')), false);
     console.log(`\n${ok}/${ok + ko} ${ko ? '❌' : '✅'}`);
     process.exit(ko ? 1 : 0);
 })();

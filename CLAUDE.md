@@ -550,6 +550,36 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 75. LES SOURCES OFFICIELLES TPC : UN TÉMOIN QUI CHANGE DE LANGUE, UN DÉNOMINATEUR QUI NE NOMME PAS LE SET, ET UNE REDIRECTION QUI SORT DU SITE — 2026-10-07 (soir)
+
+> 🔑 **DÉCISION DE L'ÉDITEUR : TPC Asie (id, th, tw) et pokemon-card.com ouverts pour combler les visuels MANQUANTS, impression exacte ;
+> TPC Chine fermé (pas de base publique).** Rien de protégé, robots.txt respecté, cadence lente (10 s), arrêt au premier blocage ; preuve
+> numéro + nom + set, un doute est un trou ; jamais l'illustration d'une autre impression ; chaque visuel porte sa source, la mention
+> « © Pokémon / The Pokémon Company » et le lot `tpc-2026-10` (`retirer-visuels-tpc.js` le retire d'un geste). Code : collecte-cartes/tpc.js,
+> collecteur-images-tpc.js (le worker), collecte-cartes/tpc-sets.js (70 lignes, MESURÉES) ; bancs test-tpc.js 81, test-collecteur-tpc.js 28.
+
+🔴 **LE TÉMOIN QUI CHANGE DE LANGUE NE TÉMOIGNE PLUS : TCGdex data-asia `SV-P/001` porte `ja` « ピカチュウ » et `th` « วาไนเดอร์ » (Spidops).**
+Chaque langue numérote ses promos à sa façon ; un fichier qui fusionne les langues fusionne deux cartes. Le numéro se lit sur la page de la
+langue servie, jamais chez un tiers qui les mêle.
+🔑 **LE NOM TRADUIT SE COMPARE PAR CE QUI NE SE TRADUIT PAS** : le n° de Pokédex et les PV que la page porte en chiffres, et la RÈGLE (ex, V,
+VMAX, Méga, forme X/Y) qui s'écrit en lettres latines partout. ⚠️ « 超級噴火龍Xex » : la lettre de forme collée cachait le « ex » — elle se
+lit et se retire AVANT lui. Notre carte sans `ndex` prend le n° de son nom anglais (pokedex-dexids.json, normalisation de scoring.js). Un
+dresseur au nom traduit (« Tukar Pokémon » = Switch) reste un trou.
+✅ **CALIBRÉ AVANT D'ÊTRE CÂBLÉ, sur ~40 vraies fiches (fonctions de production) : 51 trous prouvés sur 64**, résidu nommé (dresseurs
+traduits, deux fiches au même numéro à la source).
+🔴 **LA RELECTURE (sous-agent) A TROUVÉ HUIT DÉFAUTS, dont trois dans le sens qui affirme ou qui frappe** :
+· **un dénominateur numérique (« 165/164 ») ne nomme pas le set** : si la source ignorait son filtre, une fiche d'un autre set au même
+  numéro passait. Désormais la majorité de la liste (dénominateur, symbole) et le TOTAL de la liste contre la mesure de la table ;
+· **`fetch` suivait les redirections** : l'hôte et robots.txt n'étaient vérifiés que sur l'adresse de départ. `redirect: 'manual'`, même
+  site, robots relu, trois sauts ;
+· **un set sans produit sortait « verifie »** — le §41, dans un outil écrit le jour même.
+Et : les vignettes oubliées par le retrait, des unités ARRÊTÉES (blocage, taille) rangées en refus définitif (§17), une garde qui comptait
+les entrées au lieu de les comparer. Une seconde relecture : robots.txt redirigé bloquait la source pour de bon, une garde passait sans
+compte mesuré, un Crawl-delay sans plafond. 🔑 **Les bancs passaient 61/61 avant la relecture : ils gardaient ce que j'avais prévu.**
+⚠️ **LA GRAPPE DE PRODUCTION (`test`) EST À 439 Mo (données + index), dont `references_image` 369 Mo** — au-dessus du seuil de 400 de
+l'éditeur. Le lot TPC écrit dans `cartes` (167 Mo) ; rien n'est écrit dans `test`. **My First Battle** : aucun visuel par produit chez
+aucune source légale (TCGdex : une Potion, une Switch, sans image) — l'égalité d'illustration ne se prouve pas, rien ne bouge.
+
 ## 74. RATMARKET V1 : LE CADRE RESSEMBLE PLUS QUE LE DESSIN, UNE ZONE MOYENNE NOIE LE NUMÉRO, ET L'IMAGE AFFIRME SANS LECTURE — 2026-10-05
 
 > 🔑 **DÉCISION DU TESTEUR : l'identification ne doit plus dépendre d'un appel payant ; Gemini n'est qu'un professeur pour mesurer, jamais
