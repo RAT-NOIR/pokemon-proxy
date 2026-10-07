@@ -51,7 +51,7 @@ async function sousVerrouGlobal(M, travail) {
         // référence. Ce qui a changé n'est pas l'avis, c'est le FAIT mesuré : la liste artofpkm de Terastal Festival ex
         // porte 381 numéros DISTINCTS, aucun doublon — la source publie une image par NUMÉRO, pas par motif. Le visuel
         // servi est donc le bon set et le bon numéro, et il ne montre simplement pas le motif du produit ; la ligne le
-        // DIT (`motifNonDistingue` → `mention`, écrite à côté de la preuve).
+        // DIT (`motifNonDistingue` → `noteVariante`, écrite à côté de la preuve ; `mention` jusqu'au 2026-10-08).
         const additionals = TABLE_AUTO.filter(l => /-Additionals$/.test(l.slugSet || ''));
         // 🔴 LES LIGNES JAPONAISES QUI NE SONT PAS DANS `TABLE_AUTO` N'ÉTAIENT JAMAIS CANDIDATES (2026-09-23) : ni celles écrites
         // à la main (les 20 decks du §48), ni celles de la voie « sans page ». Une ligne sans source ne peut pas avoir de visuel,

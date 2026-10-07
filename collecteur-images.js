@@ -376,17 +376,19 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // image, la jointure ne joignait rien, et l'unité sortait « fait/verifie ». 737 cartes rattachées, 0 visuel, aucune
     // erreur — une concordance juste sur un ensemble vide (§21 n°8). Pour un set À BASE PARTAGÉE, on lit donc les images
     // par leur set SOURCE, qui est la vraie clé ; et on ne réécrit PAS le document image (l. suivante), qui appartient à
-    // la base — lui poser la mention « motif non distingué » la ferait porter à la base.
+    // la base — lui poser la note « motif non distingué » la ferait porter à la base.
     const partagees = !!S?.setDeBase;
     // les sous-sections de kit sont des sets source à part (2026-10-06) : leurs ids viennent des entrées de la liste
     const idsSource = [...new Set([...S?.ids || [], ...(S?.ids || []).flatMap(id => (entrees?.[id] || []).map(e => e.sourceSetId).filter(x => x != null))])];
     const images = await M.Image.find(partagees ? { source: SOURCE, sourceSetId: { $in: idsSource }, etat: 'ok' } : { source: SOURCE, set: slug, etat: 'ok' }).lean();
-    // 🔑 LA MENTION VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
+    // 🔑 LA NOTE VOYAGE AVEC LA DONNÉE (2026-09-19). Les expansions « Additionals » de Cardmarket sont des VARIANTES
     // (motifs Master Ball, Poké Ball) qui partagent le numéro du set de base ; artofpkm, lui, ne publie qu'UNE image par
     // NUMÉRO — mesuré : Terastal Festival ex, 381 numéros distincts, aucun doublon. Leur visuel est donc le bon numéro du
-    // bon set, mais PAS le motif du produit. Sans cette mention, quelqu'un comparera un jour deux variantes en croyant
+    // bon set, mais PAS le motif du produit. Sans cette note, quelqu'un comparera un jour deux variantes en croyant
     // voir deux visuels différents : la ligne le dit elle-même, à côté de la preuve.
-    const mention = S?.motifNonDistingue ? 'variante Cardmarket : la source ne distingue pas le motif — une image par numéro' : null;
+    // ⚠️ `noteVariante`, PAS `mention` (testeur, 2026-10-08) : `mention` est le texte PUBLIC qu'un visuel doit porter (« © Pokémon /
+    // The Pokémon Company » des sources TPC) ; une note INTERNE sous le même nom se lisait comme une mention à afficher.
+    const noteVariante = S?.motifNonDistingue ? 'variante Cardmarket : la source ne distingue pas le motif — une image par numéro' : null;
     const restes = [];
     const cartesAvecImage = new Set();
     let jointes = 0, clesRefusees = 0;
@@ -477,7 +479,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             continue;
         }
         {
-            if (!partagees) await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(mention ? { mention } : {}) } });
+            if (!partagees) await M.Image.updateOne({ _id: im._id }, { $set: { carteId: c._id, preuve, ...(noteVariante ? { noteVariante } : {}) } });
             // 🔴 UNE IMAGE APPARTIENT À UNE IMPRESSION, PAS À UNE CARTE (CLAUDE.md §19). `image`,
             // champ unique, donnait un seul visuel à une carte qui vit dans plusieurs sets : 60
             // cartes de la base, 29 déjà pourvues. `images` est une LISTE clé par `set`, comme la
@@ -490,7 +492,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(mention ? { mention } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
             // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
             // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
             // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur
