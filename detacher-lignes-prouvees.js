@@ -1,12 +1,17 @@
 // ============================================================
 // DÉTACHER DES LIGNES DE JOINTURE PROUVÉES FAUSSES — nommées une à une, rejugées au moment d'écrire
 // ============================================================
-//   node detacher-lignes-prouvees.js --annonce=<fichier.json>    (simulation : rejuge chaque ligne, écrit l'annonce des baisses)
-//   node lot-additif.js --quoi="…" --collections=restes --annonce=<fichier.json> -- node detacher-lignes-prouvees.js --ecrire
+//   node detacher-lignes-prouvees.js --decision=<date> --annonce=<fichier.json>    (simulation : rejuge chaque ligne, écrit l'annonce)
+//   node lot-additif.js --quoi="…" --collections=restes --annonce=<fichier.json> -- node detacher-lignes-prouvees.js --decision=<date> --ecrire
 //
-// FEU VERT DU TESTEUR (2026-09-25, soir) : « détacher uniquement les 3 lignes prouvées (Alolan Sandslash SM18, Volcanion,
-// Exeggutor H10) » et « Aquapolis : détache les 24 homonymes croisés » — Exeggutor H10 est l'un des 24 : 26 lignes en tout.
-// La liste est FERMÉE : un outil de détachement ne décide pas ce qui est faux, il applique une décision prise sur une preuve.
+// UNE LISTE FERMÉE PAR DÉCISION : un outil de détachement ne décide pas ce qui est faux, il applique une décision prise sur une
+// preuve. Chaque décision garde sa liste (l'historique se relit) et une exécution n'en applique qu'UNE, nommée.
+// · 2026-09-25 (soir) : « détacher uniquement les 3 lignes prouvées (Alolan Sandslash SM18, Volcanion, Exeggutor H10) » et
+//   « Aquapolis : détache les 24 homonymes croisés » — Exeggutor H10 est l'un des 24 : 26 lignes en tout.
+// · 2026-10-08 : les deux jointures fausses trouvées par l'épreuve de la catégorie (Umbreon ex SV-P143 -> Energy Sticker, Espeon ex
+//   SV-P142 -> Double Dragon Energy). ⚠️ Le feu vert disait aussi « retirer l'impression n° 143 d'Energy Sticker » et « le
+//   rattachement de Double Dragon Energy à Scarlet-Violet-Promos » : ils sont VRAIS (SV-P 143 et 142/231 chez artofpkm ET TCGdex,
+//   produits 761017, 749923, 804761 joints, visuels du set) — ils ne se retirent pas ; seules les deux LIGNES sont fausses.
 // 🔑 Et la preuve se REJOUE à l'écriture : si une seule ligne n'est plus contredite par son témoin (la base a bougé depuis la
 // mesure), rien n'est écrit. Deux témoins, tous deux indépendants de la clé par le numéro qui a fabriqué la ligne :
 //   · `attaques` : les attaques que Cardmarket écrit entre crochets désignent une AUTRE carte (score strictement supérieur) ;
@@ -27,20 +32,33 @@ const AQUAPOLIS = ['41765|275087', '42177|275187', '42198|275191', '42499|275161
     '43558|275139', '48556|275193', '41499|275086', '41938|275165', '42500|275160', '41494|275085', '41517|275092', '41807|275093',
     '41926|275141', '41993|275182', '42269|275117', '42297|275144', '42298|275143', '42497|275159', '42498|275158', '43324|275130',
     '41764|275051'];
-const LIGNES = [
-    { id: '221206|358427', preuve: 'attaques', autre: 228226, type: 'fiche-contredite-par-les-attaques',
-        pourquoi: 'Alolan Sandslash SM18 : les attaques du produit désignent le document 228226 (TCGdex smp-SM127), pas 221206' },
-    { id: '213157|553958', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
-        pourquoi: 'produit « Volcanion » joint à Volcanion-EX (TCGdex désigne deux autres documents Volcanion)' },
-    ...AQUAPOLIS.map(id => ({ id, preuve: 'attaques', autre: 'aquapolis', type: 'fiche-contredite-par-les-attaques',
-        pourquoi: 'homonyme croisé d\'Aquapolis (bonus jumeau du 20/09) : les attaques désignent la carte de la ligne Aquapolis' }))
-];
+const DECISIONS = {
+    '2026-09-25': [
+        { id: '221206|358427', preuve: 'attaques', autre: 228226, type: 'fiche-contredite-par-les-attaques',
+            pourquoi: 'Alolan Sandslash SM18 : les attaques du produit désignent le document 228226 (TCGdex smp-SM127), pas 221206' },
+        { id: '213157|553958', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
+            pourquoi: 'produit « Volcanion » joint à Volcanion-EX (TCGdex désigne deux autres documents Volcanion)' },
+        ...AQUAPOLIS.map(id => ({ id, preuve: 'attaques', autre: 'aquapolis', type: 'fiche-contredite-par-les-attaques',
+            pourquoi: 'homonyme croisé d\'Aquapolis (bonus jumeau du 20/09) : les attaques désignent la carte de la ligne Aquapolis' }))
+    ],
+    // le nom + les attaques désignent UNE carte (323164, 323159), mais elle ne porte aucune impression jp SV-P, et les n° 143 et 142
+    // du tirage SV-P sont Energy Sticker et Double Dragon Energy chez artofpkm ET TCGdex : la FICHE (set, numéro) n'est pas prouvée,
+    // le produit reste non joint, la candidate est écrite dans le reste
+    '2026-10-08': [
+        { id: '286142|825498', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
+            pourquoi: 'produit « Umbreon ex [Moon Mirage | Onyx] » (SV-P143) joint par le numéro à Energy Sticker ; nom + attaques désignent 323164 (Umbreon ex, Prismatic Evolutions), qui n\'a pas d\'impression jp SV-P — fiche non prouvée, non joint' },
+        { id: '203010|825497', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
+            pourquoi: 'produit « Espeon ex [Psych Out | Amazez] » (SV-P142) joint par le numéro à Double Dragon Energy ; nom + attaques désignent 323159 (Espeon ex, Prismatic Evolutions), qui n\'a pas d\'impression jp SV-P — fiche non prouvée, non joint' }
+    ]
+};
 
-const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/];
+const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/, /^--decision=\d{4}-\d{2}-\d{2}$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 const ecrire = process.argv.includes('--ecrire');
 const annonce = process.argv.find(a => a.startsWith('--annonce='))?.slice(10);
-if (inconnus.length || ecrire === !!annonce) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}usage : --annonce=<fichier.json> (simulation) | --ecrire`); process.exit(2); }
+const DECISION = process.argv.find(a => a.startsWith('--decision='))?.slice(11);
+const LIGNES = DECISIONS[DECISION];
+if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${DECISION && !LIGNES ? `décision inconnue : ${DECISION} — ` : ''}usage : --decision=<${Object.keys(DECISIONS).join('|')}> --annonce=<fichier.json> (simulation) | --decision=<…> --ecrire`); process.exit(2); }
 
 (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
@@ -98,7 +116,7 @@ if (inconnus.length || ecrire === !!annonce) { console.error(`❌ ${inconnus.len
     for (const p of plan.filter(p => !p.autres)) {
         restes++;
         await cx.db.collection('restes').updateOne({ set: p.l.slugSet, type: p.x.type, idProduct: p.l.idProduct, carteId: p.l.carteId },
-            { $set: { detail: `${p.l.idProduct} « ${p.nom} » : joint par ${p.l.preuve} à ${p.l.carteId} — ${p.x.pourquoi} ; ${p.verdict} ; détachée par detacher-lignes-prouvees.js (feu vert du testeur, 2026-09-25)`, le: new Date() } }, { upsert: true });
+            { $set: { detail: `${p.l.idProduct} « ${p.nom} » : joint par ${p.l.preuve} à ${p.l.carteId} — ${p.x.pourquoi} ; ${p.verdict} ; détachée par detacher-lignes-prouvees.js (feu vert du testeur, décision du ${DECISION})`, le: new Date() } }, { upsert: true });
     }
     const encore = await L.countDocuments({ _id: { $in: plan.map(p => p.l._id) } });
     console.log(`\n   ✅ détachées : ${r.deletedCount} (attendu ${plan.length}) · encore présentes : ${encore} · restes écrits : ${restes} (produits restés sans ligne)`);
