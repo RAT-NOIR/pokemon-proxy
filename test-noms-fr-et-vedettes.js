@@ -58,5 +58,29 @@ egal('31 jamais un scan japonais pour un set non japonais', visuelAutreTirage([{
 egal('32 jamais le set lui-même', visuelAutreTirage([{ set: 'S', cleR2: 's' }], sets.get('S'), sets), null);
 egal('33 source préférée à tirage égal', visuelAutreTirage([{ set: 'A', cleR2: 'a', source: 'bulbapedia' }, { set: 'C', cleR2: 'c', source: 'tcgdex' }], sets.get('S'), sets)?.cleR2, 'c');
 
-console.log(`${ko ? '🔴' : '✅'} ${ok}/${ok + ko}`);
-process.exitCode = ko ? 1 : 0;
+// --- la fiche du set (règle du SITE, importée) et le classement de secours (2026-10-07, nuit) ---
+const { regleDuSite, fichesDesProduits, ordreDeSecours } = require('./exporter-donnees-logos-site');
+(async () => {
+    const regle = await regleDuSite();
+    const set = { _id: 'S', tirage: 'jp', region: 'jp', code: 'XY', bulba: { expansion: 'Exp' } };
+    const imp = numero => ({ tirage: 'jp', expansion: 'Exp', numero });
+    const prod = (idProduct, carteId, slug, numeroFiche = null) => ({ idProduct, carteId, slug, numeroFiche });
+    const f = (docs, produits) => Object.fromEntries([...fichesDesProduits(regle, set, docs, produits).fiche].map(([k, v]) => [k, v.numero]));
+    // le cas signalé par le site : une impression du set SANS numéro (Expansion Pack) — sa fiche « n° ? » garde ses produits
+    egal('34 impression sans numéro : le produit reste sur la fiche n° ?', f([{ _id: 1, impressions: [imp(null)] }], [prod(10, 1, 'Charizard', '4')]), { 10: null });
+    egal('35 aucune impression du set : fiche sans numéro, produit gardé', f([{ _id: 1, impressions: [] }], [prod(10, 1, 'Charizard')]), { 10: null });
+    egal('36 un numéro lu après le code qui CONTREDIT la fiche : détaché', f([{ _id: 1, impressions: [imp('4')] }], [prod(10, 1, 'Pikachu-XY104')]), {});
+    egal('37 deux impressions : chaque produit sur la sienne', f([{ _id: 1, impressions: [imp('4'), imp('104')] }], [prod(10, 1, 'Pikachu-XY4'), prod(11, 1, 'Pikachu-XY104')]), { 10: '4', 11: '104' });
+    egal('38 le produit d\'une carte hors des documents du set : aucune fiche', f([{ _id: 1, impressions: [imp(null)] }], [prod(10, 2, 'Charizard')]), {});
+    const e = (rarete, numero, idProduct) => ({ rarete, numero, idProduct });
+    egal('39 secours : rareté décroissante, puis numéro', [e(null, '2', 1), e('SR', '9', 2), e('HR', '50', 3), e('SR', '3', 4), e(null, '10', 5)].sort(ordreDeSecours).map(x => x.idProduct), [3, 4, 2, 1, 5]);
+    egal('40 une rareté hors table se range avec « sans rareté »', [e('XYZ', '5', 1), e(null, '3', 2), e('RR', '9', 3)].sort(ordreDeSecours).map(x => x.idProduct), [3, 2, 1]);
+    egal('41 sans numéro après les numérotées', [e(null, null, 1), e(null, '7', 2)].sort(ordreDeSecours).map(x => x.idProduct), [2, 1]);
+    // (relecture) la garde de langue du SITE avant le choix du visuel : un scan artofpkm (japonais) ne sert jamais un set intl
+    const admisIntl = m => regle.visuelAdmisPourLaRegion(m, 'intl');
+    egal('42 un scan japonais d\'artofpkm sur un set intl : aucun visuel', visuelDuProduit([{ set: 'S', cleR2: 'artofpkm/6/15.webp', numero: '12', w: 600, h: 825 }], 'S', '12', { admis: admisIntl }), null);
+    egal('43 le même visuel sur un set jp : admis', visuelDuProduit([{ set: 'S', cleR2: 'artofpkm/6/15.webp', numero: '12', w: 600, h: 825 }], 'S', '12', { admis: m => regle.visuelAdmisPourLaRegion(m, 'jp') })?.cleR2, 'artofpkm/6/15.webp');
+    egal('44 « TG05 » et « TG5 » ne sont pas le même numéro pour le site', visuelDuProduit([im('TG5', 'a'), im('TG05', 'b')], 'S', 'TG05', { normaliser: regle.normaliserNumero })?.cleR2, 'b');
+    console.log(`${ko ? '🔴' : '✅'} ${ok}/${ok + ko}`);
+    process.exitCode = ko ? 1 : 0;
+})().catch(err => { console.error(err); process.exitCode = 1; });
