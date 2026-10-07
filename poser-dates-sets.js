@@ -238,7 +238,15 @@ const RELEVES_2026_10_07 = {
         pourquoi: 'les 30 produits Cardmarket « Trick or Trade » sont les 30 cartes de 2022 ; les éditions 2023 et 2024 sont des sets à part' },
     ...Object.fromEntries(['30th-Celebration-Simplified-Chinese', '30th-Celebration-IDTH'].map(id => [id, { jour: 'September 16, 2026', remplace: true, url: `${W}20260910024556/${P('30th_Celebration_(TCG)')}`,
         citation: '« Releasing simultaneously worldwide on September 16, 2026 » ; « 30th Celebration is the first set to be released globally on the same day—including in Simplified Chinese »',
-        pourquoi: 'la valeur de l\'infobox n\'a pas d\'étiquette de tirage ; le texte de la page dit la sortie mondiale le même jour, et porte les listes chinoise, thaïe et indonésienne' }]))
+        pourquoi: 'la valeur de l\'infobox n\'a pas d\'étiquette de tirage ; le texte de la page dit la sortie mondiale le même jour, et porte les listes chinoise, thaïe et indonésienne' }])),
+    // (2026-10-07, soir) la série AS, indonésienne et thaïe (tirage idth : Sky Ruler corrigé, AS1-AS3 créés après la passe Tampermonkey) :
+    // chaque page « (ATCG) » dit « exclusively available in Indonesian and Thai » et date les DEUX sorties ; un set idth vote pour les deux
+    // (la plus tôt à égalité). TCGdex data-asia, témoin : AS1 th 2019-02-01, id 2019-08-09 (la page : August 8) ; AS2 2019-10-23 ;
+    // AS3 2019-12-21 ; AS4 2020-03-04 (id, quelques jours avant la page).
+    'First-Impact': { jours: ['February 1, 2019', 'August 8, 2019'], url: `${W}20260819163844/${P('First_Impact_(ATCG)')}`, citation: 'Release date Thai: February 1, 2019, Indonesian: August 8, 2019 — « the first of six Asian Sun & Moon Era catch-up sets … exclusively available in Indonesian and Thai »' },
+    'Legends-Awakened-ID-TH': { jours: ['May 9, 2019', 'October 26, 2019'], url: `${W}20260602091209/${P('Legends_Awakened_(ATCG)')}`, citation: 'Release date Thai: May 9, 2019, Indonesian: October 26, 2019 — « It was officially released on May 9, 2019 » (avant-première le 1er mai à Fortune Town : ne vote pas)' },
+    'Hidden-Shadow': { jours: ['August 11, 2019', 'December 30, 2019'], url: `${W}20260810061304/${P('Hidden_Shadow_(ATCG)')}`, citation: 'Release date Thai: August 11, 2019, Indonesian: December 30, 2019 — « Hidden Shadow was released on August 11, 2019 in Thailand, followed by a release in Indonesia on December 30, 2019 »' },
+    'Sky-Ruler': { jours: ['November 22, 2019', 'March 10, 2020'], url: `${W}20260819163914/${P('Sky_Ruler_(ATCG)')}`, citation: 'Release date Thai: November 22, 2019, Indonesian: March 10, 2020 — « Sky Ruler was released on November 22, 2019 in Thailand, followed by a release in Indonesia on March 10, 2020 »' }
 };
 // LES WCD (même demande) : Cardmarket fait UN set par année de championnat ; Bulbapedia, une page par DECK, et chaque page dit « X is one of
 // the four <année> World Championships Decks, released … ». La date d'un set WCD-<année> est celle des decks de cette année, lue sur la page

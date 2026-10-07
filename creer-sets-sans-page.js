@@ -71,7 +71,15 @@ const TIRAGES = {
     5060: ['jp', 'asymétrie : désignés en jp 2, en intl 0'],
     // (2026-10-07, testeur : « les sets sans page : propose toi-même la meilleure preuve de tirage pour chacun et applique-la ») — lues sur
     // nos données, zéro requête : l'asymétrie CHINOISE (les cartes désignées sont imprimées en zh-hans, jamais en zh-hant) et la famille
-    6700: ['zh-hans', 'asymétrie : 57 désignés, 49 imprimés en zh-hans seul, 0 en zh-hant (Storming Emergence, Battle Elite) (AS4)'],
+    // 🔴 6700 (AS4 Sky Ruler) disait ici « zh-hans, asymétrie » — FAUX : l'asymétrie ne peut voir que les tirages déjà en base, et aucune
+    // carte SM n'y est imprimée en indonésien ou en thaï (corrigé le 2026-10-07, feu vert du testeur : corriger-tirage-sans-page.js).
+    // La série AS est indonésienne et thaïe (2026-10-07, zéro requête) : TCGdex data-asia/SM/AS1a…AS4b (noms `id`, et `th` pour AS1 ;
+    // dates `id` 2019-08-09, `th` 2019-02-01 pour AS1) ; page « Sky Ruler (ATCG) » (copie Wayback) : « exclusively available in
+    // Indonesian and Thai » ; le slug Cardmarket de 6703 dit « ID-TH ». Aucun fichier de carte chez TCGdex pour ces quatre sets.
+    6700: ['idth', 'TCGdex data-asia AS4a/AS4b « Booster Pack Penguasa Langit » (id) ; page « Sky Ruler (ATCG) » : « exclusively available in Indonesian and Thai » (AS4)'],
+    6701: ['idth', 'TCGdex data-asia AS3a/AS3b « Booster Pack Bayangan Tersembunyi » (id) ; famille AS1, AS2, AS4 : idth (AS3)'],
+    6702: ['idth', 'TCGdex data-asia AS1a/AS1b « Matahari & Bulan: Hantaman Pertama » (id) et « ซันแอนด์มูน เฟิร์สอิมแพค » (th) (AS1)'],
+    6703: ['idth', 'nom : « Legends Awakened ID-TH » (slug Cardmarket) ; TCGdex data-asia AS2a/AS2b « Booster Pack Kebangkitan Legenda » (id) (AS2)'],
     6635: ['zh-hans', 'famille : CSVM1C est zh-hans (CSVM2) ; asymétrie : 30 désignés, 25 en zh-hans seul, 1 en zh-hant seul'],
     3354: ['intl', 'famille : MCD14, MCD16, MCD17, MCD22 sont intl (MCD19F)'],
     // (2026-10-07, testeur : « crée leurs sets par la voie normale (preuve de tirage, date, logo composé si besoin) ») — lues sur nos données
