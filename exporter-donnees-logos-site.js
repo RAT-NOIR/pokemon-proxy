@@ -89,7 +89,7 @@ if (require.main === module) (async () => {
     // les vedettes — v2 (décisions de l'éditeur, 2026-10-07, soir : le CLASSEMENT LONG, des cartes POKÉMON seulement, aucun tampon)
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const meta = await prod.db.collection('guide_prix_meta').findOne({ _id: 'dernier' });
-    const setsBase = new Map((await cx.db.collection('sets').find({}, { projection: { idExpansion: 1, nomAffichage: 1, 'logoCompose.famille': 1, tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s]));
+    const setsBase = new Map((await cx.db.collection('sets').find({}, { projection: { idExpansion: 1, nomAffichage: 1, 'logoCompose.famille': 1, tirage: 1, region: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
     const familles = [...setsBase.values()].filter(s => typeof s.nomAffichage === 'string' && (['promos', 'pop', 'mcdonalds'].includes(s.logoCompose?.famille) || /(-Promos$|^POP-Series-|McDonald)/.test(s._id)));
     if (!familles.length) throw new Error('aucun set promos/POP/McDonald\'s : base fausse');
     // les 41 « autres » : ceux que le site attend (lib/logos-composes.json, `enAttente`, raison « liste des cartes phares du serveur absente »)
@@ -104,11 +104,25 @@ if (require.main === module) (async () => {
     const autres = enAttente.filter(id => setsBase.has(id) && !familles.some(s => s._id === id)).map(id => setsBase.get(id));
     const absents = enAttente.filter(id => !setsBase.has(id));
     const N_CLASSEMENT = 15;
+    // (2026-10-07, nuit — demande du site) trois sets n'ont AUCUNE carte propre dans leurs 15 (pleines illustrations à nom imprimé,
+    // tampons) : pour eux seuls, un classement de 40
+    const N_CLASSEMENT_LONG = { 'MEP-Black-Star-Promos': 40, 'SV-Black-Star-Promos': 40, 'Sword-Shield-Thai-Promos': 40 };
     const vedettes = {}, exclusTotal = { 'dresseur ou énergie': 0, 'catégorie inconnue (fiche simple)': 0, 'tampon dans le nom': 0, 'sans prix': 0, 'aucun visuel': 0 };
     for (const s of [...familles, ...autres].sort((a, b) => a._id.localeCompare(b._id))) {
         const exps = [].concat(s.idExpansion ?? []);
         const lignes = await cx.db.collection('cartes_produits').find({ $or: [{ slugSet: s._id }, { idExpansion: { $in: exps } }] }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1, slug: 1, visuelSubstitut: 1 } }).toArray();
-        const cartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1, categorie: 1 } }).toArray()).map(c => [c._id, c]));
+        const cartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1, categorie: 1, sets: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
+        // (2026-10-07, nuit — demande du site : « le classement doit viser des cartes rattachées au set ») une FICHE DU SET, comme le site la
+        // construit (lib/entreesDuSet.ts) : la carte est membre du set (`cartes.sets`) ; si elle porte des impressions du set (tirage + nom
+        // d'expansion), le produit doit tomber sur l'une d'elles (son numéro) ; sinon la fiche est sans numéro (`numero: null`)
+        const tirageDuSet = s.tirage ?? s.region, nomsExpansion = [].concat(setsBase.get(s._id)?.bulba?.expansion ?? []);
+        const ficheDuSet = (c, numeroFiche) => {
+            if (!(c.sets || []).includes(s._id)) return { ok: false, motif: 'carte hors du set (cartes.sets)' };
+            const imps = (c.impressions || []).filter(i => i && i.tirage === tirageDuSet && nomsExpansion.includes(i.expansion));
+            if (!imps.length) return { ok: true, numero: null };
+            const i = imps.find(x => numeroFiche != null && cleNumero(x.numero) === cleNumero(numeroFiche));
+            return i ? { ok: true, numero: i.numero } : { ok: false, motif: 'aucune impression du set à ce numéro' };
+        };
         const prix = new Map((await prod.db.collection('guide_prix').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, trend: 1, avg: 1, guideDu: 1 } }).toArray()).map(p => [p.idProduct, p]));
         const noms = new Map((await prod.db.collection('catalogue_produits').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, name: 1 } }).toArray()).map(p => [p.idProduct, p.name]));
         const cands = [], exclus = Object.fromEntries(Object.keys(exclusTotal).map(k => [k, 0]));
@@ -118,6 +132,8 @@ if (require.main === module) (async () => {
             // une garde s'écrit par ce qu'elle autorise : la catégorie « pokemon » lue sur la page de la carte, rien d'autre
             if (c.categorie !== 'pokemon') { exclus[c.categorie ? 'dresseur ou énergie' : 'catégorie inconnue (fiche simple)']++; continue; }
             if (tamponProbable(noms.get(l.idProduct), l.slug)) { exclus['tampon dans le nom']++; continue; }
+            const fiche = ficheDuSet(c, l.numeroFiche);
+            if (!fiche.ok) { exclus['pas une fiche du set'] = (exclus['pas une fiche du set'] || 0) + 1; continue; }
             const p = prix.get(l.idProduct), v = prixDe(p);
             if (!v) { exclus['sans prix']++; continue; }
             let im = visuelDuProduit(c.images, s._id, l.numeroFiche), visuel = 'du-set', mention = null;
@@ -129,14 +145,16 @@ if (require.main === module) (async () => {
                 if (a) { im = a; visuel = 'autre-tirage'; mention = `Visuel de la même carte dans un autre tirage (${setsBase.get(a.set)?.nomAffichage ?? a.set}${a.numero ? ` n°${a.numero}` : ''}) — pas celui de ce set`; }
             }
             if (!im) { exclus['aucun visuel']++; continue; }
-            cands.push({ idProduct: l.idProduct, produit: noms.get(l.idProduct) ?? null, carteId: l.carteId, carte: c.nomEn, numero: l.numeroFiche ?? (visuel === 'du-set' ? im.numero : null) ?? null,
+            // le numéro de la FICHE (celle que le site construit), jamais celui du produit quand la fiche n'en a pas
+            cands.push({ idProduct: l.idProduct, produit: noms.get(l.idProduct) ?? null, carteId: l.carteId, carte: c.nomEn, numero: fiche.numero,
                 prix: { valeur: v.valeur, champ: v.champ, trend: p.trend ?? null, avg: p.avg ?? null, guideDu: p.guideDu ?? meta?.guideDu ?? null },
                 visuel, mention, image: { cleR2: im.cleR2, vignette: im.vignette?.cleR2 ?? null, langue: im.langue ?? null, set: im.set ?? s._id, numero: im.numero ?? null, source: im.source ?? null } });
         }
         cands.sort((a, b) => b.prix.valeur - a.prix.valeur || a.idProduct - b.idProduct);
         const vus = new Set(), classement = [];
-        for (const c of cands) { if (vus.has(c.carteId)) continue; vus.add(c.carteId); classement.push({ rang: classement.length + 1, ...c }); if (classement.length === N_CLASSEMENT) break; }
-        for (const [k, n] of Object.entries(exclus)) exclusTotal[k] += n;
+        const n = N_CLASSEMENT_LONG[s._id] ?? N_CLASSEMENT;
+        for (const c of cands) { if (vus.has(c.carteId)) continue; vus.add(c.carteId); classement.push({ rang: classement.length + 1, ...c }); if (classement.length === n) break; }
+        for (const [k, n] of Object.entries(exclus)) exclusTotal[k] = (exclusTotal[k] || 0) + n;
         vedettes[s._id] = { famille: s.logoCompose?.famille ?? (autres.includes(s) ? 'autres' : null), autres: autres.includes(s), nom: s.nomAffichage, tirage: s.tirage ?? s.region, produitsLus: lignes.length, pokemonClasses: cands.length,
             visuelNonDesigne: sansVisuelSur, exclus, classement,
             // top3 (compatibilité) : les 3 premières du classement dont le visuel est CELUI DE CE SET

@@ -1,5 +1,5 @@
 {
- "genere": "2026-10-07T20:15:21.107Z",
+ "genere": "2026-10-07T20:48:38.895Z",
  "par": "wcd-decks-champions.js",
  "source": "C:\\Users\\Yung\\AppData\\Local\\Temp\\claude\\c--Users-Yung-Desktop-pokemon-proxy\\65a1ec64-f853-444c-840c-b5a38ebe8695\\scratchpad\\wcd-decks.json",
  "annees": [
@@ -11,6 +11,105 @@
     "nom": "Magma Spirit",
     "joueur": "Tsuguyoshi Yamato",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 46471,
+      "nomEn": "Team Magma's Groudon",
+      "titrePage": "Team Magma's Groudon (EX Team Magma vs Team Aqua 9)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "9",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/9-46471.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 9 »"
+       }
+      ]
+     },
+     {
+      "carteId": 46756,
+      "nomEn": "Team Magma's Zangoose",
+      "titrePage": "Team Magma's Zangoose (EX Team Magma vs Team Aqua 23)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "23",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/23-46756.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 23 »"
+       }
+      ]
+     },
+     {
+      "carteId": 46713,
+      "nomEn": "Team Magma's Baltoy",
+      "titrePage": "Team Magma's Baltoy (EX Team Magma vs Team Aqua 60)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "60",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/60-46713.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 60 »"
+       }
+      ]
+     },
+     {
+      "carteId": 46752,
+      "nomEn": "Team Magma's Camerupt",
+      "titrePage": "Team Magma's Camerupt (EX Team Magma vs Team Aqua 19)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "19",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/19-46752.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 19 »"
+       }
+      ]
+     },
+     {
+      "carteId": 46692,
+      "nomEn": "Team Magma's Claydol",
+      "titrePage": "Team Magma's Claydol (EX Team Magma vs Team Aqua 8)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "8",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/8-46692.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 8 »"
+       }
+      ]
+     },
+     {
+      "carteId": 46757,
+      "nomEn": "Team Magma's Numel",
+      "titrePage": "Team Magma's Numel (EX Team Magma vs Team Aqua 64)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Team-Magma-vs-Team-Aqua",
+        "numero": "64",
+        "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/64-46757.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 64 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Magma Spirit (TCG)",
      "copie": "20260830162735",
@@ -47,6 +146,137 @@
     "nomsPossibles": [
      "Nidoqueen"
     ],
+    "pokemon": [
+     {
+      "carteId": 53195,
+      "nomEn": "Nidoqueen",
+      "titrePage": "Nidoqueen (EX FireRed & LeafGreen 9)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "9",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/9-53195.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 9 »"
+       }
+      ]
+     },
+     {
+      "carteId": 53606,
+      "nomEn": "Nidoran♀",
+      "titrePage": "Nidoran♀ (EX FireRed & LeafGreen 70)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "70",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/70-53606.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 70 »"
+       }
+      ]
+     },
+     {
+      "carteId": 53348,
+      "nomEn": "Nidorina",
+      "titrePage": "Nidorina (EX FireRed & LeafGreen 40)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "40",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/40-53348.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 40 »"
+       }
+      ]
+     },
+     {
+      "carteId": 30445,
+      "nomEn": "Pidgeot",
+      "titrePage": "Pidgeot (EX FireRed & LeafGreen 10)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "10",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/10-30445.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 10 »"
+       }
+      ]
+     },
+     {
+      "carteId": 30446,
+      "nomEn": "Pidgey",
+      "titrePage": "Pidgey (EX FireRed & LeafGreen 73)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "73",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/73-30446.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 73 »"
+       }
+      ]
+     },
+     {
+      "carteId": 30444,
+      "nomEn": "Pidgeotto",
+      "titrePage": "Pidgeotto (EX FireRed & LeafGreen 45)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-FireRed-LeafGreen",
+        "numero": "45",
+        "cleR2": "tcgdex/EX-FireRed-LeafGreen/45-30444.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 45 »"
+       }
+      ]
+     },
+     {
+      "carteId": 53698,
+      "nomEn": "Feebas",
+      "titrePage": "Feebas (EX Hidden Legends 61)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Hidden-Legends",
+        "numero": "61",
+        "cleR2": "tcgdex/EX-Hidden-Legends/61-53698.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Hidden Legends 61 »"
+       }
+      ]
+     },
+     {
+      "carteId": 53246,
+      "nomEn": "Milotic",
+      "titrePage": "Milotic (EX Hidden Legends 12)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Hidden-Legends",
+        "numero": "12",
+        "cleR2": "tcgdex/EX-Hidden-Legends/12-53246.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Hidden Legends 12 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Queendom (TCG)",
      "copie": "20260831042743",
@@ -82,6 +312,143 @@
     "nomsPossibles": [
      "Manectric ex"
     ],
+    "pokemon": [
+     {
+      "carteId": 47927,
+      "nomEn": "Mew ex",
+      "titrePage": "Mew ex (EX Legend Maker 88)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Legend-Maker",
+        "numero": "88",
+        "cleR2": "tcgdex/EX-Legend-Maker/88-47927.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Legend Maker 88 »"
+       }
+      ]
+     },
+     {
+      "carteId": 45262,
+      "nomEn": "Electrike",
+      "titrePage": "Electrike (EX Deoxys 60)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Deoxys",
+        "numero": "60",
+        "cleR2": "tcgdex/EX-Deoxys/60-45262.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Deoxys 60 »"
+       }
+      ]
+     },
+     {
+      "carteId": 52696,
+      "nomEn": "Manectric ex",
+      "titrePage": "Manectric ex (EX Deoxys 101)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Deoxys",
+        "numero": "101",
+        "cleR2": "tcgdex/EX-Deoxys/101-52696.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Deoxys 101 »"
+       }
+      ]
+     },
+     {
+      "carteId": 31249,
+      "nomEn": "Holon's Magneton",
+      "titrePage": "Holon's Magneton (EX Delta Species 22)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Delta-Species",
+        "numero": "22",
+        "cleR2": "tcgdex/EX-Delta-Species/22-31249.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Delta Species 22 »"
+       }
+      ]
+     },
+     {
+      "carteId": 40394,
+      "nomEn": "Deoxys ex",
+      "titrePage": "Deoxys ex (EX Emerald 93)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Emerald",
+        "numero": "93",
+        "cleR2": "tcgdex/EX-Emerald/93-40394.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Emerald 93 »"
+       },
+       {
+        "set": "POP-Series-4",
+        "numero": "17",
+        "cleR2": "tcgdex/POP-Series-4/17-40394.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 6895,
+      "nomEn": "Regirock ex",
+      "titrePage": "Regirock ex (EX Hidden Legends 98)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Hidden-Legends",
+        "numero": "98",
+        "cleR2": "tcgdex/EX-Hidden-Legends/98-6895.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Hidden Legends 98 »"
+       }
+      ]
+     },
+     {
+      "carteId": 48868,
+      "nomEn": "Girafarig",
+      "titrePage": "Girafarig (EX Legend Maker 16)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Legend-Maker",
+        "numero": "16",
+        "cleR2": "tcgdex/EX-Legend-Maker/16-48868.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Legend Maker 16 »"
+       }
+      ]
+     },
+     {
+      "carteId": 48879,
+      "nomEn": "Roselia",
+      "titrePage": "Roselia (EX Legend Maker 42)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Legend-Maker",
+        "numero": "42",
+        "cleR2": "tcgdex/EX-Legend-Maker/42-48879.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Legend Maker 42 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Mewtrick (TCG)",
      "copie": "20260829043011",
@@ -115,6 +482,201 @@
     "nom": "Legendary Ascent",
     "joueur": "Tom Roos",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 43149,
+      "nomEn": "Absol ex",
+      "titrePage": "Absol ex (EX Power Keepers 92)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Power-Keepers",
+        "numero": "92",
+        "cleR2": "tcgdex/EX-Power-Keepers/92-43149.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Power Keepers 92 »"
+       }
+      ]
+     },
+     {
+      "carteId": 25186,
+      "nomEn": "Eevee",
+      "titrePage": "Eevee (EX Delta Species 69)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Delta-Species",
+        "numero": "69",
+        "cleR2": "tcgdex/EX-Delta-Species/69-25186.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Delta Species 69 »"
+       }
+      ]
+     },
+     {
+      "carteId": 60723,
+      "nomEn": "Jolteon ex",
+      "titrePage": "Jolteon ex (EX Delta Species 109)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Delta-Species",
+        "numero": "109",
+        "cleR2": "tcgdex/EX-Delta-Species/109-60723.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Delta Species 109 »"
+       }
+      ]
+     },
+     {
+      "carteId": 47927,
+      "nomEn": "Mew ex",
+      "titrePage": "Mew ex (EX Legend Maker 88)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Legend-Maker",
+        "numero": "88",
+        "cleR2": "tcgdex/EX-Legend-Maker/88-47927.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Legend Maker 88 »"
+       }
+      ]
+     },
+     {
+      "carteId": 44441,
+      "nomEn": "Rayquaza ex δ",
+      "titrePage": "Rayquaza ex δ (EX Dragon Frontiers 97)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Dragon-Frontiers",
+        "numero": "97",
+        "cleR2": "tcgdex/EX-Dragon-Frontiers/97-44441.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Dragon Frontiers 97 »"
+       }
+      ]
+     },
+     {
+      "carteId": 25187,
+      "nomEn": "Espeon ex",
+      "titrePage": "Espeon ex (EX Unseen Forces 102)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Unseen-Forces",
+        "numero": "102",
+        "cleR2": "tcgdex/EX-Unseen-Forces/102-25187.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Unseen Forces 102 »"
+       }
+      ]
+     },
+     {
+      "carteId": 45517,
+      "nomEn": "Jirachi ex",
+      "titrePage": "Jirachi ex (EX Crystal Guardians 94)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Crystal-Guardians",
+        "numero": "94",
+        "cleR2": "tcgdex/EX-Crystal-Guardians/94-45517.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Crystal Guardians 94 »"
+       }
+      ]
+     },
+     {
+      "carteId": 25190,
+      "nomEn": "Vaporeon ex",
+      "titrePage": "Vaporeon ex (EX Delta Species 110)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Delta-Species",
+        "numero": "110",
+        "cleR2": "tcgdex/EX-Delta-Species/110-25190.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Delta Species 110 »"
+       }
+      ]
+     },
+     {
+      "carteId": 25282,
+      "nomEn": "Holon's Castform",
+      "titrePage": "Holon's Castform (EX Holon Phantoms 44)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Holon-Phantoms",
+        "numero": "44",
+        "cleR2": "tcgdex/EX-Holon-Phantoms/44-25282.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Holon Phantoms 44 »"
+       }
+      ]
+     },
+     {
+      "carteId": 25285,
+      "nomEn": "Holon's Voltorb",
+      "titrePage": "Holon's Voltorb (EX Delta Species 71)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Delta-Species",
+        "numero": "71",
+        "cleR2": "tcgdex/EX-Delta-Species/71-25285.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Delta Species 71 »"
+       }
+      ]
+     },
+     {
+      "carteId": 34588,
+      "nomEn": "Jolteon",
+      "titrePage": "Jolteon ☆ (EX Power Keepers 101)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Power-Keepers",
+        "numero": "101",
+        "cleR2": "tcgdex/EX-Power-Keepers/101-34588.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Power Keepers 101 »"
+       }
+      ]
+     },
+     {
+      "carteId": 44261,
+      "nomEn": "Lickitung",
+      "titrePage": "Lickitung δ (EX Dragon Frontiers 19)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Dragon-Frontiers",
+        "numero": "19",
+        "cleR2": "tcgdex/EX-Dragon-Frontiers/19-44261.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Dragon Frontiers 19 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Legendary Ascent (TCG)",
      "copie": "20260426033908",
@@ -148,6 +710,194 @@
     "nom": "Psychic Lock",
     "joueur": "Jason Klaczynski",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 29819,
+      "nomEn": "Gardevoir",
+      "titrePage": "Gardevoir (Secret Wonders 7)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Secret-Wonders",
+        "numero": "7",
+        "cleR2": "tcgdex/Secret-Wonders/7-29819.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Secret Wonders 7 »"
+       }
+      ]
+     },
+     {
+      "carteId": 36289,
+      "nomEn": "Baltoy",
+      "titrePage": "Baltoy (Great Encounters 60)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "60",
+        "cleR2": "tcgdex/Great-Encounters/60-36289.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 60 »"
+       }
+      ]
+     },
+     {
+      "carteId": 36299,
+      "nomEn": "Claydol",
+      "titrePage": "Claydol (Great Encounters 15)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "15",
+        "cleR2": "tcgdex/Great-Encounters/15-36299.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 15 »"
+       }
+      ]
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Gallade (POP Series 7 2)",
+      "quantite": 2,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Kirlia (POP Series 7 8)",
+      "quantite": 2,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Ralts (POP Series 7 15)",
+      "quantite": 2,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     },
+     {
+      "carteId": 31768,
+      "nomEn": "Ralts",
+      "titrePage": "Ralts (Secret Wonders 102)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Secret-Wonders",
+        "numero": "102",
+        "cleR2": "tcgdex/Secret-Wonders/102-31768.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Secret Wonders 102 »"
+       },
+       {
+        "set": "POP-Series-7",
+        "numero": "15",
+        "cleR2": "tcgdex/POP-Series-7/15-31768.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 28217,
+      "nomEn": "Gardevoir LV.X",
+      "titrePage": "Gardevoir LV.X (Secret Wonders 131)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": []
+     },
+     {
+      "carteId": 45517,
+      "nomEn": "Jirachi ex",
+      "titrePage": "Jirachi ex (EX Crystal Guardians 94)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "EX-Crystal-Guardians",
+        "numero": "94",
+        "cleR2": "tcgdex/EX-Crystal-Guardians/94-45517.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Crystal Guardians 94 »"
+       }
+      ]
+     },
+     {
+      "carteId": 41763,
+      "nomEn": "Chatot",
+      "titrePage": "Chatot (Majestic Dawn 55)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Majestic-Dawn",
+        "numero": "55",
+        "cleR2": "tcgdex/Majestic-Dawn/55-41763.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Majestic Dawn 55 »"
+       }
+      ]
+     },
+     {
+      "carteId": 28915,
+      "nomEn": "Dusknoir",
+      "titrePage": "Dusknoir (Diamond & Pearl 2)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Diamond-Pearl",
+        "numero": "2",
+        "cleR2": "tcgdex/Diamond-Pearl/2-28915.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Diamond & Pearl 2 »"
+       }
+      ]
+     },
+     {
+      "carteId": 31396,
+      "nomEn": "Duskull",
+      "titrePage": "Duskull (Diamond & Pearl 80)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Diamond-Pearl",
+        "numero": "80",
+        "cleR2": "tcgdex/Diamond-Pearl/80-31396.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Diamond & Pearl 80 »"
+       }
+      ]
+     },
+     {
+      "carteId": 34588,
+      "nomEn": "Jolteon",
+      "titrePage": "Jolteon ☆ (EX Power Keepers 101)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "EX-Power-Keepers",
+        "numero": "101",
+        "cleR2": "tcgdex/EX-Power-Keepers/101-34588.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « EX Power Keepers 101 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Psychic Lock (TCG)",
      "copie": "20260830162600",
@@ -183,6 +933,201 @@
     "nomsPossibles": [
      "Beedrill"
     ],
+    "pokemon": [
+     {
+      "carteId": 75975,
+      "nomEn": "Kakuna",
+      "titrePage": "Kakuna (Rising Rivals 66)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "66",
+        "cleR2": "tcgdex/Rising-Rivals/66-75975.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 66 »"
+       }
+      ]
+     },
+     {
+      "carteId": 36066,
+      "nomEn": "Weedle",
+      "titrePage": "Weedle (Great Encounters 93)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "93",
+        "cleR2": "tcgdex/Great-Encounters/93-36066.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 93 »"
+       }
+      ]
+     },
+     {
+      "carteId": 36299,
+      "nomEn": "Claydol",
+      "titrePage": "Claydol (Great Encounters 15)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "15",
+        "cleR2": "tcgdex/Great-Encounters/15-36299.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 15 »"
+       }
+      ]
+     },
+     {
+      "carteId": 36289,
+      "nomEn": "Baltoy",
+      "titrePage": "Baltoy (Great Encounters 60)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "60",
+        "cleR2": "tcgdex/Great-Encounters/60-36289.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 60 »"
+       }
+      ]
+     },
+     {
+      "carteId": 35625,
+      "nomEn": "Beedrill",
+      "titrePage": "Beedrill (Great Encounters 13)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "13",
+        "cleR2": "tcgdex/Great-Encounters/13-35625.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 13 »"
+       }
+      ]
+     },
+     {
+      "carteId": 75900,
+      "nomEn": "Beedrill",
+      "titrePage": "Beedrill (Rising Rivals 15)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "15",
+        "cleR2": "tcgdex/Rising-Rivals/15-75900.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 15 »"
+       }
+      ]
+     },
+     {
+      "carteId": 35798,
+      "nomEn": "Unown G",
+      "titrePage": "Unown G (Great Encounters 57)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Great-Encounters",
+        "numero": "57",
+        "cleR2": "tcgdex/Great-Encounters/57-35798.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Great Encounters 57 »"
+       }
+      ]
+     },
+     {
+      "carteId": 74533,
+      "nomEn": "Luxray GL LV.X",
+      "titrePage": "Luxray GL LV.X (Rising Rivals 109)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "109",
+        "cleR2": "tcgdex/Rising-Rivals/109-74533.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 109 »"
+       }
+      ]
+     },
+     {
+      "carteId": 50187,
+      "nomEn": "Azelf",
+      "titrePage": "Azelf (Legends Awakened 19)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Legends-Awakened",
+        "numero": "19",
+        "cleR2": "tcgdex/Legends-Awakened/19-50187.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Legends Awakened 19 »"
+       }
+      ]
+     },
+     {
+      "carteId": 41763,
+      "nomEn": "Chatot",
+      "titrePage": "Chatot (Majestic Dawn 55)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Majestic-Dawn",
+        "numero": "55",
+        "cleR2": "tcgdex/Majestic-Dawn/55-41763.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Majestic Dawn 55 »"
+       }
+      ]
+     },
+     {
+      "carteId": 69331,
+      "nomEn": "Crobat G",
+      "titrePage": "Crobat G (Platinum 47)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Platinum",
+        "numero": "47",
+        "cleR2": "tcgdex/Platinum/47-69331.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Platinum 47 »"
+       }
+      ]
+     },
+     {
+      "carteId": 75950,
+      "nomEn": "Luxray GL",
+      "titrePage": "Luxray GL (Rising Rivals 9)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "9",
+        "cleR2": "tcgdex/Rising-Rivals/9-75950.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 9 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Luxdrill (TCG)",
      "copie": "20260607210502",
@@ -219,6 +1164,215 @@
      "Garchomp C LV.X",
      "Garchomp C"
     ],
+    "pokemon": [
+     {
+      "carteId": 71777,
+      "nomEn": "Garchomp C LV.X",
+      "titrePage": "Garchomp C LV.X (Supreme Victors 145)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Supreme-Victors",
+        "numero": "145",
+        "cleR2": "tcgdex/Supreme-Victors/145-71777.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Supreme Victors 145 »"
+       },
+       {
+        "set": "DP-Black-Star-Promos",
+        "numero": "DP46",
+        "cleR2": "tcgdex/DP-Black-Star-Promos/DP46-71777.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 74533,
+      "nomEn": "Luxray GL LV.X",
+      "titrePage": "Luxray GL LV.X (Rising Rivals 109)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "109",
+        "cleR2": "tcgdex/Rising-Rivals/109-74533.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 109 »"
+       }
+      ]
+     },
+     {
+      "carteId": 71227,
+      "nomEn": "Garchomp C",
+      "titrePage": "Garchomp C (Supreme Victors 60)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Supreme-Victors",
+        "numero": "60",
+        "cleR2": "tcgdex/Supreme-Victors/60-71227.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Supreme Victors 60 »"
+       }
+      ]
+     },
+     {
+      "carteId": 75950,
+      "nomEn": "Luxray GL",
+      "titrePage": "Luxray GL (Rising Rivals 9)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "9",
+        "cleR2": "tcgdex/Rising-Rivals/9-75950.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 9 »"
+       }
+      ]
+     },
+     {
+      "carteId": 50824,
+      "nomEn": "Uxie",
+      "titrePage": "Uxie (Legends Awakened 43)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Legends-Awakened",
+        "numero": "43",
+        "cleR2": "tcgdex/Legends-Awakened/43-50824.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Legends Awakened 43 »"
+       }
+      ]
+     },
+     {
+      "carteId": 69180,
+      "nomEn": "Dialga G LV.X",
+      "titrePage": "Dialga G LV.X (Platinum 122)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Platinum",
+        "numero": "122",
+        "cleR2": "tcgdex/Platinum/122-69180.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Platinum 122 »"
+       }
+      ]
+     },
+     {
+      "carteId": 50859,
+      "nomEn": "Uxie LV.X",
+      "titrePage": "Uxie LV.X (Legends Awakened 146)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": []
+     },
+     {
+      "carteId": 50187,
+      "nomEn": "Azelf",
+      "titrePage": "Azelf (Legends Awakened 19)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Legends-Awakened",
+        "numero": "19",
+        "cleR2": "tcgdex/Legends-Awakened/19-50187.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Legends Awakened 19 »"
+       }
+      ]
+     },
+     {
+      "carteId": 57401,
+      "nomEn": "Bronzong G",
+      "titrePage": "Bronzong G (Platinum 41)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Platinum",
+        "numero": "41",
+        "cleR2": "tcgdex/Platinum/41-57401.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Platinum 41 »"
+       }
+      ]
+     },
+     {
+      "carteId": 69331,
+      "nomEn": "Crobat G",
+      "titrePage": "Crobat G (Platinum 47)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Platinum",
+        "numero": "47",
+        "cleR2": "tcgdex/Platinum/47-69331.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Platinum 47 »"
+       }
+      ]
+     },
+     {
+      "carteId": 68546,
+      "nomEn": "Dialga G",
+      "titrePage": "Dialga G (Platinum 7)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Platinum",
+        "numero": "7",
+        "cleR2": "tcgdex/Platinum/7-68546.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Platinum 7 »"
+       }
+      ]
+     },
+     {
+      "carteId": 71409,
+      "nomEn": "Dragonite FB",
+      "titrePage": "Dragonite FB (Supreme Victors 56)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Supreme-Victors",
+        "numero": "56",
+        "cleR2": "tcgdex/Supreme-Victors/56-71409.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Supreme Victors 56 »"
+       }
+      ]
+     },
+     {
+      "carteId": 74523,
+      "nomEn": "Lucario GL",
+      "titrePage": "Lucario GL (Rising Rivals 8)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Rising-Rivals",
+        "numero": "8",
+        "cleR2": "tcgdex/Rising-Rivals/8-74523.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 8 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "LuxChomp of the Spirit (TCG)",
      "copie": "20260831043111",
@@ -260,6 +1414,210 @@
     "nomsPossibles": [
      "Emboar"
     ],
+    "pokemon": [
+     {
+      "carteId": 101144,
+      "nomEn": "Magnemite",
+      "titrePage": "Magnemite (Triumphant 68)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Triumphant",
+        "numero": "68",
+        "cleR2": "tcgdex/Triumphant/68-101144.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Triumphant 68 »"
+       }
+      ]
+     },
+     {
+      "carteId": 101146,
+      "nomEn": "Magnezone",
+      "titrePage": "Magnezone (Triumphant 96)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Triumphant",
+        "numero": "96",
+        "cleR2": "tcgdex/Triumphant/96-101146.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Triumphant 96 »"
+       }
+      ]
+     },
+     {
+      "carteId": 116080,
+      "nomEn": "Tepig",
+      "titrePage": "Tepig (Black & White 15)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Black-White",
+        "numero": "15",
+        "cleR2": "tcgdex/Black-White/15-116080.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Black & White 15 »"
+       }
+      ]
+     },
+     {
+      "carteId": 87079,
+      "nomEn": "Cleffa",
+      "titrePage": "Cleffa (HeartGold & SoulSilver 17)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "HeartGold-SoulSilver",
+        "numero": "17",
+        "cleR2": "tcgdex/HeartGold-SoulSilver/17-87079.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « HeartGold & SoulSilver 17 »"
+       },
+       {
+        "set": "Call-of-Legends",
+        "numero": "24",
+        "cleR2": "tcgdex/Call-of-Legends/24-87079.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "HGSS-Black-Star-Promos",
+        "numero": "HGSS12",
+        "cleR2": "tcgdex/HGSS-Black-Star-Promos/HGSS12-87079.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 125279,
+      "nomEn": "Emboar",
+      "titrePage": "Emboar (Black & White 20)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Black-White",
+        "numero": "20",
+        "cleR2": "tcgdex/Black-White/20-125279.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Black & White 20 »"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "27",
+        "cleR2": "tcgdex/Legendary-Treasures/27-125279.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Next-Destinies",
+        "numero": "100",
+        "cleR2": "tcgdex/Next-Destinies/100-125279.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 122795,
+      "nomEn": "Reshiram",
+      "titrePage": "Reshiram (Black & White 26)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Black-White",
+        "numero": "26",
+        "cleR2": "tcgdex/Black-White/26-122795.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Black & White 26 »"
+       },
+       {
+        "set": "BW-Black-Star-Promos",
+        "numero": "BW004",
+        "cleR2": "bulbapedia/BW-Black-Star-Promos/4-122795.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "Black-White",
+        "numero": "113",
+        "cleR2": "tcgdex/Black-White/113-122795.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 108323,
+      "nomEn": "Rayquaza & Deoxys LEGEND",
+      "titrePage": "Rayquaza & Deoxys LEGEND (Undaunted 89)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Undaunted",
+        "numero": "89",
+        "cleR2": "tcgdex/Undaunted/89-108323.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Undaunted 89 »"
+       },
+       {
+        "set": "Undaunted",
+        "numero": "90",
+        "cleR2": "tcgdex/Undaunted/90-108323.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 101145,
+      "nomEn": "Magneton",
+      "titrePage": "Magneton (Triumphant 43)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Triumphant",
+        "numero": "43",
+        "cleR2": "tcgdex/Triumphant/43-101145.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Triumphant 43 »"
+       }
+      ]
+     },
+     {
+      "carteId": 122968,
+      "nomEn": "Pignite",
+      "titrePage": "Pignite (Black & White 18)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Black-White",
+        "numero": "18",
+        "cleR2": "tcgdex/Black-White/18-122968.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Black & White 18 »"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "26",
+        "cleR2": "tcgdex/Legendary-Treasures/26-122968.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Rayquaza & Deoxys LEGEND (Undaunted 90)",
+      "quantite": 1,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Twinboar (TCG)",
      "copie": "20260220193818",
@@ -293,6 +1651,131 @@
     "nom": "Pesadelo Prism",
     "joueur": "Igor Costa",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 150074,
+      "nomEn": "Darkrai-EX",
+      "titrePage": "Darkrai-EX (Dark Explorers 63)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Dark-Explorers",
+        "numero": "63",
+        "cleR2": "tcgdex/Dark-Explorers/63-150074.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Dark Explorers 63 »"
+       },
+       {
+        "set": "Dark-Explorers",
+        "numero": "107",
+        "cleR2": "tcgdex/Dark-Explorers/107-150074.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "88",
+        "cleR2": "tcgdex/Legendary-Treasures/88-150074.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 145555,
+      "nomEn": "Mewtwo-EX",
+      "titrePage": "Mewtwo-EX (Next Destinies 54)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Next-Destinies",
+        "numero": "54",
+        "cleR2": "tcgdex/Next-Destinies/54-145555.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Next Destinies 54 »"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "54",
+        "cleR2": "tcgdex/Legendary-Treasures/54-145555.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Next-Destinies",
+        "numero": "98",
+        "cleR2": "tcgdex/Next-Destinies/98-145555.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 89353,
+      "nomEn": "Shaymin",
+      "titrePage": "Shaymin (Unleashed 8)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Unleashed",
+        "numero": "8",
+        "cleR2": "tcgdex/Unleashed/8-89353.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unleashed 8 »"
+       }
+      ]
+     },
+     {
+      "carteId": 95656,
+      "nomEn": "Smeargle",
+      "titrePage": "Smeargle (Undaunted 8)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Undaunted",
+        "numero": "8",
+        "cleR2": "tcgdex/Undaunted/8-95656.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Undaunted 8 »"
+       },
+       {
+        "set": "Call-of-Legends",
+        "numero": "21",
+        "cleR2": "tcgdex/Call-of-Legends/21-95656.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 142376,
+      "nomEn": "Terrakion",
+      "titrePage": "Terrakion (Noble Victories 73)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Noble-Victories",
+        "numero": "73",
+        "cleR2": "tcgdex/Noble-Victories/73-142376.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Noble Victories 73 »"
+       },
+       {
+        "set": "Boundaries-Crossed",
+        "numero": "151",
+        "cleR2": "tcgdex/Boundaries-Crossed/151-142376.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "84",
+        "cleR2": "tcgdex/Legendary-Treasures/84-142376.webp",
+        "source": "tcgdex"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Pesadelo Prism (TCG)",
      "copie": "20260905222332",
@@ -338,6 +1821,104 @@
     "nom": "Darkrai Deck",
     "joueur": "Jason Klaczynski",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 150074,
+      "nomEn": "Darkrai-EX",
+      "titrePage": "Darkrai-EX (Dark Explorers 63)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Dark-Explorers",
+        "numero": "63",
+        "cleR2": "tcgdex/Dark-Explorers/63-150074.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Dark Explorers 63 »"
+       },
+       {
+        "set": "Dark-Explorers",
+        "numero": "107",
+        "cleR2": "tcgdex/Dark-Explorers/107-150074.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "88",
+        "cleR2": "tcgdex/Legendary-Treasures/88-150074.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 151741,
+      "nomEn": "Sableye",
+      "titrePage": "Sableye (Dark Explorers 62)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Dark-Explorers",
+        "numero": "62",
+        "cleR2": "tcgdex/Dark-Explorers/62-151741.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Dark Explorers 62 »"
+       }
+      ]
+     },
+     {
+      "carteId": 163953,
+      "nomEn": "Keldeo-EX",
+      "titrePage": "Keldeo-EX (Boundaries Crossed 49)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Boundaries-Crossed",
+        "numero": "49",
+        "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Boundaries Crossed 49 »"
+       },
+       {
+        "set": "Boundaries-Crossed",
+        "numero": "142",
+        "cleR2": "tcgdex/Boundaries-Crossed/142-163953.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "45",
+        "cleR2": "tcgdex/Legendary-Treasures/45-163953.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 171874,
+      "nomEn": "Mr. Mime",
+      "titrePage": "Mr. Mime (Plasma Freeze 47)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Plasma-Freeze",
+        "numero": "47",
+        "cleR2": "tcgdex/Plasma-Freeze/47-171874.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Freeze 47 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [
+     {
+      "carteId": 150074,
+      "nomEn": "Darkrai-EX",
+      "quantite": 4,
+      "position": 0
+     }
+    ],
     "source": {
      "page": "Darkrai Deck (TCG)",
      "copie": "20260811194027",
@@ -383,6 +1964,91 @@
     "nom": "Emerald King",
     "joueur": "Andrew Estrada",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 173735,
+      "nomEn": "Genesect-EX",
+      "titrePage": "Genesect-EX (Plasma Blast 11)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Plasma-Blast",
+        "numero": "11",
+        "cleR2": "tcgdex/Plasma-Blast/11-173735.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Blast 11 »"
+       },
+       {
+        "set": "Plasma-Blast",
+        "numero": "97",
+        "cleR2": "tcgdex/Plasma-Blast/97-173735.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 174692,
+      "nomEn": "Virizion-EX",
+      "titrePage": "Virizion-EX (Plasma Blast 9)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Plasma-Blast",
+        "numero": "9",
+        "cleR2": "tcgdex/Plasma-Blast/9-174692.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Blast 9 »"
+       },
+       {
+        "set": "Plasma-Blast",
+        "numero": "96",
+        "cleR2": "tcgdex/Plasma-Blast/96-174692.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 174752,
+      "nomEn": "Jirachi-EX",
+      "titrePage": "Jirachi-EX (Plasma Blast 60)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Plasma-Blast",
+        "numero": "60",
+        "cleR2": "tcgdex/Plasma-Blast/60-174752.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Blast 60 »"
+       },
+       {
+        "set": "Plasma-Blast",
+        "numero": "98",
+        "cleR2": "tcgdex/Plasma-Blast/98-174752.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 171874,
+      "nomEn": "Mr. Mime",
+      "titrePage": "Mr. Mime (Plasma Freeze 47)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Plasma-Freeze",
+        "numero": "47",
+        "cleR2": "tcgdex/Plasma-Freeze/47-171874.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Freeze 47 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Emerald King (TCG)",
      "copie": "20260913052521",
@@ -422,6 +2088,159 @@
     "nom": "Honorstoise",
     "joueur": "Jacob Van Wagner",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 163953,
+      "nomEn": "Keldeo-EX",
+      "titrePage": "Keldeo-EX (Boundaries Crossed 49)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Boundaries-Crossed",
+        "numero": "49",
+        "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Boundaries Crossed 49 »"
+       },
+       {
+        "set": "Boundaries-Crossed",
+        "numero": "142",
+        "cleR2": "tcgdex/Boundaries-Crossed/142-163953.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Legendary-Treasures",
+        "numero": "45",
+        "cleR2": "tcgdex/Legendary-Treasures/45-163953.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 174752,
+      "nomEn": "Jirachi-EX",
+      "titrePage": "Jirachi-EX (Plasma Blast 60)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Plasma-Blast",
+        "numero": "60",
+        "cleR2": "tcgdex/Plasma-Blast/60-174752.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Blast 60 »"
+       },
+       {
+        "set": "Plasma-Blast",
+        "numero": "98",
+        "cleR2": "tcgdex/Plasma-Blast/98-174752.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 202651,
+      "nomEn": "Shaymin-EX",
+      "titrePage": "Shaymin-EX (Roaring Skies 77)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Roaring-Skies",
+        "numero": "77",
+        "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Roaring Skies 77 »"
+       },
+       {
+        "set": "Roaring-Skies",
+        "numero": "106",
+        "cleR2": "tcgdex/Roaring-Skies/106-202651.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Blastoise (Plasma Blast 16)",
+      "quantite": 2,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     },
+     {
+      "carteId": 171782,
+      "nomEn": "Exeggcute",
+      "titrePage": "Exeggcute (Plasma Freeze 4)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Plasma-Freeze",
+        "numero": "4",
+        "cleR2": "tcgdex/Plasma-Freeze/4-171782.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Plasma Freeze 4 »"
+       },
+       {
+        "set": "Plasma-Blast",
+        "numero": "102",
+        "cleR2": "tcgdex/Plasma-Blast/102-171782.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 200580,
+      "nomEn": "Wailord-EX",
+      "titrePage": "Wailord-EX (Primal Clash 38)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Primal-Clash",
+        "numero": "38",
+        "cleR2": "tcgdex/Primal-Clash/38-200580.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Primal Clash 38 »"
+       },
+       {
+        "set": "Primal-Clash",
+        "numero": "147",
+        "cleR2": "tcgdex/Primal-Clash/147-200580.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 203104,
+      "nomEn": "Articuno",
+      "titrePage": "Articuno (Roaring Skies 17)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Roaring-Skies",
+        "numero": "17",
+        "cleR2": "tcgdex/Roaring-Skies/17-203104.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Roaring Skies 17 »"
+       }
+      ]
+     },
+     {
+      "carteId": null,
+      "nomEn": null,
+      "titrePage": "Mewtwo-EX (Legendary Treasures 54)",
+      "quantite": 1,
+      "carteARegle": null,
+      "images": [],
+      "absenteDeLaBase": true
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Honorstoise (TCG)",
      "copie": "20260830005322",
@@ -467,6 +2286,151 @@
     "nom": "Magical Symphony",
     "joueur": "Shintaro Ito",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 211858,
+      "nomEn": "Audino-EX",
+      "titrePage": "Audino-EX (Fates Collide 84)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Fates-Collide",
+        "numero": "84",
+        "cleR2": "tcgdex/Fates-Collide/84-211858.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fates Collide 84 »"
+       }
+      ]
+     },
+     {
+      "carteId": 211863,
+      "nomEn": "M Audino-EX",
+      "titrePage": "M Audino-EX (Fates Collide 85)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Fates-Collide",
+        "numero": "85",
+        "cleR2": "tcgdex/Fates-Collide/85-211863.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fates Collide 85 »"
+       }
+      ]
+     },
+     {
+      "carteId": 202651,
+      "nomEn": "Shaymin-EX",
+      "titrePage": "Shaymin-EX (Roaring Skies 77)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Roaring-Skies",
+        "numero": "77",
+        "cleR2": "tcgdex/Roaring-Skies/77-202651.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Roaring Skies 77 »"
+       },
+       {
+        "set": "Roaring-Skies",
+        "numero": "106",
+        "cleR2": "tcgdex/Roaring-Skies/106-202651.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 204547,
+      "nomEn": "Hoopa-EX",
+      "titrePage": "Hoopa-EX (Ancient Origins 36)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Ancient-Origins",
+        "numero": "36",
+        "cleR2": "tcgdex/Ancient-Origins/36-204547.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Ancient Origins 36 »"
+       },
+       {
+        "set": "XY-Black-Star-Promos",
+        "numero": "XY71",
+        "cleR2": "tcgdex/XY-Black-Star-Promos/XY71-204547.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Ancient-Origins",
+        "numero": "89",
+        "cleR2": "tcgdex/Ancient-Origins/89-204547.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 213539,
+      "nomEn": "Magearna-EX",
+      "titrePage": "Magearna-EX (Steam Siege 75)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Steam-Siege",
+        "numero": "75",
+        "cleR2": "tcgdex/Steam-Siege/75-213539.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Steam Siege 75 »"
+       },
+       {
+        "set": "Steam-Siege",
+        "numero": "110",
+        "cleR2": "tcgdex/Steam-Siege/110-213539.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "XY-Black-Star-Promos",
+        "numero": "XY175",
+        "cleR2": "tcgdex/XY-Black-Star-Promos/XY175-213539.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 203125,
+      "nomEn": "Absol",
+      "titrePage": "Absol (Roaring Skies 40)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Roaring-Skies",
+        "numero": "40",
+        "cleR2": "tcgdex/Roaring-Skies/40-203125.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Roaring Skies 40 »"
+       }
+      ]
+     },
+     {
+      "carteId": 213703,
+      "nomEn": "Cobalion",
+      "titrePage": "Cobalion (Steam Siege 74)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Steam-Siege",
+        "numero": "74",
+        "cleR2": "tcgdex/Steam-Siege/74-213703.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Steam Siege 74 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Magical Symphony (TCG)",
      "copie": "20260217053901",
@@ -500,6 +2464,201 @@
     "nom": "Infinite Force",
     "joueur": "Diego Cassiraga",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 223955,
+      "nomEn": "Ralts",
+      "titrePage": "Ralts (Burning Shadows 91)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Burning-Shadows",
+        "numero": "91",
+        "cleR2": "tcgdex/Burning-Shadows/91-223955.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Burning Shadows 91 »"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV34",
+        "cleR2": "tcgdex/Hidden-Fates/SV34-223955.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 223351,
+      "nomEn": "Gardevoir-GX",
+      "titrePage": "Gardevoir-GX (Burning Shadows 93)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Burning-Shadows",
+        "numero": "93",
+        "cleR2": "tcgdex/Burning-Shadows/93-223351.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Burning Shadows 93 »"
+       },
+       {
+        "set": "Burning-Shadows",
+        "numero": "140",
+        "cleR2": "tcgdex/Burning-Shadows/140-223351.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Burning-Shadows",
+        "numero": "159",
+        "cleR2": "tcgdex/Burning-Shadows/159-223351.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 221208,
+      "nomEn": "Tapu Lele-GX",
+      "titrePage": "Tapu Lele-GX (Guardians Rising 60)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Guardians-Rising",
+        "numero": "60",
+        "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Guardians Rising 60 »"
+       },
+       {
+        "set": "Guardians-Rising",
+        "numero": "137",
+        "cleR2": "tcgdex/Guardians-Rising/137-221208.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Guardians-Rising",
+        "numero": "155",
+        "cleR2": "tcgdex/Guardians-Rising/155-221208.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 223952,
+      "nomEn": "Kirlia",
+      "titrePage": "Kirlia (Burning Shadows 92)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Burning-Shadows",
+        "numero": "92",
+        "cleR2": "tcgdex/Burning-Shadows/92-223952.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Burning Shadows 92 »"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV35",
+        "cleR2": "tcgdex/Hidden-Fates/SV35-223952.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 206541,
+      "nomEn": "Remoraid",
+      "titrePage": "Remoraid (BREAKthrough 32)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "BREAKthrough",
+        "numero": "32",
+        "cleR2": "tcgdex/BREAKthrough/32-206541.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « BREAKthrough 32 »"
+       }
+      ]
+     },
+     {
+      "carteId": 221577,
+      "nomEn": "Alolan Vulpix",
+      "titrePage": "Alolan Vulpix (Guardians Rising 21)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Guardians-Rising",
+        "numero": "21",
+        "cleR2": "tcgdex/Guardians-Rising/21-221577.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Guardians Rising 21 »"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV8",
+        "cleR2": "tcgdex/Hidden-Fates/SV8-221577.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 223573,
+      "nomEn": "Diancie",
+      "titrePage": "Diancie (Burning Shadows 94)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Burning-Shadows",
+        "numero": "94",
+        "cleR2": "tcgdex/Burning-Shadows/94-223573.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Burning Shadows 94 »"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV36",
+        "cleR2": "tcgdex/Hidden-Fates/SV36-223573.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 206581,
+      "nomEn": "Gallade",
+      "titrePage": "Gallade (BREAKthrough 84)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "BREAKthrough",
+        "numero": "84",
+        "cleR2": "tcgdex/BREAKthrough/84-206581.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « BREAKthrough 84 »"
+       }
+      ]
+     },
+     {
+      "carteId": 206540,
+      "nomEn": "Octillery",
+      "titrePage": "Octillery (BREAKthrough 33)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "BREAKthrough",
+        "numero": "33",
+        "cleR2": "tcgdex/BREAKthrough/33-206540.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « BREAKthrough 33 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Infinite Force (TCG)",
      "copie": "20260831042812",
@@ -539,6 +2698,156 @@
     "nom": "Victory Map",
     "joueur": "Robin Schulz",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 224190,
+      "nomEn": "Zoroark-GX",
+      "titrePage": "Zoroark-GX (Shining Legends 53)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Shining-Legends",
+        "numero": "53",
+        "cleR2": "bulbapedia/Shining-Legends/53-224190.webp",
+        "source": "bulbapedia",
+        "impressionDOrigine": "l'impression que nomme la page : « Shining Legends 53 »"
+       },
+       {
+        "set": "SM-Black-Star-Promos",
+        "numero": "SM84",
+        "cleR2": "tcgdex/SM-Black-Star-Promos/SM84-224190.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 224446,
+      "nomEn": "Zorua",
+      "titrePage": "Zorua (Shining Legends 52)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "SM-Black-Star-Promos",
+        "numero": "SM83",
+        "cleR2": "tcgdex/SM-Black-Star-Promos/SM83-224446.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV25",
+        "cleR2": "tcgdex/Hidden-Fates/SV25-224446.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 221208,
+      "nomEn": "Tapu Lele-GX",
+      "titrePage": "Tapu Lele-GX (Guardians Rising 60)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Guardians-Rising",
+        "numero": "60",
+        "cleR2": "tcgdex/Guardians-Rising/60-221208.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Guardians Rising 60 »"
+       },
+       {
+        "set": "Guardians-Rising",
+        "numero": "137",
+        "cleR2": "tcgdex/Guardians-Rising/137-221208.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Guardians-Rising",
+        "numero": "155",
+        "cleR2": "tcgdex/Guardians-Rising/155-221208.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 208784,
+      "nomEn": "Trubbish",
+      "titrePage": "Trubbish (BREAKpoint 56)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "BREAKpoint",
+        "numero": "56",
+        "cleR2": "tcgdex/BREAKpoint/56-208784.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « BREAKpoint 56 »"
+       }
+      ]
+     },
+     {
+      "carteId": 221742,
+      "nomEn": "Garbodor",
+      "titrePage": "Garbodor (Guardians Rising 51)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Guardians-Rising",
+        "numero": "51",
+        "cleR2": "tcgdex/Guardians-Rising/51-221742.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Guardians Rising 51 »"
+       }
+      ]
+     },
+     {
+      "carteId": 225247,
+      "nomEn": "Kartana-GX",
+      "titrePage": "Kartana-GX (Crimson Invasion 70)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Crimson-Invasion",
+        "numero": "70",
+        "cleR2": "tcgdex/Crimson-Invasion/70-225247.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Crimson Invasion 70 »"
+       },
+       {
+        "set": "Hidden-Fates",
+        "numero": "SV73",
+        "cleR2": "tcgdex/Hidden-Fates/SV73-225247.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Crimson-Invasion",
+        "numero": "106",
+        "cleR2": "tcgdex/Crimson-Invasion/106-225247.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 208779,
+      "nomEn": "Garbodor",
+      "titrePage": "Garbodor (BREAKpoint 57)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "BREAKpoint",
+        "numero": "57",
+        "cleR2": "tcgdex/BREAKpoint/57-208779.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « BREAKpoint 57 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Victory Map (TCG)",
      "copie": "20260830005326",
@@ -578,6 +2887,268 @@
     "nom": "Perfection",
     "joueur": "Henry Brand",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 237652,
+      "nomEn": "Mewtwo & Mew-GX",
+      "titrePage": "Mewtwo & Mew-GX (Unified Minds 71)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unified-Minds",
+        "numero": "71",
+        "cleR2": "tcgdex/Unified-Minds/71-237652.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 71 »"
+       },
+       {
+        "set": "SM-Black-Star-Promos",
+        "numero": "SM191",
+        "cleR2": "bulbapedia/SM-Black-Star-Promos/191-237652.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "Unified-Minds",
+        "numero": "222",
+        "cleR2": "tcgdex/Unified-Minds/222-237652.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 234576,
+      "nomEn": "Dedenne-GX",
+      "titrePage": "Dedenne-GX (Unbroken Bonds 57)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "57",
+        "cleR2": "tcgdex/Unbroken-Bonds/57-234576.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unbroken Bonds 57 »"
+       },
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "195",
+        "cleR2": "tcgdex/Unbroken-Bonds/195-234576.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "219",
+        "cleR2": "tcgdex/Unbroken-Bonds/219-234576.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 232590,
+      "nomEn": "Cobalion-GX",
+      "titrePage": "Cobalion-GX (Team Up 106)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Team-Up",
+        "numero": "106",
+        "cleR2": "tcgdex/Team-Up/106-232590.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Team Up 106 »"
+       },
+       {
+        "set": "Team-Up",
+        "numero": "168",
+        "cleR2": "tcgdex/Team-Up/168-232590.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Team-Up",
+        "numero": "189",
+        "cleR2": "tcgdex/Team-Up/189-232590.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 237805,
+      "nomEn": "Espeon & Deoxys-GX",
+      "titrePage": "Espeon & Deoxys-GX (Unified Minds 72)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unified-Minds",
+        "numero": "72",
+        "cleR2": "tcgdex/Unified-Minds/72-237805.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 72 »"
+       }
+      ]
+     },
+     {
+      "carteId": 237806,
+      "nomEn": "Jirachi-GX",
+      "titrePage": "Jirachi-GX (Unified Minds 79)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unified-Minds",
+        "numero": "79",
+        "cleR2": "tcgdex/Unified-Minds/79-237806.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 79 »"
+       }
+      ]
+     },
+     {
+      "carteId": 237759,
+      "nomEn": "Latios-GX",
+      "titrePage": "Latios-GX (Unified Minds 78)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unified-Minds",
+        "numero": "78",
+        "cleR2": "tcgdex/Unified-Minds/78-237759.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 78 »"
+       },
+       {
+        "set": "Unified-Minds",
+        "numero": "223",
+        "cleR2": "tcgdex/Unified-Minds/223-237759.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Unified-Minds",
+        "numero": "243",
+        "cleR2": "tcgdex/Unified-Minds/243-237759.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 230496,
+      "nomEn": "Magcargo-GX",
+      "titrePage": "Magcargo-GX (Lost Thunder 44)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Lost-Thunder",
+        "numero": "44",
+        "cleR2": "tcgdex/Lost-Thunder/44-230496.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Lost Thunder 44 »"
+       },
+       {
+        "set": "Lost-Thunder",
+        "numero": "198",
+        "cleR2": "tcgdex/Lost-Thunder/198-230496.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Lost-Thunder",
+        "numero": "218",
+        "cleR2": "tcgdex/Lost-Thunder/218-230496.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 237009,
+      "nomEn": "Naganadel-GX",
+      "titrePage": "Naganadel-GX (Unified Minds 160)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unified-Minds",
+        "numero": "160",
+        "cleR2": "tcgdex/Unified-Minds/160-237009.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 160 »"
+       },
+       {
+        "set": "Unified-Minds",
+        "numero": "230",
+        "cleR2": "tcgdex/Unified-Minds/230-237009.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Unified-Minds",
+        "numero": "249",
+        "cleR2": "tcgdex/Unified-Minds/249-237009.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 235767,
+      "nomEn": "Reshiram & Charizard-GX",
+      "titrePage": "Reshiram & Charizard-GX (Unbroken Bonds 20)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "20",
+        "cleR2": "tcgdex/Unbroken-Bonds/20-235767.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unbroken Bonds 20 »"
+       },
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "194",
+        "cleR2": "tcgdex/Unbroken-Bonds/194-235767.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "217",
+        "cleR2": "tcgdex/Unbroken-Bonds/217-235767.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 226512,
+      "nomEn": "Solgaleo-GX",
+      "titrePage": "Solgaleo-GX (SM Promo 104)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "SM-Black-Star-Promos",
+        "numero": "SM104",
+        "cleR2": "tcgdex/SM-Black-Star-Promos/SM104-226512.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 234687,
+      "nomEn": "Marshadow",
+      "titrePage": "Marshadow (Unbroken Bonds 81)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Unbroken-Bonds",
+        "numero": "81",
+        "cleR2": "tcgdex/Unbroken-Bonds/81-234687.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Unbroken Bonds 81 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Perfection (TCG)",
      "copie": "20260309002012",
@@ -623,6 +3194,263 @@
     "nom": "ADP",
     "joueur": "Ondřej Škubal",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 264173,
+      "nomEn": "Arceus V",
+      "titrePage": "Arceus V (Brilliant Stars 122)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Brilliant-Stars",
+        "numero": "122",
+        "cleR2": "tcgdex/Brilliant-Stars/122-264173.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 122 »"
+       },
+       {
+        "set": "SWSH-Black-Star-Promos",
+        "numero": "SWSH306",
+        "cleR2": "bulbapedia/SWSH-Black-Star-Promos/306-264173.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "Brilliant-Stars",
+        "numero": "165",
+        "cleR2": "tcgdex/Brilliant-Stars/165-264173.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 265800,
+      "nomEn": "Arceus VSTAR",
+      "titrePage": "Arceus VSTAR (Brilliant Stars 123)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Brilliant-Stars",
+        "numero": "123",
+        "cleR2": "tcgdex/Brilliant-Stars/123-265800.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 123 »"
+       },
+       {
+        "set": "SWSH-Black-Star-Promos",
+        "numero": "SWSH307",
+        "cleR2": "bulbapedia/SWSH-Black-Star-Promos/307-265800.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "Crown-Zenith",
+        "numero": "GG70",
+        "cleR2": "bulbapedia/Crown-Zenith/70-265800.webp",
+        "source": "bulbapedia"
+       }
+      ]
+     },
+     {
+      "carteId": 263373,
+      "nomEn": "Flying Pikachu V",
+      "titrePage": "Flying Pikachu V (Celebrations 6)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Celebrations",
+        "numero": "006",
+        "cleR2": "tcgdex/Celebrations/006-263373.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Celebrations 6 »"
+       }
+      ]
+     },
+     {
+      "carteId": 263374,
+      "nomEn": "Flying Pikachu VMAX",
+      "titrePage": "Flying Pikachu VMAX (Celebrations 7)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Celebrations",
+        "numero": "007",
+        "cleR2": "tcgdex/Celebrations/007-263374.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Celebrations 7 »"
+       }
+      ]
+     },
+     {
+      "carteId": 269244,
+      "nomEn": "Hisuian Decidueye V",
+      "titrePage": "Hisuian Decidueye V (Astral Radiance 83)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Astral-Radiance",
+        "numero": "083",
+        "cleR2": "tcgdex/Astral-Radiance/083-269244.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Astral Radiance 83 »"
+       },
+       {
+        "set": "Astral-Radiance",
+        "numero": "173",
+        "cleR2": "tcgdex/Astral-Radiance/173-269244.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "SWSH-Black-Star-Promos",
+        "numero": "SWSH238",
+        "cleR2": "tcgdex/SWSH-Black-Star-Promos/SWSH238-269244.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 269245,
+      "nomEn": "Hisuian Decidueye VSTAR",
+      "titrePage": "Hisuian Decidueye VSTAR (Astral Radiance 84)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Astral-Radiance",
+        "numero": "084",
+        "cleR2": "tcgdex/Astral-Radiance/084-269245.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Astral Radiance 84 »"
+       },
+       {
+        "set": "Astral-Radiance",
+        "numero": "195",
+        "cleR2": "tcgdex/Astral-Radiance/195-269245.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 267646,
+      "nomEn": "Bibarel",
+      "titrePage": "Bibarel (Brilliant Stars 121)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Brilliant-Stars",
+        "numero": "121",
+        "cleR2": "tcgdex/Brilliant-Stars/121-267646.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 121 »"
+       },
+       {
+        "set": "Crown-Zenith",
+        "numero": "GG25",
+        "cleR2": "bulbapedia/Crown-Zenith/25-267646.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "SWSH-Black-Star-Promos",
+        "numero": "SWSH188",
+        "cleR2": "tcgdex/SWSH-Black-Star-Promos/SWSH188-267646.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 267645,
+      "nomEn": "Bidoof",
+      "titrePage": "Bidoof (Brilliant Stars 120)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Brilliant-Stars",
+        "numero": "120",
+        "cleR2": "tcgdex/Brilliant-Stars/120-267645.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 120 »"
+       }
+      ]
+     },
+     {
+      "carteId": 251725,
+      "nomEn": "Crobat V",
+      "titrePage": "Crobat V (Darkness Ablaze 104)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Darkness-Ablaze",
+        "numero": "104",
+        "cleR2": "tcgdex/Darkness-Ablaze/104-251725.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Darkness Ablaze 104 »"
+       },
+       {
+        "set": "Darkness-Ablaze",
+        "numero": "182",
+        "cleR2": "tcgdex/Darkness-Ablaze/182-251725.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Shining-Fates",
+        "numero": "044",
+        "cleR2": "tcgdex/Shining-Fates/044-251725.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 267492,
+      "nomEn": "Lumineon V",
+      "titrePage": "Lumineon V (Brilliant Stars 40)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Brilliant-Stars",
+        "numero": "040",
+        "cleR2": "tcgdex/Brilliant-Stars/040-267492.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 40 »"
+       },
+       {
+        "set": "Crown-Zenith",
+        "numero": "GG39",
+        "cleR2": "bulbapedia/Crown-Zenith/39-267492.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "Brilliant-Stars",
+        "numero": "155",
+        "cleR2": "tcgdex/Brilliant-Stars/155-267492.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 262630,
+      "nomEn": "Pumpkaboo",
+      "titrePage": "Pumpkaboo (Evolving Skies 76)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Evolving-Skies",
+        "numero": "076",
+        "cleR2": "tcgdex/Evolving-Skies/076-262630.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Evolving Skies 76 »"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "ADP (TCG)",
      "copie": "20251114162044",
@@ -668,6 +3496,150 @@
     "nom": "Mew's Revenge",
     "joueur": "Vance Kelley",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 263504,
+      "nomEn": "Genesect V",
+      "titrePage": "Genesect V (Fusion Strike 185)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Fusion-Strike",
+        "numero": "185",
+        "cleR2": "tcgdex/Fusion-Strike/185-263504.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 185 »"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "254",
+        "cleR2": "tcgdex/Fusion-Strike/254-263504.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "255",
+        "cleR2": "tcgdex/Fusion-Strike/255-263504.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 263497,
+      "nomEn": "Mew V",
+      "titrePage": "Mew V (Fusion Strike 113)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Fusion-Strike",
+        "numero": "113",
+        "cleR2": "tcgdex/Fusion-Strike/113-263497.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 113 »"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "250",
+        "cleR2": "tcgdex/Fusion-Strike/250-263497.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "251",
+        "cleR2": "tcgdex/Fusion-Strike/251-263497.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 263498,
+      "nomEn": "Mew VMAX",
+      "titrePage": "Mew VMAX (Fusion Strike 114)",
+      "quantite": 3,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Fusion-Strike",
+        "numero": "114",
+        "cleR2": "tcgdex/Fusion-Strike/114-263498.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 114 »"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "268",
+        "cleR2": "tcgdex/Fusion-Strike/268-263498.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Fusion-Strike",
+        "numero": "269",
+        "cleR2": "tcgdex/Fusion-Strike/269-263498.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 263499,
+      "nomEn": "Meloetta",
+      "titrePage": "Meloetta (Fusion Strike 124)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Fusion-Strike",
+        "numero": "124",
+        "cleR2": "tcgdex/Fusion-Strike/124-263499.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 124 »"
+       }
+      ]
+     },
+     {
+      "carteId": 263491,
+      "nomEn": "Oricorio",
+      "titrePage": "Oricorio (Fusion Strike 42)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Fusion-Strike",
+        "numero": "042",
+        "cleR2": "tcgdex/Fusion-Strike/042-263491.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 42 »"
+       },
+       {
+        "set": "Crown-Zenith",
+        "numero": "GG04",
+        "cleR2": "bulbapedia/Crown-Zenith/4-263491.webp",
+        "source": "bulbapedia"
+       },
+       {
+        "set": "SWSH-Black-Star-Promos",
+        "numero": "SWSH168",
+        "cleR2": "tcgdex/SWSH-Black-Star-Promos/SWSH168-263491.webp",
+        "source": "tcgdex"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [
+     {
+      "carteId": 263497,
+      "nomEn": "Mew V",
+      "quantite": 4,
+      "position": 0
+     },
+     {
+      "carteId": 263498,
+      "nomEn": "Mew VMAX",
+      "quantite": 3,
+      "position": 0
+     }
+    ],
     "source": {
      "page": "Mew's Revenge (TCG)",
      "copie": "20260905222312",
@@ -715,6 +3687,37 @@
     "nomsPossibles": [
      "Iron Thorns ex"
     ],
+    "pokemon": [
+     {
+      "carteId": 303233,
+      "nomEn": "Iron Thorns ex",
+      "titrePage": "Iron Thorns ex (Twilight Masquerade 77)",
+      "quantite": 4,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Twilight-Masquerade",
+        "numero": "077",
+        "cleR2": "tcgdex/Twilight-Masquerade/077-303233.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Twilight Masquerade 77 »"
+       },
+       {
+        "set": "Prismatic-Evolutions",
+        "numero": "032",
+        "cleR2": "tcgdex/Prismatic-Evolutions/032-303233.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Twilight-Masquerade",
+        "numero": "196",
+        "cleR2": "tcgdex/Twilight-Masquerade/196-303233.webp",
+        "source": "tcgdex"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [],
     "source": {
      "page": "Crushing Thorn (TCG)",
      "copie": "20260913110943",
@@ -760,6 +3763,269 @@
     "nom": "Flutter Devo Gardevoir",
     "joueur": "Riley McKay",
     "nomsPossibles": [],
+    "pokemon": [
+     {
+      "carteId": 306755,
+      "nomEn": "Munkidori",
+      "titrePage": "Munkidori (Twilight Masquerade 95)",
+      "quantite": 4,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Twilight-Masquerade",
+        "numero": "095",
+        "cleR2": "tcgdex/Twilight-Masquerade/095-306755.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Twilight Masquerade 95 »"
+       },
+       {
+        "set": "Prismatic-Evolutions",
+        "numero": "044",
+        "cleR2": "tcgdex/Prismatic-Evolutions/044-306755.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Shrouded-Fable",
+        "numero": "072",
+        "cleR2": "tcgdex/Shrouded-Fable/072-306755.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 279631,
+      "nomEn": "Ralts",
+      "titrePage": "Ralts (Scarlet & Violet 84)",
+      "quantite": 3,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Scarlet-Violet",
+        "numero": "084",
+        "cleR2": "tcgdex/Scarlet-Violet/084-279631.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Scarlet & Violet 84 »"
+       },
+       {
+        "set": "Scarlet-Violet",
+        "numero": "211",
+        "cleR2": "tcgdex/Scarlet-Violet/211-279631.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Paldean-Fates",
+        "numero": "027",
+        "cleR2": "tcgdex/Paldean-Fates/027-279631.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 279633,
+      "nomEn": "Gardevoir ex",
+      "titrePage": "Gardevoir ex (Scarlet & Violet 86)",
+      "quantite": 2,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Scarlet-Violet",
+        "numero": "086",
+        "cleR2": "tcgdex/Scarlet-Violet/086-279633.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Scarlet & Violet 86 »"
+       },
+       {
+        "set": "Scarlet-Violet",
+        "numero": "228",
+        "cleR2": "tcgdex/Scarlet-Violet/228-279633.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Scarlet-Violet",
+        "numero": "245",
+        "cleR2": "tcgdex/Scarlet-Violet/245-279633.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 279632,
+      "nomEn": "Kirlia",
+      "titrePage": "Kirlia (Scarlet & Violet 85)",
+      "quantite": 2,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Scarlet-Violet",
+        "numero": "085",
+        "cleR2": "tcgdex/Scarlet-Violet/085-279632.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Scarlet & Violet 85 »"
+       },
+       {
+        "set": "Scarlet-Violet",
+        "numero": "212",
+        "cleR2": "tcgdex/Scarlet-Violet/212-279632.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Paldean-Fates",
+        "numero": "028",
+        "cleR2": "tcgdex/Paldean-Fates/028-279632.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 309629,
+      "nomEn": "Fezandipiti ex",
+      "titrePage": "Fezandipiti ex (Shrouded Fable 38)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Shrouded-Fable",
+        "numero": "038",
+        "cleR2": "tcgdex/Shrouded-Fable/038-309629.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Shrouded Fable 38 »"
+       },
+       {
+        "set": "Shrouded-Fable",
+        "numero": "084",
+        "cleR2": "tcgdex/Shrouded-Fable/084-309629.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Shrouded-Fable",
+        "numero": "092",
+        "cleR2": "tcgdex/Shrouded-Fable/092-309629.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 319011,
+      "nomEn": "Lillie's Clefairy ex",
+      "titrePage": "Lillie's Clefairy ex (Journey Together 56)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "Journey-Together-Additionals",
+        "numero": "056",
+        "cleR2": "tcgdex/Journey-Together-Additionals/056-319011.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Journey Together 56 »"
+       },
+       {
+        "set": "Journey-Together",
+        "numero": "056",
+        "cleR2": "tcgdex/Journey-Together/056-319011.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Journey Together 56 »"
+       },
+       {
+        "set": "Journey-Together-Additionals",
+        "numero": "173",
+        "cleR2": "tcgdex/Journey-Together-Additionals/173-319011.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 282793,
+      "nomEn": "Mew ex",
+      "titrePage": "Mew ex (151 151)",
+      "quantite": 1,
+      "carteARegle": true,
+      "images": [
+       {
+        "set": "151",
+        "numero": "151",
+        "cleR2": "tcgdex/151/151-282793.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « 151 151 »"
+       },
+       {
+        "set": "Paldean-Fates",
+        "numero": "216",
+        "cleR2": "tcgdex/Paldean-Fates/216-282793.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Paldean-Fates",
+        "numero": "232",
+        "cleR2": "tcgdex/Paldean-Fates/232-282793.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 301355,
+      "nomEn": "Flutter Mane",
+      "titrePage": "Flutter Mane (Temporal Forces 78)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Temporal-Forces",
+        "numero": "078",
+        "cleR2": "tcgdex/Temporal-Forces/078-301355.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Temporal Forces 78 »"
+       },
+       {
+        "set": "Prismatic-Evolutions",
+        "numero": "043",
+        "cleR2": "tcgdex/Prismatic-Evolutions/043-301355.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Prismatic-Evolutions-Additionals",
+        "numero": "043",
+        "cleR2": "tcgdex/Prismatic-Evolutions-Additionals/043-301355.webp",
+        "source": "tcgdex"
+       }
+      ]
+     },
+     {
+      "carteId": 294663,
+      "nomEn": "Scream Tail",
+      "titrePage": "Scream Tail (Paradox Rift 86)",
+      "quantite": 1,
+      "carteARegle": false,
+      "images": [
+       {
+        "set": "Paradox-Rift",
+        "numero": "086",
+        "cleR2": "tcgdex/Paradox-Rift/086-294663.webp",
+        "source": "tcgdex",
+        "impressionDOrigine": "l'impression que nomme la page : « Paradox Rift 86 »"
+       },
+       {
+        "set": "Prismatic-Evolutions",
+        "numero": "042",
+        "cleR2": "tcgdex/Prismatic-Evolutions/042-294663.webp",
+        "source": "tcgdex"
+       },
+       {
+        "set": "Prismatic-Evolutions-Additionals",
+        "numero": "042",
+        "cleR2": "tcgdex/Prismatic-Evolutions-Additionals/042-294663.webp",
+        "source": "tcgdex"
+       }
+      ]
+     }
+    ],
+    "citesParLeNom": [
+     {
+      "carteId": 279633,
+      "nomEn": "Gardevoir ex",
+      "quantite": 2,
+      "position": 13
+     }
+    ],
     "source": {
      "page": "Flutter Devo Gardevoir (TCG)",
      "copie": "20260913002117",

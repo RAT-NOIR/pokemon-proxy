@@ -100,7 +100,15 @@ const espece = nom => nu(nom).replace(/^(team \w+'s|[\w-]+'s|dark|light|shining|
         const plat = nu(nomDeck).replace(/[^a-z]/g, '');
         const fragments = e => { const s = e.replace(/[^a-z]/g, ''), out = []; for (let i = 0; i + 4 <= s.length; i++) out.push(s.slice(i, i + 4)); return out; };
         const nomsPossibles = nommes.length ? [] : [...new Set(connus.filter(p => fragments(espece(p.carte.nomEn)).some(f => plat.includes(f))).map(p => p.carte.nomEn))];
-        sortie.push({ ...ligne, deckChampion: { nom: nomDeck, joueur, nomsPossibles, source: { page: d.titre.replace(/_/g, ' '), copie: d.copie, url: d.url ? d.url.replace('id_/', '/') : null, phrase: phrase?.slice(0, 300) ?? null, ...(parEvenement ? { evenement: parEvenement.copie } : {}) },
+        // (2026-10-07, nuit — demande du site, règle de l'éditeur : la vedette est le Pokémon que NOMME le deck, le premier cité, puis le
+        // suivant, puis « le Pokémon suivant du deck qui a une image propre » — le site regarde chaque illustration) : la liste ENTIÈRE des
+        // cartes Pokémon du deck, par quantité décroissante, la carte à règle à égalité ; et les Pokémon cités par le nom, dans l'ordre du nom
+        const liste = [...departage(connus).map(p => ({ carteId: p.carte._id, nomEn: p.carte.nomEn, titrePage: p.titre, quantite: p.quantite, carteARegle: REGLE.test(p.carte.nomEn), images: imagesDeLaVedette(p.carte) })),
+            ...pokemon.filter(p => !p.carte).map(p => ({ carteId: null, nomEn: null, titrePage: p.titre, quantite: p.quantite, carteARegle: null, images: [], absenteDeLaBase: true }))]
+            .sort((x, y) => y.quantite - x.quantite || (y.carteARegle ? 1 : 0) - (x.carteARegle ? 1 : 0) || String(x.titrePage).localeCompare(String(y.titrePage)));
+        const citesParLeNom = nommes.map(p => ({ carteId: p.carte._id, nomEn: p.carte.nomEn, quantite: p.quantite, position: motsDuNom.indexOf(` ${espece(p.carte.nomEn)} `) }))
+            .sort((x, y) => x.position - y.position || y.quantite - x.quantite);
+        sortie.push({ ...ligne, deckChampion: { nom: nomDeck, joueur, nomsPossibles, pokemon: liste, citesParLeNom, source: { page: d.titre.replace(/_/g, ' '), copie: d.copie, url: d.url ? d.url.replace('id_/', '/') : null, phrase: phrase?.slice(0, 300) ?? null, ...(parEvenement ? { evenement: parEvenement.copie } : {}) },
             vedette: v ? { carteId: v.carte._id, nomEn: v.carte.nomEn, titrePage: v.titre, quantite: v.quantite, regle,
                 images: imagesDeLaVedette(v.carte) } : null,
             raisonSansVedette: v ? null : `vedette non déterminée : ${inconnus.length} carte(s) de la liste absente(s) de la base (${inconnus.slice(0, 4).join(', ')})` } });
