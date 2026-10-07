@@ -550,6 +550,29 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 77. UN FEU VERT AUTORISE UN GESTE, IL NE PROUVE PAS SA PRÉMISSE — 2026-10-08
+
+> 🔴 **LE FEU VERT DISAIT « retirer l'impression n° 143 d'Energy Sticker et le rattachement de Double Dragon Energy à
+> Scarlet-Violet-Promos ».** Il reprenait une phrase du site : « ces fiches n'existent qu'à cause de vos documents ». Mesuré avant
+> d'écrire : Energy Sticker EST le jp SV-P 143 (artofpkm ET TCGdex, produit 761017 joint), Double Dragon Energy EST le SV-P 142 et 231
+> (749923, 804761, deux visuels du set). Seules les deux LIGNES (Umbreon ex, Espeon ex jointes par le numéro) étaient fausses ;
+> exécuter le feu vert à la lettre effaçait deux vraies fiches. 🔑 **La prémisse d'un feu vert se rejoue avant d'écrire, comme la preuve
+> d'une ligne (`detacher-lignes-prouvees.js` le fait pour les lignes) ; ce qui ne se rejoue pas ne s'écrit pas, et se dit.**
+
+**Trois lectures à moi, fausses dans la soirée, toutes de la même forme — un état lu une fois et rapporté comme définitif :** « le worker
+n'est pas redéployé » (Render lu à 22:35, déploiement manuel de c1d8c78 à 22:36 — l'alarme était juste au moment de la lecture, fausse
+au moment du rapport) ; « 80 visuels par page » (le flux React répète le HTML : on compte les ÉLÉMENTS, pas les chaînes — 40) ; « 0 mention »
+(mon motif ne reconnaissait pas le texte servi : le compte des `data-mention-visuel` disait vrai). ⚠️ **Le MCP Render ne lit AUCUNE
+variable d'environnement, pas même un nom** : la présence de `MONGODB_URI` se prouve par le premier import, qui nomme une variable absente
+sans faire de requête (`7e8c57d`).
+**Imports** : catalogue à 12 h 15 UTC (l'export paraît vers 11 h 31), guide à 5 h ; requête CONDITIONNELLE (ETag du dernier fichier
+TRAITÉ, 304 sans corps) ; un « rien de neuf » clôt le jour. **TAILLE** : la grappe de production est à 438,9 Mo, dont `references_image`
+371,8 Mo (84,7 %, lu par la route à chaque scan : le seul levier qui compte, et il n'est pas « sans risque ») ; le lot TPC écrit sur
+l'AUTRE grappe (`cartes`, 167,9 Mo) et pèse ~2,9 Ko par visuel posé (≤ 5 Mo pour tout le lot). **Note artofpkm** : `mention` →
+`noteVariante` (1 045 entrées), `mention` ne désigne plus qu'un texte public. **Dépendances** (Trail of Bits, OSV) : axios 1.20.0,
+sharp 0.35.5 — une mise à jour d'encodeur se juge sur les OCTETS produits, pas sur des bancs verts : la chaîne des collecteurs rejouée
+sur 12 visuels réels rend des sorties identiques octet pour octet à la 0.34.5.
+
 ## 76. LA RÈGLE DU SITE IMPORTÉE, UNE CALIBRATION QUI NE POUVAIT PAS ÉCHOUER, ET « PRÉSENTE » N'EST PAS « JOIGNABLE » — 2026-10-07 (nuit)
 
 > 🔑 **DÉCISIONS DU TESTEUR** : un set sans prix au guide se classe par RARETÉ décroissante puis numéro (`classementSansPrix: true` sur
