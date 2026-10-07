@@ -66,8 +66,11 @@ function frDuLangtable(w) {
             const v = /^\s*fr\s*=([\s\S]*)$/.exec(p)?.[1];
             if (v == null) continue;
             const reserves = [];
-            const x = v.replace(/<!--[\s\S]*?-->/g, '').replace(/\{\{\s*tt\s*\|\s*\*\s*\|([^{}|]*)\}\}/gi, (_, q) => { reserves.push(q.trim()); return ''; })
-                .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/'''?/g, '').trim();
+            // (relecture du 2026-10-07, soir) les références, balises et entités HTML ne font pas partie du nom
+            const x = v.replace(/<!--[\s\S]*?-->/g, '').replace(/<ref[^>]*\/>|<ref[^>]*>[\s\S]*?<\/ref>/gi, '').replace(/<[^>]+>/g, ' ')
+                .replace(/&#0?39;|&apos;/g, "'").replace(/&amp;/g, '&').replace(/&nbsp;|&#160;/g, ' ')
+                .replace(/\{\{\s*tt\s*\|\s*\*\s*\|([^{}|]*)\}\}/gi, (_, q) => { reserves.push(q.trim()); return ''; })
+                .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').replace(/'''?/g, '').replace(/\s+/g, ' ').trim();
             if (!x || /[{}[\]|]/.test(x) || reserves.length > 1) continue;
             const r = reserves[0] || null;
             if (!vals.some(y => cle(y.fr) === cle(x) && y.reserve === r)) vals.push({ fr: x, reserve: r });
@@ -132,6 +135,11 @@ const r2 = require('./collecte-cartes/r2');
             temoin = v[0]?.fr ?? null;
         }
         if (temoin && cle(temoin) !== cle(t.fr)) { plan.push({ id: s._id, refus: `les sources divergent — TCGdex « ${t.fr} » · Bulbapedia « ${temoin} »` }); continue; }
+        // RÈGLE DU TESTEUR (2026-10-07, soir) : « un nom français n'est posé que s'il figure sur un produit imprimé en français ; sinon, on
+        // garde l'anglais ». TCGdex nomme aussi les sets de Pokémon TCG Online (Legendary Treasures) : seul, il ne prouve pas l'impression.
+        // La preuve admise ici : le témoin de la page, SANS réserve (une infobulle « Online » a déjà refusé plus haut). Sinon : le logo
+        // français officiel, lu à l'œil (poser-noms-fr-logos.js).
+        if (!temoin) { plan.push({ id: s._id, refus: 'aucune preuve d\'un produit imprimé en français (TCGdex seul, témoin absent) : on garde l\'anglais' }); continue; }
         plan.push({ id: s._id, nom: s.nomAffichage, nomFr: t.fr, preuve: `TCGdex [${t.id}] désigné par ${cles.length} clés (${cles.join(' + ')}), aucun autre set TCGdex désigné ; témoin Bulbapedia ${temoin ? `« ${temoin} » d'accord` : 'absent'} ; set occidental (tirage intl)` });
     }
     const noms = plan.filter(p => p.nomFr), absents = plan.filter(p => p.absent), refus = plan.filter(p => p.refus);

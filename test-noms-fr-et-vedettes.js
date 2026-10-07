@@ -3,7 +3,7 @@
 //   · exporter-donnees-logos-site.js — le visuel d'une vedette est celui de SON numéro ; une carte à plusieurs visuels dans le set, sans
 //     numéro qui en désigne un seul, n'a pas de visuel (jamais `ims[0]`) ; un prix nul n'est pas un prix.
 const { frDuLangtable } = require('./poser-noms-fr-sets-clone');
-const { visuelDuProduit, prixDe } = require('./exporter-donnees-logos-site');
+const { visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage } = require('./exporter-donnees-logos-site');
 let ok = 0, ko = 0;
 const egal = (n, a, b) => { const sa = JSON.stringify(a), sb = JSON.stringify(b); if (sa === sb) ok++; else { ko++; console.log(`❌ ${n} : ${sa} ≠ ${sb}`); } };
 
@@ -22,6 +22,8 @@ egal('10 valeur encore gabaritée : illisible', fr('{{Langtable|fr={{tt|A|B}}}}'
 // Legendary Treasures (archive du 2026-10-07) : l'infobulle dit d'où vient le nom — elle se LIT, elle ne se jette pas
 egal('10b réserve d\'infobulle', fr('{{Langtable|color=E6DC3F|fr=Trésors Légendaires {{tt|*|Pokémon Trading Card Game Online}}|de=x}}'), ['Trésors Légendaires [Pokémon Trading Card Game Online]']);
 egal('10c deux infobulles : illisible', fr('{{Langtable|fr=A {{tt|*|X}} {{tt|*|Y}}}}'), []);
+// relecture du 2026-10-07 (soir) : balises et entités ne font pas partie du nom
+egal('10d <ref/>, <br> et entité retirés', fr("{{Langtable|fr=L&#39;Éveil des Légendes<ref name=\"a\"/><br>|de=x}}"), ["L'Éveil des Légendes"]);
 
 // --- le visuel d'une vedette ---
 const im = (numero, cleR2) => ({ set: 'S', cleR2, numero });
@@ -40,6 +42,21 @@ egal('20 trend', prixDe({ trend: 4.5, avg: 3 }), { valeur: 4.5, champ: 'trend' }
 egal('21 trend nul → avg', prixDe({ trend: 0, avg: 3 }), { valeur: 3, champ: 'avg' });
 egal('22 rien de positif', prixDe({ trend: 0, avg: null }), null);
 egal('23 aucun document', prixDe(undefined), null);
+
+// --- le tampon (décision de l'éditeur, 2026-10-07 : aucune illustration à texte ou tampon) — écarter à tort ne coûte qu'un rang ---
+egal('24 avant-première', tamponProbable('Pikachu [Prerelease]', 'Pikachu-Prerelease'), true);
+egal('25 Worlds dans le slug', tamponProbable('Charizard', 'Charizard-Worlds-2023'), true);
+egal('26 Pokémon Center', tamponProbable('Pikachu (Pokémon Center)', null), true);
+egal('27 Staff', tamponProbable('Mew', 'Mew-Staff'), true);
+egal('28 carte ordinaire', tamponProbable('Charizard ex [Burning Darkness | Infernal Reign]', 'Charizard-ex-SVP056'), false);
+egal('29 « Lumiose City » n\'est pas un tampon de ville', tamponProbable('Lumiose City', 'Lumiose-City'), false);
+
+// --- le visuel d'un autre tirage (sets sans visuel de leur tirage : la même carte, ailleurs, en le disant) ---
+const sets = new Map([['A', { _id: 'A', tirage: 'intl', region: 'intl' }], ['B', { _id: 'B', tirage: 'jp', region: 'jp' }], ['C', { _id: 'C', tirage: 'intl', region: 'intl' }], ['S', { _id: 'S', tirage: 'intl', region: 'intl' }]]);
+egal('30 même tirage d\'abord', visuelAutreTirage([{ set: 'B', cleR2: 'jp', langue: 'ja' }, { set: 'C', cleR2: 'c' }], sets.get('S'), sets)?.cleR2, 'c');
+egal('31 jamais un scan japonais pour un set non japonais', visuelAutreTirage([{ set: 'B', cleR2: 'jp', langue: 'ja' }], sets.get('S'), sets), null);
+egal('32 jamais le set lui-même', visuelAutreTirage([{ set: 'S', cleR2: 's' }], sets.get('S'), sets), null);
+egal('33 source préférée à tirage égal', visuelAutreTirage([{ set: 'A', cleR2: 'a', source: 'bulbapedia' }, { set: 'C', cleR2: 'c', source: 'tcgdex' }], sets.get('S'), sets)?.cleR2, 'c');
 
 console.log(`${ko ? '🔴' : '✅'} ${ok}/${ok + ko}`);
 process.exitCode = ko ? 1 : 0;
