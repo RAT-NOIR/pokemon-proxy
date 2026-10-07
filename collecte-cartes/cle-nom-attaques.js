@@ -116,4 +116,4 @@ function designerCroise({ index, parMeta, metacarteDe }, p, { tirage, sauf = nul
     return { carte: d.carte, raison: null };
 }
 
-module.exports = { indexer, candidats, designer, compatible, memeAttaque, indexerMetacartes, designerCroise };
+module.exports = { indexer, candidats, designer, compatible, memeAttaque, memeNom, indexerMetacartes, designerCroise };
