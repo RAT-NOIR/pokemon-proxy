@@ -162,11 +162,13 @@ function journaliser(t, dossier, combien, sortie) {
         let revalidation = null;
         if (BASE === 'cartes' && !options.includes('--sans-revalidation')) {
             const touches = setsTouches({ avant: docsAvant, apres: apres.docs });
-            console.log(`   6. sets touchés (documents comparés) : ${touches.sets.length}${touches.sets.length ? ` — ${liste(touches.sets, 12)}` : ''} · catalogue ${touches.catalogue} · espèces ${touches.especes}`);
+            console.log(`   6. sets touchés (documents comparés) : ${touches.sets.length}${touches.sets.length ? ` — ${liste(touches.sets, 12)}` : ''} · catalogue ${touches.catalogue} · espèces ${touches.especes} · sets-info ${touches.setsInfo}`);
             try {
                 const { revaliderSets } = require('./collecte-cartes/revalider-site');
-                const r = await revaliderSets(touches.sets, { catalogue: touches.catalogue, especes: touches.especes });
-                revalidation = `revalidation ✅ ${r.sets} sets${touches.catalogue ? ' + catalogue' : ''}${touches.especes ? ' + espèces' : ''}`;
+                // (2026-10-07) `setsInfo` : un nom, une date, un LOGO de set vivent dans l'entrée `sets-info` du site — sans elle, la
+                // page régénérée relit l'ancien (188 logos de decks restés composés après un lot revalidé en HTTP 200)
+                const r = await revaliderSets(touches.sets, { catalogue: touches.catalogue, especes: touches.especes, setsInfo: touches.setsInfo });
+                revalidation = `revalidation ✅ ${r.sets} sets${touches.catalogue ? ' + catalogue' : ''}${touches.especes ? ' + espèces' : ''}${touches.setsInfo ? ' + sets-info' : ''}`;
             } catch (e) {
                 // Les sets à revalider ne se perdent pas : ils attendent dans un fichier, rejoué par
                 // `node collecte-cartes/revalider-site.js --en-attente` quand la route répond.

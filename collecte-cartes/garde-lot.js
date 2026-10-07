@@ -135,11 +135,19 @@ const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSe
 // la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
 // SITE lit : `PROJECTION_SET` de lib/cartes.ts (rat-market-site), recopiée ici — plus `dateSortieMois`, demandé au site le même
 // jour — et, du logo, ce qui s'affiche (la date et la preuve n'en font pas partie). Un champ que le site ajoute se reporte ICI.
-const CHAMPS_SET_LUS = ['code', 'nomJa', 'nomAffichage', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn', 'periodeDistribution', 'totalImprime', 'idExpansion', 'symbole', 'dateSortieMois'];
+// (2026-10-07, relecture) recopiée de PROJECTION_SET (rat-market-site lib/cartes.ts, lue le 2026-10-07) : `nomFr` et sa preuve, `serie`,
+// `symbolesIdentification` manquaient — un lot de noms français ne revalidait rien, comme les logos.
+const CHAMPS_SET_LUS = ['code', 'nomJa', 'nomAffichage', 'nomFr', 'nomFrSource', 'nomFrPreuve', 'region', 'tirage', 'dateSortieJa', 'dateSortieEn',
+    'periodeDistribution', 'totalImprime', 'idExpansion', 'symbole', 'serie'];
+// (2026-10-07) le site lit TROIS logos, dans cet ordre : logoCompose, logoFr, logo (lib/visuelSet.ts, CHAMPS_LOGO) — la projection ne
+// regardait que `logo` : un logoCompose posé ou retiré seul ne revalidait rien.
+const sansDate = l => l ? Object.fromEntries(Object.entries(l).filter(([k]) => !['le', 'preuve'].includes(k))) : null;
 const PROJECTION_SET = s => !s ? null : {
     ...Object.fromEntries(CHAMPS_SET_LUS.map(k => [k, s[k] ?? null])),
+    dateSortieMois: s.dateSortieMois?.iso ?? null,
+    symbolesIdentification: (s.symbolesIdentification || []).map(x => ({ cleR2: x?.cleR2 ?? null, w: x?.w ?? null, h: x?.h ?? null, fichier: x?.fichier ?? null, source: x?.source ?? null })),
     bulba: { expansion: s.bulba?.expansion ?? null, titre: s.bulba?.titre ?? null, pageid: s.bulba?.pageid ?? null },
-    logo: s.logo ? Object.fromEntries(Object.entries(s.logo).filter(([k]) => !['le', 'preuve'].includes(k))) : null
+    logo: sansDate(s.logo), logoFr: sansDate(s.logoFr), logoCompose: sansDate(s.logoCompose)
 };
 
 /**
@@ -184,13 +192,16 @@ function setsTouches({ avant, apres }) {
         for (const s of [a?.slugSet, b?.slugSet]) if (s) touches.add(s);
         if (!a || !b) catalogue = true;   // une fiche de plus ou de moins : un compte du catalogue
     }
+    // (2026-10-07) un champ de SET (nom, date, logo…) vit aussi dans l'entrée `sets-info` du site (30 jours), que les pages régénérées
+    // relisent : sans `setsInfo`, 188 logos de decks sont restés composés sur le site après un lot revalidé en HTTP 200.
+    let setsInfo = false;
     const [sA, sB] = [parId(avant.sets), parId(apres.sets)];
     for (const k of new Set([...sA.keys(), ...sB.keys()])) {
         const a = sA.get(k), b = sB.get(k);
         if (signature(PROJECTION_SET(a)) === signature(PROJECTION_SET(b))) continue;
-        touches.add((a || b)._id); catalogue = true;
+        touches.add((a || b)._id); catalogue = true; setsInfo = true;
     }
-    return { sets: [...touches].sort(), catalogue, especes };
+    return { sets: [...touches].sort(), catalogue, especes, setsInfo };
 }
 
 module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, canon, setsTouches, PROJECTION_CARTES };

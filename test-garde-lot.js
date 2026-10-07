@@ -85,32 +85,32 @@ verifier('un document identique à l\'ordre des clés près n\'est pas réécrit
 // font bouger AUCUN compteur ; les documents, si. Un set dont un document a changé est touché, et lui seul.
 const { setsTouches } = require('./collecte-cartes/garde-lot');
 const docs0 = copie(etat0);
-verifier('rien n\'a changé : aucun set touché, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: copie(etat0) }), { sets: [], catalogue: false, especes: false });
+verifier('rien n\'a changé : aucun set touché, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: copie(etat0) }), { sets: [], catalogue: false, especes: false, setsInfo: false });
 const lDate = copie(etat0); lDate.sets[0].dateSortieEn = 'May 30, 2025';
-verifier('une date posée sur un set : ce set, et le catalogue', setsTouches({ avant: docs0, apres: lDate }), { sets: ['Set-A'], catalogue: true, especes: false });
+verifier('une date posée sur un set : ce set, et le catalogue', setsTouches({ avant: docs0, apres: lDate }), { sets: ['Set-A'], catalogue: true, especes: false, setsInfo: true });
 const lFiche = copie(etat0); lFiche.cartesProduits[3].numeroFiche = '25'; lFiche.cartesProduits[3].slugSet = 'Set-B';
 const d0b = copie(etat0); d0b.cartesProduits[3].slugSet = 'Set-B';
-verifier('un numeroFiche posé sur une ligne : le set de la ligne, pas le catalogue', setsTouches({ avant: d0b, apres: lFiche }), { sets: ['Set-B'], catalogue: false, especes: false });
+verifier('un numeroFiche posé sur une ligne : le set de la ligne, pas le catalogue', setsTouches({ avant: d0b, apres: lFiche }), { sets: ['Set-B'], catalogue: false, especes: false, setsInfo: false });
 const lImg = copie(etat0); lImg.cartes[0].images[0].cleR2 = 'a/2-bis';
-verifier('une image remplacée (même compte) : le set de l\'image', setsTouches({ avant: docs0, apres: lImg }), { sets: ['Set-A'], catalogue: false, especes: false });
+verifier('une image remplacée (même compte) : le set de l\'image', setsTouches({ avant: docs0, apres: lImg }), { sets: ['Set-A'], catalogue: false, especes: false, setsInfo: false });
 // 🔴 2026-09-25 (soir) : un lot de 60 sets en a revalidé 336. Une carte qui changeait faisait revalider TOUTES ses appartenances ;
 // or une image posée par le worker dans UN set ne change que la page de ce set — et une carte de promo réimprimée appartient à
 // 20 sets. Le quota du site (Vercel) paie chaque revalidation : le set touché est celui de la PARTIE qui a changé.
 const lCarte = copie(etat0); lCarte.cartes[0].sets.push('Set-C');
-verifier('une carte qui entre dans un set : CE set seulement, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-C'], catalogue: true, especes: true });
+verifier('une carte qui entre dans un set : CE set seulement, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-C'], catalogue: true, especes: true, setsInfo: false });
 const lImgB = copie(etat0); lImgB.cartes[1].images.push({ set: 'Set-B', numero: '99', cleR2: 'b/99' });
-verifier('une image ajoutée dans UN set d\'une carte à deux sets : ce set seulement, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: lImgB }), { sets: ['Set-B'], catalogue: false, especes: false });
+verifier('une image ajoutée dans UN set d\'une carte à deux sets : ce set seulement, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: lImgB }), { sets: ['Set-B'], catalogue: false, especes: false, setsInfo: false });
 // Le repli prudent ne doit pas se déclencher parce qu'une AUTRE carte a déjà touché le même set (mesuré sur le lot du soir :
 // 505 sets pour des images posées dans 3).
 const lImg2 = copie(etat0); lImg2.cartes[0].images.push({ set: 'Set-B', numero: '7', cleR2: 'b/7' }); lImg2.cartes[1].images.push({ set: 'Set-B', numero: '99', cleR2: 'b/99' });
 const d0c = copie(etat0); d0c.cartes[0].sets.push('Set-D'); lImg2.cartes[0].sets.push('Set-D');
-verifier('deux cartes, une image chacune dans le MÊME set : ce set seulement', setsTouches({ avant: d0c, apres: lImg2 }), { sets: ['Set-B'], catalogue: false, especes: false });
+verifier('deux cartes, une image chacune dans le MÊME set : ce set seulement', setsTouches({ avant: d0c, apres: lImg2 }), { sets: ['Set-B'], catalogue: false, especes: false, setsInfo: false });
 const lNom = copie(etat0); lNom.cartes[1].nomEn = 'Pikachu ex';
-verifier('un nom de carte changé : tous ses sets, le catalogue et les espèces', setsTouches({ avant: docs0, apres: lNom }), { sets: ['Set-A', 'Set-B'], catalogue: true, especes: true });
+verifier('un nom de carte changé : tous ses sets, le catalogue et les espèces', setsTouches({ avant: docs0, apres: lNom }), { sets: ['Set-A', 'Set-B'], catalogue: true, especes: true, setsInfo: false });
 const lIll = copie(etat0); lIll.cartes[1].impressions[0].illustrateur = 'Atsuko Nishida';
-verifier('une impression changée (illustrateur) : tous les sets de la carte (prudent : l\'impression ne porte qu\'un NOM d\'expansion)', setsTouches({ avant: docs0, apres: lIll }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: false });
+verifier('une impression changée (illustrateur) : tous les sets de la carte (prudent : l\'impression ne porte qu\'un NOM d\'expansion)', setsTouches({ avant: docs0, apres: lIll }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: false, setsInfo: false });
 const lLigne = copie(etat0); lLigne.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 1, slugSet: 'Set-C' });
-verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches({ avant: docs0, apres: lLigne }), { sets: ['Set-C'], catalogue: true, especes: false });
+verifier('une ligne de jointure ajoutée : son set et le catalogue', setsTouches({ avant: docs0, apres: lLigne }), { sets: ['Set-C'], catalogue: true, especes: false, setsInfo: false });
 // 🔴 2026-09-26 : le lot des logos a revalidé 156 sets pour 12 changés — le collecteur réécrivait chaque logo (sa date `le`) et
 // chaque motif de refus. Un set ne se revalide que pour ce que le SITE lit (PROJECTION_SET de lib/cartes.ts).
 const lRefus = copie(etat0); lRefus.sets[0].logoRefus = { motif: 'aucun `setlogo` dans l\'infobox', le: new Date('2026-09-26') };
@@ -119,9 +119,30 @@ const d0l = copie(etat0); d0l.sets[0].logo = { cleR2: 'l/a.png', w: 200, h: 80, 
 const lLogoLe = copie(d0l); lLogoLe.sets[0].logo = { ...lLogoLe.sets[0].logo, le: new Date('2026-09-26'), preuve: 'y' };
 verifier('le même logo réécrit (date, preuve) : rien', setsTouches({ avant: d0l, apres: lLogoLe }).sets, []);
 const lLogo = copie(d0l); lLogo.sets[0].logo = { ...lLogo.sets[0].logo, cleR2: 'l/b.png' };
-verifier('un logo changé : ce set, et le catalogue', setsTouches({ avant: d0l, apres: lLogo }), { sets: ['Set-A'], catalogue: true, especes: false });
+verifier('un logo changé : ce set, et le catalogue', setsTouches({ avant: d0l, apres: lLogo }), { sets: ['Set-A'], catalogue: true, especes: false, setsInfo: true });
 const lMois = copie(etat0); lMois.sets[0].dateSortieMois = { iso: '2014-11', texte: 'November 2014' };
 verifier('une date au mois posée : ce set (le site la lira)', setsTouches({ avant: docs0, apres: lMois }).sets, ['Set-A']);
+// (2026-10-07) le site lit TROIS logos — logoCompose, logoFr, logo (lib/visuelSet.ts, CHAMPS_LOGO) : la projection ne regardait que `logo`,
+// et un logoCompose posé ou retiré seul ne revalidait rien (poser-logos-composes.js le faisait à la main).
+const d0c2 = copie(etat0); d0c2.sets[0].logoCompose = { cleR2: 'logos/composes/a.png', w: 480, h: 120, le: new Date('2026-10-04'), preuve: 'x' };
+const lSansCompose = copie(d0c2); delete lSansCompose.sets[0].logoCompose;
+verifier('un logoCompose retiré : ce set, et le catalogue', setsTouches({ avant: d0c2, apres: lSansCompose }), { sets: ['Set-A'], catalogue: true, especes: false, setsInfo: true });
+const lFr = copie(etat0); lFr.sets[0].logoFr = { cleR2: 'logos/fr/a.png', w: 300, h: 90 };
+verifier('un logoFr posé : ce set', setsTouches({ avant: docs0, apres: lFr }).sets, ['Set-A']);
+// (2026-10-07) le logo d'un set, son nom, sa date vivent dans l'entrée `sets-info` du site (30 jours) : sans `setsInfo`, la page
+// régénérée relisait l'ancien logo (188 logos de decks restés composés sur le site après un lot revalidé en HTTP 200)
+verifier('un logo changé : setsInfo (le site lit les logos dans sets-info)', setsTouches({ avant: d0c2, apres: lSansCompose }).setsInfo, true);
+verifier('une image de carte changée : pas de setsInfo', setsTouches({ avant: docs0, apres: lImg }).setsInfo, false);
+verifier('une date posée sur un set : setsInfo', setsTouches({ avant: docs0, apres: lDate }).setsInfo, true);
+const lNomFr = copie(etat0); lNomFr.sets[0].nomFr = 'Écarlate et Violet';
+verifier('un nom français posé sur un set : ce set et setsInfo (sets-info le lit)', [setsTouches({ avant: docs0, apres: lNomFr }).sets, setsTouches({ avant: docs0, apres: lNomFr }).setsInfo], [['Set-A'], true]);
+const lSymb = copie(etat0); lSymb.sets[0].symbolesIdentification = [{ cleR2: 's/a.png', w: 30, h: 17, fichier: 'a/symbol.png', source: 'ptcg-assets', le: new Date() }];
+verifier('un symbole d\'identification posé : ce set et setsInfo', setsTouches({ avant: docs0, apres: lSymb }).setsInfo, true);
+const d0m = copie(etat0); d0m.sets[0].dateSortieMois = { iso: '2014-11', texte: 'November 2014' };
+const lMoisTexte = copie(d0m); lMoisTexte.sets[0].dateSortieMois = { iso: '2014-11', texte: 'Nov. 2014' };
+verifier('le seul texte de dateSortieMois changé (le site ne lit que .iso) : rien', setsTouches({ avant: d0m, apres: lMoisTexte }).sets, []);
+const lComposeLe = copie(d0c2); lComposeLe.sets[0].logoCompose = { ...lComposeLe.sets[0].logoCompose, le: new Date('2026-10-07'), preuve: 'y' };
+verifier('le même logoCompose réécrit (date, preuve) : rien', setsTouches({ avant: d0c2, apres: lComposeLe }).sets, []);
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);
