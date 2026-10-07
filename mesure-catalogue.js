@@ -24,6 +24,8 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 // Le filtre des cartes-code vit dans collecte-cartes/jointure.js depuis le 2026-09-26 (soir) : une seule définition, que ce fichier,
 // la table maîtresse, les outils et le serveur importent — il y en avait neuf copies mot pour mot.
 const { estCarteCode } = require('./collecte-cartes/jointure');
+const { correctionDe } = require('./collecte-cartes/corrections-images');
+const sansChiffre = n => (n == null || !/\d/.test(String(n)) ? '' : String(n));
 
 (async () => {
     const tout = process.argv.includes('--tout');
@@ -164,11 +166,16 @@ const { estCarteCode } = require('./collecte-cartes/jointure');
     //     et invisibles (Shiny Treasure ex 292, Sableye n°121 effacée par la jointure de sa n°291). Dénominateur imprimé.
     //     ⚠️ La clé est (carte, set, NUMÉRO), pas le fichier : artofpkm publie parfois DEUX scans d'un même numéro (123 sur
     //     Shiny Treasure ex, variante du même tirage) — une entrée par numéro est la règle, l'autre n'est pas une perte.
-    const imsJointes = await cx.db.collection('images').find({ source: 'artofpkm', etat: 'ok', carteId: { $ne: null } }, { projection: { carteId: 1, set: 1, numero: 1 } }).toArray();
+    const imsJointes = await cx.db.collection('images').find({ source: 'artofpkm', etat: 'ok', carteId: { $ne: null } }, { projection: { carteId: 1, set: 1, numero: 1, cleR2: 1 } }).toArray();
     const entreesArt = new Set();
     for await (const c of cx.db.collection('cartes').find({ 'images.source': 'artofpkm' }, { projection: { images: 1 } }))
-        for (const e of c.images || []) if (e.source === 'artofpkm') entreesArt.add(`${c._id}|${e.set}|${e.numero ?? ''}`);
-    const invisibles = imsJointes.filter(im => !entreesArt.has(`${im.carteId}|${im.set}|${im.numero ?? ''}`));
+        for (const e of c.images || []) if (e.source === 'artofpkm') entreesArt.add(`${c._id}|${e.set}|${sansChiffre(e.numero)}`);
+    // (2026-10-07) le numéro LU À L'ŒIL (corrections-images.js) remplace un numéro absent à la jointure (collecteur-images.js) : la mesure
+    // lit le même numéro que la production, sinon les deux Mew de 30th Celebration (« B », « G ») passaient pour invisibles. Et un « numéro »
+    // SANS CHIFFRE est le code de la série (artofpkm écrit « XY-P », « SM-P », « S-P » pour un promo non numéroté) : les entrées des cartes
+    // n'en portent pas — 156 images affichées passaient pour invisibles.
+    const numeroJoint = im => sansChiffre(im.numero ?? correctionDe(im.cleR2)?.numero);
+    const invisibles = imsJointes.filter(im => !entreesArt.has(`${im.carteId}|${im.set}|${numeroJoint(im)}`));
     console.log(`   ⚖️ image jointe = image affichée : ${invisibles.length} image(s) artofpkm jointes absentes de leur carte, sur ${imsJointes.length} jointes ${!imsJointes.length ? '— 🔴 AUCUNE image jointe lue : le contrôle ne peut pas conclure' : invisibles.length ? `— 🔴 (${[...new Set(invisibles.map(i => i.set))].length} sets) : node collecteur-images.js --rejouer-jointure=<codes>` : '✅'}`);
     //   · L'ILLUSTRATEUR PAR IMPRESSION N'EST JAMAIS ABSENT (2026-09-24) : nommé, ou `null` avec sa raison. Un champ ABSENT est
     //     une impression que construire-illustrateurs.js n'a pas vue (carte neuve) — ou qu'une réécriture du tableau a vidée :
