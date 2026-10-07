@@ -41,7 +41,8 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
     const PREFIXE = 'sauvegardes/guide_prix/test_scratch/';
     const restes = await r2.listerPrefixe(process.env.R2_BUCKET_BRUT, PREFIXE);
     if (restes.length) await r2.supprimer(process.env.R2_BUCKET_BRUT, restes);
-    const srv = http.createServer((req, res) => { const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
+    let requetes = 0;
+    const srv = http.createServer((req, res) => { requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const url = f => `--url=http://127.0.0.1:${srv.address().port}${f}`;
     try {
@@ -64,8 +65,21 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
         const rB = await lancer('--base=test_scratch', url('/B.json'));
         verifier('guide B, plus récent : importé', [rB.status, (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [0, '2026-10-02T00:00:00.000Z']);
         // la SAUVEGARDE IMPOSSIBLE (bucket absent) : RIEN n'est importé — le cœur de l'ordre, vérifié sur la base et la méta
+        // (2026-10-07, nuit) le bucket absent se constate AVANT la requête — et MONGODB_URI aussi (le worker l'avait oubliée : six fichiers
+        // téléchargés pour rien)
+        const q0 = requetes;
         const rS0 = await lancerAvec({ R2_BUCKET_BRUT: '' }, '--base=test_scratch', url('/C.json'));
-        verifier('sauvegarde impossible : sortie 1, le guide C n\'est PAS importé', [rS0.status, /pas de sauvegarde possible/.test(rS0.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString(), await G.countDocuments({ guideDu: new Date('2026-10-04T00:00:00Z') })], [1, true, '2026-10-02T00:00:00.000Z', 0]);
+        verifier('sauvegarde impossible : sortie 1, le guide C n\'est PAS importé, AUCUNE requête', [rS0.status, /R2_BUCKET_BRUT absent/.test(rS0.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString(), await G.countDocuments({ guideDu: new Date('2026-10-04T00:00:00Z') }), requetes - q0], [1, true, '2026-10-02T00:00:00.000Z', 0, 0]);
+        const q1 = requetes;
+        const rU0 = await lancerAvec({ MONGODB_URI: '' }, '--base=test_scratch', url('/C.json'));
+        verifier('MONGODB_URI absent : sortie 1, la variable est NOMMÉE, AUCUNE requête', [rU0.status, /MONGODB_URI absente/.test(rU0.err), requetes - q1], [1, true, 0]);
+        // (relecture, 2026-10-08) présente n'est pas JOIGNABLE : la base et le bucket se vérifient eux aussi avant la requête
+        const q2 = requetes;
+        const rU1 = await lancerAvec({ MONGODB_URI: 'mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1500' }, '--base=test_scratch', url('/C.json'));
+        verifier('base injoignable : sortie 1, AUCUNE requête', [rU1.status, requetes - q2], [1, 0]);
+        const q3 = requetes;
+        const rS1 = await lancerAvec({ R2_BUCKET_BRUT: 'banc-bucket-qui-n-existe-pas' }, '--base=test_scratch', url('/C.json'));
+        verifier('bucket qui ne répond pas : sortie 1, le guide C n\'est PAS importé, AUCUNE requête', [rS1.status, (await M.findOne({ _id: 'dernier' })).guideDu.toISOString(), requetes - q3], [1, '2026-10-02T00:00:00.000Z', 0]);
         // LES ARGUMENTS : testés SANS lancer le script (lireArguments est pure) — aucun cas ne peut atteindre la base de production ni
         // Cardmarket, même si une garde régressait (relecture du 2026-10-03)
         const { lireArguments, URL_GUIDE } = require('./import-guide-quotidien');

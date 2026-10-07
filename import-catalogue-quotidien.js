@@ -8,6 +8,7 @@
 // L'adresse est celle que le site lit lui-même (rat-market-site/scripts/mesurer-expansions-cardmarket.mjs:41). Une requête par jour,
 // ce fichier et lui seul : c'est l'unique exception à « aucune requête de ma part vers Cardmarket » (accord du testeur, 2026-10-05).
 // CE QU'IL FAIT, DANS CET ORDRE, ET IL S'ARRÊTE AU PREMIER NON (sortie 1, rien d'écrit après le non) :
+//   0. vérifie les variables, puis que la base et le bucket RÉPONDENT — un non ici ne coûte aucune requête à Cardmarket ;
 //   1. télécharge `products_singles_6.json` (6 = Pokémon) — UNE requête, aucune redirection suivie, plafond de taille, délai borné ;
 //   2. le JUGE avant d'écrire quoi que ce soit : JSON objet lisible, `createdAt` daté et pas dans le futur (2 h de marge),
 //      `products` dont 99 % des lignes ont la forme attendue — les autres sont COMPTÉES et jamais écrites ; PAS PLUS RÉCENT que le
@@ -89,10 +90,23 @@ async function main() {
     const A = lireArguments(process.argv.slice(2));
     if (A.erreur) { console.error(`❌ ${A.erreur}`); process.exit(2); }
     const { base: BASE, url: URL, sortie: SORTIE, collection: COLL } = A;
+    // 0. la configuration, AVANT la requête : une variable absente ne coûte pas un téléchargement (collecte-cartes/variables-requises.js)
+    require('./collecte-cartes/variables-requises').exigerVariables('import-catalogue-quotidien.js');
     const axios = require('axios');
     const mongoose = require('mongoose');
     const { EJSON } = require('bson');
     const { estDateValide } = require('./import-catalogue');
+
+    // 0 bis. la base et le bucket JOIGNABLES, eux aussi avant la requête (relecture du 2026-10-08) : une variable PRÉSENTE n'est pas
+    // une grappe qui répond — une adresse refusée par Atlas ou un bucket faux coûtaient encore un téléchargement par essai
+    let cx;
+    try { cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise(); }
+    catch (e) { console.error(`❌ base « ${BASE} » injoignable (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 200)}) — aucune requête vers Cardmarket`); process.exit(1); }
+    const sortir = async code => { await cx.close(); process.exit(code); };
+    const bucket = process.env.R2_BUCKET_BRUT;
+    const r2 = require('./collecte-cartes/r2');
+    try { await r2.verifierBucket(bucket); }
+    catch (e) { console.error(`❌ R2 : le bucket ${bucket} ne répond pas (${e.name || e.message}) — ni archive ni sauvegarde possibles, aucune requête vers Cardmarket`); return await sortir(1); }
 
     // 1. le fichier — aucune redirection suivie : seule l'adresse autorisée répond
     console.log(`téléchargement : ${URL}`);
@@ -100,23 +114,21 @@ async function main() {
     const brut = Buffer.isBuffer(r.data) ? r.data : Buffer.from(r.data);
     const empreinte = sha256(brut);
 
-    // 2. les juges du fichier, avant toute connexion
+    // 2. les juges du fichier, avant toute écriture
     let data;
     try { data = JSON.parse(brut.toString('utf8')); } catch { data = null; }
-    if (!data || typeof data !== 'object' || Array.isArray(data)) { console.error(`❌ fichier illisible (${brut.length} octets, pas un objet JSON) : rien n'est écrit`); process.exit(1); }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) { console.error(`❌ fichier illisible (${brut.length} octets, pas un objet JSON) : rien n'est écrit`); return await sortir(1); }
     const exportDu = new Date(data.createdAt);
     const tous = Array.isArray(data.products) ? data.products : [];
-    if (!tous.length || Number.isNaN(exportDu.getTime())) { console.error(`❌ pas de products ou pas de createdAt lisible (${data.createdAt}) : rien n'est écrit`); process.exit(1); }
+    if (!tous.length || Number.isNaN(exportDu.getTime())) { console.error(`❌ pas de products ou pas de createdAt lisible (${data.createdAt}) : rien n'est écrit`); return await sortir(1); }
     const produits = tous.filter(ligneValide);
     const informes = tous.length - produits.length;
     data = null;   // seules les lignes valides survivent (mémoire : une tâche Render à 512 Mo)
     console.log(`fichier : ${(brut.length / 1e6).toFixed(1)} Mo · ${tous.length} lignes · ${produits.length} à la forme attendue${informes ? ` · ${informes} INFORMES, jamais écrites` : ''} · export du ${exportDu.toISOString()}`);
-    if (exportDu.getTime() > Date.now() + MARGE_FUTUR_MS) { console.error(`❌ export daté du ${exportDu.toISOString()}, dans le FUTUR : rien n'est écrit`); process.exit(1); }
-    if (informes > 0.01 * tous.length) { console.error(`❌ ${informes} lignes sur ${tous.length} n'ont pas la forme attendue (> 1 %) : rien n'est écrit`); process.exit(1); }
+    if (exportDu.getTime() > Date.now() + MARGE_FUTUR_MS) { console.error(`❌ export daté du ${exportDu.toISOString()}, dans le FUTUR : rien n'est écrit`); return await sortir(1); }
+    if (informes > 0.01 * tous.length) { console.error(`❌ ${informes} lignes sur ${tous.length} n'ont pas la forme attendue (> 1 %) : rien n'est écrit`); return await sortir(1); }
     if (SORTIE) { fs.writeFileSync(SORTIE, brut); console.log(`   copie locale : ${SORTIE}`); }
 
-    const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
-    const sortir = async code => { await cx.close(); process.exit(code); };
     try {
         const C = cx.db.collection(COLL), META = cx.db.collection('catalogue_export_meta');
         const metaId = COLL === 'catalogue_produits' ? 'dernier' : `dernier:${COLL}`;
@@ -132,11 +144,7 @@ async function main() {
         const refus = jugerCollection({ base: BASE, enCollection, lignesFichier: produits.length, meta });
         if (refus) { console.error(`❌ ${refus} — rien n'est écrit`); return await sortir(1); }
 
-        // 4. l'archive du fichier brut, relue octet pour octet
-        const bucket = process.env.R2_BUCKET_BRUT;
-        if (!bucket) { console.error('❌ R2_BUCKET_BRUT absent : ni archive ni sauvegarde possibles, rien n\'est écrit'); return await sortir(1); }
-        const r2 = require('./collecte-cartes/r2');
-        await r2.verifierBucket(bucket);
+        // 4. l'archive du fichier brut, relue octet pour octet (le bucket a répondu à l'étape 0 bis)
         const prefixe = `exports-cardmarket/${BASE}/products_singles_6/${horodatage(exportDu)}`;
         await r2.deposerBinaire(bucket, `${prefixe}.json.gz`, zlib.gzipSync(brut), 'application/gzip');
         if (sha256(zlib.gunzipSync(await r2.lireBinaire(bucket, `${prefixe}.json.gz`))) !== empreinte) { console.error('❌ archive relue : contenu différent du fichier téléchargé — rien n\'est écrit'); return await sortir(1); }

@@ -5,6 +5,7 @@
 //   node import-guide-quotidien.js --base=test --confirmer-production          (la tâche planifiée : Render Cron Job, une fois par jour)
 //   node import-guide-quotidien.js --base=test_scratch --url=<fichier de test>  (le banc : test-import-guide-quotidien.js)
 // CE QU'IL FAIT, DANS CET ORDRE, ET IL S'ARRÊTE AU PREMIER NON :
+//   0. vérifie les variables, puis que la base et le bucket RÉPONDENT — un non ici ne coûte aucune requête à Cardmarket ;
 //   1. télécharge `price_guide_6.json` (6 = Pokémon) — UNE requête, plafond de taille, délai borné ; le fichier part aussitôt sur le
 //      disque temporaire (la mémoire ne garde pas le brut ET l'objet ET la sauvegarde à la fois — relecture du 2026-10-03 : ~80 000
 //      lignes, une tâche Render à 512 Mo) ;
@@ -44,46 +45,53 @@ async function main() {
     const A = lireArguments(process.argv.slice(2));
     if (A.erreur) { console.error(`❌ ${A.erreur}`); process.exit(2); }
     const { base: BASE, url: URL } = A;
+    // 0. la configuration, AVANT la requête : une variable absente ne coûte pas un téléchargement (collecte-cartes/variables-requises.js)
+    require('./collecte-cartes/variables-requises').exigerVariables('import-guide-quotidien.js');
     const axios = require('axios');
     const mongoose = require('mongoose');
     const { EJSON } = require('bson');
 
+    // 0 bis. la base et le bucket JOIGNABLES, eux aussi avant la requête (relecture du 2026-10-08) : une variable PRÉSENTE n'est pas
+    // une grappe qui répond — une adresse refusée par Atlas ou un bucket faux coûtaient encore un téléchargement par essai
+    let cx;
+    try { cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise(); }
+    catch (e) { console.error(`❌ base « ${BASE} » injoignable (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 200)}) — aucune requête vers Cardmarket`); process.exit(1); }
+    const fichier = path.join(os.tmpdir(), `price_guide_quotidien_${process.pid}.json`);
+    const sortir = async code => { fs.rmSync(fichier, { force: true }); await cx.close(); process.exit(code); };
+    if (cx.db.databaseName !== BASE) { console.error(`❌ base connectée « ${cx.db.databaseName} », attendue « ${BASE} »`); await sortir(2); }
+    const bucket = process.env.R2_BUCKET_BRUT;
+    const r2 = require('./collecte-cartes/r2');
+    try { await r2.verifierBucket(bucket); }
+    catch (e) { console.error(`❌ R2 : le bucket ${bucket} ne répond pas (${e.name || e.message}) — pas de sauvegarde possible, aucune requête vers Cardmarket`); await sortir(1); }
+
     // 1. le fichier, aussitôt sur le disque
     console.log(`téléchargement : ${URL}`);
     const r = await axios.get(URL, { responseType: 'arraybuffer', timeout: 180000, maxContentLength: TAILLE_MAX, maxBodyLength: TAILLE_MAX, headers: { 'User-Agent': 'rat-market-guide-prix/1.0 (import quotidien, une requete par jour)' } });
-    const fichier = path.join(os.tmpdir(), `price_guide_quotidien_${process.pid}.json`);
     fs.writeFileSync(fichier, Buffer.from(r.data));
     const octets = r.data.byteLength;
     // les mesures du fichier, puis l'objet est LÂCHÉ (seuls les nombres survivent)
     let guideDu, lignes, avecPrix;
     {
         let data;
-        try { data = JSON.parse(fs.readFileSync(fichier, 'utf8')); } catch { fs.rmSync(fichier, { force: true }); console.error(`❌ fichier illisible (${octets} octets, pas du JSON) : rien n'est importé`); process.exit(1); }
+        try { data = JSON.parse(fs.readFileSync(fichier, 'utf8')); } catch { console.error(`❌ fichier illisible (${octets} octets, pas du JSON) : rien n'est importé`); await sortir(1); }
         guideDu = new Date(data.createdAt);
-        if (!Array.isArray(data.priceGuides) || !data.priceGuides.length || Number.isNaN(guideDu.getTime())) { fs.rmSync(fichier, { force: true }); console.error(`❌ pas de priceGuides ou pas de createdAt lisible (${data.createdAt}) : rien n'est importé`); process.exit(1); }
+        if (!Array.isArray(data.priceGuides) || !data.priceGuides.length || Number.isNaN(guideDu.getTime())) { console.error(`❌ pas de priceGuides ou pas de createdAt lisible (${data.createdAt}) : rien n'est importé`); await sortir(1); }
         lignes = data.priceGuides.length;
         avecPrix = data.priceGuides.filter(g => Number.isFinite(g.trend) || Number.isFinite(g.avg)).length;
     }
-    const sortir = async (code, cx) => { fs.rmSync(fichier, { force: true }); if (cx) await cx.close(); process.exit(code); };
     console.log(`fichier : ${(octets / 1e6).toFixed(1)} Mo · ${lignes} lignes · ${avecPrix} avec un prix · guide du ${guideDu.toISOString()}`);
     if (guideDu.getTime() > Date.now() + 24 * 3600 * 1000) { console.error(`❌ guide daté du ${guideDu.toISOString()}, dans le FUTUR : rien n'est importé`); await sortir(1); }
 
     // 2. les juges, avant toute écriture
-    const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
-    if (cx.db.databaseName !== BASE) { console.error(`❌ base connectée « ${cx.db.databaseName} », attendue « ${BASE} »`); await sortir(2, cx); }
     const meta = await cx.db.collection('guide_prix_meta').findOne({ _id: 'dernier' });
     // LA RÉFÉRENCE DE L'IMPORTEUR (import-price-guide.js) : la méta, à défaut le plus récent `majAt` DATÉ
     const dernierImport = (await cx.db.collection('guide_prix').find({ majAt: { $type: 'date' } }, { projection: { majAt: 1 } }).sort({ majAt: -1 }).limit(1).toArray())[0]?.majAt ?? null;
     const reference = meta?.guideDu ?? dernierImport;
-    if (reference && guideDu <= new Date(reference)) { console.log(`ℹ️ rien de neuf : le fichier est du ${guideDu.toISOString()}, la référence en base du ${new Date(reference).toISOString()}${meta?.guideDu ? '' : ' (dernier import, pas de méta)'}`); await sortir(0, cx); }
-    if (meta?.lignesDuFichier && lignes < 0.9 * meta.lignesDuFichier) { console.error(`❌ ${lignes} lignes contre ${meta.lignesDuFichier} au dernier guide (< 90 %) : fichier tronqué ? rien n'est importé`); await sortir(1, cx); }
-    if (avecPrix < 0.9 * lignes) { console.error(`❌ ${avecPrix} lignes sur ${lignes} portent un prix (< 90 %) : rien n'est importé`); await sortir(1, cx); }
+    if (reference && guideDu <= new Date(reference)) { console.log(`ℹ️ rien de neuf : le fichier est du ${guideDu.toISOString()}, la référence en base du ${new Date(reference).toISOString()}${meta?.guideDu ? '' : ' (dernier import, pas de méta)'}`); await sortir(0); }
+    if (meta?.lignesDuFichier && lignes < 0.9 * meta.lignesDuFichier) { console.error(`❌ ${lignes} lignes contre ${meta.lignesDuFichier} au dernier guide (< 90 %) : fichier tronqué ? rien n'est importé`); await sortir(1); }
+    if (avecPrix < 0.9 * lignes) { console.error(`❌ ${avecPrix} lignes sur ${lignes} portent un prix (< 90 %) : rien n'est importé`); await sortir(1); }
 
-    // 3. la sauvegarde, en flux : une ligne EJSON par document, la méta en tête, gzip ; puis relue
-    const bucket = process.env.R2_BUCKET_BRUT;
-    if (!bucket) { console.error('❌ R2_BUCKET_BRUT absent : pas de sauvegarde possible, rien n\'est importé'); await sortir(1, cx); }
-    const r2 = require('./collecte-cartes/r2');
-    await r2.verifierBucket(bucket);
+    // 3. la sauvegarde, en flux : une ligne EJSON par document, la méta en tête, gzip ; puis relue (le bucket a répondu à l'étape 0 bis)
     const gz = zlib.createGzip(), morceaux = [];
     gz.on('data', c => morceaux.push(c));
     const fin = new Promise((ok, ko) => { gz.on('end', ok); gz.on('error', ko); });
@@ -100,7 +108,7 @@ async function main() {
         relues = 0; for (let i = texte.indexOf('\n'); i !== -1; i = texte.indexOf('\n', i + 1)) relues++;
         relues -= 1;   // la ligne de méta
     }
-    if (relues !== n) { console.error(`❌ sauvegarde relue : ${relues} lignes pour ${n} — rien n'est importé`); await sortir(1, cx); }
+    if (relues !== n) { console.error(`❌ sauvegarde relue : ${relues} lignes pour ${n} — rien n'est importé`); await sortir(1); }
     console.log(`✅ sauvegarde : ${n} lignes + méta, ${(archive.length / 1e6).toFixed(1)} Mo -> R2 ${bucket}/${cle} (relue)`);
     await cx.close();
 

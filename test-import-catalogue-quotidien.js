@@ -50,7 +50,8 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
     const PREFIXES = ['exports-cardmarket/test_scratch/', `sauvegardes/${COLL}/test_scratch/`];
     const viderR2 = async () => { for (const p of PREFIXES) { const l = await r2.listerPrefixe(B, p); if (l.length) await r2.supprimer(B, l); } };
     await viderR2();
-    const srv = http.createServer((req, res) => { const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
+    let requetes = 0;
+    const srv = http.createServer((req, res) => { requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const url = f => `--url=http://127.0.0.1:${srv.address().port}${f}`;
     try {
@@ -73,8 +74,20 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
         verifier('export B : les 10 nouveaux insérés, les 5 noms et l\'expansion changés NE SONT PAS écrits, comptés en attente',
             [rB.status, await C.countDocuments({}), (await C.findOne({ idProduct: 1000 })).name, (await C.findOne({ idProduct: 1005 })).idExpansion, m.nouveauxInseres, m.enAttente],
             [0, 110, 'Carte 0', 12, 10, { noms: 5, expansions: 1, metacards: 0, disparus: 0 }]);
+        // (2026-10-07, nuit) une variable absente se constate AVANT la requête : le worker sans MONGODB_URI a téléchargé six fichiers pour rien
+        const q0 = requetes;
         const rS0 = await lancerAvec({ R2_BUCKET_BRUT: '' }, url('/C.json'));
-        verifier('archive impossible (bucket absent) : sortie 1, rien d\'inséré', [rS0.status, /R2_BUCKET_BRUT absent/.test(rS0.err), await C.countDocuments({})], [1, true, 110]);
+        verifier('archive impossible (bucket absent) : sortie 1, rien d\'inséré, AUCUNE requête', [rS0.status, /R2_BUCKET_BRUT absent/.test(rS0.err), await C.countDocuments({}), requetes - q0], [1, true, 110, 0]);
+        const q1 = requetes;
+        const rU0 = await lancerAvec({ MONGODB_URI: '' }, url('/C.json'));
+        verifier('MONGODB_URI absent : sortie 1, la variable est NOMMÉE, AUCUNE requête', [rU0.status, /MONGODB_URI absente/.test(rU0.err), requetes - q1], [1, true, 0]);
+        // (relecture, 2026-10-08) présente n'est pas JOIGNABLE : la base et le bucket se vérifient eux aussi avant la requête
+        const q2 = requetes;
+        const rU1 = await lancerAvec({ MONGODB_URI: 'mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1500' }, url('/C.json'));
+        verifier('base injoignable : sortie 1, AUCUNE requête', [rU1.status, requetes - q2], [1, 0]);
+        const q3 = requetes;
+        const rS1 = await lancerAvec({ R2_BUCKET_BRUT: 'banc-bucket-qui-n-existe-pas' }, url('/C.json'));
+        verifier('bucket qui ne répond pas : sortie 1, rien d\'inséré, AUCUNE requête', [rS1.status, await C.countDocuments({}), requetes - q3], [1, 110, 0]);
         const rAn = await lancer(url('/ancien.json'));
         verifier('un export PLUS ANCIEN que le dernier archivé : « rien de neuf », rien d\'écrit', [rAn.status, /rien de neuf/.test(rAn.out), await C.countDocuments({})], [0, true, 110]);
         const rN = await lancer(url('/nul.json'));
