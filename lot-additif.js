@@ -93,7 +93,7 @@ const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(
 // La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
 async function etatDeLaBase(db) {
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1 }).toArray(),
+        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, categorie: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1 }).toArray(),
         db.collection('cartes_produits').find({}).project({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1 }).toArray(),
         db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])

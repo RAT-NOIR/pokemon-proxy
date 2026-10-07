@@ -35,6 +35,10 @@ verifier('impressions : toutes, par tirage et expansion (sans illustrateur compr
 const lotImp = copie(etat0);
 lotImp.cartes[1].impressions = lotImp.cartes[1].impressions.filter(i => i.tirage !== 'jp');
 verifier('une impression SANS illustrateur effacée est une baisse', comparer(avant, compterEtat(lotImp)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['impressions imp:jp|Set B 1→0']);
+// (relecture du 2026-10-07, nuit) une catégorie effacée par un lot ne faisait bouger aucun compteur : seule une revalidation partait
+const etatCat = copie(etat0); etatCat.cartes[0].categorie = 'pokemon';
+const lotCat = copie(etatCat); delete lotCat.cartes[0].categorie;
+verifier('une catégorie effacée est une baisse', comparer(compterEtat(etatCat), compterEtat(lotCat)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['categories-cartes set:Set-A 1→0']);
 verifier('images, cartes, noms de cartes, nom affiché : par set', [avant.get('images set:Set-A'), avant.get('images set:Set-B'), avant.get('cartes set:Set-A'), avant.get('noms-cartes set:Set-B'), avant.get('nom-affiche set:Set-A'), avant.get('nom-affiche set:Set-C') ?? 0], [1, 1, 2, 1, 1, 0]);
 
 // ── 2. LE CAS DU §59 : +1 fiche annoncée, un illustrateur effacé à côté. Le total monte, le groupe baisse.
@@ -107,6 +111,10 @@ const d0c = copie(etat0); d0c.cartes[0].sets.push('Set-D'); lImg2.cartes[0].sets
 verifier('deux cartes, une image chacune dans le MÊME set : ce set seulement', setsTouches({ avant: d0c, apres: lImg2 }), { sets: ['Set-B'], catalogue: false, especes: false, setsInfo: false });
 const lNom = copie(etat0); lNom.cartes[1].nomEn = 'Pikachu ex';
 verifier('un nom de carte changé : tous ses sets, le catalogue et les espèces', setsTouches({ avant: docs0, apres: lNom }), { sets: ['Set-A', 'Set-B'], catalogue: true, especes: true, setsInfo: false });
+// (2026-10-07, nuit) le site lit `categorie` (page de la carte, listes d'espèces : lib/cartes.ts, lib/pokemon.ts) — un lot qui la
+// pose sur les fiches simples ne revalidait rien
+const lCat = copie(etat0); lCat.cartes[1].categorie = 'pokemon';
+verifier('une catégorie posée : tous les sets de la carte et les espèces, pas le catalogue', setsTouches({ avant: docs0, apres: lCat }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: true, setsInfo: false });
 const lIll = copie(etat0); lIll.cartes[1].impressions[0].illustrateur = 'Atsuko Nishida';
 verifier('une impression changée (illustrateur) : tous les sets de la carte (prudent : l\'impression ne porte qu\'un NOM d\'expansion)', setsTouches({ avant: docs0, apres: lIll }), { sets: ['Set-A', 'Set-B'], catalogue: false, especes: false, setsInfo: false });
 const lLigne = copie(etat0); lLigne.cartesProduits.push({ _id: 'p9', idProduct: 300, idExpansion: 12, carteId: 1, slugSet: 'Set-C' });

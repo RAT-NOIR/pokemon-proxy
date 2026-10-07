@@ -22,6 +22,8 @@ const COMPTEURS = Object.freeze({
     'fiches': 'produits distincts rattachés à une carte, par expansion Cardmarket (cartes_produits.idExpansion)',
     'cartes': 'cartes membres du set (cartes.sets)',
     'noms-cartes': 'cartes du set qui portent un nomEn',
+    // ➕ 2026-10-07 (nuit) : le site lit `categorie` (page de la carte, listes d'espèces) ; une catégorie effacée ne faisait bouger rien
+    'categories-cartes': 'cartes du set qui portent une catégorie',
     // ➕ 2026-09-24 : une impression écrite depuis la Setlist (sans illustrateur) qu'une relecture efface ne faisait bouger
     // aucun compteur — « illustrateurs » ne compte que les impressions qui portent le champ.
     'impressions': 'impressions de cartes, toutes, par tirage et expansion',
@@ -46,6 +48,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
         for (const s of new Set(c.sets || [])) {
             inc(`cartes set:${s}`);
             if (c.nomEn) inc(`noms-cartes set:${s}`);
+            if (c.categorie) inc(`categories-cartes set:${s}`);
         }
         for (const i of c.impressions || []) {
             if (!i) continue;
@@ -127,7 +130,8 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
 // ⚠️ Pas `canon` : la sauvegarde relue en EJSON « relaxed » rend 12 en double quand la base le rend en int32 ; `canon` y verrait
 // une différence de TYPE, donc des sets « touchés » qui ne le sont pas. Ici, une valeur JSON (une Date devient sa chaîne ISO).
 const signature = v => JSON.stringify(trier(v ?? null));
-const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null,
+// (2026-10-07, nuit) `categorie` : le site la lit (page de la carte, listes d'espèces) — elle se compare comme le nom
+const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null, categorie: c.categorie ?? null,
     impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
     images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null]) });
 const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null];
@@ -169,7 +173,7 @@ function setsTouches({ avant, apres }) {
         // est celui de la PARTIE qui a changé : un nom ou une impression (qui ne porte qu'un NOM d'expansion) → tous les sets de
         // la carte ; une appartenance → le set entré ou sorti ; une image → le set de l'entrée ajoutée, retirée ou remplacée.
         const tous = [...(pa?.sets || []), ...(pb?.sets || []), ...(pa?.images || []).map(m => m[0]), ...(pb?.images || []).map(m => m[0])];
-        if (!pa || !pb || pa.nomEn !== pb.nomEn || signature(pa.impressions) !== signature(pb.impressions)) { for (const s of tous) if (s) touches.add(s); }
+        if (!pa || !pb || pa.nomEn !== pb.nomEn || pa.categorie !== pb.categorie || signature(pa.impressions) !== signature(pb.impressions)) { for (const s of tous) if (s) touches.add(s); }
         else {
             // Ce que CETTE carte attribue — pas la taille de l'ensemble, qu'une autre carte a pu remplir avant elle (le premier
             // correctif comparait la taille globale : 505 sets revalidés pour des images posées dans 3).
@@ -184,6 +188,7 @@ function setsTouches({ avant, apres }) {
             for (const s of attribues.size ? attribues : tous) if (s) touches.add(s);
         }
         if (!pa || !pb || pa.nomEn !== pb.nomEn || signature(pa.sets) !== signature(pb.sets)) { especes = true; catalogue = true; }
+        else if (pa.categorie !== pb.categorie) especes = true;   // les listes d'espèces filtrent `categorie: "pokemon"` ; le catalogue ne compte pas les catégories
     }
     const [lA, lB] = [parId(avant.cartesProduits), parId(apres.cartesProduits)];
     for (const k of new Set([...lA.keys(), ...lB.keys()])) {
