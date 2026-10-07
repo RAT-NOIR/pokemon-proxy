@@ -550,6 +550,36 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 76. LA RÈGLE DU SITE IMPORTÉE, UNE CALIBRATION QUI NE POUVAIT PAS ÉCHOUER, ET « PRÉSENTE » N'EST PAS « JOIGNABLE » — 2026-10-07 (nuit)
+
+> 🔑 **DÉCISIONS DU TESTEUR** : un set sans prix au guide se classe par RARETÉ décroissante puis numéro (`classementSansPrix: true` sur
+> chaque entrée) ; la catégorie d'une fiche simple vient de la carte d'origine quand la réimpression est PROUVÉE (même nom ET mêmes
+> attaques), « on ne devine jamais, on n'écrase jamais une valeur » — additif, sous garde de lot.
+
+🔴 **MA COPIE DE LA RÈGLE DES FICHES DU SITE A FAIT RÉGRESSER LES VIEUX SETS JAPONAIS** (signalé par le site) : elle écartait les
+impressions à numéro `null`, que `lib/entreesDuSet.ts` garde. C'est le motif en tête du catalogue, entre le serveur et le LECTEUR :
+`exporter-donnees-logos-site.js` IMPORTE désormais les `.ts` du site (`import()` dynamique, Node 24) et lève si une fonction manque.
+⚠️ **Et la garde de langue du site, appliquée au visuel « autre tirage », a vidé 30 sets** (« aucun visuel » 146 → 2 491) : elle juge un
+visuel pour LE set affiché ; un autre tirage se juge par sa propre règle. Une règle importée s'applique au geste qu'elle décrit, pas à
+tous ceux d'à côté.
+
+🔴 **LA CALIBRATION « VRAIE CARTE RETIRÉE » NE POUVAIT PAS ÉCHOUER UTILEMENT** (relecture) : chaque carte y porte ses PROPRES attaques, et
+un Dresseur n'en a pas — le danger (un Dresseur à crochets pris pour un Pokémon) n'y figurait jamais. L'ÉPREUVE se fait sur les VRAIS
+noms Cardmarket des produits déjà joints, carte retirée : **66 398 jugés (dont 14 009 Dresseurs/Énergies), 7 040 réponses, 0 faux,
+0 sur un Dresseur**. Ses deux « faux » étaient des jointures FAUSSES chez nous (Umbreon ex SV-P143 → Energy Sticker, Espeon ex SV-P142 →
+Double Dragon Energy) : le §67 encore — quand une calibration échoue, la vérité qu'elle suppose peut être fausse. Une écriture refuse
+désormais toute jointure à contre-catégorie qu'elle n'a pas annoncée (`--contredites=<N>`). **809 fiches remplies, 703 vides** (586 sans
+attaque : le nom seul ne prouve rien). La garde de lot compte `categorie` : une catégorie effacée est une baisse.
+
+🔴 **« PRÉSENTE » N'EST PAS « JOIGNABLE »** : le 2026-10-07, le worker sans `MONGODB_URI` a téléchargé 6 fichiers Cardmarket pour rien
+(3 essais × 2 imports). Les imports vérifient les variables (`collecte-cartes/variables-requises.js`), PUIS que la base et le bucket
+répondent, AVANT la requête (bancs : 0 requête sur base injoignable, bucket faux, variable absente). ⚠️ **Et l'horaire coûte encore** :
+l'export catalogue paraît vers 11 h 31 UTC ; à 5 h, 7 h, 9 h, 11 h le worker télécharge celui de la veille (« rien de neuf ») — ~5
+requêtes par jour contre une. Le guide (00 h 49 UTC) n'a pas ce défaut. Arbitrage au testeur.
+**Outillage** : MCP `mongodb-lecture` — l'écriture refusée À DEUX NIVEAUX, prouvée par un `insertOne` réel (AtlasError 8000) et pas par
+la seule absence d'outils d'écriture ; MCP Render ; Trail of Bits (`supply-chain-risk-auditor` : axios 1.18.1, 12 avis, corrigés en
+1.20.0 dans la plage déclarée ; sharp 0.34.5, 3 avis, corrigés en 0.35.5 hors plage).
+
 ## 75. LES SOURCES OFFICIELLES TPC : UN TÉMOIN QUI CHANGE DE LANGUE, UN DÉNOMINATEUR QUI NE NOMME PAS LE SET, ET UNE REDIRECTION QUI SORT DU SITE — 2026-10-07 (soir)
 
 > 🔑 **DÉCISION DE L'ÉDITEUR : TPC Asie (id, th, tw) et pokemon-card.com ouverts pour combler les visuels MANQUANTS, impression exacte ;
