@@ -13,7 +13,8 @@
 //   · confirmé par une source INDÉPENDANTE : la Setlist de Bulbapedia qui range cette carte à ce numéro (le `detail` d'une ligne
 //     « setlist+numero » / « set+numero »), la POSITION dans la liste imprimée d'un deck Battle Academy (« deck+section+position » :
 //     n° Cardmarket = position lue sur la page du produit), ou une ENTRÉE de la Setlist archivée au nom de la carte et à ce numéro
-//     (un lien rouge compte : c'est la Setlist qui parle, pas la page de carte).
+//     (un lien rouge compte : c'est la Setlist qui parle, pas la page de carte), ou, à défaut (2026-10-07), l'impression de la PAGE DE
+//     CARTE à ce numéro sous un nom d'expansion qui désigne ce set, calibré sur le set entier (nomsSoeurs : ≥ 2 accords, 0 contradiction).
 // UN COUPLE N'EST TOUCHÉ QUE SI : chaque produit y reçoit un numéro confirmé (sinon un produit qui s'affiche aujourd'hui ne
 // s'afficherait plus nulle part) ; le document n'a aucune image de ce set SANS numéro (le site repasserait le set ENTIER en « une fiche
 // par document », documentAmbigu) ; le document n'a pas d'impression sans numéro dans ce set.
@@ -91,8 +92,55 @@ async function setlistDuSet(set) {
     return { entrees, raison: null, sections };
 }
 
+/**
+ * LA QUATRIÈME SECONDE SOURCE (2026-10-07) : la page de la CARTE, quand Bulbapedia nomme ce produit autrement que le set. Les sets créés
+ * sans page portent le nom de Cardmarket (svOM « Starter Set ex Marnies Morpeko Grimmsnarl ex ») ; la page de Marnie's Morpeko déclare
+ * « ex Starter Set Marnie's Morpeko & Grimmsnarl ex » n°008 et n°020 — les numéros Cardmarket de ses deux produits. Un nom E DÉSIGNE le
+ * set S quand, sur TOUS les produits numérotés de S (numéro Cardmarket : numeros_cartes), E porte ce numéro sur la carte du produit au
+ * moins 2 fois et JAMAIS sur une autre carte (E/n tenu par une autre carte contredit Cardmarket — « Intro Pack » n°18 est Bulbasaur ET
+ * Squirtle : deux decks renumérotés sous un nom, refusé). Calibré sur le set entier, jamais sur la carte qu'on corrige.
+ * Une FICHE SIMPLE (document créé par nous faute de page, preuve « fiche-simple ») n'est pas une identité : elle témoigne par son NOM —
+ * E/n tenu par une seule carte de son nom l'appuie, par une carte d'un autre nom (ou par plusieurs) le contredit. (relecture du
+ * 2026-10-07 : un set où 2 vraies cartes seulement s'accordent par coïncidence se voyait ainsi contredit par ses fiches simples ; et il
+ * faut au moins 3 témoins d'accord en tout.) E/n se lit sur TOUTES les cartes de la base, fiches simples comprises.
+ * Rend Map(slug → Map(E → { accords, parLeNom, contradictions })), seulement les E qui désignent.
+ */
+async function nomsSoeurs({ cx, prod, slugs, setsTous }) {
+    const sortie = new Map();
+    for (const slug of slugs) {
+        const s = setsTous.get(slug); if (!s) continue;
+        const tirage = s.tirage ?? s.region, propres = [].concat(s.bulba?.expansion ?? []);
+        if (!propres.length || !propres.every(e => typeof e === 'string' && e)) continue;
+        const lignes = await cx.db.collection('cartes_produits').find({ slugSet: slug }, { projection: { _id: 0, carteId: 1, idProduct: 1, preuve: 1 } }).toArray();
+        const NC = new Map((await prod.db.collection('numeros_cartes').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { _id: 0, idProduct: 1, numero: 1 } }).toArray()).map(n => [n.idProduct, n.numero]));
+        const tous = lignes.map(l => ({ c: l.carteId, n: NC.get(l.idProduct), simple: l.preuve === 'fiche-simple' || !(l.carteId > 0) })).filter(x => x.n != null && /\d/.test(String(x.n))).map(x => ({ ...x, k: cleSource(x.n) }));
+        const produits = tous.filter(x => !x.simple), simples = tous.filter(x => x.simple);
+        const cartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(tous.map(x => x.c))] } }, { projection: { nomEn: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
+        const accords = new Map();
+        for (const x of produits) for (const e of new Set((cartes.get(x.c)?.impressions || []).filter(i => i.tirage === tirage && typeof i.expansion === 'string' && !propres.includes(i.expansion) && i.source !== 'numero-cardmarket' && cleSource(i.numero) === x.k).map(i => i.expansion))) accords.set(e, (accords.get(e) || 0) + 1);
+        const retenus = new Map();
+        for (const [e, a] of accords) {
+            if (a < 2) continue;
+            const tenus = new Map();          // E/n → Map(carte → nom), sur TOUTE la base
+            for (const c of await cx.db.collection('cartes').find({ impressions: { $elemMatch: { tirage, expansion: e } } }, { projection: { nomEn: 1, impressions: 1 } }).toArray())
+                for (const i of c.impressions) if (i.tirage === tirage && i.expansion === e && i.numero != null) (tenus.get(cleSource(i.numero)) || tenus.set(cleSource(i.numero), new Map()).get(cleSource(i.numero))).set(c._id, c.nomEn);
+            let contradictions = produits.filter(x => [...(tenus.get(x.k)?.keys() || [])].some(id => id !== x.c)).length, parLeNom = 0;
+            for (const x of simples) {
+                const t = [...(tenus.get(x.k) || new Map())].filter(([id]) => id !== x.c);
+                if (!t.length) continue;
+                if (t.length === 1 && memeNomSimple(cartes.get(x.c)?.nomEn, t[0][1])) parLeNom++; else contradictions++;
+            }
+            if (!contradictions && a + parLeNom >= 3) retenus.set(e, { accords: a, parLeNom, contradictions });
+        }
+        if (retenus.size) sortie.set(slug, retenus);
+    }
+    return sortie;
+}
+/** Le nom Cardmarket d'une fiche simple peut porter la variante d'illustration après « - » (« Professor's Research - Professor Magnolia »). */
+const memeNomSimple = (fiche, vraie) => !!fiche && !!vraie && (nomPlat(fiche) === nomPlat(vraie) || nomPlat(String(fiche).split(' - ')[0]) === nomPlat(vraie));
+
 /** La seconde source d'un produit : rend { numero, preuve } ou { refus }. */
-function confirmer(p, nomCarte, setlist) {
+function confirmer(p, nomCarte, setlist, soeurs = null, impressions = [], tirage = null) {
     const numero = p.numeroFiche ?? p.ncNumero;
     if (!numero) return { refus: 'aucun numéro Cardmarket' };
     if (p.preuve === 'setlist+numero' || p.preuve === 'set+numero') {
@@ -106,11 +154,14 @@ function confirmer(p, nomCarte, setlist) {
         return { refus: `position du deck non lue ou différente du numéro ${numero} (${(p.detail || '').slice(0, 80)})` };
     }
     // toute autre preuve : une entrée de la Setlist archivée, au nom de la carte et à ce numéro, UNE seule — sur une page à une section
-    if ((setlist.sections ?? 0) > 1) return { refus: `la page porte ${setlist.sections} sections de Setlist : les chiffres ne disent pas laquelle` };
     const n = chiffres(numero);
-    const ents = setlist.entrees.filter(e => e.nom === nomPlat(nomCarte) && e.numero === n);
+    const ents = (setlist.sections ?? 0) > 1 ? [] : setlist.entrees.filter(e => e.nom === nomPlat(nomCarte) && e.numero === n);
     if (ents.length === 1) return { numero, preuve: `entrée de Setlist « ${ents[0].titre} » (Bulbapedia, archive)` };
-    return { refus: ents.length ? `${ents.length} entrées de Setlist à ce nom et ce numéro` : `aucune entrée de Setlist « ${nomCarte} » n°${n}${setlist.raison ? ` (${setlist.raison})` : ''}` };
+    // sinon la page de la carte, sous un nom qui DÉSIGNE ce set (nomsSoeurs) — un seul nom, au même numéro
+    const parSoeur = soeurs ? [...new Set(impressions.filter(i => i.tirage === tirage && soeurs.has(i.expansion) && i.source !== 'numero-cardmarket' && cleSource(i.numero) === cleSource(numero)).map(i => i.expansion))] : [];
+    if (parSoeur.length === 1) { const st = soeurs.get(parSoeur[0]); return { numero, preuve: `impression « ${parSoeur[0]} » n°${numero} de la page de carte (Bulbapedia) ; ce nom désigne le set : ${st.accords} produits au même numéro sur leur carte, ${st.parLeNom} fiche(s) simple(s) au même nom, 0 contradiction` }; }
+    if ((setlist.sections ?? 0) > 1) return { refus: `la page porte ${setlist.sections} sections de Setlist : les chiffres ne disent pas laquelle` };
+    return { refus: ents.length ? `${ents.length} entrées de Setlist à ce nom et ce numéro` : parSoeur.length > 1 ? `${parSoeur.length} noms d'expansion de la page de carte portent ce numéro` : `aucune entrée de Setlist « ${nomCarte} » n°${n}${setlist.raison ? ` (${setlist.raison})` : ''}` };
 }
 
 function rareteDe(setlist, nomCarte, numero) {
@@ -169,6 +220,9 @@ async function completerNumeroFiche({ cx, prod, ecrire }) {
     const setlists = new Map();
     for (const slug of sets.keys()) setlists.set(slug, await setlistDuSet(sets.get(slug)));
     const cartesDoc = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set([...res.A, ...res.B].map(x => x.carteId))] } }, { projection: { nomEn: 1, impressions: 1, images: 1, sets: 1 } }).toArray()).map(c => [c._id, c]));
+    const setsSoeurs = new Map((await cx.db.collection('sets').find({ _id: { $in: [...sets.keys()] } }, { projection: { tirage: 1, region: 1, 'bulba.expansion': 1 } }).toArray()).map(s => [s._id, s]));
+    const soeurs = await nomsSoeurs({ cx, prod, slugs: [...sets.keys()], setsTous: setsSoeurs });
+    console.log(`   noms d'expansion de la page de carte qui DÉSIGNENT le set (≥ 2 produits au même numéro sur leur carte, ≥ 3 témoins, 0 contradiction) : ${soeurs.size} set(s) sur ${sets.size}${[...soeurs].map(([s, m]) => `\n      ${s} ← ${[...m].map(([e, st]) => `« ${e} » (${st.accords} accords, ${st.parLeNom} par le nom)`).join(', ')}`).join('')}`);
 
     const issues = {}, aPoser = new Map(), numerosFiche = [], corriges = [], candidats = [], groupesRefuses = new Set();
     const note = (cause, ex) => { (issues[cause] || (issues[cause] = { n: 0, ex: [] })).n++; if (issues[cause].ex.length < 3) issues[cause].ex.push(ex); };
@@ -190,7 +244,7 @@ async function completerNumeroFiche({ cx, prod, ecrire }) {
         const impsSet = (c.impressions || []).filter(i => i.tirage === x.tirage && i.expansion === x.expansion);
         if (impsSet.some(i => i.numero == null || String(i.numero).trim() === '')) { refuser('une impression SANS numéro dans ce set'); continue; }
         const concernes = classe === 'A' ? x.produits : x.produits.filter(p => x.horsFiche.includes(p.idProduct));
-        const conf = concernes.map(p => ({ p, ...confirmer(p, x.nomEn, setlist) }));
+        const conf = concernes.map(p => ({ p, ...confirmer(p, x.nomEn, setlist, soeurs.get(x.set) || null, c.impressions || [], x.tirage) }));
         const refuses = conf.filter(k => k.refus);
         if (refuses.length) { refuser(`${refuses.length === conf.length ? 'aucun' : 'pas tous les'} produits confirmés par une seconde source — ${refuses[0].refus.replace(/\d+/g, '#').slice(0, 90)}`, `${ex} · ${refuses[0].refus.slice(0, 160)}`); continue; }
         // (relecture) un numéro qui ne diffère d'une impression existante QUE par l'écriture (« a053 » contre « A53 ») ferait deux fiches
