@@ -213,18 +213,32 @@ async function aligner(gris, sc) {
     let Hh, inl;
     if (ALIGNEMENT === 'stable') ({ H: Hh, inliers: inl } = homographieStable(cv, p1, p2));
     else { const r = homographie(cv, p1, p2, 'ransac', 6.0); Hh = r?.H ?? null; inl = r ? r.masque.reduce((s, x) => s + (x ? 1 : 0), 0) : 0; }
-    if (!Hh) return { mat: copie(), inliers: 0 };
+    if (!Hh) return { mat: copie(), inliers: 0, H: null };
     // une homographie aberrante (écrasement, retournement) est pire que pas d'alignement — l'aire du quadrilatère des coins (contourArea)
     const c = [[0, 0], [L, 0], [L, H], [0, H]].map(([x, y]) => projeter(Hh, x, y));
     const aire = Math.abs(c.reduce((s, [x, y], i) => { const [x2, y2] = c[(i + 1) % 4]; return s + x * y2 - x2 * y; }, 0)) / 2;
     // (2026-10-07) une homographie ABERRANTE n'aligne rien : ses points ne comptent pas (garde_zones.py, même règle) — sinon deux scans non
     // alignés passaient pour alignés (≥ 12) et la carte des différences était fausse. v1 : l'ancien compte, pour rejouer le 2026-10-06.
-    if (inl < 12) return { mat: copie(), inliers: inl };
-    if (!(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: ALIGNEMENT === 'v1' ? inl : 0 };
+    if (inl < 12) return { mat: copie(), inliers: inl, H: Hh };
+    if (!(0.6 * L * H < aire && aire < 1.6 * L * H)) return { mat: copie(), inliers: ALIGNEMENT === 'v1' ? inl : 0, H: Hh };
     const al = new cv.Mat(), Hm = cv.matFromArray(3, 3, cv.CV_64F, Hh);
     cv.warpPerspective(gris, al, Hm, new cv.Size(L, H), cv.INTER_LINEAR, cv.BORDER_REPLICATE, new cv.Scalar());
     Hm.delete();
-    return { mat: al, inliers: inl };
+    return { mat: al, inliers: inl, H: Hh };
+}
+
+// (2026-10-07, accordée par le testeur) DEUX SCANS se ramènent l'un sur l'autre par une homographie PROCHE DE L'IDENTITÉ : la règle et
+// son seuil sont ceux de garde_zones.py (IDENTITE_MAX). Une paire n'est alignée que si AUCUN coin ne bouge de plus de IDENTITE_MAX × L.
+// 🔴 MESURÉE À 0,20 ET NON ACTIVÉE : 0 faux des deux côtés, mais la parité se dégrade (paires de l'autre côté d'un seuil 12 → 35/2 796,
+// décisions 1 911 → 1 891/1 922) — OpenCV.js et Python ne rendent pas la même homographie sur les paires faibles (garde_zones.py le
+// détaille). ÉTEINTE par défaut ; RM_IDENTITE_MAX=0.2 la rejoue. Vide, négatif ou illisible LÈVE, comme garde_zones._identite_max
+// (relecture : `Number('')` valait 0 et éteignait la garde en silence).
+const brutIdentite = process.env.RM_IDENTITE_MAX;
+const IDENTITE_MAX = brutIdentite == null ? 0 : (brutIdentite.trim() === '' ? NaN : Number(brutIdentite));
+if (!Number.isFinite(IDENTITE_MAX) || IDENTITE_MAX < 0) throw new Error(`RM_IDENTITE_MAX « ${brutIdentite} » : un nombre ≥ 0 attendu`);
+/** Le plus grand déplacement d'un coin du cadre par l'homographie, en fraction de la largeur L (garde_zones.deplacement_coins). */
+function deplacementCoins(Hh) {
+    return Math.max(...[[0, 0], [L, 0], [L, H], [0, H]].map(([x, y]) => { const [u, v] = projeter(Hh, x, y); return Math.hypot(u - x, v - y); })) / L;
 }
 
 function ncc(a, b) {
@@ -261,9 +275,9 @@ const _paires = new Map();
 async function cartePaire(sa, sb, cle) {
     if (_paires.has(cle)) return servir(_paires, cle);
     const { cv } = await outils();
-    const { mat: al, inliers } = await aligner(sb.mat, sa);
+    const { mat: al, inliers, H: Hh } = await aligner(sb.mat, sa);
     let P = null;
-    if (inliers >= 12) {
+    if (inliers >= 12 && (IDENTITE_MAX === 0 || (Hh && deplacementCoins(Hh) <= IDENTITE_MAX))) {
         const gb = gradient(cv, al);
         const A = sa.grad.data32F, B = gb.data32F, n = L * H, d = new Float32Array(n);
         for (let i = 0; i < n; i++) d[i] = Math.abs(A[i] - B[i]);
@@ -312,5 +326,5 @@ async function comparerPaire(photo, sourceA, sourceB) {
 let fileZones = Promise.resolve();
 const unParUn = f => (...a) => { const p = fileZones.then(() => f(...a)); fileZones = p.catch(() => { }); return p; };
 
-module.exports = { L, H, ZONES, ALIGNEMENT, CACHE_SCANS, CACHE_PAIRES, outils, grisPillow, redimPillow, scan, photoGrise, aligner,
+module.exports = { L, H, ZONES, ALIGNEMENT, IDENTITE_MAX, deplacementCoins, CACHE_SCANS, CACHE_PAIRES, outils, grisPillow, redimPillow, scan, photoGrise, aligner,
     scoresZones: unParUn(scoresZones), comparerPaire: unParUn(comparerPaire), _scans, _paires };
