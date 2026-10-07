@@ -39,7 +39,7 @@ if (!LISTE) { console.error('❌ --liste=<LISTE-EXPANSIONS-SANS-PAGE.json> requi
 if (ECRIRE && !ATTENDU) { console.error('❌ --ecrire exige --attendu=<sets>:<lignes> (le compte du plan, relu)'); process.exit(2); }
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
-const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode } = require('./collecte-cartes/jointure');
+const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { lisible } = require('./collecte-cartes/nom-affichage');
 
@@ -73,8 +73,19 @@ const TIRAGES = {
     // nos données, zéro requête : l'asymétrie CHINOISE (les cartes désignées sont imprimées en zh-hans, jamais en zh-hant) et la famille
     6700: ['zh-hans', 'asymétrie : 57 désignés, 49 imprimés en zh-hans seul, 0 en zh-hant (Storming Emergence, Battle Elite) (AS4)'],
     6635: ['zh-hans', 'famille : CSVM1C est zh-hans (CSVM2) ; asymétrie : 30 désignés, 25 en zh-hans seul, 1 en zh-hant seul'],
-    3354: ['intl', 'famille : MCD14, MCD16, MCD17, MCD22 sont intl (MCD19F)']
+    3354: ['intl', 'famille : MCD14, MCD16, MCD17, MCD22 sont intl (MCD19F)'],
+    // (2026-10-07, testeur : « crée leurs sets par la voie normale (preuve de tirage, date, logo composé si besoin) ») — lues sur nos données
+    // et le clone TCGdex, zéro requête :
+    5526: ['intl', 'pages de cartes : Potion et Switch déclarent « My First Battle » en intl (decks Pikachu, Bulbasaur, Charmander, Squirtle)'],
+    6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; aucun set thaï de ce code'],
+    6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)']
 };
+// LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
+// pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
+// le set, parce que leurs fiches naîtraient dans le set À CÔTÉ de fiches simples des mêmes produits (des doublons). Ici, au lieu de refuser :
+// chaque produit dont le nom est celui d'UNE carte déclarante est joint à cette carte (preuve `carte-declarante`), et le set est REFUSÉ si
+// une carte déclarante n'est couverte par AUCUN produit (sa fiche naîtrait seule, sans produit) ou si un nom désigne deux déclarantes.
+const DECLARANTES = { 5526: 'My First Battle' };
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
@@ -113,11 +124,21 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         const existant = setsBase.get(slug);
         if (existant && !(Array.isArray(existant.idExpansion) ? existant.idExpansion : [existant.idExpansion]).includes(exp)) { refus.push({ exp, raison: `un set « ${slug} » existe déjà pour une AUTRE expansion (${JSON.stringify(existant.idExpansion)})`, resume }); continue; }
         if (existant && (existant.tirage ?? existant.region) !== tirage) { refus.push({ exp, raison: `le set existant est en ${existant.tirage ?? existant.region}, la table dit ${tirage}`, resume }); continue; }
-        const nomExp = existant ? (Array.isArray(existant.bulba?.expansion) ? existant.bulba.expansion[0] : existant.bulba?.expansion) ?? null : lisible(slug);
+        const nomDecl = DECLARANTES[exp] ?? null;
+        const nomExp = existant ? (Array.isArray(existant.bulba?.expansion) ? existant.bulba.expansion[0] : existant.bulba?.expansion) ?? null : (nomDecl ?? lisible(slug));
         const aJoindre = P.filter(p => !dejaJoints.has(p.idProduct) && !estCarteCode(p.name ?? ''));
         const designes = [], simples = new Map();
         let sansFiche = 0;
+        // les cartes déclarantes (DECLARANTES) : celles dont une impression porte (tirage, nom d'expansion déclaré)
+        const declarantes = nomDecl ? cartes.filter(c => (c.impressions || []).some(i => i?.tirage === tirage && i.expansion === nomDecl)) : [];
+        let ambiguDecl = null;
         for (const p of aJoindre) {
+            if (nomDecl) {
+                const nomP = (p.nom || decomposerNomCardmarket(p.name ?? '').nom || '').trim();
+                const dd = declarantes.filter(c => clesNom(nomJointDe(c)).some(k => clesNom(nomP).includes(k)));
+                if (dd.length > 1) { ambiguDecl = `« ${nomP} » désigne ${dd.length} cartes déclarantes`; break; }
+                if (dd.length === 1) { designes.push({ p, carte: dd[0], declarante: true }); continue; }
+            }
             const d = designerCroise(ctx, p, { tirage });
             if (d.carte) { designes.push({ p, carte: d.carte }); continue; }
             // un set EXISTANT a une ligne de table : sa collecte joindra ses vraies pages ; une fiche simple y ferait doublon
@@ -135,6 +156,8 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         if (!existant) {
             const parCarte = new Map(); for (const d of designes) (parCarte.get(d.carte._id) || parCarte.set(d.carte._id, []).get(d.carte._id)).push(d);
             for (const [, ds] of parCarte) {
+                // une carte DÉCLARANTE reçoit tous ses produits (My First Battle : la même Potion dans quatre decks, sans numéro)
+                if (ds.some(d => d.declarante)) continue;
                 if (new Set(ds.map(d => nuNum(d.p.numero) ?? `p${d.p.idProduct}`)).size < 2) continue;
                 for (const d of ds) {
                     // (relecture) un produit sans nom lisible ne peut pas devenir une fiche simple : il reste désigné, jamais perdu en silence
@@ -147,7 +170,17 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         }
         // une fiche simple porte une impression (tirage, nom d'expansion) : refusée si une carte en base déclare déjà ce couple — elle
         // ferait naître ses fiches dans le set (sauf un set existant, dont le nom d'expansion est déjà le sien)
-        const conflit = !existant && nomExp && declare.has(`${tirage}|${nomExp}`);
+        if (nomDecl) {
+            if (ambiguDecl) { refus.push({ exp, raison: `cartes déclarantes : ${ambiguDecl}`, resume }); continue; }
+            if (!declarantes.length) { refus.push({ exp, raison: `aucune carte ne déclare « ${nomDecl} » en ${tirage}`, resume }); continue; }
+            const couvertes = new Set(designes.filter(d => d.declarante).map(d => d.carte._id));
+            const seules = declarantes.filter(c => !couvertes.has(c._id));
+            if (seules.length) { refus.push({ exp, raison: `carte(s) déclarante(s) sans produit : ${seules.map(c => `${c._id} « ${c.nomEn} »`).join(', ')}`, resume }); continue; }
+            const autreSet = [...setsBase.values()].find(s => (s.tirage ?? s.region) === tirage && [].concat(s.bulba?.expansion ?? []).includes(nomDecl));
+            if (autreSet) { refus.push({ exp, raison: `« ${nomDecl} » est déjà l'expansion du set ${autreSet._id}`, resume }); continue; }
+        }
+        // le nom déclaré, dont TOUTES les cartes déclarantes reçoivent leurs produits ici, n'est pas un conflit : c'est le but
+        const conflit = !existant && nomExp && declare.has(`${tirage}|${nomExp}`) && nomExp !== nomDecl;
         if (conflit) { refus.push({ exp, raison: `des cartes en base déclarent déjà « ${nomExp} » en ${tirage} : un bulba.expansion ferait naître leurs fiches ici`, resume }); continue; }
         if (!nomExp && simples.size) { refus.push({ exp, raison: 'set existant sans bulba.expansion : une fiche simple n\'aurait pas d\'impression lisible', resume }); continue; }
         for (const [k, g] of simples) {
@@ -188,8 +221,10 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
                 // (2026-10-07) dans un set NEUF, le numéro Cardmarket du produit — le numéro de CE set, celui que la règle anti-mélange
                 // ci-dessus compare : sans lui, le site lit le slug, et un « Caterpie-V2 » sans numéro y comptait pour une autre carte que
                 // « Caterpie-V1-MCD19F2 » (14 fiches mélangées sur McDonald's 2019-2). Un set existant garde la règle d'avant (null).
-                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: x.existant ? null : (d.p.numero ?? null),
-                detail: `exp ${x.exp} n°${d.p.numero ?? '—'} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : métacarte Cardmarket ${metaDe.get(d.p.idProduct)} (une seule carte chez nous) = nom + attaques · carte déjà imprimée en ${x.tirage} · ${RISQUE}`,
+                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: d.declarante ? 'carte-declarante' : 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: x.existant ? null : (d.p.numero ?? null),
+                detail: d.declarante
+                    ? `exp ${x.exp} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : la SEULE carte de la base qui déclare « ${x.nomExp} » (${x.tirage}) sous ce nom — décision du testeur du 2026-10-07`
+                    : `exp ${x.exp} n°${d.p.numero ?? '—'} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : métacarte Cardmarket ${metaDe.get(d.p.idProduct)} (une seule carte chez nous) = nom + attaques · carte déjà imprimée en ${x.tirage} · ${RISQUE}`,
                 verifieLe: le, route: `sans-page:${x.exp}` } }, upsert: true } })), { ordered: false });
             lignesPosees += r.upsertedCount;
         }

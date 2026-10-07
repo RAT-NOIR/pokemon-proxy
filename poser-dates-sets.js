@@ -209,6 +209,63 @@ const RELEVES_BULBAPEDIA = {
     'Collect-151': { jour: 'January 17, 2025', remplace: true, url: 'archive R2 de « Collection 151 (ATCG) »', citation: 'release=January 17, 2025 (Journey)<br>April 18, 2025 (Hope)<br>July 18, 2015 (Scare)<br>October 17, 2025 (Gather)', pourquoi: 'quatre boîtes ; « July 18, 2015 (Scare) » est une COQUILLE (entre avril et octobre 2025, dans une série de 2025) — la plus tôt des vraies sorties est le 17 janvier 2025' }
 };
 for (const v of Object.values(RELEVES_BULBAPEDIA)) v.lu = '2026-10-04';
+// ➕ 2026-10-07 (demande du site : « 51 sets sans date, dont les 11 créés cette nuit : date-les, mois et année suffisent, sous la garde ») :
+// pages lues dans leur COPIE Wayback (archive.org seulement, une requête toutes les 10 s ; aucune à Bulbapedia), infobox et phrase de
+// sortie relues à l'œil ; chaque ligne dit pourquoi la page est celle de CE produit. DEUX REFUS DU 2026-10-05 TOMBENT À LA RELECTURE : la
+// page « Intro Pack » NOMME le deck Squirtle (« the cards in the Squirtle Deck have a black number in a white circle ») — le refus avait été
+// écrit sur l'infobox seule ; et la copie du 2026-09-01 de « ex Starter Sets 2026 » NOMME les trois decks (celle de juin ne le faisait pas).
+const P = t => `https://bulbapedia.bulbagarden.net/wiki/${t}`;
+const RELEVES_2026_10_07 = {
+    'Intro-Pack-Squirtle': { jour: 'July 30, 1999', url: `${W}20260802191020/${P('Intro_Pack_(TCG)')}`, citation: 'Release date July 30, 1999 — la page porte les deux Half Decks, Bulbasaur et Squirtle (« the cards in the Squirtle Deck have a black number in a white circle »)' },
+    ...Object.fromEntries([['MEGA-Starter-Set-Eevee-ex', 'Eevee ex'], ['MEGA-Starter-Set-Zorua-Zoroark-ex', 'Zorua & Zoroark ex'], ['MEGA-Starter-Set-Sprigatito-Meowscarada-ex', 'Sprigatito & Meowscarada ex']].map(([id, deck]) => [id, {
+        jour: 'July 31, 2026', url: `${W}20260901020426/${P('Ex_Starter_Sets_2026_(TCG)')}`, citation: `Release date — Japanese: July 31, 2026 ; « ex Starter Set ${deck} », l'un des trois decks (Eevee ex · Zorua & Zoroark ex · Sprigatito & Meowscarada ex)`,
+        pourquoi: 'Cardmarket nomme ces trois decks « MEGA Starter Set … » : les mêmes trois Pokémon ex, un set par deck' }])),
+    'Beginning-Set-Plus': { jour: 'August 5, 2011', url: `${W}20260905191819/${P('Beginning_Set_+_(TCG)')}`, citation: 'redirige vers « Beginning Set (TCG) » — Release date … August 5, 2011 (Plus version) ; « An enhanced version of the standard Beginning Set was released on August 5, 2011 as the Beginning Set + (Plus) »' },
+    'World-Championships-2023-Yokohama-Deck-Pikachu': { jour: 'July 28, 2023', url: `${W}20260907153056/${P('2023_Pokémon_World_Championships_Yokohama_Deck:_Pikachu_(TCG)')}`, citation: 'Release date — Japanese: July 28, 2023 (« released alongside the Japanese Ruler of the Black Flame expansion on July 28, 2023 »)' },
+    'P-Promos': { periode: { texte: 'July 2001 - July 2002', debut: 'July 2001', fin: 'July 2002', debutIso: '2001-07' }, url: `${W}20260513164655/${P('P_Promotional_cards_(TCG)')}`, citation: 'Release period July 2001 - July 2002' },
+    'PLAY-Promos': { periode: { texte: 'January 2003 - January 2006', debut: 'January 2003', fin: 'January 2006', debutIso: '2003-01' }, url: `${W}20260131080859/${P('PLAY_Promotional_cards_(TCG)')}`, citation: 'Release period January 2003 - January 2006 (Pokémon Players Club)' },
+    'PPP-Promos': { periode: { texte: 'May 2007', debut: 'May 2007', fin: null, debutIso: '2007-05' }, url: `${W}20260804041215/${P('PPP_Promotional_cards_(TCG)')}`, citation: 'Release period May 2007 (Pokémon Players Club)' },
+    'Arceus-LVX-Deck-Lightning-Psychic': { jour: 'July 8, 2009', url: `${W}20260704173230/${P('Arceus_LV.X_Deck:_Lightning_&_Psychic_(TCG)')}`, citation: 'Release date July 8, 2009 (Japanese-exclusive Standard Deck)' },
+    'Melee-Pokemon-Scramble': { jour: 'July 10, 2009', url: `${W}20260618084242/${P('Melee!_Pokémon_Scramble_(TCG)')}`, citation: 'redirige vers « Pokémon Rumble (TCG) » — Release date English: December 2, 2009, Japanese: July 10, 2009 (« 乱戦！ポケモンスクランブル×ポケモンカードゲーム ») ; set japonais : la date japonaise' },
+    'McDonalds-Collection-2019-2': { periode: { texte: 'From October 30, 2019 (France)', debut: 'October 30, 2019', fin: null, debutIso: '2019-10-30' }, url: `${W}20260607144826/${P("McDonald's_Collection_2019_(TCG)")}`,
+        citation: 'Release period … From October 30, 2019 (France) — « a separate collection was released in France from October 30, 2019 » : 40 cartes, Non Holofoil et Confetti Holofoil', pourquoi: 'MCD19F : le « F » de MCD18F (France), et 80 produits = les 40 cartes françaises en deux versions' },
+    'Master-Strategy-Deck-Building-Sets-Vol-2': { jour: 'July 16, 2026', url: `${W}20260813035340/${P('Master_Strategy_Deck_Building_Sets_(ATCG)')}`, citation: 'Release date January 16, 2026 (CSVM1), July 16, 2026 (CSVM2) — « the second deck sets (CSVM2) … were released on July 16, 2026 »' },
+    // créé le 2026-10-07 (creer-sets-sans-page.js, cartes déclarantes)
+    'My-First-Battle': { jour: 'September 29, 2023', url: `${W}20260711221239/${P('My_First_Battle_(TCG)')}`, citation: 'Release date September 29, 2023 — « Two versions were released on September 29, 2023, one featuring Pikachu & Bulbasaur and the other Charmander & Squirtle »' },
+    'Hanada-City-Gym': { jour: 'April 26, 1998', url: `${W}20260824174546/${P('Hanada_City_Gym_(TCG)')}`, citation: 'Release date April 26, 1998 (Japanese-exclusive Standard Deck, Leaders\' Stadium)' },
+    'Best-of-Game-Cards-Promos': { periode: { texte: 'December 2002 - July 2003', debut: 'December 2002', fin: 'July 2003', debutIso: '2002-12' }, url: `${W}20251013115425/${P('Best_of_Game_Cards_(TCG)')}`, citation: '« Best of Game (TCG) » — Release period December 2002 - July 2003 (TCGdex « bog », une clé : 2002-12-01, même mois)' },
+    'Trick-or-Trade': { jour: 'September 1, 2022', url: `${W}20260819163945/${P('Trick_or_Trade_2022_(TCG)')}`, citation: '« The 2022 Trick or Trade release is a set of 30 cards … first released on September 1, 2022 in Canada, the U.S. and the UK »',
+        pourquoi: 'les 30 produits Cardmarket « Trick or Trade » sont les 30 cartes de 2022 ; les éditions 2023 et 2024 sont des sets à part' },
+    ...Object.fromEntries(['30th-Celebration-Simplified-Chinese', '30th-Celebration-IDTH'].map(id => [id, { jour: 'September 16, 2026', remplace: true, url: `${W}20260910024556/${P('30th_Celebration_(TCG)')}`,
+        citation: '« Releasing simultaneously worldwide on September 16, 2026 » ; « 30th Celebration is the first set to be released globally on the same day—including in Simplified Chinese »',
+        pourquoi: 'la valeur de l\'infobox n\'a pas d\'étiquette de tirage ; le texte de la page dit la sortie mondiale le même jour, et porte les listes chinoise, thaïe et indonésienne' }]))
+};
+// LES WCD (même demande) : Cardmarket fait UN set par année de championnat ; Bulbapedia, une page par DECK, et chaque page dit « X is one of
+// the four <année> World Championships Decks, released … ». La date d'un set WCD-<année> est celle des decks de cette année, lue sur la page
+// d'un de ses decks (liste des decks par année : « World Championships Deck (TCG) », copie du 2026-08-10). Depuis 2022, les decks d'une
+// année sortent l'année suivante : c'est ce que les pages disent, et c'est ce qui est écrit. Un mois seul reste un mois (dateSortieMois).
+const WCD = [[2004, 'Magma_Spirit_(TCG)', '20260830162735', 'November 2004', 'Magma Spirit is one of the four 2004 World Championships Decks, released in November 2004'],
+    [2005, 'Queendom_(TCG)', '20260831042743', 'October 31, 2005', 'It is one of the four 2005 World Championships Decks, released on October 31st, 2005'],
+    [2006, 'Mewtrick_(TCG)', '20260829043011', 'October 31, 2006', 'Mewtrick is one of the four 2006 World Championships Decks, released on October 31st, 2006'],
+    [2007, 'Flyvees_(TCG)', '20260913002058', 'November 19, 2007', 'It is one of the four 2007 World Championships Decks, released on November 19, 2007'],
+    [2008, 'Intimidation_(TCG)', '20260913002058', 'November 5, 2008', 'Intimidation is one of the four 2008 World Championships Decks, released on November 5, 2008'],
+    [2009, 'Stallgon_(TCG)', '20260913002058', 'October 28, 2009', 'Stallgon is one of the four 2009 World Championships Decks, released on October 28, 2009'],
+    [2010, 'LuxChomp_of_the_Spirit_(TCG)', '20260831043111', 'November 2010', 'LuxChomp of the Spirit is one of the four 2010 World Championships Decks, released in November 2010'],
+    [2011, 'Megazone_(TCG)', '20260913002058', 'October 2011', 'Megazone is one of the four 2011 World Championships Decks released in October 2011'],
+    [2012, 'Pesadelo_Prism_(TCG)', '20260905222332', 'November 2012', 'It is one of the four 2012 World Championships Decks, released in November 2012'],
+    [2013, 'Darkrai_Deck_(TCG)', '20260811194027', 'November 4, 2013', 'It is one of the four 2013 World Championships Decks, released on November 4, 2013'],
+    [2014, 'Plasma_Power_(TCG)', '20260831042743', 'November 2014', 'It is one of the four 2014 World Championships Decks, released in November 2014'],
+    [2015, 'Honorstoise_(TCG)', '20260830005322', 'November 2015', 'It is one of the four 2015 World Championships Decks, released in November 2015 (Punches \'n\' Bites, copie 20260830162637 : idem)'],
+    [2016, 'Bebe_Deck_(TCG)', '20260831042743', 'November 2016', 'It is one of the four 2016 World Championships Decks, released in November 2016'],
+    [2017, 'Ice_Path_FTW_(TCG)', '20260831042726', 'November 17, 2017', 'It is one of the 2017 World Championships Decks, released November 17, 2017'],
+    [2018, 'Victory_Map_(TCG)', '20260830005326', 'November 14, 2018', 'It is one of the 2018 World Championships Decks released November 14, 2018'],
+    [2019, 'Mind_Blown_(TCG)', '20260811194032', 'November 22, 2019', 'It is one of the 2019 World Championships Decks released November 22, 2019'],
+    [2022, 'Ice_Rider_Palkia_(TCG)', '20260425212914', 'March 3, 2023', 'It is one of the 2022 World Championships Decks released March 3, 2023'],
+    [2023, "Mew's_Revenge_(TCG)", '20260905222312', 'March 1, 2024', 'It is one of the 2023 World Championship Decks released March 1, 2024'],
+    [2024, 'Ancient_Toolbox_(TCG)', '20260913002058', 'May 16, 2025', 'It is one of the 2024 World Championship Decks released on May 16, 2025'],
+    [2025, 'Flutter_Devo_Gardevoir_(TCG)', '20260913002117', 'June 19, 2026', 'It is one of the 2025 World Championship Decks released on June 19, 2026']];
+for (const [a, page, copie, quand, phrase] of WCD) RELEVES_2026_10_07[`WCD-${a}`] = { jour: quand, url: `${W}${copie}/${P(page)}`, citation: `« ${phrase} »`, pourquoi: `un set Cardmarket par année : la sortie des decks ${a}` };
+for (const [k, v] of Object.entries(RELEVES_2026_10_07)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-07' };
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
