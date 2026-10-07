@@ -100,9 +100,12 @@ function designer({ produits, parNom, tenus, setsParNom, slugSet }) {
 
 (async () => {
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
-    const toutes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, ficheSimple: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1, 'images.set': 1, 'images.numero': 1 } });
+    const toutes = await lireMongo(cx.db.collection('cartes'), {}, { nom: 'cartes', projection: { nomEn: 1, 'bulba.titre': 1, ficheSimple: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1, 'images.set': 1, 'images.numero': 1 } });
     const parNom = new Map(), tenus = new Map();
     for (const c of toutes) {
+        // (2026-10-07) LE ☆ VIT DANS LE TITRE, PAS DANS nomEn : « Vaporeon ☆ (EX Power Keepers 102) » a nomEn « Vaporeon ». Sans lui, le
+        // « Vaporeon Gold Star » de Cardmarket ne retrouvait pas sa carte, et un « Vaporeon » ordinaire pouvait se joindre à la Gold Star.
+        if (c.nomEn && /☆/.test(String(c.bulba?.titre ?? '').replace(/\s*\([^()]*\)\s*$/, '')) && !/☆/.test(c.nomEn)) c.nomEn = `${c.nomEn} ☆`;
         c.numeroLu = new Map();
         for (const i of c.impressions || []) {
             if (!i || typeof i.expansion !== 'string' || !i.tirage || !cle(i.numero)) continue;
