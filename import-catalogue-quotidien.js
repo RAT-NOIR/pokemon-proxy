@@ -10,6 +10,7 @@
 // CE QU'IL FAIT, DANS CET ORDRE, ET IL S'ARRÊTE AU PREMIER NON (sortie 1, rien d'écrit après le non) :
 //   0. vérifie les variables, puis que la base et le bucket RÉPONDENT — un non ici ne coûte aucune requête à Cardmarket ;
 //   1. télécharge `products_singles_6.json` (6 = Pokémon) — UNE requête, aucune redirection suivie, plafond de taille, délai borné ;
+//      CONDITIONNELLE : le fichier déjà traité rend 304 sans corps -> « rien de neuf », aucun téléchargement (requete-conditionnelle.js) ;
 //   2. le JUGE avant d'écrire quoi que ce soit : JSON objet lisible, `createdAt` daté et pas dans le futur (2 h de marge),
 //      `products` dont 99 % des lignes ont la forme attendue — les autres sont COMPTÉES et jamais écrites ; PAS PLUS RÉCENT que le
 //      dernier export archivé -> « rien de neuf », sortie 0 ; plus ancien que les produits déjà en collection -> refus ;
@@ -108,9 +109,18 @@ async function main() {
     try { await r2.verifierBucket(bucket); }
     catch (e) { console.error(`❌ R2 : le bucket ${bucket} ne répond pas (${e.name || e.message}) — ni archive ni sauvegarde possibles, aucune requête vers Cardmarket`); return await sortir(1); }
 
-    // 1. le fichier — aucune redirection suivie : seule l'adresse autorisée répond
-    console.log(`téléchargement : ${URL}`);
-    const r = await axios.get(URL, { responseType: 'arraybuffer', timeout: 180000, maxRedirects: 0, maxContentLength: TAILLE_MAX, maxBodyLength: TAILLE_MAX, headers: { 'User-Agent': 'rat-market-catalogue/1.0 (export quotidien, une requete par jour)' } });
+    const C = cx.db.collection(COLL), META = cx.db.collection('catalogue_export_meta');
+    const metaId = COLL === 'catalogue_produits' ? 'dernier' : `dernier:${COLL}`;
+    const meta = await META.findOne({ _id: metaId });
+
+    // 1. le fichier — aucune redirection suivie : seule l'adresse autorisée répond. Requête CONDITIONNELLE (testeur, 2026-10-08) :
+    // le fichier déjà traité rend 304, sans corps — aucun téléchargement (collecte-cartes/requete-conditionnelle.js)
+    const RC = require('./collecte-cartes/requete-conditionnelle');
+    const conditions = RC.entetesConditionnels(meta?.http);
+    console.log(`téléchargement : ${URL}${Object.keys(conditions).length ? ' (conditionnel : ETag du dernier fichier traité)' : ''}`);
+    const r = await axios.get(URL, { responseType: 'arraybuffer', timeout: 180000, maxRedirects: 0, maxContentLength: TAILLE_MAX, maxBodyLength: TAILLE_MAX, validateStatus: RC.statutAccepte, headers: { 'User-Agent': 'rat-market-catalogue/1.0 (export quotidien, une requete par jour)', ...conditions } });
+    if (r.status === 304) { console.log(`ℹ️ rien de neuf : 304, le fichier n'a pas changé depuis le dernier traité (export du ${meta?.exportDu ? new Date(meta.exportDu).toISOString() : '?'}) — aucun téléchargement`); return await sortir(0); }
+    const http = RC.validateursDe(r.headers);
     const brut = Buffer.isBuffer(r.data) ? r.data : Buffer.from(r.data);
     const empreinte = sha256(brut);
 
@@ -130,10 +140,11 @@ async function main() {
     if (SORTIE) { fs.writeFileSync(SORTIE, brut); console.log(`   copie locale : ${SORTIE}`); }
 
     try {
-        const C = cx.db.collection(COLL), META = cx.db.collection('catalogue_export_meta');
-        const metaId = COLL === 'catalogue_produits' ? 'dernier' : `dernier:${COLL}`;
-        const meta = await META.findOne({ _id: metaId });
-        if (meta?.exportDu && exportDu <= new Date(meta.exportDu)) { console.log(`ℹ️ rien de neuf : le fichier est du ${exportDu.toISOString()}, le dernier export archivé du ${new Date(meta.exportDu).toISOString()}`); return await sortir(0); }
+        if (meta?.exportDu && exportDu <= new Date(meta.exportDu)) {
+            // jugé « rien de neuf » : ses validateurs se gardent, le prochain passage rendra 304 sans corps
+            if (http) await META.updateOne({ _id: metaId }, { $set: { http } });
+            console.log(`ℹ️ rien de neuf : le fichier est du ${exportDu.toISOString()}, le dernier export archivé du ${new Date(meta.exportDu).toISOString()}`); return await sortir(0);
+        }
         // plus ancien que ce que la collection porte déjà (une intégration à la main d'un export plus récent, qui n'écrit pas la
         // méta) : la dernière entrée datée de la collection ne peut pas être postérieure de plus de 2 jours à l'export
         const derniereEntree = (await C.find({ dateAdded: { $type: 'date' } }, { projection: { dateAdded: 1 } }).sort({ dateAdded: -1 }).limit(1).toArray())[0]?.dateAdded ?? null;
@@ -183,7 +194,7 @@ async function main() {
         }
 
         // 7. la méta, en dernier
-        await META.updateOne({ _id: metaId }, { $set: { exportDu, lignesDuFichier: produits.length, informes, doublons: D.doublons, sha256: empreinte, cleArchive: `${prefixe}.json.gz`, cleDiff: `${prefixe}.diff.json`, cleSauvegarde, archiveLe: new Date(), nouveauxInseres: inseres, enAttente: { noms: D.noms.length, expansions: D.expansions.length, metacards: D.metacards.length, disparus: D.disparus.length } } }, { upsert: true });
+        await META.updateOne({ _id: metaId }, { $set: { exportDu, lignesDuFichier: produits.length, informes, doublons: D.doublons, sha256: empreinte, cleArchive: `${prefixe}.json.gz`, cleDiff: `${prefixe}.diff.json`, cleSauvegarde, archiveLe: new Date(), nouveauxInseres: inseres, enAttente: { noms: D.noms.length, expansions: D.expansions.length, metacards: D.metacards.length, disparus: D.disparus.length }, http: http ?? null } }, { upsert: true });
 
         // 8. les expansions qui reçoivent des produits
         const parExp = new Map();

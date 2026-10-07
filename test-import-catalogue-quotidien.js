@@ -5,6 +5,7 @@
 process.argv.push('--base=test_scratch');
 require('dotenv').config();
 const http = require('http');
+const crypto = require('crypto');
 const path = require('path');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
@@ -50,19 +51,29 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
     const PREFIXES = ['exports-cardmarket/test_scratch/', `sauvegardes/${COLL}/test_scratch/`];
     const viderR2 = async () => { for (const p of PREFIXES) { const l = await r2.listerPrefixe(B, p); if (l.length) await r2.supprimer(B, l); } };
     await viderR2();
-    let requetes = 0;
-    const srv = http.createServer((req, res) => { requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
+    // le serveur local se comporte comme S3 : un ETag par contenu, 304 SANS CORPS à une requête conditionnelle qui le cite
+    let requetes = 0, nonModifies = 0;
+    const etagDe = f => `"${crypto.createHash('sha1').update(f).digest('hex')}"`;
+    const srv = http.createServer((req, res) => {
+        requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); }
+        if (req.headers['if-none-match'] === etagDe(f)) { nonModifies++; res.writeHead(304, { etag: etagDe(f) }); return res.end(); }
+        res.writeHead(200, { 'content-type': 'application/json', etag: etagDe(f), 'last-modified': 'Wed, 07 Oct 2026 11:31:05 GMT' }); res.end(f);
+    });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const url = f => `--url=http://127.0.0.1:${srv.address().port}${f}`;
     try {
         const rA = await lancer(url('/A.json'));
         verifier('export A sur une collection vide : archivé, 100 nouveaux insérés', [rA.status, await C.countDocuments({}), (await M.findOne({ _id: META }))?.nouveauxInseres], [0, 100, 100]);
+        verifier('les validateurs HTTP du fichier importé sont gardés dans la méta', (await M.findOne({ _id: META }))?.http?.etag, etagDe(FICHIERS['/A.json']));
+        // (testeur, 2026-10-08) « si l'export du jour a la même date que la veille, aucun téléchargement » : requête conditionnelle, 304
+        const n0 = nonModifies;
         const rA2 = await lancer(url('/A.json'));
-        verifier('le même export une seconde fois : « rien de neuf », sortie 0', [rA2.status, /rien de neuf/.test(rA2.out)], [0, true]);
+        verifier('le même export une seconde fois : 304 sans corps (AUCUN téléchargement), « rien de neuf », sortie 0', [rA2.status, /rien de neuf/.test(rA2.out), nonModifies - n0], [0, true, 1]);
         const rF = await lancer(url('/futur.json'));
         verifier('un export daté du FUTUR : refusé, rien d\'inséré', [rF.status, /FUTUR/.test(rF.err), await C.countDocuments({})], [1, true, 100]);
         const rT = await lancer(url('/tronque.json'));
         verifier('fichier tronqué (50 contre 100) : refusé', [rT.status, /tronqué/.test(rT.err), await C.countDocuments({})], [1, true, 100]);
+        verifier('un fichier REFUSÉ ne laisse pas ses validateurs : la méta garde ceux de A (le suivant sera retéléchargé)', (await M.findOne({ _id: META }))?.http?.etag, etagDe(FICHIERS['/A.json']));
         const rI = await lancer(url('/informe.json'));
         verifier('plus de 1 % de lignes informes : refusé', [rI.status, /forme attendue/.test(rI.err), await C.countDocuments({})], [1, true, 100]);
         const rJ = await lancer(url('/pasjson.json'));

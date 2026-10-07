@@ -6,7 +6,8 @@
 //   node import-guide-quotidien.js --base=test_scratch --url=<fichier de test>  (le banc : test-import-guide-quotidien.js)
 // CE QU'IL FAIT, DANS CET ORDRE, ET IL S'ARRÊTE AU PREMIER NON :
 //   0. vérifie les variables, puis que la base et le bucket RÉPONDENT — un non ici ne coûte aucune requête à Cardmarket ;
-//   1. télécharge `price_guide_6.json` (6 = Pokémon) — UNE requête, plafond de taille, délai borné ; le fichier part aussitôt sur le
+//   1. télécharge `price_guide_6.json` (6 = Pokémon) — UNE requête CONDITIONNELLE (le guide déjà traité rend 304 sans corps : « rien de
+//      neuf », aucun téléchargement — requete-conditionnelle.js), plafond de taille, délai borné ; le fichier part aussitôt sur le
 //      disque temporaire (la mémoire ne garde pas le brut ET l'objet ET la sauvegarde à la fois — relecture du 2026-10-03 : ~80 000
 //      lignes, une tâche Render à 512 Mo) ;
 //   2. le JUGE avant d'écrire quoi que ce soit : JSON lisible, `createdAt` daté et PAS DANS LE FUTUR (un guide daté de demain poserait
@@ -64,9 +65,17 @@ async function main() {
     try { await r2.verifierBucket(bucket); }
     catch (e) { console.error(`❌ R2 : le bucket ${bucket} ne répond pas (${e.name || e.message}) — pas de sauvegarde possible, aucune requête vers Cardmarket`); await sortir(1); }
 
-    // 1. le fichier, aussitôt sur le disque
-    console.log(`téléchargement : ${URL}`);
-    const r = await axios.get(URL, { responseType: 'arraybuffer', timeout: 180000, maxContentLength: TAILLE_MAX, maxBodyLength: TAILLE_MAX, headers: { 'User-Agent': 'rat-market-guide-prix/1.0 (import quotidien, une requete par jour)' } });
+    const META = cx.db.collection('guide_prix_meta');
+    const meta = await META.findOne({ _id: 'dernier' });
+
+    // 1. le fichier, aussitôt sur le disque. Requête CONDITIONNELLE (testeur, 2026-10-08) : le guide déjà traité rend 304, sans corps —
+    // aucun téléchargement (collecte-cartes/requete-conditionnelle.js)
+    const RC = require('./collecte-cartes/requete-conditionnelle');
+    const conditions = RC.entetesConditionnels(meta?.http);
+    console.log(`téléchargement : ${URL}${Object.keys(conditions).length ? ' (conditionnel : ETag du dernier guide traité)' : ''}`);
+    const r = await axios.get(URL, { responseType: 'arraybuffer', timeout: 180000, maxContentLength: TAILLE_MAX, maxBodyLength: TAILLE_MAX, validateStatus: RC.statutAccepte, headers: { 'User-Agent': 'rat-market-guide-prix/1.0 (import quotidien, une requete par jour)', ...conditions } });
+    if (r.status === 304) { console.log(`ℹ️ rien de neuf : 304, le guide n'a pas changé depuis le dernier traité (guide du ${meta?.guideDu ? new Date(meta.guideDu).toISOString() : '?'}) — aucun téléchargement`); await sortir(0); }
+    const http = RC.validateursDe(r.headers);
     fs.writeFileSync(fichier, Buffer.from(r.data));
     const octets = r.data.byteLength;
     // les mesures du fichier, puis l'objet est LÂCHÉ (seuls les nombres survivent)
@@ -83,11 +92,14 @@ async function main() {
     if (guideDu.getTime() > Date.now() + 24 * 3600 * 1000) { console.error(`❌ guide daté du ${guideDu.toISOString()}, dans le FUTUR : rien n'est importé`); await sortir(1); }
 
     // 2. les juges, avant toute écriture
-    const meta = await cx.db.collection('guide_prix_meta').findOne({ _id: 'dernier' });
     // LA RÉFÉRENCE DE L'IMPORTEUR (import-price-guide.js) : la méta, à défaut le plus récent `majAt` DATÉ
     const dernierImport = (await cx.db.collection('guide_prix').find({ majAt: { $type: 'date' } }, { projection: { majAt: 1 } }).sort({ majAt: -1 }).limit(1).toArray())[0]?.majAt ?? null;
     const reference = meta?.guideDu ?? dernierImport;
-    if (reference && guideDu <= new Date(reference)) { console.log(`ℹ️ rien de neuf : le fichier est du ${guideDu.toISOString()}, la référence en base du ${new Date(reference).toISOString()}${meta?.guideDu ? '' : ' (dernier import, pas de méta)'}`); await sortir(0); }
+    if (reference && guideDu <= new Date(reference)) {
+        // jugé « rien de neuf » : ses validateurs se gardent sur la méta existante (jamais créée ici), le prochain passage rendra 304
+        if (http && meta) await META.updateOne({ _id: 'dernier' }, { $set: { http } });
+        console.log(`ℹ️ rien de neuf : le fichier est du ${guideDu.toISOString()}, la référence en base du ${new Date(reference).toISOString()}${meta?.guideDu ? '' : ' (dernier import, pas de méta)'}`); await sortir(0);
+    }
     if (meta?.lignesDuFichier && lignes < 0.9 * meta.lignesDuFichier) { console.error(`❌ ${lignes} lignes contre ${meta.lignesDuFichier} au dernier guide (< 90 %) : fichier tronqué ? rien n'est importé`); await sortir(1); }
     if (avecPrix < 0.9 * lignes) { console.error(`❌ ${avecPrix} lignes sur ${lignes} portent un prix (< 90 %) : rien n'est importé`); await sortir(1); }
 
@@ -116,6 +128,16 @@ async function main() {
     const args = [path.join(__dirname, 'import-price-guide.js'), fichier, `--base=${BASE}`, ...(BASE === 'test' ? ['--confirmer-production'] : [])];
     const res = spawnSync(process.execPath, args, { stdio: 'inherit', env: process.env });
     fs.rmSync(fichier, { force: true });
+    // 5. le guide IMPORTÉ garde ses validateurs (et lui seul : la méta doit porter CE guide) — un échec ici ne défait pas l'import,
+    // il coûtera seulement un téléchargement complet au prochain passage
+    if (res.status === 0 && http) {
+        try {
+            const cx2 = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
+            const u = await cx2.db.collection('guide_prix_meta').updateOne({ _id: 'dernier', guideDu }, { $set: { http } });
+            await cx2.close();
+            console.log(`${u.matchedCount ? '✅ validateurs HTTP gardés' : '⚠️ la méta ne porte pas ce guide : validateurs NON gardés'} (prochain passage ${u.matchedCount ? 'conditionnel' : 'complet'})`);
+        } catch (e) { console.error(`⚠️ validateurs HTTP non gardés (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 120)}) : le prochain passage retéléchargera`); }
+    }
     process.exit(res.status ?? 1);
 }
 

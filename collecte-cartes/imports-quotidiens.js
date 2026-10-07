@@ -1,5 +1,5 @@
 // ============================================================
-// LES IMPORTS QUOTIDIENS, LANCÉS PAR LE WORKER — catalogue Cardmarket et guide des prix, une fois par jour après 5 h UTC
+// LES IMPORTS QUOTIDIENS, LANCÉS PAR LE WORKER — catalogue Cardmarket (après 12 h 15 UTC) et guide des prix (après 5 h UTC), une fois par jour
 // ============================================================
 // 🔑 LA DEMANDE (testeur, 2026-10-06) : « sans cron Render payant : le WORKER lance lui-même, une fois par jour vers 5 h UTC, l'import du
 // catalogue (import-catalogue-quotidien.js --base=test --confirmer-production) et celui du guide des prix, sous la garde de lot, avec une
@@ -8,8 +8,8 @@
 // chacun) — c'est en eux que vivent les gardes de l'import (jugement du fichier avant toute écriture, sauvegarde relue sur R2, insertion
 // additive, méta écrite en dernier, « rien de neuf » = sortie 0). Il ne réécrit aucune de ces gardes : une seule définition (§21 bis).
 // · QUAND : à chaque tour de la boucle du worker, ENTRE deux unités (aucune image en cours de traitement : le worker tient sur 512 Mo,
-//   et un import en tient lui-même plusieurs dizaines) ; après 5 h UTC ; une réussite par jour ; trois essais par jour au plus, une heure
-//   entre deux — une panne longue reste une panne visible, pas une boucle (§29).
+//   et un import en tient lui-même plusieurs dizaines) ; après l'heure de CET import ; une réussite ou un « rien de neuf » par jour ;
+//   trois essais en échec par jour au plus, une heure entre deux — une panne longue reste une panne visible, pas une boucle (§29).
 // · L'ESSAI SE COMPTE AVANT LE LANCEMENT : un worker tué au milieu d'un import (redéploiement) ne relance pas en boucle un import qui le
 //   tue — il a consommé un essai.
 // · LE JOURNAL : `collecte_images_etat`, document `import-quotidien/<nom>` (jour, essais, dernier code, fin de la sortie, 30 dernières
@@ -21,18 +21,22 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
+// (testeur, 2026-10-08) L'HEURE EST PAR IMPORT. L'export du catalogue paraît vers 11 h 31 UTC (createdAt de l'export du 2026-10-06 :
+// 13:31 +02:00) : à 5 h, 7 h, 9 h, 11 h, le worker retéléchargeait celui de la veille — ~5 requêtes Cardmarket par jour contre une.
+// Le catalogue part donc à 12 h 15 UTC (marge après 11 h 31) ; le guide, qui paraît vers 0 h 49 UTC, garde 5 h.
 const IMPORTS = [
-    { nom: 'catalogue', script: 'import-catalogue-quotidien.js' },
-    { nom: 'guide', script: 'import-guide-quotidien.js' }
+    { nom: 'catalogue', script: 'import-catalogue-quotidien.js', heure: 12, minute: 15 },
+    { nom: 'guide', script: 'import-guide-quotidien.js', heure: 5, minute: 0 }
 ];
 const ARGS = ['--base=test', '--confirmer-production'];
-const HEURE_UTC = 5, ESSAIS_PAR_JOUR = 3, PASSAGES_PAR_JOUR = 12, ENTRE_ESSAIS_MS = 60 * 60 * 1000, ENTRE_RIEN_DE_NEUF_MS = 2 * 60 * 60 * 1000;
+const ESSAIS_PAR_JOUR = 3, ENTRE_ESSAIS_MS = 60 * 60 * 1000;
 const DELAI_MAX_MS = 30 * 60 * 1000, JOURNAL_MAX = 30;
 const RACINE = path.join(__dirname, '..');
 const jourUTC = d => d.toISOString().slice(0, 10);
-// (relecture) « rien de neuf » n'est PAS la réussite du jour : le fichier Cardmarket du jour paraît vers 11 h 30 UTC (createdAt de
-// l'export du 2026-10-06 : 13:31 +02:00) ; à 5 h, les deux scripts sortent 0 en disant « rien de neuf ». Le jour ne se clôt qu'à un
-// import FAIT ; un « rien de neuf » fait repasser deux heures plus tard, sans compter d'échec — douze passages au plus par jour.
+// (testeur, 2026-10-08) « si l'export du jour a la même date que la veille, aucun téléchargement ne doit avoir lieu » : un « rien de
+// neuf » CLÔT LE JOUR — chaque passage était une requête. Le script, lui, fait une requête CONDITIONNELLE (ETag du dernier fichier
+// importé) : le même fichier rend 304, sans corps. Un « rien de neuf » n'est ni une réussite (pas de succesLe) ni un échec (pas
+// d'alerte) ; le lendemain, on repasse.
 const RIEN_DE_NEUF = /ℹ️ rien de neuf/;
 // (relecture) LA MÉMOIRE : le worker reste vivant pendant l'import, sur 512 Mo. Le tas de l'enfant est plafonné : au-delà, il échoue
 // PROPREMENT (code non nul, alerte écrite) au lieu de faire tuer le conteneur entier par le système. Valeur mesurée : voir MESURE_MEMOIRE.
@@ -44,22 +48,26 @@ const NOEUD = ['--max-old-space-size=256'];
 // d'environnement du worker, après avoir regardé la mémoire du worker dans le tableau de bord : `IMPORTS_QUOTIDIENS=1`, et rien d'autre.
 const actif = (env = process.env) => env.IMPORTS_QUOTIDIENS === '1';
 
-/** Faut-il lancer cet import maintenant ? Fonction pure : `etat` est le document `import-quotidien/<nom>` (ou null). */
-function aLancer(etat, maintenant) {
-    if (maintenant.getUTCHours() < HEURE_UTC) return { lancer: false, raison: `avant ${HEURE_UTC} h UTC` };
+/**
+ * Faut-il lancer cet import maintenant ? Fonction pure : `etat` est le document `import-quotidien/<nom>` (ou null), `horaire` est
+ * `{ heure, minute }` UTC de l'import — obligatoire : sans horaire, elle LÈVE plutôt que de lancer sur un défaut.
+ */
+function aLancer(etat, maintenant, horaire) {
+    if (!horaire || !Number.isInteger(horaire.heure) || !Number.isInteger(horaire.minute)) throw new Error('aLancer : horaire { heure, minute } manquant');
+    const debut = horaire.heure * 60 + horaire.minute;
+    if (maintenant.getUTCHours() * 60 + maintenant.getUTCMinutes() < debut) return { lancer: false, raison: `avant ${horaire.heure} h ${String(horaire.minute).padStart(2, '0')} UTC` };
     const j = jourUTC(maintenant), memeJour = etat?.jour === j;
     if (etat?.succesLe === j) return { lancer: false, raison: 'déjà importé aujourd\'hui' };
+    if (memeJour && etat.dernierResultat === 'rien-de-neuf') return { lancer: false, raison: 'rien de neuf aujourd\'hui (le même fichier que la veille) : demain' };
     const essais = memeJour ? (etat.essais || 0) : 0, echecs = memeJour ? (etat.echecs ?? etat.essais ?? 0) : 0;
     if (echecs >= ESSAIS_PAR_JOUR) return { lancer: false, raison: `${echecs} échecs aujourd'hui : demain` };
-    if (essais >= PASSAGES_PAR_JOUR) return { lancer: false, raison: `${essais} passages aujourd'hui : demain` };
-    const attente = etat?.dernierResultat === 'rien-de-neuf' ? ENTRE_RIEN_DE_NEUF_MS : ENTRE_ESSAIS_MS;
-    if (memeJour && etat.dernierEssai && maintenant - new Date(etat.dernierEssai) < attente) return { lancer: false, raison: `dernier passage il y a moins de ${attente / 3600000} h` };
+    if (memeJour && etat.dernierEssai && maintenant - new Date(etat.dernierEssai) < ENTRE_ESSAIS_MS) return { lancer: false, raison: 'dernier passage il y a moins d\'une heure' };
     return { lancer: true, essai: essais + 1, echecs };
 }
 
 /** Un import doit-il tourner MAINTENANT ? (le worker ne rend son verrou global que dans ce cas) */
 async function aFaire({ E, maintenant = () => new Date() }) {
-    for (const { nom } of IMPORTS) if (aLancer(await E.findOne({ _id: `import-quotidien/${nom}` }), maintenant()).lancer) return true;
+    for (const { nom, heure, minute } of IMPORTS) if (aLancer(await E.findOne({ _id: `import-quotidien/${nom}` }), maintenant(), { heure, minute }).lancer) return true;
     return false;
 }
 
@@ -90,10 +98,10 @@ function lancerEnfant(script, args = ARGS, { racine = RACINE, delaiMs = DELAI_MA
  * import en échec ne doit pas arrêter le worker (il crie dans l'alerte). @param E la collection `collecte_images_etat`.
  */
 async function importsQuotidiens({ E, lancerScript = lancerEnfant, maintenant = () => new Date(), journal = console }) {
-    for (const { nom, script } of IMPORTS) {
+    for (const { nom, script, heure, minute } of IMPORTS) {
         const id = `import-quotidien/${nom}`, idAlerte = `alerte/import-${nom}`;
         const etat = await E.findOne({ _id: id });
-        const now = maintenant(), d = aLancer(etat, now);
+        const now = maintenant(), d = aLancer(etat, now, { heure, minute });
         if (!d.lancer) continue;
         const j = jourUTC(now);
         // l'essai ET un échec PROVISOIRE sont comptés AVANT le lancement : un conteneur tué au milieu (redéploiement, mémoire) a
@@ -110,7 +118,7 @@ async function importsQuotidiens({ E, lancerScript = lancerEnfant, maintenant = 
         });
         if (resultat !== 'echec') {
             await E.updateOne({ _id: idAlerte, active: true }, { $set: { active: false, resolueLe: now } });
-            journal.log(`${resultat === 'importe' ? '✅' : 'ℹ️'} import quotidien « ${nom} » : ${resultat === 'importe' ? 'importé' : 'rien de neuf, nouveau passage dans 2 h'} (code 0, ${r.dureeS} s)`);
+            journal.log(`${resultat === 'importe' ? '✅' : 'ℹ️'} import quotidien « ${nom} » : ${resultat === 'importe' ? 'importé' : 'rien de neuf, prochain passage demain'} (code 0, ${r.dureeS} s)`);
         } else {
             await E.updateOne({ _id: idAlerte, active: { $ne: true } }, { $set: { depuis: now } });
             await E.updateOne({ _id: idAlerte }, { $set: { active: true, constateLe: now, essais: d.echecs + 1, code: r.code, extrait: String(r.extrait || '').slice(-1000), commande: `node ${script} ${ARGS.join(' ')}` }, $setOnInsert: { depuis: now } }, { upsert: true });
@@ -119,4 +127,4 @@ async function importsQuotidiens({ E, lancerScript = lancerEnfant, maintenant = 
     }
 }
 
-module.exports = { actif, IMPORTS, ARGS, NOEUD, HEURE_UTC, ESSAIS_PAR_JOUR, aLancer, aFaire, lancerEnfant, importsQuotidiens, jourUTC };
+module.exports = { actif, IMPORTS, ARGS, NOEUD, ESSAIS_PAR_JOUR, aLancer, aFaire, lancerEnfant, importsQuotidiens, jourUTC };

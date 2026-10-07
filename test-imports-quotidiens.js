@@ -1,5 +1,5 @@
-// BANC — collecte-cartes/imports-quotidiens.js : le worker lance lui-même, une fois par jour après 5 h UTC, l'import du catalogue et
-// celui du guide des prix (ordre du testeur, 2026-10-06 : « sans cron Render payant […] avec une ligne au journal et une alerte en cas
+// BANC — collecte-cartes/imports-quotidiens.js : le worker lance lui-même, une fois par jour (catalogue après 12 h 15 UTC, guide après
+// 5 h UTC), l'import du catalogue et celui du guide des prix (ordre du testeur, 2026-10-06 : « sans cron Render payant […] avec une ligne au journal et une alerte en cas
 // d'échec »). Aucune base, aucun réseau : une collection en mémoire, un lanceur factice, puis un VRAI processus enfant.
 //   node test-imports-quotidiens.js
 const assert = require('assert');
@@ -29,31 +29,36 @@ const muet = { log() { }, warn() { }, error() { } };
 
 (async () => {
     // ── 1. la décision, pure ──────────────────────────────────────────────────────────────────────────────────────────
-    await t('avant 5 h UTC : rien', () => assert.equal(IQ.aLancer(null, a('2026-10-07T04:59:00Z')).lancer, false));
-    await t('après 5 h UTC, jamais lancé : on lance', () => assert.equal(IQ.aLancer(null, a('2026-10-07T05:00:00Z')).lancer, true));
-    await t('déjà réussi aujourd\'hui : rien', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, succesLe: '2026-10-07', dernierEssai: a('2026-10-07T05:01:00Z') }, a('2026-10-07T12:00:00Z')).lancer, false));
-    await t('réussi HIER : on relance aujourd\'hui', () => assert.equal(IQ.aLancer({ jour: '2026-10-06', essais: 1, succesLe: '2026-10-06', dernierEssai: a('2026-10-06T05:01:00Z') }, a('2026-10-07T05:30:00Z')).lancer, true));
-    await t('échec il y a moins d\'une heure : on attend', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, dernierEssai: a('2026-10-07T05:10:00Z') }, a('2026-10-07T05:50:00Z')).lancer, false));
-    await t('échec il y a plus d\'une heure : on réessaie', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, dernierEssai: a('2026-10-07T05:10:00Z') }, a('2026-10-07T06:20:00Z')).lancer, true));
+    // (testeur, 2026-10-08) l'heure est PAR IMPORT : le catalogue à 12 h 15 UTC (l'export du jour paraît vers 11 h 31 — à 5 h le worker
+    // retéléchargeait celui de la veille, ~5 requêtes par jour), le guide à 5 h (il paraît vers 0 h 49)
+    const GUI = { heure: 5, minute: 0 }, CAT = { heure: 12, minute: 15 };
+    await t('les horaires : catalogue 12 h 15 UTC, guide 5 h UTC', () => assert.deepEqual(IQ.IMPORTS.map(i => [i.nom, i.heure, i.minute]), [['catalogue', 12, 15], ['guide', 5, 0]]));
+    await t('guide : avant 5 h UTC rien, à 5 h on lance', () => { assert.equal(IQ.aLancer(null, a('2026-10-07T04:59:00Z'), GUI).lancer, false); assert.equal(IQ.aLancer(null, a('2026-10-07T05:00:00Z'), GUI).lancer, true); });
+    await t('catalogue : à 12 h 14 UTC rien, à 12 h 15 on lance', () => { assert.equal(IQ.aLancer(null, a('2026-10-07T12:14:00Z'), CAT).lancer, false); assert.equal(IQ.aLancer(null, a('2026-10-07T12:15:00Z'), CAT).lancer, true); });
+    await t('sans horaire : refus de conclure, jamais un lancement', () => assert.throws(() => IQ.aLancer(null, a('2026-10-07T13:00:00Z'))));
+    await t('déjà réussi aujourd\'hui : rien', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, succesLe: '2026-10-07', dernierEssai: a('2026-10-07T05:01:00Z') }, a('2026-10-07T12:00:00Z'), GUI).lancer, false));
+    await t('réussi HIER : on relance aujourd\'hui', () => assert.equal(IQ.aLancer({ jour: '2026-10-06', essais: 1, succesLe: '2026-10-06', dernierEssai: a('2026-10-06T05:01:00Z') }, a('2026-10-07T05:30:00Z'), GUI).lancer, true));
+    await t('échec il y a moins d\'une heure : on attend', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, dernierEssai: a('2026-10-07T05:10:00Z') }, a('2026-10-07T05:50:00Z'), GUI).lancer, false));
+    await t('échec il y a plus d\'une heure : on réessaie', () => assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 1, dernierEssai: a('2026-10-07T05:10:00Z') }, a('2026-10-07T06:20:00Z'), GUI).lancer, true));
     await t('trois essais en échec aujourd\'hui : plus rien jusqu\'à demain', () => {
-        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 3, dernierEssai: a('2026-10-07T07:10:00Z') }, a('2026-10-07T23:00:00Z')).lancer, false);
-        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 3, dernierEssai: a('2026-10-07T07:10:00Z') }, a('2026-10-08T05:05:00Z')).lancer, true);
+        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 3, dernierEssai: a('2026-10-07T07:10:00Z') }, a('2026-10-07T23:00:00Z'), GUI).lancer, false);
+        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 3, dernierEssai: a('2026-10-07T07:10:00Z') }, a('2026-10-08T05:05:00Z'), GUI).lancer, true);
     });
-    // (relecture) « rien de neuf » n'est PAS la réussite du jour : le fichier Cardmarket du jour paraît vers 11 h 30 UTC (createdAt de
-    // l'export du 06/10 : 13:31 +02:00) — à 5 h, le script dit « rien de neuf » ; on repasse deux heures plus tard, sans compter d'échec
-    await t('« rien de neuf » il y a moins de deux heures : on attend ; plus de deux heures : on repasse', () => {
-        const e = { jour: '2026-10-07', essais: 1, echecs: 0, dernierEssai: a('2026-10-07T05:01:00Z'), dernierResultat: 'rien-de-neuf' };
-        assert.equal(IQ.aLancer(e, a('2026-10-07T06:30:00Z')).lancer, false);
-        assert.equal(IQ.aLancer(e, a('2026-10-07T07:05:00Z')).lancer, true);
-    });
-    await t('des « rien de neuf » ne consomment pas les trois essais d\'échec ; douze passages au plus par jour', () => {
-        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 5, echecs: 0, dernierEssai: a('2026-10-07T13:00:00Z'), dernierResultat: 'rien-de-neuf' }, a('2026-10-07T15:30:00Z')).lancer, true);
-        assert.equal(IQ.aLancer({ jour: '2026-10-07', essais: 12, echecs: 0, dernierEssai: a('2026-10-07T20:00:00Z'), dernierResultat: 'rien-de-neuf' }, a('2026-10-07T23:00:00Z')).lancer, false);
+    // (testeur, 2026-10-08) « si l'export du jour a la même date que la veille, aucun téléchargement » : un « rien de neuf » CLÔT le jour
+    // — on ne repasse plus (chaque passage était une requête Cardmarket) ; le lendemain, on relance
+    await t('« rien de neuf » clôt le jour : plus aucun passage aujourd\'hui ; le lendemain on relance', () => {
+        const e = { jour: '2026-10-07', essais: 1, echecs: 0, dernierEssai: a('2026-10-07T12:16:00Z'), dernierResultat: 'rien-de-neuf' };
+        assert.equal(IQ.aLancer(e, a('2026-10-07T14:30:00Z'), CAT).lancer, false);
+        assert.equal(IQ.aLancer(e, a('2026-10-07T23:59:00Z'), CAT).lancer, false);
+        assert.equal(IQ.aLancer(e, a('2026-10-08T12:20:00Z'), CAT).lancer, true);
     });
     await t('aFaire : vrai seulement quand un import doit tourner (le worker ne rend son verrou que dans ce cas)', async () => {
         const E = collection();
         assert.equal(await IQ.aFaire({ E, maintenant: () => a('2026-10-07T04:00:00Z') }), false);
-        assert.equal(await IQ.aFaire({ E, maintenant: () => a('2026-10-07T05:10:00Z') }), true);
+        assert.equal(await IQ.aFaire({ E, maintenant: () => a('2026-10-07T05:10:00Z') }), true, 'le guide est dû');
+        await E.updateOne({ _id: 'import-quotidien/guide' }, { $set: { jour: '2026-10-07', essais: 1, succesLe: '2026-10-07' } }, { upsert: true });
+        assert.equal(await IQ.aFaire({ E, maintenant: () => a('2026-10-07T11:00:00Z') }), false, 'guide fait, catalogue pas encore dû');
+        assert.equal(await IQ.aFaire({ E, maintenant: () => a('2026-10-07T12:20:00Z') }), true, 'le catalogue est dû');
     });
     // la MÉMOIRE du worker sur Render n'est pas mesurable d'ici (l'import seul : 190 Mo de RSS, 61 Mo de tas, insertion non comprise) :
     // la fonction n'est ACTIVE que si la variable le dit, exactement « 1 » — une garde s'écrit par ce qu'elle autorise
@@ -72,11 +77,13 @@ const muet = { log() { }, warn() { }, error() { } };
         const E = collection(), lances = [];
         const lancer = async (script) => { lances.push(script); return { code: 0, dureeS: 12, extrait: '✅ rien de neuf' }; };
         await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T05:03:00Z'), journal: muet });
-        assert.deepEqual(lances, ['import-catalogue-quotidien.js', 'import-guide-quotidien.js']);
+        assert.deepEqual(lances, ['import-guide-quotidien.js'], 'à 5 h, le guide seul');
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T12:20:00Z'), journal: muet });
+        assert.deepEqual(lances, ['import-guide-quotidien.js', 'import-catalogue-quotidien.js'], 'à 12 h 20, le catalogue');
         const c = await E.findOne({ _id: 'import-quotidien/catalogue' });
         assert.equal(c.succesLe, '2026-10-07'); assert.equal(c.essais, 1); assert.equal(c.journal.length, 1); assert.equal(c.journal[0].code, 0);
         assert.equal(await E.findOne({ _id: 'alerte/import-catalogue', active: true }), null);
-        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T09:00:00Z'), journal: muet });
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T16:00:00Z'), journal: muet });
         assert.equal(lances.length, 2, 'rien de relancé le même jour');
     });
     await t('échec : alerte ACTIVE avec sa date de début ; un second échec garde la date ; le succès la lève', async () => {
@@ -95,27 +102,30 @@ const muet = { log() { }, warn() { }, error() { } };
     await t('un lanceur qui LÈVE : l\'essai est compté (posé avant le lancement), l\'alerte écrite, l\'autre import passe quand même', async () => {
         const E = collection(), lances = [];
         const lancer = async (script) => { lances.push(script); if (script.includes('catalogue')) throw new Error('spawn ENOENT'); return { code: 0, dureeS: 1, extrait: 'ok' }; };
-        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T05:03:00Z'), journal: muet });
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T12:20:00Z'), journal: muet });
         assert.deepEqual(lances, ['import-catalogue-quotidien.js', 'import-guide-quotidien.js']);
         const c = await E.findOne({ _id: 'import-quotidien/catalogue' });
         assert.equal(c.essais, 1); assert.equal(c.enCours, false); assert.notEqual(c.succesLe, '2026-10-07');
         assert.equal((await E.findOne({ _id: 'alerte/import-catalogue' })).active, true);
         assert.equal((await E.findOne({ _id: 'import-quotidien/guide' })).succesLe, '2026-10-07');
     });
-    await t('« rien de neuf » (code 0) : pas de succesLe, pas d\'échec compté, pas d\'alerte ; le passage suivant importe et clôt le jour', async () => {
-        const E = collection(); let n = 0;
-        const lancer = async () => (++n === 1 ? { code: 0, dureeS: 2, extrait: 'ℹ️ rien de neuf : le fichier est du 2026-10-06T11:31:01.000Z' } : { code: 0, dureeS: 40, extrait: '✅ 12 nouveaux insérés' });
-        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T05:03:00Z'), journal: muet });
+    await t('« rien de neuf » (code 0) : pas de succesLe, pas d\'échec, pas d\'alerte, et PLUS AUCUN passage ce jour-là ; le lendemain importe', async () => {
+        const E = collection(); const lances = [];
+        const lancer = async (s) => { lances.push(s); return lances.filter(x => x === s).length === 1 ? { code: 0, dureeS: 2, extrait: 'ℹ️ rien de neuf : 304, le fichier n\'a pas changé — aucun téléchargement' } : { code: 0, dureeS: 40, extrait: '✅ 12 nouveaux insérés' }; };
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T12:20:00Z'), journal: muet });
         let c = await E.findOne({ _id: 'import-quotidien/catalogue' });
         assert.notEqual(c.succesLe, '2026-10-07'); assert.equal(c.echecs, 0); assert.equal(c.dernierResultat, 'rien-de-neuf');
         assert.equal(await E.findOne({ _id: 'alerte/import-catalogue' }), null);
-        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T12:00:00Z'), journal: muet });
+        const avant = lances.length;
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-07T18:00:00Z'), journal: muet });
+        assert.equal(lances.length, avant, 'aucun passage de plus le même jour');
+        await IQ.importsQuotidiens({ E, lancerScript: lancer, maintenant: () => a('2026-10-08T12:20:00Z'), journal: muet });
         c = await E.findOne({ _id: 'import-quotidien/catalogue' });
-        assert.equal(c.succesLe, '2026-10-07'); assert.equal(c.dernierResultat, 'importe');
+        assert.equal(c.succesLe, '2026-10-08'); assert.equal(c.dernierResultat, 'importe');
     });
     await t('le journal garde les 30 dernières lignes', async () => {
         const E = collection();
-        for (let i = 0; i < 35; i++) await IQ.importsQuotidiens({ E, lancerScript: async () => ({ code: 0, dureeS: 1, extrait: `j${i}` }), maintenant: () => new Date(Date.UTC(2026, 9, 7 + i, 6)), journal: muet });
+        for (let i = 0; i < 35; i++) await IQ.importsQuotidiens({ E, lancerScript: async () => ({ code: 0, dureeS: 1, extrait: `j${i}` }), maintenant: () => new Date(Date.UTC(2026, 9, 7 + i, 13)), journal: muet });
         const c = await E.findOne({ _id: 'import-quotidien/catalogue' });
         assert.equal(c.journal.length, 30); assert.equal(c.journal[29].extrait, 'j34');
     });

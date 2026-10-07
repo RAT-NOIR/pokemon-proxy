@@ -4,6 +4,7 @@
 process.argv.push('--base=test_scratch');
 require('dotenv').config();
 const http = require('http');
+const crypto = require('crypto');
 const path = require('path');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
@@ -41,21 +42,31 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
     const PREFIXE = 'sauvegardes/guide_prix/test_scratch/';
     const restes = await r2.listerPrefixe(process.env.R2_BUCKET_BRUT, PREFIXE);
     if (restes.length) await r2.supprimer(process.env.R2_BUCKET_BRUT, restes);
-    let requetes = 0;
-    const srv = http.createServer((req, res) => { requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': 'application/json' }); res.end(f); });
+    // le serveur local se comporte comme S3 : un ETag par contenu, 304 SANS CORPS à une requête conditionnelle qui le cite
+    let requetes = 0, nonModifies = 0;
+    const etagDe = f => `"${crypto.createHash('sha1').update(f).digest('hex')}"`;
+    const srv = http.createServer((req, res) => {
+        requetes++; const f = FICHIERS[req.url]; if (!f) { res.writeHead(404); return res.end(); }
+        if (req.headers['if-none-match'] === etagDe(f)) { nonModifies++; res.writeHead(304, { etag: etagDe(f) }); return res.end(); }
+        res.writeHead(200, { 'content-type': 'application/json', etag: etagDe(f), 'last-modified': 'Wed, 07 Oct 2026 00:49:50 GMT' }); res.end(f);
+    });
     await new Promise(r => srv.listen(0, '127.0.0.1', r));
     const url = f => `--url=http://127.0.0.1:${srv.address().port}${f}`;
     try {
         const G = db.collection('guide_prix'), M = db.collection('guide_prix_meta');
         const rA = await lancer('--base=test_scratch', url('/A.json'));
         verifier('guide A : téléchargé et importé par la commande de toujours', [rA.status, await G.countDocuments({}), (await M.findOne({ _id: 'dernier' }))?.lignesDuFichier], [0, 100, 100]);
+        verifier('les validateurs HTTP du guide importé sont gardés dans la méta', (await M.findOne({ _id: 'dernier' }))?.http?.etag, etagDe(FICHIERS['/A.json']));
         const majAtA = (await G.findOne({ idProduct: 1000 })).majAt.toISOString();
+        // (testeur, 2026-10-08) le même fichier ne se retélécharge pas : requête conditionnelle, 304 sans corps
+        const n0 = nonModifies;
         const rA2 = await lancer('--base=test_scratch', url('/A.json'));
-        verifier('le même guide une seconde fois : « rien de neuf », sortie 0, rien d\'écrit', [rA2.status, /rien de neuf/.test(rA2.out), (await G.findOne({ idProduct: 1000 })).majAt.toISOString() === majAtA], [0, true, true]);
+        verifier('le même guide une seconde fois : 304 sans corps (AUCUN téléchargement), « rien de neuf », sortie 0, rien d\'écrit', [rA2.status, /rien de neuf/.test(rA2.out), nonModifies - n0, (await G.findOne({ idProduct: 1000 })).majAt.toISOString() === majAtA], [0, true, 1, true]);
         const rF = await lancer('--base=test_scratch', url('/futur.json'));
         verifier('un guide daté du FUTUR : refusé, la méta ne bouge pas', [rF.status, /FUTUR/.test(rF.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
         const rT = await lancer('--base=test_scratch', url('/tronque.json'));
         verifier('fichier tronqué (50 lignes contre 100) : refusé, la méta ne bouge pas', [rT.status, /tronqué/.test(rT.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
+        verifier('un fichier REFUSÉ ne laisse pas ses validateurs : la méta garde ceux de A', (await M.findOne({ _id: 'dernier' }))?.http?.etag, etagDe(FICHIERS['/A.json']));
         const rS = await lancer('--base=test_scratch', url('/sansprix.json'));
         verifier('fichier où moins de 90 % des lignes ont un prix : refusé', [rS.status, /portent un prix/.test(rS.err)], [1, true]);
         const rJ = await lancer('--base=test_scratch', url('/pasjson.json'));
