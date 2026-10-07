@@ -1,5 +1,5 @@
 {
- "genere": "2026-10-07T19:01:59.179Z",
+ "genere": "2026-10-07T20:15:21.107Z",
  "par": "wcd-decks-champions.js",
  "source": "C:\\Users\\Yung\\AppData\\Local\\Temp\\claude\\c--Users-Yung-Desktop-pokemon-proxy\\65a1ec64-f853-444c-840c-b5a38ebe8695\\scratchpad\\wcd-decks.json",
  "annees": [
@@ -7,8 +7,35 @@
    "annee": 2004,
    "set": "WCD-2004",
    "decksLus": 4,
-   "deckChampion": null,
-   "raison": "0 deck(s) dont la page se dit champion Masters (—) sur 4 lus"
+   "deckChampion": {
+    "nom": "Magma Spirit",
+    "joueur": "Tsuguyoshi Yamato",
+    "nomsPossibles": [],
+    "source": {
+     "page": "Magma Spirit (TCG)",
+     "copie": "20260830162735",
+     "url": "https://web.archive.org/web/20260830162735/https://bulbapedia.bulbagarden.net/wiki/Magma_Spirit_(TCG)",
+     "phrase": "Tsuguyoshi Yamato, of Japan, was the first Fifteen and Over Champion, winning with a perfect match record. — Reason: Needs more info on the strategy Magma Spirit Box art Expansion {{{expansion}}} Release date {{{release}}} Types used Major cards Team Magma's Groudon Coin {{{coin}}} Magma Spirit is t",
+     "evenement": "http://web.archive.org/web/20260822000048/https://bulbapedia.bulbagarden.net/wiki/2004_World_Championships_(TCG)"
+    },
+    "vedette": {
+     "carteId": 46471,
+     "nomEn": "Team Magma's Groudon",
+     "titrePage": "Team Magma's Groudon (EX Team Magma vs Team Aqua 9)",
+     "quantite": 4,
+     "regle": "le nom du deck ne nomme aucun Pokémon : la carte Pokémon la plus présente (×4), à égalité la carte à règle",
+     "images": [
+      {
+       "set": "EX-Team-Magma-vs-Team-Aqua",
+       "numero": "9",
+       "cleR2": "tcgdex/EX-Team-Magma-vs-Team-Aqua/9-46471.webp",
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « EX Team Magma vs Team Aqua 9 »"
+      }
+     ]
+    },
+    "raisonSansVedette": null
+   }
   },
   {
    "annee": 2005,
@@ -37,7 +64,8 @@
        "set": "EX-FireRed-LeafGreen",
        "numero": "9",
        "cleR2": "tcgdex/EX-FireRed-LeafGreen/9-53195.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « EX FireRed & LeafGreen 9 »"
       }
      ]
     },
@@ -71,7 +99,8 @@
        "set": "EX-Legend-Maker",
        "numero": "88",
        "cleR2": "tcgdex/EX-Legend-Maker/88-47927.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « EX Legend Maker 88 »"
       }
      ]
     },
@@ -103,7 +132,8 @@
        "set": "EX-Power-Keepers",
        "numero": "92",
        "cleR2": "tcgdex/EX-Power-Keepers/92-43149.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « EX Power Keepers 92 »"
       }
      ]
     },
@@ -135,7 +165,8 @@
        "set": "Secret-Wonders",
        "numero": "7",
        "cleR2": "tcgdex/Secret-Wonders/7-29819.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Secret Wonders 7 »"
       }
      ]
     },
@@ -169,7 +200,8 @@
        "set": "Rising-Rivals",
        "numero": "66",
        "cleR2": "tcgdex/Rising-Rivals/66-75975.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Rising Rivals 66 »"
       }
      ]
     },
@@ -201,15 +233,16 @@
      "regle": "le nom du deck ne nomme aucun Pokémon : la carte Pokémon la plus présente (×2), à égalité la carte à règle",
      "images": [
       {
-       "set": "DP-Black-Star-Promos",
-       "numero": "DP46",
-       "cleR2": "tcgdex/DP-Black-Star-Promos/DP46-71777.webp",
-       "source": "tcgdex"
-      },
-      {
        "set": "Supreme-Victors",
        "numero": "145",
        "cleR2": "tcgdex/Supreme-Victors/145-71777.webp",
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Supreme Victors 145 »"
+      },
+      {
+       "set": "DP-Black-Star-Promos",
+       "numero": "DP46",
+       "cleR2": "tcgdex/DP-Black-Star-Promos/DP46-71777.webp",
        "source": "tcgdex"
       }
      ]
@@ -244,7 +277,8 @@
        "set": "Triumphant",
        "numero": "68",
        "cleR2": "tcgdex/Triumphant/68-101144.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Triumphant 68 »"
       }
      ]
     },
@@ -276,7 +310,8 @@
        "set": "Dark-Explorers",
        "numero": "63",
        "cleR2": "tcgdex/Dark-Explorers/63-150074.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Dark Explorers 63 »"
       },
       {
        "set": "Dark-Explorers",
@@ -320,7 +355,8 @@
        "set": "Dark-Explorers",
        "numero": "63",
        "cleR2": "tcgdex/Dark-Explorers/63-150074.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Dark Explorers 63 »"
       },
       {
        "set": "Dark-Explorers",
@@ -364,7 +400,8 @@
        "set": "Plasma-Blast",
        "numero": "11",
        "cleR2": "tcgdex/Plasma-Blast/11-173735.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Plasma Blast 11 »"
       },
       {
        "set": "Plasma-Blast",
@@ -402,7 +439,8 @@
        "set": "Boundaries-Crossed",
        "numero": "49",
        "cleR2": "tcgdex/Boundaries-Crossed/49-163953.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Boundaries Crossed 49 »"
       },
       {
        "set": "Boundaries-Crossed",
@@ -446,7 +484,8 @@
        "set": "Fates-Collide",
        "numero": "84",
        "cleR2": "tcgdex/Fates-Collide/84-211858.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Fates Collide 84 »"
       }
      ]
     },
@@ -478,7 +517,8 @@
        "set": "Burning-Shadows",
        "numero": "91",
        "cleR2": "tcgdex/Burning-Shadows/91-223955.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Burning Shadows 91 »"
       },
       {
        "set": "Hidden-Fates",
@@ -516,7 +556,8 @@
        "set": "Shining-Legends",
        "numero": "53",
        "cleR2": "bulbapedia/Shining-Legends/53-224190.webp",
-       "source": "bulbapedia"
+       "source": "bulbapedia",
+       "impressionDOrigine": "l'impression que nomme la page : « Shining Legends 53 »"
       },
       {
        "set": "SM-Black-Star-Promos",
@@ -551,16 +592,17 @@
      "regle": "le nom du deck ne nomme aucun Pokémon : la carte Pokémon la plus présente (×4)",
      "images": [
       {
+       "set": "Unified-Minds",
+       "numero": "71",
+       "cleR2": "tcgdex/Unified-Minds/71-237652.webp",
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Unified Minds 71 »"
+      },
+      {
        "set": "SM-Black-Star-Promos",
        "numero": "SM191",
        "cleR2": "bulbapedia/SM-Black-Star-Promos/191-237652.webp",
        "source": "bulbapedia"
-      },
-      {
-       "set": "Unified-Minds",
-       "numero": "71",
-       "cleR2": "tcgdex/Unified-Minds/71-237652.webp",
-       "source": "tcgdex"
       },
       {
        "set": "Unified-Minds",
@@ -595,16 +637,17 @@
      "regle": "le nom du deck ne nomme aucun Pokémon : la carte Pokémon la plus présente (×4)",
      "images": [
       {
+       "set": "Brilliant-Stars",
+       "numero": "122",
+       "cleR2": "tcgdex/Brilliant-Stars/122-264173.webp",
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Brilliant Stars 122 »"
+      },
+      {
        "set": "SWSH-Black-Star-Promos",
        "numero": "SWSH306",
        "cleR2": "bulbapedia/SWSH-Black-Star-Promos/306-264173.webp",
        "source": "bulbapedia"
-      },
-      {
-       "set": "Brilliant-Stars",
-       "numero": "122",
-       "cleR2": "tcgdex/Brilliant-Stars/122-264173.webp",
-       "source": "tcgdex"
       },
       {
        "set": "Brilliant-Stars",
@@ -642,7 +685,8 @@
        "set": "Fusion-Strike",
        "numero": "113",
        "cleR2": "tcgdex/Fusion-Strike/113-263497.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Fusion Strike 113 »"
       },
       {
        "set": "Fusion-Strike",
@@ -685,15 +729,16 @@
      "regle": "le nom du deck ne nomme aucun Pokémon : la carte Pokémon la plus présente (×4)",
      "images": [
       {
-       "set": "Prismatic-Evolutions",
-       "numero": "032",
-       "cleR2": "tcgdex/Prismatic-Evolutions/032-303233.webp",
-       "source": "tcgdex"
-      },
-      {
        "set": "Twilight-Masquerade",
        "numero": "077",
        "cleR2": "tcgdex/Twilight-Masquerade/077-303233.webp",
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Twilight Masquerade 77 »"
+      },
+      {
+       "set": "Prismatic-Evolutions",
+       "numero": "032",
+       "cleR2": "tcgdex/Prismatic-Evolutions/032-303233.webp",
        "source": "tcgdex"
       },
       {
@@ -732,7 +777,8 @@
        "set": "Scarlet-Violet",
        "numero": "086",
        "cleR2": "tcgdex/Scarlet-Violet/086-279633.webp",
-       "source": "tcgdex"
+       "source": "tcgdex",
+       "impressionDOrigine": "l'impression que nomme la page : « Scarlet & Violet 86 »"
       },
       {
        "set": "Scarlet-Violet",

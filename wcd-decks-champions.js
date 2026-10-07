@@ -20,6 +20,13 @@ const DECKS = process.argv.find(a => a.startsWith('--decks='))?.slice(8);
 if (!DECKS) { console.error('❌ --decks=<wcd-decks.json> requis'); process.exit(2); }
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 
+// ➕ 2026-10-07 (soir, demande du site : « le champion Masters 2004 ») — quand AUCUNE page de deck ne se dit championne, la page de
+// l'ÉVÉNEMENT peut nommer le champion ; son deck est alors celui dont la page dit « used by <ce joueur> ». Deux pages, deux citations :
+// une ligne par année, lue à l'œil dans sa copie, jamais devinée.
+const CHAMPIONS_PAR_EVENEMENT = {
+    2004: { joueur: 'Tsuguyoshi Yamato', copie: 'http://web.archive.org/web/20260822000048/https://bulbapedia.bulbagarden.net/wiki/2004_World_Championships_(TCG)',
+        citation: 'Tsuguyoshi Yamato, of Japan, was the first Fifteen and Over Champion, winning with a perfect match record.' }
+};
 const MASTERS = /(Masters?\s+Division|\bMasters\b|(?:15|Fifteen)\s+and\s+(?:Older|Over))[^.]{0,60}?\b(champion|winner|World Champion)\b|\b(champion|winner|won)\b[^.]{0,40}\b(Masters?\s+Division|Masters|(?:15|Fifteen)\s+and\s+(?:Older|Over))/i;
 const PAS_PREMIER = /runner-up|finalist|semi-final|Top \d|second|third|fourth/i;
 const REGLE = /\b(ex|EX|GX|V|VMAX|VSTAR|V-UNION|LV\.X|BREAK|Prime|LEGEND)\b|☆|δ|-GX|-EX/;
@@ -36,14 +43,33 @@ const espece = nom => nu(nom).replace(/^(team \w+'s|[\w-]+'s|dark|light|shining|
     const titres = [...new Set(decks.flatMap(d => d.lignes.flatMap(l => l.cartes.map(ent))))];
     const parTitre = new Map();
     for (let i = 0; i < titres.length; i += 1000) for (const c of await cx.db.collection('cartes').find({ 'bulba.titre': { $in: titres.slice(i, i + 1000) } }, { projection: { nomEn: 1, categorie: 1, 'bulba.titre': 1, images: 1 } }).toArray()) parTitre.set(c.bulba.titre, c);
+    // ➕ 2026-10-07 (soir, demande du site : « une impression sans tampon de Garchomp C LV.X pour 2010 ») — le visuel de l'impression
+    // D'ORIGINE d'abord : celle que nomme le titre de la page (« Garchomp C LV.X (Supreme Victors 145) »), dans le set de ce nom, au même
+    // numéro. Le TYPE de set ne le dit pas (25th Anniversary Edition est typé « extension » et réimprime) ; l'origine, si.
+    const nomsDesSets = new Map((await cx.db.collection('sets').find({}, { projection: { 'bulba.expansion': 1, nomAffichage: 1 } }).toArray()).map(s => [s._id, [].concat(s.bulba?.expansion ?? [], s.nomAffichage ?? []).map(nu)]));
+    const cleN = n => String(n ?? '').toUpperCase().replace(/^([A-Z-]*)0*(\d+)/, '$1$2');
+    function imagesDeLaVedette(carte) {
+        const o = /\(([^()]+?)\s+([A-Za-z]*\d+[A-Za-z]*)\)$/.exec(carte.bulba?.titre || '');
+        const estOrigine = m => !!o && cleN(m.numero) === cleN(o[2]) && (nomsDesSets.get(m.set) || []).includes(nu(o[1]));
+        return (carte.images || []).filter(m => m && m.cleR2 && m.langue !== 'ja')
+            .map(m => ({ set: m.set, numero: m.numero ?? null, cleR2: m.cleR2, source: m.source ?? null, ...(estOrigine(m) ? { impressionDOrigine: `l'impression que nomme la page : « ${o[1]} ${o[2]} »` } : {}) }))
+            .sort((a, b) => (b.impressionDOrigine ? 1 : 0) - (a.impressionDOrigine ? 1 : 0)).slice(0, 3);
+    }
     const annees = [...new Set(decks.map(d => d.annee))].sort();
     const sortie = [];
     for (const a of annees) {
         const ds = decks.filter(d => d.annee === a);
-        const champions = ds.filter(d => d.intro.some(p => MASTERS.test(p) && !PAS_PREMIER.test((MASTERS.exec(p) || [''])[0])));
+        let champions = ds.filter(d => d.intro.some(p => MASTERS.test(p) && !PAS_PREMIER.test((MASTERS.exec(p) || [''])[0])));
         const ligne = { annee: a, set: `WCD-${a}`, decksLus: ds.length };
-        if (champions.length !== 1) { sortie.push({ ...ligne, deckChampion: null, raison: `${champions.length} deck(s) dont la page se dit champion Masters (${champions.map(d => d.titre).join(', ') || '—'}) sur ${ds.length} lus` }); continue; }
-        const d = champions[0], phrase = d.intro.find(p => MASTERS.test(p));
+        const ev = CHAMPIONS_PAR_EVENEMENT[a];
+        let parEvenement = null;
+        if (!champions.length && ev) {
+            const usePar = new RegExp(`used by ${ev.joueur.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+            champions = ds.filter(d => d.intro.some(p => usePar.test(p)));
+            if (champions.length === 1) parEvenement = { ...ev, phraseDeck: champions[0].intro.find(p => usePar.test(p)) };
+        }
+        if (champions.length !== 1) { sortie.push({ ...ligne, deckChampion: null, raison: `${champions.length} deck(s) dont la page se dit champion Masters (${champions.map(d => d.titre).join(', ') || '—'}) sur ${ds.length} lus${ev ? ` ; page de l'événement : ${ev.joueur}` : ''}` }); continue; }
+        const d = champions[0], phrase = parEvenement ? `${parEvenement.citation} — ${parEvenement.phraseDeck}` : d.intro.find(p => MASTERS.test(p));
         const joueur = ent((/deck (?:used by|of)\s+([^,.]+?)(?:,| who| in the| at the)/i.exec(d.intro.join(' ')) || [])[1] || '').trim() || null;
         const nomDeck = ent(d.titre.replace(/_/g, ' ').replace(/ \(TCG\)$/, ''));
         // les cartes Pokémon de la liste, avec leur quantité et notre carte
@@ -74,9 +100,9 @@ const espece = nom => nu(nom).replace(/^(team \w+'s|[\w-]+'s|dark|light|shining|
         const plat = nu(nomDeck).replace(/[^a-z]/g, '');
         const fragments = e => { const s = e.replace(/[^a-z]/g, ''), out = []; for (let i = 0; i + 4 <= s.length; i++) out.push(s.slice(i, i + 4)); return out; };
         const nomsPossibles = nommes.length ? [] : [...new Set(connus.filter(p => fragments(espece(p.carte.nomEn)).some(f => plat.includes(f))).map(p => p.carte.nomEn))];
-        sortie.push({ ...ligne, deckChampion: { nom: nomDeck, joueur, nomsPossibles, source: { page: d.titre.replace(/_/g, ' '), copie: d.copie, url: d.url ? d.url.replace('id_/', '/') : null, phrase: phrase?.slice(0, 300) ?? null },
+        sortie.push({ ...ligne, deckChampion: { nom: nomDeck, joueur, nomsPossibles, source: { page: d.titre.replace(/_/g, ' '), copie: d.copie, url: d.url ? d.url.replace('id_/', '/') : null, phrase: phrase?.slice(0, 300) ?? null, ...(parEvenement ? { evenement: parEvenement.copie } : {}) },
             vedette: v ? { carteId: v.carte._id, nomEn: v.carte.nomEn, titrePage: v.titre, quantite: v.quantite, regle,
-                images: (v.carte.images || []).filter(m => m && m.cleR2 && m.langue !== 'ja').map(m => ({ set: m.set, numero: m.numero ?? null, cleR2: m.cleR2, source: m.source ?? null })).slice(0, 3) } : null,
+                images: imagesDeLaVedette(v.carte) } : null,
             raisonSansVedette: v ? null : `vedette non déterminée : ${inconnus.length} carte(s) de la liste absente(s) de la base (${inconnus.slice(0, 4).join(', ')})` } });
     }
     await fermer();
