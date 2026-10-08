@@ -1,6 +1,6 @@
 'use strict';
 const { col } = require('../db'); const M = require('../modeles');
-const J = require('./jetons'); const P = require('./mots-de-passe');
+const J = require('./jetons'); const P = require('./mots-de-passe'); const S = require('./sessions'); const { emailCle } = require('./email-cle');
 
 const URL_VERIFICATION = () => process.env.V2_URL_VERIFICATION || 'https://rat-market.fr/fr/verification';
 
@@ -47,4 +47,54 @@ async function verifierAdresse({ jeton, cfg, maintenant = new Date() }) {
     }
     return { statut: 200 };
 }
-module.exports = { inscrire, URL_VERIFICATION, consommerLien, verifierAdresse };
+/** Vérifie un couple adresse/mot de passe. Une adresse inconnue ou invalide paie le même calcul scrypt (verifierFactice) : le temps ne dit rien. */
+async function connecter({ email, motDePasse, cfg, maintenant = new Date() }) {
+    const cle = typeof email === 'string' && email.length <= 254 ? emailCle(email) : null;
+    const mdp = typeof motDePasse === 'string' && motDePasse.length <= 1000 ? motDePasse : '';
+    const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
+    if (!compte) { await P.verifierFactice(mdp); return { ok: false }; }
+    if (!(await P.verifier(mdp, compte.motDePasse))) return { ok: false };
+    const session = await S.creerSession(compte._id, maintenant, cfg.comptes.sessionJours);
+    await col('comptes').updateOne({ _id: compte._id }, { $set: { derniereConnexionLe: maintenant } });
+    return { ok: true, compte, session };
+}
+async function deconnecter(token) {
+    if (typeof token !== 'string' || !token) return 0;
+    return (await col('sessions').deleteOne({ tokenEmpreinte: J.empreinte(token) })).deletedCount;
+}
+const URL_REINIT = () => process.env.V2_URL_REINIT || 'https://rat-market.fr/fr/reinitialisation';
+
+/** Mot de passe oublié : adresse inconnue = rien (ni lien, ni courrier). L'appelant répond 202 dans tous les cas. */
+async function demanderReinit({ email, cfg, courrier, maintenant = new Date() }) {
+    const cle = typeof email === 'string' && email.length <= 254 ? emailCle(email) : null;
+    const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
+    if (!compte) return { envoye: false };
+    const jeton = J.genererJeton();
+    await col('liens_email').insertOne({ empreinte: J.empreinte(jeton), type: 'reinit', compteId: compte._id, creeLe: maintenant,
+        expireLe: new Date(maintenant.getTime() + cfg.comptes.lienHeures * 3600e3), utiliseLe: null });
+    try { await courrier.envoyerReinitialisation(compte.email, `${URL_REINIT()}?jeton=${jeton}`); }
+    catch (e) { console.error(`❌ [v2 mot-de-passe-oublie] envoi du courrier en échec (${e.message})`); }
+    return { envoye: true };
+}
+
+/** Réinitialisation. Ordre : (1) le lien existe et est vivant (sans le consommer), (2) le mot de passe est acceptable, (3) le hachage est prêt,
+ *  (4) SEULEMENT ALORS le lien est consommé (atomique) ; un refus de politique ne brûle donc pas le lien. Révoque toutes les sessions du compte. */
+async function reinitialiser({ jeton, motDePasse, maintenant = new Date() }) {
+    if (typeof jeton !== 'string' || !jeton || jeton.length > 128) return { statut: 404, code: 'CODE_INVALIDE' };
+    const empreinte = J.empreinte(jeton);
+    const vivant = await col('liens_email').findOne({ empreinte, type: 'reinit', utiliseLe: null });
+    if (!vivant) return { statut: 404, code: 'CODE_INVALIDE' };
+    if (!(vivant.expireLe > maintenant)) return { statut: 410, code: 'CODE_EXPIRE' };
+    const compte = await col('comptes').findOne({ _id: vivant.compteId });
+    if (!compte) return { statut: 404, code: 'CODE_INVALIDE' };
+    const faute = P.politique(motDePasse, compte.emailCle);
+    if (faute) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: faute };
+    const hash = await P.hacher(motDePasse);
+    const c = await consommerLien(jeton, 'reinit', maintenant);
+    if (c.echec) return { statut: c.echec === 'expire' ? 410 : 404, code: c.echec === 'expire' ? 'CODE_EXPIRE' : 'CODE_INVALIDE' };
+    await col('comptes').updateOne({ _id: compte._id }, { $set: { motDePasse: hash } });
+    await col('liens_email').updateMany({ compteId: compte._id, type: 'reinit', utiliseLe: null }, { $set: { utiliseLe: maintenant } });
+    await col('sessions').deleteMany({ compteId: compte._id });
+    return { statut: 200 };
+}
+module.exports = { inscrire, URL_VERIFICATION, consommerLien, verifierAdresse, connecter, deconnecter, demanderReinit, reinitialiser };

@@ -1,7 +1,7 @@
 'use strict';
 const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('./sessions'); const svc = require('./service');
-const P = require('./mots-de-passe'); const { emailCle, estJetable } = require('./email-cle');
+const J = require('./jetons'); const P = require('./mots-de-passe'); const { emailCle, estJetable } = require('./email-cle');
 
 const HEURE = 3600e3;
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
@@ -35,6 +35,45 @@ function routesComptes(router, cfg, deps) {
             await svc.inscrire({ email: b.email.normalize('NFKC').trim(), emailCle: cle, motDePasse: b.motDePasse, cfg, courrier });
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 inscription] ${e.message}`); return indispo(res); }
+    });
+
+    // 10 essais par heure et par ADRESSE (clé = empreinte de l'emailCle, adresses inconnues comprises), AVANT toute vérification de mot de passe.
+    const parCompte = L.limiteur({ nom: 'connexion', max: cfg.limites.connexionParCompteHeure, fenetreMs: HEURE, cle: q => {
+        const e = objet(q.body) && typeof q.body.email === 'string' && q.body.email.length <= 254 ? emailCle(q.body.email) : null;
+        return e ? J.empreinte(e) : `invalide-${L.empreinteIp(q.ip)}`;
+    } });
+    router.post('/api/compte/connexion', ...site, parCompte, async (req, res) => {
+        try {
+            const b = objet(req.body) ? req.body : {};
+            const r = await svc.connecter({ email: b.email, motDePasse: b.motDePasse, cfg });
+            if (!r.ok) return repondreErreur(res, 'IDENTIFIANTS', 'Adresse ou mot de passe incorrect');
+            res.setHeader('Set-Cookie', S.cookieSession(r.session.token, cfg));
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json({ success: true, compte: { email: r.compte.email, verifie: r.compte.verifie, creeLe: r.compte.creeLe } });
+        } catch (e) { console.error(`❌ [v2 connexion] ${e.message}`); return indispo(res); }
+    });
+    router.post('/api/compte/deconnexion', ...site, async (req, res) => {
+        try {
+            await svc.deconnecter(S.lireCookie(req));
+            res.setHeader('Set-Cookie', S.cookieEffacement(cfg));
+            return res.status(200).json({ success: true });
+        } catch (e) { console.error(`❌ [v2 deconnexion] ${e.message}`); return indispo(res); }
+    });
+
+    router.post('/api/compte/mot-de-passe-oublie', ...site, parIp('oubli-ip', 10), async (req, res) => {
+        try {
+            let courrier; try { courrier = registre.obtenir('courrier'); } catch { return indispo(res); }
+            await svc.demanderReinit({ email: objet(req.body) ? req.body.email : undefined, cfg, courrier });
+            return res.status(202).json({ success: true });
+        } catch (e) { console.error(`❌ [v2 mot-de-passe-oublie] ${e.message}`); return indispo(res); }
+    });
+    router.post('/api/compte/reinitialiser', ...site, parIp('reinit-ip', 10), async (req, res) => {
+        try {
+            const b = objet(req.body) ? req.body : {};
+            const r = await svc.reinitialiser({ jeton: b.jeton, motDePasse: b.motDePasse });
+            if (r.statut === 200) return res.status(200).json({ success: true });
+            return repondreErreur(res, r.code, r.code === 'MOT_DE_PASSE_FAIBLE' ? 'Mot de passe trop faible' : r.code === 'CODE_EXPIRE' ? 'Lien expiré' : 'Lien invalide', r.detail ? { detail: r.detail } : {});
+        } catch (e) { console.error(`❌ [v2 reinitialiser] ${e.message}`); return indispo(res); }
     });
 
     router.post('/api/compte/verification', ...site, parIp('verification-ip', 30), async (req, res) => {
