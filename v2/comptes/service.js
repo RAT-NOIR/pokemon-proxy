@@ -97,4 +97,25 @@ async function reinitialiser({ jeton, motDePasse, maintenant = new Date() }) {
     await col('sessions').deleteMany({ compteId: compte._id });
     return { statut: 200 };
 }
-module.exports = { inscrire, URL_VERIFICATION, consommerLien, verifierAdresse, connecter, deconnecter, demanderReinit, reinitialiser };
+/** Installations VIVANTES d'un compte, sous la forme publique (jamais d'empreinte). */
+async function installationsDuCompte(compteId) {
+    const l = await col('installations').find({ compteId, revoqueeLe: null }).sort({ creeLe: 1 }).toArray();
+    return l.map(i => ({ id: i._id, libelle: i.libelle, lieeLe: i.lieeLe, derniereAnalyse: i.derniereAnalyseLe }));
+}
+
+/** Suppression : mot de passe revérifié, refus tant qu'il reste des crédits achetés sans renonciation EXPRESSE (`=== true`).
+ *  Rien n'est supprimé avant que ces deux gardes aient passé. */
+async function supprimerCompte({ compte, motDePasse, renonciation }) {
+    if (!(await P.verifier(typeof motDePasse === 'string' ? motDePasse : '', compte.motDePasse))) return { statut: 401, code: 'IDENTIFIANTS' };
+    if ((compte.solde && compte.solde.achete > 0) && renonciation !== true) return { statut: 409, code: 'CREDITS_ACHETES' };
+    const id = compte._id;
+    await col('sessions').deleteMany({ compteId: id });                               // d'abord : le cookie cesse de valoir tout de suite
+    await col('installations').updateMany({ compteId: id }, { $set: { compteId: null, essais: 0 } });
+    await col('mouvements').updateMany({ compteId: id }, { $unset: { compteId: '' }, $set: { supprime: true } });
+    await col('analyses').deleteMany({ porteur: { $in: [`compte:${id}`, String(id)] } });
+    await col('codes_liaison').deleteMany({ compteId: id });
+    await col('liens_email').deleteMany({ compteId: id });
+    await col('comptes').deleteOne({ _id: id });                                       // en dernier : une panne en cours de route se rejoue
+    return { statut: 200 };
+}
+module.exports = { inscrire, URL_VERIFICATION, consommerLien, verifierAdresse, connecter, deconnecter, demanderReinit, reinitialiser, installationsDuCompte, supprimerCompte };

@@ -86,6 +86,27 @@ function routesComptes(router, cfg, deps) {
             return res.status(200).json({ success: true, code: r.code, expire: r.expire });
         } catch (e) { console.error(`❌ [v2 code] ${e.message}`); return indispo(res); }
     });
+    router.get('/api/compte', deps.pret, resoudrePorteur(cfg), exigerSession, async (req, res) => {
+        try {
+            const argent = registre.obtenir('argent'), porteur = req.v2.porteur, compte = porteur.compte;
+            const suite = typeof req.query.suite === 'string' && req.query.suite.length <= 200 ? req.query.suite : undefined;
+            const [solde, hist, installations] = await Promise.all([argent.solde(porteur), argent.historique(porteur, suite), svc.installationsDuCompte(compte._id)]);
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json({ success: true, compte: { email: compte.email, verifie: compte.verifie, creeLe: compte.creeLe }, solde, installations,
+                historique: { lignes: hist.lignes, suite: hist.suite ?? null } });
+        } catch (e) { console.error(`❌ [v2 compte] ${e.message}`); return indispo(res); }
+    });
+    // la suppression partage le plafond de la connexion (10/h/adresse) : une session volée ne devine pas le mot de passe par ici
+    const parCompteSession = L.limiteur({ nom: 'connexion', max: cfg.limites.connexionParCompteHeure, fenetreMs: HEURE, cle: q => J.empreinte(q.v2.porteur.compte.emailCle) });
+    router.delete('/api/compte', ...parSession, parCompteSession, async (req, res) => {
+        try {
+            const b = objet(req.body) ? req.body : {};
+            const r = await svc.supprimerCompte({ compte: req.v2.porteur.compte, motDePasse: b.motDePasse, renonciation: b.renonciation });
+            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'CREDITS_ACHETES' ? 'Des crédits achetés subsistent : renonciation requise' : 'Mot de passe incorrect');
+            res.setHeader('Set-Cookie', S.cookieEffacement(cfg));
+            return res.status(200).json({ success: true });
+        } catch (e) { console.error(`❌ [v2 suppression] ${e.message}`); return indispo(res); }
+    });
     router.delete('/api/compte/installations/:id', ...parSession, async (req, res) => {
         try {
             if (!(await liaison.revoquer(req.v2.porteur.id, req.params.id))) return repondreErreur(res, 'CODE_INVALIDE', 'Introuvable');   // 404 aussi pour l'installation d'un autre : on ne révèle rien
