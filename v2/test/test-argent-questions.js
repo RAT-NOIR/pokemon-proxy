@@ -109,7 +109,7 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     H.v('N2 préalable : question remboursee, solde 3', [(await db.col('questions').findOne({ _id: 'rj:0' })).etat, (await lire(p14)).solde.achete], ['remboursee', 3]);
     const d14 = await Lg.debiter(p14, { scanId: 'rj', cleIdempotence: 'd|rj', maintenant: h(2) }, cfg);
     H.v('   la clé rejouée redébite (I2)', [d14.ok, d14.reessaye, (await lire(p14)).solde.achete], [true, true, 2]);
-    const x14 = await Q.reserverQuestion(p14, d14.credit, { scanId: 'rj', carte: 0, raison: 'egalite', candidats: [111, 222], choix }, cfg, h(2));
+    const x14 = await Q.reserverQuestion(p14, d14.credit, { scanId: 'rj', carte: 0, raison: 'egalite', candidats: [111, 222], choix, cleDebit: d14.cle }, cfg, h(2));
     H.v('   réservation rejouée sur une remboursee : la réponse dit remboursee', [x14.etat, x14.rejoue], ['remboursee', true]);
     H.v('   AUCUN débit sans livraison : solde revenu à 3, aucun débit ouvert', [(await lire(p14)).solde.achete, await db.col('mouvements').countDocuments({ compteId: p14.id, type: 'debit', scanId: 'rj', etat: { $ne: 'rembourse' } })], [3, 0]);
     // 15. N2 (a) — le rendu du débit neuf vise SA ligne seulement : un AUTRE débit ouvert du même scan (autre carte, livré) reste intact, aucun crédit n'est créé
@@ -133,5 +133,19 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     H.v('   la ligne du débit neuf est lisible : rendu-echoue (et reste remboursable plus tard), échec journalisé', [(await db.col('mouvements').findOne({ cleIdempotence: dE.cle })).etat, erreurs.some(e => e.includes('🔴')), (await lire(p16)).solde.achete], ['rendu-echoue', true, 2]);
     const apres = await Lg.rembourser(p16, dE.credit, 'reprise', { scanId: 'ech', compteur: 'question', sansPlafond: true, maintenant: h(3) }, cfg);
     H.v('   une reprise ultérieure rend ce crédit (solde 3)', [apres.rendu, (await lire(p16)).solde.achete], [true, 3]);
+    // 17. (1) cleDebit OBLIGATOIRE : sans elle on ne devine JAMAIS une ligne (une unité de lot ré-essayée et livrée porte aussi un cleOrigine) — rien n'est rendu
+    const p17 = await compte({ solde: { accueil: 0, achete: 4 } }); await poser(p17, { scanId: 'cd17' }); await rep(p17, 'cd17', 'aucune');
+    const d17 = await Lg.debiter(p17, { scanId: 'cd17', cleIdempotence: 'd|cd17', maintenant: h(2) }, cfg);
+    const x17 = await Q.reserverQuestion(p17, d17.credit, { scanId: 'cd17', carte: 0, raison: 'egalite', candidats: [111, 222], choix }, cfg, h(2));
+    H.v('sans cleDebit : non-remboursee, cle-debit-absente, remboursee:false', [x17.etat, x17.remboursee, x17.raisonNonRembourse], ['non-remboursee', false, 'cle-debit-absente']);
+    H.v('   rien n\'est rendu : la ligne neuve reste debite, solde 3 (le débit est visible, pas deviné)', [(await db.col('mouvements').findOne({ cleIdempotence: d17.cle })).etat, (await lire(p17)).solde.achete], ['debite', 3]);
+    // 18. (3) l'écriture d'état « rendu-echoue » échoue ELLE-MÊME : la ligne ne doit pas rester « rembourse » (sans crédit ni trace) — elle reste « rendu-en-cours », visible, jamais reprise seule
+    const p18 = await compte({ solde: { accueil: 0, achete: 3 } }); await poser(p18, { scanId: 'dbl' }); await rep(p18, 'dbl', 'aucune');
+    const d18 = await Lg.debiter(p18, { scanId: 'dbl', cleIdempotence: 'd|dbl', maintenant: h(2) }, cfg);
+    const col18 = db.col, err18 = console.error; console.error = () => { };
+    db.col = n => (n === 'comptes' ? { updateOne: async () => { throw new Error('panne simulée'); } } : n === 'mouvements' ? new Proxy(col18(n), { get: (c, k) => k === 'updateOne' ? async () => { throw new Error('panne simulée 2'); } : c[k].bind(c) }) : col18(n));
+    let x18; try { x18 = await Q.reserverQuestion(p18, d18.credit, { scanId: 'dbl', carte: 0, raison: 'egalite', candidats: [111, 222], choix, cleDebit: d18.cle }, cfg, h(2)); } finally { db.col = col18; console.error = err18; }
+    H.v('double panne : jamais remboursee, la ligne n\'est PAS « rembourse » mais « rendu-en-cours » (visible)', [x18.etat !== 'remboursee', x18.remboursee, (await db.col('mouvements').findOne({ cleIdempotence: d18.cle })).etat], [true, false, 'rendu-en-cours']);
+    H.v('   et un rembourser du scan ne la reprend pas seul (pas de double rendu possible)', [(await Lg.rembourser(p18, d18.credit, 'x', { scanId: 'dbl', compteur: 'question', sansPlafond: true, maintenant: h(3) }, cfg)).rendu, (await lire(p18)).solde.achete], [false, 2]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

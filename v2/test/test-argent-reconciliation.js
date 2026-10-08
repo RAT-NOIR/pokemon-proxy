@@ -44,6 +44,17 @@ const octroi = (p, poche, delta, type = 'octroi') => db.col('mouvements').insert
     await db.col('comptes').updateOne({ _id: pf.id }, { $inc: { 'solde.accueil': 1 } }); await db.col('comptes').updateOne({ _id: pg.id }, { $inc: { 'solde.achete': -7 } });
     const r0 = lance('--base=test_scratch', `--prefixe=${prefixe}`);
     H.v('CLI sans écart : code 0 (les 120 + le non vérifiable ne font pas de faux écart)', r0.status, 0);
+    // 3 bis. N2b — une ligne « rendu-echoue » (ou « rendu-en-cours » : écriture d'état interrompue) NE se voit PAS dans la somme des deltas ; la réconciliation la LISTE et n'est pas « propre » tant qu'il en reste
+    const pe = porteurs[3];
+    const ligne = { compteId: pe.id, le: t, surface: 'scanner', type: 'debit', delta: 0, poche: 'achete', credit: { poche: 'achete' }, scanId: 'ecs', etat: 'rendu-echoue', raisonRendu: 'erreur', cleIdempotence: 'ecs-x', expireLe: new Date('2028-01-01') };
+    const ins = await db.col('mouvements').insertOne(ligne);
+    const re = await R.reconcilier(pe, cfg), rn = await R.reconcilier(porteurs[4], cfg);
+    H.v('ligne rendu-echoue : listée (id, scanId, poche, état), aucun écart de solde, verdict NON propre', [re.ecarts.length, re.rendusEchoues.map(l => [String(l.id) === String(ins.insertedId), l.scanId, l.poche, l.etat]), re.propre], [0, [[true, 'ecs', 'achete', 'rendu-echoue']], false]);
+    H.v('   un porteur sans ligne : liste vide, verdict propre', [rn.rendusEchoues.length, rn.propre], [0, true]);
+    const r2 = lance('--base=test_scratch', `--prefixe=${prefixe}`);
+    H.v('CLI : code 1 tant qu\'une ligne rendu-echoue existe, et elle est imprimée', [r2.status, /rendu-echoue/.test(r2.stdout) && /ecs/.test(r2.stdout)], [1, true]);
+    await db.col('mouvements').deleteOne({ _id: ins.insertedId });
+    H.v('   ligne retirée : code 0', lance('--base=test_scratch', `--prefixe=${prefixe}`).status, 0);
     // 4. --base=test sans --confirmer-production : refus AVANT toute connexion
     const rp = lance('--base=test');
     H.v('--base=test sans --confirmer-production : refusé, code 1, aucune base ouverte', [rp.status, /confirmer-production/.test(rp.stderr + rp.stdout), /Base :/.test(rp.stdout)], [1, true, false]);

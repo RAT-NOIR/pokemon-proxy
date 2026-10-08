@@ -31,18 +31,28 @@ async function reconcilier(porteur) {
         comparer('essai', Number.isInteger(i.essaisInitiaux) ? i.essaisInitiaux + (somme.essai ?? 0) : null, i.essais ?? 0);
         comparer('achete', somme.achete ?? 0, i.achete ?? 0);
     } else throw new Error(`reconcilier : type de porteur inconnu "${porteur.type}"`);
-    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees };
+    const rendusEchoues = await lignesNonRendues(porteur);
+    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, propre: ecarts.length === 0 && rendusEchoues.length === 0 };
+}
+// Une ligne de débit dont le rendu a échoué (« rendu-echoue ») ou n'a pas été confirmé (« rendu-en-cours ») NE se voit PAS dans la somme des deltas (le solde et le journal restent d'accord) :
+// le client est débité sans livraison. Elle est LISTÉE ici et le verdict n'est pas « propre » tant qu'il en reste une.
+async function lignesNonRendues(porteur) {
+    const filtre = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
+    const l = await col('mouvements').find({ ...filtre, type: 'debit', etat: { $in: ['rendu-echoue', 'rendu-en-cours'] } }).toArray();
+    return l.map(m => ({ id: m._id, scanId: m.scanId, porteur: `${porteur.type}:${porteur.id}`, poche: m.poche, etat: m.etat, raison: m.raisonRendu ?? null }));
 }
 // Tous les porteurs de la base (curseur : pas de liste en mémoire)
 async function reconcilierTous() {
-    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [] };
+    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], propre: true };
     for (const [type, nom] of [['compte', 'comptes'], ['installation', 'installations']]) {
         for await (const d of col(nom).find({}, { projection: { _id: 1 } })) {
             const r = await reconcilier({ type, id: d._id });
             bilan.porteurs++; bilan.comparees += r.comparees; bilan.nonVerifiables += r.nonVerifiables.length;
             if (r.ecarts.length) { bilan.avecEcart++; bilan.lignes.push(r); }
+            bilan.rendusEchoues.push(...(r.rendusEchoues ?? []));
         }
     }
+    bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0;
     return bilan;
 }
 module.exports = { reconcilier, reconcilierTous };
@@ -67,7 +77,12 @@ if (require.main === module) {
             console.log('porteur'.padEnd(46) + 'poche'.padEnd(10) + 'attendu'.padStart(9) + 'réel'.padStart(8) + 'écart'.padStart(8));
             for (const l of b.lignes) for (const e of l.ecarts) console.log(l.porteur.padEnd(46) + String(e.poche).padEnd(10) + String(e.attendu).padStart(9) + String(e.reel).padStart(8) + String(e.ecart).padStart(8));
         }
+        console.log(`${b.rendusEchoues.length} ligne(s) de débit au rendu non confirmé (rendu-echoue / rendu-en-cours) — débit sans livraison tant qu'elles restent`);
+        if (b.rendusEchoues.length) {
+            console.log('porteur'.padEnd(46) + 'scanId'.padEnd(24) + 'poche'.padEnd(10) + 'état');
+            for (const l of b.rendusEchoues) console.log(l.porteur.padEnd(46) + String(l.scanId).padEnd(24) + String(l.poche).padEnd(10) + l.etat + (l.raison ? ` (${l.raison})` : '') + `  _id=${l.id}`);
+        }
         await mongoose.disconnect();
-        process.exit(b.avecEcart ? 1 : 0);
+        process.exit(b.propre ? 0 : 1);
     })().catch(e => { console.error('❌', e); process.exit(1); });
 }

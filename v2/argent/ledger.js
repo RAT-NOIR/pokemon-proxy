@@ -155,8 +155,8 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
             if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
         }
         for (const d of pendantes) {
-            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
-            if (!pris) continue;                                                   // un autre chemin vient de la rendre
+            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
+            if (!pris) continue;                                                  // un autre chemin vient de la rendre
             const restituer = () => col('mouvements').updateOne({ _id: d._id }, { $set: { etat: pris.etat } });
             let r;
             try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { await restituer(); throw e; }
@@ -191,7 +191,9 @@ async function rendreUnite(porteur, credit, cfg, now) {
     const r = await rendrePoche(cible, c, cfg, now);
     return { rendu: r.rendu, raison: r.raison, pocheRendue: c.poche, cible };
 }
-const ouvertes = d => d.credit && d.etat !== 'rembourse';
+// « rendu-en-cours » : un rendu commencé et non confirmé (processus tué, écriture d'état échouée) — ni ouverte ni close : jamais reprise seule (le crédit a pu être rendu), listée par la réconciliation.
+const ETATS_CLOS = ['rembourse', 'rendu-en-cours'];
+const ouvertes = d => d.credit && !ETATS_CLOS.includes(d.etat);
 async function rembourser(porteur, credit, motif, o = {}, cfg) {
     if (!credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
     const r = await rendreLeScan(porteur, motif, o, cfg);
@@ -210,12 +212,18 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
     try {
         d = await col('mouvements').findOne({ ...base(porteur), type: 'debit', cleIdempotence: cle });
         if (!d || !d.credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
-        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
+        // La prise écrit « rendu-en-cours » (jamais « rembourse » avant que le crédit soit rendu) : si le processus ou une écriture ultérieure échoue, la ligne reste VISIBLE
+        // (réconciliation) et ne peut être ni reprise seule ni rendue deux fois (ni rembourserLigne ni rendreLeScan ne prennent un « rendu-en-cours »).
+        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' } }, { returnDocument: 'before' });
         if (!pris) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
     } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    const ecrireEtat = async (etat, plus = {}) => {                              // un second essai, puis l'échec est dit : la ligne garde alors « rendu-en-cours »
+        for (let essai = 0; essai < 2; essai++) { try { await col('mouvements').updateOne({ _id: d._id }, { $set: { etat, ...plus } }); return true; } catch (e) { if (essai) console.error(`🔴 [v2 rembourser-ligne] ${cle} : état « ${etat} » non écrit (${e.message}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
+        return false;
+    };
     const echec = async raison => {
         console.error(`🔴 [v2 rembourser-ligne] ${cle} : crédit NON rendu (${raison}) — ligne « rendu-echoue », à rendre à la main ou par la reprise`);
-        try { await col('mouvements').updateOne({ _id: d._id }, { $set: { etat: 'rendu-echoue', raisonRendu: raison } }); } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : état « rendu-echoue » non écrit (${e.message})`); }
+        await ecrireEtat('rendu-echoue', { raisonRendu: raison });
         return { rendu: false, raisonNonRembourse: raison };
     };
     let r;
@@ -223,6 +231,7 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
     if (!r.rendu) return echec(r.raison || 'poche-introuvable');
     try { await col('mouvements').insertOne({ ...base(r.cible), poche: r.pocheRendue, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId: d.scanId, etat: 'rembourse', cleIdempotence: `rl|${cle}`, expireLe: expireMouvement(maintenant, cfg) }); }
     catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : crédit rendu mais trace non écrite (${e.message}) — la réconciliation le dira`); }
+    await ecrireEtat('rembourse');                                              // crédit rendu : si cette écriture échoue, la ligne reste « rendu-en-cours » (listée), jamais rendue une 2e fois
     return { rendu: true, raisonNonRembourse: null };
 }
 module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne };

@@ -45,13 +45,13 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
             if (ex && ex.scanId === scanId && ex.porteur && ex.porteur.type === porteur.type && String(ex.porteur.id) === String(porteur.id)) {
                 // N2 — la clé rejouée après un remboursement a REDÉBITÉ (I2) : aucun débit sans livraison, ce débit neuf est rendu dans le même geste (hors plafond : ce n'est pas une panne)
                 if (ex.etat === 'remboursee') {
-                    // UNIQUEMENT la ligne du débit neuf (cleDebit = `cle` rendue par debiter) ; à défaut, l'unique ligne ouverte de ce scan née d'un ré-essai (cleOrigine) ; sinon on ne devine pas.
-                    let cible = cleDebit;
-                    if (!cible) {
-                        const l = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, etat: { $ne: 'rembourse' }, cleOrigine: { $exists: true } }).toArray();
-                        cible = l.length === 1 ? l[0].cleIdempotence : null;
+                    // UNIQUEMENT la ligne du débit neuf, désignée par `cleDebit` (= `cle` rendue par debiter) — OBLIGATOIRE : on ne devine jamais une ligne
+                    // (une unité de lot ré-essayée et LIVRÉE porte aussi un cleOrigine). Sans elle, rien n'est rendu et la cause est dite.
+                    if (!cleDebit) {
+                        console.error(`🔴 [v2 question-rejeu] ${scanId} : cleDebit absente — le débit neuf d'une question remboursee N'EST PAS rendu (aucune ligne devinée)`);
+                        return { etat: 'non-remboursee', rejoue: true, remboursee: false, raisonNonRembourse: 'cle-debit-absente' };
                     }
-                    const r = await rembourserLigne(porteur, cible, `question:${raison}`, { maintenant }, cfg);
+                    const r = await rembourserLigne(porteur, cleDebit, `question:${raison}`, { maintenant }, cfg);
                     if (r.rendu) return { etat: 'remboursee', rejoue: true, remboursee: true };
                     console.error(`🔴 [v2 question-rejeu] ${scanId} : le débit neuf d'une question remboursee n'a pas été rendu (${r.raisonNonRembourse})`);
                     return { etat: 'non-remboursee', rejoue: true, remboursee: false, raisonNonRembourse: r.raisonNonRembourse };
