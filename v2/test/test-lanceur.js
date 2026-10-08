@@ -1,6 +1,9 @@
 'use strict';
-// Le lanceur ne compte vert qu'un banc qui sort en 0 ET imprime un bilan « N réussis, 0 échoués » avec N > 0.
-// Chaque cas est un faux banc dans fixtures-lanceur/ (sous-dossier : le lanceur normal ne les voit pas).
+// Le lanceur ne compte vert qu'un banc qui sort en 0 ET dont la DERNIÈRE ligne non vide est l'unique bilan « N réussis, 0 échoués »
+// avec N > 0 ; et il refuse tout argument non reconnu AVANT de lancer quoi que ce soit.
+// Faux bancs dans fixtures-lanceur/ (sous-dossier : le lanceur normal ne les voit pas). AUCUNE base Mongo n'est touchée ici :
+// pour les cas d'arguments, le lanceur est COPIÉ dans un dossier jetable à côté d'un faux banc, de sorte que « la suite normale »
+// y soit inoffensive (si le lanceur ignorait un argument, il lancerait ce faux banc et non les vrais).
 const fs = require('fs'), os = require('os'), path = require('path');
 const { spawnSync } = require('child_process');
 const H = require('./_harnais');
@@ -9,19 +12,45 @@ const FIX = path.join(__dirname, 'fixtures-lanceur');
 
 if (process.env.RM_LANCEUR_IMBRIQUE) { H.vrai('imbrication évitée (lanceur ancien qui ignore --dossier)', true); H.bilan(); return; }
 
-const lancer = (dossier) => spawnSync(process.execPath, [LANCEUR, `--dossier=${dossier}`], { encoding: 'utf8', env: { ...process.env, RM_LANCEUR_IMBRIQUE: '1' }, timeout: 120000 });
-const seul = (nom) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-lanceur-')); fs.copyFileSync(path.join(FIX, nom), path.join(d, nom)); return d; };
+const env = { ...process.env, RM_LANCEUR_IMBRIQUE: '1' };
+// cwd = le dossier du script : un chemin vide ou relatif ne peut jamais viser la racine du dépôt (ses test-*.js écrivent dans Mongo).
+const lancer = (script, ...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env, timeout: 120000, cwd: path.dirname(script) });
+const jetable = () => fs.mkdtempSync(path.join(__dirname, '.jetable-lanceur-'));   // DANS v2/test : l'unique racine permise
+const nettoyer = (d) => fs.rmSync(d, { recursive: true, force: true });
+const seul = (nom) => { const d = jetable(); fs.copyFileSync(path.join(FIX, nom), path.join(d, nom)); return d; };
 
-for (const nom of ['test-suspens.js', 'test-zero-reussite.js', 'test-echec-et-reussite.js']) {
-    const d = seul(nom); const r = lancer(d);
+// 1. jugement des bancs
+for (const nom of ['test-suspens.js', 'test-zero-reussite.js', 'test-echec-et-reussite.js', 'test-deux-bilans.js', 'test-texte-apres.js']) {
+    const d = seul(nom); const r = lancer(LANCEUR, `--dossier=${d}`);
     H.v(`${nom} : le lanceur sort en code 1`, r.status, 1);
     H.vrai(`${nom} : le lanceur le NOMME en rouge`, new RegExp(`🔴 ${nom}`).test(r.stdout || ''));
-    fs.rmSync(d, { recursive: true, force: true });
+    nettoyer(d);
 }
-const d = seul('test-vert.js'); const r = lancer(d);
-H.v('test-vert.js : un banc avec bilan 3/0 est compté vert (code 0)', r.status, 0);
-fs.rmSync(d, { recursive: true, force: true });
-const vide = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-lanceur-'));
-H.v('dossier sans banc : code 1', lancer(vide).status, 1);
-fs.rmSync(vide, { recursive: true, force: true });
+{
+    const d = seul('test-vert.js'); const r = lancer(LANCEUR, `--dossier=${d}`);
+    H.v('test-vert.js : un banc avec bilan 3/0 en dernière ligne est compté vert (code 0)', r.status, 0);
+    nettoyer(d);
+    const vide = jetable();
+    H.v('dossier sans banc : code 1', lancer(LANCEUR, `--dossier=${vide}`).status, 1);
+    nettoyer(vide);
+}
+
+// 2. arguments : tout ce qui n'est pas reconnu est refusé AVANT de lancer un banc
+{
+    const bac = jetable();                                          // dossier du lanceur COPIÉ : sa « suite normale » = un faux banc vert
+    fs.copyFileSync(LANCEUR, path.join(bac, 'lancer-tout.js'));
+    fs.copyFileSync(path.join(FIX, 'test-vert.js'), path.join(bac, 'test-vert.js'));
+    const dehors = fs.mkdtempSync(path.join(os.tmpdir(), 'rm-lanceur-'));   // hors de la racine permise
+    fs.copyFileSync(path.join(FIX, 'test-vert.js'), path.join(dehors, 'test-vert.js'));
+    const copie = path.join(bac, 'lancer-tout.js');
+    const temoin = lancer(copie);
+    H.v('témoin : sans argument, le lanceur copié lance son faux banc vert (code 0)', temoin.status, 0);
+    for (const [nom, args] of [['faute de frappe --dosier=x', ['--dosier=x']], ['--dossier sans =', ['--dossier']], ['--dossier= vide', ['--dossier=']],
+        ['argument quelconque', ['bonjour']], ['--dossier= hors de v2/test', [`--dossier=${dehors}`]], ['--dossier= avec .. qui sort', [`--dossier=${path.join(bac, '..', '..')}`]]]) {
+        const r = lancer(copie, ...args);
+        H.v(`${nom} : refus, code 1`, r.status, 1);
+        H.vrai(`${nom} : refusé AVANT de lancer un banc (aucun « === »)`, !/===/.test(r.stdout || ''));
+    }
+    nettoyer(dehors); nettoyer(bac);
+}
 H.bilan();
