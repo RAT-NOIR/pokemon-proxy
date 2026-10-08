@@ -5,7 +5,8 @@ const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });        
 const cfgH = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '2' });
 const t = new Date('2026-10-08T10:00:00Z');                                          // jeudi, semaine ISO 2026-W41, mois 2026-10
 const prendre = async (p, scanId, c = cfg, maintenant = t) => { const r = await Lg.debiter(p, { scanId, cleIdempotence: `d|${scanId}`, maintenant }, c); if (!r.ok) throw new Error(`débit refusé ${scanId} : ${r.code}`); return r.credit; };
-const plaf = async (p, jour, type) => (await db.col('plafonds').findOne({ porteur: `${p.type}:${p.id}`, jour, type }));
+const mouvDebit = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compte' ? { compteId: p.id } : { installationId: p.id }), type: 'debit', scanId });
+const plaf = async(p, jour, type) => (await db.col('plafonds').findOne({ porteur: `${p.type}:${p.id}`, jour, type }));
 (async () => {
     await H.ouvrirBac('test-argent-remboursement.js'); await M.creerIndex();
     // 1. débit puis remboursement
@@ -117,5 +118,47 @@ const plaf = async (p, jour, type) => (await db.col('plafonds').findOne({ porteu
     await Lg.rembourser(pj, cj, 'ia-echec', { scanId: 'unique', maintenant: t }, cfg);
     const bis = []; for (let i = 0; i < 4; i++) bis.push((await Lg.rembourser(pj, cj, 'ia-echec', { scanId: `fantome${i}`, maintenant: t }, cfg)).raisonNonRembourse);
     H.v('   le même crédit présenté sous 4 scanId fantômes : jamais rendu', [bis, (await lire(pj)).solde.achete], [Array(4).fill('aucun-debit'), 9]);
+    // 13. I1 — un LOT à plusieurs unités : CHAQUE unité débitée pour le scan est rendue, une fois chacune, et le lot compte pour UN remboursement au plafond
+    const Lot = require('../argent/lot');
+    const lotDe = async (p, scanId, unites, c = cfg) => { const u0 = await Lg.debiter(p, { scanId, cleIdempotence: scanId, maintenant: t }, c); const s = await Lot.debiterSupplement(p, { scanId, unites: unites - 1, cleIdempotence: `${scanId}s`, maintenant: t }, c); return [u0.credit, ...s.credits]; };
+    const somme = async (p, poche, type) => (await db.col('mouvements').aggregate([{ $match: { compteId: p.id, poche, ...(type ? { type } : {}) } }, { $group: { _id: null, s: { $sum: '$delta' } } }]).toArray())[0]?.s ?? 0;
+    const p13 = await compte({ solde: { accueil: 1, achete: 5 } }); const cr13 = await lotDe(p13, 'lotA', 3);
+    H.v('lot de 3 unités débité sur accueil (1) puis acheté (2)', [cr13.map(c => c.poche), (await lire(p13)).solde], [['accueil', 'achete', 'achete'], { accueil: 0, achete: 3 }]);
+    const l13 = await Lg.rembourserLot(p13, cr13, 'introuvable', { scanId: 'lotA', maintenant: t }, cfg);
+    H.v('   rembourserLot : TOUTES les unités rendues, poche par poche', [l13.rendu, l13.unites, (await lire(p13)).solde], [true, 3, { accueil: 1, achete: 5 }]);
+    H.v('   le lot compte pour UN remboursement au plafond du jour', (await plaf(p13, '2026-10-08', 'panne')).count, 1);
+    H.v('   journal : +1 accueil, +2 acheté (remboursements), 3 débits marqués rembourse', [await somme(p13, 'accueil', 'remboursement'), await somme(p13, 'achete', 'remboursement'), await db.col('mouvements').countDocuments({ compteId: p13.id, type: 'debit', etat: 'rembourse' })], [1, 2, 3]);
+    const l13b = await Lg.rembourserLot(p13, cr13, 'introuvable', { scanId: 'lotA', maintenant: t }, cfg);
+    H.v('   rejoué : deja-rembourse, rien de plus', [l13b, (await lire(p13)).solde], [{ rendu: false, raisonNonRembourse: 'deja-rembourse' }, { accueil: 1, achete: 5 }]);
+    const p13b = await compte({ solde: { accueil: 0, achete: 9 } }); const cr13b = await lotDe(p13b, 'lotB', 3);
+    const rr13 = await Promise.all(Array.from({ length: 10 }, () => Lg.rembourserLot(p13b, cr13b, 'introuvable', { scanId: 'lotB', maintenant: t }, cfg)));
+    H.v('   10 remboursements simultanés du même lot : un seul rend, 3 unités une fois (dénominateur 10)', [rr13.filter(r => r.rendu).length, (await lire(p13b)).solde.achete], [1, 9]);
+    const p13c = await compte({ solde: { accueil: 0, achete: 9 } }); const cr13c = await lotDe(p13c, 'lotC', 3);
+    const ru13 = await Lg.rembourser(p13c, cr13c[0], 'ia-echec', { scanId: 'lotC', maintenant: t }, cfg);
+    H.v('   rembourser (panne sur la requête d\'un lot) rend aussi TOUTES les unités du scan', [ru13.rendu, (await lire(p13c)).solde.achete], [true, 9]);
+    const p13d = await compte({ solde: { accueil: 0, achete: 60 } }); const rl = [];
+    for (let i = 0; i < 6; i++) { const c = await lotDe(p13d, `lotD${i}`, 3); rl.push((await Lg.rembourserLot(p13d, c, 'introuvable', { scanId: `lotD${i}`, maintenant: t }, cfg)).raisonNonRembourse ?? 'rendu'); }
+    H.v('   6 lots de 3 unités : 5 passent (un lot = un compteur), le 6e plafond-jour, ses 3 unités restent débitées', [rl, (await lire(p13d)).solde.achete], [['rendu', 'rendu', 'rendu', 'rendu', 'rendu', 'plafond-jour'], 60 - 18 + 15]);
+    H.v('   rembourserLot sans crédit (administrateur) : aucun-debit', (await Lg.rembourserLot(p13d, [null], 'introuvable', { scanId: 'x', maintenant: t }, cfg)).raisonNonRembourse, 'aucun-debit');
+    // 14. M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat
+    const Q = require('../argent/questions');
+    const p14 = await compte({ solde: { accueil: 0, achete: 3 } }); const c14 = await prendre(p14, 'qrep');
+    await Q.reserverQuestion(p14, c14, { scanId: 'qrep', carte: 0, raison: 'x', candidats: [1, 2], choix: [{ id: 'a', idProduct: 1 }] }, cfg, t);
+    await Q.repondreQuestion(p14, { scanId: 'qrep', carte: 0, choix: 'a' }, cfg, t);
+    H.v('panne après réponse par un candidat : refusée (deja-livre), le débit reste, rien rendu', [(await Lg.rembourser(p14, c14, 'ia-echec', { scanId: 'qrep', maintenant: t }, cfg)).raisonNonRembourse, (await lire(p14)).solde.achete, (await mouvDebit(p14, 'qrep')).etat], ['deja-livre', 2, 'debite']);
+    // 15. M6 — remboursement après liaison : rendu à la poche du COMPTE, pas à la poche morte de l'installation
+    const cpt = await compte({ solde: { accueil: 5, achete: 0 } }); const i15 = await inst({ essais: 3, achete: 2 });
+    const e15 = await prendre(i15, 'lie-essai');
+    await db.col('installations').updateOne({ _id: i15.id }, { $set: { compteId: cpt.id, essais: 0, achete: 0 } });
+    const r15 = await Lg.rembourser(i15, e15, 'ia-echec', { scanId: 'lie-essai', maintenant: t }, cfg);
+    H.v('installation liée entre-temps : l\'essai est rendu sur l\'ACCUEIL du compte (6), l\'installation reste à 0', [r15.rendu, (await lire(cpt)).solde.accueil, (await lire(i15)).essais], [true, 6, 0]);
+    H.v('   le journal du compte porte le +1 (la réconciliation reste vraie)', await somme(cpt, 'accueil'), 1);
+    const i15b = await inst({ essais: 0, achete: 2 }); const b15 = await prendre(i15b, 'lie-achete2');
+    await db.col('installations').updateOne({ _id: i15b.id }, { $set: { compteId: cpt.id, achete: 0 } });
+    H.v('   un crédit acheté est rendu à l\'ACHETÉ du compte', [(await Lg.rembourser(i15b, b15, 'ia-echec', { scanId: 'lie-achete2', maintenant: t }, cfg)).rendu, (await lire(cpt)).solde.achete, (await lire(i15b)).achete], [true, 1, 0]);
+    // 16. une panne PENDANT le rendu restitue l'état du débit (jamais un débit « rembourse » sans crédit rendu)
+    const p16 = await compte({ solde: { accueil: 0, achete: 0 } }); const c16 = await prendre(p16, 'e16', cfgH);
+    casse('hebdo'); await Lg.rembourser(p16, c16, 'ia-echec', { scanId: 'e16', maintenant: t }, cfgH); db.col = colReel;
+    H.v('panne pendant le rendu : le débit est RESTITUÉ à « debite » et le scan peut être remboursé ensuite', [(await mouvDebit(p16, 'e16')).etat, (await Lg.rembourser(p16, c16, 'ia-echec', { scanId: 'e16', maintenant: t }, cfgH)).rendu], ['debite', true]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

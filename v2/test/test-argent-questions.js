@@ -91,5 +91,17 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     H.v('   d\'un abandon remboursé', out[0].facturation, { debite: 0, reserve: 0, rembourse: 1, motif: 'question', raisonNonRembourse: null });
     H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[30].facturation, { debite: 1, reserve: 0, rembourse: 0, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
     H.v('   d\'un lot : rien de plus facturé', rl.facturation, { debite: 0, reserve: 0, rembourse: 0, motif: 'lot', raisonNonRembourse: null });
+    // 13. I3 — réserver DEUX FOIS la même (scanId, carte) est idempotent : ni crédit rendu, ni question touchée
+    const p13 = await compte({ solde: { accueil: 0, achete: 3 } }); const d13 = await Lg.debiter(p13, { scanId: 'dup', cleIdempotence: 'd|dup', maintenant: t }, cfg);
+    const res13 = { scanId: 'dup', carte: 0, raison: 'x', candidats: [111, 222], choix };
+    const a13 = await Q.reserverQuestion(p13, d13.credit, res13, cfg, t), b13 = await Q.reserverQuestion(p13, d13.credit, res13, cfg, t);
+    H.v('réservation rejouée : l\'état existant, SANS repli ni remboursement', [a13.etat, b13.etat, b13.repli ?? null, b13.rejoue, (await lire(p13)).solde.achete], ['en-attente', 'en-attente', null, true, 2]);
+    H.v('   le débit reste en reserve, une seule question', [(await mouv(p13, 'dup')).etat, await db.col('questions').countDocuments({ scanId: 'dup' })], ['reserve', 1]);
+    const c13 = await Promise.all(Array.from({ length: 10 }, () => Q.reserverQuestion(p13, d13.credit, res13, cfg, t)));
+    H.v('   10 réservations simultanées : aucune ne rembourse (dénominateur 10)', [c13.filter(r => r.etat === 'en-attente').length, (await lire(p13)).solde.achete], [10, 2]);
+    const r13 = await rep(p13, 'dup', 'c1');
+    H.v('   puis la réponse par un candidat est facturée sur un crédit TOUJOURS pris', [r13.statut, r13.facturation.debite, (await lire(p13)).solde.achete, (await mouv(p13, 'dup')).etat], [200, 1, 2, 'debite']);
+    const e13 = await Q.reserverQuestion(p13, d13.credit, res13, cfg, t);
+    H.v('   rejouée APRÈS la réponse : l\'état repondue, le débit n\'est pas remis en reserve', [e13.etat, (await mouv(p13, 'dup')).etat, (await lire(p13)).solde.achete], ['repondue', 'debite', 2]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

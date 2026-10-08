@@ -83,5 +83,26 @@ const lire = async p => p.type === 'compte' ? db.col('comptes').findOne({ _id: p
     // 13. une installation DÉJÀ LIÉE à un compte ne débite plus ses poches propres (le porteur est le compte)
     const pl = await inst({ essais: 3, achete: 2, compteId: pa1.id });
     H.v('installation liée : ni essai ni acheté, QUOTA', [(await Lg.debiter(pl, { cleIdempotence: 'liee', maintenant: t }, cfg)).code, (await lire(pl)).essais, (await lire(pl)).achete], ['QUOTA', 3, 2]);
+    // 14. I2 — rejeu d'une clé APRÈS remboursement : une NOUVELLE tentative, débitée à nouveau (sinon une panne retentée serait une analyse gratuite)
+    {
+    const pr = await compte({ solde: { accueil: 0, achete: 5 } });
+    const x1 = await Lg.debiter(pr, { scanId: 'rj', cleIdempotence: 'cle-rj', maintenant: t }, c0);
+    await Lg.rembourser(pr, x1.credit, 'ia-echec', { scanId: 'rj', maintenant: t }, c0);
+    H.v('débit, remboursement : solde revenu à 5', (await lire(pr)).solde.achete, 5);
+    const x2 = await Lg.debiter(pr, { scanId: 'rj', cleIdempotence: 'cle-rj', maintenant: t }, c0);
+    H.v('même clé après remboursement : NOUVEAU débit (ok, reessaye, pas rejoue), solde 4', [x2.ok, x2.reessaye, x2.rejoue ?? false, x2.credit && x2.credit.poche, (await lire(pr)).solde.achete], [true, true, false, 'achete', 4]);
+    const x3 = await Lg.debiter(pr, { scanId: 'rj', cleIdempotence: 'cle-rj', maintenant: t }, c0);
+    H.v('   la même clé encore (tentative non remboursée) : rejoue, AUCUN débit de plus', [x3.rejoue, (await lire(pr)).solde.achete], [true, 4]);
+    await Lg.rembourser(pr, x2.credit, 'ia-echec', { scanId: 'rj', maintenant: t }, c0);
+    const x4 = await Lg.debiter(pr, { scanId: 'rj', cleIdempotence: 'cle-rj', maintenant: t }, c0);
+    H.v('   remboursée une 2e fois puis rejouée : encore une nouvelle tentative (chaîne), solde 4', [x4.reessaye, (await lire(pr)).solde.achete], [true, 4]);
+    await Lg.rembourser(pr, x4.credit, 'ia-echec', { scanId: 'rj', maintenant: new Date(t.getTime() + 86400e3) }, c0);
+    const rs2 = await Promise.all(Array.from({ length: 10 }, () => Lg.debiter(pr, { scanId: 'rj', cleIdempotence: 'cle-rj', maintenant: t }, c0)));
+    H.v('   10 rejeux simultanés après remboursement : UN seul nouveau débit (solde 4), dénominateur 10', [rs2.filter(r => r.ok).length, (await lire(pr)).solde.achete, await db.col('mouvements').countDocuments({ compteId: pr.id, type: 'debit', etat: 'debite' })], [10, 4, 1]);
+    }
+    // 15. M3 — l'administrateur se relit en BASE : un objet porteur forgé ne suffit pas
+    const pf = await compte({ solde: { accueil: 2, achete: 0 } }); pf.administrateur = true;
+    const fg = await Lg.debiter(pf, { scanId: 'forge', cleIdempotence: 'forge', maintenant: t }, c0);
+    H.v('porteur.administrateur forgé sur un compte sans rôle : débité normalement', [fg.administrateur ?? false, fg.credit && fg.credit.poche, (await lire(pf)).solde.accueil], [false, 'accueil', 1]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

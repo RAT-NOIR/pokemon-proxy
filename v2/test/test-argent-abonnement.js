@@ -22,6 +22,12 @@ Module.prototype.require = function (id) { if (id === 'stripe') { tentativesStri
     const c2 = await lire(p1);
     H.v('desactiverAbonnement : actif false, restant conservé', [c2.abonnement.actif, c2.abonnement.restant], [false, 99]);
     H.v('   et inutilisable : QUOTA', (await Lg.debiter(p1, { scanId: 'ab2', cleIdempotence: 'ab2', maintenant: t }, cfg)).code, 'QUOTA');
+    // M9 : relancer l'activation en cours de mois NE redonne PAS un quota plein (restant et mois conservés, plafonnés au nouveau quota)
+    await Ab.activerAbonnement(p1.id, { quotaMensuel: 100, jusquAu: new Date('2027-02-01') });
+    const c2b = await lire(p1);
+    H.v('réactivation en cours de mois : restant 99 et mois conservés, échéance prolongée', [c2b.abonnement.actif, c2b.abonnement.restant, c2b.abonnement.moisCle, c2b.abonnement.jusquAu.toISOString().slice(0, 10)], [true, 99, '2026-10', '2027-02-01']);
+    await Ab.activerAbonnement(p1.id, { quotaMensuel: 50, jusquAu: new Date('2027-02-01') });
+    H.v('   un quota abaissé plafonne le restant (50)', (await lire(p1)).abonnement.restant, 50);
     let leve = null; try { await Ab.activerAbonnement(p1.id, { quotaMensuel: 0, jusquAu: new Date('2027-01-01') }); } catch (e) { leve = e.message; }
     H.v('quota invalide (0) : lève', typeof leve, 'string');
     let leve2 = null; try { await Ab.activerAbonnement(p1.id, { quotaMensuel: 10, jusquAu: new Date('pas une date') }); } catch (e) { leve2 = e.message; }

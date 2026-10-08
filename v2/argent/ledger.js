@@ -49,13 +49,25 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
         if (String(dej.compteId ?? dej.installationId) !== String(porteur.id)) throw new Error('debiter : cleIdempotence appartenant à un autre porteur');
         return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur' };
     };
+    // I2 — une clé dont le débit a été REMBOURSÉ n'est plus un rejeu mais une NOUVELLE tentative (une panne retentée avec la même clé ne doit pas être gratuite) :
+    // elle débite à nouveau sous une clé DÉRIVÉE, unique par maillon de la chaîne (cleOrigine + id du maillon remboursé) ; deux retentatives simultanées se départagent sur cette clé.
+    let cleEff = cleIdempotence, origine = null, reessaye = false;
     if (cleIdempotence) {
         const dej = await col('mouvements').findOne({ cleIdempotence });
-        if (dej) return rejeu(dej);
+        if (dej) {
+            if (!(dej.type === 'debit' && dej.etat === 'rembourse')) return rejeu(dej);
+            rejeu(dej);                                                           // propriété de la clé : lève si elle est à un autre porteur
+            const [fin] = await col('mouvements').find({ cleOrigine: cleIdempotence, type: 'debit' }).sort({ _id: -1 }).limit(1).toArray();
+            const bout = fin || dej;
+            if (bout.etat !== 'rembourse') return rejeu(bout);
+            cleEff = `${cleIdempotence}|retry|${bout._id}`; origine = cleIdempotence; reessaye = true;
+        }
     }
     const mv = { ...base(porteur), le: maintenant, surface: surface ?? porteur.surface, type: 'debit', delta: -1, poche: null, credit: null, motif: null,
-                 scanId, etat: 'debite', cleIdempotence, expireLe: expireMouvement(maintenant, cfg) };
-    if (porteur.administrateur) {
+                 scanId, etat: 'debite', cleIdempotence: cleEff, ...(origine ? { cleOrigine: origine } : {}), expireLe: expireMouvement(maintenant, cfg) };
+    // M3 — « administrateur » ne se croit pas sur l'objet porteur : il se relit en base (comptes.role), comme la vérification de l'hebdo
+    const admin = porteur.administrateur === true && porteur.type === 'compte' && (await col('comptes').countDocuments({ _id: porteur.id, role: 'administrateur' })) > 0;
+    if (admin) {
         Object.assign(mv, { delta: 0, motif: 'administrateur' });
         try { await col('mouvements').insertOne(mv); } catch (e) { if (e.code !== 11000) throw e; }
         return { ok: true, administrateur: true, credit: null };
@@ -63,8 +75,8 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     let credit = null;
     for (const poche of P.ordreDe(porteur, cfg)) { credit = await essayerPoche(poche, porteur, cfg, maintenant); if (credit) break; }
     if (!credit) {
-        if (cleIdempotence) {   // un jumeau de même clé a peut-être gagné pendant que ce refus se décidait : c'est un rejeu, pas un refus
-            const dej = await col('mouvements').findOne({ cleIdempotence });
+        if (cleEff) {   // un jumeau de même clé a peut-être gagné pendant que ce refus se décidait : c'est un rejeu, pas un refus
+            const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
             if (dej) return rejeu(dej);
         }
         return { ok: false, code: porteur.compte && !porteur.compte.verifie ? 'VERIFICATION' : 'QUOTA' };
@@ -72,12 +84,12 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     mv.poche = credit.poche; mv.credit = credit;
     try { await col('mouvements').insertOne(mv); }
     catch (e) {
-        if (e.code !== 11000 || !cleIdempotence) throw e;
+        if (e.code !== 11000 || !cleEff) throw e;
         await rendrePoche(porteur, credit, cfg, maintenant);                   // une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
-        const dej = await col('mouvements').findOne({ cleIdempotence });
+        const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
         return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };
     }
-    return { ok: true, credit };
+    return reessaye ? { ok: true, credit, reessaye: true } : { ok: true, credit };
 }
 // rendrePoche : ne rend JAMAIS plus que ce qui a été pris (chaque filtre porte son plafond)
 async function rendrePoche(porteur, credit, cfg, now) {
@@ -105,32 +117,85 @@ async function incPlafond(porteurCle, jour, type, now) {   // même schéma que 
     try { return await col('plafonds').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
     catch (e) { if (e.code !== 11000) throw e; return col('plafonds').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
 }
-// rembourser : ordre = CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → rendrePoche → si rien rendu, libérer claim ET compteur.
-async function rembourser(porteur, credit, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, maintenant = new Date() } = {}, cfg) {
-    if (!credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+// rendreLeScan : ordre = débits enregistrés → CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → unité par unité (prise atomique, rendu, trace) → si rien rendu, libérer claim ET compteur.
+async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, maintenant = new Date() } = {}, cfg) {
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
-    const cle = `rb|${scanId}`, jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
+    let cle = `rb|${scanId}`;
+    const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
     const type = compteur === 'question' ? 'question' : 'panne', plafond = cfg.plafonds[type], porteurCle = `${porteur.type}:${porteur.id}`;
-    try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: credit.poche, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }
+    // « ne rend jamais plus que ce qui a été pris » : on juge sur les DÉBITS enregistrés pour ce scan et CE porteur, jamais sur un objet `credit` présenté par l'appelant
+    let pendantes;
+    try {
+        const debits = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, delta: -1 }).toArray();
+        if (!debits.some(d => d.credit)) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+        pendantes = debits.filter(ouvertes);
+        if (!pendantes.length) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
+        // une NOUVELLE tentative (même clé d'idempotence rejouée après un premier remboursement, I2) est un autre débit du même scan : sa claim porte l'id de sa 1re unité
+        pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
+        if (pendantes[0].cleOrigine) cle = `rb|${scanId}|${pendantes[0]._id}`;
+        // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
+        if (compteur !== 'question' && await col('questions').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
+            return { rendu: false, raisonNonRembourse: 'deja-livre' };
+    } catch (e) { console.error(`❌ [v2 rembourser] lecture des débits : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 0, poche: null, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }
     catch (e) { if (e.code === 11000) return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; console.error(`❌ [v2 rembourser] claim : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let compteurPris = false;
     const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -1 } }); };
+    const rendus = [];
+    let premiereRaison = null;
     try {
-        // « ne rend jamais plus que ce qui a été pris » : le remboursement se juge sur le DÉBIT enregistré pour ce scan et CE porteur,
-        // jamais sur l'objet `credit` que l'appelant présente (un scanId fantôme ou une poche plus riche ne rend rien de plus).
-        const debit = await col('mouvements').findOne({ ...base(porteur), type: 'debit', scanId, delta: -1 });
-        if (!debit || !debit.credit) { await liberer(); return { rendu: false, raisonNonRembourse: 'aucun-debit' }; }
-        if (debit.etat === 'rembourse') { await liberer(); return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; }
-        if (debit.credit.poche !== credit.poche) console.error(`🔴 [v2 rembourser] ${scanId} : poche présentée « ${credit.poche} » ≠ poche débitée « ${debit.credit.poche} » — la poche DÉBITÉE est rendue`);
-        credit = debit.credit;
+        // I1 — le remboursement rend CHAQUE unité débitée pour ce scan (un lot = 1 débit + des suppléments au même scanId), jugée sur les débits ENREGISTRÉS ;
+        // une unité n'est rendue qu'une fois (le passage de son débit à « rembourse » est la prise atomique), et tout le scan compte pour UN seul remboursement au plafond.
+        pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (!sansPlafond) {
             const c = await incPlafond(porteurCle, jour, type, maintenant); compteurPris = true;
             if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
         }
-        const { rendu, raison } = await rendrePoche(porteur, credit, cfg, maintenant);
-        if (!rendu) { await liberer(); return { rendu: false, raisonNonRembourse: raison }; }
-        await col('mouvements').updateOne({ _id: debit._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } });
-        return { rendu: true, raisonNonRembourse: null };
-    } catch (e) { try { await liberer(); } catch (_) { /* la réconciliation (B3.6) le dira */ } console.error(`❌ [v2 rembourser] ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+        for (const d of pendantes) {
+            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
+            if (!pris) continue;                                                   // un autre chemin vient de la rendre
+            const restituer = () => col('mouvements').updateOne({ _id: d._id }, { $set: { etat: pris.etat } });
+            let r;
+            try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { await restituer(); throw e; }
+            if (!r.rendu) { await restituer(); premiereRaison = premiereRaison || r.raison; continue; }
+            // la trace : la ligne-claim `rb|scanId` devient celle de la 1re unité rendue, les suivantes ont la leur (`rb|scanId#k`) — somme(delta) reste égale au solde
+            const cible = r.cible, ligne = { ...base(cible), poche: r.pocheRendue };
+            if (!rendus.length) await col('mouvements').updateOne({ cleIdempotence: cle }, { $set: { delta: 1, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
+            else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, etat: 'rembourse', cleIdempotence: `${cle}#${rendus.length}`, expireLe: expireMouvement(maintenant, cfg) });
+            rendus.push(d._id);
+        }
+        if (!rendus.length) { await liberer(); return { rendu: false, raisonNonRembourse: premiereRaison || 'poche-introuvable' }; }
+        return { rendu: true, raisonNonRembourse: null, unites: rendus.length, ...(rendus.length < pendantes.length ? { partiel: true, raisonPartielle: premiereRaison } : {}) };
+    } catch (e) {
+        console.error(`❌ [v2 rembourser] ${e.message}`);
+        if (rendus.length) return { rendu: true, raisonNonRembourse: null, unites: rendus.length, partiel: true, raisonPartielle: 'erreur' };   // des unités SONT rendues et tracées : on garde claim et compteur
+        try { await liberer(); } catch (_) { /* la réconciliation (B3.6) le dira */ }
+        return { rendu: false, raisonNonRembourse: 'erreur' };
+    }
 }
-module.exports = { debiter, rendrePoche, essayerPoche, rembourser };
+// M6 — le porteur effectif d'une unité : une installation LIÉE entre-temps n'a plus de poches propres, le crédit est rendu à celles du COMPTE (essai → accueil, plafonné ; acheté → acheté).
+async function rendreUnite(porteur, credit, cfg, now) {
+    let cible = porteur, c = credit;
+    if (porteur.type === 'installation') {
+        const i = await col('installations').findOne({ _id: porteur.id }, { projection: { compteId: 1 } });
+        if (i && i.compteId) {
+            cible = { type: 'compte', id: i.compteId };
+            c = { poche: credit.poche === 'essai' ? 'accueil' : credit.poche };
+            if (!['accueil', 'achete'].includes(c.poche)) return { rendu: false, raison: 'poche-introuvable', pocheRendue: c.poche, cible };
+        }
+    }
+    const r = await rendrePoche(cible, c, cfg, now);
+    return { rendu: r.rendu, raison: r.raison, pocheRendue: c.poche, cible };
+}
+const ouvertes = d => d.credit && d.etat !== 'rembourse';
+async function rembourser(porteur, credit, motif, o = {}, cfg) {
+    if (!credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+    const r = await rendreLeScan(porteur, motif, o, cfg);
+    return { rendu: r.rendu, raisonNonRembourse: r.raisonNonRembourse };
+}
+// rembourserLot : rend TOUTES les unités du scan (B1b l'appelle pour un lot entièrement introuvable / sans prix). `credits` ne sert qu'à refuser un lot sans aucun débit (administrateur) : les unités se lisent au journal.
+async function rembourserLot(porteur, credits, motif, o = {}, cfg) {
+    if (!Array.isArray(credits) || !credits.some(Boolean)) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+    return rendreLeScan(porteur, motif, o, cfg);
+}
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot };

@@ -6,7 +6,10 @@ const col = nom => db.col(nom);
 async function activerAbonnement(compteId, { quotaMensuel, jusquAu } = {}) {
     if (!Number.isInteger(quotaMensuel) || quotaMensuel < 1) throw new Error(`activerAbonnement : quotaMensuel invalide (${quotaMensuel})`);
     if (!(jusquAu instanceof Date) || Number.isNaN(jusquAu.getTime())) throw new Error('activerAbonnement : jusquAu doit être une date valide');
-    const r = await col('comptes').updateOne({ _id: compteId }, { $set: { abonnement: { actif: true, quotaMensuel, moisCle: null, restant: 0, jusquAu } } });
+    // M9 : le mois ET le restant déjà écrits sont CONSERVÉS (plafonnés au nouveau quota) — relancer l'activation en cours de mois ne redonne pas un quota plein ;
+    // une première activation part de moisCle null / restant 0, et le premier débit du mois recharge.
+    const r = await col('comptes').updateOne({ _id: compteId }, [{ $set: { abonnement: { actif: true, quotaMensuel, jusquAu,
+        moisCle: { $ifNull: ['$abonnement.moisCle', null] }, restant: { $min: [{ $ifNull: ['$abonnement.restant', 0] }, quotaMensuel] } } } }]);
     return { ok: r.matchedCount === 1 };
 }
 // `restant` est CONSERVÉ mais inutilisable : le débit exige actif:true.

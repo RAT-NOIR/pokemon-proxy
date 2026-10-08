@@ -32,12 +32,26 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
         return { etat: r.rendu ? 'remboursee' : 'non-remboursee', repli: cause, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse };
     };
     if (!scanId) return repli('aucun identifiant de scan');
+    const _id = idQuestion(scanId, carte);
     try {
-        if (!lot) await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: 'debite' }, { $set: { etat: 'reserve' } });   // débité à la réponse, rendu à l'abandon
-        await col('questions').insertOne({ _id: idQuestion(scanId, carte), scanId, carte, porteur: { type: porteur.type, id: porteur.id }, surface: porteur.surface ?? null,
+        await col('questions').insertOne({ _id, scanId, carte, porteur: { type: porteur.type, id: porteur.id }, surface: porteur.surface ?? null,
             credit, raison: raison ?? null, choix, candidats: (candidats || []).filter(Number.isFinite), poseeLe: maintenant, etat: 'en-attente', reponse: null,
             priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: Boolean(lot) });
-    } catch (e) { return repli(`écriture refusée (${e.message})`); }
+    } catch (e) {
+        // I3 — une réservation REJOUÉE pour la même (scanId, carte) est IDEMPOTENTE : elle rend l'état existant, ne touche ni au crédit ni à la question.
+        // Seule une ligne qui n'est pas CELLE de ce porteur et de ce scan (corrompue, étrangère) part au repli.
+        if (e.code === 11000) {
+            const ex = await col('questions').findOne({ _id });
+            if (ex && ex.scanId === scanId && ex.porteur && ex.porteur.type === porteur.type && String(ex.porteur.id) === String(porteur.id)) return { etat: ex.etat, rejoue: true };
+        }
+        return repli(`écriture refusée (${e.message})`);
+    }
+    try {
+        if (!lot) await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: 'debite' }, { $set: { etat: 'reserve' } });   // débité à la réponse, rendu à l'abandon
+    } catch (e) {
+        try { await col('questions').deleteOne({ _id, etat: 'en-attente' }); } catch (_) { /* le repli rend le crédit : la question orpheline ne peut plus être répondue */ }
+        return repli(`réserve refusée (${e.message})`);
+    }
     return { etat: 'en-attente' };
 }
 
