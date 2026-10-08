@@ -240,11 +240,11 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         }
         const appelsCurseur = [];
         const fauxCursor = {};
-        for (const nom of nomsCurseur) fauxCursor[nom] = function () { appelsCurseur.push(nom); return nom === 'toArray' ? Promise.resolve([]) : this; };
+        for (const nom of nomsCurseur) fauxCursor[nom] = function () { appelsCurseur.push(nom); return nom === 'toArray' ? Promise.resolve([]) : (nom === 'next' || nom === 'tryNext') ? null : this; };
         for (const g of accesseurs) Object.defineProperty(fauxCursor, g, { get() { appelsCurseur.push(`get:${g}`); return { ECRITURE_POSSIBLE: true }; } });
         fauxCursor[Symbol.asyncIterator] = async function* () { appelsCurseur.push('asyncIterator'); };
         fauxCursor.nimporteQuoi = function () { appelsCurseur.push('nimporteQuoi'); return this; };
-        const fauxColl = new Proxy({}, { get: (_, m) => (...a) => { appels.push(`coll.${String(m)}`); return fauxCursor; } });
+        const fauxColl = new Proxy({}, { get: (_, m) => (...a) => { appels.push(`coll.${String(m)}`); return m === 'find' || m === 'aggregate' ? fauxCursor : { _id: 1 }; } });   // findOne/count/distinct rendent un document, plus un curseur
         const fauxDb = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => { appels.push('db.listCollections'); return fauxCursor; }, dropDatabase: async () => { appels.push('db.dropDatabase'); } };
         const F = B.facadeLecture(fauxDb, async () => { });
         const nonLevee = async f => { try { await f(); return false; } catch (e) { return /LECTURE SEULE/.test(e.message); } };
@@ -263,7 +263,7 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         verifier('façade : databaseName lisible, db renvoie la façade elle-même (jamais le Db brut)', [F.databaseName, F.db === F], ['test', true]);
 
         // ── LE CURSEUR : enveloppé, à liste fermée, jamais le curseur natif (qui porte out(), addStage(), clone(), et l'accesseur client)
-        const AUTORISES = new Set(['toArray', 'next', 'tryNext', 'hasNext', 'forEach', 'close', 'batchSize', 'maxTimeMS', 'stream', 'limit', 'skip', 'sort', 'project', 'match', 'group', 'unwind', 'map']);
+        const AUTORISES = new Set(['toArray', 'next', 'tryNext', 'hasNext', 'forEach', 'close', 'batchSize', 'maxTimeMS', 'limit', 'skip', 'sort', 'project', 'match', 'group', 'unwind', 'map']);
         verifier(`le faux curseur porte les méthodes du VRAI (${nomsCurseur.size} méthodes, ${accesseurs.size} accesseurs lus sur AggregationCursor et FindCursor), dont out, addStage, clone, explain et l'accesseur client`,
             [['out', 'addStage', 'clone', 'explain', 'rewind'].every(m => nomsCurseur.has(m)), accesseurs.has('client')], [true, true]);
         appels.length = 0; appelsCurseur.length = 0;
@@ -282,14 +282,94 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
             ['aggregate().sort().limit().addStage($out)', () => F.collection('x').aggregate([]).sort({ a: 1 }).limit(5).addStage({ $out: 'y' })], ['find().sort().client', () => F.collection('x').find({}).sort({ a: 1 }).client],
             ['find().limit().skip().project().clone()', () => F.collection('x').find({}).limit(2).skip(1).project({ a: 1 }).clone()], ['find().map().out()', () => F.collection('x').find({}).map(d => d).out('y')],
             ['aggregate().match({$out})', () => F.collection('x').aggregate([]).match({ $out: 'y' })], ['aggregate().group({$merge})', () => F.collection('x').aggregate([]).group({ $merge: { into: 'y' } })],
-            ['aggregate().unwind().lookup()', () => F.collection('x').aggregate([]).unwind('$a').lookup({ from: 'y' })]];
-        verifier('curseur : les chaînes (constructeurs autorisés puis out, addStage, client, clone, lookup) lèvent toutes « LECTURE SEULE »', (await Promise.all(chaines.map(async ([nom, f]) => (await nonLevee(f)) ? null : nom))).filter(Boolean), []);
+            ['aggregate().unwind().lookup()', () => F.collection('x').aggregate([]).unwind('$a').lookup({ from: 'y' })],
+            // les trois chaînes nommées par la relecture du tour 4 : batchSize/maxTimeMS rendent `this` dans le pilote, stream() porte `_cursor`
+            ['aggregate().batchSize(1).out()', () => F.collection('x').aggregate([]).batchSize(1).out('y')], ['aggregate().maxTimeMS(1).addStage($merge)', () => F.collection('x').aggregate([]).maxTimeMS(1).addStage({ $merge: 'y' })],
+            ['aggregate().stream()._cursor', () => F.collection('x').aggregate([]).stream()._cursor]];
+        verifier('curseur : les chaînes (constructeurs autorisés puis out, addStage, client, clone, lookup ; batchSize/maxTimeMS puis out/addStage ; stream()._cursor) lèvent toutes « LECTURE SEULE »', (await Promise.all(chaines.map(async ([nom, f]) => (await nonLevee(f)) ? null : nom))).filter(Boolean), []);
+        verifier('curseur : après toutes ces chaînes, 0 appel d\'écriture (out, addStage, clone, stream…) n\'a atteint le curseur natif', appelsCurseur.filter(a => !AUTORISES.has(a)), []);
         appelsCurseur.length = 0;
         const c1 = F.collection('x').aggregate([{ $match: {} }]);
         const lus = [await c1.sort({ a: 1 }).limit(3).skip(1).project({ a: 1 }).match({ b: 1 }).group({ _id: '$a' }).unwind('$a').toArray(), await c1.next(), await c1.tryNext(), await c1.hasNext(), await c1.forEach(() => { }), await c1.close()];
         for await (const _ of F.collection('x').find({})) { /* itère */ }
-        const lectureOk = appelsCurseur.every(a => AUTORISES.has(a) || a === 'asyncIterator');
-        verifier('curseur : les lectures de la liste fermée (toArray, next, tryNext, hasNext, forEach, close, constructeurs, for await) passent jusqu\'au curseur natif, et rien d\'autre', [lectureOk, appelsCurseur.includes('toArray'), appelsCurseur.includes('asyncIterator'), lus.length], [true, true, true, 6]);
+        const lectureOk = appelsCurseur.every(a => AUTORISES.has(a));
+        verifier('curseur : les lectures de la liste fermée (toArray, next, tryNext, hasNext, forEach, close, constructeurs, for await) passent jusqu\'au curseur natif, et rien d\'autre ; le for await passe par next() de l\'ENVELOPPE, jamais par l\'itérateur natif', [lectureOk, appelsCurseur.includes('toArray'), !appelsCurseur.includes('asyncIterator') && appelsCurseur.includes('next'), lus.length], [true, true, true, 6]);
+
+        // ── 🔑 TOUR 4 : LA GARDE JUGE CE QUI SORT, PAS LES NOMS. Aucune des vérifications ci-dessous ne lit la liste des méthodes autorisées : elle
+        // SONDE chaque nom du vrai prototype, observe si l'enveloppe répond ou lève, et juge la VALEUR rendue. Si l'on ajoutait demain à la liste
+        // autorisée une méthode qui rend le natif (batchSize l'était, stream aussi), ces sondes échoueraient sans qu'on les ait retouchées.
+        const { Readable } = require('stream'); const { EventEmitter } = require('events');
+        const mongodbReel = require('mongodb');
+        class NatifMarque { constructor() { this._cursor = { out() { } }; this.client = {}; } }   // un faux flux (avec `_cursor`) / faux client natif
+        const fauxQui = rendre => {
+            const f = {};
+            for (const nom of nomsCurseur) f[nom] = function () { return rendre(this, nom); };
+            for (const g of accesseurs) Object.defineProperty(f, g, { get() { return rendre(this, g); } });
+            f.nimporteQuoi = function () { return rendre(this, 'nimporteQuoi'); };
+            f[Symbol.asyncIterator] = function () { return rendre(this, 'asyncIterator'); };
+            return f;
+        };
+        const enveloppeDe = fauxC => B.facadeLecture({ databaseName: 'test', collection: () => ({ find: () => fauxC, aggregate: () => fauxC }), listCollections: () => fauxC }, async () => { }).collection('x').find({});
+        const exploration = async fauxC => {
+            const env = enveloppeDe(fauxC), bilan = { autorisees: [], sortis: [], inattendus: [] };
+            const sur = r => r === env || r == null || (typeof r !== 'object' && typeof r !== 'function') || (Array.isArray(r) && r.length === 0);
+            for (const nom of [...nomsCurseur, ...accesseurs, 'nimporteQuoi']) {
+                let r, leve = null;
+                try { r = await Promise.race([Promise.resolve(env[nom]?.(() => { }, {})), new Promise((_, no) => setTimeout(() => no(new Error('délai : thenable natif attendu pour rien')), 100))]); } catch (e) { leve = e; }
+                if (leve) { if (!/LECTURE SEULE/.test(leve.message)) bilan.inattendus.push(`${nom} : ${leve.message}`); continue; }
+                bilan.autorisees.push(nom);
+                if (!sur(r)) bilan.sortis.push(nom);
+            }
+            return bilan;
+        };
+        const rendantThis = await exploration(fauxQui(f => f));
+        verifier(`sortie : un curseur dont CHAQUE méthode du vrai prototype (${nomsCurseur.size}) rend this : toute méthode que l'enveloppe laisse répondre rend l'ENVELOPPE (0 objet natif sorti, 0 erreur autre que « LECTURE SEULE »)`,
+            [rendantThis.sortis, rendantThis.inattendus, rendantThis.autorisees.length >= 10], [[], [], true]);
+        const natifs = { 'objet natif marqué (faux flux/client)': () => new NatifMarque(), 'promesse d\'un objet natif': () => Promise.resolve(new NatifMarque()), 'flux Readable réel': () => Readable.from([]),
+            'EventEmitter': () => new EventEmitter(), 'fonction': () => () => 1, 'MongoClient réel': () => new mongodbReel.MongoClient('mongodb://127.0.0.1:1'), 'thenable': () => ({ then() { } }), 'tableau d\'objets natifs': () => [new NatifMarque()],
+            'document portant un objet natif': () => ({ a: { b: new NatifMarque() } }) };
+        const natifsSortis = [];
+        for (const [quoi, fabriquer] of Object.entries(natifs)) {
+            const b = await exploration(fauxQui(() => fabriquer()));
+            if (b.autorisees.length || b.inattendus.length) natifsSortis.push(`${quoi} : sortie par ${[...b.autorisees, ...b.inattendus].slice(0, 4).join(', ')}`);
+        }
+        verifier(`sortie : un curseur dont CHAQUE méthode rend un objet natif (${Object.keys(natifs).length} natures) : l'enveloppe LÈVE « LECTURE SEULE » pour chaque nom — aucune méthode ne le laisse sortir`, natifsSortis, []);
+        // les callbacks et l'itérateur : seuls des DOCUMENTS en sortent
+        const recus = [];
+        const fauxCb = fauxQui(f => f); fauxCb.forEach = async function (fn) { fn(new NatifMarque()); }; fauxCb.map = function (fn) { fn(new NatifMarque()); return this; };
+        const cbLeves = [];
+        for (const m of ['forEach', 'map']) if (!await nonLevee(() => enveloppeDe(fauxCb)[m](d => recus.push(d)))) cbLeves.push(m);
+        verifier('callback : forEach(fn) et map(fn) ne passent JAMAIS un objet natif à la fonction (elle n\'est pas appelée, l\'enveloppe lève)', [cbLeves, recus.length], [[], 0]);
+        const fauxDocs = fauxQui(f => f); fauxDocs.forEach = async function (fn) { fn({ a: 1 }); fn({ a: 2 }); };
+        const docsRecus = []; await enveloppeDe(fauxDocs).forEach(d => docsRecus.push(d));
+        verifier('callback : un document (objet simple) arrive au callback', docsRecus, [{ a: 1 }, { a: 2 }]);
+        let itNatif = 0; const reste = [{ a: 1 }, { a: 2 }];
+        const fauxIt = fauxQui(f => f); fauxIt.next = async () => reste.shift() ?? null; fauxIt.close = async () => { }; fauxIt[Symbol.asyncIterator] = () => { itNatif++; return (async function* () { yield new NatifMarque(); })(); };
+        const itLus = []; for await (const d of enveloppeDe(fauxIt)) itLus.push(d);
+        verifier('itérateur : for await est écrit par l\'enveloppe (son propre next()), l\'itérateur natif n\'est jamais appelé', [itLus, itNatif], [[{ a: 1 }, { a: 2 }], 0]);
+        const fauxItNatif = fauxQui(f => f); fauxItNatif.next = async () => new NatifMarque(); fauxItNatif.close = async () => { }; fauxItNatif[Symbol.asyncIterator] = () => ({ next: async () => ({ done: true, value: undefined }) });
+        verifier('itérateur : un next() natif qui rend autre chose qu\'un document fait LEVER le for await', await nonLevee(async () => { for await (const _ of enveloppeDe(fauxItNatif)) { /* rien */ } }), true);
+        // la fonction de jugement elle-même (documents acceptés, tout le reste refusé) et les méthodes de COLLECTION qui rendent une valeur
+        if (typeof B.sortieSure !== 'function') verifier('sortieSure est exportée (une seule fonction juge ce qui sort)', typeof B.sortieSure, 'function');
+        else {
+            const { ObjectId, Decimal128, Binary, Long } = mongodbReel;
+            const nu = Object.assign(Object.create(null), { a: 1 });
+            const acceptes = [undefined, null, true, 3, 'x', { a: 1 }, nu, [], [{ a: 1 }, { b: [1, 2, { c: null }] }], { _id: new ObjectId(), d: new Date(), x: Decimal128.fromString('1.5'), b: new Binary(Buffer.from('ab')), l: Long.fromNumber(7) }, [new ObjectId(), new Date()]];
+            const refuses = [Symbol('s'), () => 1, new NatifMarque(), Readable.from([]), new EventEmitter(), new Map(), new (class Autre { })(), { f() { } }, { a: [{ b: new EventEmitter() }] }, [() => 1], Buffer.from('x'), new mongodbReel.MongoClient('mongodb://127.0.0.1:1')];
+            const mal = [];
+            for (const v of acceptes) { try { if (await B.sortieSure(v) !== v) mal.push(`accepté mais altéré : ${typeof v}`); } catch (e) { mal.push(`refusé à tort : ${String(e.message).slice(0, 40)}`); } }
+            for (const v of refuses) { if (!await nonLevee(async () => B.sortieSure(v))) mal.push(`laissé passer : ${typeof v === 'object' ? v?.constructor?.name : typeof v}`); }
+            if (!await nonLevee(() => B.sortieSure(Promise.resolve(new NatifMarque())))) mal.push('promesse d\'un natif laissée passer');
+            if ((await B.sortieSure(Promise.resolve({ a: 1 })))?.a !== 1) mal.push('promesse d\'un document refusée');
+            verifier(`sortieSure : ${acceptes.length} valeurs/documents acceptés (ObjectId, Date, Decimal128, Binary, Long à l'intérieur compris), ${refuses.length + 1} sorties refusées (curseur/flux/client/fonction/EventEmitter/Map/instance de classe/Buffer/promesse d'un natif)`, mal, []);
+        }
+        const natifColl = new Proxy({}, { get: () => async () => new NatifMarque() });
+        const Fn = B.facadeLecture({ databaseName: 'test', collection: () => natifColl, listCollections: () => fauxCursor }, async () => new NatifMarque());
+        const collLevees = [];
+        for (const m of ['findOne', 'countDocuments', 'estimatedDocumentCount', 'distinct']) if (!await nonLevee(() => Fn.collection('x')[m]({}))) collLevees.push(`collection.${m}`);
+        verifier('collection : findOne, countDocuments, estimatedDocumentCount et distinct qui rendraient un objet natif LÈVENT « LECTURE SEULE » (la même fonction de sortie)', collLevees, []);
+        verifier('db.close() : la valeur de fermeture du pilote (cx.close() rend la connexion mongoose, ici un objet natif) est JETÉE — close rend undefined', await Fn.close(), undefined);
+        appelsCurseur.length = 0;
 
         // connexionProduction / connexionCartes rendent la FAÇADE (preuve de comportement, faux mongoose sans réseau) : le Db brut n'en sort jamais
         const dbBrut = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => fauxCursor };
