@@ -93,20 +93,54 @@ function faussesReponses(corps = XML, ok = true) { let n = 0; return { appels: (
 
     // ── échecs réseau : jamais d'exception, le jour n'est pas consommé
     {
+        // un essai raté est BORNÉ (CLAUDE.md §38) : marque du jour conservée avec essais/dernierEssaiLe, 1 h entre deux essais, 3 essais au plus par jour
+        const H1 = 3600 * 1000, t0 = J8_17H.getTime(), a_ = k => new Date(t0 + k * H1);   // 17 h, 18 h, 19 h, 20 h Paris (même jour)
         await vider();
         let n = 0;
         const casse = async () => { n++; throw new Error('réseau coupé'); };
-        const a = await T.rafraichirTaux({ fetch: casse, maintenant: J8_17H });
+        const a = await T.rafraichirTaux({ fetch: casse, maintenant: a_(0) });
         v('fetch qui lève => pas d\'exception, lu:false', [a.lu, n], [false, 1]);
         const h = faussesReponses(XML, false);
-        const b = await T.rafraichirTaux({ fetch: h.fetch, maintenant: J8_17H });
-        v('réponse HTTP non ok => lu:false', b.lu, false);
+        const b = await T.rafraichirTaux({ fetch: h.fetch, maintenant: a_(1) });
+        v('réponse HTTP non ok (1 h plus tard) => lu:false, 2e essai', [b.lu, h.appels()], [false, 1]);
         const c = faussesReponses('<html>pas du xml de taux</html>');
-        const d = await T.rafraichirTaux({ fetch: c.fetch, maintenant: J8_17H });
-        v('corps sans aucun taux => lu:false, rien de stocké', [d.lu, await db.col('taux').countDocuments({ devise: { $ne: '__lu' } })], [false, 0]);
+        const d = await T.rafraichirTaux({ fetch: c.fetch, maintenant: a_(2) });
+        v('corps sans aucun taux (3e essai) => lu:false, rien de stocké', [d.lu, await db.col('taux').countDocuments({ devise: { $ne: '__lu' } })], [false, 0]);
+        const m = await db.col('taux').findOne({ devise: '__lu', date: '2026-10-08' });
+        v('la marque du jour porte essais:3, ok non vrai', [m.essais, m.ok === true], [3, false]);
         const f = faussesReponses();
-        const e = await T.rafraichirTaux({ fetch: f.fetch, maintenant: J8_17H });
-        v('après des échecs, le même jour peut encore lire (un échec n\'est pas une lecture)', [e.lu, f.appels()], [true, 1]);
+        const e = await T.rafraichirTaux({ fetch: f.fetch, maintenant: a_(3) });
+        v('4e essai du jour => ZÉRO fetch, même avec 1 h écoulée', [e.lu, f.appels()], [false, 0]);
+
+        await vider();
+        const g = { n: 0, fetch: async () => { g.n++; throw new Error('BCE en panne'); } };
+        for (let k = 0; k < 10; k++) await T.rafraichirTaux({ fetch: g.fetch, maintenant: new Date(t0 + k * 60000) });
+        v('panne de la BCE, 10 ticks rapprochés (1 min) => UN fetch', g.n, 1);
+        await T.rafraichirTaux({ fetch: g.fetch, maintenant: new Date(t0 + H1) });
+        v('un tick 1 h plus tard => 2e fetch', g.n, 2);
+        await T.rafraichirTaux({ fetch: g.fetch, maintenant: new Date(t0 + H1 - 1) });
+        v('59 min 59 s après le dernier essai => pas de fetch', g.n, 2);
+
+        await vider();
+        const s = faussesReponses();
+        await T.rafraichirTaux({ fetch: s.fetch, maintenant: a_(0) });
+        for (const k of [1, 2, 3]) await T.rafraichirTaux({ fetch: s.fetch, maintenant: a_(k) });
+        v('après un succès => ZÉRO fetch supplémentaire, 1 h plus tard comme 3 h plus tard', s.appels(), 1);
+        const ok = await db.col('taux').findOne({ devise: '__lu', date: '2026-10-08' });
+        v('succès : la marque porte ok:true', ok.ok, true);
+
+        await vider();
+        const k2 = faussesReponses();
+        const [r1, r2, r3] = await Promise.all([1, 2, 3].map(() => T.rafraichirTaux({ fetch: k2.fetch, maintenant: J8_17H })));
+        v('trois appels concurrents => UN fetch', k2.appels(), 1);
+        v('un seul a lu', [r1, r2, r3].filter(r => r.lu).length, 1);
+
+        // échec puis reprise le même jour, 1 h plus tard : réussit
+        await vider();
+        await T.rafraichirTaux({ fetch: casse, maintenant: a_(0) });
+        const rep = faussesReponses();
+        const ap = await T.rafraichirTaux({ fetch: rep.fetch, maintenant: a_(1) });
+        v('échec puis reprise 1 h plus tard => lu', [ap.lu, rep.appels()], [true, 1]);
     }
 
     // ── (3) week-end : le dernier taux publié, SA date ; (4) absent / inconnu / périmé
