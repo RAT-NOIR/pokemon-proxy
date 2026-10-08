@@ -5,7 +5,7 @@ const erreur = env => { try { lireConfig(env); return null; } catch (e) { return
 const SECRET = 'un-secret-serveur-de-test-assez-long';
 const c = lireConfig({ MONGODB_BASE: 'test_scratch' });
 H.v('limites par défaut', [c.limites.inscriptionIpHeure, c.limites.oubliIpHeure, c.limites.reinitIpHeure, c.limites.verificationIpHeure, c.limites.connexionIpHeure, c.limites.suppressionParCompteHeure, c.limites.renvoiParCompteHeure], [10, 10, 10, 30, 30, 10, 3]);
-H.v('durées par défaut', [c.comptes.glissementHeures, c.retention.octroiJours, c.empreinte.jours], [24, 730, 730]);
+H.v('durées par défaut', [c.comptes.glissementHeures, c.retention.octroiJours, c.empreinte.jours], [24, 730, 365]);   // empreinte des adresses supprimées : 12 mois (décision 5 du testeur, 2026-10-08) ; octroiJours (rétention des octrois) reste 730
 H.v('URL par défaut', [c.urls.verification, c.urls.reinit], ['https://rat-market.fr/fr/verification', 'https://rat-market.fr/fr/reinitialisation']);
 const o = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_CONNEXION_IP_HEURE: '7', V2_EMPREINTE_JOURS: '30', V2_URL_VERIFICATION: 'https://exemple.fr/v' });
 H.v('surcharges d\'environnement', [o.limites.inscriptionIpHeure, o.limites.connexionIpHeure, o.empreinte.jours, o.urls.verification], [3, 7, 30, 'https://exemple.fr/v']);

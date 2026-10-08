@@ -26,7 +26,7 @@ const hmac = cle => crypto.createHmac('sha256', SECRET).update(`octroi|${cle}`).
     const emp = await db.col('adresses_octroyees').find({}).toArray();
     H.v('octroi : 25, une empreinte écrite', [(await accueil('dup@exemple.fr')).solde.accueil, emp.length], [25, 1]);
     H.v('l\'empreinte est le HMAC-SHA256 (clé = secret serveur), pas un simple SHA de l\'adresse', [emp[0].empreinte === hmac('dup@exemple.fr'), emp[0].empreinte === J.empreinte('dup@exemple.fr'), JSON.stringify(emp).includes('dup')], [true, false, false]);
-    H.vrai('expireLe ≈ +730 jours', Math.abs(emp[0].expireLe.getTime() - (Date.now() + 730 * 864e5)) < 10000);
+    H.vrai('expireLe ≈ +365 jours (12 mois, décision 5)', Math.abs(emp[0].expireLe.getTime() - (Date.now() + 365 * 864e5)) < 10000);
     // 2 : suppression puis réinscription
     const sup = await supprimer(c1);
     H.v('suppression : 200, l\'empreinte SURVIT (1)', [sup.statut, await db.col('adresses_octroyees').countDocuments({})], [200, 1]);
