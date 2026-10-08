@@ -39,17 +39,11 @@ const corpsOk = (img, src = 'camera', extra = Buffer.alloc(0)) => Buffer.concat(
     r = await essayer(requete(corpsOk(WEBP, 'collage')));
     H.v('WebP + source=collage : ok', r.ok && [r.ok.champs.source, r.ok.image.type], ['collage', 'image/webp']);
     for (const m of ['heic', 'heix', 'mif1']) {
-        r = await essayer(requete(corpsOk(heic(m))), { heifPermis: true });
-        H.v(`HEIC (${m}) avec heif permis : ok`, r.ok && r.ok.image.type, 'image/heic');
+        r = await essayer(requete(corpsOk(heic(m))));
+        H.v(`HEIC (${m}) jugé sur ses octets : ok (le décodage relève de B9.2)`, r.ok && r.ok.image.type, 'image/heic');
     }
-    r = await essayer(requete(corpsOk(heic('heic'))), { heifPermis: false });
-    H.v('HEIC sans lecture heif : 415 format', forme(r), ['IMAGE', 'format', 415]);
-    r = await essayer(requete(corpsOk(heic('avif'))), { heifPermis: true });
+    r = await essayer(requete(corpsOk(heic('avif'))));
     H.v('ftyp d\'une autre marque (avif) : 415 format', forme(r), ['IMAGE', 'format', 415]);
-    // la valeur par défaut de heifPermis suit sharp (pas une constante)
-    let sharpHeif = false; try { sharpHeif = Boolean(require('sharp').format.heif.input.buffer || require('sharp').format.heif.input.file); } catch { /* sharp absent */ }
-    r = await essayer(requete(corpsOk(heic('heic'))));
-    H.v('HEIC, défaut : suit sharp.format.heif.input', r.ok ? 'ok' : forme(r), sharpHeif ? 'ok' : ['IMAGE', 'format', 415]);
 
     // (2) > 12 Mo : 413 et la lecture s'arrête
     const gros = [], MORCEAU = Buffer.alloc(65536, 1);
@@ -139,6 +133,88 @@ const corpsOk = (img, src = 'camera', extra = Buffer.alloc(0)) => Buffer.concat(
     const coupee = new Readable({ read() { this.destroy(new Error('reset')); } }); coupee.headers = { 'content-type': `multipart/form-data; boundary=${B}` };
     r = await essayer(coupee);
     H.v('connexion coupée : 400 corps-interrompu', forme(r), ['ENTREE', 'corps-interrompu', 400]);
+
+    // frontières de taille : l'IMAGE ≤ 12 Mo pile ; le CORPS ≤ 12 Mo + 64 Kio
+    const MO12 = 12 * 1024 * 1024, MARGE = 64 * 1024;
+    const jpegDe = n => Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(n - 4, 9)]);
+    r = await essayer(requete(corpsOk(jpegDe(MO12))));
+    H.v('image de 12 Mo pile : acceptée', r.ok && r.ok.image.buffer.length, MO12);
+    r = await essayer(requete(corpsOk(jpegDe(MO12 + 1))));
+    H.v('image de 12 Mo + 1 : 413 trop-lourde', forme(r), ['IMAGE', 'trop-lourde', 413]);
+    const reqPlafond = requete(corpsOk(jpegDe(MO12 + MARGE + 1)), { cl: false });
+    r = await essayer(reqPlafond);
+    H.v('corps au-delà de 12 Mo + 64 Kio (sans Content-Length) : 413', forme(r), ['IMAGE', 'trop-lourde', 413]);
+    H.vrai(`   lecture arrêtée : ${reqPlafond.etat.lus} octets lus (< 12 Mo + 64 Kio + un morceau)`, reqPlafond.etat.lus <= MO12 + MARGE + 65536);
+    r = await essayer(requete(corpsOk(jpegDe(100)), { entetes: { 'content-length': String(MO12 + MARGE + 1) } }));
+    H.v('Content-Length de 12 Mo + 64 Kio + 1 : 413 avant lecture', forme(r), ['IMAGE', 'trop-lourde', 413]);
+
+    // PARTIES_MAX : 9 parties refusées, 8 passent le compteur
+    const parts = n => Buffer.concat([partie('source', 'camera'), partie('image', JPEG), ...Array.from({ length: n - 2 }, () => partie('x', 'y')), fin()]);
+    r = await essayer(requete(parts(9)));
+    H.v('9 parties : 400 multipart', forme(r), ['ENTREE', 'multipart', 400]);
+    r = await essayer(requete(parts(8)));
+    H.v('8 parties : passe le compteur (refusée plus loin, champ inconnu)', forme(r), ['ENTREE', 'champ-inconnu', 400]);
+
+    // boundary entre guillemets
+    r = await essayer(requete(corpsOk(JPEG), { ct: `multipart/form-data; boundary="${B}"` }));
+    H.v('boundary entre guillemets : ok', r.ok && r.ok.image.type, 'image/jpeg');
+
+    // un \r\n-- dans les octets de l'image n'est pas un délimiteur tant que ce n'est pas LE délimiteur
+    const piege = Buffer.concat([JPEG, Buffer.from('\r\n--'), Buffer.from('\r\n--xXbound'), Buffer.from([0, 0, 0]), Buffer.from('--\r\n'), JPEG]);
+    r = await essayer(requete(corpsOk(piege)));
+    H.v('"\\r\\n--" et un début de délimiteur dans l\'image : octets intacts', r.ok && r.ok.image.buffer.equals(piege), true);
+    r = await essayer(requete(corpsOk(Buffer.concat([JPEG, Buffer.from(`\r\n--${B}`), JPEG]))));
+    H.vrai('le vrai délimiteur dans les octets coupe la partie : refus structuré 400, jamais un faux accord', r.err && r.err.statut === 400);
+
+    // octets nuls
+    r = await essayer(requete(corpsOk(Buffer.concat([JPEG, Buffer.alloc(50, 0)]))));
+    H.v('image contenant des octets nuls : ok', r.ok && r.ok.image.buffer.length, JPEG.length + 50);
+    r = await essayer(requete(corpsOk(JPEG, 'camera\u0000')));
+    H.v('source terminée par un octet nul : 400 source', forme(r), ['ENTREE', 'source', 400]);
+    r = await essayer(requete(corpsOk(JPEG, 'came\u0000ra')));
+    H.v('source avec un nul au milieu : 400 source', forme(r), ['ENTREE', 'source', 400]);
+    r = await essayer(requete(Buffer.concat([partie('source', 'camera'), partie('image\u0000', JPEG), fin()])));
+    H.v('nom de partie "image\\0" : 400 champ inconnu', forme(r), ['ENTREE', 'champ-inconnu', 400]);
+
+    // Content-Length incohérent avec le corps
+    const cOk = corpsOk(JPEG);
+    r = await essayer(requete(cOk, { entetes: { 'content-length': String(cOk.length + 10) } }));
+    H.v('Content-Length plus grand que le corps reçu : 400', forme(r), ['ENTREE', 'content-length', 400]);
+    r = await essayer(requete(cOk, { entetes: { 'content-length': String(cOk.length - 10) } }));
+    H.v('Content-Length plus petit que le corps reçu : 400', forme(r), ['ENTREE', 'content-length', 400]);
+    const reqCourt = requete(gros, { entetes: { 'content-length': '100' } });
+    r = await essayer(reqCourt);
+    H.v('Content-Length 100 pour un flux plus gros : 400, lecture arrêtée très tôt (< 1 Mo lu)', [forme(r), reqCourt.etat.lus < 1024 * 1024], [['ENTREE', 'content-length', 400], true]);
+    r = await essayer(requete(cOk, { entetes: { 'content-length': String(cOk.length) } }));
+    H.v('Content-Length exact : ok', r.ok && r.ok.image.type, 'image/jpeg');
+
+    // paramètres entre guillemets : un `name=` dans un filename n'est pas un paramètre
+    const brut = disp => Buffer.concat([partie('source', 'camera'), Buffer.from(`--${B}\r\nContent-Disposition: ${disp}\r\n\r\n`), JPEG, Buffer.from('\r\n'), fin()]);
+    r = await essayer(requete(brut('form-data; filename="a; name=\\"source\\""; name="image"')));
+    H.v('filename contenant "; name=" échappé : la partie reste image', r.ok && r.ok.image.type, 'image/jpeg');
+    r = await essayer(requete(brut('form-data; filename="x; name="source"; name="image"')));
+    H.v('filename mal fermé laissant voir un name= : 400 (pas de lecture du faux name)', forme(r), ['ENTREE', 'multipart', 400]);
+    r = await essayer(requete(brut('form-data; name="image" intrus')));
+    H.v('texte illisible après un paramètre : 400', forme(r), ['ENTREE', 'multipart', 400]);
+    r = await essayer(requete(brut('form-data; name="image"; ???')));
+    H.v('paramètre mal formé : 400', forme(r), ['ENTREE', 'multipart', 400]);
+    r = await essayer(requete(brut('form-data; name="image"; name="source"')));
+    H.v('name en double : 400', forme(r), ['ENTREE', 'multipart', 400]);
+
+    // échéance de lecture : horloge injectée, aucune attente réelle
+    const minuterie = { cbs: [], effaces: 0, set(f, ms) { this.ms = ms; this.cbs.push(f); return this.cbs.length; }, clear() { this.effaces++; } };
+    const lent = new Readable({ read() { } }); lent.headers = { 'content-type': `multipart/form-data; boundary=${B}` };
+    const enCours = essayer(lent, { minuterie });
+    lent.push(Buffer.from('--x'));                                   // un client qui goutte
+    await new Promise(res => setImmediate(res));
+    H.v('délai de lecture par défaut', minuterie.ms, 30000);
+    minuterie.cbs[0]();                                               // l'échéance tombe
+    r = await enCours;
+    H.v('client lent : rejet structuré 408 délai', forme(r), ['ENTREE', 'delai', 408]);
+    H.vrai('   la requête est détruite', lent.destroyed);
+    minuterie.effaces = 0;
+    r = await essayer(requete(corpsOk(JPEG)), { minuterie });
+    H.vrai('lecture normale : l\'échéance est effacée', r.ok && minuterie.effaces >= 1);
 
     // de bout en bout par un vrai serveur HTTP et le FormData de Node
     const srv = await H.serveur(async (req, res) => {
