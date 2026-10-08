@@ -73,4 +73,15 @@ function garderClientR2(client, env = process.env) {
     return client;
 }
 
-module.exports = { hotesDe, cleDeGrappe, verifierHoteBanc, bucketsDeProduction, verifierEcritureR2, garderClientR2 };
+/** Les clés avec lesquelles le client R2 est construit. Sous BANC_ISOLE=1 : R2_BANC_* et SEULEMENT elles (jamais un repli sur les clés de production) ;
+ *  s'il en manque une, LÈVE avant toute requête, en nommant la variable (jamais une valeur). Hors banc : les clés de production, comme avant. */
+function clesR2(env = process.env) {
+    if (env.BANC_ISOLE === '1') {
+        const manquantes = ['R2_BANC_ACCESS_KEY_ID', 'R2_BANC_SECRET_ACCESS_KEY'].filter(k => !env[k]);
+        if (manquantes.length) throw new Error(`🔴 BANC REFUSÉ — clés R2 de banc absentes : ${manquantes.join(', ')}. Un banc n'utilise QUE les clés R2_BANC_*, jamais celles de production. Aucune requête n'est partie.`);
+        return { accessKeyId: env.R2_BANC_ACCESS_KEY_ID, secretAccessKey: env.R2_BANC_SECRET_ACCESS_KEY };
+    }
+    return { accessKeyId: env.R2_ACCESS_KEY_ID, secretAccessKey: env.R2_SECRET_ACCESS_KEY };
+}
+
+module.exports = { hotesDe, cleDeGrappe, verifierHoteBanc, bucketsDeProduction, verifierEcritureR2, garderClientR2, clesR2 };

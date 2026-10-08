@@ -237,6 +237,34 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         verifier('appliquer : les buckets de production sont remplacés par R2_BUCKET_BANC pour les enfants, et la liste d\'origine figée dans BANC_R2_INTERDITS', [envA.R2_BUCKET_IMAGES, envA.R2_BUCKET_BRUT, envA.BANC_R2_INTERDITS.split(',').sort()], ['banc-r2', 'banc-r2', ['brut-prod', 'img-prod']]);
         let refus = null; try { (await B.ouvrirBanc({ env: { ...sansR2, MONGODB_TEST_URI: BANC_URI, R2_BUCKET_IMAGES: 'img-prod', R2_BUCKET_BANC: 'img-prod' }, memoireDisponible: false })).appliquer(); } catch (e) { refus = e.message; }
         verifier('appliquer REFUSE un R2_BUCKET_BANC égal à un bucket de production', /R2_BUCKET_BANC/.test(refus || ''), true);
+
+        // ── 8 bis. LES CLÉS R2 : sous BANC_ISOLE=1 le client porte R2_BANC_* et SEULEMENT elles ; hors banc, la production garde les siennes.
+        //    Client RÉEL du SDK, jamais de requête : on ne fait que résoudre ses identifiants.
+        const idsDe = async (env, endpoint = 'http://127.0.0.1:1') => { const c = await r2mod.clientPour(endpoint, env); const k = await c.config.credentials(); return [k.accessKeyId, k.secretAccessKey]; };
+        const envCles = (extra = {}) => ({ R2_ACCESS_KEY_ID: 'id-prod', R2_SECRET_ACCESS_KEY: 'sec-prod', R2_BANC_ACCESS_KEY_ID: 'id-banc', R2_BANC_SECRET_ACCESS_KEY: 'sec-banc', ...extra });
+        verifier('sous BANC_ISOLE=1 le client R2 porte les clés de BANC (pas celles de production)', await idsDe(envCles({ BANC_ISOLE: '1' })).catch(e => `erreur:${e.message}`), ['id-banc', 'sec-banc']);
+        verifier('hors banc le client R2 garde les clés de PRODUCTION (non-régression)', await idsDe(envCles()).catch(e => `erreur:${e.message}`), ['id-prod', 'sec-prod']);
+        for (const manque of ['R2_BANC_ACCESS_KEY_ID', 'R2_BANC_SECRET_ACCESS_KEY']) {
+            const e = await idsDe(envCles({ BANC_ISOLE: '1', [manque]: '' })).then(() => null, x => x.message);
+            verifier(`sous BANC_ISOLE=1, ${manque} absente : REFUS avant toute requête, qui nomme la variable et jamais une valeur`, [!!e && e.includes(manque), /id-prod|sec-prod|id-banc|sec-banc/.test(e || '')], [true, false]);
+        }
+        const eSeule = await idsDe({ BANC_ISOLE: '1', R2_ACCESS_KEY_ID: 'id-prod', R2_SECRET_ACCESS_KEY: 'sec-prod' }).then(() => null, x => x.message);
+        verifier('sous BANC_ISOLE=1 avec SEULES les clés de production : REFUS (aucun repli sur elles)', !!eSeule, true);
+        // le harnais : appliquer() retire les clés de PRODUCTION de l'environnement (jamais celles de banc), de façon que dotenv ne les remette pas
+        const envC = { ...sansR2, ...envCles(), MONGODB_TEST_URI: BANC_URI, R2_BUCKET_BANC: 'banc-r2' };
+        (await B.ouvrirBanc({ env: envC, memoireDisponible: false })).appliquer();
+        verifier('appliquer : R2_ACCESS_KEY_ID et R2_SECRET_ACCESS_KEY sont VIDES dans l\'environnement (un banc ne peut pas les lire), les clés de banc intactes', [!envC.R2_ACCESS_KEY_ID, !envC.R2_SECRET_ACCESS_KEY, envC.R2_BANC_ACCESS_KEY_ID, envC.R2_BANC_SECRET_ACCESS_KEY], [true, true, 'id-banc', 'sec-banc']);
+        // le verdict de verifier-cles-r2-banc.js se prouve sur des matrices FABRIQUÉES : il sait dire NON
+        const { juger } = require('./verifier-cles-r2-banc');
+        const PTS = ['generique', 'ue'], PROD = ['I', 'B'];
+        const matrice = (lus) => { const m = {}; for (const nc of ['banc', 'production']) for (const nb of ['banc', ...PROD]) for (const np of PTS) m[`${nc}|${nb}|${np}`] = lus.includes(`${nc}|${nb}|${np}`) ? 'LU' : 'refus 403 AccessDenied'; return m; };
+        const BON = ['banc|banc|generique', 'production|I|ue', 'production|B|ue'];
+        verifier('verifier-cles-r2-banc : matrice attendue → prouvé', juger(matrice(BON), PROD, PTS).ok, true);
+        verifier('verifier-cles-r2-banc : une clé de banc lit un bucket de production → NON prouvé, fuite nommée', [juger(matrice([...BON, 'banc|I|ue']), PROD, PTS).ok, juger(matrice([...BON, 'banc|I|ue']), PROD, PTS).fuites], [false, ['I']]);
+        verifier('verifier-cles-r2-banc : témoin muet (la production ne lit pas) → NON prouvé', juger(matrice(['banc|banc|generique']), PROD, PTS).ok, false);
+        verifier('verifier-cles-r2-banc : le banc ne lit pas son bucket → NON prouvé', juger(matrice(BON.slice(1)), PROD, PTS).ok, false);
+        verifier('verifier-cles-r2-banc : matrice incomplète → NON prouvé', juger({ 'banc|banc|generique': 'LU' }, PROD, PTS).ok, false);
+        verifier('appliquer : les clés de production vidées EXISTENT encore comme noms (dotenv ne remplace pas une variable présente)', ['R2_ACCESS_KEY_ID' in envC, 'R2_SECRET_ACCESS_KEY' in envC], [true, true]);
     }
 
     // ── 9. LA FAÇADE DE LECTURE DE LA PRODUCTION : une liste FERMÉE de lectures ; tout le reste lève, sans qu'aucun appel d'écriture n'atteigne le Db

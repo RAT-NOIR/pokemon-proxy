@@ -8,6 +8,16 @@
 // Sortie 0 seulement si les DEUX utilisateurs sont OK. Aucune valeur de variable n'est imprimée.
 const { LECTURES, jugerLecture, verifierPrivilegesLecture } = require('./collecte-cartes/base-banc');
 
+/** Le message du serveur, lisible et sans rien de secret : tout mot qui contient « :// » ou « @ », ou qui a la forme d'un hôte (trois labels pointés ou plus), est masqué ; 200 caractères au plus. */
+function messageNettoye(e) {
+    const brut = String(e?.message ?? '').replace(/\r?\n/g, ' ');
+    // une parenthèse qui contient une URI part en entier (elle peut contenir des espaces d'identifiants)
+    const sansUri = brut.replace(/\([^)]*(:\/\/|@)[^)]*\)/g, '(…)');
+    const mots = sansUri.split(/\s+/).filter(Boolean).map(m => (/:\/\/|@/.test(m) || /[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}/.test(m)) ? '[masqué]' : m);
+    const t = mots.join(' ').trim();
+    return t ? t.slice(0, 200) : 'message du serveur vide';
+}
+
 /** Contrôle chaque utilisateur de lecture. `mongoose` est injectable (faux client dans les bancs). Rend [{ quoi, variable, base, ok, raison }]. */
 async function verifierUtilisateurs(env, mongoose) {
     const resultats = [];
@@ -20,7 +30,7 @@ async function verifierUtilisateurs(env, mongoose) {
             cx = await mongoose.createConnection(j.uri, { dbName: d.grappe, autoIndex: false, autoCreate: false, serverSelectionTimeoutMS: 15000 }).asPromise();
             r = await verifierPrivilegesLecture(cx.db, d.grappe);
         } catch (e) {
-            r = { ok: false, raison: `🔴 connexion ou constat impossible (${e?.codeName || e?.name || 'erreur'}) : doute = refus.` };
+            r = { ok: false, raison: `🔴 connexion ou constat impossible (${[e?.codeName || e?.name || 'erreur', e?.code != null ? `code ${e.code}` : null].filter(Boolean).join(', ')}) : ${messageNettoye(e)} — doute = refus.` };
         } finally {
             try { if (cx) await cx.close(); } catch (_) { /* rien à ajouter au résultat */ }
         }
@@ -29,7 +39,7 @@ async function verifierUtilisateurs(env, mongoose) {
     return resultats;
 }
 
-module.exports = { verifierUtilisateurs };
+module.exports = { verifierUtilisateurs, messageNettoye };
 
 if (require.main === module) {
     require('dotenv').config();

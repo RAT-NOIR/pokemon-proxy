@@ -230,6 +230,9 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
             env.BANC_ISOLE = '1';
             env.BANC_HOTES = hotesDe(uri).join(',');
             env.BANC_R2_INTERDITS = [...new Set(buckets)].join(',');
+            // les clés R2 de PRODUCTION sortent de l'environnement : un banc (et ses enfants) ne peut pas les lire, même par erreur. Vidées, pas supprimées :
+            // une variable présente n'est jamais remise par dotenv (un delete laisserait un enfant recharger le .env). Le client R2 n'utilise que R2_BANC_* sous banc (clesR2).
+            for (const k of ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) env[k] = '';
             if (env.R2_BUCKET_BANC) for (const k of Object.keys(env)) if (/^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC') env[k] = env.R2_BUCKET_BANC;
             installerGardeEcriture(require('mongoose').Collection, env);
         },
