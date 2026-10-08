@@ -60,6 +60,10 @@ const cors = {};
         H.v(`CORS hérité (${nom}) : extension autorisée`, [o.extension.statut, o.extension.acao], [200, ORIGINE_EXTENSION]);
         H.vrai(`   Vary: Origin présent (${nom})`, /origin/i.test(o.vinted.vary || ''));
     }
-    H.v('CORS hérité : éteint et allumé rendent EXACTEMENT les mêmes réponses', cors.allume, cors.eteint);
+    // Écart ASSUMÉ (ruling B4, progress.md) : l'interrupteur allumé ajoute `Vary: Origin` au refus 403 des routes héritées
+    // (éteint : aucun Vary). Seul ce champ diffère ; tout le reste doit être identique.
+    H.v('CORS hérité (allumé) : le refus 403 porte Vary: Origin (écart assumé B4)', [cors.eteint.interdite.vary, cors.allume.interdite.vary], [null, 'Origin']);
+    const sansVary = o => ({ ...o, interdite: { ...o.interdite, vary: undefined } });
+    H.v('CORS hérité : éteint et allumé rendent les mêmes réponses (hors Vary du refus 403, écart assumé B4)', sansVary(cors.allume), sansVary(cors.eteint));
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
