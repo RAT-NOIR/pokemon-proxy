@@ -6,7 +6,7 @@ const { HOTES_PHOTO_AUTORISES } = require('../../departage-image');   // la list
 
 const TITRE_MAX = 300, DESCRIPTION_MAX = 4000;
 
-// Comparaison numérique `a.b.c` ('2.0.10' > '2.0.9'). Illisible => null (jamais un ordre inventé).
+// Comparaison numérique `a.b.c` ('2.0.10' > '2.0.9'). Illisible => null (jamais un ordre inventé) : 'v2.0.0' et '2.0.0-beta' sont refusés (400 version).
 function comparerVersions(a, b) {
     const lire = v => (typeof v === 'string' && /^\d+(\.\d+){0,2}$/.test(v.trim())) ? v.trim().split('.').map(Number) : null;
     const x = lire(a), y = lire(b);
@@ -54,6 +54,7 @@ function verifierEntree(corps, cfg) {
     return { entree: {
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
+        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat : null,       // CONTRAT-2.md l. 24 : passé tel quel à la chaîne héritée (B1b.3)
         langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim()
     } };
 }

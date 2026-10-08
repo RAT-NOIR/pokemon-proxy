@@ -61,6 +61,20 @@ const bon = (sur = {}) => ({ contrat: 2, imageUrls: ['https://images1.vinted.net
     H.v('vintedUrl http : 400', forme(await post(bon({ vintedUrl: 'http://www.vinted.fr/items/1' }))).slice(0, 2), [400, 'ENTREE']);
     H.v('vintedUrl hôte inconnu : 400', forme(await post(bon({ vintedUrl: 'https://evil.example/items/1' }))).slice(0, 2), [400, 'ENTREE']);
     H.v('vintedUrl vinted.fr.evil.example : 400', forme(await post(bon({ vintedUrl: 'https://vinted.fr.evil.example/items/1' }))).slice(0, 2), [400, 'ENTREE']);
+    // correction n°1 : vintedEtat recopié dans req.entree
+    await post(bon({ vintedEtat: 'Bon état' })); H.v('vintedEtat recopié tel quel', recu.vintedEtat, 'Bon état');
+    await post(bon({ vintedEtat: null })); H.v('vintedEtat null -> null', recu.vintedEtat, null);
+    await post(bon({ vintedEtat: undefined })); H.v('vintedEtat absent -> null', recu.vintedEtat, null);
+    await post(bon({ vintedEtat: 5 })); H.v('vintedEtat non chaîne -> null, jamais refusé', recu.vintedEtat, null);
+    // correction n°2 : cas manquants
+    const sansV = bon(); delete sansV.versionExtension;
+    H.v('versionExtension absente : 400 version', forme(await post(sansV)), [400, 'ENTREE', 'version', false]);
+    H.v('2.0.0-beta : 400 version', forme(await post(bon({ versionExtension: '2.0.0-beta' }))), [400, 'ENTREE', 'version', false]);
+    H.v('v2.0.0 : 400 version (illisible = refus)', forme(await post(bon({ versionExtension: 'v2.0.0' }))), [400, 'ENTREE', 'version', false]);
+    H.v('prix sans devise : 400 devise', forme(await post(bon({ prixVinted: 5, devise: null }))), [400, 'ENTREE', 'devise', false]);
+    H.v('title non chaîne : 400 title', forme(await post(bon({ title: 42 }))), [400, 'ENTREE', 'title', false]);
+    H.v('description non chaîne : 400 description', forme(await post(bon({ description: { a: 1 } }))), [400, 'ENTREE', 'description', false]);
+    H.v('vintedUrl valide sur un autre marché connu (vinted.de)', (await post(bon({ vintedUrl: 'https://www.vinted.de/items/2' }))).passe, true);
     // corps
     for (const [nom, c] of [['tableau', []], ['chaîne', 'abc'], ['null', null], ['nombre', 7]])
         H.v(`corps non-objet (${nom}) : 400`, forme(await post(c)).slice(0, 2).concat(forme(await post(c))[3]), [400, 'ENTREE', false]);
