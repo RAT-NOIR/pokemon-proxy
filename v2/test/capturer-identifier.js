@@ -11,6 +11,8 @@ const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n
 const normaliser = s => s.replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"');
 (async () => {
     if (!arg('ecrire') && !arg('contre')) { console.error('USAGE : --ecrire=<fichier> ou --contre=<fichier>'); process.exit(1); }
+    // INT2 : le serveur enfant ne lit plus la production. Base de banc (sans catalogue : la référence se refuse alors, plus bas) ou refus.
+    const H = require('./_harnais'); await H.ouvrirBancV2();
     const charges = JSON.parse(fs.readFileSync(path.join(RACINE, 'verrou', 'charges.json'), 'utf8')).charges;
     const srv = await demarrer(path.join(RACINE, 'verrou', 'faux-reseau.js'), { VERROU_CHARGES: path.join(RACINE, 'verrou', 'charges.json'), JETON_API: JETON, MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '' });
     if (!await srv.attendreMongo()) { console.error('Mongo non connecté'); srv.enfant.kill(); process.exit(1); }

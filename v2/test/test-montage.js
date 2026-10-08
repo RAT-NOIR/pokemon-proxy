@@ -26,6 +26,8 @@ async function observerCors(srv) {
 }
 const cors = {};
 (async () => {
+    // INT2 : le serveur enfant hérite de process.env ; sans base de banc il lirait MONGODB_URI du .env (la production). Banc ou refus, avant tout enfant.
+    await H.ouvrirBancV2();
     // INTERRUPTEUR ÉTEINT : /ping a EXACTEMENT les clés d'aujourd'hui, et aucune route v2 n'existe
     await avec({ RM_API_V2: '' }, async srv => {
         cors.eteint = await observerCors(srv);
@@ -65,5 +67,6 @@ const cors = {};
     H.v('CORS hérité (allumé) : le refus 403 porte Vary: Origin (écart assumé B4)', [cors.eteint.interdite.vary, cors.allume.interdite.vary], [null, 'Origin']);
     const sansVary = o => ({ ...o, interdite: { ...o.interdite, vary: undefined } });
     H.v('CORS hérité : éteint et allumé rendent les mêmes réponses (hors Vary du refus 403, écart assumé B4)', sansVary(cors.allume), sansVary(cors.eteint));
+    await H.arreterBanc();
     H.bilan();
-})().catch(e => { console.error('❌', e); process.exit(1); });
+})().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });
