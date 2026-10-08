@@ -211,7 +211,41 @@ const corpsOk = (img, src = 'camera', extra = Buffer.alloc(0)) => Buffer.concat(
     minuterie.cbs[0]();                                               // l'échéance tombe
     r = await enCours;
     H.v('client lent : rejet structuré 408 délai', forme(r), ['ENTREE', 'delai', 408]);
-    H.vrai('   la requête est détruite', lent.destroyed);
+    H.vrai('   le module ne détruit rien : c\'est au handler de répondre puis fermer', !lent.destroyed);
+    H.vrai('   l\'erreur porte l\'indication de fermeture (fermer: true)', r.err && r.err.fermer === true);
+    r = await essayer(requete(corpsOk(JPEG, 'zzz')));
+    H.vrai('   une erreur ordinaire ne demande pas la fermeture', r.err && !r.err.fermer);
+
+    // contrat avec un VRAI serveur : un client lent reçoit le 408 + Connection: close, puis la socket se ferme
+    const net = require('net');
+    const srvLent = await H.serveur(async (req, res) => {
+        try { await lireMultipart(req, { delaiMs: 300 }); res.end('ok'); }
+        catch (e) {
+            res.statusCode = e.statut; res.setHeader('content-type', 'application/json');
+            if (e.fermer) { res.setHeader('Connection', 'close'); res.on('finish', () => req.destroy()); }
+            res.end(JSON.stringify({ code: e.code, detail: e.detail }));
+        }
+    });
+    const reponse = await new Promise(resolve => {
+        const s = net.connect(Number(new URL(srvLent.url).port), '127.0.0.1');
+        let recu = '', ferme = false; const t0 = Date.now();
+        s.on('connect', () => { s.write(`POST / HTTP/1.1\r\nHost: x\r\nContent-Type: multipart/form-data; boundary=${B}\r\nContent-Length: 5000\r\n\r\n--${B}`); });
+        const goutte = setInterval(() => { if (!s.destroyed) s.write('x'); }, 100);   // un octet toutes les 100 ms
+        s.on('data', d => { recu += d.toString('latin1'); });
+        s.on('close', () => { ferme = true; clearInterval(goutte); resolve({ recu, ferme, ms: Date.now() - t0 }); });
+        s.on('error', () => { });
+        setTimeout(() => { clearInterval(goutte); if (!ferme) { s.destroy(); } }, 4000);
+    });
+    H.vrai('client lent, vrai serveur : la réponse HTTP 408 est bien reçue (pas un reset)', /^HTTP\/1\.1 408 /.test(reponse.recu));
+    H.vrai('   avec Connection: close', /connection: close/i.test(reponse.recu));
+    H.vrai(`   le corps structuré est lisible, puis la socket se ferme (${reponse.ms} ms)`, /"detail":"delai"/.test(reponse.recu) && reponse.ms < 3500);
+    await srvLent.fermer();
+
+    // mineurs : espace final de Content-Disposition, guillemet échappé dans le nom
+    r = await essayer(requete(brut('form-data; name="image"  ')));
+    H.v('espace final après Content-Disposition : toléré', r.ok && r.ok.image.type, 'image/jpeg');
+    r = await essayer(requete(Buffer.concat([partie('source', 'camera'), partie('image\\"', JPEG), fin()])));
+    H.v('nom de partie avec \\" : 400 champ inconnu (jamais pris pour "image")', forme(r), ['ENTREE', 'champ-inconnu', 400]);
     minuterie.effaces = 0;
     r = await essayer(requete(corpsOk(JPEG)), { minuterie });
     H.vrai('lecture normale : l\'échéance est effacée', r.ok && minuterie.effaces >= 1);

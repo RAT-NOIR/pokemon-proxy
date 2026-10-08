@@ -5,7 +5,8 @@
 // (en-têtes de parties et délimiteurs). La lecture entière a une échéance (DELAI_LECTURE_MS) : un client lent est coupé.
 // Le nom de fichier annoncé par le client n'est jamais conservé. HEIC : jugé sur ses OCTETS seulement (marques du brief) ;
 // savoir le DÉCODER n'est pas l'affaire de ce module (B9.2).
-// Erreurs : lève { code, detail, statut } — IMAGE (413/415/422) ou ENTREE (400, 408 pour l'échéance). Elle ne lève jamais autre chose.
+// Erreurs : lève { code, detail, statut[, fermer] } — IMAGE (413/415/422) ou ENTREE (400 ; 408 pour l'échéance, avec fermer:true :
+// le handler répond avec Connection: close puis détruit la requête sur res.on('finish')). Elle ne lève jamais autre chose.
 const { lireConfig } = require('../config');
 
 const SOURCES = Object.freeze(['camera', 'fichier', 'collage']);
@@ -65,8 +66,10 @@ function lireCorps(req, octetsMax, delaiMs, minuterie) {
         const surClose = () => { if (!req.readableEnded) surErreur(); };
         minute = minuterie.set(() => {
             if (fini) return;
-            clore(reject, new ErreurMultipart('ENTREE', 'delai', 408));
-            if (typeof req.destroy === 'function') req.destroy();
+            // Le module ne détruit RIEN : détruire la socket avant la réponse ferait un reset au lieu d'un 408.
+            // Le handler répond (statut, Connection: close) puis détruit la requête sur res.on('finish').
+            const e = new ErreurMultipart('ENTREE', 'delai', 408); e.fermer = true;
+            clore(reject, e);
         }, delaiMs);
         req.on('data', surDonnee); req.on('end', surFin); req.on('error', surErreur); req.on('aborted', surErreur); req.on('close', surClose);
     });
@@ -115,7 +118,7 @@ function nomDePartie(partie) {
     const lignes = partie.toString('latin1', 0, finTete).split('\r\n');
     const disp = lignes.find(l => /^content-disposition\s*:/i.test(l));
     if (!disp) throw entree('multipart');
-    const m = /^content-disposition\s*:\s*form-data(.*)$/i.exec(disp);
+    const m = /^content-disposition\s*:\s*form-data(.*?)\s*$/i.exec(disp);   // espaces finaux tolérés
     if (!m) throw entree('multipart');
     const noms = parametres(m[1]).filter(([k]) => k === 'name');     // le filename n'est jamais exploité
     if (noms.length !== 1) throw entree('multipart');
