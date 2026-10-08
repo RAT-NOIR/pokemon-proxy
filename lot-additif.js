@@ -21,6 +21,13 @@
 // collections qu'il tient (file_images, images, collecte_images_etat) ne sont jamais restaurées en automatique : le journal
 // dit qu'elles ne l'ont pas été.
 //
+// ANNONCER une baisse de VIGNETTES (cartes.images[].vignette) — le fichier --annonce est un JSON { "<compteur> <groupe>": n } :
+//   par SET (retrait de masse voulu, K vignettes) : { "vignettes-set set:Sun-Moon-Promos": 120 }   — couvre les 120 clés ET le nombre du set
+//   par CLÉ (un cas précis)                        : { "vignettes-images set:Sun-Moon-Promos|<carteId>|<numero>|<cleR2>": 1 }
+// Sans annonce, une vignette perdue ARRÊTE le lot (incident du 2026-10-08) ; elle se remet champ par champ, jamais en rendant le tableau
+// `images` (un remplacement d'image à compte égal s'arrête mais ne se restaure pas : la relecture le dit, la sauvegarde le porte).
+// Le rejeu de jointure (collecteur-images.js --rejouer-jointure) écrit aussi sur R2 (vignettes fabriquées) hors de cette garde : additif, idempotent.
+//
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion.
 // `--base=test_scratch` (et `--journal=`, qui ne vaut qu'avec elle) sert au banc test-lot-garde-scratch.js, jamais à un lot.
 require('dotenv').config();
@@ -211,15 +218,15 @@ function journaliser(t, dossier, combien, sortie) {
     }
     // 🔑 Les vignettes se restaurent CHIRURGICALEMENT (relecture du 2026-10-08) : une baisse de `vignettes-images` ne fait JAMAIS remplacer le
     // tableau `images` (le worker y écrit en même temps : les images neuves de la fenêtre, et celles des autres sets de la carte, seraient
-    // perdues sans que la relecture le voie — une hausse perdue n'est pas une baisse). On remet le seul champ `vignette` (et `jointeLe`,
-    // réécrit avec lui) de chaque entrée du set fautif qui en avait une dans la sauvegarde et n'en a plus.
-    const setsVignettesFautifs = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'vignettes-images').map(b => b.groupe.replace(/^set:/, '').split('|')[0]));
+    // perdues sans que la relecture le voie — une hausse perdue n'est pas une baisse). On remet le seul champ `vignette` (pas `jointeLe` : voir planVignettes)
+    // de chaque entrée du set fautif qui en avait une dans la sauvegarde et n'en a plus.
+    const setsVignettesFautifs = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'vignettes-images' || b.compteur === 'vignettes-set').map(b => b.groupe.replace(/^set:/, '').split('|')[0]));
     if (setsVignettesFautifs.size && aSauver.includes('cartes') && RESTAURABLES.includes('cartes')) {
         const aRemettre = planVignettes(lireSauvegarde(dossier, 'cartes'), await db.collection('cartes').find({}, { projection: { images: 1 } }).toArray(), setsVignettesFautifs);
         let n = 0;
         for (const x of aRemettre) {
             const r = await db.collection('cartes').updateOne({ _id: x._id },
-                { $set: { 'images.$[e].vignette': x.vignette, ...(x.jointeLe ? { 'images.$[e].jointeLe': x.jointeLe } : {}) } },
+                { $set: { 'images.$[e].vignette': x.vignette } },
                 { arrayFilters: [{ 'e.set': x.set, 'e.cleR2': x.cleR2, 'e.vignette': { $exists: false } }] });
             n += r.modifiedCount;
         }

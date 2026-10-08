@@ -34,6 +34,10 @@ const COMPTEURS = Object.freeze({
     // ne changent pas. Le site lit la vignette (grilles) : une vignette effacée est une baisse. Dispensée seulement dans un set où le
     // worker a écrit pendant la fenêtre (comme les images).
     'vignettes-images': 'entrées de cartes.images qui portent une vignette, UNE CLÉ PAR ENTRÉE (set|carte|numero|cleR2)',
+    // ➕ 2026-10-08 (2e relecture) : le NOMBRE de vignettes du set, en plus des clés — un remplacement d'image à compte égal (l'entrée change
+    // de cleR2 et perd sa vignette) saute la clé disparue et laisse `images` égal : seul ce nombre le voit. S'annonce aussi : un retrait de
+    // masse voulu s'annonce PAR SET (« vignettes-set set:S » : K), qui couvre les K clés perdues et le nombre.
+    'vignettes-set': 'nombre d\'entrées de cartes.images qui portent une vignette, par set',
     'nom-affiche': 'le set porte un nomAffichage'
 });
 
@@ -66,7 +70,7 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
             // une clé PAR ENTRÉE (set|carte|numero|cleR2) : un nombre par set laissait passer « une perdue, une gagnée » (relecture 2026-10-08)
             const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
             inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition
-            if (im.vignette) inc(`vignettes-images ${g}`);
+            if (im.vignette) { inc(`vignettes-images ${g}`); inc(`vignettes-set set:${im.set}`); }
         }
     }
     for (const s of sets) if (s.nomAffichage) inc(`nom-affiche set:${s._id}`);
@@ -82,19 +86,39 @@ const decouper = cle => { const i = cle.indexOf(' '); return [cle.slice(0, i), c
  */
 function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}) {
     const baisses = [], hausses = {};
+    const setDe = groupe => groupe.replace(/^set:/, '').split('|')[0];
+    // vignettes : l'annonce PAR SET est un budget que consomment les clés perdues ; une clé annoncée ou dispensée « explique » aussi la
+    // baisse du nombre de vignettes du set ; une entrée disparue l'explique seulement dans la mesure où `images` du set a réellement baissé
+    const budgetSet = new Map(), expliquees = new Map(), disparues = new Map();
+    for (const [cle, a] of Object.entries(annonces)) { const [c, g] = decouper(cle); if (c === 'vignettes-set') budgetSet.set(setDe(g), a); }
+    const pousse = (m, s, k = 1) => m.set(s, (m.get(s) || 0) + k);
     for (const [cle, n] of avant) {
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
-        if (compteur === 'entrees-cles') continue;   // interne
+        if (compteur === 'entrees-cles' || compteur === 'vignettes-set') continue;   // interne / traité après
         // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
-        if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) continue;
+        if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, setDe(groupe), n - m); continue; }
         const baisse = n - m, annonce = annonces[cle] || 0;
         // dispense du worker : même preuve (ses propres dates, sets de la fenêtre) pour les images et leurs vignettes — il réécrit des
         // entrées puis les revignette (collecteur-images.js)
-        const setDuGroupe = groupe.replace(/^set:/, '').split('|')[0];
-        const autorisee = baisse <= annonce ? 'annoncée'
+        const setDuGroupe = setDe(groupe);
+        let autorisee = baisse <= annonce ? 'annoncée'
             : (compteur === 'images' || compteur === 'vignettes-images') && setsDuWorker.has(setDuGroupe) ? 'worker' : null;
+        if (autorisee && compteur === 'vignettes-images') pousse(expliquees, setDuGroupe, baisse);
+        if (!autorisee && compteur === 'vignettes-images' && (budgetSet.get(setDuGroupe) || 0) >= baisse) { pousse(budgetSet, setDuGroupe, -baisse); autorisee = 'annoncée'; }
+        baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
+    }
+    for (const [cle, n] of avant) {
+        const [compteur, groupe] = decouper(cle);
+        if (compteur !== 'vignettes-set') continue;
+        const m = apres.get(cle) || 0;
+        if (m >= n) continue;
+        const s = setDe(groupe), baisse = n - m, annonce = annonces[cle] || 0;
+        const imgBaisse = Math.max(0, (avant.get(`images ${groupe}`) || 0) - (apres.get(`images ${groupe}`) || 0));
+        const explication = (expliquees.get(s) || 0) + Math.min(disparues.get(s) || 0, imgBaisse);
+        const autorisee = baisse <= annonce + explication ? (baisse <= annonce ? 'annoncée' : 'expliquée par les clés')
+            : setsDuWorker.has(s) ? 'worker' : null;
         baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
     }
     for (const [cle, m] of apres) {
@@ -142,9 +166,10 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
 
 /**
  * Restauration CHIRURGICALE des vignettes (2026-10-08) : pour chaque entrée (carte, set, cleR2) des sets fautifs qui avait une vignette dans
- * la sauvegarde et n'en a plus, remettre CE champ (et `jointeLe`, réécrit avec lui) — jamais le tableau `images`, que le worker écrit en
- * même temps. Une entrée qui a une vignette maintenant, ou n'existe plus, n'est pas touchée. Même geste que la restauration manuelle de la nuit.
- * @returns {{_id, set, cleR2, vignette, jointeLe}[]}
+ * la sauvegarde et n'en a plus, remettre CE champ — jamais le tableau `images`, que le worker écrit en même temps. Une entrée qui a une
+ * vignette maintenant, ou n'existe plus (remplacée : autre cleR2), n'est pas touchée — ce cas s'arrête sans se restaurer, et la relecture le dit.
+ * `jointeLe` n'est PAS remis : date d'audit que ni la garde ni le site ne lisent, et l'ancienne écraserait une valeur plus récente.
+ * @returns {{_id, set, cleR2, vignette}[]}
  */
 function planVignettes(sauvegardees, actuelles, setsFautifs) {
     const actuel = new Map(actuelles.map(d => [cleDoc(d._id), d]));
@@ -155,7 +180,7 @@ function planVignettes(sauvegardees, actuelles, setsFautifs) {
         for (const e of a.images || []) {
             if (!e || !e.vignette || !setsFautifs.has(e.set)) continue;
             const n = mb.get(`${e.set}|${e.cleR2}`);
-            if (n && !n.vignette) liste.push({ _id: a._id, set: e.set, cleR2: e.cleR2, vignette: e.vignette, jointeLe: e.jointeLe ?? null });
+            if (n && !n.vignette) liste.push({ _id: a._id, set: e.set, cleR2: e.cleR2, vignette: e.vignette });
         }
     }
     return liste;
