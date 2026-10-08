@@ -56,6 +56,8 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
+const { fabriquerTemoinImages, appliquerTemoin } = require('./collecte-cartes/temoin-images-artofpkm');   // le témoin du nom DANS la jointure (audit Celebrations, 2026-10-08)
+const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');   // les cartes qui DÉCLARENT l'impression, slug ou non : les témoins
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
@@ -125,7 +127,7 @@ async function effacerTout(M, confirmer) {
     await M.Carte.updateMany({ 'images.source': SOURCE }, { $pull: { images: { source: SOURCE } } });
     await M.Carte.updateMany({ image: { $exists: true } }, { $unset: { image: 1 } });
     await M.EtatImages.deleteMany({ _id: new RegExp(`^${SOURCE}/`) });
-    await M.Reste.deleteMany({ type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes'] } });
+    await M.Reste.deleteMany({ type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-contredite-par-le-nom'] } });
     console.log(`   effacé : ${n} objets R2, ${nImages} lignes images, ${nCartes} cartes remises sans image. Le refus est appliqué.`);
 }
 
@@ -393,7 +395,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const cartesAvecImage = new Set();
     let jointes = 0, clesRefusees = 0;
     const preuves = {};
-    const resolues = [];                  // passe 1 : la carte de chaque image ; passe 2 (plus bas) : l'écriture
+    let resolues = [];                    // passe 1 : la carte de chaque image ; passe 2 (plus bas) : l'écriture
     for (const imSource of images) {
         // (2026-10-07) une correction lue à l'œil peut porter le NUMÉRO que la source n'écrit pas (artofpkm ne numérote pas le Mew
         // « B/RGB » de 30th Celebration : une image du set sans numéro faisait passer TOUT le set en « une fiche par document » chez le
@@ -455,6 +457,15 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // 🔴 UNE CLÉ QUE PLUSIEURS IMAGES PARTAGENT N'EN DÉSIGNE AUCUNE (2026-09-24, collecte-cartes/images-cle-partagee.js) :
     // « Victory Ring » porte le « numéro » XY-P sur 24 images de 24 tournois ; la clé (carte, set, numéro) n'en gardait que
     // la dernière lue, affichée comme LE visuel. Refusées et nommées ; une entrée déjà affichée n'est pas retirée ici.
+    // 🔴 LE TÉMOIN DU NOM (audit Celebrations du 2026-10-08, collecte-cartes/temoin-images-artofpkm.js) : le numéro désigne UNE carte, le
+    // nom de l'image — qui n'entre pas dans la clé — dit si c'est la bonne. 5 visuels d'AUTRES cartes avaient été posés (Intro Pack 28 :
+    // deux decks numérotés dans UNE liste ; Premium Trainer Box ex 008 ; SV-P 323). Les cartes qui déclarent l'impression HORS du slug
+    // (et d'un autre deck) sont TÉMOINS, jamais receveuses : `cartes` (sets: slug) reste la seule population qui reçoit.
+    // Une image contredite n'est pas jointe : elle est NOMMÉE (reste `image-contredite-par-le-nom`), jamais écrasée en silence.
+    const poolTemoins = await M.Carte.find(filtreCartesDuSet(slug, nomsCibles, TIRAGE)).select('_id nomEn nomJa niveau impressions attaques').lean();
+    const { gardees, contredites } = appliquerTemoin(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }));
+    resolues = gardees;
+    for (const x of contredites) restes.push({ set: slug, type: 'image-contredite-par-le-nom', detail: `${x.im._id} « ${x.im.titre} » n°${x.im.numero ?? '—'} -> carte ${x.c._id} « ${x.c.nomEn} » refusée : ${x.verdict.raison}`, le: new Date() });
     const refusees = clesPartagees(resolues);
     if (simuler) {
         const parPreuve = {};
@@ -468,7 +479,8 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const finales = new Map();
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) finales.set(cle(r.c._id, r.im.numero), r);
         const decrire = r => ({ cleR2: r.im.cleR2, numero: r.im.numero ?? null, nomImage: r.im.nomEn ?? r.im.titre, carteId: r.c._id, nomCarte: r.c.nomEn, preuve: r.preuve });
-        return { simule: true, imagesOk: images.length, preuves: parPreuve, restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
+        return { simule: true, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomImage: x.im.nomEn, regle: x.verdict.regle })),
+            restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
             nouvelles: [...finales].filter(([k]) => !deja.has(k)).map(([, r]) => decrire(r)),
             remplacees: [...finales].filter(([k, r]) => deja.has(k) && deja.get(k) !== r.im.cleR2).map(([k, r]) => ({ ...decrire(r), avant: deja.get(k) })) };
     }
@@ -512,7 +524,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // (symbole du set, mention d'indisponibilité). Elles se COMPTENT et se nomment, elles ne sont
     // pas des restes.
     const cartesSansImage = cartes.filter(c => !cartesAvecImage.has(c._id)).map(c => ({ carteId: c._id, nomEn: c.nomEn }));
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee'] } });
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee', 'image-contredite-par-le-nom'] } });
     if (restes.length) await M.Reste.insertMany(restes);
 
     // ---- 5. complétude ----------------------------------------------------------------------
@@ -531,13 +543,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const emplacements = cartes.length > 0 && nEntrees / cartes.length >= 1.5;
     const complet = {
         entreesSource: nEntrees, cartesDuSet: cartes.length, imagesOk: images.length,
-        rattachements: jointes, clesRefusees, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
+        rattachements: jointes, clesRefusees, contredites: contredites.length, cartesCouvertes: cartesAvecImage.size, emplacements, preuves,
         cartesSansImage: cartesSansImage.length, restes: restesParType, mesures,
         // Sur un set à cartes : chaque original joint UNE carte. Sur un set à emplacements : toutes
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
         // Une image refusée pour clé partagée n'est pas un original perdu : elle est NOMMÉE (reste `image-cle-partagee`).
         concordance: nEntrees === images.length
-            && (emplacements ? cartesAvecImage.size === cartes.length : jointes + clesRefusees === images.length)
+            && (emplacements ? cartesAvecImage.size === cartes.length : jointes + clesRefusees + contredites.length === images.length)
             && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };
@@ -582,7 +594,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const codes = arg('rejouer-jointure') === 'tous' ? TABLE_CODES : arg('rejouer-jointure').split(',').map(s => s.trim());
         // `--simuler` (2026-10-05) : la jointure tourne, rien ne s'écrit ; les images qu'elle AJOUTERAIT vont dans un fichier à lire
         const simuler = process.argv.includes('--simuler');
-        const nouvelles = [], remplacees = [], totaux = {};
+        const nouvelles = [], remplacees = [], contreditesSim = [], totaux = {};
         let simules = 0;
         for (const code of codes) {
             const L = ligneDeTable(code);
@@ -595,6 +607,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 for (const [p, n] of Object.entries(r.preuves)) totaux[p] = (totaux[p] || 0) + n;
                 for (const x of r.nouvelles) nouvelles.push({ code, set: L.slugSet, ...x });
                 for (const x of r.remplacees) remplacees.push({ code, set: L.slugSet, ...x });
+                for (const x of r.contredites) contreditesSim.push({ code, set: L.slugSet, ...x });
                 if (r.nouvelles.length || r.remplacees.length) console.log(`  ${code.padEnd(7)} ${r.nouvelles.length} image(s) nouvellement jointe(s) ${JSON.stringify(r.nouvelles.reduce((a, x) => (a[x.preuve] = (a[x.preuve] || 0) + 1, a), {}))} · ${r.remplacees.length} remplacée(s)`);
                 continue;
             }
@@ -608,8 +621,8 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         if (simuler) {
             const f = path.join(dossierRapport, `simulation-jointure-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
             fs.mkdirSync(dossierRapport, { recursive: true });
-            fs.writeFileSync(f, JSON.stringify({ codes: codes.length, simules, preuves: totaux, nouvelles, remplacees }, null, 1));
-            console.log(`SIMULATION (rien d'écrit en base) : ${simules} codes simulés sur ${codes.length} demandés (les autres jamais collectés) · jointures par preuve ${JSON.stringify(totaux)} · ${nouvelles.length} image(s) qui seraient AJOUTÉES · ${remplacees.length} REMPLACÉE(S) — ${f}`);
+            fs.writeFileSync(f, JSON.stringify({ codes: codes.length, simules, preuves: totaux, nouvelles, remplacees, contredites: contreditesSim }, null, 1));
+            console.log(`SIMULATION (rien d'écrit en base) : ${simules} codes simulés sur ${codes.length} demandés (les autres jamais collectés) · jointures par preuve ${JSON.stringify(totaux)} · ${nouvelles.length} image(s) qui seraient AJOUTÉES · ${remplacees.length} REMPLACÉE(S) · ${contreditesSim.length} CONTREDITE(S) par le témoin du nom — ${f}`);
         }
         await fermer(); return;
     }
