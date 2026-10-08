@@ -1,7 +1,7 @@
 'use strict';
 // Le coût d'un lot et son supplément. Lot : max(1, ceil(cartesVues / 10)), questions comprises ; cartesVues compte les introuvables.
 const db = require('../db'); const { ObjectId } = require('mongoose').Types;
-const { debiter, rendrePoche } = require('./ledger');
+const { debiter, rendrePoche, ETATS_CLOS } = require('./ledger');
 const col = nom => db.col(nom);
 const coutDuLot = (cartesVues, cfg) => Math.max(1, Math.ceil(cartesVues / cfg.lot.tranche));
 
@@ -40,11 +40,19 @@ async function debiterSupplementSerie(porteur, { scanId, unites, cleIdempotence,
 // la même clé peut être rejouée), et un mouvement +1 garde la trace — somme(delta) reste égale au solde.
 async function annulerUnite(porteur, u, cfg, maintenant) {
     if (!u.credit) return;                                                     // administrateur : delta 0, rien à rendre
-    const { rendu } = await rendrePoche(porteur, u.credit, cfg, maintenant);
     const base = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
-    if (!rendu) { console.error(`🔴 [v2 supplement] unité ${u.cle} NON rendue (poche ${u.credit.poche}) : la réconciliation le dira`); return; }
-    await col('mouvements').updateOne({ cleIdempotence: u.cle }, { $set: { etat: 'rembourse' }, $unset: { cleIdempotence: '' } });
+    const expire = new Date(maintenant.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
+    // Tour 4 (3) — PRISE ATOMIQUE de la ligne (même garde des états clos que rembourserLigne) : une unité déjà « rembourse » / « rendu-en-cours » n'est pas rendue deux fois.
+    const pris = await col('mouvements').findOneAndUpdate({ ...base, type: 'debit', cleIdempotence: u.cle, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' }, $unset: { expireLe: '' } }, { returnDocument: 'before' });
+    if (!pris) { console.error(`🔴 [v2 supplement] unité ${u.cle} : déjà prise par un autre chemin (ou ligne absente) — rien n'est rendu ici`); return; }
+    const { rendu } = await rendrePoche(porteur, u.credit, cfg, maintenant);
+    if (!rendu) {
+        console.error(`🔴 [v2 supplement] unité ${u.cle} NON rendue (poche ${u.credit.poche}) : ligne « rendu-echoue », la réconciliation le dira`);
+        await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rendu-echoue' } });
+        return;
+    }
+    await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rembourse', expireLe: expire }, $unset: { cleIdempotence: '' } });
     await col('mouvements').insertOne({ ...base, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: u.credit.poche, motif: 'supplement-annule', scanId: null,
-        etat: 'rembourse', cleIdempotence: `annule|${u.cle}|${new ObjectId()}`, expireLe: new Date(maintenant.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3) });
+        etat: 'rembourse', cleIdempotence: `annule|${u.cle}|${new ObjectId()}`, expireLe: expire });
 }
 module.exports = { coutDuLot, debiterSupplement };

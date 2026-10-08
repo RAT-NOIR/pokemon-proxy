@@ -47,6 +47,12 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     const rejeu = dej => {
         // une clé appartient à UN porteur : la rejouer sous un autre ne rend ni son crédit ni son verdict (B1 doit la préfixer par le porteur ; ici on ferme quand même)
         if (String(dej.compteId ?? dej.installationId) !== String(porteur.id)) throw new Error('debiter : cleIdempotence appartenant à un autre porteur');
+        // Tour 4 (1) — une ligne dont le rendu est commencé/échoué (« rendu-en-cours » / « rendu-echoue ») n'est NI rejouée (le crédit a pu être rendu : scan gratuit) NI redébitée (double débit) :
+        // l'argent de cette ligne attend la réconciliation. Aucune analyse livrée, aucun crédit touché.
+        if (dej.type === 'debit' && ETATS_RENDU_NON_CONFIRME.includes(dej.etat)) {
+            console.error(`🔴 [v2 debiter] clé ${dej.cleIdempotence} : ligne « ${dej.etat} » — rejeu REFUSÉ (EN_RECONCILIATION), ni rejoué ni redébité ; à résoudre par la réconciliation`);
+            return { ok: false, code: 'EN_RECONCILIATION', cle: dej.cleIdempotence };
+        }
         return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur', cle: dej.cleIdempotence };
     };
     // I2 — une clé dont le débit a été REMBOURSÉ n'est plus un rejeu mais une NOUVELLE tentative (une panne retentée avec la même clé ne doit pas être gratuite) :
@@ -155,9 +161,9 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
             if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
         }
         for (const d of pendantes) {
-            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
+            const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rembourse', expireLe: expireMouvement(maintenant, cfg) } }, { returnDocument: 'before' });   // une ligne « rendu-echoue » reprise retrouve son expiration
             if (!pris) continue;                                                  // un autre chemin vient de la rendre
-            const restituer = () => col('mouvements').updateOne({ _id: d._id }, { $set: { etat: pris.etat } });
+            const restituer = () => col('mouvements').updateOne({ _id: d._id }, pris.expireLe ? { $set: { etat: pris.etat, expireLe: pris.expireLe } } : { $set: { etat: pris.etat }, $unset: { expireLe: '' } });
             let r;
             try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { await restituer(); throw e; }
             if (!r.rendu) { await restituer(); premiereRaison = premiereRaison || r.raison; continue; }
@@ -192,6 +198,7 @@ async function rendreUnite(porteur, credit, cfg, now) {
     return { rendu: r.rendu, raison: r.raison, pocheRendue: c.poche, cible };
 }
 // « rendu-en-cours » : un rendu commencé et non confirmé (processus tué, écriture d'état échouée) — ni ouverte ni close : jamais reprise seule (le crédit a pu être rendu), listée par la réconciliation.
+const ETATS_RENDU_NON_CONFIRME = ['rendu-en-cours', 'rendu-echoue'];   // lignes de débit en attente de réconciliation : jamais rejouées, jamais expirées
 const ETATS_CLOS = ['rembourse', 'rendu-en-cours'];
 const ouvertes = d => d.credit && !ETATS_CLOS.includes(d.etat);
 async function rembourser(porteur, credit, motif, o = {}, cfg) {
@@ -214,11 +221,11 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
         if (!d || !d.credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
         // La prise écrit « rendu-en-cours » (jamais « rembourse » avant que le crédit soit rendu) : si le processus ou une écriture ultérieure échoue, la ligne reste VISIBLE
         // (réconciliation) et ne peut être ni reprise seule ni rendue deux fois (ni rembourserLigne ni rendreLeScan ne prennent un « rendu-en-cours »).
-        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' } }, { returnDocument: 'before' });
+        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' }, $unset: { expireLe: '' } }, { returnDocument: 'before' });   // tour 4 (2) : une ligne non résolue n'expire pas
         if (!pris) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
     } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     const ecrireEtat = async (etat, plus = {}) => {                              // un second essai, puis l'échec est dit : la ligne garde alors « rendu-en-cours »
-        for (let essai = 0; essai < 2; essai++) { try { await col('mouvements').updateOne({ _id: d._id }, { $set: { etat, ...plus } }); return true; } catch (e) { if (essai) console.error(`🔴 [v2 rembourser-ligne] ${cle} : état « ${etat} » non écrit (${e.message}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
+        for (let essai = 0; essai < 2; essai++) { try { await col('mouvements').updateOne({ _id: d._id }, etat === 'rembourse' ? { $set: { etat, ...plus, expireLe: expireMouvement(maintenant, cfg) } } : { $set: { etat, ...plus }, $unset: { expireLe: '' } }); return true; } catch (e) { if (essai) console.error(`🔴 [v2 rembourser-ligne] ${cle} : état « ${etat} » non écrit (${e.message}) — la ligne reste « rendu-en-cours » (réconciliation)`); } }
         return false;
     };
     const echec = async raison => {
@@ -234,4 +241,4 @@ async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } 
     await ecrireEtat('rembourse');                                              // crédit rendu : si cette écriture échoue, la ligne reste « rendu-en-cours » (listée), jamais rendue une 2e fois
     return { rendu: true, raisonNonRembourse: null };
 }
-module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne };
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne, ETATS_CLOS, ETATS_RENDU_NON_CONFIRME };
