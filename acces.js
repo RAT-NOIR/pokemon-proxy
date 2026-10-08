@@ -344,6 +344,7 @@ async function verifierAcces(req, res, next) {
  */
 async function rembourserScan(req, motif, { compteur: quelCompteur, jourDe } = {}) {
     const question = quelCompteur === 'question';
+    if (req && req.credit && req.credit.v2) return req.credit.v2.rembourser(req, motif, { compteur: quelCompteur, jourDe });   // API v2 : la main passe à v2/argent
     const Compteur = question ? RemboursementQuestion : Remboursement;
     const plafond = question ? REMBOURSEMENTS_QUESTIONS_MAX_JOUR : REMBOURSEMENTS_MAX_JOUR;
     // ⚠️ CHAQUE `return false` NOMME SA CAUSE. Il y en a neuf, et le journal n'en gardait
@@ -465,6 +466,7 @@ async function signalerIncertain(req, raison) {
  */
 async function poserQuestion(req, { scanId, raison, candidats }) {
     const credit = req && req.credit;
+    if (credit && credit.v2) return credit.v2.poserQuestion(req, { scanId, raison, candidats });   // API v2 : la main passe à v2/argent
     const userId = (credit && credit.userId) || (req && req.body && req.body.userId) || '?';
     console.warn(`⚠️ [scan-incertain] userId=${userId} raison=${raison} -> question en attente`);
     if (!credit) { noterNonRemboursement('aucun-debit'); return { etat: null }; }
