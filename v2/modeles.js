@@ -30,9 +30,11 @@ const INDEX = Object.freeze([
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees')
 ]);
 
-async function creerIndex() {
-    for (const i of INDEX) await col(i.c).createIndex(i.cle, i.opts);
-    return INDEX.length;
+// `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle. `colFn` est injectable pour les bancs.
+async function creerIndex(collections, colFn = col) {
+    const choisis = Array.isArray(collections) ? INDEX.filter(i => collections.includes(i.c)) : INDEX;
+    for (const i of choisis) await colFn(i.c).createIndex(i.cle, i.opts);
+    return choisis.length;
 }
 // Les propriétés qu'un index GARANTIT : c'est elles qu'on compare, jamais le seul nom (un index de même nom, non unique ou sans TTL,
 // ne garantit rien). Retourne la liste des propriétés qui diffèrent (vide = conforme).

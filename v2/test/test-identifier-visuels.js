@@ -124,6 +124,20 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.vrai(`   visuels.js ne nomme que des collections de la liste (${nommees.length} appels : ${[...new Set(nommees)].join(', ')})`, nommees.length > 0 && nommees.every(n => V.COLLECTIONS_LUES.includes(n)));
     H.vrai('   visuels.js ne nomme jamais cartes_produits ni numeros_cartes ni catalogue_produits',
         !/cartes_produits|numeros_cartes|catalogue_produits/.test(src.replace(/\/\/.*$/gm, '')));
+    // un nom CALCULÉ passerait la lecture des littéraux : le seul accès à la base est donc EXACTEMENT le `db.col(` de colLue, rien d'autre
+    const code = src.replace(/\/\/.*$/gm, '');
+    const occ = [...code.matchAll(/\bdb\.col\(/g)].length;
+    const corpsColLue = (code.match(/function colLue\([^)]*\)\s*\{[\s\S]*?\n\}/) || [''])[0];
+    H.v('   exactement UNE occurrence de `db.col(` dans visuels.js, et dans colLue', [occ, /db\.col\(/.test(corpsColLue)], [1, true]);
+    H.v('   aucun autre accès à `db.` (hors db.col dans colLue) ni à mongoose', [[...code.matchAll(/\bdb\.(?!col\()/g)].length, /mongoose/i.test(code)], [0, false]);
+    // l'import ne crée QUE les index de `visuels` (la garde de taille ne compte que ceux-là)
+    const creesParDefaut = []; const faussesCol = nom => ({ createIndex: async (cle, o) => { creesParDefaut.push([nom, o.name]); } });
+    const nTotal = await M.creerIndex(['visuels'], faussesCol);
+    H.v('creerIndex([\'visuels\']) : 2 index, tous sur visuels', [nTotal, creesParDefaut], [2, [['visuels', 'visuels_produit'], ['visuels', 'visuels_metacarte']]]);
+    const appels = []; await Imp.creerIndexVisuels({ creerIndex: async (c) => { appels.push(c); return 2; } });
+    H.v('   l\'import demande exactement [\'visuels\'] au socle', appels, [['visuels']]);
+    const tous = []; await M.creerIndex(undefined, nom => ({ createIndex: async () => { tous.push(nom); } }));
+    H.vrai(`   sans filtre, creerIndex garde son comportement (${tous.length} index, plusieurs collections)`, tous.length === M.INDEX.length && new Set(tous).size > 1);
 
     // taille : estimation et garde (par ce qu'elle AUTORISE)
     const docs = [brut(5001), brut(5002), brut(5003)];
@@ -163,6 +177,7 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
     H.v('CLI --ecrire --base=test_scratch : code 0, "2 lus, 1 importés, 1 refusés"', [ok.status, /2 lus, 1 importés, 1 refusés/.test(ok.stdout)], [0, true]);
     H.v('   écrit dans la base de banc (collection nue de l\'enfant)', await brutCol().countDocuments({ idProduct: 4001 }), 1);
     H.vrai('   l\'enfant a créé l\'index idMetacard (creerIndex)', (await brutCol().indexes()).some(i => i.name === 'visuels_metacarte'));
+    H.v('   l\'enfant n\'a créé que la collection visuels (aucun index d\'une autre collection)', (await require('mongoose').connection.db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name).filter(n => !n.startsWith('rm_t')), ['visuels']);
     await brutCol().drop().catch(() => { });
     for (const x of [f, manque, sansMetaF]) fs.unlinkSync(x);
 

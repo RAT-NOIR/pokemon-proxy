@@ -89,7 +89,10 @@ function entreesDuFichier(json) {
     return liste.map(e => e || {});
 }
 
-module.exports = { importerVisuels, preparer, resume, entreesDuFichier, estimerAjout, garderTaille, PLAFOND_OCTETS };
+/** Crée les index de la collection `visuels` (visuels_produit, visuels_metacarte), et aucun autre. `socle` est injectable pour le banc. */
+async function creerIndexVisuels(socle = require('../modeles')) { return socle.creerIndex(['visuels']); }
+
+module.exports = { creerIndexVisuels, importerVisuels, preparer, resume, entreesDuFichier, estimerAjout, garderTaille, PLAFOND_OCTETS };
 
 if (require.main === module) {
     (async () => {
@@ -112,14 +115,14 @@ if (require.main === module) {
         if (!ecrire) { console.log('(simulation : rien n\'est écrit ; ajoute --base=… --ecrire pour importer)'); process.exit(0); }
         const { connecterMongo } = require('../../mongo-connexion');
         const mongoose = require('mongoose');
-        const db = require('../db'), { creerIndex } = require('../modeles');
+        const db = require('../db');
         const nom = await connecterMongo({ script: 'v2/migrations/importer-visuels.js', ecrit: true, confirmationProduction: true });
         db.brancher(mongoose.connection.db);
         const actuel = await tailleGrappe(mongoose);
         console.log(`taille actuelle de la grappe (test + test_scratch, données + index) : ${Number.isFinite(actuel) ? mo(actuel) + ' Mo' : 'illisible'}`);
         const g = garderTaille({ actuel, ajout: est.total, plafond });
         if (!g.ok) { await mongoose.disconnect(); stop(`${g.raison} (plafond ${mo(plafond)} Mo) — rien n'est écrit`); }
-        await creerIndex();
+        await creerIndexVisuels();           // SEULEMENT les index de `visuels` : la garde de taille ne compte que ceux-là
         const r = await importerVisuels(entrees);
         console.log(`import dans "${nom}" : ${resume(r)}`);
         await mongoose.disconnect();
