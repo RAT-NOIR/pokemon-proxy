@@ -1,4 +1,12 @@
 {
+  "permissions": {
+    "allow": [
+      "PowerShell(node poser-par-metacarte.js --codes=SM)",
+      "PowerShell(node v2/test/test-cors.js)",
+      "PowerShell(node v2/test/capturer-identifier.js --ecrire=*)",
+      "PowerShell(node v2/test/capturer-identifier.js --contre=*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
