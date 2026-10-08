@@ -56,7 +56,7 @@ function impression(i, ctx) {
     return Object.freeze({
         idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
-        lien: lienCardmarket(i.lienCardmarket, numero, rarete), prixGuide: prixGuideDe(i.prixGuide)
+        lien: lienCardmarket(i.lien, numero, rarete), prixGuide: prixGuideDe(i.prixGuide)
     });
 }
 
