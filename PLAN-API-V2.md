@@ -2438,12 +2438,16 @@ d'onnxruntime (mêmes modèles) n'est pas mesuré ; le levier mémoire de l'arè
 ### 22.3 La règle de décision (écrite par ce qu'elle AUTORISE)
 
 1. **Affirmer (`identifiee`)** — seulement dans l'un de ces cas, et sinon NON : (a) **G affirme** (image seule, garde des zones : déjà mesurée à 0 faux) ; (b) **l'image désigne un produit ET une source de texte
-   indépendante (OCR consensus numéro+total, ou paire du titre) concorde avec lui, ET aucune source ne le contredit** (un numéro lu qui désigne un AUTRE produit du top-k bloque l'affirmation). **Une source de texte n'affirme
+   (OCR consensus numéro+total, ou paire du titre) concorde avec lui, ET aucune source ne le contredit** (un numéro lu qui désigne un AUTRE produit du top-k bloque l'affirmation). **Une source de texte n'affirme
    jamais seule** (le §73 l'a montré : un faux numéro lu est pire qu'un silence) ; deux sources de texte d'accord, sans image, ne suffisent pas non plus (elles partagent le même catalogue de numéros : « une clé sans doublon peut désigner la mauvaise carte »).
+   **🔴 L'INDÉPENDANCE DU TEXTE N'EST PAS ÉTABLIE — trois limites, écrites :** (i) **l'OCR lit la même photo que Gemini et que l'image** : leurs erreurs sont corrélées (§72 : deux lectures du même modèle sur la même photo se trompent ensemble ; ici même flou, même reflet, même bande), donc « image + OCR d'accord » est plus faible que deux sources ;
+   (ii) **le titre est la seule source indépendante de la photo, et c'est le vendeur qui le contrôle** (et il peut être faux ou ambigu : sur les 20 cartes du labo à numéro imprimé, 3 titres donnent un AUTRE numéro que le vrai parmi leurs lectures possibles — mesure avec le premier extracteur ; avec les nombres collés « 59100 » découpés en paires candidates, la vraie paire figure parmi les candidates sur 17 des 19 cartes à numéro+total et aucun titre ne donne une paire sans la bonne, mais un nombre à 5 chiffres reste ambigu) — un titre ne confirme jamais seul ni ne contredit seul ;
+   (iii) **l'auto-banc n'a pas de vrais textes imprimés** (ses photos sont simulées depuis des visuels, sa « lecture » est parfaite ou simulée) : il **ne peut pas calibrer les seuils du texte**, seulement ceux de l'image ; ceux du texte n'ont, pour banc, que les photos réelles (86, dont 47 sans numéro).
+   **Aucun seuil du banc n'est transposable tel quel au trafic réel** (annonces modernes, photos de téléphone, vendeurs) : toute valeur se re-mesure sur de vraies analyses consenties (lot B6) avant d'être crue.
 2. **Poser une question de départage (`a-trancher`)** — quand 2 ou 3 candidats restent au top-k et qu'un champ de la liste fermée (numéro, total, motif, langue, carte, visuel) les sépare, **sans Gemini** : la question en images existe déjà au contrat. **Une question n'est
    pas un recours.**
 3. **Appeler Gemini (dernier recours)** — seulement si 1 et 2 ne résolvent pas : aucune affirmation, aucune question formulable à ≤ 3 candidats, ou top-k sans candidat plausible. **Gemini rend une lecture ; le décideur la traite comme n'importe quelle lecture**
-   (`deciderAvecSeconde` : garde de lecture, jumeaux, seconde lecture si besoin). **Plafond de coût** : au plus 1 appel de lecture + 1 seconde lecture par scan, plafond d'appels par heure et par compte (existant : 120/h).
+   (`deciderAvecSeconde` : garde de lecture, jumeaux, seconde lecture si besoin). 🔴 **Cette lecture PEUT faire affirmer ce que G n'affirmait pas** (au labo, `deciderAvecSeconde` a fait passer les affirmés de 47 à 52) **et Gemini se trompe 3 fois sur 39 sur le numéro** : elle **ne confirme donc jamais seule**, elle est soumise à la **garde de lecture STRICTE (écart 0,02, décision du testeur §72)** et à la **contrainte du jumeau** (§72 : un autre produit non contredit au même visuel empêche l'affirmation ; la confirmation n'est due que pour un voisin écarté seulement par le code ou le numéro). **Plafond de coût** : au plus 1 appel de lecture + 1 seconde lecture par scan, plafond d'appels par heure et par compte (existant : 120/h).
 4. **Rien ne résout** : `introuvable` (rembourse) — jamais une affirmation par défaut.
 
 **LE SEUIL.** Il n'y a pas un seuil de « confiance » unique : il y a les **seuils de G** (zones 0,06 · sim ≥ 0 · marge ≥ 0,2 · inliers_min 40, calibrés) et les **seuils du texte** (consensus 2 bandes/3, score OCR ≥ 0,7, accord titre/OCR). **Réglage : on choisit sur
@@ -2451,7 +2455,7 @@ la moitié A de l'auto-banc (1 922 décisions), on VÉRIFIE sur la moitié B, le
 (§72) ; **un seuil ne se desserre pas pour sauver un cas ni pour baisser le recours** (§23 : « un seuil qu'on bouge pour sauver deux cas n'est plus un seuil ») ; tout faux est ouvert à l'œil avant tout nouveau réglage ; le banc réel (86) **ne choisit pas** — il est trop petit.
 **Aujourd'hui, seuls les seuils de G sont calibrés ; ceux du texte ne l'ont été sur rien d'autre que ces 86 photos : ils sont À CALIBRER avant de brancher la règle 1(b).**
 
-### 22.4 Le taux de recours à Gemini — estimé pour chaque combinaison (MESURÉ pour G seul, BORNES pour le reste)
+### 22.4 Le taux de recours à Gemini — estimé pour chaque combinaison (MESURÉ pour G seul, RECOURS MINIMAUX pour le reste)
 
 Dénominateur : **86 photos** ; recours = scan qui irait à Gemini. Aujourd'hui : **86/86 = 100 %** (chaque scan appelle Gemini ; v5 : 75/83 demandent en plus une seconde lecture).
 
@@ -2459,24 +2463,25 @@ Dénominateur : **86 photos** ; recours = scan qui irait à Gemini. Aujourd'hui 
 |---|---|---|
 | Gemini d'abord (aujourd'hui) | **86 = 100 %** | mesuré |
 | RatMarket G seul | **54 = 62,8 %** (32 affirmés, 0 faux) | **MESURÉ** |
-| G + titre (65 photos du labo ; 21 du testeur sans titre) | plafond **45 = 52,3 %** (G seul = plancher 62,8 %) | PLAFOND |
-| G + OCR RapidOCR | plafond **34 = 39,5 %** (numéro seul) / 36 = 41,9 % (numéro ET total) ; **0 lecture fausse** parmi les 54 | PLAFOND |
-| G + OCR Tesseract | plafond 49 = 57,0 % ; 1 lecture fausse | PLAFOND |
-| G + titre + OCR RapidOCR | plafond **31 = 36,0 %** / 36 = 41,9 % ; 0 faux lu | PLAFOND |
+| G + titre — **le titre ne couvre que 65 photos (labo) ; les 21 du testeur n'en ont pas** | recours minimal si le décideur confirme tout ce que le titre lit juste : 45 = 52,3 % (le recours attendu est plus haut, entre ce minimum et 62,8 %) | RECOURS MINIMAL |
+| G + OCR RapidOCR | recours minimal si… : 34 = 39,5 % (numéro seul) / 36 = 41,9 % (numéro ET total) ; 0 lecture fausse parmi les 54 | RECOURS MINIMAL |
+| G + OCR Tesseract | recours minimal si… : 49 = 57,0 % ; 1 lecture fausse | RECOURS MINIMAL |
+| G + titre (65 photos seulement) + OCR RapidOCR | recours minimal si… : 31 = 36,0 % / 36 = 41,9 % ; 0 faux lu | RECOURS MINIMAL |
 
 **Décomposition des 54 non affirmés par G :** 3 sans fiche chez nous (rien à affirmer) · **19 dont la carte n'imprime AUCUN numéro** (le texte ne peut rien : vintage japonais) · **32 à numéro imprimé, seul gisement du texte** — l'OCR en lit 20 juste (consensus).
-**« PLAFOND » veut dire : on suppose que tout scan non affirmé par G dont la source lit le BON numéro serait confirmé par le décideur** (le bon produit est au top-k). **Ce n'est PAS une mesure du recours futur.** Avertissement mesuré : sur le décideur ACTUEL du labo
-(1re lecture Gemini + image ancienne, 83 photos avec fiche), la seconde lecture OCR RapidOCR a lu un numéro sur 24 photos et a fait passer les affirmés de **47 à 47** (0 faux), là où la seconde lecture Gemini les fait passer à 52 : **le gain réel du texte sera inférieur au plafond, d'un facteur qu'on ne connaît pas**.
-**Le recours réel de chaque combinaison est donc À MESURER** en construisant le décideur 1(b) sur le top-k de RatMarket (qui n'est écrit sur disque pour aucune des 86 : seules les décisions le sont) — lot à ouvrir, critère de fin : 0 faux sur réel 86 + auto-banc B + Dracaufeu 60 + vérité cachée, et le recours imprimé avec son dénominateur.
+**« RECOURS MINIMAL » veut dire : si le décideur confirmait tout scan non affirmé par G dont la source lit le BON numéro** (le bon produit au top-k) — **c'est un PLANCHER de recours, donc un coût MINIMAL, jamais un attendu ni une mesure du recours futur.** Rappel de l'essai du labo, mesuré : sur le décideur ACTUEL
+(1re lecture Gemini + image ancienne, 83 photos avec fiche), la seconde lecture OCR RapidOCR a lu un numéro sur 24 photos et a fait passer les affirmés de **47 à 47** (0 faux), là où la seconde lecture Gemini les fait passer à 52 : **le recours réel du texte sera plus haut que ce minimum, d'un écart qu'on ne connaît pas**.
+**Le recours réel de chaque combinaison est donc À MESURER** en construisant le décideur 1(b) sur le top-k de RatMarket (qui n'est écrit sur disque pour aucune des 86 : seules les décisions le sont) — lot à ouvrir, critère de fin : 0 faux sur réel 86 + auto-banc B + Dracaufeu 60 + vérité cachée, **et 0 faux affirmé par le chemin « lecture Gemini rendue au décideur », mesuré sur le banc réel (86)**, et le recours imprimé avec son dénominateur.
 **Limite du banc, à dire à chaque usage :** 55 % de ses cartes sont du vintage japonais sans numéro ; le trafic réel (annonces modernes à numéro) est plus favorable au texte — **supposé, non mesuré** (le journal de production n'a aucune analyse d'extension depuis le 08/09 et aucune image stockée).
-**Coût par scan (arithmétique, SUPPOSÉE) = recours × appels par recours × coût de l'appel** : à 1 appel de lecture par recours et 0,0035 $ (milieu de 0,0032-0,0037, §73) → 100 % : 0,0035 $ ; 62,8 % : **0,0022 $** ; 39,5 % : **0,0014 $** ; une seconde lecture ajoute ~0,0008 $ par recours qui en a besoin ; le calcul local ne coûte pas de $ mais une instance (non chiffrée).
+**Coût par scan (arithmétique, SUPPOSÉE) = recours × appels par recours × coût de l'appel** : à 1 appel de lecture par recours et 0,0035 $ (milieu de 0,0032-0,0037, §73) → 100 % : 0,0035 $ ; 62,8 % (recours MESURÉ de G seul) : 0,0022 $ ; 39,5 % (recours MINIMAL avec l'OCR) : 0,0014 $ — **un coût minimal, pas un attendu** ; une seconde lecture ajoute ~0,0008 $ par recours qui en a besoin. **Ce coût est INCOMPLET : l'instance qui porte l'OCR n'est pas chiffrée**, donc le coût total par scan n'est pas connu.
 
 ### 22.5 Ce que CHAQUE scan journalise — pour que le taux de recours et le coût sortent de TOUT rapport
 
 Champs ajoutés à `analyses` (§3.2) / au journal, en plus de l'existant : `scanId`, `versionChaine` (commit + version de la règle), `etages` : tableau `{ nom: 'titre'|'ocr'|'image'|'decision'|'gemini', etat: 'ok'|'muet'|'panne'|'saute', ms, lu: {numero,total,setCode}|null }` ;
 `etageDecisif` ∈ `image-g | image+texte | question | gemini | aucun` ; `recoursGemini` (booléen) ; `motifRecours` ∈ `aucun-candidat | pas-de-question-possible | image-illisible | etage-en-panne | sans-fiche` ; `appelsGemini` (0, 1, 2) ; `jetonsGemini` {entree, sortie} ; `coutGemini` ($, lu dans l'usage rendu par le fournisseur, jamais estimé) ;
 `msLocal` ; `issue` (`identifiee|a-trancher|introuvable|panne`) ; `fauxConnus` (rempli à la correction de l'utilisateur ou au banc : l'étage décisif d'un faux affirmé).
-**Définition imprimée par chaque rapport :** **taux de recours = scans avec `appelsGemini ≥ 1` / scans à image exploitable** (on retire du dénominateur, et on IMPRIME le retrait, les refus d'entrée `IMAGE`, `QUOTA`, `VERSION`, `MARCHE` et les pannes d'entrée) ; affiché **n / N**, décomposé par `motifRecours` et par `etageDecisif`, avec l'intervalle de Wilson et la période ;
+**Définition imprimée par chaque rapport :** **taux de recours = scans avec `appelsGemini ≥ 1` / N retenu**, où le filtre d'entrée est un critère **écrit d'AVANCE et indépendant des étages** (ni de l'OCR, ni de RatMarket, ni de Gemini) : requête recevable (pas de refus `IMAGE`, `QUOTA`, `VERSION`, `MARCHE`), une image décodable, **côté court ≥ 300 px** (valeur à fixer sur le trafic avant l'allumage, puis figée) et **carte détectée par la détection géométrique** (§22.1 étage 2 ; si elle ne trouve rien, le scan RESTE au dénominateur). Chaque rapport imprime **N brut ET N retenu** et chaque retrait par motif.
+🔴 **`image-illisible` compte DANS le recours (au numérateur), jamais dans le retrait** : un dénominateur qui rétrécit pendant que le taux monte est le signal d'un contrôle vidé (§0, §34). Le taux est donc calculé sur le même dénominateur pour toutes les combinaisons comparées ; affiché **n / N**, décomposé par `motifRecours` et par `etageDecisif`, avec l'intervalle de Wilson et la période ;
 **appels par scan** (≠ recours : une seconde lecture fait 2) ; **coût moyen par scan = somme(`coutGemini`) / N** ; faux affirmés par `etageDecisif` (un étage dont les faux montent est coupé). Un rapport sans son N n'est pas un rapport (§0).
 
 ### 22.6 Quand un étage tombe en panne
@@ -2484,7 +2489,7 @@ Champs ajoutés à `analyses` (§3.2) / au journal, en plus de l'existant : `sca
 Règle : **une panne est un `etat: 'panne'`, jamais une lecture vide ni une contradiction** (une panne de RatMarket ne fait pas dire « introuvable »). Le décideur tourne avec ce qui reste ; ce qui ne peut pas conclure BLOQUE l'affirmation et le dit.
 | étage en panne | conséquence |
 |---|---|
-| OCR (processus séparé : délai 4 s dépassé, mémoire, arrêt) | `etat: 'panne'`, étage sauté ; titre + image continuent ; le taux de recours monte (visible : `motifRecours: etage-en-panne`) |
+| OCR (processus séparé : délai dépassé, mémoire, arrêt) | `etat: 'panne'`, étage sauté ; titre + image continuent ; le taux de recours monte (visible : `motifRecours: etage-en-panne`). **Le délai n'est PAS 4 s** : l'OCR mesuré prend 1,8 s en médiane, 2,6 s au p90 sur ce PC, ×1,5 à 3 supposé sur Render ; **il se fixe APRÈS une mesure sur l'instance Render réelle**, au-dessus de son p99. **Alarme** (écrite en base comme `alerte/file-vide`) quand la part de scans en `etage-en-panne` dépasse un seuil sur une heure (seuil à poser avec la mesure). **Plafond d'appels Gemini quand l'OCR est en panne** : une panne de l'OCR ne doit pas faire exploser le coût en silence — plafond horaire global d'appels Gemini ; au-delà, les scans non résolus reçoivent `panne` (remboursée) et non un appel. |
 | titre absent / illisible | sans effet (étage `muet`) |
 | RatMarket / voisins indisponibles | pas de G ; **le texte ne peut pas affirmer seul** → tout part à Gemini = la chaîne d'AUJOURD'HUI (mode dégradé, coût d'avant) ; alerte écrite (comme `alerte/file-vide`) |
 | Gemini indisponible | si une question de départage est formulable sans lui, elle est posée ; sinon `panne` (HTTP existant, **remboursée**, jamais `introuvable`) |
@@ -2493,7 +2498,7 @@ Règle : **une panne est un `etat: 'panne'`, jamais une lecture vide ni une cont
 ### 22.7 MESURÉ / SUPPOSÉ — récapitulatif
 
 **MESURÉ (8 octobre 2026) :** 86 photos, 258 bandes ; latence, mémoire et lecture par champ des deux OCR (§22.2) ; RapidOCR à 800 px = même mémoire ; 1 seul cœur ≈ +20 % ; titre : 17/19 ; G : 32/86, 0 faux ; décideur actuel : OCR 47→47, Gemini 47→52 ; coûts d'appel §73.
-**SUPPOSÉ :** que le texte confirme tout ce qu'il lit juste (plafonds) ; la latence sur Render ; le trafic réel plus favorable que le banc ; la vérité de code (slug) ; le coût d'une instance OCR ; la géométrie du banc de bandes (candidat n° 1 de la détection, au lieu du meilleur des trois par similarité d'image).
+**SUPPOSÉ :** que le texte confirme tout ce qu'il lit juste (les recours minimaux ne sont pas des attendus) ; qu'un seuil du banc se transpose au trafic réel (non) ; que le titre (65 photos seulement) représente les annonces ; la latence sur Render ; le trafic réel plus favorable que le banc ; la vérité de code (slug) ; le coût d'une instance OCR ; la géométrie du banc de bandes (candidat n° 1 de la détection, au lieu du meilleur des trois par similarité d'image).
 **NON FAIT :** le décideur 1(b) ; la calibration des seuils du texte ; l'OCR en Node ; tout appel payant (aucun dans ce lot).
 
 ---
