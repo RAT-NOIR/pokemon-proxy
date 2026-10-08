@@ -36,16 +36,23 @@ async function fermerBac() { if (ferme) return; ferme = true; try { await db.vid
 function armerNettoyage() {
     if (armee) return; armee = true;
     const sortirReel = process.exit.bind(process);
-    let sortie = false;
-    const finir = (code) => {
-        if (code !== undefined && code !== null) process.exitCode = code;
+    let sortie = false, retenu = 0;
+    // Le PREMIER code non nul gagne, et un 0 ultérieur (le code d'un banc continue après un process.exit(1) : bilan(), exit(0)…)
+    // ne l'efface jamais : un banc rouge ne sort pas vert.
+    const retenir = (code) => { const c = Number(code === undefined || code === null ? process.exitCode : code) || 0; if (!retenu && c) retenu = c; if (retenu) process.exitCode = retenu; return retenu; };
+    const finir = (code, immediat = false) => {
+        retenir(code);
+        if (immediat) return sortirReel(retenu || 1);      // second SIGINT : on ne rattend pas un nettoyage qui ne répond pas
         if (sortie) return; sortie = true;
-        fermerBac().catch(e => { console.error('❌ nettoyage du préfixe :', e.message); process.exitCode = 1; }).finally(() => sortirReel(process.exitCode));
+        // Mongo muet : le nettoyage ne bloque jamais la sortie au-delà du délai (unref : il ne retient pas le processus à lui seul).
+        setTimeout(() => { console.error('❌ nettoyage du préfixe : délai dépassé, sortie forcée (collections possiblement restantes)'); sortirReel(retenu || 1); },
+            Number(process.env.RM_DELAI_NETTOYAGE_MS) || 20000).unref();
+        fermerBac().catch(e => { console.error('❌ nettoyage du préfixe :', e.message); retenir(1); }).finally(() => sortirReel(retenu || Number(process.exitCode) || 0));
     };
-    process.exit = finir;                                   // le code qui suit un process.exit() ne doit plus compter : on rend la main
+    process.exit = (code) => finir(code);                  // le code qui suit un process.exit() ne doit plus compter : on rend la main
     process.on('uncaughtException', e => { console.error('❌', e); finir(1); });
     process.on('unhandledRejection', e => { console.error('❌', e); finir(1); });
-    for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => finir(1));
+    for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => finir(1, sortie));
 }
 
 function serveur(app) {

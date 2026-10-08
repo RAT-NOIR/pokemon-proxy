@@ -1,22 +1,31 @@
 'use strict';
-// FUITE : après un banc, terminé normalement OU par exception OU par process.exit, aucune collection de son préfixe ne doit rester
-// dans test_scratch (y compris celles qu'une écriture ou un index tardif recréerait). Chaque cas est un vrai processus enfant.
+// FUITE : après un banc, terminé normalement OU par exception OU par process.exit OU par signal, aucune collection de son préfixe
+// ne doit rester dans test_scratch (y compris celles qu'une écriture ou un index tardif recréerait), et son CODE DE SORTIE doit
+// rester honnête (un banc rouge ne sort jamais en 0). Chaque cas est un vrai processus enfant.
 const path = require('path');
 const { spawnSync } = require('child_process');
 const H = require('./_harnais');
 const db = require('../db');
 
-const compter = async (prefixe) => (await db.base().listCollections({}, { nameOnly: true }).toArray()).filter(c => c.name.startsWith(prefixe)).length;
+const noms = async (prefixe) => (await db.base().listCollections({}, { nameOnly: true }).toArray()).map(c => c.name).filter(n => n.startsWith(prefixe));
+// mode -> code de sortie attendu de l'enfant
+const CAS = { normal: 0, exception: 1, exit: 1, 'exit-puis-zero': 1, 'non-attrapee': 1, rejet: 1, sigint: 1, sigterm: 1, tardif: 0, 'mongo-muet': 1, 'double-sigint': 1 };
+const MUETS = ['mongo-muet', 'double-sigint'];   // le nettoyage de l'enfant ne répond jamais : il ne peut pas vider, c'est le parent qui nettoie
 
 (async () => {
     await H.ouvrirBac('test-fuite.js');
-    for (const mode of ['normal', 'exception', 'exit', 'tardif']) {
-        const r = spawnSync(process.execPath, [path.join(__dirname, 'fuite-enfant.js'), mode], { encoding: 'utf8' });
+    for (const [mode, codeAttendu] of Object.entries(CAS)) {
+        const debut = Date.now();
+        const r = spawnSync(process.execPath, [path.join(__dirname, 'fuite-enfant.js'), mode], { encoding: 'utf8', timeout: 30000 });
         const m = /PREFIXE=(rm_t[0-9a-z]+_)/.exec(r.stdout || '');
         H.vrai(`${mode} : l'enfant a annoncé son préfixe`, m);
+        H.v(`${mode} : code de sortie de l'enfant`, r.status, codeAttendu);
+        if (mode === 'double-sigint') H.vrai('double-sigint : sortie immédiate (< 10 s, pas le délai de 600 s)', Date.now() - debut < 10000);
         if (!m) continue;
         await new Promise(res => setTimeout(res, 1500));           // laisse tout travail tardif de l'enfant se poser
-        H.v(`${mode} : collections restantes sous le préfixe de l'enfant`, await compter(m[1]), 0);
+        const restantes = await noms(m[1]);
+        if (MUETS.includes(mode)) { for (const n of restantes) await db.base().collection(n).drop(); }
+        else H.v(`${mode} : collections restantes sous le préfixe de l'enfant`, restantes.length, 0);
     }
     await H.fermerBac();
     H.bilan();
