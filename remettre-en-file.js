@@ -37,7 +37,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const { largeurMinDe } =require('./collecte-cartes/seuils-images');
+const { largeurMinDe } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const balise = require('./collecte-cartes/balise-worker');   // le commit du worker, au repos comme au travail
@@ -233,16 +233,16 @@ if (require.main !== module) return;
     // et Diamond & Pearl (min 200, médiane 381).
     // 🔑 C'est le motif dominant du chantier : la sonde doit lire LA MÊME CHOSE que le code de
     // production, sinon elle fabrique le refus qu'elle mesure.
-    const medLargeur = new Map(), medSource = new Map();
+    const medLargeur = new Map();   // clé `<source>/<slug>` : deux sources peuvent mesurer le même slug (_id de collecte_images_etat)
     for (const e of await cx.db.collection('collecte_images_etat').find({}).toArray()) {
         // la mesure écrite par le collecteur fait foi quand elle existe ; sinon on la recalcule
         // sur le même champ que lui, et de la même façon.
         const slug = String(e._id).split('/').slice(1).join('/');
         const src = String(e._id).split('/')[0];   // `<source>/<slug>` : le seuil dépend de la source (largeurMinDe)
-        if (e.mesure?.mediane != null) { medLargeur.set(slug, e.mesure.mediane); medSource.set(slug, src); continue; }
+        if (e.mesure?.mediane != null) { medLargeur.set(`${src}/${slug}`, e.mesure.mediane); continue; }
         const ws = [...(e.infosListe || []).map(x => x?.w), ...Object.values(e.mesures || {}).flat().map(x => x?.w)]
             .filter(Boolean).sort((a, b) => a - b);
-        if (ws.length) { medLargeur.set(slug, ws[Math.floor(ws.length / 2)]); medSource.set(slug, src); }
+        if (ws.length) medLargeur.set(`${src}/${slug}`, ws[Math.floor(ws.length / 2)]);
     }
 
     const reprises = [], insertions = [], bloquees = [], sansSource = [], complets = [];
@@ -253,11 +253,12 @@ if (require.main !== module) return;
         if (manque <= 0) { complets.push(code); continue; }
         const S = sourceDe(code);
         const u = file.get(code);
-        const min = medLargeur.get(l.slugSet) ?? null;   // MÉDIANE, le critère de la production
+        const source = u?.source ?? (S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
+        const min = medLargeur.get(`${source}/${l.slugSet}`) ?? null;   // MÉDIANE, le critère de la production
         const ligne = { code, slug: l.slugSet, manque, n: g.n, min, etat: u ? `${u.etat}/${u.resultat ?? '—'}` : 'absent' };
         if (u && u.etat === 'attente') continue;              // déjà en file
         if (u && u.etat === 'refuse' && u.resultat === 'refuse-resolution') {
-            const seuil = largeurMinDe(medSource.get(l.slugSet));
+            const seuil = largeurMinDe(source);
             if (min != null && min >= seuil) reprises.push(ligne);
             else bloquees.push({ ...ligne, pourquoi: `largeur MÉDIANE ${min ?? '?'} px < ${seuil} — le critère de la production` });
             continue;

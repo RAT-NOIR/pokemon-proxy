@@ -12,7 +12,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { ligne } = require('./collecte-cartes/table-sets');
-const { largeurMinDe } =require('./collecte-cartes/seuils-images');
+const { largeurMinDe } = require('./collecte-cartes/seuils-images');
 const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 (async () => {
@@ -27,13 +27,13 @@ const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule d�
     champSur(sets, 'region', { collection: 'sets' });
     const setDoc = new Map(sets.map(s => [s._id, s]));
     const file = new Map((await cx.db.collection('file_images').find({}).toArray()).map(u => [u._id, u]));
-    const med = new Map(), medSource = new Map();
+    const med = new Map();   // clé `<source>/<slug>` : deux sources peuvent mesurer le même slug
     for (const e of await cx.db.collection('collecte_images_etat').find({}, { projection: { mesure: 1, infosListe: 1, mesures: 1 } }).toArray()) {
         const slug = String(e._id).split('/').slice(1).join('/');
         const src = String(e._id).split('/')[0];   // l'_id d'une mesure est `<source>/<slug>` : le seuil dépend de la source (largeurMinDe)
-        if (e.mesure?.mediane != null) { med.set(slug, e.mesure.mediane); medSource.set(slug, src); continue; }
+        if (e.mesure?.mediane != null) { med.set(`${src}/${slug}`, e.mesure.mediane); continue; }
         const ws = [...(e.infosListe || []).map(x => x?.w), ...Object.values(e.mesures || {}).flat().map(x => x?.w)].filter(Boolean).sort((a, b) => a - b);
-        if (ws.length) { med.set(slug, ws[Math.floor(ws.length / 2)]); medSource.set(slug, src); }
+        if (ws.length) med.set(`${src}/${slug}`, ws[Math.floor(ws.length / 2)]);
     }
 
     // produits fichés sans visuel, par set
@@ -63,11 +63,12 @@ const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule d�
         // LIGNE de table, celle que la collecte a suivie : on lit la même chose que la production.
         const L = code ? ligne(code) : null;
         const region = L?.bulba?.tirage || d?.region || '?';
-        const m = med.get(s);
-        const seuil = largeurMinDe(medSource.get(s));
+        const S = code ? sourceDe(code) : null;
+        const source = u?.source ?? (S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
+        const m = med.get(`${source}/${s}`);
+        const seuil = largeurMinDe(source);
         if (m != null && m < seuil) return [`seuil : médiane ${m} px < ${seuil} (§23 — on ne bouge pas un seuil pour ses refus)`, 'non'];
         if (/^zh/.test(region)) return [`plancher CHINOIS (${region}) : trois sources épuisées (§42)`, 'non'];
-        const S = code ? sourceDe(code) : null;
         if (!S && ['jp', 'id', 'th', 'idth', 'ko'].includes(region)) return [`plancher ${region.toUpperCase()} : la page de CARTE ne porte que le fichier occidental (§44, --plan)`, 'non'];
         if (!d) return ['aucun document `sets` (set sans ligne collectée)', 'à instruire'];
         if (!u) return [`${S ? 'artofpkm' : 'bulbapedia'} · jamais mis en file`, 'à instruire'];

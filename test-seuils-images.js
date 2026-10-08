@@ -24,13 +24,31 @@ if (typeof S.largeurMinDe === 'function') {
     verifier('propriété héritée (« constructor », « __proto__ ») → 350', [f('constructor'), f('__proto__'), f('toString')], [350, 350, 350]);
 }
 
+// ── §21 bis : la liste officielle est DÉRIVÉE de la source unique des sites TPC, pas recopiée ───────────────────────────
+const TPC = require('./collecte-cartes/tpc');
+verifier('chaque site de SITES (tpc.js) est à 300 : une source TPC ajoutée ne peut pas rester à 350',
+    TPC.SOURCES_TPC.map(s => S.largeurMinDe(s)), TPC.SOURCES_TPC.map(() => 300));
+verifier('la liste officielle = SOURCES_TPC + pokemon-com, rien d\'autre', [...(S.SOURCES_OFFICIELLES || [])].sort(), [...TPC.SOURCES_TPC, 'pokemon-com'].sort());
+
+// ── une décision de seuil se relit (§23) : aRejuger(document trop-petit, source) ───────────────────────────────────────
+verifier('aRejuger est exportée', typeof S.aRejuger, 'function');
+if (typeof S.aRejuger === 'function') {
+    const r = S.aRejuger;
+    verifier('tpc-asie, 320 px, sans seuilApplique (jugé à 350) → à rejuger', r({ wOriginal: 320 }, 'tpc-asie'), true);
+    verifier('tpc-asie, 290 px, sans seuilApplique → reste trop petit', r({ wOriginal: 290 }, 'tpc-asie'), false);
+    verifier('artofpkm, 320 px, sans seuilApplique → reste trop petit (350)', r({ w: 320 }, 'artofpkm'), false);
+    verifier('tpc-asie, 320 px, jugé à 300 → rien à relire', r({ wOriginal: 320, seuilApplique: 300 }, 'tpc-asie'), false);
+    verifier('tpc-asie, largeur inconnue, sans seuilApplique → à rejuger (on ne sait pas conclure)', r({}, 'tpc-asie'), true);
+    verifier('source inconnue, 320 px → pas de rejugement', r({ wOriginal: 320 }, 'quelque-part'), false);
+}
+
 // ── les appelants : chacun passe par largeurMinDe avec SA source, aucun ne compare à LARGEUR_MIN ──────────────────────
 const lire = f => fs.readFileSync(path.join(__dirname, f), 'utf8');
 const sansCommentaires = t => t.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
 const APPELANTS = {
     'collecteur-images.js': "largeurMinDe('artofpkm')",
     'collecteur-images-bulba.js': "largeurMinDe('bulbapedia')",
-    'collecteur-images-tcgdex.js': "largeurMinDe('tcgdex')",
+    'collecteur-images-tcgdex.js': 'largeurMinDe(SOURCE)',
     'collecteur-images-tpc.js': 'largeurMinDe(site)',
     'collecte-cartes/preparer-images-auto.js': "largeurMinDe('artofpkm')",
     'remettre-en-file.js': 'largeurMinDe(',
@@ -41,6 +59,13 @@ for (const [f, appel] of Object.entries(APPELANTS)) {
     verifier(`${f} appelle ${appel}`, t.includes(appel), true);
     verifier(`${f} ne compare plus à LARGEUR_MIN (aucune copie du nombre)`, /\bLARGEUR_MIN\b/.test(t), false);
 }
+
+// ── la médiane est indexée par `source/slug`, pas par slug seul (deux sources, un même slug) ──────────────────────────
+for (const f of ['remettre-en-file.js', 'reste-visuels.js']) {
+    const t = sansCommentaires(lire(f));
+    verifier(`${f} indexe les médianes par source/slug`, /\.set\(`\$\{src\}\/\$\{slug\}`/.test(t) && !/medSource/.test(t), true);
+}
+verifier('collecteur-images-tcgdex.js : SOURCE est la constante de la source', /const SOURCE = 'tcgdex'/.test(lire('collecteur-images-tcgdex.js')), true);
 
 // ── la garde du commit du worker : le collecteur TPC est un fichier du critère ──────────────────────────────────────
 const regles = lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '';

@@ -31,13 +31,27 @@ const LARGEUR_MIN = 350;
 // 🔑 La liste est FERMÉE et la comparaison EXACTE (une garde s'écrit par ce qu'elle autorise) : une source inconnue, absente,
 // d'une autre casse ou héritée de Object.prototype reçoit 350.
 const LARGEUR_MIN_OFFICIELLE = 300;
-const SOURCES_OFFICIELLES = Object.freeze(['tpc-asie', 'pokemon-card-com', 'pokemon-com']);
+// §21 bis : les sites TPC viennent de la SOURCE UNIQUE (`SITES` de tpc.js) — un site TPC ajouté là passe à 300 sans autre geste.
+// `pokemon-com` n'a pas encore de collecteur, donc pas de site : il s'ajoute ici, à la main.
+const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);
 function largeurMinDe(source) {
     return typeof source === 'string' && SOURCES_OFFICIELLES.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;
+}
+
+// Une décision de seuil se RELIT (§23). Un document `trop-petit` porte le seuil appliqué (`seuilApplique`) ; un document SANS ce
+// champ est antérieur à ce commit et a été jugé à LARGEUR_MIN (350) — l'absence du champ est l'information.
+// À rejuger si le seuil d'aujourd'hui est plus BAS que celui qui a jugé, ET que la largeur stockée ne suffit pas à conclure
+// « toujours trop petit » (largeur inconnue, ou au moins égale au seuil d'aujourd'hui). Sans effet de bord, sans requête.
+function aRejuger(doc, source) {
+    const avant = doc?.seuilApplique ?? LARGEUR_MIN;
+    const maintenant = largeurMinDe(source);
+    if (maintenant >= avant) return false;
+    const w = doc?.wOriginal ?? doc?.w;
+    return !w || w >= maintenant;
 }
 
 // Le format servi : WebP, 700 px de large au plus, qualité 80 (SPEC-COLLECTE-IMAGES.md).
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE };

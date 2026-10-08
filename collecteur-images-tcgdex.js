@@ -171,9 +171,9 @@ async function collecterSet(unite, M, { verrou }) {
                 const buffer = await client.telecharger(url);
                 if (!buffer) throw new Error('absent chez TCGdex (404)');
                 const meta = await sharp(buffer).metadata();
-                if (!meta.width || meta.width < largeurMinDe('tcgdex')) {
+                if (!meta.width || meta.width < largeurMinDe(SOURCE)) {
                     tropPetits++;
-                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carte._id, numero: p.numero, tcgdexId: p.tcg.id, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit' } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carte._id, numero: p.numero, tcgdexId: p.tcg.id, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(SOURCE) } }, { upsert: true });
                     continue;
                 }
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });

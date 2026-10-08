@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
@@ -199,12 +199,13 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             const _id = T.idImageTpc(site, slug, p.carteId, p.numero, langueImage);
             const url = p.fiche.image ? new URL(p.fiche.image, T.SITES[site].hote).href : null;
             if (!url) { echecs++; compter('fiche-sans-image'); continue; }
-            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat').lean();
+            const deja = await M.Image.findById(_id).select('sha256 urlOriginal etat wOriginal seuilApplique').lean();
             // un visuel RETIRÉ (retirer-visuels-tpc.js) ne revient jamais par une recollecte : il faudrait une décision
             if (deja?.etat === 'retire') { retires++; continue; }
             if (deja?.sha256 && deja.urlOriginal === url && deja.etat === 'ok') { sautes++; continue; }
-            // déjà jugé trop petit à la même adresse : on ne le redemande pas (relecture du 2026-10-07)
-            if (deja?.etat === 'trop-petit' && deja.urlOriginal === url) { tropPetits++; continue; }
+            // déjà jugé trop petit à la même adresse : on ne le redemande pas (relecture du 2026-10-07) — SAUF si le seuil a baissé
+            // depuis et que la largeur gardée n'interdit plus (`aRejuger`, §23) : alors il repasse par la cadence normale du client
+            if (deja?.etat === 'trop-petit' && deja.urlOriginal === url && !aRejuger(deja, site)) { tropPetits++; continue; }
             try {
                 const buffer = await client.image(url);
                 if (!buffer) throw new Error('absent à la source (404)');
@@ -213,7 +214,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                     tropPetits++;
                     // un visuel DÉJÀ prouvé et servi (« ok ») ne se dégrade pas : l'ancien reste, l'essai est noté à côté (seconde relecture)
                     if (deja?.etat === 'ok') await M.Image.updateOne({ _id }, { $set: { dernierEssai: { le: new Date(), url, resultat: `trop-petit (${meta.width} px)` } } });
-                    else await M.Image.updateOne({ _id }, { $set: { source: site, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', lot: T.LOT } }, { upsert: true });
+                    else await M.Image.updateOne({ _id }, { $set: { source: site, set: slug, carteId: p.carteId, numero: p.numero, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(site), lot: T.LOT } }, { upsert: true });
                     continue;
                 }
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });

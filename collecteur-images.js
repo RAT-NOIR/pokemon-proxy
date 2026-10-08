@@ -284,7 +284,7 @@ async function collecterSet(code, M, dossierRapport) {
                 if (!img.w || img.w < largeurMin) {
                     tropPetits++;
                     console.warn(`   ⤵️ ${_id} « ${e.titre} » : ${img.w ?? '?'} px de large < ${largeurMin} — ÉCARTÉE, comptée, non servie.`);
-                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit' } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit', seuilApplique: largeurMin } }, { upsert: true });
                     continue;
                 }
                 const ext = img.fmt === 'webp' ? 'webp' : img.fmt === 'png' ? 'png' : 'jpg';
