@@ -68,7 +68,12 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
             // BATTEMENT : tant que la route n'a pas répondu, le claim est repoussé par son propriétaire (updateOne SANS upsert : un claim
             // repris par un autre n'est jamais recréé). Sans lui, une route plus longue que la fenêtre verrait son claim repris et ré-exécutée.
             const fenetreMs = cfg.retention.idempotenceEnCoursMinutes * 60000;
+            // Il s'arrête dans TOUS les cas : réponse, finish, close (client coupé), et au plafond de durée totale (route muette).
+            // Ensuite le claim n'est PAS supprimé mais laissé expirer (≤ fenêtre) : la route a pu débiter avant la coupure, la libérer tout de suite
+            // permettrait un second débit concurrent ; B3 (mouvements.cleIdempotence) borne de toute façon le débit en base.
+            const plafondMs = (cfg.retention.idempotenceBattementMaxMinutes ?? 10) * 60000, debutBattement = Date.now();   // 10 min par défaut ; à ajouter au socle
             const battement = setInterval(() => {
+                if (Date.now() - debutBattement >= plafondMs) return clearInterval(battement);
                 col('idempotence').updateOne({ ...filtre, etat: 'en-cours' }, { $set: { expireLe: new Date(Date.now() + fenetreMs) } }).catch(e => journal(e, 'battement'));
             }, cfg.retention.idempotenceBattementMs ?? 30000);   // 30 s par défaut ; à ajouter au socle : config.retention.idempotenceBattementMs
             battement.unref();
@@ -84,7 +89,8 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
                 travail.catch(e => journal(e, 'fin')).then(() => origSend.call(this, corps));   // le rejeu doit trouver le résultat DÈS que le client a la réponse
                 return this;
             };
-            res.on('finish', () => {                                  // réponse sans res.json : en échec, le claim part ; en succès, il reste (2 min) : jamais de double exécution
+            res.on('close', () => clearInterval(battement));
+            res.on('finish', () => {                                // réponse sans res.json : en échec, le claim part ; en succès, il reste (2 min) : jamais de double exécution
                 clearInterval(battement);
                 if (!fini && res.statusCode >= 300) col('idempotence').deleteOne(filtre).catch(e => journal(e, 'nettoyage'));
             });

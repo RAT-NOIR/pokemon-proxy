@@ -170,5 +170,41 @@ for (const m of ['log', 'error', 'warn', 'info']) { const o = console[m].bind(co
     await new Promise(r => setTimeout(r, 1000));
     H.v('   battement arrêté à la réponse : aucun claim recréé', await col('idempotence').countDocuments({}), 0);
 
+    // 12. le battement s'arrête dans TOUS les cas (fenêtre 3 s, battement 400 ms, plafond 6 s) : jamais de claim immortel
+    const cfgPlafond = { ...cfgCourt, retention: { ...cfgCourt.retention, idempotenceBattementMaxMinutes: 0.1 } };
+    const dormir = ms => new Promise(r => setTimeout(r, ms));
+    app.post('/api/coupe', idem.idempotente('coupe', {}, cfgPlafond), async (req, res) => { etat.debits++; await dormir(9000); if (!res.destroyed) res.json({ ok: true }); });
+    app.post('/api/muette', idem.idempotente('muette', {}, cfgPlafond), async (req, res) => { etat.debits++; await dormir(13000); });
+    app.post('/api/explose', idem.idempotente('explose', {}, cfgPlafond), (req, res) => { etat.debits++; throw new Error('boum-idem'); });
+    app.post('/api/texte', idem.idempotente('texte', {}, cfgPlafond), (req, res) => { etat.debits++; res.status(200).send('texte'); });
+    const brut = (chemin, cle, signal) => fetch(srv.url + chemin, { method: 'POST', signal, headers: { 'content-type': 'application/json', 'x-porteur': 'p1', 'idempotency-key': cle }, body: '{}' }).catch(() => null);
+    const expire = async () => { const d = await col('idempotence').findOne({}); return d ? d.expireLe.getTime() : null; };
+
+    // a. le client coupe pendant l'exécution
+    await reset();
+    const ac = new AbortController(); const pCoupe = brut('/api/coupe', SECRET + 'coup0001', ac.signal);
+    await dormir(500); ac.abort(); await pCoupe;
+    await dormir(4500);
+    const eCoupe = await expire();
+    H.vrai(`12a. client coupé : le battement s'arrête, le claim expire (expireLe ${eCoupe === null ? 'absent' : ((eCoupe - Date.now()) / 1000).toFixed(1) + ' s'})`, eCoupe === null || eCoupe < Date.now());
+    await dormir(4500);
+
+    // b. route muette : le plafond arrête le battement
+    await reset(); const ac2 = new AbortController(); const pMuette = brut('/api/muette', SECRET + 'mute0001', ac2.signal);
+    await dormir(10000);                                   // > plafond 6 s + fenêtre 3 s
+    const eMuette = await expire();
+    H.vrai(`12b. route muette, client toujours là : plafond atteint, claim expiré (expireLe ${eMuette === null ? 'absent' : ((eMuette - Date.now()) / 1000).toFixed(1) + ' s'})`, eMuette === null || eMuette < Date.now());
+    ac2.abort(); await pMuette;
+
+    // c. exception : 500, claim libéré, rien recréé
+    await reset(); const ex = await brut('/api/explose', SECRET + 'expl0001');
+    await dormir(1200);
+    H.v('12c. exception : 500 et claim supprimé, non recréé par un battement', [ex && ex.status, await col('idempotence').countDocuments({})], [500, 0]);
+
+    // d. réponse non JSON : le battement s'arrête (expireLe ne bouge plus)
+    await reset(); await brut('/api/texte', SECRET + 'text0001');
+    const e1 = await expire(); await dormir(1300); const e2 = await expire();
+    H.v('12d. réponse non JSON : expireLe ne bouge plus (battement arrêté)', [e1 !== null, e1 === e2], [true, true]);
+
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
