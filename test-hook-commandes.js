@@ -47,5 +47,48 @@ for (const [lib, entree, attendu] of CAS) {
     bon ? ok++ : ko++;
     console.log(`${bon ? '✅' : '🔴'} ${lib.padEnd(34)} code ${r.code} (attendu ${attendu})${!bon && r.err ? ' · ' + r.err.trim() : ''}`);
 }
-console.log(`\n${ok}/${CAS.length} cas justes${ko ? ` — ${ko} en échec` : ''}`);
+
+// LE CHEMIN DE LA CONFIGURATION (2026-10-08). Le banc ci-dessus lance node directement ; Claude Code, lui, lançait la commande
+// par PowerShell (pas de Git Bash sur ce poste : c'est le shell par défaut des hooks), et `powershell -Command` rend 1 pour un
+// refus à 2 — or 1 ne bloque pas. Le hook refusait, le refus se perdait, et le banc était vert. On relance donc le hook TEL QUE
+// .claude/settings.json le décrit : forme exec (`args`) → l'exécutable directement ; forme shell → `powershell -Command`.
+// `--reglages=<fichier>` rejoue une autre version du fichier (ex. celle d'avant le correctif, pour voir ce banc échouer).
+const fs = require('fs');
+const argReglages = process.argv.find(a => a.startsWith('--reglages='));
+const REGLAGES = argReglages ? argReglages.slice('--reglages='.length) : path.join(__dirname, '.claude', 'settings.json');
+// Le PATH est VIDÉ pour ce lancement (relecture du 2026-10-08) : un processus Claude Code lancé avec un PATH sans node verrait
+// le hook échouer au démarrage — erreur non bloquante, tout passe. La commande doit donc nommer l'exécutable en chemin absolu.
+function lancerCommeConfigure(h, entree) {
+    const env = { ...process.env, PATH: '', Path: '' };
+    const r = Array.isArray(h.args)
+        ? spawnSync(h.command, h.args, { input: entree, encoding: 'utf8', env })
+        : spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', h.command], { input: entree, encoding: 'utf8' });
+    return { code: r.status, err: r.stderr, erreur: r.error && r.error.code };
+}
+// Le matcher se lit comme Claude Code le lit : « * » ou vide couvre tout, sinon une expression sur le nom de l'outil.
+const couvre = (matcher, outil) => !matcher || matcher === '*' || new RegExp(`^(?:${matcher})$`).test(outil);
+const groupes = JSON.parse(fs.readFileSync(REGLAGES, 'utf8')).hooks?.PreToolUse || [];
+const bash = command => JSON.stringify({ tool_name: 'Bash', tool_input: { command } });
+for (const [outil, enJson] of [['PowerShell', ps], ['Bash', bash]]) {
+    const hooks = groupes.filter(g => couvre(g.matcher, outil)).flatMap(g => g.hooks || []).filter(h => h.type === 'command');
+    if (!hooks.length) { ko++; console.log(`🔴 ${REGLAGES} : aucun hook PreToolUse de type command ne couvre ${outil}`); continue; }
+    const cas = [[`${outil} Get-Content, par la config`, enJson('Get-Content fichier.txt'), 2],
+        [`${outil} node script.js, par la config`, enJson('node mesure-catalogue.js'), 0]];
+    for (const h of hooks) for (const [lib, entree, attendu] of cas) {
+        const r = lancerCommeConfigure(h, entree);
+        const bon = r.code === attendu;
+        bon ? ok++ : ko++;
+        console.log(`${bon ? '✅' : '🔴'} ${lib.padEnd(40)} code ${r.code} (attendu ${attendu}, forme ${Array.isArray(h.args) ? 'exec' : 'shell'})${r.erreur ? ` · lancement : ${r.erreur}` : ''}`);
+    }
+}
+
+// UN HOOK QUI PLANTE DOIT REFUSER (relecture du 2026-10-08) : une exception non rattrapée sort à 1, non bloquant — le défaut
+// de forme corrigé plus haut, par une autre cause. On fait lever toutes les RegExp (préchargement) et on attend 2.
+{
+    const r = spawnSync(process.execPath, ['-r', path.join(__dirname, 'test-hook-panne-simulee.js'), HOOK], { input: ps('Get-Content x'), encoding: 'utf8' });
+    const bon = r.status === 2;
+    bon ? ok++ : ko++;
+    console.log(`${bon ? '✅' : '🔴'} ${'hook qui plante en plein verdict'.padEnd(40)} code ${r.status} (attendu 2)`);
+}
+console.log(`\n${ok}/${ok + ko} cas justes${ko ? ` — ${ko} en échec` : ''}`);
 process.exit(ko ? 1 : 0);

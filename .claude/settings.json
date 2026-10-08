@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node C:/Users/Yung/Desktop/pokemon-proxy/.claude/hooks/refuser-commandes.js"
+            "command": "C:/Program Files/nodejs/node.exe",
+            "args": ["C:/Users/Yung/Desktop/pokemon-proxy/.claude/hooks/refuser-commandes.js"]
           }
         ]
       }

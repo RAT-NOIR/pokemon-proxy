@@ -24,6 +24,10 @@ function verdict(entree) {
 }
 
 if (require.main === module) {
+    // Un hook qui PLANTE sortirait à 1, que Claude Code traite comme non bloquant : tout passerait. Toute erreur refuse (code 2).
+    const refuserSurPanne = err => { process.stderr.write(`hook en panne, refusé par prudence : ${err && err.message}\n`); process.exit(2); };
+    process.on('uncaughtException', refuserSurPanne);
+    process.stdin.on('error', refuserSurPanne);
     let entree = '';
     process.stdin.setEncoding('utf8');
     process.stdin.on('data', d => { entree += d; });
