@@ -1,8 +1,9 @@
 'use strict';
 // LE CHEMIN DE L'ARGENT v2. Tout compteur est un findOneAndUpdate CONDITIONNEL atomique (jamais lire-puis-écrire) ;
 // un remboursement ne rend jamais plus que ce qui a été pris ; un cas non classé => QUOTA / non remboursé, et la cause s'écrit.
-const { col } = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches');
-const expireMouvement = (now, cfg) => new Date(now.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
+const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches');
+const col = nom => db.col(nom);   // indirection VOLONTAIRE : les bancs y glissent une panne simulée (db.col remplacé)
+const expireMouvement =(now, cfg) => new Date(now.getTime() + cfg.retention.mouvementsMois * 30.5 * 86400e3);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
 
 async function incrementerHebdo(compteId, semaine, now) {   // upsert + course de première insertion (11000) : on retente une fois, comme limites.consommer
@@ -92,4 +93,31 @@ async function rendrePoche(porteur, credit, cfg, now) {
     }
     return { rendu, raison: rendu ? null : raison };
 }
-module.exports = { debiter, rendrePoche, essayerPoche };
+async function incPlafond(porteurCle, jour, type, now) {   // même schéma que incrementerHebdo ; expire 2 jours après la fin du jour compté
+    const filtre = { porteur: porteurCle, jour, type };
+    const maj = { $inc: { count: 1 }, $setOnInsert: { expireLe: new Date(new Date(`${jour}T00:00:00Z`).getTime() + 3 * 86400e3) } };
+    try { return await col('plafonds').findOneAndUpdate(filtre, maj, { upsert: true, returnDocument: 'after' }); }
+    catch (e) { if (e.code !== 11000) throw e; return col('plafonds').findOneAndUpdate(filtre, { $inc: { count: 1 } }, { returnDocument: 'after' }); }
+}
+// rembourser : ordre = CLAIM du mouvement rb|scanId (une fois par scan) → plafond (incrément puis rollback) → rendrePoche → si rien rendu, libérer claim ET compteur.
+async function rembourser(porteur, credit, motif, { scanId, compteur = 'panne', jourDe, sansPlafond = false, maintenant = new Date() } = {}, cfg) {
+    if (!credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+    if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    const cle = `rb|${scanId}`, jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
+    const type = compteur === 'question' ? 'question' : 'panne', plafond = cfg.plafonds[type], porteurCle = `${porteur.type}:${porteur.id}`;
+    try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, poche: credit.poche, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }
+    catch (e) { if (e.code === 11000) return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; console.error(`❌ [v2 rembourser] claim : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    let compteurPris = false;
+    const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -1 } }); };
+    try {
+        if (!sansPlafond) {
+            const c = await incPlafond(porteurCle, jour, type, maintenant); compteurPris = true;
+            if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
+        }
+        const { rendu, raison } = await rendrePoche(porteur, credit, cfg, maintenant);
+        if (!rendu) { await liberer(); return { rendu: false, raisonNonRembourse: raison }; }
+        await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } });
+        return { rendu: true, raisonNonRembourse: null };
+    } catch (e) { try { await liberer(); } catch (_) { /* la réconciliation (B3.6) le dira */ } console.error(`❌ [v2 rembourser] ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+}
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser };
