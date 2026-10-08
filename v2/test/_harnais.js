@@ -25,9 +25,28 @@ async function ouvrirBac(script) {
     const p = `rm_t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}_`;
     db.definirPrefixe(p);
     db.brancher(mongoose.connection.db);
+    armerNettoyage();
     return p;
 }
-async function fermerBac() { try { await db.viderPrefixe(); } finally { await mongoose.disconnect(); } }
+let ferme = false, armee = false;
+async function fermerBac() { if (ferme) return; ferme = true; try { await db.viderPrefixe(); } finally { await mongoose.disconnect(); } }
+// Un banc qui sort par process.exit(), par une exception ou un Ctrl-C ne passe pas par fermerBac : ses collections restaient dans
+// test_scratch (mesuré : 16 collections par banc, 80 rm_t… restantes). Une fois le bac ouvert, TOUTE sortie vide d'abord le préfixe.
+// (Un kill dur du processus reste hors de portée de tout code : seule la balayeuse du lanceur le rattrape, hors de ce lot.)
+function armerNettoyage() {
+    if (armee) return; armee = true;
+    const sortirReel = process.exit.bind(process);
+    let sortie = false;
+    const finir = (code) => {
+        if (code !== undefined && code !== null) process.exitCode = code;
+        if (sortie) return; sortie = true;
+        fermerBac().catch(e => { console.error('❌ nettoyage du préfixe :', e.message); process.exitCode = 1; }).finally(() => sortirReel(process.exitCode));
+    };
+    process.exit = finir;                                   // le code qui suit un process.exit() ne doit plus compter : on rend la main
+    process.on('uncaughtException', e => { console.error('❌', e); finir(1); });
+    process.on('unhandledRejection', e => { console.error('❌', e); finir(1); });
+    for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => finir(1));
+}
 
 function serveur(app) {
     return new Promise(resolve => {

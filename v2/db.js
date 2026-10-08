@@ -26,8 +26,15 @@ async function viderPrefixe() {
     const db = base();
     if (!prefixe) throw new Error('viderPrefixe : aucun préfixe de test posé (refus : on ne vide jamais des collections nues)');
     if (db.databaseName !== 'test_scratch') throw new Error(`viderPrefixe refusé sur la base "${db.databaseName}"`);
-    const noms = (await db.listCollections().toArray()).map(c => c.name).filter(n => n.startsWith(prefixe));
-    for (const n of noms) await db.collection(n).drop();
-    return noms.length;
+    // Une écriture ou un createIndex lancé sans attente peut se poser APRÈS un passage et recréer la collection : on repasse
+    // (après une courte pose) jusqu'à ce qu'un passage ne trouve plus rien, et on LÈVE si le préfixe ne se vide pas.
+    let total = 0;
+    for (let passe = 0; passe < 10; passe++) {
+        const noms = (await db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name).filter(n => n.startsWith(prefixe));
+        if (!noms.length && passe > 0) return total;
+        for (const n of noms) { try { await db.collection(n).drop(); total++; } catch (e) { if (e.codeName !== 'NamespaceNotFound' && e.code !== 26) throw e; } }
+        await new Promise(r => setTimeout(r, 200));
+    }
+    throw new Error(`viderPrefixe : le préfixe ${prefixe} ne se vide pas (écritures tardives qui recréent des collections)`);
 }
 module.exports = { col, base, brancher, definirPrefixe, viderPrefixe, prefixeCourant: () => prefixe };
