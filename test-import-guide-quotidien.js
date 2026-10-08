@@ -68,7 +68,10 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
         verifier('fichier tronqué (50 lignes contre 100) : refusé, la méta ne bouge pas', [rT.status, /tronqué/.test(rT.err), (await M.findOne({ _id: 'dernier' })).guideDu.toISOString()], [1, true, '2026-10-01T00:00:00.000Z']);
         verifier('un fichier REFUSÉ ne laisse pas ses validateurs : la méta garde ceux de A', (await M.findOne({ _id: 'dernier' }))?.http?.etag, etagDe(FICHIERS['/A.json']));
         const rS = await lancer('--base=test_scratch', url('/sansprix.json'));
-        verifier('fichier où moins de 90 % des lignes ont un prix : refusé', [rS.status, /portent un prix/.test(rS.err)], [1, true]);
+        // (2026-10-08) le seuil est 85 % + pas de chute de plus de 3 points (collecte-cartes/taux-prix-guide.js, testé en pur par
+        // test-taux-prix-guide.js) ; ce fichier à 27 % (30/110) reste refusé par le seuil fixe, quel que soit le taux du dernier guide
+        verifier('fichier où moins de 85 % des lignes ont un prix : refusé', [rS.status, /portent un prix/.test(rS.err)], [1, true]);
+        verifier('la méta de A porte son taux (100 lignes, 100 avec un prix, 100 %)', (({ avecPrix, lignes, tauxPrix }) => ({ avecPrix, lignes, tauxPrix }))((await M.findOne({ _id: 'dernier' })) || {}), { avecPrix: 100, lignes: 100, tauxPrix: 100 });
         const rJ = await lancer('--base=test_scratch', url('/pasjson.json'));
         verifier('une page HTML à la place du fichier : refusée', [rJ.status, /illisible/.test(rJ.err)], [1, true]);
         const r404 = await lancer('--base=test_scratch', url('/absent.json'));
