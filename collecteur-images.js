@@ -32,7 +32,7 @@ const { revaliderSets } = require('./collecte-cartes/revalider-site');   // une 
 // les issues d'unité ATTEINTES APRÈS la jointure des images (les trois collecteurs) — les seules où une page peut avoir changé.
 // Écrit par ce qu'il autorise (§51) : un refus précoce, un arrêt, une mesure n'ont rien joint et ne coûtent pas un appel au quota Vercel.
 const APRES_JOINTURE = /^(verifie|incomplet|incomplet-transitoire|non-concordant)$/;
-const { assurerVignettes } = require('./collecte-cartes/vignette');   // les vignettes de 200 px des images neuves, après la jointure
+const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');   // les vignettes de 200 px des images neuves, après la jointure
 const TABLE_CODES = TABLE.map(l => l.code);
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
@@ -599,6 +599,11 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 continue;
             }
             console.log(`  ${code.padEnd(7)} ${r.imagesOk} images · ${r.cartesCouvertes} carte(s) couverte(s) / ${r.cartesDuSet}${r.emplacements ? ` (deck : ${r.rattachements} rattachements)` : ''} · ${r.cartesSansImage} sans image · ${JSON.stringify(r.restes)} ${r.concordance ? '✅' : '❌'}`);
+            // 🔴 INCIDENT DU 2026-10-08 : la jointure réécrit les entrées de cartes.images et les rend sans vignette — le worker les
+            // recopie du document `images` juste après la sienne (même fonction, mêmes options) ; le rejeu ne le faisait pas (1 089 effacées).
+            // Un lot-additif revalide ensuite les sets dont le DOCUMENT a changé (vignette comprise) : rien à revalider ici.
+            const W = await vignetterApresJointure(cx.db, L.slugSet, { bucket: process.env.R2_BUCKET_IMAGES });
+            console.log(`           vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.depuisDocument} recopiée(s) du document · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)${W.vg.interrompu ? ' · interrompu' : ''}`}${W.sets.length ? ` — sets vignettés : ${W.sets.join(', ')}` : ''}`);
         }
         if (simuler) {
             const f = path.join(dossierRapport, `simulation-jointure-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
@@ -866,12 +871,8 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                     // réduction de 200 px AVANT la revalidation, pour que la page régénérée les serve. Relues sur R2 (0 requête aux sources) ;
                     // un échec est compté et écrit sur l'unité, il n'empêche ni la revalidation ni la suite de la boucle.
                     // interruptible (SIGTERM) : la revalidation qui suit doit partir dans la grâce de Render (revue du 2026-09-27)
-                    let vg = null, setsVignettes = [];
-                    try {
-                        const V = await assurerVignettes(cx.db, { bucket: process.env.R2_BUCKET_IMAGES, slug: slugUnite, parallele: 4, arreter: () => arretDemande });
-                        vg = { entrees: V.entrees, images: V.cles, traitees: V.traitees, fabriquees: V.fabriquees, deja: V.deja, depuisDocument: V.depuisDocument, echecs: V.echecs.length, interrompu: V.interrompu };
-                        setsVignettes = V.sets;
-                    } catch (e) { vg = { erreur: e.message }; console.error(`🔴 vignettes de ${slugUnite} : ${e.message}`); }
+                    // (même fonction que le rejeu de jointure — collecte-cartes/vignettes-apres-jointure.js, §21 bis)
+                    const { vg, sets: setsVignettes } = await vignetterApresJointure(cx.db, slugUnite, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
                     await File.updateOne({ _id: suivant._id }, { $set: { vignettes: { le: new Date(), ...vg } } });
                     // une image partagée (un set et ses Additionals : même cleR2) a reçu sa vignette sur les DEUX entrées — les deux
                     // pages se revalident (revue du 2026-09-27 : 1 045 cartes dans ce cas)
