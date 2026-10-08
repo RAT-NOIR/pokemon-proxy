@@ -25,7 +25,7 @@ const crypto = require('crypto');
 const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
@@ -209,7 +209,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const buffer = await client.image(url);
                 if (!buffer) throw new Error('absent à la source (404)');
                 const meta = await sharp(buffer).metadata();
-                if (!meta.width || meta.width < LARGEUR_MIN) {
+                if (!meta.width || meta.width < largeurMinDe(site)) {
                     tropPetits++;
                     // un visuel DÉJÀ prouvé et servi (« ok ») ne se dégrade pas : l'ancien reste, l'essai est noté à côté (seconde relecture)
                     if (deja?.etat === 'ok') await M.Image.updateOne({ _id }, { $set: { dernierEssai: { le: new Date(), url, resultat: `trop-petit (${meta.width} px)` } } });

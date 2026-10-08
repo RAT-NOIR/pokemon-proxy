@@ -186,6 +186,15 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     tr = reseau(avecPetite);
     ({ b } = await lancer(B9, tr));
     verifier('   au passage suivant : 0 requête (la même URL, déjà jugée trop petite)', tr.appels.length, 0);
+    // décision 4 du testeur (2026-10-08) : 300 px pour une source OFFICIELLE — 320 px passe (350 le refusait), 290 px reste trop petit
+    const moyen = await sharp({ create: { width: 320, height: 447, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const B9b = fausseBase(); semer(B9b);
+    ({ b } = await lancer(B9b, reseau(u => u.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets: moyen } : normal(u))));
+    verifier('image de 320 px (source officielle, seuil 300) → « ok », servie, rien de trop petit', [b.tropPetits, B9b.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id')?.etat], [0, 'ok']);
+    const presque = await sharp({ create: { width: 290, height: 405, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const B9c = fausseBase(); semer(B9c);
+    ({ b } = await lancer(B9c, reseau(u => u.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets: presque } : normal(u))));
+    verifier('image de 290 px → « trop-petit » (sous 300)', [b.tropPetits, B9c.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id')?.etat], [1, 'trop-petit']);
     // une exception PENDANT la jointure : l'unité rend « incomplet » (la page se revalide), elle ne lève pas
     const B10 = fausseBase(); semer(B10);
     const ecrire = B10.M.Carte.updateOne;

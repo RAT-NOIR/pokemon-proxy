@@ -12,7 +12,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { ligne } = require('./collecte-cartes/table-sets');
-const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe } =require('./collecte-cartes/seuils-images');
 const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 (async () => {
@@ -27,12 +27,13 @@ const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule d�
     champSur(sets, 'region', { collection: 'sets' });
     const setDoc = new Map(sets.map(s => [s._id, s]));
     const file = new Map((await cx.db.collection('file_images').find({}).toArray()).map(u => [u._id, u]));
-    const med = new Map();
+    const med = new Map(), medSource = new Map();
     for (const e of await cx.db.collection('collecte_images_etat').find({}, { projection: { mesure: 1, infosListe: 1, mesures: 1 } }).toArray()) {
         const slug = String(e._id).split('/').slice(1).join('/');
-        if (e.mesure?.mediane != null) { med.set(slug, e.mesure.mediane); continue; }
+        const src = String(e._id).split('/')[0];   // l'_id d'une mesure est `<source>/<slug>` : le seuil dépend de la source (largeurMinDe)
+        if (e.mesure?.mediane != null) { med.set(slug, e.mesure.mediane); medSource.set(slug, src); continue; }
         const ws = [...(e.infosListe || []).map(x => x?.w), ...Object.values(e.mesures || {}).flat().map(x => x?.w)].filter(Boolean).sort((a, b) => a - b);
-        if (ws.length) med.set(slug, ws[Math.floor(ws.length / 2)]);
+        if (ws.length) { med.set(slug, ws[Math.floor(ws.length / 2)]); medSource.set(slug, src); }
     }
 
     // produits fichés sans visuel, par set
@@ -63,7 +64,8 @@ const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule d�
         const L = code ? ligne(code) : null;
         const region = L?.bulba?.tirage || d?.region || '?';
         const m = med.get(s);
-        if (m != null && m < LARGEUR_MIN) return [`seuil : médiane ${m} px < ${LARGEUR_MIN} (§23 — on ne bouge pas un seuil pour ses refus)`, 'non'];
+        const seuil = largeurMinDe(medSource.get(s));
+        if (m != null && m < seuil) return [`seuil : médiane ${m} px < ${seuil} (§23 — on ne bouge pas un seuil pour ses refus)`, 'non'];
         if (/^zh/.test(region)) return [`plancher CHINOIS (${region}) : trois sources épuisées (§42)`, 'non'];
         const S = code ? sourceDe(code) : null;
         if (!S && ['jp', 'id', 'th', 'idth', 'ko'].includes(region)) return [`plancher ${region.toUpperCase()} : la page de CARTE ne porte que le fichier occidental (§44, --plan)`, 'non'];

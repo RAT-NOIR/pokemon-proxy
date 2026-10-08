@@ -24,8 +24,20 @@
 // est exactement l'échec silencieux du §21. Dette nommée, chiffrée, à faire.
 const LARGEUR_MIN = 350;
 
+// ➕ 2026-10-08, DÉCISION 4 DU TESTEUR : « 300 px accepté seulement pour les sources OFFICIELLES (TPC, pokemon.com,
+// pokemon-card.com). Bulbapedia reste à 350 px. » La valeur vient de la NATURE de la source (un éditeur qui sert ses propres
+// visuels), pas d'une liste de cas qu'on voudrait sauver (§23). UNE règle, `largeurMinDe(source)` : aucun collecteur ne compare
+// plus une largeur à un nombre (§21 bis).
+// 🔑 La liste est FERMÉE et la comparaison EXACTE (une garde s'écrit par ce qu'elle autorise) : une source inconnue, absente,
+// d'une autre casse ou héritée de Object.prototype reçoit 350.
+const LARGEUR_MIN_OFFICIELLE = 300;
+const SOURCES_OFFICIELLES = Object.freeze(['tpc-asie', 'pokemon-card-com', 'pokemon-com']);
+function largeurMinDe(source) {
+    return typeof source === 'string' && SOURCES_OFFICIELLES.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;
+}
+
 // Le format servi : WebP, 700 px de large au plus, qualité 80 (SPEC-COLLECTE-IMAGES.md).
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE };
