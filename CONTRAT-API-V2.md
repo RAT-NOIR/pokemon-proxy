@@ -837,8 +837,9 @@ Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, messa
 | `CONFLIT` | 409 | réponse différente sur une carte déjà tranchée | ne pas rejouer ; afficher le résultat déjà obtenu |
 | `CREDITS_ACHETES` | 409 | suppression d'un compte qui porte des crédits achetés | demander une renonciation explicite (`renonciation: true`) |
 | `ENTREE` | 400 (422 pour une clé réutilisée) | corps invalide ; `detail` précise (`image-hote`, `cle-reutilisee`, `adresse-invalide`, `adresse-refusee`, `defi-anti-robot`, `lot-trop-grand`…) | corriger la requête |
+| `EN_RECONCILIATION` | 409 | clé d'idempotence rejouée dont la ligne de débit attend la réconciliation : ni rejouée ni redébitée (B3) | réessayer plus tard ; aucun crédit ni remboursement associé |
 
-Les 20 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client (ajout futur) doit tomber sur `SERVEUR` : un défaut qui n'affirme rien. `RESEAU` et `EXTENSION` (côté extension) sont des codes **du client**, jamais servis.
+Les 21 codes ci-dessus sont ceux de `v2/erreurs.js`. Un code inconnu d'un client (ajout futur) doit tomber sur `SERVEUR` : un défaut qui n'affirme rien. `RESEAU` et `EXTENSION` (côté extension) sont des codes **du client**, jamais servis.
 
 ```json schema=ReponseErreur
 {

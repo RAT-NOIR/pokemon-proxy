@@ -3030,7 +3030,8 @@
                   "DEJA_LIE",
                   "CONFLIT",
                   "CREDITS_ACHETES",
-                  "ENTREE"
+                  "ENTREE",
+                  "EN_RECONCILIATION"
                 ]
               },
               "message": {

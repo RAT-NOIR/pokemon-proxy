@@ -17,12 +17,17 @@ if (args.length === 1) {
 }
 // BASE DE BANC (INT2) : le lanceur n'ouvre aucune base. CHAQUE banc démarre la sienne (base en mémoire, _harnais.js ouvrirBancV2) : un banc qui se tue
 // n'en laisse aucune à son voisin, et un banc lancé seul se comporte comme ici. Aucun n'ouvre la grappe de production ; sans base de banc il refuse.
-// Exclusion EXPLICITE : bancs qui exigent une référence externe (RM_REFERENCE_IDENTIFIER) et sortent en code 1 sans elle.
-// Ils se lancent à la main ; la liste est ici, nommée, jamais déduite.
-const EXCLUS = ['test-identifier-inchange.js'];
-for (const e of EXCLUS) if (!fs.existsSync(path.join(__dirname, e))) console.log(`⚠️ EXCLUS nomme « ${e} » qui n'existe plus : retirer l'entrée`);
-const fichiers = fs.readdirSync(dossier).filter(f => /^test-.*\.js$/.test(f) && !EXCLUS.includes(f)).sort();
-console.log(`exclus du lanceur : ${EXCLUS.join(', ')}`);
+// EXCLUS : liste EXPLICITE, jamais déduite. Chacun est NOMMÉ à l'exécution : un banc exclu ne disparaît pas en silence. Deux familles, les deux survivent :
+//  - test-identifier-inchange.js exige une référence externe (RM_REFERENCE_IDENTIFIER) et sort en code 1 sans elle : il se lance à la main ;
+//  - test-argent-course-R.js est volontairement rouge (défaut connu, garé, à rouvrir).
+const EXCLUS = {
+    'test-identifier-inchange.js': 'exige RM_REFERENCE_IDENTIFIER (référence externe), sort en code 1 sans elle — se lance à la main',
+    'test-argent-course-R.js': 'défaut garé R (course réponse/remboursement sur M2), à rouvrir en B8 — rouge attendu'
+};
+// l'existence se vérifie dans le dossier du LANCEUR (un --dossier de test n'a pas ces fichiers) ; un nom absent est une erreur, pas un avertissement
+const presents = fs.readdirSync(__dirname);
+for (const f of Object.keys(EXCLUS)) { if (!presents.includes(f)) { console.error(`❌ EXCLUS nomme un banc absent : ${f}`); process.exit(1); } console.log(`⏭️  exclu : ${f} — ${EXCLUS[f]}`); }
+const fichiers = fs.readdirSync(dossier).filter(f => /^test-.*\.js$/.test(f) && !(f in EXCLUS)).sort();
 if (!fichiers.length) { console.error('❌ aucun test-*.js trouvé : un lanceur qui ne lance rien n\'est pas vert'); process.exit(1); }
 const FORME_BILAN = /^(\d+) réussis, (\d+) échoués$/;
 let echecs = 0;

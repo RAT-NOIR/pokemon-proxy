@@ -3,8 +3,11 @@
 const CODES = Object.freeze({
     JETON: 401, VERIFICATION: 403, QUOTA: 429, DEBIT: 429, INDISPONIBLE: 503, IMAGE: 200, IA: 200, SERVEUR: 500, VERSION: 426, MARCHE: 422,
     SESSION: 401, ORIGINE: 403, IDENTIFIANTS: 401, MOT_DE_PASSE_FAIBLE: 422, CODE_INVALIDE: 404, CODE_EXPIRE: 410, DEJA_LIE: 409,
-    CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400
+    CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400,
+    EN_RECONCILIATION: 409   // B3 tour 5 : clé rejouée dont la ligne de débit attend la réconciliation — ni rejouée ni redébitée, aucun crédit ni remboursement associé
 });
+// Messages STABLES des codes émis par la couche argent (le texte ne change pas d'un appel à l'autre).
+const MESSAGES = Object.freeze({ EN_RECONCILIATION: 'paiement en cours de réconciliation, réessayer plus tard' });
 function corpsErreur(code, message, extra = {}) {
     if (!Object.hasOwn(CODES, code)) throw new Error(`code d'erreur inconnu : ${code}`);
     const erreur = { code, message };
@@ -20,4 +23,4 @@ function repondreErreur(res, code, message, extra = {}, statut) {
     if (extra.reessayerDans !== undefined && typeof res.setHeader === 'function') res.setHeader('Retry-After', String(extra.reessayerDans));
     return res.status(statut ?? CODES[code]).json(corps);
 }
-module.exports = { CODES, corpsErreur, repondreErreur };
+module.exports = { CODES, MESSAGES, corpsErreur, repondreErreur };
