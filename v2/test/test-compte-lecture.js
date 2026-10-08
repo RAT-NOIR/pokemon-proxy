@@ -65,5 +65,22 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const e = await creer('essaie@exemple.fr'); const codes = [];
     for (let k = 0; k < 11; k++) codes.push((await supp(e.cookie, { motDePasse: 'mauvais-mot-de-passe' })).statut);
     H.v('suppression avec mots de passe faux : 10 × 401 puis 429 (11 tentatives)', [codes.slice(0, 10).every(x => x === 401), codes[10]], [true, 429]);
+    // I5 / mineur : le limiteur de suppression est distinct de celui de la connexion
+    const f = await creer('separe@exemple.fr'); const ckf = f.cookie;
+    for (let k = 0; k < 10; k++) await supp(ckf, { motDePasse: 'mauvais-mot-de-passe' });
+    const connexionLibre = await H.appel(srv.url, '/api/compte/connexion', { methode: 'POST', corps: { email: 'separe@exemple.fr', motDePasse: 'mauvais-mot-de-passe' }, entetes: { ...A.SITE, ...A.ip(++n) } });
+    H.v('10 suppressions ratées ne consomment PAS le budget de connexion (401 IDENTIFIANTS, pas 429)', connexionLibre.statut, 401);
+    // mineur : purge de hebdo, plafonds, questions
+    const g = await creer('purge@exemple.fr');
+    await db.col('hebdo').insertOne({ compteId: g.c._id, semaine: '2026-W41', count: 1, expireLe: new Date(Date.now() + 1e8) });
+    await db.col('hebdo').insertOne({ compteId: autre.c._id, semaine: '2026-W41', count: 1, expireLe: new Date(Date.now() + 1e8) });
+    await db.col('plafonds').insertMany([{ porteur: `compte:${g.c._id}`, jour: '2026-10-08', type: 'panne', count: 2, expireLe: new Date(Date.now() + 1e8) }, { porteur: `compte:${autre.c._id}`, jour: '2026-10-08', type: 'panne', count: 2, expireLe: new Date(Date.now() + 1e8) }]);
+    await db.col('questions').insertMany([{ _id: 'q1', porteur: `compte:${g.c._id}`, etat: 'en-attente', poseeLe: new Date() }, { _id: 'q2', porteur: `compte:${autre.c._id}`, etat: 'en-attente', poseeLe: new Date() }]);
+    const sp = await supp(g.cookie, { motDePasse: MDP });
+    H.v('suppression : hebdo, plafonds, questions du compte purgés, ceux d\'un autre intacts', [sp.statut, await db.col('hebdo').countDocuments({ compteId: g.c._id }), await db.col('plafonds').countDocuments({ porteur: `compte:${g.c._id}` }), await db.col('questions').countDocuments({ porteur: `compte:${g.c._id}` }), await db.col('hebdo').countDocuments({}), await db.col('plafonds').countDocuments({}), await db.col('questions').countDocuments({})], [200, 0, 0, 0, 1, 1, 1]);
+    // I1 : une empreinte d'adresse est écrite à la suppression d'un compte qui avait reçu ses offertes
+    const h = await creer('empreinte@exemple.fr'); await db.col('comptes').updateOne({ _id: h.c._id }, { $set: { offertesAccordeesLe: new Date() } });
+    await supp(h.cookie, { motDePasse: MDP });
+    H.v('compte aux offertes accordées supprimé : une empreinte conservée', await db.col('adresses_octroyees').countDocuments({}), 1);
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

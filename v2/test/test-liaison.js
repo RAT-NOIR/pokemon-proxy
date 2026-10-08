@@ -98,5 +98,15 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     H.v('jeton révoqué : 401 JETON', [apresRev.statut, apresRev.json.erreur.code], [401, 'JETON']);
     const sansOrigine = await H.appel(srv.url, `/api/compte/installations/${iB._id}`, { methode: 'DELETE', entetes: { cookie: ckB, ...A.ip(++n) } });
     H.v('DELETE sans Origin : 403', sansOrigine.statut, 403);
+    // collision de code (index unique) : un réessai, puis 503
+    const { c: cC, cookie: ckC } = await creerCompte('collision@exemple.fr');
+    await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte('COLL01'), compteId: cA._id, creeLe: new Date(), expireLe: new Date(Date.now() + 600e3), utiliseLe: null });
+    const vraiGen = J.genererCode; let suite = ['COLL01', 'NEWC02']; J.genererCode = () => suite.shift();
+    const col1 = await code(ckC);
+    H.v('une collision puis un tirage libre : 200 avec le second code (réessai unique)', [col1.statut, col1.json.code], [200, 'NEWC02']);
+    J.genererCode = () => 'COLL01';
+    const col2 = await code(ckC);
+    J.genererCode = vraiGen;
+    H.v('deux collisions de suite : 503 INDISPONIBLE (pas de boucle)', [col2.statut, col2.json.erreur.code], [503, 'INDISPONIBLE']);
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

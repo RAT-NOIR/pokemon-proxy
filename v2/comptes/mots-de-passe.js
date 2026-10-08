@@ -4,7 +4,8 @@ const scrypt = promisify(crypto.scrypt);
 const PARAMS = { n: 32768, r: 8, p: 1, longueur: 64 };
 const OPTIONS = { N: PARAMS.n, r: PARAMS.r, p: PARAMS.p, maxmem: 64 * 1024 * 1024 };  // 128*N*r = 32 Mio = la limite par défaut de Node : sans maxmem, scrypt LÈVE
 function politique(mdp, emailCle) {
-    const n = [...String(mdp ?? '')].length;
+    if (typeof mdp !== 'string') return 'type-invalide';   // jamais converti par String() : {} deviendrait « [object Object] »
+    const n = [...mdp].length;
     if (n < 10) return 'trop-court';
     if (n > 200) return 'trop-long';
     if (emailCle && String(mdp).toLowerCase() === emailCle) return 'egal-a-l-adresse';

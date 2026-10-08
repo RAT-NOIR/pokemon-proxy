@@ -2,7 +2,6 @@
 // L'identité d'une requête v2. Écrit par ce qu'il AUTORISE : tout ce qui n'est pas un jeton ou un cookie valide, en base, est « personne ».
 const { col } = require('./db'); const J = require('./comptes/jetons'); const S = require('./comptes/sessions'); const { repondreErreur } = require('./erreurs');
 const RE_BEARER = /^Bearer ([A-Za-z0-9_-]{20,64})$/;
-const GLISSEMENT_MS = 24 * 3600e3;
 async function compteDe(id) { return id ? col('comptes').findOne({ _id: id }) : null; }
 function porteurDeCompte(compte, surface) { return { type: 'compte', id: compte._id, compte, installation: null, surface, administrateur: compte.role === 'administrateur' }; }
 function resoudrePorteur(cfg) {
@@ -29,7 +28,7 @@ function resoudrePorteur(cfg) {
                         const compte = await compteDe(sess.compteId);
                         if (compte) {
                             req.v2.porteur = porteurDeCompte(compte, 'scanner'); req.v2.echec = null; req.v2.session = sess;
-                            if (now.getTime() - sess.vueLe.getTime() > GLISSEMENT_MS)   // au plus une écriture par 24 h
+                            if (now.getTime() - sess.vueLe.getTime() > cfg.comptes.glissementHeures * 3600e3)   // au plus une écriture par 24 h
                                 await col('sessions').updateOne({ _id: sess._id }, { $set: { vueLe: now, expireLe: new Date(now.getTime() + cfg.comptes.sessionJours * 86400e3) } });
                         } else req.v2.echec = 'session-absente';
                     }

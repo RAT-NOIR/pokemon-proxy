@@ -26,8 +26,8 @@ function lireConfig(env = process.env) {
     const secretEmpreinte = (() => {
         const s = env.V2_SECRET_EMPREINTE;
         if (s !== undefined && s !== '') { if (String(s).length < 16) throw new Error('configuration invalide : V2_SECRET_EMPREINTE trop court (16 caractères au moins)'); return String(s); }
-        if (!actif) return null;
         if (base === 'test_scratch') return 'secret-de-bac-test_scratch-uniquement';
+        if (!actif) return null;
         throw new Error('configuration invalide : V2_SECRET_EMPREINTE absent (v2 allumée)');
     })();
     const url = (nom, v, defaut) => { if (v === undefined || v === '') return defaut; if (!/^https:\/\/\S+$/.test(v)) throw new Error(`configuration invalide : ${nom} doit commencer par https://`); return v; };

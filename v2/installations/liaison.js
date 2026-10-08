@@ -10,9 +10,14 @@ async function creerCode(compteId, cfg, maintenant = new Date()) {
     const vivants = () => col('codes_liaison').find({ compteId, utiliseLe: null, expireLe: { $gt: maintenant } }).sort({ expireLe: 1 }).toArray();
     const refus = async () => { const v = await vivants(); return { refus: true, reessayerDans: Math.max(1, Math.ceil((v[0].expireLe.getTime() - maintenant.getTime()) / 1000)) }; };
     if ((await vivants()).length >= cfg.comptes.codesVivants) return refus();
-    const code = J.genererCode(cfg.comptes.codeLongueur), expireLe = new Date(maintenant.getTime() + cfg.comptes.codeMinutes * 60e3);
-    const doc = { codeEmpreinte: J.empreinte(code), compteId, creeLe: maintenant, expireLe, utiliseLe: null };
-    await col('codes_liaison').insertOne(doc);
+    const expireLe = new Date(maintenant.getTime() + cfg.comptes.codeMinutes * 60e3);
+    let code, doc;
+    for (let essai = 0; ; essai++) {   // collision sur l'index unique des empreintes : UN réessai, puis l'erreur remonte (503), jamais de boucle
+        code = J.genererCode(cfg.comptes.codeLongueur);
+        doc = { codeEmpreinte: J.empreinte(code), compteId, creeLe: maintenant, expireLe, utiliseLe: null };
+        try { await col('codes_liaison').insertOne(doc); break; }
+        catch (e) { if (e.code !== 11000 || essai >= 1) throw e; }
+    }
     if ((await vivants()).length > cfg.comptes.codesVivants) {   // deux demandes simultanées : la plus tardive se retire
         const apres = await col('codes_liaison').find({ compteId, utiliseLe: null, expireLe: { $gt: maintenant } }).sort({ creeLe: 1, _id: 1 }).toArray();
         if (apres.slice(cfg.comptes.codesVivants).some(d => d._id.equals(doc._id))) { await col('codes_liaison').deleteOne({ _id: doc._id }); return refus(); }

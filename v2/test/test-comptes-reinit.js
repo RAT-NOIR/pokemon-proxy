@@ -9,7 +9,7 @@ const S = require('../comptes/sessions'); const { creerCourrierMemoire } = requi
     A.registre.fournir('turnstile', { verifier: async () => true });
     const srv = await A.demarrer(cfg);
     let n = 0; const ANCIEN = 'ancien-mot-de-passe-1', NOUVEAU = 'nouveau-mot-de-passe-2';
-    const post = (chemin, corps, entetes = {}, ipn = ++n) => H.appel(srv.url, chemin, { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } });
+    const post = async (chemin, corps, entetes = {}, ipn = ++n) => { const r = await H.appel(srv.url, chemin, { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } }); await A.attendre(); return r; };   // travail détaché (I2)
     const creer = async (email) => { const c = M.nouveauCompte({ email, emailCle: email, motDePasse: await P.hacher(ANCIEN) }); c.verifie = true; c.offertesAccordeesLe = new Date(Date.now() - 1000); c.solde.accueil = 25; await db.col('comptes').insertOne(c); return c; };
     const lien = async (c, type = 'reinit', decalage = 24 * 3600e3) => { const j = J.genererJeton(); await db.col('liens_email').insertOne({ empreinte: J.empreinte(j), type, compteId: c._id, creeLe: new Date(), expireLe: new Date(Date.now() + decalage), utiliseLe: null }); return j; };
 
@@ -64,6 +64,8 @@ const S = require('../comptes/sessions'); const { creerCourrierMemoire } = requi
     const nv = M.nouveauCompte({ email: 'nv@exemple.fr', emailCle: 'nv@exemple.fr', motDePasse: await P.hacher(ANCIEN) }); await db.col('comptes').insertOne(nv);
     await post('/api/compte/reinitialiser', { jeton: await lien(nv), motDePasse: NOUVEAU });
     const anv = await db.col('comptes').findOne({ _id: nv._id });
-    H.v('compte non vérifié : reste non vérifié, aucun octroi', [anv.verifie, anv.offertesAccordeesLe, anv.solde.accueil], [false, null, 0]);
+    H.v('compte NON vérifié : la réinitialisation prouve l\'adresse (I3b) => vérifié + 25 offertes, une fois', [anv.verifie, anv.offertesAccordeesLe instanceof Date, anv.solde.accueil, await db.col('mouvements').countDocuments({ compteId: nv._id })], [true, true, 25, 1]);
+    const lx = await post('/api/compte/reinitialiser', { jeton: 'x'.repeat(20), motDePasse: {} });
+    H.v('motDePasse non-texte : 400 ENTREE (reinit)', [lx.statut, lx.json.erreur.code], [400, 'ENTREE']);
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

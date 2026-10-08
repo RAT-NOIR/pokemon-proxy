@@ -15,7 +15,7 @@ const { lireConfig } = require('../config'); const { creerCourrierMemoire } = re
     const srv = await A.demarrer(cfg); let n = 0;
     const ip = () => A.ip(++n);
     const MDP = 'un-mot-de-passe-solide';
-    const post = (c, corps, entetes) => H.appel(srv.url, c, { methode: 'POST', corps, entetes: { ...ip(), ...entetes } });
+    const post = async (c, corps, entetes) => { const r = await H.appel(srv.url, c, { methode: 'POST', corps, entetes: { ...ip(), ...entetes } }); await A.attendre(); return r; };   // travail d'inscription détaché (I2)
 
     const inst = await post('/api/installation', { versionExtension: '2.0.0', libelle: 'Chrome · Windows' });
     H.v('1. installation : 3 essais annoncés', [inst.statut, inst.json.solde.essai], [201, 3]);

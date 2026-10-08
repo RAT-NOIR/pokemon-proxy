@@ -11,7 +11,7 @@ function montrerInstallation(router, cfg, deps) {
         next();
     };
     const limite = L.limiteur({ nom: 'inst-ip', max: cfg.limites.installationParIpJour, fenetreMs: 86400e3, cle: q => L.empreinteIp(q.ip) });
-    router.post('/api/installation', deps.pret, entree, limite, async (req, res) => {
+    router.post('/api/installation', entree, limite, async (req, res) => {
         try {
             const argent = registre.obtenir('argent');     // avant toute écriture : jamais d'installation sans de quoi dire son solde
             const { installation, jeton } = await S.creerInstallation({ libelle: req.body.libelle, cfg });
@@ -22,14 +22,14 @@ function montrerInstallation(router, cfg, deps) {
             res.setHeader('Cache-Control', 'no-store');
             return res.status(201).json({ success: true, installationId: installation._id, jetonInstallation: jeton, solde });
         } catch (e) {
-            console.error(`❌ [v2 installation] ${e.message}`);
+            console.error(`❌ [v2 installation] ${(e && e.name) || 'Error'}`);   // jamais e.message : il peut venir de B3 (héritage) et contenir le userId
             return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
         }
     });
 }
 /** Routes de l'extension (Bearer) : lier / délier. */
 function routesLiaison(router, cfg, deps) {
-    const base = [deps.pret, resoudrePorteur(cfg), exigerInstallation];
+    const base = [resoudrePorteur(cfg), exigerInstallation];
     // chaque TENTATIVE compte, bonne ou fausse : la 6e d'une installation (la 21e d'une IP) dans l'heure est refusée même avec le bon code
     const parInstallation = L.limiteur({ nom: 'lier-inst', max: cfg.limites.codeEssaisInstallationHeure, fenetreMs: 3600e3, cle: q => q.v2.porteur.installation._id });
     const parIp = L.limiteur({ nom: 'lier-ip', max: cfg.limites.codeEssaisIpHeure, fenetreMs: 3600e3, cle: q => L.empreinteIp(q.ip) });
@@ -46,7 +46,7 @@ function routesLiaison(router, cfg, deps) {
             const solde = await argent.solde({ type: 'compte', id: r.compte._id, compte: r.compte, installation: apres, surface: 'extension', administrateur: r.compte.role === 'administrateur' });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, compte: { emailMasque: r.emailMasque, verifie: r.compte.verifie }, jetonInstallation: r.jeton, solde });
-        } catch (e) { console.error(`❌ [v2 lier] ${e.message}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
+        } catch (e) { console.error(`❌ [v2 lier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
     router.post('/api/compte/delier', ...base, async (req, res) => {
         try {
@@ -57,7 +57,7 @@ function routesLiaison(router, cfg, deps) {
             const solde = await argent.solde({ type: 'installation', id: apres._id, compte: null, installation: apres, surface: 'extension', administrateur: false });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, solde });
-        } catch (e) { console.error(`❌ [v2 delier] ${e.message}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
+        } catch (e) { console.error(`❌ [v2 delier] ${(e && e.name) || 'Error'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
     });
 }
 module.exports = { montrerInstallation, routesLiaison };

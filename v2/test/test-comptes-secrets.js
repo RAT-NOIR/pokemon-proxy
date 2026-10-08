@@ -2,6 +2,7 @@
 const H = require('./_harnais');
 const P = require('../comptes/mots-de-passe'); const J = require('../comptes/jetons');
 (async () => {
+    H.v('non-texte ({}, nombre, tableau, null, absent) : refusé, jamais converti par String()', [{}, 1234567890, ['abcdefghijk'], null, undefined].map(x => P.politique(x)), Array(5).fill('type-invalide'));
     H.v('9 caractères : refusé', P.politique('123456789'), 'trop-court');
     H.v('10 caractères : accepté', P.politique('1234567890'), null);
     H.v('201 caractères : refusé (borne anti-DoS de scrypt)', P.politique('a'.repeat(201)), 'trop-long');

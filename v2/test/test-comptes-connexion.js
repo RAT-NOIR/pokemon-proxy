@@ -78,6 +78,18 @@ const { resoudrePorteur } = require('../porteur');
     H.v('cookie rejoué après déconnexion : session-absente', [q.v2.porteur, q.v2.echec], [null, 'session-absente']);
     const dec2 = await post('/api/compte/deconnexion', {});
     H.v('déconnexion sans session : 200 (idempotente)', dec2.statut, 200);
+    // I5 : limite par IP, distincte de celle du compte
+    const s31 = []; for (let k = 0; k < 31; k++) s31.push((await H.appel(srv.url, '/api/compte/connexion', { methode: 'POST', corps: { email: `bourrage${k}@exemple.fr`, motDePasse: 'faux-faux-faux' }, entetes: { ...A.SITE, ...A.ip(9999) } })).statut);
+    H.v('31 connexions, 31 adresses différentes, une même IP : 30 traitées (401), la 31e est 429 (31 requêtes)', [s31.slice(0, 30).every(x => x === 401), s31[30]], [true, 429]);
+    const autreIp = await post('/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: MDP });
+    H.v('une autre IP n\'est pas touchée', autreIp.statut, 200);
+    const ipBloquee = await H.appel(srv.url, '/api/compte/connexion', { methode: 'POST', corps: { email: 'bob@exemple.fr', motDePasse: MDP }, entetes: { ...A.SITE, ...A.ip(9999) } });
+    H.v('l\'IP bloquée l\'est même avec le BON couple', ipBloquee.statut, 429);
+    const cfgIp = lireConfig({ MONGODB_BASE: 'test_scratch', V2_CONNEXION_IP_HEURE: '2' });
+    const srvIp = await A.demarrer(cfgIp);
+    const si = []; for (let k = 0; k < 3; k++) si.push((await H.appel(srvIp.url, '/api/compte/connexion', { methode: 'POST', corps: { email: `reglage${k}@exemple.fr`, motDePasse: 'faux-faux-faux' }, entetes: { ...A.SITE, ...A.ip(9998) } })).statut);
+    H.v('plafond réglé par V2_CONNEXION_IP_HEURE=2 : 401, 401, 429', si, [401, 401, 429]);
+    await srvIp.fermer();
     P.verifierFactice = factice0;
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

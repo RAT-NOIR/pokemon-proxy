@@ -59,11 +59,8 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     await verif(j6, srv10);
     H.v('V2_ACCUEIL=10 : octroi de 10', [(await db.col('comptes').findOne({ _id: c6._id })).solde.accueil, (await db.col('mouvements').findOne({ compteId: c6._id })).delta], [10, 10]);
     await srv10.fermer();
-    // 8 : TROU CONNU
-    await db.col('comptes').deleteOne({ _id: c1._id });
-    const c1bis = M.nouveauCompte({ email: 'bis@exemple.fr', emailCle: 'bis@exemple.fr', motDePasse: {} }); await db.col('comptes').insertOne(c1bis);
-    await verif(await lien(c1bis));
-    H.v('TROU CONNU: un compte supprimé puis recréé à la même adresse reçoit 25 de plus (§5 Q29, parade non décidée)', (await db.col('comptes').findOne({ _id: c1bis._id })).solde.accueil, 25);
+    // 8 : le trou connu (suppression puis réinscription) est FERMÉ par l'empreinte d'adresse : voir test-comptes-empreinte.js
+    H.v('l\'octroi a écrit l\'empreinte de l\'adresse (c1, c2, c6… : un octroi, une empreinte)', await db.col('adresses_octroyees').countDocuments({}), await db.col('mouvements').countDocuments({ motif: 'octroi-accueil' }));
     // garde au niveau du COMPTE : 10 liens différents consommés ensemble
     const cm = await nouveauCompte(); const liensM = []; for (let i = 0; i < 10; i++) liensM.push(await lien(cm));
     const rm = await Promise.all(liensM.map(j => verif(j)));

@@ -10,8 +10,13 @@ const { creerCourrierMemoire } = require('../comptes/courrier'); const { verifie
     A.registre.fournir('courrier', courrier); A.registre.fournir('turnstile', turnstile);
     const srv = await A.demarrer(cfg);
     let n = 0;
-    const ins = (corps, entetes = {}, ipn = ++n) => H.appel(srv.url, '/api/compte/inscription', { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } });
+    const ins = async (corps, entetes = {}, ipn = ++n) => { const r = await H.appel(srv.url, '/api/compte/inscription', { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } }); await A.attendre(); return r; };   // le travail est DÉTACHÉ de la réponse (I2) : on l'attend avant de lire la base
     const MDP = 'un-mot-de-passe-solide';
+    {   // M1 : un mot de passe qui n'est pas un texte est une entrée invalide (400), jamais converti
+        const avantM = await db.col('comptes').countDocuments({});
+        const o = await ins({ email: 'objet@exemple.fr', motDePasse: {}, turnstile: 'ok' }), nb = await ins({ email: 'nombre@exemple.fr', motDePasse: 1234567890, turnstile: 'ok' });
+        H.v('motDePasse objet / nombre : 400 ENTREE, aucun compte', [o.statut, o.json.erreur.code, nb.statut, nb.json.erreur.code, await db.col('comptes').countDocuments({}) - avantM], [400, 'ENTREE', 400, 'ENTREE', 0]);
+    }
 
     // 9 : journaux captés pendant toute la 1re inscription
     const trace = []; const orig = { log: console.log, warn: console.warn, error: console.error };
@@ -70,7 +75,7 @@ const { creerCourrierMemoire } = require('../comptes/courrier'); const { verifie
     H.v('V2_TURNSTILE=off : passe sans appeler verifier', [off.statut, appelsT.length - appelsAvant], [202, 0]);
     await srvOff.fermer();
     const srv2 = await A.demarrer(cfg);
-    const ins2 = (corps, entetes = {}, ipn = ++n) => H.appel(srv2.url, '/api/compte/inscription', { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } });
+    const ins2 = async (corps, entetes = {}, ipn = ++n) => { const r = await H.appel(srv2.url, '/api/compte/inscription', { methode: 'POST', corps, entetes: { ...A.SITE, ...A.ip(ipn), ...entetes } }); await A.attendre(); return r; };
     // 7
     const r7 = await ins2({ email: 'pirate@exemple.fr', motDePasse: MDP, turnstile: 'ok', role: 'administrateur', verifie: true, solde: { accueil: 999 }, offertesAccordeesLe: new Date() });
     const p = await db.col('comptes').findOne({ emailCle: 'pirate@exemple.fr' });
