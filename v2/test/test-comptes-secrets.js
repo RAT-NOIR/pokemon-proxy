@@ -1,0 +1,27 @@
+'use strict';
+const H = require('./_harnais');
+const P = require('../comptes/mots-de-passe'); const J = require('../comptes/jetons');
+(async () => {
+    H.v('non-texte ({}, nombre, tableau, null, absent) : refusé, jamais converti par String()', [{}, 1234567890, ['abcdefghijk'], null, undefined].map(x => P.politique(x)), Array(5).fill('type-invalide'));
+    H.v('9 caractères : refusé', P.politique('123456789'), 'trop-court');
+    H.v('10 caractères : accepté', P.politique('1234567890'), null);
+    H.v('201 caractères : refusé (borne anti-DoS de scrypt)', P.politique('a'.repeat(201)), 'trop-long');
+    H.v('égal à l\'adresse : refusé', P.politique('vous@exemple.fr', 'vous@exemple.fr'), 'egal-a-l-adresse');
+    H.v('10 émojis comptent pour 10 (points de code, pas unités UTF-16)', P.politique('😀'.repeat(10)), null);
+    const a = await P.hacher('un-mot-de-passe-solide'), b = await P.hacher('un-mot-de-passe-solide');
+    H.vrai('deux hachages du même mot ont deux sels', a.sel !== b.sel && a.hash !== b.hash);
+    H.v('paramètres scrypt écrits', [a.algo, a.n, a.r, a.p], ['scrypt', 32768, 8, 1]);
+    H.v('le bon mot passe', await P.verifier('un-mot-de-passe-solide', a), true);
+    H.v('le mauvais', await P.verifier('un-mot-de-passe-solidE', a), false);
+    H.v('algo inconnu : faux, sans lever', await P.verifier('x', { algo: 'md5', hash: 'x', sel: 'x' }), false);
+    H.v('enregistrement vide : faux', await P.verifier('x', null), false);
+    H.v('factice ne lève pas et rend faux', await P.verifierFactice('x'), false);
+    const j = J.genererJeton(); H.vrai('jeton : 43 caractères base64url', /^[A-Za-z0-9_-]{43}$/.test(j));
+    H.vrai('deux jetons diffèrent', J.genererJeton() !== j);
+    H.v('empreinte : 64 hex et déterministe', [J.empreinte(j).length, J.empreinte(j) === J.empreinte(j)], [64, true]);
+    const codes = new Set(Array.from({ length: 500 }, () => J.genererCode()));
+    H.vrai('codes : 6 caractères [A-Z0-9]', [...codes].every(c => /^[A-Z0-9]{6}$/.test(c)));
+    H.vrai('codes : pas de collision grossière sur 500 tirages', codes.size > 495);
+    H.v('égalité en temps constant', [J.egalite('abc', 'abc'), J.egalite('abc', 'abd'), J.egalite('abc', 'abcd')], [true, false, false]);
+    H.bilan();
+})();

@@ -1,3 +1,4 @@
 'use strict';
-// Emplacement du lot — réécrit par son lot, et par lui seul.
-module.exports = { enTete(app, cfg) { }, routes(router, cfg, deps) { } };
+// Montage du lot B2 (installations). Les en-têtes CORS sont ceux du lot transport (B4) ; ici, seulement les routes.
+const { montrerInstallation, routesLiaison } = require('./routes');
+module.exports = { enTete(app, cfg) { }, routes(router, cfg, deps) { montrerInstallation(router, cfg, deps); routesLiaison(router, cfg, deps); } };

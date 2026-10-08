@@ -24,7 +24,9 @@ const INDEX = Object.freeze([
     I('limites', 'limites_cle', { cle: 1 }, { unique: true }), TTL('limites'),
     I('banc_lignes', 'banc_jeton', { jetonEmpreinte: 1 }), TTL('banc_lignes'),
     I('visuels', 'visuels_produit', { idProduct: 1 }, { unique: true }),
-    I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true })
+    I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
+    // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
+    I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees')
 ]);
 
 async function creerIndex() {
