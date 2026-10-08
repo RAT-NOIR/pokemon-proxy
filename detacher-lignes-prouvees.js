@@ -56,11 +56,28 @@ const DECISIONS = {
     '2026-10-08b': [
         { id: '262554|692805', preuve: 'attaques+nom', autre: 267492, type: 'fiche-contredite-par-les-attaques',
             pourquoi: 'Lumineon V (Premium Trainer Box ex 008) joint à Mareep par set+numero : les attaques désignent 267492 et le nom n\'est pas Mareep' }
+    ],
+    // FEU VERT NOMMÉ du testeur (2026-10-08) : les 7 jointures du Garchomp SP Half Deck (produits 676469-676474 et 676476) et la ligne
+    // doublon Gastly 339431|860026. Chaque produit du kit est joint par set+numero à une carte d'un AUTRE nom dont aucune attaque
+    // n'est celle que Cardmarket écrit entre crochets (preuve 'nom+attaques', rejouée). 676475 (Garchomp LV.X, ligne 154845) n'est
+    // PAS nommée : elle ne se détache pas. Eldegoss V 481749 : interdit (voir INTERDITS).
+    '2026-10-08c': [
+        ...[['158470|676469', 'Magikarp'], ['158471|676470', 'Gyarados'], ['157992|676471', 'Electrike'], ['158472|676472', 'Manectric'],
+            ['157993|676473', 'Gible'], ['154852|676474', 'Gabite'], ['158473|676476', 'Swablu']].map(([id, carte]) => ({
+            id, preuve: 'nom+attaques', type: 'fiche-contredite-par-le-nom',
+            pourquoi: `Garchomp SP Half Deck : le produit est joint par set+numero à ${carte}, d'un autre nom, qui ne porte aucune des attaques écrites par Cardmarket` })),
+        { id: '339431|860026', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
+            pourquoi: 'produit « Hole-Digging Shovel » joint à Gastly ; la bonne ligne 338279|860026 existe déjà (doublon par setlist+numero)' }
     ]
 };
 
+// Produits dont aucune ligne ne se détache par cet outil, quelle que soit la décision : la preuve n'est pas apportée.
+const INTERDITS = [481749]; // Eldegoss V (V-Starter-Decks) — « on n'y touche pas, preuve à apporter » (feu vert du 2026-10-08)
+const estInterdite = id => INTERDITS.includes(Number(String(id).split('|')[1]));
+
 // Le rejeu d'une preuve, PUR (testable sans base). Rend { verdict } : une phrase si le témoin contredit encore la ligne, sinon null.
 function jugerLigne(x, nomProduit, notre, autre) {
+    if (estInterdite(x.id)) return { verdict: null };
     const d = decomposerNomCardmarket(nomProduit);
     const parAttaques = () => {
         const att = d.attaques.map(normaliserNom).filter(Boolean);
@@ -73,12 +90,20 @@ function jugerLigne(x, nomProduit, notre, autre) {
     if (x.preuve === 'attaques') verdict = parAttaques();
     else if (x.preuve === 'nom') verdict = parNom();
     else if (x.preuve === 'attaques+nom') { const a = parAttaques(), n = parNom(); verdict = a && n ? `${a} ; ${n}` : null; }
+    else if (x.preuve === 'nom+attaques') {
+        // le nom du produit n'est pas celui de la carte ET aucune des attaques du produit n'est sur la carte (produit sans attaque : refus)
+        // le décomposeur laisse la rareté entre crochets dans le nom (« Milotic C ») : le nom de la carte doit être un PRÉFIXE du nom du produit
+        const nc = normaliserNom(notre?.nomEn);
+        const n = nc && normaliserNom(d.nom).startsWith(nc) ? null : parNom(), att = d.attaques.map(normaliserNom).filter(Boolean);
+        const sur = (notre?.attaques || []).filter(a => att.includes(normaliserNom(a.nom))).length;
+        verdict = n && att.length && notre && !sur ? `${n} ; aucune des attaques [${d.attaques.join(' | ')}] sur la carte` : null;
+    }
     else verdict = null;
     return { verdict };
 }
 
 async function main() {
-    const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/, /^--decision=\d{4}-\d{2}-\d{2}b?$/];
+    const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/, /^--decision=\d{4}-\d{2}-\d{2}[a-z]?$/];
     const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
     const ecrire = process.argv.includes('--ecrire');
     const annonce = process.argv.find(a => a.startsWith('--annonce='))?.slice(10);
@@ -86,6 +111,8 @@ async function main() {
     const LIGNES = DECISIONS[DECISION];
     if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${DECISION && !LIGNES ? `décision inconnue : ${DECISION} — ` : ''}usage : --decision=<${Object.keys(DECISIONS).join('|')}> --annonce=<fichier.json> (simulation) | --decision=<…> --ecrire`); process.exit(2); }
 
+    const interdites = LIGNES.filter(x => estInterdite(x.id));
+    if (interdites.length) { console.error(`❌ ligne(s) interdite(s) (preuve non apportée) : ${interdites.map(x => x.id).join(' ')} — rien n'est lu ni écrit`); process.exit(2); }
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const L = cx.db.collection('cartes_produits'), C = cx.db.collection('cartes');
     const lignes = await L.find({ _id: { $in: LIGNES.map(x => x.id) } }).toArray();
@@ -139,5 +166,5 @@ async function main() {
     await fermer();
     if (r.deletedCount !== plan.length || encore) process.exitCode = 1;
 }
-module.exports = { DECISIONS, jugerLigne };
+module.exports = { DECISIONS, jugerLigne, estInterdite };
 if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
