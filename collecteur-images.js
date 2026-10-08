@@ -50,7 +50,8 @@ const VERROU_MS = 10 * 60 * 1000;
 // une SUPPOSITION et jamais revu fait refuser du bon travail. Il coûte dans l'autre sens, et
 // silencieusement — un set refusé ne réclame rien. La résolution réelle de chaque set est conservée
 // dans `completImages.mesures` : le jour où la vue pleine carte existera, on saura lesquels sont bas.
-const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');   // une définition pour les deux collecteurs
+const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
+const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
@@ -231,9 +232,9 @@ async function collecterSet(code, M, dossierRapport) {
         // règle qui ne dérange rien de ce qui marche se câble sans attendre de la rencontrer.
         const largeurs = mesures[id].map(x => x?.w).filter(Boolean).sort((a, b) => a - b);
         const mediane = largeurs.length ? largeurs[Math.floor(largeurs.length / 2)] : null;
-        const trop = (mediane == null || mediane < LARGEUR_MIN) ? mesures[id].filter(x => !x.w || x.w < LARGEUR_MIN) : [];
+        const trop = (mediane == null || mediane < largeurMin) ? mesures[id].filter(x => !x.w || x.w < largeurMin) : [];
         if (trop.length) {
-            console.error(`❌ ${code} : largeur MÉDIANE ${mediane ?? '?'} px < ${LARGEUR_MIN} (${mesures[id].length} mesures, ${trop.length} sous le seuil) — set REFUSÉ, rien n'est téléchargé.`);
+            console.error(`❌ ${code} : largeur MÉDIANE ${mediane ?? '?'} px < ${largeurMin} (${mesures[id].length} mesures, ${trop.length} sous le seuil) — set REFUSÉ, rien n'est téléchargé.`);
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-resolution' } });
             await liberer(); return { code, etat: 'refuse-resolution', mesures };
         }
@@ -280,10 +281,10 @@ async function collecterSet(code, M, dossierRapport) {
                 // reprise de l'état. Un désaccord avec la liste se DIT : il ne doit pas arriver sur une liste fraîche (mesuré égal sur 552/1).
                 if (faits.original && faits.original !== e.original) console.warn(`   ⚠️ ${_id} : l'original de la page (${faits.original.split('/').pop()}) n'est pas celui de la liste (${e.cleCdn}).`);
                 const img = await src.telecharger(faits.original || e.original);
-                if (!img.w || img.w < LARGEUR_MIN) {
+                if (!img.w || img.w < largeurMin) {
                     tropPetits++;
-                    console.warn(`   ⤵️ ${_id} « ${e.titre} » : ${img.w ?? '?'} px de large < ${LARGEUR_MIN} — ÉCARTÉE, comptée, non servie.`);
-                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit' } }, { upsert: true });
+                    console.warn(`   ⤵️ ${_id} « ${e.titre} » : ${img.w ?? '?'} px de large < ${largeurMin} — ÉCARTÉE, comptée, non servie.`);
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, sourceSetId: sid, n: e.n, titre: e.titre, urlOriginal: e.original, cleCdn: e.cleCdn, set: slug, w: img.w, h: img.h, fmt: img.fmt, octets: img.octets, etat: 'trop-petit', seuilApplique: largeurMin } }, { upsert: true });
                     continue;
                 }
                 const ext = img.fmt === 'webp' ? 'webp' : img.fmt === 'png' ? 'png' : 'jpg';
@@ -308,7 +309,7 @@ async function collecterSet(code, M, dossierRapport) {
             }
         }
     }
-    console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${LARGEUR_MIN} px`);
+    console.log(`3. originaux : ${telecharges} téléchargés, ${sautes} déjà faits, ${echecs} échecs, ${tropPetits} écartée(s) sous ${largeurMin} px`);
     if (arretDemande) { await liberer(); return { code, etat: 'interrompu', telecharges, sautes, echecs }; }
 
     const complet = await joindreImages(M, L, slug, S, entrees, mesures, dossierRapport);

@@ -39,7 +39,7 @@ const sharp = require('sharp');
 const r2 = require('./collecte-cartes/r2');
 const { ligne, TABLE } = require('./collecte-cartes/table-sets');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
@@ -171,9 +171,9 @@ async function collecterSet(unite, M, { verrou }) {
                 const buffer = await client.telecharger(url);
                 if (!buffer) throw new Error('absent chez TCGdex (404)');
                 const meta = await sharp(buffer).metadata();
-                if (!meta.width || meta.width < LARGEUR_MIN) {
+                if (!meta.width || meta.width < largeurMinDe(SOURCE)) {
                     tropPetits++;
-                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carte._id, numero: p.numero, tcgdexId: p.tcg.id, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit' } }, { upsert: true });
+                    await M.Image.updateOne({ _id }, { $set: { source: SOURCE, set: slug, carteId: p.carte._id, numero: p.numero, tcgdexId: p.tcg.id, urlOriginal: url, wOriginal: meta.width, hOriginal: meta.height, etat: 'trop-petit', seuilApplique: largeurMinDe(SOURCE) } }, { upsert: true });
                     continue;
                 }
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });

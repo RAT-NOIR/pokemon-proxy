@@ -37,7 +37,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const { LARGEUR_MIN } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, sourceDeUnite } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const balise = require('./collecte-cartes/balise-worker');   // le commit du worker, au repos comme au travail
@@ -64,6 +64,11 @@ const balise = require('./collecte-cartes/balise-worker');   // le commit du wor
 // cache, de l'appariement et de la règle de langue — cinq fichiers qu'un worker antérieur ne connaît pas : il sortirait
 // l'unité `refuse-table` pour toujours.
 const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js',
+    // ➕ 2026-10-08 : le seuil dépend de la source (largeurMinDe) ; le collecteur TPC l'applique à ses visuels — il bouge avec la règle
+    'collecteur-images-tpc.js',
+    // ➕ idem : la liste des sources officielles de `largeurMinDe` est dérivée de `SITES` (tpc.js) — ajouter ou retirer un site
+    // change la règle sans toucher seuils-images.js (test-seuils-images.js casse si une dépendance de seuils-images manque ici)
+    'collecte-cartes/tpc.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
@@ -231,15 +236,16 @@ if (require.main !== module) return;
     // et Diamond & Pearl (min 200, médiane 381).
     // 🔑 C'est le motif dominant du chantier : la sonde doit lire LA MÊME CHOSE que le code de
     // production, sinon elle fabrique le refus qu'elle mesure.
-    const medLargeur = new Map();
+    const medLargeur = new Map();   // clé `<source>/<slug>` : deux sources peuvent mesurer le même slug (_id de collecte_images_etat)
     for (const e of await cx.db.collection('collecte_images_etat').find({}).toArray()) {
         // la mesure écrite par le collecteur fait foi quand elle existe ; sinon on la recalcule
         // sur le même champ que lui, et de la même façon.
         const slug = String(e._id).split('/').slice(1).join('/');
-        if (e.mesure?.mediane != null) { medLargeur.set(slug, e.mesure.mediane); continue; }
+        const src = String(e._id).split('/')[0];   // `<source>/<slug>` : le seuil dépend de la source (largeurMinDe)
+        if (e.mesure?.mediane != null) { medLargeur.set(`${src}/${slug}`, e.mesure.mediane); continue; }
         const ws = [...(e.infosListe || []).map(x => x?.w), ...Object.values(e.mesures || {}).flat().map(x => x?.w)]
             .filter(Boolean).sort((a, b) => a - b);
-        if (ws.length) medLargeur.set(slug, ws[Math.floor(ws.length / 2)]);
+        if (ws.length) medLargeur.set(`${src}/${slug}`, ws[Math.floor(ws.length / 2)]);
     }
 
     const reprises = [], insertions = [], bloquees = [], sansSource = [], complets = [];
@@ -250,12 +256,14 @@ if (require.main !== module) return;
         if (manque <= 0) { complets.push(code); continue; }
         const S = sourceDe(code);
         const u = file.get(code);
-        const min = medLargeur.get(l.slugSet) ?? null;   // MÉDIANE, le critère de la production
+        const source = sourceDeUnite(u, S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
+        const min = medLargeur.get(`${source}/${l.slugSet}`) ?? null;   // MÉDIANE, le critère de la production
         const ligne = { code, slug: l.slugSet, manque, n: g.n, min, etat: u ? `${u.etat}/${u.resultat ?? '—'}` : 'absent' };
         if (u && u.etat === 'attente') continue;              // déjà en file
         if (u && u.etat === 'refuse' && u.resultat === 'refuse-resolution') {
-            if (min != null && min >= LARGEUR_MIN) reprises.push(ligne);
-            else bloquees.push({ ...ligne, pourquoi: `largeur MÉDIANE ${min ?? '?'} px < ${LARGEUR_MIN} — le critère de la production` });
+            const seuil = largeurMinDe(source);
+            if (min != null && min >= seuil) reprises.push(ligne);
+            else bloquees.push({ ...ligne, pourquoi: `largeur MÉDIANE ${min ?? '?'} px < ${seuil} — le critère de la production` });
             continue;
         }
         if (!S) { sansSource.push(ligne); continue; }
@@ -264,7 +272,7 @@ if (require.main !== module) return;
     }
 
     const tot = a => a.reduce((s, x) => s + x.manque, 0);
-    console.log(`\n════ DÉNOMINATEUR : ${parCode.size} lignes énumérées (${admises} admises + ${parCode.size - admises} non admises mais dont le set peut porter des cartes) · ${file.size} unités en file · seuil ${LARGEUR_MIN} px ════`);
+    console.log(`\n════ DÉNOMINATEUR : ${parCode.size} lignes énumérées (${admises} admises + ${parCode.size - admises} non admises mais dont le set peut porter des cartes) · ${file.size} unités en file · seuil par source : officielles ${largeurMinDe('tpc-asie')} px, autres ${largeurMinDe('bulbapedia')} px ════`);
     console.log(`   ✅ sets complets (toutes les cartes ont leur visuel)     : ${complets.length}`);
     console.log(`   ♻️  À REPRENDRE (refusées au seuil, passent maintenant)  : ${reprises.length} sets · ${tot(reprises)} cartes`);
     console.log(`   ➕ À INSÉRER (absentes de la file, source connue)        : ${insertions.length} sets · ${tot(insertions)} cartes`);
@@ -337,7 +345,7 @@ if (require.main !== module) return;
     }
     for (const x of reprises) {
         const r = await F.updateOne({ _id: x.code, etat: 'refuse', resultat: 'refuse-resolution' }, {
-            $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `seuil abaissé de 480 à ${LARGEUR_MIN} px le 2026-09-21 ; largeur mediane de ce set : ${x.min} px` },
+            $set: { etat: 'attente', remisEnFileLe: new Date(), remisEnFileMotif: `seuil par source (largeurMinDe, décision du 2026-10-08) ; largeur mediane de ce set : ${x.min} px` },
             $unset: { resultat: '', pris: '', fini: '' }
         });
         repris += r.modifiedCount;
