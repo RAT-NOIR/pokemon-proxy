@@ -15,6 +15,10 @@
 // nom japonais de l'image n'ont RIEN en commun avec la porteuse (478/323 : un Stade sur Teal Mask Ogerpon). CALIBRÉE (§22) : sur 1 096
 // entrées artofpkm à numéro sans chiffre, 1 refus, 0 visuel juste perdu. La même règle étendue aux numéros chiffrés (noms disjoints sans
 // témoin) refuserait 8 entrées de plus dont 1 juste (Thunderclap Spark 072) : NON câblée, mesure dans le rapport du lot.
+// ⚠️ PORTÉE : cette règle EMPÊCHE de joindre, elle ne RETIRE rien de ce qui est déjà servi. Les 5 faux déjà posés (28/25, 28/27, 28/40,
+// 538/8, 478/323) restent dans `cartes.images` tant que `retirer-visuels.js` ne les retire pas (feu vert du testeur) : une recollecte
+// ne les rejoue pas.
+// ⚠️ `ja: 'absent'` (porteuse ou image sans nom japonais) : le refus est GARDÉ — doute = trou, pas visuel d'une autre carte (testé).
 // Les cartes hors slug / d'un autre deck sont TÉMOINS, JAMAIS receveuses (comme `peutRecevoir` chez TCGdex, 387a731) : ce module
 // ne répond que sur la porteuse qu'on lui soumet.
 // ⚪ Le témoin se TAIT quand le nom ne désigne aucune carte au même numéro (écart de forme, traduction) : la jointure passe.
@@ -84,4 +88,14 @@ function appliquerTemoin(resolues, temoin) {
     return { gardees, contredites };
 }
 
-module.exports = { fabriquerTemoinImages, appliquerTemoin, REGLE_NOM, REGLE_PLACEHOLDER };
+/**
+ * 🔑 LE TÉMOIN NE PEUT QUE RETIRER, JAMAIS FAIRE SERVIR. Les clés partagées (`clesPartagees`) se calculent sur les résolues d'AVANT le
+ * filtrage : retirer des contredites d'abord laisserait une image seule sur une clé qui en portait trois, donc la ferait servir.
+ * @returns {{gardees: object[], contredites: object[], refusees: Set<string>}}  `gardees` inclut encore les clés refusées (l'appelant les écarte)
+ */
+function jugerResolues(resolues, temoin, clesPartagees) {
+    const refusees = clesPartagees(resolues);
+    return { ...appliquerTemoin(resolues, temoin), refusees };
+}
+
+module.exports = { fabriquerTemoinImages, appliquerTemoin, jugerResolues, REGLE_NOM, REGLE_PLACEHOLDER };

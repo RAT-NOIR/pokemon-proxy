@@ -56,7 +56,7 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
-const { fabriquerTemoinImages, appliquerTemoin } = require('./collecte-cartes/temoin-images-artofpkm');   // le témoin du nom DANS la jointure (audit Celebrations, 2026-10-08)
+const { fabriquerTemoinImages, jugerResolues } = require('./collecte-cartes/temoin-images-artofpkm');   // le témoin du nom DANS la jointure (audit Celebrations, 2026-10-08)
 const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');   // les cartes qui DÉCLARENT l'impression, slug ou non : les témoins
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
@@ -463,10 +463,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // (et d'un autre deck) sont TÉMOINS, jamais receveuses : `cartes` (sets: slug) reste la seule population qui reçoit.
     // Une image contredite n'est pas jointe : elle est NOMMÉE (reste `image-contredite-par-le-nom`), jamais écrasée en silence.
     const poolTemoins = await M.Carte.find(filtreCartesDuSet(slug, nomsCibles, TIRAGE)).select('_id nomEn nomJa niveau impressions attaques').lean();
-    const { gardees, contredites } = appliquerTemoin(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }));
+    // ⚠️ ORDRE : les clés partagées se calculent sur les résolues d'AVANT le témoin (il ne peut que RETIRER, jamais faire servir une image
+    // restée seule sur une clé qui en portait trois) — `jugerResolues`.
+    const { gardees, contredites, refusees } = jugerResolues(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }), clesPartagees);
     resolues = gardees;
     for (const x of contredites) restes.push({ set: slug, type: 'image-contredite-par-le-nom', detail: `${x.im._id} « ${x.im.titre} » n°${x.im.numero ?? '—'} -> carte ${x.c._id} « ${x.c.nomEn} » refusée : ${x.verdict.raison}`, le: new Date() });
-    const refusees = clesPartagees(resolues);
+    // une carte privée d'image par une contredite est une décision NOMMÉE (le reste ci-dessus), pas un oubli : la concordance des decks la compte
+    const cartesPrivees = new Set(contredites.map(x => x.c._id));
     if (simuler) {
         const parPreuve = {};
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) parPreuve[r.preuve] = (parPreuve[r.preuve] || 0) + 1;
@@ -479,7 +482,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const finales = new Map();
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) finales.set(cle(r.c._id, r.im.numero), r);
         const decrire = r => ({ cleR2: r.im.cleR2, numero: r.im.numero ?? null, nomImage: r.im.nomEn ?? r.im.titre, carteId: r.c._id, nomCarte: r.c.nomEn, preuve: r.preuve });
-        return { simule: true, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomImage: x.im.nomEn, regle: x.verdict.regle })),
+        return { simule: true, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomJaCarte: x.c.nomJa ?? null, nomImage: x.im.nomEn, nomJaImage: x.im.nomJa ?? null, regle: x.verdict.regle, ja: x.verdict.ja, temoins: x.verdict.autres.map(a => `${a._id} « ${a.nomEn} »`), serviraitSansTemoin: !refusees.has(`${x.c._id}|${String(x.im.numero).trim()}`) })),
             restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
             nouvelles: [...finales].filter(([k]) => !deja.has(k)).map(([, r]) => decrire(r)),
             remplacees: [...finales].filter(([k, r]) => deja.has(k) && deja.get(k) !== r.im.cleR2).map(([k, r]) => ({ ...decrire(r), avant: deja.get(k) })) };
@@ -549,7 +552,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
         // Une image refusée pour clé partagée n'est pas un original perdu : elle est NOMMÉE (reste `image-cle-partagee`).
         concordance: nEntrees === images.length
-            && (emplacements ? cartesAvecImage.size === cartes.length : jointes + clesRefusees + contredites.length === images.length)
+            && (emplacements ? cartes.every(c => cartesAvecImage.has(c._id) || cartesPrivees.has(c._id)) : jointes + clesRefusees + contredites.length === images.length)
             && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };

@@ -96,11 +96,36 @@ const squirtle = carte(39472, 'Squirtle', 'ゼニガメ', IP, '40', 'Squirtle De
     verifier('appliquerTemoin sans témoin (null) : rien ne change', appliquerTemoin(resolues, null).gardees.length, 2);
 }
 
+// ── 5 bis. LE TÉMOIN NE PEUT QUE RETIRER, JAMAIS FAIRE SERVIR (relecture, tour 1/5) ─────────────────────────────────────────────
+// Trois images portent « SV-P » sur la même carte (sha différents) : `clesPartagees` refuse la clé. Si deux sont contredites AVANT ce
+// calcul, la troisième reste seule sur la clé et devient SERVIE — l'ordre du premier jet. La clé se calcule sur les résolues d'AVANT.
+{
+    const { jugerResolues } = require('./collecte-cartes/temoin-images-artofpkm');
+    const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');
+    const SVP = 'SV-P Promotional cards';
+    const ogerpon = carte(306527, 'Teal Mask Ogerpon', 'オーガポン みどりのめん', SVP, 'SV-P');
+    const T = fabriquerTemoinImages({ ligne: { bulba: { expansion: SVP, tirage: 'jp' } }, cartes: [ogerpon] });
+    const r = (cle, en, ja, sha) => ({ im: { ...im(cle, 'SV-P', en, ja), sha256: sha }, c: ogerpon, carteId: 306527, preuve: 'numero' });
+    const resolues = [r('a', 'Victory Medal (1st Place)', 'ビクトリーメダル', 's1'), r('b', 'Victory Symbol', 'ビクトリーシンボル', 's2'), r('c', 'Teal Mask Ogerpon', 'オーガポン みどりのめん', 's3')];
+    const ancien = appliquerTemoin(resolues, T).gardees;                       // l'ancien ordre : filtrer, PUIS compter les clés partagées
+    verifier('contraste : l\'ancien ordre ferait SERVIR l\'image restée seule', [ancien.length, clesPartagees(ancien).size], [1, 0]);
+    const j = jugerResolues(resolues, T, clesPartagees);
+    verifier('jugerResolues : la clé reste partagée (calculée avant), donc l\'image restante n\'est PAS servie', [j.contredites.length, j.refusees.has('306527|SV-P')], [2, true]);
+}
+// ── 5 ter. NOM JAPONAIS ABSENT : le doute est un trou (décision du coordinateur) ──────────────────────────────────────────────
+{
+    const X = 'Expansion Z';
+    const sansJa = carte(1, 'Mareep', null, X, '008'), lum = carte(2, 'Lumineon V', 'ネオラントV', X, '008');
+    const T = fabriquerTemoinImages({ ligne: { bulba: { expansion: X, tirage: 'jp' } }, cartes: [sansJa, lum] });
+    const v = T(im('artofpkm/538/8.webp', '008', 'Lumineon V', 'ネオラントV'), sansJa);
+    verifier('porteuse SANS nom japonais, témoin au même numéro : refusé (ja « absent » : doute = trou)', [refus(v), v && v.ja], ['nom-contredit-par-une-carte-au-meme-numero', 'absent']);
+}
+
 // ── 6. CÂBLAGE : la jointure appelle le témoin, et l'unité surveillée par la garde du worker est déclarée ────────────────────────
 {
     const fs = require('fs');
     const src = fs.readFileSync(require.resolve('./collecteur-images.js'), 'utf8');
-    verifier('collecteur-images.js importe et applique le témoin', [/temoin-images-artofpkm/.test(src), /appliquerTemoin\(/.test(src), /image-contredite-par-le-nom/.test(src)], [true, true, true]);
+    verifier('collecteur-images.js importe et applique le témoin, par jugerResolues (clés partagées calculées AVANT le filtrage)', [/temoin-images-artofpkm/.test(src), /jugerResolues\(/.test(src), /image-contredite-par-le-nom/.test(src), /clesPartagees\(resolues\)/.test(src)], [true, true, true, false]);
     const regles = fs.readFileSync(require.resolve('./remettre-en-file.js'), 'utf8');
     verifier('remettre-en-file.js surveille collecte-cartes/temoin-images-artofpkm.js', /'collecte-cartes\/temoin-images-artofpkm\.js'/.test(regles), true);
 }

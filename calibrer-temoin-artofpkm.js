@@ -39,7 +39,7 @@ const SUSPECTS = ['artofpkm/64/64.webp', 'artofpkm/64/65.webp', 'artofpkm/64/66.
         const r = { ls, par, temoin: ls.map(l => fabriquerTemoinImages({ ligne: l, cartes: par.get(l).pool, slug })) };
         contexte.set(slug, r); return r;
     };
-    let entrees = 0, sansDoc = 0, sansLigne = 0;
+    let entrees = 0, sansDoc = 0, sansLigne = 0, sansLigneApplicable = 0;
     const refus = [];
     for (const c of cartesAvecImage) {
         for (const e of c.images || []) {
@@ -49,15 +49,21 @@ const SUSPECTS = ['artofpkm/64/64.webp', 'artofpkm/64/65.webp', 'artofpkm/64/66.
             if (!im) { sansDoc++; continue; }
             const x = await ctx(e.set);
             if (!x.ls.length) { sansLigne++; continue; }
-            // porteuse admise par au moins une ligne du slug
+            // JUGÉ PAR LIGNE, comme la production (un `joindreImages` par ligne) : la porteuse n'est jugée que par les lignes dont elle est
+            // RECEVEUSE (elle déclare (tirage, expansion[, deck]) de la ligne). Refusée seulement si TOUTES ses lignes la refusent : une
+            // ligne qui la refuse ne l'ôte pas à une autre ligne qui la joint.
             const imfull = { ...im, numero: e.numero ?? im.numero };
-            for (const t of x.temoin) {
-                const v = t(imfull, c);
-                if (v) { refus.push({ cleR2: e.cleR2, set: e.set, numero: e.numero, carte: c._id, nomCarte: c.nomEn, nomJaCarte: c.nomJa, imageEn: im.nomEn, imageJa: im.nomJa, regle: v.regle, raison: v.raison, autres: (v.autres || []).map(a => `${a._id} « ${a.nomEn} »`) }); break; }
-            }
+            const verdicts = [];
+            x.ls.forEach((l, i) => {
+                const recoit = (c.impressions || []).some(p => p.tirage === x.par.get(l).tirage && x.par.get(l).exp.includes(p.expansion) && (!l.bulba.deck || p.deck === l.bulba.deck));
+                if (recoit) verdicts.push(x.temoin[i](imfull, c));
+            });
+            if (!verdicts.length) { sansLigneApplicable++; continue; }
+            const v = verdicts.every(Boolean) ? verdicts[0] : null;
+            if (v) refus.push({ cleR2: e.cleR2, set: e.set, numero: e.numero, carte: c._id, nomCarte: c.nomEn, nomJaCarte: c.nomJa, imageEn: im.nomEn, imageJa: im.nomJa, regle: v.regle, raison: v.raison, autres: (v.autres || []).map(a => `${a._id} « ${a.nomEn} »`) });
         }
     }
-    console.log(`DÉNOMINATEUR : ${entrees} entrées artofpkm servies (${cartesAvecImage.length} cartes) · ${sansDoc} sans document images · ${sansLigne} sans ligne de table · ${entrees - sansDoc - sansLigne} jugées`);
+    console.log(`DÉNOMINATEUR : ${entrees} entrées artofpkm servies (${cartesAvecImage.length} cartes) · ${sansDoc} sans document images · ${sansLigne} sans ligne de table · ${sansLigneApplicable} dont la porteuse n'est receveuse d'aucune ligne · ${entrees - sansDoc - sansLigne - sansLigneApplicable} jugées`);
     const prouves = refus.filter(r => PROUVES.includes(r.cleR2)), suspects = refus.filter(r => SUSPECTS.includes(r.cleR2));
     const reste = refus.filter(r => !PROUVES.includes(r.cleR2) && !SUSPECTS.includes(r.cleR2));
     console.log(`REFUSÉES : ${refus.length} · prouvés ${prouves.length}/${PROUVES.length} · suspects ${suspects.length}/${SUSPECTS.length} (+1 hors liste connue éventuel) · RESTE ${reste.length}`);
