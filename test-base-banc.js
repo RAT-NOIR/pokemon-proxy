@@ -230,7 +230,20 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     // ── 9. LA FAÇADE DE LECTURE DE LA PRODUCTION : une liste FERMÉE de lectures ; tout le reste lève, sans qu'aucun appel d'écriture n'atteigne le Db
     {
         const appels = [];
-        const fauxCursor = { toArray: async () => [], sort() { return this; }, limit() { return this; } };
+        // 🔑 LE FAUX CURSEUR PORTE LES MÉTHODES DU VRAI : toutes celles de AggregationCursor et FindCursor du pilote (out, addStage, clone, explain, rewind,
+        // withReadConcern…) et leurs accesseurs (client, server, session…), lus sur les prototypes réels. Un faux plus pauvre que le vrai ne peut pas
+        // échouer là où le vrai écrit (89a5596 : la façade rendait le curseur natif, `.out()` et `.addStage()` y ajoutent un $out/$merge après coup).
+        const { AggregationCursor, FindCursor } = require('mongodb');
+        const nomsCurseur = new Set(), accesseurs = new Set();
+        for (const K of [AggregationCursor, FindCursor]) for (let p = K.prototype; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+            for (const [nom, d] of Object.entries(Object.getOwnPropertyDescriptors(p))) { if (nom === 'constructor') continue; if (typeof d.value === 'function') nomsCurseur.add(nom); else if (d.get) accesseurs.add(nom); }
+        }
+        const appelsCurseur = [];
+        const fauxCursor = {};
+        for (const nom of nomsCurseur) fauxCursor[nom] = function () { appelsCurseur.push(nom); return nom === 'toArray' ? Promise.resolve([]) : this; };
+        for (const g of accesseurs) Object.defineProperty(fauxCursor, g, { get() { appelsCurseur.push(`get:${g}`); return { ECRITURE_POSSIBLE: true }; } });
+        fauxCursor[Symbol.asyncIterator] = async function* () { appelsCurseur.push('asyncIterator'); };
+        fauxCursor.nimporteQuoi = function () { appelsCurseur.push('nimporteQuoi'); return this; };
         const fauxColl = new Proxy({}, { get: (_, m) => (...a) => { appels.push(`coll.${String(m)}`); return fauxCursor; } });
         const fauxDb = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => { appels.push('db.listCollections'); return fauxCursor; }, dropDatabase: async () => { appels.push('db.dropDatabase'); } };
         const F = B.facadeLecture(fauxDb, async () => { });
@@ -248,14 +261,55 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         await F.collection('x').distinct('a'); await F.collection('x').aggregate([{ $match: {} }, { $sort: { a: 1 } }]); F.listCollections({});
         verifier('façade : les lectures de la liste fermée (find, findOne, countDocuments, estimatedDocumentCount, distinct, aggregate sans $out/$merge, listCollections) passent', appels, ['coll.find', 'coll.findOne', 'coll.countDocuments', 'coll.estimatedDocumentCount', 'coll.distinct', 'coll.aggregate', 'db.listCollections']);
         verifier('façade : databaseName lisible, db renvoie la façade elle-même (jamais le Db brut)', [F.databaseName, F.db === F], ['test', true]);
+
+        // ── LE CURSEUR : enveloppé, à liste fermée, jamais le curseur natif (qui porte out(), addStage(), clone(), et l'accesseur client)
+        const AUTORISES = new Set(['toArray', 'next', 'tryNext', 'hasNext', 'forEach', 'close', 'batchSize', 'maxTimeMS', 'stream', 'limit', 'skip', 'sort', 'project', 'match', 'group', 'unwind', 'map']);
+        verifier(`le faux curseur porte les méthodes du VRAI (${nomsCurseur.size} méthodes, ${accesseurs.size} accesseurs lus sur AggregationCursor et FindCursor), dont out, addStage, clone, explain et l'accesseur client`,
+            [['out', 'addStage', 'clone', 'explain', 'rewind'].every(m => nomsCurseur.has(m)), accesseurs.has('client')], [true, true]);
+        appels.length = 0; appelsCurseur.length = 0;
+        const ouvertures = { 'aggregate([])': () => F.collection('x').aggregate([{ $match: {} }]), 'find({})': () => F.collection('x').find({}), 'listCollections()': () => F.listCollections({}) };
+        const curseurLeves = [];
+        for (const [origine, ouvrir] of Object.entries(ouvertures)) {
+            for (const nom of [...nomsCurseur, ...accesseurs, 'nimporteQuoi']) {
+                if (AUTORISES.has(nom)) continue;
+                if (!await nonLevee(() => ouvrir()[nom]?.({ $merge: { into: 'x' } }))) curseurLeves.push(`${origine}.${nom}`);
+            }
+        }
+        verifier(`curseur : tout ce qui n'est pas dans la liste fermée (${[...nomsCurseur, ...accesseurs].filter(m => !AUTORISES.has(m)).length + 1} noms dont out, addStage, clone, client, server, session, explain, nimporteQuoi) LÈVE « LECTURE SEULE » sur les curseurs de aggregate, find et listCollections`, curseurLeves, []);
+        verifier('curseur : AUCUN appel n\'a atteint le curseur natif, aucun accesseur lu (0 appel compté)', appelsCurseur, []);
+        // les chaînes : un constructeur de la liste fermée rend à son tour le curseur ENVELOPPÉ, jamais le natif
+        const chaines = [['aggregate().out()', () => F.collection('x').aggregate([]).out('y')], ['aggregate().addStage($merge)', () => F.collection('x').aggregate([]).addStage({ $merge: { into: 'x' } })],
+            ['aggregate().sort().limit().addStage($out)', () => F.collection('x').aggregate([]).sort({ a: 1 }).limit(5).addStage({ $out: 'y' })], ['find().sort().client', () => F.collection('x').find({}).sort({ a: 1 }).client],
+            ['find().limit().skip().project().clone()', () => F.collection('x').find({}).limit(2).skip(1).project({ a: 1 }).clone()], ['find().map().out()', () => F.collection('x').find({}).map(d => d).out('y')],
+            ['aggregate().match({$out})', () => F.collection('x').aggregate([]).match({ $out: 'y' })], ['aggregate().group({$merge})', () => F.collection('x').aggregate([]).group({ $merge: { into: 'y' } })],
+            ['aggregate().unwind().lookup()', () => F.collection('x').aggregate([]).unwind('$a').lookup({ from: 'y' })]];
+        verifier('curseur : les chaînes (constructeurs autorisés puis out, addStage, client, clone, lookup) lèvent toutes « LECTURE SEULE »', (await Promise.all(chaines.map(async ([nom, f]) => (await nonLevee(f)) ? null : nom))).filter(Boolean), []);
+        appelsCurseur.length = 0;
+        const c1 = F.collection('x').aggregate([{ $match: {} }]);
+        const lus = [await c1.sort({ a: 1 }).limit(3).skip(1).project({ a: 1 }).match({ b: 1 }).group({ _id: '$a' }).unwind('$a').toArray(), await c1.next(), await c1.tryNext(), await c1.hasNext(), await c1.forEach(() => { }), await c1.close()];
+        for await (const _ of F.collection('x').find({})) { /* itère */ }
+        const lectureOk = appelsCurseur.every(a => AUTORISES.has(a) || a === 'asyncIterator');
+        verifier('curseur : les lectures de la liste fermée (toArray, next, tryNext, hasNext, forEach, close, constructeurs, for await) passent jusqu\'au curseur natif, et rien d\'autre', [lectureOk, appelsCurseur.includes('toArray'), appelsCurseur.includes('asyncIterator'), lus.length], [true, true, true, 6]);
+
+        // connexionProduction / connexionCartes rendent la FAÇADE (preuve de comportement, faux mongoose sans réseau) : le Db brut n'en sort jamais
+        const dbBrut = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => fauxCursor };
+        const fauxMongoose = { createConnection: () => ({ asPromise: async () => ({ db: dbBrut, close: async () => { } }) }) };
+        const bf = await B.ouvrirBanc({ env: { ...process.env, MONGODB_TEST_URI: BANC_URI }, memoireDisponible: false });
+        appels.length = 0;
+        const lecturesOuvertes = [await bf.connexionProduction(fauxMongoose, 'test'), await bf.connexionCartes(fauxMongoose, 'cartes')];
+        const sortieBrute = [];
+        for (const h of lecturesOuvertes) {
+            if (h === dbBrut || h.db === dbBrut) sortieBrute.push('Db brut');
+            for (const m of ['command', 'insertOne', 'dropDatabase']) if (!await nonLevee(() => h[m]?.({}) ?? h.collection('x')[m]({}))) sortieBrute.push(`écriture ${m}`);
+            if (!await nonLevee(() => h.collection('x').aggregate([]).out('y'))) sortieBrute.push('curseur.out');
+        }
+        verifier('connexionProduction et connexionCartes rendent une façade : ni Db brut, ni commande, ni écriture, ni curseur.out ne passent (faux mongoose, 0 appel d\'écriture)', [sortieBrute, appels.filter(a => a !== 'coll.aggregate')], [[], []]);
         // les URI de LECTURE dédiées (utilisateur Atlas en lecture seule) sont préférées quand elles existent
         const envL = { ...process.env, MONGODB_TEST_URI: BANC_URI, MONGODB_LECTURE_URI: 'mongodb://lecture.example/x', MONGODB_CARTES_LECTURE_URI: 'mongodb://lecture-cartes.example/x' };
         const bl = await B.ouvrirBanc({ env: envL, memoireDisponible: false });
         verifier('MONGODB_LECTURE_URI et MONGODB_CARTES_LECTURE_URI, quand elles existent, sont préférées pour la lecture ; puis REMPLACÉES dans l\'environnement des enfants', [bl.uriProduction === 'mongodb://lecture.example/x', bl.uriCartes === 'mongodb://lecture-cartes.example/x'], [true, true]);
         bl.appliquer();
         verifier('   ... après appliquer, plus aucune variable MONGODB_*URI ne vaut autre chose que le banc', Object.entries(envL).filter(([k, v]) => /^MONGODB_.*URI$/.test(k) && v !== BANC_URI).map(([k]) => k), []);
-        // et connexionProduction / connexionCartes rendent la FAÇADE, jamais la connexion mongoose
-        verifier('connexionProduction / connexionCartes rendent la façade (la fonction facadeLecture est la seule porte)', /facadeLecture\(/.test(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'base-banc.js'), 'utf8').split('async connexionProduction')[1] || ''), true);
     }
 
     // ── 10. le banc vignette n'écrit plus sur R2 : faux stockage en mémoire, aucun identifiant R2 exigé, pas de bucket de production

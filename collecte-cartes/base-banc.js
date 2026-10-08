@@ -175,6 +175,33 @@ const LECTURES_BASE = new Set(['databaseName', 'collection', 'listCollections', 
 const refusLecture = (quoi) => new Error(`🔴 LECTURE SEULE : « ${quoi} » n'est pas dans la liste fermée de ce qu'un banc peut faire sur la production (find, findOne, countDocuments, estimatedDocumentCount, distinct, listCollections, aggregate sans $out/$merge).`);
 const ecritDansPipeline = (x) => Array.isArray(x) ? x.some(ecritDansPipeline) : (x && typeof x === 'object') ? Object.entries(x).some(([k, v]) => k === '$out' || k === '$merge' || ecritDansPipeline(v)) : false;
 
+// ── LE CURSEUR : enveloppé lui aussi, à liste fermée. Le curseur natif porte de quoi ÉCRIRE (AggregationCursor.out() et addStage() ajoutent un
+// $out/$merge APRÈS la vérification du pipeline d'entrée) et de quoi s'échapper (l'accesseur `client` rend le MongoClient, `clone()` un curseur
+// natif, `lookup`, `redact`… d'autres étapes). Trouvé dans le pilote : aucune propriété du curseur n'est sûre hors de cette liste.
+const LECTURES_CURSEUR = new Set(['toArray', 'next', 'tryNext', 'hasNext', 'forEach', 'close', 'batchSize', 'maxTimeMS', 'stream']);
+// constructeurs : chacun rend à son tour le curseur ENVELOPPÉ, et son argument ne doit contenir ni $out ni $merge
+const CONSTRUCTEURS_CURSEUR = new Set(['limit', 'skip', 'sort', 'project', 'match', 'group', 'unwind', 'map']);
+
+function envelopperCurseur(curseur) {
+    const enveloppe = new Proxy({}, {
+        get(_, p) {
+            if (p === 'then') return undefined;
+            if (p === Symbol.asyncIterator) return () => curseur[Symbol.asyncIterator]();
+            if (typeof p === 'symbol') return undefined;
+            if (CONSTRUCTEURS_CURSEUR.has(p)) {
+                return (...a) => {
+                    if (ecritDansPipeline(a)) throw refusLecture(`curseur.${p} avec $out/$merge`);
+                    curseur[p](...a);   // le pilote modifie ce curseur et le rend ; on ne rend JAMAIS cet objet-là
+                    return enveloppe;
+                };
+            }
+            if (LECTURES_CURSEUR.has(p)) return (...a) => curseur[p](...a);
+            throw refusLecture(`curseur.${String(p)}`);
+        }
+    });
+    return enveloppe;
+}
+
 function facadeLecture(db, fermer = async () => { }) {
     const collection = nom => {
         const c = db.collection(nom);
@@ -182,7 +209,8 @@ function facadeLecture(db, fermer = async () => { }) {
             get(_, p) {
                 if (typeof p === 'symbol' || p === 'then') return undefined;
                 if (!LECTURES_COLLECTION.has(p)) throw refusLecture(`collection.${String(p)}`);
-                if (p === 'aggregate') return (pipeline, ...r) => { if (ecritDansPipeline(pipeline)) throw refusLecture('aggregate avec $out/$merge'); return c.aggregate(pipeline, ...r); };
+                if (p === 'aggregate') return (pipeline, ...r) => { if (ecritDansPipeline(pipeline)) throw refusLecture('aggregate avec $out/$merge'); return envelopperCurseur(c.aggregate(pipeline, ...r)); };
+                if (p === 'find') return (...a) => envelopperCurseur(c.find(...a));
                 return (...a) => c[p](...a);
             }
         });
@@ -194,7 +222,7 @@ function facadeLecture(db, fermer = async () => { }) {
             if (p === 'databaseName') return db.databaseName;
             if (p === 'db') return facade;
             if (p === 'collection') return collection;
-            if (p === 'listCollections') return (...a) => db.listCollections(...a);
+            if (p === 'listCollections') return (...a) => envelopperCurseur(db.listCollections(...a));
             return fermer;
         }
     });
@@ -225,7 +253,10 @@ function verifierEcritureR2(nomCommande, bucket, env = process.env) {
     return { ok: true, raison: null };
 }
 
-/** Enrobe `client.send` : la décision tombe AVANT toute requête, et c'est la PROMESSE qui est rejetée. Idempotente. */
+/** Enrobe `client.send` : la décision tombe AVANT toute requête, et c'est la PROMESSE qui est rejetée. Idempotente.
+ *  ⚠️ LIMITE : une URL PRÉSIGNÉE (getSignedUrl pour un PUT) ne passe pas par `send` — elle est signée localement puis appelée en HTTP par un autre
+ *  chemin — donc pas par cette garde. Le dépôt n'a AUCUN présigneur aujourd'hui (grep de `@aws-sdk/s3-request-presigner` : aucune occurrence) ; si
+ *  un présigneur y arrive, il doit lui aussi appeler `verifierEcritureR2` (commande PutObjectCommand, bucket visé) avant de signer, ou être refusé. */
 function garderClientR2(client, env = process.env) {
     if (!client || client.send?.__gardeBanc) return client;
     const original = client.send.bind(client);
