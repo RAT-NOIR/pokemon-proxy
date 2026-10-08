@@ -36,7 +36,8 @@ function monter(app, deps = {}, env = process.env) {
  * Un lot v2 ne pose AUCUN use() (sans chemin, '/', tableau, sous-routeur…) : un use s'appliquerait aussi aux routes héritées.
  * La pile ne doit donc contenir que des couches `route` ; sinon le lot est REFUSÉ (échoue fermé).
  */
-const CHEMIN_DE_LOT = /^\/(?:api\/[A-Za-z0-9_-][A-Za-z0-9_.-]*|ping)(?:\/[A-Za-z0-9_.:-]+)*$/;
+// Minuscules SEULEMENT : Express ignore la casse des chemins, une majuscule contournerait la comparaison aux chemins hérités.
+const CHEMIN_DE_LOT = /^\/(?:api\/[a-z0-9_-][a-z0-9_.-]*|ping)(?:\/[a-z0-9_.:-]+)*$/;
 function assembler(lots, cfgLots, deps = {}) {
     const router = express.Router();
     lots.forEach((l, i) => {
@@ -51,7 +52,7 @@ function assembler(lots, cfgLots, deps = {}) {
                 throw new Error(`v2 : refus du lot n°${i} : chemin « ${String(couche.route.path)} » hors de la liste blanche (/api/<segment> littéral ou /ping)`);
             // Chemin qui RECOUVRE une route héritée : pour CHAQUE méthode de la route, le premier handler doit être un aiguilleur
             // (sinon une requête 1.0.x tomberait sur la garde d'index au lieu de la route héritée).
-            if (CHEMINS_HERITES.includes(couche.route.path)) {
+            if (CHEMINS_HERITES.includes(couche.route.path.toLowerCase())) {   // Express ignore la casse : on compare en minuscules
                 const vues = new Set();
                 for (const c of couche.route.stack) {
                     const m = c.method || '_toutes';
@@ -65,11 +66,15 @@ function assembler(lots, cfgLots, deps = {}) {
             // L'aiguilleur (premier handler de la méthode demandée) passe AVANT la garde : prédicat faux => la route héritée répond.
             const dispatch = couche.handle, route = couche.route;
             couche.handle = function gardeIndex(req, res, next) {
-                const m = String(req.method).toLowerCase();
-                const premier = route.stack.find(c => !c.method || c.method === m);
+                // Comme Express : HEAD est servi par les handlers GET quand la route n'en déclare pas pour HEAD.
+                let m = String(req.method).toLowerCase();
+                if (m === 'head' && !route.methods.head) m = 'get';
                 const garde = () => pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next)));
-                if (premier && estAiguilleur(premier.handle)) return premier.handle(req, res, a => (a === 'route' ? next() : a ? next(a) : garde()));
-                return garde();
+                // TOUS les aiguilleurs consécutifs en tête de la méthode demandée sont consultés avant la garde.
+                const aiguilleurs = [];
+                for (const c of route.stack.filter(c => !c.method || c.method === m)) { if (!estAiguilleur(c.handle)) break; aiguilleurs.push(c.handle); }
+                const suite = k => (k >= aiguilleurs.length ? garde() : aiguilleurs[k](req, res, a => (a === 'route' ? next() : a ? next(a) : suite(k + 1))));
+                return suite(0);
             };
         }
         router.stack.push(...sous.stack);
