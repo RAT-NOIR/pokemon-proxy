@@ -183,22 +183,22 @@ function routesMontees(app) {
     H.v('routesMontees : lit un routeur imbriqué et les paramètres', [...routesMontees(fausse)].sort(), ['GET /api/y', 'GET /ping', 'POST /api/x/{id}']);
 }
 const app = express();
-v2.monter(app, {}, { RM_API_V2: '1' });
+v2.monter(app, {}, { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' });   // sans base de bac, la config v2 exige V2_SECRET_EMPREINTE (B2) et aucune route ne monte
 v2.arreter();
 const montees = routesMontees(app);
 const promesses = OPERATIONS.filter(o => !o.op['x-heritee']);
 console.log(`   routes montées par le routeur v2 : ${montees.size} ; promises par le contrat : ${promesses.length} (dont ${promesses.filter(o => o.op['x-conditionnel']).length} conditionnelles)`);
-// Mode « avant fusion » (--avant-fusion, ou RM_OPENAPI_AVANT_FUSION=1 posée par l'orchestrateur pour le lanceur) : sort en 0 SEULEMENT si
-// les routes absentes sont EXACTEMENT la liste écrite ci-dessous et que tout le reste passe. Le mode par défaut reste strict.
-const AVANT_FUSION = process.argv.includes('--avant-fusion') || process.env.RM_OPENAPI_AVANT_FUSION === '1';
-const ATTENDUES_ABSENTES = [
-    'DELETE /api/compte', 'DELETE /api/compte/installations/{id}', 'GET /api/compte', 'POST /api/compte/code', 'POST /api/compte/connexion', 'POST /api/compte/deconnexion',
-    'POST /api/compte/delier', 'POST /api/compte/inscription', 'POST /api/compte/lier', 'POST /api/compte/mot-de-passe-oublie', 'POST /api/compte/reinitialiser',
-    'POST /api/compte/verification', 'POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/installation', 'POST /api/retour-live', 'POST /api/solde'];
+// Intégration PARTIELLE (INT1) : les lots B1b (identifier, reponse, retour-live) et B3 (solde) ne sont pas encore montés. Tant que cette
+// liste est non vide, les routes absentes doivent en être EXACTEMENT l'ensemble (ni une de plus, ni une de moins) et tout le reste doit passer.
+// Liste VIDE (à vider quand B1b et B3 sont fusionnés) ou `--complet` : mode strict, toute route promise doit être montée.
+// (Remplace RM_OPENAPI_AVANT_FUSION, une variable d'environnement qui n'existait que pour passer avant la fusion des lots.)
+const ATTENDUES_ABSENTES = ['POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/retour-live', 'POST /api/solde'];
+const AVANT_FUSION = ATTENDUES_ABSENTES.length > 0 && !process.argv.includes('--complet');
 const absentes = promesses.filter(o => !o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`)).map(o => `${o.methode} ${o.chemin}`).sort();
 for (const o of promesses.filter(o => o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`))) console.log(`   ⚠ route conditionnelle non montée (${o.op['x-conditionnel']}) : ${o.methode} ${o.chemin}`);
 if (AVANT_FUSION) {
-    console.log(`   MODE AVANT FUSION — routes absentes attendues (${ATTENDUES_ABSENTES.length}) :\n     ${ATTENDUES_ABSENTES.join('\n     ')}`);
+    console.log(`   MODE INTÉGRATION PARTIELLE — routes absentes attendues (${ATTENDUES_ABSENTES.length}) :\n     ${ATTENDUES_ABSENTES.join('\n     ')}`);
+    for (const o of promesses.filter(o => !o.op['x-conditionnel'] && !ATTENDUES_ABSENTES.includes(`${o.methode} ${o.chemin}`))) H.vrai(`route montée : ${o.methode} ${o.chemin}`, montees.has(`${o.methode} ${o.chemin}`));
     H.v(`avant fusion : les routes absentes sont EXACTEMENT les ${ATTENDUES_ABSENTES.length} écrites`, { absenteNonListee: absentes.filter(r => !ATTENDUES_ABSENTES.includes(r)), listeeMaisPresente: ATTENDUES_ABSENTES.filter(r => !absentes.includes(r)) }, { absenteNonListee: [], listeeMaisPresente: [] });
 } else {
     for (const o of promesses.filter(o => !o.op['x-conditionnel'])) H.vrai(`route montée : ${o.methode} ${o.chemin}`, montees.has(`${o.methode} ${o.chemin}`));

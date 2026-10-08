@@ -58,7 +58,13 @@ function carte(statut, o) {
 function enveloppe(issue, c, extra = {}) {
     return { issue, analyse: { statut: c.statut, cartes: [c], lot: null, raison: c.statut === 'introuvable' ? c.raison : null }, ...extra };
 }
-function introuvable(raison) { return enveloppe('introuvable', carte('introuvable', { raison })); }
+// Liste FERMÉE des raisons d'un « introuvable » (PLAN §2) : le contrat publié (v2/openapi) la compare à celle-ci, ensemble pour ensemble.
+// L'adaptateur n'en émet que deux ; les trois autres sont posées par B1b (en amont de la chaîne héritée). Une raison hors liste lève.
+const RAISONS = Object.freeze(['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture']);
+function introuvable(raison) {
+    if (!RAISONS.includes(raison)) throw new Error(`adaptateur : raison d'introuvable hors liste : ${raison}`);
+    return enveloppe('introuvable', carte('introuvable', { raison }));
+}
 
 function question(ids, etat, ctx) {
     const premiers = ids.slice(0, 3);                                    // l'ordre du classement n'est pas servi : on ne garde que le rang pour couper
@@ -124,4 +130,4 @@ function adapter({ statutHttp, corps } = {}, ctx = {}) {
         return { issue: 'panne', analyse: null, erreur: { code }, diagnostic };
     }
 }
-module.exports = { adapter };
+module.exports = { adapter, RAISONS };
