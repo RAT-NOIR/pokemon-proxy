@@ -474,7 +474,14 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const nommesEmpl = new Set([...contredites.map(x => cleEmpl(x.c, x.im.numero)), ...resolues.filter(r => refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)).map(r => cleEmpl(r.c, r.im.numero))]);
     const servisEmpl = new Set(resolues.filter(r => !refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)).map(r => cleEmpl(r.c, r.im.numero)));
     const cartesContredites = new Set(contredites.map(x => x.c._id));
+    const numerosAttendus = c => [...new Set(impsDe(c).map(i => cleNumero(i.numero)).filter(Boolean))];
     if (simuler) {
+        // la concordance n'est pas sur le chemin simulé : on appelle LA MÊME fonction pour mesurer ce que la règle (carte, numéro) ferait basculer
+        const avecImageSim = new Set(resolues.filter(r => !refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)).map(r => r.c._id));
+        const nEntreesSim = S.ids.reduce((a, id) => a + entrees[id].length, 0);
+        var couverture = { emplacements: cartes.length > 0 && nEntreesSim / cartes.length >= 1.5, cartes: cartes.length,
+            avant: cartes.filter(c => !avecImageSim.has(c._id)).map(c => c._id),
+            apres: cartesNonCouvertes(cartes, { numerosDe: numerosAttendus, servis: servisEmpl, nommes: nommesEmpl, cartesAvecImage: avecImageSim, cartesContredites }).map(c => ({ carteId: c._id, nomCarte: c.nomEn, manquants: numerosAttendus(c).filter(n => !servisEmpl.has(`${c._id}|${n}`) && !nommesEmpl.has(`${c._id}|${n}`)) })) };
         const parPreuve = {};
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) parPreuve[r.preuve] = (parPreuve[r.preuve] || 0) + 1;
         // CE QUE LE REJEU AJOUTERAIT, par la clé qu'il écrit : (carte, set, numéro), la dernière image lue l'emportant (le $pull/$push
@@ -486,7 +493,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const finales = new Map();
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) finales.set(cle(r.c._id, r.im.numero), r);
         const decrire = r => ({ cleR2: r.im.cleR2, numero: r.im.numero ?? null, nomImage: r.im.nomEn ?? r.im.titre, carteId: r.c._id, nomCarte: r.c.nomEn, preuve: r.preuve });
-        return { simule: true, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomJaCarte: x.c.nomJa ?? null, nomImage: x.im.nomEn, nomJaImage: x.im.nomJa ?? null, regle: x.verdict.regle, ja: x.verdict.ja, temoins: (x.verdict.autres || []).map(a => `${a._id} « ${a.nomEn} »`), serviraitSansTemoin: !refusees.has(`${x.c._id}|${String(x.im.numero).trim()}`) })),
+        return { simule: true, couverture, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomJaCarte: x.c.nomJa ?? null, nomImage: x.im.nomEn, nomJaImage: x.im.nomJa ?? null, regle: x.verdict.regle, ja: x.verdict.ja, temoins: (x.verdict.autres || []).map(a => `${a._id} « ${a.nomEn} »`), serviraitSansTemoin: !refusees.has(`${x.c._id}|${String(x.im.numero).trim()}`) })),
             restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
             nouvelles: [...finales].filter(([k]) => !deja.has(k)).map(([, r]) => decrire(r)),
             remplacees: [...finales].filter(([k, r]) => deja.has(k) && deja.get(k) !== r.im.cleR2).map(([k, r]) => ({ ...decrire(r), avant: deja.get(k) })) };
@@ -556,7 +563,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
         // Une image refusée pour clé partagée n'est pas un original perdu : elle est NOMMÉE (reste `image-cle-partagee`).
         concordance: nEntrees === images.length
-            && (emplacements ? !cartesNonCouvertes(cartes, { numerosDe: c => [...new Set(impsDe(c).map(i => cleNumero(i.numero)).filter(Boolean))], servis: servisEmpl, nommes: nommesEmpl, cartesAvecImage, cartesContredites }).length : jointes + clesRefusees + contredites.length === images.length)
+            && (emplacements ? !cartesNonCouvertes(cartes, { numerosDe: numerosAttendus, servis: servisEmpl, nommes: nommesEmpl, cartesAvecImage, cartesContredites }).length : jointes + clesRefusees + contredites.length === images.length)
             && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };
@@ -601,7 +608,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const codes = arg('rejouer-jointure') === 'tous' ? TABLE_CODES : arg('rejouer-jointure').split(',').map(s => s.trim());
         // `--simuler` (2026-10-05) : la jointure tourne, rien ne s'écrit ; les images qu'elle AJOUTERAIT vont dans un fichier à lire
         const simuler = process.argv.includes('--simuler');
-        const nouvelles = [], remplacees = [], contreditesSim = [], totaux = {};
+        const nouvelles = [], remplacees = [], contreditesSim = [], couverturesSim = [], totaux = {};
         let simules = 0;
         for (const code of codes) {
             const L = ligneDeTable(code);
@@ -615,6 +622,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 for (const x of r.nouvelles) nouvelles.push({ code, set: L.slugSet, ...x });
                 for (const x of r.remplacees) remplacees.push({ code, set: L.slugSet, ...x });
                 for (const x of r.contredites) contreditesSim.push({ code, set: L.slugSet, ...x });
+                if (r.couverture.emplacements) couverturesSim.push({ code, set: L.slugSet, cartes: r.couverture.cartes, sansImageAvant: r.couverture.avant.length, nonCouvertesApres: r.couverture.apres });
                 if (r.nouvelles.length || r.remplacees.length) console.log(`  ${code.padEnd(7)} ${r.nouvelles.length} image(s) nouvellement jointe(s) ${JSON.stringify(r.nouvelles.reduce((a, x) => (a[x.preuve] = (a[x.preuve] || 0) + 1, a), {}))} · ${r.remplacees.length} remplacée(s)`);
                 continue;
             }
@@ -628,7 +636,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         if (simuler) {
             const f = path.join(dossierRapport, `simulation-jointure-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
             fs.mkdirSync(dossierRapport, { recursive: true });
-            fs.writeFileSync(f, JSON.stringify({ codes: codes.length, simules, preuves: totaux, nouvelles, remplacees, contredites: contreditesSim }, null, 1));
+            fs.writeFileSync(f, JSON.stringify({ codes: codes.length, simules, preuves: totaux, nouvelles, remplacees, contredites: contreditesSim, couvertures: couverturesSim }, null, 1));
             console.log(`SIMULATION (rien d'écrit en base) : ${simules} codes simulés sur ${codes.length} demandés (les autres jamais collectés) · jointures par preuve ${JSON.stringify(totaux)} · ${nouvelles.length} image(s) qui seraient AJOUTÉES · ${remplacees.length} REMPLACÉE(S) · ${contreditesSim.length} CONTREDITE(S) par le témoin du nom — ${f}`);
         }
         await fermer(); return;

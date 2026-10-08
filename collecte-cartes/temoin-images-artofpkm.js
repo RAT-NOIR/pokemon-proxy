@@ -99,17 +99,22 @@ function jugerResolues(resolues, temoin, clesPartagees) {
 }
 
 /**
- * Les cartes d'un set à EMPLACEMENTS (deck) que la concordance doit déclarer non couvertes. Sans témoin, une carte est couverte dès
- * qu'elle porte une image (comportement d'avant, inchangé). Une carte TOUCHÉE par une contredite est jugée par (carte, NUMÉRO) : chaque
- * emplacement attendu est soit servi, soit nommé en reste (contredite, clé partagée) — jamais « couvert » par un autre numéro de la
- * même carte, sinon l'emplacement orphelin se perdrait sans être nommé nulle part.
+ * Les cartes d'un set à EMPLACEMENTS (deck) que la concordance doit déclarer non couvertes. Une carte touchée par une contredite OU à ≥ 2
+ * numéros attendus (tour 3/5) est jugée par (carte, NUMÉRO) : chaque emplacement attendu est soit servi, soit nommé en reste (contredite,
+ * clé partagée) — jamais « couvert » par un autre numéro de la même carte, sinon l'emplacement orphelin se perdrait sans être nommé nulle
+ * part. Une carte à UN numéro, non touchée : couverte dès qu'elle porte une image (comme avant).
+ * ⚠️ `numerosDe` = les numéros que la carte déclare dans CE set : une impression que la source n'a pas rend la carte non couverte (faux
+ * négatif sans mensonge — le reste le nomme).
  * ⚠️ Les images contredites comptent dans le calcul des clés partagées (`jugerResolues`) : doute = trou, voulu et non à changer.
  * @param {{numerosDe: (c) => string[], servis: Set<string>, nommes: Set<string>, cartesAvecImage: Set, cartesContredites: Set}} o  clés `${carteId}|${cleNumero}`
  */
 function cartesNonCouvertes(cartes, { numerosDe, servis, nommes, cartesAvecImage, cartesContredites }) {
-    return cartes.filter(c => cartesContredites.has(c._id)
-        ? (numerosDe(c) || []).some(n => !servis.has(`${c._id}|${n}`) && !nommes.has(`${c._id}|${n}`))
-        : !cartesAvecImage.has(c._id));
+    return cartes.filter(c => {
+        const ns = numerosDe(c) || [];
+        return cartesContredites.has(c._id) || ns.length >= 2
+            ? ns.some(n => !servis.has(`${c._id}|${n}`) && !nommes.has(`${c._id}|${n}`))
+            : !cartesAvecImage.has(c._id);
+    });
 }
 
 module.exports = { fabriquerTemoinImages, appliquerTemoin, jugerResolues, cartesNonCouvertes, REGLE_NOM, REGLE_PLACEHOLDER };

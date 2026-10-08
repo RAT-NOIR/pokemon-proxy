@@ -132,7 +132,11 @@ const squirtle = carte(39472, 'Squirtle', 'ゼニガメ', IP, '40', 'Squirtle De
     verifier('carte à deux emplacements, un contredit nommé, un orphelin NON nommé -> non couverte', f({ avecImage: [2], servis: ['2|3'], nommes: ['1|1'], contredites: [1] }).map(c => c._id), [1]);
     verifier('les deux emplacements nommés -> couverte', f({ avecImage: [2], servis: ['2|3'], nommes: ['1|1', '1|2'], contredites: [1] }).map(c => c._id), []);
     verifier('un emplacement servi, l\'autre contredit nommé -> couverte', f({ avecImage: [1, 2], servis: ['1|2', '2|3'], nommes: ['1|1'], contredites: [1] }).map(c => c._id), []);
-    verifier('carte non touchée par le témoin : comportement d\'avant (couverte par une image, non couverte sans)', f({ avecImage: [1] , servis: ['1|1'] }).map(c => c._id), [2]);
+    // tour 3/5 : la règle (carte, numéro) vaut pour TOUTE carte à ≥ 2 numéros attendus, touchée ou non — l'emplacement 2 ni joint ni nommé
+    // (son image est allée à une autre carte, ou la source l'a manqué) se NOMME au lieu d'être couvert par l'emplacement 1
+    verifier('carte NON touchée à deux emplacements, 1 servi, 2 ni servi ni nommé -> non couverte', f({ avecImage: [1, 2], servis: ['1|1', '2|3'] }).map(c => c._id), [1]);
+    verifier('carte non touchée à deux emplacements, 1 servi, 2 nommé (clé partagée) -> couverte', f({ avecImage: [1, 2], servis: ['1|1', '2|3'], nommes: ['1|2'] }).map(c => c._id), []);
+    verifier('carte à UN seul numéro attendu, non touchée : couverte dès qu\'elle porte une image, sinon non', f({ avecImage: [1], servis: ['1|1', '1|2'] }).map(c => c._id), [2]);
 }
 
 // ── 6. CÂBLAGE : la jointure appelle le témoin, et l'unité surveillée par la garde du worker est déclarée ────────────────────────
