@@ -64,5 +64,28 @@ const muet = async f => { const e0 = console.error; console.error = () => { }; t
     const p3b = await compte({ solde: { accueil: 0, achete: 1 } });
     const r3b = await L.debiterSupplement(p3b, { scanId: 's5', unites: 2, cleIdempotence: 'sup2', maintenant: t }, cfg);
     H.v('(3 bis) annulation normale : crédit rendu une fois, trace +1, clé libérée', [r3b.ok, (await lire(p3b)).solde.achete, await db.col('mouvements').countDocuments({ compteId: p3b.id, motif: 'supplement-annule' }), await ligne('sup2#0')], [false, 1, 1, null]);
+    // 3 ter. annulerUnite dont le rendu échoue : rendu-echoue AVEC raisonRendu (comme rembourserLigne)
+    const p3c = await compte({ solde: { accueil: 1, achete: 0 } });
+    const col4 = db.col;
+    db.col = n => n !== 'comptes' ? col4(n) : new Proxy(col4(n), { get: (c, k) => k === 'findOneAndUpdate' ? async (...a) => {
+        const r = await c.findOneAndUpdate(...a);
+        if (!r && await col4('mouvements').countDocuments({ cleIdempotence: 'sup3#0' })) await col4('comptes').updateOne({ _id: p3c.id }, { $set: { 'solde.accueil': cfg.quotas.accueil } });   // le plafond est atteint avant le rendu
+        return r; } : c[k].bind(c) });
+    try { await muet(() => L.debiterSupplement(p3c, { scanId: 's6', unites: 2, cleIdempotence: 'sup3', maintenant: t }, cfg)); } finally { db.col = col4; }
+    const l3c = await db.col('mouvements').findOne({ compteId: p3c.id, scanId: 's6', type: 'debit' });
+    H.v('(3 ter) annulerUnite non rendue : rendu-echoue + raisonRendu, sans expireLe', [l3c.etat, l3c.raisonRendu, 'expireLe' in l3c], ['rendu-echoue', 'accueil-au-plafond', false]);
+    // 4. EN_RECONCILIATION dans le registre : 409, message stable, ni 500 ni QUOTA, aucun crédit ni remboursement associé
+    const { CODES, MESSAGES, repondreErreur } = require('../erreurs');
+    const p4 = await compte({ solde: { accueil: 0, achete: 3 } });
+    await Lg.debiter(p4, { scanId: 's7', cleIdempotence: 'k7', maintenant: t }, cfg);
+    await db.col('mouvements').updateOne({ cleIdempotence: 'k7' }, { $set: { etat: 'rendu-en-cours' } });
+    const r4 = await muet(() => Lg.debiter(p4, { scanId: 's7', cleIdempotence: 'k7', maintenant: t }, cfg));
+    let statut4 = null, corps4 = null;
+    const res4 = { status(s) { statut4 = s; return this; }, json(c) { corps4 = c; return this; }, setHeader() { } };
+    let leve4 = null; try { repondreErreur(res4, r4.code, (MESSAGES || {})[r4.code], {}); } catch (e) { leve4 = e.message; }
+    H.v('(4) registre : EN_RECONCILIATION -> 409, accepté par repondreErreur', [CODES.EN_RECONCILIATION, leve4], [409, null]);
+    H.v('   message stable, success:false, code EN_RECONCILIATION, ni solde ni achat ni facturation', [statut4, corps4 && corps4.erreur.code, corps4 && corps4.erreur.message, corps4 && corps4.success, corps4 && corps4.facturation, corps4 && ('solde' in corps4 || 'achat' in corps4)],
+        [409, 'EN_RECONCILIATION', 'paiement en cours de réconciliation, réessayer plus tard', false, null, false]);
+    H.v('   ni 500 ni QUOTA (429)', [statut4 !== null && statut4 !== 500, statut4 !== 429, r4.code !== 'QUOTA'], [true, true, true]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

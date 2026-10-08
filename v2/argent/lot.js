@@ -45,10 +45,10 @@ async function annulerUnite(porteur, u, cfg, maintenant) {
     // Tour 4 (3) — PRISE ATOMIQUE de la ligne (même garde des états clos que rembourserLigne) : une unité déjà « rembourse » / « rendu-en-cours » n'est pas rendue deux fois.
     const pris = await col('mouvements').findOneAndUpdate({ ...base, type: 'debit', cleIdempotence: u.cle, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rendu-en-cours' }, $unset: { expireLe: '' } }, { returnDocument: 'before' });
     if (!pris) { console.error(`🔴 [v2 supplement] unité ${u.cle} : déjà prise par un autre chemin (ou ligne absente) — rien n'est rendu ici`); return; }
-    const { rendu } = await rendrePoche(porteur, u.credit, cfg, maintenant);
+    const { rendu, raison } = await rendrePoche(porteur, u.credit, cfg, maintenant);
     if (!rendu) {
         console.error(`🔴 [v2 supplement] unité ${u.cle} NON rendue (poche ${u.credit.poche}) : ligne « rendu-echoue », la réconciliation le dira`);
-        await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rendu-echoue' } });
+        await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rendu-echoue', raisonRendu: raison || 'poche-introuvable' } });
         return;
     }
     await col('mouvements').updateOne({ _id: pris._id }, { $set: { etat: 'rembourse', expireLe: expire }, $unset: { cleIdempotence: '' } });
