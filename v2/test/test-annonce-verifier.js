@@ -17,7 +17,7 @@ const t = preparerAnnonce({ title: 'a\n\tb   <b>c</b>\r\nd', description: '' }, 
 H.v('(3) une ligne, sans chevrons, sans espaces multiples', t.titre, 'a b ‹b›c‹/b› d');
 H.v('(3) titre ≤ 300', preparerAnnonce({ title: 'x'.repeat(5000) }, cfg).titre.length, 300);
 H.v('(3) description ≤ 2000', preparerAnnonce({ description: 'y'.repeat(5000) }, cfg).description.length, 2000);
-H.vrai('(3) la description garde ses sauts de ligne mais pas de chevrons', (() => { const d = preparerAnnonce({ description: 'ligne1\nligne2 <script>' }, cfg).description; return !d.includes('<') && !d.includes('>'); })());
+H.vrai('(3) la description (ramenée à une ligne) est sans chevrons', (() => { const d = preparerAnnonce({ description: 'ligne1\nligne2 <script>' }, cfg).description; return !d.includes('<') && !d.includes('>'); })());
 const coupe = preparerAnnonce({ title: 'a'.repeat(295) + ' 0612345678' }, cfg);
 H.vrai('(3) un numéro coupé par la troncature ne laisse aucun chiffre en queue', !/\d/.test(coupe.titre));
 

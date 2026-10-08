@@ -16,7 +16,10 @@ const H = require('./_harnais'); const db = require('../db'); const M = require(
     // « maintenant » : 2026-09-29 12:00 => s1 (échu le 29/09 à 00:00) est échu, s2 (échu le 29/10) et s3 non
     const r = await C.purgerAnnonces(new Date('2026-09-29T12:00:00Z'));
     H.v('la purge supprime exactement les lignes échues', [r.supprimees, (await db.col('annonces').find().toArray()).map(x => x._id).sort()], [1, ['s2', 's3']]);
-    H.v('à 89 jours + 23 h : rien d\'échu', (await C.purgerAnnonces(new Date('2026-09-28T23:00:00Z'))).supprimees, 0);
+    // frontière RÉELLE : 'sb' créée le 02/07 00:00 expire le 30/09 00:00 ; à 89 j + 23 h elle doit SURVIVRE, à l'instant exact elle part ($lte)
+    await C.conserverAnnonce('sb', { titre: 'B', description: 'b', expurgeeParServeur: false }, cfg, new Date('2026-07-02T00:00:00Z'));
+    H.v('à 89 jours + 23 h : rien d\'échu ET la ligne vit encore', [(await C.purgerAnnonces(new Date('2026-09-29T23:00:00Z'))).supprimees, await db.col('annonces').countDocuments({ _id: 'sb' })], [0, 1]);
+    H.v('à l\'instant exact d\'expiration : la ligne part', [(await C.purgerAnnonces(new Date('2026-09-30T00:00:00Z'))).supprimees, await db.col('annonces').countDocuments({ _id: 'sb' })], [1, 0]);
     const r2 = await C.purgerAnnonces(new Date('2027-06-01T00:00:00Z')); H.v('plus tard, tout est parti', [r2.supprimees, await db.col('annonces').countDocuments()], [2, 0]);
     // l'interrupteur de conservation : éteint => RIEN n'est écrit
     await C.conserverAnnonce('s4', { titre: 'D', description: 'd' }, lireConfig({ MONGODB_BASE: 'test_scratch', V2_DESCRIPTION_CONSERVEE: '0' }), t0);
