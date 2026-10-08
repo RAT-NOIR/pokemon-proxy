@@ -24,7 +24,7 @@
 // Les fonctions du site sont IMPORTÉES (rat-market-site/lib/*.ts), jamais recopiées (CLAUDE.md §76).
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { clesNom, nomJointDe } = require('./jointure');
+const { clesNom, nomJointDe, jetonsDeSetlist } = require('./jointure');
 
 const SITE_LIB = path.join(__dirname, '..', '..', 'rat-market-site', 'lib');
 
@@ -56,7 +56,18 @@ function construireContexte({ cartes, lignes, etats, sets }, site) {
 const nu = n => String(n ?? '?').replace(/^0+(?=\d)/, '');
 const norm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const nomTitre = t => String(t).replace(/\s*\([^()]*\)\s*$/, '');
-const parseTitre = t => { const m = /^(.*) \(([^()]*) ([^\s()]+)\)\s*$/.exec(String(t)); return m ? { nom: m[1], num: m[3] } : { nom: String(t), num: null }; };
+const parseTitre = t => { const m = /^(.*) \(([^()]*) ([^\s()]+)\)\s*$/.exec(String(t)); return m ? { nom: m[1], jeton: m[2], num: m[3] } : { nom: String(t), jeton: null, num: null }; };
+/**
+ * Les jetons que CETTE Setlist reconnaît comme SIENS — la définition de la production (`jetonsDeSetlist`, jointure.js, lue par la jointure ET la vérification) :
+ * les noms d'expansion de la ligne + le jeton le plus fréquent de la Setlist ; plus les jetons des listes de la table (`bulba.prefixesParJeton`, comme
+ * `numeroDeSetlist`). Tout autre jeton est une RÉIMPRESSION listée en passant (« Psyduck (Astral Radiance 28) »), dont le numéro est celui d'un autre set.
+ * Les entrées de `collecte_etat.pages` n'ont que leur titre : le jeton est lu dedans (même forme « Nom (Jeton N) » que les entrées de TCG ID).
+ */
+function jetonsReconnus(L, entrees) {
+    const jetons = jetonsDeSetlist(entrees.filter(e => e.jeton).map(e => ({ forme: 'tcg-id', a: e.jeton })), [].concat(L.bulba?.expansion ?? []));
+    for (const k of Object.keys(L.bulba?.prefixesParJeton || {})) jetons.add(k);
+    return jetons;
+}
 
 const CAUSES = {
     C1: 'le n° du produit est déjà porté par une AUTRE carte du set (impression, numeroFiche ou n° du produit d\'une ligne)',
@@ -68,6 +79,8 @@ const CAUSES = {
     C3d: 'une page réelle de même nom existe ailleurs dans la Setlist',
     C3e: 'lien rouge de même nom mais autre forme de numéro',
     C3f: 'un homonyme est déjà dans le set',
+    'C3g-jeton-etranger': 'le lien rouge au bon nom et au bon numéro porte le jeton d\'un AUTRE set (réimpression listée en passant)',
+    EXCLU: 'exclu par décision nommée (--exclure)',
     C4a: 'la Setlist ne nomme ni ce n° ni cette carte',
     C4b: 'aucune Setlist lue (voie « sans page »)',
     'HORS-PERIMETRE': 'la ligne de table n\'est pas vérifiée (`verifie` : relevé avec date et page)',
@@ -116,8 +129,12 @@ function jugerRegleR(ctx, { L, p, X, numDe }) {
     const nomX = new Set(clesNom(nomJointDe(X)));
     const memeNom = entrees.filter(e => clesNom(e.nom).some(k => nomX.has(k)));
     if (memeNum.length) {
-        const nomme = memeNum.filter(e => norm(nomTitre(e.titre)) === norm(X.nomEn));
-        if (!nomme.length) return refus('C3b', `n°${p.numero} : ${memeNum.slice(0, 3).map(e => e.titre).join(' / ')}`);
+        const nommeTous = memeNum.filter(e => norm(nomTitre(e.titre)) === norm(X.nomEn));
+        if (!nommeTous.length) return refus('C3b', `n°${p.numero} : ${memeNum.slice(0, 3).map(e => e.titre).join(' / ')}`);
+        // R2 ne lit que les entrées qui désignent CE set : un lien rouge au bon nom et au bon numéro mais au jeton d'un autre set est une réimpression
+        const jetons = jetonsReconnus(L, entrees);
+        const nomme = nommeTous.filter(e => jetons.has(e.jeton));
+        if (!nomme.length) return refus('C3g-jeton-etranger', nommeTous.slice(0, 2).map(e => `${e.titre} (jeton « ${e.jeton} » ∉ ${[...jetons].slice(0, 3).join(' / ')})`).join(' ; '));
         if (!nomme.every(e => e.etat === 'manquant')) return refus('C3c', nomme.map(e => `${e.titre} ${e.etat}`).join(' / '));
         const reelles = memeNom.filter(e => e.etat === 'ok');
         if (reelles.length) return refus('C3d', reelles.slice(0, 2).map(e => e.titre).join(' / '));
@@ -140,6 +157,18 @@ function refuserCollisionsDuLot(resultats) {
     return resultats.map(r => (r.j.autorise && r.p.numero != null && cartesParCle.get(cle(r)).size > 1)
         ? { ...r, j: { autorise: false, regle: null, cause: 'C1', raison: `${CAUSES.C1} — collision dans le lot : ${cartesParCle.get(cle(r)).size} cartes autorisées au n°${r.p.numero}` } }
         : r);
+}
+
+/**
+ * L'EXCLUSION NOMMÉE (`--exclure=<idProduct,…>`) : une liste FERMÉE de produits que la décision du testeur retire du lot. Chaque idProduct doit être un
+ * produit AUTORISÉ du lot ; un absent ou un déjà refusé LÈVE (une exclusion qui ne mord sur rien se confirmerait elle-même). Rend la liste, les exclus en `EXCLU`.
+ */
+function exclureProduits(resultats, ids) {
+    const voulus = new Set(ids);
+    const autorises = new Set(resultats.filter(r => r.j.autorise).map(r => r.p.idProduct));
+    const faux = [...voulus].filter(id => !autorises.has(id));
+    if (faux.length) throw new Error(`🔴 --exclure : ${faux.join(', ')} n'est pas un produit AUTORISÉ de ce lot (absent ou déjà refusé) — rien n'est exclu en silence.`);
+    return resultats.map(r => voulus.has(r.p.idProduct) ? { ...r, j: { autorise: false, regle: null, cause: 'EXCLU', raison: CAUSES.EXCLU } } : r);
 }
 
 // ── L'ÉCRITURE SUR `cartes` ET SA GARDE
@@ -190,4 +219,4 @@ function controlerRepere(cartes, parCarte) {
     return r;
 }
 
-module.exports = { controlerRepere, chargerSite, lireBases, construireContexte, jugerRegleR, refuserCollisionsDuLot, operationsCartes, garderEcritureSite, cartesSansRepere, CAUSES };
+module.exports = { exclureProduits, controlerRepere, chargerSite, lireBases, construireContexte, jugerRegleR, refuserCollisionsDuLot, operationsCartes, garderEcritureSite, cartesSansRepere, CAUSES };

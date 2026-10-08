@@ -36,6 +36,8 @@ const CARTES = [
     carte(13, 'Lima', { sets: [SLUG], bulba: { titre: `Lima (${EXP} 130)` } }),                                                  // C2b : la Setlist liste sa page deux fois
     carte(14, 'Mike'),                                                                     // collision du lot (avec 15)
     carte(15, 'November'),
+    carte(16, 'Oscar'),                                                                    // C3g : lien rouge au bon nom et au bon numéro, mais au jeton d'un AUTRE set
+    carte(17, 'Quebec'),                                                                   // jeton reconnu par la table (prefixesParJeton)
     carte(26, 'Zulu', { sets: [SLUG], impressions: [imp('30')] }),
     carte(27, 'Yankee', { sets: [SLUG] }),                                                 // porte la ligne numeroFiche 40 (Delta)
     carte(28, 'Xray', { sets: [SLUG] }),                                                   // porte la ligne dont le produit est le n°50 (Echo)
@@ -51,7 +53,9 @@ const PAGES = [
     { titre: `Juliett (${EXP} 100)`, etat: 'manquant' }, { titre: `Juliett (${EXP} 5)`, etat: 'ok' },
     { titre: `Kilo (${EXP} 110)`, etat: 'manquant' },
     { titre: `Lima (${EXP} 130)`, etat: 'ok' }, { titre: `Lima (${EXP} 130)`, etat: 'ok' },
-    { titre: `Mike (${EXP} 140)`, etat: 'manquant' }, { titre: `November (${EXP} 140)`, etat: 'manquant' }
+    { titre: `Mike (${EXP} 140)`, etat: 'manquant' }, { titre: `November (${EXP} 140)`, etat: 'manquant' },
+    { titre: 'Oscar (Autre Set 160)', etat: 'manquant' },                                   // une RÉIMPRESSION d'un autre set listée en passant
+    { titre: `Quebec (${EXP} Reward Pack 170)`, etat: 'manquant' }
 ];
 const p = (idProduct, numero, name = `Produit ${idProduct}`) => ({ idProduct, numero, name });
 const numDe = new Map([[9028, '50']]);
@@ -82,6 +86,9 @@ async function main() {
         verifier('C3e : lien rouge de même nom, autre forme de numéro (p001 / « Reward Pack 1 »)', juger(7, p(9007, 'p001')), [false, null, 'C3e']);
         verifier('C4a : la Setlist ne nomme ni ce n° ni cette carte', juger(8, p(9008, '080')), [false, null, 'C4a']);
         verifier('C4b : aucune Setlist lue (voie « sans page », `verifie.page` nul comme UNP)', juger(8, p(9008, '080'), { ...L, slugSet: 'Set-Vide', verifie: { le: '2026-09-24', page: null, note: 'sans page' } }), [false, null, 'C4b']);
+        verifier('C3g : lien rouge au bon nom et au bon numéro mais au jeton d\'un AUTRE set → refusé', juger(16, p(9016, '160')), [false, null, 'C3g-jeton-etranger']);
+        verifier('C3g : le jeton d\'une liste de la table (prefixesParJeton) est celui du set → R2', juger(17, p(9017, '170'), { ...L, bulba: { ...L.bulba, prefixesParJeton: { [`${EXP} Reward Pack`]: 'p' } } }), [true, 'R2', 'C3a']);
+        verifier('C3g : sans cette entrée de la table, ce même jeton est étranger', juger(17, p(9017, '170')), [false, null, 'C3g-jeton-etranger']);
         // ── ce que la règle ajoute en n'autorisant que R1 et R2
         verifier('C3c : l\'entrée de ce n° et de ce nom est une page réelle → pas de fiche nouvelle', juger(9, p(9009, '090')), [false, null, 'C3c']);
         verifier('C3d : une page réelle de même nom existe ailleurs dans la Setlist', juger(10, p(9010, '100')), [false, null, 'C3d']);
@@ -99,6 +106,13 @@ async function main() {
         verifier('lot : deux cartes au même n° dans le même set → les deux refusées (C1)', R.refuserCollisionsDuLot(res).map(r => [r.j.autorise, r.j.cause]), [[false, 'C1'], [false, 'C1']]);
         const meme = [{ ...a, j: res[0].j }, { ...a, p: p(9016, '140'), j: res[0].j }];
         verifier('lot : deux produits de la MÊME carte au même n° ne se heurtent pas', R.refuserCollisionsDuLot(meme).map(r => r.j.autorise), [true, true]);
+
+        // ── l'exclusion nommée : liste fermée d'idProduct, chacun doit être un produit AUTORISÉ du lot, sinon elle lève
+        const apresExclusion = R.exclureProduits(res, [9014]);
+        verifier('exclusion : le produit nommé sort (cause EXCLU), l\'autre reste', apresExclusion.map(r => [r.j.autorise, r.j.cause]), [[false, 'EXCLU'], [true, 'C3a']]);
+        const leve = (liste, ids) => { try { R.exclureProduits(liste, ids); return false; } catch (_) { return true; } };
+        verifier('exclusion : un produit absent du lot lève (rien n\'est exclu en silence)', leve(res, [1]), true);
+        verifier('exclusion : nommer un produit déjà refusé lève', leve(apresExclusion, [9014]), true);
 
         // ── LA GARDE DU SITE : `nomEn` et l'ordre de `liens.idProduct` ne bougent pas
         const avant = await db.collection('cartes').findOne({ _id: 2 });

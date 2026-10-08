@@ -38,7 +38,7 @@ const R = require('./collecte-cartes/regle-r-fiches');
 // --regle-r (2026-10-08, feu vert NOMMÉ du testeur, DOUBLONS-FICHES.md §4) : après R0 (désignation croisée + --sans-fiche-melangee), une fiche ne
 // s'écrit que si la règle R l'autorise (collecte-cartes/regle-r-fiches.js : R1 rattachement, R2 lien rouge de la Setlist lue ; tout le reste bloque
 // et dit sa cause). `--attendu=CODE:N` compte alors les AUTORISÉES. `--rapport=<fichier>.json` écrit, en LOCAL, la décision de chaque produit et sa cause.
-const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/];
+const AUTORISES = [/^--codes=[\w.,/-]+$/, /^--attendu=[\w.:,/-]+$/, /^--ecrire$/, /^--export=.+\.json$/, /^--sans-fiche-melangee$/, /^--regle-r$/, /^--rapport=.+\.json$/, /^--attendu-total=\d+$/, /^--exclure=\d+(,\d+)*$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length) { console.error(`❌ argument inconnu : ${inconnus.join(' ')}`); process.exit(2); }
 const arg = n => process.argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3);
@@ -47,6 +47,11 @@ const ATTENDUS = Object.fromEntries((arg('attendu') || '').split(',').filter(Boo
 const ecrire = process.argv.includes('--ecrire');
 const SANS_MELANGE = process.argv.includes('--sans-fiche-melangee');
 const REGLE_R = process.argv.includes('--regle-r'), RAPPORT = arg('rapport');
+// --attendu-total=N : le feu vert parle d'un TOTAL, `--attendu=CODE:N` d'un compte par code — la somme des autorisées doit être N, sinon rien n'est écrit.
+// --exclure=<idProduct,…> : liste FERMÉE de produits retirés du lot par décision nommée ; chacun doit être un produit AUTORISÉ (regle-r-fiches.js exclureProduits).
+const ATTENDU_TOTAL = arg('attendu-total') === undefined ? null : Number(arg('attendu-total'));
+const EXCLUS = (arg('exclure') || '').split(',').filter(Boolean).map(Number), exclusUtilises = new Set();
+if (EXCLUS.length && !REGLE_R) { console.error('❌ --exclure exige --regle-r'); process.exit(2); }
 if (!CODES.length) { console.error('❌ --codes=<CODE>[,…] obligatoire'); process.exit(2); }
 if (REGLE_R && !SANS_MELANGE) { console.error('❌ --regle-r exige --sans-fiche-melangee (R0 : la désignation croisée ET la fiche non mélangée)'); process.exit(2); }
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
@@ -98,7 +103,9 @@ function grouperParCarte(aEcrire, metaDe) {
         }
         if (REGLE_R) {
             // 🔑 R0 est passé (désignation croisée + non mélangée) ; R1 ou R2 autorise, tout le reste bloque et DIT sa cause
-            const jugees = R.refuserCollisionsDuLot(passent.map(x => ({ x, L, p: x.p, X: x.d.carte, j: R.jugerRegleR(ctxR, { L, p: x.p, X: x.d.carte, numDe }) })));
+            let jugees = R.refuserCollisionsDuLot(passent.map(x => ({ x, L, p: x.p, X: x.d.carte, j: R.jugerRegleR(ctxR, { L, p: x.p, X: x.d.carte, numDe }) })));
+            const ici = EXCLUS.filter(id => jugees.some(r => r.p.idProduct === id));
+            if (ici.length) { jugees = R.exclureProduits(jugees, ici); ici.forEach(id => exclusUtilises.add(id)); console.log(`   ⛔ exclus par décision nommée (--exclure) : ${ici.join(', ')}`); }
             for (const r of jugees) decisions.push({ code: CODE, idProduct: r.p.idProduct, numero: r.p.numero ?? null, nom: r.p.name, carteId: r.X._id, carte: r.X.bulba?.titre ?? r.X.nomEn, autorise: r.j.autorise, regle: r.j.regle, cause: r.j.cause, raison: r.j.raison });
             for (const r of jugees) if (!r.j.autorise) { const k = `refusé par la règle R · ${r.j.cause}`; raisons[k] = (raisons[k] || 0) + 1; }
             passent = jugees.filter(r => r.j.autorise).map(r => r.x);
@@ -114,6 +121,12 @@ function grouperParCarte(aEcrire, metaDe) {
         if (passent.length) sets.push(L);
     }
     console.log(`\n   ${aEcrire.length} fiches à poser sur ${sets.length} sets${ecrire ? '' : ' — (mesure seule)'}`);
+    const inutilises = EXCLUS.filter(id => !exclusUtilises.has(id));
+    if (inutilises.length) { console.error(`❌ ARRÊT : --exclure ${inutilises.join(', ')} ne désigne aucun produit jugé de ces sets — rien n'est écrit`); await fermer(); process.exit(1); }
+    if (ATTENDU_TOTAL !== null) {
+        console.log(`   TOTAL des autorisées : ${aEcrire.length} (attendu ${ATTENDU_TOTAL})`);
+        if (aEcrire.length !== ATTENDU_TOTAL && ecrire) { console.error(`❌ ARRÊT : le total des autorisées est ${aEcrire.length}, attendu ${ATTENDU_TOTAL} — rien n'est écrit`); await fermer(); process.exit(1); }
+    }
     if (REGLE_R) {
         const parCause = {}; for (const d of decisions) parCause[d.cause] = (parCause[d.cause] || 0) + 1;
         const dejaMembres = decisions.filter(d => d.autorise && d.regle === 'R1').length;
@@ -136,7 +149,7 @@ function grouperParCarte(aEcrire, metaDe) {
         carteId: x.d.carte._id, idProduct: x.p.idProduct, idExpansion: x.L.exp, tirage: x.L.bulba.tirage, preuve: 'metacarte+nom+attaques', slug: x.p.slug ?? null, slugSet: x.p.slugSet ?? x.L.slugSet, numeroFiche: null,
         detail: `${x.CODE} n°${x.p.numero ?? '—'} « ${x.p.name} » → « ${x.d.carte.bulba?.titre ?? x.d.carte.nomEn} » : métacarte Cardmarket ${metaDe.get(x.p.idProduct)} (une seule carte chez nous) = nom + attaques (seule candidate, aucune voisine du nom ne partage une attaque) · carte déjà imprimée en ${x.L.bulba.tirage} · ${RISQUE}`,
         verifieLe: le, route: x.CODE } }, upsert: true } })), { ordered: false });
-    const rc =await cx.db.collection('cartes').bulkWrite(opsCartes, { ordered: false });
+    const rc = await cx.db.collection('cartes').bulkWrite(opsCartes, { ordered: false });
     let crees = 0;
     for (const L of sets) crees += (await cx.db.collection('sets').updateOne({ _id: L.slugSet }, { $setOnInsert: {
         code: L.code, idExpansion: [L.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: L.bulba.tirage, totalImprime: null,
