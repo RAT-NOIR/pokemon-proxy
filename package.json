@@ -7,7 +7,8 @@
     "start": "node index.js",
     "test": "node scoring.js && node test-acces.js",
     "test:scoring": "node scoring.js",
-    "test:acces": "node test-acces.js"
+    "test:acces": "node test-acces.js",
+    "test:v2": "node v2/test/lancer-tout.js"
   },
   "engines": {
     "node": "22.x"
