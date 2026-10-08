@@ -35,18 +35,23 @@ function monter(app, deps = {}, env = process.env) {
  * Un lot v2 ne pose AUCUN use() (sans chemin, '/', tableau, sous-routeur…) : un use s'appliquerait aussi aux routes héritées.
  * La pile ne doit donc contenir que des couches `route` ; sinon le lot est REFUSÉ (échoue fermé).
  */
+const CHEMIN_DE_LOT = /^\/(?:api\/[A-Za-z0-9_-][A-Za-z0-9_.-]*|ping)(?:\/[A-Za-z0-9_.:-]+)*$/;
 function assembler(lots, cfgLots, deps = {}) {
     const router = express.Router();
     lots.forEach((l, i) => {
         const sous = express.Router();
         l.routes(sous, cfgLots, { ...deps, pret: pret.pret });
+        if (Object.keys(sous.params || {}).length || (sous._params || []).length) throw new Error(`v2 : refus du lot n°${i} : router.param n'est pas autorisé (il serait ignoré en silence)`);
         for (const couche of sous.stack) {
             if (!couche.route) throw new Error(`v2 : refus du lot n°${i} : un use() (middleware ou sous-routeur) n'est pas autorisé, seules les routes le sont`);
-            for (const c of couche.route.stack) {
-                if (c.handle.length === 4) continue;   // gestionnaire d'erreur : il ne tourne qu'après la garde
-                const h0 = c.handle;
-                c.handle = function gardeIndex(req, res, next) { return pret.pret(req, res, err => (err ? next(err) : h0.call(this, req, res, next))); };
-            }
+            // LISTE BLANCHE des chemins : chaîne littérale sous /api/<segment littéral> ou /ping. Un joker, une expression
+            // régulière, un tableau ou un paramètre en tête capterait des routes héritées.
+            if (typeof couche.route.path !== 'string' || !CHEMIN_DE_LOT.test(couche.route.path))
+                throw new Error(`v2 : refus du lot n°${i} : chemin « ${String(couche.route.path)} » hors de la liste blanche (/api/<segment> littéral ou /ping)`);
+            // Garde à l'EXÉCUTION : on enveloppe le point d'entrée de la couche (route.dispatch), pas une copie de la pile de la
+            // Route — un handler ajouté plus tard sur une Route retenue par le lot est donc gardé aussi.
+            const dispatch = couche.handle;
+            couche.handle = function gardeIndex(req, res, next) { return pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next))); };
         }
         router.stack.push(...sous.stack);
     });

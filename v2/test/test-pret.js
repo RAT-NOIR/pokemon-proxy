@@ -19,16 +19,20 @@ const lotB = { routes(router) {
     router.search('/api/banc/s', h('s'));                                   // méthode hors de toute liste écrite à la main
     router.route('/api/banc/r').get(h('r')).post(h('rp'));                  // route() chaîné, plusieurs méthodes
 } };
+// lot C : garde un objet Route et lui AJOUTE un handler APRÈS l'assemblage (sonde de la relecture)
+let routeTardive = null;
+const lotC = { routes(router) { routeTardive = router.route('/api/tard'); routeTardive.get(h('t')); } };
 const refuse = lot => { let m = null; try { assembler([lot], {}, {}); } catch (e) { m = e.message; } return /refus/.test(m || ''); };
 
 (async () => {
     const app = express();
     app.get('/ancien', (req, res) => res.json({ ancien: true }));        // route HÉRITÉE : la garde ne doit jamais la toucher
-    app.use(assembler([lotA, lotB], {}, {}));
+    app.use(assembler([lotA, lotB, lotC], {}, {}));
+    routeTardive.post(h('tp'));                                              // déclaration TARDIVE sur la Route retenue
     app.get('/ancien-apres', (req, res) => res.json({ ancien: 'apres' })); // route HÉRITÉE déclarée APRÈS le montage v2
     const s = await H.serveur(app);
     const sur = async (m, chemin) => { const r = await H.appel(s.url, chemin, { methode: m, corps: ['POST', 'SEARCH'].includes(m) ? {} : undefined }); return [r.statut, r.json && (r.json.erreur ? r.json.erreur.code : Object.keys(r.json)[0])]; };
-    const CHEMINS = [['GET', '/api/compte/x'], ['POST', '/api/compte/y'], ['GET', '/api/banc/a'], ['GET', '/api/banc/b'], ['SEARCH', '/api/banc/s'], ['GET', '/api/banc/r'], ['POST', '/api/banc/r']];
+    const CHEMINS = [['GET', '/api/compte/x'], ['POST', '/api/compte/y'], ['GET', '/api/banc/a'], ['GET', '/api/banc/b'], ['SEARCH', '/api/banc/s'], ['GET', '/api/banc/r'], ['POST', '/api/banc/r'], ['GET', '/api/tard'], ['POST', '/api/tard']];
     const toutes = async () => { const o = []; for (const [m, c] of CHEMINS) o.push(await sur(m, c)); return o; };
     const tous = (statut, code) => CHEMINS.map(() => [statut, code]);
     const journal = []; const ce = console.error; console.error = (...a) => { journal.push(a.join(' ')); };
@@ -57,6 +61,12 @@ const refuse = lot => { let m = null; try { assembler([lot], {}, {}); } catch (e
     H.vrai('use([fn]) est refusé', refuse({ routes(r) { r.use([mw]); } }));
     H.vrai('use(chemin, sous-routeur) est refusé', refuse({ routes(r) { r.use('/api/banc', express.Router()); } }));
     H.vrai('un lot qui ne déclare que des routes est accepté', !refuse(lotB));
+    H.vrai('router.param est refusé (ignoré en silence sinon)', refuse({ routes(r) { r.param('id', (req, res, next) => next()); r.get('/api/x/:id', h('p')); } }));
+    // chemins : LISTE BLANCHE (chaîne littérale sous /api/<segment littéral> ou /ping) ; tout le reste est refusé
+    for (const mauvais of ['*', '/*', '/api/*', '/api/:x', '/autre', '/api', '/api/', /^\/api\/.*/, ['/api/a', '/api/b'], '/api/a(.*)', '/api/a?', '/ping*', '/apix/a'])
+        H.vrai(`chemin de lot ${String(mauvais)} est refusé`, refuse({ routes(r) { r.get(mauvais, h('m')); } }));
+    for (const bon of ['/api/compte/x', '/api/compte/:id', '/api/scanner', '/ping', '/ping/v2'])
+        H.vrai(`chemin de lot ${bon} est accepté`, !refuse({ routes(r) { r.get(bon, h('b')); } }));
 
     console.error = ce;
     await s.fermer();
