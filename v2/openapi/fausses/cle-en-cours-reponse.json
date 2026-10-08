@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "DEBIT",
+    "message": "Une requête identique est déjà en cours.",
+    "reessayerDans": 2
+  },
+  "facturation": null
+}

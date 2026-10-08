@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "VERSION",
+    "message": "Cette version de l'extension n'est plus prise en charge."
+  },
+  "facturation": null
+}

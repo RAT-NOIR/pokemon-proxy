@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "compte": {
+    "emailMasque": "v•••@exemple.fr",
+    "verifie": true
+  },
+  "jetonInstallation": "FICTIF-renouvele-0123456789abcdefghijklmnop",
+  "solde": {
+    "total": 22,
+    "essai": 0,
+    "accueil": 17,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

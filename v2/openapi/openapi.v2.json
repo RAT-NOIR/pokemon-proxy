@@ -1,0 +1,3830 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "API RatMarket v2 — contrat 2",
+    "version": "2.0.0",
+    "description": "Contrat commun à l'extension et au scanner du site. Ce fichier est généré à la main avec le code ; test-openapi.js compare chaque liste fermée au code. Voir CONTRAT-API-V2.md."
+  },
+  "servers": [
+    {
+      "url": "https://api.rat-market.fr",
+      "description": "Principal"
+    },
+    {
+      "url": "https://pokemon-proxy-ratnoir666.onrender.com",
+      "description": "Secours (même base, mêmes réponses ; ce n'est PAS une origine CORS)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "identification"
+    },
+    {
+      "name": "comptes"
+    },
+    {
+      "name": "installations"
+    },
+    {
+      "name": "scanner"
+    },
+    {
+      "name": "sante"
+    }
+  ],
+  "paths": {
+    "/api/installation": {
+      "post": {
+        "operationId": "creerInstallation",
+        "tags": [
+          "installations"
+        ],
+        "summary": "Crée une installation (jeton rendu UNE fois, 3 essais)",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteInstallation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Installation créée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseInstallation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identifier": {
+      "post": {
+        "operationId": "identifier",
+        "tags": [
+          "identification"
+        ],
+        "summary": "Identifie les cartes d'une annonce (contrat 2)",
+        "description": "Sans `contrat: 2` dans le corps : la réponse héritée, inchangée. Les refus IMAGE et IA gardent le statut HTTP 200 (success:false).",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteIdentifier"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Une analyse, ou un refus qui garde le statut 200 (IMAGE, IA).",
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une requête déjà traitée.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ReponseAnalyse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReponseErreur"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "VERSION : mettre à jour l'extension.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "SERVEUR.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identifier/reponse": {
+      "post": {
+        "operationId": "repondreQuestion",
+        "tags": [
+          "identification"
+        ],
+        "summary": "Répond à la question posée sur une carte à trancher",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteReponse"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "La carte résolue, ce que la réponse a coûté, le solde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseQuestion"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une requête déjà traitée.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expiré (CODE_EXPIRE, question échue).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "SERVEUR.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/retour-live": {
+      "post": {
+        "operationId": "retourLive",
+        "tags": [
+          "identification"
+        ],
+        "summary": "Retour du prix lu en direct par l'extension (avec Bearer)",
+        "description": "Sans `Authorization: Bearer`, la route héritée répond comme aujourd'hui.",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteRetourLive"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prix enregistré ; remboursement `sans-prix` si la lecture ratée est définitive.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseRetourLive"
+                }
+              }
+            },
+            "headers": {
+              "Idempotency-Replayed": {
+                "description": "`true` quand la réponse est un rejeu d'une requête déjà traitée.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "true"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/solde": {
+      "post": {
+        "operationId": "solde",
+        "tags": [
+          "identification"
+        ],
+        "summary": "Le solde de l'installation (avec Bearer)",
+        "description": "Sans `Authorization: Bearer`, la forme héritée (`soldeGratuit`, `soldeScans`, `restantSemaine`).",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le solde.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSolde"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte": {
+      "get": {
+        "operationId": "lireCompte",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Le compte, son solde, ses installations, son historique",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le compte connecté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseCompte"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "supprimerCompte",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Supprime le compte (refusé tant qu'il reste des crédits achetés, sauf renonciation)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteSuppressionCompte"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compte supprimé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/inscription": {
+      "post": {
+        "operationId": "inscription",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Inscription (202 TOUJOURS quand l'entrée est valide)",
+        "description": "La réponse ne dit jamais si l'adresse existe déjà.",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteInscription"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Demande prise en compte.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/verification": {
+      "post": {
+        "operationId": "verifierAdresse",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Confirme l'adresse par le jeton du lien (24 h, usage unique) ; accorde les 25 offertes une fois",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Adresse vérifiée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseVerification"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expiré (CODE_EXPIRE, question échue).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/connexion": {
+      "post": {
+        "operationId": "connexion",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Connexion : pose le cookie de session `rm_session`",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteConnexion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Connecté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseConnexion"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "description": "`rm_session` ; HttpOnly; Secure; SameSite=Lax; Path=/ ; sans `Domain` ; 30 jours glissants.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/deconnexion": {
+      "post": {
+        "operationId": "deconnexion",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Déconnexion : révoque la session",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Déconnecté.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/mot-de-passe-oublie": {
+      "post": {
+        "operationId": "motDePasseOublie",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Demande de réinitialisation (202 TOUJOURS)",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteMotDePasseOublie"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Demande prise en compte.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/reinitialiser": {
+      "post": {
+        "operationId": "reinitialiserMotDePasse",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Réinitialise le mot de passe (24 h, usage unique ; révoque les sessions)",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteReinitialisation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mot de passe changé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expiré (CODE_EXPIRE, question échue).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/code": {
+      "post": {
+        "operationId": "codeLiaison",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Code de liaison (6 caractères, 10 min, usage unique, 3 vivants au plus)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Le code.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseCodeLiaison"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/lier": {
+      "post": {
+        "operationId": "lierInstallation",
+        "tags": [
+          "installations"
+        ],
+        "summary": "Lie l'installation au compte (le jeton est renouvelé, l'ancien révoqué)",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteLier"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Installation liée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseLier"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expiré (CODE_EXPIRE, question échue).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/delier": {
+      "post": {
+        "operationId": "delierInstallation",
+        "tags": [
+          "installations"
+        ],
+        "summary": "Délie l'installation (sans nouvel essai)",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installation déliée.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSolde"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compte/installations/{id}": {
+      "delete": {
+        "operationId": "revoquerInstallation",
+        "tags": [
+          "installations"
+        ],
+        "summary": "Révoque une installation du compte",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Installation révoquée (son jeton rend JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scanner/analyses": {
+      "post": {
+        "operationId": "analyserScanner",
+        "tags": [
+          "scanner"
+        ],
+        "x-conditionnel": "B9",
+        "summary": "Analyse une photo depuis le site (multipart)",
+        "description": "Livré seulement si l'éditeur le confirme (lot B9). Les refus de forme du scanner (413, 415, 422) sont des codes IMAGE avec `erreur.detail` : `trop-lourde`, `format`, `aucune-carte`.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteScanner"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Une analyse (`regleVerdict` et `prixLive` null au scanner), ou un refus IMAGE/IA.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ReponseAnalyse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ReponseErreur"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Image trop lourde (IMAGE, detail trop-lourde).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Format refusé (IMAGE, detail format).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "SERVEUR.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/scanner/analyses/{id}/reponse": {
+      "post": {
+        "operationId": "repondreQuestionScanner",
+        "tags": [
+          "scanner"
+        ],
+        "x-conditionnel": "B9",
+        "summary": "Réponse à une question du scanner (même corps que /api/identifier/reponse)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteReponse"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "La carte résolue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseQuestion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Entrée invalide (ENTREE).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON, SESSION, IDENTIFIANTS).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Introuvable (CODE_INVALIDE, scan d'un autre porteur).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expiré (CODE_EXPIRE, question échue).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ping": {
+      "get": {
+        "operationId": "ping",
+        "tags": [
+          "sante"
+        ],
+        "x-heritee": true,
+        "summary": "Santé du serveur ; v2 allumée : ajoute `versionMinExtension`",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Le serveur répond.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponsePing"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "installation": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Jeton d'installation rendu une fois par POST /api/installation."
+      },
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "rm_session",
+        "description": "Cookie de session du site (HttpOnly, Secure, SameSite=Lax)."
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Une requête rejouée avec la même clé rend la même réponse, sans second débit. Conservée 24 h.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,64}$"
+        }
+      },
+      "XRatMarket": {
+        "name": "X-Rat-Market",
+        "in": "header",
+        "required": true,
+        "description": "Obligatoire sur toute écriture authentifiée par cookie (avec `Origin: https://rat-market.fr`).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "1"
+          ]
+        }
+      }
+    },
+    "schemas": {
+      "Image": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "pattern": "^https://(pub-7d992e666c3d4a2b870b680a920045b6\\.r2\\.dev|rat-market\\.fr)/",
+            "description": "Une image de NOTRE R2 (hôte exact du bucket public ou rat-market.fr), jamais de Cardmarket."
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "url",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false
+      },
+      "Visuel": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "pattern": "^https://(pub-7d992e666c3d4a2b870b680a920045b6\\.r2\\.dev|rat-market\\.fr)/"
+          },
+          "w": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "h": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "grande": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Image"
+              }
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "w",
+          "h",
+          "grande"
+        ],
+        "additionalProperties": false,
+        "description": "La vignette (url, w, h) et, quand on l'a, la grande image pour la loupe."
+      },
+      "PrixGuide": {
+        "type": "object",
+        "properties": {
+          "tendance": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "de": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "moyenne30": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "tendance",
+          "de",
+          "moyenne30",
+          "date"
+        ],
+        "additionalProperties": false,
+        "description": "Le guide quotidien de Cardmarket (trend, low, avg30) ; `date` est celle du GUIDE, jamais celle de l'import. Un zéro n'est pas un prix : absent = null."
+      },
+      "SetProduit": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tirage": {
+            "type": "string"
+          },
+          "annee": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "symbole": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Image"
+              }
+            ]
+          }
+        },
+        "required": [
+          "slug",
+          "nom",
+          "code",
+          "tirage",
+          "annee",
+          "symbole"
+        ],
+        "additionalProperties": false
+      },
+      "Impression": {
+        "type": "object",
+        "properties": {
+          "idProduct": {
+            "type": "integer"
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rarete": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variante": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "normale",
+              "reverse",
+              "holo",
+              "premiere-edition",
+              "tampon",
+              "jumbo",
+              null
+            ]
+          },
+          "set": {
+            "type": "object",
+            "properties": {
+              "nom": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "nom"
+            ],
+            "additionalProperties": false
+          },
+          "lien": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prixGuide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrixGuide"
+              }
+            ]
+          }
+        },
+        "required": [
+          "idProduct",
+          "numero",
+          "total",
+          "rarete",
+          "variante",
+          "set",
+          "lien",
+          "prixGuide"
+        ],
+        "additionalProperties": false,
+        "description": "Une impression Cardmarket de la carte. `lien` n'est servi que si numéro ET rareté sont connus (jamais de lien anonyme)."
+      },
+      "Produit": {
+        "type": "object",
+        "properties": {
+          "idProduct": {
+            "type": "integer"
+          },
+          "nom": {
+            "type": "string",
+            "description": "`nomFr` quand `langueInterface` est `fr` et qu'on l'a, sinon le nom Cardmarket."
+          },
+          "nomCardmarket": {
+            "type": "string"
+          },
+          "set": {
+            "$ref": "#/components/schemas/SetProduit"
+          },
+          "numero": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "langue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "variante": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "normale",
+              "reverse",
+              "holo",
+              "premiere-edition",
+              "tampon",
+              "jumbo",
+              null
+            ],
+            "description": "null = on ne sait pas (jamais « normale » deviné)."
+          },
+          "rarete": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "visuel": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Visuel"
+              }
+            ]
+          },
+          "visuelMention": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prixGuide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrixGuide"
+              }
+            ]
+          },
+          "liens": {
+            "type": "object",
+            "properties": {
+              "cardmarket": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "null tant que numéro ET rareté ne sont pas connus."
+              },
+              "fiche": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "cardmarket",
+              "fiche"
+            ],
+            "additionalProperties": false
+          },
+          "impressions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Impression"
+            }
+          }
+        },
+        "required": [
+          "idProduct",
+          "nom",
+          "nomCardmarket",
+          "set",
+          "numero",
+          "total",
+          "langue",
+          "variante",
+          "rarete",
+          "visuel",
+          "visuelMention",
+          "prixGuide",
+          "liens",
+          "impressions"
+        ],
+        "additionalProperties": false
+      },
+      "Zone": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "w": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "h": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "photo",
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "description": "En fractions de la photo `photo` (0 à 1)."
+      },
+      "ZoneQuestion": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "y": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "w": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "h": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "w",
+          "h"
+        ],
+        "additionalProperties": false,
+        "description": "La région des visuels candidats où la différence se voit (fractions)."
+      },
+      "Choix": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "libelle": {
+            "type": "string"
+          },
+          "idProduct": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "libelle",
+          "idProduct"
+        ],
+        "additionalProperties": false,
+        "description": "Chaque choix désigne exactement un candidat."
+      },
+      "Question": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "reverse",
+              "symbole",
+              "numero",
+              "langue",
+              "premiere-edition",
+              "visuel"
+            ]
+          },
+          "texte": {
+            "type": "string"
+          },
+          "aide": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "zone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ZoneQuestion"
+              }
+            ]
+          },
+          "choix": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/Choix"
+            }
+          }
+        },
+        "required": [
+          "code",
+          "texte",
+          "aide",
+          "zone",
+          "choix"
+        ],
+        "additionalProperties": false
+      },
+      "EtatCarte": {
+        "type": "object",
+        "properties": {
+          "estime": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MT",
+              "NM",
+              "EX",
+              "GD",
+              "LP",
+              "PL",
+              "PO",
+              null
+            ]
+          },
+          "confiance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "haute",
+              "moyenne",
+              "basse",
+              null
+            ],
+            "description": "Une chaîne de liste fermée, jamais un score."
+          },
+          "defauts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            }
+          },
+          "declare": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "retenu": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MT",
+              "NM",
+              "EX",
+              "GD",
+              "LP",
+              "PL",
+              "PO",
+              null
+            ]
+          }
+        },
+        "required": [
+          "estime",
+          "confiance",
+          "defauts",
+          "declare",
+          "retenu"
+        ],
+        "additionalProperties": false
+      },
+      "PrixLive": {
+        "type": "object",
+        "properties": {
+          "idProduct": {
+            "type": "integer"
+          },
+          "langues": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "reverseHolo": {
+            "type": "boolean"
+          },
+          "etatVise": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MT",
+              "NM",
+              "EX",
+              "GD",
+              "LP",
+              "PL",
+              "PO",
+              null
+            ]
+          }
+        },
+        "required": [
+          "idProduct",
+          "langues",
+          "reverseHolo",
+          "etatVise"
+        ],
+        "additionalProperties": false,
+        "description": "Extension seulement : ce que l'extension lit en direct sur Cardmarket. null au scanner."
+      },
+      "CarteIdentifiee": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "statut": {
+            "const": "identifiee"
+          },
+          "carte": {
+            "$ref": "#/components/schemas/Produit"
+          },
+          "candidats": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "question": {
+            "type": "null"
+          },
+          "raison": {
+            "type": "null"
+          },
+          "etat": {
+            "$ref": "#/components/schemas/EtatCarte"
+          },
+          "prixLive": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrixLive"
+              }
+            ]
+          },
+          "zone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Zone"
+              }
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "statut",
+          "carte",
+          "candidats",
+          "question",
+          "raison",
+          "etat",
+          "prixLive",
+          "zone"
+        ],
+        "additionalProperties": false
+      },
+      "CarteATrancher": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "statut": {
+            "const": "a-trancher"
+          },
+          "carte": {
+            "type": "null"
+          },
+          "candidats": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/Produit"
+            }
+          },
+          "question": {
+            "$ref": "#/components/schemas/Question"
+          },
+          "raison": {
+            "type": "null"
+          },
+          "etat": {
+            "$ref": "#/components/schemas/EtatCarte"
+          },
+          "prixLive": {
+            "type": "null"
+          },
+          "zone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Zone"
+              }
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "statut",
+          "carte",
+          "candidats",
+          "question",
+          "raison",
+          "etat",
+          "prixLive",
+          "zone"
+        ],
+        "additionalProperties": false
+      },
+      "CarteIntrouvable": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "statut": {
+            "const": "introuvable"
+          },
+          "carte": {
+            "type": "null"
+          },
+          "candidats": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "question": {
+            "type": "null"
+          },
+          "raison": {
+            "type": "string",
+            "enum": [
+              "photo-illisible",
+              "pas-une-carte",
+              "hors-catalogue",
+              "plusieurs-cartes-non-separees",
+              "panne-lecture"
+            ]
+          },
+          "etat": {
+            "type": "null"
+          },
+          "prixLive": {
+            "type": "null"
+          },
+          "zone": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Zone"
+              }
+            ]
+          }
+        },
+        "required": [
+          "index",
+          "statut",
+          "carte",
+          "candidats",
+          "question",
+          "raison",
+          "etat",
+          "prixLive",
+          "zone"
+        ],
+        "additionalProperties": false
+      },
+      "CarteAnalysee": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CarteIdentifiee"
+          },
+          {
+            "$ref": "#/components/schemas/CarteATrancher"
+          },
+          {
+            "$ref": "#/components/schemas/CarteIntrouvable"
+          }
+        ],
+        "description": "Trois issues par carte, et trois seulement : identifiee · a-trancher · introuvable."
+      },
+      "Lot": {
+        "type": "object",
+        "properties": {
+          "cartesVues": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "identifiees": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "aTrancher": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "introuvables": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lectureLiveMax": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "cartesVues",
+          "identifiees",
+          "aTrancher",
+          "introuvables",
+          "lectureLiveMax"
+        ],
+        "additionalProperties": false
+      },
+      "RegleVerdict": {
+        "type": "object",
+        "properties": {
+          "bonneAffaireSous": {
+            "type": "number"
+          },
+          "cherAuDela": {
+            "type": "number"
+          },
+          "versEUR": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "tauxDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "bonneAffaireSous",
+          "cherAuDela",
+          "versEUR",
+          "tauxDate"
+        ],
+        "additionalProperties": false,
+        "description": "Extension seulement. `versEUR: null` ⇒ aucun verdict affiché."
+      },
+      "Facturation": {
+        "type": "object",
+        "properties": {
+          "debite": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reserve": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "rembourse": {
+            "type": "boolean"
+          },
+          "motif": {
+            "type": "string",
+            "enum": [
+              "affirmee",
+              "question",
+              "lot",
+              "introuvable",
+              "sans-prix",
+              "panne",
+              "plafond-jour",
+              "administrateur"
+            ]
+          },
+          "raisonNonRembourse": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "debite",
+          "reserve",
+          "rembourse",
+          "motif",
+          "raisonNonRembourse"
+        ],
+        "additionalProperties": false,
+        "description": "Ce que CETTE requête a coûté, et pourquoi."
+      },
+      "Abonnement": {
+        "type": "object",
+        "properties": {
+          "restant": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "quotaMensuel": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "renouvelleLe": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [
+          "restant",
+          "quotaMensuel",
+          "renouvelleLe"
+        ],
+        "additionalProperties": false
+      },
+      "Solde": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "essai": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "accueil": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hebdo": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "achete": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hebdoMax": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "prochainHebdo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "compte": {
+            "type": "object",
+            "properties": {
+              "lie": {
+                "type": "boolean"
+              },
+              "emailMasque": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "verifie": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "lie",
+              "emailMasque",
+              "verifie"
+            ],
+            "additionalProperties": false
+          },
+          "partage": {
+            "type": "boolean"
+          },
+          "abonnement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Abonnement"
+              }
+            ]
+          }
+        },
+        "required": [
+          "total",
+          "essai",
+          "accueil",
+          "hebdo",
+          "achete",
+          "hebdoMax",
+          "prochainHebdo",
+          "compte",
+          "partage",
+          "abonnement"
+        ],
+        "additionalProperties": false,
+        "description": "Le solde, le même pour l'extension et le scanner. `total` = poches utilisables, réserves déjà retirées."
+      },
+      "ReponseAnalyse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "contrat": {
+            "const": 2
+          },
+          "scanId": {
+            "type": "string"
+          },
+          "analyse": {
+            "type": "object",
+            "properties": {
+              "statut": {
+                "type": "string",
+                "enum": [
+                  "identifiee",
+                  "a-trancher",
+                  "introuvable",
+                  "lot"
+                ]
+              },
+              "cartes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/components/schemas/CarteAnalysee"
+                }
+              },
+              "lot": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Lot"
+                  }
+                ]
+              },
+              "regleVerdict": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RegleVerdict"
+                  }
+                ]
+              },
+              "raison": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "photo-illisible",
+                  "pas-une-carte",
+                  "hors-catalogue",
+                  "plusieurs-cartes-non-separees",
+                  "panne-lecture",
+                  null
+                ]
+              }
+            },
+            "required": [
+              "statut",
+              "cartes",
+              "lot",
+              "regleVerdict",
+              "raison"
+            ],
+            "additionalProperties": false
+          },
+          "facturation": {
+            "$ref": "#/components/schemas/Facturation"
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success",
+          "contrat",
+          "scanId",
+          "analyse",
+          "facturation",
+          "solde"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseQuestion": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "carte": {
+            "$ref": "#/components/schemas/CarteAnalysee"
+          },
+          "facturation": {
+            "$ref": "#/components/schemas/Facturation"
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success",
+          "carte",
+          "facturation",
+          "solde"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseErreur": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": false
+          },
+          "erreur": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "JETON",
+                  "VERIFICATION",
+                  "QUOTA",
+                  "DEBIT",
+                  "INDISPONIBLE",
+                  "IMAGE",
+                  "IA",
+                  "SERVEUR",
+                  "VERSION",
+                  "MARCHE",
+                  "SESSION",
+                  "ORIGINE",
+                  "IDENTIFIANTS",
+                  "MOT_DE_PASSE_FAIBLE",
+                  "CODE_INVALIDE",
+                  "CODE_EXPIRE",
+                  "DEJA_LIE",
+                  "CONFLIT",
+                  "CREDITS_ACHETES",
+                  "ENTREE"
+                ]
+              },
+              "message": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "reessayerDans": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "facturation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Facturation"
+              }
+            ]
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          },
+          "achat": {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "erreur",
+          "facturation"
+        ],
+        "additionalProperties": false,
+        "description": "Tout refus. Le code est dans une liste fermée ; le statut HTTP suit le code (voir CONTRAT-API-V2.md)."
+      },
+      "CompteSession": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "verifie": {
+            "type": "boolean"
+          },
+          "creeLe": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "verifie",
+          "creeLe"
+        ],
+        "additionalProperties": false
+      },
+      "Installation": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "libelle": {
+            "type": "string"
+          },
+          "lieeLe": {
+            "type": "string"
+          },
+          "derniereAnalyse": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "libelle",
+          "lieeLe",
+          "derniereAnalyse"
+        ],
+        "additionalProperties": false
+      },
+      "LigneAnalyse": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "const": "analyse"
+          },
+          "le": {
+            "type": "string"
+          },
+          "surface": {
+            "type": "string",
+            "enum": [
+              "extension",
+              "scanner"
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "identifiee",
+              "a-trancher",
+              "introuvable",
+              "lot"
+            ]
+          },
+          "carte": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "nom": {
+                    "type": "string"
+                  },
+                  "set": {
+                    "type": "string"
+                  },
+                  "numero": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "nom",
+                  "set",
+                  "numero"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "cartesVues": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "facturation": {
+            "$ref": "#/components/schemas/Facturation"
+          }
+        },
+        "required": [
+          "genre",
+          "le",
+          "surface",
+          "statut",
+          "carte",
+          "cartesVues",
+          "facturation"
+        ],
+        "additionalProperties": false
+      },
+      "LigneCredits": {
+        "type": "object",
+        "properties": {
+          "genre": {
+            "const": "credits"
+          },
+          "le": {
+            "type": "string"
+          },
+          "motif": {
+            "type": "string",
+            "enum": [
+              "accueil",
+              "hebdo",
+              "achat"
+            ]
+          },
+          "credits": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "genre",
+          "le",
+          "motif",
+          "credits"
+        ],
+        "additionalProperties": false
+      },
+      "LigneHistorique": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/LigneAnalyse"
+          },
+          {
+            "$ref": "#/components/schemas/LigneCredits"
+          }
+        ]
+      },
+      "ReponseCompte": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "compte": {
+            "$ref": "#/components/schemas/CompteSession"
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          },
+          "installations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Installation"
+            }
+          },
+          "historique": {
+            "type": "object",
+            "properties": {
+              "lignes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LigneHistorique"
+                }
+              },
+              "suite": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "lignes",
+              "suite"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "success",
+          "compte",
+          "solde",
+          "installations",
+          "historique"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseSolde": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success",
+          "solde"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseSimple": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseInstallation": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "installationId": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$"
+          },
+          "jetonInstallation": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Rendu UNE fois ; le serveur n'en garde que l'empreinte."
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success",
+          "installationId",
+          "jetonInstallation",
+          "solde"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseVerification": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "verifie": {
+            "const": true
+          }
+        },
+        "required": [
+          "success",
+          "verifie"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseConnexion": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "compte": {
+            "$ref": "#/components/schemas/CompteSession"
+          }
+        },
+        "required": [
+          "success",
+          "compte"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseCodeLiaison": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{6}$"
+          },
+          "expire": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "success",
+          "code",
+          "expire"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseLier": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "compte": {
+            "type": "object",
+            "properties": {
+              "emailMasque": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "verifie": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "emailMasque",
+              "verifie"
+            ],
+            "additionalProperties": false
+          },
+          "jetonInstallation": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success",
+          "compte",
+          "jetonInstallation",
+          "solde"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseRetourLive": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "facturation": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Facturation"
+              }
+            ]
+          },
+          "solde": {
+            "$ref": "#/components/schemas/Solde"
+          }
+        },
+        "required": [
+          "success"
+        ],
+        "additionalProperties": false,
+        "description": "Une lecture ratée DÉFINITIVE rend `facturation` (motif `sans-prix`, rembourse: true) et `solde`, une fois par scan."
+      },
+      "ReponsePing": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mongo": {},
+          "version": {
+            "type": "string"
+          },
+          "versionMinExtension": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "mongo",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "RequeteIdentifier": {
+        "type": "object",
+        "properties": {
+          "contrat": {
+            "const": 2
+          },
+          "imageUrls": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "pattern": "^https://([A-Za-z0-9-]+\\.)+vinted\\.net(/|$)"
+            },
+            "description": "Hôte *.vinted.net, https."
+          },
+          "title": {
+            "type": "string",
+            "description": "Données, jamais consignes. 300 caractères au plus (tronqué, pas refusé)."
+          },
+          "description": {
+            "type": "string",
+            "description": "4 000 caractères au plus (tronqué, pas refusé)."
+          },
+          "prixVinted": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Strictement positif, ou null."
+          },
+          "devise": {
+            "type": "string",
+            "enum": [
+              "EUR",
+              "GBP",
+              "USD",
+              "PLN",
+              "CZK",
+              "HUF",
+              "RON",
+              "SEK",
+              "DKK"
+            ]
+          },
+          "vintedEtat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vintedUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "marche": {
+            "type": "string",
+            "description": "Un marché de la configuration du serveur (`V2_MARCHES`), p. ex. `vinted.fr`."
+          },
+          "langueInterface": {
+            "type": "string",
+            "description": "`fr` ou `en` ; toute autre valeur rend l'anglais."
+          },
+          "versionExtension": {
+            "type": "string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+$"
+          }
+        },
+        "required": [
+          "contrat",
+          "imageUrls"
+        ],
+        "description": "Sans `contrat: 2`, la requête sort du routeur v2 et la route héritée répond comme aujourd'hui."
+      },
+      "RequeteReponse": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string"
+          },
+          "carte": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Index de la carte dans l'analyse (0 par défaut)."
+          },
+          "choix": {
+            "type": "string",
+            "enum": [
+              "a",
+              "b",
+              "c",
+              "aucune",
+              "ne-sait-pas"
+            ],
+            "description": "L'`id` d'un choix, `aucune` ou `ne-sait-pas`."
+          }
+        },
+        "required": [
+          "scanId",
+          "choix"
+        ]
+      },
+      "RequeteRetourLive": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string"
+          },
+          "carte": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "prixLive": {
+            "type": "number",
+            "description": "Strictement positif."
+          },
+          "prixLiveEtat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "MT",
+              "NM",
+              "EX",
+              "GD",
+              "LP",
+              "PL",
+              "PO",
+              null
+            ]
+          },
+          "prixLiveCodeLangue": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 10
+          },
+          "originePrix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "grille",
+              "plancher-toutes-langues",
+              "tendance",
+              null
+            ]
+          },
+          "verdictAffiche": {
+            "type": "string",
+            "enum": [
+              "bonne-affaire",
+              "correct",
+              "cher",
+              "aucun"
+            ]
+          },
+          "lectureRatee": {
+            "type": "object",
+            "properties": {
+              "cause": {
+                "type": "string",
+                "enum": [
+                  "defi",
+                  "blocage",
+                  "grille-vide",
+                  "sans-prix",
+                  "sans-offre-reverse",
+                  "onglet"
+                ]
+              },
+              "definitive": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "cause",
+              "definitive"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "scanId"
+        ],
+        "description": "Une lecture ratée `definitive: true` rembourse une fois par scan (`sans-prix`) ; `definitive: false` (défi Cloudflare) ne rembourse rien."
+      },
+      "RequeteInstallation": {
+        "type": "object",
+        "properties": {
+          "versionExtension": {
+            "type": "string"
+          },
+          "libelle": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "Texte libre, jamais interprété."
+          },
+          "userIdHerite": {
+            "type": "string",
+            "description": "Le `userId` de la 1.0.x, repris une seule fois."
+          }
+        },
+        "required": [
+          "versionExtension",
+          "libelle"
+        ]
+      },
+      "RequeteInscription": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "motDePasse": {
+            "type": "string",
+            "minLength": 10
+          },
+          "turnstile": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "motDePasse",
+          "turnstile"
+        ]
+      },
+      "RequeteVerification": {
+        "type": "object",
+        "properties": {
+          "jeton": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "jeton"
+        ]
+      },
+      "RequeteConnexion": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "motDePasse": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "motDePasse"
+        ]
+      },
+      "RequeteMotDePasseOublie": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "RequeteReinitialisation": {
+        "type": "object",
+        "properties": {
+          "jeton": {
+            "type": "string"
+          },
+          "motDePasse": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "required": [
+          "jeton",
+          "motDePasse"
+        ]
+      },
+      "RequeteLier": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{6}$"
+          }
+        },
+        "required": [
+          "code"
+        ]
+      },
+      "RequeteSuppressionCompte": {
+        "type": "object",
+        "properties": {
+          "motDePasse": {
+            "type": "string"
+          },
+          "renonciation": {
+            "type": "boolean",
+            "description": "Obligatoire pour supprimer un compte qui porte encore des crédits achetés."
+          }
+        },
+        "required": [
+          "motDePasse"
+        ]
+      },
+      "RequeteScanner": {
+        "type": "object",
+        "properties": {
+          "image": {
+            "type": "string",
+            "description": "Fichier (JPEG, PNG, WebP, HEIC ; 12 Mo au plus), en multipart."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "camera",
+              "fichier",
+              "collage"
+            ]
+          }
+        },
+        "required": [
+          "image",
+          "source"
+        ]
+      }
+    }
+  }
+}

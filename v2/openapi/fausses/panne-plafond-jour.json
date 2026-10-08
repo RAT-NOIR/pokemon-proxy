@@ -1,0 +1,30 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "SERVEUR",
+    "message": "Erreur serveur interne."
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "plafond-jour",
+    "raisonNonRembourse": "plafond-jour"
+  },
+  "solde": {
+    "total": 2,
+    "essai": 2,
+    "accueil": 0,
+    "hebdo": 0,
+    "achete": 0,
+    "hebdoMax": 0,
+    "prochainHebdo": null,
+    "compte": {
+      "lie": false,
+      "emailMasque": null,
+      "verifie": false
+    },
+    "partage": false,
+    "abonnement": null
+  }
+}

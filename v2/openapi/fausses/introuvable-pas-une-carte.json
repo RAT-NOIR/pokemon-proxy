@@ -1,0 +1,52 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-introuvable-pas-une-carte",
+  "analyse": {
+    "statut": "introuvable",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "introuvable",
+        "carte": null,
+        "candidats": [],
+        "question": null,
+        "raison": "pas-une-carte",
+        "etat": null,
+        "prixLive": null,
+        "zone": null
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "versEUR": 1,
+      "tauxDate": null
+    },
+    "raison": "pas-une-carte"
+  },
+  "facturation": {
+    "debite": 0,
+    "reserve": 0,
+    "rembourse": true,
+    "motif": "introuvable",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 3,
+    "essai": 3,
+    "accueil": 0,
+    "hebdo": 0,
+    "achete": 0,
+    "hebdoMax": 0,
+    "prochainHebdo": null,
+    "compte": {
+      "lie": false,
+      "emailMasque": null,
+      "verifie": false
+    },
+    "partage": false,
+    "abonnement": null
+  }
+}

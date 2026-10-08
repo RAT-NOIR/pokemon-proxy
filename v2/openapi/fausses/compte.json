@@ -1,0 +1,77 @@
+{
+  "success": true,
+  "compte": {
+    "email": "vous@exemple.fr",
+    "verifie": true,
+    "creeLe": "2026-10-01T08:00:00.000Z"
+  },
+  "solde": {
+    "total": 22,
+    "essai": 0,
+    "accueil": 17,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  },
+  "installations": [
+    {
+      "id": "0123456789abcdef0123456789abcdef",
+      "libelle": "Chrome · Windows",
+      "lieeLe": "2026-10-02T09:00:00.000Z",
+      "derniereAnalyse": "2026-10-07T09:14:00.000Z"
+    }
+  ],
+  "historique": {
+    "lignes": [
+      {
+        "genre": "analyse",
+        "le": "2026-10-07T09:14:00.000Z",
+        "surface": "extension",
+        "statut": "identifiee",
+        "carte": {
+          "nom": "Lokhlass",
+          "set": "30th Celebration",
+          "numero": "017"
+        },
+        "cartesVues": 1,
+        "facturation": {
+          "debite": 1,
+          "reserve": 0,
+          "rembourse": false,
+          "motif": "affirmee",
+          "raisonNonRembourse": null
+        }
+      },
+      {
+        "genre": "analyse",
+        "le": "2026-10-06T18:02:00.000Z",
+        "surface": "scanner",
+        "statut": "introuvable",
+        "carte": null,
+        "cartesVues": 1,
+        "facturation": {
+          "debite": 0,
+          "reserve": 0,
+          "rembourse": true,
+          "motif": "introuvable",
+          "raisonNonRembourse": null
+        }
+      },
+      {
+        "genre": "credits",
+        "le": "2026-10-02T09:30:00.000Z",
+        "motif": "accueil",
+        "credits": 25
+      }
+    ],
+    "suite": null
+  }
+}

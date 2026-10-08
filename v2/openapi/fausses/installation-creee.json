@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "installationId": "0123456789abcdef0123456789abcdef",
+  "jetonInstallation": "FICTIF-jeton-0123456789abcdefghijklmnopqrst",
+  "solde": {
+    "total": 3,
+    "essai": 3,
+    "accueil": 0,
+    "hebdo": 0,
+    "achete": 0,
+    "hebdoMax": 0,
+    "prochainHebdo": null,
+    "compte": {
+      "lie": false,
+      "emailMasque": null,
+      "verifie": false
+    },
+    "partage": false,
+    "abonnement": null
+  }
+}

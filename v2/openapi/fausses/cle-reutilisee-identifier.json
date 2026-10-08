@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "Cette Idempotency-Key a déjà servi avec un autre corps.",
+    "detail": "cle-reutilisee"
+  },
+  "facturation": null
+}

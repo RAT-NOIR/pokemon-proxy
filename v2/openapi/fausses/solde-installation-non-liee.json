@@ -1,0 +1,19 @@
+{
+  "success": true,
+  "solde": {
+    "total": 3,
+    "essai": 3,
+    "accueil": 0,
+    "hebdo": 0,
+    "achete": 0,
+    "hebdoMax": 0,
+    "prochainHebdo": null,
+    "compte": {
+      "lie": false,
+      "emailMasque": null,
+      "verifie": false
+    },
+    "partage": false,
+    "abonnement": null
+  }
+}

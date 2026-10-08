@@ -1,0 +1,23 @@
+{
+  "success": true,
+  "solde": {
+    "total": 104,
+    "essai": 0,
+    "accueil": 0,
+    "hebdo": 2,
+    "achete": 2,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": {
+      "restant": 100,
+      "quotaMensuel": 100,
+      "renouvelleLe": "2026-11-01"
+    }
+  }
+}
