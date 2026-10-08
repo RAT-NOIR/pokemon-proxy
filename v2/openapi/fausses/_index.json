@@ -131,6 +131,36 @@
     "schema": "ReponseErreur",
     "description": "Trop vite ou requête en cours : attendre `reessayerDans` secondes."
   },
+  "cle-reutilisee-identifier.json": {
+    "route": "POST /api/identifier",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Idempotency-Key réutilisée avec un autre corps : 422 ENTREE, rien n'est débité."
+  },
+  "cle-reutilisee-reponse.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Idempotency-Key réutilisée avec un autre corps : 422 ENTREE, rien n'est débité."
+  },
+  "cle-en-cours-reponse.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Même clé, première requête encore en cours : 429 DEBIT, attendre reessayerDans secondes."
+  },
+  "cle-reutilisee-retour-live.json": {
+    "route": "POST /api/retour-live",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Idempotency-Key réutilisée avec un autre corps : 422 ENTREE, rien n'est débité."
+  },
+  "cle-en-cours-retour-live.json": {
+    "route": "POST /api/retour-live",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Même clé, première requête encore en cours : 429 DEBIT, attendre reessayerDans secondes."
+  },
   "jeton.json": {
     "route": "POST /api/identifier",
     "statut": 401,

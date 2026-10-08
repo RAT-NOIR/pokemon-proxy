@@ -191,7 +191,7 @@
             }
           },
           "422": {
-            "description": "MARCHE, MOT_DE_PASSE_FAIBLE ou ENTREE.",
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
             "content": {
               "application/json": {
                 "schema": {
@@ -350,6 +350,16 @@
               }
             }
           },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
           "429": {
             "description": "QUOTA (avec `solde`) ou DEBIT (avec `reessayerDans`).",
             "content": {
@@ -473,6 +483,16 @@
           },
           "409": {
             "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
             "content": {
               "application/json": {
                 "schema": {
@@ -760,7 +780,7 @@
             }
           },
           "422": {
-            "description": "MARCHE, MOT_DE_PASSE_FAIBLE ou ENTREE.",
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1181,7 +1201,7 @@
             }
           },
           "422": {
-            "description": "MARCHE, MOT_DE_PASSE_FAIBLE ou ENTREE.",
+            "description": "MARCHE, MOT_DE_PASSE_FAIBLE, ou ENTREE avec detail `cle-reutilisee` (Idempotency-Key réutilisée avec un autre corps).",
             "content": {
               "application/json": {
                 "schema": {

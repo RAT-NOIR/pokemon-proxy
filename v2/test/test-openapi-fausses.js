@@ -52,6 +52,7 @@ H.v('tout scanId commence par « fausse- »', scansNonFictifs, []);
 
 // ── 4. couverture : une fausse par état demandé, et toutes les valeurs des listes fermées y figurent ──
 const REQUISES = ['identifiee', 'a-trancher-2', 'a-trancher-3', 'lot', 'panne-ia', 'panne-indisponible', 'panne-serveur', 'quota-compte', 'quota-installation', 'verification',
+    'cle-reutilisee-identifier', 'cle-reutilisee-reponse', 'cle-reutilisee-retour-live', 'debit', 'cle-en-cours-reponse', 'cle-en-cours-retour-live',
     'question-repondue', 'question-abandonnee-aucune', 'question-abandonnee-ne-sait-pas', 'solde-installation-non-liee', 'solde-installation-liee', 'solde-compte-non-verifie', 'solde-abonnement'];
 H.v('états demandés présents', REQUISES.filter(n => !fichiers.includes(`${n}.json`)), []);
 const motsRaisons = ['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture'];

@@ -188,10 +188,22 @@ v2.arreter();
 const montees = routesMontees(app);
 const promesses = OPERATIONS.filter(o => !o.op['x-heritee']);
 console.log(`   routes montées par le routeur v2 : ${montees.size} ; promises par le contrat : ${promesses.length} (dont ${promesses.filter(o => o.op['x-conditionnel']).length} conditionnelles)`);
-for (const o of promesses) {
-    const cond = o.op['x-conditionnel'];
-    if (montees.has(`${o.methode} ${o.chemin}`)) H.vrai(`route montée : ${o.methode} ${o.chemin}`, true);
-    else if (cond) console.log(`   ⚠ route conditionnelle non montée (${cond}) : ${o.methode} ${o.chemin}`);
-    else H.vrai(`route montée : ${o.methode} ${o.chemin}`, false);
+// Mode « avant fusion » (--avant-fusion, ou RM_OPENAPI_AVANT_FUSION=1 posée par l'orchestrateur pour le lanceur) : sort en 0 SEULEMENT si
+// les routes absentes sont EXACTEMENT la liste écrite ci-dessous et que tout le reste passe. Le mode par défaut reste strict.
+const AVANT_FUSION = process.argv.includes('--avant-fusion') || process.env.RM_OPENAPI_AVANT_FUSION === '1';
+const ATTENDUES_ABSENTES = [
+    'DELETE /api/compte', 'DELETE /api/compte/installations/{id}', 'GET /api/compte', 'POST /api/compte/code', 'POST /api/compte/connexion', 'POST /api/compte/deconnexion',
+    'POST /api/compte/delier', 'POST /api/compte/inscription', 'POST /api/compte/lier', 'POST /api/compte/mot-de-passe-oublie', 'POST /api/compte/reinitialiser',
+    'POST /api/compte/verification', 'POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/installation', 'POST /api/retour-live', 'POST /api/solde'];
+const absentes = promesses.filter(o => !o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`)).map(o => `${o.methode} ${o.chemin}`).sort();
+for (const o of promesses.filter(o => o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`))) console.log(`   ⚠ route conditionnelle non montée (${o.op['x-conditionnel']}) : ${o.methode} ${o.chemin}`);
+if (AVANT_FUSION) {
+    console.log(`   MODE AVANT FUSION — routes absentes attendues (${ATTENDUES_ABSENTES.length}) :\n     ${ATTENDUES_ABSENTES.join('\n     ')}`);
+    H.v(`avant fusion : les routes absentes sont EXACTEMENT les ${ATTENDUES_ABSENTES.length} écrites`, { absenteNonListee: absentes.filter(r => !ATTENDUES_ABSENTES.includes(r)), listeeMaisPresente: ATTENDUES_ABSENTES.filter(r => !absentes.includes(r)) }, { absenteNonListee: [], listeeMaisPresente: [] });
+} else {
+    for (const o of promesses.filter(o => !o.op['x-conditionnel'])) H.vrai(`route montée : ${o.methode} ${o.chemin}`, montees.has(`${o.methode} ${o.chemin}`));
 }
+// toute route qui accepte Idempotency-Key documente 422 (clé réutilisée avec un autre corps) et 429 (même clé en cours)
+for (const o of OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKey')))
+    H.v(`${o.methode} ${o.chemin} documente 422 et 429`, ['422', '429'].filter(s => !(o.op.responses || {})[s]), []);
 H.bilan();

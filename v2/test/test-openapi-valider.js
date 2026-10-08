@@ -62,6 +62,10 @@ H.v('composants = document entier', valider({ statut: 'a' }, ref('Carte'), { com
 H.vrai('format lève', /format/.test(leve(() => valider('a@b.fr', { type: 'string', format: 'email' }, C)) || ''));
 H.vrai('allOf lève', /allOf/.test(leve(() => valider({}, { allOf: [{ type: 'object' }] }, C)) || ''));
 H.vrai('un mot-clé inconnu lève même sous une propriété', /patternProperties/.test(leve(() => valider({ a: 1 }, { type: 'object', properties: { a: { patternProperties: {} } } }, C)) || ''));
+// un $ref avec des mots-clés voisins serait ignoré en silence : refusé
+H.vrai('$ref + mot-clé voisin lève', /voisins/.test(leve(() => valider({ statut: 'a' }, { $ref: '#/components/schemas/Carte', required: ['n'] }, C)) || ''));
+H.vrai('verifierSchema refuse aussi $ref + voisin', /voisins/.test(leve(() => verifierSchema({ schemas: { A: { $ref: '#/components/schemas/B', maxItems: 1 }, B: { type: 'array' } } })) || ''));
+H.v('$ref + description reste permis', valider({ statut: 'a' }, { $ref: '#/components/schemas/Carte', description: 'd' }, C).ok, true);
 // les métadonnées passent
 H.v('description / example tolérés', valider(1, { type: 'integer', description: 'd', example: 1, title: 't' }, C).ok, true);
 // verifierSchema parcourt TOUT, y compris ce qu'une valeur n'atteint pas

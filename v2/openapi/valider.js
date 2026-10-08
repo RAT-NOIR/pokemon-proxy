@@ -40,6 +40,11 @@ function controlerMotsCles(schema, chemin) {
     for (const k of Object.keys(schema))
         if (!MOTS_CLES.has(k) && !METADONNEES.has(k) && !k.startsWith('x-'))
             throw new Error(`valider : mot-clé non géré "${k}" (${chemin}) — un validateur qui ignore ce qu'il ne comprend pas valide tout`);
+    // un $ref avec des mots-clés voisins (hors métadonnées) : ils seraient IGNORÉS en silence, on refuse
+    if (schema.$ref !== undefined) {
+        const voisins = Object.keys(schema).filter(k => k !== '$ref' && !METADONNEES.has(k) && !k.startsWith('x-'));
+        if (voisins.length) throw new Error(`valider : $ref avec mots-clés voisins (${voisins.join(', ')}) à ${chemin} — ils seraient ignorés ; mettez-les dans un schéma référencé`);
+    }
 }
 
 /** Vrai si la branche porte au moins une propriété `const` et que la valeur la satisfait (sert à choisir l'indice d'un oneOf raté). */

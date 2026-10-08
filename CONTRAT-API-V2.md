@@ -965,6 +965,8 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | A11 | « réponse commune » (banc RatMarket) | pas d'issue de ce nom : une carte `a-trancher` avec la question `visuel` | Q34 |
 | A12 | `IMAGE` et `IA` en erreur HTTP | `IMAGE` et `IA` gardent le statut **200** (`success: false`) ; `VERSION` 426, `MARCHE` 422 | Q12 |
 | A13 | 24 marchés (extension) / 16 domaines (CORS hérité) | la liste est celle du serveur (`V2_MARCHES`, 16 domaines Vinted + `vinted.com` par défaut) ; hors liste : `422 MARCHE` | C13, Q26 |
+| A15 | « une carte identifiée absente du guide » : rien de dit côté clients | une carte identifiée dont `prixGuide` est `null` est **remboursée**, `motif: sans-prix` (règle de l'éditeur « un résultat sans aucun prix lisible est remboursé », valable aux deux surfaces ; à confirmer par l'éditeur) | CONTRAT-2 §6 |
+| A16 | valeur d'un lot au scanner : fourchette ou total inventé | la **somme des tendances du guide** des cartes chiffrées, avec sa **couverture** (« 2 cartes sur 3 ») ; une carte à trancher ou sans tendance n'est pas comptée ; aucune fourchette inventée | CONTRAT-2 §6 |
 | A14 | codes d'erreur propres à chaque document | l'union, 20 codes (§6) | C9, Q13 |
 
 ### 7.2 Le site (`scannerContrat.ts`, `compteContrat.ts`)
@@ -1024,7 +1026,7 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 | à trancher (2 et 3 candidats), lot | `a-trancher-2`, `a-trancher-3`, `lot` |
 | introuvable (une par raison) | `introuvable-photo-illisible`, `introuvable-pas-une-carte`, `introuvable-hors-catalogue`, `introuvable-plusieurs-cartes-non-separees`, `introuvable-panne-lecture` |
 | pannes | `panne-ia`, `panne-indisponible`, `panne-serveur`, `panne-plafond-jour` |
-| refus | `quota-compte`, `quota-installation`, `verification`, `debit`, `jeton`, `version`, `marche`, `entree`, `image` |
+| refus | `quota-compte`, `quota-installation`, `verification`, `debit`, `cle-reutilisee-identifier`, `cle-reutilisee-reponse`, `cle-reutilisee-retour-live`, `cle-en-cours-reponse`, `cle-en-cours-retour-live`, `jeton`, `version`, `marche`, `entree`, `image` |
 | questions | `question-repondue`, `question-abandonnee-aucune`, `question-abandonnee-ne-sait-pas`, `question-plafond` |
 | prix lu | `retour-live`, `retour-live-sans-prix` |
 | solde de chaque porteur | `solde-installation-non-liee`, `solde-installation-liee`, `solde-compte-non-verifie`, `solde-abonnement` |
