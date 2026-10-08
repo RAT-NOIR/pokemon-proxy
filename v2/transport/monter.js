@@ -1,3 +1,9 @@
 'use strict';
-// Emplacement du lot — réécrit par son lot, et par lui seul.
-module.exports = { enTete(app, cfg) { }, routes(router, cfg, deps) { } };
+// Emplacement du lot B4 : le transport. enTete() est appelé AVANT le cors() hérité (et avant toute route).
+const cors = require('./cors');
+module.exports = {
+    enTete(app, cfg) {
+        app.use(cors.middlewareV2(cfg));
+    },
+    routes(router, cfg, deps) { }
+};
