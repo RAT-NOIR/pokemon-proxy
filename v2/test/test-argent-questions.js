@@ -86,5 +86,10 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     H.v('repli : remboursée à l\'émission, cause renseignée', [rp.r.etat, typeof rp.r.repli, (await lire(p10)).solde.achete], ['remboursee', 'string', 4]);
     // 11. credit null (administrateur) : rien à régler
     H.v('credit null : etat null, rien d\'écrit', [(await Q.reserverQuestion(p10, null, { scanId: 'adm', carte: 0, raison: 'x', candidats: [], choix: [] }, cfg, t)).etat, await db.col('questions').countDocuments({ _id: 'adm:0' })], [null, 0]);
+    // 12. la facturation rendue avec la réponse (forme CONTRAT-2, via argent/facturation.js)
+    H.v('facturation d\'une réponse par un candidat : débitée', r1.facturation, { debite: 1, reserve: 0, rembourse: 0, motif: 'question', raisonNonRembourse: null });
+    H.v('   d\'un abandon remboursé', out[0].facturation, { debite: 0, reserve: 0, rembourse: 1, motif: 'question', raisonNonRembourse: null });
+    H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[30].facturation, { debite: 1, reserve: 0, rembourse: 0, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
+    H.v('   d\'un lot : rien de plus facturé', rl.facturation, { debite: 0, reserve: 0, rembourse: 0, motif: 'lot', raisonNonRembourse: null });
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

@@ -9,7 +9,20 @@ const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: 
 const idQuestion = (scanId, carte) => `${scanId}:${carte}`;
 const BLOQUEE_MS = 15 * 60e3;
 const ABANDONS = ['aucune', 'ne-sait-pas'];
+const { facturation } = require('./facturation');
 const nu = q => q;   // la question rendue telle que stockée (aucun champ secret)
+
+// La facturation d'une question RÉGLÉE : réponse par un candidat = débitée ; abandon rendu = rendu ; abandon refusé = reste débitée, la cause est dite ; lot = rien de plus.
+function facturationDe(q) {
+    if (q.lot) return facturation({ motif: 'lot' });
+    if (q.etat === 'remboursee') return facturation({ rembourse: 1, motif: 'question' });
+    if (q.etat === 'non-remboursee') {
+        const raison = require('./facturation').raisonPublique(q.raisonNonRembourse);
+        return facturation({ debite: 1, motif: raison === 'plafond-jour' ? 'plafond-jour' : 'question', raisonNonRembourse: raison });
+    }
+    if (q.etat === 'repondue') return facturation({ debite: 1, motif: 'question' });
+    return facturation({ reserve: 1, motif: 'question' });                         // en-attente / en-reglement : le crédit est réservé
+}
 
 async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, candidats = [], choix = [], lot = false } = {}, cfg, maintenant = new Date()) {
     if (!credit) return { etat: null };                       // administrateur, ou rien de débité : rien à régler
@@ -46,7 +59,7 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
     const cand = (q0.choix || []).find(c => c.id === choix);
     if (!cand && !ABANDONS.includes(choix)) return { statut: 400, code: 'ENTREE' };      // une liste fermée : tout le reste est refusé
     const abandon = !cand;
-    const corps = (q, statut = 200) => ({ statut, etat: q.etat, question: nu(q) });
+    const corps = (q, statut = 200) => ({ statut, etat: q.etat, question: nu(q), facturation: facturationDe(q) });
     // la prise conditionnelle : un seul gagnant, quel que soit le nombre de requêtes et de balayages
     const reponse = { choix, idProduct: cand ? cand.idProduct : null, aucune: abandon, le: maintenant };
     if (q0.lot) {
@@ -96,4 +109,4 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
     if (bilan.bloquees) console.error(`🔴 [v2 question-balayage] ${bilan.bloquees} question(s) bloquée(s) « en-reglement » depuis plus de 15 min : crédit rendu ou non, à vérifier à la main (jamais reprise seule)`);
     return bilan;
 }
-module.exports = { reserverQuestion, repondreQuestion, balayerQuestions };
+module.exports = { reserverQuestion, repondreQuestion, balayerQuestions, facturationDe };
