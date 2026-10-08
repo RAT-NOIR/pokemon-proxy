@@ -21,6 +21,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { prixDeReference } = require('./scoring');
 
 const BASE_PROD = 'test';
 const BASE_SCRATCH = 'test_scratch';
@@ -28,21 +29,30 @@ const libre = () => new mongoose.Schema({}, { strict: false });
 
 // Les six cas remontés en production. Pour chacun, le résultat ATTENDU est celui qu'on a
 // mesuré dans la base réelle — aucune valeur inventée.
+//
+// LE PRIX ATTENDU EST CELUI DU GUIDE DU JOUR (2026-10-08). Les quatre prix écrits en dur
+// (160,08 · 72,22 · 147,94 · 239,94, relevés en août) faisaient échouer le banc dès que le
+// guide bougeait — un banc rouge pour une raison qui n'est pas un défaut ne garde plus rien.
+// `prixDuGuide: true` : le gagnant doit porter le prix de référence du produit ATTENDU dans le
+// guide copié à l'étape 1 (le même que la fonction lit), à TOLERANCE_PRIX près ; un guide sans
+// prix pour ce produit fait ÉCHOUER l'assertion (elle ne peut pas conclure, elle ne passe pas).
+// `prixHistorique` n'est qu'imprimé, pour lire l'écart avec le relevé d'origine.
+const TOLERANCE_PRIX = 0.01;
 const CAS = [
     {
         nom: 'Arbok holo 099/128 (e-Series 1)',
         lu: { nomLu: 'Arbok', numeroLu: '099', regionAttendue: 'japonais' },
-        attendu: 650689, prixAttendu: 160.08, codeAttendu: 'EC1'
+        attendu: 650689, prixDuGuide: true, prixHistorique: 160.08, codeAttendu: 'EC1'
     },
     {
         nom: 'Rhydon 055/088 (e-Series 4)',
         lu: { nomLu: 'Rhydon', numeroLu: '055', regionAttendue: 'japonais' },
-        attendu: 653962, prixAttendu: 72.22, codeAttendu: 'EC4'
+        attendu: 653962, prixDuGuide: true, prixHistorique: 72.22, codeAttendu: 'EC4'
     },
     {
         nom: 'Ledian 007/088 (e-Series 4)',
         lu: { nomLu: 'Ledian', numeroLu: '007', regionAttendue: 'japonais' },
-        attendu: 653888, prixAttendu: 147.94, codeAttendu: 'EC4',
+        attendu: 653888, prixDuGuide: true, prixHistorique: 147.94, codeAttendu: 'EC4',
         // Le cas qui prouve que la région travaille : l'homonyme XY occidental coûte
         // 0,23 € et serait retenu sans elle.
         doitEcarter: 281344
@@ -81,7 +91,7 @@ const CAS = [
         // set de 88 cartes connu de TCGdex est « Perfect Order » (2025). Il a donc rendu
         // « Turtonator » à 0,02 € — et le serveur l'a appris. Le catalogue local corrobore.
         lu: { nomLu: 'Flareon', numeroLu: '017', regionAttendue: 'japonais', total: '088' },
-        attendu: 653910, prixAttendu: 239.94, codeAttendu: 'EC4'
+        attendu: 653910, prixDuGuide: true, prixHistorique: 239.94, codeAttendu: 'EC4'
     },
     {
         nom: 'ARBITRAGE — Pyroli 017 : la même carte, nom FRANÇAIS',
@@ -257,7 +267,18 @@ async function main() {
         } else {
             verifier('le bon produit gagne', g?.idProduct, cas.attendu);
             if (cas.codeAttendu) verifier(`   ... dans l'expansion ${cas.codeAttendu}`, g?.codeSet, cas.codeAttendu);
-            if (cas.prixAttendu != null) verifier('   ... au bon prix', g?.prix, cas.prixAttendu);
+            if (cas.prixDuGuide) {
+                const doc = guides.find(d => Number(d.idProduct) === cas.attendu);
+                const duJour = prixDeReference(doc, false);
+                if (duJour == null) {
+                    echecs++;
+                    console.log(`  ❌    ... au bon prix : le guide du jour n'a AUCUN prix pour ${cas.attendu} — l'assertion ne peut pas conclure`);
+                } else {
+                    const ecart = typeof g?.prix === 'number' ? Math.abs(g.prix - duJour) : Infinity;
+                    verifier(`   ... au prix du guide du jour (${duJour} € au guide du ${doc.guideDu ? new Date(doc.guideDu).toISOString().slice(0, 10) : '?'}, ±${TOLERANCE_PRIX} ; relevé d'origine ${cas.prixHistorique} €)`,
+                        ecart <= TOLERANCE_PRIX, true);
+                }
+            }
             if (cas.doitEcarter) {
                 const rangEcarte = r.scores.findIndex(s => s.candidat.idProduct === cas.doitEcarter);
                 verifier(`   ... et l'homonyme occidental ${cas.doitEcarter} est derrière`, rangEcarte > 0, true);
