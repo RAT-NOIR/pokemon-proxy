@@ -105,7 +105,7 @@ vrai('entrée invalide : set absent -> lève', leve(() => construireProduit({ id
 
 // 9. impressions
 const imp = (o = {}) => ({ idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
-    lienCardmarket: 'https://www.cardmarket.com/fr/Pokemon/Products?idProduct=900002', prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
+    lien: 'https://www.cardmarket.com/fr/Pokemon/Products?idProduct=900002', prixGuide: { trend: 1180, low: 950, avg30: 1000, guideDu: new Date('2026-10-05') }, ...o });
 const avecImp = P({ impressions: [imp(), imp({ idProduct: 900004, rarete: null, numero: '3', variante: 'V3' })] });
 v('impression complète', avecImp.impressions[0], { idProduct: 900002, numero: '4', total: '102', rarete: 'Holo Rare', variante: 'premiere-edition', set: { nom: 'Set de Base' },
     lien: 'https://www.cardmarket.com/fr/Pokemon/Products?idProduct=900002', prixGuide: { tendance: 1180, de: 950, moyenne30: 1000, date: '2026-10-05' } });

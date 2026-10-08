@@ -24,14 +24,17 @@ const INDEX = Object.freeze([
     I('limites', 'limites_cle', { cle: 1 }, { unique: true }), TTL('limites'),
     I('banc_lignes', 'banc_jeton', { jetonEmpreinte: 1 }), TTL('banc_lignes'),
     I('visuels', 'visuels_produit', { idProduct: 1 }, { unique: true }),
+    I('visuels', 'visuels_metacarte', { idMetacard: 1 }),                 // B1b.4 : les impressions d'une métacarte se lisent dans `visuels`, jamais par balayage
     I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees')
 ]);
 
-async function creerIndex() {
-    for (const i of INDEX) await col(i.c).createIndex(i.cle, i.opts);
-    return INDEX.length;
+// `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle. `colFn` est injectable pour les bancs.
+async function creerIndex(collections, colFn = col) {
+    const choisis = Array.isArray(collections) ? INDEX.filter(i => collections.includes(i.c)) : INDEX;
+    for (const i of choisis) await colFn(i.c).createIndex(i.cle, i.opts);
+    return choisis.length;
 }
 // Les propriétés qu'un index GARANTIT : c'est elles qu'on compare, jamais le seul nom (un index de même nom, non unique ou sans TTL,
 // ne garantit rien). Retourne la liste des propriétés qui diffèrent (vide = conforme).

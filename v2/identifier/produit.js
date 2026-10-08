@@ -56,7 +56,7 @@ function impression(i, ctx) {
     return Object.freeze({
         idProduct: i.idProduct, numero, total: chaineOuNull(i.total), rarete, variante: varianteDe(i.variante),
         set: Object.freeze({ nom: texte(i.set && i.set.nom) }),
-        lien: lienCardmarket(i.lienCardmarket, numero, rarete), prixGuide: prixGuideDe(i.prixGuide)
+        lien: lienCardmarket(i.lien, numero, rarete), prixGuide: prixGuideDe(i.prixGuide)
     });
 }
 
@@ -84,6 +84,7 @@ function construireProduit(source, ctx = {}) {
         visuel: visuel && Object.freeze(visuel),
         visuelMention: visuel ? mention(source.visuelMention, ctx.langueInterface) : null,   // une mention n'accompagne qu'un visuel servi
         prixGuide: prixGuideDe(source.prixGuide),
+        // `source.lienCardmarket` = le lien de la FICHE PRODUIT (ligne de catalogue) ; `lien` d'une impression (i.lien, plus haut) = le lien de CETTE impression.
         liens: Object.freeze({ cardmarket: lienCardmarket(source.lienCardmarket, numero, rarete),
                                fiche: ctx.ficheServie ? `https://rat-market.fr/fr/p/${source.idProduct}` : null }),
         impressions: Object.freeze(Array.isArray(source.impressions) ? source.impressions.filter(i => i && Number.isInteger(i.idProduct)).map(i => impression(i, ctx)) : [])
