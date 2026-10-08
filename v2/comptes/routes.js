@@ -1,7 +1,7 @@
 'use strict';
 const registre = require('../registre'); const L = require('../transport/limites');
 const { repondreErreur } = require('../erreurs'); const S = require('./sessions'); const svc = require('./service');
-const J = require('./jetons'); const P = require('./mots-de-passe'); const { emailCle, estJetable } = require('./email-cle');
+const { resoudrePorteur, exigerSession } = require('../porteur'); const liaison = require('../installations/liaison'); const J = require('./jetons'); const P = require('./mots-de-passe'); const { emailCle, estJetable } = require('./email-cle');
 
 const HEURE = 3600e3;
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
@@ -74,6 +74,23 @@ function routesComptes(router, cfg, deps) {
             if (r.statut === 200) return res.status(200).json({ success: true });
             return repondreErreur(res, r.code, r.code === 'MOT_DE_PASSE_FAIBLE' ? 'Mot de passe trop faible' : r.code === 'CODE_EXPIRE' ? 'Lien expiré' : 'Lien invalide', r.detail ? { detail: r.detail } : {});
         } catch (e) { console.error(`❌ [v2 reinitialiser] ${e.message}`); return indispo(res); }
+    });
+
+    // Écritures par SESSION : index prêts, identité résolue, Origin + X-Rat-Market, puis session exigée.
+    const parSession = [deps.pret, resoudrePorteur(cfg), S.exigerOrigineSite(cfg), exigerSession];
+    router.post('/api/compte/code', ...parSession, async (req, res) => {
+        try {
+            const r = await liaison.creerCode(req.v2.porteur.id, cfg);
+            if (r.refus) return repondreErreur(res, 'DEBIT', 'Trop de codes en cours, réessayez plus tard.', { reessayerDans: r.reessayerDans });
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(200).json({ success: true, code: r.code, expire: r.expire });
+        } catch (e) { console.error(`❌ [v2 code] ${e.message}`); return indispo(res); }
+    });
+    router.delete('/api/compte/installations/:id', ...parSession, async (req, res) => {
+        try {
+            if (!(await liaison.revoquer(req.v2.porteur.id, req.params.id))) return repondreErreur(res, 'CODE_INVALIDE', 'Introuvable');   // 404 aussi pour l'installation d'un autre : on ne révèle rien
+            return res.status(200).json({ success: true });
+        } catch (e) { console.error(`❌ [v2 revoquer] ${e.message}`); return indispo(res); }
     });
 
     router.post('/api/compte/verification', ...site, parIp('verification-ip', 30), async (req, res) => {
