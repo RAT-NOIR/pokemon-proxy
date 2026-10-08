@@ -22,6 +22,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { prixDeReference } = require('./scoring');
+const { viderBac, nomsDesModeles } = require('./verrou/bac');
 
 const BASE_PROD = 'test';
 const BASE_SCRATCH = 'test_scratch';
@@ -228,9 +229,10 @@ async function main() {
     const CsS = mongoose.model('CsS', libre(), 'codes_set');
     const GuS = mongoose.model('GuS', libre(), 'guide_prix');
 
+    // `drop`, pas `deleteMany` (FUITE-MAIN, 2026-10-08) : deleteMany laissait numeros_cartes (7,6 Mo), catalogue_produits, codes_set et
+    // guide_prix VIDES sur la grappe de production. On y ajoute les collections de tous les modèles chargés (autoIndex).
     const nettoyer = async () => {
-        await CatS.deleteMany({}); await NumS.deleteMany({});
-        await CsS.deleteMany({}); await GuS.deleteMany({});
+        await viderBac(mongoose.connection.db, { noms: [...new Set(['catalogue_produits', 'numeros_cartes', 'codes_set', 'guide_prix', ...nomsDesModeles(mongoose)])], log: () => { } });
     };
     await nettoyer();
     const sansId = d => { const o = { ...d }; delete o._id; return o; };

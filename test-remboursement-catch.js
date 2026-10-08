@@ -15,6 +15,7 @@
 process.env.MONGODB_BASE = 'test_scratch';
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { viderBac, nomsDesModeles } = require('./verrou/bac');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -197,6 +198,9 @@ const v = (nom, obtenu, attendu) => {
     console.log(`\n🧹 test_scratch : ${creditsRestes.deletedCount} crédit(s), ${restes.deletedCount} compteur(s) de remboursement supprimés.`);
 
     console.log(echecs ? `\n❌ ${echecs} échec(s).` : '\n🎉 Tous les tests passent.');
+    // `drop` des collections de tous les modèles de index.js (FUITE-MAIN, 2026-10-08) : deleteMany laissait credits, remboursements,
+    // cardprices… (fichier + index) sur la grappe de production
+    await viderBac(mongoose.connection.db, { noms: nomsDesModeles(mongoose) });
     await mongoose.connection.close();
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.stack); process.exit(1); });

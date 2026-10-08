@@ -43,6 +43,7 @@ process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_verrou_rejeu';
 const http = require('http');
 const mongoose = require('mongoose');
 const Stripe = require('stripe');
+const { viderBac, nomsDesModeles } = require('./verrou/bac');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -311,6 +312,9 @@ function poster(port, corps, signature) {
 
     console.log(echecs ? `\n❌ ${echecs} échec(s).` : '\n🎉 Tous les tests passent.');
     srv.close();
+    // `drop` des collections de tous les modèles de index.js (FUITE-MAIN, 2026-10-08) : deleteMany laissait evenements_stripe, credits,
+    // cardprices… (fichier + index) sur la grappe de production ; l'autoIndex les crée à la connexion, sans y écrire une ligne
+    await viderBac(mongoose.connection.db, { noms: nomsDesModeles(mongoose) });
     await mongoose.connection.close();
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.stack); process.exit(1); });
