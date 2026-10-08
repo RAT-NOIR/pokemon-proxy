@@ -13,7 +13,7 @@
 //      Seul `num` (un fichier de CE set et de CE numéro) est collecté ; `set-voisin`, `absent`,
 //      `ambigu`, `conflit` sont comptés et nommés, jamais servis : ce serait un visuel faux.
 //   2. IMAGEINFO par lots de 50 (url, taille, sha1), mis en cache dans l'état : une reprise ne redemande rien.
-//   3. SEUIL : set REFUSÉ si la largeur MÉDIANE est sous LARGEUR_MIN (TR, mesuré : médiane 350) ;
+//   3. SEUIL : set REFUSÉ si la largeur MÉDIANE est sous largeurMinDe('bulbapedia') (TR, mesuré : médiane 350) ;
 //      sinon chaque fichier sous le seuil est écarté et compté.
 //   4. ORIGINAL -> sha1 contrôlé contre imageinfo -> WebP 700 q80 -> R2 -> ligne `images` (APRÈS R2).
 //   5. JOINTURE, gratuite : l'image vient de la page de la carte, donc `carteId` est connu d'avance.
@@ -39,7 +39,7 @@ const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-image');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
-const { LARGEUR_MIN, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 
 const SOURCE = 'bulbapedia';
@@ -158,22 +158,23 @@ async function collecterSet(code, M, { mesurerSeulement }) {
         const largeurs = R.plan.map(p => cacheObj[p.fichier]?.w).filter(Boolean).sort((a, b) => a - b);
         const mediane = largeurs[Math.floor(largeurs.length / 2)] ?? null;
         const fichiersAbsents = R.plan.filter(p => !cacheObj[p.fichier]);
-        const sousSeuil = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w < LARGEUR_MIN);
-        console.log(`2. tailles : ${largeurs.length} lues sur ${R.plan.length} · largeur min ${largeurs[0]} · médiane ${mediane} · max ${largeurs.at(-1)} · sous ${LARGEUR_MIN} px : ${sousSeuil.length} · fichier absent chez Bulbapedia : ${fichiersAbsents.length}`);
+        const largeurMin = largeurMinDe('bulbapedia');   // la règle unique par source (seuils-images.js) : Bulbapedia n'est pas officielle
+        const sousSeuil = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w < largeurMin);
+        console.log(`2. tailles : ${largeurs.length} lues sur ${R.plan.length} · largeur min ${largeurs[0]} · médiane ${mediane} · max ${largeurs.at(-1)} · sous ${largeurMin} px : ${sousSeuil.length} · fichier absent chez Bulbapedia : ${fichiersAbsents.length}`);
         await M.EtatImages.updateOne({ _id: idEtat }, { $set: { mesure: { lues: largeurs.length, plan: R.plan.length, min: largeurs[0] ?? null, mediane, max: largeurs.at(-1) ?? null, sousSeuil: sousSeuil.length, fichiersAbsents: fichiersAbsents.length } } });
         if (mesurerSeulement) return { code, etat: 'mesure', mediane, sousSeuil: sousSeuil.length, plan: R.plan.length };
         // ---- 3. seuil ----------------------------------------------------------------------------
         // Le SET est refusé sur sa médiane — même sens que le refus d'artofpkm (un set trop bas ne se
         // sert pas à moitié). Au-dessus, les fichiers isolés sous le seuil sont écartés et COMPTÉS.
-        if (mediane == null || mediane < LARGEUR_MIN) {
-            console.error(`❌ ${code} : largeur médiane ${mediane} px < ${LARGEUR_MIN} — set REFUSÉ, rien n'est téléchargé.`);
+        if (mediane == null || mediane < largeurMin) {
+            console.error(`❌ ${code} : largeur médiane ${mediane} px < ${largeurMin} — set REFUSÉ, rien n'est téléchargé.`);
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-resolution' } });
             return { code, etat: 'refuse-resolution', mediane };
         }
 
         // ---- 4. originaux -> WebP -> R2 -> images ------------------------------------------------
         const bucket = process.env.R2_BUCKET_IMAGES;
-        const aFaire = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w >= LARGEUR_MIN);
+        const aFaire = R.plan.filter(p => cacheObj[p.fichier] && cacheObj[p.fichier].w >= largeurMin);
         let telecharges = 0, sautes = 0, echecs = 0;
         for (const p of aFaire) {
             if (arretDemande) break;

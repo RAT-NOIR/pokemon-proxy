@@ -17,8 +17,12 @@
 //
 // USAGE : node test-sources.js   (aucun réseau ; index.js ouvre sa connexion Mongo au
 //         chargement, comme pour toutes les suites qui l'importent)
+// BASE DE BANC (2026-10-08) : ce banc n'a besoin d'AUCUNE donnée de production (fonctions pures). index.js se connecte à MONGODB_URI au chargement et
+// mongoose y crée des index (une ÉCRITURE) : on ouvre donc la base de banc et on l'applique AVANT de requérir index.js ; sans base de banc, REFUS.
+require('dotenv').config();
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const { interrogerSource, dansUnScan, sourcesTombees, pannesHorsContexte } = require('./sources');
-const { champsDeRefus, REFUS_D_ABSENCE } = require('./index');
+let champsDeRefus, REFUS_D_ABSENCE;
 
 let echecs = 0;
 function verifier(libelle, obtenu, attendu) {
@@ -30,6 +34,8 @@ function verifier(libelle, obtenu, attendu) {
 const tombe = () => { throw new Error('connexion perdue (simulée)'); };
 
 (async () => {
+    (await ouvrirBanc()).appliquer();
+    ({ champsDeRefus, REFUS_D_ABSENCE } = require('./index'));
     console.log('--- 1. DEUX ÉTATS, JAMAIS UN ---');
     await dansUnScan(async () => {
         const bon = await interrogerSource('catalogue/nom', async () => [{ idProduct: 1 }]);

@@ -10,6 +10,8 @@ const path = require('path');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
 const { connecterMongo } = require('./mongo-connexion');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const COLL = 'catalogue_banc_quotidien';
 let echecs = 0, n = 0;
@@ -38,12 +40,19 @@ const lancerAvec = (env, ...args) => new Promise(resolve => {
 });
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Les imports lancés en sous-processus héritent de cet environnement.
+    (await ouvrirBanc()).appliquer();
+    // R2 (2026-10-08, tour 3) : ce banc ÉCRIT sur R2 (archives, sauvegardes) via les imports lancés en sous-processus — il n'écrit jamais dans un bucket
+    // de production. R2_BUCKET_BANC (un bucket de banc dédié) est obligatoire ; appliquer() y redirige alors R2_BUCKET_BRUT pour le processus et ses enfants.
+    if (!process.env.R2_BUCKET_BANC) { console.error('❌ REFUS : ce banc écrit sur R2 et aucun bucket de banc n\'est défini (R2_BUCKET_BANC absent). Rien n\'a été écrit.'); process.exit(1); }
     const base = await connecterMongo({ script: 'test-import-catalogue-quotidien.js', ecrit: true });
     if (base !== 'test_scratch') { console.error(`❌ banc sur « ${base} » : refusé, test_scratch seulement`); process.exit(1); }
     const db = mongoose.connection.db;
     const C = db.collection(COLL), M = db.collection('catalogue_export_meta');
     const META = `dernier:${COLL}`;
-    const vider = async () => { await C.deleteMany({}); await M.deleteMany({ _id: META }); };
+    // `drop`, pas `deleteMany` (FUITE-MAIN, 2026-10-08) : deleteMany laissait les deux collections (fichier + index) sur la grappe de production
+    const vider = async () => { await viderBac(db, { noms: [COLL, 'catalogue_export_meta'], log: () => { } }); };
     await vider();
     const r2 = require('./collecte-cartes/r2');
     const B = process.env.R2_BUCKET_BRUT;

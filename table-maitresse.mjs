@@ -63,7 +63,11 @@ const regionCodes = new Map((await prod.db.collection('codes_set').find({}, { pr
 const setsDocs = await cx.db.collection('sets').find({}).toArray();
 const sets = new Map(setsDocs.map(s => [s._id, { ...s, publie: typeof s.nomAffichage === 'string', exps: new Set([].concat(s.bulba?.expansion ?? [])) }]));
 const docs = new Map(); for await (const d of cx.db.collection('cartes').find({}, { projection: { sets: 1, impressions: 1, images: 1, nomEn: 1 } })) docs.set(d._id, d);
-const lignesJ = await cx.db.collection('cartes_produits').find({}, { projection: { carteId: 1, slugSet: 1, slug: 1, idProduct: 1, 'visuelSubstitut.cleR2': 1 } }).toArray();
+// 🔴 2026-10-08 : `numeroFiche` manquait à cette projection — la règle du site importée retombait alors sur le numéro du SLUG et
+// la table SOUS-COMPTAIT les produits servis (mesuré par la même règle : fiches 68 120 → 69 365, visuels 48 045 → 48 810). La
+// projection est celle du site, mot pour mot (rat-market-site/lib/cartes.ts:973 ; le site, lui, lit numeroFiche) : un instrument
+// qui ne lit pas les mêmes champs que le lecteur fabrique le défaut qu'il mesure (CLAUDE.md, en tête du catalogue d'erreurs).
+const lignesJ = await cx.db.collection('cartes_produits').find({}, { projection: { carteId: 1, slugSet: 1, slug: 1, idProduct: 1, numeroFiche: 1, 'visuelSubstitut.cleR2': 1 } }).toArray();
 const substitut = new Set(lignesJ.filter(l => l.visuelSubstitut?.cleR2).map(l => l.idProduct));
 const resteDe = new Map(); for (const r of await cx.db.collection('restes').find({ idProduct: { $ne: null } }, { projection: { idProduct: 1, type: 1, set: 1 } }).toArray()) if (!resteDe.has(r.idProduct)) resteDe.set(r.idProduct, r);
 const etats = new Map((await cx.db.collection('collecte_etat').find({}, { projection: { pages: 1 } }).toArray()).map(e => [String(e._id), e]));

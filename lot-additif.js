@@ -21,6 +21,13 @@
 // collections qu'il tient (file_images, images, collecte_images_etat) ne sont jamais restaurées en automatique : le journal
 // dit qu'elles ne l'ont pas été.
 //
+// ANNONCER une baisse de VIGNETTES (cartes.images[].vignette) — le fichier --annonce est un JSON { "<compteur> <groupe>": n } :
+//   par SET (retrait de masse voulu, K vignettes) : { "vignettes-set set:Sun-Moon-Promos": 120 }   — couvre les 120 clés ET le nombre du set
+//   par CLÉ (un cas précis)                        : { "vignettes-images set:Sun-Moon-Promos|<carteId>|<numero>|<cleR2>": 1 }
+// Sans annonce, une vignette perdue ARRÊTE le lot (incident du 2026-10-08) ; elle se remet champ par champ, jamais en rendant le tableau
+// `images` (un remplacement d'image à compte égal s'arrête mais ne se restaure pas : la relecture le dit, la sauvegarde le porte).
+// Le rejeu de jointure (collecteur-images.js --rejouer-jointure) écrit aussi sur R2 (vignettes fabriquées) hors de cette garde : additif, idempotent.
+//
 // La ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : un argument inconnu refuse avant toute connexion.
 // `--base=test_scratch` (et `--journal=`, qui ne vaut qu'avec elle) sert au banc test-lot-garde-scratch.js, jamais à un lot.
 require('dotenv').config();
@@ -28,7 +35,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
@@ -59,6 +66,12 @@ const comptes = options.filter(a => a.startsWith('--compte=')).map(a => {
 });
 if (inconnus.length || !quoi || !collections || !commande.length || (val('journal') && BASE !== 'test_scratch')) {
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${val('journal') && BASE !== 'test_scratch' ? '--journal= ne vaut qu\'avec --base=test_scratch — ' : ''}usage : --quoi="…" --collections=a,b [--annonce=baisses.json] [--compte=coll[:champ=valeur]]… -- <commande…>`);
+    process.exit(2);
+}
+// BASE DE BANC (2026-10-08) : `--base=test_scratch` ne sert qu'aux bancs, et un banc n'écrit plus dans la production. Sans BANC_ISOLE=1
+// (posé par collecte-cartes/base-banc.js, hérité par ce processus enfant), test_scratch serait celui de la grappe de production : refus.
+if (BASE === 'test_scratch' && process.env.BANC_ISOLE !== '1') {
+    console.error('❌ --base=test_scratch refusé hors banc isolé : aucune base de test hors production n\'est ouverte (BANC_ISOLE=1 absent). Rien n\'a été écrit.');
     process.exit(2);
 }
 const annonces = val('annonce') ? JSON.parse(fs.readFileSync(path.resolve(val('annonce')), 'utf8')) : {};
@@ -93,7 +106,7 @@ const lireSauvegarde = (dossier, coll) => EJSON.parse(fs.readFileSync(path.join(
 // La projection couvre aussi ce que `setsTouches` compare (numéros, clés d'images, lignes de jointure, sets entiers).
 async function etatDeLaBase(db) {
     const [cartes, cartesProduits, sets] = await Promise.all([
-        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, categorie: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1 }).toArray(),
+        db.collection('cartes').find({}).project({ sets: 1, nomEn: 1, categorie: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.illustrateur': 1, 'impressions.numero': 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1, 'images.vignette': 1 }).toArray(),
         db.collection('cartes_produits').find({}).project({ idExpansion: 1, idProduct: 1, carteId: 1, slugSet: 1, numeroFiche: 1, preuve: 1 }).toArray(),
         db.collection('sets').find({}).toArray()]);
     for (const [n, l] of [['cartes', cartes], ['cartes_produits', cartesProduits], ['sets', sets]])
@@ -207,6 +220,23 @@ function journaliser(t, dossier, combien, sortie) {
         if (ops.length) await db.collection(coll).bulkWrite(ops, { ordered: false });
         const champs = Object.entries(plan.champs).map(([f, n]) => `${f}×${n}`).join(' ');
         faits.push(`${coll} ${plan.remplacer.length} remplacé(s)${champs ? ` [${champs}]` : ''}, ${plan.inserer.length} réinséré(s), ${plan.supprimer.length} retiré(s)`);
+        console.log(`      ${faits.at(-1)}`);
+    }
+    // 🔑 Les vignettes se restaurent CHIRURGICALEMENT (relecture du 2026-10-08) : une baisse de `vignettes-images` ne fait JAMAIS remplacer le
+    // tableau `images` (le worker y écrit en même temps : les images neuves de la fenêtre, et celles des autres sets de la carte, seraient
+    // perdues sans que la relecture le voie — une hausse perdue n'est pas une baisse). On remet le seul champ `vignette` (pas `jointeLe` : voir planVignettes)
+    // de chaque entrée du set fautif qui en avait une dans la sauvegarde et n'en a plus.
+    const setsVignettesFautifs = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'vignettes-images' || b.compteur === 'vignettes-set').map(b => b.groupe.replace(/^set:/, '').split('|')[0]));
+    if (setsVignettesFautifs.size && aSauver.includes('cartes') && RESTAURABLES.includes('cartes')) {
+        const aRemettre = planVignettes(lireSauvegarde(dossier, 'cartes'), await db.collection('cartes').find({}, { projection: { images: 1 } }).toArray(), setsVignettesFautifs);
+        let n = 0;
+        for (const x of aRemettre) {
+            const r = await db.collection('cartes').updateOne({ _id: x._id },
+                { $set: { 'images.$[e].vignette': x.vignette } },
+                { arrayFilters: [{ 'e.set': x.set, 'e.cleR2': x.cleR2, 'e.vignette': { $exists: false } }] });
+            n += r.modifiedCount;
+        }
+        faits.push(`cartes : ${n} vignette(s) remise(s) champ par champ (${aRemettre.length} prévue(s)), tableau images intact`);
         console.log(`      ${faits.at(-1)}`);
     }
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));

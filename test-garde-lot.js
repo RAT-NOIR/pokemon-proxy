@@ -39,6 +39,58 @@ verifier('une impression SANS illustrateur effacée est une baisse', comparer(av
 const etatCat = copie(etat0); etatCat.cartes[0].categorie = 'pokemon';
 const lotCat = copie(etatCat); delete lotCat.cartes[0].categorie;
 verifier('une catégorie effacée est une baisse', comparer(compterEtat(etatCat), compterEtat(lotCat)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['categories-cartes set:Set-A 1→0']);
+// (2026-10-08, incident 01:10 UTC) un rejeu de jointure a effacé `vignette` de 1 089 entrées de cartes.images : (set, cleR2, numero)
+// ne bougeaient pas, la garde n'a rien vu. Les vignettes se comptent par set, avant et après, par la même fonction.
+const etatVig = copie(etat0); etatVig.cartes[0].images[0].vignette = { cleR2: 'vignettes/a/2.webp', w: 200, h: 280 };
+const lotVigPerdue = copie(etatVig); delete lotVigPerdue.cartes[0].images[0].vignette;
+// Relecture : le compteur est un ENSEMBLE de clés (set|carte|numero|cleR2), pas un nombre par set — une perdue et une gagnée à compte égal
+// doivent arrêter. Une entrée qui a DISPARU (baisse d'images déjà comptée) n'est pas en plus une baisse de vignette.
+const K_A = 'vignettes-images set:Set-A|1|2|a/2';
+verifier('compteur : une clé par entrée d\'images qui porte une vignette', [compterEtat(etatVig).get(K_A), compterEtat(etat0).get(K_A) ?? 0], [1, 0]);
+verifier('une vignette effacée (le reste de l\'entrée intact) est une baisse', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue)).nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), [`${K_A} 1→0`, 'vignettes-set set:Set-A 1→0']);   // la clé ET le nombre du set
+verifier('une vignette effacée peut s\'annoncer (par clé)', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue), { annonces: { [K_A]: 1 } }).nonAutorisees.length, 0);
+verifier('des vignettes qui MONTENT : le lot passe', comparer(compterEtat(etat0), compterEtat(etatVig)).nonAutorisees.length, 0);
+verifier('sans worker prouvé sur le set : la baisse de vignette arrête', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue), { setsDuWorker: new Set(['Set-B']) }).nonAutorisees.length, 2);
+verifier('worker actif sur CE set (même preuve que pour les images) : la baisse de vignette est dispensée, dite « worker »', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue), { setsDuWorker: new Set(['Set-A']) }).baisses.map(b => b.autorisee), ['worker', 'expliquée par les clés']);
+{ // worker actif sur A, lot qui efface une vignette du set B : arrêt
+    const e = copie(etat0); e.cartes[1].images[0].vignette = { cleR2: 'vignettes/b/25.webp', w: 200, h: 280 };
+    const l = copie(e); delete l.cartes[1].images[0].vignette;
+    verifier('worker actif sur A, vignette effacée dans B : arrêt', comparer(compterEtat(e), compterEtat(l), { setsDuWorker: new Set(['Set-A']) }).nonAutorisees.map(b => b.groupe), ['set:Set-B|2|25|b/25', 'set:Set-B']);
+}
+{ // une perdue + une gagnée dans le même set, compte égal
+    const e = copie(etat0); e.cartes[0].images.push({ set: 'Set-A', numero: '3', cleR2: 'a/3' });
+    e.cartes[0].images[0].vignette = { cleR2: 'vignettes/a/2.webp', w: 200, h: 280 };
+    const l = copie(e); delete l.cartes[0].images[0].vignette; l.cartes[0].images[1].vignette = { cleR2: 'vignettes/a/3.webp', w: 200, h: 280 };
+    verifier('une vignette perdue + une gagnée dans le même set (compte égal) : ARRÊT', comparer(compterEtat(e), compterEtat(l)).nonAutorisees.map(b => b.cle), [K_A]);
+}
+{ // l'entrée a disparu : c'est la baisse d'IMAGES (déjà comptée), pas en plus une baisse de vignette
+    const l = copie(etatVig); l.cartes[0].images = [];
+    verifier('entrée disparue avec sa vignette : une seule baisse (images), pas de baisse de vignette en plus', comparer(compterEtat(etatVig), compterEtat(l)).nonAutorisees.map(b => b.compteur), ['images']);
+}
+{ // 2e relecture : un REMPLACEMENT d'image à compte égal (autre cleR2, sans vignette) — la clé disparue est sautée, `images` reste égal :
+  // seul le NOMBRE de vignettes du set le voit
+    const l = copie(etatVig); l.cartes[0].images[0] = { set: 'Set-A', numero: '2', cleR2: 'a/2-bis' };
+    const c = comparer(compterEtat(etatVig), compterEtat(l));
+    verifier('remplacement d\'image à compte égal, nouvelle entrée sans vignette : ARRÊT par le nombre de vignettes du set', c.nonAutorisees.map(b => `${b.cle} ${b.avant}→${b.apres}`), ['vignettes-set set:Set-A 1→0']);
+    verifier('… et le worker prouvé sur ce set le dispense', comparer(compterEtat(etatVig), compterEtat(l), { setsDuWorker: new Set(['Set-A']) }).nonAutorisees.length, 0);
+    verifier('rejeu qui revignette (l\'entrée neuve reçoit sa vignette) : le lot passe', (() => { const g = copie(l); g.cartes[0].images[0].vignette = { cleR2: 'vignettes/a/2-bis.webp' }; return comparer(compterEtat(etatVig), compterEtat(g)).nonAutorisees.length; })(), 0);
+    // annonces : par SET (retrait de masse voulu) ou par CLÉ (précis)
+    verifier('annonce PAR SET (vignettes-set set:S) : couvre les clés perdues ET le nombre', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue), { annonces: { 'vignettes-set set:Set-A': 1 } }).nonAutorisees.length, 0);
+    verifier('annonce par SET trop petite : bloque', comparer(compterEtat(e2()), compterEtat(e2(true)), { annonces: { 'vignettes-set set:Set-A': 1 } }).nonAutorisees.length > 0, true);
+    verifier('annonce PAR CLÉ seule : couvre aussi le nombre (une clé perdue annoncée explique la baisse)', comparer(compterEtat(etatVig), compterEtat(lotVigPerdue), { annonces: { [K_A]: 1 } }).nonAutorisees.length, 0);
+    function e2(perdues) { const e = copie(etat0); e.cartes[0].images.push({ set: 'Set-A', numero: '3', cleR2: 'a/3' }); for (const im of e.cartes[0].images) if (!perdues) im.vignette = { cleR2: 'v' }; return e; }
+    verifier('annonce par set : un retrait de masse (2 clés) pour une annonce de 2 passe', comparer(compterEtat(e2()), compterEtat(e2(true)), { annonces: { 'vignettes-set set:Set-A': 2 } }).nonAutorisees.length, 0);
+}
+{ const { validerAnnonces } = require('./collecte-cartes/garde-lot'); let leve = false; try { validerAnnonces({ [K_A]: 1, 'vignettes-set set:Set-A': 3 }); } catch { leve = true; }
+  verifier('l\'annonce « vignettes-images » est un compteur connu', leve, false); }
+{ // restauration CHIRURGICALE : on ne remet que le champ vignette, jamais le tableau images
+    const { planVignettes } = require('./collecte-cartes/garde-lot');
+    const sauve = [{ _id: 1, images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: 'ancien', vignette: { cleR2: 'v/a2' } }, { set: 'Set-A', numero: '3', cleR2: 'a/3', vignette: { cleR2: 'v/a3' } }, { set: 'Set-B', numero: '1', cleR2: 'b/1', vignette: { cleR2: 'v/b1' } }] }];
+    const actuel = [{ _id: 1, images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: 'nouveau' }, { set: 'Set-A', numero: '3', cleR2: 'a/3', vignette: { cleR2: 'v/posee-depuis' } }, { set: 'Set-B', numero: '1', cleR2: 'b/1' }, { set: 'Set-A', numero: '9', cleR2: 'a/9' }] }];
+    const p = planVignettes(sauve, actuel, new Set(['Set-A']));
+    verifier('planVignettes : seulement l\'entrée du set fautif qui a perdu sa vignette (pas celle posée depuis, pas un autre set, pas une entrée neuve)', p.map(x => [x._id, x.set, x.cleR2, x.vignette.cleR2, 'jointeLe' in x]), [[1, 'Set-A', 'a/2', 'v/a2', false]]);   // jointeLe n'est pas restauré : date d'audit que ni la garde ni le site ne lisent, l'ancienne écraserait une plus récente
+    verifier('planVignettes : une entrée disparue n\'est pas recréée', planVignettes(sauve, [{ _id: 1, images: [] }], new Set(['Set-A'])).length, 0);
+}
 verifier('images, cartes, noms de cartes, nom affiché : par set', [avant.get('images set:Set-A'), avant.get('images set:Set-B'), avant.get('cartes set:Set-A'), avant.get('noms-cartes set:Set-B'), avant.get('nom-affiche set:Set-A'), avant.get('nom-affiche set:Set-C') ?? 0], [1, 1, 2, 1, 1, 0]);
 
 // ── 2. LE CAS DU §59 : +1 fiche annoncée, un illustrateur effacé à côté. Le total monte, le groupe baisse.
@@ -102,6 +154,7 @@ verifier('une image remplacée (même compte) : le set de l\'image', setsTouches
 // 20 sets. Le quota du site (Vercel) paie chaque revalidation : le set touché est celui de la PARTIE qui a changé.
 const lCarte = copie(etat0); lCarte.cartes[0].sets.push('Set-C');
 verifier('une carte qui entre dans un set : CE set seulement, le catalogue (compte) et les espèces', setsTouches({ avant: docs0, apres: lCarte }), { sets: ['Set-C'], catalogue: true, especes: true, setsInfo: false });
+verifier('(setsTouches) une vignette effacée : le set de l\'image est touché (le site la lit)', setsTouches({ avant: etatVig, apres: lotVigPerdue }).sets, ['Set-A']);
 const lImgB = copie(etat0); lImgB.cartes[1].images.push({ set: 'Set-B', numero: '99', cleR2: 'b/99' });
 verifier('une image ajoutée dans UN set d\'une carte à deux sets : ce set seulement, ni catalogue ni espèces', setsTouches({ avant: docs0, apres: lImgB }), { sets: ['Set-B'], catalogue: false, especes: false, setsInfo: false });
 // Le repli prudent ne doit pas se déclencher parce qu'une AUTRE carte a déjà touché le même set (mesuré sur le lot du soir :

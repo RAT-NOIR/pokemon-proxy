@@ -186,6 +186,35 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     tr = reseau(avecPetite);
     ({ b } = await lancer(B9, tr));
     verifier('   au passage suivant : 0 requête (la même URL, déjà jugée trop petite)', tr.appels.length, 0);
+    // décision 4 du testeur (2026-10-08) : 300 px pour une source OFFICIELLE — 320 px passe (350 le refusait), 290 px reste trop petit
+    const moyen = await sharp({ create: { width: 320, height: 447, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const B9b = fausseBase(); semer(B9b);
+    ({ b } = await lancer(B9b, reseau(u => u.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets: moyen } : normal(u))));
+    verifier('image de 320 px (source officielle, seuil 300) → « ok », servie, rien de trop petit', [b.tropPetits, B9b.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id')?.etat], [0, 'ok']);
+    const presque = await sharp({ create: { width: 290, height: 405, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
+    const B9c = fausseBase(); semer(B9c);
+    ({ b } = await lancer(B9c, reseau(u => u.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets: presque } : normal(u))));
+    verifier('image de 290 px → « trop-petit » (sous 300)', [b.tropPetits, B9c.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id')?.etat], [1, 'trop-petit']);
+    // tour de correction 1 : une décision de seuil se RELIT (§23). Le document écrit « trop-petit » porte le seuil appliqué...
+    verifier('un trop-petit écrit porte `seuilApplique` (300 pour tpc-asie)', B9c.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id')?.seuilApplique, 300);
+    // ...et un trop-petit ANTÉRIEUR (sans `seuilApplique` = jugé à 350) de 320 px est REJUGÉ au passage suivant, même URL
+    const URL_7125 = 'https://asia.pokemon-card.com/id/card-img/id00007125.png';
+    const ID_7125 = 'tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id';
+    const ancien = (Bx, w) => Bx.col('images').set(ID_7125, { _id: ID_7125, source: 'tpc-asie', set: SLUG, urlOriginal: URL_7125, wOriginal: w, etat: 'trop-petit' });
+    const B13 = fausseBase(); semer(B13); ancien(B13, 320);
+    tr = reseau(u => u.endsWith('/card-img/id00007125.png') ? { status: 200, type: 'image/png', octets: moyen } : normal(u));
+    ({ b } = await lancer(B13, tr));
+    verifier('trop-petit ancien à 320 px, sans seuilApplique → rejugé (téléchargé), devient « ok »', [B13.col('images').get(ID_7125)?.etat, tr.appels.some(u => u.endsWith('id00007125.png'))], ['ok', true]);
+    // un trop-petit ancien à 290 px reste trop petit, SANS requête : la largeur stockée suffit à conclure
+    const B14 = fausseBase(); semer(B14); ancien(B14, 290);
+    tr = reseau(normal);
+    ({ b } = await lancer(B14, tr));
+    verifier('trop-petit ancien à 290 px → reste trop-petit, 0 téléchargement de l\'image', [B14.col('images').get(ID_7125)?.etat, tr.appels.some(u => u.endsWith('id00007125.png'))], ['trop-petit', false]);
+    // un trop-petit déjà jugé À 300 (seuilApplique 300) de 290 px : rien à relire
+    const B15 = fausseBase(); semer(B15); ancien(B15, 290); B15.col('images').get(ID_7125).seuilApplique = 300;
+    tr = reseau(normal);
+    ({ b } = await lancer(B15, tr));
+    verifier('trop-petit jugé à 300, 290 px → reste, 0 téléchargement', [B15.col('images').get(ID_7125)?.etat, tr.appels.some(u => u.endsWith('id00007125.png'))], ['trop-petit', false]);
     // une exception PENDANT la jointure : l'unité rend « incomplet » (la page se revalide), elle ne lève pas
     const B10 = fausseBase(); semer(B10);
     const ecrire = B10.M.Carte.updateOne;

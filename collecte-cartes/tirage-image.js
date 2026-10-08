@@ -53,6 +53,7 @@ const numeroEntier = s => { const m = String(s ?? '').match(/(\d+)/); return m ?
 function pairesJaponaisOccidental(wt) {
     const paires = new Map();
     paires.jumeaux = new Map();   // serre(jpexpansion) -> Set(expansion occidentale appariée sur la page)
+    paires.ambigus = new Set();   // clés « serre(jpexpansion)#jpnum » appariées à PLUSIEURS tirages occidentaux (la Map garde le dernier)
     const tcg = (bloc, champ) => (bloc.match(new RegExp(`^\\|${champ}=\\{\\{TCG\\|([^}|]+)`, 'm')) || [])[1]?.trim() ?? null;
     const val = (bloc, champ) => (bloc.match(new RegExp(`^\\|${champ}=([^\\n]*)`, 'm')) || [])[1]?.trim() ?? null;
     // ⚠️ TOUS les types de carte, et la CASSE varie : `PokémoncardInfobox/Expansion`,
@@ -62,7 +63,11 @@ function pairesJaponaisOccidental(wt) {
         const e = tcg(bloc, 'expansion'), j = tcg(bloc, 'jpexpansion');
         const n = numeroEntier(val(bloc, 'cardno')), jn = numeroEntier(val(bloc, 'jpcardno'));
         if (e && j) { if (!paires.jumeaux.has(serre(j))) paires.jumeaux.set(serre(j), new Set()); paires.jumeaux.get(serre(j)).add(e); }
-        if (e && j && n != null && jn != null) paires.set(`${serre(j)}#${jn}`, { expansion: e, numero: n });
+        if (e && j && n != null && jn != null) {
+            const cle = `${serre(j)}#${jn}`, deja = paires.get(cle);
+            if (deja && (deja.expansion !== e || deja.numero !== n)) paires.ambigus.add(cle);
+            paires.set(cle, { expansion: e, numero: n });
+        }
     }
     return paires;
 }
@@ -89,6 +94,7 @@ function fichiersDeLaPage(wt, impressions) {
     const paires = pairesJaponaisOccidental(wt);
     const exps = [...new Set(impressions.map(i => i.expansion))].filter(Boolean).sort((a, b) => serre(b).length - serre(a).length);
     const champ = re => { const m = wt.match(re); return m ? m[1].trim() : null; };
+    const nomCarte = serre(champ(/^\|cardname=([^\n|]+)/m));
     const F = new Map();
     const ajouter = (fichier, legende, origine) => {
         if (!fichier) return;
@@ -105,11 +111,27 @@ function fichiersDeLaPage(wt, impressions) {
         const bloc = wt.slice(g, fin > 0 ? fin : undefined);
         for (const m of bloc.matchAll(/^\|image(\d+)=([^\n|]+)/gm)) ajouter(m[2], (bloc.match(new RegExp(`^\\|caption${m[1]}=([^\\n]+)`, 'm')) || [])[1], `galerie${m[1]}`);
     }
+    // 🔴 C2 (rapport A1) : légende « SM Black Star Promos » MAIS numéro JAPONAIS dans le fichier
+    // (`PikachuSMPromo367.jpg`, 367/SM-P ; le bloc d'infobox dit cardno=SM227 + jpcardno=367/SM-P). Le numéro du
+    // fichier est un `jpcardno` du bloc de CE set : on le traduit, sauf si le set occidental a lui-même ce numéro
+    // (alors la lecture directe reste la bonne). Un seul bloc doit répondre, sinon on ne traduit pas.
+    const traductionJp = (expansion, numFichier) => {
+        if (intl.has(expansion) && impressions.some(i => i.tirage === 'intl' && i.expansion === expansion && numeroEntier(i.numero) === numFichier)) return null;
+        const hits = [...paires].filter(([k, v]) => v.expansion === expansion && k.endsWith(`#${numFichier}`));
+        if (hits.length !== 1 || paires.ambigus.has(hits[0][0])) return null;   // un numéro japonais qui désigne deux cartes ne désigne rien
+        return { expansion, numero: hits[0][1].numero, preuve: `légende + numéro japonais du fichier apparié par l'infobox (${numFichier} -> ${hits[0][1].numero})` };
+    };
     for (const f of F.values()) {
         const tcg = new Set(f.legendes.flatMap(l => [...l.matchAll(/\{\{TCG\|([^}|]+)/g)].map(x => x[1].trim())));
         f.setsLegende = exps.filter(e => tcg.has(e));
         // nom de fichier : on RETIRE chaque nom de set trouvé, du plus long au plus court
         let base = serre(f.fichier.replace(/\.(?:jpe?g|png|gif|webp)$/i, ''));
+        // 🔴 LE NOM DE LA CARTE N'EST PAS UN SET (rapport A1, C1). Un fichier commence par le nom de la carte :
+        // `DetectivePikachuSMPromo170.jpg` — et « Detective Pikachu » est aussi le nom d'un set de la page, lu
+        // dans le préfixe -> conflit avec la légende « SM Black Star Promos ». Quand le nom de la carte est
+        // EXACTEMENT un nom d'expansion de la page, on le retire du DÉBUT du fichier avant d'y chercher les sets
+        // (le set qui suit, lui, reste : `DetectivePikachuDetectivePikachu10.jpg` garde « Detective Pikachu »).
+        if (nomCarte && exps.some(e => serre(e) === nomCarte) && base.startsWith(nomCarte)) base = base.slice(nomCarte.length);
         f.setsFichier = [];
         for (const e of exps) {
             const k = serre(e);
@@ -142,6 +164,7 @@ function fichiersDeLaPage(wt, impressions) {
         if (legIntl.length) {
             const accord = parNom.filter(t => legIntl.includes(t.expansion));
             if (accord.length) f.tirages = accord.map(t => ({ ...t, preuve: `légende + ${t.preuve}` }));
+            else if (!f.setsFichier.length && legIntl.length === 1 && numFichier != null && traductionJp(legIntl[0], numFichier)) f.tirages = [traductionJp(legIntl[0], numFichier)];
             else if (!f.setsFichier.length && legIntl.length === 1 && numFichier != null) f.tirages = [{ expansion: legIntl[0], numero: numFichier, preuve: 'légende + numéro du nom de fichier' }];
             else { f.tirages = []; f.conflit = true; }
         } else f.tirages = f.conflit ? [] : parNom;

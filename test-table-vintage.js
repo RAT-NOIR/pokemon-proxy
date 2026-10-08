@@ -21,9 +21,9 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { SETS_VINTAGE_JAPONAIS, SETS_NON_PROUVES, EXPANSIONS_VINTAGE } = require('./sets-vintage-japonais');
-mongoose.set('strictQuery', false);
-const CS = mongoose.model('CSv', new mongoose.Schema({}, { strict: false }), 'codes_set');
-const Num = mongoose.model('Nv', new mongoose.Schema({}, { strict: false }), 'numeros_cartes');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
+// BASE DE BANC (2026-10-08) : ce banc LIT des données réelles de la production (codes_set, numeros_cartes) ; il le fait par la FAÇADE de lecture à liste
+// fermée (find, countDocuments… ; tout le reste lève), jamais par une connexion mongoose à MONGODB_URI. Sans base de banc, REFUS.
 
 let ok = 0, ko = 0;
 function verifier(libelle, bon, detail = '') {
@@ -32,9 +32,11 @@ function verifier(libelle, bon, detail = '') {
 }
 
 (async () => {
-    await mongoose.connect(process.env.MONGODB_URI, { dbName: 'test' });
-    console.log(`\nbase : ${mongoose.connection.db.databaseName} (lecture seule)\n`);
-    const lignes = await CS.find({}).lean();
+    const banc = await ouvrirBanc();
+    banc.appliquer();
+    const prod = await banc.connexionProduction(mongoose, 'test');
+    console.log(`\nbase : ${prod.db.databaseName} (lecture seule, façade)\n`);
+    const lignes = await prod.collection('codes_set').find({}).toArray();
     const parExp = new Map(lignes.map(l => [Number(l.idExpansion), l]));
 
     console.log(`=== ${SETS_VINTAGE_JAPONAIS.length} lignes admises ===`);
@@ -51,7 +53,7 @@ function verifier(libelle, bon, detail = '') {
     // Le slug doit toujours désigner CETTE expansion, et une seule.
     console.log(`\n=== Les slugs désignent-ils toujours une expansion unique ? ===`);
     for (const s of SETS_VINTAGE_JAPONAIS) {
-        const exps = [...new Set((await Num.find({ slugSet: s.slug }, { idExpansion: 1 }).lean()).map(d => Number(d.idExpansion)))];
+        const exps = [...new Set((await prod.collection('numeros_cartes').find({ slugSet: s.slug }, { projection: { idExpansion: 1 } }).toArray()).map(d => Number(d.idExpansion)))];
         verifier(`${String(s.code).padEnd(9)} ${s.slug}`, exps.length === 1 && exps[0] === Number(s.exp),
             exps.length === 0 ? 'slug ABSENT' : exps.length > 1 ? `${exps.length} expansions` : (exps[0] !== Number(s.exp) ? `pointe sur ${exps[0]}, pas ${s.exp}` : ''));
     }
@@ -63,6 +65,6 @@ function verifier(libelle, bon, detail = '') {
     verifier('chaque non-prouvée porte son motif', SETS_NON_PROUVES.every(s => s.preuveManquante));
 
     console.log(`\n${ko === 0 ? '🎉' : '💥'} ${ok}/${ok + ko} assertions passées.${sansRegion ? `  ⚠️ ${sansRegion} ligne(s) sans région en base.` : ''}`);
-    await mongoose.disconnect();
+    await prod.close();
     process.exit(ko === 0 ? 0 : 1);
-})().catch(async e => { console.error('❌ ERREUR', e.message); try { await mongoose.disconnect(); } catch (_) { } process.exit(1); });
+})().catch(e => { console.error('❌ ERREUR', e.message); process.exit(1); });

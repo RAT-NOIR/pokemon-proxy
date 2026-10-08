@@ -32,8 +32,11 @@ verifier('tirage idth, un Dresseur traduit (le nom indonésien ne désigne aucun
 verifier('tirage idth, numéros croisés : contredits par le nom', resume(apparierExpansion(E, [idth(10, 'Feebas', '189'), idth(11, 'Magneton', '193')], [tcg('189', 'Magneton'), tcg('193', 'Feebas')], 'idth')), ['10@1:contredite-par-le-nom', '11@1:contredite-par-le-nom']);
 // 6. un numéro porté par deux cartes TCGdex : ambigu, même si les noms concordent
 verifier('numéro double chez TCGdex', resume(apparierExpansion(E, [carte(7, 'Eevee', '125')], [tcg('125', 'Eevee'), { ...tcg('125', 'Eevee'), id: 'swsh7-125a' }])), ['7@1:numero-ambigu-chez-tcgdex']);
-// 7. un numéro porté par deux de NOS cartes : ambigu (un numéro qui désigne deux cartes ne désigne rien)
-verifier('numéro double chez nous', resume(apparierExpansion(E, [carte(8, 'Eevee', '125'), carte(9, 'Flareon', '125')], [tcg('125', 'Eevee')])), ['8@1:numero-ambigu-chez-nous', '9@1:numero-ambigu-chez-nous']);
+// 7. un numéro porté par deux de NOS cartes : le NOM de la carte TCGdex départage quand EXACTEMENT UNE porteuse lui est compatible
+//    (Celebrations « 015 » Lunala / « 15 » Venusaur — 2026-10-08) : Eevee reçoit le scan, Flareon est contredite par le nom.
+//    Sinon (aucune ou plusieurs compatibles), un numéro qui désigne deux cartes ne désigne rien : ambigu, comme avant.
+verifier('numéro double chez nous, le nom TCGdex départage', resume(apparierExpansion(E, [carte(8, 'Eevee', '125'), carte(9, 'Flareon', '125')], [tcg('125', 'Eevee')])), ['8@1:swsh7-125', '9@1:contredite-par-le-nom']);
+verifier('numéro double chez nous, le nom ne départage pas', resume(apparierExpansion(E, [carte(8, 'Eevee', '125'), carte(9, 'Flareon', '125')], [tcg('125', 'Nom sans rapport')])), ['8@1:numero-ambigu-chez-nous', '9@1:numero-ambigu-chez-nous']);
 // 8. le préfixe se garde (cleNumero) : TG01 n'est pas 1
 verifier('TG01 ne répond pas au n°1', resume(apparierExpansion(E, [carte(10, 'Pikachu', 'TG01')], [tcg('1', 'Pikachu')])), ['10@1:absente-de-tcgdex']);
 // 9. les impressions d'une AUTRE expansion ne sont pas traitées

@@ -9,6 +9,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const mongoose = require('mongoose');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const COLLS = ['cartes', 'cartes_produits', 'sets', 'collecte_images_etat'];
 const effacer = process.argv.find(a => a.startsWith('--effacer='))?.slice(10);
@@ -22,7 +23,7 @@ async function ouvrir() {
 const JOUR = new Date('2026-09-20T10:00:00Z');
 const semer = async db => {
     await db.collection('cartes').insertMany([
-        { _id: 1, nomEn: 'Blastoise', sets: ['Set-A'], collecteLe: JOUR, impressions: [{ tirage: 'intl', expansion: 'Set A', numero: '2', illustrateur: 'Ken Sugimori', illustrateurPreuve: 'tcgdex:a-2' }], images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: JOUR }] },
+        { _id: 1, nomEn: 'Blastoise', sets: ['Set-A'], collecteLe: JOUR, impressions: [{ tirage: 'intl', expansion: 'Set A', numero: '2', illustrateur: 'Ken Sugimori', illustrateurPreuve: 'tcgdex:a-2' }], images: [{ set: 'Set-A', numero: '2', cleR2: 'a/2', jointeLe: JOUR, vignette: { cleR2: 'vignettes/a/2.webp', w: 200, h: 280 } }] },
         { _id: 2, nomEn: 'Pikachu', sets: ['Set-A', 'Set-B'], collecteLe: JOUR, impressions: [{ tirage: 'intl', expansion: 'Set A', numero: '58', illustrateur: null }, { tirage: 'jp', expansion: 'Set B', numero: '25' }], images: [{ set: 'Set-B', numero: '25', cleR2: 'b/25', jointeLe: JOUR }] }
     ]);
     await db.collection('cartes_produits').insertMany([
@@ -47,6 +48,12 @@ async function jouer(cas) {
         await db.collection('sets').updateOne({ _id: 'Set-A' }, { $unset: { nomAffichage: 1 } });
     } else if (cas === 'image-worker') {                   // le worker retire une image de SON set (il la remettra)
         await worker({ $pull: { images: { set: 'Set-B', numero: '25' } } });
+    } else if (cas === 'vignette-lot') {                   // l'incident du 2026-10-08 : un rejeu réécrit l'entrée (jointeLe) et perd la vignette
+        await C.updateOne({ _id: 1 }, { $unset: { 'images.0.vignette': 1 }, $set: { 'images.0.jointeLe': new Date() } });
+        await P.insertOne({ _id: '500-1', idProduct: 500, idExpansion: 15, carteId: 1, verifieLe: new Date() });   // et il ajoute quelque chose (voulu)
+        // pendant ce temps le worker joint une image neuve sur la MÊME carte, dans un autre set : l'arrêt ne doit pas la perdre (relecture)
+        await C.updateOne({ _id: 1 }, { $push: { images: { set: 'Set-B', numero: '9', cleR2: 'b/9', jointeLe: new Date() } } });
+        await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/Set-B' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
     } else if (cas === 'additif') {
         await P.insertOne({ _id: '400-1', idProduct: 400, idExpansion: 14, carteId: 1, verifieLe: new Date() });
     } else throw new Error(`cas inconnu : ${cas}`);
@@ -60,6 +67,9 @@ const verifier = (nom, obtenu, attendu) => {
 };
 
 async function main() {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Seul le processus PRINCIPAL ouvre le banc ; lot-additif.js et la commande `--effacer=` (enfants) en héritent par l'environnement.
+    (await ouvrirBanc()).appliquer();
     const cx = await ouvrir(), db = cx.db;
     const presentes = (await db.listCollections().toArray()).map(c => c.name).filter(n => COLLS.includes(n));
     if (presentes.length) { await cx.close(); throw new Error(`test_scratch porte déjà ${presentes.join(', ')} : je ne les écrase pas (ce ne sont pas les miennes)`); }
@@ -102,6 +112,15 @@ async function main() {
         await remettre();
         r = lot('image-worker');
         verifier('D. baisse d\'images dans un set du worker : le lot passe, la baisse est nommée', [r.code, /\[worker\]/.test(r.ligne)], [0, true]);
+
+        // ── F. l'incident du 2026-10-08 : le lot ajoute une fiche et EFFACE une vignette : ARRÊT, la vignette revient
+        await remettre();
+        r = lot('vignette-lot');
+        c1 = await db.collection('cartes').findOne({ _id: 1 });
+        verifier('F. vignette effacée par le lot : arrêt (code 3), la vignette revient, la fiche du lot repart', [r.code, c1.images[0].vignette?.cleR2, await db.collection('cartes_produits').countDocuments({ _id: '500-1' })], [3, 'vignettes/a/2.webp', 0]);
+        verifier('F. le journal nomme la baisse de vignettes (clé par entrée)', /vignettes-images set:Set-A\\?\|1\\?\|2\\?\|a\/2 1→0/.test(r.ligne), true);
+        verifier('F. restauration CHIRURGICALE : l\'image du worker (autre set, même carte) reste, le tableau n\'est pas remplacé', c1.images.map(i => i.cleR2), ['a/2', 'b/9']);
+        if (r.code !== 3) console.log(r.sortie);
 
         // ── E. purement additif
         await remettre();

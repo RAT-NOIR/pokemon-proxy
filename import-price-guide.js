@@ -54,6 +54,7 @@
 require('dotenv').config();
 const { connecterMongo } = require('./mongo-connexion');
 const fs = require('fs');
+const { porteUnPrix } = require('./collecte-cartes/taux-prix-guide');
 const mongoose = require('mongoose');
 
 // la ligne de commande s'écrit par ce qu'elle AUTORISE (§54) : le fichier, la base, la confirmation de production
@@ -149,13 +150,15 @@ async function main() {
         console.log(`... ${traites}/${guides.length} importés`);
     }
 
+    // le taux de lignes avec un prix de CE guide (même prédicat que l'import quotidien), gardé dans la méta pour le juge du suivant
+    const avecPrix = guides.filter(porteUnPrix).length;
     const lignesApres = await GuidePrix.countDocuments({});
     const aJour = await GuidePrix.countDocuments({ guideDu });
     const idsDistincts = new Set(guides.map(g => g.idProduct)).size;   // un idProduct en double dans le fichier n'écrit qu'une ligne
     console.log(`RELU : ${lignesApres} lignes (avant ${lignesAvant}) · ${aJour} au guide du ${guideDu.toISOString()} (${idsDistincts} idProduct distincts dans le fichier) · ${lignesApres - aJour} absentes de ce guide, gardées avec leur date (prix périmés, lisibles)`);
     // la méta ne se pose qu'après le contrôle : un import incomplet ne se déclare pas « dernier guide » (relecture du 2026-09-28)
     if (aJour !== idsDistincts) { console.error(`🔴 ${aJour} lignes au guide du jour pour ${idsDistincts} idProduct dans le fichier : la méta n'est PAS mise à jour`); process.exitCode = 1; }
-    else { await META.updateOne({ _id: 'dernier' }, { $set: { guideDu, importeLe: new Date(), fichier: require('path').basename(cheminFichier), lignesDuFichier: guides.length } }, { upsert: true }); console.log('✅ Import terminé.'); }
+    else { await META.updateOne({ _id: 'dernier' }, { $set: { guideDu, importeLe: new Date(), fichier: require('path').basename(cheminFichier), lignesDuFichier: guides.length, avecPrix, lignes: guides.length, tauxPrix: guides.length ? avecPrix * 100 / guides.length : null } }, { upsert: true }); console.log('✅ Import terminé.'); }
     await mongoose.disconnect();
 }
 

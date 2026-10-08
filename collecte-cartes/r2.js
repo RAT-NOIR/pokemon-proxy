@@ -9,6 +9,7 @@
 // réécrit pas. `deposerTexte` rend `{ ecrit: true|false }` pour que l'appelant compte.
 
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
+const { garderClientR2 } = require('./garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
 
 // ⚠️ JURIDICTION. Un bucket créé avec la restriction « EU » n'est joignable QUE par l'endpoint
 // `<compte>.eu.r2.cloudflarestorage.com` ; l'endpoint générique répond AccessDenied (403), ce qui
@@ -18,12 +19,16 @@ const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObj
 let _client = null;
 let _endpoint = null;
 function fabriquer(endpoint) {
-    return new S3Client({
+    // Garde des bancs (base-banc.js) : inerte hors banc ; sous BANC_ISOLE=1, toute écriture hors R2_BUCKET_BANC est refusée AVANT la requête,
+    // quel que soit le chemin du module qui l'appelle (tous passent par ce client).
+    return garderClientR2(new S3Client({
         region: 'auto', endpoint,
         credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY },
         forcePathStyle: true
-    });
+    }));
 }
+/** Pour les bancs seulement : pose (ou retire, avec null) un client de remplacement, gardé comme les autres. */
+function _poserClient(c) { _client = c ? garderClientR2(c) : null; }
 function client() {
     if (_client) return _client;
     _endpoint = process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
@@ -105,4 +110,4 @@ async function supprimer(bucket, cles) {
 
 const cleWikitext = (pageid, revid) => `bulba/${pageid}/${revid}.wikitext`;
 
-module.exports = { verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };
+module.exports = { _poserClient, verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };

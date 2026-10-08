@@ -14,7 +14,8 @@
 //      une méta que tous les vrais guides suivants trouveraient « pas plus récente » : un import arrêté en silence), `priceGuides` non vide ;
 //      PAS PLUS RÉCENT que le guide en base -> « rien de neuf », sortie 0 — la référence est CELLE de l'importeur (la méta, à défaut le
 //      dernier `majAt` daté), sans quoi les deux pourraient se contredire et la tâche échouer chaque jour ; MOINS de 90 % des lignes du
-//      dernier guide importé -> refus (un fichier tronqué) ; moins de 90 % des lignes avec un prix (`trend` ou `avg` numérique) -> refus ;
+//      dernier guide importé -> refus (un fichier tronqué) ; moins de 85 % des lignes avec un prix (`trend` ou `avg` numérique), ou un taux
+//      qui chute de plus de 3 points sur celui du dernier guide (méta.tauxPrix) -> refus (taux-prix-guide.js) ;
 //   3. SAUVEGARDE le guide en base AVANT de l'écrire : une ligne Extended JSON par document (la méta `guide_prix_meta` en tête), en flux,
 //      compressée, sur R2 (`sauvegardes/guide_prix/<base>/<horodatage>.ndjson.gz`, bucket R2_BUCKET_BRUT), puis RELUE (nombre de lignes) ;
 //      sauvegarde impossible ou relue fausse -> rien n'est importé. Restaurer = relire chaque ligne et la réécrire (EJSON garde les dates) ;
@@ -25,7 +26,8 @@ require('dotenv').config();
 const fs = require('fs'), os = require('os'), path = require('path'), zlib = require('zlib');
 const { spawnSync } = require('child_process');
 
-const URL_GUIDE = 'https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json';
+const { jugerTauxPrix, porteUnPrix } = require('./collecte-cartes/taux-prix-guide');
+const URL_GUIDE ='https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_6.json';
 const TAILLE_MAX = 120 * 1024 * 1024;
 const AUTORISES = [/^--base=(test|test_scratch)$/, /^--confirmer-production$/, /^--url=https?:\/\/.+$/];
 
@@ -86,7 +88,7 @@ async function main() {
         guideDu = new Date(data.createdAt);
         if (!Array.isArray(data.priceGuides) || !data.priceGuides.length || Number.isNaN(guideDu.getTime())) { console.error(`❌ pas de priceGuides ou pas de createdAt lisible (${data.createdAt}) : rien n'est importé`); await sortir(1); }
         lignes = data.priceGuides.length;
-        avecPrix = data.priceGuides.filter(g => Number.isFinite(g.trend) || Number.isFinite(g.avg)).length;
+        avecPrix = data.priceGuides.filter(porteUnPrix).length;
     }
     console.log(`fichier : ${(octets / 1e6).toFixed(1)} Mo · ${lignes} lignes · ${avecPrix} avec un prix · guide du ${guideDu.toISOString()}`);
     if (guideDu.getTime() > Date.now() + 24 * 3600 * 1000) { console.error(`❌ guide daté du ${guideDu.toISOString()}, dans le FUTUR : rien n'est importé`); await sortir(1); }
@@ -101,7 +103,11 @@ async function main() {
         console.log(`ℹ️ rien de neuf : le fichier est du ${guideDu.toISOString()}, la référence en base du ${new Date(reference).toISOString()}${meta?.guideDu ? '' : ' (dernier import, pas de méta)'}`); await sortir(0);
     }
     if (meta?.lignesDuFichier && lignes < 0.9 * meta.lignesDuFichier) { console.error(`❌ ${lignes} lignes contre ${meta.lignesDuFichier} au dernier guide (< 90 %) : fichier tronqué ? rien n'est importé`); await sortir(1); }
-    if (avecPrix < 0.9 * lignes) { console.error(`❌ ${avecPrix} lignes sur ${lignes} portent un prix (< 90 %) : rien n'est importé`); await sortir(1); }
+    // LA règle du taux (testeur, 2026-10-08) : 85 % fixe ET pas de chute de plus de 3 points sur le taux du dernier guide (méta.tauxPrix ;
+    // absent tant qu'aucun import n'a posé le taux : seul le seuil joue) — collecte-cartes/taux-prix-guide.js
+    const jugement = jugerTauxPrix({ avecPrix, lignes, tauxDernier: meta?.tauxPrix });
+    if (!jugement.passe) { console.error(`❌ ${jugement.raison} : rien n'est importé`); await sortir(1); }
+    console.log(`✅ taux de lignes avec un prix : ${jugement.raison}`);
 
     // 3. la sauvegarde, en flux : une ligne EJSON par document, la méta en tête, gzip ; puis relue (le bucket a répondu à l'étape 0 bis)
     const gz = zlib.createGzip(), morceaux = [];

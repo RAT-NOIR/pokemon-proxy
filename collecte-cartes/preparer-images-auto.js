@@ -23,7 +23,8 @@ const { fabriquerVerrou } = require('./verrou-source');
 const src = require('./artofpkm');
 const { TABLE_AUTO } = require('./table-sets');
 const { ARTOFPKM } = require('./sources-sets');
-const { LARGEUR_MIN } = require('./seuils-images');
+const { largeurMinDe } = require('./seuils-images');
+const largeurMin = largeurMinDe('artofpkm');   // ce script ne prépare que des sets artofpkm
 
 const FICHIER_SETS = path.join(__dirname, 'artofpkm-sets.json');
 const FICHIER_AUTO = path.join(__dirname, 'sources-sets-auto.json');
@@ -156,7 +157,7 @@ async function sousVerrouGlobal(M, travail) {
                     await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees, [`pagesListe.${id}`]: entrees.pages || etat?.pagesListe?.[id] || null, [`mesures.${id}`]: mesures, phase: 'mesure', derniereRequete: new Date() }, $setOnInsert: { debute: new Date() } }, { upsert: true });
                     w.push(...mesures.map(x => x.w));
                     const nbCartes = await M.Carte.countDocuments({ sets: L.slugSet });
-                    bilan.push(`${code.padEnd(7)} ${String(id).padStart(4)} « ${S.noms[0]} » · entrées ${entrees.length} pour ${nbCartes} cartes · largeurs ${mesures.map(x => `${x.w}×${x.h}`).join(' ')} ${mesures.some(x => !x.w || x.w < LARGEUR_MIN) ? `❌ SOUS ${LARGEUR_MIN} : le worker refusera` : '✅'}`);
+                    bilan.push(`${code.padEnd(7)} ${String(id).padStart(4)} « ${S.noms[0]} » · entrées ${entrees.length} pour ${nbCartes} cartes · largeurs ${mesures.map(x => `${x.w}×${x.h}`).join(' ')} ${mesures.some(x => !x.w || x.w < largeurMin) ? `❌ SOUS ${largeurMin} : le worker refusera` : '✅'}`);
                 }
             }
             console.log(`\nBILAN (${codes.length} sets demandés, ${src.compteRequetes()} requêtes artofpkm) :`);

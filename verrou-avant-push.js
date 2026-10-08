@@ -88,6 +88,8 @@ const { demarrer, appeler } = require('./verrou/serveur');
 // et `verrou-charges.js` la détruisait en sortant — le verrou était donc rouge par
 // construction depuis le 2026-08-30 19:17. Voir verrou/tranche.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const JETON = process.env.JETON_API || 'jeton-verrou';
 const USER_VERROU = 'verrou-avant-push';
@@ -113,6 +115,11 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
 
 (async () => {
     console.log('=== VERROU AVANT PUSH ===');
+    // BASE DE BANC (2026-10-08) : l'ÉCRITURE (test_scratch : tranche, comptes, serveur) va à la base de banc ; la LECTURE de la production (tranche à
+    // copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose vers elle est refusée (base-banc.js). Sans base de banc,
+    // ce verrou REFUSE de démarrer. Les serveurs lancés plus bas héritent de l'environnement du banc.
+    const banc = await ouvrirBanc();
+    banc.appliquer();
 
     if (!fs.existsSync(FICHIER_CHARGES)) {
         console.log(`\n❌ ${FICHIER_CHARGES} absent.`);
@@ -217,7 +224,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     const mongooseT = require('mongoose');
     let bacTranche = null;
     try {
-        const prodT = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test' }).asPromise();
+        const prodT = await banc.connexionProduction(mongooseT, 'test');   // LECTURE de la production (garde d'écriture installée)
         bacTranche = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
         if (bacTranche.db.databaseName !== 'test_scratch') {
             console.error(`❌ ARRÊT : écriture visée sur "${bacTranche.db.databaseName}" au lieu de test_scratch.`);
@@ -555,7 +562,13 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         // ⚠️ ET LA TRANCHE, PAR CE FICHIER, PARCE QUE C'EST LUI QUI L'A COPIÉE.
         // Chaque outil range ce qu'il a construit : aucun des deux ne dépend de l'ordre
         // d'exécution de l'autre, et aucun ne détruit ce que l'autre attend.
-        if (bacTranche) { await viderTranche(bacTranche); await bacTranche.close(); }
+        if (bacTranche) {
+            await viderTranche(bacTranche);
+            // `drop` des collections de comptes (les deleteMany ci-dessus les laissaient vides, fichier + index alloués) et de la liste déclarée
+            // COLLECTIONS_SERVEUR (ce que l'autoIndex du serveur crée) — jamais « tout ce qui est né depuis »
+            await viderBac(bacTranche.db, { noms: COLLECTIONS_SERVEUR });
+            await bacTranche.close();
+        }
         await bac.close();
     } catch (e) { console.log(`\n⚠️ nettoyage impossible : ${e.message}`); }
 

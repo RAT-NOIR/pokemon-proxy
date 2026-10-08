@@ -30,6 +30,14 @@ const COMPTEURS = Object.freeze({
     'illustrateurs': 'impressions qui portent le champ illustrateur (null compris : il porte sa raison), par tirage et expansion',
     'illustrateurs-nommes': 'impressions dont l\'illustrateur est un nom',
     'images': 'entrées de cartes.images, par set',
+    // ➕ 2026-10-08 : un rejeu de jointure a effacé `vignette` de 1 089 entrées sans qu'aucun compteur bouge — (set, cleR2, numero)
+    // ne changent pas. Le site lit la vignette (grilles) : une vignette effacée est une baisse. Dispensée seulement dans un set où le
+    // worker a écrit pendant la fenêtre (comme les images).
+    'vignettes-images': 'entrées de cartes.images qui portent une vignette, UNE CLÉ PAR ENTRÉE (set|carte|numero|cleR2)',
+    // ➕ 2026-10-08 (2e relecture) : le NOMBRE de vignettes du set, en plus des clés — un remplacement d'image à compte égal (l'entrée change
+    // de cleR2 et perd sa vignette) saute la clé disparue et laisse `images` égal : seul ce nombre le voit. S'annonce aussi : un retrait de
+    // masse voulu s'annonce PAR SET (« vignettes-set set:S » : K), qui couvre les K clés perdues et le nombre.
+    'vignettes-set': 'nombre d\'entrées de cartes.images qui portent une vignette, par set',
     'nom-affiche': 'le set porte un nomAffichage'
 });
 
@@ -57,7 +65,13 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
             if ('illustrateur' in i) inc(`illustrateurs ${g}`);
             if (typeof i.illustrateur === 'string' && i.illustrateur) inc(`illustrateurs-nommes ${g}`);
         }
-        for (const im of c.images || []) if (im) inc(`images set:${im.set}`);
+        for (const im of c.images || []) if (im) {
+            inc(`images set:${im.set}`);
+            // une clé PAR ENTRÉE (set|carte|numero|cleR2) : un nombre par set laissait passer « une perdue, une gagnée » (relecture 2026-10-08)
+            const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
+            inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition
+            if (im.vignette) { inc(`vignettes-images ${g}`); inc(`vignettes-set set:${im.set}`); }
+        }
     }
     for (const s of sets) if (s.nomAffichage) inc(`nom-affiche set:${s._id}`);
     return m;
@@ -72,18 +86,44 @@ const decouper = cle => { const i = cle.indexOf(' '); return [cle.slice(0, i), c
  */
 function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}) {
     const baisses = [], hausses = {};
+    const setDe = groupe => groupe.replace(/^set:/, '').split('|')[0];
+    // vignettes : l'annonce PAR SET est un budget que consomment les clés perdues ; une clé annoncée ou dispensée « explique » aussi la
+    // baisse du nombre de vignettes du set ; une entrée disparue l'explique seulement dans la mesure où `images` du set a réellement baissé
+    const budgetSet = new Map(), expliquees = new Map(), disparues = new Map();
+    for (const [cle, a] of Object.entries(annonces)) { const [c, g] = decouper(cle); if (c === 'vignettes-set') budgetSet.set(setDe(g), a); }
+    const pousse = (m, s, k = 1) => m.set(s, (m.get(s) || 0) + k);
     for (const [cle, n] of avant) {
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
+        if (compteur === 'entrees-cles' || compteur === 'vignettes-set') continue;   // interne / traité après
+        // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
+        if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) { pousse(disparues, setDe(groupe), n - m); continue; }
         const baisse = n - m, annonce = annonces[cle] || 0;
-        const autorisee = baisse <= annonce ? 'annoncée'
-            : compteur === 'images' && setsDuWorker.has(groupe.replace(/^set:/, '')) ? 'worker' : null;
+        // dispense du worker : même preuve (ses propres dates, sets de la fenêtre) pour les images et leurs vignettes — il réécrit des
+        // entrées puis les revignette (collecteur-images.js)
+        const setDuGroupe = setDe(groupe);
+        let autorisee = baisse <= annonce ? 'annoncée'
+            : (compteur === 'images' || compteur === 'vignettes-images') && setsDuWorker.has(setDuGroupe) ? 'worker' : null;
+        if (autorisee && compteur === 'vignettes-images') pousse(expliquees, setDuGroupe, baisse);
+        if (!autorisee && compteur === 'vignettes-images' && (budgetSet.get(setDuGroupe) || 0) >= baisse) { pousse(budgetSet, setDuGroupe, -baisse); autorisee = 'annoncée'; }
+        baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
+    }
+    for (const [cle, n] of avant) {
+        const [compteur, groupe] = decouper(cle);
+        if (compteur !== 'vignettes-set') continue;
+        const m = apres.get(cle) || 0;
+        if (m >= n) continue;
+        const s = setDe(groupe), baisse = n - m, annonce = annonces[cle] || 0;
+        const imgBaisse = Math.max(0, (avant.get(`images ${groupe}`) || 0) - (apres.get(`images ${groupe}`) || 0));
+        const explication = (expliquees.get(s) || 0) + Math.min(disparues.get(s) || 0, imgBaisse);
+        const autorisee = baisse <= annonce + explication ? (baisse <= annonce ? 'annoncée' : 'expliquée par les clés')
+            : setsDuWorker.has(s) ? 'worker' : null;
         baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
     }
     for (const [cle, m] of apres) {
         const d = m - (avant.get(cle) || 0);
-        if (d > 0) { const [compteur] = decouper(cle); hausses[compteur] = (hausses[compteur] || 0) + d; }
+        if (d > 0) { const [compteur] = decouper(cle); if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d; }
     }
     const annoncesNonRealisees = Object.entries(annonces)
         .map(([cle, a]) => ({ cle, annonce: a, baisse: baisses.find(b => b.cle === cle)?.baisse || 0 }))
@@ -124,6 +164,28 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
     return plan;
 }
 
+/**
+ * Restauration CHIRURGICALE des vignettes (2026-10-08) : pour chaque entrée (carte, set, cleR2) des sets fautifs qui avait une vignette dans
+ * la sauvegarde et n'en a plus, remettre CE champ — jamais le tableau `images`, que le worker écrit en même temps. Une entrée qui a une
+ * vignette maintenant, ou n'existe plus (remplacée : autre cleR2), n'est pas touchée — ce cas s'arrête sans se restaurer, et la relecture le dit.
+ * `jointeLe` n'est PAS remis : date d'audit que ni la garde ni le site ne lisent, et l'ancienne écraserait une valeur plus récente.
+ * @returns {{_id, set, cleR2, vignette}[]}
+ */
+function planVignettes(sauvegardees, actuelles, setsFautifs) {
+    const actuel = new Map(actuelles.map(d => [cleDoc(d._id), d]));
+    const liste = [];
+    for (const a of sauvegardees) {
+        const b = actuel.get(cleDoc(a._id)); if (!b) continue;
+        const mb = new Map((b.images || []).filter(Boolean).map(e => [`${e.set}|${e.cleR2}`, e]));
+        for (const e of a.images || []) {
+            if (!e || !e.vignette || !setsFautifs.has(e.set)) continue;
+            const n = mb.get(`${e.set}|${e.cleR2}`);
+            if (n && !n.vignette) liste.push({ _id: a._id, set: e.set, cleR2: e.cleR2, vignette: e.vignette });
+        }
+    }
+    return liste;
+}
+
 // ── LES SETS TOUCHÉS PAR UN LOT (2026-09-25) — ce que la revalidation à la demande du site attend (collecte-cartes/revalider-site.js).
 // Les compteurs ne suffisent pas : une date, un numeroFiche, une image remplacée à compte égal n'en font bouger aucun. On compare
 // donc les DOCUMENTS, avant (la sauvegarde) et après (la base), sur ce que le site lit — et par la MÊME fonction des deux côtés.
@@ -133,7 +195,7 @@ const signature = v => JSON.stringify(trier(v ?? null));
 // (2026-10-07, nuit) `categorie` : le site la lit (page de la carte, listes d'espèces) — elle se compare comme le nom
 const PROJECTION_CARTES = c => ({ sets: [...(c.sets || [])].sort(), nomEn: c.nomEn ?? null, categorie: c.categorie ?? null,
     impressions: (c.impressions || []).filter(Boolean).map(i => [i.tirage ?? null, i.expansion ?? null, i.numero ?? null, 'illustrateur' in i ? i.illustrateur : '∅']),
-    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null]) });
+    images: (c.images || []).filter(Boolean).map(m => [m.set ?? null, m.cleR2 ?? null, m.numero ?? null, m.vignette?.cleR2 ?? null]) });
 const PROJECTION_LIGNES = l => [l.carteId ?? null, l.idProduct ?? null, l.slugSet ?? null, l.numeroFiche ?? null, l.preuve ?? null];
 // 🔴 2026-09-26 : un lot de logos a revalidé 156 sets pour 12 changés — le document ENTIER était comparé, et le collecteur réécrivait
 // la date `le` de chaque logo et chaque motif de refus (`logoRefus`, que le site ne lit pas). Un set se compare sur les champs que le
@@ -209,4 +271,4 @@ function setsTouches({ avant, apres }) {
     return { sets: [...touches].sort(), catalogue, especes, setsInfo };
 }
 
-module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };
