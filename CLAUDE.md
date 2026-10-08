@@ -40,6 +40,17 @@ renégocie pas en cours de route.
 
 ---
 
+## 🤝 RÈGLE PERMANENTE DU TESTEUR (2026-10-08) — ON NE DEMANDE L'ACCORD DE PERSONNE
+
+> # **Aucun e-mail, aucun formulaire, aucune demande d'aide ni d'autorisation à un site ou à une source.**
+>
+> **Une source qui exige un accord est simplement ÉCARTÉE**, et un rapport l'écrit ainsi : « écartée : accord requis » — jamais « à demander »,
+> jamais « un accès se demande à… ». Seule exception future, décidée par le testeur : **Cardmarket, quand Rat-Market sera vraiment implanté.**
+> ⚠️ Les paragraphes plus anciens qui proposent de demander un accès (Bulbagarden au §73, The Pokémon Company au §78) décrivent une voie FERMÉE
+> par cette règle : une source protégée par un défi reste un trou nommé, on ne contourne rien, et on ne sollicite personne.
+
+---
+
 ## 🔐 EN TÊTE DES RÈGLES DE SÉCURITÉ — DEUX PHRASES, ET TOUTES LES GARDES S'Y MESURENT
 
 > # **UNE GARDE S'ÉCRIT PAR CE QU'ELLE AUTORISE, JAMAIS PAR CE QU'ELLE REFUSE.**
