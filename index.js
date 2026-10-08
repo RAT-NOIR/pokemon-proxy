@@ -104,6 +104,7 @@ const { blocGuidePrix, iso } = require('./guide-prix-date');
 // Testée en bac à sable par test-identification-locale.js.
 const { identifierEnLocal } = require('./identification-locale');
 
+const V2 = process.env.RM_API_V2 === '1' ? require('./v2') : null;   // API v2 : éteinte = production inchangée
 const app = express();
 app.set('trust proxy', 1); // Render est derrière un proxy → nécessaire pour lire la vraie IP côté rate-limit
 const PORT = process.env.PORT || 3000;
@@ -117,7 +118,7 @@ const ORIGINES_AUTORISEES = [
     /^chrome-extension:\/\/[a-p]+$/,                       // l'extension elle-même
     /^https:\/\/(www\.)?vinted\.(fr|be|com|de|es|it|nl|lu|at|pl|pt|se|cz|sk|lt|uk)$/ // Vinted, domaines officiels
 ];
-app.use(cors({
+const corsHeritage = cors({
     origin: (origin, callback) => {
         // Pas d'origine = appel direct (curl, tests locaux) -> autorisé
         if (!origin) return callback(null, true);
@@ -127,7 +128,9 @@ app.use(cors({
         // fichier, pour répondre un JSON court au lieu de la page HTML par défaut d'Express.
         return callback(Object.assign(new Error('Origine non autorisée'), { status: 403 }));
     }
-}));
+});
+if (V2) V2.monterEnTete(app);
+app.use((req, res, next) => (req.origineV2 ? next() : corsHeritage(req, res, next)));
 // ════════════════════════════════════════════════════════════════════════════
 // LE CONTEXTE DE SCAN — EN TOUT PREMIER, AVANT LA MOINDRE ROUTE
 // ════════════════════════════════════════════════════════════════════════════
@@ -200,6 +203,7 @@ const limiteurIA = rateLimit({
     message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' }
 });
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
+if (V2) V2.monter(app, { mongoose });
 
 // Limiteur dédié à la création de Checkout Sessions. Le jeton partagé est
 // extractible de l'extension distribuée : sans ce garde-fou, n'importe qui pourrait
@@ -7121,7 +7125,7 @@ app.post('/api/solde', verifierJeton, async (req, res) => {
 // `version` est la MÊME constante que celle écrite au journal (`VERSION`, exportée par
 // `journal-scans.js`), jamais un second calcul : sinon les deux dériveraient et on
 // croirait dater une ligne alors qu'on daterait une route.
-app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION }));
+app.get('/ping', (req, res) => res.json({ ok: true, mongo: mongoose.connection.readyState === 1, version: VERSION, ...(V2 ? V2.ping() : {}) }));
 
 app.get('/', (req, res) => res.send('Serveur Analyseur Pokémon actif'));
 
