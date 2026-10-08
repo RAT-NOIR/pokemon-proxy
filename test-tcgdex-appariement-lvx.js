@@ -89,6 +89,27 @@ const S = 'SWSH Black Star Promos';
         [rep(double, 80), rep(double, 81)], ['swshp-SWSH160', 'contredite-par-le-nom']);
 }
 
+// ── 3 bis. I1 de la relecture : une carte vue HORS slug (Additionals qui déclarent la même expansion) sert de TÉMOIN, jamais de RÉCIPIENDAIRE ──
+{
+    const { recevantsDuSet } = require('./collecte-cartes/tcgdex-appariement');
+    const X = 'Ascended Heroes';
+    const prin = { ...carte(500, 'Bulbasaur', X, '001'), sets: ['Ascended-Heroes'] };
+    const addi = { ...carte(501, 'Bulbasaur', X, '001'), sets: ['Ascended-Heroes-Additionals'] };   // même nom, même numéro, autre slug (xASC)
+    const autre = { ...carte(502, 'Ivysaur', X, '002'), sets: ['Ascended-Heroes-Additionals'] };
+    const T = [tcg('me2pt5', '001', 'Bulbasaur'), tcg('me2pt5', '002', 'Ivysaur')];
+    const R = apparierExpansion(X, [prin, addi, autre], T, 'intl', recevantsDuSet('Ascended-Heroes'));
+    verifier('Additionals : la carte du slug de l\'unité reçoit son scan (pas d\'ambiguïté fabriquée par l\'Additional)', rep(R, 500), 'me2pt5-001');
+    verifier('Additionals : aucune réponse pour les cartes hors slug (jamais de scan posé sous le slug de l\'unité)', R.filter(r => r.carte._id !== 500).length, 0);
+    // le témoin voit quand même la carte hors slug : Blastoise (slug) au n°2 ne prend pas le scan de « Reshiram » (hors slug)
+    const bl = { ...carte(13, 'Blastoise', C, '2'), sets: ['Celebrations'] }, re = { ...carte(12, 'Reshiram', C, '002'), sets: ['25th-Anniversary-Collection'] };
+    const R2 = apparierExpansion(C, [bl, re], [tcg('cel25', '2', 'Reshiram')], 'intl', recevantsDuSet('Celebrations'));
+    verifier('Hors slug : Reshiram (hors slug) contredit encore Blastoise (slug) ; Reshiram ne reçoit rien', R2.map(r => `${r.carte._id}:${r.motif || r.tcg.id}`), ['13:contredite-par-le-nom']);
+    // le 2e faux visuel : « _____'s Pikachu » n°24 (slug) face à Professor's Research 024 (hors slug), nom TCGdex en écart de forme -> ambigu, aucun scan
+    const pk = { ...carte(15, "_____'s Pikachu", C, '24'), sets: ['Celebrations'] }, pr = { ...carte(14, "Professor's Research", C, '024'), sets: ['Journey-Together'] };
+    verifier('Hors slug : une porteuse hors slug de nom différent garde l\'ambiguïté (2e faux visuel)', apparierExpansion(C, [pk, pr], [tcg('cel25', '24', "Professor's Research (Professor Oak)")], 'intl', recevantsDuSet('Celebrations')).map(r => `${r.carte._id}:${r.motif || r.tcg.id}`), ['15:numero-ambigu-chez-nous']);
+    verifier('sans prédicat : toutes les cartes reçoivent (illustrateurs, comme avant)', apparierExpansion(C, [bl, re], [tcg('cel25', '2', 'Reshiram')]).length, 2);
+}
+
 // ── 4. la lecture des cartes : le slug OU la déclaration de l'impression (sans quoi le témoin ne voit pas Reshiram) ───────
 {
     const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');
@@ -96,7 +117,7 @@ const S = 'SWSH Black Star Promos';
         { $or: [{ sets: 'Celebrations' }, { impressions: { $elemMatch: { tirage: 'intl', expansion: { $in: ['Celebrations', 'X'] } } } }] });
     verifier('lecture : une expansion seule est une liste', filtreCartesDuSet('S', 'E').$or[1].impressions.$elemMatch.expansion, { $in: ['E'] });
     const src = require('fs').readFileSync(require('path').join(__dirname, 'collecteur-images-tcgdex.js'), 'utf8');
-    verifier('lecture : le collecteur lit les cartes par filtreCartesDuSet (branche anglaise)', /M\.Carte\.find\(filtreCartesDuSet\(L\.slugSet, L\.bulba\.expansion\)\)/.test(src), true);
+    verifier('lecture : le collecteur lit les cartes par filtreCartesDuSet (branche anglaise)', /M\.Carte\.find\(filtreCartesDuSet\(L\.slugSet, L\.bulba\.expansion\)\)/.test(src) && /apparierExpansion\(nom, cartes, tcg, 'intl', recevantsDuSet\(L\.slugSet\)\)/.test(src), true);
 }
 
 console.log(`\n${ok} passés, ${ko} en échec`);

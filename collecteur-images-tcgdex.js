@@ -44,7 +44,7 @@ const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
 const { cartesEn, cartesLangue, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
-const { apparierExpansion, filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');
+const { apparierExpansion, filtreCartesDuSet, recevantsDuSet } = require('./collecte-cartes/tcgdex-appariement');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 // l'identifiant d'un document `images` TCGdex vit dans le module du manque réel : l'alimentateur y cherche ce que ce
 // collecteur a TENTÉ, et une seconde écriture de la forme divergerait un jour (§21 bis)
@@ -128,8 +128,9 @@ async function planifier(M, db, client, L, set, langue = 'en') {
     const compagnons = compagnonsDuSet(set, liste), compagnonsNonLus = [];
     const tcg = [...principal];
     for (const c of compagnons) { const cs = await lire(c.id); if (cs) tcg.push(...cs); else compagnonsNonLus.push(c.id); }
-    const cartes = await M.Carte.find(filtreCartesDuSet(L.slugSet, L.bulba.expansion)).select('nomEn niveau attaques impressions').lean();
-    const R = [].concat(L.bulba.expansion).flatMap(nom => apparierExpansion(nom, cartes, tcg));
+    const cartes = await M.Carte.find(filtreCartesDuSet(L.slugSet, L.bulba.expansion)).select('nomEn niveau attaques impressions sets').lean();
+    // les cartes hors slug (Additionals, Celebrations) sont TÉMOINS du nom ; seules celles du slug de l'unité reçoivent un scan
+    const R = [].concat(L.bulba.expansion).flatMap(nom => apparierExpansion(nom, cartes, tcg, 'intl', recevantsDuSet(L.slugSet)));
     const plan = R.filter(r => r.tcg?.image);
     const nonLu = compagnonsNonLus.length ? ` (galerie ${compagnonsNonLus.join(', ')} non lue : reste NON MESURÉ)` : '';
     const restes = R.filter(r => !r.tcg?.image).map(r => ({ carteId: r.carte._id, nomEn: r.carte.nomEn, numero: r.numero, motif: (r.motif === 'absente-de-tcgdex' ? r.motif + nonLu : r.motif) || 'tcgdex-sans-image', ...(r.detail ? { detail: r.detail } : {}) }));
