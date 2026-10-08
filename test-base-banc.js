@@ -148,11 +148,22 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     B.installerGardeEcriture(FausseCollection, iso);
     B.installerGardeEcriture(FausseCollection, iso);   // idempotent : pas de double enrobage
     const surBanc = new FausseCollection('127.0.0.1'), surProd = new FausseCollection('cluster0-shard-00-00.abcde.mongodb.net'), surInconnu = new FausseCollection(undefined);
-    const essaie = (c, m) => { try { return c[m](); } catch (e) { return /ÉCRITURE REFUSÉE/.test(e.message) ? 'refusé' : `autre:${e.message}`; } };
-    verifier(`${ECRITURES.length} méthodes d'écriture : sur le banc, elles passent`, ECRITURES.filter(m => essaie(surBanc, m) !== 'passe'), []);
-    verifier(`${ECRITURES.length} méthodes d'écriture : sur un hôte qui n'est pas le banc, TOUTES sont refusées`, ECRITURES.filter(m => essaie(surProd, m) !== 'refusé'), []);
-    verifier('écriture sur un hôte inconnu (connexion pas encore établie) : refusée (doute)', essaie(surInconnu, 'insertOne'), 'refusé');
-    verifier('lecture (find, findOne, countDocuments) sur la production : permise', ['find', 'findOne', 'countDocuments'].map(m => essaie(surProd, m)), ['passe', 'passe', 'passe']);
+    // 🔑 la garde REJETTE la promesse (un `.catch()` seul la capte) : un appelant `async` ne doit pas avoir à entourer l'appel d'un try synchrone
+    const essaie = async (c, m, ...a) => {
+        let r; try { r = c[m](...a); } catch (e) { return `levé-synchrone:${/ÉCRITURE REFUSÉE/.test(e.message)}`; }
+        return await Promise.resolve(r).then(v => v, e => /ÉCRITURE REFUSÉE/.test(e.message) ? 'refusé' : `autre:${e.message}`);
+    };
+    const filtrer = async (liste, f) => { const r = await Promise.all(liste.map(f)); return liste.filter((_, i) => r[i]); };
+    verifier(`${ECRITURES.length} méthodes d'écriture : sur le banc, elles passent`, await filtrer(ECRITURES, async m => (await essaie(surBanc, m)) !== 'passe'), []);
+    verifier(`${ECRITURES.length} méthodes d'écriture : sur un hôte qui n'est pas le banc, TOUTES rejettent la promesse (jamais un lancer synchrone)`, await filtrer(ECRITURES, async m => (await essaie(surProd, m)) !== 'refusé'), []);
+    verifier('écriture sur un hôte inconnu (connexion pas encore établie) : refusée (doute)', await essaie(surInconnu, 'insertOne'), 'refusé');
+    verifier('un `.catch()` seul capte le refus (aucun try autour de l\'appel)', await new Promise(r => { surProd.insertOne().catch(e => r(/ÉCRITURE REFUSÉE/.test(e.message))); }), true);
+    verifier('lecture (find, findOne, countDocuments) sur la production : permise', await Promise.all(['find', 'findOne', 'countDocuments'].map(m => essaie(surProd, m))), ['passe', 'passe', 'passe']);
+    // aggregate : permis en lecture, refusé avec $out / $merge (même imbriqué) sur un hôte qui n'est pas le banc
+    FausseCollection.prototype.aggregate = function () { return 'passe'; };
+    B.installerGardeEcriture(FausseCollection, iso);
+    verifier('aggregate en lecture : permis ; avec $out, $merge, ou $merge sous $facet : refusé', await Promise.all([[{ $match: {} }], [{ $out: 'x' }], [{ $merge: { into: 'x' } }], [{ $facet: { a: [{ $merge: { into: 'x' } }] } }]].map(p => essaie(surProd, 'aggregate', p))), ['passe', 'refusé', 'refusé', 'refusé']);
+    verifier('méthodes natives supplémentaires (watch, bulk ordonné/non ordonné, mapReduce) : couvertes par la garde', B.METHODES_ECRITURE.filter(m => ['watch', 'initializeOrderedBulkOp', 'initializeUnorderedBulkOp', 'mapReduce'].includes(m)).length, 4);
     const horsBanc = new FausseCollection('cluster0-shard-00-00.abcde.mongodb.net');
     class SansBanc { constructor(h) { this.conn = { host: h }; } insertOne() { return 'passe'; } }
     B.installerGardeEcriture(SansBanc, {});
@@ -166,6 +177,91 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     for (const nomBase of ['test_scratch', 'cartes', 'autre', undefined]) {
         let r = null; try { await bancG.connexionProduction(mongooseReel, nomBase); } catch (e) { r = e.message; }
         verifier(`connexionProduction refuse la base « ${nomBase} » (seule « test » se lit), sans se connecter`, /seule la base « test »/.test(r || ''), true);
+    }
+    // ── 8. LA GARDE R2 : sous BANC_ISOLE=1, aucune écriture (put, delete, copy, multipart…) hors du bucket R2_BUCKET_BANC, lui-même distinct de
+    //       tout bucket de production lu dans l'environnement ; la lecture reste permise. Faux client : on COMPTE les commandes qui partiraient.
+    const S3 = require('@aws-sdk/client-s3');
+    const r2mod = require('./collecte-cartes/r2');
+    const fauxClient = () => { const c = { envoyees: [], async send(cmd) { c.envoyees.push(cmd.constructor.name); return {}; } }; return c; };
+    const envR2 = (extra = {}) => ({ BANC_ISOLE: '1', R2_BUCKET_IMAGES: 'bucket-images-prod', R2_BUCKET_BRUT: 'bucket-brut-prod', ...extra });
+    const ECRITURES_R2 = [['PutObjectCommand', () => new S3.PutObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k', Body: 'x' })], ['DeleteObjectsCommand', () => new S3.DeleteObjectsCommand({ Bucket: 'bucket-images-prod', Delete: { Objects: [{ Key: 'k' }] } })],
+        ['DeleteObjectCommand', () => new S3.DeleteObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k' })], ['CopyObjectCommand', () => new S3.CopyObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k', CopySource: 'a/b' })],
+        ['CreateMultipartUploadCommand', () => new S3.CreateMultipartUploadCommand({ Bucket: 'bucket-images-prod', Key: 'k' })], ['PutBucketCorsCommand', () => new S3.PutBucketCorsCommand({ Bucket: 'bucket-images-prod', CORSConfiguration: { CORSRules: [] } })]];
+    {
+        const fc = fauxClient(); B.garderClientR2(fc, envR2());
+        const sorties = await Promise.all(ECRITURES_R2.map(([, mk]) => fc.send(mk()).then(() => 'envoyée', e => /ÉCRITURE R2 REFUSÉE/.test(e.message) ? 'refusée' : `autre:${e.message}`)));
+        verifier(`${ECRITURES_R2.length} commandes d'écriture R2 vers R2_BUCKET_IMAGES sous BANC_ISOLE=1 : toutes REFUSÉES (promesse rejetée) AVANT toute requête`, [sorties.every(s => s === 'refusée'), fc.envoyees.length], [true, 0]);
+        const lect = fauxClient(); B.garderClientR2(lect, envR2());
+        await Promise.all([new S3.GetObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k' }), new S3.HeadObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k' }), new S3.ListObjectsV2Command({ Bucket: 'bucket-images-prod' })].map(c => lect.send(c)));
+        verifier('lectures R2 (Get, Head, ListObjectsV2) : permises', lect.envoyees, ['GetObjectCommand', 'HeadObjectCommand', 'ListObjectsV2Command']);
+        const sans = fauxClient(); B.garderClientR2(sans, envR2());
+        const r0 = await sans.send(new S3.PutObjectCommand({ Bucket: 'bucket-du-banc', Key: 'k', Body: 'x' })).then(() => 'envoyée', e => `refusée:${/R2_BUCKET_BANC absent/.test(e.message)}`);
+        verifier('R2_BUCKET_BANC absent : écriture vers n\'importe quel bucket REFUSÉE (0 requête)', [r0, sans.envoyees.length], ['refusée:true', 0]);
+        const bon = fauxClient(); B.garderClientR2(bon, envR2({ R2_BUCKET_BANC: 'bucket-du-banc' }));
+        const ok1 = await bon.send(new S3.PutObjectCommand({ Bucket: 'bucket-du-banc', Key: 'k', Body: 'x' })).then(() => 'envoyée', e => `refusée:${e.message}`);
+        const ko1 = await bon.send(new S3.PutObjectCommand({ Bucket: 'bucket-images-prod', Key: 'k', Body: 'x' })).then(() => 'envoyée', () => 'refusée');
+        verifier('R2_BUCKET_BANC présent : écriture vers lui permise, vers R2_BUCKET_IMAGES toujours refusée', [ok1, ko1, bon.envoyees], ['envoyée', 'refusée', ['PutObjectCommand']]);
+        for (const cible of ['bucket-images-prod', 'bucket-brut-prod']) {
+            const egal = fauxClient(); B.garderClientR2(egal, envR2({ R2_BUCKET_BANC: cible }));
+            const re = await egal.send(new S3.PutObjectCommand({ Bucket: cible, Key: 'k', Body: 'x' })).then(() => 'envoyée', e => `refusée:${/production/.test(e.message)}`);
+            verifier(`R2_BUCKET_BANC égal à un bucket de production (${cible}) : REFUSÉ`, [re, egal.envoyees.length], ['refusée:true', 0]);
+        }
+        const inerte = fauxClient(); B.garderClientR2(inerte, { R2_BUCKET_IMAGES: 'x' });
+        await inerte.send(new S3.PutObjectCommand({ Bucket: 'x', Key: 'k', Body: 'x' }));
+        verifier('hors banc (BANC_ISOLE absent) la garde R2 est inerte', inerte.envoyees, ['PutObjectCommand']);
+        // par le module r2 lui-même (deposerBinaire), quel que soit le chemin : le client posé est gardé, la lecture HEAD passe, le PUT n'est jamais envoyé
+        const avantEnv = { BANC_ISOLE: process.env.BANC_ISOLE, R2_BUCKET_IMAGES: process.env.R2_BUCKET_IMAGES, R2_BUCKET_BANC: process.env.R2_BUCKET_BANC };
+        process.env.BANC_ISOLE = '1'; process.env.R2_BUCKET_IMAGES = 'bucket-images-prod'; delete process.env.R2_BUCKET_BANC;
+        const fm = fauxClient(); fm.send = async cmd => { fm.envoyees.push(cmd.constructor.name); if (cmd.constructor.name === 'HeadObjectCommand') { const e = new Error('nf'); e.name = 'NotFound'; throw e; } return {}; };
+        r2mod._poserClient(fm);
+        const viaModule = await r2mod.deposerBinaire('bucket-images-prod', 'vignettes/x.webp', Buffer.from('x'), 'image/webp').then(() => 'écrit', e => /ÉCRITURE R2 REFUSÉE/.test(e.message) ? 'refusé' : `autre:${e.message}`);
+        verifier('r2.deposerBinaire vers R2_BUCKET_IMAGES sous BANC_ISOLE=1 : refusé, aucun PutObject envoyé (seul le Head de lecture est parti)', [viaModule, fm.envoyees.filter(c => c === 'PutObjectCommand').length], ['refusé', 0]);
+        for (const [k, v] of Object.entries(avantEnv)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+        r2mod._poserClient(null);
+        // appliquer() fige la liste des buckets de production AVANT tout remplacement et refuse un R2_BUCKET_BANC qui en fait partie
+        const sansR2 = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^R2_BUCKET_/.test(k)));
+        const envA = { ...sansR2, MONGODB_TEST_URI: BANC_URI, R2_BUCKET_IMAGES: 'img-prod', R2_BUCKET_BRUT: 'brut-prod', R2_BUCKET_BANC: 'banc-r2' };
+        (await B.ouvrirBanc({ env: envA, memoireDisponible: false })).appliquer();
+        verifier('appliquer : les buckets de production sont remplacés par R2_BUCKET_BANC pour les enfants, et la liste d\'origine figée dans BANC_R2_INTERDITS', [envA.R2_BUCKET_IMAGES, envA.R2_BUCKET_BRUT, envA.BANC_R2_INTERDITS.split(',').sort()], ['banc-r2', 'banc-r2', ['brut-prod', 'img-prod']]);
+        let refus = null; try { (await B.ouvrirBanc({ env: { ...sansR2, MONGODB_TEST_URI: BANC_URI, R2_BUCKET_IMAGES: 'img-prod', R2_BUCKET_BANC: 'img-prod' }, memoireDisponible: false })).appliquer(); } catch (e) { refus = e.message; }
+        verifier('appliquer REFUSE un R2_BUCKET_BANC égal à un bucket de production', /R2_BUCKET_BANC/.test(refus || ''), true);
+    }
+
+    // ── 9. LA FAÇADE DE LECTURE DE LA PRODUCTION : une liste FERMÉE de lectures ; tout le reste lève, sans qu'aucun appel d'écriture n'atteigne le Db
+    {
+        const appels = [];
+        const fauxCursor = { toArray: async () => [], sort() { return this; }, limit() { return this; } };
+        const fauxColl = new Proxy({}, { get: (_, m) => (...a) => { appels.push(`coll.${String(m)}`); return fauxCursor; } });
+        const fauxDb = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => { appels.push('db.listCollections'); return fauxCursor; }, dropDatabase: async () => { appels.push('db.dropDatabase'); } };
+        const F = B.facadeLecture(fauxDb, async () => { });
+        const nonLevee = async f => { try { await f(); return false; } catch (e) { return /LECTURE SEULE/.test(e.message); } };
+        const COLLECTION_ECRITURES = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany', 'bulkWrite', 'findOneAndUpdate', 'findOneAndDelete', 'findOneAndReplace', 'drop', 'createIndex', 'createIndexes', 'rename', 'watch', 'initializeOrderedBulkOp', 'mapReduce', 'indexes', 'options', 'stats'];
+        const echecsFacade = [];
+        for (const m of COLLECTION_ECRITURES) if (!await nonLevee(() => F.collection('x')[m]({}))) echecsFacade.push(`collection.${m}`);
+        for (const m of ['command', 'dropDatabase', 'createCollection', 'dropCollection', 'renameCollection', 'admin', 'watch', 'createIndex']) if (!await nonLevee(() => F[m]?.({}) ?? (() => { throw new Error('LECTURE SEULE'); })())) echecsFacade.push(`db.${m}`);
+        for (const [nom, p] of [['$out', [{ $out: 'x' }]], ['$merge', [{ $merge: { into: 'x' } }]], ['$merge sous $facet', [{ $facet: { a: [{ $merge: { into: 'x' } }] } }]], ['$out sous $lookup', [{ $lookup: { from: 'y', pipeline: [{ $out: 'x' }], as: 'z' } }]], ['$unionWith + $merge', [{ $unionWith: { coll: 'y', pipeline: [{ $merge: { into: 'x' } }] } }]]]) {
+            if (!await nonLevee(() => F.collection('x').aggregate(p))) echecsFacade.push(`aggregate ${nom}`);
+        }
+        verifier(`façade : ${COLLECTION_ECRITURES.length} méthodes de collection hors liste fermée, 8 de db, 5 formes d'aggregate écrivant : TOUTES lèvent « LECTURE SEULE »`, echecsFacade, []);
+        verifier('façade : AUCUN appel d\'écriture n\'a atteint le Db (0 appel compté)', appels, []);
+        await F.collection('x').find({}).toArray(); await F.collection('x').findOne({}); await F.collection('x').countDocuments({}); await F.collection('x').estimatedDocumentCount();
+        await F.collection('x').distinct('a'); await F.collection('x').aggregate([{ $match: {} }, { $sort: { a: 1 } }]); F.listCollections({});
+        verifier('façade : les lectures de la liste fermée (find, findOne, countDocuments, estimatedDocumentCount, distinct, aggregate sans $out/$merge, listCollections) passent', appels, ['coll.find', 'coll.findOne', 'coll.countDocuments', 'coll.estimatedDocumentCount', 'coll.distinct', 'coll.aggregate', 'db.listCollections']);
+        verifier('façade : databaseName lisible, db renvoie la façade elle-même (jamais le Db brut)', [F.databaseName, F.db === F], ['test', true]);
+        // les URI de LECTURE dédiées (utilisateur Atlas en lecture seule) sont préférées quand elles existent
+        const envL = { ...process.env, MONGODB_TEST_URI: BANC_URI, MONGODB_LECTURE_URI: 'mongodb://lecture.example/x', MONGODB_CARTES_LECTURE_URI: 'mongodb://lecture-cartes.example/x' };
+        const bl = await B.ouvrirBanc({ env: envL, memoireDisponible: false });
+        verifier('MONGODB_LECTURE_URI et MONGODB_CARTES_LECTURE_URI, quand elles existent, sont préférées pour la lecture ; puis REMPLACÉES dans l\'environnement des enfants', [bl.uriProduction === 'mongodb://lecture.example/x', bl.uriCartes === 'mongodb://lecture-cartes.example/x'], [true, true]);
+        bl.appliquer();
+        verifier('   ... après appliquer, plus aucune variable MONGODB_*URI ne vaut autre chose que le banc', Object.entries(envL).filter(([k, v]) => /^MONGODB_.*URI$/.test(k) && v !== BANC_URI).map(([k]) => k), []);
+        // et connexionProduction / connexionCartes rendent la FAÇADE, jamais la connexion mongoose
+        verifier('connexionProduction / connexionCartes rendent la façade (la fonction facadeLecture est la seule porte)', /facadeLecture\(/.test(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'base-banc.js'), 'utf8').split('async connexionProduction')[1] || ''), true);
+    }
+
+    // ── 10. le banc vignette n'écrit plus sur R2 : faux stockage en mémoire, aucun identifiant R2 exigé, pas de bucket de production
+    {
+        const v = fs.readFileSync(path.join(__dirname, 'test-vignette-scratch.js'), 'utf8');
+        verifier('test-vignette-scratch.js : substitue le module r2 par un FAUX STOCKAGE, n\'exige aucun identifiant R2 et ne lit pas R2_BUCKET_IMAGES', [/fauxStockage/.test(v), /Object\.assign\(r2, fauxStockage/.test(v), /R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY|process\.env\.R2_BUCKET_IMAGES/.test(v.replace(/\/\/.*$/gm, ''))], [true, true, false]);
     }
     console.log(`\n${echecs ? `⚠️ ${echecs}/${n} en échec` : `🎉 ${n}/${n} passés`} (aucune connexion, aucune écriture)`);
     process.exit(echecs ? 1 : 0);

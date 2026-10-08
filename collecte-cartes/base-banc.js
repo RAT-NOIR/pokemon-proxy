@@ -136,32 +136,108 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
     }
     // L'URI de production, gardée AVANT le remplacement, pour les seuls bancs qui LISENT la production (copie d'une tranche, journal des scans).
     // Elle ne passe jamais dans l'environnement : les enfants ne la voient pas. Toute écriture mongoose vers elle est refusée (garde ci-dessous).
-    const uriProduction = env.MONGODB_URI, uriCartes = env.MONGODB_CARTES_URI;
+    // Un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI / MONGODB_CARTES_LECTURE_URI), s'il existe, est préféré ; la façade s'applique de toute façon.
+    const uriProduction = env.MONGODB_LECTURE_URI || env.MONGODB_URI, uriCartes = env.MONGODB_CARTES_LECTURE_URI || env.MONGODB_CARTES_URI;
     return {
-        origine: r.origine, uri, arreter, uriProduction,
+        origine: r.origine, uri, arreter, uriProduction, uriCartes,
         appliquer() {
+            // R2 : la liste des buckets de PRODUCTION est figée AVANT tout remplacement ; R2_BUCKET_BANC ne peut pas en faire partie
+            const buckets = Object.entries(env).filter(([k, v]) => /^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC' && v).map(([, v]) => v);
+            if (env.R2_BUCKET_BANC && buckets.includes(env.R2_BUCKET_BANC)) throw new Error('🔴 BANC REFUSÉ — R2_BUCKET_BANC est égal à un bucket R2 de production : un banc n\'écrit jamais dans la production, R2 compris.');
             for (const nom of variablesDeConnexion(env, fichierEnv)) env[nom] = uri;
             env.BANC_ISOLE = '1';
             env.BANC_HOTES = hotesDe(uri).join(',');
+            env.BANC_R2_INTERDITS = [...new Set(buckets)].join(',');
+            if (env.R2_BUCKET_BANC) for (const k of Object.keys(env)) if (/^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC') env[k] = env.R2_BUCKET_BANC;
             installerGardeEcriture(require('mongoose').Collection, env);
         },
-        /** Connexion mongoose à la base `test` de production, pour LIRE (find, count, aggregate). Les écritures y sont refusées par la garde. */
+        /** La base `test` de production, pour LIRE : une FAÇADE à liste fermée (find, findOne, countDocuments, estimatedDocumentCount, distinct, listCollections,
+         *  aggregate sans $out/$merge) — jamais la connexion ni le Db bruts. Tout le reste lève. */
         async connexionProduction(mongoose, dbName) {
             if (dbName !== 'test') throw new Error('connexionProduction : seule la base « test » se lit (production en lecture seule) ; jamais test_scratch ni cartes.');
             if (!uriProduction) throw new Error('connexionProduction : MONGODB_URI absente, rien à lire.');
-            return mongoose.createConnection(uriProduction, { dbName }).asPromise();
+            const cx = await mongoose.createConnection(uriProduction, { dbName }).asPromise();
+            return facadeLecture(cx.db, () => cx.close());
         },
-        /** Connexion mongoose à la base `cartes` (autre grappe de production), pour LIRE des cartes réelles à copier dans le banc. Écritures refusées. */
+        /** La base `cartes` (autre grappe de production), pour LIRE des cartes réelles à copier dans le banc : même façade à liste fermée. */
         async connexionCartes(mongoose, dbName) {
             if (dbName !== 'cartes') throw new Error('connexionCartes : seule la base « cartes » se lit ici (lecture seule).');
             if (!uriCartes) throw new Error('connexionCartes : MONGODB_CARTES_URI absente, rien à lire.');
-            return mongoose.createConnection(uriCartes, { dbName }).asPromise();
+            const cx = await mongoose.createConnection(uriCartes, { dbName }).asPromise();
+            return facadeLecture(cx.db, () => cx.close());
         }
     };
 }
 
+// ── LA FAÇADE DE LECTURE : une liste FERMÉE de ce qui est sûr (jamais une liste de ce qui est interdit).
+const LECTURES_COLLECTION = new Set(['find', 'findOne', 'countDocuments', 'estimatedDocumentCount', 'distinct', 'aggregate']);
+const LECTURES_BASE = new Set(['databaseName', 'collection', 'listCollections', 'db', 'close']);
+const refusLecture = (quoi) => new Error(`🔴 LECTURE SEULE : « ${quoi} » n'est pas dans la liste fermée de ce qu'un banc peut faire sur la production (find, findOne, countDocuments, estimatedDocumentCount, distinct, listCollections, aggregate sans $out/$merge).`);
+const ecritDansPipeline = (x) => Array.isArray(x) ? x.some(ecritDansPipeline) : (x && typeof x === 'object') ? Object.entries(x).some(([k, v]) => k === '$out' || k === '$merge' || ecritDansPipeline(v)) : false;
+
+function facadeLecture(db, fermer = async () => { }) {
+    const collection = nom => {
+        const c = db.collection(nom);
+        return new Proxy({}, {
+            get(_, p) {
+                if (typeof p === 'symbol' || p === 'then') return undefined;
+                if (!LECTURES_COLLECTION.has(p)) throw refusLecture(`collection.${String(p)}`);
+                if (p === 'aggregate') return (pipeline, ...r) => { if (ecritDansPipeline(pipeline)) throw refusLecture('aggregate avec $out/$merge'); return c.aggregate(pipeline, ...r); };
+                return (...a) => c[p](...a);
+            }
+        });
+    };
+    const facade = new Proxy({}, {
+        get(_, p) {
+            if (typeof p === 'symbol' || p === 'then') return undefined;
+            if (!LECTURES_BASE.has(p)) throw refusLecture(`db.${String(p)}`);
+            if (p === 'databaseName') return db.databaseName;
+            if (p === 'db') return facade;
+            if (p === 'collection') return collection;
+            if (p === 'listCollections') return (...a) => db.listCollections(...a);
+            return fermer;
+        }
+    });
+    return facade;
+}
+
+// toutes les opérations d'écriture du pilote natif qu'une collection mongoose expose (le reste — find, count… — est de la lecture) ;
+// `aggregate` est traitée à part : permise en lecture, refusée avec $out/$merge. Les trois dernières lèvent de façon SYNCHRONE (elles ne rendent
+// pas de promesse) ; toutes les autres REJETTENT la promesse, pour qu'un `.catch()` seul la capte.
 const METHODES_ECRITURE = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndUpdate',
-    'findOneAndDelete', 'findOneAndReplace', 'bulkWrite', 'drop', 'createIndex', 'createIndexes', 'dropIndex', 'dropIndexes', 'rename', 'findAndModify'];
+    'findOneAndDelete', 'findOneAndReplace', 'bulkWrite', 'drop', 'createIndex', 'createIndexes', 'dropIndex', 'dropIndexes', 'rename', 'findAndModify',
+    'watch', 'initializeOrderedBulkOp', 'initializeUnorderedBulkOp', 'mapReduce'];
+const SYNCHRONES = new Set(['watch', 'initializeOrderedBulkOp', 'initializeUnorderedBulkOp']);
+
+// ── R2 : sous BANC_ISOLE=1, la LECTURE est permise (liste fermée) ; toute autre commande n'est permise que vers R2_BUCKET_BANC, jamais un bucket de production.
+const LECTURES_R2 = new Set(['GetObjectCommand', 'HeadObjectCommand', 'ListObjectsV2Command', 'ListObjectsCommand', 'HeadBucketCommand']);
+
+/** { ok, raison } : cette commande S3 peut-elle partir ? Pure. */
+function verifierEcritureR2(nomCommande, bucket, env = process.env) {
+    if (env.BANC_ISOLE !== '1' || LECTURES_R2.has(nomCommande)) return { ok: true, raison: null };
+    const banc = env.R2_BUCKET_BANC;
+    if (!banc) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : R2_BUCKET_BANC absent — un banc n'écrit jamais dans un bucket de production (même des clés idempotentes).` };
+    const interdits = env.BANC_R2_INTERDITS !== undefined
+        ? env.BANC_R2_INTERDITS.split(',').filter(Boolean)
+        : Object.entries(env).filter(([k, v]) => /^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC' && v).map(([, v]) => v);
+    if (interdits.includes(banc)) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : R2_BUCKET_BANC est égal à un bucket de production.` };
+    if (bucket !== banc) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : le bucket visé n'est pas R2_BUCKET_BANC.` };
+    return { ok: true, raison: null };
+}
+
+/** Enrobe `client.send` : la décision tombe AVANT toute requête, et c'est la PROMESSE qui est rejetée. Idempotente. */
+function garderClientR2(client, env = process.env) {
+    if (!client || client.send?.__gardeBanc) return client;
+    const original = client.send.bind(client);
+    const send = async (commande, ...r) => {
+        const v = verifierEcritureR2(commande?.constructor?.name, commande?.input?.Bucket, env);
+        if (!v.ok) throw new Error(`🔴 ${v.raison}`);
+        return original(commande, ...r);
+    };
+    send.__gardeBanc = true;
+    client.send = send;
+    return client;
+}
 
 /**
  * 🔑 LA GARDE D'ÉCRITURE : sous BANC_ISOLE=1, toute écriture d'une collection mongoose dont la connexion n'est PAS sur l'hôte du banc (ou dont
@@ -169,12 +245,15 @@ const METHODES_ECRITURE = ['insertOne', 'insertMany', 'updateOne', 'updateMany',
  * `Collection` est mongoose.Collection (les méthodes y sont posées une à une depuis le pilote) ; passée en paramètre pour être testée sur une fausse.
  */
 function installerGardeEcriture(Collection, env = process.env) {
-    for (const m of METHODES_ECRITURE) {
+    for (const m of [...METHODES_ECRITURE, 'aggregate']) {
         const original = Collection.prototype[m];
         if (typeof original !== 'function' || original.__gardeBanc) continue;
         const gardee = function (...args) {
-            if (env.BANC_ISOLE === '1' && !(this?.conn?.host && verifierHoteBanc(`mongodb://${this.conn.host}/`, env).ok)) {
-                throw new Error(`🔴 ÉCRITURE REFUSÉE (${m}) : la connexion de cette collection n'est pas sur l'hôte du banc — un banc n'écrit jamais ailleurs que sur sa base.`);
+            const ecrit = m !== 'aggregate' || ecritDansPipeline(args[0]);   // aggregate : lecture permise, $out/$merge refusés
+            if (ecrit && env.BANC_ISOLE === '1' && !(this?.conn?.host && verifierHoteBanc(`mongodb://${this.conn.host}/`, env).ok)) {
+                const e = new Error(`🔴 ÉCRITURE REFUSÉE (${m}) : la connexion de cette collection n'est pas sur l'hôte du banc — un banc n'écrit jamais ailleurs que sur sa base.`);
+                if (SYNCHRONES.has(m)) throw e;
+                return Promise.reject(e);
             }
             return original.apply(this, args);
         };
@@ -183,4 +262,5 @@ function installerGardeEcriture(Collection, env = process.env) {
     }
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE };
+module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
+    facadeLecture, verifierEcritureR2, garderClientR2 };
