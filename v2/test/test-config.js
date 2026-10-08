@@ -23,6 +23,20 @@ H.v('devises', c.devises, ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK
 // un nombre fait d'espaces ne vaut PAS 0 : refus
 let l0 = null; try { lireConfig({ V2_ACCUEIL: '   ' }); } catch (e) { l0 = e.message; }
 H.vrai('V2_ACCUEIL="   " lève (jamais 0 silencieux)', /configuration invalide/.test(l0 || ''));
+// variables booléennes : seulement '0' et '1' ; toute autre valeur (false, off, non, oui, vrai…) rend la configuration invalide
+H.v('V2_DESCRIPTION_CONSERVEE défaut : allumée', c.annonce.conservee, true);
+H.v('V2_DESCRIPTION_CONSERVEE=0 : éteinte', lireConfig({ V2_DESCRIPTION_CONSERVEE: '0' }).annonce.conservee, false);
+H.v('V2_DESCRIPTION_CONSERVEE=1 : allumée', lireConfig({ V2_DESCRIPTION_CONSERVEE: '1' }).annonce.conservee, true);
+for (const nom of ['V2_DESCRIPTION_CONSERVEE', 'V2_DESCRIPTION_AU_MODELE', 'V2_REGLE_G', 'V2_COOKIE_SECURE']) {
+    for (const mauvaise of ['false', 'off', 'non', 'oui', 'true', ' 0']) {
+        let e = null; try { lireConfig({ [nom]: mauvaise }); } catch (x) { e = x.message; }
+        H.vrai(`${nom}="${mauvaise}" rend la configuration invalide`, /configuration invalide/.test(e || ''));
+    }
+}
+let lt = null; try { lireConfig({ V2_TURNSTILE: 'non' }); } catch (x) { lt = x.message; }
+H.vrai('V2_TURNSTILE hors on/off rend la configuration invalide', /configuration invalide/.test(lt || ''));
+H.v('V2_TURNSTILE=off', lireConfig({ V2_TURNSTILE: 'off' }).turnstile, 'off');
+H.v('V2_COOKIE_SECURE=0', lireConfig({ V2_COOKIE_SECURE: '0' }).cookieSecure, false);
 // une valeur d'environnement s'applique
 H.v('V2_ACCUEIL=10 s\'applique', lireConfig({ V2_ACCUEIL: '10' }).quotas.accueil, 10);
 // une valeur INVALIDE LÈVE (on n'allume pas la v2 sur une configuration qu'on ne comprend pas)

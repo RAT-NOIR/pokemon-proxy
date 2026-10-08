@@ -7,6 +7,13 @@ const entier = (nom, v, defaut, min = 0) => {
     return n;
 };
 const gele = o => { Object.values(o).forEach(x => { if (x && typeof x === 'object') gele(x); }); return Object.freeze(o); };
+// Variable booléenne : seulement '0' ou '1' (absente ou vide = défaut). Toute autre valeur rend la configuration invalide.
+const booleen = (nom, v, defaut) => {
+    if (v === undefined || v === '') return defaut;
+    if (v === '1') return true;
+    if (v === '0') return false;
+    throw new Error(`configuration invalide : ${nom}="${v}" (attendu 0 ou 1)`);
+};
 
 function lireConfig(env = process.env) {
     const ordre = env.V2_ORDRE_POCHES ? env.V2_ORDRE_POCHES.split(',').map(s => s.trim()) : ['essai', 'accueil', 'hebdo', 'abonnement', 'achete'];
@@ -30,16 +37,16 @@ function lireConfig(env = process.env) {
                     site: 'https://rat-market.fr' },
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
         retention: { annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2 },
-        annonce: { conservee: env.V2_DESCRIPTION_CONSERVEE !== '0', auModele: env.V2_DESCRIPTION_AU_MODELE === '1' },
+        annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
         banc: { versionsTexte: ['2026-10-07-v1'] },
         verdict: { bonneAffaireSous: -30, cherAuDela: 15 },
         devises: ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK'],
         marches: (env.V2_MARCHES ? env.V2_MARCHES.split(',').map(s => s.trim()) :
             ['fr', 'be', 'com', 'de', 'es', 'it', 'nl', 'lu', 'at', 'pl', 'pt', 'se', 'cz', 'sk', 'lt', 'uk'].map(t => `vinted.${t}`)),
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
-        regleG: env.V2_REGLE_G === '1',
-        turnstile: env.V2_TURNSTILE === 'off' ? 'off' : 'on',
-        cookieSecure: env.V2_COOKIE_SECURE !== '0'
+        regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
+        turnstile: (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })(),
+        cookieSecure: booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true)
     });
 }
 module.exports = { lireConfig, POCHES };
