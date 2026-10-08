@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "IMAGE",
+    "message": "Aucune image exploitable."
+  },
+  "facturation": null
+}

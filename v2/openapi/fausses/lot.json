@@ -1,0 +1,360 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-lot-0004",
+  "analyse": {
+    "statut": "lot",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000013,
+          "nom": "Évoli",
+          "nomCardmarket": "Eevee",
+          "set": {
+            "slug": "Rocket-Gang",
+            "nom": "Rocket Gang",
+            "code": null,
+            "tirage": "jp",
+            "annee": 1997,
+            "symbole": null
+          },
+          "numero": null,
+          "total": null,
+          "langue": "JP",
+          "variante": null,
+          "rarete": null,
+          "visuel": {
+            "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000013.webp",
+            "w": 255,
+            "h": 356,
+            "grande": null
+          },
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 11.9,
+            "de": 9.5,
+            "moyenne30": 11,
+            "date": "2026-10-04"
+          },
+          "liens": {
+            "cardmarket": null,
+            "fiche": null
+          },
+          "impressions": []
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "EX",
+          "confiance": "haute",
+          "defauts": [],
+          "declare": "Bon état",
+          "retenu": "EX"
+        },
+        "prixLive": {
+          "idProduct": 9000013,
+          "langues": [
+            7
+          ],
+          "reverseHolo": false,
+          "etatVise": "EX"
+        },
+        "zone": {
+          "photo": 0,
+          "x": 0.04,
+          "y": 0.06,
+          "w": 0.44,
+          "h": 0.42
+        }
+      },
+      {
+        "index": 1,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000022,
+          "nom": "Aéromite",
+          "nomCardmarket": "Venomoth",
+          "set": {
+            "slug": "Pokemon-Card-web",
+            "nom": "Pokémon Card web",
+            "code": null,
+            "tirage": "jp",
+            "annee": 2001,
+            "symbole": null
+          },
+          "numero": null,
+          "total": null,
+          "langue": "JP",
+          "variante": null,
+          "rarete": null,
+          "visuel": {
+            "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000022.webp",
+            "w": 255,
+            "h": 356,
+            "grande": null
+          },
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 6.8,
+            "de": 5.4,
+            "moyenne30": 6.5,
+            "date": "2026-10-04"
+          },
+          "liens": {
+            "cardmarket": null,
+            "fiche": null
+          },
+          "impressions": []
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "EX",
+          "confiance": "haute",
+          "defauts": [],
+          "declare": "Bon état",
+          "retenu": "EX"
+        },
+        "prixLive": {
+          "idProduct": 9000022,
+          "langues": [
+            7
+          ],
+          "reverseHolo": false,
+          "etatVise": "EX"
+        },
+        "zone": {
+          "photo": 0,
+          "x": 0.52,
+          "y": 0.06,
+          "w": 0.44,
+          "h": 0.42
+        }
+      },
+      {
+        "index": 2,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000012,
+          "nom": "Évoli",
+          "nomCardmarket": "Eevee",
+          "set": {
+            "slug": "Pokemon-Jungle",
+            "nom": "Pokémon Jungle",
+            "code": null,
+            "tirage": "jp",
+            "annee": 1997,
+            "symbole": null
+          },
+          "numero": null,
+          "total": null,
+          "langue": "JP",
+          "variante": null,
+          "rarete": null,
+          "visuel": {
+            "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000012.webp",
+            "w": 255,
+            "h": 356,
+            "grande": null
+          },
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 6.2,
+            "de": 5,
+            "moyenne30": 5.8,
+            "date": "2026-10-04"
+          },
+          "liens": {
+            "cardmarket": null,
+            "fiche": null
+          },
+          "impressions": []
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "NM",
+          "confiance": "haute",
+          "defauts": [],
+          "declare": "Bon état",
+          "retenu": "NM"
+        },
+        "prixLive": {
+          "idProduct": 9000012,
+          "langues": [
+            7
+          ],
+          "reverseHolo": false,
+          "etatVise": "NM"
+        },
+        "zone": {
+          "photo": 0,
+          "x": 0.04,
+          "y": 0.52,
+          "w": 0.44,
+          "h": 0.42
+        }
+      },
+      {
+        "index": 3,
+        "statut": "a-trancher",
+        "carte": null,
+        "candidats": [
+          {
+            "idProduct": 9000031,
+            "nom": "Master Ball",
+            "nomCardmarket": "Master Ball",
+            "set": {
+              "slug": "Base-Expansion-Pack",
+              "nom": "Base Expansion Pack",
+              "code": "BEP",
+              "tirage": "jp",
+              "annee": 1996,
+              "symbole": null
+            },
+            "numero": null,
+            "total": null,
+            "langue": "JP",
+            "variante": null,
+            "rarete": null,
+            "visuel": {
+              "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000031.webp",
+              "w": 255,
+              "h": 356,
+              "grande": null
+            },
+            "visuelMention": null,
+            "prixGuide": {
+              "tendance": 3.2,
+              "de": 2.6,
+              "moyenne30": 3,
+              "date": "2026-10-04"
+            },
+            "liens": {
+              "cardmarket": null,
+              "fiche": null
+            },
+            "impressions": []
+          },
+          {
+            "idProduct": 9000032,
+            "nom": "Master Ball",
+            "nomCardmarket": "Master Ball",
+            "set": {
+              "slug": "Pokemon-VS",
+              "nom": "Pokémon VS",
+              "code": "VS",
+              "tirage": "jp",
+              "annee": 2001,
+              "symbole": null
+            },
+            "numero": null,
+            "total": null,
+            "langue": "JP",
+            "variante": null,
+            "rarete": null,
+            "visuel": {
+              "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000032.webp",
+              "w": 255,
+              "h": 356,
+              "grande": null
+            },
+            "visuelMention": null,
+            "prixGuide": {
+              "tendance": 4.5,
+              "de": 3.9,
+              "moyenne30": 4.2,
+              "date": "2026-10-04"
+            },
+            "liens": {
+              "cardmarket": null,
+              "fiche": null
+            },
+            "impressions": []
+          }
+        ],
+        "question": {
+          "code": "symbole",
+          "texte": "Sur les photos, quel logo voyez-vous en bas à gauche de la carte ?",
+          "aide": null,
+          "zone": {
+            "x": 0,
+            "y": 0.8,
+            "w": 0.34,
+            "h": 0.2
+          },
+          "choix": [
+            {
+              "id": "a",
+              "libelle": "Base Expansion Pack",
+              "idProduct": 9000031
+            },
+            {
+              "id": "b",
+              "libelle": "Pokémon VS",
+              "idProduct": 9000032
+            }
+          ]
+        },
+        "raison": null,
+        "etat": {
+          "estime": "EX",
+          "confiance": "moyenne",
+          "defauts": [],
+          "declare": "Bon état",
+          "retenu": "EX"
+        },
+        "prixLive": null,
+        "zone": {
+          "photo": 0,
+          "x": 0.52,
+          "y": 0.52,
+          "w": 0.44,
+          "h": 0.42
+        }
+      }
+    ],
+    "lot": {
+      "cartesVues": 4,
+      "identifiees": 3,
+      "aTrancher": 1,
+      "introuvables": 0,
+      "lectureLiveMax": 5
+    },
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "versEUR": 1,
+      "tauxDate": null
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "lot",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

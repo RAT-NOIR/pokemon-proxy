@@ -1,0 +1,85 @@
+{
+  "success": true,
+  "carte": {
+    "index": 0,
+    "statut": "identifiee",
+    "carte": {
+      "idProduct": 9000012,
+      "nom": "Évoli",
+      "nomCardmarket": "Eevee",
+      "set": {
+        "slug": "Pokemon-Jungle",
+        "nom": "Pokémon Jungle",
+        "code": null,
+        "tirage": "jp",
+        "annee": 1997,
+        "symbole": null
+      },
+      "numero": null,
+      "total": null,
+      "langue": "JP",
+      "variante": null,
+      "rarete": null,
+      "visuel": {
+        "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000012.webp",
+        "w": 255,
+        "h": 356,
+        "grande": null
+      },
+      "visuelMention": null,
+      "prixGuide": {
+        "tendance": 6.2,
+        "de": 5,
+        "moyenne30": 5.8,
+        "date": "2026-10-04"
+      },
+      "liens": {
+        "cardmarket": null,
+        "fiche": null
+      },
+      "impressions": []
+    },
+    "candidats": [],
+    "question": null,
+    "raison": null,
+    "etat": {
+      "estime": "EX",
+      "confiance": "moyenne",
+      "defauts": [],
+      "declare": "Bon état",
+      "retenu": "EX"
+    },
+    "prixLive": {
+      "idProduct": 9000012,
+      "langues": [
+        7
+      ],
+      "reverseHolo": false,
+      "etatVise": "EX"
+    },
+    "zone": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "question",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

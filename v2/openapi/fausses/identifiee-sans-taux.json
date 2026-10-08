@@ -1,0 +1,104 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-sans-taux-0008",
+  "analyse": {
+    "statut": "identifiee",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000001,
+          "nom": "Lokhlass",
+          "nomCardmarket": "Lapras",
+          "set": {
+            "slug": "30th-Celebration",
+            "nom": "30th Celebration",
+            "code": "30C",
+            "tirage": "intl",
+            "annee": 2026,
+            "symbole": null
+          },
+          "numero": "017",
+          "total": "128",
+          "langue": "EN",
+          "variante": "normale",
+          "rarete": "Common",
+          "visuel": {
+            "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/vignettes/9000001.webp",
+            "w": 255,
+            "h": 356,
+            "grande": {
+              "url": "https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/fictif/grandes/9000001.webp",
+              "w": 600,
+              "h": 825
+            }
+          },
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 15.2,
+            "de": 12.4,
+            "moyenne30": 14,
+            "date": "2026-10-04"
+          },
+          "liens": {
+            "cardmarket": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000001",
+            "fiche": null
+          },
+          "impressions": []
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "NM",
+          "confiance": "moyenne",
+          "defauts": [],
+          "declare": "Très bon état",
+          "retenu": "NM"
+        },
+        "prixLive": {
+          "idProduct": 9000001,
+          "langues": [
+            1
+          ],
+          "reverseHolo": false,
+          "etatVise": "NM"
+        },
+        "zone": null
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "versEUR": null,
+      "tauxDate": null
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "affirmee",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

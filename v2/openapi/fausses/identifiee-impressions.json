@@ -1,0 +1,166 @@
+{
+  "success": true,
+  "contrat": 2,
+  "scanId": "fausse-impressions-0006",
+  "analyse": {
+    "statut": "identifiee",
+    "cartes": [
+      {
+        "index": 0,
+        "statut": "identifiee",
+        "carte": {
+          "idProduct": 9000101,
+          "nom": "Dracaufeu",
+          "nomCardmarket": "Charizard",
+          "set": {
+            "slug": "Base-Set",
+            "nom": "Set de Base",
+            "code": "BS",
+            "tirage": "intl",
+            "annee": 1999,
+            "symbole": null
+          },
+          "numero": "4",
+          "total": "102",
+          "langue": "FR",
+          "variante": "holo",
+          "rarete": "Holo Rare",
+          "visuel": null,
+          "visuelMention": null,
+          "prixGuide": {
+            "tendance": 330,
+            "de": 285,
+            "moyenne30": 320,
+            "date": "2026-10-04"
+          },
+          "liens": {
+            "cardmarket": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000101",
+            "fiche": null
+          },
+          "impressions": [
+            {
+              "idProduct": 9000101,
+              "numero": "4",
+              "total": "102",
+              "rarete": "Holo Rare",
+              "variante": "holo",
+              "set": {
+                "nom": "Set de Base"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000101",
+              "prixGuide": {
+                "tendance": 330,
+                "de": 285,
+                "moyenne30": null,
+                "date": "2026-10-04"
+              }
+            },
+            {
+              "idProduct": 9000102,
+              "numero": "4",
+              "total": "102",
+              "rarete": "Holo Rare",
+              "variante": "premiere-edition",
+              "set": {
+                "nom": "Set de Base"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000102",
+              "prixGuide": {
+                "tendance": 1180,
+                "de": 950,
+                "moyenne30": null,
+                "date": "2026-10-04"
+              }
+            },
+            {
+              "idProduct": 9000103,
+              "numero": "4",
+              "total": "130",
+              "rarete": "Holo Rare",
+              "variante": "holo",
+              "set": {
+                "nom": "Set de Base 2"
+              },
+              "lien": "https://www.cardmarket.com/fr/Pokemon/Products?idProduct=9000103",
+              "prixGuide": {
+                "tendance": 210,
+                "de": 160,
+                "moyenne30": null,
+                "date": "2026-10-04"
+              }
+            },
+            {
+              "idProduct": 9000104,
+              "numero": "3",
+              "total": "110",
+              "rarete": null,
+              "variante": "holo",
+              "set": {
+                "nom": "Collection Légendaire"
+              },
+              "lien": null,
+              "prixGuide": {
+                "tendance": 300,
+                "de": 240,
+                "moyenne30": null,
+                "date": "2026-10-04"
+              }
+            }
+          ]
+        },
+        "candidats": [],
+        "question": null,
+        "raison": null,
+        "etat": {
+          "estime": "GD",
+          "confiance": "haute",
+          "defauts": [
+            "bords blanchis"
+          ],
+          "declare": "Bon état",
+          "retenu": "GD"
+        },
+        "prixLive": {
+          "idProduct": 9000101,
+          "langues": [
+            2
+          ],
+          "reverseHolo": false,
+          "etatVise": "GD"
+        },
+        "zone": null
+      }
+    ],
+    "lot": null,
+    "regleVerdict": {
+      "bonneAffaireSous": -30,
+      "cherAuDela": 15,
+      "versEUR": 1,
+      "tauxDate": null
+    },
+    "raison": null
+  },
+  "facturation": {
+    "debite": 1,
+    "reserve": 0,
+    "rembourse": false,
+    "motif": "affirmee",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 21,
+    "essai": 0,
+    "accueil": 16,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

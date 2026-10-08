@@ -1,0 +1,254 @@
+{
+  "identifiee.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Une carte identifiée, débitée (affirmee)."
+  },
+  "identifiee-impressions.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Identifiée avec quatre impressions (un lien seulement quand numéro ET rareté sont connus)."
+  },
+  "identifiee-hors-euro.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Annonce en dollars : versEUR est le taux du jour, tauxDate sa date."
+  },
+  "identifiee-sans-taux.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Taux du jour indisponible : versEUR null, AUCUN verdict affiché par l'extension."
+  },
+  "identifiee-administrateur.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Compte administrateur : debite 0, solde intact."
+  },
+  "identifiee-scanner.json": {
+    "route": "POST /api/scanner/analyses",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Au scanner : regleVerdict et prixLive null, un seul prix (le guide)."
+  },
+  "a-trancher-2.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Deux candidats : une question, le crédit est RÉSERVÉ (debite 0, reserve 1)."
+  },
+  "a-trancher-3.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Trois candidats, sans ordre de classement."
+  },
+  "lot.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Un lot de 4 cartes : 1 crédit (ceil(4/10)), questions comprises."
+  },
+  "introuvable-photo-illisible.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (photo-illisible) : remboursé."
+  },
+  "introuvable-pas-une-carte.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (pas-une-carte) : remboursé. Raison de la liste fermée que la chaîne actuelle ne produit pas encore."
+  },
+  "introuvable-hors-catalogue.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (hors-catalogue) : remboursé."
+  },
+  "introuvable-plusieurs-cartes-non-separees.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (plusieurs-cartes-non-separees) : remboursé. Raison de la liste fermée que la chaîne actuelle ne produit pas encore."
+  },
+  "introuvable-panne-lecture.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseAnalyse",
+    "description": "Introuvable (panne-lecture) : remboursé. Raison de la liste fermée que la chaîne actuelle ne produit pas encore."
+  },
+  "panne-ia.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseErreur",
+    "description": "Panne de lecture (IA) : statut HTTP 200 conservé, remboursée. Une panne n'est JAMAIS un introuvable."
+  },
+  "panne-indisponible.json": {
+    "route": "POST /api/identifier",
+    "statut": 503,
+    "schema": "ReponseErreur",
+    "description": "Catalogue ou base injoignable : 503, remboursée."
+  },
+  "panne-serveur.json": {
+    "route": "POST /api/identifier",
+    "statut": 500,
+    "schema": "ReponseErreur",
+    "description": "Erreur interne : 500, remboursée."
+  },
+  "panne-plafond-jour.json": {
+    "route": "POST /api/identifier",
+    "statut": 500,
+    "schema": "ReponseErreur",
+    "description": "Panne dont le remboursement est refusé (plafond de 5 pannes par jour atteint) : reste débitée, la cause s'écrit."
+  },
+  "quota-compte.json": {
+    "route": "POST /api/identifier",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Compte sans crédit : QUOTA avec le solde et l'adresse de recharge."
+  },
+  "quota-installation.json": {
+    "route": "POST /api/identifier",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Installation non liée sans essai : QUOTA ; l'extension propose de créer un compte."
+  },
+  "verification.json": {
+    "route": "POST /api/identifier",
+    "statut": 403,
+    "schema": "ReponseErreur",
+    "description": "Compte lié dont l'adresse n'est pas confirmée."
+  },
+  "debit.json": {
+    "route": "POST /api/identifier",
+    "statut": 429,
+    "schema": "ReponseErreur",
+    "description": "Trop vite ou requête en cours : attendre `reessayerDans` secondes."
+  },
+  "jeton.json": {
+    "route": "POST /api/identifier",
+    "statut": 401,
+    "schema": "ReponseErreur",
+    "description": "Bearer absent, inconnu ou révoqué."
+  },
+  "version.json": {
+    "route": "POST /api/identifier",
+    "statut": 426,
+    "schema": "ReponseErreur",
+    "description": "versionExtension sous le minimum : mise à jour."
+  },
+  "marche.json": {
+    "route": "POST /api/identifier",
+    "statut": 422,
+    "schema": "ReponseErreur",
+    "description": "Marché Vinted hors liste."
+  },
+  "entree.json": {
+    "route": "POST /api/identifier",
+    "statut": 400,
+    "schema": "ReponseErreur",
+    "description": "Entrée invalide ; `detail` précise."
+  },
+  "image.json": {
+    "route": "POST /api/identifier",
+    "statut": 200,
+    "schema": "ReponseErreur",
+    "description": "Aucune image : statut 200 conservé (comme la route héritée)."
+  },
+  "question-repondue.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 200,
+    "schema": "ReponseQuestion",
+    "description": "Réponse par un candidat : la réserve devient le débit."
+  },
+  "question-abandonnee-aucune.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 200,
+    "schema": "ReponseQuestion",
+    "description": "« aucune » : introuvable/hors-catalogue, crédit rendu."
+  },
+  "question-abandonnee-ne-sait-pas.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 200,
+    "schema": "ReponseQuestion",
+    "description": "« ne-sait-pas » : la carte reste à trancher (mêmes candidats), crédit rendu."
+  },
+  "question-plafond.json": {
+    "route": "POST /api/identifier/reponse",
+    "statut": 200,
+    "schema": "ReponseQuestion",
+    "description": "Abandon dont le remboursement est refusé (30 par jour atteints) : motif plafond-jour."
+  },
+  "retour-live.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "Prix lu enregistré."
+  },
+  "retour-live-sans-prix.json": {
+    "route": "POST /api/retour-live",
+    "statut": 200,
+    "schema": "ReponseRetourLive",
+    "description": "Lecture ratée DÉFINITIVE : remboursée une fois par scan (sans-prix)."
+  },
+  "solde-installation-non-liee.json": {
+    "route": "POST /api/solde",
+    "statut": 200,
+    "schema": "ReponseSolde",
+    "description": "Installation non liée : 3 essais, ni hebdomadaire ni paiement."
+  },
+  "solde-installation-liee.json": {
+    "route": "POST /api/solde",
+    "statut": 200,
+    "schema": "ReponseSolde",
+    "description": "Installation liée à un compte vérifié (accueil, hebdomadaire, achetés ; solde partagé avec le scanner)."
+  },
+  "solde-compte-non-verifie.json": {
+    "route": "POST /api/solde",
+    "statut": 200,
+    "schema": "ReponseSolde",
+    "description": "Compte non vérifié : accueil 0 et hebdo 0 même si la base dit autre chose."
+  },
+  "solde-abonnement.json": {
+    "route": "POST /api/solde",
+    "statut": 200,
+    "schema": "ReponseSolde",
+    "description": "Compte abonné : quota mensuel non reportable."
+  },
+  "installation-creee.json": {
+    "route": "POST /api/installation",
+    "statut": 201,
+    "schema": "ReponseInstallation",
+    "description": "Le jeton n'est rendu qu'ICI (valeur fictive)."
+  },
+  "lier.json": {
+    "route": "POST /api/compte/lier",
+    "statut": 200,
+    "schema": "ReponseLier",
+    "description": "Liaison : le jeton est renouvelé, l'ancien révoqué."
+  },
+  "code-liaison.json": {
+    "route": "POST /api/compte/code",
+    "statut": 200,
+    "schema": "ReponseCodeLiaison",
+    "description": "Code de liaison : 6 caractères, 10 minutes, usage unique."
+  },
+  "compte.json": {
+    "route": "GET /api/compte",
+    "statut": 200,
+    "schema": "ReponseCompte",
+    "description": "Le compte connecté : solde, installations, historique."
+  },
+  "compte-non-verifie.json": {
+    "route": "GET /api/compte",
+    "statut": 200,
+    "schema": "ReponseCompte",
+    "description": "Compte non vérifié : pas encore ses 25."
+  }
+}

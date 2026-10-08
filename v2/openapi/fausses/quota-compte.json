@@ -1,0 +1,27 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "QUOTA",
+    "message": "Plus aucune analyse disponible."
+  },
+  "facturation": null,
+  "solde": {
+    "total": 0,
+    "essai": 0,
+    "accueil": 0,
+    "hebdo": 0,
+    "achete": 0,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  },
+  "achat": {
+    "url": "https://rat-market.fr/fr/compte#recharge"
+  }
+}

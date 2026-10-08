@@ -1,0 +1,37 @@
+{
+  "success": true,
+  "carte": {
+    "index": 0,
+    "statut": "introuvable",
+    "carte": null,
+    "candidats": [],
+    "question": null,
+    "raison": "hors-catalogue",
+    "etat": null,
+    "prixLive": null,
+    "zone": null
+  },
+  "facturation": {
+    "debite": 0,
+    "reserve": 0,
+    "rembourse": true,
+    "motif": "question",
+    "raisonNonRembourse": null
+  },
+  "solde": {
+    "total": 22,
+    "essai": 0,
+    "accueil": 17,
+    "hebdo": 2,
+    "achete": 3,
+    "hebdoMax": 2,
+    "prochainHebdo": "2026-10-12",
+    "compte": {
+      "lie": true,
+      "emailMasque": "v•••@exemple.fr",
+      "verifie": true
+    },
+    "partage": true,
+    "abonnement": null
+  }
+}

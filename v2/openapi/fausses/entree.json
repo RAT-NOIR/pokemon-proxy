@@ -1,0 +1,9 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "ENTREE",
+    "message": "Image refusée : hôte non autorisé.",
+    "detail": "image-hote"
+  },
+  "facturation": null
+}

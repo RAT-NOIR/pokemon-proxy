@@ -1,0 +1,8 @@
+{
+  "success": false,
+  "erreur": {
+    "code": "JETON",
+    "message": "Jeton d'installation absent ou refusé."
+  },
+  "facturation": null
+}

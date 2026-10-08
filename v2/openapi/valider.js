@@ -42,6 +42,15 @@ function controlerMotsCles(schema, chemin) {
             throw new Error(`valider : mot-clé non géré "${k}" (${chemin}) — un validateur qui ignore ce qu'il ne comprend pas valide tout`);
 }
 
+/** Vrai si la branche porte au moins une propriété `const` et que la valeur la satisfait (sert à choisir l'indice d'un oneOf raté). */
+function discriminantConcorde(valeur, schema, table) {
+    let s = schema;
+    if (s && s.$ref && s.$ref.startsWith(PREFIXE_REF)) s = table[s.$ref.slice(PREFIXE_REF.length)];
+    if (!s || !s.properties || valeur === null || typeof valeur !== 'object') return false;
+    const consts = Object.entries(s.properties).filter(([, p]) => p && p.const !== undefined);
+    return consts.length > 0 && consts.every(([k, p]) => egal(valeur[k], p.const));
+}
+
 function validerDans(valeur, schema, table, chemin, erreurs) {
     if (schema === true) return;
     if (schema === false) { erreurs.push({ chemin, message: 'schéma `false` : rien n\'est permis ici' }); return; }
@@ -96,7 +105,9 @@ function validerDans(valeur, schema, table, chemin, erreurs) {
         const essais = schema.oneOf.map(s => { const e = []; validerDans(valeur, s, table, chemin, e); return e; });
         const bonnes = essais.filter(e => e.length === 0).length;
         if (bonnes !== 1) {
-            const meilleure = essais.reduce((a, b) => (b.length < a.length ? b : a));
+            // l'INDICE (jamais le verdict) : la branche dont les clés `const` (le discriminant) concordent, sinon la plus proche
+            const discriminee = schema.oneOf.map((s, i) => ({ i, d: discriminantConcorde(valeur, s, table) })).filter(x => x.d).map(x => essais[x.i]);
+            const meilleure = (discriminee.length ? discriminee : essais).reduce((a, b) => (b.length < a.length ? b : a));
             const indice = bonnes === 0 && meilleure[0] ? ` — la branche la plus proche échoue à ${meilleure[0].chemin} : ${meilleure[0].message}` : '';
             erreurs.push({ chemin, message: `oneOf : ${bonnes} correspondance${bonnes > 1 ? 's' : ''} au lieu d'une seule${indice}` });
         }
