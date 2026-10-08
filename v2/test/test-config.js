@@ -20,6 +20,9 @@ H.v('seuils du verdict', c.verdict, { bonneAffaireSous: -30, cherAuDela: 15 });
 H.v('mot de passe : 10 caractères', c.comptes.motDePasseMin, 10);
 H.v('lot : paliers de 10', c.lot.tranche, 10);
 H.v('devises', c.devises, ['EUR', 'GBP', 'USD', 'PLN', 'CZK', 'HUF', 'RON', 'SEK', 'DKK']);
+// un nombre fait d'espaces ne vaut PAS 0 : refus
+let l0 = null; try { lireConfig({ V2_ACCUEIL: '   ' }); } catch (e) { l0 = e.message; }
+H.vrai('V2_ACCUEIL="   " lève (jamais 0 silencieux)', /configuration invalide/.test(l0 || ''));
 // une valeur d'environnement s'applique
 H.v('V2_ACCUEIL=10 s\'applique', lireConfig({ V2_ACCUEIL: '10' }).quotas.accueil, 10);
 // une valeur INVALIDE LÈVE (on n'allume pas la v2 sur une configuration qu'on ne comprend pas)
@@ -43,6 +46,10 @@ H.v('corps d\'erreur', corpsErreur('QUOTA', 'm', { solde: { total: 0 } }),
     { success: false, erreur: { code: 'QUOTA', message: 'm' }, facturation: null, solde: { total: 0 } });
 let l4 = null; try { corpsErreur('INCONNU', 'x'); } catch (e) { l4 = e.message; }
 H.vrai('un code hors liste lève', /code d'erreur inconnu/.test(l4 || ''));
+for (const faux of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+    let e = null; try { corpsErreur(faux, 'x'); } catch (x) { e = x.message; }
+    H.vrai(`un nom hérité du prototype (${faux}) n'est pas un code`, /code d'erreur inconnu/.test(e || ''));
+}
 const res = { s: null, j: null, status(x) { this.s = x; return this; }, json(o) { this.j = o; return this; } };
 repondreErreur(res, 'DEBIT', 'trop vite', { reessayerDans: 2 });
 H.v('repondreErreur : statut 429 et reessayerDans', [res.s, res.j.erreur.reessayerDans], [429, 2]);

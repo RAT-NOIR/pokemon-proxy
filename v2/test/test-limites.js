@@ -2,13 +2,16 @@
 const H = require('./_harnais'); const M = require('../modeles'); const L = require('../transport/limites');
 (async () => {
     await H.ouvrirBac('test-limites.js'); await M.creerIndex();
-    const t0 = new Date('2026-10-08T10:00:00Z');
+    // Horloge RELATIVE : début de la prochaine heure pleine. Une date fixe passée ferait naître des documents déjà expirés
+    // (expireLe = t0 + 2 h) que le moniteur TTL de Mongo peut supprimer en cours de test.
+    const HEURE = 3600e3, debutFenetre = Math.floor(Date.now() / HEURE) * HEURE + HEURE;
+    const t0 = new Date(debutFenetre);
     let r; for (let i = 1; i <= 3; i++) r = await L.consommer('a', { max: 2, fenetreMs: 3600e3, maintenant: t0 });
     H.v('3e appel sur max 2 : refusé', [r.permis, r.n, r.max], [false, 3, 2]);
     H.v('   reessayerDans = secondes restantes de la fenêtre', r.reessayerDans, 3600);
     const autre = await L.consommer('b', { max: 2, fenetreMs: 3600e3, maintenant: t0 });
     H.v('une autre clé a son propre compteur', autre.permis, true);
-    const suiv = await L.consommer('a', { max: 2, fenetreMs: 3600e3, maintenant: new Date('2026-10-08T11:00:01Z') });
+    const suiv = await L.consommer('a', { max: 2, fenetreMs: 3600e3, maintenant: new Date(debutFenetre + HEURE + 1000) });
     H.v('fenêtre suivante : repart à 1', [suiv.permis, suiv.n], [true, 1]);
     // concurrence : 50 appels simultanés sur max 20 => exactement 20 permis
     const rs = await Promise.all(Array.from({ length: 50 }, () => L.consommer('conc', { max: 20, fenetreMs: 3600e3, maintenant: t0 })));
@@ -24,5 +27,7 @@ const H = require('./_harnais'); const M = require('../modeles'); const L = requ
     const res2 = { s: null, j: null, status(x) { this.s = x; return this; }, json(o) { this.j = o; return this; }, setHeader() {} };
     let p2 = 0; await L.limiteur({ nom: 'y', max: 5, fenetreMs: 60e3, cle: () => null })({ ip: '1.1.1.1' }, res2, () => p2++);
     H.v('clé non calculable => refus fermé (pas de passage)', [p2, res2.s], [0, 503]);
+    const docs = await require('../db').col('limites').find().toArray();
+    H.vrai(`aucun des ${docs.length} documents de limite n'est né déjà expiré (moniteur TTL)`, docs.length > 0 && docs.every(d => d.expireLe > new Date()));
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

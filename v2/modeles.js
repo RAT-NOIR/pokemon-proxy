@@ -31,12 +31,26 @@ async function creerIndex() {
     for (const i of INDEX) await col(i.c).createIndex(i.cle, i.opts);
     return INDEX.length;
 }
+// Les propriétés qu'un index GARANTIT : c'est elles qu'on compare, jamais le seul nom (un index de même nom, non unique ou sans TTL,
+// ne garantit rien). Retourne la liste des propriétés qui diffèrent (vide = conforme).
+const sig = x => JSON.stringify(x === undefined ? null : x);
+function ecarts(declare, present) {
+    const e = [];
+    if (sig(Object.entries(present.key)) !== sig(Object.entries(declare.cle))) e.push('key');
+    if (Boolean(present.unique) !== Boolean(declare.opts.unique)) e.push('unique');
+    if (sig(present.expireAfterSeconds) !== sig(declare.opts.expireAfterSeconds)) e.push('expireAfterSeconds');
+    if (sig(present.partialFilterExpression) !== sig(declare.opts.partialFilterExpression)) e.push('partialFilterExpression');
+    return e;
+}
 async function verifierIndex() {
     const manquants = [];
     for (const i of INDEX) {
         let presents = [];
-        try { presents = (await col(i.c).indexes()).map(x => x.name); } catch (e) { if (e.codeName !== 'NamespaceNotFound' && e.code !== 26) throw e; }
-        if (!presents.includes(i.opts.name)) manquants.push(`${i.c}.${i.opts.name}`);
+        try { presents = await col(i.c).indexes(); } catch (e) { if (e.codeName !== 'NamespaceNotFound' && e.code !== 26) throw e; }
+        const p = presents.find(x => x.name === i.opts.name);
+        if (!p) { manquants.push(`${i.c}.${i.opts.name}`); continue; }
+        const diff = ecarts(i, p);
+        if (diff.length) manquants.push(`${i.c}.${i.opts.name} (forme fausse : ${diff.join(', ')})`);
     }
     return { manquants };
 }

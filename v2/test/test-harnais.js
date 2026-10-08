@@ -4,6 +4,14 @@ const H = require('./_harnais');
 const db = require('../db');
 
 (async () => {
+    // M4 : un `--base=` en argument ne doit JAMAIS faire ouvrir une autre base : refus AVANT toute connexion.
+    // Le cas fabriqué utilise --base=test_scratch (inoffensif) : seule la présence de l'argument compte, jamais sa valeur.
+    if (!process.argv.some(a => /^--base\b/.test(a))) {
+        const { spawnSync } = require('child_process');
+        const r = spawnSync(process.execPath, [__filename, '--base=test_scratch'], { encoding: 'utf8' });
+        H.v('--base= en argument : le banc sort en code 1', r.status, 1);
+        H.vrai('   et AUCUNE connexion n\'a été ouverte', !/Base : "/.test(r.stdout || '') && /--base/.test((r.stdout || '') + (r.stderr || '')));
+    }
     const prefixe = await H.ouvrirBac('test-harnais.js');
     // 1. une collection v2 est préfixée
     await db.col('comptes').insertOne({ x: 1 });

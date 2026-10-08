@@ -6,7 +6,7 @@ const CODES = Object.freeze({
     CONFLIT: 409, CREDITS_ACHETES: 409, ENTREE: 400
 });
 function corpsErreur(code, message, extra = {}) {
-    if (!(code in CODES)) throw new Error(`code d'erreur inconnu : ${code}`);
+    if (!Object.hasOwn(CODES, code)) throw new Error(`code d'erreur inconnu : ${code}`);
     const erreur = { code, message };
     if (extra.detail !== undefined) erreur.detail = extra.detail;
     if (extra.reessayerDans !== undefined) erreur.reessayerDans = extra.reessayerDans;

@@ -2,7 +2,7 @@
 const POCHES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 const entier = (nom, v, defaut, min = 0) => {
     if (v === undefined || v === '') return defaut;
-    const n = Number(v);
+    const n = String(v).trim() === '' ? NaN : Number(v);   // Number(' ') vaut 0 : un nombre fait d'espaces n'est pas un nombre
     if (!Number.isInteger(n) || n < min) throw new Error(`configuration invalide : ${nom}="${v}"`);
     return n;
 };

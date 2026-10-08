@@ -29,6 +29,23 @@ const M = require('../modeles');
     // fabriques
     const i = M.nouvelleInstallation({ jetonEmpreinte: 'h', essais: 3, libelle: 'Chrome · Windows' });
     H.v('installation neuve non liée', [i.compteId, i.essais, i.libelle], [null, 3, 'Chrome · Windows']);
+    // I1 : la garde compare ce que l'index GARANTIT (clé, unicité, TTL, filtre partiel), pas son nom.
+    // Chaque cas fabrique un index de MÊME NOM mais de forme fausse : la garde doit dire NON, et nommer la propriété.
+    async function refaire(c, nom, cle, opts) {
+        await db.col(c).dropIndex(nom);
+        await db.col(c).createIndex(cle, { name: nom, ...opts });
+        const r = await M.verifierIndex();
+        const ligne = r.manquants.find(m => m.startsWith(`${c}.${nom}`));
+        await db.col(c).dropIndex(nom);
+        const decl = M.INDEX.find(x => x.c === c && x.opts.name === nom);
+        await db.col(c).createIndex(decl.cle, decl.opts);   // rétablit la forme juste pour le cas suivant
+        return ligne || null;
+    }
+    H.vrai('même nom mais NON unique => refusé (comptes_emailCle)', /unique/.test(await refaire('comptes', 'comptes_emailCle', { emailCle: 1 }, {})));
+    H.vrai('TTL avec une autre durée => refusé (sessions_ttl)', /expireAfterSeconds/.test(await refaire('sessions', 'sessions_ttl', { expireLe: 1 }, { expireAfterSeconds: 60 })));
+    H.vrai('unique SANS filtre partiel => refusé (installations_heritage)', /partialFilterExpression/.test(await refaire('installations', 'installations_heritage', { heriteEmpreinte: 1 }, { unique: true })));
+    H.vrai('autre clé sous le même nom => refusé (installations_compte)', /key/.test(await refaire('installations', 'installations_compte', { libelle: 1 }, {})));
+    H.v('après rétablissement, rien ne manque', (await M.verifierIndex()).manquants, []);
     await H.fermerBac();
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
