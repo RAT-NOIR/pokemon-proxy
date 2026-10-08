@@ -50,6 +50,9 @@ async function jouer(cas) {
     } else if (cas === 'vignette-lot') {                   // l'incident du 2026-10-08 : un rejeu réécrit l'entrée (jointeLe) et perd la vignette
         await C.updateOne({ _id: 1 }, { $unset: { 'images.0.vignette': 1 }, $set: { 'images.0.jointeLe': new Date() } });
         await P.insertOne({ _id: '500-1', idProduct: 500, idExpansion: 15, carteId: 1, verifieLe: new Date() });   // et il ajoute quelque chose (voulu)
+        // pendant ce temps le worker joint une image neuve sur la MÊME carte, dans un autre set : l'arrêt ne doit pas la perdre (relecture)
+        await C.updateOne({ _id: 1 }, { $push: { images: { set: 'Set-B', numero: '9', cleR2: 'b/9', jointeLe: new Date() } } });
+        await db.collection('collecte_images_etat').updateOne({ _id: 'tcgdex/Set-B' }, { $set: { debute: new Date(), fini: new Date() } }, { upsert: true });
     } else if (cas === 'additif') {
         await P.insertOne({ _id: '400-1', idProduct: 400, idExpansion: 14, carteId: 1, verifieLe: new Date() });
     } else throw new Error(`cas inconnu : ${cas}`);
@@ -111,7 +114,8 @@ async function main() {
         r = lot('vignette-lot');
         c1 = await db.collection('cartes').findOne({ _id: 1 });
         verifier('F. vignette effacée par le lot : arrêt (code 3), la vignette revient, la fiche du lot repart', [r.code, c1.images[0].vignette?.cleR2, await db.collection('cartes_produits').countDocuments({ _id: '500-1' })], [3, 'vignettes/a/2.webp', 0]);
-        verifier('F. le journal nomme la baisse de vignettes', /vignettes-images set:Set-A 1→0/.test(r.ligne), true);
+        verifier('F. le journal nomme la baisse de vignettes (clé par entrée)', /vignettes-images set:Set-A\\?\|1\\?\|2\\?\|a\/2 1→0/.test(r.ligne), true);
+        verifier('F. restauration CHIRURGICALE : l\'image du worker (autre set, même carte) reste, le tableau n\'est pas remplacé', c1.images.map(i => i.cleR2), ['a/2', 'b/9']);
         if (r.code !== 3) console.log(r.sortie);
 
         // ── E. purement additif

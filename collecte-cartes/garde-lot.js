@@ -31,8 +31,9 @@ const COMPTEURS = Object.freeze({
     'illustrateurs-nommes': 'impressions dont l\'illustrateur est un nom',
     'images': 'entrées de cartes.images, par set',
     // ➕ 2026-10-08 : un rejeu de jointure a effacé `vignette` de 1 089 entrées sans qu'aucun compteur bouge — (set, cleR2, numero)
-    // ne changent pas. Le site lit la vignette (grilles) : une vignette effacée est une baisse, jamais dispensée par le worker.
-    'vignettes-images': 'entrées de cartes.images qui portent une vignette, par set',
+    // ne changent pas. Le site lit la vignette (grilles) : une vignette effacée est une baisse. Dispensée seulement dans un set où le
+    // worker a écrit pendant la fenêtre (comme les images).
+    'vignettes-images': 'entrées de cartes.images qui portent une vignette, UNE CLÉ PAR ENTRÉE (set|carte|numero|cleR2)',
     'nom-affiche': 'le set porte un nomAffichage'
 });
 
@@ -60,7 +61,13 @@ function compterEtat({ cartes = [], cartesProduits = [], sets = [] }) {
             if ('illustrateur' in i) inc(`illustrateurs ${g}`);
             if (typeof i.illustrateur === 'string' && i.illustrateur) inc(`illustrateurs-nommes ${g}`);
         }
-        for (const im of c.images || []) if (im) { inc(`images set:${im.set}`); if (im.vignette) inc(`vignettes-images set:${im.set}`); }
+        for (const im of c.images || []) if (im) {
+            inc(`images set:${im.set}`);
+            // une clé PAR ENTRÉE (set|carte|numero|cleR2) : un nombre par set laissait passer « une perdue, une gagnée » (relecture 2026-10-08)
+            const g = `set:${im.set}|${c._id}|${im.numero ?? ''}|${im.cleR2 ?? ''}`;
+            inc(`entrees-cles ${g}`);   // interne (hors COMPTEURS) : dit si l'entrée existe encore, pour ne pas compter deux fois sa disparition
+            if (im.vignette) inc(`vignettes-images ${g}`);
+        }
     }
     for (const s of sets) if (s.nomAffichage) inc(`nom-affiche set:${s._id}`);
     return m;
@@ -79,14 +86,20 @@ function comparer(avant, apres, { annonces = {}, setsDuWorker = new Set() } = {}
         const m = apres.get(cle) || 0;
         if (m >= n) continue;
         const [compteur, groupe] = decouper(cle);
+        if (compteur === 'entrees-cles') continue;   // interne
+        // l'entrée a disparu : c'est une baisse d'IMAGES (comptée par set), pas en plus une baisse de vignette
+        if (compteur === 'vignettes-images' && !apres.get(`entrees-cles ${groupe}`)) continue;
         const baisse = n - m, annonce = annonces[cle] || 0;
+        // dispense du worker : même preuve (ses propres dates, sets de la fenêtre) pour les images et leurs vignettes — il réécrit des
+        // entrées puis les revignette (collecteur-images.js)
+        const setDuGroupe = groupe.replace(/^set:/, '').split('|')[0];
         const autorisee = baisse <= annonce ? 'annoncée'
-            : compteur === 'images' && setsDuWorker.has(groupe.replace(/^set:/, '')) ? 'worker' : null;
+            : (compteur === 'images' || compteur === 'vignettes-images') && setsDuWorker.has(setDuGroupe) ? 'worker' : null;
         baisses.push({ cle, compteur, groupe, avant: n, apres: m, baisse, annonce, autorisee });
     }
     for (const [cle, m] of apres) {
         const d = m - (avant.get(cle) || 0);
-        if (d > 0) { const [compteur] = decouper(cle); hausses[compteur] = (hausses[compteur] || 0) + d; }
+        if (d > 0) { const [compteur] = decouper(cle); if (compteur !== 'entrees-cles') hausses[compteur] = (hausses[compteur] || 0) + d; }
     }
     const annoncesNonRealisees = Object.entries(annonces)
         .map(([cle, a]) => ({ cle, annonce: a, baisse: baisses.find(b => b.cle === cle)?.baisse || 0 }))
@@ -125,6 +138,27 @@ function planRestauration(sauves, actuels, { garder = () => [] } = {}) {
     }
     for (const [k, a] of actuels) if (!sauves.has(k)) plan.supprimer.push(a._id);
     return plan;
+}
+
+/**
+ * Restauration CHIRURGICALE des vignettes (2026-10-08) : pour chaque entrée (carte, set, cleR2) des sets fautifs qui avait une vignette dans
+ * la sauvegarde et n'en a plus, remettre CE champ (et `jointeLe`, réécrit avec lui) — jamais le tableau `images`, que le worker écrit en
+ * même temps. Une entrée qui a une vignette maintenant, ou n'existe plus, n'est pas touchée. Même geste que la restauration manuelle de la nuit.
+ * @returns {{_id, set, cleR2, vignette, jointeLe}[]}
+ */
+function planVignettes(sauvegardees, actuelles, setsFautifs) {
+    const actuel = new Map(actuelles.map(d => [cleDoc(d._id), d]));
+    const liste = [];
+    for (const a of sauvegardees) {
+        const b = actuel.get(cleDoc(a._id)); if (!b) continue;
+        const mb = new Map((b.images || []).filter(Boolean).map(e => [`${e.set}|${e.cleR2}`, e]));
+        for (const e of a.images || []) {
+            if (!e || !e.vignette || !setsFautifs.has(e.set)) continue;
+            const n = mb.get(`${e.set}|${e.cleR2}`);
+            if (n && !n.vignette) liste.push({ _id: a._id, set: e.set, cleR2: e.cleR2, vignette: e.vignette, jointeLe: e.jointeLe ?? null });
+        }
+    }
+    return liste;
 }
 
 // ── LES SETS TOUCHÉS PAR UN LOT (2026-09-25) — ce que la revalidation à la demande du site attend (collecte-cartes/revalider-site.js).
@@ -212,4 +246,4 @@ function setsTouches({ avant, apres }) {
     return { sets: [...touches].sort(), catalogue, especes, setsInfo };
 }
 
-module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, canon, setsTouches, PROJECTION_CARTES };
+module.exports = { COMPTEURS, compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, canon, setsTouches, PROJECTION_CARTES };

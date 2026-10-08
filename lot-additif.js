@@ -28,7 +28,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { EJSON } = require('mongodb').BSON;
-const { compterEtat, comparer, validerAnnonces, planRestauration, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
+const { compterEtat, comparer, validerAnnonces, planRestauration, planVignettes, cleDoc, setsTouches } = require('./collecte-cartes/garde-lot');
 // ➕ 2026-09-25 : le site ne régénère plus ses pages de lui-même (quota Vercel) ; sans appel, une page attend 30 jours. Un lot
 // réussi sur la base `cartes` demande donc la revalidation des sets qu'il a TOUCHÉS (documents comparés, pas compteurs) — et
 // d'eux seuls. Un échec de revalidation ne défait rien (les données sont justes), mais il s'écrit au journal en 🔴.
@@ -191,7 +191,7 @@ function journaliser(t, dossier, combien, sortie) {
     // ── ARRÊT : restauration depuis la sauvegarde
     const fautives = cmp.nonAutorisees.map(decrire);
     console.log(`\n   🔴 ARRÊT : ${cmp.nonAutorisees.length} baisse(s) NON ANNONCÉE(S) :\n      ${fautives.join('\n      ')}\n   6. restauration depuis ${dossier}`);
-    const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images' || b.compteur === 'vignettes-images').map(b => b.groupe.replace(/^set:/, '')));
+    const imagesFautives = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'images').map(b => b.groupe.replace(/^set:/, '')));
     const garderPour = coll => (d, a) => {
         const champs = CHAMPS_DU_WORKER[coll] || [];
         if (coll === 'cartes' && [...(d.images || []), ...(a.images || [])].some(im => imagesFautives.has(im?.set))) return champs.filter(f => f !== 'images');
@@ -207,6 +207,23 @@ function journaliser(t, dossier, combien, sortie) {
         if (ops.length) await db.collection(coll).bulkWrite(ops, { ordered: false });
         const champs = Object.entries(plan.champs).map(([f, n]) => `${f}×${n}`).join(' ');
         faits.push(`${coll} ${plan.remplacer.length} remplacé(s)${champs ? ` [${champs}]` : ''}, ${plan.inserer.length} réinséré(s), ${plan.supprimer.length} retiré(s)`);
+        console.log(`      ${faits.at(-1)}`);
+    }
+    // 🔑 Les vignettes se restaurent CHIRURGICALEMENT (relecture du 2026-10-08) : une baisse de `vignettes-images` ne fait JAMAIS remplacer le
+    // tableau `images` (le worker y écrit en même temps : les images neuves de la fenêtre, et celles des autres sets de la carte, seraient
+    // perdues sans que la relecture le voie — une hausse perdue n'est pas une baisse). On remet le seul champ `vignette` (et `jointeLe`,
+    // réécrit avec lui) de chaque entrée du set fautif qui en avait une dans la sauvegarde et n'en a plus.
+    const setsVignettesFautifs = new Set(cmp.nonAutorisees.filter(b => b.compteur === 'vignettes-images').map(b => b.groupe.replace(/^set:/, '').split('|')[0]));
+    if (setsVignettesFautifs.size && aSauver.includes('cartes') && RESTAURABLES.includes('cartes')) {
+        const aRemettre = planVignettes(lireSauvegarde(dossier, 'cartes'), await db.collection('cartes').find({}, { projection: { images: 1 } }).toArray(), setsVignettesFautifs);
+        let n = 0;
+        for (const x of aRemettre) {
+            const r = await db.collection('cartes').updateOne({ _id: x._id },
+                { $set: { 'images.$[e].vignette': x.vignette, ...(x.jointeLe ? { 'images.$[e].jointeLe': x.jointeLe } : {}) } },
+                { arrayFilters: [{ 'e.set': x.set, 'e.cleR2': x.cleR2, 'e.vignette': { $exists: false } }] });
+            n += r.modifiedCount;
+        }
+        faits.push(`cartes : ${n} vignette(s) remise(s) champ par champ (${aRemettre.length} prévue(s)), tableau images intact`);
         console.log(`      ${faits.at(-1)}`);
     }
     const nonRestaurees = aSauver.filter(x => !RESTAURABLES.includes(x));
