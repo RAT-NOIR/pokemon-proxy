@@ -15,7 +15,7 @@ function banc(reponses, { allume = true, t0 = Date.parse('2026-10-08T12:00:00Z')
     const etat = { now: t0, doc: null, requetes: 0 };
     const file = [...reponses];
     const client = async () => { etat.requetes++; const r = file.length > 1 ? file.shift() : file[0]; if (r instanceof Error) throw r; return r; };
-    const magasin = { lire: async () => etat.doc, ecrire: async d => { etat.doc = { ...d }; } };
+    const magasin = { lire: async () => etat.doc, ecrire: async d => { etat.doc = { ...d }; }, reserver: async (lu, now) => { etat.doc = { ...(etat.doc || { _id: 'alerte/source-bloquee/bulbapedia', active: false }), dernierEssai: now }; return true; } };
     const essai = E.fabriquerEssaiEspace({ client, magasin, maintenant: () => etat.now, allume });
     return { etat, essai };
 }
@@ -29,7 +29,11 @@ function banc(reponses, { allume = true, t0 = Date.parse('2026-10-08T12:00:00Z')
     await t('429 = AUTRE avec retry-after', () => { const v = E.verdictDe(rep(429, { 'retry-after': '120' })); assert.strictEqual(v.verdict, 'AUTRE'); assert.ok(/429/.test(v.motif)); });
     await t('503 = AUTRE', () => assert.strictEqual(E.verdictDe(rep(503)).verdict, 'AUTRE'));
     await t('302 = AUTRE (jamais suivie)', () => assert.strictEqual(E.verdictDe(rep(302, { location: 'https://x' })).verdict, 'AUTRE'));
-    await t('robots.txt qui interdit /w/api.php = AUTRE', () => assert.strictEqual(E.verdictDe(rep(200, {}, 'User-agent: *\nDisallow: /w/\n')).verdict, 'AUTRE'));
+    await t('robots.txt qui interdit /w/api.php = AUTRE (motif robots)', () => { const v = E.verdictDe(rep(200, { 'content-type': 'text/plain' }, 'User-agent: *\nDisallow: /w/\n')); assert.strictEqual(v.verdict, 'AUTRE'); assert.ok(/robots/.test(v.motif)); });
+    await t('200 au corps vide = AUTRE (pas SERVI)', () => assert.strictEqual(E.verdictDe(rep(200, { 'content-type': 'text/plain' }, '')).verdict, 'AUTRE'));
+    await t('200 en HTML sans défi reconnu = AUTRE', () => assert.strictEqual(E.verdictDe(rep(200, { 'content-type': 'text/html' }, '<html><body>Bienvenue</body></html>')).verdict, 'AUTRE'));
+    await t('200 text/plain sans ligne User-agent = AUTRE', () => assert.strictEqual(E.verdictDe(rep(200, { 'content-type': 'text/plain' }, 'hello')).verdict, 'AUTRE'));
+    await t('200 text/html portant une ligne User-agent = AUTRE (content-type exigé)', () => assert.strictEqual(E.verdictDe(rep(200, { 'content-type': 'text/html' }, 'User-agent: *\nDisallow:\n')).verdict, 'AUTRE'));
     await t('aucune réponse exploitable (null) = AUTRE', () => assert.strictEqual(E.verdictDe(null).verdict, 'AUTRE'));
 
     console.log('machine d\'état');
@@ -94,12 +98,86 @@ function banc(reponses, { allume = true, t0 = Date.parse('2026-10-08T12:00:00Z')
         const r = await e.essayer(); assert.strictEqual(r.envoye, false); assert.strictEqual(n, 0);
     });
     await t('écriture de la suspension impossible après un défi : le dit (ne passe pas sous silence)', async () => {
-        const e = E.fabriquerEssaiEspace({ client: async () => DEFI, magasin: { lire: async () => null, ecrire: async () => { throw new Error('mongo down'); } }, maintenant: () => 0, allume: true });
+        const e = E.fabriquerEssaiEspace({ client: async () => DEFI, magasin: { lire: async () => null, reserver: async () => true, ecrire: async () => { throw new Error('mongo down'); } }, maintenant: () => 0, allume: true });
         await assert.rejects(() => e.essayer(), /mongo down/);
     });
     await t('état corrompu (jusqua absent mais active) : traité comme suspendu', async () => {
         let n = 0; const e = E.fabriquerEssaiEspace({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => ({ active: true }), ecrire: async () => { } }, maintenant: () => 5, allume: true });
         assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
+    });
+
+    console.log('garde d\'état (autoriser seulement)');
+    const sansRequete = async (doc, nom) => t(nom, async () => {
+        const b = banc([SERVI]); b.etat.doc = doc; const r = await b.essai.essayer();
+        assert.strictEqual(r.envoye, false); assert.strictEqual(b.etat.requetes, 0);
+    });
+    await sansRequete({}, 'état {} : bloque');
+    await sansRequete({ active: 'true' }, 'état {active:"true"} : bloque');
+    await sansRequete({ active: 'false', dernierEssai: 1 }, 'état {active:"false"} : bloque');
+    await sansRequete({ active: false }, 'état actif=false sans dernierEssai : bloque');
+    await sansRequete({ active: true, jusqua: 1 }, 'état suspendu échu mais sans dernierEssai : bloque');
+    await sansRequete([], 'état non objet : bloque');
+    await t('allume:"oui" n\'allume pas (seul true)', async () => {
+        let n = 0; const e = E.fabriquerEssaiEspace({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => null, ecrire: async () => { }, reserver: async () => true }, maintenant: () => 0, allume: 'oui' });
+        assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
+    });
+    await t('cadenceMs négatif / 0 / NaN / texte ne raccourcit jamais sous 60 s', async () => {
+        for (const c of [-5, 0, NaN, 'x', null]) {
+            const b = banc([SERVI]); const t0 = b.etat.now; b.etat.doc = { active: false, dernierEssai: t0, cadenceMs: c };
+            b.etat.now = t0 + E.CADENCE_ESSAI_MS - 1; await b.essai.essayer(); assert.strictEqual(b.etat.requetes, 0, 'cadenceMs=' + c);
+        }
+    });
+    await t('Crawl-delay: 120 : la cadence retenue n\'est jamais sous 120 s', async () => {
+        const robots = 'User-agent: *\nCrawl-delay: 120\n';
+        const b = banc([rep(200, { 'content-type': 'text/plain' }, robots), SERVI]); await b.essai.essayer();
+        b.etat.now += 119 * 1000; await b.essai.essayer(); assert.strictEqual(b.etat.requetes, 1);
+        b.etat.now += 1000; await b.essai.essayer(); assert.strictEqual(b.etat.requetes, 2);
+    });
+    await t('sans magasin.reserver : aucune requête (prise atomique obligatoire)', async () => {
+        let n = 0; const e = E.fabriquerEssaiEspace({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => null, ecrire: async () => { } }, maintenant: () => 0, allume: true });
+        assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
+    });
+    await t('réservation refusée (un autre worker a pris l\'essai) : aucune requête', async () => {
+        let n = 0; const e = E.fabriquerEssaiEspace({ client: async () => { n++; return SERVI; }, magasin: { lire: async () => null, ecrire: async () => { }, reserver: async () => false }, maintenant: () => 0, allume: true });
+        assert.strictEqual((await e.essayer()).envoye, false); assert.strictEqual(n, 0);
+    });
+
+    console.log('magasinMongo (fausse collection)');
+    function fausseCollection() {
+        const docs = new Map(), journal = [];
+        const ok = (d, f) => Object.entries(f).every(([k, v]) => d[k] === v);
+        const trouver = f => [...docs.values()].find(d => ok(d, f)) || null;
+        return {
+            docs, journal,
+            findOne: async f => { journal.push(['findOne', f]); const d = trouver(f); return d ? { ...d } : null; },
+            insertOne: async d => { journal.push(['insertOne', d]); if (docs.has(d._id)) throw new Error('E11000'); docs.set(d._id, { ...d }); return { acknowledged: true }; },
+            updateOne: async (f, u, o) => { journal.push(['updateOne', f, u, o]); let d = trouver(f); if (!d && o && o.upsert) { d = { _id: f._id }; docs.set(d._id, d); } if (d) { assert.ok(!('_id' in u.$set), '$set ne porte pas _id'); Object.assign(d, u.$set); } return { matchedCount: d ? 1 : 0 }; },
+            findOneAndUpdate: async (f, u) => { journal.push(['findOneAndUpdate', f, u]); const d = trouver(f); if (!d) return null; Object.assign(d, u.$set); return { ...d }; }
+        };
+    }
+    await t('lire filtre par _id ; ecrire = updateOne {_id}, $set sans _id, upsert', async () => {
+        const c = fausseCollection(), m = E.magasinMongo(c);
+        await m.ecrire({ _id: E.ID_ETAT, active: true, jusqua: 9 });
+        const j = c.journal[0]; assert.strictEqual(j[0], 'updateOne'); assert.deepStrictEqual(j[1], { _id: E.ID_ETAT }); assert.strictEqual(j[3].upsert, true);
+        assert.strictEqual((await m.lire()).jusqua, 9); assert.deepStrictEqual(c.journal[1][1], { _id: E.ID_ETAT });
+    });
+    await t('reserver sur état absent : insertOne ; la seconde prise échoue', async () => {
+        const c = fausseCollection(), m = E.magasinMongo(c);
+        assert.strictEqual(await m.reserver(null, 100), true); assert.strictEqual(await m.reserver(null, 100), false);
+    });
+    await t('reserver sur état lu : findOneAndUpdate conditionnel (active, dernierEssai) ; un état changé refuse', async () => {
+        const c = fausseCollection(), m = E.magasinMongo(c);
+        await m.ecrire({ _id: E.ID_ETAT, active: false, dernierEssai: 10 });
+        const lu = await m.lire();
+        assert.strictEqual(await m.reserver(lu, 5000), true);
+        const f = c.journal.find(x => x[0] === 'findOneAndUpdate')[1]; assert.deepStrictEqual(f, { _id: E.ID_ETAT, active: false, dernierEssai: 10 });
+        assert.strictEqual(await m.reserver(lu, 6000), false);
+    });
+    await t('DEUX workers sur la même collection : une seule requête part', async () => {
+        const c = fausseCollection(); let n = 0;
+        const mk = () => E.fabriquerEssaiEspace({ client: async () => { n++; return SERVI; }, magasin: E.magasinMongo(c), maintenant: () => 1e12, allume: true });
+        const [a, b] = await Promise.all([mk().essayer(), mk().essayer()]);
+        assert.strictEqual(n, 1); assert.strictEqual([a, b].filter(r => r.envoye).length, 1);
     });
 
     console.log('client direct');

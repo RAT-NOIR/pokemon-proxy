@@ -42,7 +42,10 @@ function verdictDe(rep) {
     const texte = typeof rep.texte === 'string' ? rep.texte.slice(0, 5000) : '';
     if (/challenge/i.test(h('cf-mitigated') || '') || DEFI_PAGE.test(texte)) return { verdict: 'DEFI', motif: `défi anti-robot (${resume})`, retryAfterS: Number(h('retry-after')) || null };
     if (rep.status !== 200) return { verdict: 'AUTRE', motif: `HTTP ${rep.status} (${resume})`, retryAfterS: Number(h('retry-after')) || null };
-    // 200 : la sonde lit robots.txt (une seule requête) — l'API doit y être permise pour notre agent, sinon on ne vient pas.
+    // 200 : SERVI seulement si c'est un vrai robots.txt (text/plain portant au moins une ligne User-agent) : un corps vide ou une page HTML
+    // sans défi reconnu n'est pas une preuve que le site nous sert.
+    if (!/^text\/plain/i.test(h('content-type') || '') || !/^\s*user-agent\s*:/im.test(texte)) return { verdict: 'AUTRE', motif: `200 qui n'est pas un robots.txt lisible (${resume})` };
+    // l'API doit être permise pour notre agent, sinon on ne vient pas.
     if (!autoriseParRobots(texte, CHEMIN_API, UA)) return { verdict: 'AUTRE', motif: `robots.txt interdit ${CHEMIN_API} (${resume})` };
     return { verdict: 'SERVI', motif: `200 sans défi (${resume})`, crawlDelayS: delaiDesRobots(texte, UA) };
 }
@@ -69,13 +72,23 @@ function fabriquerEssaiEspace({ client, magasin, maintenant = Date.now, allume =
             const now = maintenant();
             let etat;
             try { etat = await magasin.lire(); } catch (e) { return { envoye: false, raison: `état illisible (${e.message}) : on ne peut pas conclure` }; }
-            if (etat && etat.active === true) {
-                if (!Number.isFinite(etat.jusqua)) return { envoye: false, raison: 'suspendu, échéance illisible : on ne peut pas conclure' };
-                if (now < etat.jusqua) return { envoye: false, raison: `suspendu jusqu'à ${new Date(etat.jusqua).toISOString()} (${etat.motif})` };
+            if (typeof magasin.reserver !== 'function') return { envoye: false, raison: 'magasin sans prise atomique : on ne peut pas conclure' };
+            // On n'autorise QUE : aucun état (jamais essayé), ou un état complet — active booléen, dernierEssai fini, cadence écoulée,
+            // et si suspendu une échéance finie et échue. Tout autre cas bloque et le dit.
+            if (etat != null) {
+                if (typeof etat !== 'object' || Array.isArray(etat) || typeof etat.active !== 'boolean') return { envoye: false, raison: 'état illisible (active non booléen) : on ne peut pas conclure' };
+                if (etat.active === true) {
+                    if (!Number.isFinite(etat.jusqua)) return { envoye: false, raison: 'suspendu, échéance illisible : on ne peut pas conclure' };
+                    if (now < etat.jusqua) return { envoye: false, raison: `suspendu jusqu'à ${new Date(etat.jusqua).toISOString()} (${etat.motif})` };
+                }
+                if (!Number.isFinite(etat.dernierEssai)) return { envoye: false, raison: 'état sans date d\'essai : on ne peut pas conclure' };
+                const cadence = Math.max(CADENCE_ESSAI_MS, Number.isFinite(etat.cadenceMs) ? etat.cadenceMs : 0);
+                if (now < etat.dernierEssai + cadence) return { envoye: false, raison: 'cadence d\'essai non écoulée' };
             }
-            if (etat && Number.isFinite(etat.dernierEssai) && now < etat.dernierEssai + (etat.cadenceMs || CADENCE_ESSAI_MS))
-                return { envoye: false, raison: 'cadence d\'essai non écoulée' };
-            if (etat && !Number.isFinite(etat.dernierEssai) && etat.active === false) return { envoye: false, raison: 'état sans date d\'essai : on ne peut pas conclure' };
+            // Prise atomique de l'essai (deux workers : un seul passe). Un refus ou une erreur = pas de requête.
+            let prise = false;
+            try { prise = (await magasin.reserver(etat ?? null, now)) === true; } catch (e) { return { envoye: false, raison: `réservation impossible (${e.message})` }; }
+            if (!prise) return { envoye: false, raison: 'essai pris par un autre processus' };
 
             let v;
             try { v = verdictDe(await client()); } catch (e) { v = { verdict: 'AUTRE', motif: `erreur réseau : ${e.code || e.message}` }; }
@@ -95,10 +108,20 @@ function fabriquerEssaiEspace({ client, magasin, maintenant = Date.now, allume =
     return { essayer };
 }
 
-/** Adaptateur Mongo (collection `collecte_images_etat`, base `cartes`) : une façade fine, testable par une fausse collection. */
+/** Adaptateur Mongo (collection `collecte_images_etat`, base `cartes`) : testé sur une fausse collection (test-bulba-espacement.js). */
 function magasinMongo(collection) {
     return {
         lire: () => collection.findOne({ _id: ID_ETAT }),
+        // Prise atomique : conditionnelle à l'état LU. Absent : insertOne (le doublon de clé refuse). Présent : findOneAndUpdate sur
+        // (active, dernierEssai) lus — si un autre processus a pris l'essai entre-temps, le filtre ne correspond plus.
+        async reserver(lu, now) {
+            try {
+                if (lu == null) { await collection.insertOne({ _id: ID_ETAT, active: false, dernierEssai: now, reserve: true }); return true; }
+                const r = await collection.findOneAndUpdate({ _id: ID_ETAT, active: lu.active, dernierEssai: lu.dernierEssai }, { $set: { dernierEssai: now, reserve: true } });
+                const doc = r && typeof r === 'object' && 'value' in r && 'ok' in r ? r.value : r;   // anciens pilotes : { value, ok }
+                return !!doc;
+            } catch (e) { return false; }
+        },
         ecrire: ({ _id, ...champs }) => collection.updateOne({ _id: ID_ETAT }, { $set: champs }, { upsert: true })
     };
 }
