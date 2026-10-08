@@ -127,6 +127,13 @@
 //   node banc-japonais.js --holdout       le lot frais SEUL, avec ses quatre cellules
 //   node banc-japonais.js --auto-controle vérifie que le banc sait signaler une erreur
 
+// 🔴 REFUS DE DÉMARRER (2026-10-08) — décision du testeur : « aucun banc ne doit plus jamais écrire dans la production ». Ce banc LIT des données réelles
+// (journal_scans, catalogue, codes_set) à travers les fonctions d'index.js, qui se connecte à MONGODB_URI AU CHARGEMENT et laisse mongoose y créer des index
+// (une ÉCRITURE). La façade de lecture à liste fermée ne remplace pas la connexion mongoose d'index.js : le faire demande de RÉÉCRIRE ce banc (choix de fond :
+// copier une tranche réelle dans la base de banc comme verrou-charges, ou une base d'index en lecture seule). Tant que ce n'est pas tranché, il ne tourne pas.
+console.error('❌ REFUS : banc-japonais.js lit la production à travers index.js (connexion mongoose + autoIndex = écritures possibles). Il ne démarre pas tant qu\'il n\'est pas réécrit sur la façade de lecture ou sur une tranche copiée en base de banc (collecte-cartes/base-banc.js).');
+process.exit(1);
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const S = require('./scoring.js');

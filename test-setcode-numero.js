@@ -13,6 +13,13 @@
 //
 // USAGE : node test-setcode-numero.js
 
+// 🔴 REFUS DE DÉMARRER (2026-10-08) — décision du testeur : « aucun banc ne doit plus jamais écrire dans la production ». Ce test appelle les vraies fonctions
+// d'index.js, qui se connecte à MONGODB_URI AU CHARGEMENT (mongoose y crée des index : une ÉCRITURE) et lit le catalogue réel par ses modèles. La façade de
+// lecture ne remplace pas cette connexion : le faire demande de RÉÉCRIRE le test (copier une tranche réelle en base de banc, comme verrou-charges). Choix de
+// fond, non tranché : tant qu'il ne l'est pas, ce test ne démarre pas.
+console.error('❌ REFUS : test-setcode-numero.js lit la production à travers index.js (connexion mongoose + autoIndex = écritures possibles). Il ne démarre pas tant qu\'il n\'est pas réécrit sur la façade de lecture ou sur une tranche copiée en base de banc (collecte-cartes/base-banc.js).');
+process.exit(1);
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { trouverParSetCodeEtNumero, nomOpposeUnVeto, scorerCandidatsLocal, lireCodeSets } = require('./index');

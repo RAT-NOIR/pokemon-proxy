@@ -15,7 +15,7 @@
 // que le mal soit fait.
 
 const mongoose = require('mongoose');
-const { verifierHoteBanc } = require('./collecte-cartes/base-banc');
+const { verifierHoteBanc } = require('./collecte-cartes/garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
 
 // Nom de la base de production. Sert uniquement à afficher un avertissement bien
 // visible — le script s'y connecte volontiers, à condition qu'on l'ait demandé.

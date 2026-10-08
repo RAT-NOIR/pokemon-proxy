@@ -28,7 +28,7 @@ const { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCod
 // `rang` avant sa suppression : c'est elle qui doit prouver qu'il reste recalculable,
 // pas une réimplémentation, qui ne démontrerait que sa propre cohérence.
 const { rangDuNumero } = require('./scoring');
-const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { viderBac } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE = process.env.MONGODB_BASE || 'test_scratch';
@@ -267,7 +267,7 @@ async function attendreLigne(filtre, limiteMs = 5000) {
 
     console.log(`\n${ko === 0 ? '🎉' : '💥'} ${ok}/${ok + ko} assertions passées.`);
     // `drop` (FUITE-MAIN, 2026-10-08) : deleteMany laissait journal_scans (fichier + index TTL) sur la grappe de production
-    await viderBac(mongoose.connection.db, { noms: ['journal_scans', ...nomsDesModeles(mongoose)] });
+    await viderBac(mongoose.connection.db, { noms: ['journal_scans', 'numeros_cartes', 'codes_set'] });
     await mongoose.disconnect();
     process.exit(ko === 0 ? 0 : 1);
 })().catch(async e => {

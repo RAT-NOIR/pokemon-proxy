@@ -30,7 +30,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const { demarrer, appeler } = require('./verrou/serveur');
 const { JournalScan } = require('./journal-scans');
-const { viderBac, COLLECTIONS_SERVEUR, nomsDesModeles } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE = 'test_scratch';
@@ -167,7 +167,7 @@ function verifier(libelle, obtenu, attendu) {
         try { srv.enfant.send('arret'); } catch (_) { srv.enfant.kill(); }
         setTimeout(() => { try { srv.enfant.kill(); } catch (_) { } resolve(); }, 8000);
     });
-    await viderBac(mongoose.connection.db, { noms: [...COLLECTIONS_SERVEUR, ...nomsDesModeles(mongoose)] });
+    await viderBac(mongoose.connection.db, { noms: [...COLLECTIONS_SERVEUR, 'journal_scans', 'numeros_cartes', 'codes_set'] });
     await mongoose.disconnect();
 
     console.log(`\n${ko === 0 ? '🎉' : '❌'} ${ok} vérification(s) passées, ${ko} en échec.`);

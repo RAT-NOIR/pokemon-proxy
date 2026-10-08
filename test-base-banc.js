@@ -141,6 +141,18 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     // lot-additif --base=test_scratch ne sert qu'aux bancs : il REFUSE hors banc isolé
     verifier('lot-additif.js refuse --base=test_scratch sans BANC_ISOLE=1', /BANC_ISOLE/.test(fs.readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8')), true);
 
+    // ── 6 bis. (correction finale) les bancs qui ouvraient ENCORE la production : lecteurs par la façade, ou refus de démarrer. Lecture du code seulement pour les
+    // outils du verrou (on ne les exécute pas) ; les deux bancs hors verrou qui refusent sont exécutés (ils sortent AVANT toute connexion).
+    const code = f => fs.readFileSync(path.join(__dirname, f), 'utf8').replace(/\/\/.*$/gm, '');
+    const LECTEURS = ['test-table-vintage.js', 'verrou-cellules.js', path.join('verrou', 'constituer-photos.js')];
+    const malLecteurs = LECTEURS.filter(f => { const s = code(f); return !(/ouvrirBanc\(/.test(s) && /\.appliquer\(\)/.test(s) && /connexionProduction\(/.test(s)) || /createConnection\(\s*process\.env\.MONGODB_URI/.test(s) || /mongoose\.connect\(/.test(s); });
+    verifier(`${LECTEURS.length} lecteurs de la production : ouvrent la base de banc, lisent par connexionProduction (façade), n'ouvrent plus MONGODB_URI eux-mêmes`, malLecteurs, []);
+    const REFUSEURS = ['banc-japonais.js', 'test-setcode-numero.js', path.join('verrou', 'sonde-image-jeu.js')];
+    const malRefus = REFUSEURS.filter(f => { const s = code(f), x = s.indexOf('process.exit(1)'); return !(x >= 0 && /REFUS/.test(s) && x < s.indexOf("require('dotenv')") && x < s.indexOf('require(\'mongoose\')')); });
+    verifier(`${REFUSEURS.length} bancs qui lisent la production sans pouvoir passer par la façade : REFUSENT de démarrer avant tout require (dotenv, mongoose, index)`, malRefus, []);
+    const lances = ['banc-japonais.js', 'test-setcode-numero.js'].map(f => { const r = spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8', timeout: 20000 }); return [f, r.status, /REFUS/.test(r.stderr || '')]; });
+    verifier('banc-japonais.js et test-setcode-numero.js lancés : sortie 1, message « REFUS », aucune connexion (ils sortent avant tout require)', lances, [['banc-japonais.js', 1, true], ['test-setcode-numero.js', 1, true]]);
+
     // ── 7. LA GARDE D'ÉCRITURE : toute écriture mongoose vers un hôte qui n'est pas celui du banc est refusée (lecture de la production permise)
     class FausseCollection { constructor(host) { this.conn = { host }; } }
     const ECRITURES = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndUpdate', 'findOneAndDelete', 'findOneAndReplace', 'bulkWrite', 'drop', 'createIndex', 'createIndexes', 'dropIndex', 'dropIndexes', 'rename'];
@@ -371,8 +383,10 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
             const tabAccesseur = [1]; Object.defineProperty(tabAccesseur, 0, { get: () => new NatifMarque(), enumerable: true });
             const dateChargee = new Date(); dateChargee.client = new NatifMarque();
             const profond = {}; { let c = profond; for (let i = 0; i < 70; i++) c = c.x = {}; }
+            const idTampon = Object.create(ObjectId.prototype); idTampon.buffer = Object.setPrototypeOf({ c: { find() { } } }, Uint8Array.prototype);   // tampon contrefait : un objet ordinaire au prototype changé (sonde du relecteur)
+            const idSousU8 = Object.create(ObjectId.prototype); { class U8 extends Uint8Array { } const u = new U8(12); u.client = new NatifMarque(); idSousU8.buffer = u; }
             const menteur = new Proxy(new NatifMarque(), { getPrototypeOf: () => Object.prototype });
-            const formesFausses = { 'sous-classe d\'ObjectId': sousClasse, 'Object.create(ObjectId.prototype) chargé': sansConstructeur, 'ObjectId portant une propriété propre': idChargee, 'tableau portant une propriété propre': tabProp,
+            const formesFausses = { 'ObjectId au tampon contrefait (prototype Uint8Array posé sur un objet ordinaire)': idTampon, 'ObjectId au tampon sous-classe d\'Uint8Array': idSousU8, 'sous-classe d\'ObjectId': sousClasse, 'Object.create(ObjectId.prototype) chargé': sansConstructeur, 'ObjectId portant une propriété propre': idChargee, 'tableau portant une propriété propre': tabProp,
                 'tableau à accesseur d\'index': tabAccesseur, 'Date portant une propriété propre': dateChargee, 'Proxy dont getPrototypeOf ment': menteur, 'Proxy d\'un objet simple': new Proxy({ a: 1 }, {}), 'Proxy d\'un tableau': new Proxy([1], {}),
                 'document contenant un Proxy': { a: new Proxy({}, {}) }, 'RegExp (refus voulu)': /a/, 'plus de 64 niveaux (refus voulu)': profond, 'DBRef dont fields porte un natif': new DBRef('c', new ObjectId(), 'db', { n: new NatifMarque() }) };
             const mal = [];

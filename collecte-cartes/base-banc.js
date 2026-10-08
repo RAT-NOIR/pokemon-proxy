@@ -24,27 +24,19 @@
 const fs = require('fs');
 const path = require('path');
 
-/** Hôtes d'une URI mongodb:// ou mongodb+srv:// (minuscules, sans port, sans point final) ; [] si elle n'est pas lisible. */
-function hotesDe(uri) {
-    if (typeof uri !== 'string') return [];
-    const m = /^mongodb(?:\+srv)?:\/\/(?:[^@/]*@)?([^/?#]+)/i.exec(uri.trim());
-    if (!m) return [];
-    const hotes = m[1].split(',').map(h => h.trim().toLowerCase().replace(/(?<=\]|[^:\]]):\d+$/, '').replace(/\.$/, '')).filter(Boolean);
-    return hotes.some(h => !/^(\[[0-9a-f:.]+\]|[a-z0-9._-]+)$/.test(h)) ? [] : hotes;
-}
-
-/** Identité de GRAPPE d'un hôte : un hôte Atlas (srv `cluster0.abcde.mongodb.net` ou shard `cluster0-shard-00-00.abcde.mongodb.net`) se compare
- *  par ses trois derniers labels (`abcde.mongodb.net`) ; tout autre hôte, tel quel. */
-function cleDeGrappe(hote) {
-    const l = hote.split('.');
-    return hote.endsWith('.mongodb.net') && l.length >= 4 ? l.slice(-3).join('.') : hote;
-}
+// 🔑 Ce que la PRODUCTION charge (hotesDe, cleDeGrappe, verifierHoteBanc, verifierEcritureR2, garderClientR2, bucketsDeProduction) vit dans
+// garde-banc.js, sans dépendance : ce module-ci (façade, mongodb-memory-server) peut lever à l'import et la production ne le requiert jamais.
+const { hotesDe, cleDeGrappe, verifierHoteBanc, bucketsDeProduction, verifierEcritureR2, garderClientR2 } = require('./garde-banc');
 
 const estIp = h => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || /^\[.*\]$/.test(h);
 const estLoopback = h => /^127(\.\d{1,3}){3}$/.test(h) || h === '[::1]' || h === 'localhost';
 
 /**
  * Cette URI peut-elle servir de base de banc ? { ok, raison }. `env` porte MONGODB_URI et MONGODB_CARTES_URI (les deux grappes de production).
+ * ⚠️ LIMITES CONNUES (écrites, pas codées) : (1) une IP en forme exotique (`0x7f.0.0.1`, entier unique, octal) ne ressemble pas à `estIp` ; `hotesDe` la prend
+ * pour un NOM, qui ne sera pas dans la production → acceptée alors qu'elle pourrait désigner une adresse (hors loopback) ; l'URI de banc vient d'un
+ * opérateur (MONGODB_TEST_URI), pas d'une entrée non fiable. (2) Un nom DNS de banc qui pointe vers un nœud de production passe : le DNS n'est pas résolu ici.
+ * La vraie garantie contre les deux est l'utilisateur Atlas en lecture seule (décision du testeur en attente).
  */
 function jugerUri(uri, env = process.env) {
     const hotes = hotesDe(uri);
@@ -59,20 +51,6 @@ function jugerUri(uri, env = process.env) {
     }
     if (hotes.some(h => prod.includes(cleDeGrappe(h)))) return { ok: false, raison: 'hôte = production : refusé (un banc n\'écrit jamais dans une grappe de production).' };
     return { ok: true, raison: null };
-}
-
-/**
- * Sous BANC_ISOLE=1, une connexion n'est permise que vers l'hôte du banc (BANC_HOTES). Hors banc : ne dit rien (ok). Un doute refuse.
- * @param {string} uri  l'URI (ou `mongodb://<hôte>/` pour un hôte déjà connecté)
- */
-function verifierHoteBanc(uri, env = process.env) {
-    if (env.BANC_ISOLE !== '1') return { ok: true, isole: false, raison: null };
-    const banc = (env.BANC_HOTES || '').split(',').map(h => h.trim()).filter(Boolean).map(cleDeGrappe);
-    const hotes = hotesDe(uri);
-    if (!banc.length) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 sans BANC_HOTES : je ne sais pas où est le banc, refusé.' };
-    if (!hotes.length) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 et URI illisible : refusé.' };
-    if (!hotes.every(h => banc.includes(cleDeGrappe(h)))) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 : l\'hôte de cette connexion n\'est pas celui du banc, refusé (hôte = production ou inconnu).' };
-    return { ok: true, isole: true, raison: null };
 }
 
 // Le paquet mongodb-memory-server vit dans `.banc-local/` (son package.json et son lock épinglés, HORS du package.json du dépôt : Render ne
@@ -142,7 +120,7 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
         origine: r.origine, uri, arreter, uriProduction, uriCartes,
         appliquer() {
             // R2 : la liste des buckets de PRODUCTION est figée AVANT tout remplacement ; R2_BUCKET_BANC ne peut pas en faire partie
-            const buckets = Object.entries(env).filter(([k, v]) => /^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC' && v).map(([, v]) => v);
+            const buckets = bucketsDeProduction(env);
             if (env.R2_BUCKET_BANC && buckets.includes(env.R2_BUCKET_BANC)) throw new Error('🔴 BANC REFUSÉ — R2_BUCKET_BANC est égal à un bucket R2 de production : un banc n\'écrit jamais dans la production, R2 compris.');
             for (const nom of variablesDeConnexion(env, fichierEnv)) env[nom] = uri;
             env.BANC_ISOLE = '1';
@@ -206,12 +184,20 @@ const NATURES = {
     Timestamp: { low: 'prim', high: 'prim', unsigned: 'prim' }, Double: { value: 'prim' }, Int32: { value: 'prim' }, MinKey: {}, MaxKey: {}, Code: { code: 'prim', scope: 'val' },
     BSONRegExp: { pattern: 'prim', options: 'prim' }, BSONSymbol: { value: 'prim' }, DBRef: { collection: 'prim', oid: 'val', db: 'prim', fields: 'val' }, UUID: { sub_type: 'prim', buffer: 'u8', position: 'prim' }
 };
-const CLASSES = (() => {   // prototype exact -> table des clés propres permises ; Date : aucune clé
-    const m = require('mongodb'), t = new Map([[Date.prototype, {}]]);
+// prototype exact -> table des clés propres permises ; Date : aucune clé. Calculé à la PREMIÈRE utilisation (jamais à l'import : ce module ne doit pas pouvoir
+// lever en se chargeant) et par `mongoose.mongo` — le pilote que mongoose utilise réellement, sans `require('mongodb')` (non déclaré dans le package.json racine).
+let _classes = null;
+function classes() {
+    if (_classes) return _classes;
+    const m = require('mongoose').mongo, t = new Map([[Date.prototype, {}]]);
     for (const [nom, cles] of Object.entries(NATURES)) { if (typeof m[nom] === 'function') t.set(m[nom].prototype, cles); }
     if (!t.has(m.ObjectId.prototype) || !t.has(m.Binary.prototype)) throw new Error('base-banc : le pilote mongodb n\'exporte plus ObjectId/Binary — la garde de sortie ne sait plus reconnaître un document, refusé.');
-    return t;
-})();
+    return (_classes = t);
+}
+// Un tampon (ObjectId.buffer, Binary.buffer…) : un VRAI Uint8Array/Buffer (util.types.isUint8Array lit le slot interne, pas le prototype), non-Proxy, au
+// prototype EXACT Uint8Array.prototype ou Buffer.prototype (ni sous-classe, ni objet ordinaire au prototype changé), sans autre clé propre que ses indices.
+const { isUint8Array } = require('util').types;
+const estTampon = v => isUint8Array(v) && !isProxy(v) && (Object.getPrototypeOf(v) === Uint8Array.prototype || Object.getPrototypeOf(v) === Buffer.prototype) && Reflect.ownKeys(v).length === v.length;
 const ENVELOPPES = new WeakSet();   // nos propres enveloppes : jamais une valeur de document
 const estIndice = k => typeof k === 'string' && /^(0|[1-9]\d*)$/.test(k);
 const estPrim = v => v === null || v === undefined || ['string', 'number', 'boolean', 'bigint'].includes(typeof v);
@@ -241,13 +227,13 @@ function estValeurBson(x, prof = 0) {
         }
         return true;
     }
-    const permises = CLASSES.get(proto);
+    const permises = classes().get(proto);
     if (!permises) return false;
     for (const k of Reflect.ownKeys(x)) {
         const nature = typeof k === 'string' ? permises[k] : undefined;
         const d = nature ? Object.getOwnPropertyDescriptor(x, k) : null;
         if (!d || !('value' in d)) return false;
-        if (nature === 'u8' ? !(d.value instanceof Uint8Array) || isProxy(d.value) : nature === 'prim' ? !estPrim(d.value) : !estValeurBson(d.value, prof + 1)) return false;
+        if (nature === 'u8' ? !estTampon(d.value) : nature === 'prim' ? !estPrim(d.value) : !estValeurBson(d.value, prof + 1)) return false;
     }
     return true;
 }
@@ -331,38 +317,7 @@ const METHODES_ECRITURE = ['insertOne', 'insertMany', 'updateOne', 'updateMany',
     'watch', 'initializeOrderedBulkOp', 'initializeUnorderedBulkOp', 'mapReduce'];
 const SYNCHRONES = new Set(['watch', 'initializeOrderedBulkOp', 'initializeUnorderedBulkOp']);
 
-// ── R2 : sous BANC_ISOLE=1, la LECTURE est permise (liste fermée) ; toute autre commande n'est permise que vers R2_BUCKET_BANC, jamais un bucket de production.
-const LECTURES_R2 = new Set(['GetObjectCommand', 'HeadObjectCommand', 'ListObjectsV2Command', 'ListObjectsCommand', 'HeadBucketCommand']);
-
-/** { ok, raison } : cette commande S3 peut-elle partir ? Pure. */
-function verifierEcritureR2(nomCommande, bucket, env = process.env) {
-    if (env.BANC_ISOLE !== '1' || LECTURES_R2.has(nomCommande)) return { ok: true, raison: null };
-    const banc = env.R2_BUCKET_BANC;
-    if (!banc) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : R2_BUCKET_BANC absent — un banc n'écrit jamais dans un bucket de production (même des clés idempotentes).` };
-    const interdits = env.BANC_R2_INTERDITS !== undefined
-        ? env.BANC_R2_INTERDITS.split(',').filter(Boolean)
-        : Object.entries(env).filter(([k, v]) => /^R2_BUCKET_/.test(k) && k !== 'R2_BUCKET_BANC' && v).map(([, v]) => v);
-    if (interdits.includes(banc)) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : R2_BUCKET_BANC est égal à un bucket de production.` };
-    if (bucket !== banc) return { ok: false, raison: `ÉCRITURE R2 REFUSÉE (${nomCommande}) : le bucket visé n'est pas R2_BUCKET_BANC.` };
-    return { ok: true, raison: null };
-}
-
-/** Enrobe `client.send` : la décision tombe AVANT toute requête, et c'est la PROMESSE qui est rejetée. Idempotente.
- *  ⚠️ LIMITE : une URL PRÉSIGNÉE (getSignedUrl pour un PUT) ne passe pas par `send` — elle est signée localement puis appelée en HTTP par un autre
- *  chemin — donc pas par cette garde. Le dépôt n'a AUCUN présigneur aujourd'hui (grep de `@aws-sdk/s3-request-presigner` : aucune occurrence) ; si
- *  un présigneur y arrive, il doit lui aussi appeler `verifierEcritureR2` (commande PutObjectCommand, bucket visé) avant de signer, ou être refusé. */
-function garderClientR2(client, env = process.env) {
-    if (!client || client.send?.__gardeBanc) return client;
-    const original = client.send.bind(client);
-    const send = async (commande, ...r) => {
-        const v = verifierEcritureR2(commande?.constructor?.name, commande?.input?.Bucket, env);
-        if (!v.ok) throw new Error(`🔴 ${v.raison}`);
-        return original(commande, ...r);
-    };
-    send.__gardeBanc = true;
-    client.send = send;
-    return client;
-}
+// ── R2 : verifierEcritureR2 et garderClientR2 vivent dans garde-banc.js (la production les charge) ; re-exportés ci-dessous.
 
 /**
  * 🔑 LA GARDE D'ÉCRITURE : sous BANC_ISOLE=1, toute écriture d'une collection mongoose dont la connexion n'est PAS sur l'hôte du banc (ou dont

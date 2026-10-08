@@ -9,7 +9,7 @@
 // réécrit pas. `deposerTexte` rend `{ ecrit: true|false }` pour que l'appelant compte.
 
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
-const { garderClientR2 } = require('./base-banc');
+const { garderClientR2 } = require('./garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
 
 // ⚠️ JURIDICTION. Un bucket créé avec la restriction « EU » n'est joignable QUE par l'endpoint
 // `<compte>.eu.r2.cloudflarestorage.com` ; l'endpoint générique répond AccessDenied (403), ce qui

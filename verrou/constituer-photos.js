@@ -25,7 +25,11 @@ const { DOSSIER, INDEX, lireIndex, empreinteJeu } = require('./photos-locales');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
-    const c = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test' }).asPromise();
+    // BASE DE BANC (2026-10-08) : le journal se LIT dans la production par la FAÇADE à liste fermée (find… ; tout le reste lève), jamais par une connexion
+    // mongoose ouverte vers MONGODB_URI. Sans base de banc, REFUS. (Les écritures de cet outil sont des fichiers LOCAUX, jamais la base.)
+    const banc = await require('../collecte-cartes/base-banc').ouvrirBanc();
+    banc.appliquer();
+    const c = await banc.connexionProduction(mongoose, 'test');
     if (c.db.databaseName !== 'test') throw new Error(`base « ${c.db.databaseName} » : le journal se lit dans « test »`);
     const docs = (await c.collection('journal_scans').find({}).sort({ le: 1 }).toArray()).map(d => ({ ...d, le: new Date(d.le) }));
     await c.close();
@@ -87,4 +91,4 @@ const { DOSSIER, INDEX, lireIndex, empreinteJeu } = require('./photos-locales');
     for (const [u, p] of Object.entries(relu.photos)) { const b = fs.readFileSync(path.join(DOSSIER, p.fichier)); if (crypto.createHash('sha256').update(b).digest('hex') === p.sha256) ok++; else console.log(`   🔴 ${p.fichier} ne porte pas son empreinte (${u.slice(0, 60)})`); }
     console.log(`${ok === Object.keys(relu.photos).length ? '✅' : '🔴'} jeu fixe : ${Object.keys(relu.photos).length} photo(s), ${ok} relues à leur empreinte · empreinte du jeu ${empreinteJeu(relu.photos)}`);
     if (ok !== Object.keys(relu.photos).length) process.exitCode = 1;
-})().catch(e => { console.error(e); process.exit(1); });
+})().then(() => process.exit(process.exitCode || 0)).catch(e => { console.error(e); process.exit(1); });   // le mongod du banc se coupe avec le processus

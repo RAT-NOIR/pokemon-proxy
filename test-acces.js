@@ -33,7 +33,7 @@ const mongoose = require('mongoose');
 mongoose.set('strictQuery', false);
 
 const { connecterMongo } = require('./mongo-connexion');
-const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { viderBac } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const {
     Credit, QuotaSemaine, Remboursement, RemboursementQuestion,
@@ -467,7 +467,7 @@ async function main() {
     v('aucun document de test résiduel', await Credit.countDocuments({ userId: /^TEST-/ }), 0);
     // `drop` des collections de tous les modèles chargés (FUITE-MAIN, 2026-10-08) : le deleteMany ci-dessus laissait credits, quotas_semaine,
     // remboursements, remboursements_questions, questions (fichier + index) sur la grappe de production ; mongoose les recrée à la connexion suivante
-    await viderBac(mongoose.connection.db, { noms: nomsDesModeles(mongoose) });
+    await viderBac(mongoose.connection.db, { noms: ['credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions'] });   // liste LITTÉRALE : les modèles d'acces.js
 
     console.log(`\n${ko === 0 ? '🎉' : '⚠️'} ${ok}/${ok + ko} assertions passées.`);
     await mongoose.disconnect();

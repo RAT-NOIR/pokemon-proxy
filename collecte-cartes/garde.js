@@ -12,7 +12,7 @@
 // dessus : seules `find`, `countDocuments`, `distinct` y sont appelées.
 
 const mongoose = require('mongoose');
-const { verifierHoteBanc } = require('./base-banc');
+const { verifierHoteBanc } = require('./garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
 
 const BASE_CIBLE = 'cartes';
 const BASE_PRODUCTION = 'test';

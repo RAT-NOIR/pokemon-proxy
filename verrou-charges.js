@@ -320,6 +320,10 @@ const SONDE_MAX_CANDIDATES = 6;
         // sereinement « 0 ligne n'emprunte le chemin ».
         // C'est encore une absence lue comme une valeur — et le contrôle qui devait la voir
         // rendait un nombre parfaitement plausible.
+        // ⚠️ CE QUI GARDE CETTE CONNEXION, ET CE QUI NE LA GARDE PAS (correction finale, 2026-10-08) : c'est la connexion mongoose PAR DÉFAUT vers la production.
+        // Seule la garde d'écriture sur `mongoose.Collection` la couvre (écritures des collections mongoose, aggregate avec $out/$merge). Elle NE couvre PAS le pilote
+        // natif (`mongoose.connection.db.collection(...).insertOne`, `db.createCollection`, `db.dropCollection`…). Aucun chemin d'écriture n'existe aujourd'hui sur
+        // cette connexion, mais la vraie garantie est un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI) — décision du testeur en attente.
         await mongoose.connect(banc.uriProduction, { dbName: BASE });   // LECTURE de la production (garde d'écriture installée)
         // ⚠️ ET ON VÉRIFIE QUE LA LECTURE MARCHE AVANT DE COMPTER. Sans ce garde-fou, un
         // « 0 » resterait indiscernable entre « aucune ligne ne convient » et « je n'ai

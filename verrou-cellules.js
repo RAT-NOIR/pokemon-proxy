@@ -17,6 +17,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const S = require('./scoring');
 const { SETS_VINTAGE_JAPONAIS } = require('./sets-vintage-japonais');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const arg = process.argv.find(a => a.startsWith('--base='));
 if (!arg) {
@@ -54,8 +55,12 @@ const CELLULES = [
 ];
 
 (async () => {
-    const c = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
-    console.log(`base : ${c.db.databaseName} (LECTURE SEULE)\n`);
+    // BASE DE BANC (2026-10-08) : le journal se LIT dans la production par la FAÇADE à liste fermée (find, countDocuments… ; tout le reste lève), jamais par une
+    // connexion mongoose ouverte vers MONGODB_URI. Seule la base « test » se lit (connexionProduction refuse le reste) ; sans base de banc, REFUS.
+    const banc = await ouvrirBanc();
+    banc.appliquer();
+    const c = await banc.connexionProduction(mongoose, BASE);
+    console.log(`base : ${c.db.databaseName} (LECTURE SEULE, façade)\n`);
     const docs = await c.collection('journal_scans').find({}).sort({ le: -1 }).toArray();
     console.log(`${docs.length} lignes au journal\n`);
 
@@ -94,4 +99,5 @@ const CELLULES = [
     console.log(`${remplies}/3 cellules remplissables aujourd'hui.`);
     if (remplies < 3) console.log(`Après un nouveau scan : node verrou-charges.js --base=test  puis  node verrou-avant-push.js`);
     await c.close();
-})();
+    process.exit(0);   // le mongod du banc se coupe avec le processus
+})().catch(e => { console.error(e.message); process.exit(1); });
