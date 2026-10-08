@@ -88,7 +88,7 @@ const { demarrer, appeler } = require('./verrou/serveur');
 // et `verrou-charges.js` la détruisait en sortant — le verrou était donc rouge par
 // construction depuis le 2026-08-30 19:17. Voir verrou/tranche.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
-const { viderBac, instantane } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 
 const JETON = process.env.JETON_API || 'jeton-verrou';
 const USER_VERROU = 'verrou-avant-push';
@@ -216,7 +216,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // cause — le vivier vide. C'est exactement ce qu'on a lu le 2026-09-02.
     console.log('\n=== 1 bis. Tranche de catalogue -> test_scratch ===');
     const mongooseT = require('mongoose');
-    let bacTranche = null, avantBac = null;
+    let bacTranche = null;
     try {
         const prodT = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test' }).asPromise();
         bacTranche = await mongooseT.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
@@ -224,9 +224,6 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
             console.error(`❌ ARRÊT : écriture visée sur "${bacTranche.db.databaseName}" au lieu de test_scratch.`);
             process.exit(1);
         }
-        // FUITE-MAIN (2026-10-08) : le serveur lancé plus bas crée par autoIndex ses modèles dans test_scratch (collections VIDES) ; on note
-        // ce qui existe AVANT, et tout ce qui est né depuis part en sortant (drop, jamais deleteMany).
-        avantBac = await instantane(bacTranche.db);
         const comptes = await copierTranche(prodT, bacTranche, donnees.charges);
         for (const [nom, n] of Object.entries(comptes)) console.log(`   ${nom.padEnd(20)} ${n}`);
         verifier('tranche copiée (le vivier des charges est en base)',
@@ -561,9 +558,9 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
         // d'exécution de l'autre, et aucun ne détruit ce que l'autre attend.
         if (bacTranche) {
             await viderTranche(bacTranche);
-            // `drop` des six collections de comptes (les deleteMany ci-dessus les laissaient vides, fichier + index alloués) et de tout ce que
-            // le serveur a fait naître depuis `avantBac` ; sans instantané, seules les six nommées partent
-            await viderBac(bacTranche.db, { noms: ['credits', 'journal_scans', 'remboursements', 'quotas_semaine', 'remboursements_questions', 'questions'], ...(avantBac ? { avant: avantBac } : {}) });
+            // `drop` des collections de comptes (les deleteMany ci-dessus les laissaient vides, fichier + index alloués) et de la liste déclarée
+            // COLLECTIONS_SERVEUR (ce que l'autoIndex du serveur crée) — jamais « tout ce qui est né depuis »
+            await viderBac(bacTranche.db, { noms: COLLECTIONS_SERVEUR });
             await bacTranche.close();
         }
         await bac.close();

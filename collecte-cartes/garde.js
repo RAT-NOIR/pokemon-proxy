@@ -12,6 +12,7 @@
 // dessus : seules `find`, `countDocuments`, `distinct` y sont appelées.
 
 const mongoose = require('mongoose');
+const { verifierHoteBanc } = require('./base-banc');
 
 const BASE_CIBLE = 'cartes';
 const BASE_PRODUCTION = 'test';
@@ -29,6 +30,11 @@ function verifierEnvironnement({ buckets = ['R2_BUCKET_BRUT'], production = true
     const base = process.env.MONGODB_CARTES_BASE;
     if (base !== BASE_CIBLE) arret(`MONGODB_CARTES_BASE doit valoir "${BASE_CIBLE}" (lu : ${JSON.stringify(base ?? null)}).`);
     if (!uri) arret('MONGODB_CARTES_URI absent du .env.');
+    // BANC (base-banc.js) : sous BANC_ISOLE=1, aucune connexion vers un hôte qui n'est pas celui du banc
+    for (const v of ['MONGODB_CARTES_URI', ...(production ? ['MONGODB_URI'] : [])]) {
+        const g = verifierHoteBanc(process.env[v]);
+        if (!g.ok) arret(`${v} : ${g.raison}`);
+    }
     if (uri === process.env.MONGODB_URI) arret('MONGODB_CARTES_URI est ÉGAL à MONGODB_URI — c\'est le cluster de PRODUCTION. Refus.');
     if (production && !process.env.MONGODB_URI) arret('MONGODB_URI absent : la jointure lit la production en lecture seule, elle en a besoin.');
     for (const v of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', ...buckets]) {

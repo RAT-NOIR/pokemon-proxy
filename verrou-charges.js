@@ -90,7 +90,7 @@ const { demarrer, appeler } = require('./verrou/serveur');
 const { profondeurAtteinte, profondeurSuffisante } = require('./verrou/jalons');
 // ⚠️ UNE SEULE DÉFINITION DE LA TRANCHE, partagée avec verrou-avant-push.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
-const { viderBac, instantane } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 
 const SCRATCH = 'test_scratch';
 const SORTIE = path.join(__dirname, 'verrou', 'charges.json');
@@ -471,9 +471,6 @@ const SONDE_MAX_CANDIDATES = 6;
         console.error(`❌ ARRÊT : écriture visée sur "${bac.db.databaseName}" au lieu de ${SCRATCH}.`);
         process.exit(1);
     }
-    // FUITE-MAIN (2026-10-08) : le serveur lancé plus bas crée par autoIndex tous ses modèles (cardprices, evenements_stripe, credits…) dans
-    // test_scratch, sans y écrire une ligne ; on note ce qui existe AVANT, et tout ce qui est né depuis part en sortant (drop).
-    const avantBac = await instantane(bac.db);
     // ⚠️ LA COPIE VIT DANS verrou/tranche.js, PARTAGÉE AVEC verrou-avant-push.js.
     // Elle était ici, et lui la consommait sans la construire : ce fichier la vidant en
     // sortant (règle du dépôt, correctement appliquée), il détruisait ce que l'étape
@@ -658,7 +655,7 @@ const SONDE_MAX_CANDIDATES = 6;
     // 🔴 FUITE-MAIN (2026-10-08) : ce nettoyage se faisait par `deleteMany({ userId })` sur six collections — il laissait credits,
     // journal_scans, remboursements, remboursements_questions, questions, quotas_semaine VIDES (fichier + index alloués) sur la grappe de
     // production. Ce bac n'est qu'à cette exécution (test_scratch, une tranche à la fois) : `drop`, jamais deleteMany. Le `viderBac` plus bas
-    // y ajoute tout ce que le serveur a fait naître depuis `avantBac`.
+    // y ajoute la liste déclarée COLLECTIONS_SERVEUR (ce que l'autoIndex du serveur crée) — jamais « tout ce qui est né ».
     const COLLECTIONS_COMPTES = ['journal_scans', 'credits', 'remboursements', 'remboursements_questions', 'questions', 'quotas_semaine'];
     const nj = { deletedCount: await bac.collection('journal_scans').countDocuments({ userId: USER_VERROU }) };
     const nc = { deletedCount: await bac.collection('credits').countDocuments({ userId: USER_VERROU }) };
@@ -674,7 +671,7 @@ const SONDE_MAX_CANDIDATES = 6;
     // balayage du serveur suivant les rembourserait 24 h plus tard sur un compte qui n'existe plus
     const nqu = { deletedCount: await bac.collection('questions').countDocuments({ userId: USER_VERROU }) };
     const nq = { deletedCount: await bac.collection('quotas_semaine').countDocuments({ userId: USER_VERROU }) };
-    await viderBac(bac.db, { noms: COLLECTIONS_COMPTES, avant: avantBac });
+    await viderBac(bac.db, { noms: [...COLLECTIONS_COMPTES, ...COLLECTIONS_SERVEUR] });
     console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions remboursées, ${nqu.deletedCount} question(s), ${nq.deletedCount} quota(s) hebdo — collections supprimées (drop).`);
 
     // ════════════════════════════════════════════════════════════════════════

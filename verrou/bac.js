@@ -4,42 +4,41 @@
 // 🔴 `deleteMany` vide une collection mais GARDE son fichier et ses index alloués (verrou/tranche.js, « deleteMany ne rend pas la place »).
 // test_scratch vit sur la grappe de PRODUCTION (MONGODB_URI) : le 2026-10-08, elle a dépassé DEUX fois l'arrêt dur de 480 Mo, et la
 // place était prise par des collections VIDES laissées par les outils du dépôt principal (numeros_cartes 7,6 Mo, guide_prix, questions…).
-// Deux sources de collections vides, et ce module répond aux deux :
-//   1. l'outil vide ses collections par `deleteMany` en sortant        -> `viderBac(db, { noms })`
-//   2. l'outil (ou le serveur qu'il lance) fait CRÉER des collections par autoIndex de mongoose dès la connexion, sans y écrire une ligne
-//      (cardprices, evenements_stripe…)                                -> `viderBac(db, { avant })` avec `avant = await instantane(db)` pris
-//      AVANT de lancer le serveur / de se connecter : tout ce qui est né depuis part.
-// 🔑 Une garde s'écrit par ce qu'elle AUTORISE : seule la base `test_scratch` est acceptée (tout le reste refuse, y compris un nom absent),
-// et jamais une collection `rm_t…` (les bancs de l'API v2 y créent les leurs, supprimées par eux-mêmes en sortant).
+// La garde principale est collecte-cartes/base-banc.js (un banc n'ouvre plus la production) ; ce module est la défense en profondeur.
+// 🔑 Ce module ne supprime QUE ce que l'outil DÉCLARE (sa liste `noms`) : jamais « tout ce qui est né depuis un instantané » — un banc
+// concurrent dont les collections ne portent pas le préfixe rm_t y passerait. Un outil qui lance le serveur déclare `COLLECTIONS_SERVEUR`
+// (les collections que l'autoIndex des modèles de index.js crée dès la connexion, sans y écrire une ligne).
+// 🔑 Une garde s'écrit par ce qu'elle AUTORISE : seule la base `test_scratch` est acceptée, et jamais une collection `rm_t…` (bancs de l'API v2).
 
 const BASE_BAC = 'test_scratch';
 const PREFIXE_BANCS_V2 = /^rm_t/;
 
-/** Les noms des collections présentes. Pris AVANT de lancer l'outil ou son serveur. */
+/** Les collections que les modèles mongoose du serveur (index.js et les modules qu'il charge) créent par autoIndex. */
+const COLLECTIONS_SERVEUR = Object.freeze(['cardprices', 'catalogue_produits', 'guide_prix', 'codes_set', 'numeros_cartes', 'evenements_stripe',
+    'references_image', 'credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions', 'journal_scans']);
+
+/** Les noms des collections présentes. */
 async function instantane(db) {
     return new Set((await db.listCollections({}, { nameOnly: true }).toArray()).map(c => c.name));
 }
 
-/** Les collections de tous les modèles mongoose chargés dans CE processus (celles que l'autoIndex a créées). */
+/** Les collections de tous les modèles mongoose chargés dans CE processus. */
 function nomsDesModeles(mongoose) {
     return mongoose.modelNames().map(m => mongoose.model(m).collection.collectionName);
 }
 
 /**
- * Supprime (drop) les collections nommées dans `noms`, plus — si `avant` est donné — toute collection née depuis cet instantané
- * (hors rm_t…). Refuse hors test_scratch. Une collection déjà absente n'est pas une erreur.
+ * Supprime (drop) les collections nommées dans `noms`, rien d'autre. Refuse hors test_scratch. Une collection absente n'est pas une erreur.
  * @returns {Promise<{refuse:boolean, droppees:string[]}>}
  */
-async function viderBac(db, { noms = [], avant = null, log = console.log } = {}) {
+async function viderBac(db, { noms = [], log = console.log } = {}) {
     if (db?.databaseName !== BASE_BAC) {
         log(`🔴 viderBac REFUSE : base « ${db?.databaseName} », attendu ${BASE_BAC}.`);
         return { refuse: true, droppees: [] };
     }
-    const cibles = new Set(noms);
-    if (avant) for (const nom of await instantane(db)) if (!avant.has(nom) && !PREFIXE_BANCS_V2.test(nom)) cibles.add(nom);
     const presentes = await instantane(db);
     const droppees = [];
-    for (const nom of cibles) {
+    for (const nom of new Set(noms)) {
         if (PREFIXE_BANCS_V2.test(nom) || !presentes.has(nom)) continue;
         try { await db.dropCollection(nom); droppees.push(nom); }
         catch (e) { if (e?.codeName !== 'NamespaceNotFound' && e?.code !== 26) log(`🔴 drop de ${nom} : ${e.message}`); }
@@ -48,4 +47,4 @@ async function viderBac(db, { noms = [], avant = null, log = console.log } = {})
     return { refuse: false, droppees };
 }
 
-module.exports = { BASE_BAC, instantane, nomsDesModeles, viderBac };
+module.exports = { BASE_BAC, COLLECTIONS_SERVEUR, instantane, nomsDesModeles, viderBac };

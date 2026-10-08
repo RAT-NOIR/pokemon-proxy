@@ -15,6 +15,7 @@
 // que le mal soit fait.
 
 const mongoose = require('mongoose');
+const { verifierHoteBanc } = require('./collecte-cartes/base-banc');
 
 // Nom de la base de production. Sert uniquement à afficher un avertissement bien
 // visible — le script s'y connecte volontiers, à condition qu'on l'ait demandé.
@@ -110,6 +111,14 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
         process.exit(1);
     }
 
+    // BANC (collecte-cartes/base-banc.js) : sous BANC_ISOLE=1, aucune connexion vers un hôte qui n'est pas celui du banc
+    const gardeBanc = verifierHoteBanc(process.env[variable]);
+    if (!gardeBanc.ok) {
+        console.error(`\n❌ REFUS : ${gardeBanc.raison}`);
+        console.error(`   Aucune connexion n'a été ouverte.`);
+        process.exit(1);
+    }
+
     await mongoose.connect(process.env[variable], { dbName: attendue });
     const reelle = mongoose.connection.db.databaseName;
 
@@ -126,11 +135,12 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     // 🔑 ET LE CONTRÔLE QUI AURAIT SUFFI À LUI SEUL, PARCE QU'IL NE PORTE PAS SUR UN NOM : une base
     // RÉELLE de ce projet n'est jamais vide. Zéro collection veut dire qu'on vient de la faire
     // naître en s'y connectant — la signature exacte d'une grappe fausse.
-    const nCollections = (await mongoose.connection.db.listCollections().toArray()).length;
-    if (!nCollections) {
-        console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} ne contient AUCUNE collection.`);
-        console.error(`   Une base vide n'est pas un résultat : MongoDB la crée à la demande, donc c'est`);
-        console.error(`   le signe qu'on n'est pas sur la bonne grappe. Aucune opération n'a été effectuée.`);
+    // ⚠️ SOUS BANC_ISOLE=1 ce contrôle est REMPLACÉ : une base de banc NEUVE est vide, et c'est normal. Le contrôle qui peut échouer dans le
+    // cas redouté ici (un banc qui se retrouve sur une vraie grappe) porte sur ce qu'une vraie grappe n'a PAS : l'hôte du banc.
+    const apres = await controlerApresConnexion({ db: mongoose.connection.db, hote: mongoose.connection.host, env: process.env });
+    if (!apres.ok) {
+        console.error(`\n❌ ARRÊT : la base "${reelle}" derrière ${variable} — ${apres.raison}`);
+        console.error(`   Aucune opération n'a été effectuée.`);
         await mongoose.disconnect();
         process.exit(1);
     }
@@ -159,4 +169,17 @@ async function connecterMongo({ script = 'ce script', ecrit = false, confirmatio
     return reelle;
 }
 
-module.exports = { connecterMongo, baseDemandee, BASES, BASE_PRODUCTION, BASE_BAC_A_SABLE };
+/**
+ * Le contrôle d'après connexion. Hors banc : « une base RÉELLE de ce projet n'est jamais vide » (§50, inchangé). Sous BANC_ISOLE=1 : l'hôte de la
+ * connexion est celui du banc (une base vide y est normale). { ok, raison }
+ */
+async function controlerApresConnexion({ db, hote, env = process.env }) {
+    if (env.BANC_ISOLE === '1') {
+        const g = verifierHoteBanc(`mongodb://${hote || ''}/`, env);
+        return g.ok ? { ok: true, raison: null } : { ok: false, raison: g.raison };
+    }
+    const n = (await db.listCollections().toArray()).length;
+    return n ? { ok: true, raison: null } : { ok: false, raison: 'ne contient AUCUNE collection. Une base vide n\'est pas un résultat : MongoDB la crée à la demande, c\'est le signe qu\'on n\'est pas sur la bonne grappe.' };
+}
+
+module.exports = { connecterMongo, controlerApresConnexion, baseDemandee, BASES, BASE_PRODUCTION, BASE_BAC_A_SABLE };

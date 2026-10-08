@@ -12,14 +12,25 @@
 //   (c) sinon : REFUS de démarrer, « aucune base de test hors production ». JAMAIS de repli silencieux sur test_scratch de la production.
 // 🔑 Une garde s'écrit par ce qu'elle autorise : un URI n'est accepté que si l'on a pu le LIRE, le COMPARER aux deux grappes de production, et
 // qu'il n'en est aucune. Un doute (URI illisible, variable de production absente) est un refus. Aucun message ne contient de valeur de variable.
+// ⚠️ ADRESSES IP : une URI de banc en adresse IP HORS LOOPBACK est REFUSÉE. On ne résout pas le DNS ici, donc on ne sait pas si cette adresse
+// est un nœud de la production (un nœud Atlas répond aussi par IP) : un doute est un refus. Seuls 127.x, ::1 et localhost passent sans nom.
+//
+// 🔴 ET LE REFUS NE TIENT QUE SI LES ENFANTS LE VOIENT. Les outils `import-*.js` lancés par un banc font `require('dotenv').config()` : dotenv
+// REMET dans l'enfant toute variable ABSENTE de l'environnement hérité. Supprimer MONGODB_CARTES_URI ne la retirait donc pas, il la rendait au
+// .env (la production). `appliquer()` REMPLACE : chaque variable MONGODB_*URI connue (environnement et .env) vaut l'URI du banc — dotenv
+// n'écrase pas une variable présente — et pose BANC_ISOLE=1 + BANC_HOTES ; `verifierHoteBanc` (mongo-connexion.js, collecte-cartes/garde.js)
+// refuse alors toute connexion dont l'hôte n'est pas celui du banc.
 
-/** Hôtes d'une URI mongodb:// ou mongodb+srv:// (minuscules, sans port) ; [] si elle n'est pas lisible. */
+const fs = require('fs');
+const path = require('path');
+
+/** Hôtes d'une URI mongodb:// ou mongodb+srv:// (minuscules, sans port, sans point final) ; [] si elle n'est pas lisible. */
 function hotesDe(uri) {
     if (typeof uri !== 'string') return [];
     const m = /^mongodb(?:\+srv)?:\/\/(?:[^@/]*@)?([^/?#]+)/i.exec(uri.trim());
     if (!m) return [];
-    const hotes = m[1].split(',').map(h => h.trim().toLowerCase().replace(/:\d+$/, '')).filter(Boolean);
-    return hotes.some(h => !/^[a-z0-9.[\]:_-]+$/.test(h)) ? [] : hotes;
+    const hotes = m[1].split(',').map(h => h.trim().toLowerCase().replace(/(?<=\]|[^:\]]):\d+$/, '').replace(/\.$/, '')).filter(Boolean);
+    return hotes.some(h => !/^(\[[0-9a-f:.]+\]|[a-z0-9._-]+)$/.test(h)) ? [] : hotes;
 }
 
 /** Identité de GRAPPE d'un hôte : un hôte Atlas (srv `cluster0.abcde.mongodb.net` ou shard `cluster0-shard-00-00.abcde.mongodb.net`) se compare
@@ -29,12 +40,17 @@ function cleDeGrappe(hote) {
     return hote.endsWith('.mongodb.net') && l.length >= 4 ? l.slice(-3).join('.') : hote;
 }
 
+const estIp = h => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || /^\[.*\]$/.test(h);
+const estLoopback = h => /^127(\.\d{1,3}){3}$/.test(h) || h === '[::1]' || h === 'localhost';
+
 /**
  * Cette URI peut-elle servir de base de banc ? { ok, raison }. `env` porte MONGODB_URI et MONGODB_CARTES_URI (les deux grappes de production).
  */
 function jugerUri(uri, env = process.env) {
     const hotes = hotesDe(uri);
     if (!hotes.length) return { ok: false, raison: 'URI de banc illisible : je ne peux pas dire où elle pointe, refusé.' };
+    const ip = hotes.find(h => estIp(h) && !estLoopback(h));
+    if (ip) return { ok: false, raison: 'URI de banc en adresse IP hors loopback : le DNS n\'est pas résolu, je ne peux pas exclure que ce soit un nœud de production (doute = refus).' };
     const prod = [];
     for (const nom of ['MONGODB_URI', 'MONGODB_CARTES_URI']) {
         const h = hotesDe(env[nom]);
@@ -43,6 +59,20 @@ function jugerUri(uri, env = process.env) {
     }
     if (hotes.some(h => prod.includes(cleDeGrappe(h)))) return { ok: false, raison: 'hôte = production : refusé (un banc n\'écrit jamais dans une grappe de production).' };
     return { ok: true, raison: null };
+}
+
+/**
+ * Sous BANC_ISOLE=1, une connexion n'est permise que vers l'hôte du banc (BANC_HOTES). Hors banc : ne dit rien (ok). Un doute refuse.
+ * @param {string} uri  l'URI (ou `mongodb://<hôte>/` pour un hôte déjà connecté)
+ */
+function verifierHoteBanc(uri, env = process.env) {
+    if (env.BANC_ISOLE !== '1') return { ok: true, isole: false, raison: null };
+    const banc = (env.BANC_HOTES || '').split(',').map(h => h.trim()).filter(Boolean).map(cleDeGrappe);
+    const hotes = hotesDe(uri);
+    if (!banc.length) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 sans BANC_HOTES : je ne sais pas où est le banc, refusé.' };
+    if (!hotes.length) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 et URI illisible : refusé.' };
+    if (!hotes.every(h => banc.includes(cleDeGrappe(h)))) return { ok: false, isole: true, raison: 'BANC_ISOLE=1 : l\'hôte de cette connexion n\'est pas celui du banc, refusé (hôte = production ou inconnu).' };
+    return { ok: true, isole: true, raison: null };
 }
 
 function memoireInstallee() {
@@ -68,12 +98,23 @@ function resoudre(env = process.env, { memoireDisponible = memoireInstallee() } 
     };
 }
 
+/** Les noms de variables MONGODB_*URI à remplacer : les trois connues, celles de l'environnement, et celles du .env (valeur en mongodb://). */
+function variablesDeConnexion(env, fichierEnv) {
+    const noms = new Set(['MONGODB_URI', 'MONGODB_CARTES_URI', 'MONGODB_TEST_URI']);
+    const estUri = v => typeof v === 'string' && /^mongodb(\+srv)?:\/\//i.test(v.trim());
+    for (const [k, v] of Object.entries(env)) if (/^MONGODB_/.test(k) && estUri(v)) noms.add(k);
+    try {
+        for (const [k, v] of Object.entries(require('dotenv').parse(fs.readFileSync(fichierEnv)))) if (/^MONGODB_/.test(k) && estUri(v)) noms.add(k);
+    } catch (_) { /* pas de .env lisible : les noms connus et ceux de l'environnement restent remplacés */ }
+    return [...noms];
+}
+
 /**
  * Ouvre la base du banc ou LÈVE (le banc ne démarre pas). Rend { origine, uri, arreter(), appliquer() }.
- * `appliquer()` : le processus (et ses enfants, qui héritent de l'environnement) ne voit plus que la base de banc —
- * MONGODB_URI devient la base de banc, MONGODB_CARTES_URI est retirée.
+ * `appliquer()` : REMPLACE chaque variable MONGODB_*URI (environnement et .env) par l'URI du banc et pose BANC_ISOLE=1 / BANC_HOTES. À appeler
+ * AVANT tout require qui lit MONGODB_*, toute connexion et tout lancement de sous-processus.
  */
-async function ouvrirBanc({ env = process.env, memoireDisponible } = {}) {
+async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = path.join(__dirname, '..', '.env') } = {}) {
     const r = resoudre(env, memoireDisponible === undefined ? undefined : { memoireDisponible });
     if (!r.ok) throw new Error(`🔴 BANC REFUSÉ — ${r.raison}`);
     let uri = r.uri, arreter = async () => { };
@@ -85,8 +126,12 @@ async function ouvrirBanc({ env = process.env, memoireDisponible } = {}) {
     }
     return {
         origine: r.origine, uri, arreter,
-        appliquer() { env.MONGODB_URI = uri; delete env.MONGODB_CARTES_URI; env.BANC_ISOLE = '1'; }
+        appliquer() {
+            for (const nom of variablesDeConnexion(env, fichierEnv)) env[nom] = uri;
+            env.BANC_ISOLE = '1';
+            env.BANC_HOTES = hotesDe(uri).join(',');
+        }
     };
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, resoudre, ouvrirBanc, memoireInstallee };
+module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion };

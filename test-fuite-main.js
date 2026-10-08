@@ -41,11 +41,13 @@ const muet = () => { };
 
     // 3. les collections NEUVES depuis l'instantané (celles qu'un serveur lancé par l'outil crée par autoIndex), sauf les rm_t… des bancs v2
     const b = fausseBase('test_scratch', ['preexistante', 'rm_tabc_comptes']);
-    const avant = await bac.instantane(b);
+    // une collection NÉE pendant l'outil mais ABSENTE de sa liste (banc concurrent non préfixé) n'est JAMAIS supprimée : seul le déclaré part
     b.colls.set('cardprices', { docs: 0, index: 1 }); b.colls.set('evenements_stripe', { docs: 0, index: 1 }); b.colls.set('rm_tzzz_comptes', { docs: 1, index: 1 });
-    const r3 = await bac.viderBac(b, { avant, log: muet });
-    verifier('viderBac(avant) : les collections nées pendant l\'outil disparaissent', r3.droppees.sort(), ['cardprices', 'evenements_stripe']);
-    verifier('   ... une préexistante et les rm_t… (bancs v2 concurrents) ne sont JAMAIS touchées', [...b.colls.keys()].sort(), ['preexistante', 'rm_tabc_comptes', 'rm_tzzz_comptes']);
+    b.colls.set('banc_concurrent_sans_prefixe', { docs: 5, index: 1 });
+    const r3 = await bac.viderBac(b, { noms: bac.COLLECTIONS_SERVEUR, log: muet });
+    verifier('viderBac(COLLECTIONS_SERVEUR) : les collections de l\'autoIndex du serveur, déclarées, disparaissent', r3.droppees.sort(), ['cardprices', 'evenements_stripe']);
+    verifier('   ... une préexistante, un banc concurrent NON préfixé et les rm_t… ne sont JAMAIS touchés', [...b.colls.keys()].sort(), ['banc_concurrent_sans_prefixe', 'preexistante', 'rm_tabc_comptes', 'rm_tzzz_comptes']);
+    verifier('viderBac n\'accepte plus d\'« avant » : l\'option est sans effet (ne supprime rien de plus)', (await bac.viderBac(b, { avant: new Set(), log: muet })).droppees, []);
     const r3b = await bac.viderBac(b, { noms: ['rm_tabc_comptes'], log: muet });
     verifier('   ... même nommée explicitement, une collection rm_t… n\'est pas touchée', [r3b.droppees, b.colls.has('rm_tabc_comptes')], [[], true]);
 

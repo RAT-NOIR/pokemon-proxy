@@ -30,7 +30,7 @@ const path = require('path');
 const mongoose = require('mongoose');
 const { demarrer, appeler } = require('./verrou/serveur');
 const { JournalScan } = require('./journal-scans');
-const { viderBac, instantane, nomsDesModeles } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR, nomsDesModeles } = require('./verrou/bac');
 
 const BASE = 'test_scratch';
 // ⚠️ La base de PRODUCTION s'appelle « test ». Ce n'est pas un nom de bac à sable, et
@@ -58,9 +58,6 @@ function verifier(libelle, obtenu, attendu) {
         process.exit(1);
     }
 
-    // FUITE-MAIN (2026-10-08) : le serveur lancé plus bas crée par autoIndex TOUS les modèles de index.js dans test_scratch (cardprices,
-    // evenements_stripe, credits…), sans y écrire une ligne ; on note ce qui existe AVANT, et tout ce qui est né depuis part en sortant.
-    const avant = await instantane(mongoose.connection.db);
 
     // Une ligne de scan réelle, écrite par le vrai modèle — pas un document bricolé.
     const scan = await JournalScan.create({ route: 'identifier', userId: MOI, idProduct: 606889, nom: 'Dark Porygon2' });
@@ -166,7 +163,7 @@ function verifier(libelle, obtenu, attendu) {
         try { srv.enfant.send('arret'); } catch (_) { srv.enfant.kill(); }
         setTimeout(() => { try { srv.enfant.kill(); } catch (_) { } resolve(); }, 8000);
     });
-    await viderBac(mongoose.connection.db, { noms: ['journal_scans', ...nomsDesModeles(mongoose)], avant });
+    await viderBac(mongoose.connection.db, { noms: [...COLLECTIONS_SERVEUR, ...nomsDesModeles(mongoose)] });
     await mongoose.disconnect();
 
     console.log(`\n${ko === 0 ? '🎉' : '❌'} ${ok} vérification(s) passées, ${ko} en échec.`);

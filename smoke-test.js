@@ -32,7 +32,7 @@ require('dotenv').config();
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
-const { viderBac, instantane } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 
 const BASE_SCRATCH = 'test_scratch';
 const JETON = process.env.JETON_API || 'jeton-smoke-test';
@@ -136,12 +136,11 @@ async function testerLesRoutes() {
     console.log('\n=== 2. Démarrage du serveur contre test_scratch ===');
     const port = await portLibre();
     // FUITE-MAIN (2026-10-08) : le serveur crée par autoIndex tous ses modèles dans test_scratch (collections VIDES, fichier + index alloués
-    // sur la grappe de production) ; on note ce qui existe AVANT de le lancer, et tout ce qui est né depuis est supprimé (drop) en sortant.
-    let bacSortie = null, avantSmoke = null;
+    // sur la grappe de production) ; en sortant, on supprime (drop) la liste DÉCLARÉE COLLECTIONS_SERVEUR, rien d'autre.
+    let bacSortie = null;
     try {
         bacSortie = await require('mongoose').createConnection(process.env.MONGODB_URI, { dbName: BASE_SCRATCH }).asPromise();
-        avantSmoke = await instantane(bacSortie.db);
-    } catch (e) { console.log(`  ⚠️ instantané de test_scratch impossible (${e.message}) : aucune collection ne sera supprimée en sortant.`); }
+    } catch (e) { console.log(`  ⚠️ connexion de sortie à test_scratch impossible (${e.message}) : aucune collection ne sera supprimée en sortant.`); }
     const enfant = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
         env: {
             ...process.env,
@@ -171,7 +170,7 @@ async function testerLesRoutes() {
         console.log('  --- sortie du serveur ---\n' + sortie.split('\n').map(l => '    ' + l).join('\n'));
         enfant.kill();
         await fini;
-        if (bacSortie && avantSmoke) await viderBac(bacSortie.db, { avant: avantSmoke });
+        if (bacSortie) await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
         if (bacSortie) await bacSortie.close();
         return;
     }
@@ -333,7 +332,7 @@ async function testerLesRoutes() {
     enfant.kill();
     await fini;
     // le serveur est arrêté : `drop` de ce qu'il a créé et de ce que le smoke test a écrit (deleteMany laissait les fichiers)
-    if (bacSortie && avantSmoke) await viderBac(bacSortie.db, { noms: ['numeros_cartes', 'catalogue_produits', 'credits'], avant: avantSmoke });
+    if (bacSortie) await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
     if (bacSortie) await bacSortie.close();
 
     // Le serveur a-t-il crié pendant le test ? Une exception non capturée s'y verrait.

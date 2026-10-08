@@ -5,7 +5,7 @@ require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
 const { demarrer, appeler } = require('./verrou/serveur');
-const { viderBac, instantane } = require('./verrou/bac');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 
 const FICHIER_CHARGES = path.join(__dirname, 'verrou', 'charges.json');
 const JETON = process.env.JETON_API || 'jeton-verrou';
@@ -30,13 +30,12 @@ const cible = process.argv[2] || 'Vileplume';
         console.error(`\n   node capture-reponse.js "<nom exact ou fragment>"`);
         process.exit(1);
     }
-    // FUITE-MAIN (2026-10-08) : le serveur crée par autoIndex tous ses modèles dans test_scratch (collections vides) ; on note ce qui existe
-    // AVANT de le lancer, et tout ce qui est né depuis est supprimé (drop) en sortant. Un instantané impossible le DIT et ne supprime rien.
-    let bacSortie = null, avant = null;
+    // FUITE-MAIN (2026-10-08) : le serveur crée par autoIndex tous ses modèles dans test_scratch (collections vides) ; en sortant on supprime
+    // (drop) la liste DÉCLARÉE COLLECTIONS_SERVEUR, rien d'autre.
+    let bacSortie = null;
     try {
         bacSortie = await require('mongoose').createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
-        avant = await instantane(bacSortie.db);
-    } catch (e) { console.log(`⚠️ instantané de test_scratch impossible (${e.message}) : aucune collection ne sera supprimée en sortant.`); }
+    } catch (e) { console.log(`⚠️ connexion de sortie à test_scratch impossible (${e.message}) : aucune collection ne sera supprimée en sortant.`); }
     const srv = await demarrer(path.join(__dirname, 'verrou', 'faux-reseau.js'), {
         VERROU_CHARGES: FICHIER_CHARGES, JETON_API: JETON, OPENROUTER_API_KEY: ''
     });
@@ -147,8 +146,8 @@ const cible = process.argv[2] || 'Vileplume';
         try { srv.enfant.send('arret'); } catch (_) { srv.enfant.kill(); }
         setTimeout(() => { try { srv.enfant.kill(); } catch (_) { } resolve(); }, 8000);
     });
-    if (bacSortie && avant) {
-        await viderBac(bacSortie.db, { noms: ['journal_scans', 'credits', 'remboursements'], avant });
+    if (bacSortie) {
+        await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
     }
     if (bacSortie) await bacSortie.close();
     setTimeout(() => { try { srv.enfant.kill(); } catch (_) { } process.exit(0); }, 2000);
