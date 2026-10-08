@@ -36,7 +36,7 @@ function lireConfig(env = process.env) {
                     extensionDev: base === 'test_scratch' ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
                     site: 'https://rat-market.fr' },
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
-        retention: { annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2 },
+        retention: { annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
         annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
         banc: { versionsTexte: ['2026-10-07-v1'] },
         verdict: { bonneAffaireSous: -30, cherAuDela: 15 },

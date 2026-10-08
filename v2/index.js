@@ -3,6 +3,7 @@ const express = require('express');
 const { lireConfig } = require('./config');
 const { verifierIndex } = require('./modeles');
 const pret = require('./pret');
+const { CHEMINS_HERITES, aiguilleur, estAiguilleur } = require('./heritage');
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
@@ -48,14 +49,32 @@ function assembler(lots, cfgLots, deps = {}) {
             // régulière, un tableau ou un paramètre en tête capterait des routes héritées.
             if (typeof couche.route.path !== 'string' || !CHEMIN_DE_LOT.test(couche.route.path))
                 throw new Error(`v2 : refus du lot n°${i} : chemin « ${String(couche.route.path)} » hors de la liste blanche (/api/<segment> littéral ou /ping)`);
+            // Chemin qui RECOUVRE une route héritée : pour CHAQUE méthode de la route, le premier handler doit être un aiguilleur
+            // (sinon une requête 1.0.x tomberait sur la garde d'index au lieu de la route héritée).
+            if (CHEMINS_HERITES.includes(couche.route.path)) {
+                const vues = new Set();
+                for (const c of couche.route.stack) {
+                    const m = c.method || '_toutes';
+                    if (vues.has(m)) continue;
+                    vues.add(m);
+                    if (!estAiguilleur(c.handle)) throw new Error(`v2 : refus du lot n°${i} : ${couche.route.path} recouvre une route héritée, son premier handler (méthode ${m}) doit être un aiguilleur`);
+                }
+            }
             // Garde à l'EXÉCUTION : on enveloppe le point d'entrée de la couche (route.dispatch), pas une copie de la pile de la
             // Route — un handler ajouté plus tard sur une Route retenue par le lot est donc gardé aussi.
-            const dispatch = couche.handle;
-            couche.handle = function gardeIndex(req, res, next) { return pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next))); };
+            // L'aiguilleur (premier handler de la méthode demandée) passe AVANT la garde : prédicat faux => la route héritée répond.
+            const dispatch = couche.handle, route = couche.route;
+            couche.handle = function gardeIndex(req, res, next) {
+                const m = String(req.method).toLowerCase();
+                const premier = route.stack.find(c => !c.method || c.method === m);
+                const garde = () => pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next)));
+                if (premier && estAiguilleur(premier.handle)) return premier.handle(req, res, a => (a === 'route' ? next() : a ? next(a) : garde()));
+                return garde();
+            };
         }
         router.stack.push(...sous.stack);
     });
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { monterEnTete, monter, assembler, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { monterEnTete, monter, assembler, aiguilleur, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };

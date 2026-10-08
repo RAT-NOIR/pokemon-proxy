@@ -12,6 +12,8 @@ H.v('hebdo', c.quotas.hebdo, 2);
 H.v('ordre des poches par défaut', c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
 H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
+H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
+H.v('idempotence : au plus 10 min', c.retention.idempotenceBattementMaxMinutes, 10);
 H.v('origine extension exacte', c.origines.extension, 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb');
 H.v('origine site exacte', c.origines.site, 'https://rat-market.fr');
 H.v('hôte du bucket public', c.images.hotesPublics[0], 'pub-7d992e666c3d4a2b870b680a920045b6.r2.dev');

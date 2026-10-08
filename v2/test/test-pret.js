@@ -5,7 +5,7 @@
 const express = require('express');
 const H = require('./_harnais');
 const pret = require('../pret');
-const { assembler } = require('../index');
+const { assembler, aiguilleur } = require('../index');
 
 const ok = async () => ({ manquants: [] });
 const manque = async () => ({ manquants: ['comptes.comptes_emailCle'] });
@@ -22,13 +22,21 @@ const lotB = { routes(router) {
 // lot C : garde un objet Route et lui AJOUTE un handler APRÈS l'assemblage (sonde de la relecture)
 let routeTardive = null;
 const lotC = { routes(router) { routeTardive = router.route('/api/tard'); routeTardive.get(h('t')); } };
+// lot D : routes qui RECOUVRENT un chemin hérité, derrière un aiguilleur (contrat 2 / Bearer) — la requête 1.0.x doit retomber sur l'héritée
+const lotD = { routes(router) {
+    router.post('/api/identifier', aiguilleur(req => req.body && req.body.contrat === 2), h('v2-identifier'));
+    router.post('/api/solde', aiguilleur(req => /^Bearer /.test(req.headers.authorization || '')), h('v2-solde'));
+} };
 const refuse = lot => { let m = null; try { assembler([lot], {}, {}); } catch (e) { m = e.message; } return /refus/.test(m || ''); };
 
 (async () => {
     const app = express();
     app.get('/ancien', (req, res) => res.json({ ancien: true }));        // route HÉRITÉE : la garde ne doit jamais la toucher
-    app.use(assembler([lotA, lotB, lotC], {}, {}));
+    app.use(express.json());
+    app.use(assembler([lotA, lotB, lotC, lotD], {}, {}));
     routeTardive.post(h('tp'));                                              // déclaration TARDIVE sur la Route retenue
+    app.post('/api/identifier', (req, res) => res.json({ legacy: 'identifier' }));   // routes HÉRITÉES de même chemin, déclarées après
+    app.post('/api/solde', (req, res) => res.json({ legacy: 'solde' }));
     app.get('/ancien-apres', (req, res) => res.json({ ancien: 'apres' })); // route HÉRITÉE déclarée APRÈS le montage v2
     const s = await H.serveur(app);
     const sur = async (m, chemin) => { const r = await H.appel(s.url, chemin, { methode: m, corps: ['POST', 'SEARCH'].includes(m) ? {} : undefined }); return [r.statut, r.json && (r.json.erreur ? r.json.erreur.code : Object.keys(r.json)[0])]; };
@@ -54,6 +62,29 @@ const refuse = lot => { let m = null; try { assembler([lot], {}, {}); } catch (e
     pret.armer(async () => ({}));
     H.v('réponse de vérification sans « manquants » : 503', await sur('GET', '/api/compte/x'), [503, 'INDISPONIBLE']);
 
+    // R1 : un aiguilleur passe AVANT la garde. 1.0.x (sans contrat 2 / sans Bearer) => route HÉRITÉE, même index manquant.
+    const poster = async (chemin, corps, entetes) => { const r = await H.appel(s.url, chemin, { methode: 'POST', corps, entetes }); return [r.statut, r.json && (r.json.erreur ? r.json.erreur.code : Object.keys(r.json)[0])]; };
+    const BEARER = { Authorization: 'Bearer abc' };
+    pret.armer(manque);
+    H.v('index manquant, /api/identifier sans contrat 2 : la route héritée répond (200)', await poster('/api/identifier', {}), [200, 'legacy']);
+    H.v('index manquant, /api/solde sans Bearer : la route héritée répond (200)', await poster('/api/solde', {}), [200, 'legacy']);
+    H.v('index manquant, /api/identifier contrat 2 : 503 INDISPONIBLE', await poster('/api/identifier', { contrat: 2 }), [503, 'INDISPONIBLE']);
+    H.v('index manquant, /api/solde avec Bearer : 503 INDISPONIBLE', await poster('/api/solde', {}, BEARER), [503, 'INDISPONIBLE']);
+    pret.armer(ok);
+    H.v('index présents, contrat 2 : le handler v2', await poster('/api/identifier', { contrat: 2 }), [200, 'ok']);
+    H.v('index présents, Bearer : le handler v2', await poster('/api/solde', {}, BEARER), [200, 'ok']);
+    H.v('index présents, 1.0.x : toujours l\'héritée', await poster('/api/identifier', {}), [200, 'legacy']);
+    pret.armer(leve);
+    H.v('vérification qui lève, 1.0.x : l\'héritée répond', await poster('/api/solde', {}), [200, 'legacy']);
+    // une route v2 sur un chemin hérité SANS aiguilleur en tête est refusée au montage
+    H.vrai('/api/identifier sans aiguilleur est refusé', refuse({ routes(r) { r.post('/api/identifier', h('x')); } }));
+    H.vrai('/api/solde, aiguilleur NON premier, est refusé', refuse({ routes(r) { r.post('/api/solde', h('x'), aiguilleur(() => true), h('y')); } }));
+    H.vrai('/ping sans aiguilleur est refusé', refuse({ routes(r) { r.get('/ping', h('x')); } }));
+    H.vrai('route.route() : deux méthodes dont une sans aiguilleur => refusé', refuse({ routes(r) { r.route('/api/retour-live').post(aiguilleur(() => true), h('a')).get(h('b')); } }));
+    H.vrai('/ping AVEC aiguilleur est accepté', !refuse({ routes(r) { r.get('/ping', aiguilleur(() => false), h('x')); } }));
+    H.vrai('un chemin non hérité n\'exige pas d\'aiguilleur', !refuse({ routes(r) { r.post('/api/compte/z', h('x')); } }));
+    H.vrai('aiguilleur(non-fonction) lève', (() => { try { aiguilleur('oui'); return false; } catch { return true; } })());
+
     // un lot v2 ne pose AUCUN use(), quelle qu'en soit la forme : la pile du routeur ne doit contenir que des couches `route`
     const mw = (req, res, next) => next();
     H.vrai('use(fn) sans chemin est refusé', refuse({ routes(r) { r.use(mw); } }));
@@ -65,7 +96,7 @@ const refuse = lot => { let m = null; try { assembler([lot], {}, {}); } catch (e
     // chemins : LISTE BLANCHE (chaîne littérale sous /api/<segment littéral> ou /ping) ; tout le reste est refusé
     for (const mauvais of ['*', '/*', '/api/*', '/api/:x', '/autre', '/api', '/api/', /^\/api\/.*/, ['/api/a', '/api/b'], '/api/a(.*)', '/api/a?', '/ping*', '/apix/a'])
         H.vrai(`chemin de lot ${String(mauvais)} est refusé`, refuse({ routes(r) { r.get(mauvais, h('m')); } }));
-    for (const bon of ['/api/compte/x', '/api/compte/:id', '/api/scanner', '/ping', '/ping/v2'])
+    for (const bon of ['/api/compte/x', '/api/compte/:id', '/api/scanner', '/ping/v2'])
         H.vrai(`chemin de lot ${bon} est accepté`, !refuse({ routes(r) { r.get(bon, h('b')); } }));
 
     console.error = ce;
