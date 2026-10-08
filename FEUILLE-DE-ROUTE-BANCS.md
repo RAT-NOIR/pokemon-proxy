@@ -4,6 +4,14 @@ Tenue depuis le 2026-10-08. Règle du testeur : **aucun banc n'écrit dans la pr
 Les bancs tournent sur une base EN MÉMOIRE (`collecte-cartes/base-banc.js`, mongodb-memory-server 11.3.0 installé dans `.banc-local/` depuis son
 lockfile : `npm ci --prefix .banc-local`). La production ne charge aucun module de banc (`collecte-cartes/garde-banc.js`, inerte sans `BANC_ISOLE`).
 
+## 0. L'installation de la base de banc, dans CHAQUE copie du dépôt
+`npm ci --prefix .banc-local` (lockfile `.banc-local/package-lock.json`, mongodb-memory-server 11.3.0 épinglé, 49 paquets). npm 11 ne lance pas
+son `postinstall`, qui ne sert qu'à télécharger mongod : le binaire (8.2.6) est pris dans le cache de l'utilisateur au premier démarrage.
+**main est autonome depuis le 2026-10-08 (décision 9 du testeur)** : l'ancienne jonction vers le worktree `a-fuite-main` est retirée (`rmdir`,
+cible intacte) et l'installation est dans main lui-même. **Prouvé avec le worktree `a-fuite-main` RENOMMÉ** (19:41 UTC) : test-base-banc 108/108,
+test-fuite-main 20/20, test-garde-prod 7/7, test-acces 85/85 sur la base en mémoire. Les worktrees de lot pointent par jonction vers
+`main\.banc-local\node_modules` (jamais vers un autre worktree).
+
 ## 1. Les bancs selon ce qu'il leur faut (état après le lot LECTURE-SEULE, branche `a-lecture-seule`)
 | exigence | bancs | état tant que la variable manque |
 |---|---|---|
