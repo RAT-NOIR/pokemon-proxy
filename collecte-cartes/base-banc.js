@@ -94,12 +94,108 @@ function variablesDeConnexion(env, fichierEnv) {
     return [...noms];
 }
 
+// ── LA LECTURE SEULE (décision 6 du testeur, 2026-10-08) : un banc qui lit la production exige un UTILISATEUR ATLAS EN LECTURE SEULE, jamais l'URI
+// d'écriture. Plus aucun repli : MONGODB_LECTURE_URI (grappe test) / MONGODB_CARTES_LECTURE_URI (grappe cartes) absentes = le banc REFUSE de démarrer,
+// avant toute connexion. La façade de lecture (facadeLecture) reste PAR-DESSUS : double protection.
+// 🔑 Une garde qui ne se confirme pas elle-même : le jour où quelqu'un copie la mauvaise valeur (l'URI d'écriture) dans la variable de lecture, la
+// variable est présente et lisible — elle passerait. Donc (1) une URI de lecture égale à une URI d'écriture, ou au même utilisateur, ou à une autre
+// grappe, est refusée (jugerLecture, pure) ; (2) à la connexion, les PRIVILÈGES de l'utilisateur sont constatés sans rien écrire (connectionStatus avec
+// showPrivileges) et un droit d'écriture, un droit inconnu ou l'absence de droit de lecture refuse (verifierPrivilegesLecture).
+const LECTURES = {
+    production: { variable: 'MONGODB_LECTURE_URI', ecriture: 'MONGODB_URI', grappe: 'test', ce: 'la base « test » de la production' },
+    cartes: { variable: 'MONGODB_CARTES_LECTURE_URI', ecriture: 'MONGODB_CARTES_URI', grappe: 'cartes', ce: 'la base « cartes »' }
+};
+const utilisateurDe = uri => {
+    const m = /^mongodb(?:\+srv)?:\/\/([^:@/]+)(?::[^@/]*)?@/i.exec(String(uri ?? '').trim());
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; }
+};
+
 /**
- * Ouvre la base du banc ou LÈVE (le banc ne démarre pas). Rend { origine, uri, arreter(), appliquer() }.
+ * L'URI de lecture de cette grappe est-elle exigible ? { ok, variable, uri?, raison }. Pure : ne se connecte à rien, n'imprime jamais une valeur.
+ * `quoi` : 'production' (grappe test) ou 'cartes'. `ce` : ce que le banc aurait lu (dit dans le refus).
+ */
+function jugerLecture(env, quoi, ce) {
+    const d = LECTURES[quoi];
+    if (!d) return { ok: false, variable: null, raison: `🔴 BANC REFUSÉ — lecture « ${quoi} » inconnue : refusé.` };
+    const debut = `🔴 BANC REFUSÉ — ce banc lirait ${ce || d.ce} (grappe ${d.grappe}) ; il exige ${d.variable} (utilisateur Atlas en LECTURE SEULE, jamais ${d.ecriture}).`;
+    const refus = (r) => ({ ok: false, variable: d.variable, raison: `${debut} ${r} Aucune connexion n'a été ouverte.` });
+    const uri = env[d.variable];
+    if (typeof uri !== 'string' || !uri.trim()) return refus(`${d.variable} est absente. C'est attendu tant que le testeur n'a pas créé cet utilisateur.`);
+    const hotes = hotesDe(uri);
+    if (!hotes.length) return refus(`${d.variable} est illisible : je ne peux pas dire où elle pointe, refusé.`);
+    const user = utilisateurDe(uri);
+    if (!user) return refus(`${d.variable} ne porte aucun identifiant : ce n'est pas un utilisateur de lecture, refusé.`);
+    const ecritures = ['MONGODB_URI', 'MONGODB_CARTES_URI'].map(nom => [nom, env[nom]]);
+    for (const [nom, v] of ecritures) {
+        if (typeof v === 'string' && v.trim() === uri.trim()) return refus(`${d.variable} a la même valeur que ${nom} (URI d'écriture) : ce n'est pas un utilisateur de lecture seule, refusé.`);
+        if (user === utilisateurDe(v)) return refus(`${d.variable} désigne le même utilisateur que ${nom} (URI d'écriture) : ce n'est pas un utilisateur de lecture seule, refusé.`);
+    }
+    const propre = hotesDe(env[d.ecriture]).map(cleDeGrappe);
+    if (!propre.length) return refus(`${d.ecriture} est absente ou illisible : je ne peux pas vérifier que ${d.variable} vise la même grappe, refusé.`);
+    if (!hotes.every(h => propre.includes(cleDeGrappe(h)))) return refus(`${d.variable} ne vise pas la grappe de ${d.ecriture} : mauvaise grappe, refusé.`);
+    return { ok: true, variable: d.variable, uri, raison: null };
+}
+
+// Ce qu'un utilisateur de lecture PEUT porter, énuméré (liste fermée) : le rôle `read` de MongoDB, relu dans la documentation officielle (built-in-roles, 2026-10-08).
+// `read` : changeStream, collStats, dbHash, dbStats, find, killCursors, listCollections, listIndexes, listSearchIndexes ; `readAnyDatabase` : la même chose sur toutes les bases
+// sauf local et config, plus listDatabases sur le cluster. `indexStats` et `planCacheRead` figurent dans le tableau documenté de `read` sur la base local : lecture pure, gardés.
+// Tout autre droit — écriture, administration, ou inconnu (listShards, validate… non documentés pour ces rôles) — refuse ; `verifier-utilisateurs-lecture.js` imprime alors la liste
+// complète de ce qui fait refuser un vrai utilisateur, pour trancher AVANT les bancs.
+const ACTIONS_LECTURE = new Set(['find', 'listCollections', 'listIndexes', 'collStats', 'dbStats', 'dbHash', 'killCursors', 'changeStream', 'indexStats', 'planCacheRead',
+    'listSearchIndexes']);
+const ACTIONS_CLUSTER_LECTURE = new Set(['listDatabases']);
+
+/**
+ * Constate, SANS écrire, que l'utilisateur de la connexion n'a que des droits de lecture. `db` = le Db natif (admin().command). { ok, raison }.
+ * Écrite par ce qu'elle AUTORISE : il faut un utilisateur authentifié, au moins un droit `find` sur `dbName`, et AUCUN droit hors de la liste fermée,
+ * sur aucune base (une réponse illisible ou une commande qui échoue refuse : « je ne sais pas » n'est pas « tout va bien »).
+ * ⚠️ LIMITE : prouvée sur un faux client (réponse fabriquée à la forme documentée de connectionStatus) ; elle n'a jamais tourné contre un vrai utilisateur
+ * Atlas, qui n'existe pas encore. À la première connexion réelle, un refus inattendu est à lire, pas à contourner.
+ */
+async function verifierPrivilegesLecture(db, dbName) {
+    const ko = (r) => ({ ok: false, raison: `🔴 LECTURE SEULE REFUSÉE — ${r}` });
+    let rep;
+    try { rep = await db.admin().command({ connectionStatus: 1, showPrivileges: true }); }
+    catch (e) { return ko(`je n'ai pas pu constater les privilèges de l'utilisateur de lecture (${e?.codeName || e?.name || 'erreur'}) : doute = refus.`); }
+    const info = rep && typeof rep === 'object' ? rep.authInfo : null;
+    if (!info || !Array.isArray(info.authenticatedUsers) || !Array.isArray(info.authenticatedUserPrivileges)) return ko('la réponse de connectionStatus est illisible : doute = refus.');
+    if (!info.authenticatedUsers.length) return ko('aucun utilisateur authentifié sur cette connexion : ce n\'est pas un utilisateur de lecture, refusé.');
+    let peutLire = false;
+    const fautes = [];   // TOUTES les ressources et actions fautives (pas la première seulement) : la commande de contrôle les imprime
+    const nomme = res => res.cluster === true ? 'cluster' : res.anyResource ? 'toutes les ressources' : `base « ${res.db === '' ? '(toutes)' : res.db} »${res.collection ? `, collection « ${res.collection} »` : ''}`;
+    for (const p of info.authenticatedUserPrivileges) {
+        const res = p?.resource, actions = p?.actions;
+        if (!res || typeof res !== 'object' || !Array.isArray(actions) || actions.some(a => typeof a !== 'string')) return ko('un privilège est illisible : doute = refus.');
+        const permises = res.cluster === true ? ACTIONS_CLUSTER_LECTURE : (typeof res.db === 'string' && !res.anyResource) ? ACTIONS_LECTURE : null;
+        if (!permises) { fautes.push(`${nomme(res)} : privilège sur toutes les ressources ou sur une ressource inconnue (actions : ${actions.join(', ') || 'aucune'})`); continue; }
+        const hors = actions.filter(a => !permises.has(a));
+        if (hors.length) fautes.push(`${nomme(res)} : ${hors.join(', ')}`);
+        if (res.cluster !== true && (res.db === dbName || res.db === '') && actions.includes('find')) peutLire = true;
+    }
+    if (fautes.length) return { ...ko(`l'utilisateur porte des droits d'écriture, d'administration ou inconnus, qu'un utilisateur de lecture seule n'a pas, refusé — ${fautes.join(' ; ')}.`), fautes };
+    if (!peutLire) return ko(`l'utilisateur n'a aucun droit de lecture (find) sur la base « ${dbName} » : refusé.`);
+    return { ok: true, raison: null };
+}
+
+/**
+ * Ouvre la base du banc ou LÈVE (le banc ne démarre pas). Rend { origine, uri, arreter(), appliquer(), connexionProduction(), connexionCartes(), connecterLecture() }.
  * `appliquer()` : REMPLACE chaque variable MONGODB_*URI (environnement et .env) par l'URI du banc et pose BANC_ISOLE=1 / BANC_HOTES. À appeler
  * AVANT tout require qui lit MONGODB_*, toute connexion et tout lancement de sous-processus.
+ * `lit` : { production?: 'ce que le banc lit', cartes?: '…' } — les lectures de la production que ce banc fera ; l'URI de lecture correspondante est
+ *   EXIGÉE ICI, avant tout démarrage de base. `ecritR2` : 'ce que le banc écrit' — R2_BUCKET_BANC est exigé ICI. Un banc qui ne déclare ni l'un ni l'autre
+ *   tourne sans ces variables (base en mémoire seule).
  */
-async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = path.join(__dirname, '..', '.env') } = {}) {
+async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = path.join(__dirname, '..', '.env'), lit = {}, ecritR2 } = {}) {
+    // Les lectures sont jugées sur l'environnement d'ORIGINE (appliquer() remplacera ensuite les variables MONGODB_*URI) ; chacune est refusée avant tout démarrage.
+    const lectures = {};
+    for (const quoi of Object.keys(LECTURES)) lectures[quoi] = jugerLecture(env, quoi, lit[quoi]);
+    for (const quoi of Object.keys(lit)) { if (!lectures[quoi]) throw new Error(`🔴 BANC REFUSÉ — lecture « ${quoi} » inconnue.`); if (!lectures[quoi].ok) throw new Error(lectures[quoi].raison); }
+    if (ecritR2) {
+        const bucket = env.R2_BUCKET_BANC;
+        if (!bucket) throw new Error(`🔴 BANC REFUSÉ — ce banc écrirait sur R2 (${ecritR2}) ; il exige R2_BUCKET_BANC (le bucket de banc dédié, rat-market-banc) et elle est absente. C'est attendu tant que le testeur n'a pas créé ce bucket. Rien n'a été écrit.`);
+        if (bucketsDeProduction(env).includes(bucket)) throw new Error('🔴 BANC REFUSÉ — R2_BUCKET_BANC est égal à un bucket R2 de production : un banc n\'écrit jamais dans la production, R2 compris. Rien n\'a été écrit.');
+    }
     const r = resoudre(env, memoireDisponible === undefined ? undefined : { memoireDisponible });
     if (!r.ok) throw new Error(`🔴 BANC REFUSÉ — ${r.raison}`);
     let uri = r.uri, arreter = async () => { };
@@ -112,12 +208,20 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
         uri = ms.getUri();
         arreter = () => ms.stop();
     }
-    // L'URI de production, gardée AVANT le remplacement, pour les seuls bancs qui LISENT la production (copie d'une tranche, journal des scans).
-    // Elle ne passe jamais dans l'environnement : les enfants ne la voient pas. Toute écriture mongoose vers elle est refusée (garde ci-dessous).
-    // Un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI / MONGODB_CARTES_LECTURE_URI), s'il existe, est préféré ; la façade s'applique de toute façon.
-    const uriProduction = env.MONGODB_LECTURE_URI || env.MONGODB_URI, uriCartes = env.MONGODB_CARTES_LECTURE_URI || env.MONGODB_CARTES_URI;
+    // Les URI de LECTURE (utilisateurs Atlas en lecture seule), jugées AVANT le remplacement des variables, pour les seuls bancs qui LISENT la production
+    // (copie d'une tranche, journal des scans). Aucune URI n'est exposée par le handle et aucune ne passe dans l'environnement : les enfants ne les voient
+    // pas, et aucun banc ne peut ouvrir la production lui-même. PLUS AUCUN REPLI sur l'URI d'écriture : une lecture non jugée sûre LÈVE.
+    // autoIndex/autoCreate à false : les privilèges ne sont constatés qu'APRÈS la connexion ; un modèle mongoose déclaré avant ne doit pas créer index ni collection avant le refus
+    const optionsLecture = (dbName) => ({ dbName, autoIndex: false, autoCreate: false });
+    const lectureOuLeve = (quoi) => { const j = lectures[quoi]; if (!j.ok) throw new Error(j.raison); return j.uri; };
+    // à la connexion : les privilèges de l'utilisateur sont constatés (aucune écriture) ; un droit d'écriture ou un doute referme la connexion et lève
+    const controler = async (db, dbName, fermer) => {
+        let v;
+        try { v = await verifierPrivilegesLecture(db, dbName); } catch (e) { v = { ok: false, raison: '🔴 LECTURE SEULE REFUSÉE — le constat des privilèges a échoué : doute = refus.' }; }
+        if (!v.ok) { try { await fermer(); } catch (_) { /* on lève le refus, pas l'échec de fermeture */ } throw new Error(v.raison); }
+    };
     return {
-        origine: r.origine, uri, arreter, uriProduction, uriCartes,
+        origine: r.origine, uri, arreter,
         appliquer() {
             // R2 : la liste des buckets de PRODUCTION est figée AVANT tout remplacement ; R2_BUCKET_BANC ne peut pas en faire partie
             const buckets = bucketsDeProduction(env);
@@ -133,15 +237,23 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
          *  aggregate sans $out/$merge) — jamais la connexion ni le Db bruts. Tout le reste lève. */
         async connexionProduction(mongoose, dbName) {
             if (dbName !== 'test') throw new Error('connexionProduction : seule la base « test » se lit (production en lecture seule) ; jamais test_scratch ni cartes.');
-            if (!uriProduction) throw new Error('connexionProduction : MONGODB_URI absente, rien à lire.');
-            const cx = await mongoose.createConnection(uriProduction, { dbName }).asPromise();
+            const cx = await mongoose.createConnection(lectureOuLeve('production'), optionsLecture(dbName)).asPromise();
+            await controler(cx.db, dbName, () => cx.close());
             return facadeLecture(cx.db, () => cx.close());
+        },
+        /** La connexion mongoose PAR DÉFAUT vers la base `test` (pour les modèles mongoose qui lisent la production) : mêmes exigences que connexionProduction
+         *  (variable de lecture, URI ≠ écriture, privilèges constatés). Elle n'a pas de façade : seule la garde d'écriture de mongoose.Collection la couvre,
+         *  et le vrai garde-fou est l'utilisateur en lecture seule, dont les privilèges sont contrôlés ici. */
+        async connecterLecture(mongoose, dbName) {
+            if (dbName !== 'test') throw new Error('connecterLecture : seule la base « test » se lit (production en lecture seule).');
+            await mongoose.connect(lectureOuLeve('production'), optionsLecture(dbName));
+            await controler(mongoose.connection.db, dbName, () => mongoose.disconnect());
         },
         /** La base `cartes` (autre grappe de production), pour LIRE des cartes réelles à copier dans le banc : même façade à liste fermée. */
         async connexionCartes(mongoose, dbName) {
             if (dbName !== 'cartes') throw new Error('connexionCartes : seule la base « cartes » se lit ici (lecture seule).');
-            if (!uriCartes) throw new Error('connexionCartes : MONGODB_CARTES_URI absente, rien à lire.');
-            const cx = await mongoose.createConnection(uriCartes, { dbName }).asPromise();
+            const cx = await mongoose.createConnection(lectureOuLeve('cartes'), optionsLecture(dbName)).asPromise();
+            await controler(cx.db, dbName, () => cx.close());
             return facadeLecture(cx.db, () => cx.close());
         }
     };
@@ -342,5 +454,5 @@ function installerGardeEcriture(Collection, env = process.env) {
     }
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
+module.exports = { hotesDe, cleDeGrappe, jugerUri, LECTURES, jugerLecture, verifierPrivilegesLecture, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
     facadeLecture, sortieSure, verifierEcritureR2, garderClientR2 };

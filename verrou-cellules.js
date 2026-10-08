@@ -57,7 +57,8 @@ const CELLULES = [
 (async () => {
     // BASE DE BANC (2026-10-08) : le journal se LIT dans la production par la FAÇADE à liste fermée (find, countDocuments… ; tout le reste lève), jamais par une
     // connexion mongoose ouverte vers MONGODB_URI. Seule la base « test » se lit (connexionProduction refuse le reste) ; sans base de banc, REFUS.
-    const banc = await ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : le journal des scans se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const banc = await ouvrirBanc({ lit: { production: 'le journal des scans de la base « test » de la production' } });
     banc.appliquer();
     const c = await banc.connexionProduction(mongoose, BASE);
     console.log(`base : ${c.db.databaseName} (LECTURE SEULE, façade)\n`);
