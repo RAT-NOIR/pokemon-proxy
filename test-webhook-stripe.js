@@ -44,6 +44,7 @@ const http = require('http');
 const mongoose = require('mongoose');
 const Stripe = require('stripe');
 const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -89,6 +90,9 @@ function poster(port, corps, signature) {
 }
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement du serveur, qui se connecte à l'import avec MONGODB_URI ; le serveur « froid » lancé plus bas hérite de cet environnement.
+    (await ouvrirBanc()).appliquer();
     // ⚠️ L'ORDRE COMPTE : c'est `require('./index')` qui ouvre la connexion Mongo ET met
     // le serveur en écoute, avec les variables posées ci-dessus.
     const { app } = require('./index');

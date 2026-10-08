@@ -16,6 +16,7 @@ process.env.MONGODB_BASE = 'test_scratch';
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -25,6 +26,9 @@ const v = (nom, obtenu, attendu) => {
 };
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement du serveur, qui se connecte à l'import avec MONGODB_URI.
+    (await ouvrirBanc()).appliquer();
     // ⚠️ L'ORDRE COMPTE : c'est `require('./index')` qui OUVRE la connexion Mongo (il le
     // fait au chargement, avec MONGODB_BASE lu en tête de ce fichier). Attendre la
     // connexion AVANT de le charger attend donc quelque chose que personne n'a demandé.

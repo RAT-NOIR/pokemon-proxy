@@ -23,6 +23,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const { prixDeReference } = require('./scoring');
 const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE_PROD = 'test';
 const BASE_SCRATCH = 'test_scratch';
@@ -171,13 +172,17 @@ function verifier(libelle, obtenu, attendu) {
 }
 
 async function main() {
+    // BASE DE BANC (2026-10-08) : l'ÉCRITURE (étape 2) va à la base de banc ; la LECTURE de la production (étape 1) garde l'URI d'origine,
+    // que le banc a mise de côté avant de remplacer les variables, et toute écriture mongoose vers elle est refusée (base-banc.js).
+    const banc = await ouvrirBanc();
+    banc.appliquer();
     if (!process.env.MONGODB_URI) {
         console.error('❌ MONGODB_URI absent du .env');
         process.exit(1);
     }
 
     // ---- 1. LECTURE de la production ---------------------------------------
-    await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE_PROD });
+    await mongoose.connect(banc.uriProduction, { dbName: BASE_PROD });
     if (mongoose.connection.db.databaseName !== BASE_PROD) {
         console.error(`❌ ARRÊT : base "${mongoose.connection.db.databaseName}" au lieu de "${BASE_PROD}".`);
         process.exit(1);

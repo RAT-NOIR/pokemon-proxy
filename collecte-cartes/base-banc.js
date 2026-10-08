@@ -75,9 +75,16 @@ function verifierHoteBanc(uri, env = process.env) {
     return { ok: true, isole: true, raison: null };
 }
 
-function memoireInstallee() {
-    try { require.resolve('mongodb-memory-server'); return true; } catch (_) { return false; }
+// Le paquet mongodb-memory-server vit dans `.banc-local/` (son package.json et son lock épinglés, HORS du package.json du dépôt : Render ne
+// l'installe jamais) ; son binaire mongod (≈ 78 Mo) est mis en cache dans `.banc-local/cache-mongod/`. Absent = refus, comme avant.
+//   installation : npm ci --prefix .banc-local   (avec MONGOMS_DOWNLOAD_DIR=<racine>/.banc-local/cache-mongod pour garder le binaire sur place)
+const DOSSIER_BANC = path.join(__dirname, '..', '.banc-local');
+const CACHE_MONGOD = path.join(DOSSIER_BANC, 'cache-mongod');
+
+function cheminMemoire() {
+    try { return require.resolve('mongodb-memory-server', { paths: [DOSSIER_BANC] }); } catch (_) { return null; }
 }
+function memoireInstallee() { return cheminMemoire() !== null; }
 
 /**
  * Quelle base de banc, ou le refus. { ok, origine, uri?, raison? }. Pure : ne se connecte à rien.
@@ -119,19 +126,61 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
     if (!r.ok) throw new Error(`🔴 BANC REFUSÉ — ${r.raison}`);
     let uri = r.uri, arreter = async () => { };
     if (r.origine === 'memoire') {
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        const ms = await MongoMemoryServer.create();
+        if (!process.env.MONGOMS_DOWNLOAD_DIR) process.env.MONGOMS_DOWNLOAD_DIR = CACHE_MONGOD;
+        // un ensemble de réplicas à UN nœud, pas un mongod isolé : le webhook Stripe écrit en transaction (« Transaction numbers are only
+        // allowed on a replica set member »), comme la production Atlas. Même binaire, quelques secondes de démarrage en plus.
+        const { MongoMemoryReplSet } = require(cheminMemoire());
+        const ms = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
         uri = ms.getUri();
         arreter = () => ms.stop();
     }
+    // L'URI de production, gardée AVANT le remplacement, pour les seuls bancs qui LISENT la production (copie d'une tranche, journal des scans).
+    // Elle ne passe jamais dans l'environnement : les enfants ne la voient pas. Toute écriture mongoose vers elle est refusée (garde ci-dessous).
+    const uriProduction = env.MONGODB_URI, uriCartes = env.MONGODB_CARTES_URI;
     return {
-        origine: r.origine, uri, arreter,
+        origine: r.origine, uri, arreter, uriProduction,
         appliquer() {
             for (const nom of variablesDeConnexion(env, fichierEnv)) env[nom] = uri;
             env.BANC_ISOLE = '1';
             env.BANC_HOTES = hotesDe(uri).join(',');
+            installerGardeEcriture(require('mongoose').Collection, env);
+        },
+        /** Connexion mongoose à la base `test` de production, pour LIRE (find, count, aggregate). Les écritures y sont refusées par la garde. */
+        async connexionProduction(mongoose, dbName) {
+            if (dbName !== 'test') throw new Error('connexionProduction : seule la base « test » se lit (production en lecture seule) ; jamais test_scratch ni cartes.');
+            if (!uriProduction) throw new Error('connexionProduction : MONGODB_URI absente, rien à lire.');
+            return mongoose.createConnection(uriProduction, { dbName }).asPromise();
+        },
+        /** Connexion mongoose à la base `cartes` (autre grappe de production), pour LIRE des cartes réelles à copier dans le banc. Écritures refusées. */
+        async connexionCartes(mongoose, dbName) {
+            if (dbName !== 'cartes') throw new Error('connexionCartes : seule la base « cartes » se lit ici (lecture seule).');
+            if (!uriCartes) throw new Error('connexionCartes : MONGODB_CARTES_URI absente, rien à lire.');
+            return mongoose.createConnection(uriCartes, { dbName }).asPromise();
         }
     };
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion };
+const METHODES_ECRITURE = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndUpdate',
+    'findOneAndDelete', 'findOneAndReplace', 'bulkWrite', 'drop', 'createIndex', 'createIndexes', 'dropIndex', 'dropIndexes', 'rename', 'findAndModify'];
+
+/**
+ * 🔑 LA GARDE D'ÉCRITURE : sous BANC_ISOLE=1, toute écriture d'une collection mongoose dont la connexion n'est PAS sur l'hôte du banc (ou dont
+ * l'hôte est encore inconnu : doute = refus) lève. La lecture de la production reste permise (find, aggregate…). Idempotente.
+ * `Collection` est mongoose.Collection (les méthodes y sont posées une à une depuis le pilote) ; passée en paramètre pour être testée sur une fausse.
+ */
+function installerGardeEcriture(Collection, env = process.env) {
+    for (const m of METHODES_ECRITURE) {
+        const original = Collection.prototype[m];
+        if (typeof original !== 'function' || original.__gardeBanc) continue;
+        const gardee = function (...args) {
+            if (env.BANC_ISOLE === '1' && !(this?.conn?.host && verifierHoteBanc(`mongodb://${this.conn.host}/`, env).ok)) {
+                throw new Error(`🔴 ÉCRITURE REFUSÉE (${m}) : la connexion de cette collection n'est pas sur l'hôte du banc — un banc n'écrit jamais ailleurs que sur sa base.`);
+            }
+            return original.apply(this, args);
+        };
+        gardee.__gardeBanc = true;
+        Collection.prototype[m] = gardee;
+    }
+}
+
+module.exports = { hotesDe, cleDeGrappe, jugerUri, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE };

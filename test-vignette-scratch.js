@@ -4,7 +4,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const sharp = require('sharp');
-const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const r2 = require('./collecte-cartes/r2');
 const { assurerVignettes, cleVignette } = require('./collecte-cartes/vignette');
 const CARTES = 'banc_vignettes_cartes', IMAGES = 'banc_vignettes_images', SLUG = 'EX-Holon-Phantoms', JUMEAU = 'banc-jumeau-EX-Holon-Phantoms';
@@ -12,7 +12,13 @@ let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 
 (async () => {
-    const { cartes: source, fermer } = await ouvrirConnexions({ production: false, buckets: ['R2_BUCKET_IMAGES'] });
+    // BASE DE BANC (2026-10-08) : l'ÉCRITURE (les collections `banc_vignettes_*`) va à la base de banc ; les cartes RÉELLES à copier sont LUES dans
+    // `cartes` avec l'URI d'origine mise de côté par le banc (lecture seule : toute écriture mongoose vers elle est refusée). R2 : inchangé.
+    const banc = await ouvrirBanc();
+    banc.appliquer();
+    for (const v of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET_IMAGES']) if (!process.env[v]) throw new Error(`${v} absent du .env.`);
+    const cxCartes = await banc.connexionCartes(mongoose, 'cartes');
+    const source = { db: cxCartes.db }, fermer = () => cxCartes.close();
     const bucket = process.env.R2_BUCKET_IMAGES;
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
     if (cx.db.databaseName !== 'test_scratch') throw new Error('je n\'écris que dans test_scratch');

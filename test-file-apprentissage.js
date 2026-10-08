@@ -2,12 +2,15 @@
 // test_scratch, une collection à lui (refusée si elle existe), retirée en sortant. `apprendre` est un témoin (la route y met apprendreLot).
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const F = require('./collecte-cartes/file-apprentissage');
 const COLL = 'banc_file_apprentissage';
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b = JSON.stringify(attendu); if (a === b) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom}\n   obtenu  ${a}\n   attendu ${b}`); } };
 const muet = { error() {}, log() {} };
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    (await ouvrirBanc()).appliquer();
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
     if (cx.db.databaseName !== 'test_scratch') throw new Error('je n\'écris que dans test_scratch');
     if ((await cx.db.listCollections({ name: COLL }).toArray()).length) throw new Error(`test_scratch porte déjà ${COLL}`);

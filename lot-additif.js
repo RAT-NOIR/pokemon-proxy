@@ -68,6 +68,12 @@ if (inconnus.length || !quoi || !collections || !commande.length || (val('journa
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${val('journal') && BASE !== 'test_scratch' ? '--journal= ne vaut qu\'avec --base=test_scratch — ' : ''}usage : --quoi="…" --collections=a,b [--annonce=baisses.json] [--compte=coll[:champ=valeur]]… -- <commande…>`);
     process.exit(2);
 }
+// BASE DE BANC (2026-10-08) : `--base=test_scratch` ne sert qu'aux bancs, et un banc n'écrit plus dans la production. Sans BANC_ISOLE=1
+// (posé par collecte-cartes/base-banc.js, hérité par ce processus enfant), test_scratch serait celui de la grappe de production : refus.
+if (BASE === 'test_scratch' && process.env.BANC_ISOLE !== '1') {
+    console.error('❌ --base=test_scratch refusé hors banc isolé : aucune base de test hors production n\'est ouverte (BANC_ISOLE=1 absent). Rien n\'a été écrit.');
+    process.exit(2);
+}
 const annonces = val('annonce') ? JSON.parse(fs.readFileSync(path.resolve(val('annonce')), 'utf8')) : {};
 try { validerAnnonces(annonces); } catch (e) { console.error(`❌ ${e.message}`); process.exit(2); }
 const aSauver = [...new Set([...collections.split(','), ...GARDEES])];

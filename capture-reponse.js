@@ -6,12 +6,16 @@ const path = require('path');
 const fs = require('fs');
 const { demarrer, appeler } = require('./verrou/serveur');
 const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const FICHIER_CHARGES = path.join(__dirname, 'verrou', 'charges.json');
 const JETON = process.env.JETON_API || 'jeton-verrou';
 const cible = process.argv[2] || 'Vileplume';
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Le serveur lancé plus bas (verrou/serveur.js) et la connexion de preuve héritent de cet environnement.
+    (await ouvrirBanc()).appliquer();
     const donnees = JSON.parse(fs.readFileSync(FICHIER_CHARGES, 'utf8'));
     // ⚠️ ÉCHEC BRUYANT SUR UNE CLÉ INCONNUE. La version d'origine retombait sur
     // `donnees.charges[0]` : demander « Light Togetic » rendait la réponse de Gardevoir ex,

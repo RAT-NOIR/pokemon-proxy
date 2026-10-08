@@ -31,6 +31,7 @@ const mongoose = require('mongoose');
 const { demarrer, appeler } = require('./verrou/serveur');
 const { JournalScan } = require('./journal-scans');
 const { viderBac, COLLECTIONS_SERVEUR, nomsDesModeles } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE = 'test_scratch';
 // ⚠️ La base de PRODUCTION s'appelle « test ». Ce n'est pas un nom de bac à sable, et
@@ -52,6 +53,9 @@ function verifier(libelle, obtenu, attendu) {
 }
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Le serveur lancé plus bas (verrou/serveur.js) hérite de cet environnement.
+    (await ouvrirBanc()).appliquer();
     await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
     if (mongoose.connection.db.databaseName !== BASE) {
         console.error(`❌ REFUS : connecté à « ${mongoose.connection.db.databaseName} ».`);

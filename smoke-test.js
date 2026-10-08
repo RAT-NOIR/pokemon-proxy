@@ -33,6 +33,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
 const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE_SCRATCH = 'test_scratch';
 const JETON = process.env.JETON_API || 'jeton-smoke-test';
@@ -327,13 +328,13 @@ async function testerLesRoutes() {
         const supprC = (await C.deleteMany({ userId: 'SMOKE-TEST-USER' })).deletedCount;
         console.log(`\n🧹 Nettoyage test_scratch : ${supprN} numéro(s), ${supprC} crédit(s) supprimé(s).`);
     }
-    await mongoose.disconnect();
-
     enfant.kill();
     await fini;
-    // le serveur est arrêté : `drop` de ce qu'il a créé et de ce que le smoke test a écrit (deleteMany laissait les fichiers)
+    // le serveur est arrêté : `drop` de ce qu'il a créé et de ce que le smoke test a écrit (deleteMany laissait les fichiers) ; AVANT
+    // `mongoose.disconnect()`, qui ferme aussi cette connexion de sortie
     if (bacSortie) await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
     if (bacSortie) await bacSortie.close();
+    await mongoose.disconnect();
 
     // Le serveur a-t-il crié pendant le test ? Une exception non capturée s'y verrait.
     const erreursGraves = sortie.split('\n').filter(l => /UnhandledPromiseRejection|is not defined|is not a function|SyntaxError|ReferenceError|TypeError/.test(l));
@@ -343,6 +344,9 @@ async function testerLesRoutes() {
 
 (async () => {
     console.log('SMOKE TEST — chargement, démarrage, et une passe sur chaque route');
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement des modules et le lancement du serveur, qui héritent de cet environnement.
+    (await ouvrirBanc()).appliquer();
     if (!process.env.MONGODB_URI) {
         console.error('❌ MONGODB_URI absent du .env — impossible de démarrer le serveur.');
         process.exit(1);

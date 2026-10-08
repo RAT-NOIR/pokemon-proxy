@@ -29,6 +29,7 @@ const { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCod
 // pas une réimplémentation, qui ne démontrerait que sa propre cohérence.
 const { rangDuNumero } = require('./scoring');
 const { viderBac, nomsDesModeles } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE = process.env.MONGODB_BASE || 'test_scratch';
 // ⚠️ La base de PRODUCTION s'appelle « test ». Ce n'est pas un nom de bac à sable et
@@ -62,6 +63,8 @@ async function attendreLigne(filtre, limiteMs = 5000) {
 }
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    (await ouvrirBanc()).appliquer();
     await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
     const reelle = mongoose.connection.db.databaseName;
     if (reelle !== 'test_scratch') {

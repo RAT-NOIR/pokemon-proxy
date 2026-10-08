@@ -91,6 +91,7 @@ const { profondeurAtteinte, profondeurSuffisante } = require('./verrou/jalons');
 // ⚠️ UNE SEULE DÉFINITION DE LA TRANCHE, partagée avec verrou-avant-push.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
 const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const SCRATCH = 'test_scratch';
 const SORTIE = path.join(__dirname, 'verrou', 'charges.json');
@@ -256,7 +257,12 @@ const SONDE_MAX_CANDIDATES = 6;
 (async () => {
     // 🔒 AVANT toute autre chose : aucun `fetch` de ce processus ne doit atteindre Vinted (décision du testeur, 2026-10-04)
     const PHOTOS = require('./verrou/photos-locales').installer({ etiquette: 'verrou-charges' });
-    const prod = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
+    // BASE DE BANC (2026-10-08) : l'ÉCRITURE (test_scratch : tranche, comptes, serveur) va à la base de banc ; la LECTURE de la production
+    // (journal des scans, vecteurs d'image, tranche à copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose
+    // vers elle est refusée (garde d'écriture de base-banc.js). Sans base de banc, ce verrou REFUSE de démarrer.
+    const banc = await ouvrirBanc();
+    banc.appliquer();
+    const prod = await banc.connexionProduction(mongoose, BASE);
     console.log(`lecture  : ${prod.db.databaseName} (aucune écriture)`);
     if (prod.db.databaseName === SCRATCH) {
         console.error('❌ La base de lecture ne peut pas être le bac à sable.');
@@ -314,7 +320,7 @@ const SONDE_MAX_CANDIDATES = 6;
         // sereinement « 0 ligne n'emprunte le chemin ».
         // C'est encore une absence lue comme une valeur — et le contrôle qui devait la voir
         // rendait un nombre parfaitement plausible.
-        await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
+        await mongoose.connect(banc.uriProduction, { dbName: BASE });   // LECTURE de la production (garde d'écriture installée)
         // ⚠️ ET ON VÉRIFIE QUE LA LECTURE MARCHE AVANT DE COMPTER. Sans ce garde-fou, un
         // « 0 » resterait indiscernable entre « aucune ligne ne convient » et « je n'ai
         // rien pu lire ». Le premier est une mesure, le second une panne.

@@ -1,0 +1,8 @@
+{
+  "name": "pokemon-proxy-banc-local",
+  "private": true,
+  "description": "Dependances des BANCS uniquement (base mongod en memoire). Hors du package.json du depot : Render ne l'installe jamais.",
+  "dependencies": {
+    "mongodb-memory-server": "11.3.0"
+  }
+}

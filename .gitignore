@@ -1,5 +1,7 @@
 .env
 node_modules/
+# le binaire mongod (≈ 78 Mo) téléchargé pour les bancs (.banc-local/package.json) ; le package.json et le lock, eux, sont versionnés
+.banc-local/cache-mongod/
 chrome-profil/
 # ⚠️ LES EXPORTS CARDMARKET, DATÉS OU NON — 27 Mo pour la paire du 30/08.
 # Les deux lignes nommées ne couvraient que les noms de juillet. Le testeur garde

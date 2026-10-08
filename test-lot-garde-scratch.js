@@ -9,6 +9,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const mongoose = require('mongoose');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const COLLS = ['cartes', 'cartes_produits', 'sets', 'collecte_images_etat'];
 const effacer = process.argv.find(a => a.startsWith('--effacer='))?.slice(10);
@@ -66,6 +67,9 @@ const verifier = (nom, obtenu, attendu) => {
 };
 
 async function main() {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Seul le processus PRINCIPAL ouvre le banc ; lot-additif.js et la commande `--effacer=` (enfants) en héritent par l'environnement.
+    (await ouvrirBanc()).appliquer();
     const cx = await ouvrir(), db = cx.db;
     const presentes = (await db.listCollections().toArray()).map(c => c.name).filter(n => COLLS.includes(n));
     if (presentes.length) { await cx.close(); throw new Error(`test_scratch porte déjà ${presentes.join(', ')} : je ne les écrase pas (ce ne sont pas les miennes)`); }

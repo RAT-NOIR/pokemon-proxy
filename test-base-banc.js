@@ -118,19 +118,55 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     verifier('ouvrirBanc LÈVE (refus) sans paquet ni MONGODB_TEST_URI — un banc ne démarre pas', [!!leve, /aucune base de test hors production/.test(leve?.message || '')], [true, true]);
 
     // ── 6. les bancs câblés passent par le module (lecture du code : les faire tourner demanderait une base de banc)
-    const CABLES = ['test-import-catalogue-quotidien.js', 'test-import-guide-quotidien.js', 'test-import-price-guide.js', 'test-acces.js'];
+    const CABLES = ['test-import-catalogue-quotidien.js', 'test-import-guide-quotidien.js', 'test-import-price-guide.js', 'test-acces.js',
+        'test-identification-locale.js', 'test-webhook-stripe.js', 'test-remboursement-catch.js', 'test-retour-live.js', 'test-journal-echecs.js',
+        'capture-reponse.js', 'smoke-test.js', 'verrou-charges.js', 'verrou-avant-push.js', 'test-vignette-scratch.js', 'test-lot-garde-scratch.js',
+        'test-deduction-ecritures-scratch.js', 'test-file-apprentissage.js'];
     const sans = CABLES.filter(f => { const s = fs.readFileSync(path.join(__dirname, f), 'utf8'); return !(/require\('\.\/collecte-cartes\/base-banc'\)/.test(s) && /ouvrirBanc\(/.test(s) && /\.appliquer\(\)/.test(s)); });
     verifier(`${CABLES.length} bancs câblés : requièrent base-banc, ouvrent, appliquent`, sans, []);
     // l'ORDRE : `appliquer()` AVANT toute connexion, tout lancement de sous-processus, et tout require de index.js (qui se connecte au chargement)
     const mal = CABLES.filter(f => {
+        // le corps du banc commence à `async function main()` ou à la première `(async () => {` ; les marqueurs ne comptent qu'à partir de là
+        // (les fonctions-aides définies plus haut ne sont pas des appels), et la PREMIÈRE ligne `appliquer()` doit les précéder tous
         const s = fs.readFileSync(path.join(__dirname, f), 'utf8'), a = s.indexOf('.appliquer()');
-        const premiers = [s.indexOf('connecterMongo({'), s.indexOf('mongoose.connect('), s.indexOf('spawn(process'), s.indexOf('lancer('), s.indexOf("require('./index')")].filter(i => i >= 0);
-        return a < 0 || premiers.some(i => i < a && !/^\s*(const|async|function)/.test(s.slice(s.lastIndexOf('\n', i) + 1, i + 12)) );
+        const debuts = [s.indexOf('async function main()'), s.indexOf('(async () => {')].filter(i => i >= 0), d = debuts.length ? Math.min(...debuts) : 0;
+        const premiers = ['connecterMongo({', 'mongoose.connect(', 'createConnection(', 'ouvrirConnexions(', 'demarrer(', 'spawn(process', 'spawnSync(process', 'lancer(', "require('./index')", "require('./identification-locale')"]
+            .map(m => s.indexOf(m, d)).filter(i => i >= 0);
+        return a < 0 || premiers.some(i => i < a);
     });
     verifier('bancs câblés : appliquer() précède toute connexion, tout lancement d\'enfant et tout require de index.js', mal, []);
     // le garde-fou de connexion est branché là où l'on se connecte
     const garde = ['mongo-connexion.js', path.join('collecte-cartes', 'garde.js')].filter(f => !/verifierHoteBanc\(/.test(fs.readFileSync(path.join(__dirname, f), 'utf8')));
     verifier('mongo-connexion.js et collecte-cartes/garde.js appellent verifierHoteBanc avant de se connecter', garde, []);
+    // lot-additif --base=test_scratch ne sert qu'aux bancs : il REFUSE hors banc isolé
+    verifier('lot-additif.js refuse --base=test_scratch sans BANC_ISOLE=1', /BANC_ISOLE/.test(fs.readFileSync(path.join(__dirname, 'lot-additif.js'), 'utf8')), true);
+
+    // ── 7. LA GARDE D'ÉCRITURE : toute écriture mongoose vers un hôte qui n'est pas celui du banc est refusée (lecture de la production permise)
+    class FausseCollection { constructor(host) { this.conn = { host }; } }
+    const ECRITURES = ['insertOne', 'insertMany', 'updateOne', 'updateMany', 'replaceOne', 'deleteOne', 'deleteMany', 'findOneAndUpdate', 'findOneAndDelete', 'findOneAndReplace', 'bulkWrite', 'drop', 'createIndex', 'createIndexes', 'dropIndex', 'dropIndexes', 'rename'];
+    for (const m of [...ECRITURES, 'find', 'findOne', 'countDocuments']) FausseCollection.prototype[m] = function () { return 'passe'; };
+    B.installerGardeEcriture(FausseCollection, iso);
+    B.installerGardeEcriture(FausseCollection, iso);   // idempotent : pas de double enrobage
+    const surBanc = new FausseCollection('127.0.0.1'), surProd = new FausseCollection('cluster0-shard-00-00.abcde.mongodb.net'), surInconnu = new FausseCollection(undefined);
+    const essaie = (c, m) => { try { return c[m](); } catch (e) { return /ÉCRITURE REFUSÉE/.test(e.message) ? 'refusé' : `autre:${e.message}`; } };
+    verifier(`${ECRITURES.length} méthodes d'écriture : sur le banc, elles passent`, ECRITURES.filter(m => essaie(surBanc, m) !== 'passe'), []);
+    verifier(`${ECRITURES.length} méthodes d'écriture : sur un hôte qui n'est pas le banc, TOUTES sont refusées`, ECRITURES.filter(m => essaie(surProd, m) !== 'refusé'), []);
+    verifier('écriture sur un hôte inconnu (connexion pas encore établie) : refusée (doute)', essaie(surInconnu, 'insertOne'), 'refusé');
+    verifier('lecture (find, findOne, countDocuments) sur la production : permise', ['find', 'findOne', 'countDocuments'].map(m => essaie(surProd, m)), ['passe', 'passe', 'passe']);
+    const horsBanc = new FausseCollection('cluster0-shard-00-00.abcde.mongodb.net');
+    class SansBanc { constructor(h) { this.conn = { host: h }; } insertOne() { return 'passe'; } }
+    B.installerGardeEcriture(SansBanc, {});
+    verifier('hors banc (BANC_ISOLE absent) la garde est inerte', new SansBanc('x').insertOne(), 'passe');
+    const mongooseReel = require('mongoose');
+    const envG = { ...process.env, MONGODB_TEST_URI: BANC_URI };
+    const bancG = await B.ouvrirBanc({ env: envG, memoireDisponible: false });
+    bancG.appliquer();
+    verifier('appliquer installe la garde sur mongoose.Collection (les 17 méthodes d\'écriture marquées)', ECRITURES.filter(m => !mongooseReel.Collection.prototype[m]?.__gardeBanc), []);
+    verifier('le handle garde l\'URI de production pour la LECTURE (égale à l\'originale, jamais imprimée), distincte de celle du banc', [bancG.uriProduction === PROD, bancG.uriProduction === envG.MONGODB_URI], [true, false]);
+    for (const nomBase of ['test_scratch', 'cartes', 'autre', undefined]) {
+        let r = null; try { await bancG.connexionProduction(mongooseReel, nomBase); } catch (e) { r = e.message; }
+        verifier(`connexionProduction refuse la base « ${nomBase} » (seule « test » se lit), sans se connecter`, /seule la base « test »/.test(r || ''), true);
+    }
     console.log(`\n${echecs ? `⚠️ ${echecs}/${n} en échec` : `🎉 ${n}/${n} passés`} (aucune connexion, aucune écriture)`);
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.message); process.exit(1); });
