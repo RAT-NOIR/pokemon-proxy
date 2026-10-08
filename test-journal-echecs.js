@@ -28,6 +28,8 @@ const { enregistrerScan, enregistrerEchec, JournalScan, RETENTION_JOURS, memeCod
 // `rang` avant sa suppression : c'est elle qui doit prouver qu'il reste recalculable,
 // pas une réimplémentation, qui ne démontrerait que sa propre cohérence.
 const { rangDuNumero } = require('./scoring');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE = process.env.MONGODB_BASE || 'test_scratch';
 // ⚠️ La base de PRODUCTION s'appelle « test ». Ce n'est pas un nom de bac à sable et
@@ -61,6 +63,8 @@ async function attendreLigne(filtre, limiteMs = 5000) {
 }
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    (await ouvrirBanc()).appliquer();
     await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
     const reelle = mongoose.connection.db.databaseName;
     if (reelle !== 'test_scratch') {
@@ -262,6 +266,8 @@ async function attendreLigne(filtre, limiteMs = 5000) {
     if (restants !== 0) { console.log('  ❌ nettoyage incomplet'); ko++; }
 
     console.log(`\n${ko === 0 ? '🎉' : '💥'} ${ok}/${ok + ko} assertions passées.`);
+    // `drop` (FUITE-MAIN, 2026-10-08) : deleteMany laissait journal_scans (fichier + index TTL) sur la grappe de production
+    await viderBac(mongoose.connection.db, { noms: ['journal_scans', 'numeros_cartes', 'codes_set'] });
     await mongoose.disconnect();
     process.exit(ko === 0 ? 0 : 1);
 })().catch(async e => {

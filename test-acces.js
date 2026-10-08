@@ -33,6 +33,8 @@ const mongoose = require('mongoose');
 mongoose.set('strictQuery', false);
 
 const { connecterMongo } = require('./mongo-connexion');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const {
     Credit, QuotaSemaine, Remboursement, RemboursementQuestion,
     exigerImage, verifierAcces, rembourserScan, signalerIncertain,
@@ -85,6 +87,9 @@ const poser = async (u, soldeGratuit, soldeScans) => {
 };
 
 async function main() {
+    // BASE DE BANC (2026-10-08) : ce banc n'ouvre plus la production. Base mémoire, ou MONGODB_TEST_URI hors production, sinon il REFUSE de
+    // démarrer (collecte-cartes/base-banc.js). Les modèles de acces.js se connectent à l'ouverture de la connexion, donc après ce point.
+    (await ouvrirBanc()).appliquer();
     if (!process.env.MONGODB_URI) { console.error('❌ MONGODB_URI absent du .env'); process.exit(1); }
     // Le test IMPOSE sa base : contrairement aux autres scripts, elle n'est pas
     // négociable en ligne de commande — un test ne doit jamais pouvoir viser la prod.
@@ -460,6 +465,9 @@ async function main() {
     const d5 = Question ? await Question.deleteMany({ userId: { $in: [...ids, 'peu-importe'] } }) : { deletedCount: 0 };
     console.log(`   supprimés : ${d1.deletedCount} credits, ${d2.deletedCount} quotas, ${d3.deletedCount} remboursements, ${d4.deletedCount} remboursements de questions, ${d5.deletedCount} questions`);
     v('aucun document de test résiduel', await Credit.countDocuments({ userId: /^TEST-/ }), 0);
+    // `drop` des collections de tous les modèles chargés (FUITE-MAIN, 2026-10-08) : le deleteMany ci-dessus laissait credits, quotas_semaine,
+    // remboursements, remboursements_questions, questions (fichier + index) sur la grappe de production ; mongoose les recrée à la connexion suivante
+    await viderBac(mongoose.connection.db, { noms: ['credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions'] });   // liste LITTÉRALE : les modèles d'acces.js
 
     console.log(`\n${ko === 0 ? '🎉' : '⚠️'} ${ok}/${ok + ko} assertions passées.`);
     await mongoose.disconnect();

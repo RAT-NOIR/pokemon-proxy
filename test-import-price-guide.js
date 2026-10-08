@@ -8,6 +8,8 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const mongoose = require('mongoose');
 const { connecterMongo } = require('./mongo-connexion');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0, n = 0;
 const verifier = (nom, obtenu, attendu) => { n++; const ok = JSON.stringify(obtenu) === JSON.stringify(attendu); if (!ok) echecs++; console.log(`${ok ? '✅' : '❌'} ${nom} : ${JSON.stringify(obtenu)}${ok ? '' : ` (attendu ${JSON.stringify(attendu)})`}`); };
@@ -16,10 +18,14 @@ const guide = (nom, createdAt, lignes) => { const f = path.join(dossier, nom); f
 const importer = (...args) => spawnSync(process.execPath, [path.join(__dirname, 'import-price-guide.js'), ...args], { encoding: 'utf8' });
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // Les imports lancés en sous-processus héritent de cet environnement.
+    (await ouvrirBanc()).appliquer();
     const base = await connecterMongo({ script: 'test-import-price-guide.js', ecrit: true });
     if (base !== 'test_scratch') { console.error(`❌ banc sur « ${base} » : refusé, test_scratch seulement`); process.exit(1); }
     const db = mongoose.connection.db;
-    const vider = async () => { await db.collection('guide_prix').deleteMany({}); await db.collection('guide_prix_meta').deleteMany({}); };
+    // `drop`, pas `deleteMany` (FUITE-MAIN, 2026-10-08) : deleteMany laissait guide_prix et guide_prix_meta (fichier + index) sur la grappe de production
+    const vider = async () => { await viderBac(db, { noms: ['guide_prix', 'guide_prix_meta'], log: () => { } }); };
     await vider();
     try {
         const A = guide('price_guide_A.json', '2026-09-01T02:00:00+0200', [{ idProduct: 1, trend: 1.5 }, { idProduct: 2, trend: 20, 'trend-holo': 30 }, { idProduct: 3, trend: 0.1 }]);

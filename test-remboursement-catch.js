@@ -15,6 +15,8 @@
 process.env.MONGODB_BASE = 'test_scratch';
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -24,6 +26,9 @@ const v = (nom, obtenu, attendu) => {
 };
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement du serveur, qui se connecte à l'import avec MONGODB_URI.
+    (await ouvrirBanc()).appliquer();
     // ⚠️ L'ORDRE COMPTE : c'est `require('./index')` qui OUVRE la connexion Mongo (il le
     // fait au chargement, avec MONGODB_BASE lu en tête de ce fichier). Attendre la
     // connexion AVANT de le charger attend donc quelque chose que personne n'a demandé.
@@ -197,6 +202,9 @@ const v = (nom, obtenu, attendu) => {
     console.log(`\n🧹 test_scratch : ${creditsRestes.deletedCount} crédit(s), ${restes.deletedCount} compteur(s) de remboursement supprimés.`);
 
     console.log(echecs ? `\n❌ ${echecs} échec(s).` : '\n🎉 Tous les tests passent.');
+    // `drop` des collections de tous les modèles de index.js (FUITE-MAIN, 2026-10-08) : deleteMany laissait credits, remboursements,
+    // cardprices… (fichier + index) sur la grappe de production
+    await viderBac(mongoose.connection.db, { noms: ['credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions', 'journal_scans', 'numeros_cartes', 'codes_set', 'references_image', 'catalogue_produits', 'guide_prix', 'cardprices', 'evenements_stripe'] });   // liste LITTÉRALE : les modèles que charge index.js
     await mongoose.connection.close();
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.stack); process.exit(1); });

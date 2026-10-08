@@ -13,6 +13,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 const M = require(process.env.MODULE_DEDUCTION ? path.resolve(process.env.MODULE_DEDUCTION) : './collecte-cartes/deduire-produit');
 const { appliquerDeductions, aReecrireParLecture, majLectureExacte } = M;
 const COLL = 'banc_deduction_numeros', CAT = 'banc_deduction_catalogue';
@@ -25,6 +26,8 @@ const cas = async (nom, f) => { try { await f(); } catch (e) { ko++; console.log
 const { decoderCodeSet } = require('./collecte-cartes/codes-set');
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    (await ouvrirBanc()).appliquer();
     const cx = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: 'test_scratch' }).asPromise();
     if (cx.db.databaseName !== 'test_scratch') { await cx.close(); throw new Error(`base « ${cx.db.databaseName} » : je n'écris que dans test_scratch`); }
     for (const nom of [COLL, CAT]) if ((await cx.db.listCollections({ name: nom }).toArray()).length) { await cx.close(); throw new Error(`test_scratch porte déjà ${nom} : je ne l'écrase pas`); }

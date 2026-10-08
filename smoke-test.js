@@ -32,6 +32,8 @@ require('dotenv').config();
 const { spawn } = require('child_process');
 const path = require('path');
 const net = require('net');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const BASE_SCRATCH = 'test_scratch';
 const JETON = process.env.JETON_API || 'jeton-smoke-test';
@@ -134,6 +136,12 @@ async function appeler(port, methode, chemin, { corps = null, jeton = true, brut
 async function testerLesRoutes() {
     console.log('\n=== 2. Démarrage du serveur contre test_scratch ===');
     const port = await portLibre();
+    // FUITE-MAIN (2026-10-08) : le serveur crée par autoIndex tous ses modèles dans test_scratch (collections VIDES, fichier + index alloués
+    // sur la grappe de production) ; en sortant, on supprime (drop) la liste DÉCLARÉE COLLECTIONS_SERVEUR, rien d'autre.
+    let bacSortie = null;
+    try {
+        bacSortie = await require('mongoose').createConnection(process.env.MONGODB_URI, { dbName: BASE_SCRATCH }).asPromise();
+    } catch (e) { console.log(`  ⚠️ connexion de sortie à test_scratch impossible (${e.message}) : aucune collection ne sera supprimée en sortant.`); }
     const enfant = spawn(process.execPath, [path.join(__dirname, 'index.js')], {
         env: {
             ...process.env,
@@ -162,6 +170,9 @@ async function testerLesRoutes() {
         console.log(`  ❌ ${e.message}`);
         console.log('  --- sortie du serveur ---\n' + sortie.split('\n').map(l => '    ' + l).join('\n'));
         enfant.kill();
+        await fini;
+        if (bacSortie) await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
+        if (bacSortie) await bacSortie.close();
         return;
     }
     console.log(`  ✅ serveur démarré sur le port ${port}`);
@@ -317,10 +328,13 @@ async function testerLesRoutes() {
         const supprC = (await C.deleteMany({ userId: 'SMOKE-TEST-USER' })).deletedCount;
         console.log(`\n🧹 Nettoyage test_scratch : ${supprN} numéro(s), ${supprC} crédit(s) supprimé(s).`);
     }
-    await mongoose.disconnect();
-
     enfant.kill();
     await fini;
+    // le serveur est arrêté : `drop` de ce qu'il a créé et de ce que le smoke test a écrit (deleteMany laissait les fichiers) ; AVANT
+    // `mongoose.disconnect()`, qui ferme aussi cette connexion de sortie
+    if (bacSortie) await viderBac(bacSortie.db, { noms: COLLECTIONS_SERVEUR });
+    if (bacSortie) await bacSortie.close();
+    await mongoose.disconnect();
 
     // Le serveur a-t-il crié pendant le test ? Une exception non capturée s'y verrait.
     const erreursGraves = sortie.split('\n').filter(l => /UnhandledPromiseRejection|is not defined|is not a function|SyntaxError|ReferenceError|TypeError/.test(l));
@@ -330,6 +344,9 @@ async function testerLesRoutes() {
 
 (async () => {
     console.log('SMOKE TEST — chargement, démarrage, et une passe sur chaque route');
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement des modules et le lancement du serveur, qui héritent de cet environnement.
+    (await ouvrirBanc()).appliquer();
     if (!process.env.MONGODB_URI) {
         console.error('❌ MONGODB_URI absent du .env — impossible de démarrer le serveur.');
         process.exit(1);

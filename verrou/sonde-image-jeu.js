@@ -1,5 +1,11 @@
 // SONDE (lecture seule) : sur les lignes du journal dont la photo est AU JEU FIXE et qui portent un vivier, que fait le départage par
 // l'image aujourd'hui ? (statut et motif) — pour savoir si la cellule « départage par l'image » peut se remplir sans Vinted.
+// 🔴 REFUS DE DÉMARRER (2026-10-08) — décision du testeur : « aucun banc ne doit plus jamais écrire dans la production ». Cette sonde ouvre la connexion
+// mongoose PAR DÉFAUT vers MONGODB_URI (base « test ») puis charge departage-image.js, dont le modèle lit `references_image` par cette connexion : la façade de
+// lecture ne le remplace pas. La réécrire (tranche copiée en base de banc) est un choix de fond, non tranché ; elle ne démarre pas d'ici là.
+console.error('❌ REFUS : verrou/sonde-image-jeu.js ouvre la connexion mongoose par défaut vers la production. Il ne démarre pas tant qu\'il n\'est pas réécrit sur la façade de lecture ou sur une tranche copiée en base de banc (collecte-cartes/base-banc.js).');
+process.exit(1);
+
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 (async () => {

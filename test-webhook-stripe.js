@@ -43,6 +43,8 @@ process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_verrou_rejeu';
 const http = require('http');
 const mongoose = require('mongoose');
 const Stripe = require('stripe');
+const { viderBac } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0;
 const v = (nom, obtenu, attendu) => {
@@ -88,6 +90,9 @@ function poster(port, corps, signature) {
 }
 
 (async () => {
+    // BASE DE BANC (2026-10-08) : plus jamais la production — base mémoire, ou MONGODB_TEST_URI hors production, sinon REFUS (base-banc.js).
+    // AVANT le chargement du serveur, qui se connecte à l'import avec MONGODB_URI ; le serveur « froid » lancé plus bas hérite de cet environnement.
+    (await ouvrirBanc()).appliquer();
     // ⚠️ L'ORDRE COMPTE : c'est `require('./index')` qui ouvre la connexion Mongo ET met
     // le serveur en écoute, avec les variables posées ci-dessus.
     const { app } = require('./index');
@@ -311,6 +316,9 @@ function poster(port, corps, signature) {
 
     console.log(echecs ? `\n❌ ${echecs} échec(s).` : '\n🎉 Tous les tests passent.');
     srv.close();
+    // `drop` des collections de tous les modèles de index.js (FUITE-MAIN, 2026-10-08) : deleteMany laissait evenements_stripe, credits,
+    // cardprices… (fichier + index) sur la grappe de production ; l'autoIndex les crée à la connexion, sans y écrire une ligne
+    await viderBac(mongoose.connection.db, { noms: ['credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions', 'journal_scans', 'numeros_cartes', 'codes_set', 'references_image', 'catalogue_produits', 'guide_prix', 'cardprices', 'evenements_stripe'] });   // liste LITTÉRALE : les modèles que charge index.js
     await mongoose.connection.close();
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.stack); process.exit(1); });

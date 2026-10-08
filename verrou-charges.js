@@ -90,6 +90,8 @@ const { demarrer, appeler } = require('./verrou/serveur');
 const { profondeurAtteinte, profondeurSuffisante } = require('./verrou/jalons');
 // ⚠️ UNE SEULE DÉFINITION DE LA TRANCHE, partagée avec verrou-avant-push.js.
 const { copierTranche, viderTranche } = require('./verrou/tranche');
+const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
+const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const SCRATCH = 'test_scratch';
 const SORTIE = path.join(__dirname, 'verrou', 'charges.json');
@@ -255,7 +257,12 @@ const SONDE_MAX_CANDIDATES = 6;
 (async () => {
     // 🔒 AVANT toute autre chose : aucun `fetch` de ce processus ne doit atteindre Vinted (décision du testeur, 2026-10-04)
     const PHOTOS = require('./verrou/photos-locales').installer({ etiquette: 'verrou-charges' });
-    const prod = await mongoose.createConnection(process.env.MONGODB_URI, { dbName: BASE }).asPromise();
+    // BASE DE BANC (2026-10-08) : l'ÉCRITURE (test_scratch : tranche, comptes, serveur) va à la base de banc ; la LECTURE de la production
+    // (journal des scans, vecteurs d'image, tranche à copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose
+    // vers elle est refusée (garde d'écriture de base-banc.js). Sans base de banc, ce verrou REFUSE de démarrer.
+    const banc = await ouvrirBanc();
+    banc.appliquer();
+    const prod = await banc.connexionProduction(mongoose, BASE);
     console.log(`lecture  : ${prod.db.databaseName} (aucune écriture)`);
     if (prod.db.databaseName === SCRATCH) {
         console.error('❌ La base de lecture ne peut pas être le bac à sable.');
@@ -313,7 +320,11 @@ const SONDE_MAX_CANDIDATES = 6;
         // sereinement « 0 ligne n'emprunte le chemin ».
         // C'est encore une absence lue comme une valeur — et le contrôle qui devait la voir
         // rendait un nombre parfaitement plausible.
-        await mongoose.connect(process.env.MONGODB_URI, { dbName: BASE });
+        // ⚠️ CE QUI GARDE CETTE CONNEXION, ET CE QUI NE LA GARDE PAS (correction finale, 2026-10-08) : c'est la connexion mongoose PAR DÉFAUT vers la production.
+        // Seule la garde d'écriture sur `mongoose.Collection` la couvre (écritures des collections mongoose, aggregate avec $out/$merge). Elle NE couvre PAS le pilote
+        // natif (`mongoose.connection.db.collection(...).insertOne`, `db.createCollection`, `db.dropCollection`…). Aucun chemin d'écriture n'existe aujourd'hui sur
+        // cette connexion, mais la vraie garantie est un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI) — décision du testeur en attente.
+        await mongoose.connect(banc.uriProduction, { dbName: BASE });   // LECTURE de la production (garde d'écriture installée)
         // ⚠️ ET ON VÉRIFIE QUE LA LECTURE MARCHE AVANT DE COMPTER. Sans ce garde-fou, un
         // « 0 » resterait indiscernable entre « aucune ligne ne convient » et « je n'ai
         // rien pu lire ». Le premier est une mesure, le second une panne.
@@ -640,7 +651,8 @@ const SONDE_MAX_CANDIDATES = 6;
         srv.enfant.send('vider');
         setTimeout(resolve, 5000);
     });
-    srv.enfant.kill();
+    // le serveur doit être MORT avant le drop : vivant, il pourrait recréer une collection derrière nous
+    await new Promise(resolve => { srv.enfant.once('exit', resolve); srv.enfant.kill(); setTimeout(resolve, 5000); });
 
     if (fs.existsSync(SORTIE_TCGDEX)) {
         const t = JSON.parse(fs.readFileSync(SORTIE_TCGDEX, 'utf8'));
@@ -650,21 +662,27 @@ const SONDE_MAX_CANDIDATES = 6;
     }
 
     // Nettoyage du bac : les lignes de journal et le crédit créés par l'enregistrement.
-    const nj = await bac.collection('journal_scans').deleteMany({ userId: USER_VERROU });
-    const nc = await bac.collection('credits').deleteMany({ userId: USER_VERROU });
+    // 🔴 FUITE-MAIN (2026-10-08) : ce nettoyage se faisait par `deleteMany({ userId })` sur six collections — il laissait credits,
+    // journal_scans, remboursements, remboursements_questions, questions, quotas_semaine VIDES (fichier + index alloués) sur la grappe de
+    // production. Ce bac n'est qu'à cette exécution (test_scratch, une tranche à la fois) : `drop`, jamais deleteMany. Le `viderBac` plus bas
+    // y ajoute la liste déclarée COLLECTIONS_SERVEUR (ce que l'autoIndex du serveur crée) — jamais « tout ce qui est né ».
+    const COLLECTIONS_COMPTES = ['journal_scans', 'credits', 'remboursements', 'remboursements_questions', 'questions', 'quotas_semaine'];
+    const nj = { deletedCount: await bac.collection('journal_scans').countDocuments({ userId: USER_VERROU }) };
+    const nc = { deletedCount: await bac.collection('credits').countDocuments({ userId: USER_VERROU }) };
     // ⚠️ `remboursements` ET `quotas_semaine` AUSSI (2026-10-03) : l'enregistrement rejoue
     // désormais des scans refusés (la charge d'échec, les pannes) et chacun est REMBOURSÉ. Le
     // compteur anti-abus est par (userId, JOUR), plafonné à 5 : laissé ici, il ferait refuser au
     // verrou lancé ensuite le remboursement de sa 7e cellule — l'incident du 2026-08-19, déplacé
     // d'un outil (voir l'en-tête de verrou-avant-push.js).
-    const nr = await bac.collection('remboursements').deleteMany({ userId: USER_VERROU });
+    const nr = { deletedCount: await bac.collection('remboursements').countDocuments({ userId: USER_VERROU }) };
     // `remboursements_questions` (2026-10-06) : le compteur des QUESTIONS remboursées (acces.js), même raison que ci-dessus
-    const nrq = await bac.collection('remboursements_questions').deleteMany({ userId: USER_VERROU });
+    const nrq = { deletedCount: await bac.collection('remboursements_questions').countDocuments({ userId: USER_VERROU }) };
     // `questions` (2026-10-05, seconde décision) : les questions EN ATTENTE posées par un scan avec réserve (acces.js) — laissées, le
     // balayage du serveur suivant les rembourserait 24 h plus tard sur un compte qui n'existe plus
-    const nqu = await bac.collection('questions').deleteMany({ userId: USER_VERROU });
-    const nq = await bac.collection('quotas_semaine').deleteMany({ userId: USER_VERROU });
-    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions remboursées, ${nqu.deletedCount} question(s), ${nq.deletedCount} quota(s) hebdo supprimés.`);
+    const nqu = { deletedCount: await bac.collection('questions').countDocuments({ userId: USER_VERROU }) };
+    const nq = { deletedCount: await bac.collection('quotas_semaine').countDocuments({ userId: USER_VERROU }) };
+    await viderBac(bac.db, { noms: [...COLLECTIONS_COMPTES, ...COLLECTIONS_SERVEUR] });
+    console.log(`🧹 test_scratch : ${nj.deletedCount} ligne(s) de journal, ${nc.deletedCount} crédit(s), ${nr.deletedCount} compteur(s) de remboursement, ${nrq.deletedCount} de questions remboursées, ${nqu.deletedCount} question(s), ${nq.deletedCount} quota(s) hebdo — collections supprimées (drop).`);
 
     // ════════════════════════════════════════════════════════════════════════
     // 🔴 ET LA TRANCHE, QUI NE L'ÉTAIT PAS — CORRIGÉ LE 2026-08-30

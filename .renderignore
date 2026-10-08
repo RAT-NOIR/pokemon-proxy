@@ -1,0 +1,6 @@
+# ⚠️ PAS UNE GARANTIE. Ce fichier est une précaution : Render ne lit probablement pas `.renderignore` en runtime Node natif (non vérifié, aucune
+# documentation consultée). Ce qui empêche `.banc-local/` d'entrer dans un déploiement est autre chose : le dépôt n'a ni Dockerfile ni render.yaml,
+# Render construit depuis la racine (`npm install` sur le package.json racine, puis `npm start`), et `.banc-local/` porte son propre package.json,
+# jamais référencé par celui de la racine. Ses dépendances (mongodb-memory-server ; binaire mongod ≈ 78 Mo dans cache-mongod/, ignoré par git)
+# ne s'installent donc pas sur Render.
+.banc-local/
