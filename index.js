@@ -203,7 +203,7 @@ const limiteurIA = rateLimit({
     message: { success: false, error: 'Trop de requêtes, réessaie plus tard.' }
 });
 app.use(['/api/identifier', '/api/analyser'], limiteurIA);
-if (V2) V2.monter(app, { mongoose });
+if (V2) V2.monter(app, { mongoose, gererIdentifier, gererRetourLive });
 
 // Limiteur dédié à la création de Checkout Sessions. Le jeton partagé est
 // extractible de l'extension distribuée : sans ce garde-fou, n'importe qui pourrait
@@ -3655,7 +3655,7 @@ function champsDeRefus(motifRefus, rembourse) {
     };
 }
 
-app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (req, res) => {
+async function gererIdentifier(req, res) {
     // Même raison que dans /api/analyser : le catch doit pouvoir journaliser CE QUE
     // L'IA AVAIT LU, sinon la ligne d'échec ne désigne aucune carte.
     let cardInfo = null;
@@ -5944,7 +5944,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // LA QUESTION (seconde décision du 2026-10-05, acces.js) : le crédit RESTE pris, la question attend la réponse de
         // l'utilisateur parmi CES candidats (ceux qu'il voit). Son identifiant EST le scanId, tiré ici pour qu'elle s'écrive avant
         // la ligne de journal ; sans journal (Mongo absent), pas d'identifiant : poserQuestion rembourse à l'émission (repli).
-        const scanIdPrevu = mongoose.connection.readyState === 1 ? new mongoose.Types.ObjectId() : null;
+        const scanIdPrevu = req.scanIdImpose || (mongoose.connection.readyState === 1 ? new mongoose.Types.ObjectId() : null);
         const question = carteAmbigue ? await poserQuestion(req, { scanId: scanIdPrevu, raison: raisonReserve, candidats: candidats.map(c => c.idProduct) }) : null;
 
         // JOURNAL — une ligne par scan, en base, hors chemin critique (pas de await).
@@ -6325,7 +6325,8 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
         // vérité sur l'état du compte.
         if (!res.headersSent) res.json({ success: false, ...champsDeRefus('erreur-serveur', rendu), error: "Erreur serveur interne" });
     }
-});
+}
+app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, gererIdentifier);
 
 // ════════════════════════════════════════════════════════════════════════════
 // LE RETOUR DU PRIX LIVE — la seule mesure qui puisse calibrer un seuil
@@ -6358,7 +6359,7 @@ app.post('/api/identifier', verifierJeton, exigerImage, verifierAcces, async (re
 // sans lire le texte.
 // ⚠️ `limiteurRetourLive`, PAS `limiteurIA` — 2026-09-06. La même instance partagée avec
 // les routes IA faisait consommer à chaque retour de prix une unité du quota de scans.
-app.post('/api/retour-live', limiteurRetourLive, verifierJeton, async (req, res) => {
+async function gererRetourLive(req, res) {
     try {
         if (mongoose.connection.readyState !== 1) {
             return res.status(503).json({ success: false, error: "Service momentanément indisponible" });
@@ -6522,7 +6523,8 @@ app.post('/api/retour-live', limiteurRetourLive, verifierJeton, async (req, res)
         // Message brut au log, jamais dans la réponse — voir /api/identifier.
         res.status(500).json({ success: false, error: "Erreur serveur interne" });
     }
-});
+}
+app.post('/api/retour-live', limiteurRetourLive, verifierJeton, gererRetourLive);
 
 // ════════════════════════════════════════════════════════════════════════════
 // LA RÉPONSE À UNE QUESTION — seconde décision du testeur, 2026-10-05 (acces.js)
@@ -7171,7 +7173,7 @@ if (require.main === module) {
 
 // Exporté pour les tests UNIQUEMENT. Le serveur, lui, ne lit jamais ces exports.
 module.exports = {
-    app, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux,
+    app, gererIdentifier, gererRetourLive, trouverParSetCodeEtNumero, nomOpposeUnVeto, trouverProduitsLocaux,
     // Exportés pour que le re-classement du veto soit rejouable À L'IDENTIQUE dans les
     // tests. Les rejouer avec une réimplémentation ne prouverait rien : c'est précisément
     // l'erreur qui a produit « la simulation dit 12, la production dit 0 ».
