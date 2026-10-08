@@ -137,9 +137,13 @@ function jugerLecture(env, quoi, ce) {
     return { ok: true, variable: d.variable, uri, raison: null };
 }
 
-// Ce qu'un utilisateur de lecture PEUT porter, énuméré (liste fermée) : le rôle `read` de MongoDB. Tout autre droit — écriture, administration, ou inconnu — refuse.
+// Ce qu'un utilisateur de lecture PEUT porter, énuméré (liste fermée) : le rôle `read` de MongoDB, relu dans la documentation officielle (built-in-roles, 2026-10-08).
+// `read` : changeStream, collStats, dbHash, dbStats, find, killCursors, listCollections, listIndexes, listSearchIndexes ; `readAnyDatabase` : la même chose sur toutes les bases
+// sauf local et config, plus listDatabases sur le cluster. `indexStats` et `planCacheRead` figurent dans le tableau documenté de `read` sur la base local : lecture pure, gardés.
+// Tout autre droit — écriture, administration, ou inconnu (listShards, validate… non documentés pour ces rôles) — refuse ; `verifier-utilisateurs-lecture.js` imprime alors la liste
+// complète de ce qui fait refuser un vrai utilisateur, pour trancher AVANT les bancs.
 const ACTIONS_LECTURE = new Set(['find', 'listCollections', 'listIndexes', 'collStats', 'dbStats', 'dbHash', 'killCursors', 'changeStream', 'indexStats', 'planCacheRead',
-    'listSearchIndexes', 'getDatabaseVersion', 'getShardVersion']);
+    'listSearchIndexes']);
 const ACTIONS_CLUSTER_LECTURE = new Set(['listDatabases']);
 
 /**
@@ -158,15 +162,18 @@ async function verifierPrivilegesLecture(db, dbName) {
     if (!info || !Array.isArray(info.authenticatedUsers) || !Array.isArray(info.authenticatedUserPrivileges)) return ko('la réponse de connectionStatus est illisible : doute = refus.');
     if (!info.authenticatedUsers.length) return ko('aucun utilisateur authentifié sur cette connexion : ce n\'est pas un utilisateur de lecture, refusé.');
     let peutLire = false;
+    const fautes = [];   // TOUTES les ressources et actions fautives (pas la première seulement) : la commande de contrôle les imprime
+    const nomme = res => res.cluster === true ? 'cluster' : res.anyResource ? 'toutes les ressources' : `base « ${res.db === '' ? '(toutes)' : res.db} »${res.collection ? `, collection « ${res.collection} »` : ''}`;
     for (const p of info.authenticatedUserPrivileges) {
         const res = p?.resource, actions = p?.actions;
         if (!res || typeof res !== 'object' || !Array.isArray(actions) || actions.some(a => typeof a !== 'string')) return ko('un privilège est illisible : doute = refus.');
         const permises = res.cluster === true ? ACTIONS_CLUSTER_LECTURE : (typeof res.db === 'string' && !res.anyResource) ? ACTIONS_LECTURE : null;
-        if (!permises) return ko('l\'utilisateur porte un privilège sur toutes les ressources ou sur une ressource inconnue : refusé.');
+        if (!permises) { fautes.push(`${nomme(res)} : privilège sur toutes les ressources ou sur une ressource inconnue (actions : ${actions.join(', ') || 'aucune'})`); continue; }
         const hors = actions.filter(a => !permises.has(a));
-        if (hors.length) return ko(`l'utilisateur porte un droit d'écriture, d'administration ou inconnu (${hors.slice(0, 5).join(', ')}) : un utilisateur de lecture seule n'en a aucun, refusé.`);
+        if (hors.length) fautes.push(`${nomme(res)} : ${hors.join(', ')}`);
         if (res.cluster !== true && (res.db === dbName || res.db === '') && actions.includes('find')) peutLire = true;
     }
+    if (fautes.length) return { ...ko(`l'utilisateur porte des droits d'écriture, d'administration ou inconnus, qu'un utilisateur de lecture seule n'a pas, refusé — ${fautes.join(' ; ')}.`), fautes };
     if (!peutLire) return ko(`l'utilisateur n'a aucun droit de lecture (find) sur la base « ${dbName} » : refusé.`);
     return { ok: true, raison: null };
 }
@@ -204,6 +211,8 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
     // Les URI de LECTURE (utilisateurs Atlas en lecture seule), jugées AVANT le remplacement des variables, pour les seuls bancs qui LISENT la production
     // (copie d'une tranche, journal des scans). Aucune URI n'est exposée par le handle et aucune ne passe dans l'environnement : les enfants ne les voient
     // pas, et aucun banc ne peut ouvrir la production lui-même. PLUS AUCUN REPLI sur l'URI d'écriture : une lecture non jugée sûre LÈVE.
+    // autoIndex/autoCreate à false : les privilèges ne sont constatés qu'APRÈS la connexion ; un modèle mongoose déclaré avant ne doit pas créer index ni collection avant le refus
+    const optionsLecture = (dbName) => ({ dbName, autoIndex: false, autoCreate: false });
     const lectureOuLeve = (quoi) => { const j = lectures[quoi]; if (!j.ok) throw new Error(j.raison); return j.uri; };
     // à la connexion : les privilèges de l'utilisateur sont constatés (aucune écriture) ; un droit d'écriture ou un doute referme la connexion et lève
     const controler = async (db, dbName, fermer) => {
@@ -228,7 +237,7 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
          *  aggregate sans $out/$merge) — jamais la connexion ni le Db bruts. Tout le reste lève. */
         async connexionProduction(mongoose, dbName) {
             if (dbName !== 'test') throw new Error('connexionProduction : seule la base « test » se lit (production en lecture seule) ; jamais test_scratch ni cartes.');
-            const cx = await mongoose.createConnection(lectureOuLeve('production'), { dbName }).asPromise();
+            const cx = await mongoose.createConnection(lectureOuLeve('production'), optionsLecture(dbName)).asPromise();
             await controler(cx.db, dbName, () => cx.close());
             return facadeLecture(cx.db, () => cx.close());
         },
@@ -237,13 +246,13 @@ async function ouvrirBanc({ env = process.env, memoireDisponible, fichierEnv = p
          *  et le vrai garde-fou est l'utilisateur en lecture seule, dont les privilèges sont contrôlés ici. */
         async connecterLecture(mongoose, dbName) {
             if (dbName !== 'test') throw new Error('connecterLecture : seule la base « test » se lit (production en lecture seule).');
-            await mongoose.connect(lectureOuLeve('production'), { dbName });
+            await mongoose.connect(lectureOuLeve('production'), optionsLecture(dbName));
             await controler(mongoose.connection.db, dbName, () => mongoose.disconnect());
         },
         /** La base `cartes` (autre grappe de production), pour LIRE des cartes réelles à copier dans le banc : même façade à liste fermée. */
         async connexionCartes(mongoose, dbName) {
             if (dbName !== 'cartes') throw new Error('connexionCartes : seule la base « cartes » se lit ici (lecture seule).');
-            const cx = await mongoose.createConnection(lectureOuLeve('cartes'), { dbName }).asPromise();
+            const cx = await mongoose.createConnection(lectureOuLeve('cartes'), optionsLecture(dbName)).asPromise();
             await controler(cx.db, dbName, () => cx.close());
             return facadeLecture(cx.db, () => cx.close());
         }
@@ -445,5 +454,5 @@ function installerGardeEcriture(Collection, env = process.env) {
     }
 }
 
-module.exports = { hotesDe, cleDeGrappe, jugerUri, jugerLecture, verifierPrivilegesLecture, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
+module.exports = { hotesDe, cleDeGrappe, jugerUri, LECTURES, jugerLecture, verifierPrivilegesLecture, verifierHoteBanc, resoudre, ouvrirBanc, memoireInstallee, variablesDeConnexion, installerGardeEcriture, METHODES_ECRITURE,
     facadeLecture, sortieSure, verifierEcritureR2, garderClientR2 };

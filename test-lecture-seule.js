@@ -70,6 +70,18 @@ const sansFuite = (...msgs) => msgs.some(m => /SECRET|ecrivain|lecteur/.test(m |
     verifier('privilèges : la commande échoue : refus, et le message ne reprend pas le texte de l\'erreur du pilote', [panne.ok, sansFuite(panne.raison)], [false, false]);
     verifier('privilèges : cluster listDatabases + find sur la base : accepté', (await V(statut([{ resource: { db: 'test', collection: '' }, actions: LIRE }, { resource: { cluster: true }, actions: ['listDatabases'] }]))).ok, true);
 
+    // ── 2 bis. LE FORMAT DOCUMENTÉ de readAnyDatabase (MongoDB, built-in-roles, relu 2026-10-08) : `read` = changeStream, collStats, dbHash, dbStats, find, killCursors,
+    // listCollections, listIndexes, listSearchIndexes sur toutes les collections hors système (+ system.js sans changeStream) ; readAnyDatabase = la même chose sur toutes
+    // les bases sauf local et config, plus listDatabases au niveau du cluster. Réponse FABRIQUÉE à cette forme (la vraie n'existe pas encore).
+    const DOC_READ = ['changeStream', 'collStats', 'dbHash', 'dbStats', 'find', 'killCursors', 'listCollections', 'listIndexes', 'listSearchIndexes'];
+    const DOC_SYSTEM_JS = DOC_READ.filter(a => a !== 'changeStream');
+    const readAny = (extra = []) => statut([{ resource: { db: '', collection: '' }, actions: [...DOC_READ, ...extra] }, { resource: { db: '', collection: 'system.js' }, actions: DOC_SYSTEM_JS }, { resource: { cluster: true }, actions: ['listDatabases'] }]);
+    for (const base of ['test', 'cartes']) verifier(`format documenté de readAnyDatabase (toutes bases + system.js + listDatabases du cluster) : accepté pour la base « ${base} »`, (await V(readAny(), base)).ok, true);
+    const avecEcriture = await V(readAny(['insert']));
+    verifier('   ... la même réponse PLUS une action d\'écriture (insert) : REFUSÉE, et la raison la nomme', [avecEcriture.ok, /insert/.test(avecEcriture.raison || '')], [false, true]);
+    const deux = await V(statut([{ resource: { db: 'test', collection: '' }, actions: [...DOC_READ, 'insert', 'remove'] }, { resource: { db: 'cartes', collection: 'cartes' }, actions: ['find', 'dropCollection'] }, { resource: { cluster: true }, actions: ['shutdown'] }]));
+    verifier('la raison liste TOUTES les ressources et actions fautives (insert, remove, dropCollection, shutdown ; bases test et cartes ; cluster), pas seulement la première', [deux.ok, ['insert', 'remove', 'dropCollection', 'shutdown'].every(a => (deux.raison || '').includes(a)), /test/.test(deux.raison || ''), /cartes/.test(deux.raison || ''), /cluster/.test(deux.raison || '')], [false, true, true, true, true]);
+
     // ── 3. ouvrirBanc : les lectures et les écritures R2 DÉCLARÉES sont exigées AVANT tout démarrage (aucune base de mémoire lancée)
     const ouvrir = (extra, opts = {}) => B.ouvrirBanc({ env: { ...BASE, ...extra }, memoireDisponible: false, ...opts });
     const r0 = await leve(() => ouvrir({}, { lit: { production: 'le journal des scans' } }));
@@ -88,10 +100,10 @@ const sansFuite = (...msgs) => msgs.some(m => /SECRET|ecrivain|lecteur/.test(m |
 
     // ── 4. connexionProduction / connexionCartes / connecterLecture : refus SANS ouvrir de connexion, puis privilèges contrôlés
     const fauxMongoose = (rep, { leveur } = {}) => {
-        const vu = { createConnection: 0, connect: 0, ferme: 0, disconnect: 0 };
+        const vu = { createConnection: 0, connect: 0, ferme: 0, disconnect: 0, opts: [] };
         const db = fauxDb(rep, { leveur }); const dbNatif = { databaseName: 'test', admin: db.admin, collection: () => ({}), listCollections: () => ({}) };
         const cx = { db: dbNatif, close: async () => { vu.ferme++; } };
-        return { vu, commandes: db.commandes, createConnection: () => { vu.createConnection++; return { asPromise: async () => cx }; }, connect: async () => { vu.connect++; }, disconnect: async () => { vu.disconnect++; }, connection: { db: dbNatif } };
+        return { vu, commandes: db.commandes, createConnection: (u, o) => { vu.createConnection++; vu.opts.push(o); return { asPromise: async () => cx }; }, connect: async (u, o) => { vu.connect++; vu.opts.push(o); }, disconnect: async () => { vu.disconnect++; }, connection: { db: dbNatif } };
     };
     const lecturesOk = statut([{ resource: { db: 'test', collection: '' }, actions: LIRE }]);
     const lecturesCartesOk = statut([{ resource: { db: 'cartes', collection: '' }, actions: LIRE }]);
@@ -116,6 +128,11 @@ const sansFuite = (...msgs) => msgs.some(m => /SECRET|ecrivain|lecteur/.test(m |
     }
     { const m = fauxMongoose(lecturesOk); await bon.connecterLecture(m, 'test'); verifier('connecterLecture (connexion par défaut) avec un utilisateur en lecture seule : connecté une fois, privilèges lus', [m.vu.connect, m.commandes.length, m.vu.disconnect], [1, 1, 0]); }
     { const m = fauxMongoose(ecritureOk), e = await leve(() => bon.connecterLecture(m, 'test')); verifier('connecterLecture avec un utilisateur qui PEUT ÉCRIRE : REFUS et connexion par défaut refermée', [!!e, m.vu.disconnect], [true, 1]); }
+    // MINEUR : les privilèges sont constatés APRÈS la connexion ; des modèles mongoose déclarés avant pourraient créer collections et index (autoIndex) avant le refus
+    for (const [nom, f, ok] of [['connecterLecture', m => bon.connecterLecture(m, 'test'), lecturesOk], ['connexionProduction', m => bon.connexionProduction(m, 'test'), lecturesOk], ['connexionCartes', m => bon.connexionCartes(m, 'cartes'), lecturesCartesOk]]) {
+        const m = fauxMongoose(ok); await f(m);
+        verifier(`${nom} : la connexion de lecture s'ouvre avec autoIndex:false et autoCreate:false (aucun modèle ne crée index ni collection avant le constat des privilèges)`, [m.vu.opts.length, m.vu.opts[0]?.autoIndex, m.vu.opts[0]?.autoCreate], [1, false, false]);
+    }
     verifier('le handle n\'expose plus uriProduction ni uriCartes (aucun banc ne peut ouvrir la production lui-même)', [bon.uriProduction, bon.uriCartes], [undefined, undefined]);
     for (const nomBase of ['test_scratch', 'cartes', 'autre', undefined]) {
         const m = fauxMongoose(lecturesOk), e = await leve(() => bon.connexionProduction(m, nomBase));
@@ -139,6 +156,25 @@ const sansFuite = (...msgs) => msgs.some(m => /SECRET|ecrivain|lecteur/.test(m |
         return [f, r.status !== 0, /LECTURE_URI/.test((r.stderr || '') + (r.stdout || '')), /attendu/.test((r.stderr || '') + (r.stdout || ''))];
     });
     verifier('4 lecteurs LANCÉS sans variable de lecture : sortie en échec, message qui nomme la variable et dit « attendu »', lances, [['test-table-vintage.js', true, true, true], ['verrou-cellules.js', true, true, true], [path.join('verrou', 'constituer-photos.js'), true, true, true], ['test-vignette-scratch.js', true, true, true]]);
+    // ── 7. LA COMMANDE DÉDIÉE `node verifier-utilisateurs-lecture.js` (à lancer UNE fois par le coordinateur, le jour où les utilisateurs existent, avant tout banc)
+    {
+        let V2 = null; try { V2 = require('./verifier-utilisateurs-lecture'); } catch (e) { V2 = null; }
+        verifier('verifier-utilisateurs-lecture.js existe et exporte verifierUtilisateurs', typeof V2?.verifierUtilisateurs, 'function');
+        if (V2?.verifierUtilisateurs) {
+            const env2 = { ...BASE, MONGODB_LECTURE_URI: LECT, MONGODB_CARTES_LECTURE_URI: LECT_CARTES };
+            const mOk = fauxMongoose(readAny()), rOk = await V2.verifierUtilisateurs(env2, mOk);
+            verifier('commande, deux utilisateurs au format readAnyDatabase documenté : OK pour les deux, 2 connexions (autoIndex/autoCreate à false), aucune écriture', [rOk.map(r => [r.quoi, r.ok]), mOk.vu.createConnection, mOk.vu.opts.every(o => o.autoIndex === false && o.autoCreate === false), mOk.commandes.every(c => c.connectionStatus === 1)], [[['production', true], ['cartes', true]], 2, true, true]);
+            const mKo = fauxMongoose(readAny(['insert', 'dropCollection'])), rKo = await V2.verifierUtilisateurs(env2, mKo);
+            verifier('commande, utilisateurs qui portent insert et dropCollection : refus pour les deux, la liste complète des actions fautives est dans la raison', [rKo.map(r => r.ok), rKo.every(r => /insert/.test(r.raison) && /dropCollection/.test(r.raison))], [[false, false], true]);
+            const mAbs = fauxMongoose(readAny()), rAbs = await V2.verifierUtilisateurs({ ...BASE }, mAbs);
+            verifier('commande, variables absentes : refus avec LE MÊME message que les bancs, 0 connexion', [rAbs.map(r => r.ok), rAbs[0].raison === B.jugerLecture({ ...BASE }, 'production').raison, rAbs[1].raison === B.jugerLecture({ ...BASE }, 'cartes').raison, mAbs.vu.createConnection], [[false, false], true, true, 0]);
+            const mEg = fauxMongoose(readAny()), rEg = await V2.verifierUtilisateurs({ ...BASE, MONGODB_LECTURE_URI: ECRIT, MONGODB_CARTES_LECTURE_URI: LECT_CARTES }, mEg);
+            verifier('commande, une URI de lecture égale à l\'URI d\'écriture : refus de celle-là sans connexion, l\'autre est contrôlée', [rEg.map(r => r.ok), mEg.vu.createConnection], [[false, true], 1]);
+        }
+        const lance = spawnSync(process.execPath, [path.join(__dirname, 'verifier-utilisateurs-lecture.js')], { encoding: 'utf8', timeout: 60000, cwd: __dirname, env: { ...process.env, MONGODB_LECTURE_URI: '', MONGODB_CARTES_LECTURE_URI: '' } });
+        const sortie = (lance.stdout || '') + (lance.stderr || '');
+        verifier('commande LANCÉE sans variable de lecture : sortie 1, les deux variables nommées, « attendu »', [lance.status, /MONGODB_LECTURE_URI/.test(sortie), /MONGODB_CARTES_LECTURE_URI/.test(sortie), /attendu/.test(sortie)], [1, true, true, true]);
+    }
     console.log(`\n${echecs ? `⚠️ ${echecs}/${n} en échec` : `🎉 ${n}/${n} passés`} (aucune connexion réelle)`);
     process.exit(echecs ? 1 : 0);
 })().catch(e => { console.error(e.message); process.exit(1); });
