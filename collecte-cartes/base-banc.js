@@ -193,13 +193,28 @@ const CONSTRUCTEURS_CURSEUR = new Set(['limit', 'skip', 'sort', 'project', 'matc
 // Tout le reste LÈVE : un curseur, un flux (ReadableCursorStream : prototype Readable), un client (MongoClient), une fonction, un EventEmitter, un thenable,
 // une Map, toute instance de classe inconnue — leur prototype n'est ni Object.prototype ni null, ni un type BSON ; et un objet simple qui en porterait un
 // dedans est refusé par la récursion (une fonction n'est pas une valeur). Un doute est un refus.
-const TYPES_BSON = (() => {
-    const m = require('mongodb');
-    const t = ['ObjectId', 'Decimal128', 'Binary', 'Long', 'Timestamp', 'Double', 'Int32', 'MinKey', 'MaxKey', 'Code', 'BSONRegExp', 'BSONSymbol', 'DBRef', 'UUID'].map(k => m[k]).filter(f => typeof f === 'function');
-    if (!t.includes(m.ObjectId) || !t.includes(m.Binary)) throw new Error('base-banc : le pilote mongodb n\'exporte plus ObjectId/Binary — la garde de sortie ne sait plus reconnaître un document, refusé.');
+// 🔑 Tour 5 : « autorisé » veut dire EXACTEMENT ceci, et rien de plus large. Aucun Proxy à aucun niveau (util.types.isProxy : un Proxy peut mentir sur son
+// prototype et ses clés) ; un tableau a le prototype Array.prototype, pour seules clés propres ses indices et `length`, en descripteurs de données ;
+// un Date ou un type BSON a le prototype EXACT de sa classe (pas une sous-classe, pas Object.create(Classe.prototype)) et pour seules clés propres celles
+// que porte une instance réelle du pilote (table ci-dessous), en descripteurs de données, chacune de la nature attendue.
+// Refus VOULUS, qui échouent vers la sécurité : plus de 64 niveaux d'imbrication, et un RegExp natif (le pilote rend BSONRegExp, jamais RegExp).
+const { isProxy } = require('util').types;
+// Origine : `Reflect.ownKeys(new X())` lu sur une vraie instance de chaque classe (mongodb/bson du dépôt, 2026-10-08, sonde jetable). 'u8' = Uint8Array/Buffer
+// (jamais parcouru), 'prim' = valeur simple, 'val' = valeur jugée récursivement (document, ObjectId…).
+const NATURES = {
+    ObjectId: { buffer: 'u8' }, Decimal128: { bytes: 'u8' }, Binary: { sub_type: 'prim', buffer: 'u8', position: 'prim' }, Long: { low: 'prim', high: 'prim', unsigned: 'prim' },
+    Timestamp: { low: 'prim', high: 'prim', unsigned: 'prim' }, Double: { value: 'prim' }, Int32: { value: 'prim' }, MinKey: {}, MaxKey: {}, Code: { code: 'prim', scope: 'val' },
+    BSONRegExp: { pattern: 'prim', options: 'prim' }, BSONSymbol: { value: 'prim' }, DBRef: { collection: 'prim', oid: 'val', db: 'prim', fields: 'val' }, UUID: { sub_type: 'prim', buffer: 'u8', position: 'prim' }
+};
+const CLASSES = (() => {   // prototype exact -> table des clés propres permises ; Date : aucune clé
+    const m = require('mongodb'), t = new Map([[Date.prototype, {}]]);
+    for (const [nom, cles] of Object.entries(NATURES)) { if (typeof m[nom] === 'function') t.set(m[nom].prototype, cles); }
+    if (!t.has(m.ObjectId.prototype) || !t.has(m.Binary.prototype)) throw new Error('base-banc : le pilote mongodb n\'exporte plus ObjectId/Binary — la garde de sortie ne sait plus reconnaître un document, refusé.');
     return t;
 })();
 const ENVELOPPES = new WeakSet();   // nos propres enveloppes : jamais une valeur de document
+const estIndice = k => typeof k === 'string' && /^(0|[1-9]\d*)$/.test(k);
+const estPrim = v => v === null || v === undefined || ['string', 'number', 'boolean', 'bigint'].includes(typeof v);
 
 function estValeurBson(x, prof = 0) {
     if (prof > 64) return false;
@@ -207,15 +222,32 @@ function estValeurBson(x, prof = 0) {
     const t = typeof x;
     if (t === 'string' || t === 'number' || t === 'boolean' || t === 'bigint') return true;
     if (t !== 'object') return false;
-    if (ENVELOPPES.has(x)) return false;
-    if (x instanceof Date || TYPES_BSON.some(T => x instanceof T)) return true;
-    if (Array.isArray(x)) { for (let i = 0; i < x.length; i++) if (!estValeurBson(x[i], prof + 1)) return false; return true; }
+    if (isProxy(x) || ENVELOPPES.has(x)) return false;
     const proto = Object.getPrototypeOf(x);
-    if (proto !== Object.prototype && proto !== null) return false;
+    if (proto === Object.prototype || proto === null) {   // le cas ordinaire d'abord : un document simple
+        for (const k of Reflect.ownKeys(x)) {
+            if (typeof k === 'symbol') return false;
+            const d = Object.getOwnPropertyDescriptor(x, k);
+            if (!d || !('value' in d) || !estValeurBson(d.value, prof + 1)) return false;
+        }
+        return true;
+    }
+    if (proto === Array.prototype) {
+        for (const k of Reflect.ownKeys(x)) {
+            if (k === 'length') continue;
+            if (!estIndice(k) || Number(k) >= x.length) return false;
+            const d = Object.getOwnPropertyDescriptor(x, k);
+            if (!d || !('value' in d) || !estValeurBson(d.value, prof + 1)) return false;
+        }
+        return true;
+    }
+    const permises = CLASSES.get(proto);
+    if (!permises) return false;
     for (const k of Reflect.ownKeys(x)) {
-        if (typeof k === 'symbol') return false;
-        const d = Object.getOwnPropertyDescriptor(x, k);
-        if (!d || !('value' in d) || !estValeurBson(d.value, prof + 1)) return false;
+        const nature = typeof k === 'string' ? permises[k] : undefined;
+        const d = nature ? Object.getOwnPropertyDescriptor(x, k) : null;
+        if (!d || !('value' in d)) return false;
+        if (nature === 'u8' ? !(d.value instanceof Uint8Array) || isProxy(d.value) : nature === 'prim' ? !estPrim(d.value) : !estValeurBson(d.value, prof + 1)) return false;
     }
     return true;
 }
@@ -223,8 +255,9 @@ function estValeurBson(x, prof = 0) {
 /** Juge une valeur obtenue du pilote natif ; la rend (ou rend l'enveloppe si c'est le curseur natif lui-même), ou LÈVE « LECTURE SEULE ».
  *  `lien` = { natif, enveloppe } ; `document: true` interdit aussi de rendre l'enveloppe (callbacks, itérateur : seuls des documents). */
 function sortieSure(v, lien = {}, { document = false } = {}) {
+    if (lien.natif !== undefined && v === lien.natif) { if (document) throw refusLecture('un curseur natif comme document'); return lien.enveloppe; }   // identité : aucun piège de Proxy possible
+    if (v !== null && typeof v === 'object' && isProxy(v)) throw refusLecture('Proxy');
     if (v instanceof Promise) return v.then(x => sortieSure(x, lien, { document }));
-    if (lien.natif !== undefined && v === lien.natif) { if (document) throw refusLecture('un curseur natif comme document'); return lien.enveloppe; }
     if (estValeurBson(v)) return v;
     throw refusLecture(`valeur rendue par le pilote (${v === null ? 'null' : typeof v === 'object' ? (Object.getPrototypeOf(v)?.constructor?.name || 'objet') : typeof v}) : ni valeur simple, ni document`);
 }
@@ -239,8 +272,10 @@ function envelopperCurseur(curseur) {
     // un callback (forEach, map) ne reçoit que des documents
     const gardeCallback = a => a.map(x => typeof x === 'function' ? (d, ...r) => x(sortieSure(d, lien, { document: true }), ...r) : x);
     const iterateur = async function* () {
+        let origine = null;
         try { for (; ;) { const d = await appeler('next', [], { document: true }); if (d === null || d === undefined) return; yield d; } }
-        finally { await appeler('close', []); }
+        catch (e) { origine = e; throw e; }
+        finally { try { await appeler('close', []); } catch (e) { if (!origine) throw e; } }   // si close() lève après une erreur, l'erreur d'ORIGINE sort
     };
     const enveloppe = new Proxy({}, {
         get(_, p) {
@@ -278,7 +313,7 @@ function facadeLecture(db, fermer = async () => { }) {
         get(_, p) {
             if (typeof p === 'symbol' || p === 'then') return undefined;
             if (!LECTURES_BASE.has(p)) throw refusLecture(`db.${String(p)}`);
-            if (p === 'databaseName') return db.databaseName;
+            if (p === 'databaseName') return sortieSure(db.databaseName);
             if (p === 'db') return facade;
             if (p === 'collection') return collection;
             if (p === 'listCollections') return (...a) => envelopperCurseur(db.listCollections(...a));

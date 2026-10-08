@@ -347,6 +347,11 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         const fauxIt = fauxQui(f => f); fauxIt.next = async () => reste.shift() ?? null; fauxIt.close = async () => { }; fauxIt[Symbol.asyncIterator] = () => { itNatif++; return (async function* () { yield new NatifMarque(); })(); };
         const itLus = []; for await (const d of enveloppeDe(fauxIt)) itLus.push(d);
         verifier('itérateur : for await est écrit par l\'enveloppe (son propre next()), l\'itérateur natif n\'est jamais appelé', [itLus, itNatif], [[{ a: 1 }, { a: 2 }], 0]);
+        const fauxItErreur = fauxQui(f => f); fauxItErreur.next = async () => { throw new Error('origine'); }; fauxItErreur.close = async () => { throw new Error('fermeture'); };
+        let msgIt = null; try { for await (const _ of enveloppeDe(fauxItErreur)) { /* rien */ } } catch (e) { msgIt = e.message; }
+        verifier('itérateur : si close() lève dans le finally, l\'erreur d\'ORIGINE reste celle qui sort', msgIt, 'origine');
+        const dbNatif = await nonLevee(async () => B.facadeLecture({ databaseName: new NatifMarque(), collection: () => ({}), listCollections: () => ({}) }, async () => { }).databaseName);
+        verifier('db.databaseName passe aussi par sortieSure (un nom natif lève)', dbNatif, true);
         const fauxItNatif = fauxQui(f => f); fauxItNatif.next = async () => new NatifMarque(); fauxItNatif.close = async () => { }; fauxItNatif[Symbol.asyncIterator] = () => ({ next: async () => ({ done: true, value: undefined }) });
         verifier('itérateur : un next() natif qui rend autre chose qu\'un document fait LEVER le for await', await nonLevee(async () => { for await (const _ of enveloppeDe(fauxItNatif)) { /* rien */ } }), true);
         // la fonction de jugement elle-même (documents acceptés, tout le reste refusé) et les méthodes de COLLECTION qui rendent une valeur
@@ -356,7 +361,25 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
             const nu = Object.assign(Object.create(null), { a: 1 });
             const acceptes = [undefined, null, true, 3, 'x', { a: 1 }, nu, [], [{ a: 1 }, { b: [1, 2, { c: null }] }], { _id: new ObjectId(), d: new Date(), x: Decimal128.fromString('1.5'), b: new Binary(Buffer.from('ab')), l: Long.fromNumber(7) }, [new ObjectId(), new Date()]];
             const refuses = [Symbol('s'), () => 1, new NatifMarque(), Readable.from([]), new EventEmitter(), new Map(), new (class Autre { })(), { f() { } }, { a: [{ b: new EventEmitter() }] }, [() => 1], Buffer.from('x'), new mongodbReel.MongoClient('mongodb://127.0.0.1:1')];
+            // tour 5 : le contrat INVERSE (une vraie instance de chaque type accepté passe toujours) et les formes qui ressemblent à un type accepté sans l'être
+            const { Timestamp, Double, Int32, MinKey, MaxKey, Code, BSONRegExp, BSONSymbol, DBRef, UUID } = mongodbReel;
+            const vraies = { ObjectId: new ObjectId(), Decimal128: Decimal128.fromString('1.5'), Binary: new Binary(Buffer.from('ab')), Long: Long.fromNumber(7), Timestamp: new Timestamp({ t: 1, i: 2 }), Double: new Double(1.5), Int32: new Int32(3),
+                MinKey: new MinKey(), MaxKey: new MaxKey(), Code: new Code('x', { a: 1 }), BSONRegExp: new BSONRegExp('a', 'i'), BSONSymbol: new BSONSymbol('s'), DBRef: new DBRef('c', new ObjectId(), 'db', { z: 1 }), UUID: new UUID(), Date: new Date() };
+            const sousClasse = new (class X extends ObjectId { })(); const sansConstructeur = Object.create(ObjectId.prototype); sansConstructeur.client = new NatifMarque();
+            const idChargee = new ObjectId(); idChargee.client = new NatifMarque();
+            const tabProp = [1, 2]; tabProp.client = new NatifMarque();
+            const tabAccesseur = [1]; Object.defineProperty(tabAccesseur, 0, { get: () => new NatifMarque(), enumerable: true });
+            const dateChargee = new Date(); dateChargee.client = new NatifMarque();
+            const profond = {}; { let c = profond; for (let i = 0; i < 70; i++) c = c.x = {}; }
+            const menteur = new Proxy(new NatifMarque(), { getPrototypeOf: () => Object.prototype });
+            const formesFausses = { 'sous-classe d\'ObjectId': sousClasse, 'Object.create(ObjectId.prototype) chargé': sansConstructeur, 'ObjectId portant une propriété propre': idChargee, 'tableau portant une propriété propre': tabProp,
+                'tableau à accesseur d\'index': tabAccesseur, 'Date portant une propriété propre': dateChargee, 'Proxy dont getPrototypeOf ment': menteur, 'Proxy d\'un objet simple': new Proxy({ a: 1 }, {}), 'Proxy d\'un tableau': new Proxy([1], {}),
+                'document contenant un Proxy': { a: new Proxy({}, {}) }, 'RegExp (refus voulu)': /a/, 'plus de 64 niveaux (refus voulu)': profond, 'DBRef dont fields porte un natif': new DBRef('c', new ObjectId(), 'db', { n: new NatifMarque() }) };
             const mal = [];
+            for (const [nom, v] of Object.entries(vraies)) { try { if (await B.sortieSure(v) !== v) mal.push(`${nom} altéré`); } catch (e) { mal.push(`${nom} refusé à tort`); } }
+            for (const [nom, v] of Object.entries(formesFausses)) if (!await nonLevee(async () => B.sortieSure(v))) mal.push(`laissé passer : ${nom}`);
+            verifier(`sortieSure (tour 5) : une vraie instance de chacun des ${Object.keys(vraies).length} types acceptés passe ; ${Object.keys(formesFausses).length} formes qui y ressemblent (sous-classe, prototype menti, propriété propre, accesseur, Proxy…) LÈVENT`, mal, []);
+            mal.length = 0;
             for (const v of acceptes) { try { if (await B.sortieSure(v) !== v) mal.push(`accepté mais altéré : ${typeof v}`); } catch (e) { mal.push(`refusé à tort : ${String(e.message).slice(0, 40)}`); } }
             for (const v of refuses) { if (!await nonLevee(async () => B.sortieSure(v))) mal.push(`laissé passer : ${typeof v === 'object' ? v?.constructor?.name : typeof v}`); }
             if (!await nonLevee(() => B.sortieSure(Promise.resolve(new NatifMarque())))) mal.push('promesse d\'un natif laissée passer');
