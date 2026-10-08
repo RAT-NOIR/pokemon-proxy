@@ -550,6 +550,28 @@ remesurée comme les autres : celle-ci était honnête et surdimensionnée.
 
 ---
 
+## 78. DEUX PLANCHERS DÉCIDÉS, ET LE BANC QUI ÉCRIVAIT DANS R2 — 2026-10-08
+
+> 🕳️ **PLANCHER DÉFINITIF DES VISUELS zh-hans (décision du testeur, 2026-10-08) — 0 visuel servi sur 12 083 (règle du site importée, 07:30
+> UTC).** Instrument : WebSearch et WebFetch (6 recherches, pages lues EN RÉSUMÉ), aucun téléchargement. Sources interrogées : pokemon.cn
+> (`/termofuse` : copie de contenu et d'images interdite sans accord écrit ; aucune base de cartes) · TCGdex `zh-cn` (MIT, 47 sets déclarés,
+> `cards: []` sur CSV1C et CSV9.5C, aucun champ `image` sur 5 cartes — ⚠️ 2 sets sondés, pas 47) · pocketmonsters.net (fans, sans licence) ·
+> Pokécardex (rien de chinois constaté) · dépôts GitHub de données TCG (aucun zh-hans) · et, mesurés aux §42/§55 : artofpkm, Bulbapedia (carte
+> et page ATCG), pokemon-card.com, TPC Asie. **Non examinés PAR DÉCISION** : les mini-programmes WeChat et applications officielles (compte
+> requis). C'est un plancher d'IMAGES (le texte chinois est complet) ; le substitut japonais reste interdit (§19). **Réouverture, sonde
+> gratuite : `/v2/zh-cn/cards` de TCGdex porte un champ `image`, ou TPC Chine publie une base ou une licence.**
+> 🛑 **pokemon.com : ARRÊT DÉFINITIF (décision du testeur).** Sonde du 2026-10-08, 2 requêtes à 10 s : la base de cartes est une coquille
+> qui charge les cartes côté client derrière Imperva (`x-cdn: Imperva`, `/_Incapsula_Resource`) et reCAPTCHA Enterprise. Sans passer le défi,
+> rien ne se lit ; deviner l'API interne serait un contournement. **233 cibles restent des trous — « défi anti-robot », jamais « absentes chez
+> la source » (§36)** : la source n'a pas été interrogée au-delà de sa coquille. Débloquer demande une autorisation de The Pokémon Company.
+
+🔴 **LE BANC DES VIGNETTES ÉCRIVAIT DANS LE BUCKET R2 DE PRODUCTION** (`test-vignette-scratch.js` : `R2_BUCKET_IMAGES`, clés `vignettes/…`),
+trouvé par la 4e relecture du lot qui devait garantir « aucun banc n'écrit en production ». Les trois relectures précédentes jugeaient la
+GRAPPE ; la règle du testeur porte sur la PRODUCTION, et R2 en fait partie. 🔑 **Une garde se nomme par ce qu'elle protège, pas par l'outil
+qu'on avait sous les yeux quand on l'a écrite** : « aucun banc sur la grappe » était une version plus étroite de la question posée. Et la
+lecture de production passait par l'URI d'ÉCRITURE, la garde ne voyant que mongoose (le pilote natif, `$out`, `$merge`, `db.command`
+passaient) : une lecture est sûre par ce qu'elle PEUT faire, pas par ce qu'on lui demande.
+
 ## 77. UN FEU VERT AUTORISE UN GESTE, IL NE PROUVE PAS SA PRÉMISSE — 2026-10-08
 
 > 🔴 **LE FEU VERT DISAIT « retirer l'impression n° 143 d'Energy Sticker et le rattachement de Double Dragon Energy à
