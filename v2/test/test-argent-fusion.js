@@ -83,12 +83,12 @@ const wallet = async (userId, o = {}) => { await db.col('credits').insertOne({ u
     const docs = [{ userId: 'bk1', soldeGratuit: 12, soldeScans: 160, email: 'bk.un@exemple.fr' }, { userId: 'bk2', soldeGratuit: 400, soldeScans: 0, email: null }, { userId: 'bk3', soldeGratuit: 0, soldeScans: 20, email: 'sans.compte@exemple.fr' }];
     const fich = path.join(os.tmpdir(), `credits-fabriques-${Date.now()}.json`); fs.writeFileSync(fich, EJSON.stringify(docs, { relaxed: true }));
     const cli = path.join(__dirname, '..', 'migrations', 'rejouer-migration-credits.js');
-    const lance = (...a) => spawnSync(process.execPath, [cli, ...a], { encoding: 'utf8', env: process.env });
-    const rj = lance('--base=test_scratch', `--depuis=${fich}`);
+    const lance = (...a) => H.lancerNode([cli, ...a]);   // asynchrone : voir H.lancerNode (interblocage avec mongod en mémoire sous spawnSync)
+    const rj = await lance('--base=test_scratch', `--depuis=${fich}`);
     H.v('script de rejeu sur une sauvegarde : code 0', rj.status, 0);
     H.v('   imprime somme(achetés) avant / après (180 / 180)', /avant\s*:\s*180/.test(rj.stdout) && /après\s*:\s*180/.test(rj.stdout), true);
-    H.v('   le script REFUSE --base=test (avec ou sans --confirmer-production)', [lance('--base=test', `--depuis=${fich}`).status, lance('--base=test', `--depuis=${fich}`, '--confirmer-production').status], [1, 1]);
-    H.v('   refuse sans --depuis', lance('--base=test_scratch').status, 1);
+    H.v('   le script REFUSE --base=test (avec ou sans --confirmer-production)', [(await lance('--base=test', `--depuis=${fich}`)).status, (await lance('--base=test', `--depuis=${fich}`, '--confirmer-production')).status], [1, 1]);
+    H.v('   refuse sans --depuis', (await lance('--base=test_scratch')).status, 1);
     // la baisse : code 1 (un rattachement défaillant injecté PERD des crédits)
     const rb = await Rej.rejouer(docs.map(d => ({ ...d, userId: 'perte-' + d.userId })), cfg, { emailCle, rattacher: async () => { await db.col('credits').updateMany({ userId: /^perte-/ }, { $set: { soldeScans: 0 } }); return { ok: true, total: 0 }; } });
     H.v('une perte d\'achetés pendant le rejeu : avant > après, ok false', [rb.avant, rb.apres < rb.avant, rb.ok], [180, true, false]);

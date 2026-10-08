@@ -24,9 +24,16 @@ const EXCLUS = {
     'test-identifier-inchange.js': 'exige RM_REFERENCE_IDENTIFIER (référence externe), sort en code 1 sans elle — se lance à la main',
     'test-argent-course-R.js': 'défaut garé R (course réponse/remboursement sur M2), à rouvrir en B8 — rouge attendu'
 };
-// l'existence se vérifie dans le dossier du LANCEUR (un --dossier de test n'a pas ces fichiers) ; un nom absent est une erreur, pas un avertissement
-const presents = fs.readdirSync(__dirname);
-for (const f of Object.keys(EXCLUS)) { if (!presents.includes(f)) { console.error(`❌ EXCLUS nomme un banc absent : ${f}`); process.exit(1); } console.log(`⏭️  exclu : ${f} — ${EXCLUS[f]}`); }
+// l'existence se vérifie dans le dossier du LANCEUR (un --dossier de test n'a pas ces fichiers). Un nom absent est une ERREUR dans le vrai dossier (B3) ;
+// dans une COPIE du lanceur (test-lanceur.js la fabrique, sans _harnais.js à côté) c'est un avertissement (FUITE) : la copie ne peut pas porter ces bancs.
+const presents = fs.readdirSync(__dirname), vraiDossier = presents.includes('_harnais.js');
+for (const f of Object.keys(EXCLUS)) {
+    if (!presents.includes(f)) {
+        if (vraiDossier) { console.error(`❌ EXCLUS nomme un banc absent : ${f}`); process.exit(1); }
+        console.log(`⚠️ EXCLUS nomme « ${f} » absent de ce dossier (copie du lanceur)`); continue;
+    }
+    console.log(`⏭️  exclu : ${f} — ${EXCLUS[f]}`);
+}
 const fichiers = fs.readdirSync(dossier).filter(f => /^test-.*\.js$/.test(f) && !(f in EXCLUS)).sort();
 if (!fichiers.length) { console.error('❌ aucun test-*.js trouvé : un lanceur qui ne lance rien n\'est pas vert'); process.exit(1); }
 const FORME_BILAN = /^(\d+) réussis, (\d+) échoués$/;

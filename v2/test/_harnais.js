@@ -80,6 +80,18 @@ function armerNettoyage() {
     for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => finir(1, sortie));
 }
 
+// Lance `node <args>` dans un processus ENFANT et rend { status, stdout, stderr } (contrat de spawnSync, mais ASYNCHRONE). Jamais spawnSync pour un enfant
+// qui écrit sur la base de banc : mongod (en mémoire) journalise dans un tube LU par ce processus ; un parent bloqué ne le vide plus, mongod se bloque,
+// l'enfant attend mongod — interblocage (mesuré : test-argent-fusion et son rejeu de migration, 90 s sans fin). L'enfant hérite de l'environnement du banc.
+function lancerNode(args, delaiMs = 60000) {
+    return new Promise(resolve => {
+        const e = require('child_process').spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
+        let stdout = '', stderr = '';
+        e.stdout.on('data', d => { stdout += d; }); e.stderr.on('data', d => { stderr += d; });
+        const k = setTimeout(() => e.kill(), delaiMs);
+        e.on('close', status => { clearTimeout(k); resolve({ status, stdout, stderr }); });
+    });
+}
 function serveur(app) {
     return new Promise(resolve => {
         const s = http.createServer(app).listen(0, '127.0.0.1', () =>
@@ -96,4 +108,4 @@ async function appel(url, chemin, { methode = 'GET', corps, entetes = {} } = {})
     let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
     return { statut: r.status, entetes: Object.fromEntries(r.headers), json, texte };
 }
-module.exports = { v, vrai, bilan, ouvrirBancV2, arreterBanc, ouvrirBac, fermerBac, serveur, appel };
+module.exports = { v, vrai, bilan, ouvrirBancV2, arreterBanc, ouvrirBac, fermerBac, lancerNode, serveur, appel };
