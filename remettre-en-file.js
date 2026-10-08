@@ -37,7 +37,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const { largeurMinDe, sourceDeUnite } =require('./collecte-cartes/seuils-images');
+const { largeurMinDe, sourceDeUnite } = require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const balise = require('./collecte-cartes/balise-worker');   // le commit du worker, au repos comme au travail

@@ -12,7 +12,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { ligne } = require('./collecte-cartes/table-sets');
-const { largeurMinDe, sourceDeUnite } =require('./collecte-cartes/seuils-images');
+const { largeurMinDe, sourceDeUnite } = require('./collecte-cartes/seuils-images');
 const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 (async () => {

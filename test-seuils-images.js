@@ -87,6 +87,9 @@ if (typeof S.sourceDeUnite === 'function') {
     verifier('tcgdex/<code> → préfixe', s({ _id: 'tcgdex/sv1' }, 'artofpkm'), 'tcgdex');
     verifier('code nu (ancienne unité artofpkm, sans champ source) → le défaut', s({ _id: 'PBL' }, 'artofpkm'), 'artofpkm');
     verifier('aucune unité → le défaut', s(null, 'bulbapedia'), 'bulbapedia');
+    // un code de set peut contenir « / » (table-sets-auto.json) : le préfixe n'est accepté que s'il est une source CONNUE
+    for (const code of ['SV-P/ID', 'M-P/CT', 'SM-P/CS']) verifier(`code de set « ${code} » sans source → le défaut, pas un préfixe`, s({ _id: code }, 'artofpkm'), 'artofpkm');
+    verifier('préfixe inconnu → le défaut', s({ _id: 'quelque-part/x' }, 'bulbapedia'), 'bulbapedia');
 }
 for (const f of ['remettre-en-file.js', 'reste-visuels.js']) verifier(`${f} déduit la source de l'unité par sourceDeUnite`, sansCommentaires(lire(f)).includes('sourceDeUnite('), true);
 

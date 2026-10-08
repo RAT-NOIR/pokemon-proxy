@@ -53,10 +53,14 @@ function aRejuger(doc, source) {
 // La source d'une unité de `file_images` : le champ `source` quand il existe (écrit par enfiler-tcgdex, remettre-en-file, l'alimentateur,
 // uniteDeLaLigne de TPC) ; les anciennes unités artofpkm n'en ont pas (collecte-massive les crée sans) — on lit alors le préfixe de
 // l'_id (`tpc-asie/…`, `pokemon-card-com/…`, `tcgdex/…`), et à défaut de préfixe (un code de set nu) le défaut de l'appelant.
+// sources de visuels connues : les officielles (dérivées ci-dessus) + les trois autres collecteurs
+const SOURCES_CONNUES = Object.freeze([...SOURCES_OFFICIELLES, 'tcgdex', 'artofpkm', 'bulbapedia']);
 function sourceDeUnite(unite, defaut) {
     if (typeof unite?.source === 'string' && unite.source) return unite.source;
-    const id = String(unite?._id ?? '');
-    return id.includes('/') ? id.split('/')[0] : defaut;
+    // le préfixe n'est accepté que s'il appartient à la liste FERMÉE des sources connues : des CODES DE SET contiennent « / »
+    // (`SV-P/ID`, `M-P/CT`, `SM-P/CS` dans table-sets-auto.json) et ne sont pas des sources
+    const prefixe = String(unite?._id ?? '').split('/')[0];
+    return String(unite?._id ?? '').includes('/') && SOURCES_CONNUES.includes(prefixe) ? prefixe : defaut;
 }
 
 // NB : charger ce module charge tpc.js (SOURCES_TPC) puis jointure.js, que tpc.js requiert ; ni l'un ni l'autre n'ouvre de connexion.
