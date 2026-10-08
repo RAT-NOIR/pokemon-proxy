@@ -38,9 +38,13 @@ const fichiers = fs.readdirSync(dossier).filter(f => /^test-.*\.js$/.test(f) && 
 if (!fichiers.length) { console.error('❌ aucun test-*.js trouvé : un lanceur qui ne lance rien n\'est pas vert'); process.exit(1); }
 const FORME_BILAN = /^(\d+) réussis, (\d+) échoués$/;
 let echecs = 0;
+// L'environnement des enfants est purgé comme celui du harnais (_env-banc.js) : aucune URI mongodb, BANC_ISOLE=1. Dans une copie du lanceur
+// (test-lanceur.js), _env-banc.js est dans le dossier parent.
+const { purgerEnv } = require(fs.existsSync(path.join(__dirname, '_env-banc.js')) ? './_env-banc' : path.join(__dirname, '..', '_env-banc'));
+const envEnfants = { ...process.env }; purgerEnv(envEnfants);
 for (const f of fichiers) {
     console.log(`\n=== ${f} ===`);
-    const r = spawnSync(process.execPath, [path.join(dossier, f)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync(process.execPath, [path.join(dossier, f)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: envEnfants });
     process.stdout.write(r.stdout || ''); process.stderr.write(r.stderr || '');
     // Une garde s'écrit par ce qu'elle AUTORISE : vert = code 0 ET exactement UN bilan (format de H.bilan()), qui est la dernière ligne
     // non vide de la sortie, avec N > 0 réussites et 0 échec. Un banc dont une promesse reste en suspens sort en 0 sans bilan : ROUGE.

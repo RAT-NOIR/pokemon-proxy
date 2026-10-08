@@ -23,6 +23,51 @@ const avecEnv = (vars, f) => {
     const sansComparer = await refus(() => H.ouvrirBancV2({ env: { MONGODB_TEST_URI: 'mongodb://ailleurs.exemple.net/' }, memoireDisponible: false }));
     H.vrai('MONGODB_URI absente : je ne peux pas comparer, BANC REFUSÉ (le doute refuse)', /BANC REFUSÉ/.test(sansComparer || ''));
 
+    // 1 bis. 🔴 LA CAUSE DE L'INCIDENT : le harnais charge .env, donc process.env portait l'URI de PRODUCTION pour tout code qui ouvrait Mongo hors ouvrirBancV2.
+    // Écrit par ce qu'on AUTORISE : après le chargement du harnais, toute variable MONGODB_* et toute variable dont la VALEUR est une URI mongodb est retirée,
+    // sauf l'URI d'un banc déjà isolé (loopback + BANC_HOTES). AUCUNE connexion ici : on lit la PRÉSENCE de la variable dans un enfant qui n'ouvre rien.
+    const cp = require('child_process'), chemin = require('path'), sys = require('fs'), os = require('os');
+    const envProduction = () => {
+        const e = { ...process.env, MONGODB_URI: 'mongodb://c0-shard-00-00.abcde.mongodb.net/', MONGODB_CARTES_URI: 'mongodb://d0-shard-00-00.fghij.mongodb.net/',
+            MONGODB_LECTURE_URI: 'mongodb://c0-shard-00-01.abcde.mongodb.net/', MA_BASE_A_MOI: 'mongodb+srv://x.klmno.mongodb.net/' };
+        delete e.BANC_ISOLE; delete e.BANC_HOTES; delete e.MONGODB_TEST_URI; return e;
+    };
+    const sonde = cp.spawnSync(process.execPath, [chemin.join(__dirname, 'banc-sonde-env.js')], { encoding: 'utf8', env: envProduction(), timeout: 60000 });
+    const vu = JSON.parse(/RES=(.+)/.exec(sonde.stdout || '')?.[1] || 'null');
+    H.vrai('   la sonde (enfant sous le harnais) a répondu', vu);
+    H.v('   sous le harnais : MONGODB_URI, MONGODB_CARTES_URI, MONGODB_LECTURE_URI absentes', vu && [vu.uri, vu.cartes, vu.lecture], ['undefined', 'undefined', 'undefined']);
+    H.v('   aucune variable, quel que soit son nom, ne porte encore une URI mongodb', vu && vu.variablesUri, []);
+    H.v('   BANC_ISOLE=1 posé dès le chargement du harnais', vu && vu.isole, '1');
+    H.v('   mongoose.connect(process.env.MONGODB_URI) ne trouve rien : il refuse (sans connexion)', vu && vu.refus, true);
+    // la fonction elle-même, sur des états fabriqués (aucun enfant, aucune connexion)
+    let purgerEnv = () => { }; try { ({ purgerEnv } = require('./_env-banc')); } catch (e) { H.vrai('   ./_env-banc.js existe (purgerEnv)', false); }
+    const e1 = { MONGODB_URI: 'mongodb://c0-shard-00-00.abcde.mongodb.net/', X: 'mongodb://127.0.0.1:5/', MONGODB_BASE: 'test_scratch', AUTRE: 'ok' };
+    purgerEnv(e1);
+    H.v('   purgerEnv (hors banc) : les URI et les MONGODB_* partent, le reste reste, BANC_ISOLE=1', [e1.MONGODB_URI, e1.X, e1.MONGODB_BASE, e1.AUTRE, e1.BANC_ISOLE], [undefined, undefined, undefined, 'ok', '1']);
+    const e2 = { BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1', MONGODB_URI: 'mongodb://127.0.0.1:5/?replicaSet=x', MONGODB_CARTES_URI: 'mongodb://127.0.0.1:5/?replicaSet=x', MONGODB_BASE: 'test_scratch' };
+    purgerEnv(e2);
+    H.v('   purgerEnv (enfant d\'un banc isolé, loopback) : l\'URI du banc reste', [e2.MONGODB_URI, e2.MONGODB_BASE, e2.BANC_ISOLE], ['mongodb://127.0.0.1:5/?replicaSet=x', 'test_scratch', '1']);
+    const e3 = { BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1', MONGODB_URI: 'mongodb://127.0.0.1:5/', MONGODB_CARTES_URI: 'mongodb://c0-shard-00-00.abcde.mongodb.net/' };
+    purgerEnv(e3);
+    H.v('   purgerEnv : une seule variable hors banc dans un env « isolé » retire TOUT (doute = refus)', [e3.MONGODB_URI, e3.MONGODB_CARTES_URI], [undefined, undefined]);
+    // lancer-tout : l'environnement de ses enfants est purgé aussi (un banc lancé par le lanceur ne voit pas la production)
+    const dLanceur = sys.mkdtempSync(chemin.join(__dirname, '.jetable-banc-v2-'));
+    try {
+        sys.copyFileSync(chemin.join(__dirname, 'lancer-tout.js'), chemin.join(dLanceur, 'lancer-tout.js'));
+        sys.writeFileSync(chemin.join(dLanceur, 'test-env.js'), "const m = process.env.MONGODB_URI === undefined && !Object.values(process.env).some(v => /^mongodb(\\+srv)?:\\/\\//i.test(v)) && process.env.BANC_ISOLE === '1';\nconsole.log(m ? '1 réussis, 0 échoués' : '0 réussis, 1 échoués'); process.exitCode = m ? 0 : 1;\n");
+        const rl = cp.spawnSync(process.execPath, [chemin.join(dLanceur, 'lancer-tout.js')], { encoding: 'utf8', env: envProduction(), timeout: 60000, cwd: dLanceur });
+        H.v('   lancer-tout : ses enfants ne voient ni URI mongodb ni production (code 0)', rl.status, 0);
+    } finally { sys.rmSync(dLanceur, { recursive: true, force: true }); }
+    // le rejeu de migration, LANCÉ SEUL (hors banc), refuse AVANT de se connecter. L'URI donnée est un port fermé de loopback : si le script tentait quand même
+    // la connexion, il ne toucherait aucune grappe, mais il attendrait sa sélection de serveur (≥ 15 s) et ne dirait jamais « banc ».
+    const fichierCredits = chemin.join(os.tmpdir(), `credits-banc-v2-${Date.now()}.json`);
+    sys.writeFileSync(fichierCredits, JSON.stringify([{ userId: 'u1', soldeGratuit: 1, soldeScans: 5, email: null }]));
+    const envCli = { ...process.env, MONGODB_URI: 'mongodb://127.0.0.1:1/' }; delete envCli.BANC_ISOLE; delete envCli.BANC_HOTES;
+    const t0cli = Date.now();
+    const cli = cp.spawnSync(process.execPath, [chemin.join(__dirname, '..', 'migrations', 'rejouer-migration-credits.js'), '--base=test_scratch', `--depuis=${fichierCredits}`], { encoding: 'utf8', env: envCli, timeout: 12000 });
+    sys.rmSync(fichierCredits, { force: true });
+    H.v('rejeu de migration lancé seul : refus, code 1, avant toute connexion', [cli.status, /banc/i.test((cli.stderr || '') + (cli.stdout || '')), /Base :/.test(cli.stdout || ''), Date.now() - t0cli < 10000], [1, true, false, true]);
+
     // 2. v2/db.js : une collection préfixée n'est atteignable QUE sur l'hôte du banc (BANC_ISOLE=1)
     db.definirPrefixe('rm_tabc123_');
     const ENV_OK = { BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1' };
@@ -40,12 +85,25 @@ const avecEnv = (vars, f) => {
         const v = await avecEnv(env, () => refus(() => db.viderPrefixe()));
         H.vrai(`viderPrefixe() REFUSE : ${quoi}`, /banc/i.test(v || '') && /refus/i.test(v || ''));
     }
+    // 2 bis. SANS préfixe (les collections nues de la production) : sous BANC_ISOLE=1, col() refuse aussi tout hôte qui n'est pas celui du banc ;
+    // hors BANC_ISOLE (la production elle-même) rien ne change.
+    db.definirPrefixe('');
+    db.brancher(fausseBase('c0-shard-00-00.abcde.mongodb.net'));
+    const nu = await avecEnv(ENV_OK, () => refus(async () => db.col('comptes')));
+    H.vrai('sans préfixe, banc isolé, hôte de PRODUCTION : col() REFUSE', /banc/i.test(nu || '') && /refus/i.test(nu || ''));
+    db.brancher(fausseBase(null));
+    const nu2 = await avecEnv(ENV_OK, () => refus(async () => db.col('comptes')));
+    H.vrai('sans préfixe, banc isolé, hôte inconnu : col() REFUSE', /banc/i.test(nu2 || '') && /refus/i.test(nu2 || ''));
+    db.brancher(fausseBase('127.0.0.1'));
+    H.v('sans préfixe, banc isolé, hôte du banc : col() passe, nom NU', avecEnv(ENV_OK, () => db.col('comptes').nom), 'comptes');
+    db.brancher(fausseBase('c0-shard-00-00.abcde.mongodb.net'));
+    H.v('HORS BANC_ISOLE (production) : col() sans préfixe inchangé, nom nu, aucun contrôle d\'hôte', avecEnv({ BANC_ISOLE: undefined, BANC_HOTES: undefined }, () => db.col('comptes').nom), 'comptes');
     db.definirPrefixe('');
 
     // 2 bis. tout fichier de v2/test qui lance un serveur enfant (verrou/serveur.js, hérite de process.env) ou ouvre Mongo lui-même passe par la base de banc :
     //    sans quoi l'enfant lirait MONGODB_URI du .env — la production. Lecture du code (un banc qui démarre un serveur ne se rejoue pas ici).
     const fs = require('fs'), path = require('path');
-    const touche = fs.readdirSync(__dirname).filter(f => /\.js$/.test(f) && f !== 'test-banc-v2.js' && f !== '_harnais.js' && f !== 'lancer-tout.js')
+    const touche = fs.readdirSync(__dirname).filter(f => /\.js$/.test(f) && f !== 'test-banc-v2.js' && f !== 'banc-sonde-env.js' && f !== '_harnais.js' && f !== 'lancer-tout.js')
         .filter(f => /verrou\/serveur|mongoose\.connect|connecterMongo/.test(fs.readFileSync(path.join(__dirname, f), 'utf8')));
     const sans = touche.filter(f => !/ouvrirBancV2\(|ouvrirBac\(/.test(fs.readFileSync(path.join(__dirname, f), 'utf8')));
     H.vrai(`dénominateur : ${touche.length} fichier(s) lancent un serveur ou ouvrent Mongo`, touche.length >= 2);

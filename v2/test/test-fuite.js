@@ -12,10 +12,10 @@ const db = require('../db');
 // Même contrat que spawnSync : { status, stdout }, timeout 30 s => tué (status null).
 const lancer = (args, delaiMs = 30000) => new Promise(resolve => {
     const e = spawn(process.execPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stdout = '';
-    e.stdout.on('data', d => { stdout += d; }); e.stderr.on('data', () => { });
+    let stdout = '', stderr = '';
+    e.stdout.on('data', d => { stdout += d; }); e.stderr.on('data', d => { stderr += d; });   // stderr GARDÉ : il sert au diagnostic (imprimé quand un cas échoue)
     const minuteur = setTimeout(() => e.kill(), delaiMs);
-    e.on('close', (status) => { clearTimeout(minuteur); resolve({ status, stdout }); });
+    e.on('close', (status) => { clearTimeout(minuteur); resolve({ status, stdout, stderr }); });
 });
 
 const noms = async (prefixe) => (await db.base().listCollections({}, { nameOnly: true }).toArray()).map(c => c.name).filter(n => n.startsWith(prefixe));
@@ -31,6 +31,7 @@ const MUETS = ['mongo-muet', 'double-sigint'];   // le nettoyage de l'enfant ne 
         const m = /PREFIXE=(rm_t[0-9a-z]+_)/.exec(r.stdout || '');
         H.vrai(`${mode} : l'enfant a annoncé son préfixe`, m);
         H.v(`${mode} : code de sortie de l'enfant`, r.status, codeAttendu);
+        if (r.status !== codeAttendu) console.log(`   ↳ stderr de l'enfant (${mode}) : ${String(r.stderr).slice(-600)}`);
         if (mode === 'double-sigint') H.vrai('double-sigint : sortie immédiate (< 10 s, pas le délai de 600 s)', Date.now() - debut < 10000);
         if (!m) continue;
         await new Promise(res => setTimeout(res, 1500));           // laisse tout travail tardif de l'enfant se poser

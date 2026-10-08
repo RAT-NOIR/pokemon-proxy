@@ -47,6 +47,13 @@ if (require.main === module) {
         if (baseDemandee() !== 'test_scratch') { console.error(`❌ ARRÊT : ce script ne tourne que sur test_scratch (base demandée : "${baseDemandee()}"). --confirmer-production n'y change rien.`); process.exit(1); }
         const docs = EJSON.parse(fs.readFileSync(arg.slice('--depuis='.length), 'utf8'), { relaxed: true });
         if (!Array.isArray(docs) || !docs.length) { console.error('❌ ARRÊT : la sauvegarde n\'est pas un tableau non vide (un rejeu de zéro portefeuille ne prouve rien).'); process.exit(1); }
+        // INT2 (décision du testeur : aucun rejeu n'écrit dans la production) : écrit par ce qu'on AUTORISE — un environnement de banc isolé (BANC_ISOLE=1 et
+        // MONGODB_URI sur l'hôte du banc, posés par le harnais v2 qui invoque ce script). Lancé SEUL, le script refuse AVANT de se connecter ; il n'ouvre pas de banc lui-même.
+        const { verifierHoteBanc } = require('../../collecte-cartes/garde-banc');
+        if (process.env.BANC_ISOLE !== '1' || !verifierHoteBanc(process.env.MONGODB_URI).ok) {
+            console.error('❌ ARRÊT : ce script ne tourne que sur une BASE DE BANC (BANC_ISOLE=1, hôte du banc). Lancé seul il se connecterait à la grappe de production : refusé avant toute connexion. Il se joue par le banc test-argent-fusion.');
+            process.exit(1);
+        }
         await connecterMongo({ script: 'v2/migrations/rejouer-migration-credits.js', ecrit: true });
         const prefixe = `rm_t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}_`;
         db.definirPrefixe(prefixe); db.brancher(mongoose.connection.db);

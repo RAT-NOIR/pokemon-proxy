@@ -1,6 +1,9 @@
 'use strict';
 // Harnais commun des bancs v2. Se connecte à test_scratch par mongo-connexion.js (qui refuse toute autre base et toute grappe fausse).
 require('dotenv').config();
+// .env vient de charger l'URI de PRODUCTION dans process.env : elle en est retirée AVANT tout autre require (voir _env-banc.js), BANC_ISOLE=1 posé.
+// Seule l'URI d'un banc (ouvrirBancV2) y reviendra ; un code qui ouvre Mongo hors ouvrirBancV2 ne trouve aucune adresse.
+require('./_env-banc').purgerEnv();
 const http = require('http');
 const mongoose = require('mongoose');
 mongoose.set('strictQuery', false);

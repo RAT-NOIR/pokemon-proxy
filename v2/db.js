@@ -32,7 +32,8 @@ function exigerBaseDeBanc(db) {
 function col(nom) {
     const db = base();
     if (prefixe && db.databaseName !== 'test_scratch') throw new Error(`préfixe de test refusé sur la base "${db.databaseName}"`);
-    if (prefixe) exigerBaseDeBanc(db);
+    // sous BANC_ISOLE=1 le contrôle d'hôte vaut AVEC OU SANS préfixe (les collections nues sont celles de la production) ; hors BANC_ISOLE, aucun changement
+    if (prefixe || process.env.BANC_ISOLE === '1') exigerBaseDeBanc(db);
     return db.collection(prefixe + nom);
 }
 async function viderPrefixe() {
