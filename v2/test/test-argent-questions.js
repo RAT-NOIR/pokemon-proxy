@@ -103,5 +103,35 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     H.v('   puis la réponse par un candidat est facturée sur un crédit TOUJOURS pris', [r13.statut, r13.facturation.debite, (await lire(p13)).solde.achete, (await mouv(p13, 'dup')).etat], [200, 1, 2, 'debite']);
     const e13 = await Q.reserverQuestion(p13, d13.credit, res13, cfg, t);
     H.v('   rejouée APRÈS la réponse : l\'état repondue, le débit n\'est pas remis en reserve', [e13.etat, (await mouv(p13, 'dup')).etat, (await lire(p13)).solde.achete], ['repondue', 'debite', 2]);
+    // 14. N2 — une question REMBOURSÉE dont la clé est rejouée : I2 redébite, la réservation retombe sur la question remboursée : le débit neuf est rendu dans le même geste
+    const p14 = await compte({ solde: { accueil: 0, achete: 3 } }); const q14 = await poser(p14, { scanId: 'rj' });
+    await rep(p14, 'rj', 'aucune');
+    H.v('N2 préalable : question remboursee, solde 3', [(await db.col('questions').findOne({ _id: 'rj:0' })).etat, (await lire(p14)).solde.achete], ['remboursee', 3]);
+    const d14 = await Lg.debiter(p14, { scanId: 'rj', cleIdempotence: 'd|rj', maintenant: h(2) }, cfg);
+    H.v('   la clé rejouée redébite (I2)', [d14.ok, d14.reessaye, (await lire(p14)).solde.achete], [true, true, 2]);
+    const x14 = await Q.reserverQuestion(p14, d14.credit, { scanId: 'rj', carte: 0, raison: 'egalite', candidats: [111, 222], choix }, cfg, h(2));
+    H.v('   réservation rejouée sur une remboursee : la réponse dit remboursee', [x14.etat, x14.rejoue], ['remboursee', true]);
+    H.v('   AUCUN débit sans livraison : solde revenu à 3, aucun débit ouvert', [(await lire(p14)).solde.achete, await db.col('mouvements').countDocuments({ compteId: p14.id, type: 'debit', scanId: 'rj', etat: { $ne: 'rembourse' } })], [3, 0]);
+    // 15. N2 (a) — le rendu du débit neuf vise SA ligne seulement : un AUTRE débit ouvert du même scan (autre carte, livré) reste intact, aucun crédit n'est créé
+    const p15 = await compte({ solde: { accueil: 0, achete: 5 } });
+    const dA = await Lg.debiter(p15, { scanId: 'mc', cleIdempotence: 'd|mc', maintenant: t }, cfg);
+    await Q.reserverQuestion(p15, dA.credit, { scanId: 'mc', carte: 0, raison: 'egalite', candidats: [111, 222], choix }, cfg, t);
+    await rep(p15, 'mc', 'aucune');
+    await Lg.debiter(p15, { scanId: 'mc', cleIdempotence: 'd|mc|carte1', maintenant: t }, cfg);          // l'autre carte du scan, débitée APRÈS : débit ouvert, livré
+    H.v('N2(a) préalable : carte 0 remboursee, la carte 1 reste débitée (solde 4)', [(await db.col('questions').findOne({ _id: 'mc:0' })).etat, (await lire(p15)).solde.achete], ['remboursee', 4]);
+    const dR = await Lg.debiter(p15, { scanId: 'mc', cleIdempotence: 'd|mc', maintenant: h(2) }, cfg);
+    const x15 = await Q.reserverQuestion(p15, dR.credit, { scanId: 'mc', carte: 0, raison: 'egalite', candidats: [111, 222], choix, cleDebit: dR.cle }, cfg, h(2));
+    H.v('   rejeu : remboursee, effectivement', [x15.etat, x15.remboursee], ['remboursee', true]);
+    H.v('   la ligne de la carte 1 est INTACTE (debite) et le solde = 4 : aucun crédit créé', [(await db.col('mouvements').findOne({ compteId: p15.id, cleIdempotence: 'd|mc|carte1' })).etat, (await lire(p15)).solde.achete], ['debite', 4]);
+    // 16. N2 (b) — si rendre la ligne exacte ÉCHOUE : jamais « remboursee », la ligne est lisible (rendu-echoue), l'échec journalisé en erreur
+    const p16 = await compte({ solde: { accueil: 0, achete: 3 } }); await poser(p16, { scanId: 'ech' }); await rep(p16, 'ech', 'aucune');
+    const dE = await Lg.debiter(p16, { scanId: 'ech', cleIdempotence: 'd|ech', maintenant: h(2) }, cfg);
+    const colReel = db.col, erreurs = []; const err0 = console.error; console.error = (...a) => { erreurs.push(a.join(' ')); };
+    db.col = n => (n === 'comptes' ? { updateOne: async () => { throw new Error('panne simulée'); } } : colReel(n));
+    let x16; try { x16 = await Q.reserverQuestion(p16, dE.credit, { scanId: 'ech', carte: 0, raison: 'egalite', candidats: [111, 222], choix, cleDebit: dE.cle }, cfg, h(2)); } finally { db.col = colReel; console.error = err0; }
+    H.v('N2(b) rendu en échec : jamais « remboursee », cause dite', [x16.etat !== 'remboursee', x16.remboursee, typeof x16.raisonNonRembourse], [true, false, 'string']);
+    H.v('   la ligne du débit neuf est lisible : rendu-echoue (et reste remboursable plus tard), échec journalisé', [(await db.col('mouvements').findOne({ cleIdempotence: dE.cle })).etat, erreurs.some(e => e.includes('🔴')), (await lire(p16)).solde.achete], ['rendu-echoue', true, 2]);
+    const apres = await Lg.rembourser(p16, dE.credit, 'reprise', { scanId: 'ech', compteur: 'question', sansPlafond: true, maintenant: h(3) }, cfg);
+    H.v('   une reprise ultérieure rend ce crédit (solde 3)', [apres.rendu, (await lire(p16)).solde.achete], [true, 3]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

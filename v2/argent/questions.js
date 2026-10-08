@@ -3,7 +3,7 @@
 //   en-attente → repondue                       (réponse par un candidat : le débit initial EST la facture, rien de plus)
 //   en-attente → en-reglement → remboursee | non-remboursee   (« aucune », « ne-sait-pas », ou sans réponse sous 24 h)
 // ⚠️ Un « en-reglement » n'est JAMAIS repris seul : un processus tué entre la prise et l'état final a pu rendre le crédit, le reprendre risquerait de le rendre deux fois.
-const db = require('../db'); const { rembourser } = require('./ledger');
+const db = require('../db'); const { rembourser, rembourserLigne } = require('./ledger');
 const col = nom => db.col(nom);
 const base = p => (p.type === 'compte' ? { compteId: p.id } : { installationId: p.id });
 const idQuestion = (scanId, carte) => `${scanId}:${carte}`;
@@ -24,7 +24,7 @@ function facturationDe(q) {
     return facturation({ reserve: 1, motif: 'question' });                         // en-attente / en-reglement : le crédit est réservé
 }
 
-async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, candidats = [], choix = [], lot = false } = {}, cfg, maintenant = new Date()) {
+async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, candidats = [], choix = [], lot = false, cleDebit = null } = {}, cfg, maintenant = new Date()) {
     if (!credit) return { etat: null };                       // administrateur, ou rien de débité : rien à régler
     const repli = async cause => {
         console.warn(`⚠️ [v2 question-repli] ${scanId} : ${cause} -> remboursée à l'émission`);
@@ -42,7 +42,22 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
         // Seule une ligne qui n'est pas CELLE de ce porteur et de ce scan (corrompue, étrangère) part au repli.
         if (e.code === 11000) {
             const ex = await col('questions').findOne({ _id });
-            if (ex && ex.scanId === scanId && ex.porteur && ex.porteur.type === porteur.type && String(ex.porteur.id) === String(porteur.id)) return { etat: ex.etat, rejoue: true };
+            if (ex && ex.scanId === scanId && ex.porteur && ex.porteur.type === porteur.type && String(ex.porteur.id) === String(porteur.id)) {
+                // N2 — la clé rejouée après un remboursement a REDÉBITÉ (I2) : aucun débit sans livraison, ce débit neuf est rendu dans le même geste (hors plafond : ce n'est pas une panne)
+                if (ex.etat === 'remboursee') {
+                    // UNIQUEMENT la ligne du débit neuf (cleDebit = `cle` rendue par debiter) ; à défaut, l'unique ligne ouverte de ce scan née d'un ré-essai (cleOrigine) ; sinon on ne devine pas.
+                    let cible = cleDebit;
+                    if (!cible) {
+                        const l = await col('mouvements').find({ ...base(porteur), type: 'debit', scanId, etat: { $ne: 'rembourse' }, cleOrigine: { $exists: true } }).toArray();
+                        cible = l.length === 1 ? l[0].cleIdempotence : null;
+                    }
+                    const r = await rembourserLigne(porteur, cible, `question:${raison}`, { maintenant }, cfg);
+                    if (r.rendu) return { etat: 'remboursee', rejoue: true, remboursee: true };
+                    console.error(`🔴 [v2 question-rejeu] ${scanId} : le débit neuf d'une question remboursee n'a pas été rendu (${r.raisonNonRembourse})`);
+                    return { etat: 'non-remboursee', rejoue: true, remboursee: false, raisonNonRembourse: r.raisonNonRembourse };
+                }
+                return { etat: ex.etat, rejoue: true };
+            }
         }
         return repli(`écriture refusée (${e.message})`);
     }

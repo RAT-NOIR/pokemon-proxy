@@ -160,5 +160,27 @@ const plaf = async(p, jour, type) => (await db.col('plafonds').findOne({ porteur
     const p16 = await compte({ solde: { accueil: 0, achete: 0 } }); const c16 = await prendre(p16, 'e16', cfgH);
     casse('hebdo'); await Lg.rembourser(p16, c16, 'ia-echec', { scanId: 'e16', maintenant: t }, cfgH); db.col = colReel;
     H.v('panne pendant le rendu : le débit est RESTITUÉ à « debite » et le scan peut être remboursé ensuite', [(await mouvDebit(p16, 'e16')).etat, (await Lg.rembourser(p16, c16, 'ia-echec', { scanId: 'e16', maintenant: t }, cfgH)).rendu], ['debite', true]);
+    // 17. N1 — l'annulation d'une unité de supplément RÉ-ESSAYÉE (clé dérivée |retry|) vise la ligne effectivement débitée : aucun crédit n'est créé
+    const p17 = await compte({ solde: { accueil: 0, achete: 2 } });
+    await Lot.debiterSupplement(p17, { scanId: 'n1', unites: 2, cleIdempotence: 'n1s', maintenant: t }, cfg);
+    await Lg.rembourserLot(p17, [{ poche: 'achete' }], 'introuvable', { scanId: 'n1', maintenant: t }, cfg);
+    H.v('N1 préalable : lot remboursé, solde revenu', (await lire(p17)).solde.achete, 2);
+    await db.col('comptes').updateOne({ _id: p17.id }, { $set: { 'solde.achete': 1 } });           // un autre scan a pris un crédit : la 2e unité manquera
+    const rj17 = await Lot.debiterSupplement(p17, { scanId: 'n1', unites: 2, cleIdempotence: 'n1s', maintenant: t }, cfg);
+    H.v('N1 rejeu après remboursement : la 2e unité manque (QUOTA), la 1re annulée', [rj17.ok, rj17.code, (await lire(p17)).solde.achete], [false, 'QUOTA', 1]);
+    H.v('   aucune ligne de débit ne reste ouverte (la ligne retry est annulée)', await db.col('mouvements').countDocuments({ compteId: p17.id, type: 'debit', scanId: 'n1', etat: 'debite' }), 0);
+    const rl17 = await Lg.rembourserLot(p17, [{ poche: 'achete' }], 'introuvable', { scanId: 'n1', maintenant: t }, cfg);
+    H.v('   un rembourserLot ultérieur ne crée AUCUN crédit', [rl17.rendu, (await lire(p17)).solde.achete], [false, 1]);
+    H.v('   journal : somme des deltas = 0 (-2 débits, +2 rendus, -1 retry, +1 annulé ; le décrément extérieur n\'y est pas)', await somme(p17, 'achete'), 0);
+    // 18. P — une unité non rendue (partiel) reste remboursable plus tard : son claim est libéré
+    const cfgH1 = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '1' });                     // 1 jeton hebdo : la 2e unité tombe sur l'acheté
+    const p18 = await compte({ solde: { accueil: 0, achete: 1 } });
+    const u18a = await Lg.debiter(p18, { scanId: 'pp', cleIdempotence: 'pp', maintenant: t }, cfgH1), u18b = await Lg.debiter(p18, { scanId: 'pp', cleIdempotence: 'pp#1', maintenant: t }, cfgH1);
+    H.v('P préalable : deux poches débitées dont l\'hebdo', [u18a.credit.poche, u18b.credit.poche].sort(), ['achete', 'hebdo']);
+    const pa = await Lg.rembourserLot(p18, [u18a.credit], 'introuvable', { scanId: 'pp', maintenant: new Date('2026-10-12T00:00:01Z') }, cfgH1);   // semaine suivante : l'hebdo ne se rend pas
+    H.v('   semaine suivante : partiel (1 unité rendue)', [pa.rendu, pa.unites, pa.partiel === true], [true, 1, true]);
+    const pb = await Lg.rembourserLot(p18, [u18a.credit], 'introuvable', { scanId: 'pp', maintenant: t }, cfgH1);
+    H.v('   la même semaine ISO que le débit : l\'unité restée débitée est rendue (pas deja-rembourse)', [pb.rendu, pb.unites, pb.raisonNonRembourse], [true, 1, null]);
+    H.v('   plus aucun débit ouvert', await db.col('mouvements').countDocuments({ compteId: p18.id, type: 'debit', scanId: 'pp', etat: { $ne: 'rembourse' } }), 0);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

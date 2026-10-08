@@ -32,7 +32,7 @@ async function debiterSupplementSerie(porteur, { scanId, unites, cleIdempotence,
             for (const u of pris.filter(x => !x.rejoue).reverse()) await annulerUnite(porteur, u, cfg, maintenant);
             return { ok: false, code: r.code };
         }
-        pris.push({ cle, credit: r.credit, rejoue: Boolean(r.rejoue) });
+        pris.push({ cle: r.cle || cle, credit: r.credit, rejoue: Boolean(r.rejoue) });   // la clé EFFECTIVE (dérivée `|retry|` après un remboursement) : c'est cette ligne-là qu'on annule
     }
     return { ok: true, credits: pris.map(u => u.credit) };
 }

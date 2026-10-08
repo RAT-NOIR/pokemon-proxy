@@ -47,7 +47,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     const rejeu = dej => {
         // une clé appartient à UN porteur : la rejouer sous un autre ne rend ni son crédit ni son verdict (B1 doit la préfixer par le porteur ; ici on ferme quand même)
         if (String(dej.compteId ?? dej.installationId) !== String(porteur.id)) throw new Error('debiter : cleIdempotence appartenant à un autre porteur');
-        return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur' };
+        return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur', cle: dej.cleIdempotence };
     };
     // I2 — une clé dont le débit a été REMBOURSÉ n'est plus un rejeu mais une NOUVELLE tentative (une panne retentée avec la même clé ne doit pas être gratuite) :
     // elle débite à nouveau sous une clé DÉRIVÉE, unique par maillon de la chaîne (cleOrigine + id du maillon remboursé) ; deux retentatives simultanées se départagent sur cette clé.
@@ -89,7 +89,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
         const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
         return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };
     }
-    return reessaye ? { ok: true, credit, reessaye: true } : { ok: true, credit };
+    return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };   // `cle` : la clé de la ligne EFFECTIVEMENT débitée (dérivée si ré-essai, N1)
 }
 // rendrePoche : ne rend JAMAIS plus que ce qui a été pris (chaque filtre porte son plafond)
 async function rendrePoche(porteur, credit, cfg, now) {
@@ -143,6 +143,9 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -1 } }); };
     const rendus = [];
     let premiereRaison = null;
+    // P — remboursement PARTIEL : la ligne-claim est la trace de la 1re unité rendue ; on la renomme pour libérer `rb|…`, afin que les unités restituées « debite » restent remboursables.
+    // Pas de double remboursement : chaque unité ne se rend que par sa prise atomique (etat ≠ rembourse), quel que soit le nombre de claims successifs.
+    const libererClaim = () => col('mouvements').updateOne({ cleIdempotence: cle }, { $set: { cleIdempotence: `${cle}|fait|${rendus[0]}` } });
     try {
         // I1 — le remboursement rend CHAQUE unité débitée pour ce scan (un lot = 1 débit + des suppléments au même scanId), jugée sur les débits ENREGISTRÉS ;
         // une unité n'est rendue qu'une fois (le passage de son débit à « rembourse » est la prise atomique), et tout le scan compte pour UN seul remboursement au plafond.
@@ -161,14 +164,15 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
             // la trace : la ligne-claim `rb|scanId` devient celle de la 1re unité rendue, les suivantes ont la leur (`rb|scanId#k`) — somme(delta) reste égale au solde
             const cible = r.cible, ligne = { ...base(cible), poche: r.pocheRendue };
             if (!rendus.length) await col('mouvements').updateOne({ cleIdempotence: cle }, { $set: { delta: 1, ...ligne }, ...(cible.type === 'compte' ? { $unset: { installationId: '' } } : { $unset: { compteId: '' } }) });
-            else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, etat: 'rembourse', cleIdempotence: `${cle}#${rendus.length}`, expireLe: expireMouvement(maintenant, cfg) });
+            else await col('mouvements').insertOne({ ...ligne, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId, etat: 'rembourse', cleIdempotence: `${cle}#${d._id}`, expireLe: expireMouvement(maintenant, cfg) });
             rendus.push(d._id);
         }
         if (!rendus.length) { await liberer(); return { rendu: false, raisonNonRembourse: premiereRaison || 'poche-introuvable' }; }
-        return { rendu: true, raisonNonRembourse: null, unites: rendus.length, ...(rendus.length < pendantes.length ? { partiel: true, raisonPartielle: premiereRaison } : {}) };
+        if (rendus.length < pendantes.length) { await libererClaim(); return { rendu: true, raisonNonRembourse: null, unites: rendus.length, partiel: true, raisonPartielle: premiereRaison }; }
+        return { rendu: true, raisonNonRembourse: null, unites: rendus.length };
     } catch (e) {
         console.error(`❌ [v2 rembourser] ${e.message}`);
-        if (rendus.length) return { rendu: true, raisonNonRembourse: null, unites: rendus.length, partiel: true, raisonPartielle: 'erreur' };   // des unités SONT rendues et tracées : on garde claim et compteur
+        if (rendus.length) { try { await libererClaim(); } catch (_) { /* la réconciliation le dira */ } return { rendu: true, raisonNonRembourse: null, unites: rendus.length, partiel: true, raisonPartielle: 'erreur' }; }   // des unités SONT rendues et tracées : on garde le compteur
         try { await liberer(); } catch (_) { /* la réconciliation (B3.6) le dira */ }
         return { rendu: false, raisonNonRembourse: 'erreur' };
     }
@@ -198,4 +202,27 @@ async function rembourserLot(porteur, credits, motif, o = {}, cfg) {
     if (!Array.isArray(credits) || !credits.some(Boolean)) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
     return rendreLeScan(porteur, motif, o, cfg);
 }
-module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot };
+// rembourserLigne : rend UNE ligne de débit, désignée par sa clé EFFECTIVE (celle que `debiter` vient de rendre) — jamais le scan entier (N2 : un autre débit ouvert du même scan
+// peut être livré ou réservé pour une autre carte). Prise atomique de la ligne ; si le rendu échoue, la ligne passe en « rendu-echoue » (lisible, toujours remboursable) et l'échec est journalisé en erreur.
+async function rembourserLigne(porteur, cle, motif, { maintenant = new Date() } = {}, cfg) {
+    if (!cle) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+    let d;
+    try {
+        d = await col('mouvements').findOne({ ...base(porteur), type: 'debit', cleIdempotence: cle });
+        if (!d || !d.credit) return { rendu: false, raisonNonRembourse: 'aucun-debit' };
+        const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } }, { returnDocument: 'before' });
+        if (!pris) return { rendu: false, raisonNonRembourse: 'deja-rembourse' };
+    } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    const echec = async raison => {
+        console.error(`🔴 [v2 rembourser-ligne] ${cle} : crédit NON rendu (${raison}) — ligne « rendu-echoue », à rendre à la main ou par la reprise`);
+        try { await col('mouvements').updateOne({ _id: d._id }, { $set: { etat: 'rendu-echoue', raisonRendu: raison } }); } catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : état « rendu-echoue » non écrit (${e.message})`); }
+        return { rendu: false, raisonNonRembourse: raison };
+    };
+    let r;
+    try { r = await rendreUnite(porteur, d.credit, cfg, maintenant); } catch (e) { return echec('erreur'); }
+    if (!r.rendu) return echec(r.raison || 'poche-introuvable');
+    try { await col('mouvements').insertOne({ ...base(r.cible), poche: r.pocheRendue, le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 1, motif, scanId: d.scanId, etat: 'rembourse', cleIdempotence: `rl|${cle}`, expireLe: expireMouvement(maintenant, cfg) }); }
+    catch (e) { console.error(`🔴 [v2 rembourser-ligne] ${cle} : crédit rendu mais trace non écrite (${e.message}) — la réconciliation le dira`); }
+    return { rendu: true, raisonNonRembourse: null };
+}
+module.exports = { debiter, rendrePoche, essayerPoche, rembourser, rembourserLot, rembourserLigne };
