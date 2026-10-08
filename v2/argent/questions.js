@@ -29,7 +29,7 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
     const repli = async cause => {
         console.warn(`⚠️ [v2 question-repli] ${scanId} : ${cause} -> remboursée à l'émission`);
         const r = await rembourser(porteur, credit, `question:${raison}`, { scanId, compteur: 'question', maintenant }, cfg);
-        return { etat: r.rendu ? 'remboursee' : 'non-remboursee', repli: cause };
+        return { etat: r.rendu ? 'remboursee' : 'non-remboursee', repli: cause, raisonNonRembourse: r.rendu ? null : r.raisonNonRembourse };
     };
     if (!scanId) return repli('aucun identifiant de scan');
     try {
