@@ -16,7 +16,8 @@ const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b
     // `cartes` par une FAÇADE à liste fermée (find, count… ; tout le reste lève).
     // STOCKAGE (2026-10-08, tour 3) : AUCUNE requête R2. Le module r2 est remplacé par un FAUX STOCKAGE en mémoire (Map clé -> binaire) : les
     // originaux y sont fabriqués aux proportions des vraies entrées, `assurerVignettes` y dépose ses vignettes, et le banc relit la clé demandée.
-    const banc = await ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : les cartes réelles se lisent par un utilisateur Atlas en lecture seule (MONGODB_CARTES_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const banc = await ouvrirBanc({ lit: { cartes: 'des cartes réelles de la base « cartes »' } });
     banc.appliquer();
     const cxCartes = await banc.connexionCartes(mongoose, 'cartes');
     const source = { db: cxCartes.db }, fermer = () => cxCartes.close();

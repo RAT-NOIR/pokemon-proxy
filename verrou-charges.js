@@ -260,7 +260,8 @@ const SONDE_MAX_CANDIDATES = 6;
     // BASE DE BANC (2026-10-08) : l'ÉCRITURE (test_scratch : tranche, comptes, serveur) va à la base de banc ; la LECTURE de la production
     // (journal des scans, vecteurs d'image, tranche à copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose
     // vers elle est refusée (garde d'écriture de base-banc.js). Sans base de banc, ce verrou REFUSE de démarrer.
-    const banc = await ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : la production se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const banc = await ouvrirBanc({ lit: { production: 'le journal des scans et les vecteurs d\'image de la base « test » de la production' } });
     banc.appliquer();
     const prod = await banc.connexionProduction(mongoose, BASE);
     console.log(`lecture  : ${prod.db.databaseName} (aucune écriture)`);
@@ -323,8 +324,9 @@ const SONDE_MAX_CANDIDATES = 6;
         // ⚠️ CE QUI GARDE CETTE CONNEXION, ET CE QUI NE LA GARDE PAS (correction finale, 2026-10-08) : c'est la connexion mongoose PAR DÉFAUT vers la production.
         // Seule la garde d'écriture sur `mongoose.Collection` la couvre (écritures des collections mongoose, aggregate avec $out/$merge). Elle NE couvre PAS le pilote
         // natif (`mongoose.connection.db.collection(...).insertOne`, `db.createCollection`, `db.dropCollection`…). Aucun chemin d'écriture n'existe aujourd'hui sur
-        // cette connexion, mais la vraie garantie est un utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI) — décision du testeur en attente.
-        await mongoose.connect(banc.uriProduction, { dbName: BASE });   // LECTURE de la production (garde d'écriture installée)
+        // cette connexion, et la vraie garantie est l'utilisateur Atlas en LECTURE SEULE (MONGODB_LECTURE_URI) : connecterLecture refuse une URI égale à l'URI
+        // d'écriture et constate les privilèges de l'utilisateur (connectionStatus) avant de rendre la main.
+        await banc.connecterLecture(mongoose, BASE);   // LECTURE de la production (garde d'écriture installée + utilisateur en lecture seule contrôlé)
         // ⚠️ ET ON VÉRIFIE QUE LA LECTURE MARCHE AVANT DE COMPTER. Sans ce garde-fou, un
         // « 0 » resterait indiscernable entre « aucune ligne ne convient » et « je n'ai
         // rien pu lire ». Le premier est une mesure, le second une panne.

@@ -118,7 +118,8 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     // BASE DE BANC (2026-10-08) : l'ÉCRITURE (test_scratch : tranche, comptes, serveur) va à la base de banc ; la LECTURE de la production (tranche à
     // copier) garde l'URI d'origine mise de côté par le banc, et toute écriture mongoose vers elle est refusée (base-banc.js). Sans base de banc,
     // ce verrou REFUSE de démarrer. Les serveurs lancés plus bas héritent de l'environnement du banc.
-    const banc = await ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : la tranche de catalogue se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const banc = await ouvrirBanc({ lit: { production: 'la tranche de catalogue de la base « test » de la production' } });
     banc.appliquer();
 
     if (!fs.existsSync(FICHIER_CHARGES)) {

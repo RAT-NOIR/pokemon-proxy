@@ -185,7 +185,7 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
     const bancG = await B.ouvrirBanc({ env: envG, memoireDisponible: false });
     bancG.appliquer();
     verifier('appliquer installe la garde sur mongoose.Collection (les 17 méthodes d\'écriture marquées)', ECRITURES.filter(m => !mongooseReel.Collection.prototype[m]?.__gardeBanc), []);
-    verifier('le handle garde l\'URI de production pour la LECTURE (égale à l\'originale, jamais imprimée), distincte de celle du banc', [bancG.uriProduction === PROD, bancG.uriProduction === envG.MONGODB_URI], [true, false]);
+    verifier('le handle n\'expose AUCUNE URI de production (la lecture passe par connexionProduction / connexionCartes / connecterLecture, qui exigent l\'URI de lecture : test-lecture-seule.js)', [bancG.uriProduction, bancG.uriCartes], [undefined, undefined]);
     for (const nomBase of ['test_scratch', 'cartes', 'autre', undefined]) {
         let r = null; try { await bancG.connexionProduction(mongooseReel, nomBase); } catch (e) { r = e.message; }
         verifier(`connexionProduction refuse la base « ${nomBase} » (seule « test » se lit), sans se connecter`, /seule la base « test »/.test(r || ''), true);
@@ -409,9 +409,13 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         appelsCurseur.length = 0;
 
         // connexionProduction / connexionCartes rendent la FAÇADE (preuve de comportement, faux mongoose sans réseau) : le Db brut n'en sort jamais
-        const dbBrut = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => fauxCursor };
+        // l'utilisateur de lecture (fabriqué) : connectionStatus ne rend que des droits de lecture — c'est la seule commande que la connexion envoie (comptée à part)
+        const statutLecture = { ok: 1, authInfo: { authenticatedUsers: [{ user: 'lecteur', db: 'admin' }], authenticatedUserRoles: [], authenticatedUserPrivileges: [{ resource: { db: 'test', collection: '' }, actions: ['find', 'listCollections'] }, { resource: { db: 'cartes', collection: '' }, actions: ['find', 'listCollections'] }] } };
+        const dbBrut = { databaseName: 'test', collection: () => fauxColl, command: async () => { appels.push('db.command'); }, listCollections: () => fauxCursor, admin: () => ({ command: async c => { if (!c.connectionStatus) appels.push('db.command'); return statutLecture; } }) };
         const fauxMongoose = { createConnection: () => ({ asPromise: async () => ({ db: dbBrut, close: async () => { } }) }) };
-        const bf = await B.ouvrirBanc({ env: { ...process.env, MONGODB_TEST_URI: BANC_URI }, memoireDisponible: false });
+        const envFab = { MONGODB_URI: 'mongodb+srv://ecrivain:x@cluster0.abcde.mongodb.net/test', MONGODB_CARTES_URI: 'mongodb+srv://ecrivain2:x@cluster1.fghij.mongodb.net/cartes',
+            MONGODB_LECTURE_URI: 'mongodb+srv://lecteur:x@cluster0.abcde.mongodb.net/test', MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://lecteur2:x@cluster1.fghij.mongodb.net/cartes', MONGODB_TEST_URI: BANC_URI };
+        const bf = await B.ouvrirBanc({ env: { ...envFab }, memoireDisponible: false });
         appels.length = 0;
         const lecturesOuvertes = [await bf.connexionProduction(fauxMongoose, 'test'), await bf.connexionCartes(fauxMongoose, 'cartes')];
         const sortieBrute = [];
@@ -421,10 +425,9 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
             if (!await nonLevee(() => h.collection('x').aggregate([]).out('y'))) sortieBrute.push('curseur.out');
         }
         verifier('connexionProduction et connexionCartes rendent une façade : ni Db brut, ni commande, ni écriture, ni curseur.out ne passent (faux mongoose, 0 appel d\'écriture)', [sortieBrute, appels.filter(a => a !== 'coll.aggregate')], [[], []]);
-        // les URI de LECTURE dédiées (utilisateur Atlas en lecture seule) sont préférées quand elles existent
-        const envL = { ...process.env, MONGODB_TEST_URI: BANC_URI, MONGODB_LECTURE_URI: 'mongodb://lecture.example/x', MONGODB_CARTES_LECTURE_URI: 'mongodb://lecture-cartes.example/x' };
+        // les URI de LECTURE dédiées (utilisateur Atlas en lecture seule) sont les SEULES utilisées (plus de repli : test-lecture-seule.js) ; elles sont REMPLACÉES dans l'environnement des enfants
+        const envL = { ...envFab };
         const bl = await B.ouvrirBanc({ env: envL, memoireDisponible: false });
-        verifier('MONGODB_LECTURE_URI et MONGODB_CARTES_LECTURE_URI, quand elles existent, sont préférées pour la lecture ; puis REMPLACÉES dans l\'environnement des enfants', [bl.uriProduction === 'mongodb://lecture.example/x', bl.uriCartes === 'mongodb://lecture-cartes.example/x'], [true, true]);
         bl.appliquer();
         verifier('   ... après appliquer, plus aucune variable MONGODB_*URI ne vaut autre chose que le banc', Object.entries(envL).filter(([k, v]) => /^MONGODB_.*URI$/.test(k) && v !== BANC_URI).map(([k]) => k), []);
     }

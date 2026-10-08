@@ -32,7 +32,8 @@ function verifier(libelle, bon, detail = '') {
 }
 
 (async () => {
-    const banc = await ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : ce banc lit codes_set et numeros_cartes de la production ; il exige MONGODB_LECTURE_URI et refuse avant toute connexion.
+    const banc = await ouvrirBanc({ lit: { production: 'codes_set et numeros_cartes de la base « test » de la production' } });
     banc.appliquer();
     const prod = await banc.connexionProduction(mongoose, 'test');
     console.log(`\nbase : ${prod.db.databaseName} (lecture seule, façade)\n`);

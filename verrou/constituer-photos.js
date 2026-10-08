@@ -27,7 +27,8 @@ const { DOSSIER, INDEX, lireIndex, empreinteJeu } = require('./photos-locales');
     const ecrire = process.argv.includes('--ecrire');
     // BASE DE BANC (2026-10-08) : le journal se LIT dans la production par la FAÇADE à liste fermée (find… ; tout le reste lève), jamais par une connexion
     // mongoose ouverte vers MONGODB_URI. Sans base de banc, REFUS. (Les écritures de cet outil sont des fichiers LOCAUX, jamais la base.)
-    const banc = await require('../collecte-cartes/base-banc').ouvrirBanc();
+    // LECTURE SEULE (2026-10-08) : le journal se lit par un utilisateur Atlas en lecture seule (MONGODB_LECTURE_URI) ; sans elle, REFUS avant toute connexion.
+    const banc = await require('../collecte-cartes/base-banc').ouvrirBanc({ lit: { production: 'le journal des scans de la base « test » de la production' } });
     banc.appliquer();
     const c = await banc.connexionProduction(mongoose, 'test');
     if (c.db.databaseName !== 'test') throw new Error(`base « ${c.db.databaseName} » : le journal se lit dans « test »`);
