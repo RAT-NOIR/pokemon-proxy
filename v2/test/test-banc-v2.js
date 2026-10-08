@@ -56,6 +56,10 @@ const avecEnv = (vars, f) => {
     H.v('BANC_ISOLE=1 posé par le harnais', process.env.BANC_ISOLE, '1');
     H.vrai('la connexion mongoose est sur un hôte de loopback', /^127\.|^localhost|^\[::1\]/.test(mongoose.connection.host));
     H.vrai('MONGODB_URI vaut l\'URI du banc (loopback), plus celle de la production', /^mongodb:\/\/127\./.test(process.env.MONGODB_URI || ''));
+    // un banc ENFANT d'un banc isolé tombe sur la MÊME base (sinon test-fuite compterait les collections d'une base que ses enfants n'ont jamais vue)
+    const { spawnSync } = require('child_process');
+    const enfant = spawnSync(process.execPath, [path.join(__dirname, 'banc-enfant.js')], { encoding: 'utf8', timeout: 60000 });
+    H.v('   un enfant d\'un banc isolé hérite de la base du parent (même URI, origine « herite »)', [/URI=(.+)/.exec(enfant.stdout || '')?.[1], /ORIGINE=(.+)/.exec(enfant.stdout || '')?.[1]], [process.env.MONGODB_URI, 'herite']);
     await db.col('comptes').insertOne({ x: 1 });
     H.v('une écriture v2 passe sur la base en mémoire', await db.col('comptes').countDocuments({}), 1);
     H.vrai('   et la collection est préfixée', (await db.base().listCollections().toArray()).some(c => c.name === `${prefixe}comptes`));
