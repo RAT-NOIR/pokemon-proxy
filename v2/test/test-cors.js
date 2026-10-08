@@ -106,6 +106,11 @@ function fabriquerApp(cfg) {
     // 6. sans Origin
     r = await H.appel(u, '/ping');
     H.v('6. sans Origin : passe (200) sans en-tête', [r.statut, r.entetes[ACAO]], [200, undefined]);
+    H.vrai('   ... mais Vary: Origin quand même (un cache ne doit pas confondre les origines)', /origin/i.test(r.entetes.vary || ''));
+    r = await H.appel(u, '/api/solde', { entetes: o('https://evil.com') });
+    H.vrai('   origine refusée sur un chemin v2 : Vary: Origin aussi, mais aucun Access-Control-*', /origin/i.test(r.entetes.vary || '') && !(ACAO in r.entetes));
+    r = await H.appel(u, '/api/vinted-herite', { entetes: o('https://www.vinted.fr') });
+    H.vrai('   chemin hérité : aucun Vary ajouté par la v2', !/origin/i.test(r.entetes.vary || ''));
     H.v('   extension non empaquetée : ignorée hors test_scratch', lireConfig({ MONGODB_BASE: 'test', V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://dev' }).origines.extensionDev, null);
     H.v('   ... ignorée sans base nommée', lireConfig({ V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://dev' }).origines.extensionDev, null);
     const DEV = 'chrome-extension://devdevdevdevdevdevdevdevdevdevde';

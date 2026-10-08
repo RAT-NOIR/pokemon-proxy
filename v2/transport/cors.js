@@ -21,13 +21,13 @@ function middlewareV2(cfg) {
     const P = profils(cfg);
     return function corsV2(req, res, next) {
         const origine = req.headers.origin;
-        if (typeof origine !== 'string' || !origine) return next();          // curl, serveur à serveur : aucun en-tête
         const chemin = req.path;
+        if (P.some(x => x.chemins.some(re => re.test(chemin)))) res.vary('Origin');   // la réponse d'un chemin v2 dépend de l'origine, même quand on la refuse
+        if (typeof origine !== 'string' || !origine) return next();          // curl, serveur à serveur : aucun en-tête
         const p = P.find(x => x.origines.has(origine) && x.chemins.some(re => re.test(chemin)));
         if (!p) return next();                                               // inconnue, voisine, ou hors profil : le cors() hérité décide
         req.origineV2 = true;
         res.setHeader('Access-Control-Allow-Origin', origine);               // l'origine exacte, jamais '*'
-        res.vary('Origin');
         if (p.credentials) res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Access-Control-Expose-Headers', EXPOSE);
         if (req.method === 'OPTIONS') {
