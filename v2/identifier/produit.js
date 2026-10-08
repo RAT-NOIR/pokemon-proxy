@@ -22,9 +22,9 @@ function image(src, hotes, avecGrande) {
     if (!src || typeof src !== 'object') return null;
     const url = urlAdmise(src.url, hotes);
     if (!url || !entierPositif(src.w) || !entierPositif(src.h)) return null;
-    if (!avecGrande) return { url, w: src.w, h: src.h };
+    if (!avecGrande) return Object.freeze({ url, w: src.w, h: src.h });
     const g = src.grande ? image(src.grande, hotes, false) : null;
-    return { url, w: src.w, h: src.h, grande: g };
+    return Object.freeze({ url, w: src.w, h: src.h, grande: g });
 }
 const prix = x => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);   // un zéro n'est pas un prix (index.js:3675)
 function dateDuGuide(d) {

@@ -3,6 +3,15 @@
 // Écrit par ce qu'il AUTORISE : seules les lignes de la table ci-dessous produisent autre chose qu'une panne SERVEUR.
 // Une panne n'est JAMAIS un « introuvable » (CLAUDE.md, clause 3 des refus d'absence, index.js:3576).
 // Module PUR : aucune base, aucun réseau. Les lignes de catalogue sont lues par B1b AVANT l'appel (ctx.produits).
+//
+// FORME D'APPEL EXACTE (à fournir par B1b) : adapter({ statutHttp, corps }, ctx) avec
+//   ctx.produits          Map<idProduct, ligne de catalogue> : le gagnant ET TOUS les candidats possibles, sinon panne SERVEUR ;
+//   ctx.langueInterface   'fr' | 'en' (autre : anglais) ;  ctx.cfg  la config v2 ;
+//   ctx.ficheServie       booléen d'ENTRÉE (le site sert /fr/p/<idProduct> ?) : vrai => liens.fiche renseigné, sinon null ;
+//   ctx.candidatsDeRefus  [{ idProduct }] : les 2 ou 3 produits en égalité, capturés par B1b depuis le vivier. INDISPENSABLE pour
+//                         nom-contredit-egalite / nom-contredit-sans-repli, dont les corps réels (index.js:4861-4876) n'en portent
+//                         PAS ; egalite-parfaite en porte (index.js:5127) et le corps l'emporte. Sans eux (moins de 2) : introuvable
+//                         « photo-illisible » pour nom-contredit-* (on n'affirme pas une absence du catalogue).
 const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
@@ -66,6 +75,8 @@ function traduire(statutHttp, corps, ctx) {
         const etat = etatDe(corps.etat);
         if (c.ambigu === false) {
             if (!Number.isInteger(c.idProduct)) panne('SERVEUR', 'identifiée sans idProduct');
+            const premier = entiers(corps.candidats)[0];
+            if (premier !== undefined && premier !== c.idProduct) panne('SERVEUR', `carte.idProduct ${c.idProduct} != candidats[0] ${premier}`);
             const produit = construireProduit(source(ctx, c.idProduct), pctx(ctx));
             return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
         }
@@ -79,8 +90,13 @@ function traduire(statutHttp, corps, ctx) {
         if (MOTIFS_ILLISIBLE.includes(motif)) return introuvable('photo-illisible');
         if (MOTIFS_ABSENCE.includes(motif)) return introuvable('hors-catalogue');
         if (MOTIFS_EGALITE.includes(motif)) {
-            const ids = entiers(corps.candidats);
-            return ids.length >= 2 ? question(ids, etatDe(corps.etat), ctx) : introuvable('hors-catalogue');
+            // Candidats : ceux du corps (egalite-parfaite en porte, index.js:5127), sinon ceux que B1b fournit (ctx.candidatsDeRefus).
+            const duCorps = entiers(corps.candidats);
+            const ids = duCorps.length ? duCorps : entiers(ctx.candidatsDeRefus);
+            if (ids.length >= 2) return question(ids, etatDe(corps.etat), ctx);
+            // nom-contredit-* : la lecture a été CONTREDITE, on ne sait pas ; on n'affirme jamais l'absence du catalogue.
+            if (motif !== 'egalite-parfaite') return introuvable('photo-illisible');
+            return introuvable('hors-catalogue');
         }
         panne('SERVEUR', `motif de refus délibéré inconnu : ${motif}`);
     }

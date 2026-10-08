@@ -96,6 +96,10 @@ v('clés du Produit = CONTRAT-2 §3.2', Object.keys(sortie), CLES_PRODUIT);
 vrai('aucun champ interne ne fuit', !('champInterne' in sortie) && !('majAt' in sortie) && !('_id' in sortie));
 v('impressions par défaut', sortie.impressions, []);
 vrai('sortie gelée', Object.isFrozen(sortie) && Object.isFrozen(sortie.set) && Object.isFrozen(sortie.liens));
+{
+    const g = P({ visuel: vis, symbole: sym });
+    vrai('gel profond : visuel, visuel.grande, set.symbole, prixGuide', Object.isFrozen(g.visuel) && Object.isFrozen(g.visuel.grande) && Object.isFrozen(g.set.symbole) && Object.isFrozen(g.prixGuide));
+}
 vrai('entrée invalide : idProduct absent -> lève', leve(() => construireProduit({ nomCardmarket: 'X', set: { slug: 's', nom: 's' } }, { langueInterface: 'fr' })));
 vrai('entrée invalide : set absent -> lève', leve(() => construireProduit({ idProduct: 1, nomCardmarket: 'X' }, { langueInterface: 'fr' })));
 

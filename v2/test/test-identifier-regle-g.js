@@ -22,7 +22,9 @@ const avant = JSON.stringify(G.SEUILS_G);
 }
 // (2) réponse commune -> QUESTION (code visuel), jamais une issue « réponse commune »
 {
-    const r = dec({ v1: [[500, 9.0], [501, 9.0], [502, 9.1], [503, 9.0]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
+    const plus = dec({ v1: [[500, 9.0], [501, 9.0], [502, 9.1], [503, 9.0]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
+    v('réponse commune à 4 indiscernables : pas une question à 3 choix -> introuvable photo-illisible', [plus.issue, plus.raison, plus.candidats], ['introuvable', 'photo-illisible', undefined]);
+    const r = dec({ v1: [[500, 9.0], [501, 9.0], [502, 9.1]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
     v('réponse commune -> question', r.issue, 'question');
     v('réponse commune : jusqu\'à 3 candidats', r.candidats, [500, 501, 502]);
     v('réponse commune : code de question visuel', r.codeQuestion, 'visuel');
@@ -35,15 +37,15 @@ const avant = JSON.stringify(G.SEUILS_G);
     const r2 = dec({ v1: [[500, 9.0], [501, 20.0], [502, 30.0], [503, 40.0]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
     v('question à 4 -> 3 premiers', r2.candidats, [500, 501, 502]);
 }
-// (4) ni l'un ni l'autre -> introuvable / hors-catalogue
+// (4) ni produit ni deux candidats -> null : la chaîne héritée décide (la règle G remplace une décision par une décision, jamais par une absence)
 {
     const r = dec({ v1: [] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
-    v('rien -> introuvable hors-catalogue', [r.issue, r.raison], ['introuvable', 'hors-catalogue']);
+    v('visuel sans produit -> null', r, null);
     const r2 = dec({ v1: [[500, 9.0]] }, [['v1', 0.50], ['v2', 0.49], ['v3', 0.30]]);   // marge carte trop faible : decider n'affirme pas
-    v('marge faible -> introuvable (n\'affirme pas)', r2.issue, 'introuvable');
-    // une question à un seul candidat ne peut pas se poser
+    v('marge faible -> null (jamais « hors catalogue »)', r2, null);
     const un = decisionRegleG({ ligne: ligne([['v1', 0.9]]), nEssais: 1, mesures: mes, contexteG: ctxG({ v1: [[500, 9]] }) });
-    vrai('résultat toujours dans la liste fermée', ['affirmee', 'question', 'introuvable'].includes(un.issue));
+    vrai('résultat : null ou issue de la liste fermée, jamais hors-catalogue', un === null || ['affirmee', 'question'].includes(un.issue));
+    vrai('aucune sortie ne porte la raison hors-catalogue', ![r, r2, un].some(x => x && x.raison === 'hors-catalogue'));
 }
 // sans voisins la règle ne fait rien
 {
@@ -75,7 +77,7 @@ vrai('l\'enveloppe ne peut pas modifier SEUILS_G', leve(() => { 'use strict'; G.
         process.exitCode = 1;
     } else {
         const ctx = G.contexte(JSON.parse(fs.readFileSync(path.join(dossier, 'contexte.json'), 'utf8')));
-        let total = 0, identiques = 0, affirmes = 0, faux = 0, questions = 0, introuvables = 0, manquantes = 0, hors = 0;
+        let total = 0, identiques = 0, affirmes = 0, faux = 0, questions = 0, introuvables = 0, manquantes = 0, hors = 0, heritees = 0, grosses = 0;
         for (const jeu of ['reel', 'auto', 'dracaufeu']) {
             const f = path.join(dossier, `${jeu}.json`);
             if (!fs.existsSync(f)) { console.log(`❌ jeu ${jeu} absent`); process.exitCode = 1; continue; }
@@ -91,20 +93,25 @@ vrai('l\'enveloppe ne peut pas modifier SEUILS_G', leve(() => { 'use strict'; G.
                 try { d = G.decider(ctx, l, l.nEssais, mesures, F.seuils); } catch { hors++; continue; }
                 w = decisionRegleG({ ligne: l, nEssais: l.nEssais, mesures, contexteG: ctx }, F.seuils);
                 n++;
-                const attendu = d.affirme ? { issue: 'affirmee', produit: d.produit }
-                    : d.reponseCommune ? { issue: 'question', cands: d.reponseCommune.slice(0, 3) }
-                    : Array.isArray(d.question) && new Set(d.question).size >= 2 ? { issue: 'question', cands: [...new Set(d.question)].slice(0, 3) }
-                    : { issue: 'introuvable' };
-                const bon = w.issue === attendu.issue && (w.produit ?? null) === (attendu.produit ?? null) && JSON.stringify(w.candidats ?? null) === JSON.stringify(attendu.cands ?? null);
+                // Attendu écrit depuis la sortie de decider seul : affirme -> affirmee ; 2 ou 3 indiscernables ou une question -> question
+                // (mêmes ids, même ordre) ; plus de 3 indiscernables -> introuvable photo-illisible ; sinon null (chaîne héritée).
+                const commune = Array.isArray(d.reponseCommune) ? d.reponseCommune : [];
+                const quest = Array.isArray(d.question) ? [...new Set(d.question)] : [];
+                let bon;
+                if (d.affirme) bon = w && w.issue === 'affirmee' && w.produit === d.produit;
+                else if (commune.length > 3) { grosses++; bon = w && w.issue === 'introuvable' && w.raison === 'photo-illisible'; }
+                else if (commune.length >= 2) bon = w && w.issue === 'question' && JSON.stringify(w.candidats) === JSON.stringify([...new Set(commune)]);
+                else if (quest.length >= 2) bon = w && w.issue === 'question' && JSON.stringify(w.candidats) === JSON.stringify(quest.slice(0, 3));
+                else bon = w === null;
                 if (bon) ok++;
-                if (w.issue === 'affirmee') { aff++; if (!new Set(l.verite).has(w.produit)) fx++; }
-                if (w.issue === 'question') questions++; else if (w.issue === 'introuvable') introuvables++;
+                if (w && w.issue === 'affirmee') { aff++; if (!new Set(l.verite).has(w.produit)) fx++; }
+                if (w === null) heritees++; else if (w.issue === 'question') questions++; else if (w.issue === 'introuvable') introuvables++;
             }
             console.log(`   ${jeu} : ${n} requêtes rejouées, ${ok} décisions identiques à decider seul, ${aff} affirmés, ${fx} faux`);
             total += n; identiques += ok; affirmes += aff; faux += fx;
             v(`${jeu} : mêmes décisions que decider seul (${ok}/${n}, et ${F.lignes.length} lignes au fichier)`, ok === n && n === F.lignes.length, true);
         }
-        console.log(`   TOTAL : ${total} requêtes · ${identiques} identiques · ${affirmes} affirmés · ${faux} faux · questions ${questions} · introuvables ${introuvables} · mesures manquantes ${manquantes} · lignes où decider lève ${hors}`);
+        console.log(`   TOTAL : ${total} requêtes · ${identiques} identiques · ${affirmes} affirmés · ${faux} faux · questions ${questions} · introuvables ${introuvables} (dont réponses communes > 3 : ${grosses}) · décision HÉRITÉE (null) ${heritees} · mesures manquantes ${manquantes} · lignes où decider lève ${hors}`);
         v('0 faux affirmé à travers l\'enveloppe', faux, 0);
         vrai(`dénominateur non vide (${total})`, total > 0);
         vrai('au moins un affirmé (sinon la mesure ne mord sur rien)', affirmes > 0);

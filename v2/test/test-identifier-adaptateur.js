@@ -18,6 +18,11 @@ const succes = (o = {}) => ({ success: true, scanId: 's1', question: null, carte
 const amb = (ids, o = {}) => succes({ carte: { idProduct: ids[0], ambigu: true, niveauReserve: 'forte', raisonReserve: 'x', concurrent: null, nbExAequo: 2 },
     candidats: ids.map(i => ({ idProduct: i })), classement: ids.map(i => ({ idProduct: i, score: 1 })), ...o });
 const refus = (motif, nature, o = {}) => ({ success: false, rembourse: true, raisonNonRembourse: null, motifRefus: motif, natureRefus: nature, phraseRefus: 'x', ...o });
+// Corps de refus RÉEL de la chaîne héritée, recopié de index.js:4861-4876 (nom-contredit-*) : success, champsDeRefus (rembourse,
+// raisonNonRembourse, motifRefus, natureRefus, phraseRefus), error, cardInfo. AUCUN `candidats`. (egalite-parfaite : index.js:5127 en a.)
+const refusReel = motif => ({ success: false, rembourse: true, raisonNonRembourse: null, motifRefus: motif, natureRefus: 'refus-delibere',
+    phraseRefus: 'Je ne peux pas trancher : plusieurs cartes portent exactement les mêmes indices. Voici ce que ça pourrait être.',
+    error: 'Le produit retenu ne porte pas le nom lu sur la carte ("Eevee"), et aucun candidat ne le départage.', cardInfo: { name: 'Eevee', number: '12' } });
 const A = (corps, statutHttp = 200, c = ctx()) => adapter({ statutHttp, corps }, c);
 
 // cloisonnement de chaque ligne de la table
@@ -32,8 +37,14 @@ const lignes = [
     ['aucun-candidat', A(refus('aucun-candidat', 'refus-delibere')), 'introuvable', 'introuvable', 'hors-catalogue'],
     ['aucun-prix', A(refus('aucun-prix', 'refus-delibere')), 'introuvable', 'introuvable', 'hors-catalogue'],
     ['egalite-parfaite >=2', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
-    ['nom-contredit-egalite >=2', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }, { idProduct: 702 }] })), 'question', 'a-trancher', null],
-    ['nom-contredit-sans-repli >=2', A(refus('nom-contredit-sans-repli', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
+    // I1 : la chaîne RÉELLE n'émet pas `candidats` pour ces deux motifs ; B1b les fournit par le contexte (ctx.candidatsDeRefus)
+    ['nom-contredit-egalite, candidats du ctx', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 702 }, { idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
+    ['nom-contredit-sans-repli, candidats du ctx', A(refusReel('nom-contredit-sans-repli'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
+    ['nom-contredit-egalite, candidats dans le corps (accepté)', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
+    ['nom-contredit-egalite RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-egalite')), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['nom-contredit-sans-repli RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-sans-repli')), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['nom-contredit-egalite, 1 candidat du ctx', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['egalite-parfaite, candidats du ctx si le corps n\'en a pas', A(refusReel('egalite-parfaite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
     ['egalite-parfaite <2', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'hors-catalogue'],
     ['egalite-parfaite sans candidats', A(refus('egalite-parfaite', 'refus-delibere')), 'introuvable', 'introuvable', 'hors-catalogue']
 ];
@@ -70,6 +81,8 @@ const pannes = [
     ['identifiée : idProduct hors ctx.produits (on n\'invente pas)', A(succes({ carte: { idProduct: 999999, ambigu: false } })), 'SERVEUR'],
     ['ambigu : candidat hors ctx.produits', A(amb([700, 999999])), 'SERVEUR'],
     ['refus à 2 candidats dont un hors ctx.produits', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 999999 }] })), 'SERVEUR'],
+    ['identifiée : carte.idProduct != candidats[0] (recoupement)', A(succes({ carte: { idProduct: 700, ambigu: false }, candidats: [{ idProduct: 701 }] })), 'SERVEUR'],
+    ['candidat du ctx hors ctx.produits', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 999999 }] })), 'SERVEUR'],
     ['ctx.produits absent', adapter({ statutHttp: 200, corps: succes() }, { langueInterface: 'fr', cfg }), 'SERVEUR']
 ];
 for (const [nom, r, code] of pannes) {

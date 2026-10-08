@@ -13,7 +13,8 @@ function regleGActive(cfg, deps) {
 }
 
 /**
- * @returns null (aucun voisin : la règle ne fait rien) ou { issue:'affirmee'|'question'|'introuvable', produit?, candidats?, codeQuestion?, raison?, detail }
+ * @returns null (aucun voisin, OU la règle ne tranche pas : la chaîne héritée décide) ou
+ *          { issue:'affirmee'|'question'|'introuvable', produit?, candidats?, codeQuestion?, raison?, detail }  ('introuvable' : seulement > 3 indiscernables, photo-illisible)
  * Lève si la règle a des voisins mais pas de contexte : on n'invente jamais une absence.
  */
 function decisionRegleG(entree, S) {
@@ -25,9 +26,13 @@ function decisionRegleG(entree, S) {
         if (!Number.isInteger(d.produit)) throw new Error('decisionRegleG : affirmation sans produit entier');
         return { issue: 'affirmee', produit: d.produit, detail };
     }
-    const cands = distincts(d.reponseCommune && d.reponseCommune.length ? d.reponseCommune : d.question);   // l'ordre de la règle n'est pas servi
+    const communes = distincts(d.reponseCommune);
+    // Plus de 3 indiscernables : ce n'est pas une question à 3 choix ; couper en silence ferait disparaître la vraie réponse.
+    if (communes.length > CANDIDATS_MAX) return { issue: 'introuvable', raison: 'photo-illisible', detail };
+    const cands = communes.length >= 2 ? communes : distincts(d.question);
     if (cands.length >= 2) return { issue: 'question', candidats: cands.slice(0, CANDIDATS_MAX), codeQuestion: 'visuel', detail };
-    // ni produit ni deux candidats : une question à un seul choix n'existe pas, on n'affirme rien
-    return { issue: 'introuvable', raison: 'hors-catalogue', detail };
+    // La règle G ne tranche pas : rien à dire. La chaîne héritée décide (une règle remplace une décision par une décision,
+    // jamais par une affirmation d'absence du catalogue).
+    return null;
 }
 module.exports = { decisionRegleG, regleGActive };
