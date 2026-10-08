@@ -151,5 +151,24 @@ for (const m of ['log', 'error', 'warn', 'info']) { const o = console[m].bind(co
     const b1 = await post('/api/brut', SECRET + 'brut0001'), b2 = await post('/api/brut', SECRET + 'brut0001');
     H.v('10. réponse non JSON en 200 : un second appel ne ré-exécute pas (429 en attente)', [b1.statut, b2.statut, etat.debits], [200, 429, 1]);
 
+    // 11. BATTEMENT : une route plus longue que la fenêtre garde son claim (fenêtre 3 s, battement 400 ms, route 6 s)
+    await reset();
+    const cfgCourt = { ...cfg, retention: { ...cfg.retention, idempotenceEnCoursMinutes: 0.05, idempotenceBattementMs: 400 } };
+    let finLente; const lente = new Promise(r => { finLente = r; });
+    app.post('/api/lente', idem.idempotente('lente', {}, cfgCourt), async (req, res) => { etat.debits++; await Promise.race([lente, new Promise(r => setTimeout(r, 7000))]); res.json({ ok: true }); });
+    const enVolLente = post('/api/lente', SECRET + 'lent0001');
+    await new Promise(r => setTimeout(r, 4500));     // > 3 s : sans battement le claim serait expiré depuis 1,5 s
+    const dLente = await col('idempotence').findOne({});
+    H.vrai(`11. claim encore vivant après 4,5 s (expireLe dans ${((dLente.expireLe - Date.now()) / 1000).toFixed(1)} s)`, dLente.expireLe.getTime() > Date.now());
+    const rejeuLent = await post('/api/lente', SECRET + 'lent0001');
+    H.v('   rejeu pendant l\'exécution : 429 DEBIT reessayerDans 2', [rejeuLent.statut, rejeuLent.json.erreur.code, rejeuLent.json.erreur.reessayerDans], [429, 'DEBIT', 2]);
+    H.v('   une seule exécution', etat.debits, 1);
+    finLente(); const finalLent = await enVolLente;
+    H.v('   la route finit : 200, claim fini', [finalLent.statut, (await col('idempotence').findOne({})).etat], [200, 'fini']);
+    // un battement ne recrée jamais un claim disparu
+    await col('idempotence').deleteMany({});
+    await new Promise(r => setTimeout(r, 1000));
+    H.v('   battement arrêté à la réponse : aucun claim recréé', await col('idempotence').countDocuments({}), 0);
+
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

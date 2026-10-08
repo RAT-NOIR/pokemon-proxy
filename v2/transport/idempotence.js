@@ -65,11 +65,18 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
 
             const filtre = { cle, proprietaire: r.proprietaire };
             let fini = false, viaJson = false;
+            // BATTEMENT : tant que la route n'a pas répondu, le claim est repoussé par son propriétaire (updateOne SANS upsert : un claim
+            // repris par un autre n'est jamais recréé). Sans lui, une route plus longue que la fenêtre verrait son claim repris et ré-exécutée.
+            const fenetreMs = cfg.retention.idempotenceEnCoursMinutes * 60000;
+            const battement = setInterval(() => {
+                col('idempotence').updateOne({ ...filtre, etat: 'en-cours' }, { $set: { expireLe: new Date(Date.now() + fenetreMs) } }).catch(e => journal(e, 'battement'));
+            }, cfg.retention.idempotenceBattementMs ?? 30000);   // 30 s par défaut ; à ajouter au socle : config.retention.idempotenceBattementMs
+            battement.unref();
             const origJson = res.json, origSend = res.send;
             res.json = function (corps) { viaJson = true; return origJson.call(this, corps); };
             res.send = function (corps) {
                 if (!viaJson || fini || typeof corps !== 'string') return origSend.call(this, corps);
-                fini = true; res.json = origJson; res.send = origSend;
+                fini = true; clearInterval(battement); res.json = origJson; res.send = origSend;
                 const statut = this.statusCode;
                 const travail = statut < 300
                     ? col('idempotence').updateOne(filtre, { $set: { etat: 'fini', statut, reponse: corps, expireLe: new Date(Date.now() + dureeFiniMs) } })
@@ -78,6 +85,7 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
                 return this;
             };
             res.on('finish', () => {                                  // réponse sans res.json : en échec, le claim part ; en succès, il reste (2 min) : jamais de double exécution
+                clearInterval(battement);
                 if (!fini && res.statusCode >= 300) col('idempotence').deleteOne(filtre).catch(e => journal(e, 'nettoyage'));
             });
             next();

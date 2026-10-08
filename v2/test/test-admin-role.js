@@ -100,7 +100,9 @@ const lister = router => router.stack.flatMap(l => l.route
     H.v(`   contrôle : une route fautive POSE le rôle (le détecteur sait dire non) [${nFautif} appels]`, (await comptes.findOne({ emailCle })).role, 'administrateur');
     await admin.poserRole(emailCle, 'aucun');
     const nAppels = await parcourir(app, routes);
-    console.log(`   dénominateur : ${routes.length} routes POST/DELETE/PUT/PATCH montées x 2 corps = ${nAppels} appels`);
+    console.log(`   dénominateur : ${routes.length} routes inspectées (POST/DELETE/PUT/PATCH montées) x 2 corps = ${nAppels} appels`);
+    if (process.env.RM_TEST_ADMIN_SANS_ROUTES === '1') console.log('   ⚠️ RM_TEST_ADMIN_SANS_ROUTES=1 : 0 route tolérée (worktree B4 seul) — NE DOIT PAS être posé à l\'intégration.');
+    else H.vrai(`2-bis. le banc regarde quelque chose : N routes inspectées > 0 (N=${routes.length})`, routes.length > 0);
     H.v('2. aucun compte n\'a de rôle après tous les appels', await comptes.countDocuments({ role: { $exists: true } }), 0);
     if (!routes.length) console.log('   ⚠️ 0 route montée dans ce worktree (les lots B2/B3/B1… arrivent à l\'intégration) : ce banc DOIT être relancé alors, il compte alors N routes.');
 

@@ -23,7 +23,8 @@ function masquer(adresse) {
     return `${local.slice(0, 1)}***@${hote.slice(0, 1)}***${suite.length ? '.' + suite.join('.') : ''}`;
 }
 function normaliser(email) {
-    try { const f = require('../comptes/email-cle'); const g = f.emailCle || f.normaliser || f; if (typeof g === 'function') return g(email); } catch { /* lot B2 pas encore présent : normalisation minimale ci-dessous */ }
+    try { const f = require('../comptes/email-cle'); const g = f.emailCle || f.normaliser || f; if (typeof g === 'function') return g(email); console.warn('⚠️ comptes/email-cle sans fonction exploitable : normalisation MINIMALE (minuscules) — un Gmail à points ne sera pas trouvé.'); }
+    catch (e) { console.warn(`⚠️ comptes/email-cle indisponible (${e.code || e.name}) : normalisation MINIMALE (minuscules) — un Gmail à points ne sera pas trouvé.`); }
     return String(email).trim().toLowerCase();
 }
 const valeur = (argv, nom) => { const a = argv.find(x => x.startsWith(`--${nom}=`)); return a ? a.slice(nom.length + 3).trim() : null; };
