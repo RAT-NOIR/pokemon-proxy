@@ -8,10 +8,12 @@
 //   ctx.produits          Map<idProduct, ligne de catalogue> : le gagnant ET TOUS les candidats possibles, sinon panne SERVEUR ;
 //   ctx.langueInterface   'fr' | 'en' (autre : anglais) ;  ctx.cfg  la config v2 ;
 //   ctx.ficheServie       booléen d'ENTRÉE (le site sert /fr/p/<idProduct> ?) : vrai => liens.fiche renseigné, sinon null ;
-//   ctx.candidatsDeRefus  [{ idProduct }] : les 2 ou 3 produits en égalité, capturés par B1b depuis le vivier. INDISPENSABLE pour
-//                         nom-contredit-egalite / nom-contredit-sans-repli, dont les corps réels (index.js:4861-4876) n'en portent
-//                         PAS ; egalite-parfaite en porte (index.js:5127) et le corps l'emporte. Sans eux (moins de 2) : introuvable
-//                         « photo-illisible » pour nom-contredit-* (on n'affirme pas une absence du catalogue).
+//   ctx.candidatsDeRefus  [{ idProduct }] : les 2 ou 3 produits EN ÉGALITÉ, capturés par B1b depuis le vivier. Utile pour
+//                         nom-contredit-egalite, dont le corps réel (index.js:4861-4876) n'en porte PAS ; egalite-parfaite en porte
+//                         (index.js:5127). L'UNION corps + ctx doit donner 2 ou 3 candidats distincts, sinon pas de question (un seul :
+//                         pas de choix ; plus de 3 : jamais tronqué) => introuvable « photo-illisible » (nom-contredit-*) ou
+//                         « hors-catalogue » (egalite-parfaite sans aucun candidat). nom-contredit-sans-repli IGNORE ces candidats :
+//                         pas d'égalité (r.scores vide, index.js:4840), toujours introuvable « photo-illisible ».
 const { construireProduit } = require('./produit');
 const { construireQuestion } = require('./questions');
 const { choixPour } = require('../choix');
@@ -90,12 +92,14 @@ function traduire(statutHttp, corps, ctx) {
         if (MOTIFS_ILLISIBLE.includes(motif)) return introuvable('photo-illisible');
         if (MOTIFS_ABSENCE.includes(motif)) return introuvable('hors-catalogue');
         if (MOTIFS_EGALITE.includes(motif)) {
-            // Candidats : ceux du corps (egalite-parfaite en porte, index.js:5127), sinon ceux que B1b fournit (ctx.candidatsDeRefus).
-            const duCorps = entiers(corps.candidats);
-            const ids = duCorps.length ? duCorps : entiers(ctx.candidatsDeRefus);
-            if (ids.length >= 2) return question(ids, etatDe(corps.etat), ctx);
-            // nom-contredit-* : la lecture a été CONTREDITE, on ne sait pas ; on n'affirme jamais l'absence du catalogue.
-            if (motif !== 'egalite-parfaite') return introuvable('photo-illisible');
+            // sans-repli : r.scores est VIDE (index.js:4840), il n'y a aucune égalité ; des « candidats » seraient ceux que le nom a déjà
+            // contredits, et répondre débiterait l'utilisateur : jamais une question. La lecture est contredite, on ne sait pas.
+            if (motif === 'nom-contredit-sans-repli') return introuvable('photo-illisible');
+            // Candidats : ceux du corps (egalite-parfaite : index.js:5127), complétés par ctx.candidatsDeRefus. Une question exige 2 ou 3
+            // candidats DISTINCTS dans l'UNION ; plus de 3 ne se tronque pas en silence ; un seul ne fait pas une question à choix.
+            const union = [...new Set([...entiers(corps.candidats), ...entiers(ctx.candidatsDeRefus)])];
+            if (union.length >= 2 && union.length <= 3) return question(union, etatDe(corps.etat), ctx);
+            if (union.length > 3 || motif !== 'egalite-parfaite') return introuvable('photo-illisible');   // on ne sait pas : pas d'absence affirmée
             return introuvable('hors-catalogue');
         }
         panne('SERVEUR', `motif de refus délibéré inconnu : ${motif}`);

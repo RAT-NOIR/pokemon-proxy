@@ -14,7 +14,7 @@ function regleGActive(cfg, deps) {
 
 /**
  * @returns null (aucun voisin, OU la règle ne tranche pas : la chaîne héritée décide) ou
- *          { issue:'affirmee'|'question'|'introuvable', produit?, candidats?, codeQuestion?, raison?, detail }  ('introuvable' : seulement > 3 indiscernables, photo-illisible)
+ *          { issue:'affirmee'|'question'|'introuvable', produit?, candidats?, codeQuestion?, raison?, detail }  (jamais 'introuvable' : plus de 3 indiscernables => null aussi)
  * Lève si la règle a des voisins mais pas de contexte : on n'invente jamais une absence.
  */
 function decisionRegleG(entree, S) {
@@ -27,8 +27,9 @@ function decisionRegleG(entree, S) {
         return { issue: 'affirmee', produit: d.produit, detail };
     }
     const communes = distincts(d.reponseCommune);
-    // Plus de 3 indiscernables : ce n'est pas une question à 3 choix ; couper en silence ferait disparaître la vraie réponse.
-    if (communes.length > CANDIDATS_MAX) return { issue: 'introuvable', raison: 'photo-illisible', detail };
+    // Plus de 3 indiscernables (courant en vintage : V1 à V6 par numéro) : ni question à 3 choix (couper ferait disparaître la vraie
+    // réponse), ni cause inventée (la photo est lisible) : la règle ne tranche pas, la chaîne héritée décide.
+    if (communes.length > CANDIDATS_MAX) return null;
     const cands = communes.length >= 2 ? communes : distincts(d.question);
     if (cands.length >= 2) return { issue: 'question', candidats: cands.slice(0, CANDIDATS_MAX), codeQuestion: 'visuel', detail };
     // La règle G ne tranche pas : rien à dire. La chaîne héritée décide (une règle remplace une décision par une décision,

@@ -23,7 +23,7 @@ const avant = JSON.stringify(G.SEUILS_G);
 // (2) réponse commune -> QUESTION (code visuel), jamais une issue « réponse commune »
 {
     const plus = dec({ v1: [[500, 9.0], [501, 9.0], [502, 9.1], [503, 9.0]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
-    v('réponse commune à 4 indiscernables : pas une question à 3 choix -> introuvable photo-illisible', [plus.issue, plus.raison, plus.candidats], ['introuvable', 'photo-illisible', undefined]);
+    v('réponse commune à 4 indiscernables : pas une question à 3 choix, pas une cause inventée -> null (chaîne héritée)', plus, null);
     const r = dec({ v1: [[500, 9.0], [501, 9.0], [502, 9.1]] }, [['v1', 0.95], ['v2', 0.40], ['v3', 0.30]]);
     v('réponse commune -> question', r.issue, 'question');
     v('réponse commune : jusqu\'à 3 candidats', r.candidats, [500, 501, 502]);
@@ -99,7 +99,7 @@ vrai('l\'enveloppe ne peut pas modifier SEUILS_G', leve(() => { 'use strict'; G.
                 const quest = Array.isArray(d.question) ? [...new Set(d.question)] : [];
                 let bon;
                 if (d.affirme) bon = w && w.issue === 'affirmee' && w.produit === d.produit;
-                else if (commune.length > 3) { grosses++; bon = w && w.issue === 'introuvable' && w.raison === 'photo-illisible'; }
+                else if (commune.length > 3) { grosses++; bon = w === null; }
                 else if (commune.length >= 2) bon = w && w.issue === 'question' && JSON.stringify(w.candidats) === JSON.stringify([...new Set(commune)]);
                 else if (quest.length >= 2) bon = w && w.issue === 'question' && JSON.stringify(w.candidats) === JSON.stringify(quest.slice(0, 3));
                 else bon = w === null;

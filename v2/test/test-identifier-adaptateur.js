@@ -39,7 +39,16 @@ const lignes = [
     ['egalite-parfaite >=2', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
     // I1 : la chaîne RÉELLE n'émet pas `candidats` pour ces deux motifs ; B1b les fournit par le contexte (ctx.candidatsDeRefus)
     ['nom-contredit-egalite, candidats du ctx', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 702 }, { idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
-    ['nom-contredit-sans-repli, candidats du ctx', A(refusReel('nom-contredit-sans-repli'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
+    // C1 : sans-repli = r.scores vide (index.js:4840), pas d'égalité : jamais une question, même avec des candidats (ils sont déjà contredits)
+    ['nom-contredit-sans-repli, candidats du ctx IGNORÉS', A(refusReel('nom-contredit-sans-repli'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['nom-contredit-sans-repli, candidats dans le corps IGNORÉS', A(refus('nom-contredit-sans-repli', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    // C4 : plus de 3 candidats fournis : jamais tronqués en silence -> pas de question
+    ['nom-contredit-egalite, 4 candidats du ctx -> pas de question', A(refusReel('nom-contredit-egalite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }, { idProduct: 702 }, { idProduct: 703 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    ['egalite-parfaite, 4 candidats du ctx -> pas de question', A(refusReel('egalite-parfaite'), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }, { idProduct: 701 }, { idProduct: 702 }, { idProduct: 703 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
+    // C3 : un candidat du corps ne fait pas une question ; le ctx complète seulement si l'UNION donne 2 ou 3 distincts
+    ['corps 1 candidat + ctx 1 autre -> union 2 : question', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 701 }] })), 'question', 'a-trancher', null],
+    ['corps 1 candidat + ctx le même -> union 1 : pas de question', A(refus('egalite-parfaite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 700 }] })), 'introuvable', 'introuvable', 'hors-catalogue'],
+    ['corps 1 + ctx 3 autres -> union 4 : pas de question', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }] }), 200, ctx({ candidatsDeRefus: [{ idProduct: 701 }, { idProduct: 702 }, { idProduct: 703 }] })), 'introuvable', 'introuvable', 'photo-illisible'],
     ['nom-contredit-egalite, candidats dans le corps (accepté)', A(refus('nom-contredit-egalite', 'refus-delibere', { candidats: [{ idProduct: 700 }, { idProduct: 701 }] })), 'question', 'a-trancher', null],
     ['nom-contredit-egalite RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-egalite')), 'introuvable', 'introuvable', 'photo-illisible'],
     ['nom-contredit-sans-repli RÉEL sans candidats (I1b)', A(refusReel('nom-contredit-sans-repli')), 'introuvable', 'introuvable', 'photo-illisible'],
