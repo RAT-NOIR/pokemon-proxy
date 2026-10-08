@@ -5,12 +5,16 @@
 // Une seule exception : l'URI d'un banc DÉJÀ isolé que le parent a posée par appliquer() (BANC_ISOLE=1, hôte = BANC_HOTES, loopback) — un enfant la garde.
 // Un seul doute dans cet environnement (une URI hors banc à côté d'une URI de banc) retire TOUT : on ne trie pas un environnement douteux.
 // Une lecture de production, si elle est un jour légitime, passe par la façade de collecte-cartes/base-banc.js, jamais par l'env d'un banc.
-// Partagé par _harnais.js ET lancer-tout.js (deux copies de la règle divergeraient).
+// Partagé par _harnais.js, lancer-tout.js ET le rejeu de migration (deux copies de la règle divergeraient).
+// ⚠️ LIMITES ÉCRITES : (1) une URI encodée dans une autre valeur, ou placée en milieu de chaîne, n'est pas vue (le motif exige qu'elle ouvre la valeur) ; aucune n'existe
+// dans les .env d'aujourd'hui. (2) La purge retire aussi MONGODB_TEST_URI et MONGODB_LECTURE_URI : le repli « sans mongodb-memory-server » de base-banc.js est donc
+// volontairement mort dans le harnais v2 (une base de banc = la base en mémoire, rien d'autre).
+// Un banc est TOUJOURS mongodb:// (jamais +srv) en loopback : +srv sort de l'exception et est purgé.
 const { verifierHoteBanc, hotesDe } = require('../../collecte-cartes/garde-banc');
 
 const estUriMongo = v => typeof v === 'string' && /^mongodb(\+srv)?:\/\//i.test(v.trim());
 const estLoopback = h => /^127(\.\d{1,3}){3}$/.test(h) || h === '[::1]' || h === 'localhost';
-const uriDeBanc = (v, env) => estUriMongo(v) && env.BANC_ISOLE === '1' && verifierHoteBanc(v, env).ok && hotesDe(v).length > 0 && hotesDe(v).every(estLoopback);
+const uriDeBanc = (v, env) => estUriMongo(v) && /^mongodb:\/\//i.test(v.trim()) && env.BANC_ISOLE === '1' && verifierHoteBanc(v, env).ok && hotesDe(v).length > 0 && hotesDe(v).every(estLoopback);
 
 /** Purge `env` en place (process.env ou une copie). Rend les noms retirés. */
 function purgerEnv(env = process.env) {
@@ -25,4 +29,4 @@ function purgerEnv(env = process.env) {
     env.BANC_ISOLE = '1';
     return retires;
 }
-module.exports = { purgerEnv, estUriMongo };
+module.exports = { purgerEnv, estUriMongo, estLoopback, uriDeBanc };

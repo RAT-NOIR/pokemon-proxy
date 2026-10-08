@@ -50,6 +50,9 @@ const avecEnv = (vars, f) => {
     const e3 = { BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1', MONGODB_URI: 'mongodb://127.0.0.1:5/', MONGODB_CARTES_URI: 'mongodb://c0-shard-00-00.abcde.mongodb.net/' };
     purgerEnv(e3);
     H.v('   purgerEnv : une seule variable hors banc dans un env « isolé » retire TOUT (doute = refus)', [e3.MONGODB_URI, e3.MONGODB_CARTES_URI], [undefined, undefined]);
+    const e4 = { BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1', MONGODB_URI: 'mongodb+srv://127.0.0.1/?replicaSet=x' };
+    purgerEnv(e4);
+    H.v('   purgerEnv : un banc est toujours mongodb:// — une URI mongodb+srv:// sort de l\'exception (purgée)', e4.MONGODB_URI, undefined);
     // lancer-tout : l'environnement de ses enfants est purgé aussi (un banc lancé par le lanceur ne voit pas la production)
     const dLanceur = sys.mkdtempSync(chemin.join(__dirname, '.jetable-banc-v2-'));
     try {
@@ -67,6 +70,14 @@ const avecEnv = (vars, f) => {
     const cli = cp.spawnSync(process.execPath, [chemin.join(__dirname, '..', 'migrations', 'rejouer-migration-credits.js'), '--base=test_scratch', `--depuis=${fichierCredits}`], { encoding: 'utf8', env: envCli, timeout: 12000 });
     sys.rmSync(fichierCredits, { force: true });
     H.v('rejeu de migration lancé seul : refus, code 1, avant toute connexion', [cli.status, /banc/i.test((cli.stderr || '') + (cli.stdout || '')), /Base :/.test(cli.stdout || ''), Date.now() - t0cli < 10000], [1, true, false, true]);
+    // un .env fabriqué (BANC_ISOLE=1, BANC_HOTES = l'hôte de production, URI de production) ne fait pas passer le rejeu : le loopback est exigé comme dans _env-banc.js
+    sys.writeFileSync(fichierCredits, JSON.stringify([{ userId: 'u1', soldeGratuit: 1, soldeScans: 5, email: null }]));
+    const hoteProd = 'c0-shard-00-00.abcde.mongodb.net';
+    const envFab = { ...process.env, BANC_ISOLE: '1', BANC_HOTES: hoteProd, MONGODB_URI: `mongodb://${hoteProd}/` };
+    const t1cli = Date.now();
+    const cli2 = cp.spawnSync(process.execPath, [chemin.join(__dirname, '..', 'migrations', 'rejouer-migration-credits.js'), '--base=test_scratch', `--depuis=${fichierCredits}`], { encoding: 'utf8', env: envFab, timeout: 12000 });
+    sys.rmSync(fichierCredits, { force: true });
+    H.v('rejeu de migration, BANC_ISOLE=1 + BANC_HOTES = hôte de production : refus (loopback exigé), avant toute connexion', [cli2.status, /banc/i.test((cli2.stderr || '') + (cli2.stdout || '')), /Base :/.test(cli2.stdout || ''), Date.now() - t1cli < 10000], [1, true, false, true]);
 
     // 2. v2/db.js : une collection préfixée n'est atteignable QUE sur l'hôte du banc (BANC_ISOLE=1)
     db.definirPrefixe('rm_tabc123_');
