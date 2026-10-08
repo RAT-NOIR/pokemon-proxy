@@ -50,8 +50,21 @@ function aRejuger(doc, source) {
     return !w || w >= maintenant;
 }
 
+// La source d'une unité de `file_images` : le champ `source` quand il existe (écrit par enfiler-tcgdex, remettre-en-file, l'alimentateur,
+// uniteDeLaLigne de TPC) ; les anciennes unités artofpkm n'en ont pas (collecte-massive les crée sans) — on lit alors le préfixe de
+// l'_id (`tpc-asie/…`, `pokemon-card-com/…`, `tcgdex/…`), et à défaut de préfixe (un code de set nu) le défaut de l'appelant.
+function sourceDeUnite(unite, defaut) {
+    if (typeof unite?.source === 'string' && unite.source) return unite.source;
+    const id = String(unite?._id ?? '');
+    return id.includes('/') ? id.split('/')[0] : defaut;
+}
+
+// NB : charger ce module charge tpc.js (SOURCES_TPC) puis jointure.js, que tpc.js requiert ; ni l'un ni l'autre n'ouvre de connexion.
+// Un `trop-petit` rejugeable dont le téléchargement échoue reste `trop-petit` et est redemandé à CHAQUE passage du collecteur : c'est
+// borné par la cadence du client (10 s pour TPC), pas par un compteur d'essais.
+
 // Le format servi : WebP, 700 px de large au plus, qualité 80 (SPEC-COLLECTE-IMAGES.md).
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };

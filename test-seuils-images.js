@@ -71,5 +71,24 @@ verifier('collecteur-images-tcgdex.js : SOURCE est la constante de la source', /
 const regles = lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '';
 verifier('REGLES surveille seuils-images.js ET collecteur-images-tpc.js', ['seuils-images.js', 'collecteur-images-tpc.js'].map(x => regles.includes(`'${x}`) || regles.includes(`/${x}'`)), [true, true]);
 
+// §44 — « si la règle changeait demain, quel fichier bougerait ? » : tout fichier que seuils-images.js charge (donc dont dépend
+// largeurMinDe : la liste des sites TPC vient de tpc.js) doit figurer dans REGLES, sinon la garde du commit ne le voit pas.
+const chargesParSeuils = [...lire('collecte-cartes/seuils-images.js').matchAll(/require\('\.\/([^']+)'\)/g)].map(m => `collecte-cartes/${m[1]}.js`);
+verifier('seuils-images.js charge bien au moins tpc.js (le test ne tourne pas à vide)', chargesParSeuils.includes('collecte-cartes/tpc.js'), true);
+for (const f of chargesParSeuils) verifier(`REGLES surveille ${f} (dépendance de largeurMinDe)`, regles.includes(`'${f}'`), true);
+
+// ── la source d'une unité de file_images : le champ `source` quand il existe, sinon le préfixe de l'_id, sinon le défaut ──
+verifier('sourceDeUnite est exportée', typeof S.sourceDeUnite, 'function');
+if (typeof S.sourceDeUnite === 'function') {
+    const s = S.sourceDeUnite;
+    verifier('champ source présent → il fait foi', s({ _id: 'PBL', source: 'bulbapedia' }, 'artofpkm'), 'bulbapedia');
+    verifier('tpc-asie/<slug> sans champ source → préfixe de l\'_id', s({ _id: 'tpc-asie/Sword-Shield-Indonesian-Promos' }, 'artofpkm'), 'tpc-asie');
+    verifier('pokemon-card-com/<slug> → préfixe', s({ _id: 'pokemon-card-com/M-P' }, 'bulbapedia'), 'pokemon-card-com');
+    verifier('tcgdex/<code> → préfixe', s({ _id: 'tcgdex/sv1' }, 'artofpkm'), 'tcgdex');
+    verifier('code nu (ancienne unité artofpkm, sans champ source) → le défaut', s({ _id: 'PBL' }, 'artofpkm'), 'artofpkm');
+    verifier('aucune unité → le défaut', s(null, 'bulbapedia'), 'bulbapedia');
+}
+for (const f of ['remettre-en-file.js', 'reste-visuels.js']) verifier(`${f} déduit la source de l'unité par sourceDeUnite`, sansCommentaires(lire(f)).includes('sourceDeUnite('), true);
+
 console.log(`\n${ok} passés, ${ko} en échec (sur ${ok + ko})`);
 process.exit(ko ? 1 : 0);

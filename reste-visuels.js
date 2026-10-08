@@ -12,7 +12,7 @@ const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo, champSur } = require('./collecte-cartes/lecture-sure');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
 const { ligne } = require('./collecte-cartes/table-sets');
-const { largeurMinDe } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, sourceDeUnite } =require('./collecte-cartes/seuils-images');
 const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule définition du filtre des cartes-code
 
 (async () => {
@@ -64,7 +64,7 @@ const { estCarteCode } = require('./collecte-cartes/jointure');   // la seule d�
         const L = code ? ligne(code) : null;
         const region = L?.bulba?.tirage || d?.region || '?';
         const S = code ? sourceDe(code) : null;
-        const source = u?.source ?? (S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
+        const source = sourceDeUnite(u, S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
         const m = med.get(`${source}/${s}`);
         const seuil = largeurMinDe(source);
         if (m != null && m < seuil) return [`seuil : médiane ${m} px < ${seuil} (§23 — on ne bouge pas un seuil pour ses refus)`, 'non'];

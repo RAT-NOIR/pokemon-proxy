@@ -37,7 +37,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { TABLE_MAIN, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
 const { sourceDe } = require('./collecte-cartes/sources-sets');
-const { largeurMinDe } = require('./collecte-cartes/seuils-images');
+const { largeurMinDe, sourceDeUnite } =require('./collecte-cartes/seuils-images');
 const { workerContient } = require('./collecte-cartes/sources-deployees');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const balise = require('./collecte-cartes/balise-worker');   // le commit du worker, au repos comme au travail
@@ -66,6 +66,9 @@ const balise = require('./collecte-cartes/balise-worker');   // le commit du wor
 const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'collecteur-images-bulba.js',
     // ➕ 2026-10-08 : le seuil dépend de la source (largeurMinDe) ; le collecteur TPC l'applique à ses visuels — il bouge avec la règle
     'collecteur-images-tpc.js',
+    // ➕ idem : la liste des sources officielles de `largeurMinDe` est dérivée de `SITES` (tpc.js) — ajouter ou retirer un site
+    // change la règle sans toucher seuils-images.js (test-seuils-images.js casse si une dépendance de seuils-images manque ici)
+    'collecte-cartes/tpc.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
@@ -253,7 +256,7 @@ if (require.main !== module) return;
         if (manque <= 0) { complets.push(code); continue; }
         const S = sourceDe(code);
         const u = file.get(code);
-        const source = u?.source ?? (S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
+        const source = sourceDeUnite(u, S ? 'artofpkm' : 'bulbapedia');   // la source qui a jugé cette unité
         const min = medLargeur.get(`${source}/${l.slugSet}`) ?? null;   // MÉDIANE, le critère de la production
         const ligne = { code, slug: l.slugSet, manque, n: g.n, min, etat: u ? `${u.etat}/${u.resultat ?? '—'}` : 'absent' };
         if (u && u.etat === 'attente') continue;              // déjà en file
