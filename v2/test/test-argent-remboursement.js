@@ -66,8 +66,9 @@ const plaf = async (p, jour, type) => (await db.col('plafonds').findOne({ porteu
     H.v('hebdo remboursé la semaine suivante : hebdo-semaine-changee', await Lg.rembourser(p6, c6b, 'ia-echec', { scanId: 'h2', maintenant: nx }, cfgH), { rendu: false, raisonNonRembourse: 'hebdo-semaine-changee' });
     H.v('   et le compteur de plafond n\'est PAS consommé (rollback)', (await plaf(p6, '2026-10-12', 'panne'))?.count ?? 0, 0);
     // 7. accueil au plafond ; abonnement même mois / mois suivant
-    const p7 = await compte({ solde: { accueil: 25, achete: 0 } });
-    H.v('accueil déjà à 25 : accueil-au-plafond, solde inchangé', [await Lg.rembourser(p7, { poche: 'accueil' }, 'ia-echec', { scanId: 'ac1', maintenant: t }, cfg), (await lire(p7)).solde.accueil],
+    const p7 = await compte({ solde: { accueil: 25, achete: 0 } }); const c7a = await prendre(p7, 'ac1');
+    await db.col('comptes').updateOne({ _id: p7.id }, { $set: { 'solde.accueil': 25 } });          // le solde est remonté à la dotation (autre chemin) : rendre un de plus dépasserait 25
+    H.v('accueil déjà à 25 : accueil-au-plafond, solde inchangé', [await Lg.rembourser(p7, c7a, 'ia-echec', { scanId: 'ac1', maintenant: t }, cfg), (await lire(p7)).solde.accueil],
         [{ rendu: false, raisonNonRembourse: 'accueil-au-plafond' }, 25]);
     const p7a = await compte({ solde: { accueil: 0, achete: 0 }, abonnement: { actif: true, quotaMensuel: 3, moisCle: '2026-10', restant: 3, jusquAu: new Date('2027-01-01') } });
     const c7 = await prendre(p7a, 'ab1');
@@ -102,5 +103,19 @@ const plaf = async (p, jour, type) => (await db.col('plafonds').findOne({ porteu
     // 11. garde : un scan sans identifiant ne peut pas servir de clé (rb|undefined serait commun à tous)
     const c11 = await prendre(p10, 'z1');
     H.v('scanId absent : refusé (erreur), rien d\'écrit', [(await Lg.rembourser(p10, c11, 'ia-echec', { maintenant: t }, cfg)).raisonNonRembourse, await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|undefined' })], ['erreur', 0]);
+    // 12. « ne rend jamais plus que ce qui a été pris » : le remboursement se juge sur le DÉBIT enregistré, pas sur l'objet que l'appelant présente
+    const p12 = await compte({ solde: { accueil: 0, achete: 5 } });
+    const av12 = [await db.col('mouvements').countDocuments({}), (await lire(p12)).solde.achete];
+    H.v('remboursement d\'un scan jamais débité : aucun-debit, rien rendu, rien écrit', [await Lg.rembourser(p12, { poche: 'achete' }, 'ia-echec', { scanId: 'jamais-debite', maintenant: t }, cfg), await db.col('mouvements').countDocuments({}), (await lire(p12)).solde.achete, await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|jamais-debite' })],
+        [{ rendu: false, raisonNonRembourse: 'aucun-debit' }, av12[0], av12[1], 0]);
+    const pi12 = await inst({ essais: 1, achete: 4 }); const ci12 = await prendre(pi12, 'menteur');
+    H.v('   installation : débit sur « essai »', ci12.poche, 'essai');
+    const rm = await Lg.rembourser(pi12, { poche: 'achete' }, 'ia-echec', { scanId: 'menteur', maintenant: t }, cfg);   // l'appelant prétend que c'était un crédit acheté
+    H.v('   l\'appelant présente la poche « achete » : c\'est la poche DÉBITÉE (essai) qui est rendue', [rm.rendu, (await lire(pi12)).essais, (await lire(pi12)).achete], [true, 1, 4]);
+    // le plafond ne se contourne pas en rejouant sous un autre scanId : chaque remboursement exige SON débit
+    const pj = await compte({ solde: { accueil: 0, achete: 9 } }); const cj = await prendre(pj, 'unique');
+    await Lg.rembourser(pj, cj, 'ia-echec', { scanId: 'unique', maintenant: t }, cfg);
+    const bis = []; for (let i = 0; i < 4; i++) bis.push((await Lg.rembourser(pj, cj, 'ia-echec', { scanId: `fantome${i}`, maintenant: t }, cfg)).raisonNonRembourse);
+    H.v('   le même crédit présenté sous 4 scanId fantômes : jamais rendu', [bis, (await lire(pj)).solde.achete], [Array(4).fill('aucun-debit'), 9]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

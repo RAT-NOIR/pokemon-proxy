@@ -15,10 +15,11 @@ async function essayerPoche(poche, p, cfg, now) {
     const compte = p.compte;
     if (poche === 'essai') {
         if (p.type !== 'installation') return null;
-        return (await col('installations').findOneAndUpdate({ _id: p.id, essais: { $gt: 0 } }, { $inc: { essais: -1 } })) ? { poche } : null;
+        // compteId: null — une installation LIÉE n'a plus de poches propres : son porteur est le compte
+        return (await col('installations').findOneAndUpdate({ _id: p.id, compteId: null, essais: { $gt: 0 } }, { $inc: { essais: -1 } })) ? { poche } : null;
     }
     if (poche === 'achete' && p.type === 'installation')
-        return (await col('installations').findOneAndUpdate({ _id: p.id, achete: { $gt: 0 } }, { $inc: { achete: -1 } })) ? { poche } : null;
+        return (await col('installations').findOneAndUpdate({ _id: p.id, compteId: null, achete: { $gt: 0 } }, { $inc: { achete: -1 } })) ? { poche } : null;
     if (!compte || p.type !== 'compte') return null;
     if (poche === 'accueil')
         return (await col('comptes').findOneAndUpdate({ _id: compte._id, verifie: true, 'solde.accueil': { $gt: 0 } }, { $inc: { 'solde.accueil': -1 } })) ? { poche } : null;
@@ -43,9 +44,14 @@ async function essayerPoche(poche, p, cfg, now) {
     return null;   // poche inconnue : on n'invente rien
 }
 async function debiter(porteur, { scanId = null, cleIdempotence = null, surface = null, maintenant = new Date() } = {}, cfg) {
+    const rejeu = dej => {
+        // une clé appartient à UN porteur : la rejouer sous un autre ne rend ni son crédit ni son verdict (B1 doit la préfixer par le porteur ; ici on ferme quand même)
+        if (String(dej.compteId ?? dej.installationId) !== String(porteur.id)) throw new Error('debiter : cleIdempotence appartenant à un autre porteur');
+        return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur' };
+    };
     if (cleIdempotence) {
         const dej = await col('mouvements').findOne({ cleIdempotence });
-        if (dej) return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur' };
+        if (dej) return rejeu(dej);
     }
     const mv = { ...base(porteur), le: maintenant, surface: surface ?? porteur.surface, type: 'debit', delta: -1, poche: null, credit: null, motif: null,
                  scanId, etat: 'debite', cleIdempotence, expireLe: expireMouvement(maintenant, cfg) };
@@ -59,7 +65,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     if (!credit) {
         if (cleIdempotence) {   // un jumeau de même clé a peut-être gagné pendant que ce refus se décidait : c'est un rejeu, pas un refus
             const dej = await col('mouvements').findOne({ cleIdempotence });
-            if (dej) return { ok: true, rejoue: true, credit: dej.credit ?? null, administrateur: dej.motif === 'administrateur' };
+            if (dej) return rejeu(dej);
         }
         return { ok: false, code: porteur.compte && !porteur.compte.verifie ? 'VERIFICATION' : 'QUOTA' };
     }
@@ -69,7 +75,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
         if (e.code !== 11000 || !cleIdempotence) throw e;
         await rendrePoche(porteur, credit, cfg, maintenant);                   // une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
         const dej = await col('mouvements').findOne({ cleIdempotence });
-        return { ok: true, rejoue: true, credit: dej ? dej.credit : null };
+        return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };
     }
     return { ok: true, credit };
 }
@@ -110,13 +116,20 @@ async function rembourser(porteur, credit, motif, { scanId, compteur = 'panne', 
     let compteurPris = false;
     const liberer = async () => { await col('mouvements').deleteOne({ cleIdempotence: cle }); if (compteurPris) await col('plafonds').updateOne({ porteur: porteurCle, jour, type }, { $inc: { count: -1 } }); };
     try {
+        // « ne rend jamais plus que ce qui a été pris » : le remboursement se juge sur le DÉBIT enregistré pour ce scan et CE porteur,
+        // jamais sur l'objet `credit` que l'appelant présente (un scanId fantôme ou une poche plus riche ne rend rien de plus).
+        const debit = await col('mouvements').findOne({ ...base(porteur), type: 'debit', scanId, delta: -1 });
+        if (!debit || !debit.credit) { await liberer(); return { rendu: false, raisonNonRembourse: 'aucun-debit' }; }
+        if (debit.etat === 'rembourse') { await liberer(); return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; }
+        if (debit.credit.poche !== credit.poche) console.error(`🔴 [v2 rembourser] ${scanId} : poche présentée « ${credit.poche} » ≠ poche débitée « ${debit.credit.poche} » — la poche DÉBITÉE est rendue`);
+        credit = debit.credit;
         if (!sansPlafond) {
             const c = await incPlafond(porteurCle, jour, type, maintenant); compteurPris = true;
             if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
         }
         const { rendu, raison } = await rendrePoche(porteur, credit, cfg, maintenant);
         if (!rendu) { await liberer(); return { rendu: false, raisonNonRembourse: raison }; }
-        await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } });
+        await col('mouvements').updateOne({ _id: debit._id, etat: { $ne: 'rembourse' } }, { $set: { etat: 'rembourse' } });
         return { rendu: true, raisonNonRembourse: null };
     } catch (e) { try { await liberer(); } catch (_) { /* la réconciliation (B3.6) le dira */ } console.error(`❌ [v2 rembourser] ${e.message}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
 }

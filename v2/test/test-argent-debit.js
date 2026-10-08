@@ -75,5 +75,13 @@ const lire = async p => p.type === 'compte' ? db.col('comptes').findOne({ _id: p
     // 11. garde : un porteur de type inconnu ne débite rien (refus, pas d'invention)
     H.v('porteur de type inconnu : QUOTA, aucun mouvement', [(await Lg.debiter({ type: 'x', id: 'z', compte: null, installation: null, surface: 'scanner', administrateur: false }, { cleIdempotence: 'inconnu', maintenant: t }, cfg)).code,
         await db.col('mouvements').countDocuments({ cleIdempotence: 'inconnu' })], ['QUOTA', 0]);
+    // 12. une clé d'idempotence appartient à UN porteur : la rejouer sous un autre porteur ne rend pas son crédit et ne passe pas pour un succès
+    const pa1 = await compte({ solde: { accueil: 3, achete: 0 } }), pa2 = await compte({ solde: { accueil: 3, achete: 0 } });
+    await Lg.debiter(pa1, { cleIdempotence: 'cle-partagee', maintenant: t }, c0);
+    let leve = null; try { await Lg.debiter(pa2, { cleIdempotence: 'cle-partagee', maintenant: t }, c0); } catch (e) { leve = e.message; }
+    H.v('clé d\'un autre porteur : refusée (lève), aucun débit pour le second', [typeof leve, (await lire(pa2)).solde.accueil], ['string', 3]);
+    // 13. une installation DÉJÀ LIÉE à un compte ne débite plus ses poches propres (le porteur est le compte)
+    const pl = await inst({ essais: 3, achete: 2, compteId: pa1.id });
+    H.v('installation liée : ni essai ni acheté, QUOTA', [(await Lg.debiter(pl, { cleIdempotence: 'liee', maintenant: t }, cfg)).code, (await lire(pl)).essais, (await lire(pl)).achete], ['QUOTA', 3, 2]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
