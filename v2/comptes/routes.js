@@ -36,5 +36,13 @@ function routesComptes(router, cfg, deps) {
             return res.status(202).json({ success: true });
         } catch (e) { console.error(`❌ [v2 inscription] ${e.message}`); return indispo(res); }
     });
+
+    router.post('/api/compte/verification', ...site, parIp('verification-ip', 30), async (req, res) => {
+        try {
+            const r = await svc.verifierAdresse({ jeton: objet(req.body) ? req.body.jeton : undefined, cfg });
+            if (r.statut !== 200) return repondreErreur(res, r.code, r.code === 'CODE_EXPIRE' ? 'Lien expiré' : 'Lien invalide');
+            return res.status(200).json({ success: true, verifie: true });
+        } catch (e) { console.error(`❌ [v2 verification] ${e.message}`); return indispo(res); }
+    });
 }
 module.exports = { routesComptes, defi, indispo, objet };
