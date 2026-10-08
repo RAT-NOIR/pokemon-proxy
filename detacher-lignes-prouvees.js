@@ -49,18 +49,43 @@ const DECISIONS = {
             pourquoi: 'produit « Umbreon ex [Moon Mirage | Onyx] » (SV-P143) joint par le numéro à Energy Sticker ; nom + attaques désignent 323164 (Umbreon ex, Prismatic Evolutions), qui n\'a pas d\'impression jp SV-P — fiche non prouvée, non joint' },
         { id: '203010|825497', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
             pourquoi: 'produit « Espeon ex [Psych Out | Amazez] » (SV-P142) joint par le numéro à Double Dragon Energy ; nom + attaques désignent 323159 (Espeon ex, Prismatic Evolutions), qui n\'a pas d\'impression jp SV-P — fiche non prouvée, non joint' }
+    ],
+    // Lumineon V [Luminous Sign | Aqua Return] (Premium-Trainer-Box-ex n°008), joint par set+numero à Mareep (262554) ; les attaques
+    // entre crochets désignent 267492 « Lumineon V » (qui déclare jp « Premium Trainer Box ex » 008) et le nom n'est pas « Mareep ».
+    // Les DEUX témoins indépendants du numéro sont rejoués. La ligne juste 267492|692805 n'est PAS ajoutée ici (autre écriture).
+    '2026-10-08b': [
+        { id: '262554|692805', preuve: 'attaques+nom', autre: 267492, type: 'fiche-contredite-par-les-attaques',
+            pourquoi: 'Lumineon V (Premium Trainer Box ex 008) joint à Mareep par set+numero : les attaques désignent 267492 et le nom n\'est pas Mareep' }
     ]
 };
 
-const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/, /^--decision=\d{4}-\d{2}-\d{2}$/];
-const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-const ecrire = process.argv.includes('--ecrire');
-const annonce = process.argv.find(a => a.startsWith('--annonce='))?.slice(10);
-const DECISION = process.argv.find(a => a.startsWith('--decision='))?.slice(11);
-const LIGNES = DECISIONS[DECISION];
-if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${DECISION && !LIGNES ? `décision inconnue : ${DECISION} — ` : ''}usage : --decision=<${Object.keys(DECISIONS).join('|')}> --annonce=<fichier.json> (simulation) | --decision=<…> --ecrire`); process.exit(2); }
+// Le rejeu d'une preuve, PUR (testable sans base). Rend { verdict } : une phrase si le témoin contredit encore la ligne, sinon null.
+function jugerLigne(x, nomProduit, notre, autre) {
+    const d = decomposerNomCardmarket(nomProduit);
+    const parAttaques = () => {
+        const att = d.attaques.map(normaliserNom).filter(Boolean);
+        const score = c => (c?.attaques || []).filter(a => att.includes(normaliserNom(a.nom))).length;
+        const [sN, sA] = [score(notre), score(autre)];
+        return att.length && autre && sA > sN ? `attaques [${d.attaques.join(' | ')}] : ${x.autre ?? 'autre'} ${sA} contre ${sN}` : null;
+    };
+    const parNom = () => normaliserNom(d.nom) !== normaliserNom(notre?.nomEn) ? `nom « ${d.nom} » ≠ carte « ${notre?.nomEn} »` : null;
+    let verdict;
+    if (x.preuve === 'attaques') verdict = parAttaques();
+    else if (x.preuve === 'nom') verdict = parNom();
+    else if (x.preuve === 'attaques+nom') { const a = parAttaques(), n = parNom(); verdict = a && n ? `${a} ; ${n}` : null; }
+    else verdict = null;
+    return { verdict };
+}
 
-(async () => {
+async function main() {
+    const AUTORISES = [/^--ecrire$/, /^--annonce=.+\.json$/, /^--decision=\d{4}-\d{2}-\d{2}b?$/];
+    const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
+    const ecrire = process.argv.includes('--ecrire');
+    const annonce = process.argv.find(a => a.startsWith('--annonce='))?.slice(10);
+    const DECISION = process.argv.find(a => a.startsWith('--decision='))?.slice(11);
+    const LIGNES = DECISIONS[DECISION];
+    if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}${DECISION && !LIGNES ? `décision inconnue : ${DECISION} — ` : ''}usage : --decision=<${Object.keys(DECISIONS).join('|')}> --annonce=<fichier.json> (simulation) | --decision=<…> --ecrire`); process.exit(2); }
+
     const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: true, buckets: [] });
     const L = cx.db.collection('cartes_produits'), C = cx.db.collection('cartes');
     const lignes = await L.find({ _id: { $in: LIGNES.map(x => x.id) } }).toArray();
@@ -80,18 +105,9 @@ if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${i
         let autreId = x.autre;
         if (autreId === 'aquapolis') autreId = toutes.find(t => t.idProduct === l.idProduct && t.slugSet === 'Aquapolis')?.carteId;
         const autres = toutes.filter(t => t.idProduct === l.idProduct && t._id !== l._id);
-        let verdict;
-        if (x.preuve === 'attaques') {
-            const att = d.attaques.map(normaliserNom).filter(Boolean);
-            const autre = autreId != null ? await C.findOne({ _id: autreId }, { projection: { nomEn: 1, attaques: 1 } }) : null;
-            const score = c => (c?.attaques || []).filter(a => att.includes(normaliserNom(a.nom))).length;
-            const [sN, sA] = [score(notre), score(autre)];
-            verdict = att.length && autre && sA > sN ? `attaques [${d.attaques.join(' | ')}] : ${autreId} ${sA} contre ${l.carteId} ${sN}` : null;
-            if (!verdict) fautes.push(`${x.id} « ${nom} » : le témoin des attaques ne contredit plus la ligne (autre ${autreId ?? '—'}, ${sA} contre ${sN})`);
-        } else {
-            verdict = normaliserNom(d.nom) !== normaliserNom(notre?.nomEn) ? `nom « ${d.nom} » ≠ carte « ${notre?.nomEn} »` : null;
-            if (!verdict) fautes.push(`${x.id} « ${nom} » : le nom ne contredit plus la carte « ${notre?.nomEn} »`);
-        }
+        const autre = x.preuve !== 'nom' && autreId != null ? await C.findOne({ _id: autreId }, { projection: { nomEn: 1, attaques: 1 } }) : null;
+        const { verdict } = jugerLigne({ ...x, autre: autreId }, nom, notre, autre);
+        if (!verdict) fautes.push(`${x.id} « ${nom} » : le(s) témoin(s) ${x.preuve} ne contredi(sen)t plus la ligne (carte jointe « ${notre?.nomEn} », autre ${autreId ?? '—'})`);
         if (verdict) plan.push({ x, l, nom, verdict, autres: autres.length });
         console.log(`   ${verdict ? '✅' : '🔴'} ${x.id} « ${nom} » exp ${l.idExpansion} ${l.slugSet ?? 'slugSet null'} (${l.preuve}) → ${verdict ?? 'NON CONTREDITE'} · le produit garde ${autres.length} autre(s) ligne(s)`);
     }
@@ -122,4 +138,6 @@ if (inconnus.length || ecrire === !!annonce || !LIGNES) { console.error(`❌ ${i
     console.log(`\n   ✅ détachées : ${r.deletedCount} (attendu ${plan.length}) · encore présentes : ${encore} · restes écrits : ${restes} (produits restés sans ligne)`);
     await fermer();
     if (r.deletedCount !== plan.length || encore) process.exitCode = 1;
-})().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
+}
+module.exports = { DECISIONS, jugerLigne };
+if (require.main === module) main().catch(e => { console.error('❌', e.message); process.exitCode = 1; });
