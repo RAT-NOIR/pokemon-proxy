@@ -98,4 +98,18 @@ function jugerResolues(resolues, temoin, clesPartagees) {
     return { ...appliquerTemoin(resolues, temoin), refusees };
 }
 
-module.exports = { fabriquerTemoinImages, appliquerTemoin, jugerResolues, REGLE_NOM, REGLE_PLACEHOLDER };
+/**
+ * Les cartes d'un set à EMPLACEMENTS (deck) que la concordance doit déclarer non couvertes. Sans témoin, une carte est couverte dès
+ * qu'elle porte une image (comportement d'avant, inchangé). Une carte TOUCHÉE par une contredite est jugée par (carte, NUMÉRO) : chaque
+ * emplacement attendu est soit servi, soit nommé en reste (contredite, clé partagée) — jamais « couvert » par un autre numéro de la
+ * même carte, sinon l'emplacement orphelin se perdrait sans être nommé nulle part.
+ * ⚠️ Les images contredites comptent dans le calcul des clés partagées (`jugerResolues`) : doute = trou, voulu et non à changer.
+ * @param {{numerosDe: (c) => string[], servis: Set<string>, nommes: Set<string>, cartesAvecImage: Set, cartesContredites: Set}} o  clés `${carteId}|${cleNumero}`
+ */
+function cartesNonCouvertes(cartes, { numerosDe, servis, nommes, cartesAvecImage, cartesContredites }) {
+    return cartes.filter(c => cartesContredites.has(c._id)
+        ? (numerosDe(c) || []).some(n => !servis.has(`${c._id}|${n}`) && !nommes.has(`${c._id}|${n}`))
+        : !cartesAvecImage.has(c._id));
+}
+
+module.exports = { fabriquerTemoinImages, appliquerTemoin, jugerResolues, cartesNonCouvertes, REGLE_NOM, REGLE_PLACEHOLDER };

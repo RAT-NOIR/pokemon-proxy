@@ -121,6 +121,20 @@ const squirtle = carte(39472, 'Squirtle', 'ゼニガメ', IP, '40', 'Squirtle De
     verifier('porteuse SANS nom japonais, témoin au même numéro : refusé (ja « absent » : doute = trou)', [refus(v), v && v.ja], ['nom-contredit-par-une-carte-au-meme-numero', 'absent']);
 }
 
+// ── 5 quater. CONCORDANCE DES DECKS : par (carte, NUMÉRO), jamais « couvert » par un autre numéro de la même carte (tour 2/5) ──────
+{
+    const { cartesNonCouvertes } = require('./collecte-cartes/temoin-images-artofpkm');
+    const nums = { 1: ['1', '2'], 2: ['3'] };                       // carte 1 : deux emplacements (1 et 2) ; carte 2 : un seul
+    const numerosDe = c => nums[c._id];
+    const cartes = [{ _id: 1 }, { _id: 2 }];
+    const f = (o) => cartesNonCouvertes(cartes, { numerosDe, servis: new Set(o.servis || []), nommes: new Set(o.nommes || []), cartesAvecImage: new Set(o.avecImage || []), cartesContredites: new Set(o.contredites || []) });
+    // un emplacement contredit (nommé), l'AUTRE sans image et sans nom : la carte n'est pas couverte (l'orphelin se perdrait en silence)
+    verifier('carte à deux emplacements, un contredit nommé, un orphelin NON nommé -> non couverte', f({ avecImage: [2], servis: ['2|3'], nommes: ['1|1'], contredites: [1] }).map(c => c._id), [1]);
+    verifier('les deux emplacements nommés -> couverte', f({ avecImage: [2], servis: ['2|3'], nommes: ['1|1', '1|2'], contredites: [1] }).map(c => c._id), []);
+    verifier('un emplacement servi, l\'autre contredit nommé -> couverte', f({ avecImage: [1, 2], servis: ['1|2', '2|3'], nommes: ['1|1'], contredites: [1] }).map(c => c._id), []);
+    verifier('carte non touchée par le témoin : comportement d\'avant (couverte par une image, non couverte sans)', f({ avecImage: [1] , servis: ['1|1'] }).map(c => c._id), [2]);
+}
+
 // ── 6. CÂBLAGE : la jointure appelle le témoin, et l'unité surveillée par la garde du worker est déclarée ────────────────────────
 {
     const fs = require('fs');
