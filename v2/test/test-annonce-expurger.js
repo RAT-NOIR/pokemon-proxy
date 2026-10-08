@@ -23,6 +23,39 @@ retire.push(
     // ambiguïté : forme de téléphone ET de liste => la vie privée l'emporte
     ['05 10 15 20 25', 'AMBIGU : liste en forme de téléphone FR'], ['01 02 03 04 05', 'AMBIGU : 01 02 03 04 05']
 );
+// --- tour de correction 2 (re-relecture) : ENTRÉES EXACTES de la sonde. Sortie stricte : aucun chiffre / aucun « jean » ne doit survivre ---
+const fuiteTel = ['+ 33 6 12 34 56 78', '06•12•34•56•78', '06 • 12 • 34 • 56 • 78', '06📞12📞34📞56📞78', '06*12*34*56*78', '06,12,34,56,78', '06_12_34_56_78',
+    '0️⃣6️⃣ 1️⃣2️⃣ 3️⃣4️⃣ 5️⃣6️⃣ 7️⃣8️⃣', '(0)6 12 34 56 78', '0 6 12 34 56 78', 'o6 12 34 56 78', 'O6 12 34 56 78', '+ 44 7700 900123', '00 33 6 12 34 56 78'];
+const fuiteJean = ['jean@gmail.\ncom', 'jean @ gmail . com', 'jean@gmail,com', 'jean@gmail·com', 'jean ＠ gmail ． com', 'jean[@]gmail.com', 'jean.cartes.fr',
+    'insta → jean.cartes', 'insta -> jean.cartes', 'insta ➜ jean', 'insta - jean.cartes', 'instagram — jean_cartes', 'tiktok → jean', 'ig → jean', 'telegram → jean',
+    'sur insta, jean.cartes', 'Snap⁚jean', 'tg → jean', 'jean (at) gmail (dot) com'];
+for (const t of fuiteTel) { const r = expurger(`Pikachu holo, écrivez-moi ${t} merci`); H.vrai(`strict téléphone : ${JSON.stringify(t)} -> ${JSON.stringify(r.texte)}`, !/\d/.test(r.texte) && r.texte.includes('Pikachu holo') && r.retraits >= 1); }
+for (const t of fuiteJean) { const r = expurger(`Pikachu holo, écrivez-moi ${t} merci`); H.vrai(`strict pseudo/e-mail : ${JSON.stringify(t)} -> ${JSON.stringify(r.texte)}`, !/jean/i.test(r.texte) && r.texte.includes('Pikachu holo') && r.retraits >= 1); }
+// faux positifs (la décision interdit de retirer prix et dates) : sortie IDENTIQUE
+const intactes = ['Lot at 5.50 euros, NM at 12.50€', 'Carte mint at 3.5 euros', 'Reçu le 05/10/2026 15 cartes', 'Le 06/10/2026 15 exemplaires restants',
+    'sur insta ou whatsapp possible', 'paiement via facebook marketplace', 'je suis en discord avec vous', 'Snap Ball Pokemon Dresseur', 'cartes 05, 10, 15, 20, 25 en lot'];
+for (const t of intactes) { const r = expurger(t); H.v(`intact : ${t}`, [r.texte, r.retraits], [t, 0]); }
+// les 10 descriptions réalistes du relecteur : 10/10 sans perte
+const reelles = [
+    'Dracaufeu ex 125/197 Flammes Obsidiennes (EV03), état NM, jamais joué, sous sleeve. Prix 12,50 € ou 20 € les deux. Envoi suivi 4,99 €.',
+    'Lot de 50 cartes Pokémon dont 3 holo, 12 reverse. Vendu comme sur photos. Pas d\'échange. Remise en main propre possible à Lyon.',
+    'Pikachu Illustrator promo CoroCoro 1998 reproduction, état 9/10. SV-P 143 et SVP 085 aussi disponibles.',
+    'PSA 10 Gem Mint - Mew ex 232/091 Destinées de Paldea (SV4.5) - cert 71234567 - 2023 - prix ferme 85 euros',
+    'Display Écarlate et Violet 151 (EV3.5) 36 boosters neuf scellé, 2023, 169,90 €. Le 06/10/2026 15 exemplaires restants.',
+    'Carte Dracaufeu base set 4/102 édition 1 ombré état LP/MP 150 € - pas de négociation - lot 001 002 003 004 005 dispo',
+    'Booster Epée et Bouclier Tempête Argentée SWSH12 x 10 pour 35 euros. Tyranocif VSTAR 3/3 TG 12/30 inclus. NM.',
+    'Rayquaza VMAX alt 218/203 CGC 9.5 Pristine. Acheté 2022 pour 400€. Offre à partir de 300€.',
+    'ETB Évolutions Prismatiques (SV8.5) 2025, 59,99€ boîte intacte, Pokémon Center Exclusive, carte promo SVP 150 incluse',
+    'Collection 25 30 45 60 80 101 cartes numérotées de 001/165 à 165/165, états 8/10 à 9.5/10'];
+for (const t of reelles) { const r = expurger(t); H.v(`description réaliste intacte (${t.slice(0, 30)}…)`, [r.texte, r.retraits], [t, 0]); }
+// troncature DITE
+{
+    const { preparerAnnonce: pa } = require('../annonce/verifier'); const c0 = require('../config').lireConfig({ MONGODB_BASE: 'test_scratch' });
+    H.v('expurger dit la troncature', [expurger('a '.repeat(2600)).tronque, expurger('a '.repeat(100)).tronque], [true, false]);
+    H.v('description > 5000 car. : expurgeeParServeur vrai', pa({ description: 'Dracaufeu NM. '.repeat(400) }, c0).expurgeeParServeur, true);
+    H.v('titre > 5000 car. : expurgeeParServeur vrai', pa({ title: 'x '.repeat(3000) }, c0).expurgeeParServeur, true);
+    H.v('description de 4 000 car. (coupée à 2 000 mais pas tronquée à l\'entrée) : drapeau faux', pa({ description: 'Dracaufeu NM. '.repeat(285) }, c0).expurgeeParServeur, false);
+}
 let n = 0;
 for (const [t, nom] of retire) {
     const r = expurger(`Pikachu holo, écrivez-moi ${t} merci`);
