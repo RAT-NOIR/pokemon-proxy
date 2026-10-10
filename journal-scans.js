@@ -1017,7 +1017,8 @@ function enregistrerScan(d = {}) {
             userId: d.userId || null,
             // Bornées : une URL Vinted fait ~120 caractères, une URL d'image ~200. Le
             // plafond protège d'un corps de requête fabriqué qui gonflerait la collection.
-            imageUrl: d.imageUrl ? String(d.imageUrl).slice(0, 500) : null,
+            // Une image envoyée en data-URL (le scanner du site, v2) N'EST JAMAIS journalisée : le journal garde des adresses, pas des photos. L'extension n'envoie que des URL https.
+            imageUrl: d.imageUrl && !/^\s*data:/i.test(String(d.imageUrl)) ? String(d.imageUrl).slice(0, 500) : null,
             vintedUrl: d.vintedUrl ? String(d.vintedUrl).slice(0, 500) : null,
             version: VERSION,
             // Borné : c'est une valeur de manifeste, pas un champ libre. Un client peut
