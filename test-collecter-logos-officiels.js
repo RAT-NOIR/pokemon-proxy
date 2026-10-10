@@ -127,6 +127,15 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
     const compte = v => lu.filter(x => x.verdict === v).length;
     verifier('la liste lue : 181 OFFICIEL, 37 DIFFÉRENT, 67 INTROUVABLE, 41 À REGARDER (326)', [compte('OFFICIEL'), compte('DIFFÉRENT'), compte('INTROUVABLE'), compte('À REGARDER'), lu.length], [181, 37, 67, 41, 326]);
 
+    // ───── 6 bis. l'export au site : sous `logosOfficiels`, par set, par langue — seulement des entrées complètes
+    {
+        const { logosOfficielsDesSets } = require('./exporter-donnees-logos-site');
+        const e = { cleR2: 'logos-officiels/ja/X-abc.png', vignette: { cleR2: 'vignettes/logos-officiels/ja/X-abc.webp', w: 400, h: 100 }, w: 800, h: 200, sha256: 'a', langue: 'ja', source: 'billsarchive', urlSource: 'https://billsarchive.com/x.webp', mention: '© Pokémon / The Pokémon Company', lot: 'l', le: new Date(), preuve: { secret: 1 }, octets: 5 };
+        const sortie = typeof logosOfficielsDesSets === 'function' ? logosOfficielsDesSets([{ _id: 'B', logo: { cleR2: 'x' } }, { _id: 'A', logoOfficiel: { ja: e, fr: { lot: 'l' } } }]) : null;
+        verifier('l\'export : un set sans logoOfficiel n\'y est pas ; une entrée incomplète (sans cleR2) est ignorée', Object.keys(sortie ?? {}).concat(Object.keys(sortie?.A ?? {})), ['A', 'ja']);
+        verifier('l\'export : la forme exacte (clé, vignette, tailles, empreinte, langue, source, mention, lot) — ni preuve ni date', sortie?.A?.ja, { cleR2: e.cleR2, vignette: e.vignette, w: 800, h: 200, sha256: 'a', langue: 'ja', source: 'billsarchive', urlSource: e.urlSource, mention: e.mention, lot: 'l' });
+    }
+
     // ───── 7. l'écriture et le retrait : base EN MÉMOIRE, faux R2
     const banc = await ouvrirBanc(); banc.appliquer();
     const cx = await mongoose.createConnection(process.env.MONGODB_CARTES_URI, { dbName: 'cartes' }).asPromise();

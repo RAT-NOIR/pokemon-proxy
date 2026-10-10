@@ -119,7 +119,20 @@ function ordreDeSecours(a, b) {
     return rangRarete(b.rarete) - rangRarete(a.rarete) || cleNumeroTri(a.numero) - cleNumeroTri(b.numero)
         || String(a.numero ?? '').localeCompare(String(b.numero ?? ''), 'en', { numeric: true }) || a.idProduct - b.idProduct;
 }
-module.exports = { visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
+// LES LOGOS OFFICIELS (lot logos-officiels, 2026-10-08) : `sets.logoOfficiel.<fr|ja>`, un champ NEUF que le site décide d'afficher ou non. Exportés sous
+// `logosOfficiels` { <setId>: { fr?, ja? } } ; seules les entrées COMPLÈTES (clé R2 + lot) passent, et ni la preuve ni la date ne sortent.
+function logosOfficielsDesSets(sets) {
+    const sortie = {};
+    for (const s of [...sets].sort((a, b) => String(a._id).localeCompare(String(b._id)))) {
+        for (const langue of ['fr', 'ja']) {
+            const e = s.logoOfficiel?.[langue];
+            if (!e || typeof e.cleR2 !== 'string' || !e.cleR2 || typeof e.lot !== 'string') continue;
+            (sortie[s._id] = sortie[s._id] || {})[langue] = { cleR2: e.cleR2, vignette: e.vignette ?? null, w: e.w, h: e.h, sha256: e.sha256, langue: e.langue, source: e.source, urlSource: e.urlSource, mention: e.mention, lot: e.lot };
+        }
+    }
+    return sortie;
+}
+module.exports = { logosOfficielsDesSets, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
     const fichier = async rel => { const b = fs.readFileSync(path.join(__dirname, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(__dirname, rel), sha1: sha1(b), w: m.width, h: m.height }; };
@@ -226,9 +239,11 @@ if (require.main === module) (async () => {
     }
     console.log(`AUTRES (site) : ${enAttente.length} attendus (${precedents.length} de l'export précédent) · ${autres.length} classés · ${absents.length} absents de la base${absents.length ? ` (${absents.join(', ')})` : ''} · exclus en tout ${JSON.stringify(exclusTotal)}`);
     console.log(`classement de secours (sans prix) : ${Object.values(vedettes).reduce((t, x) => t + x.classementDeSecours, 0)} entrées sur ${Object.values(vedettes).filter(x => x.classementDeSecours).length} sets`);
+    const logosOfficiels = logosOfficielsDesSets(await cx.db.collection('sets').find({ $or: [{ 'logoOfficiel.fr': { $exists: true } }, { 'logoOfficiel.ja': { $exists: true } }] }, { projection: { logoOfficiel: 1 } }).toArray());
+    console.log(`LOGOS OFFICIELS : ${Object.keys(logosOfficiels).length} sets (${Object.values(logosOfficiels).reduce((n, x) => n + Object.keys(x).length, 0)} logos)`);
     await fermer();
     if (Object.keys(raretesHorsTable).length) throw new Error(`raretés hors de RANG_RARETE dans un classement de secours : ${Object.entries(raretesHorsTable).map(([r, ss]) => `${r} (${[...ss].join(', ')})`).join(' ; ')} — à ranger dans la table avant d'exporter (rien n'est écrit)`);
-    const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, vedettes };
+    const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, logosOfficiels, vedettes };
     fs.mkdirSync(path.join(__dirname, 'donnees-site'), { recursive: true });
     fs.writeFileSync(path.join(__dirname, 'donnees-site', 'logos-composes-donnees.json'), JSON.stringify(sortie, null, 1));
     const v = Object.entries(vedettes);
