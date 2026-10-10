@@ -27,6 +27,8 @@ const refuse = async (p) => { try { await p; return 'accepté'; } catch (e) { re
     const env = { ...env0, V2_BANC_BUCKET: BUCKET };
     H.v('bucket = R2_BUCKET_IMAGES / R2_BUCKET_BRUT / R2_BUCKET_BANC : refusé', [lever('img-pub', env), lever('brut', env), lever('banc-tests', env)], ['refus', 'refus', 'refus']);
     H.v('V2_BANC_BUCKET mal réglée sur le bucket public : refusé quand même', lever('img-pub', { ...env0, V2_BANC_BUCKET: 'img-pub' }), 'refus');
+    H.v('V2_BANC_BUCKET mal réglée sur R2_BUCKET_BRUT : refusé', lever('brut', { ...env0, V2_BANC_BUCKET: 'brut' }), 'refus');
+    H.v('V2_BANC_BUCKET mal réglée sur R2_BUCKET_BANC : refusé', lever('banc-tests', { ...env0, V2_BANC_BUCKET: 'banc-tests' }), 'refus');
     H.v('bucket différent de V2_BANC_BUCKET : refusé', lever('autre', env), 'refus');
     H.v('bucket non-texte : refusé', [lever(undefined, env), lever(42, env)], ['refus', 'refus']);
     H.v('bucket exactement V2_BANC_BUCKET : ouvert', lever(BUCKET, env), 'ouvert');
@@ -42,6 +44,10 @@ const refuse = async (p) => { try { await p; return 'accepté'; } catch (e) { re
     H.v('sans exif, icc, xmp', [!!m.exif, !!m.icc, !!m.xmpAsString || !!m.xmp], [false, false, false]);
     H.vrai('aucune trace de texte EXIF dans les octets', !r.buffer.includes('AppareilTest') && !r.buffer.includes('Exif'));
     H.v('dimensions 640×894', [r.w, r.h, m.width, m.height], [640, 894, 640, 894]);
+    const avecIcc = await sharp({ create: { width: 640, height: 894, channels: 3, background: { r: 10, g: 90, b: 200 } } }).withIccProfile('srgb').jpeg().toBuffer();
+    H.vrai('l\'entrée porte bien un profil ICC (le test peut échouer)', !!(await sharp(avecIcc).metadata()).icc);
+    const rIcc = await traiterImage(avecIcc);
+    H.vrai('profil ICC absent de la sortie', !(await sharp(rIcc.buffer).metadata()).icc);
     // (2)
     const proche = await traiterImage(await jpeg(600, 850));
     H.v('600×850 (±10 %) normalisée à 640×894', [proche.w, proche.h], [640, 894]);
