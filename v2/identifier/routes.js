@@ -372,7 +372,8 @@ function traiterIdentifier(cfg, deps = {}) {
             });
         } catch (e) { journalErreur('analyses', e); }
         try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); }
-        // 10. la réponse
+        // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
+        require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
     };
 }
@@ -469,6 +470,8 @@ function traiterReponse(cfg, deps = {}) {
         try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
         catch (e) { journalErreur('vérité de la réponse', e); }
         const solde = await soldeSur();
+        // B6.4 : le crochet du banc réel, APRÈS la vérification du porteur (analyses) et l'acceptation de la réponse ; jamais attendu, ne lève jamais
+        require('../banc/crochet').apresReponse({ cfg, req, scanId: b.scanId, carte, choix, idProduct });
         return res.status(200).json({ success: true, carte: resolue, facturation, ...(solde !== undefined ? { solde } : {}) });
     };
 }

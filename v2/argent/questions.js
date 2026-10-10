@@ -122,7 +122,8 @@ async function repondreQuestion(porteur, { scanId, carte = 0, choix } = {}, cfg,
 }
 
 async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg) {
-    const bilan = { reglees: 0, remboursees: 0, nonRemboursees: 0, erreurs: 0, bloquees: 0, lots: 0 };
+    // `abandonnees` : les questions NON-lot qu'on vient d'abandonner (scanId en chaîne) — le banc réel en supprime l'image en attente (B6.4)
+    const bilan = { reglees: 0, remboursees: 0, nonRemboursees: 0, erreurs: 0, bloquees: 0, lots: 0, abandonnees: [] };
     const limite = limiteDe(maintenant, cfg);
     for (let i = 0; i < max; i++) {
         const q = await col('questions').findOneAndUpdate({ etat: 'en-attente', poseeLe: { $lte: limite } }, { $set: { etat: 'en-reglement', priseLe: maintenant } }, { sort: { poseeLe: 1 }, returnDocument: 'after' });
@@ -132,6 +133,7 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
         catch (e) { bilan.erreurs++; console.error(`🔴 [v2 question-balayage] ${q._id} : ${e.message} — reste « en-reglement », à vérifier à la main`); continue; }
         if (q.lot) { bilan.lots++; continue; }
         bilan.reglees++;
+        bilan.abandonnees.push({ scanId: String(q.scanId), carte: q.carte });
         if (fin && fin.rembourse) bilan.remboursees++; else bilan.nonRemboursees++;
     }
     bilan.bloquees = await col('questions').countDocuments({ etat: 'en-reglement', priseLe: { $lt: new Date(maintenant.getTime() - BLOQUEE_MS) } });

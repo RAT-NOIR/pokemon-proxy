@@ -63,6 +63,14 @@ function creerStockage({ client, bucket, env = process.env } = {}) {
             if (!Buffer.isBuffer(b)) throw refus('lecture-refusee');
             return b;
         },
+        // B6.4 (filet des orphelins) : les objets du préfixe du banc avec leur date. Même garde de clé que ecrire/supprimer : tout ce qui n'a pas la forme
+        // banc-reel/v2/[attente/]<hex>.webp (hors préfixe, fichier étranger) n'est JAMAIS rendu, donc jamais supprimé. Un objet sans date lisible non plus.
+        async lister() {
+            if (typeof client.listerObjets !== 'function') throw refus('client-invalide');
+            const l = await client.listerObjets(bucket, PREFIXE);
+            if (!Array.isArray(l)) throw refus('lecture-refusee');
+            return l.filter(o => o && cleOk(o.cle) && o.modifieLe instanceof Date && Number.isFinite(+o.modifieLe)).map(o => ({ cle: o.cle, modifieLe: o.modifieLe }));
+        },
     };
 }
 
@@ -78,12 +86,13 @@ function creerStockageReel(env = process.env) {
 
 /** Pour les tests : mêmes gardes de clé, rien d'externe. */
 function creerStockageMemoire() {
-    const o = new Map();
+    const o = new Map(), dates = new Map();
     return {
         async verifierBucket() { /* explicite : la mémoire n'a ni bucket ni endpoint à vérifier */ },
-        async ecrire(cle, buffer) { if (!CLE.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); return cle; },
-        async supprimer(cle) { o.delete(cle); },
+        async ecrire(cle, buffer) { if (!CLE.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); dates.set(cle, new Date()); return cle; },
+        async supprimer(cle) { o.delete(cle); dates.delete(cle); },
         async lire(cle) { if (!CLE.test(String(cle)) || !o.has(cle)) throw refus('cle-refusee'); return o.get(cle); },
+        async lister() { return [...o.keys()].map(cle => ({ cle, modifieLe: dates.get(cle) })); },
         cles() { return [...o.keys()]; },
     };
 }

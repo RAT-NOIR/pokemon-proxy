@@ -31,7 +31,10 @@ function middlewareV2(cfg) {
         if (p.credentials) res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Access-Control-Expose-Headers', EXPOSE);
         if (req.method === 'OPTIONS') {
-            res.setHeader('Access-Control-Allow-Methods', p.methodes);
+            // L'effacement par jeton est un DROIT : son préflight doit autoriser DELETE (il ne doit pas échouer en silence). Pour ce SEUL chemin de l'extension,
+            // (le plan §1 lui donne GET, POST partout ailleurs) ; le sous-chemin ou tout autre chemin garde GET, POST.
+            const delPermis = p.nom === 'extension' && /^\/api\/banc\/contributions$/.test(chemin);
+            res.setHeader('Access-Control-Allow-Methods', delPermis ? `${p.methodes}, DELETE` : p.methodes);
             res.setHeader('Access-Control-Allow-Headers', p.entetes);
             res.setHeader('Access-Control-Max-Age', '600');
             return res.status(204).end();

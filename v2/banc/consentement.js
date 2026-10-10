@@ -27,4 +27,4 @@ function lireConsentement(corps, cfg, maintenant = new Date()) {
     } catch { return FERME; }
 }
 
-module.exports = { lireConsentement };
+module.exports = { lireConsentement, FORME_JETON: JETON };

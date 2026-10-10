@@ -12,13 +12,14 @@ const { lireConsentement } = require('./consentement');
 const S = require('./stockage');
 const { repondreErreur } = require('../erreurs');
 
-const TIMEOUT_MS = 2000, JOUR_MS = 86400e3;
+const { JOUR_MS, jourUTC, creerBorner, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
+
+const TIMEOUT_MS = 2000;
 const FORME_ID = /^[0-9a-f]{24}$/i;
 const CLES_DOC = Object.freeze(['_id', 'cleR2', 'etat', 'expireLe', 'jetonEmpreinte', 'le', 'source', 'verite', 'versionModele', 'versionTexte']);
 const idProduitOk = n => Number.isSafeInteger(n) && n > 0;
 const carteOk = c => Number.isInteger(c) && c >= 0 && c <= 99;
 const modeleOk = m => (typeof m === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(m) ? m : null);
-const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
 const ARRET = () => Object.assign(new Error('arrêt'), { code: 'ARRET' });
 
 function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.col(n), horloge = () => new Date(), delaiMs = TIMEOUT_MS } = {}) {
@@ -28,7 +29,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
     const dire = raison => { if (!dit) { dit = true; console.error(`⚠️ [v2 banc] banc désactivé pour ce processus : ${raison}`); } };
     const echec = (quoi, e) => { if (e && e.code === 'ARRET') return; console.error(`❌ [v2 banc] ${quoi} (${(e && (e.code || e.name)) || 'erreur'})`); };
     const sel = () => (typeof env.V2_BANC_SEL === 'string' && env.V2_BANC_SEL ? env.V2_BANC_SEL : null);
-    const idLigne = (scanId, carte) => crypto.createHash('sha256').update(`${scanId}|${carte}|${sel()}`).digest('hex');
+    // LE seul endroit où un scanId se normalise : en minuscules (une ObjectId s'écrit en hexadécimal, /reponse accepte aussi les majuscules).
+    const idLigne = (scanId, carte) => crypto.createHash('sha256').update(`${String(scanId).toLowerCase()}|${carte}|${sel()}`).digest('hex');
 
     // Le stockage n'est rendu qu'après les contrôles d'environnement ET `verifierBucket()` réussi. Un échec désactive le banc pour le processus, dit une fois.
     function pret() {
@@ -48,10 +50,7 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
     }
 
     // une attente bornée : rejette avec le code DELAI après delaiMs (le travail sous-jacent n'est pas annulé, son résultat est ignoré)
-    const borner = p => new Promise((res, rej) => {
-        const t = setTimeout(() => rej(Object.assign(new Error('délai'), { code: 'DELAI' })), delaiMs); if (t.unref) t.unref();
-        Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
-    });
+    const borner = creerBorner(delaiMs);
     async function supprimerObjets(ctx, s) {
         const st = s || stockage;
         const cles = ctx.objets.splice(0);
@@ -167,8 +166,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
                     const s = await pret(); if (!s || ctx.stop) return;
                     const ligne = await col().findOne({ _id: idLigne(o.scanId, carteDe(o)) });
                     if (!ligne || ligne.etat !== 'attente') return;
-                    await s.supprimer(ligne.cleR2);                       // si ceci échoue, la ligne reste : on ne perd pas la trace d'un objet qui existe
-                    await col().deleteOne({ _id: ligne._id, etat: 'attente' });
+                    // la définition COMMUNE « objet puis ligne » (si l'objet ne part pas la ligne reste ; la ligne porte sa cleR2 et reste en attente au moment de partir)
+                    await supprimerObjetPuisLigne(s, ligne, col, borner, { etat: 'attente' });
                 });
             } catch (e) { echec('apresAbandon', e); }
         },
@@ -194,11 +193,10 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
                 // Chaque attente est bornée (delaiMs) : un R2 ou un Mongo qui pend ne bloque pas l'appelant (la purge), et la ligne d'un objet
                 // dont la suppression n'a pas abouti est GARDÉE. `le` est tronqué au jour : « plus de 24 h » se lit au jour (jamais avant 24 h réelles).
                 const s = await borner(pret()); if (!s) return bilan;
-                const limite = jourUTC(new Date(maintenant).getTime() - JOUR_MS);
-                const vieilles = await borner(col().find({ etat: 'attente', le: { $lt: limite } }).toArray());
+                const vieilles = await lignesEchues(col, maintenant, borner, { attenteSeulement: true });
                 for (const l of vieilles) {
-                    try { await borner(s.supprimer(l.cleR2)); await borner(col().deleteOne({ _id: l._id, etat: 'attente' })); bilan.supprimees++; }
-                    catch (e) { bilan.echecs++; echec('balayage d\'une ligne en attente', e); }
+                    const r = await supprimerObjetPuisLigne(s, l, col, borner);      // la définition PARTAGÉE : une ligne confirmée entre-temps n'est jamais supprimée
+                    if (r === 'supprimee') bilan.supprimees++; else if (r === 'echec') bilan.echecs++;
                 }
             } catch (e) { echec('balayerAttente', e); }
             return bilan;
@@ -237,7 +235,8 @@ function traiterCorrection(cfg, banc) {
         try { an = await db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(b.scanId), porteur: `${porteur.type}:${porteur.id}` }); }
         catch (e) { echec404('analyses', e); return repondreErreur(res, 'INDISPONIBLE'); }
         if (!an || !Array.isArray(an.cartes) || !an.cartes[carte]) return repondreErreur(res, 'CODE_INVALIDE', 'Scan introuvable');   // l'analyse d'un autre porteur n'existe pas
-        await banc.corriger({ corps: b, scanId: b.scanId, carte, idProduct: b.idProduct });
+        // un jeton de consentement égal au jeton d'accès relierait la ligne à l'installation : rien n'est conservé, sans le dire (comme un consentement invalide)
+        if (await consentementAutorise(req, cfg)) await banc.corriger({ corps: b, scanId: b.scanId, carte, idProduct: b.idProduct });
         return res.status(200).json({ success: true });
     };
 }
