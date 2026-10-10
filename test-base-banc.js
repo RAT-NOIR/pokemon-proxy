@@ -265,6 +265,23 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         verifier('verifier-cles-r2-banc : le banc ne lit pas son bucket → NON prouvé', juger(matrice(BON.slice(1)), PROD, PTS).ok, false);
         verifier('verifier-cles-r2-banc : matrice incomplète → NON prouvé', juger({ 'banc|banc|generique': 'LU' }, PROD, PTS).ok, false);
         verifier('appliquer : les clés de production vidées EXISTENT encore comme noms (dotenv ne remplace pas une variable présente)', ['R2_ACCESS_KEY_ID' in envC, 'R2_SECRET_ACCESS_KEY' in envC], [true, true]);
+        // ── 8 ter. UN BANC D'IMPORT PAR CE CHEMIN : l'import lancé en sous-processus sous le harnais (clés de production vidées) doit exiger et utiliser R2_BANC_*.
+        //    Aucune requête réelle : R2_ENDPOINT local, base injoignable en local, la commande s'arrête avant tout téléchargement.
+        {
+            const { spawnSync } = require('child_process');
+            const lancerImport = (script, extra) => spawnSync(process.execPath, [path.join(__dirname, script), '--base=test_scratch', '--url=http://127.0.0.1:1/x'], {
+                encoding: 'utf8', timeout: 60000, cwd: __dirname,
+                env: { ...process.env, BANC_ISOLE: '1', BANC_HOTES: '127.0.0.1', R2_ENDPOINT: 'http://127.0.0.1:1', R2_BUCKET_BRUT: 'bucket-de-banc', MONGODB_URI: 'mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1500', R2_ACCESS_KEY_ID: '', R2_SECRET_ACCESS_KEY: '', ...extra }
+            });
+            for (const script of ['import-catalogue-quotidien.js', 'import-guide-quotidien.js']) {
+                const avec = lancerImport(script, { R2_BANC_ACCESS_KEY_ID: 'id-banc', R2_BANC_SECRET_ACCESS_KEY: 'sec-banc' });
+                const sA = (avec.stderr || '') + (avec.stdout || '');
+                verifier(`${script} sous le harnais (clés de production vidées, clés de banc posées) : la configuration passe, il s'arrête sur la base injoignable, jamais sur une clé de production`, [avec.status, /R2_ACCESS_KEY_ID|R2_SECRET_ACCESS_KEY/.test(sA), /injoignable/.test(sA)], [1, false, true]);
+                const sans = lancerImport(script, { R2_BANC_ACCESS_KEY_ID: '', R2_BANC_SECRET_ACCESS_KEY: 'sec-banc' });
+                const sS = (sans.stderr || '') + (sans.stdout || '');
+                verifier(`${script} sous le harnais, clé de banc absente : REFUS avant toute connexion, qui NOMME R2_BANC_ACCESS_KEY_ID`, [sans.status, /R2_BANC_ACCESS_KEY_ID/.test(sS), /injoignable/.test(sS)], [1, true, false]);
+            }
+        }
     }
 
     // ── 9. LA FAÇADE DE LECTURE DE LA PRODUCTION : une liste FERMÉE de lectures ; tout le reste lève, sans qu'aucun appel d'écriture n'atteigne le Db
