@@ -19,11 +19,11 @@ verifier('un nom Object.prototype (constructor, toString) ne passe pas pour clas
 
 // 2. les collections REELLES des deux bases (relevees le 2026-10-10, backup-collections.js sans --collections)
 const REEL = {
-    test: { cardprices: 'regenerable', catalogue_export_meta: 'inconnue', catalogue_produits: 'regenerable', codes_set: 'non-regenerable', credits: 'non-regenerable',
+    test: { cardprices: 'regenerable', catalogue_export_meta: 'inconnue', catalogue_produits: 'non-regenerable', codes_set: 'non-regenerable', credits: 'non-regenerable',
         evenements_stripe: 'non-regenerable', guide_prix: 'non-regenerable', guide_prix_meta: 'inconnue', journal_scans: 'non-regenerable', numeros_cartes: 'non-regenerable',
         questions: 'non-regenerable', quotas: 'non-regenerable', quotas_semaine: 'non-regenerable', references_image: 'regenerable', remboursements: 'non-regenerable',
         remboursements_questions: 'non-regenerable' },
-    cartes: { cartes: 'non-regenerable', cartes_produits: 'non-regenerable', collecte_etat: 'inconnue', collecte_images_etat: 'inconnue', file_images: 'regenerable',
+    cartes: { cartes: 'non-regenerable', cartes_produits: 'non-regenerable', collecte_etat: 'inconnue', collecte_images_etat: 'inconnue', file_images: 'non-regenerable',
         histo_valeur_sets: 'non-regenerable', images: 'non-regenerable', restes: 'inconnue', sets: 'non-regenerable', tcgdex_sets: 'inconnue', tpc_fiches: 'inconnue' }
 };
 for (const [base, table] of Object.entries(REEL)) {
@@ -36,10 +36,17 @@ const { REGENERABLES, NON_REGENERABLES } = R;
 verifier('REGENERABLES et NON_REGENERABLES sont disjointes', Object.keys(REGENERABLES).filter(n => NON_REGENERABLES.includes(n)), []);
 verifier('chaque regenerable porte une raison non vide (la commande qui la refait)', Object.entries(REGENERABLES).filter(([, r]) => typeof r !== 'string' || r.trim().length < 10).map(([n]) => n), []);
 
+// 3 bis. l'etiquette d'un regenerable imprime SA commande ; le perimetre de doute liste non regenerables + inconnues
+verifier('etiquette regenerable = la commande tiree de REGENERABLES', R.etiquette('references_image').includes(REGENERABLES.references_image), true);
+verifier('etiquette inconnue / non regenerable', [R.etiquette('zz_neuve').includes('INCONNUE'), R.etiquette('guide_prix').includes('NON RÉGÉNÉRABLE')], [true, true]);
+const pd = R.perimetreDeDoute(['guide_prix', 'zz_neuve', 'cardprices', 'sets', 'tcgdex_sets']);
+verifier('perimetreDeDoute : non regenerables / inconnues / commande complete', pd, { nonRegenerables: ['guide_prix', 'sets'], inconnues: ['zz_neuve', 'tcgdex_sets'], commande: '--collections=guide_prix,sets,zz_neuve,tcgdex_sets' });
+verifier('REGENERABLES ne contient ni file_images ni catalogue_produits', ['file_images', 'catalogue_produits'].filter(n => n in REGENERABLES), []);
+
 // 4. le script s'en sert pour les DEUX impressions, et ne contient plus le libelle par defaut
 const src = fs.readFileSync(path.join(__dirname, 'backup-collections.js'), 'utf8');
 verifier('backup-collections.js importe regenerabilite', /require\('\.\/regenerabilite'\)/.test(src), true);
-verifier('backup-collections.js appelle libelleRegeneration aux deux impressions', (src.match(/libelleRegeneration\(/g) || []).length >= 2, true);
+verifier('backup-collections.js appelle etiquette aux deux impressions', (src.match(/etiquette\(/g) || []).length >= 2, true);
 verifier('backup-collections.js ne code plus « (régénérable) » en dur', /\(régénérable\)/.test(src), false);
 
 console.log(`\n${ok} passes, ${ko} en echec (sur ${ok + ko})`);

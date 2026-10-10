@@ -11,12 +11,8 @@
 
 /** collection → la commande qui la refait. Ajouter une entree = ecrire cette phrase. */
 const REGENERABLES = Object.freeze({
-    // base `test`
-    catalogue_produits: 'import-catalogue.js / integrer-export.js <products_singles_*.json> : c\'est l\'export Cardmarket (archive sur R2 par import-catalogue-quotidien.js) ; aucune ligne n\'en est tiree d\'ailleurs',
     references_image: 'ecrire-descripteurs.js --base=test (reprenable) : les descripteurs se recalculent depuis les images',
-    cardprices: 'cache de prix a duree de vie de 24 h (index.js:635, « entièrement régénérable ») : une ligne perdue ne se distingue pas d\'une ligne expiree',
-    // base `cartes`
-    file_images: 'collecte-cartes/remplir-file-images.js (reconstruit la file depuis collecte_images_etat) et l\'alimentateur du worker (collecte-cartes/alimentateur.js)'
+    cardprices: 'cache de prix a duree de vie de 24 h (index.js:635, « entièrement régénérable ») : une ligne perdue ne se distingue pas d\'une ligne expiree'
 });
 
 /** Rien ne la refait a l'identique : apprise, journal, argent, historique date, decision a la main. */
@@ -27,11 +23,13 @@ const NON_REGENERABLES = Object.freeze([
     'credits', 'evenements_stripe', 'remboursements', 'quotas_semaine', 'quotas',   // argent et quotas
     'questions', 'remboursements_questions',    // facturation : questions en attente et compteur de remboursements (acces.js:116-136)
     'guide_prix',                               // une ligne absente du dernier guide GARDE son prix date (import-price-guide.js:49-52, 158)
+    'catalogue_produits',                       // import-catalogue.js ne supprime jamais : les lignes DISPARUES des exports recents (import-catalogue-quotidien.js:83, `disparus`) ne se refont pas depuis le dernier export ; l'archive R2 date du 2026-10-05
     // base `cartes`
     'histo_valeur_sets',                        // un instantane par set et par jour du guide (collecte-cartes/historique-valeur.js:13)
     'cartes',                                   // illustrateurs/impressions posees que le parseur ne refabrique pas (schemas.js:41-42, impressions-posees.js)
     'cartes_produits',                          // preuve 'manuel', detachements, visuelSubstitut : decisions ecrites (schemas.js:75)
     'sets',                                     // nomAffichage, logos, dates poses par des outils dedies (nom-affichage.js)
+    'file_images',                              // refus motives et remises en file datees (`resultat`, `remisEnFileLe`, `remisEnFileMotif`, etats `fait`) : remplir-file-images.js:59-97 ne reinsere que des unites `attente`
     'images'                                    // documents `etat: 'retire'` (retirer-visuels.js:10) : un rejeu ne les reprend pas
 ]);
 
@@ -43,11 +41,23 @@ function libelleRegeneration(nom) {
     return 'inconnue';
 }
 
-/** Le texte imprime a la suite d'une collection non sauvegardee. */
+/** Le texte imprime a la suite d'une collection non regenerable ou inconnue. */
 const ETIQUETTES = Object.freeze({
     'non-regenerable': '  🔴 NON RÉGÉNÉRABLE — es-tu sûr ?',
-    'regenerable': '  (régénérable : voir regenerabilite.js)',
     'inconnue': '  ❓ régénérabilité INCONNUE — personne ne l\'a classée'
 });
 
-module.exports = { REGENERABLES, NON_REGENERABLES, libelleRegeneration, ETIQUETTES };
+/** L'etiquette imprimee : un regenerable dit la commande qui le refait (tiree de REGENERABLES). */
+function etiquette(nom) {
+    const c = libelleRegeneration(nom);
+    return c === 'regenerable' ? `  (régénérable : ${REGENERABLES[nom]})` : ETIQUETTES[c];
+}
+
+/** Pure. Parmi les collections presentes : les non regenerables, les INCONNUES (a sauvegarder dans le doute) et la commande complete. */
+function perimetreDeDoute(existantes) {
+    const nonRegenerables = existantes.filter(n => libelleRegeneration(n) === 'non-regenerable');
+    const inconnues = existantes.filter(n => libelleRegeneration(n) === 'inconnue');
+    return { nonRegenerables, inconnues, commande: `--collections=${[...nonRegenerables, ...inconnues].join(',')}` };
+}
+
+module.exports = { REGENERABLES, NON_REGENERABLES, libelleRegeneration, ETIQUETTES, etiquette, perimetreDeDoute };
