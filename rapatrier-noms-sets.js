@@ -16,7 +16,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { TABLE, TABLE_AUTO, TABLE_SANS_PAGE } = require('./collecte-cartes/table-sets');
-const { proposerNoms, doublonsDAffichage } = require('./collecte-cartes/nom-affichage');
+const { proposerNoms, doublonsDAffichage, ecrireNoms } = require('./collecte-cartes/nom-affichage');
 
 (async () => {
     const ecrire = process.argv.includes('--ecrire');
@@ -61,9 +61,7 @@ const { proposerNoms, doublonsDAffichage } = require('./collecte-cartes/nom-affi
     if (!ecrire) { console.log('\n   (dry-run — rien d\'écrit. --ecrire après la sauvegarde de la base cartes)'); await fermer(); return; }
 
     const avant = await S.countDocuments({ nomAffichage: { $type: 'string' } });
-    for (const c of proposes) await S.updateOne({ _id: c.s._id, nomAffichage: { $exists: false } }, { $set: {
-        nomAffichage: c.a.nom, nomAffichageSource: c.a.source, nomAffichagePreuve: c.preuve, nomCardmarket: c.nomCardmarket, nomsLe: new Date() } });
-    for (const c of refuses) await S.updateOne({ _id: c.s._id }, { $set: { nomAffichageRefus: { raison: c.raison, le: new Date(), instrument: 'rapatrier-noms-sets.js' } } });
+    await ecrireNoms(S, { proposes, refuses });   // le filtre d'écriture est celui du contrôle de publication : nomAffichage non-chaîne (absent ou null)
     const apres = await S.countDocuments({ nomAffichage: { $type: 'string' } });
     const noms = doublonsDAffichage(await S.find({}, { projection: { nomAffichage: 1 } }).toArray());
     console.log(`\n   RELU : sets nommés ${avant} → ${apres} (attendu ${avant + proposes.length}) · noms d'écran en double : ${noms.length} ${apres === avant + proposes.length && !noms.length ? '✅' : '🔴 NE CONCORDE PAS'}`);
