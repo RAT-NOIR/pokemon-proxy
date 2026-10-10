@@ -805,7 +805,8 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 | rejeu (même clé, même corps) | **même réponse, même statut**, en-tête `Idempotency-Replayed: true`, **aucun second débit**, aucun second appel de la chaîne d'identification |
 | même clé, corps différent | `422 ENTREE` (`detail: "cle-reutilisee"`) |
 | même clé, première requête encore en cours | `429 DEBIT` avec `reessayerDans: 2` |
-| clé absente ou mal formée | `400 ENTREE` |
+| clé absente | `400 ENTREE` — **seulement sur `POST /api/identifier`** ; sur `/api/identifier/reponse` et `/api/retour-live` une clé absente est acceptée (la requête se traite sans protection de rejeu par clé) |
+| clé mal formée (présente) | `400 ENTREE`, sur les trois routes |
 
 La clé est conservée **24 h**, par porteur et par route : elle vaut par l'une ou l'autre adresse du serveur.
 
@@ -834,7 +835,9 @@ Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, messa
 | `CODE_INVALIDE` | 404 | code de liaison ou jeton de lien inconnu ou déjà utilisé | redemander un code / un lien |
 | `CODE_EXPIRE` | 410 | code (10 min), lien (24 h) ou question (24 h) échu | redemander |
 | `DEJA_LIE` | 409 | l'installation est déjà liée | proposer de la délier d'abord |
-| `CONFLIT` | 409 | réponse différente sur une carte déjà tranchée | ne pas rejouer ; afficher le résultat déjà obtenu |
+| `CONFLIT` | 409 | réponse différente sur une carte déjà tranchée ; **ou** `/api/retour-live` : prix live déjà renvoyé pour ce scan (sans `detail`) | ne pas rejouer ; afficher le résultat déjà obtenu |
+| `CONFLIT` + `detail: "carte-non-identifiee"` | 409 | `/api/retour-live`, lecture ratée définitive (`sans-prix`) sur une carte qui n'est pas identifiée (question en attente, abandonnée, introuvable, lot, analyse absente) | **refus définitif** : rien n'a été remboursé, ne pas réessayer ; à distinguer du 409 « déjà complété » (celui-ci n'a pas de `detail`) |
+| `INDISPONIBLE` + `detail: "analyse-absente"` | 503 | `/api/identifier/reponse` : l'analyse du scan n'est pas enregistrée côté serveur, la question existe | la question est **intacte**, la réponse n'a pas été prise : **réessayer** plus tard (ce n'est pas un 404 « scan d'un autre porteur ») |
 | `CREDITS_ACHETES` | 409 | suppression d'un compte qui porte des crédits achetés | demander une renonciation explicite (`renonciation: true`) |
 | `ENTREE` | 400 (422 pour une clé réutilisée) | corps invalide ; `detail` précise (`image-hote`, `cle-reutilisee`, `adresse-invalide`, `adresse-refusee`, `defi-anti-robot`, `lot-trop-grand`…) | corriger la requête |
 | `EN_RECONCILIATION` | 409 | clé d'idempotence rejouée dont la ligne de débit attend la réconciliation : ni rejouée ni redébitée (B3) | réessayer plus tard ; aucun crédit ni remboursement associé |

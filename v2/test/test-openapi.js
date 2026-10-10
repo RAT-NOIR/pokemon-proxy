@@ -157,6 +157,14 @@ H.v('Idempotency-Key FACULTATIVE : même nom, même en-tête, même motif, requi
 H.vrai('   la description dit POURQUOI elle est facultative', /facultative|non exigée|pas exigée/i.test(String(aller(doc, `${FAC}.description`))) && /rejeu/i.test(String(aller(doc, `${FAC}.description`))));
 const avecCleFac = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKeyFacultative')).map(o => `${o.methode} ${o.chemin}`).sort();
 H.v('Idempotency-Key facultative sur /reponse et /retour-live, et sur elles seules', avecCleFac, ['POST /api/identifier/reponse', 'POST /api/retour-live']);
+// B1b.5 : les deux codes de détail que le serveur émet doivent être DITS au contrat, avec le sens à donner au client (définitif / à réessayer)
+const op = (chemin) => OPERATIONS.find(o => o.methode === 'POST' && o.chemin === chemin).op;
+const d409 = String(op('/api/retour-live').responses['409'].description), d503 = String(op('/api/identifier/reponse').responses['503'].description);
+H.vrai('retour-live 409 : dit `carte-non-identifiee`, refus DÉFINITIF, et le distingue du 409 « déjà complété »', /carte-non-identifiee/.test(d409) && /D[ÉE]FINITIF/i.test(d409) && /d[ée]j[àa] [ée]t[ée] renvoy|d[ée]j[àa] compl[ée]t[ée]/i.test(d409));
+H.vrai('reponse 503 : dit `analyse-absente`, question intacte, à RÉESSAYER', /analyse-absente/.test(d503) && /intacte/i.test(d503) && /R[ÉE]ESSAYER/i.test(d503));
+// le serveur n'émet que ces détails : ceux du code doivent figurer au contrat (lecture des sources, pas une liste recopiée)
+const lire = f => require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', f), 'utf8');
+H.vrai('chaque detail émis par retour-live.js / routes.js (carte-non-identifiee, analyse-absente) figure dans le contrat', /detail: 'carte-non-identifiee'/.test(lire('retour-live.js')) && /detail: 'analyse-absente'/.test(lire('routes.js')) && JSON.stringify(doc).includes('carte-non-identifiee') && JSON.stringify(doc).includes('analyse-absente'));
 // le contrat dit ce que le serveur fait : /identifier sans clé => 400 (obligatoire) ; les deux autres routes la déclarent facultative
 H.v('aucune des trois routes n\'a de paramètre Idempotency-Key en ligne (tout passe par les deux composants)', OPERATIONS.filter(o => (o.op.parameters || []).some(p => !p.$ref && p.name === 'Idempotency-Key')).length, 0);
 // aucun score nulle part (règle 4) : aucune propriété nommée score / confiance numérique dans les schémas

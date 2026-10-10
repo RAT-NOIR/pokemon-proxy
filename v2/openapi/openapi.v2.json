@@ -389,7 +389,7 @@
             }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "description": "INDISPONIBLE (index manquants, base injoignable). Avec `detail: \"analyse-absente\"` : l'analyse de ce scan n'a pas été enregistrée côté serveur ; la question est INTACTE, la réponse n'a pas été prise — RÉESSAYER plus tard (jamais un 404, qui veut dire « scan d'un autre porteur »).",
             "content": {
               "application/json": {
                 "schema": {
@@ -482,7 +482,7 @@
             }
           },
           "409": {
-            "description": "Conflit (CONFLIT, DEJA_LIE, CREDITS_ACHETES).",
+            "description": "Conflit. Deux sens à NE PAS confondre : CONFLIT sans detail = un prix live a déjà été renvoyé pour ce scan (déjà complété : ne pas rejouer) ; CONFLIT avec `detail: \"carte-non-identifiee\"` = remboursement `sans-prix` refusé parce que la carte n'est pas identifiée (question en attente, abandonnée, introuvable, lot, ou analyse absente) : refus DÉFINITIF, rien n'a été remboursé, ne pas réessayer cette lecture ratée.",
             "content": {
               "application/json": {
                 "schema": {
