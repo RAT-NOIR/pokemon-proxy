@@ -26,7 +26,7 @@ async function cartesDuLot(db) {
  * @param {object} db  la base `cartes`
  * @param {{ecrire?: boolean, effacerR2?: boolean, supprimer?: Function, bucket?: string}} o  `supprimer(bucket, cles)` : R2 (injecté par le banc)
  */
-async function retirerLot(db, { ecrire = false, effacerR2 = false, supprimer = null, bucket = process.env.R2_BUCKET_IMAGES } = {}) {
+async function retirerLot(db, { ecrire = false, effacerR2 = false, supprimer = null, bucket = process.env.R2_BUCKET_IMAGES, verifierBucket = null } = {}) {
     const C = db.collection('cartes'), I = db.collection('images'), E = db.collection('collecte_images_etat'), S = db.collection('sets');
     const cartes = await cartesDuLot(db);
     const R = P.planRetraitPtcgio(cartes);
@@ -38,7 +38,10 @@ async function retirerLot(db, { ecrire = false, effacerR2 = false, supprimer = n
     for (const c of cartes) for (const e of c.images || []) if (duLot(e)) parSet[e.set] = (parSet[e.set] || 0) + 1;
     const plan = { cartes: R.cartes, entrees: R.entrees, docs: aRetirer.length, cles, parSet };
     if (!ecrire) return plan;
-    if (effacerR2 && typeof supprimer !== 'function') throw new Error('retirerLot : --effacer-r2 sans client R2');
+    if (effacerR2 && (typeof supprimer !== 'function' || typeof verifierBucket !== 'function' || !bucket)) throw new Error('retirerLot : --effacer-r2 sans client R2, sans verifierBucket ou sans nom de bucket');
+    // 🔴 le bucket d'abord (juridiction UE : le point d'accès générique répond AccessDenied) : rien n'est écrit ni supprimé s'il ne répond pas
+    if (effacerR2) await verifierBucket(bucket);
+    // 🔴 le bucket d'abord (juridiction UE : le point d'accès générique répond AccessDenied) : rien n'est écrit ni supprimé s'il ne répond pas
 
     const le = new Date(), motif = `retrait en un lot des visuels images.pokemontcg.io (lot ${P.LOT}), sur demande de l'éditeur`;
     let nC = 0, nI = 0, nR = 0;
@@ -68,7 +71,7 @@ if (effacerR2 && !ecrire) { console.error('❌ --effacer-r2 sans --ecrire n\'a p
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
     const r2 = require('./collecte-cartes/r2');
-    const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: effacerR2 ? ['R2_BUCKET_IMAGES'] : [] });
     const cartes = await cartesDuLot(cx.db);
     const plan = await retirerLot(cx.db, { ecrire: false });
     console.log(`\n════ DÉNOMINATEUR : source ${P.SOURCE}, lot ${P.LOT} · ${plan.cartes.length} cartes portent ${plan.entrees} entrées · ${plan.docs} documents « images » non retirés · ${plan.cles.length} clés R2 (images et vignettes) ════`);
@@ -82,7 +85,7 @@ if (effacerR2 && !ecrire) { console.error('❌ --effacer-r2 sans --ecrire n\'a p
     fs.writeFileSync(fichier, JSON.stringify(Object.fromEntries(baisses.map(b => [b.cle, b.baisse])), null, 1));
     console.log(`   annonce des baisses (${baisses.length} groupes) → ${fichier}`);
     if (!ecrire) { console.log('\n   (simulation — le retrait ne part que sur demande de l\'éditeur : lot-additif.js --annonce=<ce fichier> … -- node retirer-visuels-ptcgio.js --ecrire)'); await fermer(); return; }
-    const r = await retirerLot(cx.db, { ecrire: true, effacerR2, supprimer: (b, cles) => r2.supprimer(b, cles) });
+    const r = await retirerLot(cx.db, { ecrire: true, effacerR2, supprimer: (b, cles) => r2.supprimer(b, cles), verifierBucket: b => r2.verifierBucket(b) });
     console.log(`\n   ${r.reste ? '🔴' : '✅'} cartes modifiées ${r.nC} · documents retirés ${r.nI} · objets R2 effacés ${r.nR} · bilans de sets nettoyés ${r.setsNettoyes.length} · source fermée · relu : ${r.reste} carte(s) portent encore une entrée du lot`);
     console.log(`SETS : ${Object.keys(r.parSet).join(',')}`);
     if (r.reste) process.exitCode = 1;

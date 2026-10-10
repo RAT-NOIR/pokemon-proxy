@@ -228,7 +228,29 @@ async function conclureBloque(E, slug, err, client) {
     console.error(`⛔ ${slug} : ${err.message}`);
 }
 
-module.exports = { collecterSlug, planifierSlug, numerosCardmarket, STOP_OCTETS };
+/**
+ * LE LANCEMENT de l'écriture, rejoué par le banc. 🔴 `verifierBucket` d'abord : le bucket vit en juridiction UE et le point d'accès générique répond
+ * AccessDenied (r2.js) ; on ne télécharge rien — pas une requête vers pokemontcg.io, pas un dépôt — si le bucket ne répond pas. Les autres outils qui
+ * écrivent sur R2 font de même (collecteur-images.js, collecteur-images-bulba.js, collecter-logos-officiels.js).
+ * @returns {Promise<{code: number, resultats: object[]}>}
+ */
+async function lancerEcriture(slugs, M, { verrou, client, lireNumeros, R2 = r2, bucket = process.env.R2_BUCKET_IMAGES, vignetter, fabriquerVerrouSet } = {}) {
+    if (!bucket) throw new Error('R2_BUCKET_IMAGES : nom de bucket absent — aucune requête, aucune écriture');
+    await R2.verifierBucket(bucket);
+    const resultats = [];
+    let code = 0;
+    for (const slug of slugs) {
+        if (arretDemande) break;
+        const r = await collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter, fabriquerVerrouSet, deposer: (b, c, d, t) => R2.deposerBinaire(b, c, d, t) });
+        resultats.push(r);
+        console.log(`SET ${slug} → ${r.etat}`);
+        if (!['verifie', 'refuse-substitut', 'refuse-set-non-apparie'].includes(r.etat)) code = 1;
+        if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
+    }
+    return { code, resultats };
+}
+
+module.exports = { collecterSlug, planifierSlug, numerosCardmarket, lancerEcriture, STOP_OCTETS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE.
 if (require.main !== module) return;
@@ -246,7 +268,8 @@ if (inconnus.length || modes.length !== 1 || (args.includes('--ecrire') && !args
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { modeles } = require('./collecte-cartes/schemas');
     // la production (`test`) n'est ouverte que pour LIRE `numeros_cartes` : le numéro du produit Cardmarket fait l'adresse (garde.js : « LECTURE SEULE »)
-    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: !args.includes('--verrou'), buckets: [] });
+    // `--ecrire` exige R2_BUCKET_IMAGES dans l'environnement (et lancerEcriture vérifie le bucket avant tout) ; --plan et --verrou n'écrivent pas sur R2
+    const { cartes: cx, prod, fermer } = await ouvrirConnexions({ production: !args.includes('--verrou'), buckets: args.includes('--ecrire') ? ['R2_BUCKET_IMAGES'] : [] });
     const M = modeles(cx);
     const lireNumeros = slug => numerosCardmarket(prod, slug, cx.db);
     const voulus = args.find(a => a.startsWith('--sets='))?.slice(7).split(',');
@@ -277,15 +300,9 @@ if (inconnus.length || modes.length !== 1 || (args.includes('--ecrire') && !args
     if (tenuPar) { console.error(`❌ ${P.VERROU_GLOBAL} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}`); await fermer(); process.exit(1); }
     const client = P.fabriquerClientPtcgio({ verrou });
     let code = 0;
-    try {
-        for (const slug of slugs) {
-            if (arretDemande) break;
-            const r = await collecterSlug(slug, M, { verrou, client, lireNumeros });
-            console.log(`SET ${slug} → ${r.etat}`);
-            if (!['verifie', 'refuse-substitut', 'refuse-set-non-apparie'].includes(r.etat)) code = 1;
-            if (['refuse-source-bloquee', 'incomplet'].includes(r.etat) && client.bloque()) break;
-        }
-    } finally { await verrou.rendre(); await fermer(); }
+    try { code = (await lancerEcriture(slugs, M, { verrou, client, lireNumeros })).code; }
+    catch (e) { console.error('❌', e.message); code = 1; }
+    finally { await verrou.rendre(); await fermer(); }
     console.log(`REQUÊTES : ${JSON.stringify(client.requetesParHote())}`);
     process.exit(code);
 })().catch(e => { console.error('❌', e.message); process.exit(1); });

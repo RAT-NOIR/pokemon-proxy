@@ -67,7 +67,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     // 🔴 ruling du coordinateur (2026-10-10) : les témoins COUVRENT la plage écrite — un témoin dans chaque segment, et un au moins au plus grand numéro écrit
     const couvre = l => l.segments.every(([de, a]) => l.temoins.some(w => w.n >= de && w.n <= a) && l.temoins.some(w => w.n === a));
     verifier('chaque ligne : un témoin dans chaque segment de numérotation ET un témoin au plus grand numéro du segment', P.TABLE_PTCGIO.filter(l => !couvre(l)).map(l => l.id), []);
-    verifier('la marque des McDonald\'s est celle que le relecteur a vue (symbole d\'extension propre au tirage), jamais « faible »', [P.TABLE_PTCGIO.filter(l => /faible/i.test(l.marque)).map(l => l.id), /hexagone/.test(L('McDonalds-Collection-2011', 'mcd11').marque), /« m »/.test(L('McDonalds-Collection-2016', 'mcd16').marque), /rond/.test(L('McDonalds-Collection-2019', 'mcd19').marque), /couronne|étoile/.test(L('McDonalds-Collection-2022', 'mcd22').marque)], [[], true, true, true, true]);
+    verifier('la marque des McDonald\'s est celle que le relecteur a vue (symbole d\'extension propre au tirage), jamais « faible »', [P.TABLE_PTCGIO.filter(l => /faible/i.test(l.marque)).map(l => l.id), /hexagone/.test(L('McDonalds-Collection-2011', 'mcd11').marque), /« m »/.test(L('McDonalds-Collection-2016', 'mcd16').marque), /rond/.test(L('McDonalds-Collection-2019', 'mcd19').marque), (m => /symbole propre au tirage, en bas à gauche, à côté de la marque de règlement « E »/.test(m) && !/couronne|étoile| ou /.test(m))(L('McDonalds-Collection-2022', 'mcd22').marque)], [[], true, true, true, true]);   // mcd22 : ce qui est certain, sans nommer la forme (ruling)
     verifier('segments : Shining Legends et Dragon Majesty ont un segment principal ET un segment de secrètes', [L('Shining-Legends', 'sm35').segments.length, L('Dragon-Majesty', 'sm75').segments.length], [2, 2]);
     verifier('témoins ouverts le 2026-10-10 sur les numéros que la règle de mesure ne comptait pas : le nom imprimé est celui du produit', [[L('Shining-Legends', 'sm35'), 72, 'Mewtwo-GX'], [L('Dragon-Majesty', 'sm75'), 65, 'Reshiram-GX'], [L('Dragon-Majesty', 'sm75'), 41, 'Altaria-GX'], [L('Dragon-Majesty', 'sm75'), 70, 'Zinnia'], [L('Dragon-Majesty', 'sm75'), 69, 'Blaine\'s Last Stand']].map(([l, n, nom]) => l.temoins.find(w => w.n === n)?.nom === nom), [true, true, true, true, true]);
     verifier('l\'adresse d\'une image : la haute définition, jamais la vignette', P.urlHires('mcd12', 6), 'https://images.pokemontcg.io/mcd12/6_hires.png');
@@ -160,14 +160,14 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const appelsVignettes = [];
     const assurerBanc = erreur => async (db, { bucket, slug }) => {
         appelsVignettes.push([bucket, slug]);
-        if (erreur) throw new Error(erreur);
+        if (typeof erreur === 'string') throw new Error(erreur);
         let n = 0;
         for (const c of await db.collection('cartes').find({}).toArray()) {
             let touche = false;
             const images = (c.images || []).map(e => { if (e.set !== slug || !e.cleR2 || e.vignette) return e; touche = true; n++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2.replace(/\.[^./]+$/, '')}.webp`, w: 200, h: 279 } }; });
             if (touche) await db.collection('cartes').updateOne({ _id: c._id }, { $set: { images } });
         }
-        return { entrees: n, cles: n, traitees: n, fabriquees: n, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: n ? [slug] : [] };
+        return { entrees: n, cles: n, traitees: n, fabriquees: n, deja: 0, depuisDocument: 0, echecs: erreur?.echecs ? [{ cleR2: 'x', erreur: 'lecture R2' }] : [], interrompu: !!erreur?.interrompu, sets: n ? [slug] : [] };
     };
     const vignetterBanc = (erreur = null) => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, assurer: assurerBanc(erreur), journal: { error() { } } });
     const lancer = async (B, transport, o = {}) => {
@@ -228,6 +228,12 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const B8 = fausseBase(); semer(B8);
     ({ b } = await lancer(B8, reseau(normal), { erreurVignettes: 'R2 injoignable' }));
     verifier('vignettes en échec : l\'unité est « incomplet », le bilan porte l\'erreur', [b.etat, b.vignettes?.erreur], ['incomplet', 'R2 injoignable']);
+    const B9 = fausseBase(); semer(B9);
+    ({ b } = await lancer(B9, reseau(normal), { erreurVignettes: { echecs: true } }));
+    verifier('vignettes : `echecs > 0` (une image non vignettée) : l\'unité est « incomplet »', [b.etat, b.vignettes?.echecs], ['incomplet', 1]);
+    const B10 = fausseBase(); semer(B10);
+    ({ b } = await lancer(B10, reseau(normal), { erreurVignettes: { interrompu: true } }));
+    verifier('vignettes : `interrompu` : l\'unité est « incomplet »', [b.etat, b.vignettes?.interrompu], ['incomplet', true]);
 
     // un set non prouvé / un substitut : aucune requête
     const B4 = fausseBase(); B4.col('sets').set('WCD-2009', { _id: 'WCD-2009', tirage: 'intl', region: 'intl' });
@@ -271,7 +277,7 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
         return Bx;
     };
     const effaces = [];
-    const optionsRetrait = o => ({ supprimer: async (bucket, cles) => { effaces.push([bucket, ...cles]); }, bucket: 'bucket-banc', ...o });
+    const optionsRetrait = o => ({ supprimer: async (bucket, cles) => { effaces.push([bucket, ...cles]); }, bucket: 'bucket-banc', verifierBucket: async () => { }, ...o });
     let Bx = semerRetrait();
     const avantSim = JSON.stringify([...Bx.cols].map(([k, m]) => [k, [...m]]));
     const rest = silencieux();
@@ -289,7 +295,46 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     let sans; try { sans = await retirerLot(semerRetrait().db, optionsRetrait({ ecrire: true })); } finally { rest3(); }
     verifier('retrait sans --effacer-r2 : R2 n\'est pas touché', effaces.length, 0);
 
+    // 🔴 LE BUCKET D'ABORD (relecture du 2026-10-10) : le bucket est en juridiction UE, le point d'accès générique répond AccessDenied ; tous les outils qui écrivent
+    // sur R2 appellent `verifierBucket` avant le premier dépôt. La fonction de lancement le fait avant la première requête vers pokemontcg.io.
+    const { lancerEcriture } = require('./collecteur-images-ptcgio');
+    const ordre = [];
+    const fauxR2 = (echec = null) => ({
+        async verifierBucket(b) { ordre.push(`verifierBucket:${b}`); if (echec) throw new Error(echec); },
+        async deposerBinaire() { ordre.push('deposer'); return { ecrit: true }; }
+    });
+    const reseauOrdre = () => ({ async get(url) { ordre.push(url.endsWith('/robots.txt') ? 'requete:robots' : 'requete:image'); return normal(url); } });
+    const baseSemee = () => { const Bz = fausseBase(); semer(Bz); return Bz; };
+    const lanceur = async (Bz, R2, o = {}) => {
+        const cl = P.fabriquerClientPtcgio({ transport: reseauOrdre(), verrou, pause });
+        const r = silencieux();
+        try { return await lancerEcriture([SLUG], Bz.M, { verrou, client: cl, lireNumeros, R2, bucket: 'bucket-banc', vignetter: vignetterBanc(), fabriquerVerrouSet: verrouSet, ...o }); } finally { r(); }
+    };
+    ordre.length = 0;
+    const ro = await lanceur(baseSemee(), fauxR2());
+    verifier('lancement : verifierBucket est le PREMIER appel, avant le premier dépôt R2 et avant la première requête vers pokemontcg.io', [ordre[0], ordre.indexOf('deposer') > 0, ordre.findIndex(x => x.startsWith('requete')) > 0, ordre.filter(x => x.startsWith('verifierBucket')).length, ro.code], ['verifierBucket:bucket-banc', true, true, 1, 0]);
+    ordre.length = 0;
+    const Bn = baseSemee();
+    const avantBn = JSON.stringify([...Bn.cols].map(([k, m]) => [k, [...m]]));
+    let echecBucket = null; try { await lanceur(Bn, fauxR2('AccessDenied')); } catch (e) { echecBucket = e.message; }
+    verifier('lancement : un échec de verifierBucket = 0 requête, 0 dépôt, 0 écriture en base', [echecBucket, ordre, JSON.stringify([...Bn.cols].map(([k, m]) => [k, [...m]])) === avantBn], ['AccessDenied', ['verifierBucket:bucket-banc'], true]);
+    ordre.length = 0;
+    let sansBucket = null; try { await lanceur(baseSemee(), fauxR2(), { bucket: '' }); } catch (e) { sansBucket = e.message; }
+    verifier('lancement : sans nom de bucket, refus avant tout appel', [/bucket/.test(sansBucket || ''), ordre.length], [true, 0]);
+    // le retrait : verifierBucket seulement avec --effacer-r2, et avant toute écriture
+    const ordreR = [];
+    const Br = semerRetrait();
+    const avantBr = JSON.stringify([...Br.cols].map(([k, m]) => [k, [...m]]));
+    let echecR = null; const rt = silencieux();
+    try { await retirerLot(Br.db, { ecrire: true, effacerR2: true, supprimer: async () => { ordreR.push('supprimer'); }, bucket: 'bucket-banc', verifierBucket: async b => { ordreR.push(`verifierBucket:${b}`); throw new Error('AccessDenied'); } }); } catch (e) { echecR = e.message; } finally { rt(); }
+    verifier('retrait --effacer-r2 : un échec de verifierBucket = rien d\'écrit ni de supprimé', [echecR, ordreR, JSON.stringify([...Br.cols].map(([k, m]) => [k, [...m]])) === avantBr], ['AccessDenied', ['verifierBucket:bucket-banc'], true]);
+    const ordreR2 = [];
+    const rt2 = silencieux();
+    try { await retirerLot(semerRetrait().db, { ecrire: true, effacerR2: false, supprimer: async () => ordreR2.push('supprimer'), verifierBucket: async () => ordreR2.push('verifierBucket') }); } finally { rt2(); }
+    verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
+
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
+    verifier('langue : la preuve écrite en base porte le VRAI compte (53 témoins, 55 images ouvertes) et plus « 42 »', [/53 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /55 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 53]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
