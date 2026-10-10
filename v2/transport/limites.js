@@ -23,7 +23,7 @@ function limiteur({ nom, max, fenetreMs, cle }) {
             if (!r.permis) return repondreErreur(res, 'DEBIT', 'Trop de requêtes, réessayez plus tard.', { reessayerDans: r.reessayerDans });
             next();
         } catch (e) {
-            console.error(`❌ [v2 limite ${nom}] ${e.message}`);
+            console.error(`❌ [v2 limite ${nom}] ${(e && (e.code || e.name)) || 'erreur'}`);
             repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
         }
     };

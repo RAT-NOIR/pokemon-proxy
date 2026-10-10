@@ -21,6 +21,13 @@ const hoteHttps = (u) => {
     let p; try { p = new URL(u); } catch { return null; }
     return p.protocol === 'https:' ? p.hostname.toLowerCase() : null;     // le nom d'hôte PARSÉ, jamais la chaîne
 };
+// B8.1 : une URL d'un hôte AUTORISÉ que deux analyseurs liraient différemment est refusée : une barre oblique inverse (WHATWG la lit comme « / », d'autres analyseurs comme la fin
+// d'un identifiant : « https://images1.vinted.net\@evil.example/ » — l'URL part chez un tiers : le modèle), un identifiant ou mot de passe (`user@hôte`), un port, un espace ou un caractère
+// de contrôle. Jugée APRÈS la liste blanche d'hôtes : un hôte hostile garde son refus « image-hote ».
+const urlAmbigue = (u) => {
+    if (/[\\\s\u0000-\u001f\u007f]/.test(u)) return true;
+    try { const p = new URL(u); return p.username !== '' || p.password !== '' || p.port !== ''; } catch { return true; }
+};
 
 // Fonction pure : { entree } ou { erreur: { code, message, detail? } }. Ordre : forme, version, marché, champs, images.
 function verifierEntree(corps, cfg) {
@@ -31,6 +38,7 @@ function verifierEntree(corps, cfg) {
     if (typeof corps.marche !== 'string' || !cfg.marches.includes(corps.marche)) return refus('MARCHE', 'marché non pris en charge');
     if (corps.title != null && typeof corps.title !== 'string') return refus('ENTREE', 'title invalide', 'title');
     if (corps.description != null && typeof corps.description !== 'string') return refus('ENTREE', 'description invalide', 'description');
+    if (corps.vintedEtat != null && typeof corps.vintedEtat !== 'string') return refus('ENTREE', 'vintedEtat invalide', 'vinted-etat');   // B8.1 : jamais ignoré en silence (avant : un objet donnait 200)
     const prix = corps.prixVinted ?? null;
     if (prix !== null && !(typeof prix === 'number' && Number.isFinite(prix) && prix > 0)) return refus('ENTREE', 'prixVinted invalide', 'prix');
     const devise = corps.devise ?? null;
@@ -49,6 +57,7 @@ function verifierEntree(corps, cfg) {
         const h = hoteHttps(u);
         if (!h) return refus('ENTREE', 'imageUrls : URL https attendue', 'image-url');
         if (!HOTES_PHOTO_AUTORISES.some(re => re.test(h))) return refus('ENTREE', 'imageUrls : hôte non autorisé', 'image-hote');
+        if (urlAmbigue(u)) return refus('ENTREE', 'imageUrls : URL ambiguë (identifiant, port, barre inverse ou espace)', 'image-url');
     }
     if (!urls || !urls.length) return refus('IMAGE', 'aucune image à analyser', 'aucune-image');
     return { entree: {

@@ -4,6 +4,7 @@ const { lireConfig } = require('./config');
 const { verifierIndex } = require('./modeles');
 const pret = require('./pret');
 const { CHEMINS_HERITES, aiguilleur, estAiguilleur } = require('./heritage');
+const { repondreErreur } = require('./erreurs');
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
@@ -28,6 +29,24 @@ function monter(app, deps = {}, env = process.env) {
     }
     pret.armer(verifierIndex);
     app.use(assembler(LOTS, cfg, deps));
+}
+/**
+ * B8.1 — les clés qu'un corps JSON v2 ne porte JAMAIS. Écrit par ce qu'il AUTORISE : un nom de clé ordinaire, à profondeur et nombre de nœuds bornés. Sont refusées :
+ *   · `__proto__`, `constructor`, `prototype` (JSON.parse les rend en clés PROPRES : un fusionneur d'objets, présent ou futur, les prendrait pour des consignes de prototype) ;
+ *   · toute clé qui commence par `$` (opérateurs Mongo : `{"$ne":""}` ne doit jamais atteindre un filtre) ;
+ *   · un corps plus profond que 8 niveaux ou de plus de 5 000 nœuds (aucune route n'en demande autant).
+ * @returns {string|null} la clé refusée, ou null.
+ */
+const CLES_RESERVEES = new Set(['__proto__', 'constructor', 'prototype']);
+function cleInterdite(valeur, profondeur = 0, vus = { n: 0 }) {
+    if (valeur === null || typeof valeur !== 'object') return null;
+    if (profondeur > 8 || ++vus.n > 5000) return '(profondeur ou taille)';
+    for (const k of Object.keys(valeur)) {
+        if (CLES_RESERVEES.has(k) || k.startsWith('$')) return k;
+        const r = cleInterdite(valeur[k], profondeur + 1, vus);
+        if (r !== null) return r;
+    }
+    return null;
 }
 /**
  * Assemble les routeurs des lots. La garde d'index (pret) est posée ICI, UNE fois, sur ce que le routeur de chaque lot
@@ -69,7 +88,11 @@ function assembler(lots, cfgLots, deps = {}) {
                 // Comme Express : HEAD est servi par les handlers GET quand la route n'en déclare pas pour HEAD.
                 let m = String(req.method).toLowerCase();
                 if (m === 'head' && !route.methods.head) m = 'get';
-                const garde = () => pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next)));
+                // B8.1 : un corps qui porte une clé réservée ou un opérateur est refusé AVANT toute route (voir cleInterdite) ; placé APRÈS les aiguilleurs : la route héritée d'une requête 1.0.x n'est pas touchée.
+                const garde = () => {
+                    if (cleInterdite(req.body) !== null) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'cle-interdite' });
+                    return pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next)));
+                };
                 // TOUS les aiguilleurs consécutifs en tête de la méthode demandée sont consultés avant la garde.
                 const aiguilleurs = [];
                 for (const c of route.stack.filter(c => !c.method || c.method === m)) { if (!estAiguilleur(c.handle)) break; aiguilleurs.push(c.handle); }
@@ -82,4 +105,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, cleInterdite, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };

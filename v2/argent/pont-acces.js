@@ -17,7 +17,7 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
             // UNE PANNE APRÈS LA QUESTION, dans la même requête : la question est annulée D'ABORD (sinon un échec de l'annulation laisserait une question que le balayage rendrait une seconde fois)
             if (req.questionId && !question) {
                 try { await col('questions').updateOne({ _id: `${req.questionId}:0`, etat: 'en-attente' }, { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'deja-rembourse', annuleePar: motif, regleeLe: now } }); }
-                catch (e) { console.error(`🔴 [v2 question-annulation] ${req.questionId} : ${e.message} — la panne n'est PAS remboursée ici`); noterNonRemboursement('erreur'); return false; }
+                catch (e) { console.error(`🔴 [v2 question-annulation] ${req.questionId} : ${(e && (e.code || e.name)) || 'erreur'} — la panne n'est PAS remboursée ici`); noterNonRemboursement('erreur'); return false; }
             }
             const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'question' : 'panne', jourDe, maintenant: now }, cfg);
             if (r.rendu) { req.scanRendu = true; return true; }

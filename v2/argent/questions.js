@@ -130,7 +130,7 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
         if (!q) break;
         let fin = null;
         try { fin = await regler(q, 'question-abandonnee', cfg, maintenant); }
-        catch (e) { bilan.erreurs++; console.error(`🔴 [v2 question-balayage] ${q._id} : ${e.message} — reste « en-reglement », à vérifier à la main`); continue; }
+        catch (e) { bilan.erreurs++; console.error(`🔴 [v2 question-balayage] ${q._id} : ${(e && (e.code || e.name)) || 'erreur'} — reste « en-reglement », à vérifier à la main`); continue; }
         if (q.lot) { bilan.lots++; continue; }
         bilan.reglees++;
         bilan.abandonnees.push({ scanId: String(q.scanId), carte: q.carte });

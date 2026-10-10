@@ -33,6 +33,9 @@ function lireConfig(env = process.env) {
     const url = (nom, v, defaut) => { if (v === undefined || v === '') return defaut; if (!/^https:\/\/\S+$/.test(v)) throw new Error(`configuration invalide : ${nom} doit commencer par https://`); return v; };
     const turnstile = (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })();
     if (actif && turnstile === 'off' && base !== 'test_scratch') throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur MONGODB_BASE=test_scratch');
+    // B8.1 : même garde que Turnstile — un cookie de session SANS Secure n'est admis que sur un banc (test_scratch) ; en production allumée, V2_COOKIE_SECURE=0 est une configuration invalide.
+    const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
+    if (actif && !cookieSecure && base !== 'test_scratch') throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur MONGODB_BASE=test_scratch');
     return gele({
         actif,
         base,
@@ -66,7 +69,7 @@ function lireConfig(env = process.env) {
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
         turnstile,
-        cookieSecure: booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true)
+        cookieSecure
     });
 }
 module.exports = { lireConfig, POCHES };

@@ -218,12 +218,17 @@ const corpsOk = (img, src = 'camera', extra = Buffer.alloc(0)) => Buffer.concat(
 
     // contrat avec un VRAI serveur : un client lent reçoit le 408 + Connection: close, puis la socket se ferme
     const net = require('net');
+    // B8 : le handler du banc APPELLE la fonction de production (`repondreEtFermer`, scanner/routes.js) au lieu d'en recopier la fermeture : la copie détruisait la requête sans le délai de 50 ms
+    // de la production, et un client qui écrivait encore pouvait recevoir un RST avant d'avoir lu le 408 (banc instable, 1 échec sur 4 — le serveur n'était pas en cause).
+    const { repondreEtFermer } = require('../scanner/routes');
+    H.v('scanner/routes.js exporte repondreEtFermer (la fermeture de production, une seule définition)', typeof repondreEtFermer, 'function');
     const srvLent = await H.serveur(async (req, res) => {
         try { await lireMultipart(req, { delaiMs: 300 }); res.end('ok'); }
         catch (e) {
             res.statusCode = e.statut; res.setHeader('content-type', 'application/json');
-            if (e.fermer) { res.setHeader('Connection', 'close'); res.on('finish', () => req.destroy()); }
-            res.end(JSON.stringify({ code: e.code, detail: e.detail }));
+            const envoyer = () => res.end(JSON.stringify({ code: e.code, detail: e.detail }));
+            if (e.fermer) return repondreEtFermer(req, res, envoyer);
+            envoyer();
         }
     });
     const reponse = await new Promise(resolve => {
