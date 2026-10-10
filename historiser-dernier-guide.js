@@ -1,7 +1,7 @@
 // L'HISTORIQUE DE VALEUR DES SETS — démarrer sur le DERNIER guide en base (testeur, 2026-10-08), puis mesurer.
 //   node historiser-dernier-guide.js                  SIMULATION (lecture seule) : combien de lignes, poids par jour et à 365 jours, poids du fichier R2
 //   node historiser-dernier-guide.js --mesure         MESURE (lecture seule) : poids RÉEL de la collection et des fichiers R2 (à relancer après 7 jours)
-//   node lot-additif.js --quoi="historique de valeur des sets : dernier guide" --collections=sets --compte=histo_valeur_sets -- node historiser-dernier-guide.js --ecrire --confirmer-production
+//   node lot-additif.js --quoi="historique de valeur des sets : dernier guide" --collections=sets -- node historiser-dernier-guide.js --ecrire --confirmer-production
 // L'écriture est ADDITIVE (une collection neuve de la base `cartes` + un fichier du bucket PRIVÉ R2_BUCKET_BRUT) et idempotente ; elle passe par
 // lot-additif.js. La définition (set, tendance, phare) vit dans collecte-cartes/historique-valeur.js.
 require('dotenv').config();
