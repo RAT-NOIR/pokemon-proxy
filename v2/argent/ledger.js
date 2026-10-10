@@ -95,8 +95,19 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
             // l'erreur (réponse perdue), le débit est valide ; s'il n'existe pas, la poche est rendue ; si on ne peut pas le savoir, on le DIT (réconciliation).
             let ecrit = false;
             try { const filtre = mv._id ? { _id: mv._id } : (cleEff ? { cleIdempotence: cleEff } : null); ecrit = filtre ? Boolean(await col('mouvements').findOne(filtre)) : false; } catch (_) { ecrit = null; }
-            if (ecrit === null) console.error('🔴 [v2 debiter] écriture du mouvement en erreur et état inconnu : poche prise, NON rendue — à voir par la réconciliation');
-            else if (!ecrit) { try { await rendrePoche(porteur, credit, cfg, maintenant); } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${e2.message}`); } }
+            // LIMITES CONNUES (audit B8, ne pas y toucher ici) :
+            //  · M1 — la vérification elle-même échoue (la base répond mal à ce moment) : `ecrit` vaut null, la poche reste prise ET rien n'est en base. C'est le cas journalisé
+            //    ci-dessous ; aucune réparation automatique, la réconciliation ne voit pas de mouvement à rapprocher.
+            //  · M2 — l'écriture d'origine arrive TARD, après la compensation : le mouvement existe alors ET la poche a été rendue (crédit gratuit). Fenêtre étroite (le
+            //    pilote a déjà rendu une erreur), non fermée ; la clé d'idempotence unique empêche au moins un second mouvement de même clé.
+            if (ecrit === null) console.error(`🔴 [v2 debiter] écriture du mouvement en erreur et état inconnu : poche ${credit.poche} prise, NON rendue — clé ${cleEff ?? 'aucune'}, porteur ${porteur.type}:${porteur.id} — à voir par la réconciliation`);
+            else if (!ecrit) {
+                // M3 : un `rendu:false` (hebdo-semaine-changee, accueil-au-plafond, poche-introuvable) n'est pas une exception — il se journalise aussi
+                try {
+                    const r = await rendrePoche(porteur, credit, cfg, maintenant);
+                    if (!r.rendu) console.error(`🔴 [v2 debiter] poche ${credit.poche} NON rendue après l'échec du mouvement (${r.raison}) — clé ${cleEff ?? 'aucune'}, porteur ${porteur.type}:${porteur.id}`);
+                } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${e2.message} — clé ${cleEff ?? 'aucune'}, porteur ${porteur.type}:${porteur.id}`); }
+            }
             if (ecrit !== true) throw e;
             return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };
         }

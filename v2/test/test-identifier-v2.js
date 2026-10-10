@@ -322,6 +322,45 @@ async function semer(mode) {                                  // 'double' | 'sim
             const r2 = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-apres-panne' });
             H.v('   la panne ne coince rien : la requête suivante réussit et débite une fois', [r2.statut, r2.json.success, (await solde(y.i._id)).essais], [200, true, 2]);
         }
+        // ── I1 : une exception hors des try internes (ici l'adaptateur lève) rembourse quand même ; le remboursement ne se fait qu'une fois
+        {
+            const svI = await appFabrique(cfg, { adapter: () => { throw new Error('adaptateur qui lève hors de ses try'); } });
+            mode = 'affirmee'; const x = await inst(3);
+            const r = await poster(svI.url, x.jeton, corps(), { nom: 'fab-adapter-leve' }), j = r.json || {};
+            const nRb = () => raw('mouvements').countDocuments({ installationId: x.i._id, type: 'remboursement' });
+            H.v('I1. exception hors des try internes : 500 SERVEUR, panne remboursée, solde identique à l\'avant, UN mouvement de remboursement', [r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.motif, j.facturation && j.facturation.rembourse, j.solde && j.solde.essai, (await solde(x.i._id)).essais, await nRb()], [500, 'SERVEUR', 'panne', true, 3, 3, 1]);
+            const deb = await raw('mouvements').findOne({ installationId: x.i._id, type: 'debit' });
+            const encore = await argentReg.rembourser({ type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false }, deb.credit, 'panne-SERVEUR', { scanId: deb.scanId, compteur: 'panne' });
+            H.v('   rejeu du remboursement du même scan : refusé (deja-rembourse), toujours un seul mouvement, essai 3', [encore.rendu, encore.raisonNonRembourse, await nRb(), (await solde(x.i._id)).essais], [false, 'deja-rembourse', 1, 3]);
+            await svI.fermer();
+        }
+        // ── m2 : creditPourReq (après le débit) qui lève : même filet
+        {
+            const reg = registre.obtenir('argent');                 // l'objet COURANT (chaque app fabriquée en enregistre un neuf)
+            const orig = reg.creditPourReq; reg.creditPourReq = () => { throw new Error('creditPourReq qui lève'); };
+            mode = 'affirmee'; const x = await inst(3); let r;
+            try { r = await poster(sv.url, x.jeton, corps(), { nom: 'fab-creditpourreq-leve' }); } finally { reg.creditPourReq = orig; }
+            H.v('m2. creditPourReq lève après le débit : 500 SERVEUR, remboursée, essai 3', [r.statut, r.json.erreur.code, r.json.facturation.rembourse, (await solde(x.i._id)).essais], [500, 'SERVEUR', true, 3]);
+        }
+        // ── m1 : la question n'a pas pu être écrite (repli)
+        {
+            const colOrig = db.col;
+            const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
+            mode = 'refus-egalite';
+            // (a) repli REMBOURSÉ : candidats montrés gratuitement
+            const a = await inst(3); sansEcritureQuestion(); let ra;
+            try { ra = await poster(sv.url, a.jeton, corps(), { nom: 'fab-repli-rembourse' }); } finally { db.col = colOrig; }
+            H.v('m1a. question non écrite, repli REMBOURSÉ : a-trancher gratuit { debite:0, rembourse:true }, essai 3', [ra.json.analyse && ra.json.analyse.statut, ra.json.facturation.debite, ra.json.facturation.rembourse, ra.json.facturation.motif, (await solde(a.i._id)).essais], ['a-trancher', 0, true, 'question', 3]);
+            // (b) repli NON remboursé (plafond des questions atteint) : plus un a-trancher, une panne SERVEUR, ligne 🔴
+            const b = await inst(3);
+            await raw('plafonds').insertOne({ porteur: `installation:${b.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+            const journal = []; const errOrig = console.error; console.error = (...x) => { journal.push(x.join(' ')); };
+            sansEcritureQuestion(); let rb;
+            try { rb = await poster(sv.url, b.jeton, corps(), { nom: 'fab-repli-non-rembourse' }); } finally { db.col = colOrig; console.error = errOrig; }
+            const jb = rb.json || {};
+            H.v('m1b. question non écrite ET remboursement refusé : 500 SERVEUR (jamais un a-trancher), facturation de non-remboursement', [rb.statut, jb.erreur && jb.erreur.code, jb.analyse, jb.facturation && jb.facturation.debite, jb.facturation && jb.facturation.rembourse, jb.facturation && jb.facturation.raisonNonRembourse, (await solde(b.i._id)).essais], [500, 'SERVEUR', undefined, 1, false, 'plafond-jour', 2]);
+            H.vrai('   une ligne 🔴 au journal pour la réconciliation', journal.some(l => l.startsWith('🔴')));
+        }
         // QUOTA d'un compte : achat.url
         const cq = await compte({ solde: { accueil: 0, achete: 0 } });          // vérifié : il reste le quota HEBDO, épuisé ici
         await raw('hebdo').insertOne({ compteId: cq._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });

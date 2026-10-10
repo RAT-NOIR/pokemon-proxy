@@ -126,7 +126,9 @@ function traiterIdentifier(cfg, deps = {}) {
         const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
 
         // 1. l'annonce est une DONNÉE : expurgée avant tout usage
-        const annonce = preparerAnnonce({ title: entree.title, description: entree.description }, cfg);
+        let annonce;
+        try { annonce = preparerAnnonce({ title: entree.title, description: entree.description }, cfg); }
+        catch (e) { journalErreur('annonce', e); return repondreErreur(res, 'SERVEUR'); }            // avant tout débit : rien à rendre
         // 2. l'identifiant du scan (le MÊME pour le débit, la question, le journal hérité, analyses) et la clé de débit, préfixée par le porteur
         const scanId = new mongoose.Types.ObjectId();
         const cleIdem = req.headers['idempotency-key'];
@@ -148,22 +150,23 @@ function traiterIdentifier(cfg, deps = {}) {
         const admin = debit.administrateur === true, credit = admin ? null : (debit.credit ?? null);
         const userId = `v2:${porteur.type}:${porteur.id}`;
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
-        const reqH = {
-            body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
-            ip: req.ip, headers: {}, scanIdImpose: scanId,
-            credit: argent.creditPourReq(porteur, credit, { scanId })
-        };
+        // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
+        let reqH = null, rembourserOrigine = null, sortie;
         const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
-        // Ruling n°2 (2026-10-10) : un REFUS de la chaîne par égalité (≥ 2 candidats) devient une QUESTION, réservée comme une ambiguë. La chaîne rembourse un refus
-        // d'office ; ce remboursement est donc DIFFÉRÉ (ni fait, ni compté au plafond des pannes). Si l'adaptateur en fait une question, on RÉSERVE le crédit encore
-        // pris (plus bas) ; sinon (introuvable, panne) le filet le rend. Le crédit n'est jamais perdu : il est rendu OU réservé.
-        const rembourserOrigine = reqH.credit.v2.rembourser;
-        reqH.credit.v2.rembourser = async (r, motif, opts) => {
-            if (MOTIFS_REFUS_EN_QUESTION.includes(motif) && !r.scanRembourse) { r.refusDiffere = motif; return false; }
-            return rembourserOrigine(r, motif, opts);
-        };
-        let sortie;
         try {
+            reqH = {
+                body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
+                ip: req.ip, headers: {}, scanIdImpose: scanId,
+                credit: argent.creditPourReq(porteur, credit, { scanId })
+            };
+            // Ruling n°2 (2026-10-10) : un REFUS de la chaîne par égalité (≥ 2 candidats) devient une QUESTION, réservée comme une ambiguë. La chaîne rembourse un refus
+            // d'office ; ce remboursement est donc DIFFÉRÉ (ni fait, ni compté au plafond des pannes). Si l'adaptateur en fait une question, on RÉSERVE le crédit encore
+            // pris (plus bas) ; sinon (introuvable, panne) le filet le rend. Le crédit n'est jamais perdu : il est rendu OU réservé.
+            rembourserOrigine = reqH.credit.v2.rembourser;
+            reqH.credit.v2.rembourser = async (r, motif, opts) => {
+                if (MOTIFS_REFUS_EN_QUESTION.includes(motif) && !r.scanRembourse) { r.refusDiffere = motif; return false; }
+                return rembourserOrigine(r, motif, opts);
+            };
             sortie = await dansUnScan(async () => {
                 const fr = fauxRes();
                 let exception = null;
@@ -177,7 +180,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     let produits = null;
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
-                        : adapter({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
+                        : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
                 }
                 // une question née d'un REFUS (remboursement différé) : la chaîne ne l'a pas posée, on la RÉSERVE ici, avec les choix du contrat
                 if (resultat.issue === 'question' && reqH.refusDiffere && !reqH.questionId && !admin && credit) {
@@ -190,6 +193,13 @@ function traiterIdentifier(cfg, deps = {}) {
                     else if (r && r.etat === 'remboursee') { reqH.scanRembourse = true; reqH.scanRendu = true; }                        // le repli a rendu le crédit à l'émission
                     else if (r && r.etat === 'non-remboursee') { reqH.scanRembourse = true; noterNonRemboursement(raisonPublique(r.raisonNonRembourse)); }
                     else resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };                                    // jamais un a-trancher sans question répondable
+                }
+                // m1 : une question qui n'a pas de réservation derrière elle n'est répondable par personne. Repli REMBOURSÉ : on garde les candidats, montrés gratuitement
+                // (table du plan). Repli NON remboursé (double panne : question non écrite ET remboursement en échec), ou aucun règlement : ce n'est plus un a-trancher,
+                // c'est une PANNE SERVEUR avec la facturation de non-remboursement — un client ne paie jamais une question qui n'existe pas.
+                if (resultat.issue === 'question' && !admin && credit && !reqH.questionId && !reqH.scanRendu) {
+                    console.error(`🔴 [v2 identifier] scan ${scanId} (${porteur.type}:${porteur.id}) : question NON écrite et crédit NON rendu (${raisonNonRemboursement() ?? 'cause inconnue'}) — panne SERVEUR, à la réconciliation`);
+                    resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 }
                 // la question réservée par la chaîne doit porter les choix DU CONTRAT (choixPour) : le pont ne connaît que les idProduct
                 if (resultat.issue === 'question' && reqH.questionId) {
@@ -208,8 +218,25 @@ function traiterIdentifier(cfg, deps = {}) {
                 return { resultat, facturation: facturationDe(resultat.issue, faits) };
             });
         } catch (e) {
+            // I1 : une exception hors de tout try interne (adaptateur, facturation, creditPourReq…). Le débit est pris : il est RENDU ici (idempotent : une seule fois par scan,
+            // la claim rb|scanId), puis on répond SERVEUR avec la facturation qui dit ce qui s'est réellement passé.
             journalErreur('décision', e);
-            return repondreErreur(res, 'SERVEUR');                 // dernier recours : le débit est dans le journal des mouvements, la réconciliation le voit
+            let rendu = false, cause = null;
+            if (!admin && credit && !(reqH && reqH.scanRembourse)) {
+                try {
+                    await dansUnScan(async () => {
+                        if (reqH && reqH.credit && reqH.credit.v2 && rembourserOrigine) rendu = Boolean(await rembourserOrigine(reqH, 'panne-SERVEUR', { compteur: 'panne' }));   // annule aussi une question réservée
+                        else { const r = await argent.rembourser(porteur, credit, 'panne-SERVEUR', { scanId, compteur: 'panne' }); rendu = Boolean(r && r.rendu); cause = r && r.raisonNonRembourse; }
+                        if (!rendu && !cause) cause = raisonNonRemboursement();
+                    });
+                } catch (e2) { journalErreur('remboursement après exception', e2); }
+                if (!rendu) console.error(`🔴 [v2 identifier] scan ${scanId} (${porteur.type}:${porteur.id}) : exception ET crédit NON rendu (${cause ?? 'erreur'}) — à la réconciliation`);
+            } else rendu = Boolean(reqH && reqH.scanRendu);
+            let facturation;
+            try { facturation = facturationDe('panne', { admin, rendu, question: false, cause: rendu ? null : (cause ? raisonPublique(cause) : 'erreur') }); }
+            catch (e3) { journalErreur('facturation après exception', e3); facturation = { debite: rendu || admin ? 0 : 1, reserve: 0, rembourse: rendu, motif: admin ? 'administrateur' : 'panne', raisonNonRembourse: rendu || admin ? null : 'erreur' }; }
+            const s = await soldeSur();
+            return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}) });
         }
         const { resultat, facturation } = sortie;
         // 7. le solde, relu APRÈS les mouvements
