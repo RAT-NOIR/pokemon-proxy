@@ -643,7 +643,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const fichiers = [];
         (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!REPERTOIRES_CLI.includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);
         // la règle, en fonction pure : les lignes (hors commentaire de fin de ligne) qui portent `.message` sans exception nommée
-        const fautifsDe = (rel, source) => source.split(/\r?\n/).map(l => l.replace(/\s\/\/.*$/, '')).map((l, i) => ({ l, i })).filter(({ l }) => /\.message\b/.test(l) && !EXCEPTIONS.some(x => x.fichier === rel && l.includes(x.contient))).map(({ i }) => `${rel}:${i + 1}`);
+        // Une règle statique est un FILET, pas une preuve (audit §6) : elle voit les formes ci-dessous, pas un `e` passé tel quel à une fonction tierce. Formes vues : `.message`, `['message']`,
+        // `catch ({ message })`, et, sur chaque variable de `catch (x)` du fichier : `${x}`, `String(x)`, `x.stack`, `x.toString(`, `'' + x`.
+        const formesDe = source => {
+            const noms = [...source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)].map(m => m[1]);
+            const echapper = n => n.replace(/\$/g, '\\$');
+            const re = [/\.message\b/, /\[\s*['"`]message['"`]\s*\]/, /\bcatch\s*\(\s*\{[^)]*\bmessage\b/];
+            for (const n of new Set(noms)) { const x = echapper(n); re.push(new RegExp('\\$\\{\\s*' + x + '\\s*\\}'), new RegExp('\\bString\\(\\s*' + x + '\\s*\\)'), new RegExp('\\b' + x + '\\.(?:stack\\b|toString\\()'), new RegExp('[\'"`]\\s*\\+\\s*' + x + '\\b')); }
+            return re;
+        };
+        const fautifsDe = (rel, source) => { const re = formesDe(source); return source.split(/\r?\n/).map(l => l.replace(/\s\/\/.*$/, '')).map((l, i) => ({ l, i })).filter(({ l }) => re.some(r => r.test(l)) && !EXCEPTIONS.some(x => x.fichier === rel && l.includes(x.contient))).map(({ i }) => `${rel}:${i + 1}`); };
         const fautifs = [], utilisees = new Set();
         for (const f of fichiers) {
             const rel = path.relative(racine, f).replace(/\\/g, '/'), source = fs.readFileSync(f, 'utf8');
@@ -656,6 +665,10 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const q = fs.readFileSync(path.join(racine, 'argent', 'questions.js'), 'utf8');
         const reintroduit = q.replace('repli(`écriture refusée (${(e && (e.code || e.name)) || \'erreur\'})`)', 'repli(`écriture refusée (${e.message})`)');
         H.v('step 3 : contrôle de l\'instrument — un `repli(e.message)` réintroduit dans argent/questions.js fait tomber la règle (et la version actuelle ne la fait pas tomber)', [reintroduit !== q, fautifsDe('argent/questions.js', reintroduit).length, fautifsDe('argent/questions.js', q).length], [true, 1, 0]);
+        // la règle voit AUSSI les contournements nommés par la relecture (R3 à R8) ; un `catch` qui ne dit que le code ou le nom de l'erreur n'est pas signalé
+        const contournements = ['catch ({ message }) { journal(message); }', 'catch (e) { journal(`${e}`); }', 'catch (e) { journal(e[\'message\']); }', 'catch (e) { journal(String(e)); }', 'catch (e) { journal(e.stack); }', 'catch (e) { journal(e.toString()); }', 'catch (e) { journal(\'x\' + e); }'];
+        H.v('step 3 : contrôle de l\'instrument — catch ({ message }), `${e}`, e[\'message\'], String(e), e.stack, e.toString(), \'x\' + e sont TOUS signalés', contournements.filter(f => fautifsDe('x.js', f).length === 0), []);
+        H.v('step 3 : ... et un catch qui ne dit que le code ou le nom de l\'erreur n\'est pas signalé', fautifsDe('x.js', 'catch (e) { journal((e && (e.code || e.name)) || \'erreur\'); }').length, 0);
     }
     // ═══════════════ STEP 3 ter : le pilote de courrier MÉMOIRE est celui de la production tant que BREVO_API_KEY manque (comptes/monter.js) ═══════════════
     {
@@ -779,18 +792,51 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             const absents = [...noms].sort().filter(n => !doc.includes('`' + n + '`'));
             H.v(`m2 : ${noms.size} noms de variables lus par la production (${fichiers.length} fichiers) — tous dans la table des valeurs par défaut de AUDIT-SECURITE-V2.md (noms seulement)`, absents, []);
         }
-        // I-2 : le §10 de l'audit se bâtit par ÉNUMÉRATION de progress.md, pas par mémoire : TOUTE ligne qui porte l'un de ces marqueurs a une ligne de verdict « l. N » au §10
+        // I-2 / N1 : le §10 de l'audit se bâtit par ÉNUMÉRATION du registre (progress.md), et s'INDEXE PAR UN FRAGMENT DE CONTENU de chaque ligne — jamais par son numéro (le registre grandit à chaque étape :
+        // un numéro dérive, un fragment non). Périmètre : les lignes marquées qui PRÉCÈDENT la sentinelle `- **Task B8: complete` (que le coordinateur ajoute à la fusion) ; tant qu'elle n'existe pas, tout le fichier.
+        // Les dettes écrites après la sentinelle relèvent de la revue finale, pas de ce banc. Registre : $RM_PROGRESS, sinon le chemin du poste du coordinateur ; absent = saut DIT ; présent mais illisible = ÉCHEC.
         {
-            const prog = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\.superpowers\\sdd\\PLAN-API-V2\\progress.md';
-            if (fs.existsSync(prog)) {
-                const marqueurs = ['minor (deferred', 'parked', 'Parqués', 'parqués', "POUR L'AUDIT B8", 'audit B8', 'À PORTER'];
-                const lignes = fs.readFileSync(prog, 'utf8').split(/\r?\n/).map((l, i) => ({ n: i + 1, l })).filter(({ l }) => marqueurs.some(m => l.includes(m))).map(x => x.n);
-                const doc = fs.readFileSync(path.join(__dirname, '..', '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
-                const i10 = doc.indexOf('## 10.'), i11 = doc.indexOf('## 11.'), sect = i10 >= 0 && i11 > i10 ? doc.slice(i10, i11) : '';
-                const sans = lignes.filter(n => !new RegExp(`\\| l\\. ${n} \\|`).test(sect));
-                console.log(`   ${lignes.length} lignes de progress.md portent un marqueur de dette, ${lignes.length - sans.length} verdicts au §10`);
-                H.v(`I-2 : ${lignes.length} lignes trouvées, ${lignes.length - sans.length} verdicts (les lignes sans verdict sont listées)`, sans, []);
-            } else console.log('   progress.md absent de cette machine : énumération des dettes non jouée');
+            const MARQUEURS = ['minor (deferred', 'parked', 'Parqués', 'parqués', "POUR L'AUDIT B8", 'audit B8', 'À PORTER'], SENTINELLE = '- **Task B8: complete', LONGUEUR = 48;
+            const normaliser = s => s.replace(/[`|]/g, '').replace(/\s+/g, ' ').trim();
+            const fragmentDe = l => normaliser(l.replace(/^-\s*/, '')).slice(0, LONGUEUR).trim();
+            const dettesDe = texte => { const L = texte.split(/\r?\n/), s = L.findIndex(l => l.startsWith(SENTINELLE)); return (s < 0 ? L : L.slice(0, s)).filter(l => MARQUEURS.some(m => l.includes(m))).map(fragmentDe); };
+            const lireRegistre = chemin => (fs.existsSync(chemin) ? fs.readFileSync(chemin, 'utf8') : null);       // fichier présent mais illisible : readFileSync LÈVE, le banc échoue
+            const cellulesDe = ligne => ligne.split(/(?<!\\)\|/).slice(1, -1).map(c => c.trim());
+            // jugement pur : les fragments sans verdict (aucune ligne du §10 dont la 1re cellule le porte, ou verdict vide), et les fragments non uniques
+            const jugerDettes = (registre, section) => {
+                const fragments = dettesDe(registre), lignes = section.split(/\r?\n/).filter(l => l.startsWith('|')).map(cellulesDe);
+                const sans = fragments.filter(f => { const l = lignes.filter(c => c.length >= 4 && normaliser(c[0]).startsWith(f)); return l.length !== 1 || l[0][3].length < 8; });
+                const doubles = [...new Set(fragments.filter((f, i) => fragments.indexOf(f) !== i))];
+                return { trouvees: fragments.length, sans, doubles };
+            };
+            const doc = fs.readFileSync(path.join(__dirname, '..', '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            const i10 = doc.indexOf('## 10.'), i11 = doc.indexOf('## 11.'), sect = i10 >= 0 && i11 > i10 ? doc.slice(i10, i11) : '';
+            // ── preuve de l'INSTRUMENT sur un registre fabriqué : insérer ou retirer des lignes AILLEURS ne change rien ; retirer un verdict, si ; la sentinelle borne le périmètre
+            {
+                const l1 = '- Task Z1: parked — première dette fabriquée du banc', l2 = '- Task Z2: minor (deferred): seconde dette fabriquée du banc';
+                const sectionZ = `| ${fragmentDe(l1)} | Z1 | dette un | assumée : fabriquée |\n| ${fragmentDe(l2)} | Z2 | dette deux | assumée : fabriquée |`;
+                const base = ['- ligne ordinaire 1', l1, '- ligne ordinaire 2', l2, '- ligne ordinaire 3'].join('\n');
+                const decale = ['- insérée en tête', '- insérée en tête bis', '- ligne ordinaire 1', '- insérée au milieu', l1, l2, '- ligne ordinaire 3'].join('\n');   // lignes insérées, une ordinaire retirée, tous les numéros changent
+                const apres = `${base}\n- **Task B8: complete (fabriquée)\n- Task Z3: minor (deferred): dette écrite APRÈS la sentinelle`;
+                const sansSentinelle = `${base}\n- Task Z3: minor (deferred): dette écrite sans sentinelle`;
+                H.v('N1 instrument : registre fabriqué — 2 dettes, 2 verdicts', [jugerDettes(base, sectionZ).trouvees, jugerDettes(base, sectionZ).sans], [2, []]);
+                H.v('N1 instrument : des lignes INSÉRÉES et RETIRÉES ailleurs (les numéros de ligne changent tous) ne changent rien', jugerDettes(decale, sectionZ), { trouvees: 2, sans: [], doubles: [] });
+                H.v('N1 instrument : une dette écrite APRÈS la sentinelle n\'est pas jugée', [jugerDettes(apres, sectionZ).trouvees, jugerDettes(apres, sectionZ).sans], [2, []]);
+                H.v('N1 instrument : SANS sentinelle, tout le fichier est jugé (la dette de plus n\'a pas de verdict : le banc tomberait)', jugerDettes(sansSentinelle, sectionZ).sans.map(f => f.slice(0, 20)), ['Task Z3: minor (defe']);
+                H.v('N1 instrument : un verdict retiré ou VIDE fait tomber le banc', [jugerDettes(base, sectionZ.split('\n')[0]).sans.length, jugerDettes(base, sectionZ.replace(/assumée : fabriquée/g, '')).sans.length], [1, 2]);
+                H.v('N1 instrument : deux dettes au même fragment sont signalées (le fragment doit être UNIQUE)', jugerDettes(`${l1}\n${l1}`, sectionZ).doubles.length, 1);
+                let leve = null; try { lireRegistre(__dirname); } catch (e) { leve = e.code || e.name; }
+                H.vrai('N1 instrument : un registre présent mais illisible (ici un dossier) LÈVE — un échec de lecture reste un échec', Boolean(leve));
+            }
+            const prog = process.env.RM_PROGRESS || 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\.superpowers\\sdd\\PLAN-API-V2\\progress.md';
+            const registre = lireRegistre(prog);
+            if (registre === null) console.log('   SAUT DIT : le registre (progress.md ; variable RM_PROGRESS, sinon le chemin du poste du coordinateur) est absent de cette machine : énumération des dettes NON jouée');
+            else {
+                const j = jugerDettes(registre, sect), sentinelle = registre.split(/\r?\n/).some(l => l.startsWith(SENTINELLE));
+                console.log(`   registre lu (${process.env.RM_PROGRESS ? 'copie RM_PROGRESS' : 'chemin du poste'}), sentinelle ${sentinelle ? 'présente' : 'absente (tout le fichier est jugé)'} : ${j.trouvees} lignes de dette trouvées, ${j.trouvees - j.sans.length} verdicts au §10`);
+                H.v(`I-2 : ${j.trouvees} lignes trouvées, ${j.trouvees - j.sans.length} verdicts (les fragments sans verdict sont listés)`, j.sans, []);
+                H.v('I-2 : chaque fragment est UNIQUE parmi les lignes de dette jugées', j.doubles, []);
+            }
         }
         // TURNSTILE_SECRET absent : le pilote réel LÈVE (503), il n'accepte jamais « faute de secret » ; sans pilote branché, l'inscription ferme aussi
         const { verifierTurnstile } = require('../comptes/turnstile'); let e1 = null; try { await verifierTurnstile('jeton', '1.1.1.1', { secret: undefined }); } catch (e) { e1 = e.message; }
