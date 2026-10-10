@@ -23,6 +23,7 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { champsDeNaissance } = require('./collecte-cartes/set-nomme');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
 const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
@@ -150,6 +151,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
                 compte: { ...J.compte, produitsJoints: new Set(G.gardees.map(l => l.idProduct)).size } };
             console.log(`   garde du nom seul : ${new Set(G.gardees.map(l => l.idProduct)).size} produits gardés · ${G.refusees.length} refusés (${JSON.stringify(G.refusees.reduce((a, r) => { const k = r.raison.replace(/\d+/g, 'N'); a[k] = (a[k] || 0) + 1; return a; }, {}))})`);
         }
+        // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — nommé AVANT la première écriture de la jointure (collecte-cartes/set-nomme.js)
+        const nomNaissance = await champsDeNaissance(cx.db, prod.db, { _id: slug, code: L.code, idExpansion: [L.exp], nomEn: TIRAGE === 'intl' ? nomsCibles[0] : null, nomJa: null, nomJaTraduit: null, region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE });
         const ecrit = await ecrireJointure(M, { slug, J, produits });
         // Le set existe pour le site : son nom vient de l'expansion que NOS pages déclarent, pas d'une
         // page de set qu'on n'a pas. `bulba.titre` reste null — on n'invente pas une source.
@@ -160,7 +163,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
                 region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE, totalImprime: null,
                 bulba: { titre: null, expansion: L.bulba.expansion, motifTitres: 'sans page : cartes prises par l\'expansion déclarée sur leurs propres pages' },
                 collecteLe: new Date()
-            }, $setOnInsert: { version: 1 }
+            }, $setOnInsert: { version: 1, ...nomNaissance }
         }, { upsert: true });
         const restesParType = {};
         for (const r of J.restes) restesParType[r.type] = (restesParType[r.type] || 0) + 1;
@@ -189,6 +192,8 @@ const ATTENTE_VERROU_MS = 30 * 1000;
     }
     const faitsSet = faitsDeSet(pSet.content);
     const cleSet = r2.cleWikitext(pSet.pageid, pSet.revid);
+    // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — le nom se calcule AVANT la création du document (collecte-cartes/set-nomme.js)
+    const nomNaissance = await champsDeNaissance(cx.db, prod.db, { _id: slug, code: L.code, idExpansion: [L.exp], nomEn: faitsSet?.nomEn ?? null, nomJa: faitsSet?.nomJa ?? null, nomJaTraduit: faitsSet?.nomJaTraduit ?? null, region: TIRAGE === 'jp' ? 'jp' : 'intl', tirage: TIRAGE });
     await M.Set.updateOne({ _id: slug }, {
         $set: {
             code: L.code, idExpansion: [L.exp], nomEn: faitsSet?.nomEn ?? null, nomJa: faitsSet?.nomJa ?? null, nomJaTraduit: faitsSet?.nomJaTraduit ?? null,
@@ -198,7 +203,7 @@ const ATTENTE_VERROU_MS = 30 * 1000;
             totalImprime: (TIRAGE === 'jp' ? faitsSet?.cartesJa : faitsSet?.cartesEn) ?? null, cartesEnInfobox: faitsSet?.cartesEn ?? null,
             bulba: { titre: pSet.title, pageid: pSet.pageid, revid: pSet.revid, motifTitres: L.bulba.motifTitres, expansion: L.bulba.expansion, cleR2: cleSet },
             collecteLe: new Date()
-        }, $setOnInsert: { version: 1 }
+        }, $setOnInsert: { version: 1, ...nomNaissance }
     }, { upsert: true });
     console.log(`1. set : « ${faitsSet?.nomEn} » / ${faitsSet?.nomJa} (${faitsSet?.nomJaTraduit}) — jacards ${faitsSet?.cartesJa}, encards ${faitsSet?.cartesEn}, sortie JP ${faitsSet?.sortieJa} ; R2 ${depotSet.ecrit ? 'écrit' : 'déjà là'} (${cleSet})`);
     if (faitsSet?.cartesJa !== L.attendu) console.warn(`   ⚠️ l'infobox dit ${faitsSet?.cartesJa} cartes, la table attend ${L.attendu}.`);
