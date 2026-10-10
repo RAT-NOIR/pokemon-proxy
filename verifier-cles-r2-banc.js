@@ -6,20 +6,36 @@
 // sont REFUSÉES sur chaque bucket de production, aux deux points d'accès.
 const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 
-/** Verdict pur sur la matrice { 'clés|bucket|point': 'LU' | 'refus …' }. Un bucket absent de la matrice n'est pas « refusé » : il manque, et le verdict refuse. */
+// PORTÉE DU VERDICT — ce que cette preuve établit et ce qu'elle n'établit pas :
+//   · elle teste la LECTURE (ListObjectsV2), pas l'écriture ;
+//   · elle ne porte que sur les buckets NOMMÉS dans le .env (R2_BUCKET_IMAGES, R2_BUCKET_BRUT), pas sur les autres buckets du compte ;
+//   · seul un refus d'autorisation (HTTP 403) compte comme refus ; timeout, coupure, 404, 5xx rendent la case INCONCLUSIVE et le verdict « NON PROUVÉ » ;
+//   · le périmètre réel du jeton (buckets, droits d'écriture) se vérifie côté Cloudflare : c'est une action du testeur.
+const PORTEE = 'lecture seule (ListObjectsV2) ; buckets nommés dans le .env seulement (IMAGES, BRUT) ; ni l\'écriture ni les autres buckets du compte — le périmètre du jeton se vérifie côté Cloudflare (testeur).';
+
+/** Verdict pur sur la matrice { 'clés|bucket|point': 'LU' | 'refus 403 …' | 'inconclusif …' }. Un bucket absent de la matrice n'est pas « refusé » : il manque ;
+ *  une case ni LU ni « refus 403 » est INCONCLUSIVE (nommée) : dans les deux cas le verdict refuse. */
 function juger(res, bucketsProd, points) {
+    const inconclusives = Object.entries(res).filter(([, v]) => v !== 'LU' && !/^refus 403\b/.test(String(v))).map(([k]) => k);
     const lu = (nc, nb) => points.some(np => res[`${nc}|${nb}|${np}`] === 'LU');
     const complet = ['banc', 'production'].every(nc => ['banc', ...bucketsProd].every(nb => points.every(np => `${nc}|${nb}|${np}` in res)));
     const temoin = bucketsProd.length > 0 && bucketsProd.every(nb => lu('production', nb));
     const bancLit = lu('banc', 'banc');
     const fuites = bucketsProd.filter(nb => lu('banc', nb));
-    return { complet, temoin, bancLit, fuites, ok: complet && temoin && bancLit && fuites.length === 0 };
+    return { complet, temoin, bancLit, fuites, inconclusives, ok: complet && temoin && bancLit && fuites.length === 0 && inconclusives.length === 0 };
+}
+
+/** Classe une erreur : « refus 403 … » seulement pour un refus d'autorisation HTTP 403 ; toute autre issue est « inconclusif … ». Pure. */
+function classer(e) {
+    const statut = e?.$metadata?.httpStatusCode;
+    const nom = e?.name || e?.Code || e?.code || '';
+    return `${statut === 403 ? 'refus' : 'inconclusif'} ${statut ?? '?'} ${nom}`.trim();
 }
 
 async function essai(cles, bucket, endpoint) {
     const c = new S3Client({ region: 'auto', endpoint, credentials: cles, forcePathStyle: true });
     try { await c.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1 })); return 'LU'; }
-    catch (e) { return `refus ${e.$metadata?.httpStatusCode ?? '?'} ${e.name || e.Code || ''}`.trim(); }
+    catch (e) { return classer(e); }
 }
 
 async function main(E = process.env) {
@@ -48,13 +64,15 @@ async function main(E = process.env) {
     console.log(`  témoin : les clés de production lisent leurs buckets → ${prod.map(n => `${n} ${points(res, 'production', n, POINTS) ? 'oui' : 'NON'}`).join(', ')}`);
     console.log(`  les clés de banc lisent le bucket de banc → ${v.bancLit ? 'oui' : 'NON'}`);
     console.log(`  les clés de banc lisent un bucket de production → ${prod.map(n => `${n} ${v.fuites.includes(n) ? '🔴 OUI' : 'non'}`).join(', ')}`);
+    if (v.inconclusives.length) console.log(`  cases INCONCLUSIVES (ni lecture ni refus 403) : ${v.inconclusives.join(', ')}`);
     console.log(v.ok ? '  ✅ PROUVÉ : refus des clés de banc sur la production, sur les deux points d\'accès, et le témoin lit — le refus vient de la clé, pas du point d\'accès.'
         : '  ❌ NON PROUVÉ (voir la matrice)');
+    console.log(`  PORTÉE : ${PORTEE}`);
     return v.ok ? 0 : 1;
 }
 const points = (res, nc, nb, POINTS) => Object.keys(POINTS).some(np => res[`${nc}|${nb}|${np}`] === 'LU');
 
-module.exports = { juger };
+module.exports = { juger, classer, PORTEE };
 
 if (require.main === module) {
     require('dotenv').config();

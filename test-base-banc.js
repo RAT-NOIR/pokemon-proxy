@@ -263,6 +263,12 @@ console.log(JSON.stringify({ cartesEstLeBanc: process.env.MONGODB_CARTES_URI ===
         verifier('verifier-cles-r2-banc : une clé de banc lit un bucket de production → NON prouvé, fuite nommée', [juger(matrice([...BON, 'banc|I|ue']), PROD, PTS).ok, juger(matrice([...BON, 'banc|I|ue']), PROD, PTS).fuites], [false, ['I']]);
         verifier('verifier-cles-r2-banc : témoin muet (la production ne lit pas) → NON prouvé', juger(matrice(['banc|banc|generique']), PROD, PTS).ok, false);
         verifier('verifier-cles-r2-banc : le banc ne lit pas son bucket → NON prouvé', juger(matrice(BON.slice(1)), PROD, PTS).ok, false);
+        // une erreur RÉSEAU sur une case clés de banc × bucket de production n'est pas un refus : la case est inconclusive, nommée, et le verdict refuse
+        const reseau = { ...matrice(BON), 'banc|I|ue': 'inconclusif ? TimeoutError' }, ancienne = { ...matrice(BON), 'banc|I|ue': 'refus ? TimeoutError' };
+        verifier('verifier-cles-r2-banc : erreur réseau sur une case de production → NON prouvé, case inconclusive nommée', [juger(reseau, PROD, PTS).ok, juger(reseau, PROD, PTS).inconclusives], [false, ['banc|I|ue']]);
+        verifier('verifier-cles-r2-banc : un « refus » sans statut 403 (ancien format du timeout) n\'est PAS un refus → NON prouvé', juger(ancienne, PROD, PTS).ok, false);
+        const { classer } = require('./verifier-cles-r2-banc');
+        verifier('classer : 403 AccessDenied = refus ; timeout, coupure, 500, 404 = inconclusif', [classer({ $metadata: { httpStatusCode: 403 }, name: 'AccessDenied' }), classer({ name: 'TimeoutError' }), classer({ code: 'ECONNRESET', $metadata: {} }), classer({ $metadata: { httpStatusCode: 500 }, name: 'InternalError' }), classer({ $metadata: { httpStatusCode: 404 }, name: 'NoSuchBucket' })].map(s => s.split(' ').slice(0, 2).join(' ')), ['refus 403', 'inconclusif ?', 'inconclusif ?', 'inconclusif 500', 'inconclusif 404']);
         verifier('verifier-cles-r2-banc : matrice incomplète → NON prouvé', juger({ 'banc|banc|generique': 'LU' }, PROD, PTS).ok, false);
         verifier('appliquer : les clés de production vidées EXISTENT encore comme noms (dotenv ne remplace pas une variable présente)', ['R2_ACCESS_KEY_ID' in envC, 'R2_SECRET_ACCESS_KEY' in envC], [true, true]);
         // ── 8 ter. UN BANC D'IMPORT PAR CE CHEMIN : l'import lancé en sous-processus sous le harnais (clés de production vidées) doit exiger et utiliser R2_BANC_*.
