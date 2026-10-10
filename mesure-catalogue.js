@@ -1,7 +1,7 @@
 // ============================================================
 // LES TROIS NOMBRES DU CHANTIER — fiches, visuels, écart
 // ============================================================
-//   node mesure-catalogue.js [--par-set] [--tout]
+//   node mesure-catalogue.js [--par-set] [--tout] [--par-langue] [--export=<fichier>]
 //
 // L'unité de mesure du catalogue d'images : sur les produits Cardmarket, combien ont une FICHE
 // (une carte leur est jointe) et combien ont un VISUEL (la carte porte une image DE CE SET).
@@ -70,8 +70,9 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
     // ⚠️ Un tel visuel n'est pas celui du tirage du set : il est compté À PART, jamais comme visuel du set.
     // ⚠️ `null` n'est PAS « anglais » : c'est « le format ne tranche pas » — un plancher, pas un compte (des scans japonais
     // vivent aussi dans des formats anglais : 9 sur 36 tirés au hasard dans les sets à risque).
-    const sets = await cx.db.collection('sets').find({}, { projection: { region: 1 } }).toArray();
+    const sets = await cx.db.collection('sets').find({}, { projection: { region: 1, tirage: 1 } }).toArray();
     const regionDe = new Map(sets.map(s => [s._id, s.region]));
+    const setDocDe = new Map(sets.map(s => [s._id, s]));
     const entrees = avecImages.flatMap(c => c.images || []);
     const sansLangue = entrees.filter(i => !('langue' in i)).length;
     // Une table des sets vide ou AUCUNE entrée évaluée ne rendraient pas zéro jumeau : elles rendraient « tout est du bon
@@ -103,6 +104,25 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
     console.log(`   🔴 + ${visuelsJumeau.size} produits dont le SEUL visuel est le scan japonais du jumeau (entrée \`langue: ja\` sous un set non jp) — pas comptés comme visuels`);
     console.log(`   ⚖️ entrées cartes.images sans \`langue\` évaluée : ${sansLangue} sur ${entrees.length} ${sansLangue ? '— 🔴 posées par un worker antérieur au champ : relancer poser-langue-images.js --ecrire' : '✅'}`);
     console.log(`   ÉCART   : ${total - visuels.size} sans visuel du bon tirage, dont ${fiches.size - visuels.size} qui ont une fiche`);
+
+    // ════ --par-langue : les MÊMES ensembles (fiches, visuels, visuelsJumeau, slugParProduit), regroupés par TIRAGE du set ════
+    // `tirage ?? region` (jamais `region` seul : « intl » pour des sets chinois/indonésiens/thaïs). Aucun second prédicat ;
+    // le bouclage LÈVE si la somme des langues n'égale pas le global.
+    if (process.argv.includes('--par-langue')) {
+        const { ventilerParLangue, CAUSES } = require('./collecte-cartes/ventilation-langue');
+        // le bouclage compare aux nombres que la ligne GLOBALE imprime (total, fiches, visuels, jumeau), pas à un recomptage
+        const jamaisAppris = new Set(exportArg ? produits.filter(p => !p.appris).map(p => p.idProduct) : []);
+        const v = ventilerParLangue(slugParProduit, { fiches, visuels, jumeau: visuelsJumeau }, s => setDocDe.get(s),
+            { produits: total, fiches: fiches.size, visuels: visuels.size, jumeau: visuelsJumeau.size }, jamaisAppris);
+        console.log(`\n   ════ PAR LANGUE DU TIRAGE (sets.tirage ?? sets.region) — dénominateur : ${total} produits${exportArg ? ` de l'export ${exportArg.slice('--export='.length)}` : ' (lignes apprises numeros_cartes, sans --export)'} ════`);
+        console.log(`   ${'langue'.padEnd(20)}${'produits'.padStart(9)}${'fiches'.padStart(9)}${'visuels'.padStart(9)}${'écart'.padStart(8)}${'jumeau'.padStart(8)}   % visuels`);
+        for (const l of v.tableau)
+            console.log(`   ${l.langue.padEnd(20)}${String(l.produits).padStart(9)}${String(l.fiches).padStart(9)}${String(l.visuels).padStart(9)}${String(l.produits - l.visuels).padStart(8)}${String(l.jumeau).padStart(8)}   ${(l.visuels / l.produits * 100).toFixed(1)} %`);
+        console.log(`   ${'SOMME'.padEnd(20)}${String(v.somme.produits).padStart(9)}${String(v.somme.fiches).padStart(9)}${String(v.somme.visuels).padStart(9)}${String(v.somme.produits - v.somme.visuels).padStart(8)}${String(v.somme.jumeau).padStart(8)}`);
+        console.log(`   « (langue inconnue) » par CAUSE${exportArg ? ' (entre crochets : produits JAMAIS APPRIS de l\'export)' : ''} :`);
+        for (const c of ['a', 'b', 'c']) console.log(`      (${c}) ${CAUSES[c].padEnd(52)} ${String(v.inconnue[c].produits).padStart(6)}${exportArg ? `  [${v.inconnue[c].jamaisAppris}]` : ''}`);
+        console.log(`   ⚖️ bouclage : somme des langues = mesure globale imprimée plus haut (${v.attendu.produits} produits · ${v.attendu.fiches} fiches · ${v.attendu.visuels} visuels · ${v.attendu.jumeau} jumeau) ✅`);
+    }
 
     const enCours = await cx.db.collection('file_images').countDocuments({ etat: 'en-cours' });
     const attente = await cx.db.collection('file_images').countDocuments({ etat: 'attente' });
