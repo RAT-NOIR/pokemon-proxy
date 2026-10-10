@@ -178,6 +178,48 @@ async function semer() {
         H.v('    administrateur : motif administrateur, rien rendu, compte intact (accueil 25)', [rr.statut, jr.facturation && jr.facturation.motif, jr.facturation && jr.facturation.rembourse, (await raw('comptes').findOne({ _id: c._id })).solde.accueil], [200, 'administrateur', false, 25]);
     }
 
+    // ── G. la garde du remboursement sans-prix, écrite par ce qu'elle AUTORISE : une carte IDENTIFIÉE (affirmée à l'analyse, ou tranchée par une réponse « repondue »)
+    {
+        const refus = (r) => [r.statut, r.json && r.json.erreur && r.json.erreur.code, r.json && r.json.erreur && r.json.erreur.detail];
+        const LR = scanId => ({ scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        // G1. question encore EN ATTENTE : refus explicite, crédit et question inchangés
+        {
+            const x = await inst(3); const r0 = await identifier(x.jeton); const scanId = r0.json.scanId; await journal(scanId);
+            const m0 = (await mouv(x.i._id)).length;
+            const r = await rl(x.jeton, LR(scanId));
+            H.v('G1. question EN ATTENTE + sans-prix : 409 CONFLIT (carte-non-identifiee), jamais un remboursement', refus(r), [409, 'CONFLIT', 'carte-non-identifiee']);
+            const q = await raw('questions').findOne({ _id: `${scanId}:0` });
+            H.v('    crédit et question inchangés : essais 2, question en-attente, aucun mouvement de plus, aucun plafond consommé', [await essais(x.i._id), q.etat, (await mouv(x.i._id)).length - m0, await raw('plafonds').countDocuments({ porteur: `installation:${x.i._id}` })], [2, 'en-attente', 0, 0]);
+            // la question répondue ensuite redevient remboursable : la garde suit l'état, pas une marque posée une fois
+            await repondre(x.jeton, scanId, 'a');
+            const r2 = await rl(x.jeton, LR(scanId));
+            H.v('    la même carte, une fois la question RÉPONDUE : le remboursement est permis', [r2.statut, r2.json.facturation && r2.json.facturation.rembourse, await essais(x.i._id)], [200, true, 3]);
+        }
+        // G2. question abandonnée (ne-sait-pas) : la carte n'est pas identifiée, le crédit est déjà rendu => refus
+        {
+            const x = await inst(3); const r0 = await identifier(x.jeton); const scanId = r0.json.scanId; await journal(scanId);
+            await repondre(x.jeton, scanId, 'ne-sait-pas');
+            const r = await rl(x.jeton, LR(scanId));
+            H.v('G2. question abandonnée (ne-sait-pas) : refus, pas de second crédit (essais 3)', [...refus(r), await essais(x.i._id), await rembNet(x.i._id)], [409, 'CONFLIT', 'carte-non-identifiee', 3, 1]);
+        }
+        // G3. carte AFFIRMÉE à l'analyse (ligne fabriquée d'après un vrai scan) : la garde l'autorise, la requête atteint le ledger (aucun débit => aucun-debit)
+        {
+            const s = await scanRepondu(); const src = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(s.scanId) });
+            const sid = new mongoose.Types.ObjectId();
+            await raw('analyses').insertOne({ ...src, _id: sid, cartes: [{ ...src.cartes[0], statut: 'identifiee', reponse: undefined }] });
+            await raw('journal_scans').insertOne({ _id: sid, userId: `v2:installation:${s.i._id}`, idProduct: ID_A, route: 'identifier' });
+            const r = await rl(s.jeton, LR(String(sid))), j = r.json || {};
+            H.v('G3. carte AFFIRMÉE à l\'analyse : la garde l\'autorise (200, atteint le ledger : aucun-debit, rien rendu)', [r.statut, j.facturation && j.facturation.raisonNonRembourse, j.facturation && j.facturation.rembourse], [200, 'aucun-debit', false]);
+        }
+        // G4. ligne analyses absente : la garde ne peut pas conclure => elle BLOQUE
+        {
+            const s = await scanRepondu();
+            await raw('analyses').deleteOne({ _id: new mongoose.Types.ObjectId(s.scanId) });
+            const r = await rl(s.jeton, LR(s.scanId));
+            H.v('G4. analyses absente (la garde ne peut pas conclure) : refus, rien rendu (essais 2)', [...refus(r), await essais(s.i._id)], [409, 'CONFLIT', 'carte-non-identifiee', 2]);
+        }
+    }
+
     // ── E. un prix lu 100 fois sous le guide est écrit « douteux » (le 1,18 € de la 1.0.5 contre un guide à 1 180 €)
     {
         const s = await scanRepondu(3, 'a');                                   // 'a' = idProduct le plus bas = ID_A (guide 1 180)

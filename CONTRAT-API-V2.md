@@ -18,8 +18,8 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 |---|---|---|---|---|
 | `POST /api/installation` | extension | aucune | non | `RequeteInstallation` → `201 ReponseInstallation` (le jeton n'est rendu qu'ICI) |
 | `POST /api/identifier` (avec `contrat: 2`) | extension | Bearer | **oui** | `RequeteIdentifier` → `ReponseAnalyse` |
-| `POST /api/identifier/reponse` | extension | Bearer | **oui** | `RequeteReponse` → `ReponseQuestion` |
-| `POST /api/retour-live` (avec Bearer) | extension | Bearer | **oui** | `RequeteRetourLive` → `ReponseRetourLive` |
+| `POST /api/identifier/reponse` | extension | Bearer | facultative | `RequeteReponse` → `ReponseQuestion` |
+| `POST /api/retour-live` (avec Bearer) | extension | Bearer | facultative | `RequeteRetourLive` → `ReponseRetourLive` |
 | `POST /api/solde` (avec Bearer) | extension | Bearer | non | rien → `ReponseSolde` |
 | `POST /api/compte/lier` | extension | Bearer | non | `RequeteLier` → `ReponseLier` |
 | `POST /api/compte/delier` | extension | Bearer | non | rien → `ReponseSolde` |
@@ -797,7 +797,7 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 
 ## 5. L'idempotence
 
-`Idempotency-Key` est **obligatoire** sur les trois routes qui débitent : `POST /api/identifier`, `POST /api/identifier/reponse`, `POST /api/retour-live`. Motif : `^[A-Za-z0-9_-]{8,64}$` (8 à 64 caractères). Un identifiant aléatoire par action de l'utilisateur ; **le même** pour un nouvel essai de la même action.
+`Idempotency-Key` est **obligatoire** sur la route qui débite : `POST /api/identifier`. Elle est **facultative** sur `POST /api/identifier/reponse` et `POST /api/retour-live` : une clé donnée est honorée, mais un rejeu sans clé est déjà sûr (l'état de la question, ou la garde « un second retour est refusé », rend le même résultat sans second débit ni second remboursement). Motif : `^[A-Za-z0-9_-]{8,64}$` (8 à 64 caractères). Un identifiant aléatoire par action de l'utilisateur ; **le même** pour un nouvel essai de la même action.
 
 | situation | réponse |
 |---|---|

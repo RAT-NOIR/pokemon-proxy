@@ -16,6 +16,7 @@ function raisonPublique(raison) {
 function facturation({ debite = 0, reserve = 0, rembourse = 0, motif = null, raisonNonRembourse = null } = {}) {
     if (motif !== null && !MOTIFS.includes(motif)) throw new Error(`facturation : motif hors liste fermée "${motif}"`);
     if (raisonNonRembourse !== null && !RAISONS_NON_REMBOURSE.includes(raisonNonRembourse)) throw new Error(`facturation : raisonNonRembourse hors liste fermée "${raisonNonRembourse}"`);
-    return { debite, reserve: motif === 'question' ? reserve : 0, rembourse, motif, raisonNonRembourse };
+    // `rembourse` est un BOOLÉEN au contrat (Facturation.rembourse) : questions.js passe 1, d'autres 0 ou true — la règle vit ICI, en un seul exemplaire (§21 bis)
+    return { debite, reserve: motif === 'question' ? reserve : 0, rembourse: Boolean(rembourse), motif, raisonNonRembourse };
 }
 module.exports = { facturation, raisonPublique, MOTIFS };

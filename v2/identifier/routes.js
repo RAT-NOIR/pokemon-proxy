@@ -316,7 +316,17 @@ function traiterReponse(cfg, deps = {}) {
         let an;
         try { an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }); }
         catch (e) { journalErreur('analyses', e); return repondreErreur(res, 'INDISPONIBLE'); }
-        const entree = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
+        if (!an) {
+            // Pas de ligne analyses À CE PORTEUR. Si la QUESTION de ce porteur existe, c'est une panne de notre côté (l'écriture annexe de l'analyse a échoué) : 404 voudrait dire
+            // « scan d'un autre porteur » et ferait abandonner à tort. 503 INDISPONIBLE, réessayable, question intacte (le balayage la rend à 24 h si rien ne revient).
+            // Sans question non plus : le scan n'existe pas pour ce porteur => 404.
+            let q = null;
+            try { q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id }, { projection: { _id: 1 } }); }
+            catch (e) { journalErreur('question', e); return repondreErreur(res, 'INDISPONIBLE'); }
+            if (q) { console.error(`🔴 [v2 reponse] scan ${scanId} (${porteur.type}:${porteur.id}) : question présente, ligne analyses ABSENTE — réponse refusée en 503, question intacte`); return repondreErreur(res, 'INDISPONIBLE', undefined, { detail: 'analyse-absente' }); }
+            return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
+        }
+        const entree = Array.isArray(an.cartes) ? an.cartes[carte] : null;
         if (!entree || entree.statut !== 'a-trancher') return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
         const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
 
@@ -339,10 +349,9 @@ function traiterReponse(cfg, deps = {}) {
             if (r.statut === 404) return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
             if (r.statut === 400) return entreeInvalide('choix');
             if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
-            if (r.statut === 410) { const s = await soldeSur(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: { ...r.facturation, rembourse: Boolean(r.facturation.rembourse) }, ...(s !== undefined ? { solde: s } : {}) }); }
+            if (r.statut === 410) { const s = await soldeSur(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}) }); }
             if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
-            // argent/questions.js::facturationDe écrit `rembourse` en 0/1 ; le contrat (Facturation.rembourse) est un booléen : normalisé ici, à la frontière
-            facturation = { ...r.facturation, rembourse: Boolean(r.facturation.rembourse) };
+            facturation = r.facturation;
             idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
             le = (r.question.reponse && r.question.reponse.le) || le;
         }

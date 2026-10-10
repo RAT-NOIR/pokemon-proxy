@@ -150,7 +150,15 @@ const IDEM = '^[A-Za-z0-9_-]{8,64}$';
 H.v('Idempotency-Key : le motif exact', aller(doc, 'components.parameters.IdempotencyKey.schema.pattern'), IDEM);
 H.v('Idempotency-Key : en-tête, obligatoire', [aller(doc, 'components.parameters.IdempotencyKey.in'), aller(doc, 'components.parameters.IdempotencyKey.name'), aller(doc, 'components.parameters.IdempotencyKey.required')], ['header', 'Idempotency-Key', true]);
 const avecCle = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKey')).map(o => `${o.methode} ${o.chemin}`).sort();
-H.v('Idempotency-Key sur les trois routes qui débitent', avecCle, ['POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/retour-live']);
+H.v('Idempotency-Key OBLIGATOIRE : /api/identifier seulement (le débit en exige une)', avecCle, ['POST /api/identifier']);
+// B1b.5 : /reponse et /retour-live honorent la clé quand elle est donnée mais ne l'exigent pas (leur état — question, garde « un second retour est refusé » — rend un rejeu sûr)
+const FAC = 'components.parameters.IdempotencyKeyFacultative';
+H.v('Idempotency-Key FACULTATIVE : même nom, même en-tête, même motif, required:false', [aller(doc, `${FAC}.in`), aller(doc, `${FAC}.name`), aller(doc, `${FAC}.required`), aller(doc, `${FAC}.schema.pattern`)], ['header', 'Idempotency-Key', false, IDEM]);
+H.vrai('   la description dit POURQUOI elle est facultative', /facultative|non exigée|pas exigée/i.test(String(aller(doc, `${FAC}.description`))) && /rejeu/i.test(String(aller(doc, `${FAC}.description`))));
+const avecCleFac = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKeyFacultative')).map(o => `${o.methode} ${o.chemin}`).sort();
+H.v('Idempotency-Key facultative sur /reponse et /retour-live, et sur elles seules', avecCleFac, ['POST /api/identifier/reponse', 'POST /api/retour-live']);
+// le contrat dit ce que le serveur fait : /identifier sans clé => 400 (obligatoire) ; les deux autres routes la déclarent facultative
+H.v('aucune des trois routes n\'a de paramètre Idempotency-Key en ligne (tout passe par les deux composants)', OPERATIONS.filter(o => (o.op.parameters || []).some(p => !p.$ref && p.name === 'Idempotency-Key')).length, 0);
 // aucun score nulle part (règle 4) : aucune propriété nommée score / confiance numérique dans les schémas
 const nomsProps = [];
 (function parcourir(x) { if (Array.isArray(x)) x.forEach(parcourir); else if (x && typeof x === 'object') { if (x.properties) nomsProps.push(...Object.keys(x.properties)); Object.values(x).forEach(parcourir); } })(S);
@@ -204,6 +212,6 @@ if (AVANT_FUSION) {
     for (const o of promesses.filter(o => !o.op['x-conditionnel'])) H.vrai(`route montée : ${o.methode} ${o.chemin}`, montees.has(`${o.methode} ${o.chemin}`));
 }
 // toute route qui accepte Idempotency-Key documente 422 (clé réutilisée avec un autre corps) et 429 (même clé en cours)
-for (const o of OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKey')))
+for (const o of OPERATIONS.filter(o => (o.op.parameters || []).some(p => /^#\/components\/parameters\/IdempotencyKey(Facultative)?$/.test(p.$ref || ''))))
     H.v(`${o.methode} ${o.chemin} documente 422 et 429`, ['422', '429'].filter(s => !(o.op.responses || {})[s]), []);
 H.bilan();

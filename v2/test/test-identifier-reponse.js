@@ -148,6 +148,20 @@ async function semer() {
         H.v('7. après 24 h (balayage passé) : 410 CODE_EXPIRE, facturation.rembourse true', [bilan.remboursees >= 1, r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse], [true, 410, 'CODE_EXPIRE', true]);
         H.v('   crédit rendu une seule fois (essais 3)', await essais(s.i._id), 3);
     }
+    // ── 6bis. ligne analyses ABSENTE alors que la question de CE porteur existe : une panne explicite et réessayable, JAMAIS un 404 (qui veut dire « scan d'un autre »)
+    {
+        const s = await scanAmbigu(), autre = await inst(3);
+        await raw('analyses').deleteOne({ _id: new mongoose.Types.ObjectId(s.scanId) });
+        const m0 = (await mouv(s.i._id)).length;
+        const r = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '6g' }), j = r.json || {};
+        H.v('6bis. analyses absente, question du porteur présente : 503 INDISPONIBLE (detail analyse-absente), pas 404', [r.statut, j.erreur && j.erreur.code, j.erreur && j.erreur.detail, j.success], [503, 'INDISPONIBLE', 'analyse-absente', false]);
+        const q = await raw('questions').findOne({ _id: `${s.scanId}:0` });
+        H.v('   la question est INTACTE (en-attente, non répondue), le crédit reste réservé, aucun mouvement de plus', [q.etat, q.reponse, (await mouv(s.i._id)).length - m0, await essais(s.i._id)], ['en-attente', null, 0, 2]);
+        const rA = await repondre(url, autre.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '6h' });
+        H.v('   le même scan présenté par un AUTRE porteur : toujours 404 (la panne ne révèle rien)', [rA.statut, rA.json.erreur.code], [404, 'CODE_INVALIDE']);
+        const rI = await repondre(url, s.jeton, { scanId: String(new mongoose.Types.ObjectId()), choix: 'a' }, { nom: '6i' });
+        H.v('   un scan qui n\'existe nulle part : 404', rI.statut, 404);
+    }
     // ── 10. lot : répondre ne coûte rien et ne rembourse rien (documents fabriqués d'après un vrai scan)
     {
         const s = await scanAmbigu(); const x = await inst(3);

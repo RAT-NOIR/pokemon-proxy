@@ -265,7 +265,7 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
           }
         ],
         "requestBody": {
@@ -416,7 +416,7 @@
         ],
         "parameters": [
           {
-            "$ref": "#/components/parameters/IdempotencyKey"
+            "$ref": "#/components/parameters/IdempotencyKeyFacultative"
           }
         ],
         "requestBody": {
@@ -1841,6 +1841,16 @@
         "in": "header",
         "required": true,
         "description": "Une requête rejouée avec la même clé rend la même réponse, sans second débit. Conservée 24 h.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{8,64}$"
+        }
+      },
+      "IdempotencyKeyFacultative": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": false,
+        "description": "Facultative (non exigée) sur cette route : une clé donnée est honorée (même corps rendu, sans second effet, 24 h), mais un rejeu sans clé est déjà sûr — l'état de la question (/api/identifier/reponse) ou la garde « un second retour est refusé » (/api/retour-live) rend le rejeu identique, sans second débit ni second remboursement.",
         "schema": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{8,64}$"

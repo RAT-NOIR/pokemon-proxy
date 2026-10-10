@@ -24,6 +24,21 @@ const RAPPORT_DOUTEUX = 100;                     // « plus de 100 fois sous le 
 const CHAMPS_PRIX = Object.freeze(['prixLive', 'prixLiveEtat', 'prixLiveCodeLangue', 'prixLiveTendance', 'prixLiveNM', 'originePrix', 'grilleLive', 'grilleNbEtats', 'grilleValeursDistinctes']);
 const journalErreur = (ou, e) => console.error(`❌ [v2 retour-live] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);
 
+// LA GARDE du remboursement `sans-prix`, écrite par ce qu'elle AUTORISE : la carte doit être IDENTIFIÉE — affirmée à l'analyse (statut `identifiee`), ou tranchée par une
+// réponse (question `repondue` par un candidat, hors lot). Tout le reste bloque : question en attente (son crédit est RÉSERVÉ, il se règle par la réponse ou le balayage),
+// abandonnée (déjà rendue), introuvable, lot (B1b.8 en décide), ligne analyses absente — « je ne peux pas conclure » n'est jamais « tout va bien ».
+async function carteIdentifiee(porteur, scanId, carte) {
+    const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1 } });
+    const e = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
+    if (!e) return false;
+    if (e.statut === 'identifiee') return true;
+    if (e.statut !== 'a-trancher') return false;
+    const q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id });
+    if (q) return q.etat === 'repondue' && q.lot !== true && Boolean(q.reponse) && q.reponse.aucune === false && Number.isInteger(q.reponse.idProduct);
+    // pas de question réservée : seul un administrateur (rien débité) est dans ce cas — sa réponse par un candidat est écrite sur la ligne analyses
+    return Boolean(porteur.administrateur) && Boolean(e.reponse) && Number.isInteger(e.reponse.idProduct);
+}
+
 // La facturation d'une lecture ratée définitive, d'après ce que le ledger a rendu.
 function facturationDeLecture(r) {
     if (r.rendu) return fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' });
@@ -89,6 +104,11 @@ function traiterRetourLive(cfg, deps = {}) {
                     await col('journal_scans').updateOne({ _id: scanId, userId }, { $set: { douteux: true, douteuxGuide: reference } });
             } catch (e) { journalErreur('douteux', e); }
         } else {
+            if (lr.definitive) {
+                let ok = false;
+                try { ok = await carteIdentifiee(porteur, scanId, carte); } catch (e) { journalErreur('garde', e); return repondreErreur(res, 'INDISPONIBLE'); }
+                if (!ok) return repondreErreur(res, 'CONFLIT', 'Cette carte n\'est pas identifiée : aucun remboursement sans-prix', { detail: 'carte-non-identifiee' });
+            }
             try { await col('journal_scans').updateOne({ _id: scanId, userId, prixLive: null }, { $set: { lectureRatee: { cause: lr.cause, definitive: lr.definitive, le: new Date() } } }); }
             catch (e) { journalErreur('lecture ratée', e); }
             if (lr.definitive) {
