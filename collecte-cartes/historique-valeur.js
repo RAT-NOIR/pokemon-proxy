@@ -39,7 +39,7 @@ function calculerInstantanes({ sets, produits, tendances, jour, guideDu }) {
             centimes += ct; valorises++;
             if (!phare || ct > phare.prixCt) phare = { idProduct: p.idProduct, prixCt: ct };   // ordre croissant d'idProduct : l'égalité garde le plus petit
         }
-        // FORME FINALE, sans doublon : le set et la date vivent dans l'_id (« slug|AAAA-MM-JJ » ; lire un set = _id préfixé « slug| », index _id) ;
+        // FORME FINALE, sans doublon : le set et la date vivent dans l'_id (« slug|AAAA-MM-JJ » ; lire un set = _id préfixé « slug| », index _id ; aucune lecture par préfixe dans notre code : tout lecteur doit ÉCHAPPER le slug dans la regex ancrée ^slug\|, il peut porter « . » ou « ( ») ;
         // le nom de la carte phare se relit par son idProduct (catalogue / cartes_produits), il n'est pas copié ici
         return { _id: `${s._id}|${jour}`, valeurCt: centimes, produits: vus.size, produitsValorises: valorises, phare };
     });
