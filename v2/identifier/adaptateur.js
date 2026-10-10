@@ -130,4 +130,5 @@ function adapter({ statutHttp, corps } = {}, ctx = {}) {
         return { issue: 'panne', analyse: null, erreur: { code }, diagnostic };
     }
 }
-module.exports = { adapter, RAISONS };
+// codeLangueDe / prixLiveDe : exportés pour que /api/identifier/reponse (B1b.5) fabrique le prixLive d'une carte tranchée par la MÊME règle que l'adaptateur (§21 bis : jamais une copie).
+module.exports = { adapter, RAISONS, codeLangueDe, prixLiveDe };
