@@ -163,6 +163,8 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         const x = await inst({ essais: 1, achete: 0 }); lot(nAff(25));
         const r = await poster(sv.url, x.jeton); const j = r.json || {};
         H.v('5. 25 cartes, solde 1 : 429 QUOTA detail lot-trop-grand, facturation rendue { debite:0, rembourse:true }', [r.statut, j.erreur && j.erreur.code, j.erreur && j.erreur.detail, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse], [429, 'QUOTA', 'lot-trop-grand', 0, true]);
+        const vE = valider(j, ref('ReponseErreur'), SCHEMA);
+        H.vrai(`   la réponse 429 valide contre ReponseErreur (detail est une chaîne libre au contrat : aucune valeur à ajouter) — ${vE.ok ? 'ok' : vE.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')}`, vE.ok);
         const plafonds = await raw('plafonds').find({ porteur: `installation:${x.i._id}` }).toArray();
         H.v('   crédit initial rendu (essai 1), aucun mouvement net, et le remboursement n\'a PAS compté dans les plafonds (sansPlafond)', [await essais(x), await net(x, 'lot-trop-grand'), plafonds.reduce((t, p) => t + p.count, 0)], [1, 0, 0]);
         // partiel : 2 crédits pour un lot à 3
@@ -206,10 +208,11 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     // ── (8) images vs cartes (ruling 2)
     {
         const x = await compteLie({ accueil: 0, achete: 10 }); lot(nAff(25));
-        const trop = await poster(sv.url, x.jeton, corps(21)); const avantLot = appelsLot;
-        H.v('8. 21 images : 400 ENTREE (B1b.1), ni crochet ni débit', [trop.statut, trop.json.erreur.code, (await debits(x)).length], [400, 'ENTREE', 0]);
+        const avantLot = appelsLot, avantChaine = appelsChaine;
+        const trop = await poster(sv.url, x.jeton, corps(21));
+        H.v('8. 21 images : 400 ENTREE (B1b.1), ni crochet (compteur d\'appels inchangé) ni chaîne ni débit', [trop.statut, trop.json.erreur.code, (await debits(x)).length, appelsLot - avantLot, appelsChaine - avantChaine], [400, 'ENTREE', 0, 0, 0]);
         const ok = await poster(sv.url, x.jeton, corps(3));
-        H.v('   25 cartes vues sur 3 images : légitime (200, lot de 25, 3 crédits)', [ok.statut, ok.json.analyse && ok.json.analyse.lot && ok.json.analyse.lot.cartesVues, ok.json.facturation && ok.json.facturation.debite, avantLot], [200, 25, 3, avantLot]);
+        H.v('   25 cartes vues sur 3 images : légitime (200, lot de 25, 3 crédits, le crochet appelé une fois de plus)', [ok.statut, ok.json.analyse && ok.json.analyse.lot && ok.json.analyse.lot.cartesVues, ok.json.facturation && ok.json.facturation.debite, appelsLot - avantLot], [200, 25, 3, 1]);
     }
     // ── (9) V2_LECTURE_LIVE_MAX par la route
     {
@@ -294,6 +297,112 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         await raw('journal_scans').insertOne({ _id: s1, userId: `v2:installation:${y.i._id}` });
         const c = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: r1.json.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${y.jeton}` } });
         H.v('   contrôle : le même appel sur une carte seule identifiée est remboursé (200, rembourse true, essai 3)', [c.statut, c.json.facturation && c.json.facturation.rembourse, await essais(y)], [200, true, 3]);
+    }
+    // ── sans-prix : la garde est écrite par ce qu'elle AUTORISE (identifiee / a-trancher) : un statut inconnu ne rembourse rien
+    {
+        const x = await inst(); const scanId = new mongoose.Types.ObjectId();
+        await raw('analyses').insertOne({ _id: scanId, porteur: `installation:${x.i._id}`, statut: 'statut-inconnu', cartes: [{ statut: 'identifiee', idProduct: P5 }] });
+        await raw('journal_scans').insertOne({ _id: scanId, userId: `v2:installation:${x.i._id}` });
+        const r = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: String(scanId), carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}` } });
+        H.v('S2. sans-prix sur une analyse au statut INCONNU (carte identifiée dedans) : 409 carte-non-identifiee, rien remboursé', [r.statut, r.json.erreur && r.json.erreur.detail, await essais(x)], [409, 'carte-non-identifiee', 3]);
+    }
+    // ── U. un crochet qui rend EXACTEMENT 1 résultat ne fait pas un lot : branche UNE-CARTE (règle G, question réservée, sans-prix)
+    {
+        const cfgG = lireConfig({ ...BASE, V2_REGLE_G: '1' });
+        const svG = await monter(cfgG, { identifierLot, voisins });
+        const orig = RG.decisionRegleG; let appelsG = 0; RG.decisionRegleG = (...a) => { appelsG++; return orig(...a); };
+        try {
+            const x = await inst(); lot([aff(P5)]); appelsLot = 0; appelsChaine = 0;
+            const r = await poster(sv.url, x.jeton); const a = r.json.analyse || {};
+            H.v('U1. 1 résultat identifié : forme d\'une carte seule (identifiee, 1 carte, lot null, facturation affirmee), 1 crédit ; crochet appelé 1 fois, chaîne héritée jamais',
+                [r.statut, a.statut, (a.cartes || []).length, a.lot, r.json.facturation.motif, await essais(x), appelsLot, appelsChaine], [200, 'identifiee', 1, null, 'affirmee', 2, 1, 0]);
+            const y = await inst(); const Q = [POOL[20], POOL[21]]; lot([qst(Q)]); appelsLot = 0; appelsChaine = 0;
+            const q = await poster(sv.url, y.jeton); const qa = q.json.analyse || {};
+            const ligne = await raw('questions').findOne({ _id: `${q.json.scanId}:0` });
+            H.v('U2. 1 résultat à trancher : a-trancher à 2 candidats, facturation { debite:0, reserve:1, motif question }, question réservée (PAS de lot:true), crochet 1 fois, chaîne 0',
+                [q.statut, qa.statut, (qa.cartes[0].candidats || []).length, qa.lot, q.json.facturation, ligne && ligne.etat, ligne && ligne.lot, appelsLot, appelsChaine],
+                [200, 'a-trancher', 2, null, { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 'en-attente', false, 1, 0]);
+            const ab = await repondre(sv.url, y.jeton, { scanId: q.json.scanId, carte: 0, choix: 'aucune' });
+            H.v('   répondre « aucune » à cette question : le crédit est RENDU (essai 3, somme 0), facturation rembourse', [ab.statut, ab.json.facturation && ab.json.facturation.rembourse, await essais(y), await net(y, 'question à 1 résultat abandonnée')], [200, true, 3, 0]);
+            const z = await inst(); lot([intro()]);
+            const i = await poster(sv.url, z.jeton);
+            H.v('U3. 1 résultat introuvable : introuvable (1 carte, lot null), remboursé (essai 3)', [i.json.analyse.statut, i.json.analyse.lot, i.json.facturation.rembourse, await essais(z)], ['introuvable', null, true, 3]);
+            appelsG = 0; const g = await inst(); lot([aff(P5)]);
+            const rg = await poster(svG.url, g.jeton);
+            H.v('U4. règle G allumée + 1 résultat : decisionRegleG CONSULTÉE (espion), la chaîne héritée décide (identifiee)', [rg.json.analyse.statut, appelsG], ['identifiee', 1]);
+            const s = await inst(); lot([aff(P5)]);
+            const rs = await poster(sv.url, s.jeton); const sid = new mongoose.Types.ObjectId(rs.json.scanId);
+            await raw('journal_scans').insertOne({ _id: sid, userId: `v2:installation:${s.i._id}` });
+            const sp = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: rs.json.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${s.jeton}` } });
+            H.v('U5. sans-prix sur le résultat unique : remboursé comme une carte seule (200, rembourse, essai 3)', [sp.statut, sp.json.facturation && sp.json.facturation.rembourse, await essais(s)], [200, true, 3]);
+        } finally { RG.decisionRegleG = orig; await svG.fermer(); }
+    }
+    // ── M. plafond partagé de 100 cartes par scan
+    {
+        let mod = sur(() => require('../identifier/cartes-par-scan'));
+        H.v('M0. constante partagée CARTES_PAR_SCAN_MAX = 100 (un seul module)', typeof mod === 'object' ? mod.CARTES_PAR_SCAN_MAX : mod, 100);
+        const fs = require('fs');
+        const src = n => fs.readFileSync(path.join(__dirname, '..', 'identifier', n), 'utf8');
+        H.v('   plus de littéral 99 ni de constante locale dans routes.js, retour-live.js, lot.js', ['routes.js', 'retour-live.js', 'lot.js'].map(n => /carte\s*>\s*99|CARTES_MAX\s*=/.test(src(n))), [false, false, false]);
+        const x = await inst(); lot(nAff(101));
+        const e = console.error; console.error = () => { };
+        let r; try { r = await poster(sv.url, x.jeton); } finally { console.error = e; }
+        H.v('M1. 101 résultats : 500 SERVEUR remboursé, essai 3, somme 0', [r.statut, r.json.erreur && r.json.erreur.code, r.json.facturation && r.json.facturation.rembourse, await essais(x), await net(x, '101 résultats')], [500, 'SERVEUR', true, 3, 0]);
+        const y = await compteLie({ accueil: 0, achete: 20 }); lot(nAff(100));
+        const r2 = await poster(sv.url, y.jeton);
+        H.v('M2. 100 résultats : servi (200, lot de 100, 10 crédits)', [r2.statut, r2.json.analyse && r2.json.analyse.lot && r2.json.analyse.lot.cartesVues, r2.json.facturation && r2.json.facturation.debite, (await soldeCompte(y)).achete], [200, 100, 10, 10]);
+        const a = await repondre(sv.url, y.jeton, { scanId: r2.json.scanId, carte: 99, choix: 'a' }), b = await repondre(sv.url, y.jeton, { scanId: r2.json.scanId, carte: 100, choix: 'a' });
+        H.v('   /reponse : la carte 99 est adressable (404 « pas de question », pas 400), la 100 est refusée (400 ENTREE)', [a.statut, b.statut], [404, 400]);
+    }
+    // ── 3a. questions seules / introuvables + question : jamais remboursé
+    {
+        const x = await inst(); const Q = [POOL[22], POOL[23]]; lot([...nIntro(3), qst(Q)]);
+        const r = await poster(sv.url, x.jeton); const j = r.json;
+        const rep = await repondre(sv.url, x.jeton, { scanId: j.scanId, carte: 3, choix: 'a' });
+        H.v('3a. 3 introuvables + 1 question : NON remboursé (motif lot, essai 2), question posée à l\'index 3 et répondable (200 identifiee)', [j.facturation.rembourse, j.facturation.motif, await essais(x), j.analyse.lot.aTrancher, rep.statut, rep.json.carte && rep.json.carte.statut], [false, 'lot', 2, 1, 200, 'identifiee']);
+        const y = await inst(); lot([qst([POOL[24], POOL[25]]), qst([POOL[26], POOL[27]])]);
+        const r2 = await poster(sv.url, y.jeton);
+        const n = await raw('questions').countDocuments({ scanId: new mongoose.Types.ObjectId(r2.json.scanId), etat: 'en-attente' });
+        H.v('   un lot de questions seules : NON remboursé (essai 2), 2 questions en attente', [r2.json.analyse.statut, r2.json.facturation.rembourse, await essais(y), n], ['lot', false, 2, 2]);
+    }
+    // ── 3b. deux lots de 25 du même porteur, clés différentes : deux jeux de clés de supplément
+    {
+        const x = await compteLie({ accueil: 0, achete: 20 });
+        lot(nAff(25)); const a = await poster(sv.url, x.jeton), b = await poster(sv.url, x.jeton);
+        const d = await debits(x); const sup = d.map(m => m.cleIdempotence).filter(k => k.includes('|supplement#'));
+        H.v('3b. deux lots de 25 (clés différentes) : 6 lignes de débit, 6 clés distinctes, DEUX préfixes de supplément distincts (4 unités), achete 14', [a.statut, b.statut, d.length, new Set(d.map(m => m.cleIdempotence)).size, sup.length, new Set(sup.map(k => k.split('#')[0])).size, (await soldeCompte(x)).achete], [200, 200, 6, 6, 4, 2, 14]);
+    }
+    // ── 3c. refus du supplément par un autre code que QUOTA, supplément qui lève, réservation de question qui échoue
+    {
+        const registre = require('../registre'); const argentReg = registre.obtenir('argent');
+        const origS = argentReg.debiterSupplement, origQ = argentReg.reserverQuestion;
+        const e = console.error; console.error = () => { };
+        try {
+            const res = [];
+            for (const [code, statut] of [['VERIFICATION', 403], ['EN_RECONCILIATION', 409]]) {
+                argentReg.debiterSupplement = async () => ({ ok: false, code }); const x = await inst(); lot(nAff(25));
+                const r = await poster(sv.url, x.jeton);
+                res.push([code, r.statut, r.json.erreur && r.json.erreur.code, r.json.erreur && r.json.erreur.detail === undefined, await essais(x), await net(x, `supplément refusé ${code}`)]);
+                void statut;
+            }
+            H.v('3c. supplément refusé par VERIFICATION / EN_RECONCILIATION : l\'erreur de CE code (pas QUOTA), pas de detail lot-trop-grand, crédit initial rendu, somme 0', res, [['VERIFICATION', 403, 'VERIFICATION', true, 3, 0], ['EN_RECONCILIATION', 409, 'EN_RECONCILIATION', true, 3, 0]]);
+            argentReg.debiterSupplement = async () => { throw new Error('panne simulée : supplément'); }; const y = await inst(); lot(nAff(25));
+            const r2 = await poster(sv.url, y.jeton);
+            H.v('   debiterSupplement qui LÈVE : 500 SERVEUR remboursée (essai 3, somme 0)', [r2.statut, r2.json.erreur && r2.json.erreur.code, r2.json.facturation && r2.json.facturation.rembourse, await essais(y), await net(y, 'supplément qui lève')], [500, 'SERVEUR', true, 3, 0]);
+            argentReg.debiterSupplement = origS;
+            argentReg.reserverQuestion = async () => { throw new Error('panne simulée : réservation'); }; const z = await inst(); lot([qst([POOL[28], POOL[29]]), aff(P5)]);
+            const r3 = await poster(sv.url, z.jeton);
+            const ouvertes = await raw('questions').countDocuments({ scanId: new mongoose.Types.ObjectId(r3.json.scanId || '0'.repeat(24)), etat: 'en-attente' });
+            H.v('   réservation de question qui échoue dans un lot : 500 SERVEUR remboursée (essai 3, somme 0), aucune question en attente', [r3.statut, r3.json.erreur && r3.json.erreur.code, await essais(z), await net(z, 'réservation qui échoue'), ouvertes], [500, 'SERVEUR', 3, 0, 0]);
+        } finally { argentReg.debiterSupplement = origS; argentReg.reserverQuestion = origQ; console.error = e; }
+    }
+    // ── 3d. le remboursement d'un lot introuvable est refusé (plafond du jour atteint) : le client paie TOUT le lot, et on le dit
+    {
+        const svPlaf = await monter(lireConfig({ ...BASE, V2_PLAFOND_PANNES: '0' }), { identifierLot });
+        const x = await compteLie({ accueil: 0, achete: 10 }); lot(nIntro(25));
+        const r = await poster(svPlaf.url, x.jeton); await svPlaf.fermer();
+        H.v('3d. lot de 25 introuvable, plafond de remboursements atteint : facturation { debite:3 (le coût du lot), rembourse:false, motif plafond-jour, cause plafond-jour }, achete 7',
+            [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 3, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' }, 7]);
     }
     await sv.fermer(); await svSimple.fermer();
     await mongoose.disconnect(); await H.arreterBanc();

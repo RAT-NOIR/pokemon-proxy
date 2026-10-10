@@ -6,7 +6,9 @@
 //   · le crochet est appelé APRÈS le premier débit (jamais de lecture sans crédit pris) et reçoit une requête SANS `credit` : il ne peut ni débiter ni rembourser ;
 //   · la règle G (B1b.7) juge UNE carte : elle n'est jamais consultée sur un lot (routes.js ne l'appelle que dans la branche à une carte) ;
 //   · le supplément passe par `debiterSupplement` — tout ou rien, une ligne `mouvements` par unité. Entre processus, deux requêtes de MÊME Idempotency-Key ne
-//     le débitent jamais deux fois : la route est derrière `idempotente('identifier')` (claim Mongo par porteur|route|clé), le jumeau répond DEBIT « en cours » ;
+//     le débitent jamais deux fois : (1) la route est derrière `idempotente('identifier')` (claim Mongo par porteur|route|clé), le jumeau répond DEBIT « en cours » ;
+//     (2) même sans ce claim, la clé du DÉBIT INITIAL est unique : seul le gagnant de ce débit atteint le supplément, le perdant reçoit `rejoue` et sort avant tout lot ;
+//   · un crochet qui rend UN seul résultat ne fait pas un lot : c'est la branche une-carte (`{ unique }`), avec la règle G, la question réservée et le sans-prix ;
 //   · tout débit finit livré ou remboursé ; un lot ENTIÈREMENT introuvable est remboursé, un lot dont une seule carte est lue ne l'est jamais (un crédit de lot couvre
 //     jusqu'à 10 cartes : un prix manquant sur l'une n'annule pas la lecture des autres — c'est aussi pourquoi `sans-prix` ne rembourse rien sur un lot, retour-live.js).
 const { dansUnScan } = require('../../sources');
@@ -14,7 +16,7 @@ const { adapter, codeLangueDe } = require('./adaptateur');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 
-const CARTES_MAX = 100;                          // /api/identifier/reponse n'adresse que les cartes 0 à 99 : au-delà, une question serait sans réponse possible
+const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
 const journal = (ou, e) => console.error(`❌ [v2 lot] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
 // La valeur d'une carte pour le classement : la tendance du guide, sinon null (carte sans guide, question, introuvable).
@@ -60,10 +62,12 @@ async function executerLot(p) {
     let resultats;
     try { resultats = await dansUnScan(async () => deps.identifierLot(reqLot)); }
     catch (e) { journal('crochet', e); return panne('SERVEUR'); }
-    if (!Array.isArray(resultats) || resultats.length === 0 || resultats.length > CARTES_MAX) {
-        console.error(`❌ [v2 lot] le crochet n'a pas rendu 1 à ${CARTES_MAX} résultats (${Array.isArray(resultats) ? resultats.length : typeof resultats})`);
+    if (!Array.isArray(resultats) || resultats.length === 0 || resultats.length > CARTES_PAR_SCAN_MAX) {
+        console.error(`❌ [v2 lot] le crochet n'a pas rendu 1 à ${CARTES_PAR_SCAN_MAX} résultats (${Array.isArray(resultats) ? resultats.length : typeof resultats})`);
         return panne('SERVEUR');
     }
+    // UN résultat n'est pas un lot : il tient lieu de réponse de la chaîne dans la branche UNE-CARTE de routes.js (règle G, question réservée, sans-prix). Rien n'est écrit ici.
+    if (resultats.length === 1) return { unique: resultats[0] };
     // 2. le catalogue de l'API pour tous les produits désignés ; une lecture qui TOMBE est une panne, jamais une absence
     const corpsDe = r => (r && r.corps && typeof r.corps === 'object' ? r.corps : {});
     let produits;
@@ -85,7 +89,7 @@ async function executerLot(p) {
     // 4. le supplément : max(1, ceil(N/10)) - 1 unités, TOUT OU RIEN (un administrateur ne paie rien)
     const cout = argent.coutDuLot(cartes.length), supplement = cout - 1;
     if (supplement > 0 && !admin) {
-        // entre processus : la route est déjà sérialisée par clé (claim d'idempotence) — voir l'en-tête
+        // entre processus : claim Mongo d'`idempotente` + unicité de la clé du débit initial (seul le gagnant arrive ici) — voir l'en-tête
         let s;
         try { s = await argent.debiterSupplement(porteur, { scanId, unites: supplement, cleIdempotence: `${cleDebit}|supplement` }); }
         catch (e) { journal('supplément', e); return panne('SERVEUR'); }
@@ -103,7 +107,7 @@ async function executerLot(p) {
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
         const r = await rendre('introuvable');
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
-        if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };
+        if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
     } else facturation = admin ? fabriquerFacturation({ motif: 'administrateur', rembourse: false }) : fabriquerFacturation({ debite: cout, motif: 'lot' });
     // 6. les questions : une par carte à trancher, `lot: true` (répondre ne coûte rien et ne rend rien), index = position d'entrée
     if (lotInfo.aTrancher > 0 && !admin && credit) {
@@ -125,4 +129,4 @@ async function executerLot(p) {
     return { sortie: { resultat: { issue: 'lot', analyse, erreur: null }, facturation, lecture: null, lectures, cartesEntree: cartes, desaccord: null } };
 }
 
-module.exports = { executerLot, ordonnerParValeur, compterLot, valeurDe, CARTES_MAX };
+module.exports = { executerLot, ordonnerParValeur, compterLot, valeurDe };

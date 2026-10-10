@@ -93,11 +93,28 @@ const { col } = require('../db');
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
+const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
 
-const URL_RECHARGE = 'https://rat-market.fr/fr/compte#recharge';
+// B1b.8 : un crochet `identifierLot` qui rend UN résultat ne fait pas un lot. Ce résultat tient lieu de réponse de la chaîne héritée, avec ses deux effets de bord sur le
+// crédit que la vraie chaîne produit seule (la requête du crochet n'en porte pas) : une ambiguë POSE sa question, un refus par égalité est un remboursement DIFFÉRÉ (devient question).
+// Tout le reste (introuvable, panne) est rendu par le filet de traiterIdentifier.
+function chaineDepuisResultat(r) {
+    return async (req, res) => {
+        const corps = r && r.corps && typeof r.corps === 'object' ? r.corps : null;
+        if (r && r.statutHttp === 200 && corps) {
+            if (corps.success === true && corps.carte && corps.carte.ambigu === true)
+                await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'lot-un-resultat', candidats: entiers(corps.candidats) });
+            else if (corps.success === false && corps.natureRefus === 'refus-delibere' && MOTIFS_REFUS_EN_QUESTION.includes(corps.motifRefus))
+                await req.credit.v2.rembourser(req, corps.motifRefus);
+        }
+        res.status((r && Number.isInteger(r.statutHttp)) ? r.statutHttp : 500).json(corps);
+    };
+}
+
+const URL_RECHARGE ='https://rat-market.fr/fr/compte#recharge';
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 const journalErreur = (ou, e) => console.error(`❌ [v2 identifier] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
@@ -220,12 +237,15 @@ function traiterIdentifier(cfg, deps = {}) {
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
         const modeLot = typeof deps.identifierLot === 'function';
-        let erreurLot = null;
+        let erreurLot = null, injecte = null;
         try {
             if (modeLot) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
-                if (l.erreur) erreurLot = l.erreur; else sortie = l.sortie;
-            } else {
+                if (l.erreur) erreurLot = l.erreur; else if (l.unique) injecte = l.unique; else sortie = l.sortie;
+            }
+            // Pas de lot (crochet absent) OU un crochet qui n'a rendu qu'UN résultat : la branche UNE-CARTE (règle G, question réservée, sans-prix), qui reçoit ce résultat
+            // comme réponse de la chaîne — sans la rappeler (un seul appel de lecture).
+            if (!sortie && !erreurLot) {
             reqH = {
                 body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
                 ip: req.ip, headers: {}, scanIdImpose: scanId,
@@ -242,7 +262,7 @@ function traiterIdentifier(cfg, deps = {}) {
             sortie = await dansUnScan(async () => {
                 const fr = fauxRes();
                 let exception = null;
-                try { await deps.gererIdentifier(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                try { await (injecte ? chaineDepuisResultat(injecte) : deps.gererIdentifier)(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
                 let resultat, produits = null;
                 if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 else {
@@ -395,7 +415,7 @@ function traiterReponse(cfg, deps = {}) {
         if (!b || typeof b !== 'object' || Array.isArray(b)) return entreeInvalide('corps');
         if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entreeInvalide('scan-id');
         const carte = b.carte === undefined ? 0 : b.carte;
-        if (!Number.isInteger(carte) || carte < 0 || carte > 99) return entreeInvalide('carte');
+        if (!Number.isInteger(carte) || carte < 0 || carte >= CARTES_PAR_SCAN_MAX) return entreeInvalide('carte');
         if (typeof b.choix !== 'string' || !CHOIX_REPONSE.includes(b.choix)) return entreeInvalide('choix');
         const choix = b.choix;
         const scanId = new mongoose.Types.ObjectId(b.scanId);                  // une chaîne ne sert à aucun filtre : analyses, mouvements et questions portent un ObjectId
