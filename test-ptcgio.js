@@ -22,11 +22,11 @@ const silencieux = () => { const l = console.log, w = console.warn, e = console.
 function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const cols = new Map();
     const col = n => cols.get(n) || cols.set(n, new Map()).get(n);
-    const lire = (o, k) => k.split('.').reduce((x, p) => x?.[p], o);
+    const lire = (o, k) => k.split('.').reduce((x, p) => Array.isArray(x) && !/^\d+$/.test(p) ? x.flatMap(e => e?.[p]) : x?.[p], o);   // « images.source » traverse le tableau, comme Mongo
     const ecrireChamp = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
     const accepte = (d, f) => Object.entries(f || {}).every(([k, v]) => v && typeof v === 'object' && !Array.isArray(v) && !(v instanceof Date)
         ? ('$in' in v ? v.$in.includes(lire(d, k)) : '$ne' in v ? lire(d, k) !== v.$ne : '$exists' in v ? (lire(d, k) !== undefined) === v.$exists : false)
-        : lire(d, k) === v);
+        : (x => Array.isArray(x) ? x.includes(v) : x === v)(lire(d, k)));
     const appliquer = (d, u) => {
         for (const [k, v] of Object.entries(u.$set || {})) ecrireChamp(d, k, v);
         for (const k of Object.keys(u.$unset || {})) delete d[k];
@@ -62,7 +62,14 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('EX Trainer Kit : « 11A » est hors de la plage prouvée (10)', P.adresseDe(L('EX-Trainer-Kit', 'tk1a'), '11A'), null);
     verifier('EX Trainer Kit 2 : « P6 » → tk2a, « M12 » → tk2b, « P13 » hors plage', [P.adresseDe(L('EX-Trainer-Kit-2', 'tk2a'), 'P6'), P.adresseDe(L('EX-Trainer-Kit-2', 'tk2b'), 'M12'), P.adresseDe(L('EX-Trainer-Kit-2', 'tk2a'), 'P13')], [6, 12, null]);
     verifier('Celebrations : « 011 » → 11 ; « 026 », « BS 15 », null, « 77a » → rien', [P.adresseDe(L('Celebrations', 'cel25'), '011'), P.adresseDe(L('Celebrations', 'cel25'), '026'), P.adresseDe(L('Celebrations', 'cel25'), 'BS 15'), P.adresseDe(L('Celebrations', 'cel25'), null), P.adresseDe(L('Shining-Legends', 'sm35'), '77a')], [11, null, null, null, null]);
-    verifier('Shining Legends : 73 passe, 75 (secrète non prouvée) non', [P.adresseDe(L('Shining-Legends', 'sm35'), '73'), P.adresseDe(L('Shining-Legends', 'sm35'), '75')], [73, null]);
+    verifier('Shining Legends : 72, 73 (principal) et 75 (secrète) sont couverts par un témoin ; 76 ne l\'est pas', [72, 73, 75, 76].map(n => P.adresseDe(L('Shining-Legends', 'sm35'), String(n))), [72, 73, 75, null]);
+    verifier('Dragon Majesty : 70 (principal) et 78 (secrète) couverts ; 79 non', [70, 71, 78, 79].map(n => P.adresseDe(L('Dragon-Majesty', 'sm75'), String(n))), [70, 71, 78, null]);
+    // 🔴 ruling du coordinateur (2026-10-10) : les témoins COUVRENT la plage écrite — un témoin dans chaque segment, et un au moins au plus grand numéro écrit
+    const couvre = l => l.segments.every(([de, a]) => l.temoins.some(w => w.n >= de && w.n <= a) && l.temoins.some(w => w.n === a));
+    verifier('chaque ligne : un témoin dans chaque segment de numérotation ET un témoin au plus grand numéro du segment', P.TABLE_PTCGIO.filter(l => !couvre(l)).map(l => l.id), []);
+    verifier('la marque des McDonald\'s est celle que le relecteur a vue (symbole d\'extension propre au tirage), jamais « faible »', [P.TABLE_PTCGIO.filter(l => /faible/i.test(l.marque)).map(l => l.id), /hexagone/.test(L('McDonalds-Collection-2011', 'mcd11').marque), /« m »/.test(L('McDonalds-Collection-2016', 'mcd16').marque), /rond/.test(L('McDonalds-Collection-2019', 'mcd19').marque), /couronne|étoile/.test(L('McDonalds-Collection-2022', 'mcd22').marque)], [[], true, true, true, true]);
+    verifier('segments : Shining Legends et Dragon Majesty ont un segment principal ET un segment de secrètes', [L('Shining-Legends', 'sm35').segments.length, L('Dragon-Majesty', 'sm75').segments.length], [2, 2]);
+    verifier('témoins ouverts le 2026-10-10 sur les numéros que la règle de mesure ne comptait pas : le nom imprimé est celui du produit', [[L('Shining-Legends', 'sm35'), 72, 'Mewtwo-GX'], [L('Dragon-Majesty', 'sm75'), 65, 'Reshiram-GX'], [L('Dragon-Majesty', 'sm75'), 41, 'Altaria-GX'], [L('Dragon-Majesty', 'sm75'), 70, 'Zinnia'], [L('Dragon-Majesty', 'sm75'), 69, 'Blaine\'s Last Stand']].map(([l, n, nom]) => l.temoins.find(w => w.n === n)?.nom === nom), [true, true, true, true, true]);
     verifier('l\'adresse d\'une image : la haute définition, jamais la vignette', P.urlHires('mcd12', 6), 'https://images.pokemontcg.io/mcd12/6_hires.png');
     verifier('chaque ligne de la table porte ses témoins lus à l\'œil (3 au moins, numéros distincts)', P.TABLE_PTCGIO.every(l => new Set((l.temoins || []).map(t => t.n)).size >= 3), true);
 
@@ -80,6 +87,8 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('plan : 2 prouvés (le doublon carte+numéro compte une fois), l\'adresse est la haute définition', plan1.plan.map(p => [p.carteId, p.numero, p.url]), [[1, '005', 'https://images.pokemontcg.io/cel25/5_hires.png'], [2, '011', 'https://images.pokemontcg.io/cel25/11_hires.png']]);
     verifier('plan : un produit déjà pourvu au même numéro n\'est jamais dans le plan (additif)', plan1.plan.some(p => p.carteId === 5), false);
     verifier('plan : les restes disent pourquoi', plan1.restes.map(r => [r.carteId, r.motif]).sort(), [[3, 'sans-numero'], [4, 'numero-hors-set'], [6, 'numero-contradictoire']]);
+    const plan2 = P.planifierPtcgio({ slug: 'Shining-Legends', trous: [t(carte(21, 'Raichu-GX'), '75', 31), t(carte(22, 'Hoopa'), '76', 32), t(carte(23, 'Pikachu'), '77a', 33)] });
+    verifier('plan : un numéro hors de ce que les témoins couvrent est RETIRÉ et nommé « non couvert par un témoin » (76), un numéro d\'une autre forme (77a) reste hors set', [plan2.plan.map(p => p.carteId), plan2.restes.map(r => [r.carteId, r.motif])], [[21], [[22, 'non-couvert-par-un-temoin'], [23, 'numero-hors-set']]]);
     verifier('plan : le numéro de fiche absent (null) n\'empêche pas l\'adresse (McDonald\'s 2011 : Snivy)', P.planifierPtcgio({ slug: 'McDonalds-Collection-2011', trous: [t(carte(8, 'Snivy'), '1', 98, null)] }).plan.map(p => [p.url, p.numero]), [['https://images.pokemontcg.io/mcd11/1_hires.png', '1']]);
     verifier('plan : un substitut ne produit aucun plan', P.planifierPtcgio({ slug: 'WCD-2009', trous: [t(carte(9, 'Rare Candy'), '12', 99)] }), { plan: [], restes: [{ carteId: 9, nomEn: 'Rare Candy', numero: '12', idProduct: 99, motif: 'substitut-interdit' }] });
 
@@ -144,11 +153,28 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const NUMEROS_CM = { 10: '005', 11: '011', 12: '001', 13: 'BS 15', 14: '025', 15: '024' };
     const lireNumeros = async () => new Map(Object.entries(NUMEROS_CM).map(([k, v]) => [Number(k), v]));
     const verrouSet = () => ({ prendre: async () => null, rendre: async () => { } });
+    // les VIGNETTES (règle du dépôt depuis le 2026-10-06) : le collecteur passe par `vignetterApresJointure`, comme collecteur-images.js ; le banc lui injecte un
+    // `assurer` qui fait ce que fait assurerVignettes sur la base en mémoire (pas de R2) et note le bucket et le set qu'il a reçus
+    process.env.R2_BUCKET_IMAGES = 'bucket-banc';
+    const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
+    const appelsVignettes = [];
+    const assurerBanc = erreur => async (db, { bucket, slug }) => {
+        appelsVignettes.push([bucket, slug]);
+        if (erreur) throw new Error(erreur);
+        let n = 0;
+        for (const c of await db.collection('cartes').find({}).toArray()) {
+            let touche = false;
+            const images = (c.images || []).map(e => { if (e.set !== slug || !e.cleR2 || e.vignette) return e; touche = true; n++; return { ...e, vignette: { cleR2: `vignettes/${e.cleR2.replace(/\.[^./]+$/, '')}.webp`, w: 200, h: 279 } }; });
+            if (touche) await db.collection('cartes').updateOne({ _id: c._id }, { $set: { images } });
+        }
+        return { entrees: n, cles: n, traitees: n, fabriquees: n, deja: 0, depuisDocument: 0, echecs: [], interrompu: false, sets: n ? [slug] : [] };
+    };
+    const vignetterBanc = (erreur = null) => (db, slug, o) => vignetterApresJointure(db, slug, { ...o, assurer: assurerBanc(erreur), journal: { error() { } } });
     const lancer = async (B, transport, o = {}) => {
         const depots = [];
         const cl = P.fabriquerClientPtcgio({ transport, verrou, pause });
         const r = silencieux();
-        try { return { b: await collecterSlug(o.slug || SLUG, B.M, { verrou, client: cl, lireNumeros: o.sansNumeros ? undefined : lireNumeros, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets }), depots, cl }; }
+        try { return { b: await collecterSlug(o.slug || SLUG, B.M, { verrou, client: cl, vignetter: vignetterBanc(o.erreurVignettes), lireNumeros: o.sansNumeros ? undefined : lireNumeros, deposer: async (...a) => depots.push(a), fabriquerVerrouSet: verrouSet, stopOctets: o.stopOctets }), depots, cl }; }
         finally { r(); }
     };
     const B = fausseBase(); semer(B);
@@ -162,8 +188,11 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('R2 AVANT la ligne : 2 dépôts WebP à la clé du set', [depots.length, depots[0]?.[1], depots[0]?.[3]], [2, 'pokemontcg.io/Celebrations/005-1-en.webp', 'image/webp']);
     verifier('la carte reçoit SON visuel et garde celui de l\'autre set', B.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), ['tcgdex:Autre-Set:5', `pokemontcg.io:${SLUG}:005`]);
     verifier('   l\'entrée porte mention, lot, langue, attribution, source', ((e) => [e.mention, e.lot, e.langue, e.attribution, e.source])(B.col('cartes').get(2).images[0]), ['© Pokémon / The Pokémon Company', 'ptcgio-2026-10', 'en', '© Pokémon / The Pokémon Company', 'pokemontcg.io']);
-    verifier('un produit DÉJÀ pourvu par une autre source : intact (additif)', B.col('cartes').get(3).images, [{ set: SLUG, source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/h.webp', langue: 'en' }]);
+    verifier('un produit DÉJÀ pourvu par une autre source : intact (additif ; la vignette est un champ NEUF que assurerVignettes pose partout, vignette.js)', B.col('cartes').get(3).images.map(({ vignette, ...e }) => e), [{ set: SLUG, source: 'bulbapedia', numero: '001', cleR2: 'bulbapedia/h.webp', langue: 'en' }]);
     verifier('un numéro hors plage (« BS 15 ») reste un trou : aucune entrée', B.col('cartes').get(4).images, []);
+    verifier('VIGNETTES : après la jointure, le collecteur appelle vignetterApresJointure avec le bucket des images et le set', appelsVignettes[0], ['bucket-banc', SLUG]);
+    const duLot = B.col('cartes').get(1).images.concat(B.col('cartes').get(2).images).filter(e => e.source === 'pokemontcg.io' && e.lot === 'ptcgio-2026-10');
+    verifier('VIGNETTES : toute entrée du lot a sa vignette (2 entrées, clé sous vignettes/pokemontcg.io/)', [duLot.length, duLot.every(e => /^vignettes\/pokemontcg\.io\/Celebrations\/.+\.webp$/.test(e.vignette?.cleR2 || ''))], [2, true]);
     verifier('le bilan du set : 2 prouvés, garde verte', [B.col('sets').get(SLUG).visuelsPtcgio?.prouves, B.col('sets').get(SLUG).visuelsPtcgio?.garde?.ok], [2, true]);
 
     tr = reseau(normal);
@@ -195,6 +224,11 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     ({ b, depots } = await lancer(B3, tr));
     verifier('dimensions : le fichier 600×825 d\'un set en 734×1024 est refusé, les 3 autres jointes', [B3.col('cartes').get(6).images.length, [1, 2, 5].map(i => B3.col('cartes').get(i).images.filter(e => e.source === 'pokemontcg.io').length), depots.length], [0, [1, 1, 1], 3]);
 
+    // les vignettes qui échouent : l'unité n'est PAS « verifie » (une entrée sans vignette est servie sans), et l'erreur se dit
+    const B8 = fausseBase(); semer(B8);
+    ({ b } = await lancer(B8, reseau(normal), { erreurVignettes: 'R2 injoignable' }));
+    verifier('vignettes en échec : l\'unité est « incomplet », le bilan porte l\'erreur', [b.etat, b.vignettes?.erreur], ['incomplet', 'R2 injoignable']);
+
     // un set non prouvé / un substitut : aucune requête
     const B4 = fausseBase(); B4.col('sets').set('WCD-2009', { _id: 'WCD-2009', tirage: 'intl', region: 'intl' });
     tr = reseau(normal);
@@ -220,6 +254,40 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     ];
     const R = P.planRetraitPtcgio(cartes);
     verifier('retrait : seules les entrées source ET lot du collecteur, avec leur vignette', [R.cartes, R.entrees, R.cles], [[1], 1, ['a', 'va']]);
+
+    // le chemin `--ecrire` du retrait, de bout en bout : base en mémoire, faux R2
+    const { retirerLot } = require('./retirer-visuels-ptcgio');
+    const semerRetrait = () => {
+        const Bx = fausseBase();
+        Bx.col('cartes').set(1, { _id: 1, images: [{ set: 'S', source: 'pokemontcg.io', lot: 'ptcgio-2026-10', numero: '5', cleR2: 'a', vignette: { cleR2: 'va' } }, { set: 'S', source: 'tcgdex', cleR2: 'b', vignette: { cleR2: 'vb' } }] });
+        Bx.col('cartes').set(2, { _id: 2, images: [{ set: 'S', source: 'pokemontcg.io', lot: 'autre-lot', cleR2: 'c', vignette: { cleR2: 'vc' } }, { set: 'S', source: 'tpc-asie', lot: 'ptcgio-2026-10', cleR2: 'd' }] });
+        Bx.col('cartes').set(3, { _id: 3, images: [{ set: 'S', source: 'bulbapedia', cleR2: 'e' }] });
+        Bx.col('images').set('i1', { _id: 'i1', source: 'pokemontcg.io', lot: 'ptcgio-2026-10', etat: 'ok', cleR2: 'a', vignette: { cleR2: 'va' } });
+        Bx.col('images').set('i2', { _id: 'i2', source: 'pokemontcg.io', lot: 'autre-lot', etat: 'ok', cleR2: 'c' });
+        Bx.col('images').set('i3', { _id: 'i3', source: 'tcgdex', etat: 'ok', cleR2: 'b' });
+        Bx.col('sets').set('S', { _id: 'S', visuelsPtcgio: { prouves: 1 }, visuelsTpc: { 'tpc-asie': { prouves: 1 } } });
+        Bx.col('sets').set('T', { _id: 'T', visuelsPtcgio: { prouves: 0 } });
+        Bx.col('sets').set('U', { _id: 'U' });
+        return Bx;
+    };
+    const effaces = [];
+    const optionsRetrait = o => ({ supprimer: async (bucket, cles) => { effaces.push([bucket, ...cles]); }, bucket: 'bucket-banc', ...o });
+    let Bx = semerRetrait();
+    const avantSim = JSON.stringify([...Bx.cols].map(([k, m]) => [k, [...m]]));
+    const rest = silencieux();
+    let simu; try { simu = await retirerLot(Bx.db, optionsRetrait({ ecrire: false })); } finally { rest(); }
+    verifier('retrait, simulation : rien n\'est écrit, et le plan dit 1 carte, 1 entrée, 1 document, les clés d\'image ET de vignette', [JSON.stringify([...Bx.cols].map(([k, m]) => [k, [...m]])) === avantSim, simu.cartes, simu.entrees, simu.docs, simu.cles], [true, [1], 1, 1, ['a', 'va']]);
+    const rest2 = silencieux();
+    let ecr; try { ecr = await retirerLot(Bx.db, optionsRetrait({ ecrire: true, effacerR2: true })); } finally { rest2(); }
+    verifier('retrait --ecrire : seule l\'entrée du lot sort (la vignette avec), les autres sources et l\'autre lot restent', [Bx.col('cartes').get(1).images.map(e => e.source), Bx.col('cartes').get(2).images.map(e => `${e.source}:${e.lot ?? ''}`), Bx.col('cartes').get(3).images.length], [['tcgdex'], ['pokemontcg.io:autre-lot', 'tpc-asie:ptcgio-2026-10'], 1]);
+    verifier('retrait --ecrire : le document du lot passe à « retire » (avec date et motif), les autres ne bougent pas', [Bx.col('images').get('i1').etat, !!Bx.col('images').get('i1').retireLe, !!Bx.col('images').get('i1').retireMotif, Bx.col('images').get('i2').etat, Bx.col('images').get('i3').etat], ['retire', true, true, 'ok', 'ok']);
+    verifier('retrait --ecrire : `sets.visuelsPtcgio` est nettoyé PARTOUT, rien d\'autre du set n\'est touché', [Bx.col('sets').get('S').visuelsPtcgio, Bx.col('sets').get('T').visuelsPtcgio, Bx.col('sets').get('S').visuelsTpc?.['tpc-asie']?.prouves, 'visuelsPtcgio' in Bx.col('sets').get('U')], [undefined, undefined, 1, false]);
+    verifier('retrait --ecrire : la source est fermée (alerte active, retrait) ; R2 : les clés du lot, vignette comprise, et elles seules', [Bx.col('collecte_images_etat').get('alerte/source-bloquee/pokemontcg-io')?.active, Bx.col('collecte_images_etat').get('alerte/source-bloquee/pokemontcg-io')?.retrait, effaces], [true, true, [['bucket-banc', 'a', 'va']]]);
+    verifier('retrait --ecrire : relu, plus aucune entrée du lot (reste 0)', ecr.reste, 0);
+    effaces.length = 0;
+    const rest3 = silencieux();
+    let sans; try { sans = await retirerLot(semerRetrait().db, optionsRetrait({ ecrire: true })); } finally { rest3(); }
+    verifier('retrait sans --effacer-r2 : R2 n\'est pas touché', effaces.length, 0);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);

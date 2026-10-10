@@ -16,7 +16,7 @@
 // qui ne s'est pas prouvé n'a pas de ligne et reste un trou. Les Prize Packs, Battle Academy et WCD sont des réimpressions MARQUÉES : sans set
 // dédié montrant la marque, une image serait un SUBSTITUT (§19) — `verdictDuSet` les refuse par leur nom, énumérés.
 // ⚠️ La source ne livre ni nom ni donnée : le NOM d'un produit ne se vérifie donc pas carte par carte à la collecte. Ce qui le garantit est la
-// numérotation du set (plage prouvée `max`, suffixe/préfixe du kit) ; un numéro hors plage reste un trou.
+// numérotation du set (segments couverts par les témoins, suffixe/préfixe du kit) ; un numéro « non couvert par un témoin » reste un trou.
 const { cleNumero } = require('./jointure');
 const T = require('./tpc');
 
@@ -35,34 +35,45 @@ const ID_ALERTE = 'alerte/source-bloquee/pokemontcg-io';
 const CRAWL_DELAY_MAX_S = 60;
 
 // Une ligne par set pokemontcg.io PROUVÉ. `suffixe` / `prefixe` : la moitié d'un kit (EX Trainer Kit : A = Latias = tk1a, O = Latios = tk1b).
-// `max` : le dénominateur imprimé sur les cartes — au-delà, le numéro n'est pas dans ce que l'image a prouvé.
+// `segments` : les plages de numérotation que les TÉMOINS couvrent (principal, secrètes) — chacune a un témoin en son sein ET un témoin à son plus grand
+// numéro (test-ptcgio.js le vérifie) ; au-delà, le numéro est « non couvert par un témoin » : il reste un trou, nommé.
 const t = (n, nom, imprime) => ({ n, nom, imprime });
 const TABLE_PTCGIO = Object.freeze([
-    { slug: 'EX-Trainer-Kit', id: 'tk1a', suffixe: 'A', max: 10, marque: 'symbole du EX Trainer Kit (Latias), dénominateur /10', temoins: [t(1, 'Bagon', '1/10'), t(4, 'Latias', '4/10'), t(10, 'Fire Energy', '10/10')] },
-    { slug: 'EX-Trainer-Kit', id: 'tk1b', suffixe: 'O', max: 10, marque: 'symbole du EX Trainer Kit (Latios), dénominateur /10', temoins: [t(1, 'Electrike', '1/10'), t(2, 'Latios', '2/10'), t(10, 'Lightning Energy', '10/10')] },
-    { slug: 'EX-Trainer-Kit-2', id: 'tk2a', prefixe: 'P', max: 12, marque: 'symbole du EX Trainer Kit 2 (Plusle), dénominateur /12', temoins: [t(1, 'Beldum', '1/12'), t(6, 'Plusle', '6/12'), t(12, 'Psychic Energy', '12/12')] },
-    { slug: 'EX-Trainer-Kit-2', id: 'tk2b', prefixe: 'M', max: 12, marque: 'symbole du EX Trainer Kit 2 (Minun), dénominateur /12', temoins: [t(1, 'Arcanine', '1/12'), t(6, 'Minun', '6/12'), t(12, 'Lightning Energy', '12/12')] },
-    { slug: 'McDonalds-Collection-2011', id: 'mcd11', max: 12, marque: 'collection de 12 cartes ©2011, symbole d\'extension propre ; PAS d\'arches sur l\'illustration (marque faible, dite)', temoins: [t(1, 'Snivy', '1/12'), t(6, 'Blitzle', '6/12'), t(12, 'Audino', '12/12')] },
-    { slug: 'McDonalds-Collection-2012', id: 'mcd12', max: 12, marque: 'arches McDonald\'s dans l\'illustration (Servine, Emolga, Axew en haute définition)', temoins: [t(1, 'Servine', '1/12'), t(6, 'Emolga', '6/12'), t(12, 'Axew', '12/12')] },
-    { slug: 'McDonalds-Collection-2016', id: 'mcd16', max: 12, marque: 'collection de 12 cartes ©2015, symbole d\'extension propre ; pas d\'arches lisibles à 245 px (marque faible, dite)', temoins: [t(1, 'Vulpix', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
-    { slug: 'McDonalds-Collection-2019', id: 'mcd19', max: 12, marque: 'collection de 12 cartes ©2019, symbole d\'extension propre ; pas d\'arches lisibles à 245 px (marque faible, dite)', temoins: [t(1, 'Caterpie', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
-    { slug: 'McDonalds-Collection-2022', id: 'mcd22', max: 15, marque: 'collection de 15 cartes ©2022, symbole d\'extension propre ; pas d\'arches lisibles à 245 px (marque faible, dite)', temoins: [t(1, 'Ledyba', '1/15'), t(8, 'Chinchou', '8/15'), t(15, 'Smeargle', '15/15')] },
-    { slug: 'Celebrations', id: 'cel25', max: 25, marque: 'logo « 25 » de la célébration imprimé sur chaque carte', temoins: [t(1, 'Ho-Oh', '001/025'), t(5, 'Pikachu', '005/025'), t(11, 'Mew', '011/025'), t(24, 'Professor\'s Research', '024/025'), t(25, 'Mew', '025/025')] },
-    { slug: 'Shining-Legends', id: 'sm35', max: 73, marque: 'symbole Shining Legends, ©2017, dénominateur /73', temoins: [t(1, 'Bulbasaur', '1/73'), t(4, 'Shroomish', '4/73'), t(29, 'Raichu-GX', '29/73'), t(55, 'Hoopa', '55/73')] },
-    { slug: 'Dragon-Majesty', id: 'sm75', max: 70, marque: 'symbole Dragon Majesty, ©2018, dénominateur /70', temoins: [t(1, 'Charmander', '1/70'), t(2, 'Charmeleon', '2/70'), t(30, 'Phione', '30/70'), t(63, 'Wela Volcano Park', '63/70')] },
-    { slug: 'POP-Series-5', id: 'pop5', max: 17, marque: 'symbole POP Series 5, ©2007, dénominateur /17', temoins: [t(1, 'Ho-Oh', '1/17'), t(9, 'δ Rainbow Energy', '9/17'), t(16, 'Espeon ☆', '16/17')] }
+    { slug: 'EX-Trainer-Kit', id: 'tk1a', suffixe: 'A', segments: [[1, 10]], marque: 'symbole du EX Trainer Kit (Latias), dénominateur /10', temoins: [t(1, 'Bagon', '1/10'), t(4, 'Latias', '4/10'), t(10, 'Fire Energy', '10/10')] },
+    { slug: 'EX-Trainer-Kit', id: 'tk1b', suffixe: 'O', segments: [[1, 10]], marque: 'symbole du EX Trainer Kit (Latios), dénominateur /10', temoins: [t(1, 'Electrike', '1/10'), t(2, 'Latios', '2/10'), t(10, 'Lightning Energy', '10/10')] },
+    { slug: 'EX-Trainer-Kit-2', id: 'tk2a', prefixe: 'P', segments: [[1, 12]], marque: 'symbole du EX Trainer Kit 2 (Plusle), dénominateur /12', temoins: [t(1, 'Beldum', '1/12'), t(6, 'Plusle', '6/12'), t(12, 'Psychic Energy', '12/12')] },
+    { slug: 'EX-Trainer-Kit-2', id: 'tk2b', prefixe: 'M', segments: [[1, 12]], marque: 'symbole du EX Trainer Kit 2 (Minun), dénominateur /12', temoins: [t(1, 'Arcanine', '1/12'), t(6, 'Minun', '6/12'), t(12, 'Lightning Energy', '12/12')] },
+    { slug: 'McDonalds-Collection-2011', id: 'mcd11', segments: [[1, 12]], marque: 'collection de 12 cartes ©2011 ; symbole d\'extension propre au tirage McDonald\'s : un hexagone noir et blanc à côté de 1/12 (vu en haute définition, relecteur)', temoins: [t(1, 'Snivy', '1/12'), t(6, 'Blitzle', '6/12'), t(12, 'Audino', '12/12')] },
+    { slug: 'McDonalds-Collection-2012', id: 'mcd12', segments: [[1, 12]], marque: 'arches McDonald\'s dans l\'illustration (Servine, Emolga, Axew en haute définition)', temoins: [t(1, 'Servine', '1/12'), t(6, 'Emolga', '6/12'), t(12, 'Axew', '12/12')] },
+    { slug: 'McDonalds-Collection-2016', id: 'mcd16', segments: [[1, 12]], marque: 'collection de 12 cartes ©2015 ; symbole d\'extension propre au tirage McDonald\'s : un « m » stylisé à côté de 6/12 (vu agrandi, relecteur)', temoins: [t(1, 'Vulpix', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
+    { slug: 'McDonalds-Collection-2019', id: 'mcd19', segments: [[1, 12]], marque: 'collection de 12 cartes ©2019 ; symbole d\'extension propre au tirage McDonald\'s : un symbole rond (M stylisé) en bas à gauche (vu agrandi, relecteur)', temoins: [t(1, 'Caterpie', '1/12'), t(6, 'Pikachu', '6/12'), t(12, 'Eevee', '12/12')] },
+    { slug: 'McDonalds-Collection-2022', id: 'mcd22', segments: [[1, 15]], marque: 'collection de 15 cartes ©2022 ; symbole d\'extension propre au tirage McDonald\'s : une couronne ou une étoile en bas à gauche, et la marque « E » (vu agrandi, relecteur)', temoins: [t(1, 'Ledyba', '1/15'), t(8, 'Chinchou', '8/15'), t(15, 'Smeargle', '15/15')] },
+    { slug: 'Celebrations', id: 'cel25', segments: [[1, 25]], marque: 'logo « 25 » de la célébration imprimé sur chaque carte', temoins: [t(1, 'Ho-Oh', '001/025'), t(5, 'Pikachu', '005/025'), t(11, 'Mew', '011/025'), t(24, 'Professor\'s Research', '024/025'), t(25, 'Mew', '025/025')] },
+    { slug: 'Shining-Legends', id: 'sm35', segments: [[1, 73], [74, 75]], marque: 'symbole Shining Legends, ©2017, dénominateur /73 (principal 1-73, secrètes au-delà)',
+      temoins: [t(1, 'Bulbasaur', '1/73'), t(4, 'Shroomish', '4/73'), t(29, 'Raichu-GX', '29/73'), t(55, 'Hoopa', '55/73'), t(72, 'Mewtwo-GX', '72/73'), t(73, 'Pokémon Breeder', '73/73'), t(75, 'Raichu-GX', '75/73')] },
+    { slug: 'Dragon-Majesty', id: 'sm75', segments: [[1, 70], [71, 78]], marque: 'symbole Dragon Majesty, ©2018, dénominateur /70 (principal 1-70, secrètes 71-78)',
+      temoins: [t(1, 'Charmander', '1/70'), t(2, 'Charmeleon', '2/70'), t(30, 'Phione', '30/70'), t(41, 'Altaria-GX', '41/70'), t(63, 'Wela Volcano Park', '63/70'), t(65, 'Reshiram-GX', '65/70'), t(69, 'Blaine\'s Last Stand', '69/70'), t(70, 'Zinnia', '70/70'),
+          t(75, 'Dragon Talon', '75/70'), t(77, 'Switch Raft', '77/70'), t(78, 'Ultra Necrozma-GX', '78/70')] },
+    { slug: 'POP-Series-5', id: 'pop5', segments: [[1, 16]], marque: 'symbole POP Series 5, ©2007, dénominateur /17 (le n° 17 n\'a pas de témoin : non couvert)', temoins: [t(1, 'Ho-Oh', '1/17'), t(9, 'δ Rainbow Energy', '9/17'), t(16, 'Espeon ☆', '16/17')] }
 ].map(l => Object.freeze({ ...l, lu: '2026-10-10' })));
 
 const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
 
-/** Le numéro d'URL (entier) que cette ligne sert pour ce numéro de fiche, ou null : écrit par ce qu'il AUTORISE. */
-function adresseDe(ligne, numeroFiche) {
+/** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
+function lireNumero(ligne, numeroFiche) {
     if (!ligne || numeroFiche == null) return null;
     const s = String(numeroFiche).trim();
     const m = ligne.suffixe ? new RegExp(`^(\\d{1,3})${ligne.suffixe}$`).exec(s) : ligne.prefixe ? new RegExp(`^${ligne.prefixe}(\\d{1,3})$`).exec(s) : /^0*(\d{1,3})$/.exec(s);
-    if (!m) return null;
-    const n = Number(m[1]);
-    return n >= 1 && n <= ligne.max ? n : null;
+    return m ? Number(m[1]) : null;
+}
+/**
+ * Le numéro d'URL (entier) que cette ligne sert pour ce numéro de produit, ou null : écrit par ce qu'il AUTORISE.
+ * 🔑 RULING DU 2026-10-10 : la source ne livre aucun nom, la garantie d'un numéro vient des TÉMOINS. Un numéro n'est servi que dans un SEGMENT de
+ * numérotation (principal, secrètes) que la ligne déclare, et chaque segment a un témoin en son sein et un témoin à son plus grand numéro.
+ */
+function adresseDe(ligne, numeroFiche) {
+    const n = lireNumero(ligne, numeroFiche);
+    return n != null && ligne.segments.some(([de, a]) => n >= de && n <= a) ? n : null;
 }
 const urlHires = (id, n) => `${HOTE}/${id}/${n}_hires.png`;
 
@@ -93,7 +104,11 @@ function planifierPtcgio({ slug, trous }) {
         if (x.numeroCm == null || !cleNumero(x.numeroCm)) { restes.push({ ...base, motif: 'sans-numero' }); continue; }
         let hit = null;
         for (const l of lignes) { const n = adresseDe(l, x.numeroCm); if (n != null) { hit = { l, n }; break; } }
-        if (!hit) { restes.push({ ...base, motif: 'numero-hors-set' }); continue; }
+        if (!hit) {
+            // la forme est celle du set mais aucun témoin ne couvre ce numéro : RETIRÉ de l'écriture et nommé ; une autre forme (« BS 15 », « 77a ») n'est pas de ce set
+            const nonCouvert = lignes.some(l => lireNumero(l, x.numeroCm) != null);
+            restes.push({ ...base, motif: nonCouvert ? 'non-couvert-par-un-temoin' : 'numero-hors-set' }); continue;
+        }
         if (x.numeroFiche != null) {
             const chiffres = /\d+/.exec(String(x.numeroFiche));
             if (!chiffres || Number(chiffres[0]) !== hit.n) { restes.push({ ...base, motif: 'numero-contradictoire' }); continue; }
@@ -215,6 +230,6 @@ function planRetraitPtcgio(cartes) {
 
 module.exports = {
     SOURCE, HOTE, HOTE_NOM, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
-    TABLE_PTCGIO, lignesDe, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
+    TABLE_PTCGIO, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

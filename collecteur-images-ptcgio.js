@@ -24,6 +24,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');   // les vignettes de 200 px des images neuves, après la jointure (règle du dépôt, 2026-10-06)
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/ptcgio');
 
@@ -70,7 +71,7 @@ async function compterEntrees(db, carteIds, slug) {
  * @param {object} M     les modèles de la base `cartes`
  * @param {object} o     `verrou` : le verrou global, LIÉ au client. Les autres options n'existent que pour le banc (test-ptcgio.js).
  */
-async function collecterSlug(slug, M, { verrou, client, lireNumeros, deposer = (b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS } = {}) {
+async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter = vignetterApresJointure, deposer =(b, c, d, t) => r2.deposerBinaire(b, c, d, t), fabriquerVerrouSet = fabriquerVerrou, stopOctets = STOP_OCTETS } = {}) {
     const db = M.Carte.db.db;
     const E = db.collection('collecte_images_etat');
     const refus = (etat, erreur) => { console.error(`❌ ${slug} : ${erreur}.`); return { code: slug, etat, erreur, sansJointure: true }; };
@@ -195,12 +196,17 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, deposer = (
         const apres = await compterEntrees(db, carteIds, slug);
         const garde = avant.autres === apres.autres && apres.siennes === joints;
         if (!garde) console.error(`🔴 ${slug} : GARDE — entrées des autres sources ${avant.nAutres} → ${apres.nAutres}${avant.autres === apres.autres ? '' : ' (CHANGÉES)'}, entrées ${P.SOURCE} ${apres.siennes} pour ${joints} jointes`);
+        // ---- 6. LES VIGNETTES (200 px) : une jointure RÉÉCRIT les entrées, et lot-additif ne vignette pas — même appel que le worker (collecteur-images.js) ----
+        const W = await vignetter(db, slug, { bucket: process.env.R2_BUCKET_IMAGES, arreter: () => arretDemande });
+        console.log(`   vignettes : ${W.vg.erreur ? `🔴 ${W.vg.erreur}` : `${W.vg.entrees} entrée(s) sans vignette · ${W.vg.depuisDocument} recopiée(s) · ${W.vg.fabriquees} fabriquée(s) · ${W.vg.echecs} échec(s)${W.vg.interrompu ? ' · interrompu' : ''}`}`);
+        const vignettesOk = !W.vg.erreur && !W.vg.echecs && !W.vg.interrompu;
         const complet = {
+            vignettes: W.vg,
             source: P.SOURCE, mention: P.MENTION, lot: P.LOT, lignes: P.lignesDe(slug).map(l => l.id), produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs,
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, refusDim, pasPng, joints, dejaParAutre, cartesAbsentes,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, erreurJointure,
-            concordance: garde && !erreurJointure && !bloque && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
+            concordance: garde && !erreurJointure && !bloque && vignettesOk && echecs === 0 && cartesAbsentes === 0 && telecharges + sautes + tropPetits + retires + refusDim + absents === Pl.plan.length && joints + dejaParAutre === images.length,
             verifieLe: new Date()
         };
         await M.Set.updateOne({ _id: slug }, { $set: { visuelsPtcgio: complet } });
