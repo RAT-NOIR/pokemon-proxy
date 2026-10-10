@@ -112,8 +112,16 @@ function fichesDesProduits(regle, set, docs, produits) {
 // les raretés LUES sur les impressions des cartes sans prix des sets classés (2026-10-07 : HR, SR, RR — Tag Team Collection ; 1 199 sans
 // rareté) ; une rareté hors table, dans un set qui se sert du classement de secours, ARRÊTE l'export en la nommant (jamais un rang
 // deviné en silence : relecture du 2026-10-07).
-const RANG_RARETE = { HR: 3, SR: 2, RR: 1 };
+// « None » (2026-10-10) : la valeur que TCGdex écrit (`rarity`) pour une carte SANS rareté imprimée — 1 impression en base, 30th Celebration
+// Premium Deck Set, source tcgdex (poser-cartes-tcgdex.js). Même rang qu'une rareté absente (null → 0) : après RR, départage par numéro.
+const RANG_RARETE = { HR: 3, SR: 2, RR: 1, None: 0 };
 const rangRarete = r => (r != null && Object.hasOwn(RANG_RARETE, r) ? RANG_RARETE[r] : 0);
+// La garde de la table, écrite par ce qu'elle CONNAÎT : toute rareté lue (non nulle) absente de RANG_RARETE est notée avec son set dans `acc`.
+function noterRaretesHorsTable(acc, sansPrix, setId) {
+    for (const c of sansPrix) if (c.rarete != null && !Object.hasOwn(RANG_RARETE, c.rarete)) (acc[c.rarete] = acc[c.rarete] || new Set()).add(setId);
+    return acc;
+}
+const messageRaretesHorsTable = acc => `raretés hors de RANG_RARETE dans un classement de secours : ${Object.entries(acc).map(([r, ss]) => `${r} (${[...ss].join(', ')})`).join(' ; ')} — à ranger dans la table avant d'exporter (rien n'est écrit)`;
 const cleNumeroTri = n => { const m = /(\d+)/.exec(String(n ?? '')); return m ? Number(m[1]) : Number.POSITIVE_INFINITY; };
 function ordreDeSecours(a, b) {
     return rangRarete(b.rarete) - rangRarete(a.rarete) || cleNumeroTri(a.numero) - cleNumeroTri(b.numero)
@@ -132,7 +140,7 @@ function logosOfficielsDesSets(sets) {
     }
     return sortie;
 }
-module.exports = { logosOfficielsDesSets, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
+module.exports = { logosOfficielsDesSets, visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE, noterRaretesHorsTable, messageRaretesHorsTable };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
     const fichier = async rel => { const b = fs.readFileSync(path.join(__dirname, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(__dirname, rel), sha1: sha1(b), w: m.width, h: m.height }; };
@@ -229,7 +237,7 @@ if (require.main === module) (async () => {
         const n = N_CLASSEMENT_LONG[s._id] ?? N_CLASSEMENT;
         for (const c of [...cands, ...sansPrix]) { if (vus.has(c.carteId)) continue; vus.add(c.carteId); classement.push({ rang: classement.length + 1, ...c }); if (classement.length === n) break; }
         // (relecture) l'ordre de secours s'écrit par ce qu'il CONNAÎT : une rareté hors table, dans un set qui s'en sert, arrête l'export
-        if (classement.some(c => c.classementSansPrix)) for (const c of sansPrix) if (c.rarete != null && !Object.hasOwn(RANG_RARETE, c.rarete)) (raretesHorsTable[c.rarete] = raretesHorsTable[c.rarete] || new Set()).add(s._id);
+        if (classement.some(c => c.classementSansPrix)) noterRaretesHorsTable(raretesHorsTable, sansPrix, s._id);
         for (const [k, n] of Object.entries(exclus)) exclusTotal[k] = (exclusTotal[k] || 0) + n;
         vedettes[s._id] = { famille: s.logoCompose?.famille ?? (autres.includes(s) ? 'autres' : null), autres: autres.includes(s), nom: s.nomAffichage, tirage: s.tirage ?? s.region, produitsLus: lignes.length, pokemonClasses: cands.length,
             pokemonSansPrix: sansPrix.length, classementDeSecours: classement.filter(c => c.classementSansPrix).length,
@@ -242,7 +250,7 @@ if (require.main === module) (async () => {
     const logosOfficiels = logosOfficielsDesSets(await cx.db.collection('sets').find({ $or: [{ 'logoOfficiel.fr': { $exists: true } }, { 'logoOfficiel.ja': { $exists: true } }] }, { projection: { logoOfficiel: 1 } }).toArray());
     console.log(`LOGOS OFFICIELS : ${Object.keys(logosOfficiels).length} sets (${Object.values(logosOfficiels).reduce((n, x) => n + Object.keys(x).length, 0)} logos)`);
     await fermer();
-    if (Object.keys(raretesHorsTable).length) throw new Error(`raretés hors de RANG_RARETE dans un classement de secours : ${Object.entries(raretesHorsTable).map(([r, ss]) => `${r} (${[...ss].join(', ')})`).join(' ; ')} — à ranger dans la table avant d'exporter (rien n'est écrit)`);
+    if (Object.keys(raretesHorsTable).length) throw new Error(messageRaretesHorsTable(raretesHorsTable));
     const sortie = { genere: new Date().toISOString(), par: 'exporter-donnees-logos-site.js', guideDesPrix: meta ? { fichier: meta.fichier, guideDu: meta.guideDu } : null, wcd, logosPartages: partages, logosOfficiels, vedettes };
     fs.mkdirSync(path.join(__dirname, 'donnees-site'), { recursive: true });
     fs.writeFileSync(path.join(__dirname, 'donnees-site', 'logos-composes-donnees.json'), JSON.stringify(sortie, null, 1));
