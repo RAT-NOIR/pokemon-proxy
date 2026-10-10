@@ -167,7 +167,7 @@ async function main() {
         verifier('balayage : sans la liste fermée, les deux copieurs sont des fautifs (renommer-set, reparer-identite-nulle)', sansListe.fautifs.map(x => x.split(' ')[0]).sort(), ['renommer-set.js', 'reparer-identite-nulle.js']);
         const { 'test-historique-valeur.js': _h, ...bancsSansHisto } = E.BANCS;
         verifier('balayage : un banc d\'une autre branche non listé (test-historique-valeur.js) est un fautif', E.balayer(__dirname, { bancs: bancsSansHisto }).fautifs.map(x => x.split(' ')[0]), ['test-historique-valeur.js']);
-        verifier('balayage : les bancs listés sont exactement ceux qu\'on a prouvés', Object.keys(E.BANCS).sort(), ['test-historique-valeur.js', 'test-lot-garde-scratch.js', 'test-publication-sans-trou.js', 'test-regle-r-fiches.js']);
+        verifier('balayage : les bancs listés sont exactement ceux qu\'on a prouvés', Object.keys(E.BANCS).sort(), ['test-collecter-logos-officiels.js', 'test-historique-valeur.js', 'test-lot-garde-scratch.js', 'test-publication-sans-trou.js', 'test-regle-r-fiches.js']);
         // la preuve d'isolation d'un banc listé : harnais en mémoire OBLIGATOIRE, aucune connexion ailleurs
         const OK = "const { ouvrirBanc } = require('./collecte-cartes/base-banc'); const banc = await ouvrirBanc(); mongoose.createConnection(banc.uri, { dbName: 'x' });";
         verifier('preuve de banc : harnais en mémoire + createConnection(banc.uri) → prouvé', E.preuveDeBanc(OK), []);
