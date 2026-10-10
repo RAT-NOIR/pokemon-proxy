@@ -7,10 +7,15 @@ const CODES = Object.freeze({
     EN_RECONCILIATION: 409   // B3 tour 5 : clé rejouée dont la ligne de débit attend la réconciliation — ni rejouée ni redébitée, aucun crédit ni remboursement associé
 });
 // Messages STABLES des codes émis par la couche argent (le texte ne change pas d'un appel à l'autre).
-const MESSAGES = Object.freeze({ EN_RECONCILIATION: 'paiement en cours de réconciliation, réessayer plus tard' });
+const MESSAGES = Object.freeze({
+    EN_RECONCILIATION: 'paiement en cours de réconciliation, réessayer plus tard',
+    QUOTA: 'Plus de crédit disponible', VERIFICATION: 'Confirmez votre adresse e-mail pour utiliser vos crédits', DEBIT: 'Requête identique en cours de traitement',
+    INDISPONIBLE: 'Service momentanément indisponible', IA: 'La lecture de la carte a échoué', SERVEUR: 'Erreur interne du serveur', ENTREE: 'Requête invalide'
+});
 function corpsErreur(code, message, extra = {}) {
     if (!Object.hasOwn(CODES, code)) throw new Error(`code d'erreur inconnu : ${code}`);
-    const erreur = { code, message };
+    // message absent : le message STABLE du code (mineur B3 reporté) — jamais « undefined » dans un corps d'erreur
+    const erreur = { code, message: typeof message === 'string' && message ? message : (MESSAGES[code] ?? code) };
     if (extra.detail !== undefined) erreur.detail = extra.detail;
     if (extra.reessayerDans !== undefined) erreur.reessayerDans = extra.reessayerDans;
     const corps = { success: false, erreur, facturation: extra.facturation ?? null };

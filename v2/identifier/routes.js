@@ -54,7 +54,7 @@ function verifierEntree(corps, cfg) {
     return { entree: {
         imageUrls: [...urls], title: (corps.title || '').slice(0, TITRE_MAX), description: (corps.description || '').slice(0, DESCRIPTION_MAX),
         prixVinted: prix, devise, marche: corps.marche, vintedUrl,
-        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat : null,       // CONTRAT-2.md l. 24 : passé tel quel à la chaîne héritée (B1b.3)
+        vintedEtat: typeof corps.vintedEtat === 'string' ? corps.vintedEtat.slice(0, 100) : null,   // CONTRAT-2.md l. 24 : passé à la chaîne héritée (B1b.3) ; borné (mineur reporté de B1b.1)
         langueInterface: corps.langueInterface === 'en' ? 'en' : 'fr', versionExtension: corps.versionExtension.trim()
     } };
 }
@@ -69,4 +69,150 @@ function validerEntree(cfg) {
     };
 }
 
-module.exports = { validerEntree, verifierEntree, comparerVersions };
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// B1b.3 — traiterIdentifier : du débit à la réponse. C'est ici que l'argent rencontre la chaîne d'identification.
+// Les dix étapes du plan (§14, Task B1b.3), dans cet ordre. Invariants qui se lisent dans le code :
+//   · on n'appelle JAMAIS la chaîne héritée (donc jamais l'IA) sans avoir débité ;
+//   · tout débit finit livré, réservé (question) ou remboursé : une panne et un « introuvable » sont toujours rendus, et si la chaîne ne l'a pas fait
+//     elle-même (req.scanRembourse faux) c'est CETTE fonction qui le fait ;
+//   · une écriture annexe (analyses, annonces) échoue sans jamais changer la réponse.
+// La facturation dite au client est celle que le registre du scan a RÉELLEMENT produite (req.scanRendu / req.questionId / cause relue dans le contexte du
+// scan) — jamais une valeur supposée par le type d'issue.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+const mongoose = require('mongoose');
+const registre = require('../registre');
+const { fauxRes } = require('./captureres');
+const { adapter } = require('./adaptateur');
+const { creerCatalogue } = require('./catalogue');
+const { regleVerdict } = require('./taux');
+const { preparerAnnonce } = require('../annonce/verifier');
+const { conserverAnnonce } = require('../annonce/conservation');
+const { facturation: fabriquerFacturation } = require('../argent/facturation');
+const { dansUnScan, raisonNonRemboursement } = require('../../sources');
+const { col } = require('../db');
+
+const URL_RECHARGE = 'https://rat-market.fr/fr/compte#recharge';
+const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
+const journalErreur = (ou, e) => console.error(`❌ [v2 identifier] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
+
+// La facturation, d'après ce que le registre du scan a réellement fait. `faits` = { admin, rendu, question, cause }.
+function facturationDe(issue, faits) {
+    if (faits.admin) return fabriquerFacturation({ motif: 'administrateur', rembourse: false });
+    const refuse = !faits.rendu && faits.cause === 'plafond-jour';                         // le remboursement a été REFUSÉ par le plafond du jour : la seule cause qui a un motif propre
+    const nonRendu = { debite: 1, reserve: 0, rembourse: false, raisonNonRembourse: faits.cause ?? 'erreur' };
+    if (issue === 'affirmee') return fabriquerFacturation({ debite: 1, rembourse: false, motif: 'affirmee' });
+    if (issue === 'question') {
+        if (faits.question) return fabriquerFacturation({ debite: 0, reserve: 1, rembourse: false, motif: 'question' });
+        if (faits.rendu) return fabriquerFacturation({ debite: 0, rembourse: true, motif: 'question' });
+        return fabriquerFacturation({ ...nonRendu, motif: refuse ? 'plafond-jour' : 'question' });
+    }
+    const motif = issue === 'introuvable' ? 'introuvable' : 'panne';
+    if (faits.rendu) return fabriquerFacturation({ debite: 0, rembourse: true, motif });
+    return fabriquerFacturation({ ...nonRendu, motif: refuse ? 'plafond-jour' : motif });
+}
+
+function traiterIdentifier(cfg, deps = {}) {
+    const catalogue = deps.catalogue || creerCatalogue({ cfg });
+    return async function traiterIdentifierV2(req, res) {
+        const porteur = req.v2 && req.v2.porteur, entree = req.entree;
+        let argent;
+        try {
+            argent = registre.obtenir('argent');
+            if (!porteur || !entree || typeof deps.gererIdentifier !== 'function') throw new Error('montage incomplet');
+        } catch (e) { journalErreur('montage', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
+
+        // 1. l'annonce est une DONNÉE : expurgée avant tout usage
+        const annonce = preparerAnnonce({ title: entree.title, description: entree.description }, cfg);
+        // 2. l'identifiant du scan (le MÊME pour le débit, la question, le journal hérité, analyses) et la clé de débit, préfixée par le porteur
+        const scanId = new mongoose.Types.ObjectId();
+        const cleIdem = req.headers['idempotency-key'];
+        const cleDebit = `scan|${porteur.type}:${porteur.id}|${cleIdem}`;
+        // 3. LE DÉBIT, avant toute chose
+        let debit;
+        try { debit = await argent.debiter(porteur, { scanId, cleIdempotence: cleDebit }); }
+        catch (e) { journalErreur('débit', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        if (!debit || !debit.ok) {
+            const code = debit && ['QUOTA', 'VERIFICATION', 'EN_RECONCILIATION'].includes(debit.code) ? debit.code : 'INDISPONIBLE';
+            if (code === 'INDISPONIBLE') return repondreErreur(res, code);
+            const extra = { facturation: null, ...(code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) };
+            if (code !== 'EN_RECONCILIATION') { const s = await soldeSur(); if (s !== undefined) extra.solde = s; }
+            return repondreErreur(res, code, undefined, extra);
+        }
+        // une clé déjà débitée par une requête qui n'a pas abouti : jamais un second appel à la chaîne sur ce débit (la réconciliation tranche)
+        if (debit.rejoue) return repondreErreur(res, 'DEBIT', undefined, { reessayerDans: 2 });
+
+        const admin = debit.administrateur === true, credit = admin ? null : (debit.credit ?? null);
+        const userId = `v2:${porteur.type}:${porteur.id}`;
+        // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
+        const reqH = {
+            body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
+            ip: req.ip, headers: {}, scanIdImpose: scanId,
+            credit: argent.creditPourReq(porteur, credit, { scanId })
+        };
+        const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
+        let sortie;
+        try {
+            sortie = await dansUnScan(async () => {
+                const fr = fauxRes();
+                let exception = null;
+                try { await deps.gererIdentifier(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
+                let resultat;
+                if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
+                else {
+                    // 5. le catalogue de l'API pour les produits que la chaîne désigne, puis l'adaptation
+                    const c = fr.corps && typeof fr.corps === 'object' ? fr.corps : {};
+                    const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : [])];
+                    let produits = null;
+                    try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
+                    resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
+                        : adapter({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
+                }
+                // la question réservée par la chaîne doit porter les choix DU CONTRAT (choixPour) : le pont ne connaît que les idProduct
+                if (resultat.issue === 'question' && reqH.questionId) {
+                    let ok = false;
+                    try {
+                        const r = await col('questions').updateOne({ _id: `${scanId}:0`, etat: 'en-attente' }, { $set: { choix: resultat.question.choix.map(x => ({ id: x.id, idProduct: x.idProduct })) } });
+                        ok = r.matchedCount === 1;
+                    } catch (e) { journalErreur('choix de la question', e); }
+                    if (!ok) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
+                }
+                // le filet : une panne ou un « introuvable » sont TOUJOURS rendus ; si la chaîne ne l'a pas tenté, c'est ici (annule aussi une question réservée)
+                if (!admin && credit && (resultat.issue === 'panne' || resultat.issue === 'introuvable') && !reqH.scanRembourse) {
+                    try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable'); } catch (e) { journalErreur('remboursement', e); }
+                }
+                const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
+                return { resultat, facturation: facturationDe(resultat.issue, faits) };
+            });
+        } catch (e) {
+            journalErreur('décision', e);
+            return repondreErreur(res, 'SERVEUR');                 // dernier recours : le débit est dans le journal des mouvements, la réconciliation le voit
+        }
+        const { resultat, facturation } = sortie;
+        // 7. le solde, relu APRÈS les mouvements
+        const solde = await soldeSur();
+        if (resultat.issue === 'panne') {
+            return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}) });
+        }
+        // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
+        let regle = null;
+        try { regle = await regleVerdict(entree.devise); } catch (e) { journalErreur('taux', e); }
+        const analyse = { ...resultat.analyse, regleVerdict: regle };
+        // 9. les écritures annexes : sans effet sur la réponse
+        try {
+            const maintenant = new Date();
+            const cartes = analyse.cartes;
+            await col('analyses').insertOne({
+                _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
+                cartes: cartes.map(c => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison })),
+                produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
+                creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
+            });
+        } catch (e) { journalErreur('analyses', e); }
+        try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); }
+        // 10. la réponse
+        return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
+    };
+}
+
+module.exports = { validerEntree, verifierEntree, comparerVersions, traiterIdentifier, facturationDe };
