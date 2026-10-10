@@ -1,6 +1,6 @@
 'use strict';
 // Emplacement du lot B6. B6.3 monte POST /api/banc/correction ; B6.4 y ajoute DELETE /api/banc/contributions (l'effacement par jeton) et arme la purge quotidienne.
-// Le banc est fabriqué ici (stockage réel paresseux : rien n'est chargé, aucun réseau, tant qu'une écriture consentie n'a pas lieu) et fourni au registre
+// (La purge : 1re passe différée de 10 min après le montage, puis toutes les 24 h.) Le banc est fabriqué ici (stockage réel paresseux : rien n'est chargé, aucun réseau, tant qu'une écriture consentie n'a pas lieu) et fourni au registre
 // SEULEMENT si personne ne l'a fourni avant (un banc de test injecte le sien). Le crochet du banc dans /api/identifier est v2/banc/crochet.js (B6.4).
 const mongoose = require('mongoose');
 const registre = require('../registre');
@@ -33,11 +33,22 @@ async function purgerUneFois({ etatMongo = () => mongoose.connection.readyState,
         return true;
     } catch (e) { console.error(`❌ [v2 banc-purge] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); return false; }   // jamais e.message
 }
-function arreterPurge() { if (minuteurPurge) { clearInterval(minuteurPurge); minuteurPurge = null; } }
-function demarrerPurge(purge, intervalleMs = INTERVALLE_PURGE_MS, etatMongo) {
-    arreterPurge();                                                  // un seul minuteur par processus, même si le montage est refait
-    minuteurPurge = setInterval(() => { purgerUneFois({ purge, ...(etatMongo ? { etatMongo } : {}) }); }, intervalleMs);
-    minuteurPurge.unref();
+// Une passe DIFFÉRÉE au démarrage (10 min : le temps que Mongo soit prêt) puis toutes les 24 h : un processus redéployé chaque jour ne verrait jamais l'intervalle de 24 h
+// se déclencher, et la purge (le seul effaceur) ne tournerait jamais. Même schéma que la purge des annonces (B1b.7). Un seul différé et un seul intervalle par processus.
+const DIFFERE_PURGE_MS = 10 * 60 * 1000;
+let differePurge = null, minuteursEnCours = null;
+function arreterPurge() {
+    const m = minuteursEnCours || global;
+    if (minuteurPurge) { m.clearInterval(minuteurPurge); minuteurPurge = null; }
+    if (differePurge) { m.clearTimeout(differePurge); differePurge = null; }
+    minuteursEnCours = null;
+}
+function demarrerPurge(purge, intervalleMs = INTERVALLE_PURGE_MS, etatMongo, { differeMs = DIFFERE_PURGE_MS, minuteurs = global } = {}) {
+    arreterPurge();                                                  // un seul différé et un seul intervalle par processus, même si le montage est refait
+    minuteursEnCours = minuteurs;
+    const passe = () => purgerUneFois({ purge, ...(etatMongo ? { etatMongo } : {}) });
+    differePurge = minuteurs.setTimeout(passe, differeMs); differePurge.unref();
+    minuteurPurge = minuteurs.setInterval(passe, intervalleMs); minuteurPurge.unref();
     return minuteurPurge;
 }
 
@@ -51,5 +62,5 @@ module.exports = {
         router.delete('/api/banc/contributions', resoudrePorteur(cfg), exigerInstallation, traiterEffacement(purge));
         demarrerPurge(purge);
     },
-    purgerUneFois, demarrerPurge, arreterPurge, minuteurPurge: () => minuteurPurge, INTERVALLE_PURGE_MS
+    purgerUneFois, demarrerPurge, arreterPurge, minuteurPurge: () => minuteurPurge, differePurge: () => differePurge, INTERVALLE_PURGE_MS, DIFFERE_PURGE_MS
 };

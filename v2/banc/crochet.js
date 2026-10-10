@@ -11,11 +11,27 @@ const { lireConsentement } = require('./consentement');
 
 const journal = (ou, e) => console.error(`❌ [v2 banc-crochet] ${ou} (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message
 
-/** Après /api/identifier. `analyse` est celle de la réponse ; `req.entree.imageUrls` les images de l'annonce. Rend undefined, tout de suite. */
+/**
+ * Le consentement ouvre-t-il la conservation POUR CETTE REQUÊTE ? Valide (B6.1) ET — écrit par ce qu'on autorise — d'une empreinte DIFFÉRENTE de celle du jeton d'accès
+ * du porteur : un client qui enverrait son jeton Bearer comme `consentementBanc.jeton` donnerait à ses lignes la MÊME empreinte que `installations.jetonEmpreinte`
+ * (même sha256), donc relierait le banc à l'installation. Sans porteur lisible on ne conclut pas : refus. Rien n'est dit au client (comme un consentement invalide).
+ */
+function consentementAutorise(req, cfg) {
+    try {
+        const c = lireConsentement(req && req.body, cfg);
+        if (!c.valide) return false;
+        const p = req && req.v2 && req.v2.porteur;
+        if (!p) return false;
+        const acces = [p.installation && p.installation.jetonEmpreinte, req.v2.session && req.v2.session.tokenEmpreinte].filter(x => typeof x === 'string' && x);
+        return acces.every(e => e !== c.jetonEmpreinte);
+    } catch { return false; }
+}
+
+/** Après /api/identifier.`analyse` est celle de la réponse ; `req.entree.imageUrls` les images de l'annonce. Rend undefined, tout de suite. */
 function apresIdentifier({ cfg, deps, req, scanId, analyse }) {
     try {
         if (!deps || typeof deps.detection !== 'function') return;                         // la production d'aujourd'hui : rien n'est conservé
-        if (!lireConsentement(req && req.body, cfg).valide) return;                          // sans consentement valide : ni détecteur, ni ligne, ni objet
+        if (!consentementAutorise(req, cfg)) return;                                        // sans consentement valide (et distinct du jeton d'accès) : ni détecteur, ni ligne, ni objet
         if (!analyse || analyse.statut === 'lot' || !Array.isArray(analyse.cartes) || analyse.cartes.length !== 1) return;   // un lot ne conserve rien
         const c = analyse.cartes[0];
         let issue, idProduct = null;
@@ -36,9 +52,12 @@ function apresIdentifier({ cfg, deps, req, scanId, analyse }) {
 function apresReponse({ cfg, req, scanId, carte, choix, idProduct }) {
     try {
         let banc; try { banc = registre.obtenir('banc'); } catch { return; }                // aucun banc fourni : rien, sans bruit
+        // un abandon ne demande aucun consentement (effacer n'est jamais conserver) ; une confirmation, si : valide et distinct du jeton d'accès
+        const abandon = choix === 'aucune' || choix === 'ne-sait-pas';
+        if (!abandon && !consentementAutorise(req, cfg)) return;
         Promise.resolve(banc.apresReponse({ corps: req && req.body, scanId: String(scanId), carte, choix, idProduct })).catch(e => journal('apresReponse', e));
     } catch (e) { journal('apresReponse', e); }
     void cfg;
 }
 
-module.exports = { apresIdentifier, apresReponse };
+module.exports = { apresIdentifier, apresReponse, consentementAutorise };

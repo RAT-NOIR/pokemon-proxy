@@ -57,11 +57,24 @@ function fauxClient() {
 }
 const dels = c => c.commandes.filter(x => x.op === 'del').flatMap(x => x.cles);
 
-function nouveauBanc(client) {
+function nouveauBanc(client, colFn) {
     const stockage = creerStockage({ client, bucket: BUCKET, env: { V2_BANC_BUCKET: BUCKET } });
     stockage.verifierBucket = async () => { };
-    const banc = creerBanc({ cfg, env: { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL }, stockage, horloge: () => T0 });
+    const banc = creerBanc({ cfg, env: { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL }, stockage, horloge: () => T0, ...(colFn ? { colFn } : {}) });
     return { banc, stockage };
+}
+// Une collection « rassise » : la LECTURE des lignes (find().toArray() SANS projection) rend ce qu'elle a lu, mais `pendant()` s'exécute entre cette lecture et ce
+// qui suit (le scénario de la relecture : une ligne d'attente lue par la purge, puis confirmée avant sa suppression). `compte` compte les find / findOne.
+function colRassise(pendant, compte = {}) {
+    return n => {
+        const r = db.col(n);
+        return {
+            find: (q, o) => { compte.find = (compte.find || 0) + 1; compte.projections = [...(compte.projections || []), Boolean(o && o.projection)]; const c = r.find(q, o);
+                return { toArray: async () => { const l = await c.toArray(); if (!(o && o.projection) && pendant) await pendant(); return l; } }; },
+            findOne: (...a) => { compte.findOne = (compte.findOne || 0) + 1; return r.findOne(...a); },
+            deleteOne: (...a) => r.deleteOne(...a), insertOne: (...a) => r.insertOne(...a), updateOne: (...a) => r.updateOne(...a),
+        };
+    };
 }
 const P = () => require('../banc/purge');
 function nouvellePurge(client, o = {}) {
@@ -268,15 +281,85 @@ async function section(nom, f) {
         H.v('   lister en panne : l\'orphelin reste ; les 2 lignes échues sont purgées quand même ; l\'échec du filet est compté', [client.objets.has(o2), (await lignes()).length, b2.lignes, b2.echecsOrphelins >= 1], [true, 0, 2, true]);
         // Mongo qui ne répond pas à la question « cette clé est-elle référencée ? » : on ne supprime JAMAIS sans conclure
         const o3 = poser(cle1(), new Date(T0.getTime() - 60 * H1));
-        const colCassee = () => ({ find: () => ({ toArray: async () => [] }), findOne: async () => { throw Object.assign(new Error('Mongo HS'), { code: 'MONGO_HS' }); }, deleteOne: async () => ({}), countDocuments: async () => { throw new Error('Mongo HS'); } });
+        // la lecture des références (find à PROJECTION) échoue ; la lecture des lignes échues, elle, répond (vide)
+        const colCassee = () => ({ find: (q, o) => ({ toArray: async () => { if (o && o.projection) throw Object.assign(new Error('Mongo HS'), { code: 'MONGO_HS' }); return []; } }), findOne: async () => null, deleteOne: async () => ({ deletedCount: 0 }) });
         const p3 = nouvellePurge(client, { colFn: () => colCassee() }); const cap3 = capturer();
         await p3.purgerBanc(T0); cap3.rendre();
         H.v('   Mongo qui lève sur la recherche de référence : l\'orphelin n\'est PAS supprimé (« je ne sais pas » n\'est jamais « personne »)', client.objets.has(o3), true);
+        // (I3) pas de N² : les références sont lues par UNE requête à projection, jamais une requête par objet
+        for (let i = 0; i < 6; i++) poser(cle1(), new Date(T0.getTime() - 60 * H1));
+        await ecrireLigne(banc, image, { jeton: 'jeton-O3-abcdefghij1234' }); await ecrireLigne(banc, image, { jeton: 'jeton-O4-abcdefghij1234' });
+        const compteurs = {}; const p4 = nouvellePurge(client, { colFn: colRassise(null, compteurs) });
+        const b4 = await p4.purgerBanc(T0);
+        H.v('(I3) filet sur 6 orphelins + 2 référencés (+ le reste du préfixe) : 0 findOne ; 2 find (lignes échues, puis références AVEC projection) ; 8 orphelins supprimés (les 6 + o2 et o3 restés des cas précédents)',
+            [compteurs.findOne || 0, compteurs.find, compteurs.projections, b4.orphelins], [0, 2, [false, true], 8]);
         // la sauvegarde de la garde : le seul chemin vers la suppression d'un orphelin est (préfixe, forme de clé, >48 h, aucune ligne)
         const refVieille = poser(cle1(), new Date(T0.getTime() - 900 * H1));
         await db.col('banc_lignes').insertOne({ _id: 'fab', cleR2: refVieille, etat: 'confirmee', source: 'affirme', verite: 1, expireLe: new Date(T0.getTime() + 400 * JOUR), le: T0, jetonEmpreinte: 'x', versionTexte: 'v', versionModele: null });
         await purge.purgerBanc(T0);
         H.v('   un objet de 900 h référencé par une ligne (fabriquée) survit', client.objets.has(refVieille), true);
+        await vider();
+    });
+
+    // ═══ I4 — UNE définition de « échue » et de « objet puis ligne » : une ligne confirmée entre la lecture et la suppression n'est JAMAIS supprimée ═══
+    await section('I4', async () => {
+        const C = 'jeton-I4-abcdefghij1234';
+        const monter = async () => {
+            const client = fauxClient(); const { banc: ecrivain } = nouveauBanc(client);
+            const scanId = await ecrireLigne(ecrivain, image, { jeton: C, issue: 'question' });
+            const l0 = (await lignes())[0];
+            const pendant = async () => { await ecrivain.corriger({ corps: consentement(C), scanId, carte: 0, idProduct: 55 }); };
+            return { client, l0, pendant };
+        };
+        const etat = async (client, l0) => { const ls = await lignes(); return [ls.length, ls[0] && ls[0].etat, ls[0] && ls[0].source, ls[0] && ls[0].cleR2 !== l0.cleR2, ls[0] ? client.objets.has(ls[0].cleR2) : null, client.objets.has(l0.cleR2)]; };
+        const ATTENDU = [1, 'confirmee', 'correction', true, true, false];
+        let m = await monter();
+        const b = await nouvellePurge(m.client, { colFn: colRassise(m.pendant) }).purgerBanc(new Date(T0.getTime() + 49 * H1));
+        H.v('(I4) purgerBanc : une ligne d\'attente lue puis CONFIRMÉE (correction) avant sa suppression reste, avec sa copie finale ; l\'ancien objet est parti', [await etat(m.client, m.l0), b.lignes], [ATTENDU, 0]);
+        await vider(); m = await monter();
+        const bb = await nouveauBanc(m.client, colRassise(m.pendant)).banc.balayerAttente(new Date(T0.getTime() + 49 * H1));
+        H.v('   balayerAttente : idem (même définition)', [await etat(m.client, m.l0), bb.supprimees], [ATTENDU, 0]);
+        await vider(); m = await monter();
+        const be = await nouvellePurge(m.client, { colFn: colRassise(m.pendant) }).effacerParJeton(C);
+        H.v('   effacerParJeton : idem — la ligne devenue autre n\'est pas supprimée, et l\'effacement le DIT (echecs 1 : il reste une ligne du jeton)', [await etat(m.client, m.l0), be], [ATTENDU, { supprimees: 0, echecs: 1 }]);
+        await vider();
+        // les trois entrées appellent les définitions partagées
+        const K = require('../banc/commun');
+        H.v('   le module commun exporte lignesEchues, supprimerObjetPuisLigne, jourUTC, creerBorner, JOUR_MS', ['lignesEchues', 'supprimerObjetPuisLigne', 'jourUTC', 'creerBorner', 'JOUR_MS'].map(k => k in K), Array(5).fill(true));
+    });
+
+    // ═══ M5 — effacerParJeton défend aussi sa propre entrée ═══
+    await section('M5', async () => {
+        const purge = nouvellePurge(fauxClient());
+        const code = async j => { try { await purge.effacerParJeton(j); return null; } catch (e) { return e.code; } };
+        H.v('(M5) effacerParJeton avec un jeton mal formé (court, 65 car., espace, nombre, null, objet) ⇒ ENTREE', [await code('court'), await code('a'.repeat(65)), await code('jeton avec espace!!!'), await code(12345678901234567), await code(null), await code({})], Array(6).fill('ENTREE'));
+    });
+
+    // ═══ M3 — listerObjets suit la pagination (plus de 1 000 clés) ═══
+    await section('M3', async () => {
+        const r2 = require('../../collecte-cartes/r2');
+        const tailles = [1000, 1000, 500]; const envois = []; let prefixeVu = null;
+        r2._poserClient({ send: async cmd => { const t = cmd.input.ContinuationToken; const i = t ? Number(t) : 0; envois.push(i); prefixeVu = cmd.input.Prefix;
+            return { Contents: Array.from({ length: tailles[i] }, (_, k) => ({ Key: `banc-reel/v2/${String(i * 1000 + k).padStart(32, '0')}.webp`, LastModified: new Date(T0) })), IsTruncated: i < 2, NextContinuationToken: String(i + 1) }; } });
+        let l; try { l = await r2.listerObjets(BUCKET, 'banc-reel/v2/'); } finally { r2._poserClient(null); }
+        H.v('(M3) listerObjets : 2 500 clés sur 3 pages (1 000 + 1 000 + 500), toutes avec leur date, préfixe transmis', [l.length, envois, l.every(o => o.modifieLe instanceof Date), prefixeVu, new Set(l.map(o => o.cle)).size], [2500, [0, 1, 2], true, 'banc-reel/v2/', 2500]);
+    });
+
+    // ═══ M1 — un scanId se normalise en minuscules à UN seul endroit (le calcul de l'_id de la ligne) ═══
+    await section('M1', async () => {
+        const client = fauxClient(); const { banc } = nouveauBanc(client);
+        const sid = '65000000000000000000abcd', MAJ = sid.toUpperCase();
+        await banc.apresVerdict({ corps: consentement(), scanId: sid, carte: 0, issue: 'question', imageRedressee: image, detectionSure: true });
+        await banc.apresReponse({ corps: consentement(), scanId: MAJ, carte: 0, choix: 'a', idProduct: 777 });
+        let l = (await lignes())[0] || {};
+        H.v('(M1) apresReponse avec le scanId en MAJUSCULES retrouve la ligne : confirmee / reponse / 777', [(await lignes()).length, l.etat, l.source, l.verite], [1, 'confirmee', 'reponse', 777]);
+        await banc.corriger({ corps: consentement(), scanId: MAJ, carte: 0, idProduct: 888 });
+        l = (await lignes())[0] || {};
+        H.v('   corriger (MAJUSCULES) retrouve la ligne : correction / 888', [l.source, l.verite], ['correction', 888]);
+        await vider(); client.objets.clear();
+        await banc.apresVerdict({ corps: consentement(), scanId: MAJ, carte: 0, issue: 'question', imageRedressee: image, detectionSure: true });
+        await banc.apresAbandon({ scanId: sid, carte: 0 });
+        H.v('   écrite en MAJUSCULES, abandonnée en minuscules : la même ligne (0 ligne, 0 objet)', [(await lignes()).length, client.objets.size], [0, 0]);
         await vider();
     });
 
@@ -292,7 +375,23 @@ async function section(nom, f) {
         H.v('   une passe qui échoue ne lève pas (false) et son journal ne cite pas le message', [leve, r, cap.vus.length > 0, /secret\.exemple/.test(cap.vus.join())], [null, false, true, false]);
         const m = monterBanc.demarrerPurge(faux, 20, () => 1); await attendre(130); monterBanc.arreterPurge();
         H.v('   demarrerPurge(…, 20 ms) : le minuteur se déclenche plusieurs fois, ne retient pas le processus (unref), s\'arrête', [appels >= 3, m.hasRef(), monterBanc.minuteurPurge()], [true, false, null]);
+        // (I2) une passe DIFFÉRÉE au démarrage (10 min, unref, seulement si Mongo est prêt), puis toutes les 24 h ; un seul de chaque par processus
+        const fabrique = () => { const t = []; const mk = type => (fn, ms) => { const h = { type, fn, ms, annule: false, unrefd: false, unref() { h.unrefd = true; return h; } }; t.push(h); return h; };
+            return { t, setTimeout: mk('timeout'), setInterval: mk('interval'), clearTimeout: h => { if (h) h.annule = true; }, clearInterval: h => { if (h) h.annule = true; }, actifs: type => t.filter(h => h.type === type && !h.annule) }; };
+        const mn = fabrique(); let passes = 0; const fp = { purgerBanc: async () => { passes++; return {}; } };
+        H.v('(I2) le différé par défaut est de 10 min', monterBanc.DIFFERE_PURGE_MS, 600000);
+        monterBanc.demarrerPurge(fp, 1000, () => 1, { minuteurs: mn }); monterBanc.demarrerPurge(fp, 1000, () => 1, { minuteurs: mn });
+        const dif = mn.actifs('timeout')[0], iv = mn.actifs('interval')[0];
+        H.v('   deux montages ⇒ UN seul différé et UN seul intervalle actifs (4 minuteurs créés, 2 annulés)', [mn.actifs('timeout').length, mn.actifs('interval').length, mn.t.length], [1, 1, 4]);
+        H.v('   le différé dure 10 min et ne retient pas le processus ; l\'intervalle suit la cadence donnée, unref', [dif && dif.ms, dif && dif.unrefd, iv && iv.ms, iv && iv.unrefd], [600000, true, 1000, true]);
+        if (dif) { await dif.fn(); await attendre(30); }
+        H.v('   à l\'échéance du différé, Mongo prêt : UNE passe', passes, 1);
+        const mn2 = fabrique(); monterBanc.demarrerPurge(fp, 1000, () => 0, { minuteurs: mn2 }); const d2 = mn2.actifs('timeout')[0]; if (d2) { await d2.fn(); await attendre(30); }
+        H.v('   Mongo pas prêt à l\'échéance : aucune passe de plus', passes, 1);
+        monterBanc.arreterPurge();
+        H.v('   arreterPurge annule le différé ET l\'intervalle', [mn2.actifs('timeout').length, mn2.actifs('interval').length], [0, 0]);
         const router = express.Router(); monterBanc.routes(router, cfg, { banc: nouveauBanc(fauxClient()).banc, purge: faux });
+        H.v('   routes() arme aussi le différé réel (unref)', [monterBanc.differePurge() !== null, monterBanc.differePurge() && monterBanc.differePurge().hasRef()], [true, false]);
         const arme = monterBanc.minuteurPurge();
         H.v('   routes() arme UN minuteur unref ; remonter ne duplique pas', [arme !== null, arme && arme.hasRef()], [true, false]);
         const avant = appels; monterBanc.routes(express.Router(), cfg, { banc: nouveauBanc(fauxClient()).banc, purge: faux });
@@ -394,9 +493,9 @@ async function section(nom, f) {
         const client = fauxClient(); const { banc } = nouveauBanc(client);
         registre.fournir('banc', banc);
         const monter = async deps => {
-            const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+            const app = express(); app.set('trust proxy', true); app.use(require('../transport/cors').middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
             pret.armer(M.verifierIndex);
-            app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, ...deps, ...(enLot ? { identifierLot } : {}) }));
+            app.use(assembler([require('../argent/monter'), require('../identifier/monter'), monterBanc], cfg, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), banc, purge: nouvellePurge(client), ...deps, ...(enLot ? { identifierLot } : {}) }));
             return H.serveur(app);
         };
         const avecDet = await monter({ detection });
@@ -478,6 +577,64 @@ async function section(nom, f) {
         await repondre(avecDet, x, corpsR); await jusque(async () => (await lignes())[0].etat === 'confirmee');
         const avantRejeu = JSON.stringify(await lignes()); const rej = await repondre(avecDet, x, corpsR); await attendre(200);
         H.v('   la même réponse rejouée : 200, ligne et objet inchangés (1, 1)', [rej.statut, JSON.stringify(await lignes()) === avantRejeu, client.objets.size], [200, true, 1]);
+
+        // (M1) /reponse avec le scanId en MAJUSCULES retrouve la ligne
+        await reset(); mode = 'question';
+        r = await identifier(avecDet, x, consentement()); await jusque(async () => (await lignes()).length === 1);
+        const rMaj = await repondre(avecDet, x, { scanId: r.json.scanId.toUpperCase(), carte: 0, choix: 'a', ...consentement() });
+        const okMaj = await jusque(async () => (await lignes())[0].etat === 'confirmee');
+        H.v('(M1) /reponse avec le scanId en MAJUSCULES : 200 et la ligne passe à confirmee', [rMaj.statut, okMaj], [200, true]);
+
+        // (I1) le jeton de consentement ne doit pas être le jeton d'ACCÈS : sinon jetonEmpreinte = installations.jetonEmpreinte et la ligne se rattache à l'installation
+        await reset(); mode = 'affirmee';
+        const xa = await mkInst(); const AUTRE = 'un-autre-jeton-abcdefghij1234';
+        let ri = await identifier(avecDet, xa, consentement(xa.jeton)); await attendre(250);
+        H.v('(I1) /identifier : consentementBanc.jeton = le jeton Bearer ⇒ 200, 0 ligne, 0 objet, détecteur jamais appelé', [ri.statut, (await lignes()).length, client.objets.size, appelsDetection], [200, 0, 0, 0]);
+        ri = await identifier(avecDet, xa, consentement(AUTRE)); const un = await jusque(async () => (await lignes()).length === 1);
+        H.v('   un jeton de consentement DIFFÉRENT du jeton d\'accès ⇒ 1 ligne', [un, (await lignes())[0] && (await lignes())[0].jetonEmpreinte === empreinte(AUTRE), (await lignes())[0] && (await lignes())[0].jetonEmpreinte === xa.i.jetonEmpreinte], [true, true, false]);
+        // /reponse : une ligne en attente portant l'empreinte du jeton d'accès (fabriquée en direct, hors crochet) n'est pas confirmée
+        await reset(); mode = 'question';
+        ri = await identifier(avecDet, xa, null);
+        await banc.apresVerdict({ corps: consentement(xa.jeton), scanId: ri.json.scanId, carte: 0, issue: 'question', imageRedressee: image, detectionSure: true });
+        const avantI1 = JSON.stringify(await lignes());
+        const rI1 = await repondre(avecDet, xa, { scanId: ri.json.scanId, carte: 0, choix: 'a', ...consentement(xa.jeton) }); await attendre(250);
+        H.v('   /reponse avec le jeton d\'accès comme jeton de consentement : 200 (question répondue) mais la ligne n\'est pas confirmée', [rI1.statut, (await lignes())[0].etat, JSON.stringify(await lignes()) === avantI1], [200, 'attente', true]);
+        // /api/banc/correction
+        await reset(); mode = 'affirmee';
+        ri = await identifier(avecDet, xa, null);
+        await banc.apresVerdict({ corps: consentement(xa.jeton), scanId: ri.json.scanId, carte: 0, issue: 'affirmee', idProduct: ID_A, imageRedressee: image, detectionSure: true });
+        const postCorr = (corps) => H.appel(avecDet.url, '/api/banc/correction', { methode: 'POST', corps, entetes: ent(xa.jeton) });
+        const rc = await postCorr({ scanId: ri.json.scanId, idProduct: 31, ...consentement(xa.jeton) }); await attendre(150);
+        H.v('   /api/banc/correction avec le jeton d\'accès comme jeton de consentement : 200, vérité inchangée', [rc.statut, (await lignes())[0].verite, (await lignes())[0].source], [200, ID_A, 'affirme']);
+        // contrôle positif : la même ligne portant un AUTRE jeton se corrige bien
+        await reset();
+        ri = await identifier(avecDet, xa, null);
+        await banc.apresVerdict({ corps: consentement(AUTRE), scanId: ri.json.scanId, carte: 0, issue: 'affirmee', idProduct: ID_A, imageRedressee: image, detectionSure: true });
+        await postCorr({ scanId: ri.json.scanId, idProduct: 31, ...consentement(AUTRE) }); await attendre(150);
+        H.v('   (contrôle positif) un jeton de consentement différent : la correction s\'applique', [(await lignes())[0].verite, (await lignes())[0].source], [31, 'correction']);
+
+        // (M6 + CORS) DELETE /api/banc/contributions par l'assembleur RÉEL (garde d'index, CORS) ; préflight DELETE pour ce seul chemin
+        await reset();
+        const ACAO = 'access-control-allow-origin', METH = 'access-control-allow-methods';
+        const Cdel = 'jeton-del-abcdefghij123456';
+        for (let i = 0; i < 2; i++) await banc.apresVerdict({ corps: consentement(Cdel), scanId: scanHex(900 + i), carte: 0, issue: 'affirmee', idProduct: ID_A, imageRedressee: image, detectionSure: true });
+        const delH = (corps, bearer) => H.appel(avecDet.url, '/api/banc/contributions', { methode: 'DELETE', corps, entetes: { origin: ORIGINE, ...ip(), ...(bearer ? { authorization: `Bearer ${bearer}` } : {}) } });
+        let rd = await delH({ jeton: Cdel }, null);
+        H.v('(M6) DELETE par l\'assembleur réel, sans Bearer : 401, en-têtes CORS présents, rien effacé (2 lignes)', [rd.statut, rd.entetes[ACAO], (await lignes()).length], [401, ORIGINE, 2]);
+        rd = await delH({ jeton: 'court' }, xa.jeton);
+        H.v('   jeton mal formé : 400 ENTREE', [rd.statut, rd.json && rd.json.erreur && rd.json.erreur.code], [400, 'ENTREE']);
+        rd = await delH({ jeton: Cdel }, xa.jeton);
+        H.v('   DELETE valide : 200 { supprimees: 2, echecs: 0 }, 0 ligne, 0 objet, en-têtes CORS présents', [rd.statut, rd.json, (await lignes()).length, client.objets.size, rd.entetes[ACAO]], [200, { success: true, supprimees: 2, echecs: 0 }, 0, 0, ORIGINE]);
+        const pre = (chemin, origine) => H.appel(avecDet.url, chemin, { methode: 'OPTIONS', entetes: { origin: origine, 'access-control-request-method': 'DELETE' } });
+        let p = await pre('/api/banc/contributions', ORIGINE);
+        H.v('(CORS) préflight extension sur /api/banc/contributions : 204 et DELETE autorisé', [p.statut, /\bDELETE\b/.test(p.entetes[METH] || ''), p.entetes[ACAO]], [204, true, ORIGINE]);
+        const autres = [];
+        for (const chemin of ['/api/banc/correction', '/api/identifier', '/api/identifier/reponse', '/api/solde', '/api/banc/contributions/x']) { p = await pre(chemin, ORIGINE); autres.push(p.entetes[METH]); }
+        H.v('   tout autre chemin de l\'extension : GET, POST inchangé (le sous-chemin /contributions/x n\'est PAS /contributions)', autres, ['GET, POST', 'GET, POST', 'GET, POST', 'GET, POST', 'GET, POST']);
+        p = await pre('/api/compte/connexion', cfg.origines.site);
+        H.v('   profil du site inchangé : GET, POST, DELETE', p.entetes[METH], 'GET, POST, DELETE');
+        p = await pre('/api/banc/contributions', cfg.origines.site);
+        H.v('   le site n\'a pas ce chemin : aucun en-tête CORS', p.entetes[ACAO], undefined);
 
         // (8) les corps de B1b sont identiques avec et sans banc — la sortie du crochet n'entre dans aucune réponse
         mode = 'affirmee';

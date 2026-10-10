@@ -10,11 +10,10 @@
 const crypto = require('crypto');
 const db = require('../db');
 const S = require('./stockage');
+const { FORME_JETON } = require('./consentement');
+const { codeDe, creerBorner, lignesEchues, supprimerObjetPuisLigne } = require('./commun');
 
-const JOUR_MS = 86400e3, ORPHELIN_MS = 48 * 3600e3, DELAI_MS = 10000;
-const FORME_JETON = /^[A-Za-z0-9_-]{16,64}$/;
-const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
-const codeDe = e => (e && (e.code || e.name)) || 'erreur';
+const ORPHELIN_MS = 48 * 3600e3, DELAI_MS = 10000;
 
 function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.col(n), horloge = () => new Date(), delaiMs = DELAI_MS } = {}) {
     const col = () => colFn('banc_lignes');
@@ -22,10 +21,7 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
     // Le journal ne porte JAMAIS de contenu : le code de l'erreur, pas son message (il peut citer une clé ou une URL).
     const echec = (quoi, e) => console.error(`❌ [v2 banc-purge] ${quoi} (${codeDe(e)})`);
     const dire = raison => { if (!dit) { dit = true; console.error(`⚠️ [v2 banc-purge] stockage indisponible : ${raison}`); } };
-    const borner = p => new Promise((res, rej) => {
-        const t = setTimeout(() => rej(Object.assign(new Error('délai'), { code: 'DELAI' })), delaiMs); if (t.unref) t.unref();
-        Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
-    });
+    const borner = creerBorner(delaiMs);
 
     async function pret() {
         if (pretS) return pretS;
@@ -39,14 +35,6 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
         } catch (e) { dire(`bucket ou endpoint non vérifié (${codeDe(e)})`); return null; }
     }
 
-    // L'objet d'abord, la ligne ensuite. true seulement si les deux ont abouti.
-    async function supprimerLigne(s, l) {
-        try { await borner(s.supprimer(l.cleR2)); }
-        catch (e) { echec('objet non supprimé, ligne conservée', e); return false; }
-        try { await borner(col().deleteOne({ _id: l._id })); return true; }
-        catch (e) { echec('ligne non supprimée après son objet, reprise à la prochaine passe', e); return false; }
-    }
-
     return {
         /** DELETE /api/banc/contributions : TOUTES les lignes du jeton et leurs objets. La forme du jeton est vérifiée ici aussi (jamais une requête avec autre chose). */
         async effacerParJeton(jeton) {
@@ -57,7 +45,8 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
             if (!lignes.length) return bilan;                                           // jeton inconnu : 0, sans toucher au stockage
             const s = await pret();
             if (!s) { bilan.echecs = lignes.length; return bilan; }                     // on ne peut pas effacer les objets : toutes les lignes sont gardées
-            for (const l of lignes) { if (await supprimerLigne(s, l)) bilan.supprimees++; else bilan.echecs++; }
+            // une ligne devenue autre entre la lecture et la suppression ('changee') n'est pas effacée : elle reste une ligne de ce jeton, l'effacement le DIT (echecs)
+            for (const l of lignes) { if (await supprimerObjetPuisLigne(s, l, col, borner) === 'supprimee') bilan.supprimees++; else bilan.echecs++; }
             return bilan;
         },
 
@@ -67,11 +56,13 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
             const s = await pret();
             if (!s) return bilan;
             const now = new Date(maintenant);
-            const limiteAttente = jourUTC(now.getTime() - JOUR_MS);                     // `le` est tronqué au jour : « plus de 24 h » se lit au jour (jamais avant 24 h réelles)
             let echues = [];
-            try { echues = await borner(col().find({ $or: [{ expireLe: { $lte: now } }, { etat: 'attente', le: { $lt: limiteAttente } }] }).toArray()); }
+            try { echues = await lignesEchues(col, now, borner); }                       // la définition PARTAGÉE de « échue »
             catch (e) { echec('lecture des lignes échues', e); bilan.echecs++; }
-            for (const l of echues) { if (await supprimerLigne(s, l)) { bilan.lignes++; bilan.objets++; } else bilan.echecs++; }
+            for (const l of echues) {
+                const r = await supprimerObjetPuisLigne(s, l, col, borner);
+                if (r === 'supprimee') { bilan.lignes++; bilan.objets++; } else if (r === 'echec') bilan.echecs++;     // 'changee' : confirmée entre-temps, laissée telle quelle
+            }
 
             // LE FILET : un objet du préfixe du banc qu'AUCUNE ligne ne référence et dont la date a plus de 48 h (une écriture en cours n'a pas encore sa ligne : les 48 h la
             // protègent). Jamais un objet référencé ; jamais hors du préfixe ni d'une forme de clé du banc (le stockage ne rend que celles-là) ; si l'on ne sait pas
@@ -80,12 +71,14 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
             try { objets = await borner(s.lister()); }
             catch (e) { echec('liste des objets du banc', e); bilan.echecsOrphelins++; return bilan; }
             const limite = now.getTime() - ORPHELIN_MS;
-            for (const o of objets) {
-                if (!(+o.modifieLe < limite)) continue;
-                let ref;
-                try { ref = await borner(col().findOne({ cleR2: o.cle }, { projection: { _id: 1 } })); }
-                catch (e) { echec('référence d\'un objet non vérifiable, objet gardé', e); bilan.echecsOrphelins++; continue; }
-                if (ref) continue;
+            const vieux = objets.filter(o => +o.modifieLe < limite);
+            if (!vieux.length) return bilan;
+            // UNE requête à projection lit l'ensemble des cleR2 référencées (pas une requête par objet) ; si elle échoue, on ne sait pas : AUCUNE suppression.
+            let references;
+            try { references = new Set((await borner(col().find({}, { projection: { _id: 0, cleR2: 1 } }).toArray())).map(l => l.cleR2)); }
+            catch (e) { echec('références des lignes non lisibles, aucun orphelin supprimé', e); bilan.echecsOrphelins++; return bilan; }
+            for (const o of vieux) {
+                if (references.has(o.cle)) continue;
                 try { await borner(s.supprimer(o.cle)); bilan.orphelins++; }
                 catch (e) { echec('orphelin non supprimé', e); bilan.echecsOrphelins++; }
             }
