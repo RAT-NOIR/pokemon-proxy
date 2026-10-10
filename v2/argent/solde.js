@@ -2,6 +2,7 @@
 // Le Solde (CONTRAT-2 §3.5) et l'historique. Tout est relu EN BASE (jamais l'instantané du porteur) ; chaque poche annoncée est une poche UTILISABLE :
 // un compte non vérifié n'a ni accueil ni hebdo, même si la base porte un nombre (la garde s'écrit par ce qu'elle autorise).
 const db = require('../db'); const { semaineISO } = require('../../acces'); const P = require('./poches');
+const { RAISONS_NON_REMBOURSE } = require('../../sources');
 const col = nom => db.col(nom);
 
 const masquer = email => { const i = typeof email === 'string' ? email.indexOf('@') : -1; return i < 1 ? null : `${email[0]}•••${email.slice(i)}`; };
@@ -58,7 +59,8 @@ function facturationServie(f) {
     if (!f || typeof f !== 'object') return null;
     const entier = x => Number.isInteger(x) && x >= 0;
     if (!entier(f.debite) || !entier(f.reserve) || !MOTIFS.includes(f.motif)) return null;
-    if (f.raisonNonRembourse !== null && f.raisonNonRembourse !== undefined && typeof f.raisonNonRembourse !== 'string') return null;
+    // la raison n'est servie que si elle appartient à la liste fermée (le schéma la ferme par enum) : sinon la ligne est omise et comptée, jamais servie hors contrat
+    if (f.raisonNonRembourse !== null && f.raisonNonRembourse !== undefined && !RAISONS_NON_REMBOURSE.includes(f.raisonNonRembourse)) return null;
     // `rembourse` est un booléen au contrat ; une ligne ancienne le portait en 0 / 1 : même valeur, autre écriture (aucune valeur n'est créée)
     return { debite: f.debite, reserve: f.reserve, rembourse: Boolean(f.rembourse), motif: f.motif, raisonNonRembourse: f.raisonNonRembourse ?? null };
 }
@@ -82,30 +84,51 @@ const cleDe = x => x.k;
 function lireSuite(suite) {
     if (suite == null) return null;
     try { const o = JSON.parse(Buffer.from(String(suite), 'base64url').toString('utf8')); if (Number.isFinite(o.ms) && typeof o.k === 'string') return o; } catch (_) { /* refusé plus bas */ }
-    throw new Error('historique : suite invalide');
+    throw Object.assign(new Error('historique : suite invalide'), { code: 'SUITE_INVALIDE' });     // une faute du CLIENT : la route la rend en 400 ENTREE
 }
 const ecrireSuite = l => Buffer.from(JSON.stringify({ ms: new Date(l.le).getTime(), k: cleDe(l) }), 'utf8').toString('base64url');
-async function historique(porteur, { suite = null, limite = 20 } = {}, cfg) {
-    const cur = lireSuite(suite), porteurCle = `${porteur.type}:${porteur.id}`, taille = Math.min(Math.max(1, limite), 50);
-    const borne = cur ? new Date(cur.ms) : null, marge = taille + 25;
-    const analyses = await col('analyses').find({ porteur: porteurCle, ...(borne ? { creeLe: { $lte: borne } } : {}) }).sort({ creeLe: -1 }).limit(marge).toArray();
-    const mouv = await col('mouvements').find({ ...(porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id }), type: { $in: NATURES }, ...(borne ? { le: { $lte: borne } } : {}) }).sort({ le: -1 }).limit(marge).toArray();
+// Un lot de lecture : au plus `limite` lignes de CHAQUE source, fusionnées. Une source qui rend exactement `limite` lignes est PLEINE (il peut en rester, plus anciennes) : seules sont
+// alors « sûres » (jamais précédées d'une ligne non lue) les lignes plus récentes que la dernière ligne lue de chaque source pleine. Les lignes à la même milliseconde que cette frontière
+// sont relues au lot suivant (jamais servies avant). `suivant` : où reprendre ; null = les deux sources sont épuisées.
+const FIN = '￿';
+const ordre = (a, b) => (new Date(b.le) - new Date(a.le)) || (cleDe(a) < cleDe(b) ? 1 : -1);
+const apres = (x, c) => { const ms = new Date(x.le).getTime(); return ms < c.ms || (ms === c.ms && cleDe(x) < c.k); };
+async function lireLot(porteur, cur, limite) {
+    const porteurCle = `${porteur.type}:${porteur.id}`, borne = cur ? new Date(cur.ms) : null;
+    const A = await col('analyses').find({ porteur: porteurCle, ...(borne ? { creeLe: { $lte: borne } } : {}) }).sort({ creeLe: -1 }).limit(limite).toArray();
+    const B = await col('mouvements').find({ ...(porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id }), type: { $in: NATURES }, ...(borne ? { le: { $lte: borne } } : {}) }).sort({ le: -1 }).limit(limite).toArray();
     // chaque élément : { ligne (la forme du contrat, ou null = omise), le (date), k (clé de pagination) }
-    let tous = [
-        ...analyses.map(a => ({ le: a.creeLe, k: `analyse:${String(a._id)}`, ligne: ligneAnalyse(a) })),
-        ...mouv.map(m => ({ le: m.le, k: `credits:${m.cleIdempotence ?? String(m._id)}`, ligne: ligneCredits(m) }))
-    ];
-    // tri total décroissant (date, puis clé) : la suite désigne une position exacte, une égalité de date ne duplique ni ne perd une ligne
-    const apres = (x, c) => { const ms = new Date(x.le).getTime(); return ms < c.ms || (ms === c.ms && cleDe(x) < c.k); };
+    const ia = A.map(a => ({ le: a.creeLe, k: `analyse:${String(a._id)}`, ligne: ligneAnalyse(a) })).sort(ordre);
+    const ib = B.map(m => ({ le: m.le, k: `credits:${m.cleIdempotence ?? String(m._id)}`, ligne: ligneCredits(m) })).sort(ordre);
+    let tous = [...ia, ...ib];
     if (cur) tous = tous.filter(x => apres(x, cur));
-    tous.sort((a, b) => (new Date(b.le) - new Date(a.le)) || (cleDe(a) < cleDe(b) ? 1 : -1));
-    // la page se remplit de lignes SERVIES ; les omises rencontrées en chemin sont comptées (une absence se compte)
-    const page = []; let omises = 0, i = 0;
-    for (; i < tous.length && page.length < taille; i++) { if (tous[i].ligne) page.push(tous[i]); else omises++; }
-    const resteServi = tous.slice(i).some(x => x.ligne);
-    const fenetrePleine = analyses.length === marge || mouv.length === marge;       // une source a pu être coupée : il peut rester des lignes au-delà de ce qu'on a lu
-    const suiteNeuve = page.length && (resteServi || fenetrePleine) ? ecrireSuite(page[page.length - 1]) : null;
-    if (!suiteNeuve) omises += tous.length - i;                                     // plus rien après : les omises de la queue appartiennent à cette dernière page
-    return { lignes: page.map(x => x.ligne), suite: suiteNeuve, omises };
+    tous.sort(ordre);
+    const pleines = [];
+    if (A.length === limite && ia.length) pleines.push(ia[ia.length - 1]);
+    if (B.length === limite && ib.length) pleines.push(ib[ib.length - 1]);
+    if (!pleines.length) return { items: tous, suivant: null };
+    const msFrontiere = Math.max(...pleines.map(x => new Date(x.le).getTime()));       // la frontière la plus RÉCENTE est la plus stricte
+    return { items: tous.filter(x => new Date(x.le).getTime() > msFrontiere), suivant: { ms: msFrontiere, k: FIN } };
+}
+async function historique(porteur, { suite = null, limite = 20 } = {}, cfg) {
+    let cur = lireSuite(suite);
+    const taille = Math.min(Math.max(1, limite), 50);
+    let marge = taille + 25, nOmis = 0, epuise = false;
+    const servies = [];                                                              // { x, omisesAvant } : les lignes SERVIES, dans l'ordre, chacune avec le nombre d'omises lues avant elle
+    // La page se remplit de lignes SERVIES, en relisant plus loin tant qu'elle n'est pas pleine et que les sources ne sont pas épuisées (une série d'omises ne l'arrête jamais).
+    // On lit UNE ligne servie de plus que la page : c'est elle qui dit s'il y a une suite. Les omises rencontrées sont comptées (une absence se compte).
+    for (let tours = 0; servies.length <= taille && !epuise; tours++) {
+        const lot = await lireLot(porteur, cur, marge);
+        if (lot.suivant && !lot.items.length && cur && lot.suivant.ms === cur.ms) { marge *= 2; if (marge > 1e6) throw new Error('historique : lecture bloquée'); continue; }     // plus de `marge` lignes à la même milliseconde : on élargit
+        for (const x of lot.items) {
+            if (x.ligne) servies.push({ x, omisesAvant: nOmis }); else nOmis++;
+            if (servies.length > taille) break;
+        }
+        if (servies.length > taille) break;
+        if (!lot.suivant) epuise = true; else cur = lot.suivant;
+    }
+    const page = servies.slice(0, taille), plus = servies.length > taille;
+    // `suite` est nul SEULEMENT si les deux sources sont épuisées sans autre ligne servie ; sinon elle pointe sur la dernière ligne de la page
+    return { lignes: page.map(s => s.x.ligne), suite: plus ? ecrireSuite(page[page.length - 1].x) : null, omises: plus ? servies[taille - 1].omisesAvant : nOmis };
 }
 module.exports = { solde, peutPayer, historique, masquer };

@@ -594,6 +594,19 @@
             "session": []
           }
         ],
+        "parameters": [
+          {
+            "name": "suite",
+            "in": "query",
+            "required": false,
+            "description": "Curseur opaque de la page suivante de l'historique (`historique.suite` de la page précédente). Absent = première page. Illisible ou falsifié = `400 ENTREE`.",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Le compte connecté.",
@@ -611,6 +624,16 @@
                   "enum": [
                     "no-store"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : le curseur `suite` est illisible ou falsifié.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
                 }
               }
             }

@@ -480,7 +480,11 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const g2 = await jouer(V, 'GET /api/compte', 'historique PAGINÉ (page 2, curseur suite)', 200, `/api/compte?suite=${encodeURIComponent(g1.json.historique.suite)}`, { entetes: siteH(cookie) });
         const g2l = (g2.json && g2.json.historique.lignes) || [];
         H.v('GET /api/compte page 2 : le reste (3 lignes dont le crédit d\'octroi), suite nulle, aucune ligne en double avec la page 1', [g2l.length, g2.json.historique.suite, g2l.some(l => l.genre === 'credits'), new Set([...g1l, ...g2l].map(l => JSON.stringify(l))).size], [3, null, true, 23]);
-        await jouer(V, 'GET /api/compte', 'curseur de suite falsifié (le serveur répond INDISPONIBLE : constat)', 503, '/api/compte?suite=%25%25pas-une-suite', { entetes: siteH(cookie) });
+        const g400 = await jouer(V, 'GET /api/compte', 'curseur de suite falsifié (400 ENTREE, une faute du client — plus un 503)', 400, '/api/compte?suite=%25%25pas-une-suite', { entetes: siteH(cookie) });
+        H.v('   … 400 ENTREE, detail « suite »', g400.json && [g400.json.erreur.code, g400.json.erreur.detail], ['ENTREE', 'suite']);
+        await jouer(V, 'GET /api/compte', 'curseur de suite répété (deux paramètres : pas une chaîne) → 400', 400, '/api/compte?suite=a&suite=b', { entetes: siteH(cookie) });
+        await jouer(V, 'GET /api/compte', 'curseur de suite vide → 400 (jamais la première page en silence)', 400, '/api/compte?suite=', { entetes: siteH(cookie) });
+        await jouer(V, 'GET /api/compte', 'curseur de suite trop long (> 200) → 400', 400, `/api/compte?suite=${'a'.repeat(201)}`, { entetes: siteH(cookie) });
         // un compte à abonnement, un compte non vérifié, un compte à plusieurs installations
         const cab = await compte({ abonnement: { actif: true, quotaMensuel: 100, moisCle: new Date().toISOString().slice(0, 7), restant: 40, jusquAu: new Date(Date.now() + 40 * 86400e3) } });
         const gab = await jouer(V, 'GET /api/compte', 'compte à abonnement actif', 200, '/api/compte', { entetes: siteH(cab.cookie) });
@@ -747,7 +751,6 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             { quoi: 'raison pas-une-carte jamais produite', route: 'POST /api/identifier', statut: '200', chemin: 'pas-une-carte' },
             { quoi: 'raison plusieurs-cartes-non-separees jamais produite', route: 'POST /api/identifier', statut: '200', chemin: 'plusieurs-cartes-non-separees' },
             { quoi: 'Produit.set.tirage toujours null', route: 'POST /api/identifier', statut: '200', chemin: '$.analyse.cartes[].carte.set.tirage' },
-            { quoi: 'curseur de suite falsifié rendu en 503', route: 'GET /api/compte', statut: '503', chemin: 'suite' },
             { quoi: 'lignes de crédits sans motif au contrat omises (abonnement, essai)', route: 'GET /api/compte', statut: '200', chemin: '$.historique.lignes[]' }
         ];
         const sansLigne = declarations.filter(d => !ligneExacte(d.route, d.statut, d.chemin)).map(d => d.quoi);

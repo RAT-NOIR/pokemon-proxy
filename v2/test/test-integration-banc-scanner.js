@@ -200,6 +200,15 @@ const consentement = () => ({ version: cfg.banc.versionsTexte[0], le: new Date()
         let ligne2b = null; for (let k = 0; k < 60; k++) { ligne2b = await raw('banc_lignes').findOne({ _id: ligne2._id }); if (ligne2b && ligne2b.etat === 'confirmee') break; await attendre(100); }
         H.v('E(c). CONTRÔLE POSITIF : la réponse de l\'EXTENSION (même jeton T) confirme la ligne 2 (« confirmee », nouvel objet)', [re.statut, ligne2b && ligne2b.etat, ligne2b && ligne2b.cleR2 !== ligne2.cleR2], [200, 'confirmee', true]);
         H.v('E(d). au total : la ligne 1 (créée par l\'extension, répondue par le scanner) est toujours en attente ; la ligne 2 est confirmée', [(await raw('banc_lignes').findOne({ _id: ligne1._id })).etat, (await raw('banc_lignes').findOne({ _id: ligne2._id })).etat], ['attente', 'confirmee']);
+        // (e) M-4 : EFFACER n'est jamais conserver — le scanner qui ABANDONNE (« aucune ») le scan de l'extension, sur le même compte, efface la ligne « attente » ET son objet
+        const s3 = await posterLie({ consentementBanc: consentement() });
+        let ligne3 = null; for (let k = 0; k < 60 && !ligne3; k++) { ligne3 = await raw('banc_lignes').findOne({ etat: 'attente', _id: { $ne: ligne1._id } }); if (!ligne3) await attendre(100); }
+        H.v('E(e). l\'extension crée une 3e ligne « attente » (son objet est dans le stockage)', [s3.statut, Boolean(ligne3), ligne3 && (await memoire.lister()).some(o => o.cle === ligne3.cleR2)], [200, true, true]);
+        const ab = await fetch(`${V}/api/scanner/analyses/${s3.json.scanId}/reponse`, { method: 'POST', headers: { 'content-type': 'application/json', origin: SITE, 'x-rat-market': '1', cookie: cc.cookie, ...ip() }, body: JSON.stringify({ choix: 'aucune', carte: 0 }) });
+        const abj = await ab.json();
+        let reste = true; for (let k = 0; k < 60 && reste; k++) { reste = Boolean(await raw('banc_lignes').findOne({ _id: ligne3._id })); if (reste) await attendre(100); }
+        H.v('E(e). abandon « aucune » par le SCANNER (surface refusée pour conserver, mais permise pour effacer) : 200, la ligne 3 et son objet sont effacés', [ab.status, abj.success, reste, (await memoire.lister()).some(o => o.cle === ligne3.cleR2)], [200, true, false, false]);
+        H.v('   … et la ligne 1 (créée par l\'extension, répondue par un candidat par le scanner) reste « attente » : seul l\'abandon efface', (await raw('banc_lignes').findOne({ _id: ligne1._id })).etat, 'attente');
         mode = 'affirmee';
     }
     require('../identifier/monter').arreterBalayage(); require('../identifier/monter').arreterPurge(); require('../banc/monter').arreterPurge();

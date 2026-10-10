@@ -97,6 +97,67 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     H.v('   suite opaque (chaîne)', typeof (await S.historique(ph, {}, cfg)).suite, 'string');
     let leve3 = null; try { await S.historique(ph, { suite: '%%pas-une-suite%%' }, cfg); } catch (e) { leve3 = e.message; }
     H.v('   une suite falsifiée est refusée', typeof leve3, 'string');
+    H.v('   … avec un code lisible par la route (SUITE_INVALIDE : 400 ENTREE, pas 503)', await S.historique(ph, { suite: '%%pas-une-suite%%' }, cfg).then(() => null, e => e.code), 'SUITE_INVALIDE');
+    // 9 bis (B7b.1 tour 2, I-1) : des lignes OMISES en masse ne font ni sauter ni perdre de lignes servies. Dénominateur imprimé à chaque cas.
+    {
+        const MIN = 60e3, ANC = new Date('2028-01-01');
+        const parcourir = async (p, limite) => {
+            const lignes = []; let suite = null, pages = 0, omises = 0, vides = 0, premiere = null;
+            do { const pg = await S.historique(p, { suite, limite }, cfg); pages++; if (pages === 1) premiere = pg.lignes.length; if (!pg.lignes.length) vides++; lignes.push(...pg.lignes); omises += pg.omises; suite = pg.suite; } while (suite && pages < 60);
+            return { lignes, pages, omises, vides, premiere };
+        };
+        const cle2 = p => `${p.type}:${p.id}`;
+        const an = (p, id, minutes, valide) => ({ _id: id, porteur: cle2(p), ...(valide ? { surface: 'scanner' } : {}), statut: 'introuvable', cartes: [{ idProduct: null, statut: 'introuvable' }], facturation: factOk, creeLe: new Date(t.getTime() - minutes * MIN), expireLe: ANC });
+        const mvt = (p, id, minutes, poche) => ({ compteId: p.id, le: new Date(t.getTime() - minutes * MIN), surface: 'scanner', type: 'octroi', delta: 1, poche, motif: poche, scanId: null, etat: 'debite', cleIdempotence: id, expireLe: ANC });
+        const verifier = async (nom, p, attendues, omisesAttendues, { limite, sansVide = true } = {}) => {
+            const r = await parcourir(p, limite);
+            const cles = r.lignes.map(l => JSON.stringify(l));
+            console.log(`   ${nom} : ${r.lignes.length} lignes servies sur ${attendues} attendues, ${r.omises} omises sur ${omisesAttendues}, ${r.pages} page(s), ${r.vides} page(s) vide(s)`);
+            H.v(`9bis ${nom} : lignes servies sur toutes les pages = lignes attendues (${attendues})`, r.lignes.length, attendues);
+            H.v(`   … aucune ligne répétée (${r.lignes.length} lignes, ${new Set(cles).size} distinctes)`, new Set(cles).size, r.lignes.length);
+            H.v(`   … omises comptées = ${omisesAttendues}`, r.omises, omisesAttendues);
+            if (sansVide) H.v('   … aucune page vide au milieu de la série', r.vides <= (r.lignes.length ? 0 : 1), true);
+            return r;
+        };
+        // (a) ANALYSES : 3 valides, 60 sans surface, 5 valides (le cas reproduit par la relecture)
+        const pa = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('analyses').insertMany([...[0, 1, 2].map(i => an(pa, `a-v${i}`, i, true)), ...Array.from({ length: 60 }, (_, i) => an(pa, `a-o${i}`, 10 + i, false)), ...[0, 1, 2, 3, 4].map(i => an(pa, `a-w${i}`, 100 + i, true))]);
+        const ra = await verifier('analyses : 3 valides + 60 omises consécutives + 5 valides', pa, 8, 60, { limite: 20 });
+        H.v('   … la première page se remplit AU-DELÀ des omises : 8 lignes (les 3 récentes puis les 5 anciennes), une seule page', [ra.premiere, ra.pages], [8, 1]);
+        // (b) CRÉDITS : 3 octrois accueil, 60 abonnement (omis), 5 achats
+        const pb = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('mouvements').insertMany([...[0, 1, 2].map(i => mvt(pb, `b-v${i}`, i, 'accueil')), ...Array.from({ length: 60 }, (_, i) => mvt(pb, `b-o${i}`, 10 + i, 'abonnement')), ...[0, 1, 2, 3, 4].map(i => mvt(pb, `b-w${i}`, 100 + i, 'achete'))]);
+        await verifier('crédits : 3 valides + 60 omis consécutifs + 5 valides', pb, 8, 60, { limite: 20 });
+        // (c) LES DEUX SOURCES : analyses et crédits omis en alternance de blocs de 50, valides entre les blocs
+        const pc = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('analyses').insertMany([an(pc, 'c-a0', 0, true), ...Array.from({ length: 50 }, (_, i) => an(pc, `c-ao${i}`, 10 + i, false)), an(pc, 'c-a1', 200, true)]);
+        await db.col('mouvements').insertMany([mvt(pc, 'c-m0', 5, 'achete'), ...Array.from({ length: 50 }, (_, i) => mvt(pc, `c-mo${i}`, 70 + i, 'essai')), mvt(pc, 'c-m1', 300, 'hebdo')]);
+        await verifier('deux sources : 2 analyses + 2 crédits servis entre 100 omises', pc, 4, 100, { limite: 5 });
+        // (d) UNE PAGE VIDE EN TÊTE n'arrête pas la pagination : 70 omises plus récentes que les 4 valides
+        const pd = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('analyses').insertMany([...Array.from({ length: 70 }, (_, i) => an(pd, `d-o${i}`, i, false)), ...[0, 1, 2, 3].map(i => an(pd, `d-v${i}`, 200 + i, true))]);
+        const rd = await verifier('tête vide : 70 omises puis 4 valides', pd, 4, 70, { limite: 20 });
+        H.v('   … la première page contient déjà les 4 lignes (jamais vide avec un curseur muet)', rd.premiere, 4);
+        // (e) à la taille 1 (page minimale) la série complète sort aussi
+        await verifier('taille 1 : 3 valides + 60 omises + 5 valides', pa, 8, 60, { limite: 1 });
+        // (e bis) plus de `marge` lignes à la MÊME milliseconde : ni perte ni répétition (la lecture s'élargit)
+        const pe = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('analyses').insertMany(Array.from({ length: 70 }, (_, i) => ({ ...an(pe, `e-${i}`, 0, true), cartes: Array.from({ length: i + 1 }, () => ({ idProduct: null, statut: 'introuvable' })) })));
+        await verifier('70 lignes à la même milliseconde (taille 20, marge 45)', pe, 70, 0, { limite: 20 });
+        // (f) UN CURSEUR DÉJÀ ÉMIS au format actuel reste lisible (ms + clé), et reprend exactement après sa ligne
+        const p1 = await S.historique(ph, {}, cfg);
+        const ancien = Buffer.from(JSON.stringify(JSON.parse(Buffer.from(p1.suite, 'base64url').toString('utf8'))), 'utf8').toString('base64url');
+        const pAvecAncien = await S.historique(ph, { suite: ancien }, cfg);
+        const pAvecNeuf = await S.historique(ph, { suite: p1.suite }, cfg);
+        H.v('9bis curseur émis au format actuel : lisible, mêmes lignes que le curseur neuf', [pAvecAncien.lignes.length > 0, JSON.stringify(pAvecAncien.lignes) === JSON.stringify(pAvecNeuf.lignes)], [true, true]);
+        const forme = JSON.parse(Buffer.from(p1.suite, 'base64url').toString('utf8'));
+        H.v('   … sa forme est { ms, k } avec k = « genre:identifiant » (inchangée)', [Object.keys(forme).sort(), /^(analyse|credits):/.test(forme.k)], [['k', 'ms'], true]);
+        // (g) M-2 : une raisonNonRembourse HORS de RAISONS_NON_REMBOURSE n'est pas servie (le schéma la ferme par enum) : ligne omise et comptée
+        const pg = await compte({ solde: { accueil: 0, achete: 0 } });
+        await db.col('analyses').insertMany([an(pg, 'g-ok', 0, true), { ...an(pg, 'g-mauvaise', 1, true), facturation: { ...factOk, raisonNonRembourse: 'inventee-x' } }, { ...an(pg, 'g-bonne', 2, true), facturation: { ...factOk, rembourse: false, raisonNonRembourse: 'plafond-jour' } }]);
+        const rg = await S.historique(pg, {}, cfg);
+        H.v('9bis M-2 : raison hors liste ⇒ ligne omise et comptée (2 servies dont plafond-jour, 1 omise)', [rg.lignes.length, rg.omises, rg.lignes.map(l => l.facturation.raisonNonRembourse)], [2, 1, [null, 'plafond-jour']]);
+    }
     // 10. debiterSupplement
     const p10 = await compte({ solde: { accueil: 5, achete: 0 } });
     const d1 = await Lot.debiterSupplement(p10, { scanId: 'lot1', unites: 2, cleIdempotence: 'lotc1', maintenant: t }, cfg0);
