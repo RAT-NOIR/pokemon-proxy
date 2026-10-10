@@ -55,6 +55,14 @@ function creerStockage({ client, bucket, env = process.env } = {}) {
             if (!cleOk(cle)) throw refus('cle-refusee');
             await client.supprimer(bucket, [cle]);
         },
+        // B6.3 : relire un objet du banc (l'image qui passe de attente/ à son emplacement final). Même garde de clé ; le client doit savoir lire.
+        async lire(cle) {
+            if (!cleOk(cle)) throw refus('cle-refusee');
+            if (typeof client.lireBinaire !== 'function') throw refus('client-invalide');
+            const b = await client.lireBinaire(bucket, cle);
+            if (!Buffer.isBuffer(b)) throw refus('lecture-refusee');
+            return b;
+        },
     };
 }
 
@@ -74,6 +82,7 @@ function creerStockageMemoire() {
     return {
         async ecrire(cle, buffer) { if (!CLE.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); return cle; },
         async supprimer(cle) { o.delete(cle); },
+        async lire(cle) { if (!CLE.test(String(cle)) || !o.has(cle)) throw refus('cle-refusee'); return o.get(cle); },
         cles() { return [...o.keys()]; },
     };
 }
