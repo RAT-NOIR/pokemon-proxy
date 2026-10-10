@@ -136,16 +136,49 @@ async function main() {
         }, /SET SANS NOM REFUSÉ/);
 
         // ── B bis. aucun créateur ne contourne le point d'entrée : tout `sets` + `$setOnInsert` + upsert passe par insererSetNeuf
-        const racine = __dirname;
-        const creurs = fs.readdirSync(racine).filter(f => f.endsWith('.js') && !f.startsWith('test-'));
-        const bruts = creurs.filter(f => {
-            const t = fs.readFileSync(path.join(racine, f), 'utf8');
-            return /collection\('sets'\)\.updateOne\([^;]*?\$setOnInsert/s.test(t) || /\bS\.updateOne\(\{ _id: [^}]*\}, \{ \$setOnInsert/.test(t);
-        });
-        verifier('aucun outil ne crée un set par un updateOne/$setOnInsert direct (liste des fautifs)', bruts, []);
-        const utilisent = ['poser-par-metacarte.js', 'creer-sets-par-pages-de-cartes.js', 'creer-sets-sans-page.js', 'creer-sets-reimpressions.js', 'collecteur-texte.js']
-            .filter(f => /insererSetNeuf|nommerLesNouveaux|champsDeNaissance/.test(fs.readFileSync(path.join(racine, f), 'utf8')));
-        verifier('les cinq créateurs de sets appellent le point d\'entrée (nommerLesNouveaux avant la 1re écriture)', utilisent, ['poser-par-metacarte.js', 'creer-sets-par-pages-de-cartes.js', 'creer-sets-sans-page.js', 'creer-sets-reimpressions.js', 'collecteur-texte.js']);
+        // ── C. L'ÉCRITURE DU NOM (rapatrier-noms-sets.js) est alignée sur la définition du contrôle : « sans nom » = nomAffichage NON-CHAÎNE (absent OU null),
+        //      et un nom posé n'est jamais réécrit (§57).
+        const ND = require('./collecte-cartes/nom-affichage');
+        await remplir(db, { sets: [{ _id: 'Absent' }, { _id: 'Nul', nomAffichage: null }, { _id: 'Pose', nomAffichage: 'Déjà posé' }, { _id: 'Vide', nomAffichage: '' }], cartes: [], lignes: [] });
+        const propose = id => ({ s: { _id: id }, a: { nom: `Nom ${id}`, source: 'cardmarket' }, preuve: 'p', nomCardmarket: `Nom ${id}` });
+        const refuse = id => ({ s: { _id: id }, raison: 'collision' });
+        const ecrits = await ND.ecrireNoms(db.collection('sets'), { proposes: ['Absent', 'Nul', 'Pose', 'Vide'].map(propose), refuses: [] });
+        const lus = Object.fromEntries((await db.collection('sets').find({}).toArray()).map(s => [s._id, s.nomAffichage]));
+        verifier('écriture du nom : un set à nomAffichage ABSENT est nommé', lus.Absent, 'Nom Absent');
+        verifier('écriture du nom : un set à nomAffichage NULL est nommé (le contrôle le compte non publié)', lus.Nul, 'Nom Nul');
+        verifier('écriture du nom : une chaîne posée (même vide : c\'est une chaîne pour le site) n\'est JAMAIS réécrite', [lus.Pose, lus.Vide], ['Déjà posé', '']);
+        verifier('écriture du nom : compte des sets nommés par l\'écriture', ecrits, 2);
+        await ND.ecrireNoms(db.collection('sets'), { proposes: [], refuses: [refuse('Nul')] });
+        verifier('écriture du nom : un refus ne pose que nomAffichageRefus', [(await db.collection('sets').findOne({ _id: 'Nul' })).nomAffichage, (await db.collection('sets').findOne({ _id: 'Nul' })).nomAffichageRefus.raison], ['Nom Nul', 'collision']);
+        verifier('rapatrier-noms-sets.js écrit par ecrireNoms (pas par un updateOne à lui)', /ecrireNoms\(/.test(fs.readFileSync(path.join(__dirname, 'rapatrier-noms-sets.js'), 'utf8')) && !/nomAffichage: \{ \$exists: false \}/.test(fs.readFileSync(path.join(__dirname, 'rapatrier-noms-sets.js'), 'utf8')), true);
+
+        // Le balayage (collecte-cartes/ecritures-de-sets.js) : TOUS les .js/.mjs de la racine et de collecte-cartes/ ; une écriture de `sets` capable d'insérer
+        // passe par le point d'entrée ou figure dans une liste FERMÉE et prouvée (copieurs, bancs) ; tout le reste fait échouer.
+        const E = require('./collecte-cartes/ecritures-de-sets');
+        const b = E.balayer(__dirname);
+        verifier(`balayage : aucun fichier n'écrit un set capable d'insérer hors du point d'entrée et des listes fermées (${b.balayes} fichiers balayés)`, b.fautifs, []);
+        verifier('balayage : les listes fermées sont vraies (chaque fichier listé existe ET écrit encore un set)', b.listeObsolete, []);
+        verifier('balayage : la liste fermée des copieurs est exactement renommer-set.js et reparer-identite-nulle.js', b.copieurs.sort(), ['renommer-set.js', 'reparer-identite-nulle.js']);
+        verifier('balayage : les cinq créateurs appellent le point d\'entrée', ['poser-par-metacarte.js', 'creer-sets-par-pages-de-cartes.js', 'creer-sets-sans-page.js', 'creer-sets-reimpressions.js', 'collecteur-texte.js'].filter(f => E.POINTS_D_ENTREE.test(fs.readFileSync(path.join(__dirname, f), 'utf8'))).length, 5);
+        // le balayage dit NON sur des états fabriqués : copieurs non listés, fichier de liste disparu, écritures de toutes formes
+        const sansListe = E.balayer(__dirname, { copieurs: {}, bancs: E.BANCS });
+        verifier('balayage : sans la liste fermée, les deux copieurs sont des fautifs (renommer-set, reparer-identite-nulle)', sansListe.fautifs.map(x => x.split(' ')[0]).sort(), ['renommer-set.js', 'reparer-identite-nulle.js']);
+        const avecFantome = E.balayer(__dirname, { copieurs: { ...E.COPIEURS_PROUVES, 'fantome.js': 'n\'existe pas' }, bancs: E.BANCS });
+        verifier('balayage : un fichier de la liste fermée qui n\'existe plus fait échouer', avecFantome.listeObsolete, ['fantome.js : le fichier n\'existe plus']);
+        const avecPerime = E.balayer(__dirname, { copieurs: { ...E.COPIEURS_PROUVES, 'poser-par-metacarte.js': 'x' }, bancs: E.BANCS });
+        verifier('balayage : un fichier listé qui n\'écrit plus de set (poser-par-metacarte passe par le point d\'entrée) fait échouer', avecPerime.listeObsolete.map(x => x.split(' ')[0]), ['poser-par-metacarte.js']);
+        const formes = {
+            'S.bulkWrite': "const S = cx.db.collection('sets'); await S.bulkWrite([{ updateOne: {} }]);",
+            'insertOne': "await cx.db.collection('sets').insertOne({ _id: 'X' });",
+            'insertMany': "await db.collection(\"sets\").insertMany(docs);",
+            'M.Set.create': "await M.Set.create({ _id: 'X' });",
+            'upsert (appel long, parenthèses et gabarits)': "await cx.db.collection('sets').updateOne({ _id: f(x.slug) }, { $set: { a: `texte (avec parenthèses) ${g(1)}` } }, { upsert: true });",
+            '$setOnInsert': "await M.Set.updateOne({ _id: slug }, { $setOnInsert: { version: 1 } });",
+            'alias au nom libre': "const lesSets = db.collection('sets'); await lesSets.insertOne(d);"
+        };
+        for (const [nom, texte] of Object.entries(formes)) verifier(`détecteur : voit « ${nom} »`, E.ecrituresDInsertion(texte).length, 1);
+        verifier('détecteur : ne voit PAS un update sans upsert ni $setOnInsert (un $set seul n\'insère rien)', E.ecrituresDInsertion("await cx.db.collection('sets').updateOne({ _id: 'X' }, { $set: { logo: 1 } });").length, 0);
+        verifier('détecteur : ne voit pas une écriture sur une autre collection', E.ecrituresDInsertion("await cx.db.collection('cartes').insertOne({ _id: 1 }); await cx.db.collection('restes').updateOne({}, {}, { upsert: true });").length, 0);
     } finally { await cx.close(); await banc.arreter(); }
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
