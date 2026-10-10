@@ -296,13 +296,35 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         {
             let n = 0;
             const corpsBrut = cible.multipart ? null : JSON.stringify(cible.base());
-            const variantes = cible.multipart ? [['seule', POISON]] : [['seule', POISON], ['ajoutée à un corps valide', corpsBrut === '{}' ? POISON : `${corpsBrut.slice(0, -1)},${POISON.slice(1)}`]];
+            // I-1 (liste PERMISE) : un nom qui est une propriété d'Object.prototype, une clé pointée, 10 niveaux d'objets et plus de 5 000 nœuds sont refusés aussi.
+            const variantes = [['clause __proto__ seule', POISON], ['clé « toString »', '{"toString":"x"}'], ['clé « hasOwnProperty »', '{"hasOwnProperty":1}'], ['clé pointée « a.b »', '{"a.b":1}'],
+                ['10 niveaux d\'objets', `${'{"a":'.repeat(10)}1${'}'.repeat(10)}`], ['5 001 nœuds', `{"a":[${Array(5001).fill('{}').join(',')}]}`]];
+            if (!cible.multipart) variantes.push(['clause __proto__ ajoutée à un corps valide', corpsBrut === '{}' ? POISON : `${corpsBrut.slice(0, -1)},${POISON.slice(1)}`]);
             for (const [nom, brut] of variantes) {
                 const a = await acteur(cible); const avant = await instantane(); n++; envois++;
                 const rep = await envoyer(V, { methode: r.methode, chemin: chemin(), entetes: entetesDe(a), brut, type: 'application/json' });
-                await jugerRefus({ cible: r.cle, charge: 'b', detail: `clause __proto__ ${nom}`, reponse: rep, avant });
+                await jugerRefus({ cible: r.cle, charge: 'b', detail: nom, reponse: rep, avant });
+            }
+            if (cible.multipart) {   // m5 : un champ multipart NOMMÉ __proto__ (ou constructor) n'entre nulle part
+                for (const nom of ['__proto__', 'constructor']) {
+                    const a = await acteur(cible); const avant = await instantane(); n++; envois++;
+                    const f = formulaire(); f.append(nom, '{"role":"administrateur"}');
+                    const rep = await envoyerFormulaire(chemin(), { ...a.entetes }, f);
+                    await jugerRefus({ cible: r.cle, charge: 'b', detail: `champ multipart nommé « ${nom} »`, reponse: rep, avant });
+                }
             }
             cellule(r.cle, 'b', 'jouee', n);
+        }
+        // (f) la REQUÊTE : la requête est valide par ailleurs, seule la chaîne de requête est hostile (objet imbriqué, prototype, nom hérité)
+        {
+            let n = 0;
+            for (const qs of ['?a[$ne]=1', '?constructor[prototype][x]=1', '?a=1&a[b]=2', '?toString=1']) {
+                const a = await acteur(cible); const avant = await instantane(); n++; envois++;
+                const rep = cible.multipart ? await envoyerFormulaire(chemin() + qs, { ...a.entetes }, formulaire())
+                    : await envoyer(V, { methode: r.methode, chemin: chemin() + qs, entetes: entetesDe(a), corps: cible.base() });
+                await jugerRefus({ cible: r.cle, charge: 'f', detail: `requête ${qs}`, reponse: rep, avant });
+            }
+            cellule(r.cle, 'f', 'jouee', n);
         }
         // (c) — 5 Mo
         {
@@ -441,9 +463,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
 
     // ── bilan des cinq charges
     const nJouees = cellules.filter(c => c.etat === 'jouee').length, nSans = cellules.filter(c => c.etat === 'sans-objet').length;
-    console.log(`   ${ecritures.length} routes × 5 charges (a-e) = ${ecritures.length * 5} cellules : ${nJouees} jouées, ${nSans} sans objet ; ${envois} envois d'injection (a-c) + les envois de (d)(e)`);
+    console.log(`   ${ecritures.length} routes × 6 charges (a-e, plus f = la requête) = ${ecritures.length * 6} cellules : ${nJouees} jouées, ${nSans} sans objet ; ${envois} envois d'injection (a-c, f) + les envois de (d)(e)`);
     for (const c of cellules.filter(c => c.etat === 'sans-objet')) console.log(`   sans objet : ${c.cible} [${c.charge}] — ${c.raison}`);
-    H.v('toute cellule est jouée ou déclarée sans objet AVEC sa raison', cellules.length === ecritures.length * 5 && cellules.every(c => c.etat === 'jouee' || c.raison), true);
+    H.v('toute cellule est jouée ou déclarée sans objet AVEC sa raison', cellules.length === ecritures.length * 6 && cellules.every(c => c.etat === 'jouee' || c.raison), true);
+    // la route en LECTURE (GET /api/compte) : sa chaîne de requête passe la même garde
+    for (const r of lectures) {
+        const c = await compte(); let bons = 0, n = 0;
+        for (const qs of ['?a[$ne]=1', '?constructor[prototype][x]=1', '?suite[$ne]=x']) { n++; const rep = await envoyer(V, { methode: r.methode, chemin: r.chemin + qs, entetes: siteH(c.cookie) }); if (rep.statut === 400) bons++; }
+        const ok = await envoyer(V, { methode: r.methode, chemin: r.chemin, entetes: siteH(c.cookie) });
+        H.v(`(f) ${r.cle} : ${n} requêtes hostiles → 400, la requête ordinaire → 200`, [bons, ok.statut], [n, 200]);
+    }
     for (const [t, n] of toleres) console.log(`   toléré (${n} variante(s)) : ${t}`);
     // les acceptations tolérées n'ont rien stocké d'opérateur : aucun document ne porte une clé $ne / $gt / $where
     {
@@ -454,7 +483,50 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         H.v('aucun document ne porte un opérateur Mongo ($ne, $gt, $where) venu d\'un corps', [...new Set(operateurs)], []);
     }
     H.v('Object.prototype est intact après toutes les charges', protoSain(), true);
-    H.v('step 1 : aucun écart (a)-(e) — la liste est imprimée ci-dessous', ecarts.length, 0);
+    H.v('step 1 : aucun écart (a)-(f) — la liste est imprimée ci-dessous', ecarts.length, 0);
+    // ── I-1 : la garde est une LISTE PERMISE ; sa forme est confrontée à TOUTES les clés de requête légitimes (dénominateur imprimé), et ses bornes sont éprouvées à la limite
+    {
+        const { cleInterdite, requeteRefusee, parametresRefuses } = require('../index'); const fs = require('fs');
+        const A2 = require('./_contrat-reel-aide');
+        const legit = new Map();                                                                    // clé -> d'où elle vient
+        const noter = (k, d) => { if (!legit.has(k)) legit.set(k, d); };
+        const sch = (s, d) => { if (!s || typeof s !== 'object') return; for (const [k, v] of Object.entries(s.properties || {})) { noter(k, d); sch(v, d); } if (s.items) sch(s.items, d); for (const x of s.oneOf || []) sch(x, d); };
+        let nSchemas = 0; for (const [n, s] of Object.entries(A2.SCHEMA.components.schemas)) if (/^Requete/.test(n)) { sch(s, 'openapi'); nSchemas++; }
+        for (const k of require('../identifier/retour-live').CHAMPS_PRIX) noter(k, 'retour-live');
+        for (const ops of Object.values(A2.SCHEMA.paths)) for (const op of Object.values(ops)) for (const p of op.parameters || []) if (p.in === 'query') noter(p.name, 'openapi (paramètre de requête)');
+        const refusees = [...legit.keys()].filter(k => cleInterdite({ [k]: 1 }) !== null || requeteRefusee({ [k]: 'v' }) !== null);
+        H.v(`I-1 : ${legit.size} clés de requête légitimes examinées (${nSchemas} schémas Requete* de openapi.v2.json + CHAMPS_PRIX + paramètres de requête), ${legit.size - refusees.length} acceptées (corps ET requête)`, refusees, []);
+        // les vecteurs de l'extension (lecture seule) : ce sont des RÉPONSES du faux serveur ; leurs clés sont dites, pas jugées
+        const dirExt = 'C:\\Users\\Yung\\Desktop\\extension v2\\src\\fond\\fausses';
+        if (fs.existsSync(dirExt)) {
+            const cles = new Set(); const marcher = v => { if (Array.isArray(v)) v.forEach(marcher); else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { cles.add(k); marcher(x); } };
+            for (const f of fs.readdirSync(dirExt)) if (f.endsWith('.json')) marcher(JSON.parse(fs.readFileSync(path.join(dirExt, f), 'utf8')));
+            const hors = [...cles].filter(k => cleInterdite({ [k]: 1 }) !== null);
+            console.log(`   vecteurs de l'extension (${fs.readdirSync(dirExt).filter(f => f.endsWith('.json')).length} fichiers JSON, RÉPONSES du faux serveur) : ${cles.size} clés distinctes, ${hors.length} hors de la forme permise (identifiants de produit, « ne-sait-pas », « _lisez-moi » : des clés de réponse, qu'une requête ne porte pas)`);
+            H.v('I-1 : les clés des vecteurs refusées par la forme sont des identifiants de produit, « ne-sait-pas », « _lisez-moi », des clés de scénario : aucun nom de champ d\'une requête', hors.filter(k => !/^(\d+|_lisez-moi|ne-sait-pas|fausse-[a-z]+-\d+)$/.test(k)), []);
+        } else console.log('   vecteurs de l\'extension absents de cette machine : étape non jouée');
+        const interdites = ['toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf', 'constructor', '__proto__', '__defineGetter__', '__lookupSetter__', 'a.b', 'a$ne', '$ne', ' $ne', '$where', '1a', 'a b', '', 'a-b', 'é'];
+        H.v('I-1 : ces clés sont REFUSÉES (noms hérités d\'Object.prototype, pointée, en $, espace, chiffre initial, vide, tiret, accent)', interdites.filter(k => cleInterdite({ [k]: 1 }) === null), []);
+        const profond = n => { let o = 1; for (let i = 0; i < n; i++) o = { a: o }; return o; };
+        const noeuds = n => ({ a: Array.from({ length: n }, () => ({})) });
+        H.v('m1 : 9 niveaux d\'objets passent, 10 sont refusés ; 5 000 nœuds passent, 5 001 sont refusés (la borne dit « 9 niveaux », la limite réelle)', [cleInterdite(profond(9)), cleInterdite(profond(10)) !== null, cleInterdite(noeuds(4998)), cleInterdite(noeuds(4999)) !== null], [null, true, null, true]);
+        H.v('I-1 : les tableaux sont parcourus à toute profondeur', [cleInterdite([{ a: [{ $ne: 1 }] }]) !== null, cleInterdite({ a: [[{ toString: 1 }]] }) !== null, cleInterdite({ a: [1, 'x', null, [2]] })], [true, true, null]);
+        H.v('I-1 : la requête n\'admet ni objet imbriqué ni nom hérité ; chaîne et liste de chaînes seulement', [requeteRefusee({ a: '1' }), requeteRefusee({ suite: ['a', 'b'] }), requeteRefusee({ a: { $ne: '1' } }) !== null, requeteRefusee({ constructor: 'x' }) !== null, requeteRefusee({ 'a.b': '1' }) !== null, requeteRefusee({ a: [{}] }) !== null], [null, null, true, true, true, true]);
+        H.v('I-1 : chaque paramètre de chemin est une chaîne', [parametresRefuses({ id: 'x' }), parametresRefuses({ id: {} }) !== null, parametresRefuses({ id: ['a'] }) !== null, parametresRefuses({}), parametresRefuses(undefined)], [null, true, true, null, null]);
+        // le CÂBLAGE de la garde des paramètres (Express ne rend que des chaînes : un aiguilleur de lot fabriqué, qui passe AVANT la garde, y glisse un objet — le mutant « paramètres non gardés » doit tomber)
+        {
+            const { assembler: assembler2, aiguilleur: aiguilleur2 } = require('../index');
+            const lotFab = { enTete() { }, routes(r) {
+                r.post('/api/zz/:id', aiguilleur2(q => { q.params.id = { $ne: 1 }; return true; }), (q, s) => s.json({ ok: true }));
+                r.post('/api/zz/:id/temoin', aiguilleur2(() => true), (q, s) => s.json({ ok: true }));
+            } };
+            const app = express(); app.use(express.json()); pret.armer(M.verifierIndex); app.use(assembler2([lotFab], cfg, {}));
+            const s2 = await H.serveur(app);
+            const mauvais = await envoyer(s2.url, { methode: 'POST', chemin: '/api/zz/abc', corps: {} }), bon = await envoyer(s2.url, { methode: 'POST', chemin: '/api/zz/abc/temoin', corps: {} });
+            await s2.fermer(); pret.armer(M.verifierIndex);
+            H.v('I-1 : un paramètre de chemin qui n\'est pas une chaîne est refusé (400 ENTREE « parametre »), le témoin à paramètre ordinaire passe', [mauvais.statut, mauvais.json && mauvais.json.erreur && mauvais.json.erreur.detail, bon.statut], [400, 'parametre', 200]);
+        }
+    }
 
     // ═══════════════ STEP 2 : le temps et l'énumération ═══════════════
     {
@@ -496,13 +568,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         // le courrier n'est pas une arme : une même adresse ne reçoit pas plus de `renvoiParCompteHeure` liens de réinitialisation par heure, d'où que viennent les demandes
         courrier.envoyes.length = 0;
         const victime = mail(); await raw('comptes').insertOne(Object.assign(M.nouveauCompte({ email: victime, emailCle: victime, motDePasse: hash }), { verifie: true }));
-        for (let k = 0; k < 8; k++) await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } });
+        const reps = [];
+        for (let k = 0; k < 8; k++) reps.push(await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: victime } }));
+        const inconnue = await envoyer(V, { methode: 'POST', chemin: '/api/compte/mot-de-passe-oublie', entetes: siteH(null), corps: { email: mail() } });
         await svc.attendre();
         const recus = courrier.envoyes.filter(e => e.email === victime).length;
-        // 🔴 CONSTAT OUVERT (AUDIT-SECURITE-V2.md §5, Moyen) : demanderReinit n'a AUCUNE limite par adresse (renvoyerVerification, elle, en a une : 3/h). Le plafond par IP (10/h) se contourne avec des IP ;
-        // la correction (3 lignes, L.consommer comme renvoyerVerification) casse test-comptes-temps.js (hérité : 21 demandes pour UNE adresse, 21 courriers attendus) et n'est donc pas livrée ici.
-        // Ce contrôle est ÉPINGLÉ sur l'état réel : le jour où la limite existera, il tombera et devra être remplacé par « au plus 3 courriers ».
-        H.v(`step 2 (constat ouvert §5, Moyen) : 8 demandes de réinitialisation pour UNE adresse depuis 8 IP → ${recus} courriers (aucune limite par adresse)`, recus, 8);
+        // O1 (corrigé, I-3) : au plus `renvoiParCompteHeure` courriers par adresse et par heure, d'où que viennent les demandes (le plafond par IP se contourne avec des IP). Et la LIMITE NE SE VOIT PAS :
+        // les 8 réponses (celles d'avant la limite comme celles d'après) et celle d'une adresse inconnue ont les MÊMES OCTETS — aucune énumération par la limite.
+        H.vrai(`O1 : 8 demandes de réinitialisation pour UNE adresse depuis 8 IP → au plus ${cfg.limites.renvoiParCompteHeure} courriers (reçus : ${recus})`, recus >= 1 && recus <= cfg.limites.renvoiParCompteHeure);
+        H.v('O1 : les 8 réponses (avant ET après la limite) et celle d\'une adresse inconnue : 202, MÊMES OCTETS', [...new Set([...reps, inconnue].map(r => signature(r)))].length, 1);
+        H.v('O1 : ... et ce 202 unique est bien un 202', reps[7].statut, 202);
     }
 
     // ═══════════════ STEP 4 : SSRF, ReDoS, client Turnstile ═══════════════
@@ -555,16 +630,32 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         await raw('mouvements').insertOne({ installationId: x.i._id, le: new Date(), type: 'debit', delta: -1, poche: 'essai', credit: { poche: 'essai' }, motif: null, scanId: new mongoose.Types.ObjectId(), etat: 'rendu-en-cours', cleIdempotence: cleBrute, surface: 'extension' });
         const r = await Lg.debiter({ type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false }, { scanId: new mongoose.Types.ObjectId(), cleIdempotence: cleBrute }, cfg);
         H.v('step 3 : contrôle de l\'instrument — le chemin EN_RECONCILIATION du ledger est joué', r.code, 'EN_RECONCILIATION');
-        // (2) la règle écrite par ce qu'elle AUTORISE : aucun journal de production v2 n'imprime le MESSAGE d'une erreur (un pilote y cite une clé, une adresse, une URL). Exceptions nommées : les outils en ligne de commande (migrations/, admin/) écrivent sur le terminal de l'opérateur, et v2/index.js imprime le message d'une CONFIGURATION invalide (noms de variables, jamais leur valeur secrète).
+        // (2) LISTE PERMISE (I-4) : `.message` est INTERDIT dans tout fichier non-test de v2/ — pas seulement sur la ligne d'un console.* : une indirection (`repli(…)`, `signaler(…)`, `journal(…)`) l'imprime aussi.
+        // Un pilote y cite une clé, une adresse, une URL, un nom de collection. Seules passent les exceptions NOMMÉES ci-dessous, chacune reconnue par son fichier ET un fragment de la ligne (pas un numéro de ligne, qui dérive).
         const fs = require('fs'), racine = path.join(__dirname, '..');
+        const EXCEPTIONS = [
+            { fichier: 'index.js', contient: 'console.error(`🔴 [v2] ${e.message} — les routes v2', raison: 'message d\'une CONFIGURATION invalide (lireConfig) : noms de variables, jamais la valeur d\'un secret' },
+            { fichier: 'identifier/routes.js', contient: 'r.erreur.message', raison: 'champ `message` de l\'objet de refus FABRIQUÉ par verifierEntree (pas une Error de pilote)' },
+            { fichier: 'identifier/adaptateur.js', contient: 'e instanceof Panne ? e.message', raison: 'message d\'une Panne : phrase fabriquée par l\'adaptateur (motif ou nature du refus de la chaîne héritée), jamais un message de pilote' },
+            { fichier: 'openapi/valider.js', contient: 'meilleure[0].message', raison: 'champ `message` d\'un écart du validateur (objet fabriqué)' }
+        ];
+        const REPERTOIRES_CLI = ['migrations', 'admin', 'test'];       // outils en ligne de commande : ils écrivent sur le terminal de l'opérateur, pas dans un journal de serveur
         const fichiers = [];
-        (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!['test', 'migrations', 'admin', 'openapi'].includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);
-        const fautifs = [];
+        (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!REPERTOIRES_CLI.includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);
+        // la règle, en fonction pure : les lignes (hors commentaire de fin de ligne) qui portent `.message` sans exception nommée
+        const fautifsDe = (rel, source) => source.split(/\r?\n/).map(l => l.replace(/\s\/\/.*$/, '')).map((l, i) => ({ l, i })).filter(({ l }) => /\.message\b/.test(l) && !EXCEPTIONS.some(x => x.fichier === rel && l.includes(x.contient))).map(({ i }) => `${rel}:${i + 1}`);
+        const fautifs = [], utilisees = new Set();
         for (const f of fichiers) {
-            const rel = path.relative(racine, f).replace(/\\/g, '/'); if (rel === 'index.js') continue;
-            fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.replace(/\s\/\/.*$/, '')).forEach((l, i) => { if (/console\.(log|warn|error|info)\(/.test(l) && /\.message\b/.test(l)) fautifs.push(`${rel}:${i + 1}`); });
+            const rel = path.relative(racine, f).replace(/\\/g, '/'), source = fs.readFileSync(f, 'utf8');
+            fautifs.push(...fautifsDe(rel, source));
+            for (const x of EXCEPTIONS) if (x.fichier === rel && source.includes(x.contient)) utilisees.add(x.contient);
         }
-        H.v(`step 3 : aucun console.* de v2 (${fichiers.length} fichiers) n'imprime e.message`, fautifs, []);
+        H.v(`step 3 : AUCUN \`.message\` dans les ${fichiers.length} fichiers non-test de v2/ (hors ${EXCEPTIONS.length} exceptions nommées et les dossiers ${REPERTOIRES_CLI.join(', ')})`, fautifs, []);
+        H.v('step 3 : chaque exception nommée existe encore dans son fichier (pas d\'exception morte)', EXCEPTIONS.filter(x => !utilisees.has(x.contient)).map(x => x.fichier), []);
+        // la règle SAIT dire non : le correctif de questions.js remis tel qu'il était (un `repli(e.message)` réintroduit) la fait tomber
+        const q = fs.readFileSync(path.join(racine, 'argent', 'questions.js'), 'utf8');
+        const reintroduit = q.replace('repli(`écriture refusée (${(e && (e.code || e.name)) || \'erreur\'})`)', 'repli(`écriture refusée (${e.message})`)');
+        H.v('step 3 : contrôle de l\'instrument — un `repli(e.message)` réintroduit dans argent/questions.js fait tomber la règle (et la version actuelle ne la fait pas tomber)', [reintroduit !== q, fautifsDe('argent/questions.js', reintroduit).length, fautifsDe('argent/questions.js', q).length], [true, 1, 0]);
     }
     // ═══════════════ STEP 3 ter : le pilote de courrier MÉMOIRE est celui de la production tant que BREVO_API_KEY manque (comptes/monter.js) ═══════════════
     {
@@ -611,7 +702,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     // ═══════════════ STEP 6 : la table des VALEURS PAR DÉFAUT (B8.2) — chaque variable de v2/config.js : son défaut, et ce que fait une valeur mal formée. Chaque défaut doit FERMER. ═══════════════
     {
         const { lireConfig: lire } = require('../config'); const fs = require('fs');
-        const noms = [...new Set([...fs.readFileSync(path.join(__dirname, '..', 'config.js'), 'utf8').matchAll(/env\.([A-Z][A-Z0-9_]+)/g)].map(m => m[1]))].sort();
+        // BANC_ISOLE est lue sur process.env (second témoin du mode banc), pas sur l'objet `env` passé à lireConfig : elle est éprouvée par le bloc « m4 » plus bas, pas par une ligne de cette table
+        const noms = [...new Set([...fs.readFileSync(path.join(__dirname, '..', 'config.js'), 'utf8').matchAll(/env\.([A-Z][A-Z0-9_]+)/g)].map(m => m[1]))].filter(n => n !== 'BANC_ISOLE').sort();
         const PROD = { RM_API_V2: '1', MONGODB_BASE: 'test', V2_SECRET_EMPREINTE: 's'.repeat(20) };            // une configuration de PRODUCTION (allumée, hors base de banc)
         const entier = (c, ...cle) => cle.reduce((o, k) => o[k], c);
         // [lecture, défaut attendu, valeur mal formée, issue : 'leve' (la configuration est invalide : v2 répond 503, jamais mal configurée) | 'ignore' (retombe sur le défaut) | { ferme: prédicat }, base de l'essai]
@@ -656,6 +748,50 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         H.vrai('step 6 : production allumée avec V2_TURNSTILE=off → configuration invalide', refus({ V2_TURNSTILE: 'off' }));
         H.vrai('step 6 : production allumée avec V2_COOKIE_SECURE=0 → configuration invalide (le cookie de session ne voyage jamais sans Secure en production)', refus({ V2_COOKIE_SECURE: '0' }));
         H.vrai('step 6 : contrôle de l\'instrument — la même configuration de production, sans écart, est valide', refus({}) === null);
+        // m4 : le nom `test_scratch` n'est qu'une étiquette (db.js:21-23) ; le mode banc exige AUSSI un second témoin que seul le harnais pose (BANC_ISOLE=1, _env-banc.js) — un nom n'est pas une preuve
+        {
+            const garde = process.env.BANC_ISOLE; const sec = 's'.repeat(20);
+            const essai = (env, banc) => { if (banc) process.env.BANC_ISOLE = '1'; else delete process.env.BANC_ISOLE; try { const c = lire(env); return { ok: true, c }; } catch (e) { return { ok: false }; } };
+            try {
+                const E = { RM_API_V2: '1', MONGODB_BASE: 'test_scratch' };
+                H.v('m4 : sans BANC_ISOLE, « test_scratch » seul n\'ouvre RIEN — secret de bac, Turnstile off, cookie sans Secure : tous refusés',
+                    [essai(E, false).ok, essai({ ...E, V2_SECRET_EMPREINTE: sec, V2_TURNSTILE: 'off' }, false).ok, essai({ ...E, V2_SECRET_EMPREINTE: sec, V2_COOKIE_SECURE: '0' }, false).ok, essai({ MONGODB_BASE: 'test_scratch', V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://dev' }, false).c.origines.extensionDev], [false, false, false, null]);
+                H.v('m4 : avec BANC_ISOLE=1 (posé par le harnais seul), le mode banc s\'ouvre comme avant',
+                    [essai(E, true).ok, essai({ ...E, V2_SECRET_EMPREINTE: sec, V2_TURNSTILE: 'off' }, true).ok, essai({ ...E, V2_SECRET_EMPREINTE: sec, V2_COOKIE_SECURE: '0' }, true).ok, essai({ MONGODB_BASE: 'test_scratch', V2_ORIGINE_EXTENSION_DEV: 'chrome-extension://dev' }, true).c.origines.extensionDev], [true, true, true, 'chrome-extension://dev']);
+            } finally { if (garde === undefined) delete process.env.BANC_ISOLE; else process.env.BANC_ISOLE = garde; }
+        }
+        // m3 : le gestionnaire d'erreurs final que ce banc COPIE (413 « Requête illisible » du test (c)) ne dérive pas de l'original : index.js est LU, jamais modifié ici
+        {
+            const src = fs.readFileSync(path.join(__dirname, '..', '..', 'index.js'), 'utf8');
+            const i = src.indexOf('app.use((err, req, res, next) => {'), bloc = i >= 0 ? src.slice(i, i + 900) : '';
+            const fragments = ["'Origine non autorisée'", "'Requête illisible'", "'Erreur serveur interne'", 'statut >= 400 && statut < 500', 'Number.isInteger(err?.status)', 'if (res.headersSent) return next(err)'];
+            H.v('m3 : le gestionnaire d\'erreurs final d\'index.js porte toujours les 3 messages, la règle `statut >= 400 && statut < 500` et la garde `headersSent` que le banc copie', fragments.filter(f => !bloc.includes(f)), []);
+            const mute = bloc.replace("'Requête illisible'", "'x'").replace('statut >= 400 && statut < 500', 'statut >= 400');
+            H.v('m3 : contrôle de l\'instrument — un original dont on retire « Requête illisible » ou la règle des 4xx fait tomber la dérive', fragments.filter(f => !mute.includes(f)), ["'Requête illisible'", 'statut >= 400 && statut < 500']);
+            H.vrai('m3 : et la copie du banc porte les mêmes fragments (sinon la dérive passerait inaperçue des DEUX côtés)', fragments.every(f => gestionnaireFinal.toString().includes(f.replace(/^'|'$/g, '')) || gestionnaireFinal.toString().includes(f)));
+        }
+        // m2 + dérive : TOUT nom de variable d'environnement lu par la production de v2/ (et par le client R2 que le banc réel charge) figure, en NOM, dans la table de AUDIT-SECURITE-V2.md
+        {
+            const racine = path.join(__dirname, '..'), noms = new Set(), fichiers = [path.join(racine, '..', 'collecte-cartes', 'r2.js')];
+            (function parcourir(d) { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) { if (!['test', 'migrations', 'admin'].includes(e.name)) parcourir(p); } else if (e.name.endsWith('.js')) fichiers.push(p); } })(racine);
+            for (const f of fichiers) { const s = fs.readFileSync(f, 'utf8'); for (const re of [/process\.env\.([A-Z][A-Z0-9_]{2,})/g, /\benv\.([A-Z][A-Z0-9_]{2,})/g, /'((?:R2|V2|MONGODB|TURNSTILE|BREVO|BANC|JETON|RM)_[A-Z0-9_]+)'/g]) for (const m of s.matchAll(re)) noms.add(m[1]); }
+            const doc = fs.readFileSync(path.join(racine, '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+            const absents = [...noms].sort().filter(n => !doc.includes('`' + n + '`'));
+            H.v(`m2 : ${noms.size} noms de variables lus par la production (${fichiers.length} fichiers) — tous dans la table des valeurs par défaut de AUDIT-SECURITE-V2.md (noms seulement)`, absents, []);
+        }
+        // I-2 : le §10 de l'audit se bâtit par ÉNUMÉRATION de progress.md, pas par mémoire : TOUTE ligne qui porte l'un de ces marqueurs a une ligne de verdict « l. N » au §10
+        {
+            const prog = 'C:\\Users\\Yung\\Desktop\\pokemon-proxy-api-v2\\.superpowers\\sdd\\PLAN-API-V2\\progress.md';
+            if (fs.existsSync(prog)) {
+                const marqueurs = ['minor (deferred', 'parked', 'Parqués', 'parqués', "POUR L'AUDIT B8", 'audit B8', 'À PORTER'];
+                const lignes = fs.readFileSync(prog, 'utf8').split(/\r?\n/).map((l, i) => ({ n: i + 1, l })).filter(({ l }) => marqueurs.some(m => l.includes(m))).map(x => x.n);
+                const doc = fs.readFileSync(path.join(__dirname, '..', '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
+                const i10 = doc.indexOf('## 10.'), i11 = doc.indexOf('## 11.'), sect = i10 >= 0 && i11 > i10 ? doc.slice(i10, i11) : '';
+                const sans = lignes.filter(n => !new RegExp(`\\| l\\. ${n} \\|`).test(sect));
+                console.log(`   ${lignes.length} lignes de progress.md portent un marqueur de dette, ${lignes.length - sans.length} verdicts au §10`);
+                H.v(`I-2 : ${lignes.length} lignes trouvées, ${lignes.length - sans.length} verdicts (les lignes sans verdict sont listées)`, sans, []);
+            } else console.log('   progress.md absent de cette machine : énumération des dettes non jouée');
+        }
         // TURNSTILE_SECRET absent : le pilote réel LÈVE (503), il n'accepte jamais « faute de secret » ; sans pilote branché, l'inscription ferme aussi
         const { verifierTurnstile } = require('../comptes/turnstile'); let e1 = null; try { await verifierTurnstile('jeton', '1.1.1.1', { secret: undefined }); } catch (e) { e1 = e.message; }
         H.v('step 6 : TURNSTILE_SECRET absent → le pilote réel lève (inscription : 503), jamais « accepté »', e1, 'turnstile-non-configure');

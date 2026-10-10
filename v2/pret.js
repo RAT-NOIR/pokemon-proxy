@@ -11,7 +11,7 @@ async function pret(req, res, next) {
             etat = { ok: manquants.length === 0, lueLe: Date.now(), manquants };
             if (!etat.ok) console.error(`🔴 [v2] index manquants : ${manquants.join(', ')} — routes v2 fermées (node v2/migrations/creer-index.js)`);
         }
-    } catch (e) { etat = { ok: false, lueLe: Date.now(), manquants: [e.message] }; }
+    } catch (e) { etat = { ok: false, lueLe: Date.now(), manquants: [`verification-en-erreur (${(e && (e.code || e.name)) || 'erreur'})`] }; }   // jamais e.message : une erreur de connexion cite l'hôte de la grappe
     if (!etat.ok) return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
     next();
 }

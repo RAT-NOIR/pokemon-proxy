@@ -132,4 +132,4 @@ function traiterRetourLive(cfg, deps = {}) {
     };
 }
 
-module.exports = { traiterRetourLive, VERDICTS, CAUSES, facturationDeLecture };
+module.exports = { traiterRetourLive, VERDICTS, CAUSES, facturationDeLecture, CHAMPS_PRIX };   // CHAMPS_PRIX : exporté pour que le banc d'abus confronte la garde des clés à tous les champs légitimes

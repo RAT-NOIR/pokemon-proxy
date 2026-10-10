@@ -59,13 +59,13 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
                 return { etat: ex.etat, rejoue: true };
             }
         }
-        return repli(`écriture refusée (${e.message})`);
+        return repli(`écriture refusée (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : une E11000 cite la collection et la clé
     }
     try {
         if (!lot) await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: 'debite' }, { $set: { etat: 'reserve' } });   // débité à la réponse, rendu à l'abandon
     } catch (e) {
         try { await col('questions').deleteOne({ _id, etat: 'en-attente' }); } catch (_) { /* le repli rend le crédit : la question orpheline ne peut plus être répondue */ }
-        return repli(`réserve refusée (${e.message})`);
+        return repli(`réserve refusée (${(e && (e.code || e.name)) || 'erreur'})`);
     }
     return { etat: 'en-attente' };
 }

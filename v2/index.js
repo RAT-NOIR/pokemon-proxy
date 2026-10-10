@@ -31,21 +31,44 @@ function monter(app, deps = {}, env = process.env) {
     app.use(assembler(LOTS, cfg, deps));
 }
 /**
- * B8.1 — les clés qu'un corps JSON v2 ne porte JAMAIS. Écrit par ce qu'il AUTORISE : un nom de clé ordinaire, à profondeur et nombre de nœuds bornés. Sont refusées :
- *   · `__proto__`, `constructor`, `prototype` (JSON.parse les rend en clés PROPRES : un fusionneur d'objets, présent ou futur, les prendrait pour des consignes de prototype) ;
- *   · toute clé qui commence par `$` (opérateurs Mongo : `{"$ne":""}` ne doit jamais atteindre un filtre) ;
- *   · un corps plus profond que 8 niveaux ou de plus de 5 000 nœuds (aucune route n'en demande autant).
- * @returns {string|null} la clé refusée, ou null.
+ * B8.1 (tour 1, I-1) — la garde des CLÉS, écrite par ce qu'elle AUTORISE (liste permise) : une clé n'est acceptée que si elle a la forme d'un identifiant (`FORME_CLE`)
+ * ET n'est pas une propriété d'`Object.prototype` (`k in Object.prototype` couvre `__proto__`, `constructor`, `toString`, `hasOwnProperty`, `__defineGetter__`…). Tout le reste est refusé,
+ * y compris ce qu'on n'a pas prévu : `$ne` (opérateur Mongo), `a.b` (chemin pointé), une clé avec espace, tiret, accent, chiffre initial, vide.
+ * La forme est CONFRONTÉE aux clés de requête légitimes par le banc d'abus (schémas Requete* d'openapi.v2.json, CHAMPS_PRIX de retour-live.js, paramètres de requête) : aucune n'est refusée.
+ * S'applique à `req.body` (à toute profondeur, tableaux compris : leurs ÉLÉMENTS sont parcourus, pas leurs indices), à `req.query` (aucun objet imbriqué : une chaîne, ou une liste de chaînes),
+ * et à `req.params` (une chaîne). Bornes : au plus NIVEAUX_MAX niveaux d'objets ou de tableaux (la racine est le niveau 1) et NOEUDS_MAX objets ou tableaux au total.
+ * @returns {string|null} la clé (ou la borne) refusée, ou null.
  */
-const CLES_RESERVEES = new Set(['__proto__', 'constructor', 'prototype']);
-function cleInterdite(valeur, profondeur = 0, vus = { n: 0 }) {
+const FORME_CLE = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
+const NIVEAUX_MAX = 9, NOEUDS_MAX = 5000;
+const cleOk = k => FORME_CLE.test(k) && !(k in Object.prototype);
+function cleInterdite(valeur, niveau = 1, vus = { n: 0 }) {
     if (valeur === null || typeof valeur !== 'object') return null;
-    if (profondeur > 8 || ++vus.n > 5000) return '(profondeur ou taille)';
+    if (niveau > NIVEAUX_MAX || ++vus.n > NOEUDS_MAX) return '(profondeur ou taille)';
+    if (Array.isArray(valeur)) {
+        for (const x of valeur) { const r = cleInterdite(x, niveau + 1, vus); if (r !== null) return r; }
+        return null;
+    }
     for (const k of Object.keys(valeur)) {
-        if (CLES_RESERVEES.has(k) || k.startsWith('$')) return k;
-        const r = cleInterdite(valeur[k], profondeur + 1, vus);
+        if (!cleOk(k)) return k;
+        const r = cleInterdite(valeur[k], niveau + 1, vus);
         if (r !== null) return r;
     }
+    return null;
+}
+function requeteRefusee(q) {
+    if (q === null || typeof q !== 'object') return null;
+    for (const k of Object.keys(q)) {
+        if (!cleOk(k)) return k;
+        const v = q[k];
+        if (typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'string'))) continue;
+        return k;
+    }
+    return null;
+}
+function parametresRefuses(p) {
+    if (p === null || typeof p !== 'object') return null;
+    for (const [k, v] of Object.entries(p)) if (typeof v !== 'string') return k;
     return null;
 }
 /**
@@ -88,9 +111,10 @@ function assembler(lots, cfgLots, deps = {}) {
                 // Comme Express : HEAD est servi par les handlers GET quand la route n'en déclare pas pour HEAD.
                 let m = String(req.method).toLowerCase();
                 if (m === 'head' && !route.methods.head) m = 'get';
-                // B8.1 : un corps qui porte une clé réservée ou un opérateur est refusé AVANT toute route (voir cleInterdite) ; placé APRÈS les aiguilleurs : la route héritée d'une requête 1.0.x n'est pas touchée.
+                // B8.1 : un corps, une requête ou un paramètre dont une clé sort de la liste permise est refusé AVANT toute route (voir cleInterdite) ; placé APRÈS les aiguilleurs : la route héritée d'une requête 1.0.x n'est pas touchée.
                 const garde = () => {
-                    if (cleInterdite(req.body) !== null) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'cle-interdite' });
+                    if (cleInterdite(req.body) !== null || requeteRefusee(req.query) !== null) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'cle-interdite' });
+                    if (parametresRefuses(req.params) !== null) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'parametre' });
                     return pret.pret(req, res, err => (err ? next(err) : dispatch.call(this, req, res, next)));
                 };
                 // TOUS les aiguilleurs consécutifs en tête de la méthode demandée sont consultés avant la garde.
@@ -105,4 +129,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, cleInterdite, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
