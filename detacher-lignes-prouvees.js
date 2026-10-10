@@ -68,6 +68,16 @@ const DECISIONS = {
             pourquoi: `Garchomp SP Half Deck : le produit est joint par set+numero à ${carte}, d'un autre nom, qui ne porte aucune des attaques écrites par Cardmarket` })),
         { id: '339431|860026', preuve: 'nom', type: 'fiche-contredite-par-le-nom',
             pourquoi: 'produit « Hole-Digging Shovel » joint à Gastly ; la bonne ligne 338279|860026 existe déjà (doublon par setlist+numero)' }
+    ],
+    // FEU VERT NOMMÉ du testeur (2026-10-08, tour 2) : « détacher Garchomp LV.X 676475, même preuve et même garde que les 7 autres ». Le produit
+    // « Garchomp [C] LV.X [Healing Breath | Dragon Rush] » est joint par set+numero à 154845 « Garchomp » (Dragons Exalted 91 ; attaques Jet Headbutt
+    // et Sand Tomb, aucune du produit). ⚠️ La preuve 'nom+attaques' des 7 ne s'applique pas à la lettre : le nom décomposé du produit commence par
+    // « Garchomp », la règle du préfixe (pensée pour la rareté « Milotic C ») exempte donc 154845. Les DEUX témoins de 'attaques+nom' tiennent :
+    // Dragon Rush est une attaque de 71777 « Garchomp C LV.X » (Supreme Victors 145), 1 contre 0 ; le nom n'est pas « Garchomp ». `autre` = 71777,
+    // lu en base le 2026-10-08 (aucune carte ne porte « Healing Breath », un Poké-Power). La ligne juste 71777|676475 n'est PAS ajoutée ici.
+    '2026-10-08d': [
+        { id: '154845|676475', preuve: 'attaques+nom', autre: 71777, type: 'fiche-contredite-par-les-attaques',
+            pourquoi: 'Garchomp LV.X (Garchomp SP Half Deck) joint par set+numero à Garchomp (Dragons Exalted 91) : les attaques écrites par Cardmarket désignent 71777 (Garchomp C LV.X) et le nom n\'est pas « Garchomp »' }
     ]
 };
 

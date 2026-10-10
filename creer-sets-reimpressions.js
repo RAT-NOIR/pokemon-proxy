@@ -18,6 +18,7 @@
 require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
+const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nomme');
 
 // `reimpression+origine+numero` (poser-reimpressions.js : Southeast Asia Promos, Professor Program, Trick or Trade) porte sa
 // famille dans `route` (le code du set) ; la route du set la reprend.
@@ -49,13 +50,13 @@ const PAR_LISTE_DE_DECK = new Set(['deck+section+position', 'deck+section+nom'])
     const nCartes = [...parSet.values()].reduce((s, e) => s + e.cartes.size, 0);
     if (!ecrire) { console.log(`\n   ${aCreer.length} sets à créer · ${nCartes} appartenances cartes.sets à poser (additif) — (mesure seule, relancer avec --ecrire)`); await fermer(); return; }
     let crees = 0, poses = 0;
-    for (const e of aCreer) {
-        const r = await cx.db.collection('sets').updateOne({ _id: e.slug }, { $setOnInsert: {
-            code: codeDe.get(e.slug) ?? e.slug, idExpansion: [...e.exps], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: 'intl', totalImprime: null,
-            reimpressions: e.route, bulba: { titre: null, expansion: null, motifTitres: `réimpressions (${e.route}) : produits joints à leur carte d'origine ${e.parDeck ? 'par la liste de deck de la page du produit' : 'par le slug Cardmarket'} — fiche sans numéro, sans visuel` },
-            collecteLe: new Date(), version: 1 } }, { upsert: true });
-        crees += r.upsertedCount;
-    }
+    // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — tous les sets à créer sont nommés AVANT la première écriture (collecte-cartes/set-nomme.js)
+    const docDe = e => ({ _id: e.slug,
+        code: codeDe.get(e.slug) ?? e.slug, idExpansion: [...e.exps], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: 'intl', totalImprime: null,
+        reimpressions: e.route, bulba: { titre: null, expansion: null, motifTitres: `réimpressions (${e.route}) : produits joints à leur carte d'origine ${e.parDeck ? 'par la liste de deck de la page du produit' : 'par le slug Cardmarket'} — fiche sans numéro, sans visuel` },
+        collecteLe: new Date(), version: 1 });
+    const nommes = await nommerLesNouveaux(cx.db, prod.db, aCreer.map(docDe));   // lève « SET SANS NOM REFUSÉ » avant toute écriture
+    for (const e of aCreer) crees += await insererSetNeuf(cx.db.collection('sets'), docDe(e), nommes);
     for (const e of parSet.values()) {
         const r = await cx.db.collection('cartes').updateMany({ _id: { $in: [...e.cartes] } }, { $addToSet: { sets: e.slug } });
         poses += r.modifiedCount;

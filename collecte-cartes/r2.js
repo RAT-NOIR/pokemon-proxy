@@ -9,7 +9,7 @@
 // réécrit pas. `deposerTexte` rend `{ ecrit: true|false }` pour que l'appelant compte.
 
 const { S3Client, PutObjectCommand, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command, DeleteObjectsCommand } = require('@aws-sdk/client-s3');
-const { garderClientR2 } = require('./garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
+const { garderClientR2, clesR2 } = require('./garde-banc');   // jamais base-banc.js : la production ne charge que le petit module sans dépendance
 
 // ⚠️ JURIDICTION. Un bucket créé avec la restriction « EU » n'est joignable QUE par l'endpoint
 // `<compte>.eu.r2.cloudflarestorage.com` ; l'endpoint générique répond AccessDenied (403), ce qui
@@ -18,14 +18,14 @@ const { garderClientR2 } = require('./garde-banc');   // jamais base-banc.js : l
 // retient celui qui répond — c'est écrit dans le log, pas deviné en silence.
 let _client = null;
 let _endpoint = null;
-function fabriquer(endpoint) {
+function fabriquer(endpoint, env = process.env) {
     // Garde des bancs (base-banc.js) : inerte hors banc ; sous BANC_ISOLE=1, toute écriture hors R2_BUCKET_BANC est refusée AVANT la requête,
-    // quel que soit le chemin du module qui l'appelle (tous passent par ce client).
+    // quel que soit le chemin du module qui l'appelle (tous passent par ce client). Les clés viennent de clesR2 : sous banc, R2_BANC_* seulement.
     return garderClientR2(new S3Client({
         region: 'auto', endpoint,
-        credentials: { accessKeyId: process.env.R2_ACCESS_KEY_ID, secretAccessKey: process.env.R2_SECRET_ACCESS_KEY },
+        credentials: clesR2(env),
         forcePathStyle: true
-    }));
+    }), env);
 }
 /** Pour les bancs seulement : pose (ou retire, avec null) un client de remplacement, gardé comme les autres. */
 function _poserClient(c) { _client = c ? garderClientR2(c) : null; }
@@ -38,6 +38,7 @@ function client() {
 
 /** Vérifie que le bucket répond avec ces identifiants — AVANT la première requête Bulbapedia. */
 async function verifierBucket(bucket) {
+    clesR2();   // sous banc, une clé R2_BANC_* absente refuse ICI, avant toute requête
     const candidats = process.env.R2_ENDPOINT
         ? [process.env.R2_ENDPOINT]
         : [`https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`, `https://${process.env.R2_ACCOUNT_ID}.eu.r2.cloudflarestorage.com`];
@@ -110,4 +111,4 @@ async function supprimer(bucket, cles) {
 
 const cleWikitext = (pageid, revid) => `bulba/${pageid}/${revid}.wikitext`;
 
-module.exports = { _poserClient, verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };
+module.exports = { _poserClient, clientPour: fabriquer, verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };

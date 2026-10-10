@@ -38,6 +38,7 @@ const ATTENDU = arg('attendu')?.split(':').map(Number) ?? null;
 if (!LISTE) { console.error('❌ --liste=<LISTE-EXPANSIONS-SANS-PAGE.json> requis'); process.exit(2); }
 if (ECRIRE && !ATTENDU) { console.error('❌ --ecrire exige --attendu=<sets>:<lignes> (le compte du plan, relu)'); process.exit(2); }
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
+const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nomme');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
@@ -214,12 +215,16 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
 
     const le = new Date(), CP = cx.db.collection('cartes_produits'), C = cx.db.collection('cartes'), S = cx.db.collection('sets');
     let setsCrees = 0, lignesPosees = 0, simplesCreees = 0;
+    // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — tous les sets neufs du plan sont nommés AVANT la première écriture (collecte-cartes/set-nomme.js)
+    const docDe = x => ({ _id: x.slug,
+        code: x.code ?? x.slug, idExpansion: [x.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: x.region, tirage: x.tirage, totalImprime: null,
+        creeDepuis: { le, source: 'export Cardmarket du 24/09 + numeros_cartes (apprentissage)', tirage: x.preuveTirage, demande: 'testeur 2026-10-04 : « crée-les à partir de l\'export Cardmarket et de nos apprentissages »' },
+        bulba: { titre: null, expansion: x.simples.length ? x.nomExp : null, motifTitres: `aucune page de set chez nous : réimpressions jointes par la désignation croisée, autres produits en fiches simples (nom et numéro Cardmarket) — à enrichir` },
+        collecteLe: le, version: 1 });
+    let nommes;
+    try { nommes = await nommerLesNouveaux(cx.db, prod.db, plan.filter(x => !x.existant).map(docDe)); } catch (e) { console.error(`❌ ARRÊT : ${e.message}`); await fermer(); process.exit(1); }
     for (const x of plan) {
-        if (!x.existant) setsCrees += (await S.updateOne({ _id: x.slug }, { $setOnInsert: {
-            code: x.code ?? x.slug, idExpansion: [x.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: x.region, tirage: x.tirage, totalImprime: null,
-            creeDepuis: { le, source: 'export Cardmarket du 24/09 + numeros_cartes (apprentissage)', tirage: x.preuveTirage, demande: 'testeur 2026-10-04 : « crée-les à partir de l\'export Cardmarket et de nos apprentissages »' },
-            bulba: { titre: null, expansion: x.simples.length ? x.nomExp : null, motifTitres: `aucune page de set chez nous : réimpressions jointes par la désignation croisée, autres produits en fiches simples (nom et numéro Cardmarket) — à enrichir` },
-            collecteLe: le, version: 1 } }, { upsert: true })).upsertedCount;
+        if (!x.existant) setsCrees += await insererSetNeuf(S, docDe(x), nommes);
         // les réimpressions, comme poser-par-metacarte.js — la CARTE d'abord (idempotent), la ligne ensuite : une panne entre les deux ne
         // laisse plus une ligne « déjà jointe » dont la carte n'aurait jamais reçu le slug (relecture du 2026-10-04)
         if (x.designes.length) {
