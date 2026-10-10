@@ -29,6 +29,8 @@ const { produitsDeLExpansion } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { ligne } = require('./collecte-cartes/table-sets');
 const R = require('./collecte-cartes/regle-r-fiches');
+const { relireLot } = require('./collecte-cartes/relire-lot-metacarte');
+const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nomme');
 
 // --sans-fiche-melangee (2026-10-07, SV-P/CS) : une ligne posée a `numeroFiche: null` ; si la carte reçoit dans ce set des produits de
 // DEUX numéros (Xatu n°078 et n°085), ou y porte déjà des impressions de l'expansion, le site lui montre UNE fiche sans numéro dont les
@@ -140,6 +142,12 @@ function grouperParCarte(aEcrire, metaDe) {
     if (!ecrire || !aEcrire.length) { await fermer(); return; }
 
     const le = new Date();
+    // 🔑 EX-TRAINER-KIT-2 (2026-10-08) : un set naît NOMMÉ ou il ne naît pas — nommé ICI, avant la première écriture du lot (collecte-cartes/set-nomme.js)
+    const docsSets = sets.map(L => ({ _id: L.slugSet, code: L.code, idExpansion: [L.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: L.bulba.tirage, totalImprime: null,
+        reimpressions: 'metacarte', bulba: { titre: L.bulba.titre ?? null, expansion: null, motifTitres: `réimpressions sans page de carte (Setlist en liens rouges) : produits joints à leur carte par la désignation croisée (métacarte Cardmarket ∧ nom + attaques ∧ tirage déjà imprimé) — fiche sans numéro, sans visuel` },
+        collecteLe: le, version: 1 }));
+    let nommes;
+    try { nommes = await nommerLesNouveaux(cx.db, prod.db, docsSets); } catch (e) { console.error(`❌ ARRÊT : ${e.message}`); await fermer(); process.exit(1); }
     const parCarte = grouperParCarte(aEcrire, metaDe);
     if (REGLE_R) { const c = R.controlerRepere(cartes, parCarte); if (c.deplaces.length) { console.error(`❌ ARRÊT : le repère d'adresse de ${c.deplaces.length} cartes bougerait (${c.deplaces.slice(0, 5).join(', ')}) — rien n'est écrit`); await fermer(); process.exit(1); } }
     // 🔑 CONDITION DU SITE (DEMANDE-REDIRECTION-FICHES-R.md) : ni `nomEn` ni l'ORDRE de `liens.idProduct` ne bougent — `$addToSet` ajoute en fin et ne
@@ -151,12 +159,10 @@ function grouperParCarte(aEcrire, metaDe) {
         verifieLe: le, route: x.CODE } }, upsert: true } })), { ordered: false });
     const rc = await cx.db.collection('cartes').bulkWrite(opsCartes, { ordered: false });
     let crees = 0;
-    for (const L of sets) crees += (await cx.db.collection('sets').updateOne({ _id: L.slugSet }, { $setOnInsert: {
-        code: L.code, idExpansion: [L.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: 'intl', tirage: L.bulba.tirage, totalImprime: null,
-        reimpressions: 'metacarte', bulba: { titre: L.bulba.titre ?? null, expansion: null, motifTitres: `réimpressions sans page de carte (Setlist en liens rouges) : produits joints à leur carte par la désignation croisée (métacarte Cardmarket ∧ nom + attaques ∧ tirage déjà imprimé) — fiche sans numéro, sans visuel` },
-        collecteLe: le, version: 1 } }, { upsert: true })).upsertedCount;
-    const relu = await cx.db.collection('cartes_produits').countDocuments({ preuve: 'metacarte+nom+attaques', route: { $in: CODES } });
-    console.log(`\n   ✅ lignes insérées ${r.upsertedCount} · cartes modifiées ${rc.modifiedCount} · sets créés ${crees} · RELU « metacarte+nom+attaques » pour ${CODES.join(',')} : ${relu} (attendu ${aEcrire.length})`);
+    for (const d of docsSets) crees += await insererSetNeuf(cx.db.collection('sets'), d, nommes);
+    // 🔑 la relecture compte ce que CE lancement a écrit (ses _id ET son verifieLe), pas le total de la preuve (collecte-cartes/relire-lot-metacarte.js)
+    const relu = await relireLot(cx.db.collection('cartes_produits'), { codes: CODES, ids: aEcrire.map(x => `${x.d.carte._id}|${x.p.idProduct}`), le });
+    console.log(`\n   ✅ lignes insérées ${r.upsertedCount} · cartes modifiées ${rc.modifiedCount} · sets créés ${crees} · RELU « metacarte+nom+attaques » pour ${CODES.join(',')} : écrites par ce lancement : ${relu.ecrites} (attendu ${aEcrire.length}) · déjà présentes avant : ${relu.dejaAvant} · total ${relu.total}`);
     await fermer();
-    if (relu !== aEcrire.length) process.exit(1);
+    if (relu.ecrites !== aEcrire.length) process.exit(1);
 })().catch(e => { console.error(e); process.exit(1); });

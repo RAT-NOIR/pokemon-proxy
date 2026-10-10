@@ -99,4 +99,17 @@ function proposerNoms(tousLesSets, parSlug, slugMajoritaire) {
     return { proposes, refuses };
 }
 
-module.exports = { lisible, cleAffichage, doublonsDAffichage, choisirAffichage, regionDe, proposerNoms };
+/**
+ * ÉCRIT les noms proposés (rapatrier-noms-sets.js). Le filtre d'écriture est la définition du site et du contrôle de publication : « sans nom » = nomAffichage
+ * NON-CHAÎNE (absent OU null) — `$exists: false` laissait à jamais un set à `nomAffichage: null`, que le site ne publie pas. Une chaîne posée n'est jamais
+ * réécrite (§57). Rend le nombre de sets nommés.
+ */
+async function ecrireNoms(S, { proposes, refuses }) {
+    let n = 0;
+    for (const c of proposes) n += (await S.updateOne({ _id: c.s._id, nomAffichage: { $not: { $type: 'string' } } }, { $set: {
+        nomAffichage: c.a.nom, nomAffichageSource: c.a.source, nomAffichagePreuve: c.preuve, nomCardmarket: c.nomCardmarket, nomsLe: new Date() } })).modifiedCount;
+    for (const c of refuses) await S.updateOne({ _id: c.s._id }, { $set: { nomAffichageRefus: { raison: c.raison, le: new Date(), instrument: 'rapatrier-noms-sets.js' } } });
+    return n;
+}
+
+module.exports = { lisible, cleAffichage, doublonsDAffichage, choisirAffichage, regionDe, proposerNoms, ecrireNoms };

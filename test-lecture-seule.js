@@ -170,6 +170,12 @@ const sansFuite = (...msgs) => msgs.some(m => /SECRET|ecrivain|lecteur/.test(m |
             verifier('commande, variables absentes : refus avec LE MÊME message que les bancs, 0 connexion', [rAbs.map(r => r.ok), rAbs[0].raison === B.jugerLecture({ ...BASE }, 'production').raison, rAbs[1].raison === B.jugerLecture({ ...BASE }, 'cartes').raison, mAbs.vu.createConnection], [[false, false], true, true, 0]);
             const mEg = fauxMongoose(readAny()), rEg = await V2.verifierUtilisateurs({ ...BASE, MONGODB_LECTURE_URI: ECRIT, MONGODB_CARTES_LECTURE_URI: LECT_CARTES }, mEg);
             verifier('commande, une URI de lecture égale à l\'URI d\'écriture : refus de celle-là sans connexion, l\'autre est contrôlée', [rEg.map(r => r.ok), mEg.vu.createConnection], [[false, true], 1]);
+            // erreur FABRIQUÉE (forme d'une authentification refusée par Atlas) : code et message nettoyé lisibles, aucune URI, hôte ni identifiant
+            const eAuth = Object.assign(new Error('bad auth : Authentication failed. (mongodb+srv://lecteur:MotDePasse123@cluster0.abcde.mongodb.net/test) via cluster0-shard-00-00.abcde.mongodb.net:27017'), { code: 8000, codeName: 'AtlasError' });
+            const mAuth = { createConnection: () => ({ asPromise: async () => { throw eAuth; } }) };
+            const rAuth = await V2.verifierUtilisateurs(env2, mAuth);
+            const tAuth = rAuth.map(r => r.raison).join('\n');
+            verifier('commande, authentification refusée : la raison dit le code (8000) et « bad auth : Authentication failed », sans URI, hôte, identifiant ni mot de passe', [rAuth.map(r => r.ok), /8000/.test(tAuth), /bad auth : Authentication failed/.test(tAuth), /mongodb|abcde|lecteur|MotDePasse|\/\/|@/.test(tAuth)], [[false, false], true, true, false]);
         }
         const lance = spawnSync(process.execPath, [path.join(__dirname, 'verifier-utilisateurs-lecture.js')], { encoding: 'utf8', timeout: 60000, cwd: __dirname, env: { ...process.env, MONGODB_LECTURE_URI: '', MONGODB_CARTES_LECTURE_URI: '' } });
         const sortie = (lance.stdout || '') + (lance.stderr || '');

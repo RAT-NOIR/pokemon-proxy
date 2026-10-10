@@ -43,6 +43,7 @@ const RESTES_EXCLUS = ['fiche-contredite-par-le-nom', 'fiche-contredite-par-la-m
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { decomposerNomCardmarket, estCarteCode } = require('./collecte-cartes/jointure');
+const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nomme');
 
 const SOURCE = 'export Cardmarket + numeros_cartes (apprentissage) + impressions des pages de cartes';
 const cle = n => { const s = String(n ?? '').split('/')[0].trim().toUpperCase(); return s && /\d/.test(s) ? s.replace(/^([A-Z-]*)0+(\d)/, '$1$2') : null; };
@@ -250,12 +251,16 @@ function designer({ produits, parNom, tenus, setsParNom, slugSet }) {
 
     const le = new Date(), CP = cx.db.collection('cartes_produits'), C = cx.db.collection('cartes'), S = cx.db.collection('sets');
     let setsCrees = 0, lignesPosees = 0;
+    // 🔑 EX-TRAINER-KIT-2 : un set naît NOMMÉ ou il ne naît pas — tous les sets du plan sont nommés AVANT la première écriture (collecte-cartes/set-nomme.js)
+    const docDe = x => ({ _id: x.slug,
+        code: x.code, idExpansion: [x.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: x.T === 'jp' ? 'jp' : 'intl', tirage: x.T, totalImprime: null,
+        creeDepuis: { le, source: SOURCE, tirage: `pages de cartes : ${x.votes} numéros distincts au même nom et au même numéro sous « ${x.E} » (${x.T}), 0 contradiction`, demande: 'testeur 2026-10-07 : « propose toi-même la meilleure preuve de tirage pour chacun et applique-la »' },
+        bulba: { titre: null, expansion: x.E, motifTitres: `aucune page de set chez nous : nom d'expansion lu sur les pages de cartes (creer-sets-par-pages-de-cartes.js)` },
+        collecteLe: le, version: 1 });
+    let nommes;
+    try { nommes = await nommerLesNouveaux(cx.db, prod.db, plan.map(docDe)); } catch (e) { console.error(`❌ ARRÊT : ${e.message}`); await fermer(); process.exit(1); }
     for (const x of plan) {
-        setsCrees += (await S.updateOne({ _id: x.slug }, { $setOnInsert: {
-            code: x.code, idExpansion: [x.exp], nomEn: null, nomJa: null, nomJaTraduit: null, region: x.T === 'jp' ? 'jp' : 'intl', tirage: x.T, totalImprime: null,
-            creeDepuis: { le, source: SOURCE, tirage: `pages de cartes : ${x.votes} numéros distincts au même nom et au même numéro sous « ${x.E} » (${x.T}), 0 contradiction`, demande: 'testeur 2026-10-07 : « propose toi-même la meilleure preuve de tirage pour chacun et applique-la »' },
-            bulba: { titre: null, expansion: x.E, motifTitres: `aucune page de set chez nous : nom d'expansion lu sur les pages de cartes (creer-sets-par-pages-de-cartes.js)` },
-            collecteLe: le, version: 1 } }, { upsert: true })).upsertedCount;
+        setsCrees += await insererSetNeuf(S, docDe(x), nommes);
         // la CARTE d'abord, la ligne ensuite (une panne entre les deux ne laisse pas une ligne dont la carte n'a pas le slug) ; les métacartes
         // comme creer-sets-sans-page.js les pose
         const parCarte = new Map(); for (const j of x.joints) { const v = parCarte.get(j.carte._id) || parCarte.set(j.carte._id, { ids: [], metas: new Set() }).get(j.carte._id); v.ids.push(j.p.idProduct); if (j.p.idMetacard != null) v.metas.add(j.p.idMetacard); }
