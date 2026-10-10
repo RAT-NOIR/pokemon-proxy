@@ -25,7 +25,10 @@ const BANCS = {
     'test-publication-sans-trou.js': 'ce banc : fixtures de sets dans la base du banc',
     // test-historique-valeur.js (arrivé par a-histo-valeur) : ouvre la base EN MÉMOIRE `const banc = await ouvrirBanc()` (l.22) ; ses deux connexions
     // (`createConnection(banc.uri, …)`, l.24-25) visent banc.uri et rien d'autre ; ses `insertMany` sur `sets` (l.31) sont des sets FICTIFS dans la base du banc.
-    'test-historique-valeur.js': 'banc de historique-valeur.js : sets fictifs dans la base en mémoire (ouvrirBanc, createConnection(banc.uri))'
+    'test-historique-valeur.js': 'banc de historique-valeur.js : sets fictifs dans la base en mémoire (ouvrirBanc, createConnection(banc.uri))',
+    // test-collecter-logos-officiels.js : `ouvrirBanc()` puis `banc.appliquer()` (qui remplace MONGODB_CARTES_URI par l'URI du banc) avant l'unique
+    // `createConnection(process.env.MONGODB_CARTES_URI)` ; ses `insertOne` sur `sets` sont des sets FICTIFS (Undone-Seal, Scarlet-Violet, Retrait-Test) ; R2 est un faux stockage.
+    'test-collecter-logos-officiels.js': 'banc de collecter-logos-officiels.js : sets fictifs dans la base en mémoire (ouvrirBanc + appliquer), faux R2'
 };
 
 /**
