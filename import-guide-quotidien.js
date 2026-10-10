@@ -144,6 +144,13 @@ async function main() {
             console.log(`${u.matchedCount ? '✅ validateurs HTTP gardés' : '⚠️ la méta ne porte pas ce guide : validateurs NON gardés'} (prochain passage ${u.matchedCount ? 'conditionnel' : 'complet'})`);
         } catch (e) { console.error(`⚠️ validateurs HTTP non gardés (${String(e.message).replace(/mongodb(\+srv)?:\/\/\S+/g, '<uri masquée>').slice(0, 120)}) : le prochain passage retéléchargera`); }
     }
+    // 6. L'HISTORIQUE DE VALEUR DES SETS (testeur, 2026-10-08) — seulement après un import RÉUSSI (un « rien de neuf » est sorti plus haut, et un
+    // guide déjà historisé ne réécrit rien). Il ne peut JAMAIS faire échouer l'import : historiserApresImport ne lève pas, le code de sortie reste
+    // celui de l'import. collecte-cartes/historique-valeur.js
+    if (res.status === 0) {
+        try { await require('./collecte-cartes/historique-valeur').historiserApresImport({ base: BASE, mongoose, r2 }); }
+        catch (e) { console.error(`⚠️ historique de valeur NON écrit (l'import du guide, lui, a réussi) : ${String(e.message).slice(0, 200)}`); }
+    }
     process.exit(res.status ?? 1);
 }
 
