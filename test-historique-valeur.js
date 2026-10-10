@@ -6,7 +6,9 @@ const mongoose = require('mongoose');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 let echecs = 0, n = 0;
-const verifier = (nom, obtenu, attendu) => { n++; const ok = JSON.stringify(obtenu) === JSON.stringify(attendu); if (!ok) echecs++; console.log(`${ok ? '✅' : '❌'} ${nom} : ${JSON.stringify(obtenu)}${ok ? '' : ` (attendu ${JSON.stringify(attendu)})`}`); };
+// JSON.stringify change Infinity et NaN en null : ils sont repérés AVANT la comparaison et ne passent jamais pour un null
+const nonFini = v => typeof v === 'number' ? (v === Infinity || v === -Infinity || Number.isNaN(v)) : (v && typeof v === 'object' ? Object.values(v).some(nonFini) : false);
+const verifier = (nom, obtenu, attendu) => { n++; const ok = !nonFini(obtenu) && JSON.stringify(obtenu) === JSON.stringify(attendu); if (!ok) echecs++; console.log(`${ok ? '✅' : '❌'} ${nom} : ${JSON.stringify(obtenu)}${ok ? '' : ` (attendu ${JSON.stringify(attendu)})`}`); };
 
 // faux R2 : une Map ; `panne` fait échouer toute écriture
 const fauxR2 = () => {
@@ -117,6 +119,37 @@ const muet = { log() { }, error() { } };
         const garde = new Promise(ok => setTimeout(() => ok({ statut: 'RETENU' }), 5000));
         const rD = await Promise.race([H.historiserApresImport({ base: 'banc_prod', baseCartes: 'banc_cartes', env: envBanc, mongoose, r2: pendu, delaiMs: 300, journal: { log: m => sortiesD.push(m), error: m => sortiesD.push(m) } }), garde]);
         verifier('historique qui ne répond jamais : rendu après le délai (< 3 s), statut « echec », le délai est dit', [rD.statut, Date.now() - t0 < 3000, sortiesD.some(s => /délai/.test(s))], ['echec', true, true]);
+
+        // 5 sexies. LA MESURE lit le jour là où l'_id est fabriqué (un seul exemplaire), sur des lignes de la FORME FINALE (celle que calculerInstantanes produit)
+        const col = cartes.collection('histo_valeur_sets');
+        await col.insertOne({ _id: 'pas-de-jour', valeurCt: 1, produits: 1, produitsValorises: 1, phare: null });
+        const m = await H.mesurerHistorique(col);
+        verifier('mesure : 10 lignes dont 9 datées sur 3 jours, bornes 07 → 09, 1 _id mal formé compté à part avec son exemple',
+            [m.lignes, m.jours, m.premier, m.dernier, m.malformees, m.exempleMalforme], [10, 3, '2026-10-07', '2026-10-09', 1, 'pas-de-jour']);
+        verifier('mesure : le poids par jour est fini (total / 3 jours)', [H.poidsParJour(3000, m.jours), Number.isFinite(H.poidsParJour(3000, m.jours))], [1000, true]);
+        verifier('jourDeLigne : après le DERNIER « | », forme AAAA-MM-JJ exigée (un slug peut porter « | »)', [H.jourDeLigne('a|b|2026-10-07'), H.jourDeLigne('A|2026-13-45x'), H.jourDeLigne('A|2026-10-7'), H.jourDeLigne(42)], ['2026-10-07', null, null, null]);
+        await col.deleteOne({ _id: 'pas-de-jour' });
+        const vide = await H.mesurerHistorique(cartes.collection('collection_vide_banc'));
+        verifier('0 ligne → 0 jour, bornes null', [vide.lignes, vide.jours, vide.premier], [0, 0, null]);
+        // hors JSON.stringify : Object.is distingue null de Infinity et de NaN
+        verifier('zéro jour n\'est jamais un dénominateur : poidsParJour(5000, 0) et (…, vide.jours) sont EXACTEMENT null (Object.is, ni Infinity ni NaN)',
+            [Object.is(H.poidsParJour(5000, 0), null), Object.is(H.poidsParJour(5000, vide.jours), null), Object.is(H.poidsParJour(0, 0), null)], [true, true, true]);
+        verifier('poidsParJour : valeur exacte et finie sur 3 jours (Object.is)', [Object.is(H.poidsParJour(3000, 3), 1000)], [true]);
+
+        // 5 septies. LE VERDICT de --mesure (pure, exportée) : code de sortie et lignes imprimées
+        const vN0 = H.verdictMesure({ lignes: 761, jours: 0, premier: null, dernier: null, malformees: 761, exempleMalforme: 'x' });
+        verifier('verdict : N lignes et 0 jour → code 1, « aucun jour mesurable », non mesurable', [vN0.code, vN0.mesurable, vN0.lignes.some(l => /aucun jour mesurable/.test(l))], [1, false, true]);
+        const v00 = H.verdictMesure({ lignes: 0, jours: 0, premier: null, dernier: null, malformees: 0, exempleMalforme: null });
+        verifier('verdict : 0 ligne → code 0, rien à mesurer, rien à diviser', [v00.code, v00.mesurable, v00.lignes.some(l => /rien à mesurer/.test(l))], [0, false, true]);
+        const vOk = H.verdictMesure({ lignes: 761, jours: 1, premier: '2026-10-10', dernier: '2026-10-10', malformees: 0, exempleMalforme: null });
+        verifier('verdict : cas normal → code 0, mesurable, aucune ligne d\'alerte', [vOk.code, vOk.mesurable, vOk.lignes], [0, true, []]);
+        const vMal = H.verdictMesure({ lignes: 5, jours: 2, premier: 'a', dernier: 'b', malformees: 1, exempleMalforme: 'zz' });
+        verifier('verdict : des _id mal formés avec des jours → code 0, mesurable, l\'exemple est imprimé', [vMal.code, vMal.mesurable, vMal.lignes.length, /zz/.test(vMal.lignes[0])], [0, true, 1, true]);
+        await col.insertOne({ _id: 'sans-forme', valeurCt: 1, produits: 1, produitsValorises: 1, phare: null });
+        await col.deleteMany({ _id: /\|/ });
+        const seul = await H.mesurerHistorique(col);
+        verifier('des lignes mais AUCUN jour reconnu : jours 0, malformées 1 (la sonde ne devine pas)', [seul.lignes, seul.jours, seul.malformees], [1, 0, 1]);
+        await col.deleteOne({ _id: 'sans-forme' });
 
         // 6. fonctions pures
         const p = H.calculerInstantanes({ sets: [{ _id: 'X', nomAffichage: 'X', idExpansion: [9] }], produits: [{ idProduct: 1, idExpansion: 9, name: 'a' }], tendances: new Map([[1, 0.1], [2, 0.2]]), jour: '2026-10-07', guideDu: G1 });
