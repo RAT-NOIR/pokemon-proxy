@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Référence comparée par v2/test/test-logos-sortie-identique.js : jamais réécrite par core.autocrlf (ce seul fichier, aucun autre du dossier)
+v2/test/fixtures/logos-sortie-avant.json -text
