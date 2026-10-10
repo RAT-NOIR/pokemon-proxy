@@ -27,12 +27,9 @@ const mo = n => `${(n / 1e6).toFixed(2)} Mo`;
         if (mesure) {
             const col = cartes.db.collection(H.COLLECTION);
             const M = await H.mesurerHistorique(col);   // le jour se lit par H.jourDeLigne, là où l'_id est fabriqué (lecture seule : find sur { _id: 1 })
-            if (!M.lignes) { console.log(`aucune ligne dans ${H.COLLECTION} : rien à mesurer (l'historique n'a pas démarré)`); return; }
-            if (M.malformees) console.log(`⚠️ ${M.malformees} ligne(s) dont l'_id n'a pas la forme « …|AAAA-MM-JJ », comptées à part (exemple : ${M.exempleMalforme})`);
-            if (!M.jours) {
-                console.log(`🔴 ${M.lignes} lignes et AUCUN jour reconnu : aucun jour mesurable, aucune division faite (la sonde ne devine pas)`);
-                process.exitCode = 1; return;
-            }
+            const V = H.verdictMesure(M);   // la décision (code de sortie, alertes) est testée : test-historique-valeur.js
+            for (const l of V.lignes) console.log(l);
+            if (!V.mesurable) { process.exitCode = V.code; return; }
             const st = await cartes.db.command({ collStats: H.COLLECTION });
             const cles = await r2.listerPrefixe(bucket, 'historique-prix/');
             let octets = 0; for (const c of cles) octets += (await r2.lireBinaire(bucket, c)).length;

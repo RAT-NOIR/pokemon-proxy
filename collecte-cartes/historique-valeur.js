@@ -36,6 +36,16 @@ function jourDeLigne(id) {
 /** Pure. Octets par jour ; 0 jour n'est jamais un dénominateur → null (jamais Infinity ni NaN). */
 const poidsParJour = (octets, jours) => (Number.isInteger(jours) && jours > 0 && Number.isFinite(octets) ? octets / jours : null);
 
+/** Pure. La décision de `--mesure` : { code de sortie, lignes à imprimer avant la mesure, mesurable }. Zéro jour n'est jamais un dénominateur : avec des lignes mais
+ *  aucun jour reconnu → code 1 (rouge), aucune division ; sans ligne → code 0, rien à mesurer. */
+function verdictMesure(M) {
+    const lignes = [];
+    if (!M.lignes) return { code: 0, mesurable: false, lignes: [`aucune ligne dans ${COLLECTION} : rien à mesurer (l'historique n'a pas démarré)`] };
+    if (M.malformees) lignes.push(`⚠️ ${M.malformees} ligne(s) dont l'_id n'a pas la forme « …|AAAA-MM-JJ », comptées à part (exemple : ${M.exempleMalforme})`);
+    if (!M.jours) { lignes.push(`🔴 ${M.lignes} lignes et AUCUN jour reconnu : aucun jour mesurable, aucune division faite (la sonde ne devine pas)`); return { code: 1, mesurable: false, lignes }; }
+    return { code: 0, mesurable: true, lignes };
+}
+
 /** LECTURE SEULE. Compte les lignes et leurs jours distincts, par jourDeLigne, en Node sur les seuls `_id` (projection { _id: 1 } : ~280 000 _id à 365 jours,
  *  quelques Mo ; une agrégation Mongo devrait redire la forme de l'_id en regex et en ferait une seconde définition). */
 async function mesurerHistorique(col) {
@@ -157,4 +167,4 @@ async function historiserApresImportSansDelai({ base, baseCartes, env, mongoose,
     }
 }
 
-module.exports = { jourDeLigne, poidsParJour, mesurerHistorique, historiserApresImport, COLLECTION, prefixe, tendanceValide, calculerInstantanes, fichierDuJour, preparer, historiserGuide, historiserSansEchec };
+module.exports = { verdictMesure, jourDeLigne, poidsParJour, mesurerHistorique, historiserApresImport, COLLECTION, prefixe, tendanceValide, calculerInstantanes, fichierDuJour, preparer, historiserGuide, historiserSansEchec };
