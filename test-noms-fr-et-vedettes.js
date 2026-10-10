@@ -59,7 +59,7 @@ egal('32 jamais le set lui-même', visuelAutreTirage([{ set: 'S', cleR2: 's' }],
 egal('33 source préférée à tirage égal', visuelAutreTirage([{ set: 'A', cleR2: 'a', source: 'bulbapedia' }, { set: 'C', cleR2: 'c', source: 'tcgdex' }], sets.get('S'), sets)?.cleR2, 'c');
 
 // --- la fiche du set (règle du SITE, importée) et le classement de secours (2026-10-07, nuit) ---
-const { regleDuSite, fichesDesProduits, ordreDeSecours } = require('./exporter-donnees-logos-site');
+const { regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE, noterRaretesHorsTable, messageRaretesHorsTable } = require('./exporter-donnees-logos-site');
 (async () => {
     const regle = await regleDuSite();
     const set = { _id: 'S', tirage: 'jp', region: 'jp', code: 'XY', bulba: { expansion: 'Exp' } };
@@ -76,6 +76,12 @@ const { regleDuSite, fichesDesProduits, ordreDeSecours } = require('./exporter-d
     egal('39 secours : rareté décroissante, puis numéro', [e(null, '2', 1), e('SR', '9', 2), e('HR', '50', 3), e('SR', '3', 4), e(null, '10', 5)].sort(ordreDeSecours).map(x => x.idProduct), [3, 4, 2, 1, 5]);
     egal('40 une rareté hors table se range avec « sans rareté »', [e('XYZ', '5', 1), e(null, '3', 2), e('RR', '9', 3)].sort(ordreDeSecours).map(x => x.idProduct), [3, 2, 1]);
     egal('41 sans numéro après les numérotées', [e(null, null, 1), e(null, '7', 2)].sort(ordreDeSecours).map(x => x.idProduct), [2, 1]);
+    // 2026-10-10 : « None » (TCGdex, carte sans rareté imprimée) se range au rang d'une rareté absente ; une autre rareté inconnue arrête toujours l'export
+    egal('45 « None » : après RR, à égalité avec sans rareté (départage par numéro)', [e('None', '5', 1), e(null, '3', 2), e('RR', '9', 3), e('None', '1', 4), e('HR', '50', 5)].sort(ordreDeSecours).map(x => x.idProduct), [5, 3, 4, 2, 1]);
+    egal('46 « None » n\'est pas une rareté hors table', Object.keys(noterRaretesHorsTable({}, [e('None', '1', 1), e('HR', '2', 2), e(null, '3', 3)], 'S')), []);
+    egal('47 une rareté inventée (« ZZ ») est notée avec son set', Object.entries(noterRaretesHorsTable({}, [e('None', '1', 1), e('ZZ', '2', 2)], 'S')).map(([r, ss]) => [r, [...ss]]), [['ZZ', ['S']]]);
+    egal('48 le message d\'arrêt nomme « ZZ » et le set', messageRaretesHorsTable(noterRaretesHorsTable({}, [e('ZZ', '2', 2)], 'S')).startsWith('raretés hors de RANG_RARETE dans un classement de secours : ZZ (S)'), true);
+    egal('49 RANG_RARETE : HR 3, SR 2, RR 1, None 0, rien d\'autre', RANG_RARETE, { HR: 3, SR: 2, RR: 1, None: 0 });
     // (relecture) la garde de langue du SITE avant le choix du visuel : un scan artofpkm (japonais) ne sert jamais un set intl
     const admisIntl = m => regle.visuelAdmisPourLaRegion(m, 'intl');
     egal('42 un scan japonais d\'artofpkm sur un set intl : aucun visuel', visuelDuProduit([{ set: 'S', cleR2: 'artofpkm/6/15.webp', numero: '12', w: 600, h: 825 }], 'S', '12', { admis: admisIntl }), null);
