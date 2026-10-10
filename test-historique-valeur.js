@@ -118,6 +118,23 @@ const muet = { log() { }, error() { } };
         const rD = await Promise.race([H.historiserApresImport({ base: 'banc_prod', baseCartes: 'banc_cartes', env: envBanc, mongoose, r2: pendu, delaiMs: 300, journal: { log: m => sortiesD.push(m), error: m => sortiesD.push(m) } }), garde]);
         verifier('historique qui ne répond jamais : rendu après le délai (< 3 s), statut « echec », le délai est dit', [rD.statut, Date.now() - t0 < 3000, sortiesD.some(s => /délai/.test(s))], ['echec', true, true]);
 
+        // 5 sexies. LA MESURE lit le jour là où l'_id est fabriqué (un seul exemplaire), sur des lignes de la FORME FINALE (celle que calculerInstantanes produit)
+        const col = cartes.collection('histo_valeur_sets');
+        await col.insertOne({ _id: 'pas-de-jour', valeurCt: 1, produits: 1, produitsValorises: 1, phare: null });
+        const m = await H.mesurerHistorique(col);
+        verifier('mesure : 10 lignes dont 9 datées sur 3 jours, bornes 07 → 09, 1 _id mal formé compté à part avec son exemple',
+            [m.lignes, m.jours, m.premier, m.dernier, m.malformees, m.exempleMalforme], [10, 3, '2026-10-07', '2026-10-09', 1, 'pas-de-jour']);
+        verifier('mesure : le poids par jour est fini (total / 3 jours)', [H.poidsParJour(3000, m.jours), Number.isFinite(H.poidsParJour(3000, m.jours))], [1000, true]);
+        verifier('jourDeLigne : après le DERNIER « | », forme AAAA-MM-JJ exigée (un slug peut porter « | »)', [H.jourDeLigne('a|b|2026-10-07'), H.jourDeLigne('A|2026-13-45x'), H.jourDeLigne('A|2026-10-7'), H.jourDeLigne(42)], ['2026-10-07', null, null, null]);
+        await col.deleteOne({ _id: 'pas-de-jour' });
+        const vide = await H.mesurerHistorique(cartes.collection('collection_vide_banc'));
+        verifier('zéro jour n\'est jamais un dénominateur : 0 ligne → 0 jour, bornes null ; poidsParJour(…, 0) = null (ni Infinity ni NaN)', [vide.lignes, vide.jours, vide.premier, H.poidsParJour(5000, 0), H.poidsParJour(5000, vide.jours)], [0, 0, null, null, null]);
+        await col.insertOne({ _id: 'sans-forme', valeurCt: 1, produits: 1, produitsValorises: 1, phare: null });
+        await col.deleteMany({ _id: /\|/ });
+        const seul = await H.mesurerHistorique(col);
+        verifier('des lignes mais AUCUN jour reconnu : jours 0, malformées 1 (la sonde ne devine pas)', [seul.lignes, seul.jours, seul.malformees], [1, 0, 1]);
+        await col.deleteOne({ _id: 'sans-forme' });
+
         // 6. fonctions pures
         const p = H.calculerInstantanes({ sets: [{ _id: 'X', nomAffichage: 'X', idExpansion: [9] }], produits: [{ idProduct: 1, idExpansion: 9, name: 'a' }], tendances: new Map([[1, 0.1], [2, 0.2]]), jour: '2026-10-07', guideDu: G1 });
         verifier('somme en centimes (pas de dérive flottante) : 0,1 valeur 0,1', [p[0].valeurCt, p[0].produitsValorises], [10, 1]);

@@ -26,17 +26,25 @@ const mo = n => `${(n / 1e6).toFixed(2)} Mo`;
         await r2.verifierBucket(bucket);
         if (mesure) {
             const col = cartes.db.collection(H.COLLECTION);
-            const n = await col.countDocuments({});
-            if (!n) { console.log(`aucune ligne dans ${H.COLLECTION} : rien à mesurer (l'historique n'a pas démarré)`); return; }
-            const jours = await col.distinct('jour');
+            const M = await H.mesurerHistorique(col);   // le jour se lit par H.jourDeLigne, là où l'_id est fabriqué (lecture seule : find sur { _id: 1 })
+            if (!M.lignes) { console.log(`aucune ligne dans ${H.COLLECTION} : rien à mesurer (l'historique n'a pas démarré)`); return; }
+            if (M.malformees) console.log(`⚠️ ${M.malformees} ligne(s) dont l'_id n'a pas la forme « …|AAAA-MM-JJ », comptées à part (exemple : ${M.exempleMalforme})`);
+            if (!M.jours) {
+                console.log(`🔴 ${M.lignes} lignes et AUCUN jour reconnu : aucun jour mesurable, aucune division faite (la sonde ne devine pas)`);
+                process.exitCode = 1; return;
+            }
             const st = await cartes.db.command({ collStats: H.COLLECTION });
             const cles = await r2.listerPrefixe(bucket, 'historique-prix/');
             let octets = 0; for (const c of cles) octets += (await r2.lireBinaire(bucket, c)).length;
-            console.log(`\n════ POIDS RÉEL (dénominateur : ${n} lignes, ${jours.length} jours distincts : ${jours.sort()[0]} → ${jours.sort().at(-1)}) ════`);
-            console.log(`   ${H.COLLECTION} : données ${mo(st.size)} · stockage ${mo(st.storageSize)} · index ${mo(st.totalIndexSize)} · total ${mo(st.storageSize + st.totalIndexSize)}`);
-            console.log(`   par jour : ${mo((st.storageSize + st.totalIndexSize) / jours.length)} → à 365 jours ≈ ${mo((st.storageSize + st.totalIndexSize) / jours.length * 365)}`);
-            console.log(`   R2 historique-prix/ : ${cles.length} fichiers, ${mo(octets)} (${mo(octets / Math.max(1, cles.length))} par jour → ≈ ${mo(octets / Math.max(1, cles.length) * 365)} à 365 jours)`);
-            const hors = jours.length !== cles.length ? `🔴 ${jours.length} jours en base contre ${cles.length} fichiers R2` : '✅ autant de jours en base que de fichiers R2';
+            const total = st.storageSize + st.totalIndexSize, parJour = H.poidsParJour(total, M.jours);
+            console.log(`\n════ POIDS RÉEL (dénominateur : ${M.lignes} lignes, ${M.jours} jours distincts : ${M.premier} → ${M.dernier}) ════`);
+            console.log(`   ${H.COLLECTION} : données ${mo(st.size)} · stockage ${mo(st.storageSize)} · index ${mo(st.totalIndexSize)} · total ${mo(total)}`);
+            console.log(`   par jour : ${mo(parJour)} → à 365 jours ≈ ${mo(parJour * 365)}`);
+            const parFichier = H.poidsParJour(octets, cles.length);
+            console.log(parFichier === null
+                ? `   R2 historique-prix/ : aucun fichier, aucun jour mesurable côté R2`
+                : `   R2 historique-prix/ : ${cles.length} fichiers, ${mo(octets)} (${mo(parFichier)} par jour → ≈ ${mo(parFichier * 365)} à 365 jours)`);
+            const hors = M.jours !== cles.length ? `🔴 ${M.jours} jours en base contre ${cles.length} fichiers R2` : '✅ autant de jours en base que de fichiers R2';
             console.log(`   ${hors}`);
             const s = await cartes.db.command({ dbStats: 1 });
             console.log(`   base cartes : données ${mo(s.dataSize)} · stockage ${mo(s.storageSize)} · index ${mo(s.indexSize)} (la grappe se lit avec mesurer-taille-bases.js)`);
