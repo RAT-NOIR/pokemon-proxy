@@ -25,7 +25,8 @@ const mongoose = require('mongoose');
 
         await cx.db.collection('sets').insertMany([
             { _id: 'Set-A', idExpansion: 100, code: 'SA', nomAffichage: 'Set A', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set A' } },
-            { _id: 'Set-B', idExpansion: 200, code: 'SB', nomAffichage: 'Set B', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set B' } }]);
+            { _id: 'Set-B', idExpansion: 200, code: 'SB', nomAffichage: 'Set B', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set B' } },
+            { _id: 'Set-JP', idExpansion: 300, code: 'SJ', nomAffichage: 'Set JP', tirage: 'jp', region: 'jp', bulba: { expansion: 'Set JP' } }]);
         await cx.db.collection('cartes').insertMany([
             carte(1, [imp('001')], [im('Set-A', '001', 'c1')]),                                             // du set, tout lu
             carte(2, [imp('002')], []),                                                                     // substitut AVEC mention
@@ -36,12 +37,18 @@ const mongoose = require('mongoose');
             carte(7, [imp('007'), imp('007')], [im('Set-A', '007', 'c7')]),                                 // deux impressions au même numéro (d'accord)
             carte(8, [imp('008'), imp('008', { rarete: 'Holo Rare' })], [im('Set-A', '008', 'c8')]),        // au même numéro, en désaccord sur la rareté
             carte(9, [imp('009')], [im('Set-A', '009', 'c9', { vignette: undefined })]),                    // visuel sans vignette
-            { ...carte(10, [], [im('Set-B', '010', 'orig')]), sets: ['Set-B'] }]);                          // porte le fichier du substitut (cartes/orig.webp)
+            { ...carte(10, [], [im('Set-B', '010', 'orig')]), sets: ['Set-B'] },                            // porte le fichier du substitut (cartes/orig.webp)
+            carte(20, [imp('020')], [im('Set-A', '020', 'c20')]),                                           // produit SANS fiche du site (numéro 999 contredit)
+            carte(21, [imp('021')], []),                                                                    // substitut dont le fichier n'est porté par AUCUNE entrée images
+            { ...carte(22, [{ tirage: 'jp', expansion: 'Set JP', numero: '001', total: '10', rarete: null }], [im('Set-JP', '001', 'jp22', { langue: 'ja', source: 'artofpkm' })]), sets: ['Set-JP'] },   // tirage jp
+            carte(23, [imp('013')], [im('Set-A', '013', 'c23', { langue: 'ja' })])]);                       // scan japonais sur un set intl : refusé par la règle du site
         await cx.db.collection('cartes_produits').insertMany([
             ligne(1001, 1, '001'), ligne(1002, 2, '002', { visuelSubstitut: subst({ mention: MENTION }) }),
             ligne(1003, 3, '003', { visuelSubstitut: subst({}) }), ligne(1004, 4, '004'), ligne(1005, 5, '005'),
-            ligne(1006, 6, '006'), ligne(1007, 7, '007'), ligne(1008, 8, '008'), ligne(1009, 9, '009')]);
-        const metas = [[1001, 5001], [1002, 5002], [1003, 5003], [1004, 5004], [1005, 5005], [1007, 5007], [1008, 5008], [1009, 5009], [9999, 5999]];   // 1006 absent du catalogue ; 9999 sans ligne
+            ligne(1006, 6, '006'), ligne(1007, 7, '007'), ligne(1008, 8, '008'), ligne(1009, 9, '009'),
+            ligne(1010, 20, '999'), ligne(1014, 21, '021', { visuelSubstitut: subst({ cleR2: 'cartes/seul.webp', mention: MENTION }) }),
+            ligne(1012, 22, '001', { idExpansion: 300, slugSet: 'Set-JP' }), ligne(1013, 23, '013')]);
+        const metas = [[1001, 5001], [1002, 5002], [1003, 5003], [1004, 5004], [1005, 5005], [1007, 5007], [1008, 5008], [1009, 5009], [1010, 5010], [1012, 5012], [1013, 5013], [1014, 5014], [9999, 5999]];   // 1006 absent du catalogue ; 9999 sans ligne
         await cp.db.collection('catalogue_produits').insertMany(metas.map(([idProduct, idMetacard]) => ({ idProduct, idMetacard, name: `P${idProduct}` })));
 
         const regle = await X.chargerRegle();
@@ -49,10 +56,14 @@ const mongoose = require('mongoose');
         const { entrees, denominateurs: d } = await lire();
         const e = id => entrees.find(x => x.idProduct === id);
 
-        H.v('dénominateurs : catalogue 9, produits à ligne 9, catalogue sans ligne 1', [d.catalogue, d.avecLigne, d.sansLigne], [9, 9, 1]);
-        H.v('dénominateurs : du set 5, substitut 2, autre tirage 1, aucun 1 (somme = 9)', [d.duSet, d.substitut, d.autreTirage, d.aucun], [5, 2, 1, 1]);
-        H.v('entrées écrites : 8 (le produit sans visuel n\'est pas écrit)', [entrees.length, d.ecrites], [8, 8]);
+        H.v('dénominateurs : catalogue 13, produits à ligne 13, catalogue sans ligne 1', [d.catalogue, d.avecLigne, d.sansLigne], [13, 13, 1]);
+        H.v('dénominateurs : du set 6, substitut 3, autre tirage 1, aucun 2, sans fiche du site 1 (somme = 13)', [d.duSet, d.substitut, d.autreTirage, d.aucun, d.sansFicheDuSite], [6, 3, 1, 2, 1]);
+        H.v('entrées écrites : 10 (ni le produit sans visuel, ni le produit sans fiche)', [entrees.length, d.ecrites], [10, 10]);
         H.v('1005 (aucun visuel) absent du fichier', e(1005), undefined);
+        H.v('1010 (sans fiche du site) absent du fichier : la politique des logos, pas un repli sur numeroFiche', e(1010), undefined);
+        H.v('1012 tirage jp : visuel japonais admis par la règle du site pour un set jp', [e(1012).visuel, e(1012).vignette.cle, e(1012).setNom], ['du-set', 'vignettes/jp22.webp', 'Set JP']);
+        H.v('1013 scan japonais sur un set intl : refusé par la règle du site, donc aucun visuel', e(1013), undefined);
+        H.v('1014 substitut dont le fichier n\'est porté par aucune entrée images : vignette absente, jamais devinée', [e(1014).visuel, 'vignette' in e(1014), e(1014).grande], ['substitut', false, { cle: 'cartes/seul.webp', w: 600, h: 838 }]);
 
         H.v('1001 du set : vignette lue sur la vignette, grande = l\'original', [e(1001).visuel, e(1001).mention, e(1001).vignette, e(1001).grande],
             ['du-set', null, { cle: 'vignettes/c1.webp', w: 200, h: 279 }, { cle: 'cartes/c1.webp', w: 600, h: 838 }]);
@@ -70,8 +81,18 @@ const mongoose = require('mongoose');
 
         // le fichier passe preparer() de l'importeur : refus attendus, et seulement eux
         const p = Imp.preparer(Imp.entreesDuFichier(JSON.parse(JSON.stringify(entrees))));
-        H.v('preparer() : 8 lus, 6 importés, 2 refusés', [p.lus, p.importes, p.refuses], [8, 6, 2]);
-        H.v('preparer() : motifs = substitut sans mention + vignette absente, rien d\'autre', p.motifs, { 'visuel de substitution sans mention': 1, 'vignette absente': 1 });
+        H.v('preparer() : 10 lus, 7 importés, 3 refusés', [p.lus, p.importes, p.refuses], [10, 7, 3]);
+        H.v('preparer() : motifs = substitut sans mention + 2 vignettes absentes (1009, 1014), rien d\'autre', p.motifs, { 'visuel de substitution sans mention': 1, 'vignette absente': 2 });
+
+        // UN SEUL exemplaire de la décision de visuel : la fonction des logos, paramétrée (jamais copiée) sur la politique du substitut sans mention
+        const L = require('../../exporter-donnees-logos-site');
+        const base = { ligne: { carteId: 3, visuelSubstitut: { cleR2: 'x.webp', set: 'Set-B' } }, carte: { images: [] }, set: { _id: 'Set-A', tirage: 'intl' },
+            fiche: { carteId: 3, numero: '003' }, regle, setsBase: new Map([['Set-B', { nomAffichage: 'Set B' }]]) };
+        H.v('choisirVisuel, politique repli (logos) : mention de repli', L.choisirVisuel({ ...base, substitutSansMention: 'repli' }).mention, 'Visuel de la carte d\'origine (Set B) — pas celui de ce produit');
+        H.v('choisirVisuel, politique refus (v2) : mention null, rien d\'inventé', L.choisirVisuel({ ...base, substitutSansMention: 'refus' }).mention, null);
+        let pol = null; try { L.choisirVisuel({ ...base }); } catch (x) { pol = x.message; }
+        H.v('choisirVisuel sans politique : lève (le choix est nommé, jamais un défaut)', /substitutSansMention/.test(pol || ''), true);
+        H.v('l\'exporteur v2 n\'a plus de copie de la décision (il appelle choisirVisuel)', /choisirVisuel\(/.test(require('fs').readFileSync(require.resolve('../migrations/exporter-visuels'), 'utf8')) && !/visuelAutreTirage\(/.test(require('fs').readFileSync(require.resolve('../migrations/exporter-visuels'), 'utf8')), true);
         H.v('le résumé de l\'exporteur reprend celui de l\'importeur', X.resumer({ entrees, denominateurs: d }, Imp).includes(Imp.resume(p)), true);
 
         // une règle du site introuvable LÈVE (jamais un repli)

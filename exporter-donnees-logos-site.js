@@ -69,6 +69,41 @@ function visuelAutreTirage(images, set, setsBase) {
     c.sort((a, b) => { const x = rang(a), y = rang(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return String(x[3]).localeCompare(String(y[3])) || nNum(a) - nNum(b) || String(a.cleR2).localeCompare(String(b.cleR2)); });
     return c[0] ?? null;
 }
+/**
+ * LE CHOIX DU VISUEL D'UN PRODUIT — UN SEUL exemplaire, pour l'export des logos et pour l'export des visuels de l'API v2 (§21 bis).
+ * La fiche du site d'abord (un produit sans fiche du set n'a pas de visuel à montrer : `sansFiche`), puis, dans l'ordre : le visuel de la fiche dans
+ * le set (parmi ceux que le site ADMET pour la région du set), le substitut du produit, le visuel d'un AUTRE tirage (seulement si le set n'a AUCUN
+ * visuel admis). Un visuel qui n'est pas celui du set porte TOUJOURS une mention (sauf `refus`, ci-dessous).
+ * `substitutSansMention` (obligatoire, jamais un défaut) : ce qu'on fait d'un substitut dont `mention` manque —
+ *   'repli' : les logos posent une mention de repli (« Visuel de la carte d'origine (<set>) — pas celui de ce produit ») ;
+ *   'refus' : la v2 n'invente rien ; la mention reste null (ou le texte tel quel s'il est lisible), et l'importeur refuse l'entrée (il exige une mention non vide).
+ * @returns { sansFiche } | { im, visuel, mention, duSetNonDesigne } — `duSetNonDesigne` : le set a un visuel admis, mais aucun ne désigne CE numéro.
+ */
+function choisirVisuel({ ligne: l, carte: c, set: s, fiche, regle, setsBase, substitutSansMention }) {
+    if (substitutSansMention !== 'repli' && substitutSansMention !== 'refus') throw new Error(`choisirVisuel : substitutSansMention doit valoir 'repli' ou 'refus' (lu : ${JSON.stringify(substitutSansMention)})`);
+    if (!fiche || fiche.carteId !== l.carteId) return { sansFiche: true, im: null, visuel: null, mention: null, duSetNonDesigne: false };
+    const admis = m => regle.visuelAdmisPourLaRegion(m, s.tirage ?? s.region);
+    // le visuel de la FICHE : celui de son numéro (une fiche « n° ? » ne contredit aucun visuel du set — visuelDuProduit), parmi les
+    // visuels que le site ADMET pour la région du set
+    let im = visuelDuProduit(c.images, s._id, fiche.numero, { admis, normaliser: regle.normaliserNumero }), visuel = 'du-set', mention = null;
+    const admisDuSet = (c.images || []).some(i => i?.set === s._id && i.cleR2 && admis(i));
+    const duSetNonDesigne = !im && admisDuSet;
+    // (relecture) un visuel qui n'est pas celui du set porte TOUJOURS sa mention
+    if (!im && l.visuelSubstitut?.cleR2) {
+        im = l.visuelSubstitut; visuel = 'substitut';
+        mention = substitutSansMention === 'repli'
+            ? (l.visuelSubstitut.mention ?? `Visuel de la carte d'origine (${setsBase.get(l.visuelSubstitut.set)?.nomAffichage ?? l.visuelSubstitut.set ?? '?'}) — pas celui de ce produit`)
+            : (typeof l.visuelSubstitut.mention === 'string' && l.visuelSubstitut.mention.trim() ? l.visuelSubstitut.mention.trim() : null);
+    }
+    if (!im && !admisDuSet) {
+        const a = visuelAutreTirage(c.images, s, setsBase);
+        if (a) { im = a; visuel = 'autre-tirage'; mention = mentionAutreTirage(a, setsBase); }
+    }
+    return { im, visuel, mention, duSetNonDesigne };
+}
+function mentionAutreTirage(a, setsBase) {
+    return `Visuel de la même carte dans un autre tirage (${setsBase.get(a.set)?.nomAffichage ?? a.set}${a.numero ? ` n°${a.numero}` : ''}) — pas celui de ce set`;
+}
 // LA FICHE DU SITE, IMPORTÉE — jamais recopiée (§21 bis). (2026-10-07, nuit) ma copie de la règle comparait le numéro du produit à celui
 // de l'impression : une impression du set SANS numéro (vieux sets japonais, Expansion Pack) excluait tous ses produits, alors que le site
 // les sert sur une fiche « n° ? » (`fichesDuDocument`, `produitsDeLaFiche` : une fiche sans numéro garde ses produits). Node 24 lit le
@@ -119,7 +154,7 @@ function ordreDeSecours(a, b) {
     return rangRarete(b.rarete) - rangRarete(a.rarete) || cleNumeroTri(a.numero) - cleNumeroTri(b.numero)
         || String(a.numero ?? '').localeCompare(String(b.numero ?? ''), 'en', { numeric: true }) || a.idProduct - b.idProduct;
 }
-module.exports = { visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
+module.exports = { visuelDuProduit, prixDe, tamponProbable, visuelAutreTirage, choisirVisuel, regleDuSite, fichesDesProduits, ordreDeSecours, RANG_RARETE };
 if (require.main === module) (async () => {
     const sharp = require('sharp');
     const fichier = async rel => { const b = fs.readFileSync(path.join(__dirname, rel)); const m = await sharp(b).metadata(); return { fichier: rel.replace(/\\/g, '/'), cheminAbsolu: path.join(__dirname, rel), sha1: sha1(b), w: m.width, h: m.height }; };
@@ -176,7 +211,6 @@ if (require.main === module) (async () => {
         const docs = await cx.db.collection('cartes').find({ sets: s._id, nomEn: { $type: 'string', $ne: '' } }, { projection: { impressions: 1, 'images.set': 1, 'images.cleR2': 1, 'images.numero': 1 } }).toArray();
         const ids = new Set(docs.map(d => d._id));
         const { fiche: ficheDe, doubles } = fichesDesProduits(regle, s, docs, lignes.filter(l => ids.has(l.carteId) && exps.includes(l.idExpansion)));
-        const admis = m => regle.visuelAdmisPourLaRegion(m, s.tirage ?? s.region);
         const prix = new Map((await prod.db.collection('guide_prix').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, trend: 1, avg: 1, guideDu: 1 } }).toArray()).map(p => [p.idProduct, p]));
         const noms = new Map((await prod.db.collection('catalogue_produits').find({ idProduct: { $in: lignes.map(l => l.idProduct) } }, { projection: { idProduct: 1, name: 1 } }).toArray()).map(p => [p.idProduct, p.name]));
         const cands = [], sansPrix = [], exclus = Object.fromEntries(Object.keys(exclusTotal).map(k => [k, 0]));
@@ -188,19 +222,11 @@ if (require.main === module) (async () => {
             if (c.categorie !== 'pokemon') { exclus[c.categorie ? 'dresseur ou énergie' : 'catégorie inconnue (fiche simple)']++; continue; }
             if (tamponProbable(noms.get(l.idProduct), l.slug)) { exclus['tampon dans le nom']++; continue; }
             const fiche = ficheDe.get(l.idProduct);
-            if (!fiche || fiche.carteId !== l.carteId) { exclus['pas une fiche du set']++; continue; }
+            const choix = choisirVisuel({ ligne: l, carte: c, set: s, fiche, regle, setsBase, substitutSansMention: 'repli' });
+            if (choix.sansFiche) { exclus['pas une fiche du set']++; continue; }
             const p = prix.get(l.idProduct), v = prixDe(p);
-            // le visuel de la FICHE : celui de son numéro (une fiche « n° ? » ne contredit aucun visuel du set — visuelDuProduit), parmi les
-            // visuels que le site ADMET pour la région du set
-            let im = visuelDuProduit(c.images, s._id, fiche.numero, { admis, normaliser: regle.normaliserNumero }), visuel = 'du-set', mention = null;
-            const admisDuSet = (c.images || []).some(i => i?.set === s._id && i.cleR2 && admis(i));
-            if (!im && admisDuSet) sansVisuelSur++;
-            // (relecture) un visuel qui n'est pas celui du set porte TOUJOURS sa mention
-            if (!im && l.visuelSubstitut?.cleR2) { im = l.visuelSubstitut; visuel = 'substitut'; mention = l.visuelSubstitut.mention ?? `Visuel de la carte d'origine (${setsBase.get(l.visuelSubstitut.set)?.nomAffichage ?? l.visuelSubstitut.set ?? '?'}) — pas celui de ce produit`; }
-            if (!im && !admisDuSet) {
-                const a = visuelAutreTirage(c.images, s, setsBase);
-                if (a) { im = a; visuel = 'autre-tirage'; mention = `Visuel de la même carte dans un autre tirage (${setsBase.get(a.set)?.nomAffichage ?? a.set}${a.numero ? ` n°${a.numero}` : ''}) — pas celui de ce set`; }
-            }
+            if (choix.duSetNonDesigne) sansVisuelSur++;
+            const { im, visuel, mention } = choix;
             if (!im) { exclus['aucun visuel']++; continue; }
             // le numéro de la FICHE (celle que le site construit), jamais celui du produit quand la fiche n'en a pas
             const entree = { idProduct: l.idProduct, produit: noms.get(l.idProduct) ?? null, carteId: l.carteId, carte: c.nomEn, numero: fiche.numero,

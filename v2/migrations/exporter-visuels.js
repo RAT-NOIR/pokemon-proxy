@@ -7,8 +7,8 @@
 //              une vignette absente laisse le champ absent (l'importeur refuse, « vignette absente »)
 //   grande     l'ORIGINAL : cartes.images[].cleR2, w, h ; null si une dimension manque (jamais devinée)
 //   visuel/mention  la logique du SITE, IMPORTÉE (rat-market-site/lib/*.ts : fichesDuDocument, setParImpression, produitsDeLaFiche,
-//              visuelAdmisPourLaRegion, normaliserNumero, cardmarketUrl) + les fonctions de exporter-donnees-logos-site.js (visuelDuProduit,
-//              visuelAutreTirage, fichesDesProduits, mentionAutreTirage) : du set, puis substitut (sa mention, jamais inventée), puis autre tirage
+//              visuelAdmisPourLaRegion, normaliserNumero, cardmarketUrl) + UNE fonction de exporter-donnees-logos-site.js, partagée avec l'export des
+//              logos : choisirVisuel (du set, puis substitut, puis autre tirage) — politique v2 : substitut sans mention = 'refus' (jamais inventée)
 //   numero     cartes_produits.numeroFiche ; rarete/total : les impressions de la carte (tirage et expansion du set) AU numéro de la fiche ;
 //              deux impressions au même numéro qui se CONTREDISENT → null (la règle du site garde la première : ici, aucune des deux n'est crue)
 //   idMetacard catalogue_produits (production, lecture) ; null si le produit n'y est pas
@@ -27,8 +27,6 @@ async function chargerRegle({ importer = f => import(require('url').pathToFileUR
     if (typeof C?.cardmarketUrl !== 'function') throw new Error(`cardmarketUrl absent de ${SITE_LIB} — l'export s'arrête (jamais un repli)`);
     return { ...base, cardmarketUrl: C.cardmarketUrl };
 }
-// La mention d'un visuel d'AUTRE TIRAGE : même texte que exporter-donnees-logos-site.js (l. 202), dont le fichier n'est pas touché ici — si l'un change, l'autre aussi.
-const mentionAutreTirage = (a, setsBase) => `Visuel de la même carte dans un autre tirage (${setsBase.get(a.set)?.nomAffichage ?? a.set}${a.numero ? ` n°${a.numero}` : ''}) — pas celui de ce set`;
 function verifierRegle(regle) {
     for (const k of REGLE_REQUISE) if (!regle || typeof regle[k] !== 'function') throw new Error(`règle du site absente : ${k} — l'export s'arrête (jamais un repli)`);
 }
@@ -84,7 +82,7 @@ async function exporter({ cartes, prod, regle, journal = () => { } }) {
         fiches.set(id, L.fichesDesProduits(regle, s, membres, ls.filter(l => ids.has(l.carteId) && exps(s).includes(l.idExpansion))).fiche);
     }
     const choisir = l => {
-        const cs = candidats(l).map(s => ({ s, f: fiches.get(s._id)?.get(l.idProduct), rang: 0 }));
+        const cs = candidats(l).map(s => ({ s, f: fiches.get(s._id)?.get(l.idProduct) }));
         const avec = cs.filter(x => x.f && x.f.carteId === l.carteId);
         return { ...(avec[0] || cs.find(x => exps(x.s).includes(l.idExpansion)) || cs[0] || {}), plusieurs: cs.length > 1 };
     };
@@ -100,14 +98,12 @@ async function exporter({ cartes, prod, regle, journal = () => { } }) {
         if (!c) { d.aucun++; d.aucunDetail['carte absente']++; continue; }
         if (!s) { d.aucun++; d.aucunDetail['aucun set candidat']++; continue; }
         const tirage = s.tirage ?? s.region, noms = [].concat(s.bulba?.expansion ?? []);
-        const fiche = f && f.carteId === l.carteId ? f : null;
-        if (!fiche) d.sansFicheDuSite++;
-        const admis = m => regle.visuelAdmisPourLaRegion(m, tirage);
-        let im = L.visuelDuProduit(c.images, s._id, fiche ? fiche.numero : (l.numeroFiche ?? null), { admis, normaliser: regle.normaliserNumero });
-        let visuel = 'du-set', mention = null;
-        const admisDuSet = (c.images || []).some(i => i?.set === s._id && i.cleR2 && admis(i));
-        if (!im && l.visuelSubstitut?.cleR2) { im = l.visuelSubstitut; visuel = 'substitut'; mention = texte(l.visuelSubstitut.mention); }
-        if (!im && !admisDuSet) { const a = L.visuelAutreTirage(c.images, s, setsBase); if (a) { im = a; visuel = 'autre-tirage'; mention = mentionAutreTirage(a, setsBase); } }
+        // LE choix du visuel : la fonction des logos (un seul exemplaire). Politiques : un produit sans fiche du site est écarté, comme chez les logos
+        // (le site ne le montre sur aucune fiche : aucun visuel « du set » à lui désigner) ; un substitut sans mention reste sans mention et
+        // l'importeur le refuse (il exige une mention non vide), alors que les logos posent un repli.
+        const choix = L.choisirVisuel({ ligne: l, carte: c, set: s, fiche: f, regle, setsBase, substitutSansMention: 'refus' });
+        if (choix.sansFiche) { d.sansFicheDuSite++; continue; }
+        const { im, visuel, mention } = choix;
         if (!im) { d.aucun++; d.aucunDetail['aucun visuel']++; continue; }
         if (visuel === 'du-set') d.duSet++; else if (visuel === 'substitut') d.substitut++; else d.autreTirage++;
 
@@ -139,8 +135,8 @@ async function exporter({ cartes, prod, regle, journal = () => { } }) {
 function resumer({ entrees, denominateurs: d }, Imp = require('./importer-visuels')) {
     const p = Imp.preparer(Imp.entreesDuFichier(JSON.parse(JSON.stringify(entrees))));
     return [`catalogue ${d.catalogue} produits dont ${d.sansLigne} sans ligne cartes_produits ; ${d.avecLigne} lignes cartes_produits`,
-        `visuel du set ${d.duSet} · substitut ${d.substitut} · autre tirage ${d.autreTirage} · aucun ${d.aucun} (${Object.entries(d.aucunDetail).map(([k, n]) => `${k} ${n}`).join(' ; ')}) — somme ${d.duSet + d.substitut + d.autreTirage + d.aucun} sur ${d.avecLigne}`,
-        `entrées écrites ${d.ecrites} ; sans fiche du site ${d.sansFicheDuSite} ; rareté/total contredits (mis à null) ${d.rareteContredite} ; idMetacard absent du catalogue ${d.idMetacardAbsent} ; lignes à plusieurs sets candidats ${d.plusieursSets}`,
+        `visuel du set ${d.duSet} · substitut ${d.substitut} · autre tirage ${d.autreTirage} · aucun ${d.aucun} (${Object.entries(d.aucunDetail).map(([k, n]) => `${k} ${n}`).join(' ; ')}) — sans fiche du site (écartés, comme les logos) ${d.sansFicheDuSite} — somme ${d.duSet + d.substitut + d.autreTirage + d.aucun + d.sansFicheDuSite} sur ${d.avecLigne}`,
+        `entrées écrites ${d.ecrites} ; rareté/total contredits (mis à null) ${d.rareteContredite} ; idMetacard absent du catalogue ${d.idMetacardAbsent} ; lignes à plusieurs sets candidats ${d.plusieursSets}`,
         `l'importeur (preparer) : ${Imp.resume(p)}`].join('\n');
 }
 
