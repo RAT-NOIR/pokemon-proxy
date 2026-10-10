@@ -71,4 +71,33 @@ t('Gastly : nom du produit « Hole-Digging Shovel » ≠ Gastly → contredite ;
     assert.ok(gas && jugerLigne(gas, 'Hole-Digging Shovel', { nomEn: 'Gastly' }, null).verdict);
     assert.strictEqual(jugerLigne(gas, 'Hole-Digging Shovel', { nomEn: 'Hole-Digging Shovel' }, null).verdict, null);
 });
+// ---- Garchomp LV.X 676475 (feu vert nommé du 2026-10-08, tour 2) : même preuve, même garde que les 7 autres ----
+const GL = DECISIONS['2026-10-08d'];
+t('2026-10-08d : exactement UNE ligne, 154845|676475, preuve attaques+nom (autre 71777), liste fermée', () => {
+    assert.ok(GL, 'décision absente');
+    assert.deepStrictEqual(GL.map(l => l.id), ['154845|676475']);
+    // 'nom+attaques' ne tiendrait PAS ici : le nom du produit décomposé (« Garchomp LV.X C ») a pour préfixe le nom de la carte 154845
+    // (« Garchomp »), la règle du préfixe l'exempte — c'est 'attaques+nom' (les DEUX témoins rejoués) qui contredit, avec l'autre carte.
+    assert.strictEqual(GL[0].preuve, 'attaques+nom');
+    assert.strictEqual(GL[0].autre, 71777);   // « Garchomp C LV.X » (Supreme Victors 145), lue en base : seule carte portant une attaque du produit
+    assert.strictEqual(GL[0].type, 'fiche-contredite-par-les-attaques');
+    assert.ok(GL[0].pourquoi);
+});
+const gl = GL && GL[0];
+const garchompLvx = 'Garchomp [C] LV.X [Healing Breath | Dragon Rush]';
+const notre = { nomEn: 'Garchomp', attaques: [{ nom: 'Jet Headbutt' }, { nom: 'Sand Tomb' }] };
+const autreC = { nomEn: 'Garchomp C LV.X', attaques: [{ nom: 'Dragon Rush' }] };
+t('Garchomp LV.X : les attaques désignent 71777 (1 contre 0) ET le nom diffère → contredite', () => {
+    assert.ok(gl && jugerLigne(gl, garchompLvx, notre, autreC).verdict);
+});
+t('Garchomp LV.X : REFUSE si 154845 porte une attaque du produit, si 71777 n\'en porte plus, si l\'autre manque ou si le nom concorde', () => {
+    assert.strictEqual(jugerLigne(gl, garchompLvx, { ...notre, attaques: [{ nom: 'Dragon Rush' }] }, autreC).verdict, null);
+    assert.strictEqual(jugerLigne(gl, garchompLvx, notre, { ...autreC, attaques: [] }).verdict, null);
+    assert.strictEqual(jugerLigne(gl, garchompLvx, notre, null).verdict, null);
+    assert.strictEqual(jugerLigne(gl, garchompLvx, { ...notre, nomEn: 'Garchomp LV.X C' }, autreC).verdict, null);
+});
+t('Les décisions antérieures et Eldegoss restent intacts (8 lignes en 2026-10-08c)', () => {
+    assert.strictEqual(DECISIONS['2026-10-08c'].length, 8);
+    assert.strictEqual(estInterdite('x|481749'), true);
+});
 console.log(`${ok} passés, 0 en échec`);
