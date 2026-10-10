@@ -28,9 +28,12 @@ const journalErreur = (ou, e) => console.error(`❌ [v2 retour-live] ${ou} : ${(
 // réponse (question `repondue` par un candidat, hors lot). Tout le reste bloque : question en attente (son crédit est RÉSERVÉ, il se règle par la réponse ou le balayage),
 // abandonnée (déjà rendue), introuvable, lot (B1b.8 en décide), ligne analyses absente — « je ne peux pas conclure » n'est jamais « tout va bien ».
 async function carteIdentifiee(porteur, scanId, carte) {
-    const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1 } });
+    const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1, statut: 1 } });
     const e = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
     if (!e) return false;
+    // B1b.8 (ruling 4) : la garde reste FERMÉE sur un lot, pour une carte identifiée comme pour une question. Un crédit de lot couvre jusqu'à 10 cartes : un prix manquant
+    // sur l'une n'annule pas la lecture des autres, et rembourser ferait de chaque lot un levier borné par le seul plafond du jour. Seul un lot entièrement introuvable est rendu (lot.js).
+    if (an.statut === 'lot') return false;
     if (e.statut === 'identifiee') return true;
     if (e.statut !== 'a-trancher') return false;
     const q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id });

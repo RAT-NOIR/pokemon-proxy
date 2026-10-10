@@ -92,6 +92,7 @@ const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('.
 const { col } = require('../db');
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
+const { executerLot } = require('./lot');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
@@ -215,7 +216,16 @@ function traiterIdentifier(cfg, deps = {}) {
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
         let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null;
         const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
+        // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
+        // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
+        // n'est consultée que dans la branche à une carte ci-dessous.
+        const modeLot = typeof deps.identifierLot === 'function';
+        let erreurLot = null;
         try {
+            if (modeLot) {
+                const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
+                if (l.erreur) erreurLot = l.erreur; else sortie = l.sortie;
+            } else {
             reqH = {
                 body: { imageUrls: entree.imageUrls, title: annonce.titre, vintedEtat: entree.vintedEtat, prixVinted: entree.prixVinted, vintedUrl: entree.vintedUrl, versionExtension: entree.versionExtension, userId },
                 ip: req.ip, headers: {}, scanIdImpose: scanId,
@@ -290,6 +300,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
                 return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG };
             });
+            }
         } catch (e) {
             // I1 : une exception hors de tout try interne (adaptateur, facturation, creditPourReq…). Le débit est pris : il est RENDU ici (idempotent : une seule fois par scan,
             // la claim rb|scanId), puis on répond SERVEUR avec la facturation qui dit ce qui s'est réellement passé.
@@ -311,9 +322,13 @@ function traiterIdentifier(cfg, deps = {}) {
             const s = await soldeSur();
             return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}) });
         }
-        const { resultat, facturation } = sortie;
         // 7. le solde, relu APRÈS les mouvements
         const solde = await soldeSur();
+        if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
+            return repondreErreur(res, erreurLot.code, undefined, { facturation: erreurLot.facturation, ...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
+                ...(erreurLot.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}), ...(solde !== undefined ? { solde } : {}) });
+        }
+        const { resultat, facturation } = sortie;
         if (resultat.issue === 'panne') {
             return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}) });
         }
@@ -324,12 +339,13 @@ function traiterIdentifier(cfg, deps = {}) {
         // 9. les écritures annexes : sans effet sur la réponse
         try {
             const maintenant = new Date();
-            const cartes = analyse.cartes;
+            // B1b.8 : pour un lot, la ligne `analyses` range les cartes dans l'ordre d'ENTRÉE (cartes[carte] = la carte `index` de /reponse), la réponse dans l'ordre des valeurs
+            const cartes = sortie.cartesEntree || analyse.cartes;
             await col('analyses').insertOne({
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
                 // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
-                    ...(i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}) })),
+                    ...(sortie.lectures ? { lecture: sortie.lectures[i] } : i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}) })),
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
                 ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)

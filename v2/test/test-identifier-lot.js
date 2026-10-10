@@ -1,0 +1,301 @@
+'use strict';
+// Banc B1b.8 — les lots : coût par tranche de 10, ordre par valeur, supplément tout-ou-rien, remboursement poche par poche.
+// Base : la base EN MÉMOIRE du banc (INT2) — jamais la production, ni la grappe, ni R2. Aucun réseau.
+// Les résultats du crochet `deps.identifierLot` sont FABRIQUÉS (formes copiées de capture-reponse.js / adaptateur.js) : aucun chiffre inventé n'est présenté comme réel.
+// Les assertions 1 à 10 du plan (§14, Task B1b.8) sont numérotées ; les suivantes sont les rulings du coordinateur (crochet absent, concurrence, sans-prix, règle G).
+const H = require('./_harnais');
+const path = require('path');
+const mongoose = require('mongoose');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const { lireConfig } = require('../config');
+const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
+const RG = require('../identifier/regle-g');
+const L = require('../identifier/lot');
+const CHARGES = path.join(__dirname, '..', '..', 'verrou', 'charges.json');
+const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
+const ref = n => ({ $ref: `#/components/schemas/${n}` });
+const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' };            // hebdo éteinte : un compte débite accueil puis achete (l'ordre du plan, assertion 10)
+const cfg = lireConfig(BASE);
+const ORIGINE = cfg.origines.extension;
+let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.11.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
+let nCle = 0; const cle = () => `banc-b1b8-${Date.now().toString(36)}-${++nCle}`;
+const raw = n => mongoose.connection.db.collection(n);
+const attendre = ms => new Promise(r => setTimeout(r, ms));
+const sur = f => { try { return f(); } catch (e) { return `💥 ${e && e.message}`; } };
+
+// ── catalogue FABRIQUÉ : (idProduct, tendance|undefined) ; undefined = aucune ligne de guide (prixGuide null)
+const EXP = 990002;
+const semer = async (id, trend) => {
+    await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990200 + (id % 1000) });
+    await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Lot', source: 'cardmarket', certitude: 'exacte' });
+    if (trend !== undefined) await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: trend / 2, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
+    await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990200 + (id % 1000), numero: '001', rarete: 'Common', total: '064', variante: 'normale', setNom: 'Banc Lot', lien: null });
+};
+const P5 = 910001, P20A = 910002, PNOG = 910003, P20B = 910004, P1 = 910005, POOL = Array.from({ length: 40 }, (_, i) => 910100 + i);
+
+// ── résultats FABRIQUÉS du crochet (forme de la chaîne héritée : { statutHttp, corps })
+const carteCorps = (id, ambigu) => ({ idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu });
+const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+const cand = id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Lot', prix: 1, photoUrl: null });
+const aff = id => ({ statutHttp: 200, corps: { success: true, question: null, carte: carteCorps(id, false), etat: ETAT, candidats: [cand(id)], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 } });
+const qst = ids => ({ statutHttp: 200, corps: { success: true, question: { etat: 'en-attente', delaiHeures: 24 }, carte: carteCorps(ids[0], true), etat: ETAT, candidats: ids.map(cand), classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 } });
+const intro = () => ({ statutHttp: 200, corps: { success: false, natureRefus: 'refus-delibere', motifRefus: 'aucun-prix' } });
+const nAff = n => Array.from({ length: n }, (_, i) => aff(POOL[i % POOL.length]));
+const nIntro = n => Array.from({ length: n }, () => intro());
+
+// ── porteurs
+async function inst(o = {}) {
+    const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 3, libelle: 'banc' }), o);
+    await db.col('installations').insertOne(i); return { i, jeton, base: { installationId: i._id } };
+}
+async function compteLie(solde, role) {
+    const c = Object.assign(M.nouveauCompte({ email: `lot${++nCle}@x.fr`, emailCle: `lot${nCle}@x.fr`, motDePasse: {} }), { verifie: true, solde }, role ? { role } : {});
+    await db.col('comptes').insertOne(c);
+    const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'banc' }), { compteId: c._id });
+    await db.col('installations').insertOne(i); return { i, c, jeton, base: { compteId: c._id } };
+}
+const corps = (nImages = 1, o = {}) => ({ contrat: 2, imageUrls: Array(nImages).fill(IMAGE), title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...o });
+const poster = (url, jeton, c = corps(), k = cle()) => H.appel(url, '/api/identifier', { methode: 'POST', corps: c, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': k } });
+const repondre = (url, jeton, b) => H.appel(url, '/api/identifier/reponse', { methode: 'POST', corps: b, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}` } });
+const mouvements = async x => raw('mouvements').find(x.base).sort({ _id: 1 }).toArray();
+const net = async (x, nom) => { const m = await mouvements(x); const s = m.reduce((t, y) => t + y.delta, 0); console.log(`   (dénominateur ${nom} : ${m.length} ligne(s) mouvements, somme des delta ${s})`); return s; };
+const debits = async x => (await mouvements(x)).filter(m => m.type === 'debit');
+const essais = async x => (await raw('installations').findOne({ _id: x.i._id })).essais;
+const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).solde;
+
+(async () => {
+    // ════════════ unités pures (aucune base) ════════════
+    const cv = (index, tendance) => ({ index, statut: 'identifiee', carte: tendance === undefined ? null : { prixGuide: tendance === null ? null : { tendance } } });
+    // (4) ordre : tendance décroissante, null en dernier, égalité => ordre d'ENTRÉE (tri stable, prouvé par des égalités), index inchangé
+    const entree = [cv(0, 5), cv(1, 20), cv(2, null), cv(3, 20), cv(4, 1), cv(5), cv(6, 20), cv(7, 0)];
+    H.v('4. ordonnerParValeur : tendance décroissante, null/absent en dernier, égalités dans l\'ordre d\'entrée (8 cartes, 3 égales à 20, 3 sans valeur)',
+        sur(() => L.ordonnerParValeur(entree).map(c => c.index)), [1, 3, 6, 0, 4, 7, 2, 5]);
+    H.v('   l\'entrée n\'est pas modifiée (index = position d\'entrée)', entree.map(c => c.index), [0, 1, 2, 3, 4, 5, 6, 7]);
+    // (9) V2_LECTURE_LIVE_MAX
+    H.v('9. V2_LECTURE_LIVE_MAX : défaut 5 ; 3 => 3 ; 0 => 0', [lireConfig(BASE).lot.lectureLiveMax, lireConfig({ ...BASE, V2_LECTURE_LIVE_MAX: '3' }).lot.lectureLiveMax, lireConfig({ ...BASE, V2_LECTURE_LIVE_MAX: '0' }).lot.lectureLiveMax], [5, 3, 0]);
+    for (const mauvaise of ['2.5', 'abc', ' ', '-1', '1e1x']) {
+        let e = null; try { lireConfig({ ...BASE, V2_LECTURE_LIVE_MAX: mauvaise }); } catch (x) { e = x.message; }
+        H.vrai(`9. V2_LECTURE_LIVE_MAX="${mauvaise}" rend la configuration invalide`, /configuration invalide/.test(e || ''));
+    }
+
+    await H.ouvrirBancV2();
+    process.env.MONGODB_BASE = 'test_scratch';
+    const { connecterMongo } = require('../../mongo-connexion');
+    await connecterMongo({ script: 'test-identifier-lot.js', ecrit: true });
+    db.brancher(mongoose.connection.db);
+    await M.creerIndex();
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
+    await semer(P5, 5); await semer(P20A, 20); await semer(PNOG); await semer(P20B, 20); await semer(P1, 1);
+    for (const id of POOL) await semer(id, 2);
+
+    const express = require('express'); const pret = require('../pret');
+    const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
+    let appelsChaine = 0, appelsLot = 0, derniereReq = null, lotImpl = null, appelsVoisins = 0;
+    const chaine = async (req, res) => { appelsChaine++; return res.json({ ...aff(P20A).corps, scanId: String(req.scanIdImpose) }); };
+    const voisins = async () => { appelsVoisins++; return { ligne: {}, nEssais: 1, mesures: {}, contexteG: null }; };
+    const identifierLot = async req => { appelsLot++; derniereReq = req; return lotImpl(req); };
+    const monter = async (cfgApp, deps) => {
+        const app = express(); app.set('trust proxy', true); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        pret.armer(require('../modeles').verifierIndex);
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter')], cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        return H.serveur(app);
+    };
+    const sv = await monter(cfg, { identifierLot });
+    const svSimple = await monter(cfg, {});                                  // pas de crochet : une seule carte, comme avant le lot
+    const lot = (liste, delai = 0) => { lotImpl = async () => { if (delai) await attendre(delai); return liste; }; };
+
+    // ── (1) 4 cartes (3 affirmées + 1 question)
+    {
+        const x = await inst(); const Q = [POOL[30], POOL[31]];
+        lot([aff(P5), aff(P20A), qst(Q), aff(P1)]); appelsChaine = 0; appelsLot = 0;
+        const r = await poster(sv.url, x.jeton); const j = r.json || {}; const a = j.analyse || {};
+        H.v('1. 4 cartes => analyse.statut lot, 4 cartes, lot { cartesVues:4, identifiees:3, aTrancher:1, introuvables:0, lectureLiveMax:5 }',
+            [r.statut, a.statut, (a.cartes || []).length, a.lot], [200, 'lot', 4, { cartesVues: 4, identifiees: 3, aTrancher: 1, introuvables: 0, lectureLiveMax: 5 }]);
+        H.v('   1 crédit (essai 3 -> 2), facturation { debite:1, reserve:0, rembourse:false, motif:lot }, le crochet appelé UNE fois, la chaîne à une carte jamais',
+            [await essais(x), j.facturation, appelsLot, appelsChaine], [2, { debite: 1, reserve: 0, rembourse: false, motif: 'lot', raisonNonRembourse: null }, 1, 0]);
+        const v = valider(j, ref('ReponseAnalyse'), SCHEMA);
+        H.vrai(`   la réponse valide contre ReponseAnalyse (${v.ok ? 'ok' : v.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')})`, v.ok);
+        H.vrai('   le crochet ne reçoit AUCUN crédit (il ne peut ni débiter ni rembourser), mais l\'annonce et le scan imposé', derniereReq && derniereReq.credit === undefined && derniereReq.body && derniereReq.scanIdImpose);
+        H.v('   un lot n\'est pas une carte : l\'ordre des cartes est celui des valeurs (20, 5, 1, puis la question sans valeur) ; index = position d\'entrée', (a.cartes || []).map(c => c.index), [1, 0, 3, 2]);
+    }
+    // ── crochet absent / non fonction : une seule carte, octet pour octet
+    {
+        const x = await inst(), y = await inst();
+        const norm = s => s.replace(/"scanId":"[0-9a-f]{24}"/g, '"scanId":"<id>"');
+        const a = await poster(svSimple.url, x.jeton);
+        const svBizarre = await monter(cfg, { identifierLot: 'pas-une-fonction' });
+        const b = await poster(svBizarre.url, y.jeton); await svBizarre.fermer();
+        H.v('0. crochet absent : une seule carte (identifiee, lot null), jamais un lot inventé', [a.statut, a.json.analyse.statut, a.json.analyse.cartes.length, a.json.analyse.lot], [200, 'identifiee', 1, null]);
+        H.v('   crochet non fonction : même corps octet pour octet (scanId normalisé)', norm(JSON.stringify(b.json)), norm(JSON.stringify(a.json)));
+    }
+    // ── (2) coût max(1, ceil(N/10)) — mesuré sur les LIGNES de débit, pas seulement sur le solde
+    {
+        const lignes = [];
+        for (const [n, attendu] of [[1, 1], [10, 1], [11, 2], [20, 2], [21, 3]]) {
+            const x = await compteLie({ accueil: 0, achete: 10 }); lot(nAff(n));
+            const r = await poster(sv.url, x.jeton);
+            lignes.push([n, r.statut, (await debits(x)).length, (await soldeCompte(x)).achete, r.json.facturation && r.json.facturation.debite]);
+            void attendu;
+        }
+        H.v('2. cartes -> [N, HTTP, lignes de débit, achete restant, facturation.debite] : 1 -> 1 · 10 -> 1 · 11 -> 2 · 20 -> 2 · 21 -> 3', lignes,
+            [[1, 200, 1, 9, 1], [10, 200, 1, 9, 1], [11, 200, 2, 8, 2], [20, 200, 2, 8, 2], [21, 200, 3, 7, 3]]);
+    }
+    // ── (3) cartesVues compte les introuvables
+    {
+        const x = await compteLie({ accueil: 0, achete: 10 }); lot([...nAff(5), ...nIntro(7)]);
+        const r = await poster(sv.url, x.jeton); const a = r.json.analyse || {};
+        H.v('3. 5 identifiées + 7 introuvables : cartesVues 12 (le travail de lecture a eu lieu), introuvables 7, 2 crédits, aucun remboursement',
+            [a.lot, r.json.facturation && r.json.facturation.motif, r.json.facturation && r.json.facturation.rembourse, (await debits(x)).length, (await soldeCompte(x)).achete],
+            [{ cartesVues: 12, identifiees: 5, aTrancher: 0, introuvables: 7, lectureLiveMax: 5 }, 'lot', false, 2, 8]);
+    }
+    // ── (4) ordre par la route
+    {
+        const x = await inst(); const Q = [POOL[32], POOL[33]];
+        lot([aff(P5), aff(P20A), aff(PNOG), aff(P20B), aff(P1), qst(Q), intro()]);
+        const r = await poster(sv.url, x.jeton); const cs = (r.json.analyse || {}).cartes || [];
+        H.v('4. par la route : valeur décroissante (20, 20 dans l\'ordre d\'entrée, 5, 1), puis les sans-valeur (carte sans guide, question, introuvable) dans l\'ordre d\'entrée',
+            cs.map(c => c.index), [1, 3, 0, 4, 2, 5, 6]);
+        H.v('   chaque carte porte l\'index de SA position d\'entrée', cs.filter(c => c.carte).map(c => [c.index, c.carte.idProduct]), [[1, P20A], [3, P20B], [0, P5], [4, P1], [2, PNOG]]);
+    }
+    // ── (5) supplément non payable : 25 cartes, solde 1
+    {
+        const x = await inst({ essais: 1, achete: 0 }); lot(nAff(25));
+        const r = await poster(sv.url, x.jeton); const j = r.json || {};
+        H.v('5. 25 cartes, solde 1 : 429 QUOTA detail lot-trop-grand, facturation rendue { debite:0, rembourse:true }', [r.statut, j.erreur && j.erreur.code, j.erreur && j.erreur.detail, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse], [429, 'QUOTA', 'lot-trop-grand', 0, true]);
+        const plafonds = await raw('plafonds').find({ porteur: `installation:${x.i._id}` }).toArray();
+        H.v('   crédit initial rendu (essai 1), aucun mouvement net, et le remboursement n\'a PAS compté dans les plafonds (sansPlafond)', [await essais(x), await net(x, 'lot-trop-grand'), plafonds.reduce((t, p) => t + p.count, 0)], [1, 0, 0]);
+        // partiel : 2 crédits pour un lot à 3
+        const y = await inst({ essais: 1, achete: 1 }); lot(nAff(25));
+        const r2 = await poster(sv.url, y.jeton);
+        H.v('   2 crédits pour un lot à 3 (tout-ou-rien) : QUOTA, les deux poches retrouvées (essai 1, achete 1), somme des delta 0', [r2.statut, r2.json.erreur && r2.json.erreur.detail, await essais(y), (await raw('installations').findOne({ _id: y.i._id })).achete, await net(y, 'supplément partiel')], [429, 'lot-trop-grand', 1, 1, 0]);
+    }
+    // ── (6) lot entièrement introuvable : remboursé ; un seul identifié : jamais remboursé (ruling 4)
+    {
+        const x = await inst(); lot(nIntro(5));
+        const r = await poster(sv.url, x.jeton); const j = r.json || {};
+        H.v('6. 5 cartes, aucune identifiée : remboursé, motif introuvable, essai 3, somme 0, cartesVues 5 et introuvables 5', [r.statut, j.facturation, await essais(x), await net(x, 'lot introuvable'), j.analyse && j.analyse.lot && [j.analyse.lot.cartesVues, j.analyse.lot.introuvables]],
+            [200, { debite: 0, reserve: 0, rembourse: true, motif: 'introuvable', raisonNonRembourse: null }, 3, 0, [5, 5]]);
+        const y = await inst(); lot([...nIntro(4), aff(P5)]);
+        const r2 = await poster(sv.url, y.jeton);
+        H.v('   4 introuvables + 1 identifiée : pas de remboursement (essai 2), motif lot', [r2.json.facturation.motif, r2.json.facturation.rembourse, await essais(y)], ['lot', false, 2]);
+    }
+    // ── (7) les questions d'un lot
+    {
+        const x = await inst(); const Q1 = [POOL[1], POOL[2]], Q2 = [POOL[3], POOL[4], POOL[5]], Q3 = [POOL[6], POOL[7]];
+        lot([aff(P5), qst(Q1), aff(P20A), qst(Q2), qst(Q3)]);
+        const r = await poster(sv.url, x.jeton); const j = r.json || {}; const cs = (j.analyse || {}).cartes || [];
+        const ts = cs.filter(c => c.statut === 'a-trancher');
+        const lignes = await raw('questions').find({ scanId: new mongoose.Types.ObjectId(j.scanId) }).sort({ _id: 1 }).toArray();
+        H.v('7. 3 questions : chacune a sa propre question (3 candidats distincts les uns des autres), scanId commun, une ligne `questions` par carte (_id scanId:index, lot:true, en-attente)',
+            [ts.length, new Set(ts.map(c => JSON.stringify(c.candidats.map(p => p.idProduct)))).size, lignes.map(q => [q.carte, q.lot, q.etat])], [3, 3, [[1, true, 'en-attente'], [3, true, 'en-attente'], [4, true, 'en-attente']]]);
+        H.v('   le crédit n\'est pas « réservé » (une question de lot ne se règle pas) : le débit reste débité, facturation { debite:1, reserve:0, motif lot }', [(await debits(x)).map(m => m.etat), j.facturation.debite, j.facturation.reserve, j.facturation.motif], [['debite'], 1, 0, 'lot']);
+        const avant = [await mouvements(x), await essais(x)].map(v => JSON.stringify(v));
+        const choixDe = c => c.question.choix[0].id;
+        const q1 = ts.find(c => c.index === 1), q3 = ts.find(c => c.index === 3);
+        const a = await repondre(sv.url, x.jeton, { scanId: j.scanId, carte: 1, choix: choixDe(q1) });
+        const b = await repondre(sv.url, x.jeton, { scanId: j.scanId, carte: 3, choix: 'aucune' });
+        const c = await repondre(sv.url, x.jeton, { scanId: j.scanId, carte: 4, choix: 'ne-sait-pas' });
+        H.v('   répondre par un candidat : 200, carte identifiee à l\'index 1, facturation motif lot { debite:0 }', [a.statut, a.json.carte && a.json.carte.statut, a.json.carte && a.json.carte.index, a.json.facturation && [a.json.facturation.motif, a.json.facturation.debite]], [200, 'identifiee', 1, ['lot', 0]]);
+        H.v('   « aucune » : 200 introuvable ; « ne-sait-pas » : 200 a-trancher — et rien n\'est coûté NI rendu', [b.statut, b.json.carte && b.json.carte.statut, c.statut, c.json.carte && c.json.carte.statut], [200, 'introuvable', 200, 'a-trancher']);
+        H.v('   mouvements et solde identiques avant/après les trois réponses (répondre ne coûte rien et ne rembourse rien)', [JSON.stringify(await mouvements(x)), JSON.stringify(await essais(x))], avant);
+        const faux = await repondre(sv.url, x.jeton, { scanId: j.scanId, carte: 0, choix: 'a' });
+        H.v('   la carte 0 (identifiée) n\'a pas de question : 404 CODE_INVALIDE', [faux.statut, faux.json.erreur.code], [404, 'CODE_INVALIDE']);
+        void q3;
+    }
+    // ── (8) images vs cartes (ruling 2)
+    {
+        const x = await compteLie({ accueil: 0, achete: 10 }); lot(nAff(25));
+        const trop = await poster(sv.url, x.jeton, corps(21)); const avantLot = appelsLot;
+        H.v('8. 21 images : 400 ENTREE (B1b.1), ni crochet ni débit', [trop.statut, trop.json.erreur.code, (await debits(x)).length], [400, 'ENTREE', 0]);
+        const ok = await poster(sv.url, x.jeton, corps(3));
+        H.v('   25 cartes vues sur 3 images : légitime (200, lot de 25, 3 crédits)', [ok.statut, ok.json.analyse && ok.json.analyse.lot && ok.json.analyse.lot.cartesVues, ok.json.facturation && ok.json.facturation.debite, avantLot], [200, 25, 3, avantLot]);
+    }
+    // ── (9) V2_LECTURE_LIVE_MAX par la route
+    {
+        const cfg3 = lireConfig({ ...BASE, V2_LECTURE_LIVE_MAX: '3' }); const sv3 = await monter(cfg3, { identifierLot });
+        const x = await inst(); lot(nAff(2));
+        const r = await poster(sv3.url, x.jeton, corps(1)); await sv3.fermer();
+        H.v('9. lectureLiveMax rendu = celui de la configuration (3)', r.json.analyse && r.json.analyse.lot && r.json.analyse.lot.lectureLiveMax, 3);
+    }
+    // ── (10) 25 cartes débitées sur accueil + achete, une ligne UNITAIRE par crédit, remboursement poche par poche
+    {
+        const x = await compteLie({ accueil: 1, achete: 5 }); lot(nAff(25));
+        const r = await poster(sv.url, x.jeton); const d = await debits(x);
+        H.v('10. 25 cartes sur un compte accueil 1 + achete 5 : 3 lignes UNITAIRES (delta -1 chacune), poches [accueil, achete, achete], clés base / #0 / #1 du supplément',
+            [r.statut, d.length, d.map(m => m.delta), d.map(m => m.credit && m.credit.poche), d.slice(1).map(m => m.cleIdempotence.replace(/^.*\|supplement/, 'supplement'))], [200, 3, [-1, -1, -1], ['accueil', 'achete', 'achete'], ['supplement#0', 'supplement#1']]);
+        H.v('   soldes après débit : accueil 0, achete 3', [(await soldeCompte(x)).accueil, (await soldeCompte(x)).achete], [0, 3]);
+        const y = await compteLie({ accueil: 1, achete: 5 }); lot(nIntro(25));
+        const r2 = await poster(sv.url, y.jeton); const s = await soldeCompte(y);
+        const rb = (await mouvements(y)).filter(m => m.type === 'remboursement' && m.delta === 1).map(m => m.poche).sort();
+        H.v('   le même lot de 25, entièrement introuvable : remboursé poche par poche — accueil 1 et achete 5 retrouvés, une ligne +1 par unité (accueil, achete, achete), somme 0',
+            [r2.json.facturation.rembourse, s.accueil, s.achete, rb, await net(y, 'lot de 25 remboursé')], [true, 1, 5, ['accueil', 'achete', 'achete'], 0]);
+    }
+    // ── supplément et concurrence entre deux requêtes de MÊME clé (ruling 3) : un seul jeu de lignes, le jumeau reçoit « en cours »
+    {
+        const x = await compteLie({ accueil: 0, achete: 10 }); lot(nAff(25), 400); const k = cle(); appelsLot = 0;
+        const [a, b] = await Promise.all([poster(sv.url, x.jeton, corps(), k), poster(sv.url, x.jeton, corps(), k)]);
+        const sts = [a.statut, b.statut].sort();
+        const jumeau = a.statut === 200 ? b : a;
+        H.v('C. deux requêtes concurrentes, même Idempotency-Key, lot de 25 : une réussit (200), le jumeau reçoit DEBIT « en cours » (429, reessayerDans 2)', [sts, jumeau.json.erreur.code, jumeau.json.erreur.reessayerDans], [[200, 429], 'DEBIT', 2]);
+        const d = await debits(x);
+        H.v('   UN seul jeu de lignes : 3 débits (jamais 6), 7 crédits restants, le crochet appelé une fois', [d.length, new Set(d.map(m => m.cleIdempotence)).size, (await soldeCompte(x)).achete, appelsLot], [3, 3, 7, 1]);
+    }
+    // ── la règle G ne juge pas un lot (ruling du brief)
+    {
+        const cfgG = lireConfig({ ...BASE, V2_REGLE_G: '1' });
+        const svG = await monter(cfgG, { identifierLot, voisins }), svGsimple = await monter(cfgG, { voisins });
+        const orig = RG.decisionRegleG; let appelsG = 0; RG.decisionRegleG = (...a) => { appelsG++; return orig(...a); };
+        try {
+            const x = await inst(); lot(nAff(3)); appelsVoisins = 0;
+            const r = await poster(svG.url, x.jeton);
+            H.v('G. règle G allumée + fournisseur de voisins + lot : decisionRegleG et voisins jamais appelés (espions 0 et 0), lot rendu', [r.json.analyse.statut, appelsG, appelsVoisins], ['lot', 0, 0]);
+            const y = await inst(); await poster(svGsimple.url, y.jeton);
+            H.v('   contrôle de l\'espion : la même configuration sans crochet (une carte) appelle bien decisionRegleG', [appelsG >= 1, appelsVoisins >= 1], [true, true]);
+        } finally { RG.decisionRegleG = orig; await svG.fermer(); await svGsimple.fermer(); }
+    }
+    // ── pannes du crochet : rendues, jamais payées
+    {
+        const e = console.error; console.error = () => { };
+        try {
+            const res = [];
+            for (const [nom, impl] of [['lève', async () => { throw new Error('boum'); }], ['rend un objet', async () => ({})], ['rend []', async () => []]]) {
+                const x = await inst(); lotImpl = impl; const r = await poster(sv.url, x.jeton);
+                res.push([nom, r.statut, r.json.erreur && r.json.erreur.code, r.json.facturation && r.json.facturation.rembourse, await essais(x), await net(x, `crochet ${nom}`)]);
+            }
+            H.v('P. crochet qui lève / rend un objet / rend [] : 500 SERVEUR, remboursé (essai 3), somme 0', res, [['lève', 500, 'SERVEUR', true, 3, 0], ['rend un objet', 500, 'SERVEUR', true, 3, 0], ['rend []', 500, 'SERVEUR', true, 3, 0]]);
+            // toutes les cartes en panne (corps illisible) : une panne, pas un « introuvable »
+            const y = await inst(); lot([{ statutHttp: 500, corps: null }, { statutHttp: 200, corps: { success: 'peut-être' } }]);
+            const r = await poster(sv.url, y.jeton);
+            H.v('   toutes les cartes en panne : 500 SERVEUR remboursée (jamais un lot « introuvable »)', [r.statut, r.json.erreur && r.json.erreur.code, await essais(y)], [500, 'SERVEUR', 3]);
+            const z = await inst(); lot([{ statutHttp: 500, corps: null }, aff(P5)]);
+            const r3 = await poster(sv.url, z.jeton);
+            H.v('   une carte en panne parmi une identifiée : le lot vit, la carte en panne devient introuvable « panne-lecture » (cartesVues 2)', [r3.statut, r3.json.analyse.cartes.map(c => c.raison).filter(Boolean), r3.json.analyse.lot.cartesVues, r3.json.analyse.lot.introuvables], [200, ['panne-lecture'], 2, 1]);
+        } finally { console.error = e; }
+    }
+    // ── administrateur : rien débité, jamais de supplément
+    {
+        const x = await compteLie({ accueil: 25, achete: 0 }, 'administrateur'); lot(nAff(25));
+        const r = await poster(sv.url, x.jeton); const m = await mouvements(x);
+        H.v('A. administrateur, lot de 25 : motif administrateur, UNE ligne de débit à delta 0, aucun supplément', [r.statut, r.json.facturation.motif, m.length, m.map(l => l.delta)], [200, 'administrateur', 1, [0]]);
+    }
+    // ── sans-prix : la garde reste FERMÉE sur un lot (ruling 4)
+    {
+        const x = await inst(); const Q = [POOL[10], POOL[11]];
+        lot([aff(P5), aff(P20A), qst(Q)]);
+        const r = await poster(sv.url, x.jeton); const scanId = new mongoose.Types.ObjectId(r.json.scanId);
+        await raw('journal_scans').insertOne({ _id: scanId, userId: `v2:installation:${x.i._id}` });      // la ligne que la chaîne héritée écrit pour un scan
+        const sp = idx => H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: r.json.scanId, carte: idx, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}` } });
+        const a = await sp(0), b = await sp(2);
+        H.v('S. sans-prix définitif sur une carte IDENTIFIÉE d\'un lot (index 0) et sur une question de lot (index 2) : 409 CONFLIT carte-non-identifiee, rien remboursé',
+            [a.statut, a.json.erreur && a.json.erreur.detail, b.statut, b.json.erreur && b.json.erreur.detail, await essais(x), await net(x, 'sans-prix sur un lot')], [409, 'carte-non-identifiee', 409, 'carte-non-identifiee', 2, -1]);
+        // contrôle : la garde n'est pas fermée partout — une carte seule, identifiée, est remboursée
+        const y = await inst(); const r1 = await poster(svSimple.url, y.jeton); const s1 = new mongoose.Types.ObjectId(r1.json.scanId);
+        await raw('journal_scans').insertOne({ _id: s1, userId: `v2:installation:${y.i._id}` });
+        const c = await H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: r1.json.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${y.jeton}` } });
+        H.v('   contrôle : le même appel sur une carte seule identifiée est remboursé (200, rembourse true, essai 3)', [c.statut, c.json.facturation && c.json.facturation.rembourse, await essais(y)], [200, true, 3]);
+    }
+    await sv.fermer(); await svSimple.fermer();
+    await mongoose.disconnect(); await H.arreterBanc();
+    H.bilan();
+})().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });
