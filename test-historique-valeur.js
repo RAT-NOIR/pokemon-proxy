@@ -59,11 +59,11 @@ const muet = { log() { }, error() { } };
         const r = await H.historiserGuide(dep);
         const L = await lignes();
         verifier('statut et nombre de lignes : un par set PUBLIÉ (A, B, D), pas C', [r.statut, Object.keys(L).sort()], ['ecrit', ['A|2026-10-07', 'B|2026-10-07', 'D|2026-10-07']]);
-        verifier('A : valeur 10,10 (5,05 + 5,05), 4 produits (carte-code exclue), 2 valorisés (sans tendance et périmé comptés à part)', [L['A|2026-10-07'].valeur, L['A|2026-10-07'].produits, L['A|2026-10-07'].produitsValorises], [10.1, 4, 2]);
-        verifier('A : égalité au sommet → le plus petit idProduct (10, Alpha)', L['A|2026-10-07'].phare, { idProduct: 10, nom: 'Alpha', prix: 5.05 });
-        verifier('B : valeur 3,30, phare Eta à 2,20', [L['B|2026-10-07'].valeur, L['B|2026-10-07'].produitsValorises, L['B|2026-10-07'].phare], [3.3, 2, { idProduct: 21, nom: 'Eta', prix: 2.2 }]);
-        verifier('D : un prix de 0 n\'est pas une tendance : valeur 0, 0 valorisé sur 1, phare null', [L['D|2026-10-07'].valeur, L['D|2026-10-07'].produits, L['D|2026-10-07'].produitsValorises, L['D|2026-10-07'].phare], [0, 1, 0, null]);
-        verifier('la date de la ligne est celle du GUIDE, pas de l\'import', [L['A|2026-10-07'].jour, L['A|2026-10-07'].guideDu.toISOString()], ['2026-10-07', '2026-10-07T00:00:00.000Z']);
+        verifier('A : valeur 1010 centimes (5,05 + 5,05), 4 produits (carte-code exclue), 2 valorisés (sans tendance et périmé comptés à part)', [L['A|2026-10-07'].valeurCt, L['A|2026-10-07'].produits, L['A|2026-10-07'].produitsValorises], [1010, 4, 2]);
+        verifier('A : égalité au sommet → le plus petit idProduct (10), prix en centimes', L['A|2026-10-07'].phare, { idProduct: 10, prixCt: 505 });
+        verifier('B : valeur 330 centimes, phare 21 à 220', [L['B|2026-10-07'].valeurCt, L['B|2026-10-07'].produitsValorises, L['B|2026-10-07'].phare], [330, 2, { idProduct: 21, prixCt: 220 }]);
+        verifier('D : un prix de 0 n\'est pas une tendance : valeurCt 0, 0 valorisé sur 1, phare null', [L['D|2026-10-07'].valeurCt, L['D|2026-10-07'].produits, L['D|2026-10-07'].produitsValorises, L['D|2026-10-07'].phare], [0, 1, 0, null]);
+        verifier('la date est celle du GUIDE (dans l\'_id) ; aucun champ ne répète l\'_id (set, jour, guideDu) ; valeurCt entier', [Object.keys(L['A|2026-10-07']).sort(), Number.isInteger(L['A|2026-10-07'].valeurCt)], [['_id', 'phare', 'produits', 'produitsValorises', 'valeurCt'], true]);
         // le fichier R2 du jour : idProduct -> tendance, tendances valides du guide du jour seulement
         const brut = JSON.parse(zlib.gunzipSync(r2.fichiers.get('brut-banc/historique-prix/2026-10-07.json.gz')).toString('utf8'));
         verifier('fichier R2 : clé historique-prix/AAAA-MM-JJ.json.gz, idProduct -> tendance (guide du jour, tendance > 0)', [brut.guideDu, brut.tendances], ['2026-10-07T00:00:00.000Z', { 10: 5.05, 11: 5.05, 13: 999, 20: 1.1, 21: 2.2, 30: 7 }]);
@@ -78,7 +78,7 @@ const muet = { log() { }, error() { } };
         await prod.collection('guide_prix_meta').updateOne({ _id: 'dernier' }, { $set: { guideDu: G2 } });
         const r3 = await H.historiserGuide(dep);
         const L3 = await lignes();
-        verifier('guide suivant : 6 lignes, 2 fichiers, la ligne de la veille intacte', [r3.statut, Object.keys(L3).length, r2.fichiers.size, L3['A|2026-10-07'].valeur, L3['A|2026-10-08'].valeur], ['ecrit', 6, 2, 10.1, 18]);
+        verifier('guide suivant : 6 lignes, 2 fichiers, la ligne de la veille intacte', [r3.statut, Object.keys(L3).length, r2.fichiers.size, L3['A|2026-10-07'].valeurCt, L3['A|2026-10-08'].valeurCt], ['ecrit', 6, 2, 1010, 1800]);
 
         // 4. échec R2 : l'historique ne lève JAMAIS (l'import du guide réussit quand même), le dit, et une reprise complète le fichier
         const G3 = new Date('2026-10-09T00:00:00Z');
@@ -110,9 +110,17 @@ const muet = { log() { }, error() { } };
         const r9 = await H.historiserApresImport({ base: 'banc_prod', baseCartes: 'banc_cartes', env: envBanc, mongoose, r2, journal: muet });
         verifier('crochet (guide déjà historisé) : ses connexions s\'ouvrent sur la base « cartes » du banc, rien de plus écrit', [r9.statut, Object.keys(await lignes()).length], ['deja-historise', 9]);
 
+        // 5 quater. un historique qui ne répond JAMAIS ne retient pas l'import au-delà du délai (injecté : 300 ms, pas 120 s)
+        const pendu = { ...r2, existe: () => new Promise(() => { }) };
+        await prod.collection('guide_prix_meta').updateOne({ _id: 'dernier' }, { $set: { guideDu: G3 } });
+        const t0 = Date.now(), sortiesD = [];
+        const garde = new Promise(ok => setTimeout(() => ok({ statut: 'RETENU' }), 5000));
+        const rD = await Promise.race([H.historiserApresImport({ base: 'banc_prod', baseCartes: 'banc_cartes', env: envBanc, mongoose, r2: pendu, delaiMs: 300, journal: { log: m => sortiesD.push(m), error: m => sortiesD.push(m) } }), garde]);
+        verifier('historique qui ne répond jamais : rendu après le délai (< 3 s), statut « echec », le délai est dit', [rD.statut, Date.now() - t0 < 3000, sortiesD.some(s => /délai/.test(s))], ['echec', true, true]);
+
         // 6. fonctions pures
         const p = H.calculerInstantanes({ sets: [{ _id: 'X', nomAffichage: 'X', idExpansion: [9] }], produits: [{ idProduct: 1, idExpansion: 9, name: 'a' }], tendances: new Map([[1, 0.1], [2, 0.2]]), jour: '2026-10-07', guideDu: G1 });
-        verifier('somme en centimes (pas de dérive flottante) : 0,1 valeur 0,1', [p[0].valeur, p[0].produitsValorises], [0.1, 1]);
+        verifier('somme en centimes (pas de dérive flottante) : 0,1 valeur 0,1', [p[0].valeurCt, p[0].produitsValorises], [10, 1]);
     } finally {
         await Promise.allSettled([cxProd.close(), cxCartes.close(), mongoose.disconnect()]);
         await banc.arreter();

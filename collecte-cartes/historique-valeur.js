@@ -9,7 +9,9 @@
 //  · UNE TENDANCE = le champ `trend` du guide des prix, nombre fini STRICTEMENT positif (0 = pas de prix), sur une ligne de `guide_prix` dont
 //    `guideDu` est celui du dernier guide : un produit absent du dernier guide garde son prix daté (import-price-guide.js), ce prix périmé
 //    n'est PAS dans la somme. Un produit sans tendance est exclu de la somme ET compté : `produitsValorises` sur `produits`.
-//  · valeur = somme des tendances, calculée en centimes entiers ; carte phare = la tendance la plus haute, égalité → le plus petit idProduct.
+//  · valeurCt = somme des tendances en CENTIMES entiers ; carte phare = la tendance la plus haute, égalité → le plus petit idProduct.
+//  · LA LIGNE : { _id: 'slug|AAAA-MM-JJ', valeurCt, produits, produitsValorises, phare: { idProduct, prixCt } | null } — ni set, ni jour, ni guideDu
+//    (déjà dans l'_id), ni nom de carte (relu par idProduct dans le catalogue).
 //  · LA DATE est celle du GUIDE (`guide_prix_meta.guideDu`, jour UTC), jamais l'heure de l'import. Clé d'une ligne : `<slug du set>|<AAAA-MM-JJ>`.
 // OÙ ÇA S'ÉCRIT : lignes dans `cartes.histo_valeur_sets` (grappe `cartes`, jamais la production) ; historique par carte dans
 // `historique-prix/AAAA-MM-JJ.json.gz` du bucket PRIVÉ (R2_BUCKET_BRUT), un fichier par guide : { guideDu, tendances: { idProduct: trend } }.
@@ -33,10 +35,13 @@ function calculerInstantanes({ sets, produits, tendances, jour, guideDu }) {
         for (const p of [...vus.values()].sort((a, b) => a.idProduct - b.idProduct)) {
             const t = tendances.get(p.idProduct);
             if (!tendanceValide(t)) continue;
-            centimes += Math.round(t * 100); valorises++;
-            if (!phare || t > phare.prix) phare = { idProduct: p.idProduct, nom: p.name, prix: t };   // ordre croissant d'idProduct : l'égalité garde le plus petit
+            const ct = Math.round(t * 100);
+            centimes += ct; valorises++;
+            if (!phare || ct > phare.prixCt) phare = { idProduct: p.idProduct, prixCt: ct };   // ordre croissant d'idProduct : l'égalité garde le plus petit
         }
-        return { _id: `${s._id}|${jour}`, set: s._id, jour, guideDu, valeur: centimes / 100, produits: vus.size, produitsValorises: valorises, phare };
+        // FORME FINALE, sans doublon : le set et la date vivent dans l'_id (« slug|AAAA-MM-JJ » ; lire un set = _id préfixé « slug| », index _id) ;
+        // le nom de la carte phare se relit par son idProduct (catalogue / cartes_produits), il n'est pas copié ici
+        return { _id: `${s._id}|${jour}`, valeurCt: centimes, produits: vus.size, produitsValorises: valorises, phare };
     });
 }
 
@@ -73,7 +78,7 @@ async function historiserGuide({ prod, cartes, r2, bucket, journal = console, ec
     const P = await preparer({ prod, cartes });
     const cle = prefixe(P.jour);
     const H = cartes.collection(COLLECTION);
-    const dejaLignes = await H.countDocuments({ jour: P.jour });
+    const dejaLignes = await H.countDocuments({ _id: { $in: P.lignes.map(l => l._id) } });
     const dejaFichier = await r2.existe(bucket, cle);
     const buf = fichierDuJour(P.tendances, P.guideDu);
     const resume = { jour: P.jour, lignes: P.lignes.length, fichier: { cle, octets: buf.length, tendances: P.tendances.size, dejaPresent: dejaFichier }, dejaLignes };
@@ -99,7 +104,18 @@ async function historiserSansEchec(args) {
  * Le crochet de l'import quotidien du guide : ouvre ses propres connexions (production en LECTURE, `cartes` en écriture), historise, referme. NE LÈVE JAMAIS.
  * À n'appeler qu'après un import RÉUSSI (code 0 de import-price-guide.js) : un « rien de neuf » sort avant et n'arrive jamais ici.
  */
-async function historiserApresImport({ base, baseCartes = 'cartes', env = process.env, mongoose, r2, journal = console }) {
+async function historiserApresImport({ base, baseCartes = 'cartes', env = process.env, mongoose, r2, journal = console, delaiMs = 120000 }) {
+    // DÉLAI MAXIMAL : une connexion ou un appel R2 qui ne répond jamais ne retient pas l'import (le processus sort juste après) ; au-delà, on journalise et on rend la main
+    let minuterie;
+    const delai = new Promise(ok => { minuterie = setTimeout(() => ok({ statut: 'echec', erreur: `délai de ${Math.round(delaiMs / 1000)} s dépassé` }), delaiMs); });
+    try {
+        const r = await Promise.race([historiserApresImportSansDelai({ base, baseCartes, env, mongoose, r2, journal }), delai]);
+        if (r.erreur && /^délai/.test(r.erreur)) { try { journal.error(`⚠️ historique de valeur NON écrit (l'import du guide, lui, a réussi) : ${r.erreur}`); } catch (_) { /* rien */ } }
+        return r;
+    } finally { clearTimeout(minuterie); }
+}
+
+async function historiserApresImportSansDelai({ base, baseCartes, env, mongoose, r2, journal }) {
     let cxProd = null, cxCartes = null;
     try {
         if (!env.MONGODB_URI || !env.MONGODB_CARTES_URI || !env.R2_BUCKET_BRUT) throw new Error(`variable absente : ${['MONGODB_URI', 'MONGODB_CARTES_URI', 'R2_BUCKET_BRUT'].filter(v => !env[v]).join(', ')}`);

@@ -50,8 +50,8 @@ const mo = n => `${(n / 1e6).toFixed(2)} Mo`;
             const poids = L.reduce((t, l) => t + calculateObjectSize(l), 0), index = r.lignes * 60;   // ~60 o par entrée de l'index _id (estimation, la mesure réelle tranche)
             console.log(`   poids BSON des lignes : ${mo(poids)} (moyenne ${Math.round(poids / r.lignes)} o) + index _id ≈ ${mo(index)} → ≈ ${mo(poids + index)} par jour, ≈ ${mo((poids + index) * 365)} à 365 jours`);
             const valorises = L.reduce((t, l) => t + l.produitsValorises, 0), tous = L.reduce((t, l) => t + l.produits, 0);
-            console.log(`   produits valorisés : ${valorises} sur ${tous} · sets à valeur 0 : ${L.filter(l => !l.valeur).length} sur ${L.length} · valeur totale ${L.reduce((t, l) => t + l.valeur, 0).toFixed(2)}`);
-            const top = [...L].sort((a, b) => b.valeur - a.valeur).slice(0, 3).map(l => `${l.set} ${l.valeur} (phare ${l.phare?.nom} ${l.phare?.prix})`);
+            console.log(`   produits valorisés : ${valorises} sur ${tous} · sets à valeur 0 : ${L.filter(l => !l.valeurCt).length} sur ${L.length} · valeur totale ${(L.reduce((t, l) => t + l.valeurCt, 0) / 100).toFixed(2)}`);
+            const top = [...L].sort((a, b) => b.valeurCt - a.valeurCt).slice(0, 3).map(l => `${l._id.split('|')[0]} ${l.valeurCt / 100} (phare idProduct ${l.phare?.idProduct} à ${(l.phare?.prixCt ?? 0) / 100})`);
             console.log(`   3 sets les plus valorisés : ${top.join(' · ')}`);
         }
         console.log(`   fichier R2 ${r.fichier.cle} : ${r.fichier.tendances} tendances, ${(r.fichier.octets / 1024).toFixed(0)} Ko compressé ≈ ${mo(r.fichier.octets * 365)} à 365 jours · ${r.fichier.dejaPresent ? 'DÉJÀ présent' : 'à écrire'}`);
