@@ -192,7 +192,7 @@ console.log(`   routes montées par le routeur v2 : ${montees.size} ; promises p
 // liste est non vide, les routes absentes doivent en être EXACTEMENT l'ensemble (ni une de plus, ni une de moins) et tout le reste doit passer.
 // Liste VIDE (à vider quand B1b et B3 sont fusionnés) ou `--complet` : mode strict, toute route promise doit être montée.
 // (Remplace RM_OPENAPI_AVANT_FUSION, une variable d'environnement qui n'existait que pour passer avant la fusion des lots.)
-const ATTENDUES_ABSENTES = ['POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/retour-live', 'POST /api/solde'];
+const ATTENDUES_ABSENTES = ['POST /api/identifier/reponse', 'POST /api/retour-live', 'POST /api/solde'];   // B1b.3 a monté POST /api/identifier
 const AVANT_FUSION = ATTENDUES_ABSENTES.length > 0 && !process.argv.includes('--complet');
 const absentes = promesses.filter(o => !o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`)).map(o => `${o.methode} ${o.chemin}`).sort();
 for (const o of promesses.filter(o => o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`))) console.log(`   ⚠ route conditionnelle non montée (${o.op['x-conditionnel']}) : ${o.methode} ${o.chemin}`);

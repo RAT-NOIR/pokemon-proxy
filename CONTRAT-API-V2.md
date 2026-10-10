@@ -978,6 +978,7 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | S2 | `CODES_ERREUR_COMPTE` : `NON_VERIFIE`, `JETON_EXPIRE` | **`VERIFICATION`** (403) et **`CODE_EXPIRE`** (410, et `CODE_INVALIDE` 404 pour un lien déjà utilisé) | renommer / ajouter (C9) |
 | S3 | `Produit.variante: Variante` | `Variante \| null` | typer le null (Q31) |
 | S4 | `Produit.liens.cardmarket: string` | `string \| null` | typer le null (Q31) |
+| S4b | `Produit.set.tirage: string` | `string \| null` : `null` = on ne sait pas (les collections de l'API ne portent pas le tirage ; ruling du 2026-10-10) | typer le null |
 | S5 | `Produit` sans `impressions` | `impressions: Impression[]` toujours présent (`[]` par défaut) ; chaque impression : `idProduct`, `numero`, `total`, `rarete`, `variante`, `set: { nom }`, `lien`, `prixGuide` | ajouter le type |
 | S6 | `Solde` sans `abonnement` | `abonnement: { restant, quotaMensuel, renouvelleLe } \| null` | ajouter (C17, Q3) |
 | S7 | `ReponseErreur.erreur.detail` : trois valeurs de `IMAGE` | une chaîne libre (`image-hote`, `cle-reutilisee`, `lot-trop-grand`, `adresse-invalide`…) en plus de `trop-lourde`, `format`, `aucune-carte` | typer `string` (C17) |

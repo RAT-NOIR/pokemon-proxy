@@ -2126,6 +2126,7 @@ const H = require('./_harnais'); const db = require('../db'); const M = require(
 **Séquence EXACTE de `traiterIdentifier` (chaque étape est une assertion du banc) :**
 1. `preparerAnnonce({ title, description })` (B5.2).
 2. `scanId = new ObjectId()` ; clé de débit `scan|<Idempotency-Key>`.
+   Ruling du 2026-10-10 : clé préfixée par le porteur (ledger.js), `scan|<type>:<id>|<Idempotency-Key>`, sans quoi deux porteurs à la même clé feraient lever debiter.
 3. `debiter(porteur, { scanId, cleIdempotence })` : refus ⇒ `QUOTA` 429 (avec `solde`, `facturation: null`, et pour un compte `achat: { url }` = `https://rat-market.fr/fr/compte#recharge`), ou `VERIFICATION` 403 ; **la chaîne héritée n'est PAS appelée** (aucun appel IA, aucun coût).
 4. `reqHeritee = { body: { imageUrls, title: titreExpurgé, vintedEtat, prixVinted, vintedUrl, versionExtension, userId: 'v2:<type>:<id>' }, ip, scanIdImpose: scanId, credit: { userId: 'v2:<type>:<id>', poche, v2: creditV2(...) } }` ; `await gererIdentifier(reqHeritee, fauxRes)` dans un `try` : une exception ⇒ remboursement `panne` (compteur pannes) et `SERVEUR` 500.
 5. `catalogue.lire(idProducts de corps.candidats)` ⇒ `ctx.produits` (guide : `guideDu`) ; `visuels.resoudre` ; `adapter(...)`.
