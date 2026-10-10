@@ -884,6 +884,24 @@
               }
             }
           },
+          "429": {
+            "description": "DEBIT : trop de tentatives depuis cette adresse IP (avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
           "503": {
             "description": "INDISPONIBLE (index manquants, base injoignable).",
             "content": {
@@ -1170,6 +1188,16 @@
               }
             }
           },
+          "400": {
+            "description": "ENTREE : corps illisible ou `motDePasse` qui n'est pas une chaîne.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
           "403": {
             "description": "VERIFICATION (adresse non confirmée) ou ORIGINE.",
             "content": {
@@ -1206,6 +1234,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : trop de tentatives depuis cette adresse IP (avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
                 }
               }
             }

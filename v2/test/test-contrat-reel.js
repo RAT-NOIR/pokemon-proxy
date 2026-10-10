@@ -1,0 +1,736 @@
+'use strict';
+// B7b.1 — LE CONTRAT PUBLIÉ EST VALIDÉ SUR LES RÉPONSES RÉELLES DU SERVEUR (openapi.v2.json, lot B7a, contre le serveur v2 de B1b/B2/B3/B6/B9).
+// Step 1 : chaque route de `paths` (liste DÉRIVÉE de `paths`), dans chaque état que le serveur sait produire, est jouée contre le serveur v2 RÉEL ; le corps est jugé contre le
+//          schéma que `paths` documente pour CE statut. « N réponses, M valides, 0 écart » ; un écart nomme route, état, chemin JSON. Le banc ÉCHOUE si une route de `paths`
+//          n'a été jouée dans aucun état, ou si un statut documenté n'a été joué ni déclaré non joué avec sa raison.
+// Step 2 : la propriété inverse — 24 corruptions connues de réponses RÉELLES ; le validateur doit les REFUSER (il sait dire non).
+// Deux montages : (a) un serveur ENFANT (index.js réel, RM_API_V2=1, faux réseau du verrou : la VRAIE chaîne héritée hors ligne) ; (b) l'assembleur du socle en processus (les lots de
+// production, la chaîne héritée FABRIQUÉE pour fabriquer les verdicts fermes, lots, introuvables). Base : la base EN MÉMOIRE du banc (INT2) — ni production, ni R2, ni réseau.
+const H = require('./_harnais');
+const path = require('path');
+const crypto = require('crypto');
+const mongoose = require('mongoose');
+const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const { lireConfig } = require('../config');
+const { CODES } = require('../erreurs');
+const A = require('./_contrat-reel-aide');
+const { SCHEMA, ref, OPERATIONS, STATUTS_DOCUMENTES, grandLivre, consigner, consignerHorsContrat } = A;
+const { valider } = require('../openapi/valider');
+const R = path.join(__dirname, '..', '..');
+const CHARGES = path.join(R, 'verrou', 'charges.json');
+const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
+const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3' });
+const EXT = cfg.origines.extension, SITE = cfg.origines.site;
+const raw = n => mongoose.connection.db.collection(n);
+const attendre = ms => new Promise(r => setTimeout(r, ms));
+let nIp = 0, nCle = 0;
+const ip = () => { nIp++; return { 'x-forwarded-for': `10.70.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
+const cle = () => `banc-b7b1-${Date.now().toString(36)}-${++nCle}`;
+const MDP = 'un-mot-de-passe-solide';
+
+// ── états joués : un statut obtenu différent du statut attendu est une anomalie du BANC (état mal fabriqué), pas un écart de contrat
+const mal = [];
+async function jouer(url, route, etat, attendu, chemin, { corps, entetes = {}, methode } = {}) {
+    const m = methode || route.split(' ')[0];
+    const r = await H.appel(url, chemin, { methode: m, corps, entetes });
+    consigner(route, etat, r);
+    if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''} « ${r.json.erreur.message} »)` : ''}`);
+    return r;
+}
+async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes) {
+    const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: form, headers: entetes });
+    const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
+    const r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
+    consigner(route, etat, r);
+    if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
+    return r;
+}
+
+// ── porteurs
+async function inst(essais = 3, o = {}) {
+    const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais, libelle: 'banc' }), o);
+    await db.col('installations').insertOne(i); return { i, jeton };
+}
+async function compte(o = {}) {
+    const c = Object.assign(M.nouveauCompte({ email: `c${++nCle}@exemple.fr`, emailCle: `c${nCle}@exemple.fr`, motDePasse: {} }), { verifie: true, solde: { accueil: 25, achete: 0 } }, o);
+    await db.col('comptes').insertOne(c);
+    const s = await require('../comptes/sessions').creerSession(c._id);
+    return { c, cookie: `rm_session=${s.token}` };
+}
+async function instLiee(c, o = {}) { return inst(0, { compteId: (c.c || c)._id, ...o }); }
+const extH = (jeton, plus = {}) => ({ origin: EXT, ...ip(), ...(jeton ? { authorization: `Bearer ${jeton}` } : {}), ...plus });
+const siteH = (cookie, plus = {}) => ({ origin: SITE, 'x-rat-market': '1', ...(cookie ? { cookie } : {}), ...ip(), ...plus });
+const corpsId = (o = {}) => ({ contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...o });
+
+// ── catalogue FABRIQUÉ (seul l'idProduct de A et B vient de la charge)
+const ID_A = 895789, ID_B = 895790, ID_C = 895791, EXP = 990001;
+async function semer(mode) {                               // 'double' (A, B) | 'triple' (A, B, C sans prix) | 'vide'
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    if (mode === 'vide') return;
+    await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
+    // 'double' : les prix de test-retour-live-v2.js (1180 contre 1) — deux prix très écartés, la chaîne héritée pose une vraie question et écrit sa ligne de journal ;
+    // avec 1,00 contre 2,50 elle REFUSE par égalité (remboursement différé, question réservée par v2) et n'écrit aucune ligne de journal : pas de retour-live possible.
+    const liste = mode === 'triple' ? [[ID_A, 'normale', 1.0], [ID_B, 'reverse', 2.5], [ID_C, 'normale', null]] : [[ID_A, 'normale', 1180], [ID_B, 'reverse', 1.0]];
+    for (const [id, variante, trend] of liste) {
+        await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 + (id === ID_C ? 1 : 0) });
+        await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
+        if (trend !== null) await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: 0.5, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
+        await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+    }
+}
+const journalDe = async scanId => { for (let k = 0; k < 40; k++) { const l = await raw('journal_scans').findOne({ _id: new mongoose.Types.ObjectId(scanId) }); if (l) return l; await attendre(150); } return null; };
+// une clé d'idempotence DÉJÀ prise par une requête en cours (le seul moyen honnête de fabriquer le 429 DEBIT « requête identique en cours » sans course)
+async function claimEnCours(porteur, routeIdem, valeur, corps) {
+    const { empreinteDuCorps } = require('../transport/idempotence');
+    await raw('idempotence').insertOne({ cle: `${porteur}|${routeIdem}|${valeur}`, empreinteCorps: empreinteDuCorps(corps), etat: 'en-cours', proprietaire: 'banc', creeLe: new Date(), expireLe: new Date(Date.now() + 120000) });
+}
+
+(async () => {
+    await H.ouvrirBancV2();
+    process.env.MONGODB_BASE = 'test_scratch';
+    const { connecterMongo } = require('../../mongo-connexion');
+    await connecterMongo({ script: 'test-contrat-reel.js', ecrit: true });
+    db.brancher(mongoose.connection.db);
+    await M.creerIndex();
+    const sharp = require('sharp');
+    const JPEG = await sharp(crypto.randomBytes(24 * 24 * 3), { raw: { width: 24, height: 24, channels: 3 } }).jpeg().toBuffer();
+    const PNG = await sharp(crypto.randomBytes(16 * 16 * 3), { raw: { width: 16, height: 16, channels: 3 } }).png().toBuffer();
+    const EXE = Buffer.concat([Buffer.from('MZ'), crypto.randomBytes(100)]);
+    const formulaire = ({ image = JPEG, type = 'image/jpeg', source = 'camera' } = {}) => {
+        const f = new FormData();
+        if (source !== null) f.append('source', source);
+        if (image !== null) f.append('image', new Blob([image], { type }), 'photo.jpg');
+        return f;
+    };
+
+    // ═══════════════════════════ (a) LE SERVEUR ENFANT — la vraie chaîne héritée, hors ligne ═══════════════════════════
+    const { demarrer } = require('../../verrou/serveur');
+    await semer('double');
+    const FAUX = path.join(__dirname, 'faux-reseau-scanner.js');          // = faux-reseau-v2.js (le faux réseau du verrou) + le data-URL du scanner rejoué
+    const baseEnv = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '' };
+    const srv = await demarrer(FAUX, { ...baseEnv, RM_API_V2: '1' });
+    if (!await srv.attendreMongo()) throw new Error('Mongo non connecté');
+    const U = `http://127.0.0.1:${srv.port}`;
+    const ident = (url, etat, attendu, jeton, c = corpsId(), { cleIdem = cle(), sansCle = false, entetes = {} } = {}) =>
+        jouer(url, 'POST /api/identifier', etat, attendu, '/api/identifier', { corps: c, entetes: extH(jeton, { ...(sansCle ? {} : { 'idempotency-key': cleIdem }), ...entetes }) });
+    const repondre = (url, etat, attendu, jeton, b, { cleIdem, entetes = {} } = {}) =>
+        jouer(url, 'POST /api/identifier/reponse', etat, attendu, '/api/identifier/reponse', { corps: b, entetes: extH(jeton, { ...(cleIdem ? { 'idempotency-key': cleIdem } : {}), ...entetes }) });
+    const retour = (url, etat, attendu, jeton, b, { cleIdem, entetes = {} } = {}) =>
+        jouer(url, 'POST /api/retour-live', etat, attendu, '/api/retour-live', { corps: b, entetes: extH(jeton, { ...(cleIdem ? { 'idempotency-key': cleIdem } : {}), ...entetes }) });
+    const scanAmbigu = async (url, essais = 3, etat = 'a-trancher à 2 (vraie chaîne)') => { const x = await inst(essais); const r = await ident(url, etat, 200, x.jeton); return { ...x, r, scanId: r.json && r.json.scanId }; };
+
+    await jouer(U, 'GET /ping', 'serveur v2 allumé', 200, '/ping');
+    // installation
+    {
+        const mem = ip();
+        await jouer(U, 'POST /api/installation', 'créée', 201, '/api/installation', { corps: { versionExtension: '2.0.0', libelle: 'Chrome · Windows' }, entetes: mem });
+        await jouer(U, 'POST /api/installation', 'deuxième de la même IP', 201, '/api/installation', { corps: { versionExtension: '2.0.0' }, entetes: mem });
+        await jouer(U, 'POST /api/installation', 'plafond par IP et par jour', 429, '/api/installation', { corps: { versionExtension: '2.0.0' }, entetes: mem });
+        await jouer(U, 'POST /api/installation', 'versionExtension de mauvais type', 400, '/api/installation', { corps: { versionExtension: 7 }, entetes: ip() });
+    }
+    // identifier — la vraie chaîne
+    const sc = await scanAmbigu(U);
+    {
+        const x = await inst(3), k = cle();
+        await ident(U, 'a-trancher à 2 (avec clé)', 200, x.jeton, corpsId(), { cleIdem: k });
+        await ident(U, 'rejeu de la même clé (Idempotency-Replayed)', 200, x.jeton, corpsId(), { cleIdem: k });
+        await ident(U, 'clé réutilisée avec un autre corps', 422, x.jeton, corpsId({ langueInterface: 'en' }), { cleIdem: k });
+        const y = await inst(3), k2 = cle();
+        await claimEnCours(`installation:${y.i._id}`, 'identifier', k2, corpsId());
+        await ident(U, 'même clé encore en cours de traitement', 429, y.jeton, corpsId(), { cleIdem: k2 });
+        const z = await inst(0);
+        await ident(U, 'QUOTA installation (plus d\'essai)', 429, z.jeton);
+        await ident(U, 'sans Authorization', 401, null);
+        await ident(U, 'jeton inconnu', 401, 'a'.repeat(32));
+        await ident(U, 'Idempotency-Key absente', 400, x.jeton, corpsId(), { sansCle: true });
+        await ident(U, 'imageUrls : hôte non autorisé', 400, x.jeton, corpsId({ imageUrls: ['https://evil.example/x.jpg'] }));
+        await ident(U, 'aucune image', 200, x.jeton, corpsId({ imageUrls: [] })).then(r => r);
+        await ident(U, 'marché non pris en charge', 422, x.jeton, corpsId({ marche: 'amazon.fr' }));
+        await ident(U, 'extension trop ancienne', 426, x.jeton, corpsId({ versionExtension: '1.0.0' }));
+        const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } }); const il = await instLiee(nv);
+        await ident(U, 'compte non vérifié', 403, il.jeton);
+        const ad = await compte({ role: 'administrateur', solde: { accueil: 25, achete: 0 } }); const ia = await instLiee(ad);
+        await ident(U, 'administrateur (a-trancher, rien débité)', 200, ia.jeton);
+        const ex = await compte({ solde: { accueil: 0, achete: 0 } }); const ie = await instLiee(ex);
+        await raw('hebdo').insertOne({ compteId: ex.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });
+        await ident(U, 'QUOTA compte (achat.url)', 429, ie.jeton);
+        // la panne de lecture est une panne, jamais un introuvable
+        const p = await inst(3);
+        await ident(U, 'panne de lecture (IA)', 200, p.jeton, corpsId({ imageUrls: [IMAGE_INCONNUE] }));
+        // panne du catalogue
+        const q = await inst(3);
+        srv.enfant.send('panne-catalogue'); await attendre(500);
+        await ident(U, 'panne du catalogue (INDISPONIBLE)', 503, q.jeton);
+        srv.enfant.send('panne-catalogue-off'); await attendre(300);
+        // absente du catalogue
+        await semer('vide');
+        const v = await inst(3);
+        await ident(U, 'introuvable / hors-catalogue', 200, v.jeton);
+        await semer('double');
+    }
+    // réponses à une question (la vraie machine à états)
+    {
+        const a = await scanAmbigu(U, 3, 'a-trancher à 2 pour la réponse « a »');
+        await repondre(U, 'choix « a »', 200, a.jeton, { scanId: a.scanId, carte: 0, choix: 'a' });
+        await repondre(U, 'rejeu du même choix (un seul débit)', 200, a.jeton, { scanId: a.scanId, carte: 0, choix: 'a' });
+        await repondre(U, 'réponse contradictoire', 409, a.jeton, { scanId: a.scanId, carte: 0, choix: 'b' });
+        const b = await scanAmbigu(U, 3, 'a-trancher à 2 pour « aucune »');
+        await repondre(U, 'choix « aucune » (crédit rendu)', 200, b.jeton, { scanId: b.scanId, choix: 'aucune' });
+        const c = await scanAmbigu(U, 3, 'a-trancher à 2 pour « ne-sait-pas »');
+        await repondre(U, 'choix « ne-sait-pas » (carte inchangée)', 200, c.jeton, { scanId: c.scanId, choix: 'ne-sait-pas' });
+        await repondre(U, 'choix hors liste', 400, a.jeton, { scanId: a.scanId, choix: 'z' });
+        await repondre(U, 'scanId mal formé', 400, a.jeton, { scanId: 'pas-un-id', choix: 'a' });
+        await repondre(U, 'sans Authorization', 401, null, { scanId: a.scanId, choix: 'a' });
+        const autre = await inst(3);
+        await repondre(U, 'le scan d\'un AUTRE porteur', 404, autre.jeton, { scanId: a.scanId, choix: 'a' });
+        await repondre(U, 'scan inconnu', 404, a.jeton, { scanId: String(new mongoose.Types.ObjectId()), choix: 'a' });
+        const d = await scanAmbigu(U, 3, 'a-trancher à 2 pour une question expirée');
+        await raw('questions').updateOne({ _id: `${d.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
+        await repondre(U, 'question abandonnée après 24 h', 410, d.jeton, { scanId: d.scanId, choix: 'a' });
+        const e = await scanAmbigu(U, 3, 'a-trancher à 2 pour une clé réutilisée'), k = cle();
+        await repondre(U, 'première réponse avec clé', 200, e.jeton, { scanId: e.scanId, choix: 'a' }, { cleIdem: k });
+        await repondre(U, 'clé réutilisée avec un autre corps', 422, e.jeton, { scanId: e.scanId, choix: 'b' }, { cleIdem: k });
+        const f = await scanAmbigu(U, 3, 'a-trancher à 2 pour une clé en cours'), k2 = cle();
+        await claimEnCours(`installation:${f.i._id}`, 'reponse', k2, { scanId: f.scanId, choix: 'a' });
+        await repondre(U, 'même clé encore en cours', 429, f.jeton, { scanId: f.scanId, choix: 'a' }, { cleIdem: k2 });
+        const g = await scanAmbigu(U, 3, 'a-trancher à 2 pour une carte non fabricable');
+        await raw('analyses').updateOne({ _id: new mongoose.Types.ObjectId(g.scanId) }, { $set: { produits: [] } });
+        await repondre(U, 'carte non fabricable depuis analyses (SERVEUR)', 500, g.jeton, { scanId: g.scanId, choix: 'a' });
+        const h = await scanAmbigu(U, 3, 'a-trancher à 2 pour une analyse absente');
+        await raw('analyses').deleteOne({ _id: new mongoose.Types.ObjectId(h.scanId) });
+        await repondre(U, 'question présente, analyse absente (analyse-absente)', 503, h.jeton, { scanId: h.scanId, choix: 'a' });
+    }
+    // retour-live (le chemin hérité gererRetourLive, inchangé)
+    {
+        const scanRepondu = async () => { const x = await scanAmbigu(U, 3, 'a-trancher à 2 pour le retour live'); await repondre(U, 'choix « a » avant le retour live', 200, x.jeton, { scanId: x.scanId, choix: 'a' }); const jl = await journalDe(x.scanId); if (!jl || jl.userId !== `v2:installation:${x.i._id}`) mal.push(`retour-live : ligne du journal ${jl ? 'userId ' + jl.userId : 'ABSENTE'} (attendu v2:installation:${x.i._id}) ; journal de l'enfant : ${srv.lire().split('\n').filter(l => /journal|scan/i.test(l)).slice(-4).join(' | ').slice(0, 500)}`); return x; };
+        const a = await scanRepondu();
+        await retour(U, 'prix lu valide', 200, a.jeton, { scanId: a.scanId, carte: 0, prixLive: 24.13, prixLiveEtat: 'ex', prixLiveCodeLangue: 2, originePrix: 'grille', verdictAffiche: 'correct' });
+        await retour(U, 'second retour pour le même scan', 409, a.jeton, { scanId: a.scanId, prixLive: 99 });
+        const b = await scanRepondu();
+        await retour(U, 'lecture ratée définitive (remboursée sans-prix)', 200, b.jeton, { scanId: b.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        const c = await scanRepondu();
+        await retour(U, 'lecture ratée non définitive (défi Cloudflare)', 200, c.jeton, { scanId: c.scanId, lectureRatee: { cause: 'defi', definitive: false } });
+        const d = await scanAmbigu(U, 3, 'a-trancher à 2 sans réponse'); await journalDe(d.scanId);
+        await retour(U, 'carte-non-identifiee (lecture ratée définitive sur une question)', 409, d.jeton, { scanId: d.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        await retour(U, 'scan d\'un autre porteur', 404, (await inst(3)).jeton, { scanId: a.scanId, prixLive: 5 });
+        await retour(U, 'scan inconnu', 404, a.jeton, { scanId: String(new mongoose.Types.ObjectId()), prixLive: 5 });
+        await retour(U, 'scanId mal formé', 400, a.jeton, { scanId: 'pas-un-id', prixLive: 5 });
+        await retour(U, 'ni prix ni lecture ratée', 400, a.jeton, { scanId: a.scanId });
+        await retour(U, 'Authorization illisible', 401, 'a'.repeat(32), { scanId: a.scanId, prixLive: 5 });
+        const e = await scanRepondu(), k = cle();
+        await retour(U, 'prix avec clé', 200, e.jeton, { scanId: e.scanId, prixLive: 24.13 }, { cleIdem: k });
+        await retour(U, 'clé réutilisée avec un autre corps', 422, e.jeton, { scanId: e.scanId, prixLive: 30 }, { cleIdem: k });
+        const f = await scanRepondu(), k2 = cle();
+        await claimEnCours(`installation:${f.i._id}`, 'retour-live', k2, { scanId: f.scanId, prixLive: 5 });
+        await retour(U, 'même clé encore en cours', 429, f.jeton, { scanId: f.scanId, prixLive: 5 }, { cleIdem: k2 });
+    }
+    // solde
+    {
+        const x = await inst(3);
+        await jouer(U, 'POST /api/solde', 'installation non liée', 200, '/api/solde', { corps: {}, entetes: extH(x.jeton) });
+        const c = await compte(); const l = await instLiee(c);
+        await jouer(U, 'POST /api/solde', 'installation liée à un compte vérifié', 200, '/api/solde', { corps: {}, entetes: extH(l.jeton) });
+        const nv = await compte({ verifie: false, solde: { accueil: 0, achete: 0 } }); const ln = await instLiee(nv);
+        await jouer(U, 'POST /api/solde', 'compte non vérifié', 200, '/api/solde', { corps: {}, entetes: extH(ln.jeton) });
+        const ab = await compte({ abonnement: { actif: true, paliers: 1, expireLe: new Date(Date.now() + 20 * 86400e3), restant: 80 } }); const la = await instLiee(ab);
+        await jouer(U, 'POST /api/solde', 'compte avec abonnement', 200, '/api/solde', { corps: {}, entetes: extH(la.jeton) });
+        await jouer(U, 'POST /api/solde', 'jeton inconnu', 401, '/api/solde', { corps: {}, entetes: extH('b'.repeat(32)) });
+    }
+    // comptes côté enfant : lecture, connexion par un VRAI hachage, session -> scanner (la vraie chaîne, le data-URL rejoué)
+    {
+        const P = require('../comptes/mots-de-passe');
+        const hash = await P.hacher(MDP);
+        const c = await compte({ motDePasse: hash });
+        const conn = await jouer(U, 'POST /api/compte/connexion', 'identifiants justes (Set-Cookie rm_session)', 200, '/api/compte/connexion', { corps: { email: c.c.email, motDePasse: MDP }, entetes: siteH() });
+        const cookie = /rm_session=[^;]+/.exec(conn.entetes['set-cookie'] || '')?.[0];
+        H.vrai('connexion (enfant) : un cookie rm_session est posé', Boolean(cookie));
+        await jouer(U, 'GET /api/compte', 'session ouverte par la connexion', 200, '/api/compte', { entetes: siteH(cookie) });
+    }
+    // le scanner au travers du serveur enfant (le formulaire n'est pas du JSON)
+    {
+        const c = await compte();
+        const r = await jouerFormulaire(U, 'POST /api/scanner/analyses', 'a-trancher à 2 (vraie chaîne, faux réseau du scanner)', 200, '/api/scanner/analyses', formulaire(), siteH(c.cookie));
+        if (r.json && r.json.scanId) await jouer(U, 'POST /api/scanner/analyses/{id}/reponse', 'réponse « a » (vraie chaîne)', 200, `/api/scanner/analyses/${r.json.scanId}/reponse`, { corps: { choix: 'a' }, entetes: siteH(c.cookie) });
+    }
+    // une sonde HORS contrat : un JSON illisible ne doit pas rendre une page HTML (constat, non jugé)
+    const sondeJsonIllisible = await (async () => { const r = await fetch(U + '/api/identifier', { method: 'POST', headers: { 'content-type': 'application/json', origin: EXT, ...ip() }, body: '{"x' }); const t = await r.text(); return { statut: r.status, ct: r.headers.get('content-type'), debut: t.slice(0, 40) }; })();
+    srv.enfant.kill();
+
+    // ═══════════════════════════ (b) L'ASSEMBLEUR EN PROCESSUS — les lots de production, la chaîne héritée FABRIQUÉE ═══════════════════════════
+    await semer('triple');
+    const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
+    const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
+    const LOTS = [require('../transport/monter'), require('../installations/monter'), require('../comptes/monter'), require('../argent/monter'),
+        require('../identifier/monter'), require('../banc/monter'), require('../scanner/monter')];                       // l'ordre de v2/index.js
+    const { creerCourrierMemoire } = require('../comptes/courrier');
+    const courrier = creerCourrierMemoire();
+    registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });
+    let mode = 'affirmee', retardLot = null;
+    const etatCarte = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
+    const affirme = id => ({ success: true, question: null, carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false },
+        etat: etatCarte, candidats: [{ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }], classement: [], guidePrix: {}, reverse: { attendue: false, motif: null, etat: 'aucun-motif', strategie: null }, codeLangue: 2 });
+    const chaine = async (req, res) => {
+        const sid = String(req.scanIdImpose);
+        if (mode === 'affirmee') return res.json({ ...affirme(ID_A), scanId: sid });
+        if (mode === 'sans-prix') return res.json({ ...affirme(ID_C), scanId: sid });
+        if (mode === 'exception') throw new Error('boum');
+        if (mode.startsWith('introuvable:')) { await req.credit.v2.rembourser(req, mode.slice(12)); return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: mode.slice(12) }); }
+        if (mode === 'ia-echec') return res.json({ success: false, natureRefus: 'echec-technique', motifRefus: 'ia-echec' });
+        if (mode === 'indisponible') return res.json({ success: false, natureRefus: 'echec-technique', motifRefus: 'tcgdex-injoignable' });
+        if (mode === 'ambigue2' || mode === 'ambigue3') {
+            const ids = mode === 'ambigue2' ? [ID_A, ID_B] : [ID_A, ID_B, ID_C];
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: ids });
+            return res.json({ ...affirme(ID_A), scanId: sid, question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...affirme(ID_A).carte, ambigu: true },
+                candidats: ids.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
+        }
+        throw new Error(`mode inconnu ${mode}`);
+    };
+    const lotFabrique = async () => { if (retardLot) return retardLot(); return [ID_A, ID_B, ID_C].map(id => ({ statutHttp: 200, corps: affirme(id) })); };
+    const nAff = n => Array.from({ length: n }, () => ({ statutHttp: 200, corps: affirme(ID_A) }));
+    const monter = async (cfgApp = cfg, deps = {}) => {
+        const app = express(); app.set('trust proxy', true);
+        for (const l of LOTS) l.enTete(app, cfgApp);
+        app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+        pret.armer(M.verifierIndex);
+        app.use(assembler(LOTS, cfgApp, { gererIdentifier: chaine, gererRetourLive: async (q, s) => s.json({ success: true }), ...deps }));
+        return H.serveur(app);
+    };
+    const sv = await monter();
+    const V = sv.url;
+    // identifier : les états que SEULE la chaîne fabriquée sait produire
+    {
+        mode = 'affirmee';   const a = await inst(3); await ident(V, 'identifiée (verdict ferme)', 200, a.jeton);
+        mode = 'affirmee';   const aq = await compte(); const al = await instLiee(aq); await ident(V, 'identifiée, compte lié (solde de compte)', 200, al.jeton);
+        mode = 'sans-prix';  const sp = await inst(3); await ident(V, 'identifiée sans prix au guide (prixGuide null)', 200, sp.jeton);
+        mode = 'ambigue2';   const a2 = await inst(3); await ident(V, 'a-trancher à 2', 200, a2.jeton);
+        mode = 'ambigue3';   const a3 = await inst(3); await ident(V, 'a-trancher à 3', 200, a3.jeton);
+        mode = 'introuvable:numero-illisible'; await ident(V, 'introuvable / photo-illisible', 200, (await inst(3)).jeton);
+        mode = 'introuvable:aucun-prix';       await ident(V, 'introuvable / hors-catalogue', 200, (await inst(3)).jeton);
+        mode = 'ia-echec';   await ident(V, 'panne IA remboursée', 200, (await inst(3)).jeton);
+        mode = 'indisponible'; await ident(V, 'panne INDISPONIBLE (source tombée) remboursée', 503, (await inst(3)).jeton);
+        mode = 'exception';  await ident(V, 'exception de la chaîne (SERVEUR) remboursée', 500, (await inst(3)).jeton);
+        mode = 'affirmee';
+        const svLot = await monter(cfg, { identifierLot: lotFabrique });
+        const l = await inst(3); await ident(svLot.url, 'lot de 3 cartes', 200, l.jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        retardLot = async () => [...nAff(2), { statutHttp: 500, corps: null }];
+        await ident(svLot.url, 'lot dont une photo est illisible (panne-lecture)', 200, (await inst(3)).jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        retardLot = async () => nAff(25);
+        await ident(svLot.url, 'lot trop grand pour le solde (QUOTA lot-trop-grand)', 429, (await inst(1, { achete: 0 })).jeton, corpsId({ imageUrls: [IMAGE, IMAGE, IMAGE] }));
+        retardLot = null;
+        // le scanner sur un lot (la clé de lot passe par le même traiterIdentifier)
+        const cl = await compte();
+        await jouerFormulaire(svLot.url, 'POST /api/scanner/analyses', 'lot de 3 cartes (statut lot)', 200, '/api/scanner/analyses', formulaire(), siteH(cl.cookie));
+        await svLot.fermer();
+    }
+    // réponses sur la chaîne fabriquée : à 3 candidats, choix « c »
+    {
+        mode = 'ambigue3'; const x = await inst(3); const r = await ident(V, 'a-trancher à 3 pour « c »', 200, x.jeton);
+        await repondre(V, 'choix « c » (candidat sans prix)', 200, x.jeton, { scanId: r.json.scanId, choix: 'c' });
+        mode = 'affirmee';
+    }
+    // comptes — le parcours réel (courrier en mémoire)
+    const attendreCourrier = () => require('../comptes/service').attendre();
+    const postS = (route, etat, attendu, chemin, corps, entetes) => jouer(V, route, etat, attendu, chemin, { corps, entetes: entetes || siteH(null) });
+    let cookie, jetonLien, compteC, jetonInst;
+    {
+        const email = 'a.b+promo@gmail.com';
+        await postS('POST /api/compte/inscription', 'adresse neuve', 202, '/api/compte/inscription', { email, motDePasse: MDP, turnstile: 't' });
+        await attendreCourrier();
+        await postS('POST /api/compte/inscription', 'même adresse sous une autre écriture (202 neutre)', 202, '/api/compte/inscription', { email: 'ab@gmail.com', motDePasse: MDP, turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'adresse invalide', 422, '/api/compte/inscription', { email: 'pas-une-adresse', motDePasse: MDP, turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'mot de passe trop faible', 422, '/api/compte/inscription', { email: 'faible@exemple.fr', motDePasse: 'abc', turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'motDePasse de mauvais type', 400, '/api/compte/inscription', { email: 'x@exemple.fr', motDePasse: 12, turnstile: 't' });
+        await postS('POST /api/compte/inscription', 'sans Origin du site', 403, '/api/compte/inscription', { email: 'y@exemple.fr', motDePasse: MDP }, ip());
+        const mem = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/inscription', 'sous le plafond par IP', 202, '/api/compte/inscription', { email: `plaf${k}@exemple.fr`, motDePasse: MDP, turnstile: 't' }, { ...siteH(null), ...mem });
+        await postS('POST /api/compte/inscription', 'plafond par IP atteint', 429, '/api/compte/inscription', { email: 'plaf9@exemple.fr', motDePasse: MDP, turnstile: 't' }, { ...siteH(null), ...mem });
+        await attendreCourrier();
+        jetonLien = new URL(courrier.envoyes.find(e => e.type === 'verification').lien).searchParams.get('jeton');
+        await postS('POST /api/compte/verification', 'lien inconnu', 404, '/api/compte/verification', { jeton: 'x'.repeat(40) });
+        await postS('POST /api/compte/verification', 'sans Origin du site', 403, '/api/compte/verification', { jeton: jetonLien }, ip());
+        // un lien expiré : ceux de « plaf0 »
+        const plaf = await raw('comptes').findOne({ emailCle: 'plaf0@exemple.fr' });
+        const lienExpire = await raw('liens_email').findOne({ compteId: plaf._id });
+        await raw('liens_email').updateOne({ _id: lienExpire._id }, { $set: { expireLe: new Date(Date.now() - 1000) } });
+        const lienPlaf = courrier.envoyes.find(e => e.email === 'plaf0@exemple.fr');
+        await postS('POST /api/compte/verification', 'lien expiré', 410, '/api/compte/verification', { jeton: new URL(lienPlaf.lien).searchParams.get('jeton') });
+        await postS('POST /api/compte/verification', 'lien valide (25 offertes)', 200, '/api/compte/verification', { jeton: jetonLien });
+        const memV = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/verification', 'sous le plafond', 404, '/api/compte/verification', { jeton: 'y'.repeat(40) }, { ...siteH(null), ...memV });
+        await postS('POST /api/compte/verification', 'plafond par IP atteint', 429, '/api/compte/verification', { jeton: 'y'.repeat(40) }, { ...siteH(null), ...memV });
+        // connexion
+        const conn = await postS('POST /api/compte/connexion', 'identifiants justes', 200, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP });
+        cookie = /rm_session=[^;]+/.exec(conn.entetes['set-cookie'] || '')?.[0];
+        compteC = await raw('comptes').findOne({ emailCle: 'ab@gmail.com' });
+        await postS('POST /api/compte/connexion', 'mot de passe faux', 401, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: 'faux-faux-faux' });
+        await postS('POST /api/compte/connexion', 'adresse inconnue (même réponse)', 401, '/api/compte/connexion', { email: 'inconnu@exemple.fr', motDePasse: MDP });
+        await postS('POST /api/compte/connexion', 'sans Origin du site', 403, '/api/compte/connexion', { email: 'ab@gmail.com', motDePasse: MDP }, ip());
+        for (let k = 0; k < 10; k++) await postS('POST /api/compte/connexion', 'essais sur une adresse', 401, '/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: 'x' + k });
+        await postS('POST /api/compte/connexion', 'plafond par adresse atteint', 429, '/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: 'x' });
+        // oubli / réinitialisation
+        await postS('POST /api/compte/mot-de-passe-oublie', 'adresse connue', 202, '/api/compte/mot-de-passe-oublie', { email: 'ab@gmail.com' });
+        await postS('POST /api/compte/mot-de-passe-oublie', 'adresse inconnue (même réponse)', 202, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' });
+        await postS('POST /api/compte/mot-de-passe-oublie', 'sans Origin du site', 403, '/api/compte/mot-de-passe-oublie', { email: 'ab@gmail.com' }, ip());
+        const memO = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/mot-de-passe-oublie', 'sous le plafond', 202, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' }, { ...siteH(null), ...memO });
+        await postS('POST /api/compte/mot-de-passe-oublie', 'plafond par IP atteint', 429, '/api/compte/mot-de-passe-oublie', { email: 'inconnu@exemple.fr' }, { ...siteH(null), ...memO });
+        await attendreCourrier();
+        const reinit = courrier.envoyes.filter(e => e.type === 'reinit' && e.email === compteC.email).pop();
+        const jetonReinit = new URL(reinit.lien).searchParams.get('jeton');
+        await postS('POST /api/compte/reinitialiser', 'lien inconnu', 404, '/api/compte/reinitialiser', { jeton: 'z'.repeat(40), motDePasse: 'nouveau-mot-de-passe-solide' });
+        const memR = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/reinitialiser', 'sous le plafond', 404, '/api/compte/reinitialiser', { jeton: 'w'.repeat(40), motDePasse: 'nouveau-mot-de-passe-solide' }, { ...siteH(null), ...memR });
+        await postS('POST /api/compte/reinitialiser', 'plafond par IP atteint', 429, '/api/compte/reinitialiser', { jeton: 'w'.repeat(40), motDePasse: 'nouveau-mot-de-passe-solide' }, { ...siteH(null), ...memR });
+        await postS('POST /api/compte/reinitialiser', 'sans Origin du site', 403, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'nouveau-mot-de-passe-solide' }, ip());
+        await postS('POST /api/compte/reinitialiser', 'mot de passe trop faible (le lien n\'est pas brûlé)', 422, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'abc' });
+        await postS('POST /api/compte/reinitialiser', 'motDePasse de mauvais type', 400, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 5 });
+        const lr = await raw('liens_email').findOne({ type: 'reinit', compteId: compteC._id, utiliseLe: null });
+        await raw('liens_email').updateOne({ _id: lr._id }, { $set: { expireLe: new Date(Date.now() - 1000) } });
+        await postS('POST /api/compte/reinitialiser', 'lien expiré', 410, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'nouveau-mot-de-passe-solide' });
+        await raw('liens_email').updateOne({ _id: lr._id }, { $set: { expireLe: new Date(Date.now() + 3600e3) } });
+        await postS('POST /api/compte/reinitialiser', 'lien valide', 200, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'nouveau-mot-de-passe-solide' });
+        // renvoi (route servie, hors contrat)
+        consignerHorsContrat('POST /api/compte/renvoyer-verification', 'adresse quelconque', await H.appel(V, '/api/compte/renvoyer-verification', { methode: 'POST', corps: { email: 'ab@gmail.com' }, entetes: siteH(null) }));
+        // nouvelle session (la réinitialisation a révoqué les sessions)
+        const conn2 = await H.appel(V, '/api/compte/connexion', { methode: 'POST', corps: { email: 'ab@gmail.com', motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: siteH(null) });
+        cookie = /rm_session=[^;]+/.exec(conn2.entetes['set-cookie'] || '')?.[0];
+        H.vrai('connexion après réinitialisation : un cookie est posé', Boolean(cookie));
+        // installation → code → liaison
+        const instR = await jouer(V, 'POST /api/installation', 'créée (assembleur)', 201, '/api/installation', { corps: { versionExtension: '2.0.0', libelle: 'Chrome · Windows' }, entetes: ip() });
+        jetonInst = instR.json.jetonInstallation;
+        const code = await jouer(V, 'POST /api/compte/code', 'session ouverte', 200, '/api/compte/code', { corps: {}, entetes: siteH(cookie) });
+        await jouer(V, 'POST /api/compte/code', 'sans session', 401, '/api/compte/code', { corps: {}, entetes: siteH(null) });
+        await jouer(V, 'POST /api/compte/code', 'sans Origin du site', 403, '/api/compte/code', { corps: {}, entetes: { cookie, ...ip() } });
+        await jouer(V, 'POST /api/compte/code', 'deuxième code vivant', 200, '/api/compte/code', { corps: {}, entetes: siteH(cookie) });
+        await jouer(V, 'POST /api/compte/code', 'troisième code vivant', 200, '/api/compte/code', { corps: {}, entetes: siteH(cookie) });
+        await jouer(V, 'POST /api/compte/code', 'trop de codes vivants (DEBIT, Retry-After)', 429, '/api/compte/code', { corps: {}, entetes: siteH(cookie) });
+        await jouer(V, 'POST /api/compte/lier', 'sans Authorization', 401, '/api/compte/lier', { corps: { code: code.json.code }, entetes: ip() });
+        await jouer(V, 'POST /api/compte/lier', 'code inconnu', 404, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(jetonInst) });
+        const codeExpire = J.genererCode(6);
+        await raw('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(codeExpire), compteId: compteC._id, creeLe: new Date(), expireLe: new Date(Date.now() - 1000), utiliseLe: null });
+        await jouer(V, 'POST /api/compte/lier', 'code expiré', 410, '/api/compte/lier', { corps: { code: codeExpire }, entetes: extH(jetonInst) });
+        const lie = await jouer(V, 'POST /api/compte/lier', 'code valide', 200, '/api/compte/lier', { corps: { code: code.json.code }, entetes: extH(jetonInst) });
+        const jetonLie = lie.json && lie.json.jetonInstallation;
+        await jouer(V, 'POST /api/compte/lier', 'installation déjà liée', 409, '/api/compte/lier', { corps: { code: 'ABCDEF' }, entetes: extH(jetonLie) });
+        const seul = await inst(3);
+        for (let k = 0; k < 5; k++) await jouer(V, 'POST /api/compte/lier', 'essais sous le plafond', 404, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
+        await jouer(V, 'POST /api/compte/lier', 'plafond par installation atteint', 429, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
+        // lecture du compte, révocation, déliaison
+        await jouer(V, 'GET /api/compte', 'compte vérifié, installation liée', 200, '/api/compte', { entetes: siteH(cookie) });
+        await jouer(V, 'GET /api/compte', 'sans session', 401, '/api/compte', { entetes: ip() });
+        const idLiee = (await raw('installations').findOne({ compteId: compteC._id }))._id;
+        const autreC = await compte(); const autreI = await instLiee(autreC);
+        await jouer(V, 'DELETE /api/compte/installations/{id}', 'installation d\'un autre compte (404, rien révélé)', 404, `/api/compte/installations/${autreI.i._id}`, { entetes: siteH(cookie) });
+        await jouer(V, 'DELETE /api/compte/installations/{id}', 'sans session', 401, `/api/compte/installations/${idLiee}`, { entetes: siteH(null) });
+        await jouer(V, 'DELETE /api/compte/installations/{id}', 'sans Origin du site', 403, `/api/compte/installations/${idLiee}`, { entetes: { cookie, ...ip() } });
+        const dl = await jouer(V, 'POST /api/compte/delier', 'installation liée', 200, '/api/compte/delier', { corps: {}, entetes: extH(jetonLie) });
+        void dl;
+        await jouer(V, 'POST /api/compte/delier', 'jeton inconnu', 401, '/api/compte/delier', { corps: {}, entetes: extH('c'.repeat(32)) });
+        const jetonR = J.genererJeton(); const iR = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jetonR), essais: 0, libelle: 'à révoquer' }), { compteId: compteC._id });
+        await raw('installations').insertOne(iR);
+        await jouer(V, 'DELETE /api/compte/installations/{id}', 'installation du compte', 200, `/api/compte/installations/${iR._id}`, { entetes: siteH(cookie) });
+        // déconnexion, suppression
+        await jouer(V, 'POST /api/compte/deconnexion', 'sans Origin du site', 403, '/api/compte/deconnexion', { corps: {}, entetes: ip() });
+        await jouer(V, 'DELETE /api/compte', 'sans session', 401, '/api/compte', { corps: { motDePasse: MDP }, entetes: siteH(null) });
+        await jouer(V, 'DELETE /api/compte', 'sans Origin du site', 403, '/api/compte', { corps: { motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: { cookie, ...ip() } });
+        await jouer(V, 'DELETE /api/compte', 'mot de passe faux (IDENTIFIANTS)', 401, '/api/compte', { corps: { motDePasse: 'faux-faux-faux' }, entetes: siteH(cookie) });
+        const ach = await compte({ motDePasse: await require('../comptes/mots-de-passe').hacher(MDP), solde: { accueil: 0, achete: 5 } });
+        await jouer(V, 'DELETE /api/compte', 'crédits achetés sans renonciation (CREDITS_ACHETES)', 409, '/api/compte', { corps: { motDePasse: MDP }, entetes: siteH(ach.cookie) });
+        await jouer(V, 'POST /api/compte/deconnexion', 'session ouverte', 200, '/api/compte/deconnexion', { corps: {}, entetes: siteH(cookie) });
+        const conn3 = await H.appel(V, '/api/compte/connexion', { methode: 'POST', corps: { email: 'ab@gmail.com', motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: siteH(null) });
+        const cookie3 = /rm_session=[^;]+/.exec(conn3.entetes['set-cookie'] || '')?.[0];
+        await jouer(V, 'DELETE /api/compte', 'mot de passe juste', 200, '/api/compte', { corps: { motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: siteH(cookie3) });
+    }
+    // solde d'un compte à abonnement, côté assembleur (le même schéma)
+    // le scanner — l'assembleur
+    {
+        const scan = (etat, attendu, c, { form = formulaire(), entetes } = {}) => jouerFormulaire(V, 'POST /api/scanner/analyses', etat, attendu, '/api/scanner/analyses', form, entetes || siteH(c && c.cookie));
+        const c = await compte();
+        mode = 'affirmee';  const r1 = await scan('identifiée (prixLive null, regleVerdict null)', 200, c);
+        mode = 'sans-prix'; await scan('identifiée sans prix au guide (remboursée sans-prix)', 200, await compte());
+        mode = 'ambigue2';  const ra2 = await scan('a-trancher à 2', 200, c);
+        mode = 'ambigue3';  const ra3 = await scan('a-trancher à 3', 200, c);
+        mode = 'introuvable:aucun-prix'; await scan('introuvable / hors-catalogue', 200, c);
+        mode = 'ia-echec';  await scan('panne IA remboursée', 200, c);
+        mode = 'exception'; await scan('exception de la chaîne (SERVEUR)', 500, c);
+        mode = 'affirmee';
+        await scan('PNG, source=fichier', 200, c, { form: formulaire({ image: PNG, type: 'image/png', source: 'fichier' }) });
+        await scan('administrateur', 200, await compte({ role: 'administrateur' }));
+        await scan('sans session', 401, null);
+        await scan('compte non vérifié', 403, await compte({ verifie: false, solde: { accueil: 0, achete: 0 } }));
+        await scan('Origin de l\'extension', 403, c, { entetes: { origin: EXT, 'x-rat-market': '1', cookie: c.cookie, ...ip() } });
+        await scan('octets d\'exécutable', 415, c, { form: formulaire({ image: EXE }) });
+        await scan('partie image vide', 422, c, { form: formulaire({ image: Buffer.alloc(0) }) });
+        await scan('source hors liste', 400, c, { form: formulaire({ source: 'url' }) });
+        const vide = await compte({ solde: { accueil: 0, achete: 0 } });
+        await raw('hebdo').insertOne({ compteId: vide.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });
+        await scan('QUOTA compte (achat.url)', 429, vide);
+        // une clé déjà en cours (429 DEBIT) : l'empreinte du corps est celle que le serveur calcule (source + sha256 de l'image)
+        const k = cle(); await claimEnCours(`compte:${c.c._id}`, 'scanner', k, { source: 'camera', image: crypto.createHash('sha256').update(JPEG).digest('hex') });
+        await scan('même Idempotency-Key encore en cours (DEBIT)', 429, c, { entetes: siteH(c.cookie, { 'idempotency-key': k }) });
+        // 413 : Content-Length annoncé trop grand
+        await (async () => {
+            const u = new URL(V + '/api/scanner/analyses'); const http = require('http');
+            const rep = await new Promise(res => { const q = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=BBB', 'content-length': String(13 * 1024 * 1024 + 70000), ...siteH(c.cookie) } },
+                r => { let t = ''; r.on('data', d => { t += d; }); r.on('end', () => res({ statut: r.statusCode, texte: t, entetes: r.headers })); }); q.on('error', () => res({ statut: 0, texte: '', entetes: {} })); q.write(Buffer.alloc(2000, 1)); });
+            let json = null; try { json = JSON.parse(rep.texte); } catch { /* */ }
+            consigner('POST /api/scanner/analyses', 'Content-Length annoncé > 12 Mo (413, connexion fermée)', { ...rep, json });
+            if (rep.statut !== 413) mal.push(`POST /api/scanner/analyses [413] : statut ${rep.statut}`);
+        })();
+        // 408 : un client trop lent, sur un montage à échéance courte
+        const svLent = await monter(cfg, { scannerDelaiLectureMs: 300 });
+        await (async () => {
+            const u = new URL(svLent.url + '/api/scanner/analyses'); const http = require('http');
+            const rep = await new Promise(res => { const q = http.request({ host: u.hostname, port: u.port, path: u.pathname, method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=BBB', 'content-length': '5000', ...siteH(c.cookie) } },
+                r => { let t = ''; r.on('data', d => { t += d; }); r.on('end', () => res({ statut: r.statusCode, texte: t, entetes: r.headers })); }); q.on('error', () => res({ statut: 0, texte: '', entetes: {} })); q.write('--BBB\r\n'); });
+            let json = null; try { json = JSON.parse(rep.texte); } catch { /* */ }
+            consigner('POST /api/scanner/analyses', 'client trop lent (408, connexion fermée)', { ...rep, json });
+            if (rep.statut !== 408) mal.push(`POST /api/scanner/analyses [408] : statut ${rep.statut}`);
+        })();
+        await svLent.fermer();
+        // 500 : une exception du lecteur de corps APRÈS la prise de la porte
+        const MP = require('../scanner/multipart'), orig = MP.lireMultipart;
+        MP.lireMultipart = async () => { throw new TypeError('défaut simulé'); };
+        try { await scan('exception du lecteur de corps (SERVEUR)', 500, c); } finally { MP.lireMultipart = orig; }
+        // la réponse à une question au scanner
+        const rep = (etat, attendu, cc, scanId, corps, entetes) => jouer(V, 'POST /api/scanner/analyses/{id}/reponse', etat, attendu, `/api/scanner/analyses/${scanId}/reponse`, { corps, entetes: entetes || siteH(cc && cc.cookie) });
+        if (!(ra2.json && ra2.json.analyse && ra2.json.analyse.cartes[0].question)) { console.log('   anomalies du banc avant arrêt :', JSON.stringify(mal), JSON.stringify(ra2.json).slice(0, 400)); }
+        const idA2 = ra2.json.scanId, ch2 = ra2.json.analyse.cartes[0].question.choix;
+        await rep('choix « a »', 200, c, idA2, { choix: ch2[0].id, carte: 0 });
+        await rep('rejeu du même choix', 200, c, idA2, { choix: ch2[0].id });
+        await rep('réponse contradictoire', 409, c, idA2, { choix: ch2[1].id });
+        await rep('scan d\'un autre compte', 404, await compte(), idA2, { choix: ch2[0].id });
+        await rep('sans session', 401, null, idA2, { choix: 'a' });
+        await rep('sans Origin du site', 403, c, idA2, { choix: 'a' }, { cookie: c.cookie, ...ip() });
+        await rep('identifiant illisible dans le chemin', 400, c, 'pas-un-id', { choix: 'a' });
+        const idA3 = ra3.json.scanId, ch3 = ra3.json.analyse.cartes[0].question.choix;
+        await rep('choix « c » (candidat sans prix, remboursé sans-prix)', 200, c, idA3, { choix: ch3[2].id });
+        mode = 'ambigue2'; const rb = await scan('a-trancher à 2 pour « aucune »', 200, c);
+        const rc = await scan('a-trancher à 2 pour « ne-sait-pas »', 200, c);
+        const rd = await scan('a-trancher à 2 pour une question expirée', 200, c);
+        mode = 'affirmee';
+        await rep('choix « aucune »', 200, c, rb.json.scanId, { choix: 'aucune' });
+        await rep('choix « ne-sait-pas »', 200, c, rc.json.scanId, { choix: 'ne-sait-pas' });
+        await raw('questions').updateOne({ _id: `${rd.json.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 72 * 3600e3) } });
+        await rep('question abandonnée après 24 h', 410, c, rd.json.scanId, { choix: 'a' });
+        const k2 = cle(); await claimEnCours(`compte:${c.c._id}`, 'reponse-scanner', k2, { choix: 'a', scanId: rb.json.scanId });
+        await rep('même Idempotency-Key encore en cours (DEBIT)', 429, c, rb.json.scanId, { choix: 'a' }, siteH(c.cookie, { 'idempotency-key': k2 }));
+        void r1;
+    }
+    // le banc réel et le paiement — routes SERVIES mais absentes de `paths` (jugées comme erreurs seulement ; voir le constat plus bas)
+    {
+        const x = await inst(3);
+        consignerHorsContrat('POST /api/banc/correction', 'scan inconnu', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: String(new mongoose.Types.ObjectId()), idProduct: ID_A }, entetes: extH(x.jeton) }));
+        consignerHorsContrat('POST /api/banc/correction', 'sans Authorization', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: 'x' }, entetes: extH(null) }));
+        consignerHorsContrat('POST /api/banc/correction', 'scanId mal formé', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: 'x', idProduct: ID_A }, entetes: extH(x.jeton) }));
+        consignerHorsContrat('DELETE /api/banc/contributions', 'jeton inconnu (200, 0)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'jeton-inconnu-abcdefghij1234' }, entetes: extH(x.jeton) }));
+        consignerHorsContrat('DELETE /api/banc/contributions', 'sans Authorization (401)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'jeton-inconnu-abcdefghij1234' }, entetes: extH(null) }));
+        consignerHorsContrat('DELETE /api/banc/contributions', 'forme de jeton invalide (400)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'x' }, entetes: extH(x.jeton) }));
+        consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
+    }
+    // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
+    {
+        pret.armer(async () => ({ manquants: ['index-du-banc'] }));
+        const fauxId = 'a'.repeat(24);
+        const REQ503 = {
+            'POST /api/installation': { chemin: '/api/installation', corps: { versionExtension: '2.0.0' } },
+            'POST /api/identifier': { chemin: '/api/identifier', corps: corpsId(), entetes: { 'idempotency-key': cle() } },
+            'POST /api/identifier/reponse': { chemin: '/api/identifier/reponse', corps: { scanId: fauxId, choix: 'a' } },
+            'POST /api/retour-live': { chemin: '/api/retour-live', corps: { scanId: fauxId, prixLive: 5 }, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'POST /api/solde': { chemin: '/api/solde', corps: {}, entetes: { authorization: 'Bearer ' + 'a'.repeat(32) } },
+            'GET /api/compte': { chemin: '/api/compte' },
+            'DELETE /api/compte': { chemin: '/api/compte', corps: { motDePasse: MDP } },
+            'POST /api/compte/inscription': { chemin: '/api/compte/inscription', corps: { email: 'a@exemple.fr', motDePasse: MDP } },
+            'POST /api/compte/verification': { chemin: '/api/compte/verification', corps: { jeton: 'x' } },
+            'POST /api/compte/connexion': { chemin: '/api/compte/connexion', corps: { email: 'a@exemple.fr', motDePasse: MDP } },
+            'POST /api/compte/deconnexion': { chemin: '/api/compte/deconnexion', corps: {} },
+            'POST /api/compte/mot-de-passe-oublie': { chemin: '/api/compte/mot-de-passe-oublie', corps: { email: 'a@exemple.fr' } },
+            'POST /api/compte/reinitialiser': { chemin: '/api/compte/reinitialiser', corps: { jeton: 'x', motDePasse: MDP } },
+            'POST /api/compte/code': { chemin: '/api/compte/code', corps: {} },
+            'POST /api/compte/lier': { chemin: '/api/compte/lier', corps: { code: 'ABCDEF' } },
+            'POST /api/compte/delier': { chemin: '/api/compte/delier', corps: {} },
+            'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
+            'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },
+            'POST /api/scanner/analyses/{id}/reponse': { chemin: `/api/scanner/analyses/${fauxId}/reponse`, corps: { choix: 'a' } }
+        };
+        const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route]).map(o => o.route);
+        H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);
+        for (const [route, q] of Object.entries(REQ503)) {
+            const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
+            if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() });
+            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') ? SITE : EXT } });
+        }
+        pret.armer(M.verifierIndex);
+    }
+    await sv.fermer();
+    const tousLesCas = grandLivre.length;
+
+    // ═══════════════════════════ BILAN DU STEP 1 ═══════════════════════════
+    H.v('états joués au statut attendu (anomalies du banc : un état mal fabriqué n\'est pas un écart de contrat)', mal, []);
+    // Les écarts qui viennent du SERVEUR (le contrat publié dit X, le serveur rend Y) ne se « corrigent » pas dans le schéma pour faire passer : ils sont DÉCLARÉS ici, avec leur
+    // raison, imprimés à chaque exécution et signalés au rapport. Une déclaration qui ne mord plus (le défaut est réparé) fait ÉCHOUER le banc : elle doit être retirée.
+    const ECARTS_DECLARES = [
+        { route: 'GET /api/compte', chemin: /^\$\.historique\.lignes\[\d+\]$/, raison: 'DÉFAUT DU SERVEUR (argent/solde.js historique, lot B3) : il rend { type:\'analyse\', scanId, cartes[], … } et { type:\'credits\', reference, nature, delta, poche, motif }, le contrat publié (LigneAnalyse / LigneCredits, CONTRAT-API-V2.md l. 669-710) dit { genre, carte, cartesVues, … } et { genre, motif ∈ accueil|hebdo|achat, credits }' }
+    ];
+    for (const e of grandLivre) {
+        e.declares = [];
+        e.ecarts = e.ecarts.filter(x => { const d = ECARTS_DECLARES.find(z => z.route === e.route && z.chemin.test(x.chemin)); if (d) { e.declares.push({ ...x, d }); return false; } return true; });
+    }
+    for (const d of ECARTS_DECLARES) {
+        const n = grandLivre.filter(e => e.declares.some(x => x.d === d)).length;
+        console.log(`   ÉCART DÉCLARÉ (${n} réponse(s)) ${d.route} ${d.chemin} : ${d.raison}`);
+        H.vrai(`écart déclaré encore vrai : ${d.route} ${d.chemin}`, n > 0);
+    }
+    const ecarts = grandLivre.filter(e => e.ecarts.length);
+    for (const e of ecarts) console.log(`   ÉCART  ${e.route} [${e.etat}] ${e.statut} : ${e.ecarts.slice(0, 4).map(x => `${x.chemin} ${x.message}`).join(' ; ')}`);
+    const dansContrat = grandLivre.filter(e => !e.horsContrat), declarees = dansContrat.filter(e => e.declares.length), valides = dansContrat.filter(e => !e.ecarts.length && !e.declares.length);
+    console.log(`   ${dansContrat.length} réponses, ${valides.length} valides, ${dansContrat.length - valides.length - declarees.length} écart(s), ${declarees.length} à écart déclaré (défaut du serveur)`);
+    H.v(`${dansContrat.length} réponses, ${valides.length} valides, 0 écart nouveau, ${declarees.length} à écart déclaré`, dansContrat.length - valides.length - declarees.length, 0);
+    // dénominateur des routes : celles de `paths` / celles jouées dans au moins un état
+    const jouees = new Set(dansContrat.map(e => e.route));
+    const nonJouees = OPERATIONS.filter(o => !jouees.has(o.route)).map(o => o.route);
+    console.log(`   routes : ${OPERATIONS.length} dans paths, ${OPERATIONS.length - nonJouees.length} jouées`);
+    H.v(`routes de paths jouées dans au moins un état (${OPERATIONS.length - nonJouees.length} / ${OPERATIONS.length})`, nonJouees, []);
+    // chaque statut documenté : joué, ou déclaré non joué avec sa raison (et une déclaration périmée est vue)
+    const NON_JOUES = {
+        'DELETE /api/compte 400': 'aucun chemin du handler ne rend 400 (supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES ; le garde de site rend 403) — statut documenté, non produit par le serveur',
+        'POST /api/compte/deconnexion 401': 'la déconnexion rend toujours 200 (même sans cookie) ; seul le garde de site peut refuser (403) — statut documenté, non produit par le serveur',
+        'POST /api/compte/mot-de-passe-oublie 400': 'le corps illisible est traité comme une adresse absente (202 neutre) — statut documenté, non produit par le serveur'
+    };
+    const joues = new Set(dansContrat.map(e => `${e.route} ${e.statut}`));
+    const nonJouesDoc = STATUTS_DOCUMENTES.map(s => `${s.route} ${s.statut}`).filter(k => !joues.has(k));
+    console.log(`   statuts documentés : ${STATUTS_DOCUMENTES.length} ; joués ${STATUTS_DOCUMENTES.length - nonJouesDoc.length} ; déclarés non joués ${Object.keys(NON_JOUES).length}`);
+    H.v('statuts documentés ni joués ni déclarés non joués', nonJouesDoc.filter(k => !(k in NON_JOUES)), []);
+    H.v('déclarations « non joué » périmées (le statut a été joué)', Object.keys(NON_JOUES).filter(k => joues.has(k)), []);
+    for (const k of Object.keys(NON_JOUES)) console.log(`   non joué : ${k} — ${NON_JOUES[k]}`);
+    // les codes d'erreur : tous ceux de la liste fermée que le serveur a produits, et ceux que le banc n'a pas pu produire (dits)
+    const produits = new Set(grandLivre.filter(e => e.json && e.json.erreur).map(e => e.json.erreur.code));
+    const horsListe = [...produits].filter(c => !Object.hasOwn(CODES, c));
+    H.v('un code produit par le serveur et absent de la liste fermée / du schéma', horsListe, []);
+    const JAMAIS = Object.keys(CODES).filter(c => !produits.has(c));
+    console.log(`   codes de la liste fermée produits : ${Object.keys(CODES).length - JAMAIS.length} / ${Object.keys(CODES).length} ; non produits par le banc : ${JAMAIS.join(', ') || 'aucun'}`);
+    const CODES_NON_PRODUITS = { EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
+    H.v('codes de la liste fermée jamais produits et non déclarés', JAMAIS.filter(c => !(c in CODES_NON_PRODUITS)), []);
+    // les raisons d'« introuvable » que le serveur peut produire (les deux autres sont dans le contrat mais ne sortent d'aucun chemin du code)
+    const raisonsVues = new Set();
+    (function parcourir(x) { if (Array.isArray(x)) return x.forEach(parcourir); if (x && typeof x === 'object') { if (x.statut === 'introuvable' && typeof x.raison === 'string') raisonsVues.add(x.raison); Object.values(x).forEach(parcourir); } })(grandLivre.map(e => e.json));
+    console.log(`   raisons d'introuvable produites : ${[...raisonsVues].sort().join(', ')}`);
+    H.v('raisons d\'introuvable que le serveur sait produire, toutes jouées', ['photo-illisible', 'hors-catalogue', 'panne-lecture'].filter(r => !raisonsVues.has(r)), []);
+    const motifsVus = new Set(grandLivre.map(e => e.json && e.json.facturation && e.json.facturation.motif).filter(Boolean));
+    console.log(`   motifs de facturation produits : ${[...motifsVus].sort().join(', ')}`);
+
+    // routes SERVIES et absentes de `paths` : l'ensemble est DÉCLARÉ (une route de plus fait échouer le banc)
+    const express2 = require('express');
+    const servies = (function () {
+        const out = new Set(); const app = express2(); for (const l of LOTS) { l.enTete(app, cfg); }
+        app.use(assembler(LOTS, cfg, { gererIdentifier: chaine }));
+        (function lire(pile) { for (const l of pile || []) { if (l.route) for (const m of Object.keys(l.route.methods)) out.add(`${m.toUpperCase()} ${l.route.path.replace(/:([A-Za-z]+)/g, '{$1}')}`); else if (l.name === 'router' && l.handle && l.handle.stack) lire(l.handle.stack); } })(app._router && app._router.stack);
+        return out;
+    })();
+    const dansPaths = new Set(OPERATIONS.map(o => o.route));
+    const horsContrat = [...servies].filter(r => !dansPaths.has(r)).sort();
+    const HORS_CONTRAT_DECLAREES = ['DELETE /api/banc/contributions', 'POST /api/banc/correction', 'POST /api/compte/renvoyer-verification', 'POST /api/creer-recharge'];
+    console.log(`   routes servies par l'assembleur : ${servies.size} ; absentes de paths : ${horsContrat.join(', ')}`);
+    H.v('routes servies et absentes de `paths` = exactement la liste déclarée (écart de contrat à trancher par le coordinateur)', horsContrat, HORS_CONTRAT_DECLAREES);
+    H.v('corps d\'erreur des routes hors contrat : tous valides contre ReponseErreur', grandLivre.filter(e => e.horsContrat && e.ecarts.length).map(e => `${e.route} [${e.etat}]`), []);
+    console.log(`   constat : un JSON illisible sur /api/identifier rend ${sondeJsonIllisible.statut} ${sondeJsonIllisible.ct} « ${sondeJsonIllisible.debut.replace(/\s+/g, ' ')} »`);
+
+    // ce que le banc a constaté côté SERVEUR est écrit dans CONTRAT-API-V2.md §7.4 (jamais corrigé en silence)
+    {
+        const doc = require('fs').readFileSync(path.join(R, 'CONTRAT-API-V2.md'), 'utf8'); const i = doc.indexOf('### 7.4');
+        const s74 = i >= 0 ? doc.slice(i, doc.indexOf('## 8.')) : '';
+        H.vrai('CONTRAT-API-V2.md §7.4 existe', s74.length > 0);
+        H.v('§7.4 nomme chaque route servie hors contrat', HORS_CONTRAT_DECLAREES.filter(r => !s74.includes(r.split(' ')[1])), []);
+        H.v('§7.4 nomme chaque écart déclaré (route et champ)', ECARTS_DECLARES.filter(d => !s74.includes(d.route.split(' ')[1]) || !s74.includes('historique.lignes')).map(d => d.route), []);
+        H.v('§7.4 nomme chaque statut documenté non joué', Object.keys(NON_JOUES).filter(k => !s74.includes(k.split(' ').slice(0, 2).join(' ').replace(/^[A-Z]+ /, '')) ).map(k => k), []);
+    }
+    // les dettes du ruling 5
+    {
+        const ATT = require('fs').readFileSync(path.join(__dirname, 'test-openapi.js'), 'utf8');
+        H.vrai('ruling 5 : ATTENDUES_ABSENTES de test-openapi.js est vide', /const ATTENDUES_ABSENTES = \[\];/.test(ATT));
+        const adaptateur = require('../identifier/adaptateur');
+        const raisonsSchema = SCHEMA.components.schemas.CarteIntrouvable.properties.raison.enum.filter(x => x !== null);
+        H.v('ruling 5 : RAISONS (adaptateur.js) = CarteIntrouvable.raison (contrat), ensemble pour ensemble', [[...adaptateur.RAISONS].sort(), [...raisonsSchema].sort()].map(JSON.stringify).reduce((a, b) => a === b), true);
+        const t = SCHEMA.components.schemas.Set ? SCHEMA.components.schemas.Set : SCHEMA.components.schemas.SetProduit;
+        const ty = t.properties.tirage.type;
+        H.v('ruling 5 : Produit.set.tirage est déclaré nullable', Array.isArray(ty) && ty.includes('null'), true);
+        const prodVus = []; (function p(x) { if (Array.isArray(x)) return x.forEach(p); if (x && typeof x === 'object') { if (x.set && typeof x.set === 'object' && 'tirage' in x.set && 'idProduct' in x) prodVus.push(x.set.tirage); Object.values(x).forEach(p); } })(grandLivre.map(e => e.json));
+        console.log(`   Produit.set.tirage : ${prodVus.filter(v => v === null).length} null sur ${prodVus.length} produits servis`);
+        H.vrai('ruling 5 : Produit.set.tirage est encore TOUJOURS null (catalogue.js le pose à null), dénominateur > 0', prodVus.length > 0 && prodVus.every(v => v === null));
+    }
+
+    // ═══════════════════════════ STEP 2 — LA PROPRIÉTÉ INVERSE : le validateur sait dire NON ═══════════════════════════
+    {
+        const clone = o => JSON.parse(JSON.stringify(o));
+        const trouver = (route, motEtat, statut) => { const e = dansContrat.find(x => x.route === route && x.etat.includes(motEtat) && (statut === undefined || x.statut === statut) && x.json); if (!e) throw new Error(`corruption : aucune réponse « ${route} [${motEtat}] »`); return e; };
+        const C = [
+            ['1. une clé ajoutée à la racine (analyse)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.extra = 1; }],
+            ['2. un score ajouté (la confiance chiffrée est interdite)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.score = 0.97; }],
+            ['3. une clé requise retirée (facturation)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { delete j.facturation; }],
+            ['4. une clé requise retirée (solde.essai)', trouver('POST /api/solde', 'installation non liée'), j => { delete j.solde.essai; }],
+            ['5. un type changé (cartes[0].index en chaîne)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].index = '0'; }],
+            ['6. un type changé (carte.idProduct en chaîne)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].carte.idProduct = String(j.analyse.cartes[0].carte.idProduct); }],
+            ['7. une valeur hors liste (analyse.statut)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.statut = 'peut-etre'; }],
+            ['8. un code d\'erreur hors liste', trouver('POST /api/identifier', 'QUOTA installation'), j => { j.erreur.code = 'INCONNU'; }],
+            ['9. un motif de facturation retiré de la liste (code-maitre)', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.facturation.motif = 'code-maitre'; }],
+            ['10. une variante hors liste', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].candidats[0].variante = 'V9'; }],
+            ['11. un état Cardmarket inconnu', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].etat = { estime: 'MINT', confiance: 'haute', defauts: [], declare: null, retenu: null }; }],
+            ['12. une clé en trop dans un Produit imbriqué', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].carte.classement = 1; }],
+            ['13. une confiance chiffrée', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].etat = { estime: 'EX', confiance: 0.97, defauts: [], declare: null, retenu: 'EX' }; }],
+            ['14. un contrat différent de 2', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.contrat = 3; }],
+            ['15. success en chaîne', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.success = 'true'; }],
+            ['16. une image Cardmarket', trouver('POST /api/identifier', 'identifiée (verdict ferme)'), j => { j.analyse.cartes[0].carte.visuel.url = 'https://www.cardmarket.com/img/x.jpg'; }],
+            ['17. une raison d\'introuvable hors liste', trouver('POST /api/identifier', 'introuvable / hors-catalogue'), j => { j.analyse.cartes[0].raison = 'trop-flou'; }],
+            ['18. un a-trancher à un seul candidat', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].candidats.length = 1; }],
+            ['19. un a-trancher à quatre candidats', trouver('POST /api/identifier', 'a-trancher à 3'), j => { const c = j.analyse.cartes[0]; c.candidats.push(clone(c.candidats[0])); }],
+            ['20. un identifiant de choix inconnu', trouver('POST /api/identifier', 'a-trancher à 2'), j => { j.analyse.cartes[0].question.choix[0].id = 'z'; }],
+            ['21. une erreur sans facturation', trouver('POST /api/identifier', 'QUOTA installation'), j => { delete j.facturation; }],
+            ['22. l\'ancienne forme de solde (soldeGratuit)', trouver('POST /api/solde', 'installation non liée'), j => { j.solde.soldeGratuit = 17; }],
+            ['23. une liaison dont le jeton renouvelé est retiré', trouver('POST /api/compte/lier', 'code valide'), j => { delete j.jetonInstallation; }],
+            ['24. un ping dont version n\'est plus une chaîne', trouver('GET /ping', 'serveur v2 allumé'), j => { j.version = 3; }]
+        ];
+        H.v('propriété inverse : 24 corruptions définies', C.length, 24);
+        let refusees = 0; const acceptees = [];
+        for (const [nom, e, abimer] of C) {
+            const sain = A.juger(e.route, e.statut, e.json, JSON.stringify(e.json), e.entetes).filter(x => !x.message.startsWith('(ReponseErreur)'));
+            const c = clone(e.json); abimer(c);
+            const apres = A.juger(e.route, e.statut, c, JSON.stringify(c), e.entetes);
+            if (sain.length) acceptees.push(`${nom} : la réponse de départ n'était pas saine`);
+            else if (!apres.length) acceptees.push(nom);
+            else refusees++;
+        }
+        console.log(`   propriété inverse : ${refusees} corruptions refusées sur ${C.length}`);
+        H.v('propriété inverse : le validateur REFUSE les 24 corruptions (liste de celles qu\'il accepte)', acceptees, []);
+        // LE BANC SAIT ÊTRE ROUGE (TDD de la propriété inverse) : deux validateurs MUTANTS — l'un ignore `additionalProperties:false`, l'autre ignore `enum` et `const` — doivent LAISSER PASSER
+        // plusieurs des 24 corruptions. Si les 24 passaient aussi par un validateur lâche, la mesure ne mesurerait pas le validateur.
+        const muter = f => { const m = clone(SCHEMA); (function parcourir(x) { if (Array.isArray(x)) return x.forEach(parcourir); if (x && typeof x === 'object') { f(x); Object.values(x).forEach(parcourir); } })(m.paths); (function parcourir(x) { if (Array.isArray(x)) return x.forEach(parcourir); if (x && typeof x === 'object') { f(x); Object.values(x).forEach(parcourir); } })(m.components); return m; };
+        const mutants = { 'additionalProperties ignoré': muter(x => { if (x.additionalProperties === false) delete x.additionalProperties; }), 'enum et const ignorés': muter(x => { delete x.enum; delete x.const; }) };
+        for (const [nomMutant, doc] of Object.entries(mutants)) {
+            let laisses = 0;
+            for (const [, e, abimer] of C) {
+                const c = clone(e.json); abimer(c);
+                const [methode, chemin] = e.route.split(' ');
+                const rep = doc.paths[chemin][methode.toLowerCase()].responses[String(e.statut)];
+                if (valider(c, rep.content['application/json'].schema, doc).ok) laisses++;
+            }
+            console.log(`   mutant « ${nomMutant} » : ${laisses} corruption(s) sur 24 lui échappent`);
+            H.vrai(`le banc est capable d'être rouge : le validateur mutant « ${nomMutant} » laisse passer au moins 3 corruptions (${laisses} / 24)`, laisses >= 3);
+        }
+        // balayage : une clé ajoutée à la racine de CHAQUE réponse JSON consignée est refusée ; un code d'erreur falsifié aussi
+        let n = 0; const laisses = [];
+        for (const e of dansContrat) {
+            if (!e.json || typeof e.json !== 'object' || Array.isArray(e.json) || e.ecarts.length) continue;
+            const doc = A.reponseDocumentee(e.route, e.statut); if (!doc || !doc.content) continue;
+            n++; const c = clone(e.json); c.__intruse = 1;
+            if (!A.juger(e.route, e.statut, c, '{}', e.entetes).length) laisses.push(`${e.route} [${e.etat}]`);
+        }
+        console.log(`   balayage : une clé inconnue ajoutée à chacune des ${n} réponses valides`);
+        H.v(`balayage : la clé ajoutée à la racine est refusée pour ${n} réponses sur ${n}`, laisses, []);
+        let m = 0; const faux = [];
+        for (const e of dansContrat) { if (!e.json || !e.json.erreur || e.ecarts.length) continue; m++; const c = clone(e.json); c.erreur.code = 'ZZZ'; if (!A.juger(e.route, e.statut, c, '{}', e.entetes).length) faux.push(`${e.route} [${e.etat}]`); }
+        H.v(`balayage : un code d'erreur falsifié est refusé pour ${m} réponses d'erreur sur ${m}`, faux, []);
+    }
+    void tousLesCas;
+    await attendre(400);                                       // la passe de purge que le second montage (calcul des routes servies) lance au démarrage se termine avant la base
+    require('../identifier/monter').arreterBalayage(); require('../identifier/monter').arreterPurge(); require('../banc/monter').arreterPurge();   // les minuteurs des lots ne survivent pas à la base
+    await mongoose.disconnect();
+    await H.arreterBanc();
+    H.bilan();
+})().catch(async e => { console.error('❌', e); try { await H.arreterBanc(); } catch (_) { } process.exit(1); });

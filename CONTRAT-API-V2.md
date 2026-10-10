@@ -1003,6 +1003,48 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | E9 | fausses : `variante: "normale"` partout, `liens.cardmarket` rempli sans numéro ni rareté | `variante: null` et `liens.cardmarket: null` dans ces cas (A9, A10) |
 | E10 | `CODES_ERREUR` de l'extension : 10 codes du serveur + `RESEAU` + `EXTENSION` | 20 codes serveur ; `RESEAU` et `EXTENSION` restent côté client |
 
+#### 7.3 bis — Les écarts de forme MESURÉS (B7b.1, `v2/test/test-contrat-extension.js`)
+
+Les neuf fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chaque `facturation` de `reponses.json` contre `Facturation`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart.
+
+| réf. | route et statut | chemin JSON | l'extension attend (fausse) | le serveur rend (schéma) | fichiers | qui doit changer |
+|---|---|---|---|---|---|---|
+| E1 | `POST /api/identifier` 200 | `$.solde.essai` | absent | clé requise (entier) | identifiee, lot, a-trancher | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.abonnement` | absent | clé requise (objet ou `null`) | identifiee, lot, a-trancher | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.soldeGratuit` | présent | **n'existe pas** (forme héritée seulement) | identifiee, lot, a-trancher, quota | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.restantSemaine` | présent | **n'existe pas** | idem | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.soldeScans` | présent | **n'existe pas** | idem | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.compte.verifie` | absent | clé requise (booléen) | idem | l'extension |
+| E2 | `POST /api/identifier` 200 | `$.facturation.reserve` | absent | clé requise (0 ou 1) | identifiee, lot, a-trancher, introuvable | l'extension |
+| E2 | `POST /api/identifier/reponse` 200 | `$.<scanId>[].<choix>.facturation.raisonNonRembourse` | absent | clé requise (`null` ou une raison) | reponses | l'extension |
+| E3 | `POST /api/identifier` 200 | `$.solde` | `null` | objet, **toujours** présent après une analyse | a-trancher, lot, introuvable | l'extension |
+| E4 | `POST /api/identifier` 200 | `$.question` | `{ etat, delaiHeures }` à la racine | clé **non servie** (le délai est de 24 h, fixe) | a-trancher | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions` | absent | clé requise (`[]` par défaut) | identifiee, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].impressions` | absent | clé requise | a-trancher, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.prixGuide.moyenne30` | absent | clé requise (nombre ou `null`) | identifiee, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].prixGuide.moyenne30` | absent | clé requise | a-trancher, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30` | absent | clé requise | identifiee-impressions | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.date` | absent (`{ de, tendance }`) | clé requise (date du guide) | identifiee-impressions | l'extension |
+| E6 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat` | objet rempli de `null` (introuvable) | `null` pour un introuvable | introuvable | l'extension |
+| E7 | `POST /api/identifier` 429 | `$.facturation` | `{ debite:0, rembourse:false, motif:null, … }` | `null` (aucune analyse) | quota | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
+
+Non mesuré par cette lecture de forme (aucune faute de FORME, la faute est de sens) : E9 (`variante` et `liens.cardmarket` remplis alors que le serveur rend `null` quand l'édition ou le numéro est inconnu — les valeurs `normale` / une adresse sont de forme valide), E10 (codes d'erreur : le fichier `quota.json` n'en porte qu'un). `lectures.json` n'est pas une réponse du serveur (les grilles de la lecture live simulée ne sont jamais envoyées : le serveur ne reçoit que `prixLive` et `prixLiveEtat`) ; ses états `MT`…`PO` et ses prix (`null` ou > 0) tiennent la liste fermée du contrat.
+
+### 7.4 Ce que le SERVEUR doit aligner ou documenter (mesuré par B7b.1, `v2/test/test-contrat-reel.js`)
+
+Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 réel. Quatre constats ne sont **pas** des écarts de client ; ils sont écrits ici pour que le coordinateur et les agents du serveur les tranchent, et n'ont pas été « corrigés » dans le schéma pour faire passer le banc.
+
+| # | route | constat | décision à prendre |
+|---|---|---|---|
+| X1 | `GET /api/compte`, champ `historique.lignes[]` | **défaut du serveur** : `argent/solde.js::historique` (lot B3) rend `{ type:'analyse', scanId, le, surface, statut, cartes[], facturation }` et `{ type:'credits', reference, le, nature, delta, poche, motif }` ; le contrat publié (`LigneAnalyse`, `LigneCredits`, exemples du §1.6) dit `{ genre, le, surface, statut, carte, cartesVues, facturation }` et `{ genre, le, motif ∈ accueil·hebdo·achat, credits }`. Déclaré dans le banc comme écart connu (il échoue le jour où il est réparé sans retirer la déclaration). | aligner le serveur sur le contrat (recommandé : le site lit déjà `genre`) |
+| X2 | `POST /api/compte/renvoyer-verification`, `POST /api/banc/correction`, `DELETE /api/banc/contributions`, `POST /api/creer-recharge` | **servies, absentes de `paths`** (donc de ce document) : le renvoi du lien de vérification, les deux routes du banc réel, le paiement (`501 INDISPONIBLE`, `detail: paiement-non-branche`, statut 501 qu'aucun client ne reçoit d'un contrat). Leurs corps d'erreur valident tous contre `ReponseErreur`. | les publier (additif) ou les retirer du contrat v2 ; le banc exige que cette liste reste exactement celle-ci |
+| X3 | `POST /api/compte/verification`, `POST /api/compte/reinitialiser` | le serveur rend `429 DEBIT` (limite par adresse IP) et, pour la seconde, `400 ENTREE` : **statuts non documentés** dans `paths`. **Ajoutés au schéma (additif, B7b.1)** : `verification` 429 ; `reinitialiser` 400 et 429. | aucune |
+| X4 | `introuvable.raison` ∈ `pas-une-carte`, `plusieurs-cartes-non-separees` | listées au contrat, **jamais produites** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` sortent) ; `Produit.set.tirage` est **toujours `null`** (le catalogue ne porte pas le tirage) | rien à corriger côté client ; les clients ne doivent pas compter sur ces deux raisons ni sur `tirage` |
+| X5 | statuts documentés mais jamais rendus | `DELETE /api/compte` 400, `POST /api/compte/deconnexion` 401, `POST /api/compte/mot-de-passe-oublie` 400 : aucun chemin du code ne les produit ; le code `EN_RECONCILIATION` n'est produit que sur une clé de débit rejouée dont la ligne attend la réconciliation (état fabriqué par `test-argent-tour4.js`) | laisser documentés (inoffensifs) ou retirer |
+
 ---
 
 ## 8. Les conditions de conservation
@@ -1042,5 +1084,5 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 ## 10. Ce qui n'est pas encore garanti
 
 - Les routes du scanner (`/api/scanner/…`) ne seront livrées que sur confirmation de l'éditeur.
-- Le schéma est vérifié contre les **fausses** réponses et contre le **code** (listes fermées, routes) ; sa vérification contre les réponses **réelles** du serveur est le lot suivant (B7b).
+- Le schéma est vérifié contre les **fausses** réponses, contre le **code** (listes fermées, routes) et (B7b.1, `v2/test/test-contrat-reel.js`) contre les réponses **réelles** du serveur : chaque route de `paths` dans chaque état que le serveur sait produire, avec un seul écart connu (X1, §7.4). Ce que le banc ne prouve pas : le comportement réel du modèle de lecture (le faux réseau rejoue des lectures enregistrées) et les routes du scanner sur un navigateur réel.
 - La valeur du quota mensuel d'un abonnement (`quotaMensuel`) est une valeur de configuration (100 par défaut, inventée faute de source) : elle viendra de l'éditeur.
