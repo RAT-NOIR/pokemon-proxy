@@ -14,6 +14,12 @@ const PRINCIPAL = path.join(RACINE, '..', 'pokemon-proxy');
 const REF = path.join(__dirname, 'fixtures', 'logos-sortie-avant.json');
 const SORTIE = path.join(RACINE, 'donnees-site', 'logos-composes-donnees.json');
 
+// Les fins de ligne sont normalisées des DEUX côtés : avec core.autocrlf=true, git réécrit en CRLF un fichier texte sans attribut à l'extraction
+// (mesuré : la même référence faisait 139 633 octets en LF et 144 400 en CRLF selon l'arbre) ; la sortie du script, elle, est toujours en LF.
+// (v2/test/fixtures est aussi figé en LF par .gitattributes ; cette normalisation protège le test même si l'attribut est perdu.)
+const LF = s => s.replace(/\r\n/g, '\n');
+const comparer = (texte, chemin) => LF(texte) === LF(fs.readFileSync(chemin, 'utf8'));
+
 (async () => {
     const generer = process.argv.includes('--generer');
     const banc = await H.ouvrirBancV2();
@@ -98,7 +104,14 @@ const SORTIE = path.join(RACINE, 'donnees-site', 'logos-composes-donnees.json');
         if (generer) { fs.mkdirSync(path.dirname(REF), { recursive: true }); fs.writeFileSync(REF, texte); console.log(`→ référence écrite : ${REF} (${texte.length} octets)`); }
         else {
             const ref = fs.readFileSync(REF, 'utf8');
-            H.v('sortie complète IDENTIQUE à la référence d\'avant l\'extraction (octets)', [texte.length, texte === ref], [ref.length, true]);
+            H.v('sortie complète IDENTIQUE à la référence d\'avant l\'extraction (octets)', [texte.length, comparer(texte, REF)], [ref.replace(/\r\n/g, '\n').length, true]);
+            // la référence réécrite en CRLF (core.autocrlf=true à l'extraction) ne change pas le verdict ; une vraie différence le change encore
+            const crlf = path.join(require('os').tmpdir(), `logos-ref-crlf-${process.pid}.json`);
+            fs.writeFileSync(crlf, ref.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'));
+            try {
+                H.v('la référence en CRLF donne le même verdict (fins de ligne ignorées des deux côtés)', comparer(texte, crlf), true);
+                H.v('   et une sortie différente d\'un caractère reste refusée', comparer(texte + ' ', crlf), false);
+            } finally { fs.rmSync(crlf, { force: true }); }
         }
         // l'export des logos n'a laissé que ce qu'il laisse toujours ; on rend le worktree comme on l'a trouvé
         if (sortieAvant) fs.writeFileSync(SORTIE, sortieAvant); else { fs.rmSync(SORTIE, { force: true }); try { fs.rmdirSync(dossierSortie); } catch { /* non vide : on n'y touche pas */ } }
