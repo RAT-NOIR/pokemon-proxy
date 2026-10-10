@@ -63,14 +63,11 @@ function option(nom, defaut) {
 // contrôle qui ne peut pas échouer.
 const ARG_COLLECTIONS = option('collections', null);
 const COLLECTIONS = (ARG_COLLECTIONS || '').split(',').map(s => s.trim()).filter(Boolean);
-// Les collections dont le contenu ne se REFAIT PAS. Elles ne sont pas un défaut — elles
-// sont IMPRIMÉES quand elles manquent au périmètre demandé, pour que l'oubli se voie.
-//   · `numeros_cartes` et `codes_set` sont APPRISES scan après scan : rien ne les rejoue.
-//   · le journal et les comptes sont de la donnée de production.
-// À l'inverse, `catalogue_produits` et `guide_prix` se réimportent depuis les exports
-// Cardmarket, et `references_image` se régénère par `ecrire-descripteurs.js`.
-const NON_REGENERABLES = ['numeros_cartes', 'codes_set', 'journal_scans', 'credits',
-    'evenements_stripe', 'remboursements', 'quotas_semaine', 'quotas'];
+// La régénérabilité se dit par ce qu'on SAIT (regenerabilite.js) : non régénérable, régénérable
+// (avec la commande qui la refait) ou INCONNUE. Une collection que personne n'a classée n'est
+// JAMAIS déclarée « régénérable » (2026-10-10 : histo_valeur_sets l'était, à tort).
+// ⚠️ `guide_prix` ne se réimporte PAS à l'identique : une ligne absente du dernier guide garde son prix daté.
+const { NON_REGENERABLES, libelleRegeneration, ETIQUETTES } = require('./regenerabilite');
 // Celles dont l'export JSON est pathologique — voir l'en-tête.
 const LOURDES_EN_JSON = ['references_image'];
 const DOSSIER = path.join(__dirname, option('dossier', `backup-${new Date().toISOString().slice(0, 10)}`));
@@ -124,7 +121,7 @@ async function main() {
         console.error(`   Collections présentes dans « ${db.databaseName} » :`);
         for (const n of existantes) {
             const st = await db.command({ collStats: n }).catch(() => null);
-            const nr = NON_REGENERABLES.includes(n) ? '  🔴 NON RÉGÉNÉRABLE' : '';
+            const nr = ETIQUETTES[libelleRegeneration(n)];
             const lo = LOURDES_EN_JSON.includes(n) ? '  ⚠️ lourde en JSON' : '';
             console.error(`     ${n.padEnd(22)} ${String(st?.count ?? '?').padStart(7)} docs ${taille(st?.storageSize ?? 0).padStart(9)}${nr}${lo}`);
         }
@@ -145,7 +142,7 @@ async function main() {
         console.log(`\n⚠️ NON SAUVEGARDÉES (${ecartees.length} collection(s) sur ${existantes.length}) :`);
         for (const n of ecartees) {
             const st = await db.command({ collStats: n }).catch(() => null);
-            const nr = NON_REGENERABLES.includes(n) ? '  🔴 NON RÉGÉNÉRABLE — es-tu sûr ?' : '  (régénérable)';
+            const nr = ETIQUETTES[libelleRegeneration(n)];
             console.log(`   ${n.padEnd(22)} ${String(st?.count ?? '?').padStart(7)} docs ${taille(st?.storageSize ?? 0).padStart(9)}${nr}`);
         }
     }
