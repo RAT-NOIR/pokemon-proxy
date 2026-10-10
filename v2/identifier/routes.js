@@ -87,9 +87,12 @@ const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
 const { preparerAnnonce } = require('../annonce/verifier');
 const { conserverAnnonce } = require('../annonce/conservation');
-const { facturation: fabriquerFacturation } = require('../argent/facturation');
-const { dansUnScan, raisonNonRemboursement } = require('../../sources');
+const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
+const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('../../sources');
 const { col } = require('../db');
+
+// Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
+const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
 
 const URL_RECHARGE = 'https://rat-market.fr/fr/compte#recharge';
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
@@ -151,6 +154,14 @@ function traiterIdentifier(cfg, deps = {}) {
             credit: argent.creditPourReq(porteur, credit, { scanId })
         };
         const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
+        // Ruling n°2 (2026-10-10) : un REFUS de la chaîne par égalité (≥ 2 candidats) devient une QUESTION, réservée comme une ambiguë. La chaîne rembourse un refus
+        // d'office ; ce remboursement est donc DIFFÉRÉ (ni fait, ni compté au plafond des pannes). Si l'adaptateur en fait une question, on RÉSERVE le crédit encore
+        // pris (plus bas) ; sinon (introuvable, panne) le filet le rend. Le crédit n'est jamais perdu : il est rendu OU réservé.
+        const rembourserOrigine = reqH.credit.v2.rembourser;
+        reqH.credit.v2.rembourser = async (r, motif, opts) => {
+            if (MOTIFS_REFUS_EN_QUESTION.includes(motif) && !r.scanRembourse) { r.refusDiffere = motif; return false; }
+            return rembourserOrigine(r, motif, opts);
+        };
         let sortie;
         try {
             sortie = await dansUnScan(async () => {
@@ -167,6 +178,18 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : adapter({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
+                }
+                // une question née d'un REFUS (remboursement différé) : la chaîne ne l'a pas posée, on la RÉSERVE ici, avec les choix du contrat
+                if (resultat.issue === 'question' && reqH.refusDiffere && !reqH.questionId && !admin && credit) {
+                    let r = null;
+                    try {
+                        const choix = resultat.question.choix.map(x => ({ id: x.id, idProduct: x.idProduct }));
+                        r = await argent.reserverQuestion(porteur, credit, { scanId, carte: 0, raison: reqH.refusDiffere, candidats: choix.map(x => x.idProduct), choix });
+                    } catch (e) { journalErreur('réservation de la question', e); }
+                    if (r && r.etat === 'en-attente') reqH.questionId = scanId;
+                    else if (r && r.etat === 'remboursee') { reqH.scanRembourse = true; reqH.scanRendu = true; }                        // le repli a rendu le crédit à l'émission
+                    else if (r && r.etat === 'non-remboursee') { reqH.scanRembourse = true; noterNonRemboursement(raisonPublique(r.raisonNonRembourse)); }
+                    else resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };                                    // jamais un a-trancher sans question répondable
                 }
                 // la question réservée par la chaîne doit porter les choix DU CONTRAT (choixPour) : le pont ne connaît que les idProduct
                 if (resultat.issue === 'question' && reqH.questionId) {

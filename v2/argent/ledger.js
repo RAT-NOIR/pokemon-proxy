@@ -90,7 +90,16 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     mv.poche = credit.poche; mv.credit = credit;
     try { await col('mouvements').insertOne(mv); }
     catch (e) {
-        if (e.code !== 11000 || !cleEff) throw e;
+        if (e.code !== 11000 || !cleEff) {
+            // B1b.3 n°5b — la poche est DÉJÀ prise (écriture atomique distincte) : une écriture du mouvement qui échoue ne doit pas la perdre. Si le mouvement existe malgré
+            // l'erreur (réponse perdue), le débit est valide ; s'il n'existe pas, la poche est rendue ; si on ne peut pas le savoir, on le DIT (réconciliation).
+            let ecrit = false;
+            try { const filtre = mv._id ? { _id: mv._id } : (cleEff ? { cleIdempotence: cleEff } : null); ecrit = filtre ? Boolean(await col('mouvements').findOne(filtre)) : false; } catch (_) { ecrit = null; }
+            if (ecrit === null) console.error('🔴 [v2 debiter] écriture du mouvement en erreur et état inconnu : poche prise, NON rendue — à voir par la réconciliation');
+            else if (!ecrit) { try { await rendrePoche(porteur, credit, cfg, maintenant); } catch (e2) { console.error(`🔴 [v2 debiter] poche NON rendue après l'échec du mouvement : ${e2.message}`); } }
+            if (ecrit !== true) throw e;
+            return reessaye ? { ok: true, credit, reessaye: true, cle: cleEff } : { ok: true, credit, cle: cleEff };
+        }
         await rendrePoche(porteur, credit, cfg, maintenant);                   // une requête jumelle l'a emporté : on rend ce crédit-ci, le sien reste pris
         const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
         return dej ? rejeu(dej) : { ok: true, rejoue: true, credit: null };

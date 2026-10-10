@@ -1973,7 +1973,11 @@
             ]
           },
           "tirage": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null = on ne sait pas (ruling du 2026-10-10) : les collections de l'API ne portent pas le tirage."
           },
           "annee": {
             "type": [

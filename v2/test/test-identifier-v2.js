@@ -29,12 +29,11 @@ const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const toutes = [];                                          // toutes les réponses reçues (assertion 13 : CORS sur chacune)
 let ecartsContrat = 0, reponsesValidees = 0, tiragesNuls = 0, produitsVus = 0;
-// ÉCART CONNU, COMPTÉ À PART (jamais caché) : Produit.set.tirage est `string` au schéma (B7a), mais construireProduit (B1a.1) émet null quand il ignore le tirage,
-// et les quatre collections de l'API ne le portent pas. On n'invente pas un tirage : le null est compté ici, puis remplacé par une chaîne pour que le RESTE du contrat soit jugé.
+// Ruling du 2026-10-10 : Produit.set.tirage est NULLABLE au contrat (null = « on ne sait pas » ; aucune des quatre collections de l'API ne le porte).
+// Plus aucun écart à part : la réponse est jugée telle quelle contre ReponseAnalyse. Les null sont seulement comptés (dénominateur).
 function validerAnalyse(json) {
-    const c = JSON.parse(JSON.stringify(json));
-    for (const k of c.analyse.cartes) for (const p of [k.carte, ...k.candidats]) if (p) { produitsVus++; if (p.set.tirage === null) { tiragesNuls++; p.set.tirage = 'intl'; } }
-    return valider(c, ref('ReponseAnalyse'), SCHEMA);
+    for (const k of json.analyse.cartes) for (const p of [k.carte, ...k.candidats]) if (p) { produitsVus++; if (p.set.tirage === null) tiragesNuls++; }
+    return valider(json, ref('ReponseAnalyse'), SCHEMA);
 }
 
 async function inst(essais = 3, o = {}) {
@@ -239,6 +238,15 @@ async function semer(mode) {                                  // 'double' | 'sim
             if (mode === 'affirmee') return res.json({ ...corpsAffirme(ID_A), scanId: String(req.scanIdImpose) });
             if (mode === 'produit-absent') return res.json({ ...corpsAffirme(777777777), scanId: String(req.scanIdImpose) });
             if (mode === 'introuvable') { await req.credit.v2.rembourser(req, 'aucun-prix'); return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'aucun-prix' }); }
+            if (mode === 'ambigue') {                         // le chemin ambigu de la chaîne : elle POSE la question (réserve le crédit)
+                await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [ID_A, ID_B] });
+                return res.json({ ...corpsAffirme(ID_A), scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...corpsAffirme(ID_A).carte, ambigu: true },
+                    candidats: [ID_A, ID_B].map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
+            }
+            if (mode === 'refus-egalite' || mode === 'refus-egalite-seul') {   // le chemin REFUS de la chaîne : elle tente de rembourser, puis rend 2 candidats (ou 1)
+                await req.credit.v2.rembourser(req, 'egalite-parfaite');
+                return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'egalite-parfaite', candidats: (mode === 'refus-egalite' ? [ID_A, ID_B] : [ID_A]).map(id => ({ idProduct: id })) });
+            }
             if (mode === 'exception') throw new Error('boum');
             throw new Error(`mode inconnu ${mode}`);
         };
@@ -270,6 +278,50 @@ async function semer(mode) {                                  // 'double' | 'sim
         // produit absent du catalogue de l'API : l'adaptateur refuse d'inventer, remboursée
         const e = await aff('produit-absent');
         H.v('table : produit désigné absent du catalogue de l\'API : panne SERVEUR remboursée', [e.r.statut, e.j.erreur && e.j.erreur.code, e.j.facturation.rembourse, e.j.solde.essai], [500, 'SERVEUR', true, 3]);
+        // ── ruling n°2 : une question issue d'un REFUS de la chaîne (egalite-parfaite, ≥ 2 candidats) est réservée comme une ambiguë.
+        //    Le solde et les mouvements NETS doivent être IDENTIQUES à ceux du chemin ambigu, à chaque étape : après le scan, après une réponse, après un abandon.
+        const argentReg = registre.obtenir('argent');
+        const etat = async (x, scanId) => {
+            const mv = await raw('mouvements').find({ installationId: x.i._id }).toArray();
+            const ins = await raw('installations').findOne({ _id: x.i._id });
+            const q = await raw('questions').findOne({ _id: `${scanId}:0` });
+            return { essais: ins.essais, net: mv.reduce((s, m) => s + m.delta, 0), mouvements: mv.length, debitsOuverts: mv.filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat), question: q && { etat: q.etat, choix: q.choix } };
+        };
+        const parcours = async (m, choix) => {
+            mode = m; const x = await inst(3); const r = await poster(sv.url, x.jeton, corps(), { nom: `fab-${m}-${choix}` }); const j = r.json || {};
+            const porteurX = { type: 'installation', id: x.i._id, compte: null, installation: x.i, surface: 'extension', administrateur: false };
+            const apresScan = await etat(x, j.scanId);
+            await argentReg.repondreQuestion(porteurX, { scanId: new mongoose.Types.ObjectId(j.scanId), carte: 0, choix });
+            return { statut: j.analyse && j.analyse.statut, candidats: j.analyse && j.analyse.cartes[0].candidats.map(c => c.idProduct), facturation: j.facturation, apresScan, apresReponse: await etat(x, j.scanId) };
+        };
+        const A_rep = await parcours('ambigue', 'a'), R_rep = await parcours('refus-egalite', 'a');
+        const A_ab = await parcours('ambigue', 'aucune'), R_ab = await parcours('refus-egalite', 'aucune');
+        H.v('ruling 2 : refus egalite-parfaite -> a-trancher à 2 candidats, facturation de l\'ambiguë { debite:0, reserve:1, motif:question }', [R_rep.statut, R_rep.candidats, R_rep.facturation], ['a-trancher', [ID_A, ID_B], { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }]);
+        H.v('   après le scan : solde et mouvements NETS identiques au chemin ambigu', R_rep.apresScan, A_rep.apresScan);
+        H.v('   (valeurs : essais 2, net -1, un débit réservé, question en-attente, choix = choixPour)', R_rep.apresScan, { essais: 2, net: -1, mouvements: 1, debitsOuverts: ['reserve'], question: { etat: 'en-attente', choix: choixPour([ID_A, ID_B]) } });
+        H.v('   après une réponse (débité UNE fois) : identique, essais 2, net -1', [R_rep.apresReponse, R_rep.apresReponse.essais, R_rep.apresReponse.net, R_rep.apresReponse.debitsOuverts], [A_rep.apresReponse, 2, -1, ['debite']]);
+        H.v('   après un abandon (rendu) : identique, essais 3, net 0', [R_ab.apresReponse, R_ab.apresReponse.essais, R_ab.apresReponse.net], [A_ab.apresReponse, 3, 0]);
+        H.vrai('   la facturation est celle de l\'ambiguë, à l\'identique', JSON.stringify(R_rep.facturation) === JSON.stringify(A_rep.facturation));
+        // un seul candidat : pas de question possible -> introuvable, et le crédit est RENDU (le remboursement différé n'est jamais perdu)
+        mode = 'refus-egalite-seul'; const un = await inst(3); const ru = await poster(sv.url, un.jeton, corps(), { nom: 'fab-refus-seul' });
+        H.v('   refus à UN seul candidat : introuvable, crédit rendu (essai 3), motif introuvable', [ru.json.analyse.statut, ru.json.facturation.rembourse, ru.json.facturation.motif, (await solde(un.i._id)).essais], ['introuvable', true, 'introuvable', 3]);
+        // ── n°5b : debiter qui LÈVE après avoir pris la poche (l'écriture du mouvement échoue) ne laisse RIEN de pris
+        {
+            const colOrig = db.col; let armee = true;
+            db.col = nom => {
+                const c = colOrig(nom);
+                if (nom !== 'mouvements' || !armee) return c;
+                return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { armee = false; throw new Error('panne simulée : écriture du mouvement'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } });
+            };
+            mode = 'affirmee';
+            const y = await inst(3);
+            let r;
+            try { r = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-leve' }); } finally { db.col = colOrig; }
+            H.v('5b. l\'écriture du mouvement échoue après la prise de la poche : 503 INDISPONIBLE, la chaîne n\'est pas appelée', [r.statut, r.json.erreur.code, armee], [503, 'INDISPONIBLE', false]);
+            H.v('   solde IDENTIQUE à l\'avant (essais 3), aucun mouvement', [(await solde(y.i._id)).essais, await raw('mouvements').countDocuments({ installationId: y.i._id })], [3, 0]);
+            const r2 = await poster(sv.url, y.jeton, corps(), { nom: 'fab-debit-apres-panne' });
+            H.v('   la panne ne coince rien : la requête suivante réussit et débite une fois', [r2.statut, r2.json.success, (await solde(y.i._id)).essais], [200, true, 2]);
+        }
         // QUOTA d'un compte : achat.url
         const cq = await compte({ solde: { accueil: 0, achete: 0 } });          // vérifié : il reste le quota HEBDO, épuisé ici
         await raw('hebdo').insertOne({ compteId: cq._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 5 * 86400e3) });
@@ -290,8 +342,8 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.v('14. V2_DESCRIPTION_CONSERVEE=0 : aucune ligne dans annonces', [g.statut, await raw('annonces').countDocuments({ _id: g.json.scanId })], [200, 0]);
         await sv3.fermer();
     }
-    H.v(`contrat : ${reponsesValidees} réponses d'analyse validées contre ReponseAnalyse, écarts hors tirage`, ecartsContrat, 0);
-    console.log(`ℹ️  écart CONNU (B1a.1 / B7a, hors périmètre B1b.3) : Produit.set.tirage null émis sur ${tiragesNuls} produit(s) servi(s) sur ${produitsVus} (le schéma exige une chaîne ; aucune des quatre collections ne porte le tirage)`);
+    H.v(`contrat : ${reponsesValidees} réponses d'analyse validées contre ReponseAnalyse, écarts`, ecartsContrat, 0);
+    H.v(`   Produit.set.tirage null (nullable au contrat) : ${tiragesNuls} produit(s) sur ${produitsVus} servis, tous validés`, [tiragesNuls, produitsVus].every(n => n > 0) && tiragesNuls === produitsVus, true);
 
     await mongoose.disconnect();
     await H.arreterBanc();
