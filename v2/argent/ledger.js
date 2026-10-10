@@ -43,6 +43,7 @@ async function essayerPoche(poche, p, cfg, now) {
     }
     return null;   // poche inconnue : on n'invente rien
 }
+// Relecture bornée de la clé avant un QUOTA : atténuation (5 × 20 ms), pas une garantie — voir le commentaire dans debiter.
 const ATTENTES_JUMEAU = 5, PAUSE_JUMEAU_MS = 20;
 async function debiter(porteur, { scanId = null, cleIdempotence = null, surface = null, maintenant = new Date() } = {}, cfg) {
     const rejeu = dej => {
@@ -84,7 +85,13 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
     if (!credit) {
         if (cleEff) {   // un jumeau de même clé a peut-être gagné pendant que ce refus se décidait : c'est un rejeu, pas un refus
             // LEDGER-COURSE — le jumeau a pu prendre la DERNIÈRE poche sans avoir encore écrit son mouvement (deux écritures distinctes) : une seule lecture
-            // rendait « QUOTA » à une requête légitime. On relit brièvement (bornée : 5 × 20 ms, seulement sur un refus portant une clé) ; sans jumeau, le refus reste QUOTA.
+            // rendait « QUOTA » à une requête légitime. On relit brièvement (seulement sur un refus portant une clé) ; sans jumeau, le refus reste QUOTA.
+            // 1. ATTÉNUATION BORNÉE (5 × 20 ms), PAS UNE GARANTIE : un écart prise de poche → insertion du mouvement plus long (reprise réseau, élection de primaire,
+            //    pause du ramasse-miettes) rend encore un QUOTA faux ; l'argent, lui, reste juste.
+            // 2. En production, /api/identifier est déjà sérialisé par clé par le claim d'idempotence (v2/transport/idempotence.js, `reclamer`) : cette course
+            //    n'est atteinte qu'en appel direct.
+            // 3. Tout appelant SANS claim par clé, à commencer par `debiterSupplement` (v2/argent/lot.js) quand une route le branchera (B1b.8), devra poser un
+            //    marqueur « en cours » atomique sur la clé AVANT la prise de poche.
             for (let essai = 0; essai < ATTENTES_JUMEAU; essai++) {
                 const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
                 if (dej) return rejeu(dej);
