@@ -45,7 +45,8 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     // 7. coût d'un lot
     H.v('coutDuLot 1,10,11,20,21,0', [1, 10, 11, 20, 21, 0].map(n => Lot.coutDuLot(n, cfg)), [1, 1, 2, 2, 3, 1]);
     // 8. facturation : motifs fermés
-    H.v('facturation : forme', F.facturation({ debite: 1, motif: 'affirmee' }), { debite: 1, reserve: 0, rembourse: 0, motif: 'affirmee', raisonNonRembourse: null });
+    H.v('facturation : forme', F.facturation({ debite: 1, motif: 'affirmee' }), { debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null });   // contrat : Facturation.rembourse est un BOOLÉEN (B1b.5)
+    H.v('   rembourse est un booléen, même quand l\'appelant passe 1 ou 0', [F.facturation({ rembourse: 1, motif: 'question' }).rembourse, F.facturation({ rembourse: 0 }).rembourse], [true, false]);
     let leve = null; try { F.facturation({ debite: 1, motif: 'code-maitre' }); } catch (e) { leve = e.message; }
     H.v('   motif « code-maitre » : lève', typeof leve, 'string');
     H.v('   reserve forcé à 0 hors motif question', [F.facturation({ reserve: 1, motif: 'lot' }).reserve, F.facturation({ reserve: 1, motif: 'question' }).reserve], [0, 1]);

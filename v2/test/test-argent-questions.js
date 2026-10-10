@@ -87,10 +87,10 @@ const mouv = (p, scanId) => db.col('mouvements').findOne({ ...(p.type === 'compt
     // 11. credit null (administrateur) : rien à régler
     H.v('credit null : etat null, rien d\'écrit', [(await Q.reserverQuestion(p10, null, { scanId: 'adm', carte: 0, raison: 'x', candidats: [], choix: [] }, cfg, t)).etat, await db.col('questions').countDocuments({ _id: 'adm:0' })], [null, 0]);
     // 12. la facturation rendue avec la réponse (forme CONTRAT-2, via argent/facturation.js)
-    H.v('facturation d\'une réponse par un candidat : débitée', r1.facturation, { debite: 1, reserve: 0, rembourse: 0, motif: 'question', raisonNonRembourse: null });
-    H.v('   d\'un abandon remboursé', out[0].facturation, { debite: 0, reserve: 0, rembourse: 1, motif: 'question', raisonNonRembourse: null });
-    H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[30].facturation, { debite: 1, reserve: 0, rembourse: 0, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
-    H.v('   d\'un lot : rien de plus facturé', rl.facturation, { debite: 0, reserve: 0, rembourse: 0, motif: 'lot', raisonNonRembourse: null });
+    H.v('facturation d\'une réponse par un candidat : débitée', r1.facturation, { debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null });   // rembourse : BOOLÉEN (contrat, B1b.5)
+    H.v('   d\'un abandon remboursé', out[0].facturation, { debite: 0, reserve: 0, rembourse: true, motif: 'question', raisonNonRembourse: null });
+    H.v('   d\'un abandon au plafond : reste débité, la cause est dite', out[30].facturation, { debite: 1, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' });
+    H.v('   d\'un lot : rien de plus facturé', rl.facturation, { debite: 0, reserve: 0, rembourse: false, motif: 'lot', raisonNonRembourse: null });
     // 13. I3 — réserver DEUX FOIS la même (scanId, carte) est idempotent : ni crédit rendu, ni question touchée
     const p13 = await compte({ solde: { accueil: 0, achete: 3 } }); const d13 = await Lg.debiter(p13, { scanId: 'dup', cleIdempotence: 'd|dup', maintenant: t }, cfg);
     const res13 = { scanId: 'dup', carte: 0, raison: 'x', candidats: [111, 222], choix };

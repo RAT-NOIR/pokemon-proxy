@@ -82,7 +82,7 @@ function validerEntree(cfg) {
 const mongoose = require('mongoose');
 const registre = require('../registre');
 const { fauxRes } = require('./captureres');
-const { adapter } = require('./adaptateur');
+const { adapter, codeLangueDe, prixLiveDe } = require('./adaptateur');
 const { creerCatalogue } = require('./catalogue');
 const { regleVerdict } = require('./taux');
 const { preparerAnnonce } = require('../annonce/verifier');
@@ -151,7 +151,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const userId = `v2:${porteur.type}:${porteur.id}`;
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null;
         const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
         try {
             reqH = {
@@ -176,6 +176,8 @@ function traiterIdentifier(cfg, deps = {}) {
                 else {
                     // 5. le catalogue de l'API pour les produits que la chaîne désigne, puis l'adaptation
                     const c = fr.corps && typeof fr.corps === 'object' ? fr.corps : {};
+                    // B1b.5 : ce que /reponse ne pourra pas relire (la langue lue et la stratégie reverse) pour fabriquer le prixLive d'une carte tranchée
+                    lecture = { codeLangue: codeLangueDe(c), reverseStrategie: c.reverse && typeof c.reverse.strategie === 'string' ? c.reverse.strategie : null };
                     const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : [])];
                     let produits = null;
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
@@ -215,7 +217,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable'); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
-                return { resultat, facturation: facturationDe(resultat.issue, faits) };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture };
             });
         } catch (e) {
             // I1 : une exception hors de tout try interne (adaptateur, facturation, creditPourReq…). Le débit est pris : il est RENDU ici (idempotent : une seule fois par scan,
@@ -254,7 +256,9 @@ function traiterIdentifier(cfg, deps = {}) {
             const cartes = analyse.cartes;
             await col('analyses').insertOne({
                 _id: scanId, porteur: `${porteur.type}:${porteur.id}`, surface: porteur.surface, statut: analyse.statut,
-                cartes: cartes.map(c => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison })),
+                // B1b.5 : de quoi servir /reponse sans relire le catalogue — l'état, la question, la zone (aucune donnée de l'annonce) et la lecture de la langue
+                cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
+                    ...(i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}) })),
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
@@ -265,4 +269,100 @@ function traiterIdentifier(cfg, deps = {}) {
     };
 }
 
-module.exports = { validerEntree, verifierEntree, comparerVersions, traiterIdentifier, facturationDe };
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+// B1b.5 — traiterReponse : la réponse à une question (POST /api/identifier/reponse { scanId, carte = 0, choix }).
+// Rien n'est débité ici : le scan l'a été, et c'est ce débit-là qui est la facture. Répondre par un candidat le confirme (débité UNE fois) ; `aucune` et
+// `ne-sait-pas` rendent le crédit ; une question de lot ne coûte ni ne rend rien. Toute la machine à états (prise conditionnelle, rejeu, conflit, 24 h) est celle
+// de argent/questions.js : cette fonction ne la recopie pas, elle traduit son résultat en carte du contrat.
+// La carte rendue se fabrique depuis la ligne `analyses` (les Produit des candidats y ont été écrits à l'analyse) : aucune relecture du catalogue.
+// ══════════════════════════════════════════════════════════════════════════════════════════════════════════
+const CHOIX_REPONSE = Object.freeze(['a', 'b', 'c', 'aucune', 'ne-sait-pas']);
+const FORME_ID = /^[0-9a-f]{24}$/i;
+const produitsDe = (an, ids) => ids.map(id => (an.produits || []).find(p => p && p.idProduct === id)).filter(Boolean);
+
+// La carte du contrat pour une réponse donnée. null si elle ne peut pas être fabriquée (produit absent de la ligne analyses).
+function carteRepondue(an, entree, index, choix, idProduct) {
+    if (choix === 'aucune') return { index, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'hors-catalogue', etat: null, prixLive: null, zone: null };
+    if (choix === 'ne-sait-pas') {
+        const ids = ((entree.question && entree.question.choix) || []).map(c => c.idProduct);
+        const cands = produitsDe(an, ids);
+        if (!entree.question || cands.length !== ids.length || cands.length < 2) return null;
+        return { index, statut: 'a-trancher', carte: null, candidats: cands, question: entree.question, raison: null, etat: entree.etat ?? null, prixLive: null, zone: entree.zone ?? null };
+    }
+    const produit = produitsDe(an, [idProduct])[0];
+    if (!produit || !entree.etat) return null;
+    const l = entree.lecture || {};
+    const prixLive = prixLiveDe({ codeLangue: l.codeLangue, reverse: l.reverseStrategie ? { strategie: l.reverseStrategie } : null }, idProduct, entree.etat);
+    return { index, statut: 'identifiee', carte: produit, candidats: [], question: null, raison: null, etat: entree.etat, prixLive, zone: null };
+}
+
+function traiterReponse(cfg, deps = {}) {
+    return async function traiterReponseV2(req, res) {
+        const porteur = req.v2 && req.v2.porteur;
+        let argent;
+        try { argent = registre.obtenir('argent'); if (!porteur) throw new Error('montage incomplet'); }
+        catch (e) { journalErreur('montage reponse', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        const entreeInvalide = detail => repondreErreur(res, 'ENTREE', undefined, { detail });
+        const b = req.body;
+        if (!b || typeof b !== 'object' || Array.isArray(b)) return entreeInvalide('corps');
+        if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entreeInvalide('scan-id');
+        const carte = b.carte === undefined ? 0 : b.carte;
+        if (!Number.isInteger(carte) || carte < 0 || carte > 99) return entreeInvalide('carte');
+        if (typeof b.choix !== 'string' || !CHOIX_REPONSE.includes(b.choix)) return entreeInvalide('choix');
+        const choix = b.choix;
+        const scanId = new mongoose.Types.ObjectId(b.scanId);                  // une chaîne ne sert à aucun filtre : analyses, mouvements et questions portent un ObjectId
+        const soldeSur = async () => { try { return await argent.solde(porteur); } catch (e) { journalErreur('solde', e); return undefined; } };
+        // la ligne du scan, À CE PORTEUR : celle d'un autre porteur n'existe pas (404, jamais 403)
+        let an;
+        try { an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }); }
+        catch (e) { journalErreur('analyses', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        if (!an) {
+            // Pas de ligne analyses À CE PORTEUR. Si la QUESTION de ce porteur existe, c'est une panne de notre côté (l'écriture annexe de l'analyse a échoué) : 404 voudrait dire
+            // « scan d'un autre porteur » et ferait abandonner à tort. 503 INDISPONIBLE, réessayable, question intacte (le balayage la rend à 24 h si rien ne revient).
+            // Sans question non plus : le scan n'existe pas pour ce porteur => 404.
+            let q = null;
+            try { q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id }, { projection: { _id: 1 } }); }
+            catch (e) { journalErreur('question', e); return repondreErreur(res, 'INDISPONIBLE'); }
+            if (q) { console.error(`🔴 [v2 reponse] scan ${scanId} (${porteur.type}:${porteur.id}) : question présente, ligne analyses ABSENTE — réponse refusée en 503, question intacte`); return repondreErreur(res, 'INDISPONIBLE', undefined, { detail: 'analyse-absente' }); }
+            return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
+        }
+        const entree = Array.isArray(an.cartes) ? an.cartes[carte] : null;
+        if (!entree || entree.statut !== 'a-trancher') return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
+        const admin = Boolean(an.facturation && an.facturation.motif === 'administrateur');
+
+        let facturation, idProduct = null, le = new Date();
+        if (admin) {
+            // un administrateur n'a rien débité : aucune question n'a été réservée. La réponse se résout sur la ligne analyses, et se rejoue / se contredit comme les autres.
+            const ids = ((entree.question && entree.question.choix) || []);
+            const dejaChoix = entree.reponse && entree.reponse.choix;
+            if (dejaChoix && dejaChoix !== choix) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
+            if (!dejaChoix) {
+                const cand = ids.find(c => c.id === choix);
+                if (!cand && !['aucune', 'ne-sait-pas'].includes(choix)) return entreeInvalide('choix');
+                idProduct = cand ? cand.idProduct : null;
+            } else { idProduct = entree.reponse.idProduct ?? null; le = entree.reponse.le || le; }
+            facturation = fabriquerFacturation({ motif: 'administrateur', rembourse: false });
+        } else {
+            let r;
+            try { r = await argent.repondreQuestion(porteur, { scanId, carte, choix }); }
+            catch (e) { journalErreur('repondreQuestion', e); return repondreErreur(res, 'INDISPONIBLE'); }
+            if (r.statut === 404) return repondreErreur(res, 'CODE_INVALIDE', 'Question introuvable');
+            if (r.statut === 400) return entreeInvalide('choix');
+            if (r.statut === 409) return repondreErreur(res, 'CONFLIT', 'Une autre réponse a déjà été donnée');
+            if (r.statut === 410) { const s = await soldeSur(); return repondreErreur(res, 'CODE_EXPIRE', 'La question a expiré', { facturation: r.facturation, ...(s !== undefined ? { solde: s } : {}) }); }
+            if (r.statut !== 200 || !r.question) { console.error(`🔴 [v2 reponse] statut inattendu ${r.statut} pour ${scanId}`); return repondreErreur(res, 'SERVEUR'); }
+            facturation = r.facturation;
+            idProduct = r.question.reponse && r.question.reponse.idProduct != null ? r.question.reponse.idProduct : null;
+            le = (r.question.reponse && r.question.reponse.le) || le;
+        }
+        const resolue = carteRepondue(an, entree, carte, choix, idProduct);
+        if (!resolue) { console.error(`🔴 [v2 reponse] scan ${scanId} : la carte ne peut pas être fabriquée depuis analyses (la question, elle, est réglée)`); return repondreErreur(res, 'SERVEUR'); }
+        // 9. la réponse est une VÉRITÉ : écrite une fois (la première gagne), sans jamais changer la réponse au client
+        try { await col('analyses').updateOne({ _id: scanId, [`cartes.${carte}.reponse`]: { $exists: false } }, { $set: { [`cartes.${carte}.reponse`]: { choix, idProduct, le } } }); }
+        catch (e) { journalErreur('vérité de la réponse', e); }
+        const solde = await soldeSur();
+        return res.status(200).json({ success: true, carte: resolue, facturation, ...(solde !== undefined ? { solde } : {}) });
+    };
+}
+
+module.exports = { validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };

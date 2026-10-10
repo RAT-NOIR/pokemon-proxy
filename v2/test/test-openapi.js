@@ -150,7 +150,23 @@ const IDEM = '^[A-Za-z0-9_-]{8,64}$';
 H.v('Idempotency-Key : le motif exact', aller(doc, 'components.parameters.IdempotencyKey.schema.pattern'), IDEM);
 H.v('Idempotency-Key : en-tête, obligatoire', [aller(doc, 'components.parameters.IdempotencyKey.in'), aller(doc, 'components.parameters.IdempotencyKey.name'), aller(doc, 'components.parameters.IdempotencyKey.required')], ['header', 'Idempotency-Key', true]);
 const avecCle = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKey')).map(o => `${o.methode} ${o.chemin}`).sort();
-H.v('Idempotency-Key sur les trois routes qui débitent', avecCle, ['POST /api/identifier', 'POST /api/identifier/reponse', 'POST /api/retour-live']);
+H.v('Idempotency-Key OBLIGATOIRE : /api/identifier seulement (le débit en exige une)', avecCle, ['POST /api/identifier']);
+// B1b.5 : /reponse et /retour-live honorent la clé quand elle est donnée mais ne l'exigent pas (leur état — question, garde « un second retour est refusé » — rend un rejeu sûr)
+const FAC = 'components.parameters.IdempotencyKeyFacultative';
+H.v('Idempotency-Key FACULTATIVE : même nom, même en-tête, même motif, required:false', [aller(doc, `${FAC}.in`), aller(doc, `${FAC}.name`), aller(doc, `${FAC}.required`), aller(doc, `${FAC}.schema.pattern`)], ['header', 'Idempotency-Key', false, IDEM]);
+H.vrai('   la description dit POURQUOI elle est facultative', /facultative|non exigée|pas exigée/i.test(String(aller(doc, `${FAC}.description`))) && /rejeu/i.test(String(aller(doc, `${FAC}.description`))));
+const avecCleFac = OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKeyFacultative')).map(o => `${o.methode} ${o.chemin}`).sort();
+H.v('Idempotency-Key facultative sur /reponse et /retour-live, et sur elles seules', avecCleFac, ['POST /api/identifier/reponse', 'POST /api/retour-live']);
+// B1b.5 : les deux codes de détail que le serveur émet doivent être DITS au contrat, avec le sens à donner au client (définitif / à réessayer)
+const op = (chemin) => OPERATIONS.find(o => o.methode === 'POST' && o.chemin === chemin).op;
+const d409 = String(op('/api/retour-live').responses['409'].description), d503 = String(op('/api/identifier/reponse').responses['503'].description);
+H.vrai('retour-live 409 : dit `carte-non-identifiee`, refus DÉFINITIF, et le distingue du 409 « déjà complété »', /carte-non-identifiee/.test(d409) && /D[ÉE]FINITIF/i.test(d409) && /d[ée]j[àa] [ée]t[ée] renvoy|d[ée]j[àa] compl[ée]t[ée]/i.test(d409));
+H.vrai('reponse 503 : dit `analyse-absente`, question intacte, à RÉESSAYER', /analyse-absente/.test(d503) && /intacte/i.test(d503) && /R[ÉE]ESSAYER/i.test(d503));
+// le serveur n'émet que ces détails : ceux du code doivent figurer au contrat (lecture des sources, pas une liste recopiée)
+const lire = f => require('fs').readFileSync(require('path').join(__dirname, '..', 'identifier', f), 'utf8');
+H.vrai('chaque detail émis par retour-live.js / routes.js (carte-non-identifiee, analyse-absente) figure dans le contrat', /detail: 'carte-non-identifiee'/.test(lire('retour-live.js')) && /detail: 'analyse-absente'/.test(lire('routes.js')) && JSON.stringify(doc).includes('carte-non-identifiee') && JSON.stringify(doc).includes('analyse-absente'));
+// le contrat dit ce que le serveur fait : /identifier sans clé => 400 (obligatoire) ; les deux autres routes la déclarent facultative
+H.v('aucune des trois routes n\'a de paramètre Idempotency-Key en ligne (tout passe par les deux composants)', OPERATIONS.filter(o => (o.op.parameters || []).some(p => !p.$ref && p.name === 'Idempotency-Key')).length, 0);
 // aucun score nulle part (règle 4) : aucune propriété nommée score / confiance numérique dans les schémas
 const nomsProps = [];
 (function parcourir(x) { if (Array.isArray(x)) x.forEach(parcourir); else if (x && typeof x === 'object') { if (x.properties) nomsProps.push(...Object.keys(x.properties)); Object.values(x).forEach(parcourir); } })(S);
@@ -192,7 +208,7 @@ console.log(`   routes montées par le routeur v2 : ${montees.size} ; promises p
 // liste est non vide, les routes absentes doivent en être EXACTEMENT l'ensemble (ni une de plus, ni une de moins) et tout le reste doit passer.
 // Liste VIDE (à vider quand B1b et B3 sont fusionnés) ou `--complet` : mode strict, toute route promise doit être montée.
 // (Remplace RM_OPENAPI_AVANT_FUSION, une variable d'environnement qui n'existait que pour passer avant la fusion des lots.)
-const ATTENDUES_ABSENTES = ['POST /api/identifier/reponse', 'POST /api/retour-live', 'POST /api/solde'];   // B1b.3 a monté POST /api/identifier
+const ATTENDUES_ABSENTES = [];   // B1b.3 a monté POST /api/identifier ; B1b.5 monte /api/identifier/reponse, /api/retour-live et /api/solde : plus aucune route attendue absente
 const AVANT_FUSION = ATTENDUES_ABSENTES.length > 0 && !process.argv.includes('--complet');
 const absentes = promesses.filter(o => !o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`)).map(o => `${o.methode} ${o.chemin}`).sort();
 for (const o of promesses.filter(o => o.op['x-conditionnel'] && !montees.has(`${o.methode} ${o.chemin}`))) console.log(`   ⚠ route conditionnelle non montée (${o.op['x-conditionnel']}) : ${o.methode} ${o.chemin}`);
@@ -204,6 +220,6 @@ if (AVANT_FUSION) {
     for (const o of promesses.filter(o => !o.op['x-conditionnel'])) H.vrai(`route montée : ${o.methode} ${o.chemin}`, montees.has(`${o.methode} ${o.chemin}`));
 }
 // toute route qui accepte Idempotency-Key documente 422 (clé réutilisée avec un autre corps) et 429 (même clé en cours)
-for (const o of OPERATIONS.filter(o => (o.op.parameters || []).some(p => p.$ref === '#/components/parameters/IdempotencyKey')))
+for (const o of OPERATIONS.filter(o => (o.op.parameters || []).some(p => /^#\/components\/parameters\/IdempotencyKey(Facultative)?$/.test(p.$ref || ''))))
     H.v(`${o.methode} ${o.chemin} documente 422 et 429`, ['422', '429'].filter(s => !(o.op.responses || {})[s]), []);
 H.bilan();
