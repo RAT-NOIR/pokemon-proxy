@@ -45,10 +45,14 @@ async function decoderHeicParDefaut(buffer) {
         .resize({ width: COTE_MAX_PX, height: COTE_MAX_PX, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
 }
 // M6 : une image aux octets magiques valides doit AUSSI se lire (en-tête décodable, format reconnu, dimensions raisonnables) avant le moindre débit.
-async function imageLisible(buffer) {
+// N3 : l'en-tête ne suffit pas — un DÉCODAGE réduit (64 px, à bas coût) lit l'image entière ; une image tronquée ou corrompue (avertissement du décodeur compris) est refusée.
+async function imageLisible(buffer, formats = ['jpeg', 'png', 'webp']) {
     try {
-        const m = await require('sharp')(buffer, { failOn: 'error' }).metadata();
-        return ['jpeg', 'png', 'webp'].includes(m.format) && m.width > 0 && m.height > 0 && m.width * m.height <= PIXELS_MAX;
+        const sharp = require('sharp');
+        const m = await sharp(buffer, { failOn: 'error' }).metadata();
+        if (!(formats.includes(m.format) && m.width > 0 && m.height > 0 && m.width * m.height <= PIXELS_MAX)) return false;
+        await sharp(buffer, { limitInputPixels: PIXELS_MAX }).resize({ width: 64, height: 64, fit: 'inside' }).toBuffer();
+        return true;
     } catch { return false; }
 }
 const estJpeg = b => Buffer.isBuffer(b) && b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF;
@@ -63,10 +67,28 @@ function routesScanner(router, cfg, deps = {}) {
     // 120 analyses par heure et par COMPTE : le MÊME budget que l'extension (même nom, même clé) — un compte ne double pas son débit en changeant de surface
     const parCompte = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
 
+    // N2 : un refus décidé AVANT la lecture du corps. Quand le corps est annoncé (Content-Length) et dans la borne de la lecture, on le JETTE (aucune accumulation, même échéance
+    // que la lecture) puis la réponse part normalement — le navigateur la reçoit en entier. Hors borne, sans Content-Length, ou à l'échéance : on ferme (repondreEtFermer).
+    // Le comportement d'un navigateur réel n'est pas prouvé hors ligne (client HTTP Node seulement).
+    function refuserAvantLecture(req, res, envoyer) {
+        const cl = req.headers['content-length'], annonce = /^\d+$/.test(String(cl)) ? Number(cl) : null;
+        if (req.readableEnded) return envoyer();                                   // déjà consommé en entier (express.json() global, par exemple)
+        if (annonce === null || annonce > octetsMax + MP.MARGE_ENTETES_OCTETS) return repondreEtFermer(req, res, envoyer);
+        let fini = false;
+        const nettoyer = () => { clearTimeout(minute); req.removeListener('end', surFin); req.removeListener('close', surClose); };
+        const surFin = () => { if (fini) return; fini = true; nettoyer(); envoyer(); };
+        const surClose = () => { if (fini) return; fini = true; nettoyer(); };         // le client est parti : personne à qui répondre
+        const minute = setTimeout(() => { if (fini) return; fini = true; nettoyer(); repondreEtFermer(req, res, envoyer); }, delaiMs || MP.DELAI_LECTURE_MS);
+        minute.unref();
+        req.on('end', surFin); req.on('close', surClose);
+        req.on('data', () => { });                                                   // jeté, jamais gardé
+        req.resume();
+    }
+
     // I1 : un corps qui n'est pas du multipart est refusé TOUT DE SUITE (express.json() global a pu le consommer : la lecture attendrait 30 s une fin qui a déjà eu lieu)
     function exigerMultipart(req, res, next) {
         if (/^multipart\/form-data\s*(;|$)/i.test(String(req.headers['content-type'] || ''))) return next();
-        return repondreEtFermer(req, res, () => repondreErreur(res, 'ENTREE', undefined, { detail: 'boundary' }));
+        return refuserAvantLecture(req, res, () => repondreErreur(res, 'ENTREE', undefined, { detail: 'boundary' }));
     }
 
     // I2a : « ce porteur peut-il payer ? » se juge AVANT de lire 12 Mo, par la règle de v2/argent/ (solde.peutPayer, même table de refus que le débit). Rien n'est débité ici.
@@ -74,27 +96,39 @@ function routesScanner(router, cfg, deps = {}) {
         const porteur = req.v2.porteur;
         let p;
         try { p = await registre.obtenir('argent').peutPayer(porteur); }
-        catch (e) { journalErreur('peutPayer', e); return repondreEtFermer(req, res, () => repondreErreur(res, 'INDISPONIBLE')); }
+        catch (e) { journalErreur('peutPayer', e); return refuserAvantLecture(req, res, () => repondreErreur(res, 'INDISPONIBLE')); }
         if (p.ok) return next();
         let solde; try { solde = await registre.obtenir('argent').solde(porteur); } catch (e) { journalErreur('solde', e); }
-        return repondreEtFermer(req, res, () => repondreErreur(res, p.code, undefined, { facturation: null, ...(solde !== undefined ? { solde } : {}), ...(p.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) }));
+        return refuserAvantLecture(req, res, () => repondreErreur(res, p.code, undefined, { facturation: null, ...(solde !== undefined ? { solde } : {}), ...(p.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) }));
     }
 
-    // C1 + I2b + porte : un jeton de la porte (3 corps pour le processus) ET le droit de lire UN corps pour ce compte. La libération est IDEMPOTENTE et attachée à TOUT ce qui
-    // peut finir la requête (réponse partie ou connexion coupée) ; on ne prend rien si le client est déjà parti (son `close` ne reviendrait jamais) ; un plafond de 5 min la
-    // force en dernier recours. Les middlewares suivants ne peuvent pas lever vers nous (Express attrape leurs exceptions) : la réponse d'erreur finit la requête, donc libère.
+    // C1 + I2b + N1 + porte : un jeton de la porte (3 corps pour le processus) ET le droit de lire UN corps pour ce compte. Exactement UNE libération (idempotente) :
+    //   · avant que le traitement commence (coupure ou réponse pendant les lectures, la lecture du corps, l'idempotence) : sur `close`/`finish` — et si le client est déjà parti
+    //     quand le traitement devrait commencer, il ne commence pas (voir `lancer`) ;
+    //   · une fois commencé : à sa FIN RÉELLE (`finally` de `lancer`) — un client qui coupe pendant l'IA ne libère PAS la mémoire (data-URL et copies) : la borne de 3 la borne vraiment ;
+    //   · un plafond de 5 min la force en dernier recours (chaîne bloquée).
+    // On ne prend rien si le client est déjà parti (son `close` ne reviendrait jamais).
     function tenir(req, res, next) {
         if (req.destroyed || res.destroyed || res.writableEnded) return undefined;     // client parti pendant les lectures de session/compte : rien à prendre, personne à qui répondre
         const cle = `${req.v2.porteur.type}:${req.v2.porteur.id}`;
-        if (lecturesParCompte.has(cle)) return repondreEtFermer(req, res, () => repondreErreur(res, 'DEBIT', undefined, { reessayerDans: 2 }));
-        if (enCours >= PORTE_MAX) return repondreEtFermer(req, res, () => repondreErreur(res, 'INDISPONIBLE', undefined, { reessayerDans: 2 }));
+        if (lecturesParCompte.has(cle)) return refuserAvantLecture(req, res, () => repondreErreur(res, 'DEBIT', undefined, { reessayerDans: 2 }));
+        if (enCours >= PORTE_MAX) return refuserAvantLecture(req, res, () => repondreErreur(res, 'INDISPONIBLE', undefined, { reessayerDans: 2 }));
         enCours++; lecturesParCompte.add(cle);
-        let rendu = false, garde = null;
+        let rendu = false, garde = null, commence = false;
         const liberer = () => { if (rendu) return; rendu = true; enCours--; lecturesParCompte.delete(cle); clearTimeout(garde); };
         garde = setTimeout(liberer, PLAFOND_PRISE_MS); garde.unref();
-        res.once('close', liberer); res.once('finish', liberer);
+        req.jeton = { liberer, get rendu() { return rendu; }, commencer() { commence = true; } };
+        res.once('close', () => { if (!commence) liberer(); });                       // coupure AVANT le traitement seulement
+        res.once('finish', liberer);                                                  // réponse partie : le traitement est fini
         return next();
     }
+    // Le traitement (chaîne + argent) : n'a lieu que si le client est encore là ; sa fin réelle libère la porte, quoi qu'il arrive.
+    const lancer = handler => async (req, res, next) => {
+        const j = req.jeton;
+        if (!j || j.rendu) return undefined;
+        j.commencer();
+        try { return await handler(req, res, next); } finally { j.liberer(); }
+    };
 
     async function lireImage(req, res, next) {
         try {
@@ -106,6 +140,7 @@ function routesScanner(router, cfg, deps = {}) {
                 try { jpeg = await decoder(buffer); } catch (e) { journalErreur('décodage HEIC', e); }
                 if (!estJpeg(jpeg)) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE.format, { detail: 'format' }, 415);
                 if (jpeg.length > octetsMax) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE['trop-lourde'], { detail: 'trop-lourde' }, 413);   // la sortie du décodeur est bornée comme l'entrée
+                if (!(await imageLisible(jpeg, ['jpeg']))) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE.format, { detail: 'format' }, 415);   // ... et vérifiée comme une entrée
                 buffer = jpeg; type = 'image/jpeg';
             } else if (!(await imageLisible(buffer))) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE.format, { detail: 'format' }, 415);
             req.fichier = { buffer, type, source: champs.source };
@@ -176,7 +211,7 @@ function routesScanner(router, cfg, deps = {}) {
 
     router.post('/api/scanner/analyses',
         resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), exigerMultipart, parCompte, peutPayer, tenir, lireImage,
-        idempotente('scanner', { obligatoire: false }, cfg), cleDeDebit, entreeDuScanner, sansPrix, traiterIdentifier(cfg, depsScanner));
+        idempotente('scanner', { obligatoire: false }, cfg), cleDeDebit, entreeDuScanner, sansPrix, lancer(traiterIdentifier(cfg, depsScanner)));
 
     // La réponse à une question : le scanId vient du CHEMIN (un corps qui en porte un autre est refusé), le reste est /api/identifier/reponse.
     function scanIdDuChemin(req, res, next) {

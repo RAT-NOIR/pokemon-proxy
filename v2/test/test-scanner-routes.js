@@ -177,17 +177,27 @@ async function parcourir() {
 
     // ═══ I2a : « peut-il payer ? » se juge AVANT de lire le corps (jamais 12 Mo lus pour un refus d'argent) ═══
     {
-        const entete = { 'content-length': '12000000' };           // le client annonce 12 Mo et n'en envoie que 10 octets : une réponse reçue prouve que le corps n'a pas été attendu
+        // N2 : un vrai client HTTP envoie 5 Mo ; le refus d'argent (décidé AVANT la lecture) lui arrive COMPLET : le corps est jeté, pas gardé, puis la réponse part normalement
+        const envoyer5Mo = req => { let n = 0; const bloc = Buffer.alloc(65536, 3); const pousse = () => { while (n < 80) { n++; if (!req.write(bloc)) return req.once('drain', pousse); } req.end(); }; pousse(); };   // 80 x 64 Kio = 5 Mo
+        const taille5Mo = { 'content-length': String(80 * 65536) };
         const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
-        const a = await brut(sv.url, { cookie: nv.cookie, entetes: entete, delaiMs: 3000, ecrire: req => { req.write('0123456789'); } });
-        H.v('I2a. compte non vérifié : 403 VERIFICATION rendu AVANT la lecture du corps (réponse reçue pendant que 12 Mo sont encore dus)', [a.statut, a.json && a.json.erreur.code], [403, 'VERIFICATION']);
-        a.req.destroy();
         const vide = await compte({ solde: { accueil: 0, achete: 0 } });
         await raw('hebdo').insertOne({ compteId: vide.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 86400e3) });   // la poche hebdo de la semaine est épuisée
-        const b = await brut(sv.url, { cookie: vide.cookie, entetes: entete, delaiMs: 3000, ecrire: req => { req.write('0123456789'); } });
-        H.v('   compte vérifié sans crédit : 429 QUOTA (avec solde, facturation null) AVANT la lecture du corps', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && b.json.solde && b.json.solde.total], [429, 'QUOTA', null, 0]);
-        b.req.destroy();
-        H.v('   la porte n\'a rien gardé', SC.etatPorte().enCours, 0);
+        require('v8').setFlagsFromString('--expose-gc'); const gc = require('vm').runInNewContext('gc'); const ab = async () => { for (let k = 0; k < 4; k++) { gc(); await attendre(80); } return process.memoryUsage().arrayBuffers; };
+        const ab0 = await ab();
+        const a = await brut(sv.url, { cookie: nv.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
+        H.v('N2/I2a. compte non vérifié, client qui envoie 5 Mo : 403 VERIFICATION COMPLET (statut, JSON), connexion non coupée', [a.statut, a.json && a.json.erreur.code, a.json && a.json.facturation, a.erreur, a.entetes.connection !== 'close'], [403, 'VERIFICATION', null, null, true]);
+        const b = await brut(sv.url, { cookie: vide.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
+        H.v('   compte vérifié sans crédit, 5 Mo : 429 QUOTA complet, avec solde, facturation null ET achat.url', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && b.json.solde && b.json.solde.total, b.json && b.json.achat && typeof b.json.achat.url, b.erreur], [429, 'QUOTA', null, 0, 'string', null]);
+        const ab1 = await ab();
+        H.vrai(`   mémoire : aucun corps accumulé (arrayBuffers après GC : ${ab0} -> ${ab1}, 10 Mo envoyés)`, ab1 - ab0 < 4 * 1024 * 1024);
+        H.v('   la porte n\'a rien gardé', [SC.etatPorte().enCours, SC.etatPorte().comptes], [0, 0]);
+        // l'échéance coupe un client trop lent : le refus part (Connection: close) et la socket est détruite
+        const svLent = await monter({ scannerDelaiLectureMs: 300 });
+        const lent = await brut(svLent.url, { cookie: nv.cookie, entetes: { 'content-length': '5000' }, ecrire: req => { req.write('0123456789'); } });
+        for (let k = 0; k < 30 && !lent.fermee; k++) await attendre(100);
+        H.v('   client trop lent (10 octets sur 5 000) : à l\'échéance, 403 + Connection: close, socket détruite', [lent.statut, lent.json && lent.json.erreur.code, lent.entetes.connection, lent.fermee], [403, 'VERIFICATION', 'close', true]);
+        await svLent.fermer();
         const ad = await compte({ role: 'administrateur', solde: { accueil: 0, achete: 0 } });
         const c = await scanner(sv.url, ad.cookie, { nom: 'I2a-admin' });
         H.v('   un administrateur sans crédit passe (le débit ne lui prend rien)', [c.statut, c.json.facturation.motif], [200, 'administrateur']);
@@ -376,14 +386,44 @@ async function parcourir() {
         const m0 = await nMouv(), a0 = appelsChaine;
         const r = await scanner(sv.url, cookie, { form: formulaire({ image: HEIC, type: 'image/heic' }), nom: 'heic' });
         H.v('R2. HEIC que sharp ne décode pas : 415 IMAGE/format, crédit jamais débité, chaîne non appelée', [r.statut, r.json.erreur.code, r.json.erreur.detail, await soldeCompte(c), await nMouv() - m0, appelsChaine - a0], [415, 'IMAGE', 'format', 25, 0, 0]);
-        const decode = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF]), crypto.randomBytes(50)]);
+        const decode = JPEG;                                  // une sortie de décodeur DÉCODABLE (N3 : la sortie du décodeur est vérifiée comme une entrée)
         const svH = await monter({ decoderHeic: async b => { if (!b.equals(HEIC)) throw new Error('mauvais octets'); return decode; } });
         const ok = await scanner(svH.url, cookie, { form: formulaire({ image: HEIC, type: 'image/heic' }), nom: 'heic2' });
         H.v('   HEIC décodé : la chaîne reçoit le JPEG DÉCODÉ (data:image/jpeg), jamais les octets HEIC', [ok.statut, dernierBody.imageUrls[0] === `data:image/jpeg;base64,${decode.toString('base64')}`], [200, true]);
         const svE = await monter({ decoderHeic: async () => { throw new Error('échec'); } });
         const ko = await scanner(svE.url, cookie, { form: formulaire({ image: HEIC, type: 'image/heic' }), nom: 'heic3' });
         H.v('   décodage qui échoue : 415 format, pas de second débit (solde 24 après le seul scan réussi)', [ko.statut, ko.json.erreur.detail, await soldeCompte(c)], [415, 'format', 24]);
-        await svH.fermer(); await svE.fermer();
+        const tronque = JPEG.subarray(0, Math.floor(JPEG.length / 2));
+        const svT = await monter({ decoderHeic: async () => tronque });
+        const kt = await scanner(svT.url, cookie, { form: formulaire({ image: HEIC, type: 'image/heic' }), nom: 'heic4' });
+        H.v('N3. une sortie de décodeur HEIC TRONQUÉE : 415 format, aucun second débit (solde 24)', [kt.statut, (kt.json.erreur || {}).detail, await soldeCompte(c)], [415, 'format', 24]);
+        await svH.fermer(); await svE.fermer(); await svT.fermer();
+    }
+
+    // ═══ N3 : décodabilité réelle (pas seulement l'en-tête) ═══
+    {
+        const { c, cookie } = await compte(); const m0 = await nMouv();
+        for (const [nom, img, type] of [['JPEG à en-tête valide mais TRONQUÉ', CANARI.subarray(0, Math.floor(CANARI.length / 2)), 'image/jpeg'], ['PNG tronqué', PNG.subarray(0, Math.floor(PNG.length / 2)), 'image/png']]) {
+            const r = await scanner(sv.url, cookie, { form: formulaire({ image: img, type }), nom: 'N3' });
+            H.v(`N3. ${nom} : 415 IMAGE/format, facturation null`, [r.statut, (r.json.erreur || {}).detail, r.json.facturation], [415, 'format', null]);
+        }
+        H.v('   rien débité, solde 25', [await soldeCompte(c), await nMouv() - m0], [25, 0]);
+    }
+
+    // ═══ N1 : la porte se libère à la FIN RÉELLE du traitement, pas quand le client coupe ═══
+    {
+        const { c, cookie } = await compte(); mode = 'affirmee'; retard = 1500;
+        const corpsMp = Buffer.concat([Buffer.from('--BBB\r\nContent-Disposition: form-data; name="source"\r\n\r\ncamera\r\n--BBB\r\nContent-Disposition: form-data; name="image"; filename="a.jpg"\r\nContent-Type: image/jpeg\r\n\r\n'), JPEG, Buffer.from('\r\n--BBB--\r\n')]);
+        const a0 = appelsChaine;
+        const client = brut(sv.url, { cookie, entetes: { 'content-length': String(corpsMp.length) }, delaiMs: 6000, surReq: q => setTimeout(() => q.destroy(), 500), ecrire: req => { req.write(corpsMp); req.end(); } });
+        for (let k = 0; k < 40 && appelsChaine === a0; k++) await attendre(25);
+        await client; await attendre(300);                      // le client a coupé (≈ 500 ms) ; la chaîne fabriquée dort encore (1 500 ms)
+        H.v('N1. le client coupe PENDANT la chaîne : la porte reste tenue (jeton global ET jeton du compte)', [appelsChaine - a0, SC.etatPorte().enCours, SC.etatPorte().comptes], [1, 1, 1]);
+        for (let k = 0; k < 80 && SC.etatPorte().enCours > 0; k++) await attendre(50);
+        retard = 0;
+        H.v('   à la fin réelle du traitement : rendue exactement une fois (0, 0), le scan a été débité (24)', [SC.etatPorte().enCours, SC.etatPorte().comptes, await soldeCompte(c)], [0, 0, 24]);
+        const suite = await scanner(sv.url, cookie, { nom: 'N1-suite' });
+        H.v('   le compte peut scanner à nouveau', suite.statut, 200);
     }
 
     // ═══ I4 : le décodage HEIC est BORNÉ ═══
