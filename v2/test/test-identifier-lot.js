@@ -401,8 +401,36 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         const svPlaf = await monter(lireConfig({ ...BASE, V2_PLAFOND_PANNES: '0' }), { identifierLot });
         const x = await compteLie({ accueil: 0, achete: 10 }); lot(nIntro(25));
         const r = await poster(svPlaf.url, x.jeton); await svPlaf.fermer();
+        // le registre « argent » est global au processus et LIÉ à la configuration du dernier montage : on le relie à la configuration ordinaire pour la suite
+        await (await monter(cfg, {})).fermer();
         H.v('3d. lot de 25 introuvable, plafond de remboursements atteint : facturation { debite:3 (le coût du lot), rembourse:false, motif plafond-jour, cause plafond-jour }, achete 7',
             [r.statut, r.json.facturation, (await soldeCompte(x)).achete], [200, { debite: 3, reserve: 0, rembourse: false, motif: 'plafond-jour', raisonNonRembourse: 'plafond-jour' }, 7]);
+    }
+    // ── N1. un résultat unique NON CONFORME ne rappelle JAMAIS la vraie chaîne (une seconde lecture payante) : 500 SERVEUR remboursé
+    {
+        const e = console.error; console.error = () => { };
+        try {
+            const res = [];
+            for (const [nom, v] of [['null', null], ['undefined', undefined], ['0', 0], ['chaîne vide', '']]) {
+                const x = await inst(); lot([v]); appelsLot = 0; appelsChaine = 0;
+                const r = await poster(sv.url, x.jeton);
+                res.push([nom, r.statut, r.json.erreur && r.json.erreur.code, r.json.facturation && r.json.facturation.rembourse, await essais(x), await net(x, `résultat unique ${nom}`), appelsChaine, appelsLot]);
+            }
+            H.v('N1. crochet [null] / [undefined] / [0] / [\'\'] : 500 SERVEUR remboursé (essai 3, somme 0), chaîne héritée 0 appel, crochet 1 appel', res,
+                [['null', 500, 'SERVEUR', true, 3, 0, 0, 1], ['undefined', 500, 'SERVEUR', true, 3, 0, 0, 1], ['0', 500, 'SERVEUR', true, 3, 0, 0, 1], ['chaîne vide', 500, 'SERVEUR', true, 3, 0, 0, 1]]);
+            // N2. un résultat unique EN PANNE : comme une carte seule en panne
+            const y = await inst(); lot([{ statutHttp: 500, corps: null }]); appelsLot = 0; appelsChaine = 0;
+            const r = await poster(sv.url, y.jeton);
+            H.v('N2. 1 résultat en panne { statutHttp:500, corps:null } : 500 SERVEUR remboursé comme une carte seule (essai 3, somme 0), chaîne 0 appel, crochet 1 appel',
+                [r.statut, r.json.erreur && r.json.erreur.code, r.json.facturation && r.json.facturation.rembourse, await essais(y), await net(y, 'résultat unique en panne'), appelsChaine, appelsLot], [500, 'SERVEUR', true, 3, 0, 0, 1]);
+        } finally { console.error = e; }
+    }
+    // ── N3. /api/retour-live à la frontière de CARTES_PAR_SCAN_MAX (comportement, pas seulement la regex) : 99 passe la validation, 100 ⇒ 400
+    {
+        const x = await inst(); const idInconnu = String(new mongoose.Types.ObjectId());
+        const rl = idx => H.appel(sv.url, '/api/retour-live', { methode: 'POST', corps: { scanId: idInconnu, carte: idx, lectureRatee: { cause: 'sans-prix', definitive: true } }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}` } });
+        const a = await rl(99), b = await rl(100);
+        H.v('N3. /retour-live : carte 99 acceptée par la validation (404 scan introuvable), carte 100 ⇒ 400 ENTREE', [a.statut, a.json.erreur && a.json.erreur.code, b.statut, b.json.erreur && b.json.erreur.code], [404, 'CODE_INVALIDE', 400, 'ENTREE']);
     }
     await sv.fermer(); await svSimple.fermer();
     await mongoose.disconnect(); await H.arreterBanc();

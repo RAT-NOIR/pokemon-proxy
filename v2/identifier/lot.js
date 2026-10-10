@@ -67,7 +67,13 @@ async function executerLot(p) {
         return panne('SERVEUR');
     }
     // UN résultat n'est pas un lot : il tient lieu de réponse de la chaîne dans la branche UNE-CARTE de routes.js (règle G, question réservée, sans-prix). Rien n'est écrit ici.
-    if (resultats.length === 1) return { unique: resultats[0] };
+    // Un résultat unique NON CONFORME (null, undefined, 0, '' : pas un objet { statutHttp entier, corps }) n'est jamais confié à la branche une-carte, qui rappellerait la VRAIE
+    // chaîne (une seconde lecture payante) : même issue que les autres non-conformes du crochet, 500 SERVEUR remboursé.
+    if (resultats.length === 1) {
+        const r = resultats[0];
+        if (!r || typeof r !== 'object' || Array.isArray(r) || !Number.isInteger(r.statutHttp)) { console.error('❌ [v2 lot] le crochet a rendu un résultat unique non conforme'); return panne('SERVEUR'); }
+        return { unique: r };
+    }
     // 2. le catalogue de l'API pour tous les produits désignés ; une lecture qui TOMBE est une panne, jamais une absence
     const corpsDe = r => (r && r.corps && typeof r.corps === 'object' ? r.corps : {});
     let produits;

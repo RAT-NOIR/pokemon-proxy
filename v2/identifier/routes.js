@@ -114,7 +114,7 @@ function chaineDepuisResultat(r) {
     };
 }
 
-const URL_RECHARGE ='https://rat-market.fr/fr/compte#recharge';
+const URL_RECHARGE = 'https://rat-market.fr/fr/compte#recharge';
 const entiers = xs => [...new Set((Array.isArray(xs) ? xs : []).map(c => c && c.idProduct).filter(Number.isInteger))];
 const journalErreur = (ou, e) => console.error(`❌ [v2 identifier] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
@@ -241,7 +241,7 @@ function traiterIdentifier(cfg, deps = {}) {
         try {
             if (modeLot) {
                 const l = await executerLot({ cfg, deps, catalogue, argent, porteur, entree, annonce, scanId, cleDebit, admin, credit, ip: req.ip, userId, facturationDe });
-                if (l.erreur) erreurLot = l.erreur; else if (l.unique) injecte = l.unique; else sortie = l.sortie;
+                if (l.erreur) erreurLot = l.erreur; else if ('unique' in l) injecte = l.unique; else sortie = l.sortie;     // la présence se teste par la FORME, jamais par la valeur
             }
             // Pas de lot (crochet absent) OU un crochet qui n'a rendu qu'UN résultat : la branche UNE-CARTE (règle G, question réservée, sans-prix), qui reçoit ce résultat
             // comme réponse de la chaîne — sans la rappeler (un seul appel de lecture).
