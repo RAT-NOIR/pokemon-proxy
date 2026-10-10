@@ -109,14 +109,19 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
     // `tirage ?? region` (jamais `region` seul : « intl » pour des sets chinois/indonésiens/thaïs). Aucun second prédicat ;
     // le bouclage LÈVE si la somme des langues n'égale pas le global.
     if (process.argv.includes('--par-langue')) {
-        const { ventilerParLangue } = require('./collecte-cartes/ventilation-langue');
-        const v = ventilerParLangue(slugParProduit, { fiches, visuels, jumeau: visuelsJumeau }, s => setDocDe.get(s));
+        const { ventilerParLangue, CAUSES } = require('./collecte-cartes/ventilation-langue');
+        // le bouclage compare aux nombres que la ligne GLOBALE imprime (total, fiches, visuels, jumeau), pas à un recomptage
+        const jamaisAppris = new Set(exportArg ? produits.filter(p => !p.appris).map(p => p.idProduct) : []);
+        const v = ventilerParLangue(slugParProduit, { fiches, visuels, jumeau: visuelsJumeau }, s => setDocDe.get(s),
+            { produits: total, fiches: fiches.size, visuels: visuels.size, jumeau: visuelsJumeau.size }, jamaisAppris);
         console.log(`\n   ════ PAR LANGUE DU TIRAGE (sets.tirage ?? sets.region) — dénominateur : ${total} produits${exportArg ? ` de l'export ${exportArg.slice('--export='.length)}` : ' (lignes apprises numeros_cartes, sans --export)'} ════`);
         console.log(`   ${'langue'.padEnd(20)}${'produits'.padStart(9)}${'fiches'.padStart(9)}${'visuels'.padStart(9)}${'écart'.padStart(8)}${'jumeau'.padStart(8)}   % visuels`);
         for (const l of v.tableau)
             console.log(`   ${l.langue.padEnd(20)}${String(l.produits).padStart(9)}${String(l.fiches).padStart(9)}${String(l.visuels).padStart(9)}${String(l.produits - l.visuels).padStart(8)}${String(l.jumeau).padStart(8)}   ${(l.visuels / l.produits * 100).toFixed(1)} %`);
         console.log(`   ${'SOMME'.padEnd(20)}${String(v.somme.produits).padStart(9)}${String(v.somme.fiches).padStart(9)}${String(v.somme.visuels).padStart(9)}${String(v.somme.produits - v.somme.visuels).padStart(8)}${String(v.somme.jumeau).padStart(8)}`);
-        console.log(`   ⚖️ bouclage : somme des langues = global (${v.attendu.produits} produits · ${v.attendu.fiches} fiches · ${v.attendu.visuels} visuels · ${v.attendu.jumeau} jumeau) ✅`);
+        console.log(`   « (langue inconnue) » par CAUSE${exportArg ? ' (entre crochets : produits JAMAIS APPRIS de l\'export)' : ''} :`);
+        for (const c of ['a', 'b', 'c']) console.log(`      (${c}) ${CAUSES[c].padEnd(52)} ${String(v.inconnue[c].produits).padStart(6)}${exportArg ? `  [${v.inconnue[c].jamaisAppris}]` : ''}`);
+        console.log(`   ⚖️ bouclage : somme des langues = mesure globale imprimée plus haut (${v.attendu.produits} produits · ${v.attendu.fiches} fiches · ${v.attendu.visuels} visuels · ${v.attendu.jumeau} jumeau) ✅`);
     }
 
     const enCours = await cx.db.collection('file_images').countDocuments({ etat: 'en-cours' });
