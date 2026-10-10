@@ -10,8 +10,14 @@
 // la base, le bucket des sauvegardes et des archives, les identifiants R2 et son hôte (R2_ENDPOINT, à défaut R2_ACCOUNT_ID).
 const VARIABLES_IMPORT = ['MONGODB_URI', 'R2_BUCKET_BRUT', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
 
+/** Les variables qu'un import exige : sous BANC_ISOLE=1 les clés R2 sont celles de BANC (R2_BANC_*, comme clesR2) — les clés de production
+ *  sont vidées par le harnais et un banc ne les utilise jamais. Hors banc : la liste de toujours. */
+function variablesImport(env = process.env) {
+    return env.BANC_ISOLE === '1' ? ['MONGODB_URI', 'R2_BUCKET_BRUT', 'R2_BANC_ACCESS_KEY_ID', 'R2_BANC_SECRET_ACCESS_KEY'] : VARIABLES_IMPORT;
+}
+
 /** Les variables absentes ou vides — pure. @returns {string[]} */
-function variablesManquantes(env = process.env, noms = VARIABLES_IMPORT) {
+function variablesManquantes(env = process.env, noms = variablesImport(env)) {
     const vide = n => !String(env[n] ?? '').trim();
     const manquantes = noms.filter(vide);
     if (vide('R2_ENDPOINT') && vide('R2_ACCOUNT_ID')) manquantes.push('R2_ENDPOINT ou R2_ACCOUNT_ID');
@@ -26,4 +32,4 @@ function exigerVariables(script, env = process.env) {
     process.exit(1);
 }
 
-module.exports = { VARIABLES_IMPORT, variablesManquantes, exigerVariables };
+module.exports = { VARIABLES_IMPORT, variablesImport, variablesManquantes, exigerVariables };

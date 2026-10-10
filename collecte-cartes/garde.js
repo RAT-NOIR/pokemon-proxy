@@ -37,7 +37,9 @@ function verifierEnvironnement({ buckets = ['R2_BUCKET_BRUT'], production = true
     }
     if (uri === process.env.MONGODB_URI) arret('MONGODB_CARTES_URI est ÉGAL à MONGODB_URI — c\'est le cluster de PRODUCTION. Refus.');
     if (production && !process.env.MONGODB_URI) arret('MONGODB_URI absent : la jointure lit la production en lecture seule, elle en a besoin.');
-    for (const v of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', ...buckets]) {
+    // sous banc, les clés de production sont retirées de l'environnement : on exige celles de BANC (clesR2)
+    const cles = process.env.BANC_ISOLE === '1' ? ['R2_BANC_ACCESS_KEY_ID', 'R2_BANC_SECRET_ACCESS_KEY'] : ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+    for (const v of ['R2_ACCOUNT_ID', ...cles, ...buckets]) {
         if (!process.env[v]) arret(`${v} absent du .env.`);
     }
 }
