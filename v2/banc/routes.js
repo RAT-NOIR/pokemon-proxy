@@ -12,8 +12,7 @@ const { lireConsentement } = require('./consentement');
 const S = require('./stockage');
 const { repondreErreur } = require('../erreurs');
 
-const { JOUR_MS, jourUTC, creerBorner, lignesEchues, supprimerObjetPuisLigne } = require('./commun');
-const { consentementAutorise } = require('./crochet');
+const { JOUR_MS, jourUTC, creerBorner, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
 
 const TIMEOUT_MS = 2000;
 const FORME_ID = /^[0-9a-f]{24}$/i;
@@ -167,8 +166,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
                     const s = await pret(); if (!s || ctx.stop) return;
                     const ligne = await col().findOne({ _id: idLigne(o.scanId, carteDe(o)) });
                     if (!ligne || ligne.etat !== 'attente') return;
-                    await s.supprimer(ligne.cleR2);                       // si ceci échoue, la ligne reste : on ne perd pas la trace d'un objet qui existe
-                    await col().deleteOne({ _id: ligne._id, etat: 'attente' });
+                    // la définition COMMUNE « objet puis ligne » (si l'objet ne part pas la ligne reste ; la ligne porte sa cleR2 et reste en attente au moment de partir)
+                    await supprimerObjetPuisLigne(s, ligne, col, borner, { etat: 'attente' });
                 });
             } catch (e) { echec('apresAbandon', e); }
         },
@@ -237,7 +236,7 @@ function traiterCorrection(cfg, banc) {
         catch (e) { echec404('analyses', e); return repondreErreur(res, 'INDISPONIBLE'); }
         if (!an || !Array.isArray(an.cartes) || !an.cartes[carte]) return repondreErreur(res, 'CODE_INVALIDE', 'Scan introuvable');   // l'analyse d'un autre porteur n'existe pas
         // un jeton de consentement égal au jeton d'accès relierait la ligne à l'installation : rien n'est conservé, sans le dire (comme un consentement invalide)
-        if (consentementAutorise(req, cfg)) await banc.corriger({ corps: b, scanId: b.scanId, carte, idProduct: b.idProduct });
+        if (await consentementAutorise(req, cfg)) await banc.corriger({ corps: b, scanId: b.scanId, carte, idProduct: b.idProduct });
         return res.status(200).json({ success: true });
     };
 }

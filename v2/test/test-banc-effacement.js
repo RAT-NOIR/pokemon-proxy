@@ -363,6 +363,56 @@ async function section(nom, f) {
         await vider();
     });
 
+    // ═══ I1 étendu — le jeton de consentement ne doit être AUCUNE empreinte d'accès du porteur (toutes les installations / sessions du compte) ═══
+    await section('I1 étendu', async () => {
+        const K = require('../banc/commun');
+        const compteId = new mongoose.Types.ObjectId();
+        const [jA, jB, jH, jC, jS, jSans, jD, jDH] = Array.from({ length: 8 }, () => J.genererJeton());
+        const inst = (j, plus = {}) => Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(j), essais: 3, libelle: 'x' }), plus);
+        const iA = inst(jA, { compteId }), iB = inst(jB, { compteId, heriteEmpreinte: J.empreinte(jH) }), iC = inst(jC, { compteId, revoqueeLe: new Date() });
+        const iD = inst(jD, { heriteEmpreinte: J.empreinte(jDH) });
+        await db.col('installations').insertMany([iA, iB, iC, iD]);
+        await db.col('sessions').insertOne({ tokenEmpreinte: J.empreinte(jS), compteId, creeLe: new Date(), vueLe: new Date(), expireLe: new Date(Date.now() + 86400e3) });
+        const reqCompte = jeton => ({ body: consentement(jeton), v2: { porteur: { type: 'compte', id: compteId, installation: iA, compte: { _id: compteId } } } });
+        const reqInst = jeton => ({ body: consentement(jeton), v2: { porteur: { type: 'installation', id: iD._id, compte: null, installation: iD } } });
+        const a = (req, colFn) => K.consentementAutorise(req, cfg, colFn);
+        H.v('(I1+) compte : jeton d\'accès de l\'installation COURANTE ⇒ refusé', await a(reqCompte(jA)), false);
+        H.v('   le jeton d\'une AUTRE installation du même compte ⇒ refusé', await a(reqCompte(jB)), false);
+        H.v('   le jeton HÉRITÉ (heriteEmpreinte) d\'une installation du compte ⇒ refusé', await a(reqCompte(jH)), false);
+        H.v('   le jeton d\'une installation RÉVOQUÉE du compte ⇒ refusé', await a(reqCompte(jC)), false);
+        H.v('   le jeton d\'une SESSION du compte ⇒ refusé', await a(reqCompte(jS)), false);
+        H.v('   un jeton sans rapport ⇒ autorisé', await a(reqCompte(jSans)), true);
+        H.v('   installation sans compte : son jeton, son jeton hérité ⇒ refusés ; un jeton sans rapport ⇒ autorisé', [await a(reqInst(jD)), await a(reqInst(jDH)), await a(reqInst(jSans))], [false, false, true]);
+        const panne = () => ({ find: () => ({ toArray: async () => { throw Object.assign(new Error('Mongo HS'), { code: 'MONGO_HS' }); } }), findOne: async () => { throw new Error('Mongo HS'); } });
+        const cap = capturer(); const rp = await a(reqCompte(jSans), panne); cap.rendre();
+        H.v('   lecture Mongo en panne ⇒ refusé (« je ne sais pas » ne conserve pas), même pour un jeton sans rapport', rp, false);
+        H.v('   consentement invalide ⇒ refusé, sans aucune lecture', await a({ body: {}, v2: reqCompte(jSans).v2 }, () => { throw new Error('lecture interdite'); }), false);
+        H.v('   (la fonction ne vit plus dans le crochet) crochet.consentementAutorise n\'est plus exporté', 'consentementAutorise' in require('../banc/crochet'), false);
+        await db.col('installations').deleteMany({}); await db.col('sessions').deleteMany({});
+    });
+
+    // ═══ N2 / N3 — apresAbandon : la définition commune « objet puis ligne », deleteOne porteur de la cleR2 ═══
+    await section('N2/N3', async () => {
+        const client = fauxClient(); const filtres = [];
+        const colEspion = n => { const r = db.col(n); return { findOne: (...x) => r.findOne(...x), find: (...x) => r.find(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (f, ...x) => { filtres.push(f); return r.deleteOne(f, ...x); } }; };
+        const ecr = nouveauBanc(client).banc, sp = nouveauBanc(client, colEspion).banc;
+        const scanId = await ecrireLigne(ecr, image, { jeton: 'jeton-N2-abcdefghij1234', issue: 'question' });
+        await sp.apresAbandon({ scanId, carte: 0 });
+        H.v('(N2) apresAbandon : le deleteOne porte _id, cleR2 ET etat (le filtre d\'attente est gardé)', [filtres.length, Object.keys(filtres[0] || {}).sort(), (filtres[0] || {}).etat], [1, ['_id', 'cleR2', 'etat'], 'attente']);
+        H.v('   ligne et objet supprimés', [(await lignes()).length, client.objets.size], [0, 0]);
+        // la ligne est confirmée entre la lecture et la suppression : elle reste, avec sa copie finale
+        const s2 = await ecrireLigne(ecr, image, { jeton: 'jeton-N2-abcdefghij1234', issue: 'question' }); const l0 = (await lignes())[0];
+        const colStale = n => { const r = db.col(n); return { findOne: async (...x) => { const l = await r.findOne(...x); await ecr.corriger({ corps: consentement('jeton-N2-abcdefghij1234'), scanId: s2, carte: 0, idProduct: 55 }); return l; }, find: (...x) => r.find(...x), insertOne: (...x) => r.insertOne(...x), updateOne: (...x) => r.updateOne(...x), deleteOne: (...x) => r.deleteOne(...x) }; };
+        await nouveauBanc(client, colStale).banc.apresAbandon({ scanId: s2, carte: 0 });
+        const ls = await lignes();
+        H.v('(N3) abandon d\'une ligne confirmée entre-temps : la ligne confirmée et sa copie finale restent', [ls.length, ls[0] && ls[0].etat, ls[0] && client.objets.has(ls[0].cleR2), client.objets.has(l0.cleR2)], [1, 'confirmee', true, false]);
+        // le code ne garde plus sa propre copie : la suppression passe par la fonction commune
+        const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'banc', 'routes.js'), 'utf8');
+        const bloc = src.slice(src.indexOf('async apresAbandon'), src.indexOf('async corriger'));
+        H.v('   apresAbandon appelle supprimerObjetPuisLigne (pas de s.supprimer / deleteOne propres)', [/supprimerObjetPuisLigne/.test(bloc), /\.deleteOne\(|\bs\.supprimer\(/.test(bloc)], [true, false]);
+        await vider(); client.objets.clear();
+    });
+
     // ═══ (6) la purge tourne chaque jour dans monter.js ═══
     await section('minuterie', async () => {
         H.v('(6) la périodicité est de 24 h', monterBanc.INTERVALLE_PURGE_MS, 24 * 3600 * 1000);

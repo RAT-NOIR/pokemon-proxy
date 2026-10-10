@@ -2,6 +2,8 @@
 // UNE définition de ce que le banc réel partage entre l'écriture (routes.js), le balayage d'attente (routes.js) et la purge / l'effacement (purge.js) :
 // le jour, le délai borné, « quelles lignes sont échues » et « supprimer l'objet puis la ligne ». Trois copies divergeaient déjà (§21 bis) : la suppression de la ligne
 // ne portait pas sa cleR2 chez deux d'entre elles, donc une ligne CONFIRMÉE entre-temps (sa cleR2 a changé) pouvait être supprimée avec sa copie finale orpheline.
+const db = require('../db');
+const { lireConsentement } = require('./consentement');
 const JOUR_MS = 86400e3;
 const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
 const codeDe = e => (e && (e.code || e.name)) || 'erreur';     // jamais e.message : il peut citer une clé ou une URL
@@ -30,13 +32,39 @@ function lignesEchues(col, maintenant, borner, { attenteSeulement = false } = {}
  * @returns {Promise<'supprimee'|'changee'|'echec'>} 'echec' : l'objet ou la ligne n'a pas pu être supprimé (la ligne reste, reprise à la prochaine passe) ;
  * 'changee' : la ligne n'est plus celle qu'on a lue, rien n'a été fait d'irréparable.
  */
-async function supprimerObjetPuisLigne(stockage, ligne, col, borner) {
+async function supprimerObjetPuisLigne(stockage, ligne, col, borner, filtre = {}) {
     try { await borner(stockage.supprimer(ligne.cleR2)); }
     catch (e) { console.error(`❌ [v2 banc] objet non supprimé, ligne conservée (${codeDe(e)})`); return 'echec'; }
     try {
-        const r = await borner(col().deleteOne({ _id: ligne._id, cleR2: ligne.cleR2 }));
+        const r = await borner(col().deleteOne({ ...filtre, _id: ligne._id, cleR2: ligne.cleR2 }));
         return r && r.deletedCount === 0 ? 'changee' : 'supprimee';
     } catch (e) { console.error(`❌ [v2 banc] ligne non supprimée après son objet, reprise à la prochaine passe (${codeDe(e)})`); return 'echec'; }
 }
 
-module.exports = { JOUR_MS, jourUTC, codeDe, creerBorner, limiteAttente, lignesEchues, supprimerObjetPuisLigne };
+/**
+ * Le consentement ouvre-t-il la conservation POUR CETTE REQUÊTE ? Valide (B6.1) ET — écrit par ce qu'on autorise — d'une empreinte DIFFÉRENTE de TOUTES les empreintes
+ * d'accès du porteur : un jeton de consentement égal à un jeton d'accès (même sha256) donnerait à la ligne la même empreinte que `installations.jetonEmpreinte` et la
+ * relierait à l'installation, ou au compte. Pour un compte : toutes ses installations (jetonEmpreinte ET heriteEmpreinte, révoquées comprises) et toutes ses sessions ;
+ * pour une installation sans compte : son jetonEmpreinte et son heriteEmpreinte. Sans porteur lisible, ou si une lecture échoue : refus (« je ne sais pas » ne conserve pas).
+ * La lecture n'a lieu que sur le chemin rare (consentement valide). Rien n'est dit au client.
+ * @returns {Promise<boolean>}
+ */
+async function consentementAutorise(req, cfg, colFn = n => db.col(n)) {
+    try {
+        const c = lireConsentement(req && req.body, cfg);
+        if (!c.valide) return false;
+        const p = req && req.v2 && req.v2.porteur;
+        if (!p) return false;
+        const acces = new Set();
+        const ajouter = x => { if (typeof x === 'string' && x) acces.add(x); };
+        if (p.installation) { ajouter(p.installation.jetonEmpreinte); ajouter(p.installation.heriteEmpreinte); }
+        if (req.v2.session) ajouter(req.v2.session.tokenEmpreinte);
+        if (p.type === 'compte') {
+            for (const i of await colFn('installations').find({ compteId: p.id }, { projection: { jetonEmpreinte: 1, heriteEmpreinte: 1 } }).toArray()) { ajouter(i.jetonEmpreinte); ajouter(i.heriteEmpreinte); }
+            for (const s of await colFn('sessions').find({ compteId: p.id }, { projection: { tokenEmpreinte: 1 } }).toArray()) ajouter(s.tokenEmpreinte);
+        }
+        return !acces.has(c.jetonEmpreinte);
+    } catch (e) { console.error(`❌ [v2 banc] garde du jeton de consentement non conclue, rien conservé (${codeDe(e)})`); return false; }
+}
+
+module.exports = { JOUR_MS, jourUTC, codeDe, creerBorner, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };
