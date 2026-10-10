@@ -25,6 +25,8 @@ const leve = async (nom, f, motif) => {
     catch (e) { if (motif.test(e.message)) { ok++; console.log(`✅ ${nom}`); } else { ko++; console.log(`❌ ${nom} : a levé autre chose : ${e.message.slice(0, 160)}`); } }
 };
 
+// (fragments recollés : ce fichier est lui-même balayé et prouvé — ses textes fabriqués ne doivent pas ressembler à une connexion réelle)
+const frag = (...p) => p.join('');
 const carte = (id, nomEn, sets) => ({ _id: id, nomEn, sets });
 const ligne = (carteId, idProduct, slugSet) => ({ _id: `${carteId}|${idProduct}`, carteId, idProduct, slugSet });
 
@@ -163,6 +165,18 @@ async function main() {
         // le balayage dit NON sur des états fabriqués : copieurs non listés, fichier de liste disparu, écritures de toutes formes
         const sansListe = E.balayer(__dirname, { copieurs: {}, bancs: E.BANCS });
         verifier('balayage : sans la liste fermée, les deux copieurs sont des fautifs (renommer-set, reparer-identite-nulle)', sansListe.fautifs.map(x => x.split(' ')[0]).sort(), ['renommer-set.js', 'reparer-identite-nulle.js']);
+        const { 'test-historique-valeur.js': _h, ...bancsSansHisto } = E.BANCS;
+        verifier('balayage : un banc d\'une autre branche non listé (test-historique-valeur.js) est un fautif', E.balayer(__dirname, { bancs: bancsSansHisto }).fautifs.map(x => x.split(' ')[0]), ['test-historique-valeur.js']);
+        verifier('balayage : les bancs listés sont exactement ceux qu\'on a prouvés', Object.keys(E.BANCS).sort(), ['test-historique-valeur.js', 'test-lot-garde-scratch.js', 'test-publication-sans-trou.js', 'test-regle-r-fiches.js']);
+        // la preuve d'isolation d'un banc listé : harnais en mémoire OBLIGATOIRE, aucune connexion ailleurs
+        const OK = "const { ouvrirBanc } = require('./collecte-cartes/base-banc'); const banc = await ouvrirBanc(); mongoose.createConnection(banc.uri, { dbName: 'x' });";
+        verifier('preuve de banc : harnais en mémoire + createConnection(banc.uri) → prouvé', E.preuveDeBanc(OK), []);
+        verifier('preuve de banc : process.env.MONGODB_URI accepté SEULEMENT après appliquer()', [E.preuveDeBanc(OK.replace('banc.uri', 'process.env.MONGODB_URI')).length, E.preuveDeBanc(OK.replace('banc.uri', 'process.env.MONGODB_URI') + ' banc.appliquer();').length], [1, 0]);
+        verifier('preuve de banc : sans ouvrirBanc → non prouvé', E.preuveDeBanc("mongoose.createConnection(banc.uri, {});").length, 1);
+        verifier('preuve de banc : une connexion vers une autre cible → non prouvée', E.preuveDeBanc(OK + frag(' mongoose.create', 'Connection(uriDeProd, {});')).length, 1);
+        verifier('preuve de banc : un client Mongo ouvert à la main ou une connexion mongoose par défaut → non prouvé', [E.preuveDeBanc(OK + frag(' new Mongo', 'Client(x);')).length, E.preuveDeBanc(OK + frag(' mongoose.con', 'nect(x);')).length], [1, 1]);
+        const bancFaux = E.balayer(__dirname, { bancs: { ...E.BANCS, 'test-publication-sans-trou.js': 'x' }, lire: f => /test-publication-sans-trou\.js$/.test(f) ? frag("db.collection('sets').insertMany([]); mongoose.create", 'Connection(process.env.PROD, {});') : fs.readFileSync(f, 'utf8') });
+        verifier('balayage : un banc listé sans preuve d\'isolation fait échouer', bancFaux.listeObsolete.some(x => /test-publication-sans-trou\.js : banc sans preuve d'isolation/.test(x)), true);
         const avecFantome = E.balayer(__dirname, { copieurs: { ...E.COPIEURS_PROUVES, 'fantome.js': 'n\'existe pas' }, bancs: E.BANCS });
         verifier('balayage : un fichier de la liste fermée qui n\'existe plus fait échouer', avecFantome.listeObsolete, ['fantome.js : le fichier n\'existe plus']);
         const avecPerime = E.balayer(__dirname, { copieurs: { ...E.COPIEURS_PROUVES, 'poser-par-metacarte.js': 'x' }, bancs: E.BANCS });

@@ -22,8 +22,29 @@ const COPIEURS_PROUVES = {
 const BANCS = {
     'test-lot-garde-scratch.js': 'banc de la garde de lot : insertMany de fixtures dans la base du banc',
     'test-regle-r-fiches.js': 'banc de la règle R : insertMany de fixtures dans la base du banc',
-    'test-publication-sans-trou.js': 'ce banc : fixtures de sets dans la base du banc'
+    'test-publication-sans-trou.js': 'ce banc : fixtures de sets dans la base du banc',
+    // test-historique-valeur.js (arrivé par a-histo-valeur) : ouvre la base EN MÉMOIRE `const banc = await ouvrirBanc()` (l.22) ; ses deux connexions
+    // (`createConnection(banc.uri, …)`, l.24-25) visent banc.uri et rien d'autre ; ses `insertMany` sur `sets` (l.31) sont des sets FICTIFS dans la base du banc.
+    'test-historique-valeur.js': 'banc de historique-valeur.js : sets fictifs dans la base en mémoire (ouvrirBanc, createConnection(banc.uri))'
 };
+
+/**
+ * LA PREUVE QU'UN BANC LISTÉ NE SORT PAS DE SA BASE EN MÉMOIRE (écrite par ce qu'elle autorise) : il appelle `ouvrirBanc(` (collecte-cartes/base-banc.js) ET
+ * chacune de ses `createConnection(` vise `banc.uri` — ou `process.env.MONGODB_URI` seulement si le fichier appelle `.appliquer()`, qui REMPLACE cette
+ * variable par l'URI du banc (base-banc.js). Toute autre cible, ou un banc sans harnais, est un problème. Rend la liste des problèmes (vide = prouvé).
+ * ⚠️ Lecture de texte : elle ne suit pas une URI passée par une variable intermédiaire (elle la refuse, faute de pouvoir la lire).
+ */
+function preuveDeBanc(t) {
+    const pb = [];
+    if (!/require\(\s*['"]\.\/collecte-cartes\/base-banc['"]\s*\)/.test(t) || !/\bouvrirBanc\s*\(/.test(t)) pb.push('n\'ouvre pas la base du banc (ouvrirBanc de collecte-cartes/base-banc.js)');
+    const appliquer = /\.appliquer\s*\(\s*\)/.test(t);
+    for (const m of t.matchAll(/createConnection\(\s*([^,)]*)/g)) {
+        const cible = m[1].trim();
+        if (cible !== 'banc.uri' && !(appliquer && /^process\.env\.MONGODB_(CARTES_)?URI$/.test(cible))) pb.push(`createConnection(${cible}) : ni banc.uri, ni une variable remplacée par appliquer()`);
+    }
+    if (/\bMongoClient\b|\bmongoose\.connect\(/.test(t)) pb.push('ouvre une connexion par MongoClient ou mongoose.connect : non prouvée');
+    return pb;
+}
 
 const METHODES_QUI_INSERENT = new Set(['insertOne', 'insertMany', 'bulkWrite', 'create']);
 const METHODES_A_UPSERT = new Set(['updateOne', 'updateMany', 'replaceOne', 'findOneAndUpdate', 'findOneAndReplace', 'findByIdAndUpdate']);
@@ -91,7 +112,8 @@ function balayer(racine, { copieurs = COPIEURS_PROUVES, bancs = BANCS, lire = f 
         if (!vus.has(nom)) listeObsolete.push(`${nom} : le fichier n'existe plus`);
         else if (!ecrivent.includes(nom)) listeObsolete.push(`${nom} : il n'écrit plus de set capable d'insérer (la preuve de la liste est périmée)`);
     }
+    for (const nom of Object.keys(bancs)) if (vus.has(nom)) for (const p of preuveDeBanc(vus.get(nom))) listeObsolete.push(`${nom} : banc sans preuve d'isolation — ${p}`);
     return { fautifs, listeObsolete, balayes: vus.size, ecrivent, parPointDEntree, copieurs: Object.keys(copieurs), bancs: Object.keys(bancs) };
 }
 
-module.exports = { COPIEURS_PROUVES, BANCS, POINTS_D_ENTREE, ecrituresDInsertion, balayer, fermante };
+module.exports = { COPIEURS_PROUVES, BANCS, POINTS_D_ENTREE, preuveDeBanc, ecrituresDInsertion, balayer, fermante };
