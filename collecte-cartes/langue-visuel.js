@@ -42,6 +42,9 @@ function langueDuVisuel(im) {
         const l = { id: 'id', th: 'th', tw: 'zh-hant' }[im.langueSource];
         return l ? { langue: l, preuve: `TPC Asie, site « ${im.langueSource} » (asia.pokemon-card.com/${im.langueSource}) : le scan de l'impression ${l}` } : { langue: null, preuve: `TPC Asie, site « ${im.langueSource} » sans règle` };
     }
+    // ➕ 2026-10-10 — images.pokemontcg.io : un serveur de cartes ANGLAISES (le set est celui d'un tirage occidental, prouvé à l'œil par
+    // set, collecte-cartes/ptcgio.js `temoins`) ; la collecte n'écrit que sous un set dont le tirage est `intl`.
+    if (im.source === 'pokemontcg.io') return { langue: 'en', preuve: 'images.pokemontcg.io : scan de l\'impression anglaise (42 images lues à l\'œil le 2026-10-10, toutes en anglais)' };
     if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {
         if (!im.wOriginal || !im.hOriginal) return { langue: null, preuve: 'dimensions du fichier source inconnues' };
