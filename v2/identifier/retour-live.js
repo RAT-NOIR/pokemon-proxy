@@ -15,6 +15,7 @@ const { fauxRes } = require('./captureres');
 const { col } = require('../db');
 const { colLue } = require('./catalogue');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
+const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -28,9 +29,13 @@ const journalErreur = (ou, e) => console.error(`❌ [v2 retour-live] ${ou} : ${(
 // réponse (question `repondue` par un candidat, hors lot). Tout le reste bloque : question en attente (son crédit est RÉSERVÉ, il se règle par la réponse ou le balayage),
 // abandonnée (déjà rendue), introuvable, lot (B1b.8 en décide), ligne analyses absente — « je ne peux pas conclure » n'est jamais « tout va bien ».
 async function carteIdentifiee(porteur, scanId, carte) {
-    const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1 } });
+    const an = await col('analyses').findOne({ _id: scanId, porteur: `${porteur.type}:${porteur.id}` }, { projection: { cartes: 1, statut: 1 } });
     const e = an && Array.isArray(an.cartes) ? an.cartes[carte] : null;
     if (!e) return false;
+    // B1b.8 (ruling 4) : la garde reste FERMÉE sur un lot, pour une carte identifiée comme pour une question. Un crédit de lot couvre jusqu'à 10 cartes : un prix manquant
+    // sur l'une n'annule pas la lecture des autres, et rembourser ferait de chaque lot un levier borné par le seul plafond du jour. Seul un lot entièrement introuvable est rendu (lot.js).
+    // Écrite par ce qu'elle AUTORISE : seules les analyses à UNE carte (`identifiee`, `a-trancher`) passent ; `lot` et tout statut inconnu bloquent.
+    if (!['identifiee', 'a-trancher'].includes(an.statut)) return false;
     if (e.statut === 'identifiee') return true;
     if (e.statut !== 'a-trancher') return false;
     const q = await col('questions').findOne({ _id: `${scanId}:${carte}`, 'porteur.type': porteur.type, 'porteur.id': porteur.id });
@@ -59,7 +64,7 @@ function traiterRetourLive(cfg, deps = {}) {
         if (!b || typeof b !== 'object' || Array.isArray(b)) return entreeInvalide('corps');
         if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entreeInvalide('scan-id');
         const carte = b.carte === undefined ? 0 : b.carte;
-        if (!Number.isInteger(carte) || carte < 0 || carte > 99) return entreeInvalide('carte');
+        if (!Number.isInteger(carte) || carte < 0 || carte >= CARTES_PAR_SCAN_MAX) return entreeInvalide('carte');
         if (b.verdictAffiche !== undefined && !VERDICTS.includes(b.verdictAffiche)) return entreeInvalide('verdict-affiche');
         const lr = b.lectureRatee;
         if (lr !== undefined && (!lr || typeof lr !== 'object' || Array.isArray(lr) || !CAUSES.includes(lr.cause) || typeof lr.definitive !== 'boolean')) return entreeInvalide('lecture-ratee');

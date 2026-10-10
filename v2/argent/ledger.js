@@ -90,8 +90,9 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
             //    pause du ramasse-miettes) rend encore un QUOTA faux ; l'argent, lui, reste juste.
             // 2. En production, /api/identifier est déjà sérialisé par clé par le claim d'idempotence (v2/transport/idempotence.js, `reclamer`) : cette course
             //    n'est atteinte qu'en appel direct.
-            // 3. Tout appelant SANS claim par clé, à commencer par `debiterSupplement` (v2/argent/lot.js) quand une route le branchera (B1b.8), devra poser un
-            //    marqueur « en cours » atomique sur la clé AVANT la prise de poche.
+            // 3. `debiterSupplement` (v2/argent/lot.js), appelé par la route des lots (v2/identifier/lot.js, B1b.8), est couvert : le claim Mongo d'`idempotente`
+            //    sérialise la clé de la requête ET la clé du débit initial est unique — seul le gagnant de ce débit atteint le supplément (le perdant sort en `rejoue`).
+            //    Tout NOUVEL appelant hors d'une requête claimée devrait poser un marqueur « en cours » atomique sur sa clé AVANT la prise de poche.
             for (let essai = 0; essai < ATTENTES_JUMEAU; essai++) {
                 const dej = await col('mouvements').findOne({ cleIdempotence: cleEff });
                 if (dej) return rejeu(dej);
