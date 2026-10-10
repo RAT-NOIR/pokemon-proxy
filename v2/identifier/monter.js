@@ -18,12 +18,24 @@ const siBearer = aiguilleur(req => /^Bearer /.test(String((req.headers && req.he
 // Chaque question est PRISE par une écriture conditionnelle (argent/questions.js) : deux processus ne rendent jamais deux fois.
 const INTERVALLE_BALAYAGE_MS = 60 * 1000;
 let minuteur = null;
-async function balayerQuestionsUneFois({ etatMongo = () => mongoose.connection.readyState, argent = () => registre.obtenir('argent') } = {}) {
+async function balayerQuestionsUneFois({ etatMongo = () => mongoose.connection.readyState, argent = () => registre.obtenir('argent'), banc = () => registre.obtenir('banc') } = {}) {
     try {
         if (etatMongo() !== 1) return false;                         // pas de connexion : on n'ouvre rien, on ne fait rien
-        await argent().balayerQuestions({ maintenant: new Date() });
+        const bilan = await argent().balayerQuestions({ maintenant: new Date() });
+        abandonnerAuBanc(bilan, banc);
         return true;
     } catch (e) { console.error(`❌ [v2 question-balayage] ${(e && (e.code || e.name)) || 'erreur'}`); return false; }   // une passe qui échoue ne tue ni le minuteur ni le processus
+}
+// B6.4 — l'abandon à 24 h EXACTES : chaque question non-lot que le balayage vient d'abandonner voit son image en attente (banc réel) supprimée, tout de suite.
+// Détaché du balayage : il n'attend rien (une suppression R2 lente ne retarde pas la passe suivante), ne lève jamais, et sans banc il ne fait rien.
+// (balayerAttente, 24-48 h, reste le filet, appelé par la purge.)
+function abandonnerAuBanc(bilan, banc) {
+    try {
+        const liste = bilan && Array.isArray(bilan.abandonnees) ? bilan.abandonnees : [];
+        if (!liste.length) return;
+        const b = banc();
+        (async () => { for (const a of liste) { try { await b.apresAbandon({ scanId: String(a.scanId), carte: a.carte }); } catch { /* le banc ne lève pas ; le filet reprend */ } } })().catch(() => { });
+    } catch (e) { console.error(`❌ [v2 banc-abandon] ${(e && (e.code || e.name)) || 'erreur'}`); }
 }
 function arreterBalayage() { if (minuteur) { clearInterval(minuteur); minuteur = null; } }
 function demarrerBalayage(intervalleMs = INTERVALLE_BALAYAGE_MS) {

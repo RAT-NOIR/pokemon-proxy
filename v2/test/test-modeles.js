@@ -17,7 +17,7 @@ const M = require('../modeles');
     let code = null; try { await db.col('comptes').insertOne(M.nouveauCompte({ email: 'a.b@exemple.fr', emailCle: 'a.b@exemple.fr', motDePasse: {} })); } catch (e) { code = e.code; }
     H.v('second compte de même emailCle => 11000', code, 11000);
     // les TTL existent (expireAfterSeconds: 0 sur expireLe)
-    for (const nom of ['codes_liaison', 'sessions', 'liens_email', 'annonces', 'idempotence', 'limites', 'mouvements', 'analyses', 'banc_lignes']) {
+    for (const nom of ['codes_liaison', 'sessions', 'liens_email', 'annonces', 'idempotence', 'limites', 'mouvements', 'analyses']) {   // banc_lignes n'a plus de TTL (B6.4 : la purge est le seul effaceur, objets R2 d'abord) — v2/test/test-banc-effacement.js le prouve
         const idx = await db.col(nom).indexes();
         H.vrai(`TTL sur ${nom}`, idx.some(i => i.key.expireLe === 1 && i.expireAfterSeconds === 0));
     }

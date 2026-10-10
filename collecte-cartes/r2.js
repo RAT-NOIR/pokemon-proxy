@@ -97,6 +97,18 @@ async function listerPrefixe(bucket, prefixe) {
     return cles;
 }
 
+/** Les objets sous un préfixe avec leur date de dernière modification [{ cle, modifieLe }] (B6.4 : le filet des orphelins du banc réel). Lecture seule. */
+async function listerObjets(bucket, prefixe) {
+    const objets = [];
+    let token;
+    do {
+        const r = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefixe, ContinuationToken: token }));
+        for (const o of r.Contents || []) objets.push({ cle: o.Key, modifieLe: o.LastModified });
+        token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+    return objets;
+}
+
 /** Supprime des clés, par lots de 1 000. Réservé à `--arreter-et-effacer --confirmer`. */
 async function supprimer(bucket, cles) {
     let n = 0;
@@ -110,4 +122,4 @@ async function supprimer(bucket, cles) {
 
 const cleWikitext = (pageid, revid) => `bulba/${pageid}/${revid}.wikitext`;
 
-module.exports = { _poserClient, verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, supprimer, cleWikitext };
+module.exports = { _poserClient, verifierBucket, existe, deposerTexte, deposerBinaire, lireTexte, lireBinaire, listerPrefixe, listerObjets, supprimer, cleWikitext };
