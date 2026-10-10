@@ -125,7 +125,10 @@ function routesScanner(router, cfg, deps = {}) {
     // Le traitement (chaîne + argent) : n'a lieu que si le client est encore là ; sa fin réelle libère la porte, quoi qu'il arrive.
     const lancer = handler => async (req, res, next) => {
         const j = req.jeton;
-        if (!j || j.rendu) return undefined;
+        if (!j || j.rendu) {                                 // le client est parti avant le traitement : rien n'est exécuté, donc sa clé d'idempotence redevient rejouable
+            if (req.idempotence) await req.idempotence.liberer();
+            return undefined;
+        }
         j.commencer();
         try { return await handler(req, res, next); } finally { j.liberer(); }
     };

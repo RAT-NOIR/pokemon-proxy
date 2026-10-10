@@ -426,6 +426,29 @@ async function parcourir() {
         H.v('   le compte peut scanner à nouveau', suite.statut, 200);
     }
 
+    // ═══ I-1 : un client qui coupe ENTRE le claim d'idempotence et le traitement ne bloque pas sa propre clé ═══
+    {
+        const { c, cookie } = await compte(); mode = 'affirmee';
+        const cleI = `rejeu-i1-${Date.now().toString(36)}`;
+        const corpsMp = Buffer.concat([Buffer.from('--BBB\r\nContent-Disposition: form-data; name="source"\r\n\r\ncamera\r\n--BBB\r\nContent-Disposition: form-data; name="image"; filename="a.jpg"\r\nContent-Type: image/jpeg\r\n\r\n'), JPEG, Buffer.from('\r\n--BBB--\r\n')]);
+        const dbReelle = mongoose.connection.db;
+        const lente = new Proxy(dbReelle, { get(t, p) {                    // l'écriture du claim réussit, PUIS la requête attend 600 ms : le client coupe dans cette fenêtre
+            if (p !== 'collection') { const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; }
+            return nom => { const col = t.collection(nom); if (!nom.endsWith('idempotence')) return col;
+                return new Proxy(col, { get(tc, pc) { if (pc === 'insertOne') return async (...a) => { const r = await tc.insertOne(...a); await attendre(600); return r; }; const v = tc[pc]; return typeof v === 'function' ? v.bind(tc) : v; } }); };
+        } });
+        const a0 = appelsChaine, m0 = await nMouv();
+        db.brancher(lente);
+        try {
+            await brut(sv.url, { cookie, entetes: { 'content-length': String(corpsMp.length), 'idempotency-key': cleI }, delaiMs: 4000, surReq: q => setTimeout(() => q.destroy(), 250), ecrire: req => { req.write(corpsMp); req.end(); } });
+            await attendre(1200);
+        } finally { db.brancher(dbReelle); }
+        H.v('I-1. le client a coupé après le claim : rien traité, rien débité, porte rendue', [appelsChaine - a0, await nMouv() - m0, await soldeCompte(c), SC.etatPorte().enCours], [0, 0, 25, 0]);
+        H.v('   le claim d\'idempotence est LIBÉRÉ (aucun document restant pour cette clé)', await raw('idempotence').countDocuments({ cle: new RegExp(`${cleI}$`) }), 0);
+        const rejeu = await scanner(sv.url, cookie, { entetes: { 'idempotency-key': cleI }, nom: 'I-1-rejeu' });
+        H.v('   le rejeu avec la MÊME clé est traité normalement : 200, UN seul débit (solde 24), pas de 429 « en cours »', [rejeu.statut, rejeu.json.success, await soldeCompte(c), await nMouv() - m0], [200, true, 24, 1]);
+    }
+
     // ═══ I4 : le décodage HEIC est BORNÉ ═══
     {
         const { c, cookie } = await compte();
