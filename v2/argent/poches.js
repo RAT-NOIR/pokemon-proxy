@@ -13,4 +13,7 @@ function prochainLundi(d) {
     x.setUTCDate(x.getUTCDate() + (8 - (x.getUTCDay() || 7)));
     return x.toISOString().slice(0, 10);
 }
-module.exports = { ordreDe, moisCle, prochainLundi };
+// Le code d'un débit refusé faute de poche : un compte non vérifié se voit demander de CONFIRMER son adresse, tout autre porteur est à court (une seule définition :
+// le débit et le contrôle sans débit du scanner, solde.peutPayer, la lisent ici).
+const codeRefus = porteur => (porteur && porteur.compte && !porteur.compte.verifie ? 'VERIFICATION' : 'QUOTA');
+module.exports = { ordreDe, moisCle, prochainLundi, codeRefus };

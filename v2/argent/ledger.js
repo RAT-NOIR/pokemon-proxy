@@ -99,7 +99,7 @@ async function debiter(porteur, { scanId = null, cleIdempotence = null, surface 
                 if (essai < ATTENTES_JUMEAU - 1) await new Promise(r => setTimeout(r, PAUSE_JUMEAU_MS));
             }
         }
-        return { ok: false, code: porteur.compte && !porteur.compte.verifie ? 'VERIFICATION' : 'QUOTA' };
+        return { ok: false, code: P.codeRefus(porteur) };
     }
     mv.poche = credit.poche; mv.credit = credit;
     try { await col('mouvements').insertOne(mv); }

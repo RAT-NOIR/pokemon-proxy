@@ -1598,6 +1598,36 @@
               }
             }
           },
+          "400": {
+            "description": "Corps multipart invalide (ENTREE, detail : boundary, multipart, source, source-en-double, image-en-double, champ-inconnu, content-length, corps-interrompu). Rien n'est débité.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "Corps trop lent (ENTREE, detail delai) : la connexion est fermée après la réponse. Rien n'est débité.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Aucune image dans le corps (IMAGE, detail aucune-carte). Rien n'est débité.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Image trop lourde (IMAGE, detail trop-lourde).",
             "content": {

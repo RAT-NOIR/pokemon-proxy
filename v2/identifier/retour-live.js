@@ -132,4 +132,4 @@ function traiterRetourLive(cfg, deps = {}) {
     };
 }
 
-module.exports = { traiterRetourLive, VERDICTS, CAUSES };
+module.exports = { traiterRetourLive, VERDICTS, CAUSES, facturationDeLecture };

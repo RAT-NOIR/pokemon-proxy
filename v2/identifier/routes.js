@@ -476,4 +476,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { DELAI_VOISINS_MS, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe, URL_RECHARGE };

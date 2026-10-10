@@ -11,6 +11,7 @@ module.exports = {
         router.post('/api/creer-recharge', aiguilleur(req => Boolean(req.v2 && req.v2.porteur)), paiement.creerRecharge);
         registre.fournir('argent', {
             solde: (porteur, maintenant) => S.solde(porteur, cfg, maintenant),
+            peutPayer: (porteur, maintenant) => S.peutPayer(porteur, cfg, maintenant),
             historique: (porteur, suite) => S.historique(porteur, typeof suite === 'object' && suite !== null ? suite : { suite }, cfg),
             debiter: (porteur, o) => Lg.debiter(porteur, o, cfg),
             rembourser: (porteur, credit, motif, o) => Lg.rembourser(porteur, credit, motif, o, cfg),

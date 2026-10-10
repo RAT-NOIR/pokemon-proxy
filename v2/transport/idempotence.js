@@ -89,10 +89,14 @@ function idempotente(route, { obligatoire = true } = {}, cfg) {
                 travail.catch(e => journal(e, 'fin')).then(() => origSend.call(this, corps));   // le rejeu doit trouver le résultat DÈS que le client a la réponse
                 return this;
             };
+            // LIBÉRATION du claim (la seule : celle des échecs ci-dessous, aussi offerte à une route qui n'a RIEN exécuté — `req.idempotence.liberer()`, p. ex. le scanner dont
+            // le client a coupé avant le traitement) : le battement s'arrête et le claim est supprimé, la clé redevient rejouable. Filtre = propriétaire : jamais le claim d'un autre.
+            const liberer = () => { clearInterval(battement); return col('idempotence').deleteOne(filtre).catch(e => journal(e, 'nettoyage')); };
+            req.idempotence = { liberer };
             res.on('close', () => clearInterval(battement));
             res.on('finish', () => {                                // réponse sans res.json : en échec, le claim part ; en succès, il reste (2 min) : jamais de double exécution
                 clearInterval(battement);
-                if (!fini && res.statusCode >= 300) col('idempotence').deleteOne(filtre).catch(e => journal(e, 'nettoyage'));
+                if (!fini && res.statusCode >= 300) liberer();
             });
             next();
         } catch (e) {
