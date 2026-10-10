@@ -52,6 +52,15 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
     verifier('ligne FR sur un set jp : écartée (tirage)', action(L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Undone-Seal', urls: [URL_T], urlChoisie: URL_T })), 'ecartee');
     verifier('ligne FR sur un set intl, TCGdex : collecter', action(L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet', urls: [URL_T], urlChoisie: URL_T, source: 'tcgdex' })), 'collecter');
     verifier('URL choisie absente de la ligne : refus', action(L({ urlChoisie: 'https://billsarchive.com/autre.webp' })), 'refus');
+    // LA LANGUE, PROUVÉE PAR L'ADRESSE (ruling du coordinateur) : /fr/ ou /ja/ chez TCGdex, préfixe jp- chez Bill's — jamais par le texte de la liste
+    const ARC = 'https://billsarchive.com/assets/logos/arceus.webp', URL_TJ = 'https://assets.tcgdex.net/ja/sv/sv01/logo.png';
+    const FR = (o = {}) => L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet', urls: [URL_T], urlChoisie: URL_T, source: 'tcgdex', ...o });
+    verifier('la forme des adresses : fr, ja, ja (jp-), rien (Bill\'s sans préfixe), rien (/en/ chez TCGdex)', [M.langueProuvee(URL_T), M.langueProuvee(URL_TJ), M.langueProuvee(URL_B), M.langueProuvee(ARC), M.langueProuvee('https://assets.tcgdex.net/en/sv/x/logo.png')], ['fr', 'ja', 'ja', null, null]);
+    verifier('Arceus (cible fr, langue en, adresse Bill\'s sans préfixe) : écartée par la règle, pas par une exception', [action(FR({ langue: 'en', urls: [ARC], urlChoisie: ARC, source: 'billsarchive' })), (M.planifier(FR({ langue: 'en', urls: [ARC], urlChoisie: ARC }), sets).raison ?? '').includes('langue')], ['ecartee', true]);
+    verifier('une ligne dite fr (langue fr) dont l\'adresse TCGdex est /ja/ : écartée (contraire à la cible)', action(FR({ urls: [URL_TJ], urlChoisie: URL_TJ })), 'ecartee');
+    verifier('une ligne dite fr dont l\'adresse Bill\'s ne prouve rien : écartée', action(FR({ urls: [ARC], urlChoisie: ARC, source: 'billsarchive' })), 'ecartee');
+    verifier('une ligne ja dont l\'adresse Bill\'s n\'a pas le préfixe jp- : écartée', action(L({ urls: ['https://billsarchive.com/assets/logos/japanese/undone.webp'], urlChoisie: 'https://billsarchive.com/assets/logos/japanese/undone.webp' })), 'ecartee');
+    verifier('une ligne dont la langue écrite (en) n\'est pas la cible, même si l\'adresse prouve fr : écartée', action(FR({ langue: 'en' })), 'ecartee');
 
     // ───── 3. le fichier téléchargé : identique à la phase 1, sinon re-mesure
     const A = await logoA(), B = await logoB();
@@ -116,6 +125,26 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
         verifier('le client refuse un hôte hors liste avant toute requête', [typeof msg, R.appels.length], ['string', 0]);
     }
 
+    // ───── 4 bis. l'ARRÊT PAR HÔTE (§75) : une erreur réseau, un 5xx, un robots.txt illisible arrêtent CET hôte ; rien n'y est redemandé ; l'autre hôte continue
+    for (const [nom, table, attendu] of [
+        ['erreur réseau (ECONNREFUSED) sur l\'image', { 'https://billsarchive.com/robots.txt': rep(404), [URL_B]: () => { throw new Error('ECONNREFUSED'); } }, 'réseau'],
+        ['503 sur l\'image', { 'https://billsarchive.com/robots.txt': rep(404), [URL_B]: rep(503) }, '503'],
+        ['robots.txt illisible (503)', { 'https://billsarchive.com/robots.txt': rep(503) }, 'robots'],
+        ['erreur réseau sur robots.txt', { 'https://billsarchive.com/robots.txt': () => { throw new Error('ECONNREFUSED'); } }, 'réseau']
+    ]) {
+        const R = reseau({ ...table, 'https://assets.tcgdex.net/robots.txt': rep(404), [URL_T]: rep(200, A) });
+        const c = M.creerClient({ fetch: R.fetch, ...R.horloge });
+        let e1 = null, e2 = null, e3 = null;
+        try { await c.get(URL_B); } catch (e) { e1 = e; }
+        const n = R.appels.length;
+        try { await c.get(URL_B); } catch (e) { e2 = e; }
+        try { await c.get('https://billsarchive.com/assets/logos/japanese/jp-autre.webp'); } catch (e) { e3 = e; }
+        const ok2 = await c.get(URL_T).then(r => r.status, () => null);
+        verifier(`${nom} : l'hôte est arrêté (arretHote, hôte nommé), 0 requête de plus vers lui, l'autre hôte continue`, [e1?.arretHote === true, e1?.hote, e2?.arretHote === true, e3?.arretHote === true, R.appels.slice(n).filter(a => /billsarchive/.test(a.url)).length, ok2], [true, 'billsarchive.com', true, true, 0, 200]);
+        verifier(`${nom} : la raison est dite`, new RegExp(attendu, 'i').test(e1?.message ?? ''), true);
+        verifier(`${nom} : le client liste l'hôte arrêté`, [...c.hotesArretes().keys()], ['billsarchive.com']);
+    }
+
     // ───── 5. les doublons de set (Base-Expansion-Pack : CP6 et OR1)
     verifier('deux lignes pour un même set, MÊME fichier : une écriture, un doublon', M.reduireDoublons([{ ligne: L({ fichier: 'a' }), sha256: 'x' }, { ligne: L({ fichier: 'b' }), sha256: 'x' }]).map(p => p.action), ['ecrire', 'doublon']);
     verifier('deux lignes pour un même set, fichiers DIFFÉRENTS : refus des deux', M.reduireDoublons([{ ligne: L({ fichier: 'a' }), sha256: 'x' }, { ligne: L({ fichier: 'b' }), sha256: 'y' }]).map(p => p.action), ['refus', 'refus']);
@@ -166,11 +195,32 @@ const logoB = async () => sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/
         const B2 = await logoB();
         const e3 = await M.ecrireLigne({ S, r2, bucket: 'b', ligne, set: 'Undone-Seal', fichier: { ...fichier, buf: B2, sha256: sha256(B2) }, le: new Date() });
         verifier('un fichier DIFFÉRENT sur un logoOfficiel déjà posé : refus, rien n\'est remplacé', [e3.action, (await S.findOne({ _id: 'Undone-Seal' })).logoOfficiel.ja.sha256], ['refus', sha256(A)]);
+        // LA LANGUE dans l'écriture aussi (la garde s'écrit par ce qu'elle autorise, deux fois : planifier ET ecrireLigne)
+        const avantLangue = magasin.size;
+        const eAr = await M.ecrireLigne({ S, r2, bucket: 'b', ligne: L({ part: 'FR', cible: 'fr', langue: 'en', set: 'Scarlet-Violet' }), set: 'Scarlet-Violet', fichier: { ...fichier, url: ARC }, le: new Date() });
+        const eFj = await M.ecrireLigne({ S, r2, bucket: 'b', ligne: L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet' }), set: 'Scarlet-Violet', fichier: { ...fichier, url: URL_TJ }, le: new Date() });
+        verifier('ecrireLigne : un fichier dont la langue (adresse Bill\'s sans préfixe, langue « en ») n\'est pas la cible fr : refus, rien en base, rien dans R2', [eAr.action, /langue/.test(eAr.raison ?? ''), (await S.findOne({ _id: 'Scarlet-Violet' })).logoOfficiel, magasin.size], ['refus', true, undefined, avantLangue]);
+        verifier('ecrireLigne : une ligne fr dont l\'adresse prouve ja : refus', [eFj.action, magasin.size], ['refus', avantLangue]);
+        // le champ apparu entre-temps : les objets que CET appel vient de déposer sont retirés (et dits) ; un objet déjà là n'est pas touché
+        const B3 = await logoB(), faux = { findOne: (...a) => S.findOne(...a), updateOne: async () => ({ modifiedCount: 0 }) };
+        const cleOrig = `logos-officiels/fr/Scarlet-Violet-${sha256(B3).slice(0, 10)}.png`;
+        magasin.set(cleOrig, B3);   // l'original existe déjà (un lot interrompu) : il ne doit pas être retiré
+        const avantCourse = magasin.size;
+        const eCourse = await M.ecrireLigne({ S: faux, r2, bucket: 'b', ligne: L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet' }), set: 'Scarlet-Violet', fichier: { buf: B3, sha256: sha256(B3), ext: 'png', url: URL_T, via: 'identique-phase-1' }, le: new Date() });
+        verifier('ecrireLigne : updateOne sans effet (champ apparu entre-temps) : refus, la vignette déposée par cet appel est retirée (et dite), l\'original déjà présent est gardé', [eCourse.action, eCourse.supprimes?.length, magasin.has(cleOrig), magasin.size], ['refus', 1, true, avantCourse]);
+        magasin.delete(cleOrig);
         const eSv = await M.ecrireLigne({ S, r2, bucket: 'b', ligne: L({ part: 'FR', cible: 'fr', langue: 'fr', set: 'Scarlet-Violet' }), set: 'Scarlet-Violet', fichier: { ...fichier, url: URL_T }, le: new Date() });
         // le retrait : exactement ce lot
         const cles = [...magasin.keys()].filter(k => k.includes('Scarlet-Violet') || k.includes('Undone-Seal')).sort();
         const simul = await M.retirerLot({ S, r2, bucket: 'b', lot: M.LOT, ecrire: false });
         verifier('retrait en simulation : liste les sets et les clés, ne retire rien', [simul.sets.sort(), simul.cles.length, magasin.size], [['Scarlet-Violet', 'Undone-Seal'], 4, cles.length]);
+        // l'ordre du retrait : la liste COMPLÈTE des clés R2 est imprimée AVANT tout changement en base ; un R2 en panne n'en perd aucune
+        await S.insertOne({ _id: 'Retrait-Test', logoOfficiel: { ja: { cleR2: 'logos-officiels/ja/RT-x.png', vignette: { cleR2: 'vignettes/logos-officiels/ja/RT-x.webp' }, lot: 'lot-rt' } } });
+        const journal = [];
+        let panne = null;
+        try { await M.retirerLot({ S, r2: { supprimer: async () => { throw new Error('R2 en panne'); } }, bucket: 'b', lot: 'lot-rt', ecrire: true, journal: async m => { journal.push({ m, avantBase: !!(await S.findOne({ _id: 'Retrait-Test', 'logoOfficiel.ja.lot': 'lot-rt' })) }); } }); } catch (e) { panne = e.message; }
+        verifier('retrait : R2 en panne => erreur dite, mais la liste des clés avait été imprimée AVANT de toucher la base', [panne, journal.length, journal[0]?.avantBase, ['logos-officiels/ja/RT-x.png', 'vignettes/logos-officiels/ja/RT-x.webp'].every(k => journal[0]?.m.includes(k))], ['R2 en panne', 1, true, true]);
+        await S.deleteOne({ _id: 'Retrait-Test' });
         const retrait = await M.retirerLot({ S, r2, bucket: 'b', lot: M.LOT, ecrire: true });
         const u = await S.findOne({ _id: 'Undone-Seal' }), sv = await S.findOne({ _id: 'Scarlet-Violet' });
         verifier('le retrait retire EXACTEMENT ce lot : le logoOfficiel.fr d\'un autre lot et tous les autres champs restent', [u.logoOfficiel, { ...u, logoOfficiel: undefined }], [{ fr: existant.logoOfficiel.fr }, { ...resteAvant, logoOfficiel: undefined }]);

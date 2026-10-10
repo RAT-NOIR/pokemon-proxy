@@ -47,6 +47,27 @@ function verifierUrl(ligne, url) {
     return null;
 }
 
+/**
+ * LA LANGUE D'UN FICHIER, PROUVÉE PAR L'ADRESSE de sa source (ruling du coordinateur, 2026-10-08) — jamais par le texte de la liste :
+ * segment de chemin `/fr/` ou `/ja/` chez assets.tcgdex.net, préfixe `jp-` du fichier chez billsarchive.com. Mesuré sur les 149 adresses OFFICIEL de la
+ * table : 65 prouvent fr (TCGdex /fr/), 83 prouvent ja (Bill's jp-), 1 ne prouve rien (Bill's `arceus.webp`, sans préfixe). Tout le reste : null.
+ */
+function langueProuvee(url) {
+    let u; try { u = new URL(url); } catch { return null; }
+    if (u.hostname === 'assets.tcgdex.net') { const s = u.pathname.split('/').filter(Boolean)[0]; return s === 'fr' ? 'fr' : s === 'ja' ? 'ja' : null; }
+    if (u.hostname === 'billsarchive.com') return /^jp-/.test(path.posix.basename(u.pathname)) ? 'ja' : null;
+    return null;
+}
+/** Une ligne va sous `fr` seulement si sa langue est `fr`, sous `ja` seulement si elle est `ja` — ET si l'adresse le prouve. Rend la raison du refus, ou null. */
+function refusLangue(ligne, url) {
+    if (!['fr', 'ja'].includes(ligne.cible)) return `cible « ${ligne.cible} » inconnue`;
+    if (ligne.langue !== ligne.cible) return `langue « ${ligne.langue} » ≠ cible ${ligne.cible} : un logo ne va que sous sa langue`;
+    const p = langueProuvee(url);
+    if (!p) return `l'adresse ne prouve pas la langue (ni /fr/ ou /ja/ chez TCGdex, ni préfixe jp- chez Bill's) : langue non prouvée`;
+    if (p !== ligne.cible) return `l'adresse prouve la langue ${p}, la cible est ${ligne.cible}`;
+    return null;
+}
+
 /** Le plan d'UNE ligne, avant tout téléchargement : collecter / reportee / ecartee / refus. `setsParId` : Map slug → { tirage, region }. */
 function planifier(ligne, setsParId) {
     if (ligne.verdict !== 'OFFICIEL') return { action: 'refus', raison: `verdict ${ligne.verdict} : seuls les OFFICIEL se collectent` };
@@ -55,6 +76,8 @@ function planifier(ligne, setsParId) {
     if (!ligne.urlChoisie) return { action: 'refus', raison: 'aucune URL de la liste fermée sur la ligne' };
     const rU = verifierUrl(ligne, ligne.urlChoisie);
     if (rU) return { action: 'refus', raison: rU };
+    const rL = refusLangue(ligne, ligne.urlChoisie);
+    if (rL) return { action: 'ecartee', raison: rL };
     const s = setsParId.get(ligne.set);
     if (!s) return { action: 'ecartee', raison: `set « ${ligne.set} » absent de la base` };
     const tirage = s.tirage ?? s.region;
@@ -127,6 +150,8 @@ const defi = r => {
     return !!h('cf-mitigated') || /imperva/i.test(h('x-cdn')) || [403, 429].includes(r.status);
 };
 class ArretDefi extends Error { constructor(m) { super(m); this.arret = true; } }
+// L'arrêt D'UN HÔTE (§75 : arrêt au premier blocage) : erreur réseau, 5xx, robots.txt illisible. Les autres hôtes continuent ; rien n'est redemandé à celui-ci.
+class ArretHote extends Error { constructor(hote, m) { super(m); this.arretHote = true; this.hote = hote; } }
 
 /**
  * Le client : UNE requête à la fois et au moins `cadenceMs` entre deux (tous hôtes confondus : plus lent que nécessaire, jamais plus rapide),
@@ -135,23 +160,29 @@ class ArretDefi extends Error { constructor(m) { super(m); this.arret = true; } 
  */
 function creerClient({ fetch = globalThis.fetch, attendre = ms => new Promise(r => setTimeout(r, ms)), maintenant = Date.now, cadenceMs = CADENCE_MS } = {}) {
     let derniere = null, arret = null;
-    const robots = new Map();
+    const robots = new Map(), arretes = new Map();
     const compte = {};
-    async function requete(url) {
+    const arreter = (hote, raison) => { const e = new ArretHote(hote, `ARRÊT de ${hote} pour ce lancement : ${raison} — plus aucune requête vers cet hôte`); arretes.set(hote, e); return e; };
+    async function requete(url, quoi = '') {
+        const h = hoteDe(url);
+        if (arretes.has(h)) throw arretes.get(h);   // rien n'est redemandé à un hôte arrêté
         if (derniere !== null) { const reste = cadenceMs - (maintenant() - derniere); if (reste > 0) await attendre(reste); }
         derniere = maintenant();
-        const h = hoteDe(url); compte[h] = (compte[h] || 0) + 1;
-        const r = await fetch(url, { redirect: 'manual', headers: { 'User-Agent': AGENT, Accept: 'image/*,*/*;q=0.5' } });
+        compte[h] = (compte[h] || 0) + 1;
+        let r;
+        try { r = await fetch(url, { redirect: 'manual', headers: { 'User-Agent': AGENT, Accept: 'image/*,*/*;q=0.5' } }); }
+        catch (e) { throw arreter(h, `${quoi}erreur réseau (${e.cause?.code || e.message})`); }
         if (defi(r)) { arret = new ArretDefi(`ARRÊT : ${url} a répondu ${r.status} (défi anti-robot ou limite) — plus aucune requête`); throw arret; }
+        if (r.status >= 500) throw arreter(h, `${quoi}HTTP ${r.status}`);
         return r;
     }
     async function regles(hote) {
         if (robots.has(hote)) return robots.get(hote);
-        const r = await requete(`https://${hote}/robots.txt`);
+        const r = await requete(`https://${hote}/robots.txt`, 'robots.txt : ');
         let reg;
         if (r.status === 404 || r.status === 410) reg = [];
         else if (r.status === 200) reg = regleRobots(await r.text());
-        else throw new Error(`robots.txt de ${hote} illisible (HTTP ${r.status}) : je ne sais pas, je ne demande rien`);
+        else throw arreter(hote, `robots.txt illisible (HTTP ${r.status}) : je ne sais pas, je ne demande rien`);
         robots.set(hote, reg); return reg;
     }
     async function get(url) {
@@ -160,6 +191,7 @@ function creerClient({ fetch = globalThis.fetch, attendre = ms => new Promise(r 
         for (let saut = 0; saut <= 3; saut++) {
             const u = new URL(courant);
             if (u.protocol !== 'https:' || !HOTES_COLLECTE.includes(u.hostname)) throw new Error(`hôte ${u.hostname} hors de la liste fermée`);
+            if (arretes.has(u.hostname)) throw arretes.get(u.hostname);
             if (!autorise(await regles(u.hostname), u.pathname)) throw new Error(`robots.txt de ${u.hostname} interdit ${u.pathname}`);
             const r = await requete(courant);
             if ([301, 302, 303, 307, 308].includes(r.status)) {
@@ -173,7 +205,7 @@ function creerClient({ fetch = globalThis.fetch, attendre = ms => new Promise(r 
         }
         throw new Error('trop de redirections');
     }
-    return { get, compte, arrete: () => arret };
+    return { get, compte, arrete: () => arret, hotesArretes: () => arretes };
 }
 
 const contentType = ext => ({ png: 'image/png', webp: 'image/webp', jpeg: 'image/jpeg', jpg: 'image/jpeg' })[ext] ?? 'application/octet-stream';
@@ -186,6 +218,9 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
     const { fabriquerVignette, cleVignette, LARGEUR_VIGNETTE_LOGO } = require('./collecte-cartes/vignette');
     if (!SLUG.test(set)) return { action: 'refus', raison: `identifiant de set « ${set} » non sûr pour une clé R2` };
     if (!['fr', 'ja'].includes(ligne.cible)) return { action: 'refus', raison: `cible « ${ligne.cible} » inconnue` };
+    // LA LANGUE (ruling du coordinateur) : la garde est ici AUSSI, sur l'adresse du fichier qu'on s'apprête à écrire — pas seulement dans planifier
+    const rL = refusLangue(ligne, fichier.url);
+    if (rL) return { action: 'refus', raison: rL };
     const champ = `logoOfficiel.${ligne.cible}`;
     const doc = await S.findOne({ _id: set }, { projection: { logoOfficiel: 1 } });
     if (!doc) return { action: 'refus', raison: `set ${set} absent` };
@@ -195,19 +230,23 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
     const cv = cleVignette(cleR2);
     const vg = await fabriquerVignette(fichier.buf, { largeur: LARGEUR_VIGNETTE_LOGO, qualite: 85 });
     const meta = await sharp(fichier.buf).metadata();
-    await r2.deposerBinaire(bucket, cleR2, fichier.buf, contentType(fichier.ext));
-    await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
+    const d1 = await r2.deposerBinaire(bucket, cleR2, fichier.buf, contentType(fichier.ext));
+    const d2 = await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
     const entree = {
         cleR2, w: meta.width, h: meta.height, octets: fichier.buf.length, sha256: fichier.sha256, format: meta.format, langue: ligne.langue,
         source: ligne.source, urlSource: fichier.url, lot: LOT, mention: MENTION, le, vignette: { cleR2: cv, w: vg.w, h: vg.h },
         preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null }
     };
     const u = await S.updateOne({ _id: set, [champ]: { $exists: false } }, { $set: { [champ]: entree } });
-    return u.modifiedCount === 1 ? { action: 'ecrit', cleR2, vignette: cv } : { action: 'refus', raison: `${set} : le champ est apparu entre-temps` };
+    if (u.modifiedCount === 1) return { action: 'ecrit', cleR2, vignette: cv };
+    // le champ est apparu entre-temps : les objets que CET appel vient de déposer (et eux seuls : un objet déjà là n'est pas à nous) sont retirés, et dits
+    const supprimes = [d1.ecrit ? cleR2 : null, d2.ecrit ? cv : null].filter(Boolean);
+    if (supprimes.length) await r2.supprimer(bucket, supprimes);
+    return { action: 'refus', raison: `${set} : le champ est apparu entre-temps${supprimes.length ? ` ; ${supprimes.length} objet(s) R2 déposé(s) par cet appel retiré(s) : ${supprimes.join(', ')}` : ''}`, supprimes };
 }
 
 /** Le retrait du lot (voir retirer-logos-officiels.js) : exactement les entrées `logoOfficiel.*` de CE lot, et leurs objets R2. */
-async function retirerLot({ S, r2, bucket, lot, ecrire = false }) {
+async function retirerLot({ S, r2, bucket, lot, ecrire = false, journal = m => console.log(m) }) {
     if (!lot) throw new Error('retirerLot : lot obligatoire');
     const docs = await S.find({ $or: [{ 'logoOfficiel.fr.lot': lot }, { 'logoOfficiel.ja.lot': lot }] }, { projection: { logoOfficiel: 1 } }).toArray();
     const sets = [], cles = [], parSet = new Map();
@@ -218,6 +257,8 @@ async function retirerLot({ S, r2, bucket, lot, ecrire = false }) {
         for (const k of ks) for (const c of [d.logoOfficiel[k].cleR2, d.logoOfficiel[k].vignette?.cleR2]) if (c) cles.push(c);
     }
     for (const c of cles) if (!/^(vignettes\/)?logos-officiels\//.test(c)) throw new Error(`retirerLot : clé « ${c} » hors du préfixe logos-officiels/ : arrêt`);
+    // la liste COMPLÈTE des clés R2 du lot, imprimée AVANT toute modification : un R2 qui échoue après le retrait en base n'en fait perdre aucune
+    await journal(`CLÉS R2 DU LOT ${lot} (${cles.length}, ${sets.length} sets : ${sets.join(', ')}) : ${cles.join(' ')}`);
     if (!ecrire) return { sets, cles };
     for (const [id, ks] of parSet) {
         for (const k of ks) await S.updateOne({ _id: id, [`logoOfficiel.${k}.lot`]: lot }, { $unset: { [`logoOfficiel.${k}`]: '' } });
@@ -227,7 +268,7 @@ async function retirerLot({ S, r2, bucket, lot, ecrire = false }) {
     return { sets, cles };
 }
 
-module.exports = { LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi };
+module.exports = { LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
 
 // ───────────────────────── la ligne de commande
 const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/];
@@ -256,6 +297,7 @@ if (require.main === module) (async () => {
     const rapport = { lot: LOT, le: new Date().toISOString(), lignes: [] };
     const acceptes = [];
     let arretDefi = null;
+    const hotesArretes = new Set();
     for (const l of aCollecter) {
         const cle = path.join(cache, sha256(Buffer.from(l.urlChoisie)));
         let buf = null, urlFinale = l.urlChoisie;
@@ -268,6 +310,7 @@ if (require.main === module) (async () => {
                 fs.writeFileSync(`${cle}.bin`, buf); fs.writeFileSync(`${cle}.json`, JSON.stringify({ url: l.urlChoisie, urlFinale, sha256: sha256(buf), le: new Date().toISOString() }));
             } catch (e) {
                 if (e.arret) { arretDefi = e.message; console.error(`🛑 ${e.message}`); break; }
+                if (e.arretHote) { rapport.lignes.push({ fichier: l.fichier, set: l.set, source: l.source, action: 'non-tentee', raison: `hôte ${e.hote} arrêté pour ce lancement` }); if (!hotesArretes.has(e.hote)) { hotesArretes.add(e.hote); console.error(`🛑 ${e.message}`); } continue; }
                 rapport.lignes.push({ fichier: l.fichier, set: l.set, source: l.source, action: 'refus', raison: e.message }); console.log(`   🔴 ${l.fichier} : ${e.message}`); continue;
             }
         }
@@ -290,6 +333,10 @@ if (require.main === module) (async () => {
     console.log(`REQUÊTES : ${JSON.stringify(client.compte)}${arretDefi ? ` · ARRÊT : ${arretDefi}` : ''}`);
     if (arg('rapport')) fs.writeFileSync(arg('rapport'), JSON.stringify(rapport, null, 1));
     if (arretDefi) { await cx.fermer(); process.exit(1); }
+    if (hotesArretes.size) {
+        console.error(`🛑 HÔTE(S) ARRÊTÉ(S) : ${[...hotesArretes].join(', ')} — ${rapport.lignes.filter(r => r.action === 'non-tentee').length} lignes non tentées ; rien n'est écrit. REPRISE : relancer la MÊME commande plus tard (le cache ${cache} garde les fichiers déjà obtenus, seuls les manquants sont redemandés).`);
+        await cx.fermer(); process.exit(1);
+    }
     if (!ECRIRE) { console.log('(simulation seule — --ecrire sous lot-additif.js ; rien n\'est écrit en base ni sur R2)'); await cx.fermer(); return; }
     const r2 = require('./collecte-cartes/r2'), bucket = process.env.R2_BUCKET_IMAGES;
     await r2.verifierBucket(bucket);
