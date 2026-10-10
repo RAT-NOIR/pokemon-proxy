@@ -70,17 +70,18 @@ v('SEUILS_G inchangé par l\'enveloppe', JSON.stringify(G.SEUILS_G), avant);
 vrai('l\'enveloppe ne peut pas modifier SEUILS_G', leve(() => { 'use strict'; G.SEUILS_G.delta = 9; }) );
 
 // (5) 0 faux affirmé : on rejoue les fixtures du labo À TRAVERS l'enveloppe
+let fixturesManquantes = false;       // bilan() remet process.exitCode à 0 quand aucune assertion n'a échoué : l'absence des fixtures est reposée APRÈS lui
 {
     const dossier = process.argv.find((a, i) => i > 1 && !a.startsWith('--')) || 'C:/Users/Yung/Desktop/labo-embedding/rm/fixtures-g';
     if (!fs.existsSync(path.join(dossier, 'contexte.json'))) {
         console.log(`❌ fixtures du labo ABSENTES (${dossier}) : le banc ne peut pas conclure sur « 0 faux affirmé » -> code 1`);
-        process.exitCode = 1;
+        process.exitCode = 1; fixturesManquantes = true;
     } else {
         const ctx = G.contexte(JSON.parse(fs.readFileSync(path.join(dossier, 'contexte.json'), 'utf8')));
         let total = 0, identiques = 0, affirmes = 0, faux = 0, questions = 0, introuvables = 0, manquantes = 0, hors = 0, heritees = 0, grosses = 0;
         for (const jeu of ['reel', 'auto', 'dracaufeu']) {
             const f = path.join(dossier, `${jeu}.json`);
-            if (!fs.existsSync(f)) { console.log(`❌ jeu ${jeu} absent`); process.exitCode = 1; continue; }
+            if (!fs.existsSync(f)) { console.log(`❌ jeu ${jeu} absent`); process.exitCode = 1; fixturesManquantes = true; continue; }
             const F = JSON.parse(fs.readFileSync(f, 'utf8'));
             let n = 0, ok = 0, aff = 0, fx = 0;
             for (const l of F.lignes) {
@@ -119,3 +120,4 @@ vrai('l\'enveloppe ne peut pas modifier SEUILS_G', leve(() => { 'use strict'; G.
 }
 v('SEUILS_G toujours intact après les fixtures', JSON.stringify(G.SEUILS_G), avant);
 bilan();
+if (fixturesManquantes) process.exitCode = 1;

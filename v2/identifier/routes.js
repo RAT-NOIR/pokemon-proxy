@@ -120,10 +120,24 @@ function facturationDe(issue, faits) {
 // seul un désaccord est un fait à journaliser, et le plus PRUDENT l'emporte (arbitrage-g.js). Elle ne peut que RENDRE PLUS PRUDENT : jamais promouvoir un
 // introuvable ni une question en affirmation. Une règle G qui ne répond pas, lève ou ne tranche pas : la chaîne héritée décide, sans effet sur le débit.
 // @returns null (rien à dire) | { resultat, desaccord, questionNeuve } — questionNeuve : une affirmation de la chaîne est devenue une QUESTION (son crédit doit être RÉSERVÉ).
+// Le fournisseur de voisins est appelé APRÈS le débit : sa durée est BORNÉE (un fournisseur qui ne répond pas ne doit jamais garder une requête payée en suspens).
+// Dépassement => la chaîne décide, journal du code seul. (deps.delaiVoisinsMs : surcharge pour les bancs.)
+const DELAI_VOISINS_MS = 2000;
+const CANDIDATS_MAX = 3;                         // la limite d'une question : celle que l'adaptateur applique déjà (question(), slice(0, 3))
+function avecBorne(fonction, ms) {
+    let minuteur;
+    const borne = new Promise((_, rejeter) => { minuteur = setTimeout(() => rejeter(Object.assign(new Error('voisins : délai dépassé'), { code: 'VOISINS_DELAI' })), ms); });
+    const promesse = Promise.resolve().then(fonction);
+    promesse.catch(() => { });                   // une résolution ou un rejet TARDIF n'est jamais une erreur non gérée
+    return Promise.race([promesse, borne]).finally(() => clearTimeout(minuteur));
+}
+const INTROUVABLE_REGLE_G = Object.freeze({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible' });   // -> introuvable « photo-illisible » : on ne sait pas, on n'affirme pas l'absence
+
 async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChaine, produits, catalogue, adapterFn }) {
     let d;
     try {
-        const v = await deps.voisins({ imageUrls: entree.imageUrls, scanId: String(scanId) });
+        const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
+        const v = await avecBorne(() => deps.voisins({ imageUrls: entree.imageUrls, scanId: String(scanId) }), ms);
         if (!v) return null;
         d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils);
     } catch (e) { journalErreur('règle G', e); return null; }
@@ -131,16 +145,35 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
     const c0 = resultat.analyse.cartes[0];
     const arb = arbitrer({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct) }, d);
     if (arb.action === 'garder') return { resultat, desaccord: arb.desaccord, questionNeuve: false };
+    // la lecture du catalogue peut TOMBER : c'est une panne (remboursée par le filet de l'appelant), jamais une absence
+    const tout = new Map(produits);
     try {
-        const tout = new Map(produits);
         const manquants = arb.ids.filter(id => !tout.has(id));
         if (manquants.length) for (const [k, p] of await catalogue.lire(manquants)) tout.set(k, p);
-        const c = corpsChaine || {};
-        const corpsQ = { success: true, carte: { ...(c.carte || {}), idProduct: arb.ids[0], ambigu: true }, candidats: arb.ids.map(idProduct => ({ idProduct })), etat: c.etat, codeLangue: c.codeLangue, reverse: c.reverse };
-        const r = adapterFn({ statutHttp: 200, corps: corpsQ }, { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false });
-        if (r && r.issue === 'question') return { resultat: r, desaccord: arb.desaccord, questionNeuve: true };
-    } catch (e) { journalErreur('règle G (question)', e); }
-    return { resultat, desaccord: { ...arb.desaccord, retenue: 'chaine-heritee' }, questionNeuve: false };   // la question n'a pas pu être construite : on n'invente rien
+    } catch (e) {
+        journalErreur('catalogue (règle G)', e);
+        return { resultat: { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }, desaccord: { ...arb.desaccord, retenue: 'panne-catalogue' }, questionNeuve: false };
+    }
+    const ctx = { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false };
+    const c = corpsChaine || {};
+    const question = ids => {
+        try {
+            const r = adapterFn({ statutHttp: 200, corps: { success: true, carte: { ...(c.carte || {}), idProduct: ids[0], ambigu: true }, candidats: ids.map(idProduct => ({ idProduct })), etat: c.etat, codeLangue: c.codeLangue, reverse: c.reverse } }, ctx);
+            return r && r.issue === 'question' ? r : null;
+        } catch (e) { journalErreur('règle G (question)', e); return null; }
+    };
+    // 1. la question de G telle quelle, si TOUS ses candidats sont au catalogue de l'API
+    let r = arb.ids.every(id => tout.has(id)) ? question(arb.ids) : null;
+    if (r) return { resultat: r, desaccord: arb.desaccord, questionNeuve: true };
+    // 2. repli, jamais vers l'affirmation (le moins prudent) : {candidat de la chaîne} ∪ {candidats de G PRÉSENTS}, dédoublonnés, plafonnés ; ≥ 2 => question
+    const presents = [...new Set([...(c0.carte ? [c0.carte.idProduct] : []), ...arb.ids])].filter(id => tout.has(id)).slice(0, CANDIDATS_MAX);
+    r = presents.length >= 2 ? question(presents) : null;
+    if (r) return { resultat: r, desaccord: arb.desaccord, questionNeuve: true };
+    // 3. sinon : introuvable (le crédit est rendu par le filet de l'appelant). Jamais « identifiee » : la chaîne a affirmé, G en doute, et on ne peut pas poser la question.
+    let intro = null;
+    try { intro = adapterFn({ statutHttp: 200, corps: INTROUVABLE_REGLE_G }, ctx); } catch (e) { journalErreur('règle G (introuvable)', e); }
+    if (!intro || intro.issue !== 'introuvable') intro = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
+    return { resultat: intro, desaccord: { ...arb.desaccord, retenue: 'introuvable-regle-g' }, questionNeuve: false };
 }
 
 function traiterIdentifier(cfg, deps = {}) {
@@ -404,4 +437,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };

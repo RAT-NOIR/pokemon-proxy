@@ -113,6 +113,7 @@ function chargerFixtures() {
         appelsVoisins++;
         if (voisinsMode === 'leve') throw new Error('service de voisins injoignable');
         if (voisinsMode === 'nul') return null;
+        if (voisinsMode === 'jamais') return new Promise(() => { });
         const l = voisinsMode === 'question' ? fx.question.l : fx.affirmee.l, base = l;
         const r ={ ligne: l, nEssais: l.nEssais, mesures: fx.mesuresDe(base), contexteG: fx.ctx, seuils: fx.F.seuils };
         if (voisinsMode === 'contexte-absent') r.contexteG = null;
@@ -225,11 +226,76 @@ function chargerFixtures() {
             H.v(`4bis. ${nom} : la chaîne héritée décide (identifiee A, essai 3 -> 2), aucune erreur`, [x.r.statut, x.j.analyse.statut, x.j.analyse.cartes[0].carte.idProduct, await essaisDe(x.i._id), (await analyseDe(x.j)).desaccordRegleG], [200, 'identifiee', ID_A, 2, undefined]);
         }
         H.vrai('   les deux échecs sont journalisés sans contenu (aucune adresse, aucune image)', journal.filter(t => /règle G/.test(t)).length >= 2 && !journal.some(t => t.includes(IMAGE)));
-        // produits de G absents du catalogue de l'API : on n'invente rien, la chaîne décide (jamais une panne de plus)
-        for (const id of Q) await raw('catalogue_produits').deleteOne({ idProduct: id });
-        const inconnu = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
-        H.v('   G pose une question sur des produits absents du catalogue de l\'API : la chaîne décide, identifiee A, débitée une fois (essai 2)', [inconnu.r.statut, inconnu.j.analyse.statut, inconnu.j.analyse.cartes[0].carte.idProduct, await essaisDe(inconnu.i._id)], [200, 'identifiee', ID_A, 2]);
-        for (const id of Q) await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 });
+        // 🔴 correction 1 : la question de G ne se construit pas (produits de G absents du catalogue de l'API). Le repli ne peut JAMAIS être « identifiee A » (le moins
+        // prudent, et 0 faux affirmé) : candidats = {chaîne} ∪ {candidats de G présents} ; ≥ 2 => question ; sinon introuvable remboursé ; lecture en panne => panne remboursée.
+        const netDe = async x => { const m = await mouvements(x.i._id); const s = m.reduce((t, y) => t + y.delta, 0); console.log(`   (dénominateur : ${m.length} mouvement(s) du scan, somme des delta ${s})`); return s; };
+        const ouvertsDe = async x => (await mouvements(x.i._id)).filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat);
+        const reserve = { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null };
+        const remettreQ = async () => { for (const id of Q) { await raw('catalogue_produits').deleteOne({ idProduct: id }); await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 }); } };
+        // (i) un seul des candidats de G est présent : {A, Q0} => question
+        await raw('catalogue_produits').deleteOne({ idProduct: Q[1] });
+        const un = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
+        H.v('4bis-i. G pose {Q0,Q1}, Q1 absent du catalogue : question entre la chaîne et Q0 (jamais identifiee), facturation reserve, essai 2, un débit RÉSERVÉ', [un.r.statut, un.j.analyse.statut, un.j.analyse.cartes[0].candidats.map(x => x.idProduct).sort((x, y) => x - y), un.j.facturation, await essaisDe(un.i._id), await ouvertsDe(un)], [200, 'a-trancher', [ID_A, Q[0]].sort((x, y) => x - y), reserve, 2, ['reserve']]);
+        H.v('      net -1 (un crédit réservé, aucun perdu) ; desaccordRegleG.retenue a-trancher ; la question existe, en-attente', [await netDe(un), (await analyseDe(un.j)).desaccordRegleG.retenue, (await raw('questions').findOne({ _id: `${un.j.scanId}:0` })).etat], [-1, 'a-trancher', 'en-attente']);
+        // (ii) aucun candidat de G n'est présent : {A} seul => introuvable, crédit rendu
+        await raw('catalogue_produits').deleteOne({ idProduct: Q[0] });
+        const aucun = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question');
+        H.v('4bis-ii. aucun candidat de G présent : JAMAIS identifiee — introuvable, crédit rendu (essai 3), facturation introuvable remboursée', [aucun.r.statut, aucun.j.analyse.statut, aucun.j.facturation.motif, aucun.j.facturation.rembourse, aucun.j.facturation.debite, await essaisDe(aucun.i._id)], [200, 'introuvable', 'introuvable', true, 0, 3]);
+        H.v('      net 0 ; desaccordRegleG.retenue introuvable-regle-g', [await netDe(aucun), (await analyseDe(aucun.j)).desaccordRegleG.retenue], [0, 'introuvable-regle-g']);
+        await remettreQ();
+        // (iii) la LECTURE du catalogue tombe : une panne, remboursée par le filet — jamais convertie en absence
+        {
+            const { creerCatalogue } = require('../identifier/catalogue');
+            const reel = creerCatalogue({ cfg: cfgOn }); let appelsLire = 0;
+            const svFragile = await appFabrique(cfgOn, { voisins, catalogue: { lire: async ids => { appelsLire++; if (appelsLire >= 2) throw new Error('lecture impossible'); return reel.lire(ids); } } });
+            const e2 = console.error; console.error = () => { };
+            let f; try { f = await jouer(svFragile, { mode: 'affirmee', ids: [ID_A] }, 'question'); } finally { console.error = e2; }
+            H.v('4bis-iii. la lecture du catalogue LÈVE pendant l\'arbitrage : 503 INDISPONIBLE, remboursée (essai 3), ce n\'est pas une absence', [f.r.statut, f.j.erreur && f.j.erreur.code, f.j.facturation && f.j.facturation.motif, f.j.facturation && f.j.facturation.rembourse, await essaisDe(f.i._id)], [503, 'INDISPONIBLE', 'panne', true, 3]);
+            H.v('      net 0, aucun débit ouvert', [await netDe(f), await ouvertsDe(f)], [0, []]);
+            await svFragile.fermer();
+        }
+        // 3a. reserverQuestion ÉCHOUE après la conversion affirmation -> question G : panne remboursée, aucun crédit perdu
+        {
+            const argentReg = registre.obtenir('argent'); const orig = argentReg.reserverQuestion;
+            argentReg.reserverQuestion = async () => { throw new Error('panne simulée : réservation'); };
+            const e2 = console.error; console.error = () => { }; let r3;
+            try { r3 = await jouer(svOn, { mode: 'affirmee', ids: [ID_A] }, 'question'); } finally { argentReg.reserverQuestion = orig; console.error = e2; }
+            H.v('3a. la réservation de la question G échoue : 500 SERVEUR, panne remboursée (essai 3), jamais un a-trancher sans question', [r3.r.statut, r3.j.erreur && r3.j.erreur.code, r3.j.facturation && r3.j.facturation.rembourse, await essaisDe(r3.i._id)], [500, 'SERVEUR', true, 3]);
+            H.v('     aucun crédit perdu : somme des delta 0, aucun débit ouvert', [await netDe(r3), await ouvertsDe(r3)], [0, []]);
+        }
+        // 3b. administrateur : une question née de G suit EXACTEMENT le chemin d'une question de la chaîne pour ce porteur
+        {
+            const adminInst = async () => {
+                const c = Object.assign(M.nouveauCompte({ email: `adm${++nCle}@x.fr`, emailCle: `adm${nCle}@x.fr`, motDePasse: {} }), { verifie: true, role: 'administrateur', solde: { accueil: 25, achete: 0 } });
+                await db.col('comptes').insertOne(c);
+                const jeton = J.genererJeton(); const i = Object.assign(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jeton), essais: 0, libelle: 'banc' }), { compteId: c._id });
+                await db.col('installations').insertOne(i); return { i, jeton };
+            };
+            const jouerAdmin = async (c, vm) => { chaine = c; voisinsMode = vm; const x = await adminInst(); const r = await poster(svOn.url, x.jeton); await attendre(50); return { ...x, r, j: r.json || {} }; };
+            const repondre = (x, choix) => H.appel(svOn.url, '/api/identifier/reponse', { methode: 'POST', corps: { scanId: x.j.scanId, carte: 0, choix }, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}` } });
+            const viaG = await jouerAdmin({ mode: 'affirmee', ids: [ID_A] }, 'question');
+            const viaChaine = await jouerAdmin({ mode: 'ambigue', ids: Q }, 'nul');
+            const ligneQ = async x => Boolean(await raw('questions').findOne({ _id: `${x.j.scanId}:0` }));
+            const forme = async x => [x.r.statut, x.j.analyse.statut, x.j.facturation.motif, x.j.analyse.cartes[0].candidats.length, await ligneQ(x)];
+            H.v('3b. administrateur : la question née de G a la MÊME forme que celle de la chaîne (statut, a-trancher, motif administrateur, nb de candidats, ligne questions)', await forme(viaG), await forme(viaChaine));
+            console.log(`   (comportement préexistant : ligne « questions » pour une question d'administrateur de la chaîne = ${await ligneQ(viaChaine)}, pour celle de G = ${await ligneQ(viaG)})`);
+            const rG = await repondre(viaG, 'a'), rC = await repondre(viaChaine, 'a');
+            H.v('     répondre via /api/identifier/reponse : même résultat (200, identifiee, motif administrateur)', [rG.statut, rG.json.carte && rG.json.carte.statut, rG.json.facturation && rG.json.facturation.motif], [rC.statut, rC.json.carte && rC.json.carte.statut, rC.json.facturation && rC.json.facturation.motif]);
+            H.v('     et ce résultat est bien une réponse réussie', [rC.statut, rC.json.carte && rC.json.carte.statut], [200, 'identifiee']);
+            H.v('     soldes intacts (administrateur : aucun mouvement)', [(await mouvements(viaG.i._id)).length, (await mouvements(viaChaine.i._id)).length], [0, 0]);
+        }
+        // 2. délai borné sur deps.voisins (appelé APRÈS le débit)
+        {
+            H.v('2. la borne par défaut sur les voisins est de 2 000 ms (constante nommée)', require('../identifier/routes').DELAI_VOISINS_MS, 2000);
+            const svBorne = await appFabrique(cfgOn, { voisins, delaiVoisinsMs: 80 });
+            const e2 = console.error; const lignes = []; console.error = (...x) => { lignes.push(x.join(' ')); };
+            const t0 = Date.now(); let b; try { b = await jouer(svBorne, { mode: 'affirmee', ids: [ID_A] }, 'jamais'); } finally { console.error = e2; }
+            const ecoule = Date.now() - t0;
+            H.v('2. voisins qui ne se résout jamais : la réponse arrive (bornée à 80 ms injectés), issue de la chaîne — identifiee A, facturation affirmee, essai 3 -> 2', [b.r.statut, b.j.analyse.statut, b.j.analyse.cartes[0].carte.idProduct, b.j.facturation.motif, await essaisDe(b.i._id)], [200, 'identifiee', ID_A, 'affirmee', 2]);
+            H.vrai(`     la réponse n'a pas attendu indéfiniment (${ecoule} ms) ; voisins appelé 1 fois, decisionRegleG jamais`, ecoule < 5000 && appelsVoisins === 1 && appelsG === 0);
+            H.vrai('     journal : le code seul (VOISINS_DELAI), aucun contenu', lignes.some(l => /règle G : VOISINS_DELAI/.test(l)) && !lignes.some(l => l.includes(IMAGE)));
+            await svBorne.fermer();
+        }
     }
     // pannes de la chaîne : G ne les rattrape pas (une panne reste une panne, remboursée) et n'est même pas consultée
     {
