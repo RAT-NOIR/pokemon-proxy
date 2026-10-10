@@ -33,9 +33,37 @@ function demarrerBalayage(intervalleMs = INTERVALLE_BALAYAGE_MS) {
     return minuteur;
 }
 
+// ── La purge des annonces (conservation 90 jours) : toutes les 24 h, rien sans Mongo prêt, UN minuteur par processus, unref.
+// (annonce/conservation.js::demarrerPurge ne se garde pas sur la connexion et ne peut pas être arrêté : on arme ici la même passe, gardée.)
+const INTERVALLE_PURGE_MS = 24 * 3600 * 1000;
+let minuteurPurge = null;
+async function purgerAnnoncesUneFois({ etatMongo = () => mongoose.connection.readyState, purge = () => require('../annonce/conservation').purgerAnnonces() } = {}) {
+    try {
+        if (etatMongo() !== 1) return false;
+        await purge();
+        return true;
+    } catch (e) { console.error(`❌ [v2 annonce-purge] ${(e && (e.code || e.name)) || 'erreur'}`); return false; }
+}
+function arreterPurge() { if (minuteurPurge) { clearInterval(minuteurPurge); minuteurPurge = null; } }
+function demarrerPurge(intervalleMs = INTERVALLE_PURGE_MS) {
+    arreterPurge();
+    purgerAnnoncesUneFois();                                         // une passe au démarrage (sans effet tant que Mongo n'est pas prêt)
+    minuteurPurge = setInterval(() => { purgerAnnoncesUneFois(); }, intervalleMs);
+    minuteurPurge.unref();
+    return minuteurPurge;
+}
+
+// ── Le registre : annonce, visuels, taux (contrat de registre.js). Un fournisseur DÉJÀ posé (un banc, un autre lot) n'est jamais écrasé.
+function fournirSiAbsent(nom, fabrique) { try { registre.obtenir(nom); } catch { registre.fournir(nom, fabrique()); } }
+
 module.exports = {
     enTete(app, cfg) { },
     routes(router, cfg, deps) {
+        fournirSiAbsent('annonce', () => { const A = require('../annonce/verifier'), C = require('../annonce/conservation'); return { preparerAnnonce: o => A.preparerAnnonce(o, cfg), conserverAnnonce: (scanId, a) => C.conserverAnnonce(scanId, a, cfg) }; });
+        fournirSiAbsent('visuels', () => { const { resoudre } = require('./visuels').creerVisuels({ cfg }); return { resoudre }; });
+        fournirSiAbsent('taux', () => ({ versEUR: devise => require('./taux').versEUR(devise) }));
+        // La règle G est DEMANDÉE (V2_REGLE_G=1) mais sans fournisseur de voisins elle ne peut rien : la chaîne héritée décide. On le DIT, une fois, au montage.
+        if (cfg.regleG === true && !(deps && typeof deps.voisins === 'function')) console.warn('⚠️ [v2] règle G demandée, aucun fournisseur de voisins (V2_REGLE_G=1) — la chaîne héritée décide');
         // Sans `contrat: 2` la requête sort du routeur v2 SANS qu'un octet soit lu ni écrit : la route héritée répond comme aujourd'hui.
         // L'aiguilleur EN TÊTE (registre d'A0), prédicat strictement booléen. Puis : porteur, installation exigée, limiteur par COMPTE/installation (120/h),
         // idempotence (clé obligatoire : le débit en exige une), entrée validée AVANT tout débit, traitement.
@@ -56,6 +84,7 @@ module.exports = {
             return res.status(200).json({ success: true, solde });
         });
         demarrerBalayage();
+        demarrerPurge();
     },
-    balayerQuestionsUneFois, demarrerBalayage, arreterBalayage
+    balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge
 };

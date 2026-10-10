@@ -90,6 +90,8 @@ const { conserverAnnonce } = require('../annonce/conservation');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 const { dansUnScan, raisonNonRemboursement, noterNonRemboursement } = require('../../sources');
 const { col } = require('../db');
+const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
+const { arbitrer } = require('./arbitrage-g');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
@@ -112,6 +114,66 @@ function facturationDe(issue, faits) {
     const motif = issue === 'introuvable' ? 'introuvable' : 'panne';
     if (faits.rendu) return fabriquerFacturation({ debite: 0, rembourse: true, motif });
     return fabriquerFacturation({ ...nonRendu, motif: refuse ? 'plafond-jour' : motif });
+}
+
+// ── B1b.7 : la règle G, DERRIÈRE son interrupteur (V2_REGLE_G ET un fournisseur deps.voisins). Elle est consultée APRÈS la chaîne héritée (jamais à sa place) :
+// seul un désaccord est un fait à journaliser, et le plus PRUDENT l'emporte (arbitrage-g.js). Elle ne peut que RENDRE PLUS PRUDENT : jamais promouvoir un
+// introuvable ni une question en affirmation. Une règle G qui ne répond pas, lève ou ne tranche pas : la chaîne héritée décide, sans effet sur le débit.
+// @returns null (rien à dire) | { resultat, desaccord, questionNeuve } — questionNeuve : une affirmation de la chaîne est devenue une QUESTION (son crédit doit être RÉSERVÉ).
+// Le fournisseur de voisins est appelé APRÈS le débit : sa durée est BORNÉE (un fournisseur qui ne répond pas ne doit jamais garder une requête payée en suspens).
+// Dépassement => la chaîne décide, journal du code seul. (deps.delaiVoisinsMs : surcharge pour les bancs.)
+const DELAI_VOISINS_MS = 2000;
+const CANDIDATS_MAX = 3;                         // la limite d'une question : celle que l'adaptateur applique déjà (question(), slice(0, 3))
+function avecBorne(fonction, ms) {
+    let minuteur;
+    const borne = new Promise((_, rejeter) => { minuteur = setTimeout(() => rejeter(Object.assign(new Error('voisins : délai dépassé'), { code: 'VOISINS_DELAI' })), ms); });
+    const promesse = Promise.resolve().then(fonction);
+    promesse.catch(() => { });                   // une résolution ou un rejet TARDIF n'est jamais une erreur non gérée
+    return Promise.race([promesse, borne]).finally(() => clearTimeout(minuteur));
+}
+const INTROUVABLE_REGLE_G = Object.freeze({ success: false, natureRefus: 'refus-delibere', motifRefus: 'numero-illisible' });   // -> introuvable « photo-illisible » : on ne sait pas, on n'affirme pas l'absence
+
+async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChaine, produits, catalogue, adapterFn }) {
+    let d;
+    try {
+        const ms = Number.isFinite(deps.delaiVoisinsMs) && deps.delaiVoisinsMs > 0 ? deps.delaiVoisinsMs : DELAI_VOISINS_MS;
+        const v = await avecBorne(() => deps.voisins({ imageUrls: entree.imageUrls, scanId: String(scanId) }), ms);
+        if (!v) return null;
+        d = RG.decisionRegleG({ ligne: v.ligne, nEssais: v.nEssais, mesures: v.mesures, contexteG: v.contexteG }, v.seuils);
+    } catch (e) { journalErreur('règle G', e); return null; }
+    if (!d) return null;
+    const c0 = resultat.analyse.cartes[0];
+    const arb = arbitrer({ issue: resultat.issue, ids: c0.carte ? [c0.carte.idProduct] : c0.candidats.map(x => x.idProduct) }, d);
+    if (arb.action === 'garder') return { resultat, desaccord: arb.desaccord, questionNeuve: false };
+    // la lecture du catalogue peut TOMBER : c'est une panne (remboursée par le filet de l'appelant), jamais une absence
+    const tout = new Map(produits);
+    try {
+        const manquants = arb.ids.filter(id => !tout.has(id));
+        if (manquants.length) for (const [k, p] of await catalogue.lire(manquants)) tout.set(k, p);
+    } catch (e) {
+        journalErreur('catalogue (règle G)', e);
+        return { resultat: { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }, desaccord: { ...arb.desaccord, retenue: 'panne-catalogue' }, questionNeuve: false };
+    }
+    const ctx = { produits: tout, langueInterface: entree.langueInterface, cfg, ficheServie: false };
+    const c = corpsChaine || {};
+    const question = ids => {
+        try {
+            const r = adapterFn({ statutHttp: 200, corps: { success: true, carte: { ...(c.carte || {}), idProduct: ids[0], ambigu: true }, candidats: ids.map(idProduct => ({ idProduct })), etat: c.etat, codeLangue: c.codeLangue, reverse: c.reverse } }, ctx);
+            return r && r.issue === 'question' ? r : null;
+        } catch (e) { journalErreur('règle G (question)', e); return null; }
+    };
+    // 1. la question de G telle quelle, si TOUS ses candidats sont au catalogue de l'API
+    let r = arb.ids.every(id => tout.has(id)) ? question(arb.ids) : null;
+    if (r) return { resultat: r, desaccord: arb.desaccord, questionNeuve: true };
+    // 2. repli, jamais vers l'affirmation (le moins prudent) : {candidat de la chaîne} ∪ {candidats de G PRÉSENTS}, dédoublonnés, plafonnés ; ≥ 2 => question
+    const presents = [...new Set([...(c0.carte ? [c0.carte.idProduct] : []), ...arb.ids])].filter(id => tout.has(id)).slice(0, CANDIDATS_MAX);
+    r = presents.length >= 2 ? question(presents) : null;
+    if (r) return { resultat: r, desaccord: arb.desaccord, questionNeuve: true };
+    // 3. sinon : introuvable (le crédit est rendu par le filet de l'appelant). Jamais « identifiee » : la chaîne a affirmé, G en doute, et on ne peut pas poser la question.
+    let intro = null;
+    try { intro = adapterFn({ statutHttp: 200, corps: INTROUVABLE_REGLE_G }, ctx); } catch (e) { journalErreur('règle G (introuvable)', e); }
+    if (!intro || intro.issue !== 'introuvable') intro = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
+    return { resultat: intro, desaccord: { ...arb.desaccord, retenue: 'introuvable-regle-g' }, questionNeuve: false };
 }
 
 function traiterIdentifier(cfg, deps = {}) {
@@ -151,7 +213,7 @@ function traiterIdentifier(cfg, deps = {}) {
         const userId = `v2:${porteur.type}:${porteur.id}`;
         // 4. la chaîne héritée, avec le DOUBLE de res ; tout ce qui suit se décide dans le contexte de CE scan (la cause d'un non-remboursement s'y note)
         // 🔑 TOUT ce qui suit le débit est sous UN filet : une exception, d'où qu'elle vienne, rend le crédit (voir le catch).
-        let reqH = null, rembourserOrigine = null, sortie, lecture = null;
+        let reqH = null, rembourserOrigine = null, sortie, lecture = null, desaccordG = null;
         const rembourserMoi = (motif) => reqH.credit.v2.rembourser(reqH, motif, { compteur: 'panne' });
         try {
             reqH = {
@@ -171,7 +233,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 const fr = fauxRes();
                 let exception = null;
                 try { await deps.gererIdentifier(reqH, fr); } catch (e) { exception = e; journalErreur('chaîne héritée', e); }
-                let resultat;
+                let resultat, produits = null;
                 if (exception || !fr.headersSent) resultat = { issue: 'panne', analyse: null, erreur: { code: 'SERVEUR' } };
                 else {
                     // 5. le catalogue de l'API pour les produits que la chaîne désigne, puis l'adaptation
@@ -179,17 +241,26 @@ function traiterIdentifier(cfg, deps = {}) {
                     // B1b.5 : ce que /reponse ne pourra pas relire (la langue lue et la stratégie reverse) pour fabriquer le prixLive d'une carte tranchée
                     lecture = { codeLangue: codeLangueDe(c), reverseStrategie: c.reverse && typeof c.reverse.strategie === 'string' ? c.reverse.strategie : null };
                     const ids = [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : [])];
-                    let produits = null;
                     try { produits = await catalogue.lire(ids); } catch (e) { journalErreur('catalogue', e); }
                     resultat = produits === null ? { issue: 'panne', analyse: null, erreur: { code: 'INDISPONIBLE' } }
                         : (deps.adapter || adapter)({ statutHttp: fr.statut, corps: fr.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false });
+                    // B1b.7 : la règle G, si (et seulement si) l'interrupteur est allumé ET qu'un fournisseur de voisins est branché ; jamais sur une panne
+                    if (resultat.issue !== 'panne' && RG.regleGActive(cfg, deps)) {
+                        const g = await consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChaine: c, produits, catalogue, adapterFn: deps.adapter || adapter });
+                        if (g) {
+                            resultat = g.resultat; desaccordG = g.desaccord;
+                            if (g.questionNeuve) reqH.regleGRaison = 'regle-g';        // l'affirmation de la chaîne est devenue une question : son crédit est RÉSERVÉ plus bas
+                            if (desaccordG) console.warn(`⚠️ [v2 règle G] desaccordRegleG scan=${scanId} ${JSON.stringify(desaccordG)}`);
+                        }
+                    }
                 }
                 // une question née d'un REFUS (remboursement différé) : la chaîne ne l'a pas posée, on la RÉSERVE ici, avec les choix du contrat
-                if (resultat.issue === 'question' && reqH.refusDiffere && !reqH.questionId && !admin && credit) {
+                // (B1b.7 : même chemin pour une affirmation de la chaîne que la règle G transforme en question — son crédit est encore pris, on le réserve)
+                if (resultat.issue === 'question' && (reqH.refusDiffere || reqH.regleGRaison) && !reqH.questionId && !admin && credit) {
                     let r = null;
                     try {
                         const choix = resultat.question.choix.map(x => ({ id: x.id, idProduct: x.idProduct }));
-                        r = await argent.reserverQuestion(porteur, credit, { scanId, carte: 0, raison: reqH.refusDiffere, candidats: choix.map(x => x.idProduct), choix });
+                        r = await argent.reserverQuestion(porteur, credit, { scanId, carte: 0, raison: reqH.refusDiffere || reqH.regleGRaison, candidats: choix.map(x => x.idProduct), choix });
                     } catch (e) { journalErreur('réservation de la question', e); }
                     if (r && r.etat === 'en-attente') reqH.questionId = scanId;
                     else if (r && r.etat === 'remboursee') { reqH.scanRembourse = true; reqH.scanRendu = true; }                        // le repli a rendu le crédit à l'émission
@@ -217,7 +288,7 @@ function traiterIdentifier(cfg, deps = {}) {
                     try { await rembourserMoi(resultat.issue === 'panne' ? `panne-${resultat.erreur.code}` : 'introuvable'); } catch (e) { journalErreur('remboursement', e); }
                 }
                 const faits = { admin, rendu: Boolean(reqH.scanRendu), question: Boolean(reqH.questionId) && resultat.issue === 'question', cause: reqH.scanRendu ? null : raisonNonRemboursement() };
-                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture };
+                return { resultat, facturation: facturationDe(resultat.issue, faits), lecture, desaccord: desaccordG };
             });
         } catch (e) {
             // I1 : une exception hors de tout try interne (adaptateur, facturation, creditPourReq…). Le débit est pris : il est RENDU ici (idempotent : une seule fois par scan,
@@ -260,6 +331,7 @@ function traiterIdentifier(cfg, deps = {}) {
                 cartes: cartes.map((c, i) => ({ idProduct: c.carte ? c.carte.idProduct : null, statut: c.statut, raison: c.raison, etat: c.etat ?? null, question: c.question ?? null, zone: c.zone ?? null,
                     ...(i === 0 && sortie.lecture ? { lecture: sortie.lecture } : {}) })),
                 produits: cartes.flatMap(c => (c.carte ? [c.carte] : c.candidats)), facturation,
+                ...(sortie.desaccord ? { desaccordRegleG: sortie.desaccord } : {}),          // B1b.7 : un désaccord règle G / chaîne héritée n'est jamais tranché en silence
                 creeLe: maintenant, expireLe: new Date(maintenant.getTime() + cfg.retention.analysesMois * 30.5 * 86400e3)
             });
         } catch (e) { journalErreur('analyses', e); }
@@ -365,4 +437,4 @@ function traiterReponse(cfg, deps = {}) {
     };
 }
 
-module.exports = { validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
+module.exports = { DELAI_VOISINS_MS, validerEntree, verifierEntree, comparerVersions, traiterIdentifier, traiterReponse, facturationDe };
