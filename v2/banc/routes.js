@@ -18,6 +18,7 @@ const CLES_DOC = Object.freeze(['_id', 'cleR2', 'etat', 'expireLe', 'jetonEmprei
 const idProduitOk = n => Number.isSafeInteger(n) && n > 0;
 const carteOk = c => Number.isInteger(c) && c >= 0 && c <= 99;
 const modeleOk = m => (typeof m === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(m) ? m : null);
+const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
 const ARRET = () => Object.assign(new Error('arrêt'), { code: 'ARRET' });
 
 function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.col(n), horloge = () => new Date(), delaiMs = TIMEOUT_MS } = {}) {
@@ -37,13 +38,20 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
             if (typeof env.V2_BANC_BUCKET !== 'string' || !env.V2_BANC_BUCKET) { desactive = true; dire('V2_BANC_BUCKET absente'); return null; }
             try {
                 const s = stockage || S.creerStockageReel(env);
-                if (typeof s.verifierBucket === 'function') await s.verifierBucket();
+                // écrit par ce qu'on AUTORISE : un stockage qui ne sait pas vérifier son bucket (endpoint UE) n'écrit jamais
+                if (!s || typeof s.verifierBucket !== 'function') throw new Error('verifierBucket absent');
+                await s.verifierBucket();
                 return s;
             } catch { desactive = true; dire('stockage non vérifié (bucket ou endpoint)'); return null; }
         })();
         return pretP;
     }
 
+    // une attente bornée : rejette avec le code DELAI après delaiMs (le travail sous-jacent n'est pas annulé, son résultat est ignoré)
+    const borner = p => new Promise((res, rej) => {
+        const t = setTimeout(() => rej(Object.assign(new Error('délai'), { code: 'DELAI' })), delaiMs); if (t.unref) t.unref();
+        Promise.resolve(p).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
+    });
     async function supprimerObjets(ctx, s) {
         const st = s || stockage;
         const cles = ctx.objets.splice(0);
@@ -68,7 +76,9 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
     }
 
     function nouvelleLigne({ scanId, carte, source, etat, verite, c, versionModele, cleR2 }) {
-        const now = horloge();
+        // `le` est TRONQUÉ au jour (UTC) : une date à la milliseconde rejoindrait la ligne à analyses.creeLe / mouvements, donc à un porteur.
+        // (La date de dernière modification de l'objet R2 garde l'heure : corrélation résiduelle, opérateur seulement, bornée par la rétention de `analyses`.)
+        const now = jourUTC(horloge());
         return {
             _id: idLigne(scanId, carte), verite, source, etat, versionModele: modeleOk(versionModele), versionTexte: c.version, le: now,
             jetonEmpreinte: c.jetonEmpreinte, cleR2, expireLe: new Date(now.getTime() + cfg.retention.bancMois * 30.5 * JOUR_MS)
@@ -86,10 +96,20 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
             const finale = S.nouvelleCle(false);
             await s.ecrire(finale, buf); ctx.objets.push(finale);
             if (ctx.stop) throw ARRET();
-            const r = await col().updateOne({ _id: ligne._id, etat: 'attente', cleR2: ancienne }, { $set: { verite, source, etat: 'confirmee', cleR2: finale } });
-            if (!r || !r.modifiedCount) { await supprimerObjets(ctx, s); return; }     // une autre réponse a gagné : notre copie est défaite
-            ctx.objets.splice(0);                                                       // la ligne la porte désormais : plus à défaire
-            try { await s.supprimer(ancienne); } catch (e) { echec('objet d\'attente non supprimé', e); }
+            // La mise à jour est ÉMISE : dès maintenant la copie finale ne se défait plus à l'aveugle (délai, erreur) — Mongo a pu l'appliquer.
+            ctx.objets.splice(0);
+            let r = null;
+            try { r = await col().updateOne({ _id: ligne._id, etat: 'attente', cleR2: ancienne }, { $set: { verite, source, etat: 'confirmee', cleR2: finale } }); }
+            catch (e) { echec('confirmation ambiguë', e); }
+            const suppr = async (cle, quoi) => { try { await s.supprimer(cle); } catch (e) { echec(quoi, e); } };
+            if (r && r.modifiedCount) return suppr(ancienne, 'objet d\'attente non supprimé');          // la ligne porte la copie finale
+            if (r) return suppr(finale, 'copie finale non supprimée');                                  // rien modifié : une autre réponse a gagné
+            // issue inconnue : la ligne, relue, décide ; si la relecture échoue aussi, on GARDE les deux objets (un orphelin vaut mieux qu'une ligne qui ment)
+            let l;
+            try { l = await col().findOne({ _id: ligne._id }); } catch (e) { echec('relecture impossible, objets gardés', e); return; }
+            if (l && l.cleR2 === finale) return suppr(ancienne, 'objet d\'attente non supprimé');
+            if (l && l.cleR2 === ancienne) return suppr(finale, 'copie finale non supprimée');
+            echec('issue inconnue, objets gardés', null);
         } else {
             await col().updateOne({ _id: ligne._id }, { $set: { verite, source, etat: 'confirmee' } });
         }
@@ -171,11 +191,13 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
         async balayerAttente(maintenant = horloge()) {
             const bilan = { supprimees: 0, echecs: 0 };
             try {
-                const s = await pret(); if (!s) return bilan;
-                const limite = new Date(new Date(maintenant).getTime() - JOUR_MS);
-                const vieilles = await col().find({ etat: 'attente', le: { $lt: limite } }).toArray();
+                // Chaque attente est bornée (delaiMs) : un R2 ou un Mongo qui pend ne bloque pas l'appelant (la purge), et la ligne d'un objet
+                // dont la suppression n'a pas abouti est GARDÉE. `le` est tronqué au jour : « plus de 24 h » se lit au jour (jamais avant 24 h réelles).
+                const s = await borner(pret()); if (!s) return bilan;
+                const limite = jourUTC(new Date(maintenant).getTime() - JOUR_MS);
+                const vieilles = await borner(col().find({ etat: 'attente', le: { $lt: limite } }).toArray());
                 for (const l of vieilles) {
-                    try { await s.supprimer(l.cleR2); await col().deleteOne({ _id: l._id, etat: 'attente' }); bilan.supprimees++; }
+                    try { await borner(s.supprimer(l.cleR2)); await borner(col().deleteOne({ _id: l._id, etat: 'attente' })); bilan.supprimees++; }
                     catch (e) { bilan.echecs++; echec('balayage d\'une ligne en attente', e); }
                 }
             } catch (e) { echec('balayerAttente', e); }

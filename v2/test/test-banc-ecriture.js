@@ -8,7 +8,7 @@ const sharp = require('sharp');
 const mongoose = require('mongoose');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
 const { lireConfig } = require('../config');
-const { creerStockage } = require('../banc/stockage');
+const { creerStockage, creerStockageMemoire } = require('../banc/stockage');
 const { creerBanc, TIMEOUT_MS } = require('../banc/routes');
 const monterBanc = require('../banc/monter');
 
@@ -31,10 +31,11 @@ function fauxClient() {
 const ecritures = c => c.commandes.filter(x => x.op === 'put').length;
 let T0 = new Date('2026-10-10T12:00:00Z');
 function nouveau(o = {}) {
-    const client = fauxClient();
+    const client = o.client || fauxClient();
     const env = { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL, ...(o.env || {}) };
     const stockage = creerStockage({ client, bucket: BUCKET, env: { V2_BANC_BUCKET: BUCKET } });
-    if (o.verifierBucket) stockage.verifierBucket = o.verifierBucket;
+    // un stockage SANS verifierBucket désactive le banc (ouvert par défaut = faux) : les bancs en fournissent un explicite, sauf o.sansVerifier
+    if (!o.sansVerifier) stockage.verifierBucket = o.verifierBucket || (async () => { });
     const banc = creerBanc({ cfg, env, stockage, horloge: () => T0, delaiMs: o.delaiMs, colFn: o.colFn });
     return { banc, client, env, stockage };
 }
@@ -227,14 +228,15 @@ function capturer() {
         ({ banc, client } = nouveau());
         await banc.apresVerdict({ ...e, issue: 'question' });
         await banc.apresVerdict({ ...e, scanId: '650000000000000000000009', issue: 'affirmee', idProduct: 1 });
-        let b = await banc.balayerAttente(new Date(T0.getTime() + 23 * 3600e3));
-        H.v('(4) balayage à 23 h : rien (2 lignes, 2 objets)', [b, (await lignes()).length, client.objets.size], [{ supprimees: 0, echecs: 0 }, 2, 2]);
+        // `le` est tronqué au jour (correction 2) : « plus de 24 h » se lit au jour — jamais avant 24 h réelles (de 24 h à 48 h après l'écriture)
+        let b = await banc.balayerAttente(new Date(T0.getTime() + 25 * 3600e3));
+        H.v('(4) balayage à 25 h (le jour de la ligne n\'a pas un jour d\'avance sur now−24 h) : rien (2 lignes, 2 objets)', [b, (await lignes()).length, client.objets.size], [{ supprimees: 0, echecs: 0 }, 2, 2]);
         client.panne.del = true; const cap2 = capturer();
-        b = await banc.balayerAttente(new Date(T0.getTime() + 25 * 3600e3));
+        b = await banc.balayerAttente(new Date(T0.getTime() + 49 * 3600e3));
         cap2.rendre(); client.panne.del = false;
-        H.v('(4) balayage à 25 h, suppression d\'objet ratée : la ligne en attente est conservée (échec compté)', [b, (await lignes()).length], [{ supprimees: 0, echecs: 1 }, 2]);
-        b = await banc.balayerAttente(new Date(T0.getTime() + 25 * 3600e3));
-        H.v('(4) balayage à 25 h : la ligne en attente et son objet partent, la ligne confirmée reste (1 ligne, 1 objet)', [b, (await lignes()).map(x => x.etat), client.objets.size], [{ supprimees: 1, echecs: 0 }, ['confirmee'], 1]);
+        H.v('(4) balayage à 49 h, suppression d\'objet ratée : la ligne en attente est conservée (échec compté)', [b, (await lignes()).length], [{ supprimees: 0, echecs: 1 }, 2]);
+        b = await banc.balayerAttente(new Date(T0.getTime() + 49 * 3600e3));
+        H.v('(4) balayage à 49 h : la ligne en attente et son objet partent, la ligne confirmée reste (1 ligne, 1 objet)', [b, (await lignes()).map(x => x.etat), client.objets.size], [{ supprimees: 1, echecs: 0 }, ['confirmee'], 1]);
         await vider();
     }
 
@@ -345,6 +347,92 @@ function capturer() {
         const st = await banc.statistiquesBanc();
         H.v('(8) statistiquesBanc : dénominateur par source — 1 affirme, 1 reponse, 1 correction (l\'affirmée corrigée change de source), 1 en attente, total 4', st, { confirmees: { affirme: 1, reponse: 1, correction: 1 }, attente: 1, total: 4 });
         H.vrai('(8) aucune clé de taux global dans le bilan', !Object.keys(st).some(k => /taux|ratio|pourcent/i.test(k)));
+        await vider();
+    }
+
+    // ═══ TOUR 1 — (1) la course confirmer / borne : l'issue d'un updateOne ÉMIS se décide en relisant, jamais en défaisant à l'aveugle ═══
+    {
+        const reelle = () => db.col('banc_lignes');
+        const colAvec = sur => () => { const r = reelle(); return { insertOne: (...a) => r.insertOne(...a), findOne: (...a) => r.findOne(...a), find: (...a) => r.find(...a), deleteOne: (...a) => r.deleteOne(...a), updateOne: (...a) => r.updateOne(...a), ...sur(r) }; };
+        const e = { corps: consentement(), scanId: SCAN, carte: 0, imageRedressee: image, detectionSure: true };
+        const semer = async () => { const base = nouveau(); await base.banc.apresVerdict({ ...e, issue: 'question' }); const l0 = (await lignes())[0]; return { base, cleAttente: l0.cleR2 }; };
+        // a. le délai tombe PENDANT l'updateOne, qui s'applique quand même
+        let { base, cleAttente } = await semer();
+        let n = nouveau({ client: base.client, delaiMs: 50, colFn: colAvec(r => ({ updateOne: async (f, u) => { await attendre(250); return r.updateOne(f, u); } })) });
+        let cap = capturer(); const t0 = Date.now(); await n.banc.apresReponse({ ...e, choix: 'a', idProduct: 777 }); const dt = Date.now() - t0; await attendre(600); cap.rendre();
+        let l = (await lignes())[0];
+        H.v('(R1a) updateOne qui s\'applique APRÈS la borne : ligne confirmée ET objet final présent, l\'ancien objet d\'attente supprimé', [dt < 200, l.etat, l.verite, base.client.objets.has(l.cleR2), base.client.objets.has(cleAttente), base.client.objets.size], [true, 'confirmee', 777, true, false, 1]);
+        await vider();
+        // b. l'updateOne n'a rien modifié (réponse tardive modifiedCount 0)
+        ({ base, cleAttente } = await semer());
+        n = nouveau({ client: base.client, delaiMs: 50, colFn: colAvec(() => ({ updateOne: async () => { await attendre(250); return { modifiedCount: 0 }; } })) });
+        cap = capturer(); await n.banc.apresReponse({ ...e, choix: 'a', idProduct: 777 }); await attendre(600); cap.rendre();
+        l = (await lignes())[0];
+        H.v('(R1b) updateOne tardif sans modification : la copie finale est supprimée, la ligne reste en attente sur l\'ancien objet', [l.etat, l.cleR2 === cleAttente, base.client.objets.has(cleAttente), base.client.objets.size], ['attente', true, true, 1]);
+        await vider();
+        // c. updateOne ET relecture échouent : on garde les deux objets, journal sans contenu
+        ({ base, cleAttente } = await semer());
+        const casse = () => { throw Object.assign(new Error('Mongo ' + SCAN + ' ' + IP), { code: 'MONGO_HS' }); };
+        let appels = 0;   // hors de colFn : celui-ci est rappelé à chaque accès à la collection
+        n = nouveau({ client: base.client, colFn: colAvec(r => ({ updateOne: async () => casse(), findOne: async (...a) => (++appels === 1 ? r.findOne(...a) : casse()) })) });
+        cap = capturer(); await n.banc.apresReponse({ ...e, choix: 'a', idProduct: 777 }); cap.rendre();
+        H.v('(R1c) updateOne et relecture en échec : les DEUX objets sont gardés (un orphelin vaut mieux qu\'une ligne qui ment), la ligne reste en attente', [base.client.objets.size, (await lignes())[0].etat, cap.vus.length > 0, [SCAN, IP, 'banc-reel'].map(x => cap.vus.join('\n').includes(x))], [2, 'attente', true, [false, false, false]]);
+        await vider();
+        // d. updateOne en échec mais la relecture montre la ligne confirmée sur la clé finale (Mongo l'avait appliqué) : l'ancien part, le final reste
+        ({ base, cleAttente } = await semer());
+        n = nouveau({ client: base.client, colFn: colAvec(r => ({ updateOne: async (f, u) => { await r.updateOne(f, u); casse(); } })) });
+        cap = capturer(); await n.banc.apresReponse({ ...e, choix: 'a', idProduct: 777 }); cap.rendre();
+        l = (await lignes())[0];
+        H.v('(R1d) updateOne appliqué mais réponse perdue : la relecture voit la clé finale ⇒ ancien objet supprimé, final gardé', [l.etat, base.client.objets.has(l.cleR2), base.client.objets.has(cleAttente), base.client.objets.size], ['confirmee', true, false, 1]);
+        await vider();
+    }
+
+    // ═══ TOUR 1 — (2) aucune précision infra-journalière dans la ligne ═══
+    {
+        const e = { corps: consentement(), carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true };
+        const memo = T0;
+        T0 = new Date('2026-10-10T06:05:09.123Z'); const a = nouveau(); await a.banc.apresVerdict({ ...e, scanId: '650000000000000000000031' });
+        T0 = new Date('2026-10-10T22:41:55.987Z'); const b = nouveau(); await b.banc.apresVerdict({ ...e, scanId: '650000000000000000000032' });
+        T0 = memo;
+        const ls = await lignes();
+        const dates = ls.flatMap(x => Object.values(x).filter(v => v instanceof Date));
+        H.v('(R2) deux lignes écrites à des heures différentes du même jour : même `le`, à 00:00:00.000 UTC', [ls.length, new Set(ls.map(x => +x.le)).size, ls.every(x => +x.le === Date.UTC(2026, 9, 10))], [2, 1, true]);
+        H.v('(R2) aucune date de la ligne n\'a de précision infra-journalière (' + dates.length + ' dates)', [dates.length, dates.every(d => d.getTime() % 86400000 === 0)], [4, true]);
+        H.v('(R2) expireLe = ce jour + 24 mois (732 j)', ls.every(x => (x.expireLe - x.le) / 86400e3 === 732), true);
+        await vider();
+    }
+
+    // ═══ TOUR 1 — (3) un stockage sans verifierBucket désactive le banc (fermé par défaut) ═══
+    {
+        const e = { corps: consentement(), scanId: SCAN, carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true };
+        const n = nouveau({ sansVerifier: true }); const cap = capturer();
+        await n.banc.apresVerdict(e); await n.banc.apresVerdict({ ...e, scanId: '650000000000000000000041' });
+        cap.rendre();
+        H.v('(R3) stockage sans verifierBucket : 0 commande R2, 0 ligne, dit UNE fois', [n.client.commandes.length, (await lignes()).length, cap.vus.length], [0, 0, 1]);
+        const mem = creerStockageMemoire();
+        const m = creerBanc({ cfg, env: { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL }, stockage: mem, horloge: () => T0 });
+        await m.apresVerdict(e);
+        H.v('(R3) creerStockageMemoire() fournit un verifierBucket explicite : le banc écrit', [typeof mem.verifierBucket, (await lignes()).length, mem.cles().length], ['function', 1, 1]);
+        await vider();
+    }
+
+    // ═══ TOUR 1 — (4) balayerAttente est bornée : la ligne d'un objet dont la suppression pend est GARDÉE ═══
+    {
+        const e = { corps: consentement(), scanId: SCAN, carte: 0, imageRedressee: image, detectionSure: true };
+        const base = nouveau(); await base.banc.apresVerdict({ ...e, issue: 'question' });
+        const supprimerReel = base.client.supprimer.bind(base.client);
+        base.client.supprimer = () => new Promise(() => { });
+        const n = nouveau({ client: base.client, delaiMs: 60 }); const cap = capturer();
+        let t0 = Date.now(); const b = await n.banc.balayerAttente(new Date(T0.getTime() + 49 * 3600e3)); const dt = Date.now() - t0; cap.rendre();
+        H.v('(R4) supprimer qui ne résout jamais : la fonction rend la main (< 1 s), échec compté, ligne GARDÉE avec son objet', [dt < 1000, b, (await lignes()).length, base.client.objets.size], [true, { supprimees: 0, echecs: 1 }, 1, 1]);
+        base.client.supprimer = supprimerReel;
+        const colPend = () => ({ find: () => ({ toArray: () => new Promise(() => { }) }), insertOne: () => new Promise(() => { }), findOne: () => new Promise(() => { }), deleteOne: async () => ({}), updateOne: async () => ({}) });
+        const p = nouveau({ client: base.client, delaiMs: 60, colFn: () => colPend() }); const cap2 = capturer();
+        t0 = Date.now(); const b2 = await p.banc.balayerAttente(new Date(T0.getTime() + 49 * 3600e3)); const dt2 = Date.now() - t0; cap2.rendre();
+        H.v('(R4) Mongo qui pend pendant le balayage : rend la main (< 1 s), rien supprimé', [dt2 < 1000, b2, (await lignes()).length], [true, { supprimees: 0, echecs: 0 }, 1]);
+        const q = nouveau({ client: base.client, delaiMs: 60, verifierBucket: () => new Promise(() => { }) }); const cap3 = capturer();
+        t0 = Date.now(); await q.banc.balayerAttente(new Date(T0.getTime() + 49 * 3600e3)); const dt3 = Date.now() - t0; cap3.rendre();
+        H.v('(R4) verifierBucket qui pend pendant le balayage : rend la main (< 1 s)', dt3 < 1000, true);
         await vider();
     }
 

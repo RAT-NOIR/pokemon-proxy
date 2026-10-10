@@ -80,6 +80,7 @@ function creerStockageReel(env = process.env) {
 function creerStockageMemoire() {
     const o = new Map();
     return {
+        async verifierBucket() { /* explicite : la mémoire n'a ni bucket ni endpoint à vérifier */ },
         async ecrire(cle, buffer) { if (!CLE.test(String(cle)) || !Buffer.isBuffer(buffer)) throw refus('cle-refusee'); o.set(cle, buffer); return cle; },
         async supprimer(cle) { o.delete(cle); },
         async lire(cle) { if (!CLE.test(String(cle)) || !o.has(cle)) throw refus('cle-refusee'); return o.get(cle); },
