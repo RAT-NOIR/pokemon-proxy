@@ -1,8 +1,8 @@
 'use strict';
-// B7b.1 Step 3 — LES VECTEURS DE L'EXTENSION (extension v2\src\fond\fausses\*.json, LECTURE SEULE) rejoués contre le schéma publié.
-// Tout écart de FORME doit être ÉCRIT dans CONTRAT-API-V2.md §7.3 (ce que l'extension attend, ce que le serveur rend, qui doit changer) : jamais corrigé en silence d'un côté.
-// Le banc classe chaque écart observé sous une référence E… et exige (1) qu'aucun écart ne reste sans référence, (2) que §7.3 porte cette référence. Il ne lit AUCUN secret,
-// n'écrit rien dans `extension v2`, n'ouvre aucune base.
+// B7b.1 Step 3 — LES VECTEURS DE L'EXTENSION (extension v2\src\fond\fausses\*, LECTURE SEULE) rejoués contre le schéma publié.
+// Tout écart de FORME doit être ÉCRIT dans CONTRAT-API-V2.md §7.3 bis (route, statut, chemin JSON, ce que l'extension attend, ce que le serveur rend, qui doit changer) : jamais corrigé en silence.
+// Le banc classe chaque écart observé par sa clé EXACTE « route statut chemin-normalisé » (jamais par un préfixe : un préfixe absorberait une faute neuve) ; une clé sans référence fait
+// échouer le banc ; et chaque clé doit figurer sur UNE ligne du tableau 7.3 bis qui porte, ensemble, la route, le statut et le chemin. Le banc n'écrit rien dans `extension v2`.
 const H = require('./_harnais');
 const fs = require('fs'), path = require('path');
 const A = require('./_contrat-reel-aide');
@@ -11,50 +11,52 @@ const { SCHEMA, ref } = A;
 
 const DOSSIER = process.env.RM_EXTENSION_FAUSSES || 'C:\\Users\\Yung\\Desktop\\extension v2\\src\\fond\\fausses';
 const CONTRAT = fs.readFileSync(path.join(__dirname, '..', '..', 'CONTRAT-API-V2.md'), 'utf8');
-const section73 = (() => { const i = CONTRAT.indexOf('### 7.3'), j = CONTRAT.indexOf('## 8.'); return i >= 0 && j > i ? CONTRAT.slice(i, j) : ''; })();
+const section73 = (() => { const i = CONTRAT.indexOf('#### 7.3 bis'), j = CONTRAT.indexOf('### 7.4'); return i >= 0 && j > i ? CONTRAT.slice(i, j) : ''; })();
+const lignes73 = section73.split(/\r?\n/).filter(l => l.startsWith('|'));
 
-// Les vecteurs et le schéma contre lequel chacun est jugé (route + statut que le serveur lui donnerait).
 const ANALYSES = ['identifiee.json', 'identifiee-impressions.json', 'a-trancher-2.json', 'a-trancher-3.json', 'lot.json', 'introuvable.json'];
-const norm = c => c.replace(/\[\d+\]/g, '[]').replace(/fausse-[a-z]+-\d+/, '<scanId>').replace(/(\[\])\.(a|b|c|aucune|ne-sait-pas)\./, '$1.<choix>.');
-// La classification des écarts : (motif du chemin normalisé, nature) -> référence de §7.3. Un écart qui n'entre dans aucune classe est NOUVEAU.
-const CLASSES = [
-    { ref: 'E1', quand: e => /^\$\.solde\.(soldeGratuit|restantSemaine|soldeScans)$/.test(e.chemin) || /^\$\.solde\.(essai|abonnement)$/.test(e.chemin) || /^\$\.solde\.compte\.verifie$/.test(e.chemin) || /^\$\.solde\.compte$/.test(e.chemin) },
-    { ref: 'E2', quand: e => /\.facturation\.(reserve)$/.test(e.chemin) || /\.facturation\.raisonNonRembourse$/.test(e.chemin) || /^\$\.facturation\.reserve$/.test(e.chemin) },
-    { ref: 'E3', quand: e => e.chemin === '$.solde' },
-    { ref: 'E4', quand: e => e.chemin === '$.question' },
-    { ref: 'E5', quand: e => /prixGuide/.test(e.chemin) || /\.impressions$/.test(e.chemin) },
-    { ref: 'E6', quand: e => /\.etat$/.test(e.chemin) || /\.etat\./.test(e.chemin) },
-    { ref: 'E7', quand: e => /^\$\.facturation\.motif$/.test(e.chemin) || /^\$\.facturation$/.test(e.chemin) },
-    { ref: 'E8', quand: e => /\.visuel(\.|$)/.test(e.chemin) },
-    { ref: 'E9', quand: e => /\.liens\.cardmarket$/.test(e.chemin) || /\.variante$/.test(e.chemin) }
-];
-const classe = e => (CLASSES.find(c => c.quand(e)) || {}).ref || null;
+const COUVERTS = [...ANALYSES, 'quota.json', 'reponses.json', 'lectures.json', 'reels.js'];
+// Normalisation : les indices de tableau, l'identifiant de scan et le nom du choix des vecteurs ne sont pas des chemins du contrat.
+const norm = c => c.replace(/\[\d+\]/g, '[]').replace(/\$\.fausse-[a-z]+-\d+/, '$.<scanId>').replace(/^(\$\.<scanId>\[\])\.(a|b|c|aucune|ne-sait-pas)\./, '$1.<choix>.');
+
+// LA CLASSIFICATION : clé exacte -> référence de §7.3. Une clé absente d'ici est NOUVELLE et fait échouer le banc.
+const E = (r, route, statut, chemins) => chemins.map(c => [`${route} ${statut} ${c}`, r]);
+const CLASSES = new Map([
+    ...E('E1', 'POST /api/identifier', 200, ['$.solde.essai', '$.solde.abonnement', '$.solde.soldeGratuit', '$.solde.restantSemaine', '$.solde.soldeScans', '$.solde.compte.verifie']),
+    ...E('E1', 'POST /api/identifier', 429, ['$.solde.essai', '$.solde.abonnement', '$.solde.soldeGratuit', '$.solde.restantSemaine', '$.solde.soldeScans', '$.solde.compte.verifie']),
+    ...E('E11', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.set.slug']),
+    ...E('E2', 'POST /api/identifier', 200, ['$.facturation.reserve']),
+    ...E('E2', 'POST /api/identifier/reponse', 200, ['$.<scanId>[].<choix>.facturation.raisonNonRembourse']),
+    ...E('E3', 'POST /api/identifier', 200, ['$.solde']),
+    ...E('E4', 'POST /api/identifier', 200, ['$.question']),
+    ...E('E5', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.impressions', '$.analyse.cartes[].candidats[].impressions', '$.analyse.cartes[].carte.prixGuide.moyenne30',
+        '$.analyse.cartes[].candidats[].prixGuide.moyenne30', '$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30', '$.analyse.cartes[].carte.impressions[].prixGuide.date']),
+    ...E('E6', 'POST /api/identifier', 200, ['$.analyse.cartes[].etat']),
+    ...E('E7', 'POST /api/identifier', 429, ['$.facturation']),
+    ...E('E8', 'POST /api/identifier', 200, ['$.analyse.cartes[].carte.visuel.url', '$.analyse.cartes[].carte.visuel.grande', '$.analyse.cartes[].candidats[].visuel.url'])
+]);
 
 (async () => {
     H.vrai(`le dossier des vecteurs de l'extension existe (${DOSSIER})`, fs.existsSync(DOSSIER));
     if (!fs.existsSync(DOSSIER)) return H.bilan();
-    const presents = fs.readdirSync(DOSSIER).filter(f => f.endsWith('.json')).sort();
-    console.log(`   ${presents.length} fichiers de vecteurs : ${presents.join(', ')}`);
-    H.v('les 9 fichiers de vecteurs attendus sont là', [...ANALYSES, 'quota.json', 'reponses.json', 'lectures.json'].filter(f => !presents.includes(f)), []);
-    H.v('aucun fichier de vecteur non couvert par ce banc', presents.filter(f => ![...ANALYSES, 'quota.json', 'reponses.json', 'lectures.json'].includes(f)), []);
+    const presents = fs.readdirSync(DOSSIER).filter(f => fs.statSync(path.join(DOSSIER, f)).isFile()).sort();
+    console.log(`   ${presents.length} fichiers : ${presents.join(', ')}`);
+    H.v('tous les fichiers couverts par ce banc sont là', COUVERTS.filter(f => !presents.includes(f)), []);
+    H.v('« aucun fichier non couvert » dit la vérité sur le dossier : tout fichier présent est couvert (rejoué, ou déclaré non couvert avec sa raison)', presents.filter(f => !COUVERTS.includes(f)), []);
     const lire = f => JSON.parse(fs.readFileSync(path.join(DOSSIER, f), 'utf8'));
-    const observes = [];                                         // { fichier, route, statut, chemin, message, ref }
-    const verser = (fichier, route, statut, erreurs) => { for (const e of erreurs) observes.push({ fichier, route, statut, chemin: e.chemin, message: e.message, ref: classe(e) }); };
+    const observes = [];                                         // { fichier, route, statut, chemin, message }
+    const verser = (fichier, route, statut, erreurs) => { for (const e of erreurs) observes.push({ fichier, route, statut, chemin: e.chemin, message: e.message }); };
 
-    // 1. les six réponses d'analyse : contre ce que POST /api/identifier documente pour un 200
-    // (jugées contre ReponseAnalyse DIRECTEMENT : la racine du 200 est un oneOf [analyse | erreur] qui masquerait le chemin exact de chaque écart)
-    // Le oneOf des cartes n'indique que la PREMIÈRE faute de la branche la plus proche : chaque carte est donc jugée directement contre la branche de SON statut (toutes ses fautes),
-    // et la réponse est jugée une fois avec `cartes` vidé (le reste de l'enveloppe).
+    // La réponse d'analyse est jugée carte par carte contre la branche de SON statut (le oneOf des cartes n'indique que la PREMIÈRE faute), et l'enveloppe avec `cartes` vidé.
     const BRANCHE = { identifiee: 'CarteIdentifiee', 'a-trancher': 'CarteATrancher', introuvable: 'CarteIntrouvable' };
-    for (const f of ANALYSES) {
-        const j = lire(f), cartes = (j.analyse && j.analyse.cartes) || [];
+    function juger200(nom, j) {
+        const cartes = (j.analyse && j.analyse.cartes) || [];
         const enveloppe = JSON.parse(JSON.stringify(j)); if (enveloppe.analyse) enveloppe.analyse.cartes = [];
-        verser(f, 'POST /api/identifier', 200, valider(enveloppe, ref('ReponseAnalyse'), SCHEMA).erreurs.filter(e => e.chemin !== '$.analyse.cartes'));
+        verser(nom, 'POST /api/identifier', 200, valider(enveloppe, ref('ReponseAnalyse'), SCHEMA).erreurs.filter(e => e.chemin !== '$.analyse.cartes'));
         cartes.forEach((c, i) => {
             const b = BRANCHE[c && c.statut];
-            if (!b) return verser(f, 'POST /api/identifier', 200, [{ chemin: `$.analyse.cartes[${i}].statut`, message: `statut « ${c && c.statut} » inconnu du contrat` }]);
+            if (!b) return verser(nom, 'POST /api/identifier', 200, [{ chemin: `$.analyse.cartes[${i}].statut`, message: `statut « ${c && c.statut} » inconnu du contrat` }]);
             // `visuel` et `prixGuide` sont des « null ou objet » : le oneOf ne dit rien de la faute de l'objet, qui est donc jugé DIRECTEMENT (chemin d'origine conservé)
-            const dansNul = e => /type attendu null, reçu object$/.test(e.message) && /\.(visuel|prixGuide)(\[\d+\])?$/.test(e.chemin.replace(/ .*/, ''));
             const dessous = (v, chemin, sortie) => {
                 if (Array.isArray(v)) return v.forEach((x, k) => dessous(x, `${chemin}[${k}]`, sortie));
                 if (!v || typeof v !== 'object') return;
@@ -64,35 +66,65 @@ const classe = e => (CLASSES.find(c => c.quand(e)) || {}).ref || null;
                     dessous(x, `${chemin}.${k}`, sortie);
                 }
             };
-            const propres = valider(c, ref(b), SCHEMA).erreurs.map(e => ({ chemin: `$.analyse.cartes[${i}]${e.chemin.slice(1)}`, message: e.message })).filter(e => !dansNul(e) && !/\.(visuel|prixGuide)$/.test(e.chemin));
+            const propres = valider(c, ref(b), SCHEMA).erreurs.map(e => ({ chemin: `$.analyse.cartes[${i}]${e.chemin.slice(1)}`, message: e.message })).filter(e => !/\.(visuel|prixGuide)$/.test(e.chemin));
             const profondes = []; dessous(c, `$.analyse.cartes[${i}]`, profondes);
-            // un oneOf de carte qui masque la faute d'un sous-objet est remplacé par les fautes DÉTAILLÉES (sinon une faute n'apparaît que dans le message du oneOf)
-            verser(f, 'POST /api/identifier', 200, [...propres, ...profondes]);
+            verser(nom, 'POST /api/identifier', 200, [...propres, ...profondes]);
         });
     }
-    // 2. le refus : contre le 429 de POST /api/identifier (QUOTA), c'est-à-dire ReponseErreur
+    for (const f of ANALYSES) juger200(f, lire(f));
     verser('quota.json', 'POST /api/identifier', 429, valider(lire('quota.json'), ref('ReponseErreur'), SCHEMA).erreurs);
-    // 3. les réponses à une question : { success, carte, facturation, solde } -> chaque `facturation` du vecteur contre Facturation, chaque statut/raison contre les listes du contrat
+
+    // ── reels.js (I5) : un module de DONNÉES ? Lu en texte, jamais importé : on refuse d'exécuter autre chose que des constructions d'objets.
+    let reels = null;
     {
-        const j = lire('reponses.json'); let n = 0;
-        const statutsCarte = new Set(['identifiee', 'a-trancher', 'introuvable']);
-        const raisons = new Set(SCHEMA.components.schemas.CarteIntrouvable.properties.raison.enum.filter(x => x !== null));
+        const src = fs.readFileSync(path.join(DOSSIER, 'reels.js'), 'utf8');
+        const interdits = src.replace(/\/\/.*$/gm, '').match(/\b(import|require|fetch|XMLHttpRequest|chrome|process|eval|Function|setTimeout|setInterval|localStorage|document|window|globalThis|Date|Math\.random)\b/g) || [];
+        const exports_ = src.match(/^\s*export\s/gm) || [];
+        const pur = interdits.length === 0 && exports_.length === 1 && /export const REELS\s*=/.test(src);
+        console.log(`   reels.js : ${pur ? 'module de DONNÉES pur (aucun import, aucun appel système, un seul export REELS) — ses réponses sont rejouées' : 'NON couvert : ' + (interdits.join(', ') || 'forme inattendue')}`);
+        H.vrai('reels.js : module de données pur (sinon il serait déclaré non couvert, avec sa raison)', pur);
+        if (pur) reels = new Function(`${src.replace(/^\s*export const REELS/m, 'const REELS')}\nreturn REELS;`)();
+    }
+    if (reels) {
+        const noms = Object.keys(reels);
+        console.log(`   reels.js : ${noms.length} réponses rejouées (${noms.join(', ')})`);
+        H.vrai('reels.js : le dénominateur est non nul', noms.length > 0);
+        for (const k of noms) juger200(`reels.js:${k}`, reels[k]);
+    }
+
+    // ── reponses.json (I6) : validé EN ENTIER. Le corps complet que le serveur rendrait est RECONSTRUIT depuis les champs du vecteur (statut, raison, état visé, langues, facturation)
+    //    et d'un produit VALIDE du serveur (la fausse publiée a-trancher-2), puis jugé contre ReponseQuestion : toute faute vient du vecteur, pas du produit.
+    {
+        const j = lire('reponses.json'), fausse = f => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi', 'fausses', f), 'utf8'));
+        const modele2 = fausse('a-trancher-2.json'), modele3 = fausse('a-trancher-3.json'), soldeModele = modele2.solde; let n = 0;
+        let aTrancher = modele2.analyse.cartes[0];
         for (const [scan, parCarte] of Object.entries(j)) {
             if (scan.startsWith('_')) continue;
+            // la fausse du serveur qui a AUTANT de candidats que le scénario en désigne (2 ou 3)
+            const plusGrand = Math.max(...Object.values(parCarte).flatMap(pc => Object.values(pc).map(r => (r.candidat === undefined ? 0 : r.candidat))));
+            aTrancher = (plusGrand >= 2 ? modele3 : modele2).analyse.cartes[0];
             for (const [carte, parChoix] of Object.entries(parCarte)) for (const [choix, r] of Object.entries(parChoix)) {
                 n++;
-                const ou = `$.${scan}[${carte}].${choix}`;
-                const fac = valider(r.facturation, ref('Facturation'), SCHEMA).erreurs.map(e => ({ chemin: `${ou}.facturation${e.chemin.slice(1)}`, message: e.message }));
-                verser('reponses.json', 'POST /api/identifier/reponse', 200, fac);
-                if (r.statut !== 'inchangee' && !statutsCarte.has(r.statut)) verser('reponses.json', 'POST /api/identifier/reponse', 200, [{ chemin: `${ou}.statut`, message: `statut de carte « ${r.statut} » hors du contrat` }]);
-                if (r.raison !== undefined && !raisons.has(r.raison)) verser('reponses.json', 'POST /api/identifier/reponse', 200, [{ chemin: `${ou}.raison`, message: `raison « ${r.raison} » hors du contrat` }]);
-                if (r.etatVise !== undefined && !SCHEMA.components.schemas.EtatCarte.properties.estime.enum.includes(r.etatVise)) verser('reponses.json', 'POST /api/identifier/reponse', 200, [{ chemin: `${ou}.etatVise`, message: `état « ${r.etatVise} » hors du contrat` }]);
+                const index = Number(carte);
+                let c;
+                if (r.statut === 'identifiee') c = { index, statut: 'identifiee', carte: aTrancher.candidats[r.candidat], candidats: [], question: null, raison: null, etat: { estime: r.etatVise, confiance: 'moyenne', defauts: [], declare: null, retenu: r.etatVise }, prixLive: { idProduct: aTrancher.candidats[r.candidat].idProduct, langues: r.langues, reverseHolo: false, etatVise: r.etatVise }, zone: null };
+                else if (r.statut === 'introuvable') c = { index, statut: 'introuvable', carte: null, candidats: [], question: null, raison: r.raison, etat: null, prixLive: null, zone: null };
+                else if (r.statut === 'inchangee') c = { ...aTrancher, index };
+                else { verser('reponses.json', 'POST /api/identifier/reponse', 200, [{ chemin: `$.${scan}[${carte}].${choix}.statut`, message: `statut de carte « ${r.statut} » hors du contrat` }]); continue; }
+                const corps = { success: true, carte: c, facturation: r.facturation, solde: soldeModele };
+                verser('reponses.json', 'POST /api/identifier/reponse', 200, valider(corps, ref('ReponseQuestion'), SCHEMA).erreurs.map(e => ({ chemin: `$.${scan}[${carte}].${choix}${e.chemin.slice(1)}`, message: e.message })));
             }
         }
-        console.log(`   reponses.json : ${n} réponses simulées jugées`);
+        console.log(`   reponses.json : ${n} réponses RECONSTRUITES en entier (carte, facturation, solde) et jugées contre ReponseQuestion`);
         H.vrai('reponses.json : le dénominateur est non nul', n > 0);
+        // le contrôle de reconstruction sait dire NON : une facturation correcte et un produit valide donnent un corps valide
+        aTrancher = modele2.analyse.cartes[0];
+        const saine = { success: true, carte: { index: 0, statut: 'identifiee', carte: aTrancher.candidats[0], candidats: [], question: null, raison: null, etat: { estime: 'EX', confiance: 'moyenne', defauts: [], declare: null, retenu: 'EX' }, prixLive: { idProduct: aTrancher.candidats[0].idProduct, langues: [1], reverseHolo: false, etatVise: 'EX' }, zone: null },
+            facturation: { debite: 1, reserve: 0, rembourse: false, motif: 'question', raisonNonRembourse: null }, solde: soldeModele };
+        H.v('contrôle : une réponse reconstruite SAINE passe ReponseQuestion', valider(saine, ref('ReponseQuestion'), SCHEMA).erreurs, []);
+        H.vrai('contrôle : la même, sans raisonNonRembourse, est refusée', valider({ ...saine, facturation: { debite: 1, reserve: 0, rembourse: false, motif: 'question' } }, ref('ReponseQuestion'), SCHEMA).erreurs.length > 0);
     }
-    // 4. les grilles de la lecture live : ce n'est PAS une réponse du serveur (le serveur ne reçoit que prixLive/prixLiveEtat) ; on vérifie que ses états sont ceux du contrat
+    // ── lectures.json : ce n'est PAS une réponse du serveur (grilles de la lecture live simulée) ; ses états et ses prix tiennent la liste fermée du contrat
     {
         const j = lire('lectures.json'); const etats = SCHEMA.components.schemas.EtatCarte.properties.estime.enum.filter(x => x !== null); let n = 0;
         for (const [id, grille] of Object.entries(j)) {
@@ -104,25 +136,29 @@ const classe = e => (CLASSES.find(c => c.quand(e)) || {}).ref || null;
         H.vrai('lectures.json : le dénominateur est non nul', n > 0);
     }
 
-    // ── le tableau des écarts : un par (référence, chemin normalisé)
+    // ── le tableau des écarts : un par clé EXACTE « route statut chemin »
+    const fichierDe = f => f.replace(/^reels\.js:.*/, 'reels.js');
     const groupes = new Map();
-    for (const o of observes) { const k = `${o.ref || '??'}|${norm(o.chemin)}|${o.message}`; const g = groupes.get(k) || { ...o, chemin: norm(o.chemin), fichiers: new Set() }; g.fichiers.add(o.fichier); groupes.set(k, g); }
-    console.log(`   ${observes.length} écart(s) de forme observé(s) dans ${new Set(observes.map(o => o.fichier)).size} fichier(s), ${groupes.size} distinct(s)`);
-    for (const g of [...groupes.values()].sort((a, b) => String(a.ref).localeCompare(String(b.ref)))) console.log(`   ${g.ref || 'NOUVEAU'}  ${g.fichiers.size > 1 ? '[' + g.fichiers.size + ' fichiers] ' : '[' + [...g.fichiers][0] + '] '}${g.route} ${g.statut} ${g.chemin} : ${g.message.slice(0, 150)}`);
-    H.v('écarts SANS référence dans CONTRAT-API-V2.md §7.3 (un écart ne se corrige pas en silence)', [...groupes.values()].filter(g => !g.ref).map(g => `${[...g.fichiers].join(',')} ${g.chemin} : ${g.message.slice(0, 100)}`), []);
-    const refs = [...new Set([...groupes.values()].map(g => g.ref).filter(Boolean))].sort();
-    H.v(`les références observées (${refs.join(', ')}) figurent toutes dans §7.3`, refs.filter(r => !new RegExp(`\\|\\s*${r}\\s*\\|`).test(section73)), []);
-    // §7.3 doit porter, pour chaque écart, son CHEMIN JSON exact (et la route) : le tableau 7.3 bis est écrit à partir de cette mesure
-    const chemins = [...new Set([...groupes.values()].filter(g => g.route.startsWith('POST')).map(g => `${g.route} ${g.statut} ${g.chemin}`))].sort();
-    H.vrai(`dénominateur : ${chemins.length} (route, statut, chemin JSON) distincts mesurés`, chemins.length > 0);
-    H.v('chaque (route, statut, chemin JSON) mesuré est écrit tel quel dans §7.3 bis', chemins.filter(c => !section73.includes(c.split(' ').slice(3).join(' ')) || !section73.includes(c.split(' ').slice(0, 2).join(' '))), []);
-    H.v('§7.3 bis dit « qui doit changer » (colonne) et nomme l\'extension et le serveur', ['qui doit changer', 'l\'extension attend', 'le serveur rend'].filter(m => !section73.includes(m)), []);
-    // le classeur sait dire NON : un écart d'une forme inconnue n'a aucune référence (il fait échouer le banc, il n'est jamais rangé sous une référence voisine)
-    H.v('le classeur ne range pas un écart inconnu sous une référence', [classe({ chemin: '$.analyse.cartes[0].carte.nouveauChamp' }), classe({ chemin: '$.zzz' })], [null, null]);
-    // la propriété inverse sur les vecteurs : un vecteur CONFORME au serveur est accepté (la fausse publiée du serveur, jugée par la même fonction)
+    for (const o of observes) { const cle = `${o.route} ${o.statut} ${norm(o.chemin)}`; const g = groupes.get(cle) || { cle, ref: CLASSES.get(cle) || null, route: o.route, statut: o.statut, chemin: norm(o.chemin), fichiers: new Set(), message: o.message }; g.fichiers.add(fichierDe(o.fichier)); groupes.set(cle, g); }
+    console.log(`   ${observes.length} écart(s) de forme observé(s) dans ${new Set(observes.map(o => fichierDe(o.fichier))).size} fichier(s), ${groupes.size} (route, statut, chemin) distinct(s)`);
+    for (const g of [...groupes.values()].sort((a, b) => String(a.ref).localeCompare(String(b.ref)) || a.cle.localeCompare(b.cle))) console.log(`   ${g.ref || 'NOUVEAU'}  [${[...g.fichiers].join(', ')}] ${g.cle} : ${g.message.slice(0, 110)}`);
+    H.v('écarts SANS référence exacte (un écart ne se corrige pas en silence ; une faute neuve n\'est jamais absorbée par un préfixe)', [...groupes.values()].filter(g => !g.ref).map(g => g.cle), []);
+    // la classification ne contient pas de clé morte : chaque clé déclarée a été OBSERVÉE (un écart réparé côté extension retire sa ligne du tableau)
+    H.v('clés de classification jamais observées (à retirer, avec leur ligne de §7.3 bis)', [...CLASSES.keys()].filter(k => !groupes.has(k)), []);
+    // preuve de présence au §7.3 bis par LIGNE EXACTE : la route, le statut ET le chemin dans la même ligne de tableau
+    const ligneDe = g => lignes73.some(l => l.includes('`' + g.route + '` ' + g.statut) && l.includes('`' + g.chemin + '`') && l.includes('| ' + g.ref + ' |'));
+    console.log(`   §7.3 bis : ${lignes73.length} lignes de tableau, ${groupes.size} écarts à retrouver`);
+    H.v('chaque (route, statut, chemin) mesuré a UNE ligne de §7.3 bis qui porte sa référence, sa route, son statut et son chemin', [...groupes.values()].filter(g => g.ref && !ligneDe(g)).map(g => g.cle), []);
+    H.v('§7.3 bis ne porte aucune ligne d\'écart fantôme (une ligne E… dont la clé n\'est plus observée)', lignes73.filter(l => /^\| E\d+ \|/.test(l)).filter(l => ![...groupes.values()].some(g => ligneDe(g) && l.includes('`' + g.chemin + '`') && l.includes('`' + g.route + '` ' + g.statut))).map(l => l.slice(0, 90)), []);
+    H.v('§7.3 bis dit « qui doit changer », « l\'extension attend » et « le serveur rend »', ['qui doit changer', 'l\'extension attend', 'le serveur rend'].filter(m => !section73.includes(m)), []);
+    // le classeur sait dire NON : une faute neuve n'est rangée sous aucune référence, même sous un chemin déjà classé (pas de préfixe)
+    H.v('le classeur ne range pas une faute neuve, même sous un chemin déjà classé', ['POST /api/identifier 200 $.solde.nouveau', 'POST /api/identifier 200 $.analyse.cartes[].carte.visuel.nouveau', 'POST /api/identifier 200 $.analyse.cartes[].etat.nouveau', 'POST /api/identifier 200 $.zzz'].map(k => CLASSES.get(k) || null), [null, null, null, null]);
+    // contrôle positif : la fausse publiée du SERVEUR passe la même épreuve sans écart
     {
         const f = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'openapi', 'fausses', 'identifiee.json'), 'utf8'));
-        H.v('contrôle : une fausse du SERVEUR (publiée) passe la même épreuve sans écart', A.juger('POST /api/identifier', 200, f, JSON.stringify(f), { 'content-type': 'application/json' }).length, 0);
+        const avant = observes.length; juger200('(fausse du serveur)', f);
+        H.v('contrôle : une fausse du SERVEUR (publiée) passe la même épreuve sans écart', observes.length - avant, 0);
+        observes.length = avant;
     }
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

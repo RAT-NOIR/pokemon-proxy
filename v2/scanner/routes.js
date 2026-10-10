@@ -222,7 +222,9 @@ function routesScanner(router, cfg, deps = {}) {
         if (typeof id !== 'string' || !/^[0-9a-f]{24}$/i.test(id)) return repondreErreur(res, 'ENTREE', undefined, { detail: 'scan-id' });
         if (!b || typeof b !== 'object' || Array.isArray(b)) return repondreErreur(res, 'ENTREE', undefined, { detail: 'corps' });
         if (b.scanId !== undefined && String(b.scanId).toLowerCase() !== id.toLowerCase()) return repondreErreur(res, 'ENTREE', undefined, { detail: 'scan-id' });
-        req.body = { ...b, scanId: id };
+        // LISTE BLANCHE (B7b.1 tour 1) : le scanner n'écrit JAMAIS dans le banc réel (décision B9). Seuls ces champs passent au traitement ; `consentementBanc`, que traiterReponse
+        // transmettrait au crochet du banc, ne passe pas — une réponse du scanner ne confirme donc jamais une ligne « attente » créée par l'extension sous un jeton de contribution.
+        req.body = { scanId: id, ...(b.choix !== undefined ? { choix: b.choix } : {}), ...(b.carte !== undefined ? { carte: b.carte } : {}) };
         next();
     }
     const reponseAuScanner = habiller(c => (c && c.success === true && c.carte ? { ...c, carte: sansLive(c.carte) } : c), aRembourserReponse, req => req.body.scanId);

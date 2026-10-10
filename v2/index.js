@@ -82,4 +82,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { monterEnTete, monter, assembler, aiguilleur, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };

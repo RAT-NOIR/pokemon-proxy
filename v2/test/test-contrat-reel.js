@@ -31,18 +31,18 @@ const MDP = 'un-mot-de-passe-solide';
 
 // ── états joués : un statut obtenu différent du statut attendu est une anomalie du BANC (état mal fabriqué), pas un écart de contrat
 const mal = [];
-async function jouer(url, route, etat, attendu, chemin, { corps, entetes = {}, methode } = {}) {
+async function jouer(url, route, etat, attendu, chemin, { corps, entetes = {}, methode, garde = false } = {}) {
     const m = methode || route.split(' ')[0];
     const r = await H.appel(url, chemin, { methode: m, corps, entetes });
-    consigner(route, etat, r);
+    consigner(route, etat, r, { garde });
     if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''} « ${r.json.erreur.message} »)` : ''}`);
     return r;
 }
-async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes) {
+async function jouerFormulaire(url, route, etat, attendu, chemin, form, entetes, { garde = false } = {}) {
     const x = await fetch(url + chemin, { method: 'POST', redirect: 'manual', body: form, headers: entetes });
     const texte = await x.text(); let json = null; try { json = JSON.parse(texte); } catch { /* corps non JSON */ }
     const r = { statut: x.status, json, texte, entetes: Object.fromEntries(x.headers) };
-    consigner(route, etat, r);
+    consigner(route, etat, r, { garde });
     if (r.statut !== attendu) mal.push(`${route} [${etat}] : statut ${r.statut} au lieu de ${attendu}${r.json && r.json.erreur ? ` (${r.json.erreur.code}${r.json.erreur.detail ? '/' + r.json.erreur.detail : ''})` : ''}`);
     return r;
 }
@@ -58,7 +58,7 @@ async function compte(o = {}) {
     const s = await require('../comptes/sessions').creerSession(c._id);
     return { c, cookie: `rm_session=${s.token}` };
 }
-async function instLiee(c, o = {}) { return inst(0, { compteId: (c.c || c)._id, ...o }); }
+async function instLiee(c, o = {}) { return inst(0, { compteId: (c.c || c)._id, lieeLe: new Date(), ...o }); }     // une installation LIÉE porte toujours sa date de liaison (liaison.js l.43) ; sans elle le banc fabriquait un état que le serveur ne produit pas
 const extH = (jeton, plus = {}) => ({ origin: EXT, ...ip(), ...(jeton ? { authorization: `Bearer ${jeton}` } : {}), ...plus });
 const siteH = (cookie, plus = {}) => ({ origin: SITE, 'x-rat-market': '1', ...(cookie ? { cookie } : {}), ...ip(), ...plus });
 const corpsId = (o = {}) => ({ contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...o });
@@ -87,6 +87,9 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
 }
 
 (async () => {
+    // Les limiteurs du serveur comptent par FENÊTRE FIXE (heure, jour). Un banc qui franchirait une frontière en pleine série de « 3 essais puis 429 » verrait son compteur repartir à zéro :
+    // état non joué, comptes différents d'une exécution à l'autre (constat du tour 1, M3). On attend donc la frontière avant de commencer quand elle est à moins de 4 minutes.
+    for (const fenetre of [3600e3, 86400e3]) { const reste = fenetre - (Date.now() % fenetre); if (reste < 240e3) { console.log(`   frontière de fenêtre (${fenetre / 3600e3} h) dans ${Math.round(reste / 1000)} s : attente avant de jouer`); await attendre(reste + 2000); } }
     await H.ouvrirBancV2();
     process.env.MONGODB_BASE = 'test_scratch';
     const { connecterMongo } = require('../../mongo-connexion');
@@ -209,6 +212,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await retour(U, 'second retour pour le même scan', 409, a.jeton, { scanId: a.scanId, prixLive: 99 });
         const b = await scanRepondu();
         await retour(U, 'lecture ratée définitive (remboursée sans-prix)', 200, b.jeton, { scanId: b.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
+        await retour(U, 'lecture ratée définitive REJOUÉE (deja-rembourse : rien de rendu une seconde fois)', 200, b.jeton, { scanId: b.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });
         const c = await scanRepondu();
         await retour(U, 'lecture ratée non définitive (défi Cloudflare)', 200, c.jeton, { scanId: c.scanId, lectureRatee: { cause: 'defi', definitive: false } });
         const d = await scanAmbigu(U, 3, 'a-trancher à 2 sans réponse'); await journalDe(d.scanId);
@@ -260,9 +264,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     // ═══════════════════════════ (b) L'ASSEMBLEUR EN PROCESSUS — les lots de production, la chaîne héritée FABRIQUÉE ═══════════════════════════
     await semer('triple');
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
-    const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
-    const LOTS = [require('../transport/monter'), require('../installations/monter'), require('../comptes/monter'), require('../argent/monter'),
-        require('../identifier/monter'), require('../banc/monter'), require('../scanner/monter')];                       // l'ordre de v2/index.js
+    const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition (tour 1, I7)
+    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 7);
     const { creerCourrierMemoire } = require('../comptes/courrier');
     const courrier = creerCourrierMemoire();
     registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });
@@ -276,6 +279,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         if (mode === 'sans-prix') return res.json({ ...affirme(ID_C), scanId: sid });
         if (mode === 'exception') throw new Error('boum');
         if (mode.startsWith('introuvable:')) { await req.credit.v2.rembourser(req, mode.slice(12)); return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: mode.slice(12) }); }
+        if (mode === 'refus-egalite') { await req.credit.v2.rembourser(req, 'egalite-parfaite'); return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'egalite-parfaite', candidats: [ID_A, ID_B].map(idProduct => ({ idProduct })) }); }
         if (mode === 'ia-echec') return res.json({ success: false, natureRefus: 'echec-technique', motifRefus: 'ia-echec' });
         if (mode === 'indisponible') return res.json({ success: false, natureRefus: 'echec-technique', motifRefus: 'tcgdex-injoignable' });
         if (mode === 'ambigue2' || mode === 'ambigue3') {
@@ -328,6 +332,56 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         mode = 'ambigue3'; const x = await inst(3); const r = await ident(V, 'a-trancher à 3 pour « c »', 200, x.jeton);
         await repondre(V, 'choix « c » (candidat sans prix)', 200, x.jeton, { scanId: r.json.scanId, choix: 'c' });
         mode = 'affirmee';
+    }
+    // ── (tour 1, section 3) les états de FACTURATION que le premier jeu ne jouait pas
+    {
+        const aujourdhui = new Date().toISOString().slice(0, 10), exp = new Date(Date.now() + 3 * 86400e3);
+        const plafond = async (x, type) => raw('plafonds').insertOne({ porteur: `installation:${x.i._id}`, jour: aujourdhui, type, count: cfg.plafonds[type], expireLe: exp });
+        // introuvable NON remboursé : le plafond des pannes du jour est atteint, l'utilisateur PAIE (debite 1, motif plafond-jour, raisonNonRembourse)
+        mode = 'introuvable:aucun-prix'; const p1 = await inst(3); await plafond(p1, 'panne');
+        const r1 = await ident(V, 'introuvable NON remboursé (plafond du jour atteint : debite 1)', 200, p1.jeton);
+        H.v('   … facturation { debite:1, rembourse:false, motif:plafond-jour, raisonNonRembourse:plafond-jour }', r1.json && [r1.json.facturation.debite, r1.json.facturation.rembourse, r1.json.facturation.motif, r1.json.facturation.raisonNonRembourse], [1, false, 'plafond-jour', 'plafond-jour']);
+        // une exception de la chaîne dont le remboursement est refusé : 500 SERVEUR AVEC une facturation qui dit pourquoi
+        mode = 'exception'; const p2 = await inst(3); await plafond(p2, 'panne');
+        const r2 = await ident(V, 'panne SERVEUR NON remboursée (plafond du jour atteint)', 500, p2.jeton);
+        H.v('   … facturation { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }', r2.json && [r2.json.facturation.debite, r2.json.facturation.rembourse, r2.json.facturation.raisonNonRembourse], [1, false, 'plafond-jour']);
+        // un refus de la chaîne par égalité (≥ 2 candidats) devient une QUESTION réservée (ruling n°2 de B1b)
+        mode = 'refus-egalite'; const p3 = await inst(3);
+        const r3 = await ident(V, 'refus par égalité devenu question réservée', 200, p3.jeton);
+        H.v('   … a-trancher, facturation { debite:0, reserve:1, motif:question }', r3.json && [r3.json.analyse.statut, r3.json.facturation.debite, r3.json.facturation.reserve, r3.json.facturation.motif], ['a-trancher', 0, 1, 'question']);
+        // repli de question : la question n'a pas pu être écrite
+        const colOrig = db.col;
+        const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
+        const journalMute = console.error; console.error = () => { };
+        try {
+            const p4 = await inst(3); sansEcritureQuestion();
+            const r4 = await ident(V, 'repli de question REMBOURSÉ (question non écrite, crédit rendu : a-trancher gratuit)', 200, p4.jeton);
+            db.col = colOrig;
+            H.v('   … a-trancher, facturation { debite:0, rembourse:true, motif:question }', r4.json && [r4.json.analyse.statut, r4.json.facturation.debite, r4.json.facturation.rembourse, r4.json.facturation.motif], ['a-trancher', 0, true, 'question']);
+            const p5 = await inst(3); await plafond(p5, 'question'); sansEcritureQuestion();
+            const r5 = await ident(V, 'repli de question NON remboursé (question non écrite ET plafond atteint : panne SERVEUR)', 500, p5.jeton);
+            db.col = colOrig;
+            H.v('   … SERVEUR, jamais un a-trancher, facturation { debite:1, rembourse:false, raisonNonRembourse:plafond-jour }', r5.json && [r5.json.erreur.code, r5.json.analyse, r5.json.facturation.debite, r5.json.facturation.rembourse, r5.json.facturation.raisonNonRembourse], ['SERVEUR', undefined, 1, false, 'plafond-jour']);
+        } finally { db.col = colOrig; console.error = journalMute; }
+        mode = 'affirmee';
+        // une QUESTION dans un lot, et la RÉPONSE sur un lot (le prix du lot couvre la question : rien ne bouge)
+        const candidatsLot = ids => ids.map(idProduct => ({ idProduct, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null }));
+        const qLot = { statutHttp: 200, corps: { ...affirme(ID_A), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...affirme(ID_A).carte, ambigu: true }, candidats: candidatsLot([ID_A, ID_B]) } };
+        const svLot2 = await monter(cfg, { identifierLot: async () => [{ statutHttp: 200, corps: affirme(ID_A) }, qLot] });
+        const lq = await inst(3);
+        const rl = await ident(svLot2.url, 'lot dont une carte est à trancher (question DANS un lot)', 200, lq.jeton, corpsId({ imageUrls: [IMAGE, IMAGE] }));
+        const iq = rl.json.analyse.cartes.find(c => c.statut === 'a-trancher');
+        H.vrai('   … le lot porte bien une carte à trancher', Boolean(iq && rl.json.analyse.statut === 'lot'));
+        if (iq) {
+            const choixLot = iq.question.choix[0].id;
+            const rr = await jouer(svLot2.url, 'POST /api/identifier/reponse', 'réponse SUR UN LOT (rien ne bouge : motif lot)', 200, '/api/identifier/reponse', { corps: { scanId: rl.json.scanId, carte: iq.index, choix: choixLot }, entetes: extH(lq.jeton) });
+            H.v('   … facturation de la réponse sur un lot : { debite:0, rembourse:false, motif:lot }', rr.json && rr.json.facturation && [rr.json.facturation.debite, rr.json.facturation.rembourse, rr.json.facturation.motif], [0, false, 'lot']);
+            // un abandon sur un AUTRE lot (la réponse « a » ci-dessus est la vérité du premier : une seconde, contraire, serait un 409)
+            const lq2 = await inst(3); const rl2 = await ident(svLot2.url, 'lot dont une carte est à trancher (second lot, pour l\'abandon)', 200, lq2.jeton, corpsId({ imageUrls: [IMAGE, IMAGE] }));
+            const iq2 = rl2.json.analyse.cartes.find(c => c.statut === 'a-trancher');
+            await jouer(svLot2.url, 'POST /api/identifier/reponse', 'abandon « aucune » SUR UN LOT', 200, '/api/identifier/reponse', { corps: { scanId: rl2.json.scanId, carte: iq2.index, choix: 'aucune' }, entetes: extH(lq2.jeton) });
+        }
+        await svLot2.fermer();
     }
     // comptes — le parcours réel (courrier en mémoire)
     const attendreCourrier = () => require('../comptes/service').attendre();
@@ -386,8 +440,13 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await postS('POST /api/compte/reinitialiser', 'lien expiré', 410, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'nouveau-mot-de-passe-solide' });
         await raw('liens_email').updateOne({ _id: lr._id }, { $set: { expireLe: new Date(Date.now() + 3600e3) } });
         await postS('POST /api/compte/reinitialiser', 'lien valide', 200, '/api/compte/reinitialiser', { jeton: jetonReinit, motDePasse: 'nouveau-mot-de-passe-solide' });
-        // renvoi (route servie, hors contrat)
-        consignerHorsContrat('POST /api/compte/renvoyer-verification', 'adresse quelconque', await H.appel(V, '/api/compte/renvoyer-verification', { methode: 'POST', corps: { email: 'ab@gmail.com' }, entetes: siteH(null) }));
+        // renvoi du lien de vérification (route publiée au tour 1) : la réponse ne dépend PAS de l'adresse
+        const renv1 = await postS('POST /api/compte/renvoyer-verification', 'compte non vérifié', 202, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr' });
+        const renv2 = await postS('POST /api/compte/renvoyer-verification', 'adresse inconnue (même réponse)', 202, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' });
+        H.v('renvoi : la réponse est identique pour une adresse connue et inconnue (octet pour octet)', renv1.texte === renv2.texte, true);
+        await postS('POST /api/compte/renvoyer-verification', 'sans Origin du site', 403, '/api/compte/renvoyer-verification', { email: 'plaf1@exemple.fr' }, ip());
+        const memRv = ip(); for (let k = 0; k < 3; k++) await postS('POST /api/compte/renvoyer-verification', 'sous le plafond', 202, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });
+        await postS('POST /api/compte/renvoyer-verification', 'plafond par IP atteint', 429, '/api/compte/renvoyer-verification', { email: 'inconnue@exemple.fr' }, { ...siteH(null), ...memRv });
         // nouvelle session (la réinitialisation a révoqué les sessions)
         const conn2 = await H.appel(V, '/api/compte/connexion', { methode: 'POST', corps: { email: 'ab@gmail.com', motDePasse: 'nouveau-mot-de-passe-solide' }, entetes: siteH(null) });
         cookie = /rm_session=[^;]+/.exec(conn2.entetes['set-cookie'] || '')?.[0];
@@ -412,8 +471,26 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const seul = await inst(3);
         for (let k = 0; k < 5; k++) await jouer(V, 'POST /api/compte/lier', 'essais sous le plafond', 404, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
         await jouer(V, 'POST /api/compte/lier', 'plafond par installation atteint', 429, '/api/compte/lier', { corps: { code: 'ZZZZZZ' }, entetes: extH(seul.jeton) });
-        // lecture du compte, révocation, déliaison
-        await jouer(V, 'GET /api/compte', 'compte vérifié, installation liée', 200, '/api/compte', { entetes: siteH(cookie) });
+        // lecture du compte : de VRAIES analyses (par l'installation liée, chaîne fabriquée) et le VRAI mouvement d'octroi de la vérification
+        mode = 'affirmee';
+        for (let k = 0; k < 22; k++) await ident(V, 'analyse pour l\'historique du compte', 200, jetonLie);
+        const g1 = await jouer(V, 'GET /api/compte', 'compte vérifié, installation liée, historique PAGINÉ (page 1)', 200, '/api/compte', { entetes: siteH(cookie) });
+        const g1l = (g1.json && g1.json.historique.lignes) || [];
+        H.v('GET /api/compte page 1 : 20 lignes, suite non nulle ; au moins UNE ligne analyse et (sur l\'ensemble des pages) UNE ligne credits', [g1l.length, typeof g1.json.historique.suite, g1l.some(l => l.genre === 'analyse')], [20, 'string', true]);
+        const g2 = await jouer(V, 'GET /api/compte', 'historique PAGINÉ (page 2, curseur suite)', 200, `/api/compte?suite=${encodeURIComponent(g1.json.historique.suite)}`, { entetes: siteH(cookie) });
+        const g2l = (g2.json && g2.json.historique.lignes) || [];
+        H.v('GET /api/compte page 2 : le reste (3 lignes dont le crédit d\'octroi), suite nulle, aucune ligne en double avec la page 1', [g2l.length, g2.json.historique.suite, g2l.some(l => l.genre === 'credits'), new Set([...g1l, ...g2l].map(l => JSON.stringify(l))).size], [3, null, true, 23]);
+        await jouer(V, 'GET /api/compte', 'curseur de suite falsifié (le serveur répond INDISPONIBLE : constat)', 503, '/api/compte?suite=%25%25pas-une-suite', { entetes: siteH(cookie) });
+        // un compte à abonnement, un compte non vérifié, un compte à plusieurs installations
+        const cab = await compte({ abonnement: { actif: true, quotaMensuel: 100, moisCle: new Date().toISOString().slice(0, 7), restant: 40, jusquAu: new Date(Date.now() + 40 * 86400e3) } });
+        const gab = await jouer(V, 'GET /api/compte', 'compte à abonnement actif', 200, '/api/compte', { entetes: siteH(cab.cookie) });
+        H.v('   … l\'abonnement est servi (restant 40 / quota 100)', gab.json && gab.json.solde.abonnement && [gab.json.solde.abonnement.restant, gab.json.solde.abonnement.quotaMensuel], [40, 100]);
+        const cnv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
+        const gnv = await jouer(V, 'GET /api/compte', 'compte NON vérifié (accueil non utilisable)', 200, '/api/compte', { entetes: siteH(cnv.cookie) });
+        H.v('   … compte non vérifié : verifie false, accueil 0 au solde', gnv.json && [gnv.json.compte.verifie, gnv.json.solde.accueil], [false, 0]);
+        const cmu = await compte(); for (let k = 0; k < 3; k++) await instLiee(cmu, { libelle: `Poste ${k}` });
+        const gmu = await jouer(V, 'GET /api/compte', 'compte à PLUSIEURS installations', 200, '/api/compte', { entetes: siteH(cmu.cookie) });
+        H.v('   … trois installations servies', gmu.json && gmu.json.installations.length, 3);
         await jouer(V, 'GET /api/compte', 'sans session', 401, '/api/compte', { entetes: ip() });
         const idLiee = (await raw('installations').findOne({ compteId: compteC._id }))._id;
         const autreC = await compte(); const autreI = await instLiee(autreC);
@@ -514,16 +591,20 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await rep('même Idempotency-Key encore en cours (DEBIT)', 429, c, rb.json.scanId, { choix: 'a' }, siteH(c.cookie, { 'idempotency-key': k2 }));
         void r1;
     }
-    // le banc réel et le paiement — routes SERVIES mais absentes de `paths` (jugées comme erreurs seulement ; voir le constat plus bas)
+    // le banc réel (routes publiées au tour 1) et le paiement (route servie, NON publiée : « publiée quand implémentée »)
     {
-        const x = await inst(3);
-        consignerHorsContrat('POST /api/banc/correction', 'scan inconnu', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: String(new mongoose.Types.ObjectId()), idProduct: ID_A }, entetes: extH(x.jeton) }));
-        consignerHorsContrat('POST /api/banc/correction', 'sans Authorization', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: 'x' }, entetes: extH(null) }));
-        consignerHorsContrat('POST /api/banc/correction', 'scanId mal formé', await H.appel(V, '/api/banc/correction', { methode: 'POST', corps: { scanId: 'x', idProduct: ID_A }, entetes: extH(x.jeton) }));
-        consignerHorsContrat('DELETE /api/banc/contributions', 'jeton inconnu (200, 0)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'jeton-inconnu-abcdefghij1234' }, entetes: extH(x.jeton) }));
-        consignerHorsContrat('DELETE /api/banc/contributions', 'sans Authorization (401)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'jeton-inconnu-abcdefghij1234' }, entetes: extH(null) }));
-        consignerHorsContrat('DELETE /api/banc/contributions', 'forme de jeton invalide (400)', await H.appel(V, '/api/banc/contributions', { methode: 'DELETE', corps: { jeton: 'x' }, entetes: extH(x.jeton) }));
-        consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
+        const x = await inst(3); mode = 'affirmee';
+        const sx = await ident(V, 'analyse pour la correction du banc', 200, x.jeton);
+        await jouer(V, 'POST /api/banc/correction', 'scan du porteur, sans consentement (200 quoi qu\'il arrive : la route ne dit pas si elle conserve)', 200, '/api/banc/correction', { corps: { scanId: sx.json.scanId, idProduct: ID_A }, entetes: extH(x.jeton) });
+        await jouer(V, 'POST /api/banc/correction', 'scan inconnu', 404, '/api/banc/correction', { corps: { scanId: String(new mongoose.Types.ObjectId()), idProduct: ID_A }, entetes: extH(x.jeton) });
+        await jouer(V, 'POST /api/banc/correction', 'scanId mal formé', 400, '/api/banc/correction', { corps: { scanId: 'x', idProduct: ID_A }, entetes: extH(x.jeton) });
+        await jouer(V, 'POST /api/banc/correction', 'sans Authorization', 401, '/api/banc/correction', { corps: { scanId: sx.json.scanId, idProduct: ID_A }, entetes: extH(null) });
+        await jouer(V, 'POST /api/banc/correction', 'le scan d\'un AUTRE porteur (404, rien révélé)', 404, '/api/banc/correction', { corps: { scanId: sx.json.scanId, idProduct: ID_A }, entetes: extH((await inst(3)).jeton) });
+        const jetonContribution = 'jeton-inconnu-abcdefghij1234';
+        await jouer(V, 'DELETE /api/banc/contributions', 'jeton inconnu (200, supprimees 0)', 200, '/api/banc/contributions', { corps: { jeton: jetonContribution }, entetes: extH(x.jeton) });
+        await jouer(V, 'DELETE /api/banc/contributions', 'forme de jeton invalide', 400, '/api/banc/contributions', { corps: { jeton: 'x' }, entetes: extH(x.jeton) });
+        await jouer(V, 'DELETE /api/banc/contributions', 'sans Authorization', 401, '/api/banc/contributions', { corps: { jeton: jetonContribution }, entetes: extH(null) });
+        consignerHorsContrat('POST /api/creer-recharge', 'paiement non branché (501)', await H.appel(V, '/api/creer-recharge', { methode: 'POST', corps: {}, entetes: extH(x.jeton) }));
     }
     // 503 : la garde d'index (routes v2 fermées) sur CHAQUE route de `paths` servie par l'assembleur
     {
@@ -546,6 +627,9 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'POST /api/compte/code': { chemin: '/api/compte/code', corps: {} },
             'POST /api/compte/lier': { chemin: '/api/compte/lier', corps: { code: 'ABCDEF' } },
             'POST /api/compte/delier': { chemin: '/api/compte/delier', corps: {} },
+            'POST /api/compte/renvoyer-verification': { chemin: '/api/compte/renvoyer-verification', corps: { email: 'a@exemple.fr' } },
+            'POST /api/banc/correction': { chemin: '/api/banc/correction', corps: { scanId: fauxId, idProduct: 1 } },
+            'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },
             'POST /api/scanner/analyses/{id}/reponse': { chemin: `/api/scanner/analyses/${fauxId}/reponse`, corps: { choix: 'a' } }
@@ -554,8 +638,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);
         for (const [route, q] of Object.entries(REQ503)) {
             const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
-            if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() });
-            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') ? SITE : EXT } });
+            if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() }, { garde: true });
+            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') ? SITE : EXT } });
         }
         pret.armer(M.verifierIndex);
     }
@@ -564,42 +648,44 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
 
     // ═══════════════════════════ BILAN DU STEP 1 ═══════════════════════════
     H.v('états joués au statut attendu (anomalies du banc : un état mal fabriqué n\'est pas un écart de contrat)', mal, []);
-    // Les écarts qui viennent du SERVEUR (le contrat publié dit X, le serveur rend Y) ne se « corrigent » pas dans le schéma pour faire passer : ils sont DÉCLARÉS ici, avec leur
-    // raison, imprimés à chaque exécution et signalés au rapport. Une déclaration qui ne mord plus (le défaut est réparé) fait ÉCHOUER le banc : elle doit être retirée.
-    const ECARTS_DECLARES = [
-        { route: 'GET /api/compte', chemin: /^\$\.historique\.lignes\[\d+\]$/, raison: 'DÉFAUT DU SERVEUR (argent/solde.js historique, lot B3) : il rend { type:\'analyse\', scanId, cartes[], … } et { type:\'credits\', reference, nature, delta, poche, motif }, le contrat publié (LigneAnalyse / LigneCredits, CONTRAT-API-V2.md l. 669-710) dit { genre, carte, cartesVues, … } et { genre, motif ∈ accueil|hebdo|achat, credits }' }
-    ];
-    for (const e of grandLivre) {
-        e.declares = [];
-        e.ecarts = e.ecarts.filter(x => { const d = ECARTS_DECLARES.find(z => z.route === e.route && z.chemin.test(x.chemin)); if (d) { e.declares.push({ ...x, d }); return false; } return true; });
-    }
-    for (const d of ECARTS_DECLARES) {
-        const n = grandLivre.filter(e => e.declares.some(x => x.d === d)).length;
-        console.log(`   ÉCART DÉCLARÉ (${n} réponse(s)) ${d.route} ${d.chemin} : ${d.raison}`);
-        H.vrai(`écart déclaré encore vrai : ${d.route} ${d.chemin}`, n > 0);
-    }
+    // Plus aucun écart déclaré : l'historique de GET /api/compte (défaut du serveur, B3) est réparé à la source (ruling A du tour 1).
     const ecarts = grandLivre.filter(e => e.ecarts.length);
     for (const e of ecarts) console.log(`   ÉCART  ${e.route} [${e.etat}] ${e.statut} : ${e.ecarts.slice(0, 4).map(x => `${x.chemin} ${x.message}`).join(' ; ')}`);
-    const dansContrat = grandLivre.filter(e => !e.horsContrat), declarees = dansContrat.filter(e => e.declares.length), valides = dansContrat.filter(e => !e.ecarts.length && !e.declares.length);
-    console.log(`   ${dansContrat.length} réponses, ${valides.length} valides, ${dansContrat.length - valides.length - declarees.length} écart(s), ${declarees.length} à écart déclaré (défaut du serveur)`);
-    H.v(`${dansContrat.length} réponses, ${valides.length} valides, 0 écart nouveau, ${declarees.length} à écart déclaré`, dansContrat.length - valides.length - declarees.length, 0);
-    // dénominateur des routes : celles de `paths` / celles jouées dans au moins un état
-    const jouees = new Set(dansContrat.map(e => e.route));
+    const dansContrat = grandLivre.filter(e => !e.horsContrat), valides = dansContrat.filter(e => !e.ecarts.length);
+    console.log(`   ${dansContrat.length} réponses, ${valides.length} valides, ${dansContrat.length - valides.length} écart(s)`);
+    H.v(`${dansContrat.length} réponses, ${valides.length} valides, 0 écart`, dansContrat.length - valides.length, 0);
+    // GET /api/compte a servi de VRAIES lignes des deux genres (le premier jeu n'en servait aucune : un historique vide ne prouvait rien)
+    {
+        const genres = new Map();
+        for (const e of dansContrat.filter(x => x.route === 'GET /api/compte' && x.statut === 200 && x.json)) for (const l of e.json.historique.lignes) genres.set(l.genre, (genres.get(l.genre) || 0) + 1);
+        console.log(`   lignes d'historique servies par GET /api/compte : ${[...genres].map(([g, n]) => `${g} ${n}`).join(', ')}`);
+        H.vrai('GET /api/compte a servi au moins UNE ligne analyse et UNE ligne credits', (genres.get('analyse') || 0) >= 1 && (genres.get('credits') || 0) >= 1);
+    }
+    // ── les dénominateurs de tête (tour 1, C1) : seuls comptent les couples (route, statut) joués par un ÉTAT RÉEL. La boucle de la garde d'index (503, routes fermées) est à part.
+    const reels = dansContrat.filter(e => !e.garde), gardes = dansContrat.filter(e => e.garde);
+    // le compteur sait dire NON (cas fabriqué que l'ancien dénominateur laissait passer) : une route que seule la garde d'index a « jouée » n'est PAS jouée
+    const routesJoueesPar = es => new Set(es.filter(e => !e.garde).map(e => e.route));
+    H.v('compteur de routes jouées : une route que la boucle 503 est seule à avoir jouée n\'est pas comptée', [...routesJoueesPar([{ route: 'GET /fabriquee', garde: true }, { route: 'GET /reelle', garde: false }])], ['GET /reelle']);
+    const jouees = routesJoueesPar(dansContrat);
     const nonJouees = OPERATIONS.filter(o => !jouees.has(o.route)).map(o => o.route);
-    console.log(`   routes : ${OPERATIONS.length} dans paths, ${OPERATIONS.length - nonJouees.length} jouées`);
-    H.v(`routes de paths jouées dans au moins un état (${OPERATIONS.length - nonJouees.length} / ${OPERATIONS.length})`, nonJouees, []);
-    // chaque statut documenté : joué, ou déclaré non joué avec sa raison (et une déclaration périmée est vue)
+    console.log(`   routes : ${OPERATIONS.length} dans paths, ${OPERATIONS.length - nonJouees.length} jouées par un état réel (hors boucle 503 de la garde d'index : ${gardes.length} réponses à part)`);
+    H.v(`routes de paths jouées par un état RÉEL (${OPERATIONS.length - nonJouees.length} / ${OPERATIONS.length}) — la boucle 503 ne compte pas`, nonJouees, []);
+    // chaque statut documenté : joué par un état réel, joué par la garde d'index (503 seulement), ou déclaré non joué avec sa raison — et une déclaration périmée est vue
     const NON_JOUES = {
-        'DELETE /api/compte 400': 'aucun chemin du handler ne rend 400 (supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES ; le garde de site rend 403) — statut documenté, non produit par le serveur',
-        'POST /api/compte/deconnexion 401': 'la déconnexion rend toujours 200 (même sans cookie) ; seul le garde de site peut refuser (403) — statut documenté, non produit par le serveur',
-        'POST /api/compte/mot-de-passe-oublie 400': 'le corps illisible est traité comme une adresse absente (202 neutre) — statut documenté, non produit par le serveur'
+        'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',
+        'POST /api/compte/deconnexion 401': 'aucun chemin ne rend 401 : v2/comptes/routes.js l.63-69 — la déconnexion rend 200 même sans cookie ; seul le garde de site peut refuser (403)',
+        'POST /api/compte/mot-de-passe-oublie 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.71-77 — un corps illisible vaut une adresse absente (202 neutre, l\'énumération d\'adresses est refusée par construction)'
     };
-    const joues = new Set(dansContrat.map(e => `${e.route} ${e.statut}`));
-    const nonJouesDoc = STATUTS_DOCUMENTES.map(s => `${s.route} ${s.statut}`).filter(k => !joues.has(k));
-    console.log(`   statuts documentés : ${STATUTS_DOCUMENTES.length} ; joués ${STATUTS_DOCUMENTES.length - nonJouesDoc.length} ; déclarés non joués ${Object.keys(NON_JOUES).length}`);
+    const joues = new Set(reels.map(e => `${e.route} ${e.statut}`)), joues503 = new Set(gardes.map(e => `${e.route} ${e.statut}`));
+    const documentes = STATUTS_DOCUMENTES.map(s => `${s.route} ${s.statut}`);
+    const parGardeSeule = documentes.filter(k => !joues.has(k) && joues503.has(k));
+    const nonJouesDoc = documentes.filter(k => !joues.has(k) && !joues503.has(k));
+    console.log(`   statuts documentés : ${documentes.length} ; joués par un état réel ${documentes.filter(k => joues.has(k)).length} ; joués par la seule garde d'index (503) ${parGardeSeule.length} ; déclarés non joués ${Object.keys(NON_JOUES).length}`);
     H.v('statuts documentés ni joués ni déclarés non joués', nonJouesDoc.filter(k => !(k in NON_JOUES)), []);
-    H.v('déclarations « non joué » périmées (le statut a été joué)', Object.keys(NON_JOUES).filter(k => joues.has(k)), []);
+    H.v('la garde d\'index ne joue QUE des 503', [...joues503].filter(k => !k.endsWith(' 503')), []);
+    H.v('déclarations « non joué » périmées (le statut a été joué)', Object.keys(NON_JOUES).filter(k => joues.has(k) || joues503.has(k)), []);
     for (const k of Object.keys(NON_JOUES)) console.log(`   non joué : ${k} — ${NON_JOUES[k]}`);
+    // les ÉTATS que le banc ne sait pas fabriquer : déclarés avec leur raison, et la déclaration échoue si l'état devient jouable (EN_RECONCILIATION, ci-dessous)
     // les codes d'erreur : tous ceux de la liste fermée que le serveur a produits, et ceux que le banc n'a pas pu produire (dits)
     const produits = new Set(grandLivre.filter(e => e.json && e.json.erreur).map(e => e.json.erreur.code));
     const horsListe = [...produits].filter(c => !Object.hasOwn(CODES, c));
@@ -608,6 +694,17 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     console.log(`   codes de la liste fermée produits : ${Object.keys(CODES).length - JAMAIS.length} / ${Object.keys(CODES).length} ; non produits par le banc : ${JAMAIS.join(', ') || 'aucun'}`);
     const CODES_NON_PRODUITS = { EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
     H.v('codes de la liste fermée jamais produits et non déclarés', JAMAIS.filter(c => !(c in CODES_NON_PRODUITS)), []);
+    H.v('déclarations « code non produit » périmées (le code a été produit : retirer la déclaration)', Object.keys(CODES_NON_PRODUITS).filter(c => produits.has(c)), []);
+    // les causes de non-remboursement servies (RAISONS_NON_REMBOURSE, une source) : celles que le banc a vues, et celles qu'il ne sait pas fabriquer (dites)
+    {
+        const { RAISONS_NON_REMBOURSE } = require('../../sources');
+        const vues = new Set(grandLivre.map(e => e.json && e.json.facturation && e.json.facturation.raisonNonRembourse).filter(Boolean));
+        for (const e of grandLivre) { const f = e.json && e.json.carte && e.json.facturation; if (f && f.raisonNonRembourse) vues.add(f.raisonNonRembourse); }
+        const hors = [...vues].filter(r => !RAISONS_NON_REMBOURSE.includes(r));
+        console.log(`   raisonNonRembourse servies : ${[...vues].sort().join(', ')} ; non fabriquées par ce banc : ${RAISONS_NON_REMBOURSE.filter(r => !vues.has(r)).join(', ')}`);
+        H.v('toute raisonNonRembourse servie appartient à RAISONS_NON_REMBOURSE (sources.js)', hors, []);
+        H.vrai('plafond-jour ET deja-rembourse ont été servies par un état réel', vues.has('plafond-jour') && vues.has('deja-rembourse'));
+    }
     // les raisons d'« introuvable » que le serveur peut produire (les deux autres sont dans le contrat mais ne sortent d'aucun chemin du code)
     const raisonsVues = new Set();
     (function parcourir(x) { if (Array.isArray(x)) return x.forEach(parcourir); if (x && typeof x === 'object') { if (x.statut === 'introuvable' && typeof x.raison === 'string') raisonsVues.add(x.raison); Object.values(x).forEach(parcourir); } })(grandLivre.map(e => e.json));
@@ -626,9 +723,13 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     })();
     const dansPaths = new Set(OPERATIONS.map(o => o.route));
     const horsContrat = [...servies].filter(r => !dansPaths.has(r)).sort();
-    const HORS_CONTRAT_DECLAREES = ['DELETE /api/banc/contributions', 'POST /api/banc/correction', 'POST /api/compte/renvoyer-verification', 'POST /api/creer-recharge'];
+    // (tour 1, ruling C) les trois routes du banc / du renvoi sont PUBLIÉES ; reste le paiement, 501 non implémenté : « publiée quand implémentée » (l'alignement 501 / INDISPONIBLE est parqué pour la tâche de paiement)
+    const HORS_CONTRAT_DECLAREES = ['POST /api/creer-recharge'];
     console.log(`   routes servies par l'assembleur : ${servies.size} ; absentes de paths : ${horsContrat.join(', ')}`);
-    H.v('routes servies et absentes de `paths` = exactement la liste déclarée (écart de contrat à trancher par le coordinateur)', horsContrat, HORS_CONTRAT_DECLAREES);
+    H.v('routes servies et absentes de `paths` = exactement la liste déclarée', horsContrat, HORS_CONTRAT_DECLAREES);
+    // CONSTAT : le 501 `paiement-non-branche` du code est INATTEIGNABLE en l'état — la route est montée derrière un aiguilleur dont le prédicat exige un porteur v2, et rien ne résout le porteur sur cette route :
+    // elle passe donc toujours la main à la route héritée (404 dans ce montage, qui n'en a pas). Déclaré, jamais publié.
+    H.v('la route déclarée hors contrat passe la main (404 dans ce montage sans route héritée), elle ne rend jamais son 501 : la déclaration est vraie', grandLivre.filter(e => e.route === 'POST /api/creer-recharge').map(e => e.statut), [404]);
     H.v('corps d\'erreur des routes hors contrat : tous valides contre ReponseErreur', grandLivre.filter(e => e.horsContrat && e.ecarts.length).map(e => `${e.route} [${e.etat}]`), []);
     console.log(`   constat : un JSON illisible sur /api/identifier rend ${sondeJsonIllisible.statut} ${sondeJsonIllisible.ct} « ${sondeJsonIllisible.debut.replace(/\s+/g, ' ')} »`);
 
@@ -637,9 +738,23 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const doc = require('fs').readFileSync(path.join(R, 'CONTRAT-API-V2.md'), 'utf8'); const i = doc.indexOf('### 7.4');
         const s74 = i >= 0 ? doc.slice(i, doc.indexOf('## 8.')) : '';
         H.vrai('CONTRAT-API-V2.md §7.4 existe', s74.length > 0);
-        H.v('§7.4 nomme chaque route servie hors contrat', HORS_CONTRAT_DECLAREES.filter(r => !s74.includes(r.split(' ')[1])), []);
-        H.v('§7.4 nomme chaque écart déclaré (route et champ)', ECARTS_DECLARES.filter(d => !s74.includes(d.route.split(' ')[1]) || !s74.includes('historique.lignes')).map(d => d.route), []);
-        H.v('§7.4 nomme chaque statut documenté non joué', Object.keys(NON_JOUES).filter(k => !s74.includes(k.split(' ').slice(0, 2).join(' ').replace(/^[A-Z]+ /, '')) ).map(k => k), []);
+        // EXACT (tour 1, C4) : une déclaration est prouvée par UNE ligne de tableau qui porte, ensemble, la route, le statut et le chemin — jamais une sous-chaîne quelque part dans la section.
+        const lignesTableau = s74.split(/\r?\n/).filter(l => l.startsWith('|'));
+        const ligneExacte = (route, statut, chemin) => lignesTableau.some(l => l.includes('`' + route + '`') && (statut === null || l.includes('`' + statut + '`')) && (chemin === null || l.includes('`' + chemin + '`')));
+        const declarations = [
+            ...Object.keys(NON_JOUES).map(k => { const m = /^(\S+ \S+) (\d+)$/.exec(k); return { quoi: `statut documenté non joué ${k}`, route: m[1], statut: m[2], chemin: null }; }),
+            ...HORS_CONTRAT_DECLAREES.flatMap(r => [501, 404].map(s => ({ quoi: `route servie hors contrat ${r} (${s})`, route: r, statut: String(s), chemin: null }))),
+            { quoi: 'raison pas-une-carte jamais produite', route: 'POST /api/identifier', statut: '200', chemin: 'pas-une-carte' },
+            { quoi: 'raison plusieurs-cartes-non-separees jamais produite', route: 'POST /api/identifier', statut: '200', chemin: 'plusieurs-cartes-non-separees' },
+            { quoi: 'Produit.set.tirage toujours null', route: 'POST /api/identifier', statut: '200', chemin: '$.analyse.cartes[].carte.set.tirage' },
+            { quoi: 'curseur de suite falsifié rendu en 503', route: 'GET /api/compte', statut: '503', chemin: 'suite' },
+            { quoi: 'lignes de crédits sans motif au contrat omises (abonnement, essai)', route: 'GET /api/compte', statut: '200', chemin: '$.historique.lignes[]' }
+        ];
+        const sansLigne = declarations.filter(d => !ligneExacte(d.route, d.statut, d.chemin)).map(d => d.quoi);
+        console.log(`   §7.4 : ${declarations.length} déclarations, chacune prouvée par une ligne de tableau (route + statut + chemin)`);
+        H.v('§7.4 : chaque déclaration a UNE ligne exacte (route ET statut ET chemin dans la même ligne)', sansLigne, []);
+        // le contrôle sait dire NON : une déclaration que la section ne porte pas n'est pas trouvée, même si ses mots sont ailleurs dans la section
+        H.v('   (le contrôle exact refuse une ligne qui manque)', [ligneExacte('POST /api/inexistante', '200', null), ligneExacte('GET /api/compte', '418', '$.historique.lignes[]'), ligneExacte('POST /api/creer-recharge', '200', null)], [false, false, false]);
     }
     // les dettes du ruling 5
     {
@@ -687,6 +802,18 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             ['24. un ping dont version n\'est plus une chaîne', trouver('GET /ping', 'serveur v2 allumé'), j => { j.version = 3; }]
         ];
         H.v('propriété inverse : 24 corruptions définies', C.length, 24);
+        // M2 : l'en-tête Retry-After est vérifié quand le schéma le déclare — le contrôle sait dire NON (une erreur DEBIT sans l'en-tête, ou avec une autre valeur, est un écart)
+        {
+            const e429 = { success: false, erreur: { code: 'DEBIT', message: 'x', reessayerDans: 7 }, facturation: null }, ct = { 'content-type': 'application/json' };
+            const ecart = h => A.juger('POST /api/compte/code', 429, e429, '{}', { ...ct, ...h }).filter(x => /Retry-After/.test(x.chemin)).length;
+            H.v('Retry-After : absent => écart ; égal à reessayerDans => aucun écart ; valeur différente => écart', [ecart({}), ecart({ 'retry-after': '7' }), ecart({ 'retry-after': '9' })], [1, 0, 1]);
+            const avecHeader = dansContrat.filter(e => e.json && e.json.erreur && e.json.erreur.reessayerDans !== undefined);
+            console.log(`   Retry-After : ${avecHeader.length} réponses portent reessayerDans, toutes avec l'en-tête de la même valeur (jugé par juger)`);
+            H.vrai('Retry-After : au moins une réponse réelle porte reessayerDans', avecHeader.length > 0);
+        }
+        // I7 : LOTS n'a qu'UNE définition (v2/index.js) — aucun des deux bancs n'en recopie la liste
+        for (const f of ['test-contrat-reel.js', 'test-integration-banc-scanner.js'])
+            H.v(`LOTS : ${f} ne recopie pas la liste des lots`, (require('fs').readFileSync(path.join(__dirname, f), 'utf8').match(/\[\s*require\('\.\.\/(transport|installations)\/monter'\)\s*,\s*require\('\.\.\/(installations|comptes)\/monter'\)/g) || []).length, 0);
         let refusees = 0; const acceptees = [];
         for (const [nom, e, abimer] of C) {
             const sain = A.juger(e.route, e.statut, e.json, JSON.stringify(e.json), e.entetes).filter(x => !x.message.startsWith('(ReponseErreur)'));
@@ -726,6 +853,33 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         let m = 0; const faux = [];
         for (const e of dansContrat) { if (!e.json || !e.json.erreur || e.ecarts.length) continue; m++; const c = clone(e.json); c.erreur.code = 'ZZZ'; if (!A.juger(e.route, e.statut, c, '{}', e.entetes).length) faux.push(`${e.route} [${e.etat}]`); }
         H.v(`balayage : un code d'erreur falsifié est refusé pour ${m} réponses d'erreur sur ${m}`, faux, []);
+        // ── LA PROPRIÉTÉ INVERSE SYSTÉMATIQUE (tour 1, I3) : par couple (route, statut) joué, UNE réponse valide (la plus riche) ; chaque clé REQUISE retirée, chaque nœud contraint
+        //    (feuille ET conteneur, à toute profondeur) changé de type ⇒ le validateur doit REFUSER, à chaque fois. Le schéma choisit les sites ; le banc ne les devine pas.
+        const parCouple = new Map();
+        for (const e of dansContrat) {
+            if (!e.json || e.ecarts.length) continue;
+            const doc = A.reponseDocumentee(e.route, e.statut); if (!doc || !doc.content) continue;
+            const schema = doc.content['application/json'].schema, nb = A.sitesDeMutation(e.json, schema).sites.length, k = `${e.route} ${e.statut}`;
+            if (!parCouple.has(k) || nb > parCouple.get(k).nb) parCouple.set(k, { e, schema, nb });
+        }
+        let sites = 0, refuses = 0, libres = 0, retraits = 0, types = 0; const laisses2 = [];
+        for (const [k, { e, schema }] of parCouple) {
+            const s = A.sitesDeMutation(e.json, schema); libres += s.libres;
+            for (const site of s.sites) {
+                sites++; if (site.genre === 'retrait') retraits++; else types++;
+                const c = A.muter(e.json, site);
+                if (!valider(c, schema, SCHEMA).ok) refuses++;
+                else laisses2.push(`${k} [${e.etat}] ${site.genre} ${site.chemin.join('.')}`);
+            }
+        }
+        console.log(`   inverse systématique : ${parCouple.size} couples (route, statut) à réponse valide ; ${sites} mutations (${retraits} clés requises retirées, ${types} types changés) ; ${refuses} refusées ; ${libres} nœuds libres (schéma sans contrainte) non mutés`);
+        H.vrai('inverse systématique : le dénominateur est consistant (couples > 40, mutations > 500)', parCouple.size > 40 && sites > 500);
+        H.v(`inverse systématique : ${refuses} mutations refusées sur ${sites} (la liste de celles que le validateur accepte)`, laisses2.slice(0, 20), []);
+        // le contrôle sait être rouge : un validateur mutant (sans `required`) laisserait passer tous les retraits
+        const sansRequired = JSON.parse(JSON.stringify(SCHEMA)); (function p(x) { if (Array.isArray(x)) return x.forEach(p); if (x && typeof x === 'object') { delete x.required; Object.values(x).forEach(p); } })(sansRequired.components);
+        const [kk, { e: eM, schema: sM }] = [...parCouple].find(([, v]) => A.sitesDeMutation(v.e.json, v.schema).sites.some(s => s.genre === 'retrait'));
+        const siteR = A.sitesDeMutation(eM.json, sM).sites.find(s => s.genre === 'retrait');
+        H.v(`   mutant sans « required » sur ${kk} : le retrait de ${siteR.chemin.join('.')} lui échappe (le banc serait rouge)`, valider(A.muter(eM.json, siteR), sM, sansRequired).ok, true);
     }
     void tousLesCas;
     await attendre(400);                                       // la passe de purge que le second montage (calcul des routes servies) lance au démarrage se termine avant la base

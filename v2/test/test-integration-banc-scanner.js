@@ -51,9 +51,7 @@ const consentement = () => ({ version: cfg.banc.versionsTexte[0], le: new Date()
 
     // ── le serveur : tous les lots, la chaîne héritée FABRIQUÉE, un détecteur FAUX qui compte ses appels
     const express = require('express'); const pret = require('../pret');
-    const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
-    const LOTS = [require('../transport/monter'), require('../installations/monter'), require('../comptes/monter'), require('../argent/monter'),
-        require('../identifier/monter'), require('../banc/monter'), require('../scanner/monter')];
+    const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition
     let mode = 'affirmee', detectionAppels = 0;
     const affirme = id => ({ success: true, question: null, carte: { idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false },
         etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },
@@ -171,6 +169,39 @@ const consentement = () => ({ version: cfg.banc.versionsTexte[0], le: new Date()
     const cles = Object.keys(l || {}).sort();
     H.vrai(`   la ligne n'a que les clés prévues (${cles.join(', ')}) : aucun scanId, compteId, installationId, IP`, !cles.some(k => /scan|compte|install|ip$/i.test(k)));
 
+    // ════ 3. (tour 1, ruling E) LA RÉPONSE DU SCANNER NE CONFIRME JAMAIS UNE LIGNE DU BANC ════
+    // Un compte, une installation LIÉE : l'extension et le scanner parlent alors au MÊME porteur (compte:<id>) — le scan de l'un est répondable par l'autre.
+    {
+        const cc = await compte();
+        const jetonLie = J.genererJeton(); const il = M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(jetonLie), essais: 0, libelle: 'liée' });
+        await raw('installations').insertOne({ ...il, compteId: cc.c._id });
+        const posterLie = (corps) => H.appel(V, '/api/identifier', { methode: 'POST', corps: { contrat: 2, imageUrls: [IMAGE], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr', ...corps },
+            entetes: { origin: EXT, ...ip(), authorization: `Bearer ${jetonLie}`, 'idempotency-key': `banc-int-${Date.now().toString(36)}-${++nIp}` } });
+        mode = 'ambigue2';
+        // (a) l'extension crée une ligne « attente » sous le jeton de consentement T
+        const avant = await raw('banc_lignes').countDocuments({ etat: 'attente' });
+        const s1 = await posterLie({ consentementBanc: consentement() });
+        let ligne1 = null; for (let k = 0; k < 60 && !ligne1; k++) { ligne1 = await raw('banc_lignes').findOne({ etat: 'attente' }); if (!ligne1) await attendre(100); }
+        H.v('E(a). l\'extension crée UNE ligne « attente » sous le jeton T (question, consentement dans le corps)', [s1.statut, avant, ligne1 && ligne1.etat, ligne1 && ligne1.source], [200, 0, 'attente', 'reponse']);
+        const objetsAvant = (await memoire.lister()).map(o => o.cle).sort(), cmdAvant = commandes.length;
+        // (b) le SCANNER répond au même scan en portant le jeton T : la ligne reste « attente », aucune copie d'objet
+        const choix = s1.json.analyse.cartes[0].question.choix[0].id;
+        const rs = await fetch(`${V}/api/scanner/analyses/${s1.json.scanId}/reponse`, { method: 'POST', headers: { 'content-type': 'application/json', origin: SITE, 'x-rat-market': '1', cookie: cc.cookie, ...ip() }, body: JSON.stringify({ choix, carte: 0, consentementBanc: consentement() }) });
+        const rj = await rs.json();
+        await attendre(1500);
+        const ligne1b = await raw('banc_lignes').findOne({ _id: ligne1._id });
+        H.v('E(b). réponse du SCANNER portant le jeton T : 200, la question est réglée (le scanner répond normalement)', [rs.status, rj.success, rj.carte && rj.carte.statut], [200, true, 'identifiee']);
+        H.v('E(b). …mais la ligne du banc reste « attente », même objet, même source, aucune commande de stockage de plus, aucun objet de plus', [ligne1b.etat, ligne1b.cleR2 === ligne1.cleR2, ligne1b.source, commandes.length - cmdAvant, (await memoire.lister()).map(o => o.cle).sort()], ['attente', true, 'reponse', 0, objetsAvant]);
+        // (c) CONTRÔLE POSITIF : la même réponse par l'EXTENSION, sur un second scan (même détecteur, même stockage) confirme la ligne
+        const s2 = await posterLie({ consentementBanc: consentement() });
+        let ligne2 = null; for (let k = 0; k < 60 && !ligne2; k++) { ligne2 = await raw('banc_lignes').findOne({ etat: 'attente', _id: { $ne: ligne1._id } }); if (!ligne2) await attendre(100); }
+        const choix2 = s2.json.analyse.cartes[0].question.choix[0].id;
+        const re = await H.appel(V, '/api/identifier/reponse', { methode: 'POST', corps: { scanId: s2.json.scanId, carte: 0, choix: choix2, consentementBanc: consentement() }, entetes: { origin: EXT, ...ip(), authorization: `Bearer ${jetonLie}` } });
+        let ligne2b = null; for (let k = 0; k < 60; k++) { ligne2b = await raw('banc_lignes').findOne({ _id: ligne2._id }); if (ligne2b && ligne2b.etat === 'confirmee') break; await attendre(100); }
+        H.v('E(c). CONTRÔLE POSITIF : la réponse de l\'EXTENSION (même jeton T) confirme la ligne 2 (« confirmee », nouvel objet)', [re.statut, ligne2b && ligne2b.etat, ligne2b && ligne2b.cleR2 !== ligne2.cleR2], [200, 'confirmee', true]);
+        H.v('E(d). au total : la ligne 1 (créée par l\'extension, répondue par le scanner) est toujours en attente ; la ligne 2 est confirmée', [(await raw('banc_lignes').findOne({ _id: ligne1._id })).etat, (await raw('banc_lignes').findOne({ _id: ligne2._id })).etat], ['attente', 'confirmee']);
+        mode = 'affirmee';
+    }
     require('../identifier/monter').arreterBalayage(); require('../identifier/monter').arreterPurge(); require('../banc/monter').arreterPurge();
     await sv.fermer();
     await mongoose.disconnect();

@@ -26,6 +26,9 @@
       "name": "installations"
     },
     {
+      "name": "banc"
+    },
+    {
       "name": "scanner"
     },
     {
@@ -1577,6 +1580,223 @@
         }
       }
     },
+    "/api/compte/renvoyer-verification": {
+      "post": {
+        "operationId": "renvoyerVerification",
+        "tags": [
+          "comptes"
+        ],
+        "summary": "Renvoie le lien de vérification d'un compte non vérifié (réponse 202 identique quelle que soit l'adresse)",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteRenvoiVerification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Demande prise en compte. La réponse ne dépend pas de l'adresse (ni compte, ni déjà vérifié, ni plafond par adresse) : rien n'est révélé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : trop de demandes depuis cette adresse IP (avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable, courrier non branché).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/banc/correction": {
+      "post": {
+        "operationId": "corrigerBanc",
+        "tags": [
+          "banc"
+        ],
+        "summary": "Corrige l'étiquette d'une image déjà versée au banc réel (consentement valide dans le corps)",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteCorrectionBanc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contrôles passés. La réponse ne dit PAS si une conservation a eu lieu (consentement absent, banc éteint, aucune ligne : même réponse).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseSimple"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : scanId, carte ou idProduct illisible.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "CODE_INVALIDE : scan inconnu, ou scan d'un autre porteur (jamais révélé).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/banc/contributions": {
+      "delete": {
+        "operationId": "effacerContributionsBanc",
+        "tags": [
+          "banc"
+        ],
+        "summary": "Efface, tout de suite, toutes les images versées au banc sous un jeton de contribution",
+        "security": [
+          {
+            "installation": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteEffacementBanc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Effacement fait. Un jeton inconnu rend aussi 200 avec `supprimees: 0` (rien n'est révélé). `echecs` : objets dont la suppression a échoué (leur ligne est conservée, reprise à la passe suivante).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseEffacementBanc"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE : `jeton` absent ou de forme invalide.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Identité absente ou refusée (JETON).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable, stockage injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/scanner/analyses": {
       "post": {
         "operationId": "analyserScanner",
@@ -2851,7 +3071,20 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "enum": [
+              "aucun-debit",
+              "deja-rembourse",
+              "deja-livre",
+              "mongo-absent",
+              "plafond-jour",
+              "accueil-au-plafond",
+              "hebdo-semaine-changee",
+              "poche-introuvable",
+              "erreur",
+              null
+            ],
+            "description": "Liste fermée de sources.js (RAISONS_NON_REMBOURSE), comparée par test-openapi.js."
           }
         },
         "required": [
@@ -3867,6 +4100,93 @@
           "jeton",
           "motDePasse"
         ]
+      },
+      "RequeteRenvoiVerification": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "RequeteCorrectionBanc": {
+        "type": "object",
+        "properties": {
+          "scanId": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{24}$"
+          },
+          "carte": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "idProduct": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "consentementBanc": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              },
+              "le": {
+                "type": "string"
+              },
+              "jeton": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{16,64}$"
+              }
+            },
+            "required": [
+              "version",
+              "le",
+              "jeton"
+            ]
+          }
+        },
+        "required": [
+          "scanId",
+          "idProduct"
+        ]
+      },
+      "RequeteEffacementBanc": {
+        "type": "object",
+        "properties": {
+          "jeton": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,64}$"
+          }
+        },
+        "required": [
+          "jeton"
+        ]
+      },
+      "ReponseEffacementBanc": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "supprimees": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "echecs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "success",
+          "supprimees",
+          "echecs"
+        ],
+        "additionalProperties": false
       },
       "RequeteLier": {
         "type": "object",

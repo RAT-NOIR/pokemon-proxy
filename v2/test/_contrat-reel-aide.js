@@ -29,14 +29,58 @@ function juger(route, statut, json, texte, entetes) {
         else for (const e of valider(json, doc.content['application/json'].schema, SCHEMA).erreurs) ecarts.push(e);
         if (!/application\/json/i.test(String((entetes || {})['content-type'] || ''))) ecarts.push({ chemin: '(en-tête)', message: `Content-Type ${JSON.stringify((entetes || {})['content-type'])} n'est pas application/json` });
     } else if (String(texte || '') !== '') ecarts.push({ chemin: '$', message: 'le contrat documente ce statut sans corps, le serveur en rend un' });
+    // M2 : `Retry-After` est vérifié quand le schéma le déclare. Une erreur qui porte `reessayerDans` doit porter l'en-tête, de la même valeur, et la valeur doit tenir le schéma de l'en-tête.
+    if (doc && doc.headers && doc.headers['Retry-After']) {
+        const h = (entetes || {})['retry-after'], dit = json && json.erreur && json.erreur.reessayerDans;
+        if (h !== undefined) {
+            if (!/^\d+$/.test(String(h)) || valider(Number(h), doc.headers['Retry-After'].schema, SCHEMA).erreurs.length) ecarts.push({ chemin: '(en-tête Retry-After)', message: `valeur « ${h} » hors du schéma de l'en-tête` });
+            else if (dit !== undefined && String(h) !== String(dit)) ecarts.push({ chemin: '(en-tête Retry-After)', message: `« ${h} » ≠ erreur.reessayerDans (${dit})` });
+        } else if (dit !== undefined) ecarts.push({ chemin: '(en-tête Retry-After)', message: `absent alors que erreur.reessayerDans = ${dit} et que le schéma déclare l'en-tête` });
+    }
     // un corps d'erreur est TOUJOURS jugé contre ReponseErreur (ruling 2), même quand la route documente un oneOf
     if (json && json.success === false) for (const e of valider(json, ref('ReponseErreur'), SCHEMA).erreurs) ecarts.push({ chemin: e.chemin, message: `(ReponseErreur) ${e.message}` });
     return ecarts;
 }
-function consigner(route, etat, rep) {
+// `garde` : la réponse vient de la boucle de la garde d'index (routes fermées, 503), pas d'un ÉTAT RÉEL de la route : elle ne compte pas comme « route jouée » (tour 1, C1).
+function consigner(route, etat, rep, { garde = false } = {}) {
     const ecarts = juger(route, rep.statut, rep.json, rep.texte, rep.entetes);
-    grandLivre.push({ route, etat, statut: rep.statut, json: rep.json, entetes: rep.entetes || {}, ecarts });
+    grandLivre.push({ route, etat, statut: rep.statut, json: rep.json, entetes: rep.entetes || {}, ecarts, garde });
     return rep;
+}
+
+// ── la propriété inverse SYSTÉMATIQUE (tour 1, I3) : les sites de mutation d'une réponse VALIDE, guidés par le schéma.
+//    · « retrait » : chaque clé REQUISE présente (à toute profondeur) ;  · « type » : chaque nœud dont le schéma contraint le type / une liste fermée (feuilles ET conteneurs).
+//    Un oneOf est résolu sur la branche qui valide la valeur. Un nœud que le schéma ne contraint pas (`{}`) n'est pas un site (compté à part).
+const PREFIXE = '#/components/schemas/';
+const resoudre = s => { while (s && s.$ref) s = SCHEMA.components.schemas[s.$ref.slice(PREFIXE.length)]; return s; };
+function branche(valeur, s) {
+    s = resoudre(s);
+    if (s && s.oneOf) { const b = s.oneOf.find(x => valider(valeur, x, SCHEMA).ok); return b ? branche(valeur, b) : null; }
+    return s;
+}
+function sitesDeMutation(valeur, schema, chemin = [], sortie = { sites: [], libres: 0 }) {
+    const s = branche(valeur, schema); if (!s) return sortie;
+    const types = s.type === undefined ? null : [].concat(s.type);
+    if (chemin.length) { if (types || s.enum !== undefined || s.const !== undefined) sortie.sites.push({ genre: 'type', chemin, types }); else sortie.libres++; }
+    if (valeur && typeof valeur === 'object' && !Array.isArray(valeur)) {
+        for (const k of s.required || []) if (Object.prototype.hasOwnProperty.call(valeur, k)) sortie.sites.push({ genre: 'retrait', chemin: [...chemin, k] });
+        for (const [k, v] of Object.entries(valeur)) if (s.properties && s.properties[k]) sitesDeMutation(v, s.properties[k], [...chemin, k], sortie);
+    } else if (Array.isArray(valeur) && s.items) valeur.slice(0, 3).forEach((v, i) => sitesDeMutation(v, s.items, [...chemin, i], sortie));
+    return sortie;
+}
+const typeDe = v => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v === 'number' ? (Number.isInteger(v) ? 'integer' : 'number') : typeof v);
+function intrus(types) {                                   // une valeur dont le type n'est dans AUCUN des types déclarés
+    const t = new Set(types || []); if (t.has('integer')) t.add('number');
+    if (!types) return { __intrus: 1 };
+    for (const c of ['intrus', { __intrus: 1 }, true, 7.5, []]) { const k = typeDe(c); if (!t.has(k) && !(k === 'number' && t.has('integer') && false)) return c; }
+    return '\u0000';
+}
+function muter(json, site) {
+    const c = JSON.parse(JSON.stringify(json));
+    let o = c; for (const k of site.chemin.slice(0, -1)) o = o[k];
+    const dernier = site.chemin[site.chemin.length - 1];
+    if (site.genre === 'retrait') delete o[dernier]; else o[dernier] = intrus(site.types);
+    return c;
 }
 // Une réponse hors contrat (route servie mais absente de `paths`) : jugée seulement comme erreur si elle en est une.
 function consignerHorsContrat(route, etat, rep) {
@@ -46,4 +90,4 @@ function consignerHorsContrat(route, etat, rep) {
     return rep;
 }
 const codeDe = e => (e.json && e.json.erreur && e.json.erreur.code) || null;
-module.exports = { SCHEMA, ref, OPERATIONS, STATUTS_DOCUMENTES, grandLivre, consigner, consignerHorsContrat, juger, reponseDocumentee, codeDe };
+module.exports = { SCHEMA, ref, OPERATIONS, STATUTS_DOCUMENTES, grandLivre, consigner, consignerHorsContrat, juger, reponseDocumentee, codeDe, sitesDeMutation, muter };

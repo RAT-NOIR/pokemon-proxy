@@ -57,20 +57,43 @@ const sous = (o, ref) => Object.fromEntries(Object.keys(ref).map(k => [k, o[k]])
     // 9. historique
     const ph = await compte({ solde: { accueil: 0, achete: 0 } }), autre = await compte({ solde: { accueil: 0, achete: 0 } });
     const cle = p => `${p.type}:${p.id}`;
-    const lignes = []; for (let i = 0; i < 45; i++) lignes.push({ _id: `an${i}`, porteur: cle(ph), surface: 'scanner', statut: 'ok', cartes: [{ idProduct: i, statut: 'identifiee', raison: null }], facturation: { debite: 1, reserve: 0, rembourse: 0, motif: 'affirmee', raisonNonRembourse: null }, creeLe: new Date(t.getTime() - i * 60e3), expireLe: new Date('2028-01-01') });
-    lignes.push({ _id: 'anAutre', porteur: cle(autre), surface: 'scanner', statut: 'ok', cartes: [], facturation: null, creeLe: t, expireLe: new Date('2028-01-01') });
+    // B7b.1 tour 1 (ruling A) : l'historique sert la forme du CONTRAT (LigneAnalyse / LigneCredits), jugée par le schéma publié.
+    const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
+    const factOk = { debite: 1, reserve: 0, rembourse: false, motif: 'affirmee', raisonNonRembourse: null };
+    const lignes = []; for (let i = 0; i < 45; i++) lignes.push({ _id: `an${i}`, porteur: cle(ph), surface: 'scanner', statut: 'identifiee', cartes: [{ idProduct: 900 + i, statut: 'identifiee', raison: null }],
+        produits: [{ idProduct: 900 + i, nom: `Carte ${i}`, set: { slug: 's', nom: 'Set de test', code: 'ST', tirage: null, annee: null, symbole: null }, numero: '001' }], facturation: factOk, creeLe: new Date(t.getTime() - i * 60e3), expireLe: new Date('2028-01-01') });
+    // une ligne ANCIENNE sans facturation, et une sans surface : omises (rien n'est fabriqué), comptées
+    lignes.push({ _id: 'anAncienne', porteur: cle(ph), surface: 'scanner', statut: 'identifiee', cartes: [], facturation: null, creeLe: new Date(t.getTime() - 100 * 60e3), expireLe: new Date('2028-01-01') });
+    lignes.push({ _id: 'anSansSurface', porteur: cle(ph), statut: 'introuvable', cartes: [{ idProduct: null, statut: 'introuvable', raison: 'hors-catalogue' }], facturation: factOk, creeLe: new Date(t.getTime() - 101 * 60e3), expireLe: new Date('2028-01-01') });
+    // un lot (carte null, cartesVues = nombre de cartes lues) et un introuvable
+    lignes.push({ _id: 'anLot', porteur: cle(ph), surface: 'extension', statut: 'lot', cartes: [{ idProduct: 1, statut: 'identifiee' }, { idProduct: 2, statut: 'identifiee' }, { idProduct: null, statut: 'introuvable' }], facturation: { ...factOk, motif: 'lot' }, creeLe: new Date(t.getTime() - 102 * 60e3), expireLe: new Date('2028-01-01') });
+    lignes.push({ _id: 'anAutre', porteur: cle(autre), surface: 'scanner', statut: 'identifiee', cartes: [], facturation: factOk, creeLe: t, expireLe: new Date('2028-01-01') });
     await db.col('analyses').insertMany(lignes);
+    const mv = (o) => ({ compteId: ph.id, surface: 'scanner', scanId: null, etat: 'debite', expireLe: new Date('2028-01-01'), ...o });
     await db.col('mouvements').insertMany([
-        { compteId: ph.id, le: new Date(t.getTime() - 5 * 60e3 - 1), surface: 'scanner', type: 'octroi', delta: 25, poche: 'accueil', motif: 'accueil', scanId: null, etat: 'debite', cleIdempotence: 'oct1', expireLe: new Date('2028-01-01') },
-        { compteId: ph.id, le: new Date(t.getTime() - 9 * 60e3 - 1), surface: 'scanner', type: 'achat', delta: 50, poche: 'achete', motif: 'achat', scanId: null, etat: 'debite', cleIdempotence: 'ach1', expireLe: new Date('2028-01-01') },
-        { compteId: ph.id, le: new Date(t.getTime() - 3 * 60e3 - 1), surface: 'scanner', type: 'debit', delta: -1, poche: 'accueil', motif: null, scanId: 'sc', etat: 'debite', cleIdempotence: 'dbt1', expireLe: new Date('2028-01-01') },
+        mv({ le: new Date(t.getTime() - 5 * 60e3 - 1), type: 'octroi', delta: 25, poche: 'accueil', motif: 'octroi-accueil', cleIdempotence: 'oct1' }),
+        mv({ le: new Date(t.getTime() - 9 * 60e3 - 1), type: 'achat', delta: 50, poche: 'achete', motif: 'achat', cleIdempotence: 'ach1' }),
+        mv({ le: new Date(t.getTime() - 3 * 60e3 - 1), type: 'debit', delta: -1, poche: 'accueil', motif: null, scanId: 'sc', cleIdempotence: 'dbt1' }),
+        mv({ le: new Date(t.getTime() - 11 * 60e3 - 1), type: 'octroi', delta: 2, poche: 'hebdo', motif: 'hebdo', cleIdempotence: 'heb1' }),
+        mv({ le: new Date(t.getTime() - 12 * 60e3 - 1), type: 'migration', delta: 7, poche: 'achete', motif: 'migration', cleIdempotence: 'mig1' }),
+        mv({ le: new Date(t.getTime() - 13 * 60e3 - 1), type: 'migration', delta: 3, poche: 'accueil', motif: 'migration', cleIdempotence: 'mig2' }),
+        mv({ le: new Date(t.getTime() - 14 * 60e3 - 1), type: 'octroi', delta: 5, poche: 'abonnement', motif: 'abonnement', cleIdempotence: 'abo1' }),   // le contrat n'a pas de motif « abonnement » : OMISE
+        mv({ le: new Date(t.getTime() - 15 * 60e3 - 1), type: 'octroi', delta: 3, poche: 'essai', motif: 'essai', cleIdempotence: 'ess1' }),                 // idem : OMISE
         { compteId: autre.id, le: t, surface: 'scanner', type: 'achat', delta: 20, poche: 'achete', motif: 'achat', scanId: null, etat: 'debite', cleIdempotence: 'ach-autre', expireLe: new Date('2028-01-01') }]);
-    const tout = []; let suite = null, pages = 0;
-    do { const pg = await S.historique(ph, { suite }, cfg); pages++; tout.push(...pg.lignes); suite = pg.suite; } while (suite && pages < 10);
-    H.v('historique : 3 pages (20 + 20 + 7), suite nulle à la fin', [pages, tout.length, suite], [3, 47, null]);
-    H.v('   page de 20', (await S.historique(ph, {}, cfg)).lignes.length, 20);
-    H.v('   45 lignes analyse + 2 lignes credits (le débit simple n\'est pas une ligne), aucune d\'un autre porteur', [tout.filter(l => l.type === 'analyse').length, tout.filter(l => l.type === 'credits').length, tout.some(l => l.scanId === 'anAutre' || l.reference === 'ach-autre')], [45, 2, false]);
-    H.v('   ordre décroissant strict, sans doublon', [tout.every((l, i) => i === 0 || new Date(tout[i - 1].le) >= new Date(l.le)), new Set(tout.map(l => l.type + ':' + (l.scanId ?? l.reference))).size], [true, 47]);
+    const tout = []; let suite = null, pages = 0, omises = 0, tailles = [];
+    do { const pg = await S.historique(ph, { suite }, cfg); pages++; tout.push(...pg.lignes); tailles.push(pg.lignes.length); omises += pg.omises; suite = pg.suite; } while (suite && pages < 10);
+    H.v('historique : pages 20 + 20 + 11, suite nulle à la fin', [pages, tailles, suite], [3, [20, 20, 11], null]);
+    H.v('   51 lignes servies : 46 analyses (45 + le lot) et 5 lignes de crédits (le débit simple n\'est pas une ligne)', [tout.length, tout.filter(l => l.genre === 'analyse').length, tout.filter(l => l.genre === 'credits').length], [51, 46, 5]);
+    H.v('   OMISES et comptées : 2 analyses sans facturation / sans surface, 2 crédits sans motif au contrat (abonnement, essai) = 4', omises, 4);
+    H.v('   chaque ligne valide contre LigneHistorique du schéma publié (dénominateur 51)', tout.map((l, i) => valider(l, { $ref: '#/components/schemas/LigneHistorique' }, SCHEMA)).filter(r => !r.ok).length, 0);
+    H.v('   aucune clé du dedans ne fuit : ni type, ni scanId, ni reference, ni delta, ni poche, ni cartes', tout.filter(l => ['type', 'scanId', 'reference', 'delta', 'poche', 'cartes', 'nature'].some(k => k in l)).length, 0);
+    H.v('   motif de crédit PROJETÉ PAR LA POCHE : accueil→accueil, hebdo→hebdo, achete→achat, migration d\'achete→achat, migration d\'accueil→accueil', tout.filter(l => l.genre === 'credits').map(l => `${l.motif}:${l.credits}`).sort(), ['accueil:25', 'accueil:3', 'achat:50', 'achat:7', 'hebdo:2']);
+    const un = tout.find(l => l.genre === 'analyse' && l.carte);
+    H.v('   une analyse identifiée porte carte { nom, set (texte), numero }, cartesVues 1, facturation réelle', [un.carte, un.cartesVues, un.facturation, typeof un.le, /^\d{4}-\d{2}-\d{2}T/.test(un.le)], [{ nom: un.carte.nom, set: 'Set de test', numero: '001' }, 1, factOk, 'string', true]);
+    const lot = tout.find(l => l.statut === 'lot');
+    H.v('   le lot : carte null, cartesVues 3, surface extension, motif lot', [lot.carte, lot.cartesVues, lot.surface, lot.facturation.motif], [null, 3, 'extension', 'lot']);
+    H.v('   aucune d\'un autre porteur', tout.some(l => l.credits === 20), false);
+    H.v('   ordre décroissant strict, sans doublon (clé : genre + date + rang)', [tout.every((l, i) => i === 0 || new Date(tout[i - 1].le) >= new Date(l.le)), new Set(tout.map(l => JSON.stringify(l))).size], [true, 51]);
     H.v('   suite opaque (chaîne)', typeof (await S.historique(ph, {}, cfg)).suite, 'string');
     let leve3 = null; try { await S.historique(ph, { suite: '%%pas-une-suite%%' }, cfg); } catch (e) { leve3 = e.message; }
     H.v('   une suite falsifiée est refusée', typeof leve3, 'string');
