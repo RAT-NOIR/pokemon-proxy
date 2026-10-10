@@ -105,8 +105,14 @@ function routesComptes(router, cfg) {
     router.get('/api/compte', resoudrePorteur(cfg), exigerSession, async (req, res) => {
         try {
             const argent = registre.obtenir('argent'), porteur = req.v2.porteur, compte = porteur.compte;
-            const suite = typeof req.query.suite === 'string' && req.query.suite.length <= 200 ? req.query.suite : undefined;
-            const [solde, hist, installations] = await Promise.all([argent.solde(porteur), argent.historique(porteur, suite), svc.installationsDuCompte(compte._id)]);
+            // `suite` (curseur opaque) : absent = première page ; présent mais illisible (pas une chaîne, trop long, falsifié) = 400 ENTREE, une faute du client — jamais 503, ni la première page en silence
+            const brut = req.query.suite;
+            if (brut !== undefined && !(typeof brut === 'string' && brut.length > 0 && brut.length <= 200)) return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'suite' });
+            const suite = brut;
+            let tout;
+            try { tout = await Promise.all([argent.solde(porteur), argent.historique(porteur, suite), svc.installationsDuCompte(compte._id)]); }
+            catch (e) { if (e && e.code === 'SUITE_INVALIDE') return repondreErreur(res, 'ENTREE', 'Requête invalide', { detail: 'suite' }); throw e; }
+            const [solde, hist, installations] = tout;
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, compte: { email: compte.email, verifie: compte.verifie, creeLe: compte.creeLe }, solde, installations,
                 historique: { lignes: hist.lignes, suite: hist.suite ?? null } });

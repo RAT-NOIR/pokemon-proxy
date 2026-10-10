@@ -29,6 +29,9 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `POST /api/compte/deconnexion` | site | cookie | non | rien → `ReponseSimple` |
 | `POST /api/compte/mot-de-passe-oublie` | site | aucune | non | `RequeteMotDePasseOublie` → `202 ReponseSimple` (toujours) |
 | `POST /api/compte/reinitialiser` | site | aucune (jeton du lien) | non | `RequeteReinitialisation` → `ReponseSimple` |
+| `POST /api/compte/renvoyer-verification` | site | aucune | non | `RequeteRenvoiVerification` → `202 ReponseSimple` (toujours, que l'adresse existe, soit vérifiée ou non) |
+| `POST /api/banc/correction` | extension | Bearer | non | `RequeteCorrectionBanc` → `ReponseSimple` (200 quoi qu'il arrive après les contrôles) |
+| `DELETE /api/banc/contributions` | extension | Bearer | non | `RequeteEffacementBanc` → `ReponseEffacementBanc` |
 | `POST /api/compte/code` | site | cookie | non | rien → `ReponseCodeLiaison` |
 | `GET /api/compte` | site | cookie | non | rien → `ReponseCompte` |
 | `DELETE /api/compte` | site | cookie | non | `RequeteSuppressionCompte` → `ReponseSimple` |
@@ -714,6 +717,26 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
 }
 ```
 
+**Les lignes de l'historique** (tour 1 de B7b.1 : le serveur sert exactement cette forme) : une ligne `analyse` porte toujours `surface`, `statut` et une `facturation` réelle (jamais `null`) ; `carte` est `{ nom, set, numero }` pour une analyse identifiée, `null` sinon (lot compris) ; `cartesVues` est le nombre de cartes lues. Une ligne `credits` porte `motif` ∈ `accueil` · `hebdo` · `achat` (le motif de **sa poche** ; une migration prend celui de sa poche d'origine) et `credits`. **Deux sortes de lignes sont omises de l'historique, jamais inventées** : une analyse ancienne sans facturation complète ou sans surface, et un crédit d'une poche que le contrat ne nomme pas (`abonnement`, `essai`). Le contrat n'a pas de motif pour ces crédits-là ; c'est dit au §7.4 (X1). Une ligne dont la `raisonNonRembourse` n'est pas dans la liste fermée est omise de la même façon. **La pagination ne perd jamais une ligne servie** : la page se remplit de lignes servies en relisant plus loin tant que les sources ne sont pas épuisées (une longue série de lignes omises ne l'arrête pas), et `suite` n'est nul que lorsqu'il ne reste plus rien à servir. **Le paramètre de requête `suite`** (le curseur opaque de la page précédente) est déclaré ; un curseur illisible, falsifié, vide, répété ou de plus de 200 caractères rend `400 ENTREE` (detail `suite`) — jamais `503`, jamais la première page en silence.
+
+### 1.7 Le banc réel, et le renvoi du lien de vérification
+
+- `POST /api/compte/renvoyer-verification { email }` (site : `Origin` exacte + `X-Rat-Market`) rend **toujours** `202 { success: true }` : la réponse ne dépend ni de l'existence de l'adresse ni de son état. `403 ORIGINE`, `429 DEBIT` (par adresse IP, avec `Retry-After`), `503`.
+- `POST /api/banc/correction { scanId, carte?, idProduct, consentementBanc? }` (Bearer) rend `200 { success: true }` quand les contrôles passent — **elle ne dit pas** si une image a été conservée. `400 ENTREE`, `401 JETON`, `404 CODE_INVALIDE` (scan inconnu ou d'un autre porteur), `503`.
+- `DELETE /api/banc/contributions { jeton }` (Bearer) efface tout de suite toutes les images versées sous ce jeton de contribution :
+
+```json schema=ReponseEffacementBanc
+{
+  "success": true,
+  "supprimees": 3,
+  "echecs": 0
+}
+```
+
+  Un jeton inconnu rend aussi `200` avec `supprimees: 0`. `400 ENTREE` (forme du jeton), `401 JETON`, `503`.
+- **Le scanner du site n'écrit jamais dans le banc** : sa route de réponse (`/api/scanner/analyses/{id}/reponse`) ne transmet au traitement que `scanId`, `choix` et `carte` ; un `consentementBanc` présenté au scanner est ignoré. Cette règle est tenue **deux fois** : à l'entrée du scanner (liste blanche) et dans le crochet du banc lui-même, qui ne CONSERVE (écriture d'objet, confirmation d'une ligne) que pour une surface autorisée — l'extension et l'installation — jamais pour `scanner`, ni pour une surface inconnue ou absente.
+- **Effacer n'est jamais conserver** : un abandon (`choix` = `aucune` ou `ne-sait-pas`) **efface** la ligne `attente` et son objet depuis **toute surface du même porteur** — y compris le scanner qui répond à un scan de l'extension sur le même compte. Aucun consentement n'est requis pour effacer.
+
 ---
 
 ## 2. Les règles du contrat
@@ -1002,6 +1025,62 @@ Les documents précédents (`CONTRAT-2.md`, `DEMANDE-SERVEUR-EXTENSION.md`, `sca
 | E8 | fausses : images `https://pub-fictif.r2.dev/…` | l'hôte exact du bucket public (`pub-7d992e666c3d4a2b870b680a920045b6.r2.dev`) ou `rat-market.fr` |
 | E9 | fausses : `variante: "normale"` partout, `liens.cardmarket` rempli sans numéro ni rareté | `variante: null` et `liens.cardmarket: null` dans ces cas (A9, A10) |
 | E10 | `CODES_ERREUR` de l'extension : 10 codes du serveur + `RESEAU` + `EXTENSION` | 20 codes serveur ; `RESEAU` et `EXTENSION` restent côté client |
+| E11 | `reels.js` : `set.slug: null` | `set.slug` est une chaîne (jamais `null`) |
+
+#### 7.3 bis — Les écarts de forme MESURÉS (B7b.1, `v2/test/test-contrat-extension.js`)
+
+Les dix fichiers de `extension v2\src\fond\fausses\` ont été rejoués contre le schéma (les six réponses d'analyse et les quatre de `reels.js` — module de données pur, lu en texte — contre `ReponseAnalyse`, carte par carte contre la branche de leur statut ; `quota.json` contre `ReponseErreur` ; chacune des 13 réponses de `reponses.json` RECONSTRUITE en entier — carte, facturation, solde — et jugée contre `ReponseQuestion`). Le banc échoue si un écart n'est pas listé ici avec son chemin JSON exact. **Rien n'a été corrigé ni dans l'extension (lecture seule) ni dans le schéma** : le schéma décrit ce que le serveur rend, et c'est l'extension qui doit changer. Colonne « fichiers » : ceux qui portent l'écart.
+
+| réf. | route et statut | chemin JSON | l'extension attend (fausse) | le serveur rend (schéma) | fichiers | qui doit changer |
+|---|---|---|---|---|---|---|
+| E1 | `POST /api/identifier` 200 | `$.solde.essai` | absent | clé requise (entier) | identifiee, lot, a-trancher | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.abonnement` | absent | clé requise (objet ou `null`) | identifiee, lot, a-trancher | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.soldeGratuit` | présent | **n'existe pas** (forme héritée seulement) | identifiee, lot, a-trancher, quota | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.restantSemaine` | présent | **n'existe pas** | idem | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.soldeScans` | présent | **n'existe pas** | idem | l'extension |
+| E1 | `POST /api/identifier` 200 | `$.solde.compte.verifie` | absent | clé requise (booléen) | idem | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.essai` | absent | clé requise (entier) | quota | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.abonnement` | absent | clé requise (objet ou `null`) | quota | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.soldeGratuit` | présent | **n'existe pas** | quota | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.restantSemaine` | présent | **n'existe pas** | quota | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.soldeScans` | présent | **n'existe pas** | quota | l'extension |
+| E1 | `POST /api/identifier` 429 | `$.solde.compte.verifie` | absent | clé requise (booléen) | quota | l'extension |
+| E2 | `POST /api/identifier` 200 | `$.facturation.reserve` | absent | clé requise (0 ou 1) | identifiee, lot, a-trancher, introuvable | l'extension |
+| E2 | `POST /api/identifier/reponse` 200 | `$.<scanId>[].<choix>.facturation.raisonNonRembourse` | absent | clé requise (`null` ou une raison) | reponses | l'extension |
+| E3 | `POST /api/identifier` 200 | `$.solde` | `null` | objet, **toujours** présent après une analyse | a-trancher, lot, introuvable | l'extension |
+| E4 | `POST /api/identifier` 200 | `$.question` | `{ etat, delaiHeures }` à la racine | clé **non servie** (le délai est de 24 h, fixe) | a-trancher | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions` | absent | clé requise (`[]` par défaut) | identifiee, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].impressions` | absent | clé requise | a-trancher, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.prixGuide.moyenne30` | absent | clé requise (nombre ou `null`) | identifiee, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].prixGuide.moyenne30` | absent | clé requise | a-trancher, lot | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.moyenne30` | absent | clé requise | identifiee-impressions | l'extension |
+| E5 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.impressions[].prixGuide.date` | absent (`{ de, tendance }`) | clé requise (date du guide) | identifiee-impressions | l'extension |
+| E6 | `POST /api/identifier` 200 | `$.analyse.cartes[].etat` | objet rempli de `null` (introuvable) | `null` pour un introuvable | introuvable | l'extension |
+| E7 | `POST /api/identifier` 429 | `$.facturation` | `{ debite:0, rembourse:false, motif:null, … }` | `null` (aucune analyse) | quota | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.url` | `https://pub-fictif.r2.dev/…` | `https://pub-7d992e666c3d4a2b870b680a920045b6.r2.dev/…` ou `https://rat-market.fr/…` | identifiee, identifiee-impressions | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.visuel.grande` | objet dont l'URL est fictive | objet `Image` de l'hôte public, ou `null` | identifiee | l'extension |
+| E8 | `POST /api/identifier` 200 | `$.analyse.cartes[].candidats[].visuel.url` | `https://pub-fictif.r2.dev/…` | l'hôte public exact | a-trancher, lot | l'extension |
+| E11 | `POST /api/identifier` 200 | `$.analyse.cartes[].carte.set.slug` | `null` (set sans slug) | chaîne : le slug du set est toujours connu | reels.js | l'extension |
+
+Non mesuré par cette lecture de forme (aucune faute de FORME, la faute est de sens) : E9 (`variante` et `liens.cardmarket` remplis alors que le serveur rend `null` quand l'édition ou le numéro est inconnu — les valeurs `normale` / une adresse sont de forme valide), E10 (codes d'erreur : le fichier `quota.json` n'en porte qu'un). `lectures.json` n'est pas une réponse du serveur (les grilles de la lecture live simulée ne sont jamais envoyées : le serveur ne reçoit que `prixLive` et `prixLiveEtat`) ; ses états `MT`…`PO` et ses prix (`null` ou > 0) tiennent la liste fermée du contrat.
+
+### 7.4 Ce que le SERVEUR doit aligner ou documenter (mesuré par B7b.1, `v2/test/test-contrat-reel.js`)
+
+Le banc joue chaque route de `paths` dans chaque état contre le serveur v2 réel. Ces constats ne sont **pas** des écarts de client ; ils sont écrits ici pour que le coordinateur et les agents du serveur les tranchent. **Chaque ligne porte, dans la même ligne, la route, le statut et le chemin** : le banc les cherche ainsi (une mention quelque part dans la section ne prouve rien).
+
+*Réglés au tour 1 de B7b.1 :* l'historique de `GET /api/compte` est servi dans la forme du contrat (ancien défaut du serveur, `type` / `scanId` / `cartes[]` / `delta` / `poche`) ; les routes `POST /api/compte/renvoyer-verification`, `POST /api/banc/correction` et `DELETE /api/banc/contributions` sont **publiées** ; `Facturation.raisonNonRembourse` est resserrée à la liste fermée de `sources.js` (additif côté serveur : il ne rend déjà que ces valeurs ou `null`) ; le statut `429` de `verification` / `reinitialiser` et le `400` de `reinitialiser` sont documentés.
+
+| # | route · statut · chemin | constat | décision à prendre |
+|---|---|---|---|
+| X1 | `GET /api/compte` · `200` · `$.historique.lignes[]` | **trou du contrat, pas du serveur** : le contrat n'a pas de motif de crédit pour une poche `abonnement` ni `essai`. Ces lignes sont **omises de l'historique, jamais inventées sous un autre motif**, et le banc compte celles qu'il omet. De même une analyse ancienne sans `facturation` complète ou sans `surface` est omise (rien n'est fabriqué). | ajouter des motifs (`abonnement`, `essai`) au contrat si le site veut les montrer |
+| X2 | `POST /api/creer-recharge` · `501` · `404` | **servie, jamais publiée** : montée derrière un aiguilleur dont le prédicat exige un porteur v2 que rien ne résout sur cette route ; elle passe donc toujours la main à la route héritée (404 dans le banc, qui n'en a pas). Son `501 INDISPONIBLE` / `paiement-non-branche` est **inatteignable en l'état**. Publiée quand elle sera implémentée ; l'alignement 501 / `INDISPONIBLE` est parqué pour la tâche de paiement. | publier avec le paiement |
+| X4 | `POST /api/identifier` · `200` · `pas-une-carte` | listée au contrat, **jamais produite** par le code du serveur (seules `photo-illisible`, `hors-catalogue`, `panne-lecture` sortent) | les clients ne comptent pas dessus |
+| X4 | `POST /api/identifier` · `200` · `plusieurs-cartes-non-separees` | idem | idem |
+| X4 | `POST /api/identifier` · `200` · `$.analyse.cartes[].carte.set.tirage` | `Produit.set.tirage` est **toujours `null`** (le catalogue ne porte pas le tirage) | les clients ne comptent pas dessus |
+| X5 | `DELETE /api/compte` · `400` | documenté, jamais rendu : aucun chemin de `v2/comptes/routes.js` l.117-125 ne le produit | laisser documenté (inoffensif) ou retirer |
+| X5 | `POST /api/compte/deconnexion` · `401` | documenté, jamais rendu : la déconnexion rend 200 même sans cookie (l.63-69) | idem |
+| X5 | `POST /api/compte/mot-de-passe-oublie` · `400` | documenté, jamais rendu : un corps illisible vaut une adresse absente, 202 neutre (l.71-77) | idem |
+| X6 | code `EN_RECONCILIATION` | n'est produit que sur une clé de débit rejouée dont la ligne attend la réconciliation (état fabriqué par `test-argent-tour4.js`) ; le banc de contrat le déclare non produit et échoue si un état courant le produit | rien |
 
 ---
 
@@ -1042,5 +1121,5 @@ Un compte supprimé : ses sessions, codes et liens disparaissent, ses analyses s
 ## 10. Ce qui n'est pas encore garanti
 
 - Les routes du scanner (`/api/scanner/…`) ne seront livrées que sur confirmation de l'éditeur.
-- Le schéma est vérifié contre les **fausses** réponses et contre le **code** (listes fermées, routes) ; sa vérification contre les réponses **réelles** du serveur est le lot suivant (B7b).
+- Le schéma est vérifié contre les **fausses** réponses, contre le **code** (listes fermées, routes) et (B7b.1, `v2/test/test-contrat-reel.js`) contre les réponses **réelles** du serveur : chaque route de `paths` dans chaque état que le serveur sait produire, avec un seul écart connu (X1, §7.4). Ce que le banc ne prouve pas : le comportement réel du modèle de lecture (le faux réseau rejoue des lectures enregistrées) et les routes du scanner sur un navigateur réel.
 - La valeur du quota mensuel d'un abonnement (`quotaMensuel`) est une valeur de configuration (100 par défaut, inventée faute de source) : elle viendra de l'éditeur.

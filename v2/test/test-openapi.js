@@ -122,6 +122,10 @@ comparerAuCode('Produit.variante', variantesEnum, 'identifier/produit.js', 'tamp
 H.vrai('Produit.variante est nullable (on ne devine pas l\'édition, §7 / Q31)', nullable('Produit.properties.variante'));
 H.v('Impression.variante = Produit.variante', liste('Impression.properties.variante'), variantesEnum);
 H.vrai('Impression.variante est nullable', nullable('Impression.properties.variante'));
+// B7b.1 tour 1 (M6) : la liste des causes de non-remboursement a UNE source (sources.js), le schéma la reprend ensemble pour ensemble
+const { RAISONS_NON_REMBOURSE } = require('../../sources');
+H.v('Facturation.raisonNonRembourse : schéma = RAISONS_NON_REMBOURSE (sources.js)', diff(liste('Facturation.properties.raisonNonRembourse'), [...RAISONS_NON_REMBOURSE]), { enTrop: [], manquants: [] });
+H.vrai('Facturation.raisonNonRembourse est nullable', nullable('Facturation.properties.raisonNonRembourse'));
 const raisonsCarte = liste('CarteIntrouvable.properties.raison');
 comparerAuCode('raison (introuvable)', raisonsCarte, 'identifier/adaptateur.js', 'plusieurs-cartes-non-separees', PLAN.raisons);
 H.v('ReponseAnalyse.analyse.raison = mêmes raisons', liste('ReponseAnalyse.properties.analyse.properties.raison'), raisonsCarte);
