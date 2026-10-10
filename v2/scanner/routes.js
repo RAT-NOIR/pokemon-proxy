@@ -12,18 +12,22 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 const registre = require('../registre');
 const { repondreErreur } = require('../erreurs');
-const { lireMultipart } = require('./multipart');
+const MP = require('./multipart');                    // appelée À TRAVERS l'objet du module : un banc peut l'espionner
 const L = require('../transport/limites');
 const { idempotente, FORME } = require('../transport/idempotence');
 const { resoudrePorteur, exigerSession } = require('../porteur');
 const { exigerOrigineSite } = require('../comptes/sessions');
-const { traiterIdentifier, traiterReponse } = require('../identifier/routes');
+const { traiterIdentifier, traiterReponse, URL_RECHARGE } = require('../identifier/routes');
+const { facturation: fabriquerFacturation } = require('../argent/facturation');
 const { facturationDeLecture } = require('../identifier/retour-live');
 const { col } = require('../db');
 
 const PORTE_MAX = 3;                                   // au plus 3 corps de 12 Mo en mémoire à la fois, pour le processus
+const PLAFOND_PRISE_MS = 5 * 60 * 1000;                // filet : une prise n'est jamais gardée plus de 5 min, quoi qu'il arrive (aucune fuite ne dure)
+const COTE_MAX_PX = 2048, PIXELS_MAX = 80e6;
 let enCours = 0;
-const etatPorte = () => ({ enCours, max: PORTE_MAX });
+const lecturesParCompte = new Set();                   // UN seul corps en lecture par compte à la fois (ce processus)
+const etatPorte = () => ({ enCours, max: PORTE_MAX, comptes: lecturesParCompte.size });
 const journalErreur = (ou, e) => console.error(`❌ [v2 scanner] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message
 const MESSAGES_IMAGE = Object.freeze({ 'trop-lourde': 'Image trop lourde', format: 'Format d\'image non pris en charge', 'aucune-carte': 'Aucune image reçue' });
 
@@ -34,40 +38,76 @@ function repondreEtFermer(req, res, envoyer) {
     return envoyer();
 }
 
+// Décodage BORNÉ : pixels d'entrée limités, côté long ramené à 2 048 px (jamais agrandi), sortie JPEG ; l'orientation EXIF est appliquée (la sortie n'en porte plus).
 async function decoderHeicParDefaut(buffer) {
     const sharp = require('sharp');
-    return sharp(buffer, { failOn: 'error', limitInputPixels: 80e6 }).rotate().jpeg({ quality: 90 }).toBuffer();
+    return sharp(buffer, { failOn: 'error', limitInputPixels: PIXELS_MAX }).rotate()
+        .resize({ width: COTE_MAX_PX, height: COTE_MAX_PX, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+}
+// M6 : une image aux octets magiques valides doit AUSSI se lire (en-tête décodable, format reconnu, dimensions raisonnables) avant le moindre débit.
+async function imageLisible(buffer) {
+    try {
+        const m = await require('sharp')(buffer, { failOn: 'error' }).metadata();
+        return ['jpeg', 'png', 'webp'].includes(m.format) && m.width > 0 && m.height > 0 && m.width * m.height <= PIXELS_MAX;
+    } catch { return false; }
 }
 const estJpeg = b => Buffer.isBuffer(b) && b.length > 3 && b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF;
 
 function routesScanner(router, cfg, deps = {}) {
     const decoder = typeof deps.decoderHeic === 'function' ? deps.decoderHeic : decoderHeicParDefaut;
     const delaiMs = Number.isFinite(deps.scannerDelaiLectureMs) && deps.scannerDelaiLectureMs > 0 ? deps.scannerDelaiLectureMs : undefined;
-    // pas de règle G au scanner : ses voisins se cherchent par URL d'hôte Vinted, et l'image du scanner est un data-URL
-    const depsScanner = { ...deps, voisins: undefined };
+    // Les dépendances passent TELLES QUELLES (règle G comprise) : le futur fournisseur de voisins recevra un data-URL et ne doit ni le journaliser ni le stocker.
+    const depsScanner = deps;
+    const octetsMax = cfg.images.scannerOctetsMax;
 
     // 120 analyses par heure et par COMPTE : le MÊME budget que l'extension (même nom, même clé) — un compte ne double pas son débit en changeant de surface
     const parCompte = L.limiteur({ nom: 'identifier', max: cfg.limites.identifierParCompteHeure, fenetreMs: 3600e3, cle: q => (q.v2 && q.v2.porteur ? `${q.v2.porteur.type}:${q.v2.porteur.id}` : null) });
 
-    function porteCorps(req, res, next) {
+    // I1 : un corps qui n'est pas du multipart est refusé TOUT DE SUITE (express.json() global a pu le consommer : la lecture attendrait 30 s une fin qui a déjà eu lieu)
+    function exigerMultipart(req, res, next) {
+        if (/^multipart\/form-data\s*(;|$)/i.test(String(req.headers['content-type'] || ''))) return next();
+        return repondreEtFermer(req, res, () => repondreErreur(res, 'ENTREE', undefined, { detail: 'boundary' }));
+    }
+
+    // I2a : « ce porteur peut-il payer ? » se juge AVANT de lire 12 Mo, par la règle de v2/argent/ (solde.peutPayer, même table de refus que le débit). Rien n'est débité ici.
+    async function peutPayer(req, res, next) {
+        const porteur = req.v2.porteur;
+        let p;
+        try { p = await registre.obtenir('argent').peutPayer(porteur); }
+        catch (e) { journalErreur('peutPayer', e); return repondreEtFermer(req, res, () => repondreErreur(res, 'INDISPONIBLE')); }
+        if (p.ok) return next();
+        let solde; try { solde = await registre.obtenir('argent').solde(porteur); } catch (e) { journalErreur('solde', e); }
+        return repondreEtFermer(req, res, () => repondreErreur(res, p.code, undefined, { facturation: null, ...(solde !== undefined ? { solde } : {}), ...(p.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}) }));
+    }
+
+    // C1 + I2b + porte : un jeton de la porte (3 corps pour le processus) ET le droit de lire UN corps pour ce compte. La libération est IDEMPOTENTE et attachée à TOUT ce qui
+    // peut finir la requête (réponse partie ou connexion coupée) ; on ne prend rien si le client est déjà parti (son `close` ne reviendrait jamais) ; un plafond de 5 min la
+    // force en dernier recours. Les middlewares suivants ne peuvent pas lever vers nous (Express attrape leurs exceptions) : la réponse d'erreur finit la requête, donc libère.
+    function tenir(req, res, next) {
+        if (req.destroyed || res.destroyed || res.writableEnded) return undefined;     // client parti pendant les lectures de session/compte : rien à prendre, personne à qui répondre
+        const cle = `${req.v2.porteur.type}:${req.v2.porteur.id}`;
+        if (lecturesParCompte.has(cle)) return repondreEtFermer(req, res, () => repondreErreur(res, 'DEBIT', undefined, { reessayerDans: 2 }));
         if (enCours >= PORTE_MAX) return repondreEtFermer(req, res, () => repondreErreur(res, 'INDISPONIBLE', undefined, { reessayerDans: 2 }));
-        enCours++;
-        let rendu = false;
-        res.once('close', () => { if (!rendu) { rendu = true; enCours--; } });
+        enCours++; lecturesParCompte.add(cle);
+        let rendu = false, garde = null;
+        const liberer = () => { if (rendu) return; rendu = true; enCours--; lecturesParCompte.delete(cle); clearTimeout(garde); };
+        garde = setTimeout(liberer, PLAFOND_PRISE_MS); garde.unref();
+        res.once('close', liberer); res.once('finish', liberer);
         return next();
     }
 
     async function lireImage(req, res, next) {
         try {
-            const { champs, image } = await lireMultipart(req, { ...(delaiMs ? { delaiMs } : {}) });
+            const { champs, image } = await MP.lireMultipart(req, { ...(delaiMs ? { delaiMs } : {}) });
             let { buffer, type } = image;
             const empreinte = crypto.createHash('sha256').update(buffer).digest('hex');
             if (type === 'image/heic') {                     // décodé AVANT l'IA et AVANT le débit ; un échec est un format refusé
                 let jpeg = null;
                 try { jpeg = await decoder(buffer); } catch (e) { journalErreur('décodage HEIC', e); }
                 if (!estJpeg(jpeg)) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE.format, { detail: 'format' }, 415);
+                if (jpeg.length > octetsMax) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE['trop-lourde'], { detail: 'trop-lourde' }, 413);   // la sortie du décodeur est bornée comme l'entrée
                 buffer = jpeg; type = 'image/jpeg';
-            }
+            } else if (!(await imageLisible(buffer))) return repondreErreur(res, 'IMAGE', MESSAGES_IMAGE.format, { detail: 'format' }, 415);
             req.fichier = { buffer, type, source: champs.source };
             req.body = { source: champs.source, image: empreinte };      // l'empreinte du corps pour l'idempotence : même clé + autre image = refusée
             return next();
@@ -103,32 +143,39 @@ function routesScanner(router, cfg, deps = {}) {
     // Le scanner n'a ni règle de verdict ni lecture de prix en direct (CONTRAT : « null au scanner ») : l'analyse est servie telle que traiterIdentifier l'a faite, ces deux champs à null.
     const sansLive = k => (k && typeof k === 'object' ? { ...k, prixLive: null } : k);
     const auScanner = c => (c && c.success === true && c.analyse && Array.isArray(c.analyse.cartes) ? { ...c, analyse: { ...c.analyse, regleVerdict: null, cartes: c.analyse.cartes.map(sansLive) } } : c);
-    // Carte identifiée SANS prix au guide => remboursée (`sans-prix`), une fois par scan (le ledger refuse le second). Réponse réécrite, jamais la logique de traiterIdentifier.
-    const aRembourser = c => Boolean(c && c.success === true && c.contrat === 2 && c.analyse && c.analyse.statut === 'identifiee' && Array.isArray(c.analyse.cartes) && c.analyse.cartes.length === 1
-        && c.analyse.cartes[0].statut === 'identifiee' && c.analyse.cartes[0].carte && c.analyse.cartes[0].carte.prixGuide === null
-        && c.facturation && c.facturation.motif === 'affirmee' && c.facturation.debite === 1 && c.facturation.rembourse === false && /^[0-9a-f]{24}$/i.test(String(c.scanId)));
-    async function rembourserSansPrix(req, corps) {
-        const argent = registre.obtenir('argent'), porteur = req.v2.porteur, scanId = new mongoose.Types.ObjectId(corps.scanId);
+    // Carte identifiée SANS prix au guide => remboursée (`sans-prix`), une fois par scan (le ledger refuse le second) — CONTRAT-2 §6, « à confirmer par l'éditeur ».
+    // UNE fonction pour les deux chemins : la carte identifiée d'emblée (facturation `affirmee`) et la question répondue par un candidat (facturation `question`, débit confirmé).
+    const sansPrixIdentifiee = (k, f, motif) => Boolean(k && k.statut === 'identifiee' && k.carte && k.carte.prixGuide === null && f && f.motif === motif && f.debite === 1 && f.rembourse === false);
+    const aRembourserAnalyse = c => Boolean(c && c.success === true && c.contrat === 2 && c.analyse && c.analyse.statut === 'identifiee' && Array.isArray(c.analyse.cartes) && c.analyse.cartes.length === 1
+        && sansPrixIdentifiee(c.analyse.cartes[0], c.facturation, 'affirmee') && /^[0-9a-f]{24}$/i.test(String(c.scanId)));
+    const aRembourserReponse = c => Boolean(c && c.success === true && sansPrixIdentifiee(c.carte, c.facturation, 'question'));
+    async function rembourserSansPrix(req, corps, idScan) {
+        const argent = registre.obtenir('argent'), porteur = req.v2.porteur, scanId = new mongoose.Types.ObjectId(idScan);
         const r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'question' });
-        const facturation = facturationDeLecture(r);
+        // un rejeu de la même réponse retrouve le scan DÉJÀ remboursé : la réponse dit ce qu'elle a dit la première fois
+        const facturation = !r.rendu && r.raisonNonRembourse === 'deja-rembourse' ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'sans-prix' }) : facturationDeLecture(r);
         let solde; try { solde = await argent.solde(porteur); } catch (e) { journalErreur('solde', e); }
         try { await col('analyses').updateOne({ _id: scanId }, { $set: { facturation } }); } catch (e) { journalErreur('analyses', e); }
         return { ...corps, facturation, ...(solde !== undefined ? { solde } : {}) };
     }
-    function sansPrix(req, res, next) {
-        const origine = res.json;
-        res.json = function (corps) {
-            res.json = origine;
-            corps = auScanner(corps);
-            if (!aRembourser(corps)) return origine.call(this, corps);
-            rembourserSansPrix(req, corps).catch(e => { journalErreur('remboursement sans-prix', e); return corps; }).then(c => origine.call(this, c));
-            return this;
+    // Habille res.json : `transformer` (null au scanner), puis le remboursement sans-prix si `aRembourser(corps)`. Un remboursement qui échoue sert la réponse d'origine (jamais une panne).
+    function habiller(transformer, aRembourser, idScan) {
+        return (req, res, next) => {
+            const origine = res.json;
+            res.json = function (corps) {
+                res.json = origine;
+                corps = transformer(corps);
+                if (!aRembourser(corps)) return origine.call(this, corps);
+                rembourserSansPrix(req, corps, idScan(req, corps)).catch(e => { journalErreur('remboursement sans-prix', e); return corps; }).then(c => origine.call(this, c));
+                return this;
+            };
+            next();
         };
-        next();
     }
+    const sansPrix = habiller(auScanner, aRembourserAnalyse, (req, corps) => corps.scanId);
 
     router.post('/api/scanner/analyses',
-        resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), parCompte, porteCorps, lireImage,
+        resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), exigerMultipart, parCompte, peutPayer, tenir, lireImage,
         idempotente('scanner', { obligatoire: false }, cfg), cleDeDebit, entreeDuScanner, sansPrix, traiterIdentifier(cfg, depsScanner));
 
     // La réponse à une question : le scanId vient du CHEMIN (un corps qui en porte un autre est refusé), le reste est /api/identifier/reponse.
@@ -140,13 +187,9 @@ function routesScanner(router, cfg, deps = {}) {
         req.body = { ...b, scanId: id };
         next();
     }
-    function reponseAuScanner(req, res, next) {
-        const origine = res.json;
-        res.json = function (corps) { res.json = origine; return origine.call(this, corps && corps.success === true && corps.carte ? { ...corps, carte: sansLive(corps.carte) } : corps); };
-        next();
-    }
+    const reponseAuScanner = habiller(c => (c && c.success === true && c.carte ? { ...c, carte: sansLive(c.carte) } : c), aRembourserReponse, req => req.body.scanId);
     router.post('/api/scanner/analyses/:id/reponse',
         resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), scanIdDuChemin, idempotente('reponse-scanner', { obligatoire: false }, cfg), reponseAuScanner, traiterReponse(cfg, depsScanner));
 }
 
-module.exports = { routesScanner, etatPorte, PORTE_MAX };
+module.exports = { routesScanner, etatPorte, PORTE_MAX, decoderHeicParDefaut };

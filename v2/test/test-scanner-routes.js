@@ -18,8 +18,10 @@ const SITE = cfg.origines.site, EXT = cfg.origines.extension;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 
-const JPEG = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), crypto.randomBytes(300)]);
-const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]), crypto.randomBytes(100)]);
+// Images RÉELLES (sharp) : le scanner vérifie que l'image se décode (M6). FAUX_JPEG = octets magiques valides, rien de décodable derrière.
+let JPEG, PNG, CANARI;                               // CANARI : > 20 Ko de bruit ; son base64 est cherché dans TOUTE la base et dans la sortie de l'enfant (M1)
+const bruit = (l, h) => ({ raw: { width: l, height: h, channels: 3 } });
+const FAUX_JPEG = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), crypto.randomBytes(300)]);
 const HEIC = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypheic'), crypto.randomBytes(100)]);
 const EXE = Buffer.concat([Buffer.from('MZ'), crypto.randomBytes(100)]);
 const ID_A = 895789, ID_B = 895790, ID_C = 895791, EXP = 990001;
@@ -113,6 +115,12 @@ async function parcourir() {
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
     await semer();
+    const sharp = require('sharp');
+    JPEG = await sharp(crypto.randomBytes(24 * 24 * 3), bruit(24, 24)).jpeg().toBuffer();
+    PNG = await sharp(crypto.randomBytes(16 * 16 * 3), bruit(16, 16)).png().toBuffer();
+    CANARI = await sharp(crypto.randomBytes(300 * 300 * 3), bruit(300, 300)).jpeg({ quality: 95 }).toBuffer();
+    H.vrai(`fixtures : JPEG ${JPEG.length} o, PNG ${PNG.length} o, canari ${CANARI.length} o (> 20 Ko)`, CANARI.length > 20 * 1024);
+    const B64_CANARI = CANARI.toString('base64'), MILIEU_CANARI = B64_CANARI.slice(2000, 2200);
 
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const cors = require('../transport/cors');
@@ -127,18 +135,19 @@ async function parcourir() {
         if (mode === 'affirmee') return res.json({ ...affirme(ID_A), scanId: String(req.scanIdImpose) });
         if (mode === 'sans-prix') return res.json({ ...affirme(ID_C), scanId: String(req.scanIdImpose) });
         if (mode === 'introuvable') { await req.credit.v2.rembourser(req, 'aucun-prix'); return res.json({ success: false, natureRefus: 'refus-delibere', motifRefus: 'aucun-prix' }); }
-        if (mode === 'ambigue') {
-            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: [ID_A, ID_B] });
+        if (mode === 'ambigue' || mode === 'ambigue-sans-prix') {
+            const ids = mode === 'ambigue' ? [ID_A, ID_B] : [ID_A, ID_C];
+            await req.credit.v2.poserQuestion(req, { scanId: req.scanIdImpose, raison: 'egalite-sans-enjeu', candidats: ids });
             return res.json({ ...affirme(ID_A), scanId: String(req.scanIdImpose), question: { etat: 'en-attente', delaiHeures: 24 }, carte: { ...affirme(ID_A).carte, ambigu: true },
-                candidats: [ID_A, ID_B].map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
+                candidats: ids.map(id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null })) });
         }
         throw new Error(`mode inconnu ${mode}`);
     };
     const lotFabrique = async req => { appelsChaine++; dernierBody = req.body; return [ID_A, ID_B, ID_C].map(id => ({ statutHttp: 200, corps: { ...affirme(id), scanId: String(req.scanIdImpose) } })); };
-    const monter = async (deps = {}) => {
-        const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
+    const monter = async (deps = {}, c = cfg) => {
+        const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(c)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
         pret.armer(M.verifierIndex);
-        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter')], cfg, { gererIdentifier: chaine, ...deps }));
+        app.use(assembler([require('../argent/monter'), require('../identifier/monter'), require('../scanner/monter')], c, { gererIdentifier: chaine, ...deps }));
         return H.serveur(app);
     };
     const sv = await monter();
@@ -160,6 +169,28 @@ async function parcourir() {
         const c = await scanner(sv.url, nv.cookie, { nom: '1d' });
         H.v('   compte non vérifié : 403 VERIFICATION', [c.statut, c.json.erreur.code, c.json.facturation], [403, 'VERIFICATION', null]);
         H.v('   (toujours aucune chaîne appelée, aucun mouvement)', [appelsChaine - a0, await nMouv() - m0], [0, 0]);
+        // M3 : un compte NON vérifié dont la base porte 25 « accueil » n'a aucun crédit utilisable : VERIFICATION, rien débité
+        const nv25 = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
+        const c25 = await scanner(sv.url, nv25.cookie, { nom: '1e' });
+        H.v('M3. compte non vérifié avec accueil 25 : 403 VERIFICATION, rien débité, chaîne non appelée', [c25.statut, c25.json.erreur.code, await soldeCompte(nv25.c), await nMouv() - m0, appelsChaine - a0], [403, 'VERIFICATION', 25, 0, 0]);
+    }
+
+    // ═══ I2a : « peut-il payer ? » se juge AVANT de lire le corps (jamais 12 Mo lus pour un refus d'argent) ═══
+    {
+        const entete = { 'content-length': '12000000' };           // le client annonce 12 Mo et n'en envoie que 10 octets : une réponse reçue prouve que le corps n'a pas été attendu
+        const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
+        const a = await brut(sv.url, { cookie: nv.cookie, entetes: entete, delaiMs: 3000, ecrire: req => { req.write('0123456789'); } });
+        H.v('I2a. compte non vérifié : 403 VERIFICATION rendu AVANT la lecture du corps (réponse reçue pendant que 12 Mo sont encore dus)', [a.statut, a.json && a.json.erreur.code], [403, 'VERIFICATION']);
+        a.req.destroy();
+        const vide = await compte({ solde: { accueil: 0, achete: 0 } });
+        await raw('hebdo').insertOne({ compteId: vide.c._id, semaine: require('../../acces').semaineISO(new Date()), count: cfg.quotas.hebdo, expireLe: new Date(Date.now() + 86400e3) });   // la poche hebdo de la semaine est épuisée
+        const b = await brut(sv.url, { cookie: vide.cookie, entetes: entete, delaiMs: 3000, ecrire: req => { req.write('0123456789'); } });
+        H.v('   compte vérifié sans crédit : 429 QUOTA (avec solde, facturation null) AVANT la lecture du corps', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && b.json.solde && b.json.solde.total], [429, 'QUOTA', null, 0]);
+        b.req.destroy();
+        H.v('   la porte n\'a rien gardé', SC.etatPorte().enCours, 0);
+        const ad = await compte({ role: 'administrateur', solde: { accueil: 0, achete: 0 } });
+        const c = await scanner(sv.url, ad.cookie, { nom: 'I2a-admin' });
+        H.v('   un administrateur sans crédit passe (le débit ne lui prend rien)', [c.statut, c.json.facturation.motif], [200, 'administrateur']);
     }
 
     // ═══ (2) cookie + Origin exacte + X-Rat-Market ═══
@@ -179,8 +210,8 @@ async function parcourir() {
     let compteA, scanAffirme;
     {
         compteA = await compte(); mode = 'affirmee';
-        const r = await scanner(sv.url, compteA.cookie, { nom: '3' }), j = r.json || {};
-        const attendu = `data:image/jpeg;base64,${JPEG.toString('base64')}`;
+        const r = await scanner(sv.url, compteA.cookie, { form: formulaire({ image: CANARI }), nom: '3' }), j = r.json || {};
+        const attendu = `data:image/jpeg;base64,${B64_CANARI}`;
         H.v('3. la chaîne héritée reçoit UN data-URL = les octets reçus, en base64', [r.statut, dernierBody.imageUrls.length, dernierBody.imageUrls[0] === attendu], [200, 1, true]);
         H.v('   userId v2:compte:<id> (jamais un portefeuille hérité)', dernierBody.userId, `v2:compte:${compteA.c._id}`);
         const k = j.analyse.cartes[0];
@@ -269,6 +300,23 @@ async function parcourir() {
         H.v('   « aucune » : introuvable, crédit rendu (solde 24)', [ab.json.carte.statut, await soldeCompte(c)], ['introuvable', 24]);
     }
 
+    // ═══ M4 : une question répondue par un candidat SANS prix au guide est remboursée « sans-prix », comme une carte identifiée d'emblée ═══
+    {
+        const { c, cookie } = await compte(); mode = 'ambigue-sans-prix';
+        const r = await scanner(sv.url, cookie, { nom: 'M4' }), j = r.json || {};
+        const ch = j.analyse.cartes[0].question.choix;
+        const sansPrix = ch.find(x => x.idProduct === ID_C).id, avecPrix = ch.find(x => x.idProduct === ID_A).id;
+        const nRb = () => raw('mouvements').countDocuments({ type: 'remboursement', scanId: new mongoose.Types.ObjectId(j.scanId) });
+        const rep = await repondre(sv.url, cookie, j.scanId, { choix: sansPrix }, { nom: 'M4a' });
+        H.v('M4. répondre par le candidat SANS prix : identifiée, prixGuide null, { debite:0, rembourse:true, motif:sans-prix }, solde revenu à 25', [rep.json.carte.statut, rep.json.carte.carte.prixGuide, rep.json.facturation.debite, rep.json.facturation.rembourse, rep.json.facturation.motif, rep.json.solde.accueil, await soldeCompte(c)], ['identifiee', null, 0, true, 'sans-prix', 25, 25]);
+        const rej = await repondre(sv.url, cookie, j.scanId, { choix: sansPrix }, { nom: 'M4b' });
+        H.v('   le rejeu de la réponse : même facturation, UN seul remboursement, solde 25', [rej.json.facturation, await nRb(), await soldeCompte(c)], [rep.json.facturation, 1, 25]);
+        const r2 = await scanner(sv.url, cookie, { nom: 'M4c' });
+        const rep2 = await repondre(sv.url, cookie, r2.json.scanId, { choix: r2.json.analyse.cartes[0].question.choix.find(x => x.idProduct === ID_A).id }, { nom: 'M4d' });
+        H.v('   répondre par le candidat AVEC prix : pas de remboursement (debite 1, motif question), solde 24', [rep2.json.facturation.debite, rep2.json.facturation.rembourse, rep2.json.facturation.motif, await soldeCompte(c)], [1, false, 'question', 24]);
+        void avecPrix;
+    }
+
     // ═══ (9) 120 analyses par heure et par compte ═══
     {
         const { cookie } = await compte(); let dernier = null, passes = 0;
@@ -286,6 +334,7 @@ async function parcourir() {
         const { c, cookie } = await compte(); const m0 = await nMouv(), a0 = appelsChaine;
         const cas = [
             ['415 octets d\'exécutable', formulaire({ image: EXE }), 415, 'IMAGE', 'format'],
+            ['M6. 415 octets magiques JPEG valides mais image indécodable', formulaire({ image: FAUX_JPEG }), 415, 'IMAGE', 'format'],
             ['422 partie image vide', formulaire({ image: Buffer.alloc(0) }), 422, 'IMAGE', 'aucune-carte'],
             ['422 aucune partie image', formulaire({ image: null }), 422, 'IMAGE', 'aucune-carte'],
             ['400 source hors liste', formulaire({ source: 'url' }), 400, 'ENTREE', 'source'],
@@ -293,7 +342,7 @@ async function parcourir() {
         ];
         for (const [nom, form, st, code, detail] of cas) {
             const r = await scanner(sv.url, cookie, { form, nom: 'r3' });
-            H.v(`R3. ${nom} : ${st} ${code}/${detail}, facturation null`, [r.statut, r.json.erreur.code, r.json.erreur.detail, r.json.facturation], [st, code, detail, null]);
+            H.v(`R3. ${nom} : ${st} ${code}/${detail}, facturation null`, [r.statut, (r.json.erreur || {}).code, (r.json.erreur || {}).detail, r.json.facturation], [st, code, detail, null]);
         }
         const bound = await fetch(sv.url + '/api/scanner/analyses', { method: 'POST', headers: { cookie, origin: SITE, 'x-rat-market': '1', 'content-type': 'multipart/form-data' }, body: 'x' });
         const bj = await bound.json();
@@ -337,11 +386,114 @@ async function parcourir() {
         await svH.fermer(); await svE.fermer();
     }
 
-    // ═══ R2 : au plus 3 corps en mémoire à la fois ═══
+    // ═══ I4 : le décodage HEIC est BORNÉ ═══
     {
-        const { c, cookie } = await compte(); const m0 = await nMouv();
+        const { c, cookie } = await compte();
+        const enorme = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF]), Buffer.alloc(13 * 1024 * 1024, 7)]);       // un décodeur qui rend 13 Mo de « JPEG »
+        const svG = await monter({ decoderHeic: async () => enorme });
+        const r = await scanner(svG.url, cookie, { form: formulaire({ image: HEIC, type: 'image/heic' }), nom: 'I4' });
+        H.v('I4. un décodeur qui rend plus de 12 Mo : 413 trop-lourde, rien débité', [r.statut, (r.json.erreur || {}).code, (r.json.erreur || {}).detail, await soldeCompte(c)], [413, 'IMAGE', 'trop-lourde', 25]);
+        await svG.fermer();
+        H.vrai('   le décodeur par défaut est exporté (pour être borné par un test)', typeof SC.decoderHeicParDefaut === 'function');
+        if (typeof SC.decoderHeicParDefaut === 'function') {
+            const grande = await sharp({ create: { width: 5000, height: 3000, channels: 3, background: { r: 200, g: 30, b: 30 } } }).png().toBuffer();
+            const sortie = await SC.decoderHeicParDefaut(grande);
+            const meta = await sharp(sortie).metadata();
+            H.v('   le décodeur par défaut : JPEG, côté long ≤ 2048 px, sans agrandir', [meta.format, Math.max(meta.width, meta.height)], ['jpeg', 2048]);
+            const petite = await sharp(PNG).metadata(); const sp = await sharp(await SC.decoderHeicParDefaut(PNG)).metadata();
+            H.v('   une petite image n\'est pas agrandie', [sp.width, sp.height], [petite.width, petite.height]);
+        }
+    }
+
+    // ═══ I1 : un Content-Type qui n'est pas multipart est refusé TOUT DE SUITE ═══
+    {
+        const t0 = Date.now(), { cookie } = await compte();
+        let r = null;
+        try { const x = await fetch(sv.url + '/api/scanner/analyses', { method: 'POST', headers: { cookie, origin: SITE, 'x-rat-market': '1', 'content-type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(3000) }); r = { statut: x.status, json: await x.json() }; toutes.push({ nom: 'I1', statut: x.status, acao: x.headers.get('access-control-allow-origin'), acac: x.headers.get('access-control-allow-credentials') }); }
+        catch (e) { r = { statut: `abandon (${e.name})`, json: { erreur: {} } }; }
+        H.v('I1. application/json de 2 octets : 400 ENTREE en moins de 1 s, porte intacte', [r.statut, r.json.erreur.code, Date.now() - t0 < 1000, SC.etatPorte().enCours], [400, 'ENTREE', true, 0]);
+    }
+
+    // ═══ C1 : la porte ne fuit JAMAIS (client coupé pendant une lecture lente, exception après la prise) ═══
+    {
+        const { cookie } = await compte();
+        const dbReelle = mongoose.connection.db;
+        const ralentie = new Proxy(dbReelle, { get(t, p) {
+            if (p !== 'collection') { const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; }
+            return nom => { const c = t.collection(nom); if (!nom.endsWith('sessions')) return c;
+                return new Proxy(c, { get(tc, pc) { if (pc === 'findOne') return async (...a) => { await attendre(400); return tc.findOne(...a); }; const v = tc[pc]; return typeof v === 'function' ? v.bind(tc) : v; } }); };
+        } });
+        db.brancher(ralentie);
+        const coupes = [];
+        try {
+            for (let k = 0; k < 5; k++) coupes.push(brut(sv.url, { cookie, entetes: { 'content-length': '5000' }, delaiMs: 3000, ecrire: req => { req.write('--BBB\r\n'); setTimeout(() => req.destroy(), 80); } }));
+            await Promise.all(coupes); await attendre(1500);
+        } finally { db.brancher(dbReelle); }
+        H.v('C1. 5 clients qui coupent PENDANT la lecture de session (400 ms) : la porte est rendue (0/3)', SC.etatPorte().enCours, 0);
+        const apres = await scanner(sv.url, cookie, { nom: 'C1-apres' });
+        H.v('   le compte et le processus ne sont pas bloqués : le scan suivant passe', apres.statut, 200);
+        // exception APRÈS la prise : la lecture du corps lève une erreur inattendue
+        const MP = require('../scanner/multipart'), orig = MP.lireMultipart;
+        MP.lireMultipart = async () => { throw new TypeError('défaut simulé'); };
+        let boum; try { boum = await scanner(sv.url, cookie, { nom: 'C1-exception' }); } finally { MP.lireMultipart = orig; }
+        await attendre(200);
+        H.v('   une exception après la prise : 500 SERVEUR, rien débité, porte rendue (0/3)', [boum.statut, (boum.json.erreur || {}).code, boum.json.facturation, SC.etatPorte().enCours], [500, 'SERVEUR', null, 0]);
+        const encore = await scanner(sv.url, cookie, { nom: 'C1-encore' });
+        H.v('   et le scan suivant du même compte passe', encore.statut, 200);
+    }
+
+    // ═══ I2b : UN seul corps en lecture par compte à la fois ═══
+    {
+        const { c, cookie } = await compte(), autre = await compte();
+        const reqs = [], tenu = brut(sv.url, { cookie, entetes: { 'content-length': '5000' }, delaiMs: 20000, surReq: q => reqs.push(q), ecrire: req => { req.write('--BBB\r\n'); } });
+        for (let k = 0; k < 50 && SC.etatPorte().enCours < 1; k++) await attendre(50);
+        const m0 = await nMouv();
+        const second = await scanner(sv.url, cookie, { nom: 'I2b' });
+        H.v('I2b. un second corps du même compte pendant le premier : 429 DEBIT avec reessayerDans court, rien débité', [second.statut, (second.json.erreur || {}).code, ((second.json.erreur || {}).reessayerDans > 0) && second.json.erreur.reessayerDans <= 10, await nMouv() - m0, await soldeCompte(c)], [429, 'DEBIT', true, 0, 25]);
+        const autreCompte = await scanner(sv.url, autre.cookie, { nom: 'I2b2' });
+        H.v('   un AUTRE compte n\'est pas gêné', autreCompte.statut, 200);
+        for (const q of reqs) q.destroy();
+        await tenu;
+        for (let k = 0; k < 60 && SC.etatPorte().enCours > 0; k++) await attendre(50);
+        const apres = await scanner(sv.url, cookie, { nom: 'I2b3' });
+        H.v('   le premier terminé, le compte peut scanner à nouveau', [apres.statut, SC.etatPorte().enCours], [200, 0]);
+    }
+
+    // ═══ I3 : la règle G n'est PAS coupée au scanner (consultée comme à l'extension) ═══
+    {
+        const RG = require('../identifier/regle-g'), origG = RG.decisionRegleG;
+        let appelsG = 0; const vus = [];
+        RG.decisionRegleG = () => { appelsG++; return null; };
+        const voisins = async ({ imageUrls }) => { vus.push(String(imageUrls[0]).startsWith('data:')); return { ligne: {}, nEssais: 0, mesures: [], contexteG: {}, seuils: {} }; };
+        const cfgG = lireConfig({ MONGODB_BASE: 'test_scratch', V2_REGLE_G: '1' });
+        const svG = await monter({ voisins }, cfgG);
+        try {
+            mode = 'affirmee';
+            const { cookie } = await compte();
+            const r = await scanner(svG.url, cookie, { form: formulaire({ image: CANARI }), nom: 'I3' });
+            H.v('I3. règle G allumée + un fournisseur de voisins : decisionRegleG est consultée au scanner (1 appel), le fournisseur reçoit le data-URL', [r.statut, appelsG, vus], [200, 1, [true]]);
+        } finally { RG.decisionRegleG = origG; await svG.fermer(); }
+    }
+
+    // ═══ M2 : journal-scans.js — une URL https s'écrit à l'identique, un data: devient null ═══
+    {
+        const { enregistrerScan, JournalScan } = require('../../journal-scans');
+        const marque = `__m2-${Date.now()}`;
+        const https = 'https://images1.vinted.net/t/01_00/f800/photo.webp?s=abc';
+        enregistrerScan({ route: 'identifier', userId: `${marque}-a`, imageUrl: https });
+        enregistrerScan({ route: 'identifier', userId: `${marque}-b`, imageUrl: `data:image/jpeg;base64,${B64_CANARI.slice(0, 400)}` });
+        enregistrerScan({ route: 'identifier', userId: `${marque}-c`, imageUrl: `  DATA:image/png;base64,AAAA` });
+        const lire = async u => { for (let k = 0; k < 40; k++) { const d = await JournalScan.findOne({ userId: u }).lean(); if (d) return d; await attendre(100); } return null; };
+        const [a, b, cc] = [await lire(`${marque}-a`), await lire(`${marque}-b`), await lire(`${marque}-c`)];
+        H.v('M2. journal-scans : https écrite à l\'identique ; data: (même en majuscules ou après des espaces) => null', [a && a.imageUrl, b && b.imageUrl, cc && cc.imageUrl], [https, null, null]);
+        await JournalScan.deleteMany({ userId: new RegExp(`^${marque}`) });
+    }
+
+    // ═══ R2 : au plus 3 corps en mémoire à la fois (un seul par compte : trois comptes) ═══
+    {
+        const trois = [await compte(), await compte(), await compte()], quatre = await compte(); const cookie = quatre.cookie, c = quatre.c; const m0 = await nMouv();
         const reqs = [], tenus = [];
-        for (let k = 0; k < 3; k++) tenus.push(brut(sv.url, { cookie, entetes: { 'content-length': '5000' }, delaiMs: 20000, surReq: q => reqs.push(q), ecrire: req => { req.write('--BBB\r\n'); } }));
+        for (const t of trois) tenus.push(brut(sv.url, { cookie: t.cookie, entetes: { 'content-length': '5000' }, delaiMs: 20000, surReq: q => reqs.push(q), ecrire: req => { req.write('--BBB\r\n'); } }));
         for (let k = 0; k < 50 && SC.etatPorte().enCours < 3; k++) await attendre(100);
         H.v('R2. trois corps en lecture : la porte est pleine (3/3)', [SC.etatPorte().enCours, SC.etatPorte().max], [3, 3]);
         const quatrieme = await scanner(sv.url, cookie, { nom: 'porte' });
@@ -368,6 +520,7 @@ async function parcourir() {
     await sv.fermer();
 
     // ═══ (3 réel) + (10) la VRAIE chaîne héritée, serveur enfant, faux réseau ═══
+    let sortieEnfant = '';
     {
         const { demarrer } = require('../../verrou/serveur');
         const FAUX = path.join(__dirname, 'faux-reseau-scanner.js');
@@ -377,7 +530,7 @@ async function parcourir() {
         if (!await srv.attendreMongo()) throw new Error('Mongo non connecté');
         const url = `http://127.0.0.1:${srv.port}`;
         const { c, cookie } = await compte();
-        const r = await scanner(url, cookie, { nom: 'reel' }), j = r.json || {};
+        const r = await scanner(url, cookie, { form: formulaire({ image: CANARI }), nom: 'reel' }), j = r.json || {};
         H.v('3b. VRAIE chaîne (faux réseau) : 200, contrat 2, a-trancher à 2 candidats, réservé', [r.statut, j.contrat, j.analyse && j.analyse.statut, j.analyse && j.analyse.cartes[0].candidats.length, j.facturation && j.facturation.reserve], [200, 2, 'a-trancher', 2, 1]);
         H.vrai('   l\'IA (faux réseau) a bien reçu un data-URL', /data-URL transmis à l'IA \(\d+ caractères\)/.test(srv.lire()));
         let jl = null; for (let k = 0; k < 30 && !jl; k++) { jl = await raw('journal_scans').findOne({ userId: `v2:compte:${c._id}` }); if (!jl) await attendre(200); }   // un refus par égalité porte un _id propre, pas le scanId
@@ -385,7 +538,7 @@ async function parcourir() {
         const rep = await repondre(url, cookie, j.scanId, { choix: j.analyse.cartes[0].question.choix[0].id }, { nom: 'reel-rep' });
         H.v('   réponse à la question sur la vraie chaîne : 200 identifiée', [rep.statut, rep.json.carte.statut], [200, 'identifiee']);
         // un scan dont la lecture tombe (image non rejouable ne peut pas se fabriquer ici : on vérifie la panne par une image rejouée absente — non faisable) : voir réserves
-        await attendre(500); srv.enfant.kill();
+        await attendre(500); sortieEnfant = srv.lire(); srv.enfant.kill();
     }
 
     // ═══ (10) l'image n'est ni stockée ni journalisée : TOUTES les collections ═══
@@ -396,6 +549,17 @@ async function parcourir() {
         H.vrai('    (le dénominateur contient bien les collections écrites par un scan : analyses, annonces, journal_scans, mouvements, questions, idempotence)', ['analyses', 'annonces', 'journal_scans', 'mouvements', 'questions'].every(n => noms.includes(n)));
         const docsBanc = []; for (const n of noms.filter(x => /banc/i.test(x))) docsBanc.push([n, await raw(n).countDocuments({})]);
         H.vrai(`    rien n'est conservé pour le banc (le scanner ne transmet aucun consentement) : 0 document dans ${docsBanc.length} collection(s) du banc (${docsBanc.map(x => x[0]).join(', ')})`, docsBanc.every(x => x[1] === 0));
+    }
+    // ═══ M1 : une image CANARI de plus de 20 Ko (scans en processus ET par la vraie chaîne) ne se retrouve en sous-chaîne NULLE PART ═══
+    {
+        const noms = (await mongoose.connection.db.listCollections().toArray()).map(x => x.name).filter(n => !n.startsWith('system.'));
+        let docs = 0; const trouves = [];
+        for (const n of noms) for (const d of await raw(n).find({}).toArray()) {
+            docs++; const s = JSON.stringify(d);
+            if (s.includes(B64_CANARI) || s.includes(MILIEU_CANARI) || s.includes(CANARI.toString('hex').slice(2000, 2200))) trouves.push(`${n}/${d._id}`);
+        }
+        H.v(`M1. canari de ${CANARI.length} o (base64 entier ET un fragment de 200 caractères, avec ou sans « data: », + son hex) cherché dans ${docs} documents / ${noms.length} collections`, trouves, []);
+        H.vrai(`    ... et dans la sortie du serveur enfant (${sortieEnfant.length} caractères) : absent`, sortieEnfant.length > 0 && !sortieEnfant.includes(MILIEU_CANARI) && !sortieEnfant.includes(B64_CANARI));
     }
     H.bilan();
     await mongoose.disconnect(); await H.arreterBanc();
