@@ -14,6 +14,24 @@ async function consommer(cle, { max, fenetreMs, maintenant = new Date() }) {
     const n = doc.n;
     return { permis: n <= max, n, max, reessayerDans: Math.max(1, Math.ceil((debut + fenetreMs - maintenant.getTime()) / 1000)) };
 }
+/**
+ * « Au plus UN par `delaiMs` » avec une fenêtre GLISSANTE (O3). consommer() compte par fenêtre alignée : avec max 1 il laisserait partir deux courriels à quelques secondes
+ * d'écart de part et d'autre d'une frontière de fenêtre. Ici un document par clé porte `expireLe` = dernier passage + delaiMs ; il vit dans `limites` (persistant, TTL), donc survit
+ * à un redémarrage. La prise est atomique : insertion (index unique sur `cle`) ou mise à jour conditionnée à `expireLe <= maintenant` ; une seule de deux demandes simultanées gagne.
+ * @returns {{permis: boolean, reessayerDans: number}}
+ */
+async function reserver(cle, { delaiMs, maintenant = new Date() }) {
+    const k = `${cle}|reservation`, expireLe = new Date(maintenant.getTime() + delaiMs);
+    for (let essai = 0; essai < 2; essai++) {   // 2 tours : le TTL de Mongo a pu retirer le document entre l'échec de l'insertion et la mise à jour
+        try { await col('limites').insertOne({ cle: k, n: 1, expireLe }); return { permis: true, reessayerDans: 0 }; }
+        catch (e) { if (e.code !== 11000) throw e; }
+        const r = await col('limites').updateOne({ cle: k, expireLe: { $lte: maintenant } }, { $set: { expireLe }, $inc: { n: 1 } });
+        if (r.modifiedCount === 1) return { permis: true, reessayerDans: 0 };
+        const vu = await col('limites').findOne({ cle: k });
+        if (vu) return { permis: false, reessayerDans: Math.max(1, Math.ceil((vu.expireLe.getTime() - maintenant.getTime()) / 1000)) };
+    }
+    return { permis: false, reessayerDans: 1 };   // ne peut pas conclure : refuse (une garde qui ne sait pas bloque)
+}
 function limiteur({ nom, max, fenetreMs, cle }) {
     return async function limiteurV2(req, res, next) {
         try {
@@ -28,4 +46,4 @@ function limiteur({ nom, max, fenetreMs, cle }) {
         }
     };
 }
-module.exports = { consommer, limiteur, empreinteIp };
+module.exports = { consommer, reserver, limiteur, empreinteIp };

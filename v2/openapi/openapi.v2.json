@@ -1189,7 +1189,7 @@
         "tags": [
           "comptes"
         ],
-        "summary": "Réinitialise le mot de passe (24 h, usage unique ; révoque les sessions)",
+        "summary": "Réinitialise le mot de passe (24 h, usage unique ; incrémente la génération du compte, révoque les sessions, DÉLIE les installations liées au compte et supprime ses codes de liaison vivants)",
         "security": [],
         "parameters": [
           {

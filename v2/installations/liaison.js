@@ -6,7 +6,10 @@ const RE_CODE = /^[A-Z0-9]{6}$/;
 const RE_ID = /^[0-9a-f]{32}$/;
 const masquer = email => { const [l, d] = String(email).split('@'); return `${Array.from(l)[0] || ''}•••@${d || ''}`; };
 
-async function creerCode(compteId, cfg, maintenant = new Date()) {
+/** `generation` : celle du compte LUE par la requête avec son porteur (O3 tour 2, I-A) ; le code la porte. Absente (undefined) : relue sur le compte (bancs) ; une demande en vol, dont le porteur a été résolu
+ *  AVANT une réinitialisation, écrit un code de la génération révolue, que `lier` refuse. */
+async function creerCode(compteId, cfg, maintenant = new Date(), generation = undefined) {
+    if (generation === undefined) { const c = await col('comptes').findOne({ _id: compteId }, { projection: { generation: 1 } }); generation = c && Number.isInteger(c.generation) ? c.generation : null; }
     const vivants = () => col('codes_liaison').find({ compteId, utiliseLe: null, expireLe: { $gt: maintenant } }).sort({ expireLe: 1 }).toArray();
     const refus = async () => { const v = await vivants(); return { refus: true, reessayerDans: Math.max(1, Math.ceil((v[0].expireLe.getTime() - maintenant.getTime()) / 1000)) }; };
     if ((await vivants()).length >= cfg.comptes.codesVivants) return refus();
@@ -14,7 +17,7 @@ async function creerCode(compteId, cfg, maintenant = new Date()) {
     let code, doc;
     for (let essai = 0; ; essai++) {   // collision sur l'index unique des empreintes : UN réessai, puis l'erreur remonte (503), jamais de boucle
         code = J.genererCode(cfg.comptes.codeLongueur);
-        doc = { codeEmpreinte: J.empreinte(code), compteId, creeLe: maintenant, expireLe, utiliseLe: null };
+        doc = { codeEmpreinte: J.empreinte(code), compteId, generation, creeLe: maintenant, expireLe, utiliseLe: null };
         try { await col('codes_liaison').insertOne(doc); break; }
         catch (e) { if (e.code !== 11000 || essai >= 1) throw e; }
     }
@@ -38,15 +41,25 @@ async function lier({ installation, code, argent, maintenant = new Date() }) {
     }
     const rendre = () => col('codes_liaison').updateOne({ _id: pris._id }, { $set: { utiliseLe: null } });
     const compte = await col('comptes').findOne({ _id: pris.compteId });
-    if (!compte) return { statut: 404, code: 'CODE_INVALIDE' };
+    if (!compte || compte.verifie !== true) return { statut: 404, code: 'CODE_INVALIDE' };   // O3 : jamais de liaison à un compte non confirmé (le code est consommé : réponse = code inconnu)
+    // O3 tour 2 (I-A) : un code d'une génération révolue (la réinitialisation est passée depuis sa création) ne lie rien, même vivant. Champ absent : jamais égal.
+    if (!Number.isInteger(pris.generation) || !Number.isInteger(compte.generation) || pris.generation !== compte.generation) return { statut: 404, code: 'CODE_INVALIDE' };
     const jeton = J.genererJeton();
+    const defaire = () => col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte, generation: installation.generation ?? 0 } });
     const r = await col('installations').updateOne({ _id: installation._id, compteId: null, revoqueeLe: null, jetonEmpreinte: installation.jetonEmpreinte },
-        { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton) } });
+        { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton), generation: pris.generation } });   // l'installation porte la génération du CODE
     if (r.modifiedCount !== 1) { await rendre(); return { statut: 409, code: 'DEJA_LIE' }; }
-    try { await argent.fusionnerALaLiaison({ installation, compteId: compte._id }); }
-    catch (e) {   // la liaison n'est annoncée que si la fusion a eu lieu : on défait, le client garde son ancien jeton
-        console.error(`❌ [v2 liaison] fusion en échec (${(e && (e.code || e.name)) || 'erreur'}) — liaison défaite`);
-        await col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte } });
+    // relecture APRÈS l'écriture : si la réinitialisation est passée entre la lecture du compte et cette écriture, l'installation (déjà inerte : génération révolue) est déliée tout de suite,
+    // faute de quoi elle resterait « liée » sans pouvoir ni se relier (DEJA_LIE) ni dépenser sa poche (compteId non nul)
+    const apres = await col('comptes').findOne({ _id: compte._id }, { projection: { generation: 1 } });
+    if (!apres || apres.generation !== pris.generation) { await defaire(); return { statut: 404, code: 'CODE_INVALIDE' }; }
+    // la fusion RÉELLE attend `{ compteId, installationId }` et rend `{ ok }` sans lever pour une installation ou un compte inconnu : `ok !== true` défait la liaison comme une exception
+    let fusion = null;
+    try { fusion = await argent.fusionnerALaLiaison({ compteId: compte._id, installationId: installation._id }); }
+    catch (e) { console.error(`❌ [v2 liaison] fusion en échec (${(e && (e.code || e.name)) || 'erreur'}) — liaison défaite`); }
+    if (!fusion || fusion.ok !== true) {   // la liaison n'est annoncée que si la fusion a eu lieu : on défait, le client garde son ancien jeton
+        if (fusion) console.error(`❌ [v2 liaison] fusion refusée (${String(fusion.raison || 'sans raison').slice(0, 40)}) — liaison défaite`);
+        await defaire();
         await rendre();
         return { statut: 503, code: 'INDISPONIBLE' };
     }

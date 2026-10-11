@@ -63,7 +63,9 @@ function lireConfig(env = process.env) {
                       // clesService et forfaitDocument comptent des PLACES (une clé = 1). forfaitDocument : places que coûte un DOCUMENT neuf (un set neuf pour un compte), en plus de sa première clé
                       // = le maximum MESURÉ (collStats après fsync : données + index d'un document d'une clé, divisés par le coût mesuré d'une clé maximale, moins la clé) arrondi vers le haut = 7 ; test-collection.js le mesure et échoue au-dessus.
                       forfaitDocument: 7 },
-        comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24 },
+        comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24,
+                    // O3 : un compte non confirmé est INACTIF et supprimé après `nonConfirmeHeures` ; un seul courriel de confirmation par adresse et par `confirmationHeures` (inscription et renvoi confondus).
+                    nonConfirmeHeures: 48, confirmationHeures: 24 },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',

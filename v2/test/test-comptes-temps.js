@@ -19,15 +19,21 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
         t.insExistante.push((await mesure('/api/compte/inscription', { email: 'existe@exemple.fr', motDePasse: MDP, turnstile: 't' })).ms);
         t.oubliConnu.push((await mesure('/api/compte/mot-de-passe-oublie', { email: 'existe@exemple.fr' })).ms);
         t.oubliInconnu.push((await mesure('/api/compte/mot-de-passe-oublie', { email: `inconnu${i}@exemple.fr` })).ms);
+        // O3 (tour 1, I-4) : le renvoi — adresse EN ATTENTE dont le courriel est libre (la limite est vidée : le courrier lent PART à chaque essai) contre adresse inconnue
+        await db.col('limites').deleteMany({ cle: /^confirmation:/ });
+        t.renvoiConnu.push((await mesure('/api/compte/renvoyer-verification', { email: 'existe@exemple.fr' })).ms);
+        t.renvoiInconnu.push((await mesure('/api/compte/renvoyer-verification', { email: `inconnu${i}@exemple.fr` })).ms);
     }
     const ecart = (a, b) => Math.abs(moy(a) - moy(b));
     H.vrai(`inscription : adresse nouvelle ${moy(t.insNouvelle).toFixed(0)} ms / existante ${moy(t.insExistante).toFixed(0)} ms, écart ${ecart(t.insNouvelle, t.insExistante).toFixed(1)} ms < 30 (${ESSAIS} essais par branche)`, ecart(t.insNouvelle, t.insExistante) < 30);
     H.vrai(`mot de passe oublié : connue ${moy(t.oubliConnu).toFixed(0)} ms / inconnue ${moy(t.oubliInconnu).toFixed(0)} ms, écart ${ecart(t.oubliConnu, t.oubliInconnu).toFixed(1)} ms < 30 (${ESSAIS} essais par branche)`, ecart(t.oubliConnu, t.oubliInconnu) < 30);
     H.vrai(`le courrier lent n'est jamais attendu : toutes les branches < 120 ms de moyenne`, [t.insNouvelle, t.oubliConnu].every(l => moy(l) < 120));
+    H.vrai(`renvoi de vérification : en attente (courrier lent, ${ESSAIS} envois) ${moy(t.renvoiConnu).toFixed(0)} ms / inconnue ${moy(t.renvoiInconnu).toFixed(0)} ms, écart ${ecart(t.renvoiConnu, t.renvoiInconnu).toFixed(1)} ms < 30, moyenne < 120 ms`, ecart(t.renvoiConnu, t.renvoiInconnu) < 30 && moy(t.renvoiConnu) < 120);
     // B8 (O1) : ce banc est un banc de TEMPS ; son « 21 courriers » était un incident de sa construction (une IP neuve à chaque appel neutralise la limite par IP, 21 demandes pour UNE adresse),
     // pas une spécification. Depuis la limite par adresse (renvoiParCompteHeure par heure, comme le renvoi de vérification), l'assertion dit ce qu'elle voulait dire : le courrier part bel et bien
     // (au moins un, jamais plus que la borne), les 20 inscriptions neuves envoient toutes leur lien. Les durées (lignes ci-dessus) sont inchangées : la limite est jugée DANS le travail détaché.
-    H.v('et le courrier part bel et bien (travail détaché terminé : 20 nouvelles inscriptions ; oublis connus : au moins 1 et au plus la borne par adresse)', [envoyes.filter(e => e[0] === 'v').length, envoyes.filter(e => e[0] === 'r').length >= 1 && envoyes.filter(e => e[0] === 'r').length <= cfg.limites.renvoiParCompteHeure], [ESSAIS, true]);
+    // O3 : « existe@ » est un compte NON confirmé (nouveauCompte) : sa 1re réinscription envoie UN courrier (ruling 5 : le premier inscrit reçoit un courriel si la limite d'un par adresse et par 24 h le permet), les 19 suivantes rien.
+    H.v('et le courrier part bel et bien (travail détaché terminé : 20 nouvelles inscriptions + 1 pour l\'adresse en attente, UN seul en 24 h ; oublis connus : au moins 1 et au plus la borne par adresse)', [envoyes.filter(e => e[0] === 'v').length, envoyes.filter(e => e[0] === 'r').length >= 1 && envoyes.filter(e => e[0] === 'r').length <= cfg.limites.renvoiParCompteHeure], [2 * ESSAIS + 1, true]);   // + les 20 renvois mesurés ci-dessus (limite vidée à chaque essai)
     // une panne du pilote est journalisée sans adresse ni message brut
     const trace = []; const orig = console.error; console.error = (...a) => trace.push(a.join(' '));
     A.registre.fournir('courrier', { envoyerVerification: async () => { throw new Error('Brevo 401 pour secret@exemple.fr'); }, envoyerReinitialisation: async () => { throw new Error('Brevo 401 pour autre@exemple.fr'); } });

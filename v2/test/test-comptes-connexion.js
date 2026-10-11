@@ -40,7 +40,8 @@ const { resoudrePorteur } = require('../porteur');
     // 5
     await creer('nonverifie@exemple.fr', false);
     const nv = await post('/api/compte/connexion', { email: 'nonverifie@exemple.fr', motDePasse: MDP });
-    H.v('compte non vérifié se connecte', [nv.statut, nv.json.compte.verifie], [200, false]);
+    // O3 : un compte non confirmé est inactif — même réponse qu'un mauvais mot de passe (le détail est dans test-comptes-o3.js)
+    H.v('compte non vérifié (bon mot de passe) : 401 IDENTIFIANTS, même corps qu\'un mauvais mot de passe', [nv.statut, nv.texte === mauvais.texte], [401, true]);
     // 4 : 10 essais/h/compte, adresses inconnues comprises
     await creer('cible@exemple.fr');
     const codes = []; for (let i = 0; i < 10; i++) codes.push((await post('/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: 'faux-faux-faux' })).statut);
@@ -50,7 +51,7 @@ const { resoudrePorteur } = require('../porteur');
     H.v('adresse INCONNUE : même plafond (10 × 401 puis 429), le plafond ne révèle rien', [ci.slice(0, 10).every(x => x === 401), ci[10]], [true, 429]);
     // 9
     const sansOrigine = await post('/api/compte/connexion', { email: 'bob@exemple.fr', motDePasse: MDP }, {}, false);
-    H.v('sans Origin : 403 ORIGINE, aucune session de plus', [sansOrigine.statut, await db.col('sessions').countDocuments({})], [403, 2]);
+    H.v('sans Origin : 403 ORIGINE, aucune session de plus', [sansOrigine.statut, await db.col('sessions').countDocuments({})], [403, 1]);   // O3 : le compte non vérifié ne reçoit plus de session
     // 8 glissement + 7 expiration, vus par le résolveur
     const faux = cookieTxt => ({ headers: { cookie: cookieTxt }, ip: '1.1.1.1', get(nom) { return this.headers[nom.toLowerCase()]; } });
     const resoudre = async cookieTxt => { const q = faux(cookieTxt); await resoudrePorteur(cfg)(q, { status() { return this; }, json() { return this; }, setHeader() {} }, () => {}); return q; };

@@ -155,7 +155,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await ident(U, 'marché non pris en charge', 422, x.jeton, corpsId({ marche: 'amazon.fr' }));
         await ident(U, 'extension trop ancienne', 426, x.jeton, corpsId({ versionExtension: '1.0.0' }));
         const nv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } }); const il = await instLiee(nv);
-        await ident(U, 'compte non vérifié', 403, il.jeton);
+        await ident(U, 'compte non vérifié (O3 : plus un porteur, l\'installation liée redevient une installation seule sans essai)', 429, il.jeton);
         const ad = await compte({ role: 'administrateur', solde: { accueil: 25, achete: 0 } }); const ia = await instLiee(ad);
         await ident(U, 'administrateur (a-trancher, rien débité)', 200, ia.jeton);
         const ex = await compte({ solde: { accueil: 0, achete: 0 } }); const ie = await instLiee(ex);
@@ -493,8 +493,8 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         const gab = await jouer(V, 'GET /api/compte', 'compte à abonnement actif', 200, '/api/compte', { entetes: siteH(cab.cookie) });
         H.v('   … l\'abonnement est servi (restant 40 / quota 100)', gab.json && gab.json.solde.abonnement && [gab.json.solde.abonnement.restant, gab.json.solde.abonnement.quotaMensuel], [40, 100]);
         const cnv = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
-        const gnv = await jouer(V, 'GET /api/compte', 'compte NON vérifié (accueil non utilisable)', 200, '/api/compte', { entetes: siteH(cnv.cookie) });
-        H.v('   … compte non vérifié : verifie false, accueil 0 au solde', gnv.json && [gnv.json.compte.verifie, gnv.json.solde.accueil], [false, 0]);
+        // O3 : un compte non confirmé n'est plus un porteur — sa session ne lit rien (401 SESSION), même avec un accueil écrit en base
+        await jouer(V, 'GET /api/compte', 'compte NON vérifié (O3 : plus un porteur)', 401, '/api/compte', { entetes: siteH(cnv.cookie) });
         const cmu = await compte(); for (let k = 0; k < 3; k++) await instLiee(cmu, { libelle: `Poste ${k}` });
         const gmu = await jouer(V, 'GET /api/compte', 'compte à PLUSIEURS installations', 200, '/api/compte', { entetes: siteH(cmu.cookie) });
         H.v('   … trois installations servies', gmu.json && gmu.json.installations.length, 3);
@@ -538,7 +538,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await scan('PNG, source=fichier', 200, c, { form: formulaire({ image: PNG, type: 'image/png', source: 'fichier' }) });
         await scan('administrateur', 200, await compte({ role: 'administrateur' }));
         await scan('sans session', 401, null);
-        await scan('compte non vérifié', 403, await compte({ verifie: false, solde: { accueil: 0, achete: 0 } }));
+        await scan('compte non vérifié (O3 : plus un porteur)', 401, await compte({ verifie: false, solde: { accueil: 0, achete: 0 } }));
         await scan('Origin de l\'extension', 403, c, { entetes: { origin: EXT, 'x-rat-market': '1', cookie: c.cookie, ...ip() } });
         await scan('octets d\'exécutable', 415, c, { form: formulaire({ image: EXE }) });
         await scan('partie image vide', 422, c, { form: formulaire({ image: Buffer.alloc(0) }) });
@@ -630,7 +630,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(U, R_PUT, 'sans session', 401, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(null) });
         await jouer(U, R_PUT, 'sans Origin du site (ORIGINE)', 403, ch('S1', '1|1'), { corps: { possedee: true }, entetes: { cookie: c4.cookie, ...ip() } });
         const cnv = await compte({ verifie: false });
-        await jouer(U, R_PUT, 'compte non vérifié (VERIFICATION)', 403, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(cnv.cookie) });
+        await jouer(U, R_PUT, 'compte non vérifié (O3 : plus un porteur)', 401, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(cnv.cookie) });
         await svC.fermer();
     }
     // le banc réel (routes publiées au tour 1) et le paiement (route servie, NON publiée : « publiée quand implémentée »)
@@ -719,6 +719,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const NON_JOUES = {
         'DELETE /api/compte 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.117-125 — supprimerCompte rend 401 IDENTIFIANTS ou 409 CREDITS_ACHETES, parSession rend 401/403 ; un corps non objet devient {} (donc 401), jamais 400',
         'POST /api/compte/deconnexion 401': 'aucun chemin ne rend 401 : v2/comptes/routes.js l.63-69 — la déconnexion rend 200 même sans cookie ; seul le garde de site peut refuser (403)',
+        'POST /api/identifier 403': 'O3 : le 403 VERIFICATION n\'est plus atteignable — un compte non confirmé n\'est plus un porteur (v2/porteur.js : session refusée, installation liée = installation seule) ; la garde de la chaîne reste en profondeur. Le contrat OpenAPI le documente encore (aucun contrat changé par O3 hors comptes)',
         'POST /api/compte/mot-de-passe-oublie 400': 'aucun chemin ne rend 400 : v2/comptes/routes.js l.71-77 — un corps illisible vaut une adresse absente (202 neutre, l\'énumération d\'adresses est refusée par construction)'
     };
     const joues = new Set(reels.map(e => `${e.route} ${e.statut}`)), joues503 = new Set(gardes.map(e => `${e.route} ${e.statut}`));
@@ -737,7 +738,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     H.v('un code produit par le serveur et absent de la liste fermée / du schéma', horsListe, []);
     const JAMAIS = Object.keys(CODES).filter(c => !produits.has(c));
     console.log(`   codes de la liste fermée produits : ${Object.keys(CODES).length - JAMAIS.length} / ${Object.keys(CODES).length} ; non produits par le banc : ${JAMAIS.join(', ') || 'aucun'}`);
-    const CODES_NON_PRODUITS = { EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
+    const CODES_NON_PRODUITS = { VERIFICATION: 'O3 : un compte non confirmé n\'est plus un porteur, donc aucune requête n\'atteint plus les gardes « compte vérifié » (identifier, scanner, collection) — elles restent en profondeur ; test-comptes-o3.js prouve le refus à la source', EN_RECONCILIATION: 'ne naît que d\'une clé de débit rejouée dont la ligne attend la réconciliation (test-argent-tour4.js) — état fabriqué par ce banc-là, pas par une route sur un état courant' };
     H.v('codes de la liste fermée jamais produits et non déclarés', JAMAIS.filter(c => !(c in CODES_NON_PRODUITS)), []);
     H.v('déclarations « code non produit » périmées (le code a été produit : retirer la déclaration)', Object.keys(CODES_NON_PRODUITS).filter(c => produits.has(c)), []);
     // les causes de non-remboursement servies (RAISONS_NON_REMBOURSE, une source) : celles que le banc a vues, et celles qu'il ne sait pas fabriquer (dites)

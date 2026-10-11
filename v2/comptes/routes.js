@@ -96,7 +96,7 @@ function routesComptes(router, cfg) {
     const parSession = [resoudrePorteur(cfg), S.exigerOrigineSite(cfg), exigerSession];
     router.post('/api/compte/code', ...parSession, async (req, res) => {
         try {
-            const r = await liaison.creerCode(req.v2.porteur.id, cfg);
+            const r = await liaison.creerCode(req.v2.porteur.id, cfg, undefined, Number.isInteger(req.v2.porteur.compte.generation) ? req.v2.porteur.compte.generation : null);   // la génération lue AVEC le porteur (O3 tour 2, I-A)
             if (r.refus) return repondreErreur(res, 'DEBIT', 'Trop de codes en cours, réessayez plus tard.', { reessayerDans: r.reessayerDans });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, code: r.code, expire: r.expire });
