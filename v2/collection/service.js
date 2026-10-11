@@ -157,8 +157,15 @@ async function ecrireHors(c, { compteId, slug, cle, q, maintenant }) {
 /** La clé est-elle AUSSI un bit de ce document ? (la position se relit : un concurrent a pu l'ajouter au registre depuis) */
 async function doublonAvecBit(c, compteId, slug, cle) {
     const r = await positionDuRegistre(slug, cle);
-    if (r.pos < 0) return false;
-    return bitPose(await c.findOne({ compteId, set: slug }, { projection: { mots: 1 }, ...LECTURE }), r.pos);
+    if (r.pos < 0) return -1;
+    return bitPose(await c.findOne({ compteId, set: slug }, { projection: { mots: 1 }, ...LECTURE }), r.pos) ? r.pos : -1;
+}
+/** UN SEUL ARBITRE par clé et par document : `hors` GAGNE. La seule reprise qui existe retire le BIT, et seulement CONDITIONNELLE à l'état exact lu : le bit est encore posé ET `hors` porte encore la clé. Elle ne retire jamais
+ *  de `hors` ce qu'un autre cochage vient d'y écrire (deux reprises qui se retiraient l'une l'autre perdaient la coche). Rend true si elle a retiré le bit. */
+async function reprendreBit(c, compteId, slug, cle, p) {
+    const champ = `mots.${Math.floor(p / 64)}`, b = p % 64;
+    const filtre = { compteId, set: slug, [champ]: { $bitsAllSet: [b] }, $expr: { $in: [{ $literal: cle }, { $map: { input: { $ifNull: ['$hors', []] }, in: { $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] } } }] } };
+    return Boolean(await c.findOneAndUpdate(filtre, { $bit: { [champ]: { and: inverse(b) } }, $unset: { [`qte.${p}`]: '' } }, { returnDocument: 'before', projection: { _id: 1 } }));
 }
 /** Retire la clé de `hors` (avec sa quantité) ; rend l'élément retiré, ou null s'il n'y était pas. */
 async function retirerDeHors(c, compteId, slug, cle, maintenant) {
@@ -214,8 +221,9 @@ async function ajouter(a, essai = 0) {
             avant = await ecrireBit(c, { compteId, slug, p, q, epoque, maintenant: a.maintenant });
         } else {
             avant = await ecrireHors(c, { compteId, slug, cle, q, maintenant: a.maintenant });
-            doublon = await doublonAvecBit(c, compteId, slug, cle);                                          // la course INVERSE : un autre PUT de la même clé a posé le bit (le catalogue venait de la connaître) pendant ce temps
-            if (doublon) { await retirerDeHors(c, compteId, slug, cle, a.maintenant); }
+            const dp = await doublonAvecBit(c, compteId, slug, cle);                                         // la course INVERSE : un autre PUT de la même clé a posé le bit (le catalogue venait de la connaître) pendant ce temps
+            doublon = dp >= 0;
+            if (doublon) { await reprendreBit(c, compteId, slug, cle, dp); }                                 // `hors` GAGNE : c'est le BIT qu'on reprend, jamais `hors`
         }
     } catch (e) {
         await rendre(reserve - payeRegistre);                                                                // rien n'a été ajouté au compte : le registre, lui, est payé
@@ -225,13 +233,13 @@ async function ajouter(a, essai = 0) {
     let reel;
     if (registre) {
         if (avant && indexHors(avant.hors, cle) >= 0) {                                                      // la clé est arrivée en `hors` entre la lecture et l'écriture : une clé ne vit qu'à UN endroit, le bit est repris
-            await c.updateOne({ compteId, set: a.slug }, { $bit: { [`mots.${Math.floor(p / 64)}`]: { and: inverse(p % 64) } }, $unset: { [`qte.${p}`]: '' } });
+            await reprendreBit(c, compteId, slug, cle, p);                                                   // `hors` GAGNE, et la reprise est conditionnelle à ce qu'on a lu
         }
         const motAbsent = !avant || !avant.mots || avant.mots[Math.floor(p / 64)] === undefined, avait = Boolean(avant && avant.qte && avant.qte[p] >= 2);
         reel = (avant ? 0 : C.document(slug)) + (motAbsent ? C.mot : 0) + (q >= 2 && !avait ? C.qte : 0) - (q < 2 && avait ? C.qte : 0) + payeRegistre;
     } else {
         const i = avant ? indexHors(avant.hors, cle) : -1;
-        reel = (avant ? 0 : C.document(slug)) + (doublon ? 0 : C.hors(cle, q)) - (i >= 0 ? C.hors(cle, C.lireElementHors(avant.hors[i]).q) : 0);
+        reel = (avant ? 0 : C.document(slug)) + C.hors(cle, q) - (i >= 0 ? C.hors(cle, C.lireElementHors(avant.hors[i]).q) : 0);
     }
     const delta = reserve - reel;
     if (delta > 0) await rendre(delta);

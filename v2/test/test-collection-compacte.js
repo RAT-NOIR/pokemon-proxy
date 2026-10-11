@@ -464,7 +464,7 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
             const d = (await docsDe(A))[0];
             return [d.hors || [], bitsDe(d), (await svc.lireSets(A))[0].possedees, (await svc.lireSet(A, slug)).cles];
         };
-        const attenduSwap = [[], 1, 1, ['9|9']];
+        const attenduSwap = [['9|9'], 0, 1, ['9|9']];                                                        // TOUR 2 : `hors` GAGNE, c'est le bit qui est repris
         H.v('9. course inverse (le catalogue connaît la clé entre deux PUT de la même clé) : la clé n\'existe qu\'à UN endroit, `possedees` = clés rendues', await sceneSwap(svc), attenduSwap);
         const mutSwap = charger('service.js', [['if (doublon) {', 'if (false) {']]);
         const vuSwap = await sceneSwap(mutSwap);
@@ -622,6 +622,69 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
             await raw(CPT).deleteMany({}); const abs = await svc.recompter(cfg);
             H.vrai('   le recompte corrige un compteur trop bas, trop haut ou ABSENT (même valeur : les collections n\'ont pas bougé)', Math.abs(bas - vrai) < 4096 && haut === bas && abs === bas);
         }
+    }
+
+    // ═══════════════ 13. TOUR 2 (I1) : la course qui PERD une coche — UN seul arbitre par clé et par document : `hors` GAGNE ═══════════════
+    {
+        let nRB = 0;
+        // la sonde du relecteur (rev-r1b.js, retenues déterministes) : A (catalogue v1, clé inconnue) écrit hors ; B (v2, clé connue) pose le bit en voyant hors ; A relit le bit ; B reprend le sien
+        const sceneRB = async s => {
+            const A = new ObjectId(), slug = `S-RB-${++nRB}`;
+            await s.initialiser(cfg);
+            catalogue({ [slug]: ['5|5'] });
+            let premier = true;
+            dbInjecte({ [NOM]: c => { const w = Object.create(c);
+                w.findOneAndUpdate = async (...a) => {
+                    if (Array.isArray(a[1]) && premier) { premier = false; await attendre(150); const r = await c.findOneAndUpdate(...a); await attendre(300); return r; }
+                    if (a[1] && a[1].$bit && a[1].$setOnInsert) await attendre(250);
+                    return c.findOneAndUpdate(...a);
+                };
+                w.updateOne = async (...a) => { if (a[1] && a[1].$bit) await attendre(700); return c.updateOne(...a); };
+                return w; } });
+            const pA = co({ compteId: A, slug, cle: '9|9', possedee: true }, s); await attendre(80); catalogue({ [slug]: ['5|5', '9|9'] });
+            const pB = co({ compteId: A, slug, cle: '9|9', possedee: true }, s);
+            try { await Promise.all([pA, pB]); } finally { dbInjecte(null); }
+            const d = (await docsDe(A))[0];
+            return [(await svc.lireSet(A, slug)).cles, (await svc.lireSets(A)).map(x => x.possedees), (d.hors || []).length + bitsDe(d)];
+        };
+        const attenduRB = [['9|9'], [1], 1];
+        H.v('13. la sonde du relecteur (rev-r1b) : après deux PUT de la même clé pendant un changement de version, la clé est cochée à EXACTEMENT UN endroit, possedees la compte une fois', await sceneRB(svc), attenduRB);
+        // une rafale : 25 cochages de la même clé, le catalogue change de version, 25 de plus — quel que soit l'ordre, UN endroit (10 rejeux sur des sets neufs)
+        {
+            let mal = 0, perdues = 0, plusieurs = 0;
+            for (let i = 0; i < 10; i++) {
+                const A = new ObjectId(), slug = `S-Rafale-${i}`;
+                catalogue({ [slug]: ['5|5'] });
+                const ps = Array.from({ length: 25 }, () => co({ compteId: A, slug, cle: '9|9', possedee: true }));
+                await attendre(6); catalogue({ [slug]: ['5|5', '9|9'] });
+                for (let j = 0; j < 25; j++) ps.push(co({ compteId: A, slug, cle: '9|9', possedee: true }));
+                await Promise.all(ps);
+                const d = (await docsDe(A))[0], endroits = (d.hors || []).length + bitsDe(d), l = await svc.lireSet(A, slug), n = (await svc.lireSets(A))[0].possedees;
+                if (endroits === 0) perdues++; else if (endroits > 1) plusieurs++;
+                if (n !== 1 || l.cles.length !== 1) mal++;
+            }
+            H.v('   rafale de 50 cochages de la même clé pendant un changement de version du catalogue (10 rejeux) : jamais perdue, jamais à deux endroits, possedees = 1', [perdues, plusieurs, mal], [0, 0, 0]);
+        }
+        // les deux reprises retirées ensemble : la clé existe à DEUX endroits (chacune seule est masquée par l'autre)
+        const mutDeux = charger('service.js', [['if (doublon) {', 'if (false) {'], ['if (avant && indexHors(avant.hors, cle) >= 0) {', 'if (false) {']]);
+        H.vrai('   ↳ copie mutée (aucune des deux reprises) : la clé existe à DEUX endroits — la garde sait dire NON', JSON.stringify(await sceneRB(mutDeux)) !== JSON.stringify(attenduRB));
+    }
+
+    // ═══════════════ 14. TOUR 2 (N03) : un catalogue qui LÈVE vaut un catalogue ABSENT — jamais « clé inconnue » ═══════════════
+    {
+        const casse = Object.freeze({ comptes: Object.freeze({}), fichesDuSet() { throw new Error('catalogue en panne'); }, produitsDeMetacarte: () => [], entree: () => null });
+        const scene = async s => {
+            require('../chargeur/etat').installer(casse);
+            const A = new ObjectId(), b0 = await compteur();
+            const r = await co({ compteId: A, slug: 'S-Casse', cle: '8|8', possedee: true }, s);
+            const ecrit = (await docsDe(A)).length, intact = (await compteur()) === b0, reg = await registreDe('S-Casse');
+            catalogue(null);
+            return [r.refus, r.reessayerDans > 0, ecrit, intact, reg];
+        };
+        const attendu = ['catalogue', true, 0, true, null];
+        H.v('14. un catalogue dont la fonction LÈVE : « catalogue » (503 côté route), rien d\'écrit (ni hors, ni registre, ni octets)', await scene(svc), attendu);
+        const mut = charger('service.js', [['catch (e) { return null; }', 'catch (e) { return false; }']]);
+        H.vrai('   ↳ copie mutée (un catalogue qui lève vaut « clé inconnue ») : la clé part dans hors par erreur — la garde sait dire NON', JSON.stringify(await scene(mut)) !== JSON.stringify(attendu));
     }
 
     await mongoose.disconnect();

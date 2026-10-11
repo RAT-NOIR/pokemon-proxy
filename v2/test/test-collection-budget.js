@@ -38,6 +38,12 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
     // ── les formes extrêmes du REGISTRE
     formes.push({ nom: 'F. registre : 3 documents de 3 000 clés de 45 o', registre: true, docs: () => Array.from({ length: 3 }, () => ({ _id: hex(60), cles: Array.from({ length: 3000 }, cle45) })) });
     formes.push({ nom: 'G. registre : 1 500 documents d\'une clé, identifiant de 80 caractères', registre: true, docs: () => Array.from({ length: 1500 }, () => ({ _id: hex(80), cles: [cle45()] })) });
+    // TOUR 2 (N26, N27) : la marge de l'ÉPOQUE (+30 o par document de compte, +30 o par registre) se MESURE — des documents IDENTIQUES avec et sans le champ, la différence par document contre collStats
+    const slugsP = Array.from({ length: 3000 }, () => hex(80)), idP = new ObjectId(), idsQ = Array.from({ length: 1500 }, () => hex(80)), cleQ = cle45();
+    formes.push({ nom: 'P1. 3 000 documents de compte AVEC époque', fiches: true, docs: () => slugsP.map(sl => fiche(idP, sl, { 0: Long.fromBits(1, 0) }, [])) });
+    formes.push({ nom: 'P0. les mêmes 3 000 documents SANS époque', fiches: true, docs: () => slugsP.map(sl => { const d = fiche(idP, sl, { 0: Long.fromBits(1, 0) }, []); delete d.epoque; return d; }) });
+    formes.push({ nom: 'Q1. 1 500 registres AVEC époque', registre: true, docs: () => idsQ.map(id => ({ _id: id, cles: [cleQ], epoque: hex(16) })) });
+    formes.push({ nom: 'Q0. les mêmes 1 500 registres SANS époque', registre: true, docs: () => idsQ.map(id => ({ _id: id, cles: [cleQ] })) });
 
     // ── le COMPTE MALVEILLANT : `hors` plein de clés de 45 o sur 1 000 sets fictifs (slug de 80 caractères), plafond horsCatalogueParCompte
     const NH = cfg.collection.horsCatalogueParCompte, NS = cfg.collection.setsParCompte;
@@ -102,6 +108,16 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
     const A1 = formes.find(f => f.nom.startsWith('A.'));
     H.vrai('   ↳ un document modélisé à 150 o (au lieu de 300 + 2 × slug) ne couvre PAS la forme A — le banc sait dire NON', A1.n * (150 + 2 * 80 + C.mot) < A1.net);
 
+    // ── 1 bis. la marge de l'ÉPOQUE : mesurée par document, confrontée à ce que le modèle ajoute (DOCUMENT_BASE − 300, REGISTRE_BASE − 90)
+    {
+        const f = n => formes.find(x => x.nom.startsWith(n + '.'));
+        const dP = (f('P1').net - f('P0').net) / f('P1').n, dQ = (f('Q1').net - f('Q0').net) / f('Q1').n;
+        console.log(`   époque mesurée : +${dP.toFixed(1)} o par document de compte (le modèle ajoute ${C.DOCUMENT_BASE - 300}), +${dQ.toFixed(1)} o par registre (le modèle ajoute ${C.REGISTRE_BASE - 90})`);
+        H.vrai('1 bis. l\'époque coûte une quantité POSITIVE mesurée par document de compte et par registre, que le modèle couvre (≤ sa marge)', dP > 0 && dP <= C.DOCUMENT_BASE - 300 && dQ > 0 && dQ <= C.REGISTRE_BASE - 90);
+        H.vrai('   ↳ le banc sait dire NON : une marge de l\'époque retirée (document 300, registre 90) ne couvre plus ce qui est mesuré', !(dP <= 0) && !(dQ <= 0));
+        H.vrai('   ↳ ... et la marge du modèle est SERRÉE (moins de 10 o de jeu par document et par registre), pas un chiffre rond posé au hasard', C.DOCUMENT_BASE - 300 - dP < 10 && C.REGISTRE_BASE - 90 - dQ < 10);
+    }
+
     // ── 2. les MESURES du contrat
     const M = formes.find(f => f.nom.startsWith('M.')), K = formes.find(f => f.nom.startsWith('K.')), R = formes.find(f => f.nom.startsWith('R.')), W = formes.find(f => f.nom.startsWith('W.'));
     const plafond = cfg.collection.octetsService;
@@ -122,6 +138,31 @@ const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-colle
         H.vrai('   un collectionneur COMPLET tient sous le plafond du service avec de la marge (registre compris)', K.modele + R.modele < plafond && tenusModele >= 1);
         H.vrai('   le plafond par compte couvre le collectionneur complet mesuré (bits + hors)', mesure.regleDuSite.fiches <= cfg.collection.clesParCompte && mesure.horsRegistre.total <= cfg.collection.horsCatalogueParCompte);
     }
+    // ── 3. TOUR 2 (M2) : le nombre d'ÉCRITURES du compte le plus lourd, MESURÉ — construit PAR LE SERVICE à l'échelle 1/10 (100 sets, 600 clés hors, 1 000 quantités), chaque écriture comptée
+    {
+        const dbm = require('../db'), Mod = require('../modeles'); dbm.brancher(mongoose.connection.db); await Mod.creerIndex();
+        const svc = require('../collection/service'), VB = require('./_visuels-banc');
+        const cfgS = { ...cfg, collection: { ...cfg.collection, setsParCompte: 100, horsCatalogueParCompte: 600, quantitesParCompte: 1000 } };
+        const gros = [...mesure.parSet].sort((x, y) => y[2] - x[2])[0], qBits = cfgS.collection.quantitesParCompte - cfgS.collection.horsCatalogueParCompte;
+        const cles = Array.from({ length: gros[2] }, (_, j) => `${900000 + j}|${String(j + 1).padStart(3, '0')}`);
+        VB.installer([VB.doc(1)], cles.map(c => [gros[0], c, [1]]));
+        const id = new ObjectId(); let ecritures = 0, refus = 0;
+        const put = async (slug, cle) => { const r = await svc.cocher({ cfg: cfgS, compteId: id, slug, cle, possedee: true, quantite: 99 }); if (r.refus) refus++; else ecritures++; };
+        const t0 = Date.now();
+        for (let j = 0; j < qBits; j++) await put(gros[0], cles[j]);
+        const slugs = [gros[0], ...Array.from({ length: 99 }, () => hex(80))];
+        for (let i = 0; i < cfgS.collection.horsCatalogueParCompte; i++) await put(slugs[i % 100], cle45());
+        const suivante = await svc.cocher({ cfg: cfgS, compteId: id, slug: gros[0], cle: cles[qBits], possedee: true, quantite: 99 });
+        await B.admin().command({ fsync: 1 }); await attendre(2000);
+        const stocke = await B.collection('collection_fiches').find({ compteId: id }, { promoteLongs: false }).toArray();
+        const st = await B.command({ collStats: 'collection_fiches' }), stR = await B.command({ collStats: 'collection_registre' });
+        const modeleS = stocke.reduce((n, d) => n + C.coutDuDocument(d), 0);
+        console.log(`   MESURE écritures du pire compte, construit PAR LE SERVICE à l'échelle 1/10 : ${ecritures} écritures acceptées (${qBits} quantités de bits + ${cfgS.collection.horsCatalogueParCompte} clés hors à quantité) en ${((Date.now() - t0) / 1000).toFixed(0)} s, ${stocke.length} documents, ${st.size + st.totalIndexSize} o de collection_fiches (modèle des documents ${modeleS}) ; la suivante : ${suivante.refus} → à l'échelle 1 : ${ecritures * 10} écritures, soit ${(ecritures * 10 / 1000).toFixed(0)} h au limiteur de 1 000 par heure`);
+        H.v('3. le pire compte (toutes les bornes pleines, échelle 1/10) demande EXACTEMENT quantitesParCompte écritures (une par quantité : les clés hors à quantité comptent) ; la suivante est refusée « borne-quantites »', [ecritures, refus, suivante.refus, stocke.length], [cfgS.collection.quantitesParCompte, 0, 'borne-quantites', 100]);
+        H.vrai('   ce que le service a construit tient dans le modèle (documents du compte, avant la base vide) : modèle ≥ mesuré', modeleS >= st.size + st.totalIndexSize - vides.fiches);
+        void stR;
+    }
+
     // (outil d'exploitation) RM_BUDGET_SORTIE=<fichier> : écrit les nombres mesurés, pour les citer au contrat sans les recopier à la main
     if (process.env.RM_BUDGET_SORTIE) {
         const pire = Math.max(...formes.map(f => f.net / f.modele));

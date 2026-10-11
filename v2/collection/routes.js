@@ -27,7 +27,7 @@ const MESSAGES_BORNE = Object.freeze({
     'borne-sets': n => `Au plus ${n} sets avec des fiches cochées par compte`,
     'borne-hors': n => `Au plus ${n} fiches cochées hors du catalogue sur un compte`,
     'borne-quantites': n => `Au plus ${n} fiches avec une quantité de plus d'un exemplaire par compte`,
-    'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte : réessayez plus tard'
+    'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte'
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
 function exigerVerifie(req, res, next) {
