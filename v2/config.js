@@ -57,12 +57,13 @@ function lireConfig(env = process.env) {
                    connexionIpHeure: entier('V2_CONNEXION_IP_HEURE', env.V2_CONNEXION_IP_HEURE, 30, 1), suppressionParCompteHeure: entier('V2_SUPPRESSION_COMPTE_HEURE', env.V2_SUPPRESSION_COMPTE_HEURE, 10, 1),
                    renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1),
                    collectionEcrituresParCompteHeure: 1000 },
-        // « Ma collection » : bornes écrites par ce qu'elles protègent — la taille de la grappe de production (457 Mo pour un arrêt dur à 480 Mo). Pas de variable d'environnement : une borne qu'on desserre se décide.
-        // clesService : plafond GLOBAL (toutes les clés de tous les comptes), VALEUR PROVISOIRE — la décision finale revient au testeur. Un compteur unique, voir collection/service.js.
-        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000, clesService: 100000,
-                      // clesService et forfaitDocument comptent des PLACES (une clé = 1). forfaitDocument : places que coûte un DOCUMENT neuf (un set neuf pour un compte), en plus de sa première clé
-                      // = le maximum MESURÉ (collStats après fsync : données + index d'un document d'une clé, divisés par le coût mesuré d'une clé maximale, moins la clé) arrondi vers le haut = 7 ; test-collection.js le mesure et échoue au-dessus.
-                      forfaitDocument: 7 },
+        // « Ma collection » (COLLECTION-COMPACTE) : bornes écrites par ce qu'elles protègent. Pas de variable d'environnement : une borne qu'on desserre se décide.
+        //   · clesParCompte = le CATALOGUE COMPLET : 70 000 couvre le plus grand compte MESURÉ le 2026-10-11 (68 792 fiches par la règle du site sur la sauvegarde du 10/10 — 64 858 fiches liées de l'archive plus
+        //     3 934 fiches sans produit ; le contrat annonçait 39 648, un dénominateur qui ne contenait pas ces fiches) arrondi au-dessus ; test-collection-compacte.js échoue si le défaut passe sous ce nombre ;
+        //   · horsCatalogueParCompte = 5 000 : les fiches que la règle du site donne et que l'archive ne porte pas (mesuré : 3 934, 128 sets, tous sets confondus) avec une marge de 27 % ; un test échoue sous le mesuré ;
+        //   · setsParCompte : 1 000 (le coût d'un document dépasse celui d'une clé) ; quantiteMax : 99, posée SANS mesure d'usage réel ;
+        //   · octetsService : le budget GLOBAL, en OCTETS mesurés par collStats (données + index des deux collections), VALEUR PROVISOIRE (10 Mo) : relevé au passage en Flex. Un compteur unique, voir collection/service.js.
+        collection: { clesParCompte: 70000, horsCatalogueParCompte: 5000, setsParCompte: 1000, quantiteMax: 99, octetsService: 10485760 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24 },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },

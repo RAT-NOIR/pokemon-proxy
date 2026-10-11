@@ -1,6 +1,6 @@
 'use strict';
 // Emplacement du lot COLLECTION : « Ma collection » du site (session du compte). Les routes sont dans routes.js, le stockage dans service.js.
-// Au MONTAGE, le compteur global de clés est recompté depuis les données réelles (service.js) ; un échec (base pas prête) se rejoue à la première écriture.
+// Au MONTAGE, le compteur global d'OCTETS est recompté depuis `collStats` des deux collections (service.js) ; un échec (base pas prête) se rejoue à la première écriture.
 const { routesCollection } = require('./routes');
 const service = require('./service');
 module.exports = {

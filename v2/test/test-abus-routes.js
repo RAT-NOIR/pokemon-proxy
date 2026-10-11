@@ -379,7 +379,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         collection: await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()
     });
     const avantA = JSON.stringify(await etatA());
-    H.v('(e) contrôle de l\'instrument — la collection de la victime A existe (une clé cochée par elle)', [(await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()).map(d => d.cles)], [[['895789|001']]]);
+    H.v('(e) contrôle de l\'instrument — la collection de la victime A existe (une clé cochée par elle)', [(await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()).map(d => d.hors)], [[['895789|001']]]);
 
     const nonRejoue = (rep) => !rep.entetes['idempotency-replayed'];
     for (const r of ecritures) {

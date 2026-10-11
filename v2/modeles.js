@@ -32,7 +32,8 @@ const INDEX = Object.freeze([
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),
     // lot COLLECTION : un document par (compte, set) ; l'unicité sert l'upsert et l'isolement, et son préfixe `compteId` sert le compte, la suppression et les bornes. Pas de TTL : la collection d'un compte est son bien.
     I('collection_fiches', 'collection_cle', { compteId: 1, set: 1 }, { unique: true }),
-    // lot COLLECTION : le compteur GLOBAL de clés ({ cle: 'collection-cles', n }), un document ; l'unicité de `cle` fait échouer en 11000 la création simultanée du compteur
+    // COLLECTION-COMPACTE : le compteur GLOBAL d'OCTETS ({ cle: 'collection-octets', n }), un document ; l'unicité de `cle` fait échouer en 11000 la création simultanée du compteur.
+    // `collection_registre` (un document par set, { _id: slug, cles }) n'a pas d'autre index que `_id` : il se lit et s'écrit par `_id` seulement.
     I('compteurs', 'compteurs_cle', { cle: 1 }, { unique: true })
 ]);
 

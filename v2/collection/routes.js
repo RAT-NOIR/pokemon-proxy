@@ -13,12 +13,20 @@ const { cotesDuSet } = require('./cotes');
 
 const nomErreur = e => (e && e.name) || 'Error';           // jamais e.message : un pilote peut y mettre une adresse
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
-const corpsValide = b => b !== null && typeof b === 'object' && !Array.isArray(b) && Object.keys(b).length === 1 && typeof b.possedee === 'boolean';
+// Le corps : { possedee: booléen } ; l'extension FACULTATIVE { possedee: true, quantite: n } (n entier de 1 à 99) pour les doubles. `quantite` absente vaut 1. Tout autre champ ou type : 400 ENTREE, le `detail` nomme
+// le champ fautif (`quantite` pour une quantité hors 1…99, un type faux, ou une quantité avec `possedee: false` ; `possedee` pour tout le reste).
+function lireCorps(b, max) {
+    if (b === null || typeof b !== 'object' || Array.isArray(b) || typeof b.possedee !== 'boolean') return { detail: 'possedee' };
+    if (Object.keys(b).some(k => k !== 'possedee' && k !== 'quantite')) return { detail: 'possedee' };
+    if (!Object.hasOwn(b, 'quantite')) return { possedee: b.possedee, quantite: 1 };
+    if (b.possedee !== true || !Number.isInteger(b.quantite) || b.quantite < 1 || b.quantite > max) return { detail: 'quantite' };
+    return { possedee: true, quantite: b.quantite };
+}
 const MESSAGES_BORNE = Object.freeze({
-    'borne-set': n => `Au plus ${n} fiches cochées par set`,
     'borne-compte': n => `Au plus ${n} fiches cochées au total sur un compte`,
     'borne-sets': n => `Au plus ${n} sets avec des fiches cochées par compte`,
-    'borne-service': n => `Limite atteinte pour l'ensemble du service (${n} fiches cochées en tout), pas pour votre compte : réessayez plus tard`
+    'borne-hors': n => `Au plus ${n} fiches cochées hors du catalogue sur un compte`,
+    'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte : réessayez plus tard'
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
 function exigerVerifie(req, res, next) {
@@ -48,7 +56,9 @@ function routesCollection(router, cfg) {
             // `cotes` : la cote du guide de chaque fiche du set connue du lien EN MÉMOIRE (collection/cotes.js, CONTRAT-API-V2.md §1.8). Aucun chargement réussi, ou une panne du guide : {} — le site lit {} comme « null pour toute fiche ».
             let cotes = {};
             try { cotes = await cotesDuSet(req.params.slug); } catch (e) { console.error(`❌ [v2 collection] cotes (le guide ne répond pas, {} rendu) : ${nomErreur(e)}`); }
-            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, cotes, majLe: s.majLe ? s.majLe.toISOString() : null });
+            // `quantites` : seulement les clés à n ≥ 2, et le champ ABSENT quand il n'y en a aucune (la réponse d'avant, à l'octet près)
+            const quantites = Object.keys(s.quantites).length ? { quantites: s.quantites } : {};
+            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, ...quantites, cotes, majLe: s.majLe ? s.majLe.toISOString() : null });
         } catch (e) { console.error(`❌ [v2 collection] lecture d'un set : ${nomErreur(e)}`); return indispo(res); }
     });
 
@@ -56,12 +66,13 @@ function routesCollection(router, cfg) {
         try {
             if (!F.slugValide(req.params.slug)) return entree(res, 'slug');
             if (!F.cleValide(req.params.cle)) return entree(res, 'cle');
-            if (!corpsValide(req.body)) return entree(res, 'possedee');
-            const r = await svc.cocher({ compteId: compteId(req), slug: req.params.slug, cle: req.params.cle, possedee: req.body.possedee, cfg });
+            const corps = lireCorps(req.body, cfg.collection.quantiteMax);
+            if (corps.detail) return entree(res, corps.detail);
+            const r = await svc.cocher({ compteId: compteId(req), slug: req.params.slug, cle: req.params.cle, possedee: corps.possedee, quantite: corps.quantite, cfg });
             if (r.refus) return repondreErreur(res, 'CONFLIT', MESSAGES_BORNE[r.refus](r.borne), { detail: r.refus });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, possedees: r.possedees });
         } catch (e) { console.error(`❌ [v2 collection] écriture : ${nomErreur(e)}`); return indispo(res); }
     });
 }
-module.exports = { routesCollection, corpsValide };
+module.exports = { routesCollection, lireCorps };

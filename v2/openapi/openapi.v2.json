@@ -2291,7 +2291,7 @@
             }
           },
           "400": {
-            "description": "ENTREE (detail `slug`, `cle` ou `possedee`) : la forme n'est pas admise.",
+            "description": "ENTREE (detail `slug`, `cle`, `possedee` ou `quantite`) : la forme n'est pas admise.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2321,7 +2321,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT, detail `borne-set` (2 000 clés par set), `borne-compte` (20 000 par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (plafond de TOUS les comptes ensemble, en PLACES : une clé = 1, un set neuf = 1 + un forfait de 4 ; valeur provisoire 100 000 places) : rien n'est écrit, rien n'est perdu.",
+            "description": "CONFLIT, detail `borne-compte` (70 000 fiches cochées par compte : le catalogue complet), `borne-hors` (5 000 fiches hors catalogue par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2447,10 +2447,10 @@
         "name": "cle",
         "in": "path",
         "required": true,
-        "description": "La clé stable d'une fiche : `idInterne|numero` (`-` pour une fiche sans numéro). S'envoie encodée (`895789%7C001`). Le serveur en juge la FORME ; il ne sait pas si elle désigne une fiche réelle.",
+        "description": "La clé stable d'une fiche : `idInterne|numero` (`-` pour une fiche sans numéro). `idInterne` est NÉGATIF pour une fiche simple (`-286142|001`). S'envoie encodée (`895789%7C001`). Le serveur en juge la FORME ; il ne sait pas si elle désigne une fiche réelle.",
         "schema": {
           "type": "string",
-          "pattern": "^[1-9][0-9]{0,11}\\|[A-Za-z0-9().!?-](?:[A-Za-z0-9 ().!?-]{0,30}[A-Za-z0-9().!?-])?$",
+          "pattern": "^-?[1-9][0-9]{0,11}\\|[A-Za-z0-9().!?-](?:[A-Za-z0-9 ().!?-]{0,30}[A-Za-z0-9().!?-])?$",
           "maxLength": 50
         }
       }
@@ -4006,7 +4006,16 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 2000
+            "maxItems": 70000
+          },
+          "quantites": {
+            "type": "object",
+            "description": "Par clé de fiche : la quantité (2 à 99) des seules fiches possédées en plusieurs exemplaires. Champ ABSENT quand aucune fiche du set n'est à plus d'un exemplaire (la réponse d'avant l'extension, à l'octet près).",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 99
+            }
           },
           "cotes": {
             "type": "object",
@@ -4048,6 +4057,12 @@
         "properties": {
           "possedee": {
             "type": "boolean"
+          },
+          "quantite": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 99,
+            "description": "FACULTATIF (avec `possedee: true` seulement) : le nombre d'exemplaires, de 1 à 99 ; absent vaut 1. `possedee: false` efface la quantité. 99 est posé sans mesure d'usage réel."
           }
         },
         "required": [

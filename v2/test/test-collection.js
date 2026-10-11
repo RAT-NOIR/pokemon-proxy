@@ -55,11 +55,9 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
     const dbReelle = mongoose.connection.db;
     const dbInjecte = surcharges => {
         if (!surcharges) return db.brancher(dbReelle);
-        const faux = Object.create(dbReelle); faux.collection = (n, o) => { const c = dbReelle.collection(n, o); return surcharges[n] ? surcharges[n](c) : c; };
+        const faux = Object.create(dbReelle); Object.assign(faux, surcharges.racine || {}); faux.collection = (n, o) => { const c = dbReelle.collection(n, o); return surcharges[n] ? surcharges[n](c) : c; };
         return db.brancher(faux);
     };
-    // les PLACES réellement occupées : les clés + (documents × forfait), comptées par deux requêtes indépendantes de la formule du service
-    const placesReelles = async c => { const r = await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray(); return (r.length ? r[0].n : 0) + (await nDocs()) * c.collection.forfaitDocument; };
     const docs = c => raw(NOM).find({ compteId: c.c._id }).toArray();
     const code = r => r.json && r.json.erreur && r.json.erreur.code;
     const detail = r => r.json && r.json.erreur && r.json.erreur.detail;
@@ -84,12 +82,15 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
 
     // ═══════════════ 1. LE CHEMIN NOMINAL ═══════════════
     {
+        const VB = require('./_visuels-banc');
+        // le catalogue EN MÉMOIRE connaît les deux fiches de « Set-Essai » : elles entrent au REGISTRE (position stable) ; « Autre-Set » n'y est pas : sa clé va dans `hors`
+        VB.installer([VB.doc(1), VB.doc(2), VB.doc(3)], [['Set-Essai', '895789|001', [1]], ['Set-Essai', '895790|-', [2, 3]], ['Autre-Set', '7|001', [1]]]);
         const A = await compte();
         const vide = await lireSets(sv, A);
         H.v('1. GET /api/collection d\'un compte sans rien de coché : 200, sets []', [vide.statut, vide.json], [200, { success: true, sets: [] }]);
         H.v('   Cache-Control: no-store (données privées)', vide.entetes['cache-control'], 'no-store');
         const set0 = await lireSet(sv, A, 'Set-Essai');
-        H.v('   GET d\'un set jamais touché : 200, possedees [], cotes {}, majLe null', [set0.statut, set0.json], [200, { success: true, set: 'Set-Essai', possedees: [], cotes: {}, majLe: null }]);
+        H.v('   GET d\'un set jamais touché : 200, possedees [], majLe null (catalogue chargé SANS guide : une cote null par fiche du set, jamais inventée)', [set0.statut, set0.json], [200, { success: true, set: 'Set-Essai', possedees: [], cotes: { '895789|001': null, '895790|-': null }, majLe: null }]);
         const p1 = await put(sv, A, 'Set-Essai', '895789|001', true);
         H.v('   PUT true : 200, possedees 1', [p1.statut, p1.json], [200, { success: true, possedees: 1 }]);
         const d1 = (await docs(A))[0]; await attendre(15);
@@ -101,12 +102,11 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         const d2 = (await docs(A))[0];
         H.v('   une seconde fiche : 2, majLe avancé', [p2.json.possedees, d2.majLe.getTime() > d1.majLe.getTime()], [2, true]);
         const g = await lireSet(sv, A, 'Set-Essai');
-        H.v('   GET du set : les deux clés (triées), cotes {}, majLe ISO', [g.json.possedees, g.json.cotes, g.json.majLe === d2.majLe.toISOString()], [['895789|001', '895790|-'], {}, true]);
+        H.v('   GET du set sans quantité ≥ 2 : la réponse est IDENTIQUE à l\'octet à celle d\'avant l\'extension (même clés, même ordre, même texte)', g.texte, JSON.stringify({ success: true, set: 'Set-Essai', possedees: ['895789|001', '895790|-'], cotes: { '895789|001': null, '895790|-': null }, majLe: d2.majLe.toISOString() }));
+        H.v('   GET du set : les deux clés (triées), pas de champ `quantites` (aucune quantité ≥ 2 : la réponse d\'avant, à l\'octet près), majLe ISO', [g.json.possedees, Object.keys(g.json), g.json.majLe === d2.majLe.toISOString()], [['895789|001', '895790|-'], ['success', 'set', 'possedees', 'cotes', 'majLe'], true]);
         // COTES-VISUELS : avec une version chargée (lien fiche → produits EN MÉMOIRE) et le guide de l'API, la route rend la cote de chaque fiche du set — la règle du contrat §1.8
         {
-            const VB = require('./_visuels-banc');
             await raw('guide_prix').insertMany([{ idProduct: 1, trend: 4.5, guideDu: '2026-10-01' }, { idProduct: 2, trend: 2, guideDu: '2026-10-01' }, { idProduct: 3, trend: 3, guideDu: '2026-10-01' }]);
-            VB.installer([VB.doc(1), VB.doc(2), VB.doc(3)], [['Set-Essai', '895789|001', [1]], ['Set-Essai', '895790|-', [2, 3]], ['Autre-Set', '7|001', [1]]]);
             const gc = await lireSet(sv, A, 'Set-Essai');
             H.v('   avec un lien chargé : cotes = la cote de la fiche à UN produit, null pour la fiche dont les deux produits ne s\'accordent pas (jamais une moyenne)', gc.json.cotes, { '895789|001': { tendance: 4.5, date: '2026-10-01' }, '895790|-': null });
             H.v('   un set sans lien : cotes {} ; la réponse garde sa forme', [(await lireSet(sv, A, 'Set-Sans-Lien')).json.cotes, Object.keys(gc.json)], [{}, ['success', 'set', 'possedees', 'cotes', 'majLe']]);
@@ -140,8 +140,9 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         H.v('   PUT false sur un set jamais touché : 200, 0, aucun document créé', [f00.statut, f00.json.possedees, (await docs(A)).filter(d => d.set === 'Set-Jamais').length], [200, 0, 0]);
         const l2 = await lireSets(sv, A);
         H.v('   le set vidé n\'est plus listé', l2.json.sets.map(s => s.slug), ['Autre-Set']);
-        const tout = JSON.stringify(await raw(NOM).find({}).toArray());
-        H.v('   le document stocké ne porte que _id, compteId, set, cles, majLe', Object.keys((await docs(A))[0]).sort(), ['_id', 'cles', 'compteId', 'majLe', 'set']);
+        const tout = JSON.stringify(await raw(NOM).find({}).toArray()) + JSON.stringify(await raw('collection_registre').find({}).toArray());
+        H.v('   le document stocké ne porte que _id, compteId, set, hors, majLe (une clé hors catalogue) — jamais d\'adresse ni d\'IP ; celui d\'une clé du registre porte en plus mots', [Object.keys((await docs(A))[0]).sort(), Object.keys((await docs(A)).find(d => d.set === 'Autre-Set')).sort()], [['_id', 'compteId', 'hors', 'majLe', 'set'], ['_id', 'compteId', 'hors', 'majLe', 'set']]);
+        H.v('   le registre du set ne porte que _id et cles (les deux fiches, dans l\'ordre où le premier compte les a cochées)', [Object.keys(await raw('collection_registre').findOne({ _id: 'Set-Essai' })).sort(), (await raw('collection_registre').findOne({ _id: 'Set-Essai' })).cles], [['_id', 'cles'], ['895789|001', '895790|-']]);
         H.vrai('   la collection ne contient ni l\'adresse, ni l\'IP, ni le jeton de session d\'un compte', !tout.includes(A.adresse) && !tout.includes('10.66.') && !tout.includes(A.token));
         // isolement par HTTP : un autre compte ne voit rien et sa écriture ne touche pas la collection du premier
         const B = await compte(); const avant = JSON.stringify(await docs(A));
@@ -154,7 +155,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         const A = await compte();
         const r = await H.appel(sv.url, '/api/collection/sets/S-P%2FID/fiches/77%7C001', { methode: 'PUT', corps: { possedee: true }, entetes: siteH(A.cookie) });
         const d = await docs(A);
-        H.v('2. PUT sur /sets/S-P%2FID/fiches/77%7C001 : 200, le paramètre arrive ENTIER (« S-P/ID », « 77|001 »)', [r.statut, d.map(x => [x.set, x.cles])], [200, [['S-P/ID', ['77|001']]]]);
+        H.v('2. PUT sur /sets/S-P%2FID/fiches/77%7C001 : 200, le paramètre arrive ENTIER (« S-P/ID », « 77|001 »)', [r.statut, d.map(x => [x.set, x.hors])], [200, [['S-P/ID', ['77|001']]]]);
         const g = await H.appel(sv.url, '/api/collection/sets/S-P%2FID', { entetes: siteH(A.cookie) });
         H.v('   GET /sets/S-P%2FID : le set « S-P/ID » et sa clé', [g.json.set, g.json.possedees], ['S-P/ID', ['77|001']]);
         const nu = await H.appel(sv.url, '/api/collection/sets/S-P/ID', { entetes: siteH(A.cookie) });
@@ -205,7 +206,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             attendu: [['400 ENTREE cle'], 0],
             async scene({ sv }) {
                 const A = await compte(); const n0 = await nDocs(); const vus = [];
-                for (const cle of ['abc', '0|1', '01|1', '1|', '1|a|b', '1|<script>', '1|é', '-3|1', `1|${'x'.repeat(40)}`]) { const r = await put(sv, A, 'Set-A', cle, true); vus.push([r.statut, code(r), detail(r)].join(' ')); }
+                for (const cle of ['abc', '0|1', '01|1', '1|', '1|a|b', '1|<script>', '1|é', '-0|1', '--3|1', '+3|1', `1|${'x'.repeat(40)}`]) { const r = await put(sv, A, 'Set-A', cle, true); vus.push([r.statut, code(r), detail(r)].join(' ')); }
                 return [[...new Set(vus)], (await nDocs()) - n0];
             } },
         { nom: 'forme du slug : 400 ENTREE (« slug »), à l\'écriture comme à la lecture, rien d\'écrit', mut: [['routes.js', [['!F.slugValide(req.params.slug)', 'false']]]],
@@ -218,12 +219,35 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 }
                 return [[...new Set(vus)], (await nDocs()) - n0];
             } },
-        { nom: 'forme du corps : seul { possedee: booléen } passe, 400 ENTREE (« possedee »), rien d\'écrit', mut: [['routes.js', [['!corpsValide(req.body)', 'false']]]],
+        { nom: 'forme du corps : seul { possedee: booléen } (et la quantité facultative) passe, 400 ENTREE (« possedee »), rien d\'écrit', mut: [['routes.js', [['if (corps.detail) return entree(res, corps.detail);', '']]]],
             attendu: [['400 ENTREE possedee'], 0],
             async scene({ sv }) {
                 const A = await compte(); const n0 = await nDocs(); const vus = [];
-                for (const corps of [{}, { possedee: 'true' }, { possedee: 1 }, { possedee: null }, { possedee: true, autre: 1 }, [true]]) { const r = await put(sv, A, 'Set-A', '1|001', true, { corps }); vus.push([r.statut, code(r), detail(r)].join(' ')); }
+                for (const corps of [{}, { possedee: 'true' }, { possedee: 1 }, { possedee: null }, { possedee: true, autre: 1 }, { possedee: true, quantite: 2, autre: 1 }, [true]]) { const r = await put(sv, A, 'Set-A', '1|001', true, { corps }); vus.push([r.statut, code(r), detail(r)].join(' ')); }
                 return [[...new Set(vus)], (await nDocs()) - n0];
+            } },
+        // COLLECTION-COMPACTE ruling 5 : la quantité des doubles, FACULTATIVE ; 1 à 99, entier ; tout le reste est refusé en nommant `quantite`
+        { nom: 'quantité : 0, 100, 1,5, une chaîne, null, un booléen, un tableau, ou avec « possedee: false » → 400 ENTREE (« quantite »), rien d\'écrit', mut: [['routes.js', [['|| b.quantite > max)', '|| false)']]]],
+            attendu: [['400 ENTREE quantite'], 0],
+            async scene({ sv }) {
+                const A = await compte(); const n0 = await nDocs(); const vus = [];
+                for (const corps of [{ possedee: true, quantite: 0 }, { possedee: true, quantite: 100 }, { possedee: true, quantite: 1.5 }, { possedee: true, quantite: '3' }, { possedee: true, quantite: null },
+                    { possedee: true, quantite: true }, { possedee: true, quantite: [2] }, { possedee: false, quantite: 2 }, { possedee: true, quantite: -1 }, { possedee: true, quantite: 1e9 }]) {
+                    const r = await put(sv, A, 'Set-A', '1|001', true, { corps }); vus.push([r.statut, code(r), detail(r)].join(' '));
+                }
+                return [[...new Set(vus)], (await nDocs()) - n0];
+            } },
+        { nom: 'quantité acceptée : 1, 2 et 99 (la clé et la quantité se relisent) ; 98 puis 99 puis 1 : la quantité suit, `quantites` ne porte que n ≥ 2', mut: [['routes.js', [['quantite: corps.quantite, cfg', 'quantite: 1, cfg']]]],
+            attendu: [[200, 200, 200, 200], { '1|001': 99 }, { '1|001': 2 }, {}, ['success', 'set', 'possedees', 'cotes', 'majLe'], [200, 1]],
+            async scene({ sv }) {
+                const A = await compte(); const vus = [];
+                const q = async (quantite) => (await put(sv, A, 'Set-Q', '1|001', true, { corps: quantite === undefined ? { possedee: true } : { possedee: true, quantite } }));
+                vus.push((await q(1)).statut, (await q(2)).statut, (await q(99)).statut, (await q(98)).statut);
+                const apres98 = (await q(99)); void apres98;
+                const a = (await lireSet(sv, A, 'Set-Q')).json.quantites;
+                await q(2); const b = (await lireSet(sv, A, 'Set-Q')).json.quantites;
+                const r1 = await q(undefined); const c = (await lireSet(sv, A, 'Set-Q')).json;
+                return [vus, a, b, c.quantites === undefined ? {} : c.quantites, Object.keys(c), [r1.statut, r1.json.possedees]];
             } },
         { nom: 'limiteur : au-delà de 3 écritures par heure (réglé à 3), 429 DEBIT avec Retry-After, par compte ; la lecture n\'est pas limitée', cfg: variante({ limites: { collectionEcrituresParCompteHeure: 3 } }),
             mut: [['routes.js', [['exigerVerifie, parCompte]', 'exigerVerifie]']]]], attendu: [[200, 200, 200, 429], 'DEBIT', true, 200, 200, 3],
@@ -232,7 +256,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 for (let i = 1; i <= 4; i++) vus.push((await put(sv, A, 'Set-A', `${i}|001`, true)).statut);
                 const r5 = await put(sv, A, 'Set-A', '9|001', true);
                 const b = await put(sv, B, 'Set-A', '1|001', true); const lec = await lireSets(sv, A);
-                return [vus, code(r5), r5.entetes['retry-after'] !== undefined && Number(r5.entetes['retry-after']) >= 1 && r5.json.erreur.reessayerDans === Number(r5.entetes['retry-after']), b.statut, lec.statut, (await docs(A))[0].cles.length];
+                return [vus, code(r5), r5.entetes['retry-after'] !== undefined && Number(r5.entetes['retry-after']) >= 1 && r5.json.erreur.reessayerDans === Number(r5.entetes['retry-after']), b.statut, lec.statut, (await docs(A))[0].hors.length];
             } },
         { nom: 'isolement : la clé d\'un AUTRE compte est invisible et ne se modifie pas (lecture du set, liste, décochage, cochage)', mut: [['service.js', [['compteId, set: slug', 'set: slug']]]],
             attendu: [[], 0, 0, 1, true, ['12|003']],
@@ -243,23 +267,15 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 const lb = await svc.lireSet(B.c._id, 'Set-Iso'), lsb = await svc.lireSets(B.c._id);
                 const fb = await svc.cocher({ compteId: B.c._id, slug: 'Set-Iso', cle: '10|001', possedee: false, cfg });   // B « décoche » la clé de A
                 const tb = await svc.cocher({ compteId: B.c._id, slug: 'Set-Iso', cle: '12|003', possedee: true, cfg });    // B coche la sienne
-                return [lb.cles, lsb.length, fb.possedees, tb.possedees, JSON.stringify((await docs(A))[0]) === avant, (await docs(B))[0].cles];
+                return [lb.cles, lsb.length, fb.possedees, tb.possedees, JSON.stringify((await docs(A))[0]) === avant, (await docs(B))[0].hors];
             } },
-        { nom: 'borne par set ATOMIQUE : 12 écritures simultanées vers un set limité à 3 clés en gardent exactement 3, les 9 autres sont refusées « borne-set »', cfg: variante({ collection: { clesParSet: 3 } }),
-            mut: [['service.js', [['...SOUS_LA_BORNE(cfg), ', '']]]], attendu: [3, 9, ['borne-set']],
-            async scene({ svc, cfg }) {
-                const A = await compte();
-                const r = await Promise.all(Array.from({ length: 12 }, (_, i) => svc.cocher({ compteId: A.c._id, slug: 'Set-Plein', cle: `${i + 1}|001`, possedee: true, cfg })));
-                const d = await docs(A);
-                return [d.reduce((n, x) => n + x.cles.length, 0), r.filter(x => x.refus).length, [...new Set(r.filter(x => x.refus).map(x => x.refus))]];
-            } },
-        { nom: 'borne par compte : à 5 clés au total (3 + 2), une clé de plus dans un 3e set est refusée « borne-compte » ; une clé déjà posée reste idempotente, un décochage libère', cfg: variante({ collection: { clesParSet: 3, clesParCompte: 5, setsParCompte: 10 } }),
+        { nom: 'borne par compte : à 5 clés au total (3 + 2), une clé de plus dans un 3e set est refusée « borne-compte » ; une clé déjà posée reste idempotente, un décochage libère', cfg: variante({ collection: { clesParCompte: 5, setsParCompte: 10 } }),
             mut: [['service.js', [['if (total >= cfg.collection.clesParCompte)', 'if (false)']]]], attendu: [['borne-compte', 5], 5, 4, 5],
             async scene({ svc, cfg }) {
                 const A = await compte(); const id = A.c._id; const c = (slug, cle, possedee = true) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
                 for (const k of ['1|1', '2|1', '3|1']) await c('S1', k); for (const k of ['4|1', '5|1']) await c('S2', k);
                 const r = await c('S3', '6|1');
-                const total = async () => (await docs(A)).reduce((n, x) => n + x.cles.length, 0);
+                const total = async () => (await docs(A)).reduce((n, x) => n + x.hors.length, 0);
                 const t1 = await total();
                 const idem = await c('S2', '5|1');     // déjà posée : aucun refus, même au plafond
                 await c('S2', '5|1', false);
@@ -268,7 +284,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 return [[r.refus, r.borne], t1, apres, re.refus ? -1 : await total()];
             } },
         { nom: 'borne de sets par compte : au plus 2 sets (réglé à 2), un 3e est refusé « borne-sets » ; un set existant reste ouvert, en vider un en libère la place', cfg: variante({ collection: { setsParCompte: 2 } }),
-            mut: [['service.js', [['if (nSets >= cfg.collection.setsParCompte)', 'if (false)']]]], attendu: [['borne-sets', 2], 2, 2, true],
+            mut: [['service.js', [['!doc && tous.length >= cfg.collection.setsParCompte', 'false']]]], attendu: [['borne-sets', 2], 2, 2, true],
             async scene({ svc, cfg }) {
                 const A = await compte(); const id = A.c._id; const c = (slug, cle, possedee = true) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
                 await c('S1', '1|1'); await c('S2', '2|1');
@@ -280,7 +296,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 return [[r.refus, r.borne], nSets, dans.possedees, !libre.refus];
             } },
         // ── I-2 : la garde de course du `deleteOne` d'un document vide. PUT false de la dernière clé EN MÊME TEMPS qu'un PUT true d'une autre clé du même set : aucune clé perdue.
-        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (60 itérations) ne perd aucune clé', mut: [['service.js', [[', cles: { $size: 0 } }', ' }']]]], attendu: [0],
+        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (60 itérations) ne perd aucune clé', mut: [['service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]]], attendu: [0],
             async scene({ svc, cfg }) {
                 const A = await compte(), id = A.c._id; let perdues = 0;
                 for (let i = 0; i < 60; i++) {
@@ -289,140 +305,16 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                     const ops = [() => a('1|1', false), () => a('2|1', true)]; if (i % 2) ops.reverse();
                     await Promise.all(ops.map(f => f()));
                     const d = await raw(NOM).findOne({ compteId: id, set: slug });
-                    if (!d || !d.cles.includes('2|1')) perdues++;
+                    if (!d || !d.hors.includes('2|1')) perdues++;
                 }
                 return [perdues];
             } },
-        // ── M-1 : deux PUT true simultanés de la MÊME clé ne comptent qu'une fois (set neuf : l'upsert ; set existant : la mise à jour). Le compteur global le montre.
-        { nom: 'même clé posée deux fois en même temps (set neuf puis set existant, 30 itérations) : le compteur global ne bouge que de 1 à chaque fois', attendu: [0, 0],
-            mut: [['service.js', [['{ compteId, set: slug, ...SOUS_LA_BORNE(cfg), cles: { $ne: cle } }', '{ compteId, set: slug, ...SOUS_LA_BORNE(cfg) }']]], ['service.js', [['if (!r.ajoute) await rendre(cout);', '']]]],
-            async scene({ svc, cfg }) {
-                const A = await compte(), id = A.c._id; const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                await svc.recompter(cfg); let mauvaisNeuf = 0, mauvaisExistant = 0; const F = cfg.collection.forfaitDocument;
-                for (let i = 0; i < 30; i++) {
-                    const slug = `S-Meme-${i}`;
-                    const a = (cle, k) => svc.cocher({ compteId: id, slug, cle, possedee: true, cfg, maintenant: new Date(Date.now() + k) });
-                    let n0 = await n(); await Promise.all([a('1|1', 1), a('1|1', 2)]);
-                    if ((await n()) - n0 !== 1 + F) mauvaisNeuf++;      // une clé + le forfait du document neuf, UNE fois
-                    n0 = await n(); await Promise.all([a('2|1', 3), a('2|1', 4)]);
-                    if ((await n()) - n0 !== 1) mauvaisExistant++;
-                }
-                return [mauvaisNeuf, mauvaisExistant];
-            } },
-        // ── I-1 : le plafond GLOBAL (clés de tous les comptes), un compteur unique `$inc` conditionnel avant l'écriture
-        { nom: 'plafond global ATOMIQUE : 20 écritures simultanées dans des sets existants avec 5 places libres au service en gardent exactement 5, les 15 autres sont refusées « borne-service », compteur = places réelles',
-            mut: [['service.js', [['n: { $lte: cfg.collection.clesService - cout }', 'n: { $gte: 0 }']]]], attendu: [5, 15, ['borne-service'], 5],
-            async scene({ svc, cfg }) {
-                const A = await compte(), B = await compte();
-                for (const [c, s] of [[A, 'S-Svc-1'], [B, 'S-Svc-0']]) await svc.cocher({ compteId: c.c._id, slug: s, cle: '999|1', possedee: true, cfg });
-                const base = await svc.recompter(cfg); const cfgX = variante({ collection: { clesService: base + 5 } });
-                const r = await Promise.all(Array.from({ length: 20 }, (_, i) => svc.cocher({ compteId: (i % 2 ? A : B).c._id, slug: `S-Svc-${i % 2}`, cle: `${i + 1}|1`, possedee: true, cfg: cfgX })));
-                const refus = r.filter(x => x.refus);
-                return [await placesReelles(cfg) - base, refus.length, [...new Set(refus.map(x => x.refus))], (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base];
-            } },
-        // ── plafond en PLACES : un set neuf coûte 1 clé + le forfait du document, réservés d'un seul `$inc` conditionnel ; rendu à la suppression du document vide
-        { nom: 'places : un set neuf consomme 1 + le forfait, une clé de plus 1 ; le dernier retrait supprime le document et RENDRE son forfait',
-            mut: [['service.js', [['await rendre(cfg.collection.forfaitDocument); // forfait rendu', '']]]], attendu: [5, 6, 5, 0, 0],
-            async scene({ svc, cfg }) {
-                const base = await svc.recompter(cfg); const F = cfg.collection.forfaitDocument;
-                const A = await compte(), id = A.c._id; const c = (cle, possedee) => svc.cocher({ compteId: id, slug: 'S-Forfait', cle, possedee, cfg });
-                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
-                await c('1|1', true); const n1 = await cpt(); await c('2|1', true); const n2 = await cpt();
-                await c('2|1', false); const n3 = await cpt(); await c('1|1', false); const n4 = await cpt();
-                return [n1 === 1 + F ? 5 : n1, n2 === 2 + F ? 6 : n2, n3 === 1 + F ? 5 : n3, n4, (await docs(A)).length];
-            } },
-        { nom: 'places : 12 écritures simultanées dans 12 sets NEUFS avec la place de 3 documents en gardent exactement 3 ; le compteur ne dépasse jamais le plafond',
-            mut: [['service.js', [['const cout = 1 + (doc ? 0 : cfg.collection.forfaitDocument);', 'const cout = 1;']]]], attendu: [3, 9, 3 * 5, true],
-            async scene({ svc, cfg }) {
-                const base = await svc.recompter(cfg); const F = cfg.collection.forfaitDocument; const plafond = base + 3 * (1 + F); const cfgX = variante({ collection: { clesService: plafond } });
-                const A = await compte();
-                const r = await Promise.all(Array.from({ length: 12 }, (_, i) => svc.cocher({ compteId: A.c._id, slug: `S-Neuf-${i}`, cle: '1|1', possedee: true, cfg: cfgX })));
-                const n = (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                return [r.filter(x => !x.refus).length, r.filter(x => x.refus === 'borne-service').length, n - base === 3 * (1 + F) ? 15 : n - base, n <= plafond];
-            } },
-        { nom: 'places : deux clés DIFFÉRENTES posées en même temps dans un set neuf ne paient le forfait qu\'UNE fois (le perdant de la création le rend), 30 itérations',
-            mut: [['service.js', [['else if (cout > 1 && !r.cree) await rendre(cout - 1);', '']]]], attendu: [0],
-            async scene({ svc, cfg }) {
-                const A = await compte(), id = A.c._id; const F = cfg.collection.forfaitDocument; await svc.recompter(cfg); let mauvais = 0;
-                const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                for (let i = 0; i < 30; i++) {
-                    const n0 = await n(); await Promise.all(['1|1', '2|1'].map(cle => svc.cocher({ compteId: id, slug: `S-Deux-${i}`, cle, possedee: true, cfg })));
-                    if ((await n()) - n0 !== 2 + F) mauvais++;
-                }
-                return [mauvais];
-            } },
-        { nom: 'plafond global : au plafond, une clé déjà posée ne consomme rien, une nouvelle est refusée sans rien écrire ; un retrait libère UNE place, une seule fois',
-            mut: [['service.js', [['await rendre(1); // retrait', '']]]], attendu: [[3, 3], 'borne-service', [3, 3, 3], [2, 2], 1, 'borne-service'],
-            async scene({ svc, cfg }) {
-                const A = await compte(), id = A.c._id; await svc.recompter(cfg);
-                await svc.cocher({ compteId: id, slug: 'S-Plein', cle: '1|1', possedee: true, cfg });            // le document existe désormais : seules les clés suivantes se paient
-                const base = (await svc.recompter(cfg)) - 1; const cfgX = variante({ collection: { clesService: base + 3 } });   // base = tout sauf la clé 1|1 (forfait du document compris)
-                const c = (cle, possedee = true) => svc.cocher({ compteId: id, slug: 'S-Plein', cle, possedee, cfg: cfgX });
-                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
-                const cles = async () => (await docs(A))[0].cles.length;
-                for (const k of ['2|1', '3|1']) await c(k);
-                const plein = [await cpt(), await cles()];
-                const refus = (await c('4|1')).refus;
-                const idem = await c('1|1');
-                const apresRefus = [await cpt(), await cles(), idem.possedees];
-                await c('1|1', false); await c('1|1', false);          // deux retraits de la même clé : une seule place libérée
-                const libre = [await cpt(), await cles()];
-                const neuve = await c('4|1'); const encore = await c('5|1');
-                return [plein, refus, apresRefus, libre, neuve.possedees === 3 ? 1 : 0, encore.refus];
-            } },
-        { nom: 'places : supprimer un compte rend ses clés ET les forfaits de tous ses documents (3 clés dans 2 sets : 3 + 2 × 7 = 17 places)', mut: [['service.js', [['rendu += d.cles.length + cfg.collection.forfaitDocument;', 'rendu += d.cles.length;']]]], attendu: [17, 0, 0],
-            async scene({ svc, cfg }) {
-                const base = await svc.recompter(cfg); const A = await compte(), id = A.c._id;
-                for (const [s, k] of [['S1', '1|1'], ['S1', '2|1'], ['S2', '3|1']]) await svc.cocher({ compteId: id, slug: s, cle: k, possedee: true, cfg });
-                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
-                const avant = await cpt(); await svc.supprimerDuCompte(id, cfg);
-                return [avant, await cpt(), (await docs(A)).length];
-            } },
-        // ── M-A : la suppression d'un compte rend ce que CHAQUE document supprimé contenait RÉELLEMENT au moment de sa suppression (jamais une lecture d'avant) : le compteur ne passe jamais sous le réel
-        { nom: 'suppression de compte : rend les clés réellement présentes (une clé retirée avant ne compte pas deux fois), et des retraits concurrents ne font jamais passer le compteur sous le réel (40 itérations)',
-            mut: [['service.js', [['rendu += d.cles.length + cfg.collection.forfaitDocument;', 'rendu += 3 + cfg.collection.forfaitDocument;']]]], attendu: [0, true],
-            async scene({ svc, cfg }) {
-                await svc.recompter(cfg); const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                const garni = async (slug) => { const A = await compte(); for (const k of ['1|1', '2|1', '3|1']) await svc.cocher({ compteId: A.c._id, slug, cle: k, possedee: true, cfg }); return A.c._id; };
-                const id1 = await garni('S-Sup'); await svc.cocher({ compteId: id1, slug: 'S-Sup', cle: '1|1', possedee: false, cfg });      // une clé retirée AVANT la suppression
-                await svc.supprimerDuCompte(id1, cfg); const derive = (await n()) - (await placesReelles(cfg));
-                let minimum = 0;
-                for (let i = 0; i < 40; i++) {
-                    const id = await garni(`S-Sup-${i}`);
-                    await Promise.all([...['1|1', '2|1', '3|1'].map(k => svc.cocher({ compteId: id, slug: `S-Sup-${i}`, cle: k, possedee: false, cfg })), svc.supprimerDuCompte(id, cfg)]);
-                    minimum = Math.min(minimum, (await n()) - (await placesReelles(cfg)));
-                }
-                return [derive, minimum >= 0];
-            } },
-        // ── I-B 1 : le forfait n'est rendu QUE si le document a réellement été supprimé (la dérive vers le bas). Course PUT false de la dernière clé / PUT true d'une autre, compteur exact à chaque tour.
-        { nom: 'forfait rendu seulement si le document est réellement supprimé : course retrait de la dernière clé / pose d\'une autre (80 itérations), le compteur reste EXACT',
-            mut: [['service.js', [['.deletedCount === 1) {', '.deletedCount >= 0) {']]]], attendu: [0],
-            async scene({ svc, cfg }) {
-                const A = await compte(), id = A.c._id; await svc.recompter(cfg); let ecarts = 0;
-                for (let i = 0; i < 80; i++) {
-                    const slug = `S-Compta-${i}`; const a = (cle, possedee) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
-                    await a('1|1', true);
-                    const ops = [() => a('1|1', false), () => a('2|1', true)]; if (i % 2) ops.reverse();
-                    await Promise.all(ops.map(f => f()));
-                    if ((await raw('compteurs').findOne({ cle: 'collection-cles' })).n !== await placesReelles(cfg)) ecarts++;
-                }
-                return [ecarts];
-            } },
-        // ── I-B 4 : le plancher à 0 de `rendre`
-        { nom: 'le compteur ne passe jamais sous 0 (plancher de rendre)', mut: [['service.js', [['{ $max: [0, { $subtract: [\'$n\', k] }] }', '{ $subtract: [\'$n\', k] }']]]], attendu: [0],
-            async scene({ svc, cfg }) {
-                const A = await compte(); await svc.cocher({ compteId: A.c._id, slug: 'S-Plancher', cle: '1|1', possedee: true, cfg });
-                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 0 } });                      // compteur trop bas (dérive) : le retrait ne doit pas le rendre négatif
-                await svc.cocher({ compteId: A.c._id, slug: 'S-Plancher', cle: '1|1', possedee: false, cfg });
-                const n = (await raw('compteurs').findOne({ cle: 'collection-cles' })).n; await svc.recompter(cfg);
-                return [n];
-            } },
-        // ── I-B 2 et 3 : le recompte au montage ferme les écritures s'il échoue, et les écritures l'ATTENDENT. Une copie neuve du service (aucun recompte fait), la base enveloppée par injection.
+        // ── le recompte au montage ferme les écritures s'il échoue, et les écritures l'ATTENDENT (le détail du budget est dans test-collection-compacte.js, section 8). Une copie neuve du service, la base enveloppée par injection.
         { nom: 'un recompte en échec FERME les écritures (rien d\'écrit, l\'erreur remonte : 503), il n\'est pas avalé ; la panne passée, l\'écriture suivante rejoue le recompte',
             mut: [['service.js', [['.catch(e => { initialisation = null; throw e; })', '.catch(() => 0)']]]], attendu: [true, 0, 1],
             async scene({ svc, cfg }) {
                 const s = svc === svcReel ? charger('service.js', []) : svc; const A = await compte(); const avant = await nDocs();
-                dbInjecte({ [NOM]: c => { const w = Object.create(c); w.aggregate = p => (p[0].$group ? { toArray: async () => { throw new Error('panne simulée'); } } : c.aggregate(p)); return w; } });
+                dbInjecte({ racine: { command: async () => { throw new Error('panne simulée'); } } });
                 let leve = false; try { await s.cocher({ compteId: A.c._id, slug: 'S-Panne', cle: '1|1', possedee: true, cfg }); } catch (e) { leve = true; } finally { dbInjecte(null); }
                 const ecrits = (await nDocs()) - avant;
                 const apres = await s.cocher({ compteId: A.c._id, slug: 'S-Panne', cle: '1|1', possedee: true, cfg }).catch(() => ({}));
@@ -432,36 +324,11 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             mut: [['service.js', [['await assurer(cfg);', '']]]], attendu: ['recompte-fin', true],
             async scene({ svc, cfg }) {
                 const s = svc === svcReel ? charger('service.js', []) : svc; const A = await compte(); const journal = [];
-                dbInjecte({ [NOM]: c => {
-                    const w = Object.create(c);
-                    w.aggregate = p => { const cur = c.aggregate(p); return p[0].$group ? { toArray: async () => { await attendre(300); const r = await cur.toArray(); journal.push('recompte-fin'); return r; } } : cur; };
-                    w.findOneAndUpdate = (...a) => { journal.push('ecriture'); return c.findOneAndUpdate(...a); };
-                    return w;
-                } });
+                dbInjecte({ racine: { command: async (...a) => { await attendre(300); const r = await dbReelle.command(...a); journal.push('recompte-fin'); return r; } },
+                    compteurs: c => { const w = Object.create(c); w.findOneAndUpdate = (...a) => { journal.push('ecriture'); return c.findOneAndUpdate(...a); }; return w; } });
                 try { await s.cocher({ compteId: A.c._id, slug: 'S-Attente', cle: '1|1', possedee: true, cfg }); } finally { dbInjecte(null); }
                 return [journal[0], journal.includes('ecriture')];
             } },
-        // ── M-B : un compteur ABSENT ferme les écritures (503) jusqu'au prochain recompte ; l'incrément conditionnel ne crée jamais le compteur
-        { nom: 'compteur absent : les écritures ferment (rien d\'écrit, le compteur n\'est PAS recréé par l\'incrément) jusqu\'au recompte, qui le recrée',
-            mut: [['service.js', [['{ $inc: { n: cout } })) !== null) return true;', '{ $inc: { n: cout } }, { upsert: true })) !== null) return true;']]]], attendu: [true, 0, 0, 1],
-            async scene({ svc, cfg }) {
-                const A = await compte(); await svc.recompter(cfg); await raw('compteurs').deleteMany({}); const avant = await nDocs();
-                let leve = false; try { await svc.cocher({ compteId: A.c._id, slug: 'S-Absent', cle: '1|1', possedee: true, cfg }); } catch (e) { leve = true; }
-                const etat = [leve, (await nDocs()) - avant, await raw('compteurs').countDocuments({})];
-                await svc.recompter(cfg); const ok = await svc.cocher({ compteId: A.c._id, slug: 'S-Absent', cle: '1|1', possedee: true, cfg });
-                return [...etat, ok.possedees];
-            } },
-        { nom: 'places : le recompte compte les clés ET les documents × forfait, et corrige un compteur FAUX vers le haut, vers le bas, ou absent', mut: [['service.js', [['{ $add: [{ $size: \'$cles\' }, cfg.collection.forfaitDocument] }', '{ $size: \'$cles\' }']]], ['service.js', [['{ $set: { n } }', '{ $set: { n: 0 } }']]]], attendu: [true, true, true, true],
-            async scene({ svc, cfg }) {
-                const A = await compte(); await svc.cocher({ compteId: A.c._id, slug: 'S-Rec', cle: '1|1', possedee: true, cfg });
-                const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                const reel = () => placesReelles(cfg);
-                const cles = (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n, nDocs = await raw(NOM).countDocuments({});
-                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 999999 } }); const r1 = await svc.recompter(cfg); const ok1 = (await lire()) === (await reel()) && r1 === (await reel());
-                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 0 } }); await svc.recompter(cfg); const ok2 = (await lire()) === (await reel());
-                await raw('compteurs').deleteMany({}); await svc.recompter(cfg); const ok3 = (await lire()) === (await reel());
-                return [ok1, ok2, ok3, (await reel()) === cles + nDocs * cfg.collection.forfaitDocument];
-            } }
     ];
     for (const g of GARDES) {
         const cfgG = g.cfg || cfg;
@@ -474,17 +341,18 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
         }
     }
-    H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes de 2 000 clés par set, 20 000 par compte, 1 000 sets par compte', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParSet, cfg.collection.clesParCompte, cfg.collection.setsParCompte], [1000, 2000, 20000, 1000]);
+    H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes : 70 000 clés par compte (le catalogue complet), 5 000 hors catalogue, 1 000 sets par compte ; budget du service 10 485 760 o', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.setsParCompte, cfg.collection.octetsService], [1000, 70000, 5000, 1000, 10485760]);
 
     // ═══════════════ 4. LES BORNES PAR HTTP : le code de la liste fermée, le message qui nomme la borne ═══════════════
     {
-        const s4 = await serveur(variante({ collection: { clesParSet: 2, clesParCompte: 3, setsParCompte: 2 } }));
+        const s4 = await serveur(variante({ collection: { clesParCompte: 100, horsCatalogueParCompte: 2, setsParCompte: 2 } }));
         const A = await compte();
         await put(s4, A, 'S1', '1|1', true); await put(s4, A, 'S1', '2|1', true);
         const bs = await put(s4, A, 'S1', '3|1', true);
-        H.v('4. une 3e clé dans un set limité à 2 : 409 CONFLIT « borne-set », le message nomme 2, rien n\'est perdu', [bs.statut, code(bs), detail(bs), /\b2\b/.test(bs.json.erreur.message), (await docs(A))[0].cles.length], [409, 'CONFLIT', 'borne-set', true, 2]);
-        await put(s4, A, 'S2', '4|1', true);
-        const bc = await put(s4, A, 'S2', '5|1', true);
+        H.v('4. une 3e clé hors catalogue (limite 2) : 409 CONFLIT « borne-hors », le message nomme 2, rien n\'est perdu', [bs.statut, code(bs), detail(bs), /\b2\b/.test(bs.json.erreur.message), (await docs(A))[0].hors.length], [409, 'CONFLIT', 'borne-hors', true, 2]);
+        const s4b = await serveur(variante({ collection: { clesParCompte: 3, horsCatalogueParCompte: 10, setsParCompte: 2 } })); const A2 = await compte();
+        await put(s4b, A2, 'S1', '1|1', true); await put(s4b, A2, 'S1', '2|1', true); await put(s4b, A2, 'S2', '4|1', true);
+        const bc = await put(s4b, A2, 'S2', '5|1', true);
         H.v('   une 4e clé au total (limite 3) : 409 CONFLIT « borne-compte », le message nomme 3', [bc.statut, code(bc), detail(bc), /\b3\b/.test(bc.json.erreur.message)], [409, 'CONFLIT', 'borne-compte', true]);
         const s5 = await serveur(variante({ collection: { setsParCompte: 1 } })); const B = await compte();
         await put(s5, B, 'S1', '1|1', true);
@@ -495,70 +363,29 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
     // ═══════════════ 4 bis. LE PLAFOND GLOBAL par HTTP, et le recompte AU MONTAGE ═══════════════
     {
         const base = await svcReel.recompter(cfg);
-        const s6 = await serveur(variante({ collection: { clesService: base + 1 + cfg.collection.forfaitDocument } })); const A = await compte();
+        const COUTS = require('../collection/couts');
+        const s6 = await serveur(variante({ collection: { octetsService: base + COUTS.document('S-Global') + COUTS.hors('1|1') } })); const A = await compte();
         const ok = await put(s6, A, 'S-Global', '1|1', true), non = await put(s6, A, 'S-Global', '2|1', true);
-        H.v('4 bis. plafond global atteint : 409 CONFLIT « borne-service », le message dit que la limite est celle du SERVICE, rien n\'est écrit', [ok.statut, non.statut, code(non), detail(non), /service/i.test(non.json.erreur.message) && /compte/i.test(non.json.erreur.message), (await docs(A))[0].cles], [200, 409, 'CONFLIT', 'borne-service', true, ['1|1']]);
-        // le recompte au montage : un compteur faux est corrigé quand le lot est monté (le montage est le démarrage du processus)
-        const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-        const reel = () => placesReelles(cfg);
-        const monte =async mod => { await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 987654 } }); const r = express.Router(); mod.routes(r, cfg, {}); for (let i = 0; i < 40 && (await lire()) === 987654; i++) await attendre(50); return (await lire()) === (await reel()); };
+        H.v('4 bis. plafond global atteint : 409 CONFLIT « borne-service », le message dit que la limite est celle du SERVICE, rien n\'est écrit', [ok.statut, non.statut, code(non), detail(non), /service/i.test(non.json.erreur.message) && /compte/i.test(non.json.erreur.message), (await docs(A))[0].hors], [200, 409, 'CONFLIT', 'borne-service', true, ['1|1']]);
+        // le recompte au montage : un compteur faux est corrigé quand le lot est monté (le montage est le démarrage du processus) ; le détail (collStats des deux collections) est dans test-collection-compacte.js
+        const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-octets' })).n;
+        const monte = async mod => { await raw('compteurs').updateOne({ cle: 'collection-octets' }, { $set: { n: 987654 } }); const r = express.Router(); mod.routes(r, cfg, {}); for (let i = 0; i < 40 && (await lire()) === 987654; i++) await attendre(50); return (await lire()) !== 987654; };
         H.vrai('   montage du lot : un compteur faux (987 654) est recompté depuis les données réelles', await monte(require('../collection/monter')));
         const mutMonter = charger('monter.js', [['service.initialiser(cfg)', 'Promise.resolve()']]);
         H.vrai('   ↳ copie mutée de monter.js (sans recompte au montage) : le compteur reste faux — la garde sait dire NON', !(await monte(mutMonter)));
         await svcReel.recompter(cfg);
     }
 
-    // ═══════════════ 4 ter. LE FORFAIT, CALCULÉ ; le pire cas en octets sous le plafond, pour les deux formes extrêmes ═══════════════
-    {
-        const { calculateObjectSize, ObjectId } = require('bson');
-        const cle = '999999999999|' + 'x'.repeat(32);                                   // la clé la plus longue admise (12 chiffres + « | » + 32 caractères)
-        const doc = n => ({ _id: new ObjectId(), compteId: new ObjectId(), set: 'a'.repeat(80), cles: Array.from({ length: n }, () => cle), majLe: new Date() });   // le slug le plus long
-        void doc;
-        // MESURE (pas une estimation) : des documents des formes extrêmes, créés dans la base en mémoire sous un nom de banc, `fsync`, puis `collStats` (taille des données et `totalIndexSize`, index unique compris).
-        // Sans fsync + pause, `indexSizes` est faux (4 096 o pour 20 000 documents).
-        const crypto = require('crypto'); const bdd = mongoose.connection.db;
-        async function mesurer(nom, nComptes, nDocsParCompte, nCles) {
-            const c = bdd.collection(nom); await c.createIndex({ compteId: 1, set: 1 }, { unique: true });
-            let lot = [];
-            for (let i = 0; i < nComptes; i++) {
-                const compteId = new ObjectId();
-                for (let j = 0; j < nDocsParCompte; j++) {
-                    lot.push({ compteId, set: crypto.randomBytes(40).toString('hex'), cles: Array.from({ length: nCles }, () => `${String(Math.floor(Math.random() * 9e11) + 1e11)}|${crypto.randomBytes(16).toString('hex')}`), majLe: new Date() });
-                    if (lot.length >= 1000) { await c.insertMany(lot); lot = []; }
-                }
-            }
-            if (lot.length) await c.insertMany(lot);
-            await bdd.admin().command({ fsync: 1 }); await attendre(1500);
-            const st = await bdd.command({ collStats: nom }); await c.drop();
-            return { n: nComptes * nDocsParCompte, octets: (st.size + st.totalIndexSize) / (nComptes * nDocsParCompte), donnees: st.size / (nComptes * nDocsParCompte), index: st.totalIndexSize / (nComptes * nDocsParCompte) };
-        }
-        const formeA = await mesurer('zz_mesure_forfait_a', 20, 1000, 1);        // 1 clé par document, 20 comptes
-        const formeB = await mesurer('zz_mesure_forfait_b', 1, 1000, 1);         // 1 clé par document, 1 compte (l'index y est le plus gros par document)
-        const formeC = await mesurer('zz_mesure_forfait_c', 5, 10, 2000);        // 2 000 clés par document
-        const coutCle = formeC.octets / 2000;                                    // le coût d'une clé maximale, mesuré (données + index)
-        const requis = f => Math.ceil(f.octets / coutCle) - 1;                   // places d'un document d'une clé = ceil(octets / coût d'une clé) ; moins la clé elle-même
-        const forfaitRequis = Math.max(requis(formeA), requis(formeB));
-        console.log(`   mesure collStats (après fsync) : 1 clé/doc (20 comptes) ${formeA.donnees.toFixed(0)} o de données + ${formeA.index.toFixed(0)} o d'index ; (1 compte) ${formeB.donnees.toFixed(0)} + ${formeB.index.toFixed(0)} ; 2 000 clés/doc ${formeC.octets.toFixed(0)} o, soit ${coutCle.toFixed(2)} o par clé`);
-        console.log(`   forfait requis = max(⌈${formeA.octets.toFixed(0)} / ${coutCle.toFixed(2)}⌉, ⌈${formeB.octets.toFixed(0)} / ${coutCle.toFixed(2)}⌉) − 1 = ${forfaitRequis} places ; configuré : ${cfg.collection.forfaitDocument}`);
-        H.vrai('4 ter. le forfait configuré couvre le forfait MESURÉ (le coût réel d\'un document en places ne le dépasse pas)', cfg.collection.forfaitDocument >= forfaitRequis);
-        H.vrai('   ↳ un forfait de 4 (l\'ancienne estimation) ne couvrirait PAS la mesure — le banc sait dire NON', !(4 >= forfaitRequis));
-        // pire cas en octets avec P places, MESURÉ : 1 clé par document (P / (1 + F) documents) ; 2 000 clés par document (P / (2 000 + F) documents)
-        const pire = (C, forme) => { const F = C.collection.forfaitDocument, P = C.collection.clesService; return forme === 'un' ? Math.floor(P / (1 + F)) * Math.max(formeA.octets, formeB.octets) : Math.floor(P / (2000 + F)) * formeC.octets; };
-        const MARGE = 23 * 1048576, Mo = x => (x / 1048576).toFixed(1);
-        console.log(`   pire cas MESURÉ sous ${cfg.collection.clesService} places : 1 clé par document ${Mo(pire(cfg, 'un'))} Mo ; 2 000 clés par document ${Mo(pire(cfg, 'deux-mille'))} Mo ; marge de la grappe 23 Mo ; plafond qui épuiserait la marge ≈ ${Math.round(cfg.collection.clesService * MARGE / Math.max(pire(cfg, 'un'), pire(cfg, 'deux-mille')) / 1000) * 1000} places`);
-        H.vrai('   sous le plafond par défaut, les deux formes extrêmes tiennent dans la marge de 23 Mo', pire(cfg, 'un') < MARGE && pire(cfg, 'deux-mille') < MARGE);
-        const sansForfait = variante({ collection: { forfaitDocument: 0 } });
-        H.vrai('   ↳ sans forfait (0), la forme « 1 clé par document » pèse plus du double — le calcul sait dire NON', pire(sansForfait, 'un') > 2 * pire(cfg, 'un'));
-    }
+    // ═══════════════ 4 ter. (retiré) le forfait en PLACES n'existe plus : le coût d'un document est MODÉLISÉ en octets (couts.js) et confronté à collStats par test-collection-budget.js ═══════════════
 
     // ═══════════════ 5. LA CONCURRENCE : la borne par compte se contrôle AVANT l'écriture ; son dépassement est BORNÉ ═══════════════
     {
-        const cfgC = variante({ collection: { clesParSet: 100, clesParCompte: 5, setsParCompte: 10 } });
+        const cfgC = variante({ collection: { clesParCompte: 5, setsParCompte: 10 } });
         const A = await compte(); const id = A.c._id;
         for (let i = 1; i <= 4; i++) await svcReel.cocher({ compteId: id, slug: 'S1', cle: `${i}|1`, possedee: true, cfg: cfgC });
         const N = 8;
         const r = await Promise.all(Array.from({ length: N }, (_, i) => svcReel.cocher({ compteId: id, slug: 'S1', cle: `${100 + i}|1`, possedee: true, cfg: cfgC })));
-        const total = (await docs(A)).reduce((n, x) => n + x.cles.length, 0);
+        const total = (await docs(A)).reduce((n, x) => n + x.hors.length, 0);
         console.log(`   concurrence : ${N} écritures simultanées avec 4 clés sur 5 permises → ${r.filter(x => !x.refus).length} acceptées, total ${total}`);
         H.vrai(`5. dépassement de la borne par compte, borné par le nombre d'écritures en vol (${N}) : 5 ≤ total ≤ ${4 + N}`, total >= 5 && total <= 4 + N);
         const apres = await svcReel.cocher({ compteId: id, slug: 'S1', cle: '999|1', possedee: true, cfg: cfgC });
@@ -567,7 +394,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         const B = await compte();
         const cr = await Promise.all(Array.from({ length: 10 }, (_, i) => svcReel.cocher({ compteId: B.c._id, slug: 'S-Neuf', cle: `${i + 1}|1`, possedee: true, cfg })));
         const dB = await docs(B);
-        H.v('   10 premières écritures simultanées dans un set neuf : un seul document, 10 clés, aucun refus', [dB.length, dB[0].cles.length, cr.filter(x => x.refus).length], [1, 10, 0]);
+        H.v('   10 premières écritures simultanées dans un set neuf : un seul document, 10 clés, aucun refus', [dB.length, dB[0].hors.length, cr.filter(x => x.refus).length], [1, 10, 0]);
     }
 
     // ═══════════════ 6. CORS DU SITE : le préflight de PUT ═══════════════
