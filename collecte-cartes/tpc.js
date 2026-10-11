@@ -167,12 +167,23 @@ function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu
  * (carte, numéro) ne font qu'un visuel ; deux fiches au même numéro à la source ne désignent rien.
  * @param {{trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>, fiches: object[], code: string, site: string}} o
  */
-function planifierTpc({ trous, fiches, code, site }) {
+function planifierTpc({ trous, fiches, code, site, prefixes = null }) {
     // ce que porte la majorité de la liste (preuveDeCorrespondance, `attendu`) ; une égalité de voix n'élit personne
     const majorite = xs => { const m = new Map(); for (const x of xs) if (x != null) m.set(x, (m.get(x) || 0) + 1); const t = [...m].sort((a, b) => b[1] - a[1]); return t.length && (t.length === 1 || t[0][1] > t[1][1]) ? t[0][0] : null; };
-    const attendu = { denominateur: majorite(fiches.map(f => /^\d+$/.test(f.denominateur || '') ? f.denominateur : null)), symbole: majorite(fiches.map(f => f.symbole ?? null)) };
+    const attenduDe = fs => ({ denominateur: majorite(fs.map(f => /^\d+$/.test(f.denominateur || '') ? f.denominateur : null)), symbole: majorite(fs.map(f => f.symbole ?? null)) });
+    // LIGNE À PLUSIEURS LISTES (`prefixes` = les lettres de ses demi-listes, lot TPC-AS) : le préfixe de NOTRE numéro (a019) EST la demi-liste ;
+    // une fiche se range sous « <PRÉFIXE><numéro> » (la clé que cleNumero donne à notre numéro), le set se juge sur SA liste (dénominateur,
+    // symbole), et un produit dont le préfixe n'est pas une liste de la ligne est un trou, jamais cherché dans une autre liste.
+    const multi = Array.isArray(prefixes) && prefixes.length > 0;
+    const P = multi ? prefixes.map(p => String(p).toUpperCase()) : null;
+    const attendu = multi ? new Map(P.map(p => [p, attenduDe(fiches.filter(f => String(f.prefixe ?? '').toUpperCase() === p))])) : attenduDe(fiches);
     const parNumero = new Map();
-    for (const f of fiches) { const k = cleNumero(f.numero); if (!f.numero || !k) continue; (parNumero.get(k) || parNumero.set(k, []).get(k)).push(f); }
+    for (const f of fiches) {
+        const k = cleNumero(f.numero);
+        if (!f.numero || !k) continue;
+        const kk = multi ? `${String(f.prefixe ?? '').toUpperCase()}${k}` : k;
+        (parNumero.get(kk) || parNumero.set(kk, []).get(kk)).push(f);
+    }
     const vus = new Set(), plan = [], restes = [];
     for (const t of trous) {
         const k = t.numeroFiche ? cleNumero(t.numeroFiche) : null;
@@ -181,10 +192,19 @@ function planifierTpc({ trous, fiches, code, site }) {
         vus.add(cle);
         const base = { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, idProduct: t.idProduct };
         if (!k) { restes.push({ ...base, motif: 'sans-numero' }); continue; }
+        let pref = null;
+        if (multi) {
+            pref = /^([A-Z]*)\d/.exec(k)?.[1] ?? '';
+            if (!pref) { restes.push({ ...base, motif: 'prefixe-absent', detail: `n° ${t.numeroFiche} sans lettre de demi-liste (${P.join('/')}) sur une ligne à plusieurs listes` }); continue; }
+            if (!P.includes(pref)) { restes.push({ ...base, motif: 'prefixe-inconnu', detail: `n° ${t.numeroFiche} : « ${pref} » n'est pas une liste de la ligne (${P.join('/')})` }); continue; }
+        }
         const c = parNumero.get(k) || [];
         if (!c.length) { restes.push({ ...base, motif: 'absente-de-la-source' }); continue; }
         if (c.length > 1) { restes.push({ ...base, motif: 'numero-ambigu-a-la-source', detail: c.map(f => f.idFiche).join(', ') }); continue; }
-        const p = preuveDeCorrespondance({ fiche: c[0], carte: t.carte, numeroFiche: t.numeroFiche, code, site, attendu });
+        // la fiche d'une demi-liste porte son numéro SANS la lettre : pour la preuve, elle prend celle de sa liste (a + 019 = a019) et le code de
+        // SA liste ; ce qui est écrit au plan reste la fiche lue, avec son préfixe
+        const f = multi ? { ...c[0], numero: `${pref.toLowerCase()}${c[0].numero}` } : c[0];
+        const p = preuveDeCorrespondance({ fiche: f, carte: t.carte, numeroFiche: t.numeroFiche, code: multi ? (c[0].listeCode ?? code) : code, site, attendu: multi ? attendu.get(pref) : attendu });
         if (!p.ok) { restes.push({ ...base, motif: p.motif, detail: p.detail }); continue; }
         plan.push({ ...base, fiche: c[0], voie: p.voie, preuve: p.preuve });
     }

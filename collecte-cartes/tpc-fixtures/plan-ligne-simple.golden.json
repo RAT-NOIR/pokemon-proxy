@@ -1,0 +1,162 @@
+{
+ "sv": {
+  "plan": [
+   {
+    "carteId": 10,
+    "nomEn": "Super Rod",
+    "numero": "035",
+    "idProduct": 1,
+    "fiche": {
+     "idFiche": 1035,
+     "nom": "Super Rod",
+     "numero": "035",
+     "denominateur": "SV-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/id035.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 1035 : n° 035/SV-P, nom « Super Rod » = « Super Rod » ; set SV-P (liste filtrée par la source)"
+   },
+   {
+    "carteId": 10,
+    "nomEn": "Super Rod",
+    "numero": "169",
+    "idProduct": 2,
+    "fiche": {
+     "idFiche": 1169,
+     "nom": "Super Rod",
+     "numero": "169",
+     "denominateur": "SV-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/id169.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 1169 : n° 169/SV-P, nom « Super Rod » = « Super Rod » ; set SV-P (liste filtrée par la source)"
+   },
+   {
+    "carteId": 11,
+    "nomEn": "Pikachu",
+    "numero": "050",
+    "idProduct": 3,
+    "fiche": {
+     "idFiche": 1050,
+     "nom": "Pikachu",
+     "numero": "050",
+     "denominateur": "SV-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/id050.png",
+     "dex": 25,
+     "pv": 60
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 1050 : n° 050/SV-P, nom « Pikachu » = « Pikachu », Pokédex 25, PV 60 ; set SV-P (liste filtrée par la source)"
+   },
+   {
+    "carteId": 14,
+    "nomEn": "Snorlax",
+    "numero": "070",
+    "idProduct": 6,
+    "fiche": {
+     "idFiche": 1070,
+     "nom": "Snorlax",
+     "numero": "070",
+     "denominateur": "SV-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/id070.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 1070 : n° 070/SV-P, nom « Snorlax » = « Snorlax » ; set SV-P (liste filtrée par la source)"
+   }
+  ],
+  "restes": [
+   {
+    "carteId": 12,
+    "nomEn": "Eevee",
+    "numero": "060",
+    "idProduct": 4,
+    "motif": "numero-ambigu-a-la-source",
+    "detail": "1060, 1060"
+   },
+   {
+    "carteId": 13,
+    "nomEn": "Mew",
+    "numero": null,
+    "idProduct": 5,
+    "motif": "sans-numero"
+   },
+   {
+    "carteId": 20,
+    "nomEn": "Zorua",
+    "numero": "099",
+    "idProduct": 9,
+    "motif": "absente-de-la-source"
+   }
+  ]
+ },
+ "ma5": {
+  "plan": [
+   {
+    "carteId": 165,
+    "nomEn": "Chespin",
+    "numero": "165",
+    "idProduct": 165,
+    "fiche": {
+     "idFiche": 2165,
+     "nom": "Chespin",
+     "numero": "165",
+     "denominateur": "164",
+     "symbole": "https://asia.pokemon-card.com/id/card-img/mark/MA5.png",
+     "image": "https://asia.pokemon-card.com/id/card-img/x165.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 2165 : n° 165/164, nom « Chespin » = « Chespin » ; set MA5 (liste filtrée par la source)"
+   },
+   {
+    "carteId": 166,
+    "nomEn": "Fomantis",
+    "numero": "166",
+    "idProduct": 166,
+    "fiche": {
+     "idFiche": 2166,
+     "nom": "Fomantis",
+     "numero": "166",
+     "denominateur": "164",
+     "symbole": "https://asia.pokemon-card.com/id/card-img/mark/MA5.png",
+     "image": "https://asia.pokemon-card.com/id/card-img/x166.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 2166 : n° 166/164, nom « Fomantis » = « Fomantis » ; set MA5 (liste filtrée par la source)"
+   },
+   {
+    "carteId": 167,
+    "nomEn": "Fennekin",
+    "numero": "167",
+    "idProduct": 167,
+    "fiche": {
+     "idFiche": 2167,
+     "nom": "Fennekin",
+     "numero": "167",
+     "denominateur": "164",
+     "symbole": "https://asia.pokemon-card.com/id/card-img/mark/MA5.png",
+     "image": "https://asia.pokemon-card.com/id/card-img/x167.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 2167 : n° 167/164, nom « Fennekin » = « Fennekin » ; set MA5 (liste filtrée par la source)"
+   }
+  ],
+  "restes": [
+   {
+    "carteId": 168,
+    "nomEn": "Armarouge",
+    "numero": "168",
+    "idProduct": 168,
+    "motif": "set",
+    "detail": "n° 168/198 dans une liste à /164"
+   },
+   {
+    "carteId": 169,
+    "nomEn": "Goldeen",
+    "numero": "169",
+    "idProduct": 169,
+    "motif": "set",
+    "detail": "symbole « https://asia.pokemon-card.com/id/card-img/mark/SV1.png » dans une liste au symbole « https://asia.pokemon-card.com/id/card-img/mark/MA5.png »"
+   }
+  ]
+ }
+}

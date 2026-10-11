@@ -29,7 +29,7 @@ const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collec
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
-const { TABLE_TPC, ligneTpc } = require('./collecte-cartes/tpc-sets');
+const { TABLE_TPC, ligneTpc, listesDe } = require('./collecte-cartes/tpc-sets');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const LISTE_VALIDE_MS = 30 * 24 * 3600 * 1000;
@@ -60,9 +60,13 @@ const urlListe = (site, L, page) => site === 'tpc-asie'
 const urlFiche = (site, L, id) => site === 'tpc-asie' ? `/${L.langue}/card-search/detail/${id}/` : `/card-search/details.php/card/${id}/regu/all`;
 
 /** 1. La liste, page par page, ou celle qu'on a déjà (complète, de moins de 30 jours). */
-async function lireListe(db, client, site, L, idEtat) {
+// `prefixe` : null pour une ligne à UNE liste (l'état garde `liste`, comme avant) ; la lettre de la demi-liste pour une ligne à plusieurs
+// (l'état garde `listes.<lettre>`). `L.code` est alors le code de CETTE liste (AS1a), posé par l'appelant.
+async function lireListe(db, client, site, L, idEtat, prefixe = null) {
     const E = db.collection('collecte_images_etat');
-    const deja = (await E.findOne({ _id: idEtat }, { projection: { liste: 1 } }))?.liste;
+    const champ = prefixe == null ? 'liste' : `listes.${prefixe}`;
+    const doc = await E.findOne({ _id: idEtat }, { projection: { liste: 1, listes: 1 } });
+    const deja = prefixe == null ? doc?.liste : doc?.listes?.[prefixe];
     if (deja?.complete && deja.code === L.code && deja.langue === L.langue && Date.now() - new Date(deja.luLe) < LISTE_VALIDE_MS) return { ...deja, reprise: true };
     const ids = [];
     let total = null, pages = null;
@@ -85,7 +89,7 @@ async function lireListe(db, client, site, L, idEtat) {
         }
     }
     const liste = { code: L.code, langue: L.langue, ids, total, pages, complete: total != null && ids.length === total, luLe: new Date() };
-    await E.updateOne({ _id: idEtat }, { $set: { liste } }, { upsert: true });
+    await E.updateOne({ _id: idEtat }, { $set: { [champ]: liste } }, { upsert: true });
     return liste;
 }
 
@@ -116,7 +120,7 @@ async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site }) };
+    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null }) };
 }
 
 /** La garde de la jointure : les entrées des AUTRES sources, chacune par son empreinte (carte, source, set, numéro, clé) — elles ne
@@ -171,17 +175,30 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     try {
         let liste, fiches;
         try {
-            liste = await lireListe(db, client, site, L, idEtat);
-            // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
-            // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
-            // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
-            if (!Number.isFinite(L.cartes) || liste.total == null || liste.total < L.cartes / 2 || liste.total > 2 * L.cartes + 20) {
-                const motif = `la liste filtrée rend ${liste.total ?? '?'} cartes pour ${L.code}, la mesure du 2026-10-07 en disait ${L.cartes} : le filtre ne désigne peut-être plus ce set`;
-                await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
-                console.error(`❌ ${unite._id} : ${motif}.`);
-                return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
+            // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
+            // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
+            const sources = listesDe(L);
+            const lues = [];
+            for (const S of sources) {
+                const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+                // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
+                // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
+                // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
+                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
+                    const motif = `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set`;
+                    await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
+                    console.error(`❌ ${unite._id} : ${motif}.`);
+                    return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
+                }
+                lues.push({ S, l });
             }
-            fiches = await lireFiches(db, client, site, L, liste.ids, { compter });
+            if (!L.listes) { liste = lues[0].l; fiches = await lireFiches(db, client, site, L, liste.ids, { compter }); }
+            else {
+                fiches = [];
+                for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
+                // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
+                liste = { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) };
+            }
         } catch (e) { if (!e.bloque) throw e; bloque = e; }
         if (bloque) return await conclureBloque(E, unite, site, bloque, client);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
@@ -223,7 +240,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 await M.Image.updateOne({ _id }, {
                     $set: {
                         source: site, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
-                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: `${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}`,
+                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: `${p.fiche.prefixe ?? ''}${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}`,
                         preuve: p.preuve, voie: p.voie, urlOriginal: url,
                         wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
