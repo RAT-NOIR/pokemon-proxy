@@ -103,7 +103,7 @@ const RG = require('./regle-g');                 // appelée À TRAVERS l'objet 
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
 const MS = require('../argent/marque-scan');
-const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');
+const { cartesParScanMax } = require('./cartes-par-scan');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
 const MOTIFS_REFUS_EN_QUESTION = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
@@ -452,7 +452,7 @@ function traiterReponse(cfg, deps = {}) {
         if (!b || typeof b !== 'object' || Array.isArray(b)) return entreeInvalide('corps');
         if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entreeInvalide('scan-id');
         const carte = b.carte === undefined ? 0 : b.carte;
-        if (!Number.isInteger(carte) || carte < 0 || carte >= CARTES_PAR_SCAN_MAX) return entreeInvalide('carte');
+        if (!Number.isInteger(carte) || carte < 0 || carte >= cartesParScanMax(cfg)) return entreeInvalide('carte');
         if (typeof b.choix !== 'string' || !CHOIX_REPONSE.includes(b.choix)) return entreeInvalide('choix');
         const choix = b.choix;
         const scanId = new mongoose.Types.ObjectId(b.scanId);                  // une chaîne ne sert à aucun filtre : analyses, mouvements et questions portent un ObjectId

@@ -12,6 +12,7 @@ const db = require('../db');
 const { lireConsentement } = require('./consentement');
 const S = require('./stockage');
 const { repondreErreur } = require('../erreurs');
+const { cartesParScanMax } = require('../identifier/cartes-par-scan');
 
 const { JOUR_MS, jourUTC, creerBorner, limiteLien, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
 
@@ -19,7 +20,8 @@ const TIMEOUT_MS = 2000;
 const FORME_ID = /^[0-9a-f]{24}$/i;
 const CLES_DOC = Object.freeze(['_id', 'cleR2', 'etat', 'expireLe', 'jetonEmpreinte', 'le', 'source', 'verite', 'versionModele', 'versionTexte']);
 const idProduitOk = n => Number.isSafeInteger(n) && n > 0;
-const carteOk = c => Number.isInteger(c) && c >= 0 && c <= 99;
+// L'indice de carte va de 0 à (taille d'un lot - 1) : UNE source, `cfg.lot.cartesMax` (V2_LOT_CARTES_MAX, 2 à 100) ; sans configuration lisible, tout est refusé.
+const carteOk = (c, cfg) => Number.isInteger(c) && c >= 0 && Boolean(cfg && cfg.lot) && c < cartesParScanMax(cfg);
 const modeleOk = m => (typeof m === 'string' && /^[A-Za-z0-9._-]{1,40}$/.test(m) ? m : null);
 const ARRET = () => Object.assign(new Error('arrêt'), { code: 'ARRET' });
 
@@ -84,7 +86,7 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
             jetonEmpreinte: c.jetonEmpreinte, cleR2, expireLe: new Date(now.getTime() + cfg.retention.bancMois * 30.5 * JOUR_MS)
         };
     }
-    const identiteOk = o => o && typeof o.scanId === 'string' && o.scanId.length > 0 && o.scanId.length <= 64 && carteOk(o.carte === undefined ? 0 : o.carte);
+    const identiteOk = o => o && typeof o.scanId === 'string' && o.scanId.length > 0 && o.scanId.length <= 64 && carteOk(o.carte === undefined ? 0 : o.carte, cfg);
     const carteDe = o => (o.carte === undefined ? 0 : o.carte);
 
     // attente → confirmée (réponse ou correction) : l'objet passe de attente/ à son emplacement final ; l'ancien n'est supprimé qu'une fois la ligne à jour.
@@ -233,7 +235,7 @@ function traiterCorrection(cfg, banc) {
         if (!b || typeof b !== 'object' || Array.isArray(b)) return entree('corps');
         if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entree('scan-id');
         const carte = b.carte === undefined ? 0 : b.carte;
-        if (!carteOk(carte)) return entree('carte');
+        if (!carteOk(carte, cfg)) return entree('carte');
         if (!idProduitOk(b.idProduct)) return entree('id-product');
         let an;
         try { an = await db.col('analyses').findOne({ _id: new mongoose.Types.ObjectId(b.scanId), porteur: `${porteur.type}:${porteur.id}` }); }

@@ -14,7 +14,9 @@ const L = require('../identifier/lot');
 const CHARGES = path.join(__dirname, '..', '..', 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const ref = n => ({ $ref: `#/components/schemas/${n}` });
-const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' };            // hebdo éteinte : un compte débite accueil puis achete (l'ordre du plan, assertion 10)
+// hebdo éteinte : un compte débite accueil puis achete (l'ordre du plan, assertion 10). V2_LOT_CARTES_MAX=100 : ce banc exerce les lots de 21 à 100 cartes (coût, supplément, remboursement poche par poche) ;
+// la borne par défaut (20), son refus et le plafond des refus de lot sont dans test-plafonds.js.
+const BASE = { MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' };
 const cfg = lireConfig(BASE);
 const ORIGINE = cfg.origines.extension;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.11.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
@@ -168,7 +170,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         const vE = valider(j, ref('ReponseErreur'), SCHEMA);
         H.vrai(`   la réponse 429 valide contre ReponseErreur (detail est une chaîne libre au contrat : aucune valeur à ajouter) — ${vE.ok ? 'ok' : vE.erreurs.slice(0, 3).map(e => e.chemin + ' ' + e.message).join(' ; ')}`, vE.ok);
         const plafonds = await raw('plafonds').find({ porteur: `installation:${x.i._id}` }).toArray();
-        H.v('   crédit initial rendu (essai 1), aucun mouvement net, et le remboursement n\'a PAS compté dans les plafonds (sansPlafond)', [await essais(x), await net(x, 'lot-trop-grand'), plafonds.reduce((t, p) => t + p.count, 0)], [1, 0, 0]);
+        H.v('   crédit initial rendu (essai 1), aucun mouvement net ; le refus compte dans son compteur PROPRE lot-trop-grand (1) et dans aucun autre (ni panne ni question)', [await essais(x), await net(x, 'lot-trop-grand'), plafonds.map(p => `${p.type}:${p.count}`)], [1, 0, ['lot-trop-grand:1']]);
         // partiel : 2 crédits pour un lot à 3
         const y = await inst({ essais: 1, achete: 1 }); lot(nAff(25));
         const r2 = await poster(sv.url, y.jeton);
@@ -342,14 +344,14 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     // ── M. plafond partagé de 100 cartes par scan
     {
         let mod = sur(() => require('../identifier/cartes-par-scan'));
-        H.v('M0. constante partagée CARTES_PAR_SCAN_MAX = 100 (un seul module)', typeof mod === 'object' ? mod.CARTES_PAR_SCAN_MAX : mod, 100);
+        H.v('M0. borne partagée cartesParScanMax(cfg) = cfg.lot.cartesMax (100 dans ce banc) : un seul module, aucune constante', typeof mod === 'object' && typeof mod.cartesParScanMax === 'function' ? [mod.cartesParScanMax(cfg), mod.CARTES_PAR_SCAN_MAX] : mod, [100, undefined]);
         const fs = require('fs');
         const src = n => fs.readFileSync(path.join(__dirname, '..', 'identifier', n), 'utf8');
         H.v('   plus de littéral 99 ni de constante locale dans routes.js, retour-live.js, lot.js', ['routes.js', 'retour-live.js', 'lot.js'].map(n => /carte\s*>\s*99|CARTES_MAX\s*=/.test(src(n))), [false, false, false]);
         const x = await inst(); lot(nAff(101));
         const e = console.error; console.error = () => { };
         let r; try { r = await poster(sv.url, x.jeton); } finally { console.error = e; }
-        H.v('M1. 101 résultats : 500 SERVEUR remboursé, essai 3, somme 0', [r.statut, r.json.erreur && r.json.erreur.code, r.json.facturation && r.json.facturation.rembourse, await essais(x), await net(x, '101 résultats')], [500, 'SERVEUR', true, 3, 0]);
+        H.v('M1. 101 résultats (borne 100) : REFUSÉ lot-trop-grand-taille (400 ENTREE, jamais tronqué), remboursé, essai 3, somme 0', [r.statut, r.json.erreur && r.json.erreur.code, r.json.erreur && r.json.erreur.detail, r.json.facturation && r.json.facturation.rembourse, await essais(x), await net(x, '101 résultats')], [400, 'ENTREE', 'lot-trop-grand-taille', true, 3, 0]);
         const y = await compteLie({ accueil: 0, achete: 20 }); lot(nAff(100));
         const r2 = await poster(sv.url, y.jeton);
         H.v('M2. 100 résultats : servi (200, lot de 100, 10 crédits)', [r2.statut, r2.json.analyse && r2.json.analyse.lot && r2.json.analyse.lot.cartesVues, r2.json.facturation && r2.json.facturation.debite, (await soldeCompte(y)).achete], [200, 100, 10, 10]);

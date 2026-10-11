@@ -16,7 +16,7 @@ const { adapter, codeLangueDe } = require('./adaptateur');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
 
-const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
+const { cartesParScanMax } = require('./cartes-par-scan');   // /reponse et /retour-live n'adressent que les cartes 0 à MAX-1 : au-delà, une question serait sans réponse possible
 const journal = (ou, e) => console.error(`❌ [v2 lot] ${ou} : ${(e && (e.code || e.name)) || 'erreur'}`);   // jamais e.message : il peut citer une donnée
 
 // La valeur d'une carte pour le classement : la tendance du guide, sinon null (carte sans guide, question, introuvable).
@@ -52,6 +52,16 @@ async function executerLot(p) {
         try { const r = await argent.rembourser(porteur, credit, motif, { scanId, compteur: 'panne', ...o }); return { rendu: Boolean(r && r.rendu), cause: r && r.rendu ? null : raisonPublique(r && r.raisonNonRembourse) }; }
         catch (e) { journal('remboursement', e); return { rendu: false, cause: 'erreur' }; }
     };
+    // Un refus `lot-trop-grand` (taille ou quota) : jusqu'à `cfg.plafonds.lotTropGrand` par jour et par porteur (V2_LOT_TROP_GRAND_JOUR, 10) le crédit initial est rendu ; AU-DELÀ la lecture
+    // est FACTURÉE (crédit non rendu, `debite: 1`, raison `plafond-jour` de la liste publique), la réponse restant le refus. Le supplément n'est jamais pris : seul le crédit initial l'est.
+    // Un administrateur ne paie rien et ne compte pas. Le compteur est celui du ledger (rendreLeScan), qui garde la claim `rb|scanId` : un rejeu ne compte qu'UN refus.
+    const refuserLot = async (motifRembourse, code, detail) => {
+        if (admin) return { code, detail, facturation: fabriquerFacturation({ motif: 'administrateur', rembourse: false }) };
+        const r = await rendre(motifRembourse, { compteur: 'lot-trop-grand' });
+        const facturation = r.rendu ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'lot' })
+            : fabriquerFacturation({ debite: 1, rembourse: false, motif: 'lot', raisonNonRembourse: r.cause ?? 'erreur' });
+        return { code, detail, facturation };
+    };
     const panne = async (code, dejaRendu = false) => {
         const r = dejaRendu ? { rendu: true, cause: null } : await rendre(`panne-${code}`);
         return { sortie: { resultat: { issue: 'panne', analyse: null, erreur: { code } }, facturation: p.facturationDe('panne', { admin, rendu: r.rendu, question: false, cause: r.cause }), lecture: null, desaccord: null } };
@@ -62,9 +72,15 @@ async function executerLot(p) {
     let resultats;
     try { resultats = await dansUnScan(async () => deps.identifierLot(reqLot)); }
     catch (e) { journal('crochet', e); return panne('SERVEUR'); }
-    if (!Array.isArray(resultats) || resultats.length === 0 || resultats.length > CARTES_PAR_SCAN_MAX) {
-        console.error(`❌ [v2 lot] le crochet n'a pas rendu 1 à ${CARTES_PAR_SCAN_MAX} résultats (${Array.isArray(resultats) ? resultats.length : typeof resultats})`);
+    if (!Array.isArray(resultats) || resultats.length === 0) {
+        console.error(`❌ [v2 lot] le crochet n'a pas rendu de résultats (${Array.isArray(resultats) ? resultats.length : typeof resultats})`);
         return panne('SERVEUR');
+    }
+    // Un lot de plus de `cfg.lot.cartesMax` cartes (V2_LOT_CARTES_MAX, 20) est REFUSÉ `lot-trop-grand`, jamais tronqué en silence : une carte au-delà serait sans question répondable
+    // (`carte` va de 0 à cartesMax - 1). Aucun supplément n'est pris. Même compteur et même facturation que le supplément impayable (voir `refuserLot`).
+    if (resultats.length > cartesParScanMax(cfg)) {
+        console.warn(`⚠️ [v2 lot] ${resultats.length} résultats pour un maximum de ${cartesParScanMax(cfg)} : lot refusé (lot-trop-grand-taille)`);
+        return { erreur: await refuserLot('lot-trop-grand', 'ENTREE', 'lot-trop-grand-taille') };
     }
     // UN résultat n'est pas un lot : il tient lieu de réponse de la chaîne dans la branche UNE-CARTE de routes.js (règle G, question réservée, sans-prix). Rien n'est écrit ici.
     // Un résultat unique NON CONFORME (null, undefined, 0, '' : pas un objet { statutHttp entier, corps }) n'est jamais confié à la branche une-carte, qui rappellerait la VRAIE
@@ -101,11 +117,13 @@ async function executerLot(p) {
         catch (e) { journal('supplément', e); return panne('SERVEUR'); }
         if (!s || !s.ok) {
             const code = s && ['QUOTA', 'VERIFICATION', 'EN_RECONCILIATION'].includes(s.code) ? s.code : 'INDISPONIBLE';
-            // le crédit initial est rendu SANS compter dans les plafonds : ce n'est pas une panne, c'est un lot qu'on ne peut pas payer
-            const r = await rendre(code === 'QUOTA' ? 'lot-trop-grand' : `lot-supplement-${code.toLowerCase()}`, { sansPlafond: true });
+            // QUOTA : un lot qu'on ne peut pas payer = un refus `lot-trop-grand`, compté (10 par jour) comme celui de la taille ; les autres codes (VERIFICATION, EN_RECONCILIATION,
+            // INDISPONIBLE) ne sont pas des refus de lot : crédit initial rendu SANS compter dans les plafonds, comme avant.
+            if (code === 'QUOTA') return { erreur: await refuserLot('lot-trop-grand', 'QUOTA', 'lot-trop-grand') };
+            const r = await rendre(`lot-supplement-${code.toLowerCase()}`, { sansPlafond: true });
             const facturation = r.rendu ? fabriquerFacturation({ debite: 0, rembourse: true, motif: 'lot' })
                 : fabriquerFacturation({ debite: 1, rembourse: false, motif: 'lot', raisonNonRembourse: r.cause ?? 'erreur' });
-            return { erreur: { code, detail: code === 'QUOTA' ? 'lot-trop-grand' : undefined, facturation } };
+            return { erreur: { code, detail: undefined, facturation } };
         }
     }
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un seul identifié ou une seule question et il ne l'est jamais

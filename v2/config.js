@@ -1,9 +1,9 @@
 'use strict';
 const POCHES = Object.freeze(['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
-const entier = (nom, v, defaut, min = 0) => {
+const entier = (nom, v, defaut, min = 0, max = Infinity) => {
     if (v === undefined || v === '') return defaut;
     const n = String(v).trim() === '' ? NaN : Number(v);   // Number(' ') vaut 0 : un nombre fait d'espaces n'est pas un nombre
-    if (!Number.isInteger(n) || n < min) throw new Error(`configuration invalide : ${nom}="${v}"`);
+    if (!Number.isInteger(n) || n < min || n > max) throw new Error(`configuration invalide : ${nom}="${v}"`);
     return n;
 };
 const gele = o => { Object.values(o).forEach(x => { if (x && typeof x === 'object') gele(x); }); return Object.freeze(o); };
@@ -57,10 +57,14 @@ function lireConfig(env = process.env) {
         quotas: { essai: entier('V2_ESSAIS', env.V2_ESSAIS, 3), accueil: entier('V2_ACCUEIL', env.V2_ACCUEIL, 25),
                   hebdo: entier('V2_HEBDO', env.V2_HEBDO, 2), aboMensuel: entier('V2_ABO_MENSUEL', env.V2_ABO_MENSUEL, 100) },
         ordrePoches: [...ordre],
-        plafonds: { panne: entier('V2_PLAFOND_PANNES', env.V2_PLAFOND_PANNES, 5), question: entier('V2_PLAFOND_QUESTIONS', env.V2_PLAFOND_QUESTIONS, 30) },
+        // Remboursements par JOUR UTC et par PORTEUR (le compte quand il y en a un, sinon l'installation) : panne 5, question 30, et deux compteurs PROPRES (lot PLAFONDS, 2026-10-11) —
+        // sansPrix : « prix illisible, définitif » déclaré par le client (5) ; lotTropGrand : refus `lot-trop-grand`, taille ou quota (10). Au-delà : pas de remboursement.
+        plafonds: { panne: entier('V2_PLAFOND_PANNES', env.V2_PLAFOND_PANNES, 5), question: entier('V2_PLAFOND_QUESTIONS', env.V2_PLAFOND_QUESTIONS, 30),
+                    sansPrix: entier('V2_SANS_PRIX_JOUR', env.V2_SANS_PRIX_JOUR, 5), lotTropGrand: entier('V2_LOT_TROP_GRAND_JOUR', env.V2_LOT_TROP_GRAND_JOUR, 10) },
         questionDelaiMs: 24 * 3600 * 1000,
         // lectureLiveMax : combien de prix en direct l'extension lit pour un lot (§5 Q35, défaut 5). Rendu tel quel dans `analyse.lot.lectureLiveMax`.
-        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5) },
+        // cartesMax : la taille maximale d'un lot (20) ; UNE seule source — `carte` (/reponse, /retour-live) va de 0 à cartesMax - 1 (identifier/cartes-par-scan.js).
+        lot: { tranche: 10, lectureLiveMax: entier('V2_LECTURE_LIVE_MAX', env.V2_LECTURE_LIVE_MAX, 5), cartesMax: entier('V2_LOT_CARTES_MAX', env.V2_LOT_CARTES_MAX, 20, 2, 100) },   // borné à [2, 100] : 100 est l'ancien plafond dur ; au-delà, configuration invalide
         limites: { installationParIpJour: 2, essaisGlobauxJour: entier('V2_ESSAIS_GLOBAUX_JOUR', env.V2_ESSAIS_GLOBAUX_JOUR, 500),
                    identifierParCompteHeure: 120, codeEssaisInstallationHeure: 5, codeEssaisIpHeure: 20, connexionParCompteHeure: 10,
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),

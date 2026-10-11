@@ -12,7 +12,7 @@ const registre = require('../registre');
 const R = require('../argent/reconcilier');
 const CHARGES = path.join(__dirname, '..', '..', 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' });   // ce banc joue des lots de 25 cartes (le défaut 20 les refuserait : test-plafonds.js)
 const ORIGINE = cfg.origines.extension;
 const MIN = 60e3;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.12.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
