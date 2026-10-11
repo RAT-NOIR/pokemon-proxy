@@ -75,7 +75,14 @@ function adresseDe(ligne, numeroFiche) {
     const n = lireNumero(ligne, numeroFiche);
     return n != null && ligne.segments.some(([de, a]) => n >= de && n <= a) ? n : null;
 }
-const urlHires = (id, n) => `${HOTE}/${id}/${n}_hires.png`;
+// 🔑 T2 (2026-10-12) : certains sets numérotent leurs fichiers « SM246 », « TG05 » (promos, Trainer Gallery) — pas l'entier nu. Le jeton d'URL d'une ligne
+// (`jeton: { prefixe, largeur }`) s'écrit par ce qu'il AUTORISE : un préfixe de cette liste ÉNUMÉRÉE, sinon rien ne se construit.
+const JETONS_URL = Object.freeze(['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG']);
+function urlHires(id, n, jeton = null) {
+    if (!jeton) return `${HOTE}/${id}/${n}_hires.png`;
+    if (!JETONS_URL.includes(jeton.prefixe) || !Number.isInteger(jeton.largeur) || jeton.largeur < 1 || jeton.largeur > 3) throw new Error(`${SOURCE} : jeton d'URL « ${jeton.prefixe} » hors de ce que le client autorise (${JETONS_URL.join(', ')})`);
+    return `${HOTE}/${id}/${jeton.prefixe}${String(n).padStart(jeton.largeur, '0')}_hires.png`;
+}
 
 // Les réimpressions MARQUÉES (tampon) : sans set dédié qui montre la marque, ce serait un substitut. ÉNUMÉRÉ, par le nom Cardmarket du set.
 const SUBSTITUTS = [/Prize-Pack/i, /^Battle-Academy/i, /^WCD-/i];
@@ -116,7 +123,7 @@ function planifierPtcgio({ slug, trous }) {
         const cle = `${x.carte._id}|${hit.l.id}|${hit.n}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
-        plan.push({ ...base, ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n), voie: 'set-prouve+numero',
+        plan.push({ ...base, ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton), voie: 'set-prouve+numero',
             preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
     }
     return { plan, restes };
@@ -151,7 +158,7 @@ const transportFetch = {
     }
 };
 const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|captcha|Attention Required/i;
-const CHEMIN_AUTORISE = /^\/(robots\.txt|[a-z0-9-]{2,24}\/\d{1,3}_hires\.png)$/;
+const CHEMIN_AUTORISE = new RegExp(`^/(robots\\.txt|[a-z0-9-]{2,24}/(?:(?:${JETONS_URL.join('|')})\\d{1,3}|\\d{1,3})_hires\\.png)$`);
 
 /**
  * Le SEUL chemin vers images.pokemontcg.io. Garde FERMÉE : aucune requête sans verrou global lié et tenu ; hôte unique, chemins ÉNUMÉRÉS
@@ -230,6 +237,6 @@ function planRetraitPtcgio(cartes) {
 
 module.exports = {
     SOURCE, HOTE, HOTE_NOM, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
-    TABLE_PTCGIO, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
+    TABLE_PTCGIO, JETONS_URL, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

@@ -337,6 +337,21 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('langue : la preuve écrite en base porte le VRAI compte (53 témoins, 55 images ouvertes) et plus « 42 »', [/53 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /55 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 53]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
 
+    // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
+    const JT = { prefixe: 'TG', largeur: 2 };
+    verifier('jeton d\'URL : un préfixe et une largeur donnent « TG05 », « SM246 », « SWSH301 » ; sans jeton, l\'entier nu', [P.urlHires('swsh9tg', 5, JT), P.urlHires('smp', 246, { prefixe: 'SM', largeur: 2 }), P.urlHires('swshp', 301, { prefixe: 'SWSH', largeur: 3 }), P.urlHires('mcd12', 6)],
+        ['https://images.pokemontcg.io/swsh9tg/TG05_hires.png', 'https://images.pokemontcg.io/smp/SM246_hires.png', 'https://images.pokemontcg.io/swshp/SWSH301_hires.png', 'https://images.pokemontcg.io/mcd12/6_hires.png']);
+    verifier('jeton d\'URL : un préfixe hors de la liste énumérée LÈVE (rien ne se construit sur un préfixe inconnu)', (() => { try { P.urlHires('x1', 5, { prefixe: 'FOO', largeur: 2 }); return 'passe'; } catch (e) { return 'leve'; } })(), 'leve');
+    verifier('jeton d\'URL : les préfixes autorisés sont énumérés', P.JETONS_URL, ['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG']);
+    tr = reseau(normal); c = client(tr);
+    for (const u of ['https://images.pokemontcg.io/smp/FOO01_hires.png', 'https://images.pokemontcg.io/smp/sm01_hires.png', 'https://images.pokemontcg.io/smp/SM1234_hires.png', 'https://images.pokemontcg.io/smp/SMSM01_hires.png', 'https://images.pokemontcg.io/smp/SM01.png']) {
+        err = null; try { await c.image(u); } catch (e) { err = e.message; }
+        verifier(`client : un nom de fichier hors des formes énumérées est refusé sans requête (${u.slice(30)})`, [!!err, tr.appels.length], [true, 0]);
+    }
+    tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: png }); c = client(tr);
+    await c.image(P.urlHires('smp', 246, { prefixe: 'SM', largeur: 2 })); await c.image(P.urlHires('swsh9tg', 5, JT));
+    verifier('client : « SM246 » et « TG05 » sont acceptés (hôte et chemin énumérés)', tr.appels.map(u => u.replace('https://images.pokemontcg.io', '')), ['/robots.txt', '/smp/SM246_hires.png', '/swsh9tg/TG05_hires.png']);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
