@@ -45,6 +45,7 @@ const { indexer, indexerMetacartes, designerCroise } = require('./collecte-carte
 const { lisible } = require('./collecte-cartes/nom-affichage');
 const { declarantesDuProduit } = require('./collecte-cartes/declarantes');
 const { verifierTirages } = require('./collecte-cartes/preuves-tirage');
+const { numerosFichesDuPlan } = require('./collecte-cartes/numero-fiche');
 
 // LE TIRAGE DE CHAQUE EXPANSION, AVEC SA PREUVE (2026-10-04). Les preuves admises, et elles seules :
 //   codes_set — la région que codes_set écrit (japonais / occidental), quand rien ne la contredit ;
@@ -220,7 +221,12 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
             g.id = -Math.min(...g.produits.map(p => p.idProduct));
             if (idsPris.has(g.id)) throw new Error(`fiche simple ${g.id} : identifiant déjà pris par une autre carte`);
         }
-        plan.push({ exp, slug, existant: !!existant, tirage, preuveTirage, region: tirage === 'jp' ? 'jp' : 'intl', code: codes[0]?.[0] ?? null, nomExp, produits: P.length, deja: P.filter(p => dejaJoints.has(p.idProduct)).length, designes, simples: [...simples.values()], sansFiche });
+        // (T7a, 2026-10-12) LE `numeroFiche` D'UNE RÉIMPRESSION DÉSIGNÉE EST LE NUMÉRO DE L'IMPRESSION, jamais le numéro Cardmarket recopié :
+        // Quick-Construction-Packs (« G002 » pour l'impression « 002 ») et Gift-Box-Mew-Lucario (« 007L » pour « 007 ») avaient 99 produits
+        // détachés de leur fiche. La forme se calibre sur le set ENTIER (collecte-cartes/numero-fiche.js) ; sans forme, null — jamais un faux.
+        const fiches = existant ? null : numerosFichesDuPlan(designes, { tirage, bulba: { expansion: nomExp } });
+        if (fiches?.enDefaut) console.log(`   numeroFiche ${slug} : ${fiches.enDefaut} ligne(s) dont le numéro Cardmarket ne désigne aucune impression · forme calibrée ${fiches.forme?.id ?? `AUCUNE (${fiches.raison})`}`);
+        plan.push({ exp, slug, existant: !!existant, tirage, preuveTirage, region: tirage === 'jp' ? 'jp' : 'intl', code: codes[0]?.[0] ?? null, nomExp, produits: P.length, deja: P.filter(p => dejaJoints.has(p.idProduct)).length, designes, simples: [...simples.values()], sansFiche, fiches });
     }
     const nLignes = plan.reduce((s, x) => s + x.designes.length + x.simples.reduce((t, g) => t + g.produits.length, 0), 0);
     console.log(`DÉNOMINATEUR : ${liste.length} expansions dans la liste du site · dans la table TIRAGES ${liste.filter(e => TIRAGES[e.idExpansion]).length} · au plan ${plan.length} (dont ${plan.filter(x => x.existant).length} sets existants) · refusées ${refus.length}`);
@@ -256,7 +262,7 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
                 // (2026-10-07) dans un set NEUF, le numéro Cardmarket du produit — le numéro de CE set, celui que la règle anti-mélange
                 // ci-dessus compare : sans lui, le site lit le slug, et un « Caterpie-V2 » sans numéro y comptait pour une autre carte que
                 // « Caterpie-V1-MCD19F2 » (14 fiches mélangées sur McDonald's 2019-2). Un set existant garde la règle d'avant (null).
-                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: d.declarante ? 'carte-declarante' : 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: x.existant ? null : (d.p.numero ?? null),
+                carteId: d.carte._id, idProduct: d.p.idProduct, idExpansion: x.exp, tirage: x.tirage, preuve: d.declarante ? 'carte-declarante' : 'metacarte+nom+attaques', slug: d.p.slug ?? null, slugSet: x.slug, numeroFiche: x.existant ? null : (x.fiches.valeurs.get(d) ?? null),
                 detail: d.declarante
                     ? `exp ${x.exp} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : la SEULE carte de la base qui déclare « ${x.nomExp} » (${x.tirage}) sous ce nom — décision du testeur du 2026-10-07`
                     : `exp ${x.exp} n°${d.p.numero ?? '—'} « ${d.p.name} » → « ${d.carte.bulba?.titre ?? d.carte.nomEn} » : métacarte Cardmarket ${metaDe.get(d.p.idProduct)} (une seule carte chez nous) = nom + attaques · carte déjà imprimée en ${x.tirage} · ${RISQUE}`,
