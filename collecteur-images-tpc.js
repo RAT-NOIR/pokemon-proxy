@@ -331,20 +331,106 @@ async function conclureBloque(E, unite, site, err, client, { seulementAlerte = f
     return { code: unite._id, etat: 'refuse-source-bloquee', erreur: err.message, sansJointure: true };
 }
 
-module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC };
+// `planReel` et `baseLocale` (plus bas) sont des déclarations de fonction : hissées, donc exportables ici, avant la garde de la ligne de commande.
+module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
 
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/];
+const AUTORISES = [/^--plan$/, /^--plan-reel$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/, /^--cache=[^\s]+$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--verrou')) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=slug,…], --verrou. La collecte est celle du worker.`);
+if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--plan-reel' || a === '--verrou')) {
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=slug,…], --plan-reel --sets=slug,… --cache=<dossier>, --verrou. La collecte est celle du worker.`);
     process.exit(2);
 }
+
+/**
+ * `--plan-reel` : LIT les listes et les fiches à la source (le VRAI verrou global du site, cadence et robots du client de production),
+ * apparie, imprime le plan — et ne télécharge AUCUNE image, n'écrit RIEN dans la base ni dans R2 (seul le verrou global, qui est le geste
+ * du collecteur, s'y écrit). Les listes et les fiches lues se gardent dans un dossier LOCAL (`--cache`), jamais dans `tpc_fiches` : un
+ * second passage ne redemande rien, et la base n'a pas bougé. Pure de ses entrées pour le banc : `ouvrir` et `fabriquer` sont injectables.
+ */
+function baseLocale(reelle, fichier, noms = ['collecte_images_etat', 'tpc_fiches']) {
+    const fs = require('fs'), path = require('path');
+    const mem = new Map(noms.map(n => [n, new Map()]));
+    if (fs.existsSync(fichier)) { const j = JSON.parse(fs.readFileSync(fichier, 'utf8')); for (const n of noms) for (const [k, v] of Object.entries(j[n] || {})) mem.get(n).set(k, v); }
+    const lire = (o, k) => k.split('.').reduce((x, p) => x?.[p], o);
+    const ecrire = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
+    const col = n => ({
+        async findOne(f) { return structuredClone(mem.get(n).get(f._id) ?? null); },
+        find(f) { return { toArray: async () => structuredClone((f?._id?.$in || []).map(i => mem.get(n).get(i)).filter(Boolean)) }; },
+        async updateOne(f, u, o = {}) {
+            let d = mem.get(n).get(f._id);
+            if (!d) { if (!o.upsert) return { matchedCount: 0 }; d = { _id: f._id }; mem.get(n).set(f._id, d); }
+            for (const [k, v] of Object.entries(u.$set || {})) ecrire(d, k, v);
+            return { matchedCount: 1 };
+        }
+    });
+    return {
+        collection: n => noms.includes(n) ? col(n) : reelle.collection(n),
+        ecrireFichier: () => { fs.mkdirSync(path.dirname(fichier), { recursive: true }); fs.writeFileSync(fichier, JSON.stringify(Object.fromEntries(noms.map(n => [n, Object.fromEntries(mem.get(n))])))); },
+        lire
+    };
+}
+async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, transport, cadenceMs, ligneDe = ligneTpc }) {
+    const E = cx.db.collection('collecte_images_etat');
+    const site = 'tpc-asie';
+    const bloquee = await E.findOne({ _id: idAlerteBloquee(site), active: true });
+    if (bloquee) { console.error(`⛔ ${site} a bloqué (${bloquee.motif}) — aucune requête.`); return { arret: 'source-bloquee' }; }
+    const verrou = verrouAttendu || fabriquerVerrou({ Modele: M.EtatImages, id: T.SITES[site].verrou, dureeMs: T.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${site}` });
+    const tenuPar = await verrou.prendre();
+    if (tenuPar) { console.error(`⛔ verrou global ${site} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — on s'arrête, aucune requête.`); return { arret: 'verrou-tenu', tenuPar }; }
+    const local = baseLocale(cx.db, fichierCache);
+    const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transport } : {}), ...(cadenceMs != null ? { cadenceMs, reessaiMs: 0 } : {}) });
+    const bilan = [];
+    try {
+        for (const slug of sets) {
+            const L = ligneDe(site, slug);
+            if (!L) { console.error(`❌ ${slug} : absent de collecte-cartes/tpc-sets.js`); bilan.push({ slug, erreur: 'absent de la table' }); continue; }
+            const set = await M.Set.findById(slug).select('tirage region').lean();
+            if (!set || (set.tirage ?? set.region) !== L.tirage) { console.error(`❌ ${slug} : set absent ou au mauvais tirage en base`); bilan.push({ slug, erreur: 'set absent ou mauvais tirage' }); continue; }
+            const idEtat = `${site}/${slug}`, lues = [];
+            let refus = null;
+            for (const S of listesDe(L)) {
+                const l = await lireListe(local, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) { refus = `liste ${S.code} : total ${l.total ?? '?'} pour une mesure de ${S.cartes}`; break; }
+                lues.push({ S, l });
+            }
+            if (refus) { console.error(`❌ ${slug} : ${refus} — ligne refusée`); bilan.push({ slug, refus }); continue; }
+            const fiches = [];
+            for (const { S, l } of lues) fiches.push(...(await lireFiches(local, client, site, L, l.ids, { compter: () => { } })).map(f => L.listes ? { ...f, prefixe: S.prefixe, listeCode: S.code } : f));
+            local.ecrireFichier();
+            const P = await planifier(local, slug, L, fiches);
+            const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
+            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
+            const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
+            console.log(JSON.stringify(ligne));
+            bilan.push({ ...ligne, exemplesProuves: P.plan.slice(0, 4).map(x => `${x.numero} ${x.nomEn} ← ${x.fiche.nom} (${x.voie})`), exemplesTrous: P.restes.slice(0, 6).map(r => `${r.numero ?? '—'} ${r.nomEn}: ${r.motif}`) });
+        }
+    } catch (e) {
+        local.ecrireFichier();
+        if (!e.bloque) throw e;
+        const msg = `${site} BLOQUÉ : ${e.message}`;
+        await E.updateOne({ _id: idAlerteBloquee(site) }, { $set: { active: true, constateLe: new Date(), motif: e.message, status: e.status ?? null, unite: 'plan-reel', requetes: client.compteRequetes() }, $setOnInsert: { depuis: new Date() } }, { upsert: true });
+        console.error(`⛔ ${msg}`);
+        return { arret: 'bloque', erreur: e.message, bilan, requetes: client.compteRequetes() };
+    } finally { await verrou.rendre(); }
+    return { bilan, requetes: client.compteRequetes(), cadenceMs: client.cadence() };
+}
+
 (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    if (process.argv.includes('--plan-reel')) {
+        const sets = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',');
+        const cache = process.argv.find(a => a.startsWith('--cache='))?.slice(8);
+        if (!sets || !cache) { console.error('❌ --plan-reel exige --sets=<slug,…> et --cache=<dossier>'); await fermer(); process.exit(2); }
+        const { modeles } = require('./collecte-cartes/schemas');
+        const r = await planReel({ cx, M: modeles(cx), sets, fichierCache: require('path').join(cache, 'plan-reel.json') });
+        console.log('\nRÉSULTAT', JSON.stringify({ requetesReelles: r.requetes, cadenceMs: r.cadenceMs, arret: r.arret ?? null }));
+        require('fs').writeFileSync(require('path').join(cache, 'plan-reel-resultat.json'), JSON.stringify(r, null, 1));
+        await fermer(); return;
+    }
     const E = cx.db.collection('collecte_images_etat');
     if (process.argv.includes('--verrou')) {
         for (const site of T.SOURCES_TPC) {

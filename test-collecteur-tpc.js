@@ -283,6 +283,30 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     ({ b, depots } = await lancer(BC, tr, { unite: uniteAS, ligneDe: ligneAS }));
     verifier('un produit sans préfixe (019) → trou « prefixe-absent », seul b016 est téléchargé', [b.etat, b.prouves, b.restes, depots.map(d => d[1])], ['verifie', 1, { 'prefixe-absent': 1 }, ['tpc-asie/First-Impact/b016-2-id.webp']]);
 
+    // ── 11. `--plan-reel` : lit à la source, apparie, ne télécharge rien et n'écrit rien dans la base ─────────────────────────
+    const os = require('os');
+    const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-reel-'));
+    const fichierCache = path.join(dossier, 'plan-reel.json');
+    const fauxVerrou = (tenuPar = null) => { const v = { appels: [], tenu: !tenuPar, perdu: false, async prendre() { v.appels.push('prendre'); return tenuPar; }, async rendre() { v.appels.push('rendre'); } }; return v; };
+    const BP = fausseBase(); semerAS(BP);
+    const empreinte = () => JSON.stringify([...BP.cols].filter(([, m]) => m.size).map(([n, m]) => [n, [...m]]));   // une collection LUE mais vide n'est pas une écriture
+    const avant = empreinte();
+    let vp = fauxVerrou(); tr = reseau(asie());
+    let r = silencieux(), R;
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('plan réel : 2 prouvés, 5 requêtes (robots, 2 listes, 2 fiches), AUCUNE image demandée', [R.bilan[0]?.prouves, R.requetes, tr.appels.some(u => u.includes('/card-img/'))], [2, 5, false]);
+    verifier('   le verrou global est pris puis rendu', vp.appels, ['prendre', 'rendre']);
+    verifier('   la base n\'a pas bougé d\'un octet (ni `images`, ni `tpc_fiches`, ni l\'état, ni les cartes)', empreinte(), avant);
+    verifier('   les listes et les fiches sont gardées dans le cache LOCAL', fs.existsSync(fichierCache) && Object.keys(JSON.parse(fs.readFileSync(fichierCache, 'utf8')).tpc_fiches).length, 2);
+    vp = fauxVerrou(); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('   un second passage : 0 requête (cache local), même plan', [R.bilan[0]?.prouves, tr.appels.length], [2, 0]);
+    vp = fauxVerrou({ pid: 7, hote: 'ailleurs', ageS: 5 }); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('verrou global tenu par un autre → on s\'arrête, 0 requête, le verrou d\'un autre n\'est pas rendu', [R.arret, tr.appels.length, vp.appels], ['verrou-tenu', 0, ['prendre']]);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ ERREUR DU BANC', e); process.exit(1); });
