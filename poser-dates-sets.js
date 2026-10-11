@@ -274,6 +274,12 @@ const WCD = [[2004, 'Magma_Spirit_(TCG)', '20260830162735', 'November 2004', 'Ma
     [2025, 'Flutter_Devo_Gardevoir_(TCG)', '20260913002117', 'June 19, 2026', 'It is one of the 2025 World Championship Decks released on June 19, 2026']];
 for (const [a, page, copie, quand, phrase] of WCD) RELEVES_2026_10_07[`WCD-${a}`] = { jour: quand, url: `${W}${copie}/${P(page)}`, citation: `« ${phrase} »`, pourquoi: `un set Cardmarket par année : la sortie des decks ${a}` };
 for (const [k, v] of Object.entries(RELEVES_2026_10_07)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-07' };
+// ➕ 2026-10-11 (testeur : « EX Trainer Kit 2 est publié SANS date — pose sa date, prouvée par 2 sources ») : copie Wayback lue (archive.org,
+// 2 requêtes ; aucune à Bulbapedia). La page ne donne que le MOIS : il reste un mois (dateSortieMois), aucun jour inventé. Seconde source :
+// TCGdex (dépôt cloné), « EX trainer Kit 2 (Minun) » tk-ex-m et « (Plusle) » tk-ex-p, abréviations TK2M / TK2P, releaseDate 2006-03-01 —
+// le même mois ; ses clés ne désignent pas notre set TK2 (pas d'idExpansion Cardmarket, nom et code différents), elle ne vote donc pas.
+RELEVES_BULBAPEDIA['EX-Trainer-Kit-2'] = { jour: 'March 2006', url: `${W}20260914024349/${P('EX_Trainer_Kit_2_(TCG)')}`, lu: '2026-10-11',
+    citation: 'Release date March 2006 — « The EX Trainer Kit 2 is a special Half Deck Trainer Kit … features the Pokémon Plusle and Minun. It was released in English and European languages only » ; TCGdex tk-ex-m / tk-ex-p : 2006-03-01 (même mois)' };
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
