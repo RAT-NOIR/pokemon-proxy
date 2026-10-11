@@ -279,17 +279,100 @@ const HEURE = 3600e3;
         courrier.envoyes.length = 0; await liberer();
         await ins('cible@exemple.fr', 'mot-de-passe-de-l-attaquant');                      // le tiers s'inscrit avec l'adresse de la victime
         const lien1 = jetonDe(courrier.envoyes[0]);
-        H.v('16a. RÉSIDUEL : la victime clique le lien du courriel de l\'inscription du tiers -> compte actif, mot de passe du TIERS', [(await post('/api/compte/verification', { jeton: lien1 })).statut, (await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut], [200, 200]);
-        const sessionsTiers = await db.col('sessions').countDocuments({ compteId: (await compteDe('cible@exemple.fr'))._id });
+        const clic = (await post('/api/compte/verification', { jeton: lien1 })).statut, cx = await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant');
+        H.v('16a. RÉSIDUEL : la victime clique le lien du courriel de l\'inscription du tiers -> compte actif, mot de passe du TIERS', [clic, cx.statut], [200, 200]);
+        // le tiers, connecté, s'installe : un code de liaison, une installation LIÉE, un second code laissé vivant
+        A.registre.fournir('argent', { solde: async () => ({}), fusionnerALaLiaison: async () => { } });
+        const ckT = `rm_session=${/rm_session=([^;]+)/.exec(cx.entetes['set-cookie'])[1]}`, cible = await compteDe('cible@exemple.fr');
+        const code = () => H.appel(srv.url, '/api/compte/code', { methode: 'POST', corps: {}, entetes: { ...A.SITE, ...A.ip(++n), cookie: ckT } });
+        const c1 = await code(), c2 = await code();
+        const tokT = J.genererJeton(); await db.col('installations').insertOne(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(tokT), essais: 3, libelle: 'tiers' }));
+        const lT = await H.appel(srv.url, '/api/compte/lier', { methode: 'POST', corps: { code: c1.json.code }, entetes: { authorization: `Bearer ${tokT}`, ...A.ip(++n) } });
+        const tokT2 = lT.json.jetonInstallation;
+        const avantP = (await resoudre({ authorization: `Bearer ${tokT2}` })).porteur;
+        H.v('16b0. (avant) le tiers a une session, une installation liée qui résout un porteur COMPTE, et un code vivant', [await db.col('sessions').countDocuments({ compteId: cible._id }) > 0, avantP && avantP.type, await db.col('codes_liaison').countDocuments({ compteId: cible._id, utiliseLe: null })], [true, 'compte', 1]);
         const rr = await post('/api/compte/mot-de-passe-oublie', { email: 'cible@exemple.fr' }); await A.attendre();
         const rein = courrier.envoyes.filter(e => e.type === 'reinit').pop();
         await post('/api/compte/reinitialiser', { jeton: jetonDe(rein), motDePasse: MDP_VICTIME });
-        H.v('16b. la réinitialisation par la victime révoque tout : sessions du tiers supprimées, son mot de passe ne marche plus', [rr.statut, sessionsTiers > 0, await db.col('sessions').countDocuments({ compteId: (await compteDe('cible@exemple.fr'))._id }), (await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut, (await conn('cible@exemple.fr', MDP_VICTIME)).statut], [202, true, 0, 401, 200]);
+        H.v('16b. la réinitialisation ferme TOUT accès : sessions 0, son mot de passe ne marche plus, le nouveau marche', [rr.statut, await db.col('sessions').countDocuments({ compteId: cible._id }), (await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut, (await conn('cible@exemple.fr', MDP_VICTIME)).statut], [202, 0, 401, 200]);
+        const apresP = await resoudre({ authorization: `Bearer ${tokT2}` });
+        H.v('16b1. … le jeton d\'installation du tiers ne résout plus aucun porteur COMPTE (installation seule), aucune installation liée au compte', [apresP.porteur && apresP.porteur.type, apresP.porteur && apresP.porteur.compte, await db.col('installations').countDocuments({ compteId: cible._id })], ['installation', null, 0]);
+        const autreInst = J.genererJeton(); await db.col('installations').insertOne(M.nouvelleInstallation({ jetonEmpreinte: J.empreinte(autreInst), essais: 0, libelle: 'autre' }));
+        const lMort = await H.appel(srv.url, '/api/compte/lier', { methode: 'POST', corps: { code: c2.json.code }, entetes: { authorization: `Bearer ${autreInst}`, ...A.ip(++n) } });
+        H.v('16b2. … et son code de liaison resté vivant est mort : 0 code, la liaison est refusée (404)', [await db.col('codes_liaison').countDocuments({ compteId: cible._id }), lMort.statut], [0, 404]);
         // chemin 2 : le renvoi demandé par la victime elle-même
         courrier.envoyes.length = 0; await liberer();
         await ins('cible2@exemple.fr', 'mot-de-passe-de-l-attaquant'); await liberer(); courrier.envoyes.length = 0;
         await renv('cible2@exemple.fr');
         H.v('16c. RÉSIDUEL : la victime demande elle-même un renvoi puis clique -> compte actif, mot de passe du TIERS', [courrier.envoyes.length, (await post('/api/compte/verification', { jeton: jetonDe(courrier.envoyes[0]) })).statut, (await conn('cible2@exemple.fr', 'mot-de-passe-de-l-attaquant')).statut], [1, 200, 200]);
+    }
+
+    // ============================ tour 1 (relecture r0) ============================
+    {   // I-2a : la validation de l'adresse est écrite par ce qu'elle AUTORISE
+        const neutre = await post('/api/compte/inscription', { email: 'pas-une-adresse', motDePasse: MDP, turnstile: 'ok' });
+        const formes = ['victime@gmail.com.', 'victime@gmail.com..', 'victime@.gmail.com', 'victime@gmail..com', 'victime@-gmail.com', 'victime@gmail-.com', 'victime@gmail.c'];
+        const reps = []; for (const f of formes) reps.push(await post('/api/compte/inscription', { email: f, motDePasse: MDP, turnstile: 'ok' }));
+        H.v('T1a. un domaine terminé par un point, doublé, vide, en tiret de bordure ou à extension d\'une lettre est refusé avec la réponse d\'une adresse invalide (422 adresse-invalide, mêmes octets)',
+            reps.map(r => r.statut === 422 && r.texte === neutre.texte), formes.map(() => true));
+        H.v('T1b. aucun compte pour ces formes', await db.col('comptes').countDocuments({ emailCle: { $regex: /^victime@(\.|-|gmail)/ } }), 0);
+        H.v('T1c. connexion / renvoi / oubli avec une telle forme : réponse neutre habituelle (aucune écriture)', [(await conn('victime@gmail.com.', MDP)).statut, (await renv('victime@gmail.com.')).statut, await db.col('liens_email').countDocuments({ compteId: null })], [401, 202, 0]);
+        const E = require('../comptes/email-cle');
+        H.v('T1d. emailCle : domaines IDN et à tirets admis, formes douteuses nulles', [E.emailCle('a@bücher.example'), E.emailCle('a@xn--bcher-kva.example'), E.emailCle('a@mon-site.co.uk'), E.emailCle('a@exemple.fr.'), E.emailCle('a@exemple..fr')], ['a@bücher.example', 'a@xn--bcher-kva.example', 'a@mon-site.co.uk', null, null]);
+    }
+    {   // I-2b : la limite d'un courriel de confirmation se compte par BOÎTE
+        courrier.envoyes.length = 0; await liberer();
+        await ins('victime+a@outlook.com'); await ins('victime+b@outlook.com'); await ins('Victime@Outlook.com');
+        const comptes = await db.col('comptes').countDocuments({ emailCle: { $in: ['victime+a@outlook.com', 'victime+b@outlook.com', 'victime@outlook.com'] } });
+        H.v('T2a. trois alias de la même boîte (+a, +b, sans étiquette) : trois COMPTES (la clé du compte ne change pas) mais UN seul courriel de confirmation en 24 h', [comptes, courrier.envoyes.filter(e => e.type === 'verification').length], [3, 1]);
+        await renv('victime+b@outlook.com');
+        H.v('T2b. … et un renvoi pour un autre alias de la boîte n\'en ajoute pas', courrier.envoyes.filter(e => e.type === 'verification').length, 1);
+        H.v('T2c. cleBoite : étiquette ôtée pour tout domaine, points de Gmail déjà ôtés par emailCle, étiquette seule conservée', [E2().cleBoite('a+x@exemple.fr'), E2().cleBoite('a+x+y@exemple.fr'), E2().cleBoite('+x@exemple.fr'), E2().cleBoite(E2().emailCle('A.B+x@Gmail.com'))], ['a@exemple.fr', 'a@exemple.fr', '+x@exemple.fr', 'ab@gmail.com']);
+        // la limite O1 du mot de passe oublié suit la MÊME clé de boîte (3 par heure et par boîte)
+        const r0 = courrier.envoyes.filter(e => e.type === 'reinit').length;
+        for (const e of ['victime+a@outlook.com', 'victime+b@outlook.com', 'victime@outlook.com', 'victime+a@outlook.com', 'victime+b@outlook.com']) { await post('/api/compte/mot-de-passe-oublie', { email: e }); await A.attendre(); }
+        H.v('T2d. O1 : 5 demandes réparties sur trois alias de la même boîte -> 3 courriels de réinitialisation au plus', courrier.envoyes.filter(e => e.type === 'reinit').length - r0, 3);
+    }
+    function E2() { return require('../comptes/email-cle'); }
+    {   // M-1 : la clé du compteur est l'adresse NORMALISÉE de la boîte, pas l'identité du compte ni l'écriture brute
+        courrier.envoyes.length = 0; await liberer();
+        await ins('casse@exemple.fr'); const c = await compteDe('casse@exemple.fr'); await vieillir(c._id, 60); await purger();
+        const avant = courrier.envoyes.length; await ins('CASSE@Exemple.fr');
+        H.v('T3. adresse purgée puis réinscrite sous une autre casse dans les 24 h du dernier courriel : nouveau compte, AUCUN courriel de plus', [(await compteDe('casse@exemple.fr')) !== null, courrier.envoyes.length - avant], [true, 0]);
+    }
+    {   // M-3 : « rien ne disparaît avec lui » — chaque condition de la purge, isolément
+        const vieux = async (nom, maj) => { await ins(`${nom}@exemple.fr`); const c = await compteDe(`${nom}@exemple.fr`); await db.col('comptes').updateOne({ _id: c._id }, { $set: { creeLe: new Date(Date.now() - 100 * HEURE), ...maj } }); return db.col('comptes').findOne({ _id: c._id }); };
+        const essais = {
+            'solde.accueil': await vieux('m3accueil', { 'solde.accueil': 3 }), 'abonnement.actif': await vieux('m3abo', { 'abonnement.actif': true }), stripeClient: await vieux('m3stripe', { stripeClient: 'cus_x' }),
+            offertesAccordeesLe: await vieux('m3offertes', { offertesAccordeesLe: new Date() }), mouvements: await vieux('m3mouv', {})
+        };
+        await db.col('mouvements').insertOne({ compteId: essais.mouvements._id, le: new Date(), type: 'octroi', delta: 1, poche: 'accueil', etat: 'debite' });
+        const sorties = {}; for (const [k, d] of Object.entries(essais)) sorties[k] = [await Pg.purgerCompte(d, cfg, new Date()), (await db.col('comptes').findOne({ _id: d._id })) !== null];
+        H.v('T4a. un compte non confirmé périmé qui porte un solde d\'accueil, un abonnement, un client Stripe, des offertes accordées ou un mouvement n\'est JAMAIS purgé', sorties, Object.fromEntries(Object.keys(essais).map(k => [k, ['garde', true]])));
+        await db.col('comptes').deleteMany({ emailCle: { $regex: /^m3/ } }); await db.col('mouvements').deleteMany({ type: 'octroi', delta: 1, poche: 'accueil', etat: 'debite', compteId: essais.mouvements._id });
+        const T = new Date('2026-01-01T00:00:00Z'), doc = { verifie: false, creeLe: T };
+        H.v('T4b. frontière : à 48 h pile le compte est périmé, une milliseconde avant non', [Pg.perime(doc, cfg, new Date(T.getTime() + 48 * HEURE)), Pg.perime(doc, cfg, new Date(T.getTime() + 48 * HEURE - 1))], [true, false]);
+    }
+    {   // M-2 : pas de lien de réinitialisation pour un compte non confirmé périmé (il serait refusé)
+        await ins('perime-reinit@exemple.fr'); const c = await compteDe('perime-reinit@exemple.fr'); await vieillir(c._id, 49);
+        const r0 = courrier.envoyes.filter(e => e.type === 'reinit').length; await post('/api/compte/mot-de-passe-oublie', { email: 'perime-reinit@exemple.fr' }); await A.attendre();
+        H.v('T7. mot de passe oublié pour un compte non confirmé de plus de 48 h : aucun courriel, le compte est purgé à l\'usage', [courrier.envoyes.filter(e => e.type === 'reinit').length - r0, await compteDe('perime-reinit@exemple.fr')], [0, null]);
+    }
+    {   // R26 : un compteur qui ne peut pas conclure REFUSE (une garde qui ne sait pas bloque)
+        const L2 = require('../transport/limites'); const proto = Object.getPrototypeOf(db.col('limites')); const orig = proto.insertOne;
+        proto.insertOne = async function (...a) { if (this.collectionName.endsWith('limites')) { const e = new Error('dup'); e.code = 11000; throw e; } return orig.apply(this, a); };
+        let r; try { r = await L2.reserver('confirmation:fantome', { delaiMs: 1000 }); } finally { proto.insertOne = orig; }
+        H.v('T5. reserver : insertion en doublon mais aucun document lisible ni modifiable -> refus (pas de permission par défaut)', r.permis, false);
+    }
+    {   // I-3 : le montage ARME la purge, et la passe armée supprime vraiment un compte de 49 h
+        const poses = []; const faux = { setTimeout: (f, ms) => { const o = { f, ms, unref() { } }; poses.push(['differe', o]); return o; }, setInterval: (f, ms) => { const o = { f, ms, unref() { } }; poses.push(['intervalle', o]); return o; }, clearTimeout() { }, clearInterval() { } };
+        const express = require('express');
+        require('../comptes/monter').routes(express.Router(), cfg, { minuteurs: faux });
+        H.v('T6a. comptes/monter.routes() pose exactement UN différé (60 s) et UN intervalle (1 h)', poses.map(([k, o]) => [k, o.ms]), [['differe', 60000], ['intervalle', 3600000]]);
+        await ins('arme@exemple.fr'); const c = await compteDe('arme@exemple.fr'); await vieillir(c._id, 49);
+        const differe = poses.find(([k]) => k === 'differe')[1];
+        await differe.f();
+        H.v('T6b. la passe différée posée par le montage supprime le compte non confirmé de 49 h', await compteDe('arme@exemple.fr'), null);
+        Pg.arreterPurge();
     }
 
     // ============================ ruling 9 (vérifiable ici) : rien ne touche le code hérité ============================

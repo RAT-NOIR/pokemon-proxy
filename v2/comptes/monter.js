@@ -12,6 +12,6 @@ module.exports = {
         if (absent('courrier') && !process.env.BREVO_API_KEY)   // sans clé : mémoire seulement ; avec clé et pilote non écrit : rien (503)
             registre.fournir('courrier', require('./courrier').creerCourrierMemoire());
         routesComptes(router, cfg, deps);
-        require('./purge').demarrerPurge({ cfg });   // O3 : purge des comptes non confirmés (passe différée puis horaire), un seul minuteur par processus
+        require('./purge').demarrerPurge({ cfg, ...(deps && deps.minuteurs ? { minuteurs: deps.minuteurs } : {}) });   // O3 : purge des comptes non confirmés (passe différée puis horaire), un seul minuteur par processus
     }
 };

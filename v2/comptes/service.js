@@ -7,7 +7,7 @@
 // `hebdo.compteId` est l'ObjectId du compte (index du plan).
 const crypto = require('crypto');
 const { col } = require('../db'); const M = require('../modeles'); const L = require('../transport/limites');
-const J = require('./jetons'); const P = require('./mots-de-passe'); const S = require('./sessions'); const { emailCle } = require('./email-cle'); const Pg = require('./purge');
+const J = require('./jetons'); const P = require('./mots-de-passe'); const S = require('./sessions'); const { emailCle, cleBoite } = require('./email-cle'); const Pg = require('./purge');
 
 const HEURE = 3600e3;
 
@@ -38,7 +38,8 @@ async function ecrireLien(compteId, type, cfg, maintenant) {
  * (ou a échoué à partir : la prise est consommée, un pilote en panne ne se rattrape pas en bombardant une boîte). Appelé APRÈS la réponse (travail détaché) : la limite ne se lit jamais dans la réponse.
  */
 async function confirmer(compte, cle, cfg, courrier, nom, maintenant) {
-    const r = await L.reserver(`confirmation:${J.empreinte(cle)}`, { delaiMs: cfg.comptes.confirmationHeures * HEURE, maintenant });
+    // la limite se compte par BOÎTE (O3 tour 1, I-2) : `victime+a@outlook.com` et `victime+b@outlook.com` partagent le même compteur ; la clé du COMPTE (emailCle) ne change pas
+    const r = await L.reserver(`confirmation:${J.empreinte(cleBoite(cle))}`, { delaiMs: cfg.comptes.confirmationHeures * HEURE, maintenant });
     if (!r.permis) return false;
     const jeton = await ecrireLien(compte._id, 'verification', cfg, maintenant);
     await envoyer(nom, () => courrier.envoyerVerification(compte.email, lienVerification(cfg, jeton), { purgeHeures: cfg.comptes.nonConfirmeHeures }));
@@ -62,6 +63,7 @@ function inscrire({ email, emailCle, motDePasse, cfg, courrier, maintenant = new
                 if (!existant || existant.verifie !== false) return;                                                  // confirmé (ou illisible) : silence
                 if (tour === 0 && Pg.perime(existant, cfg, maintenant)) { await Pg.purgerCompte(existant, cfg, maintenant); continue; }   // périmé : l'adresse est libre, on réessaie UNE fois
                 if (tour === 0 && !(await col('comptes').findOne({ _id: existant._id }))) continue;                    // purgé entre-temps
+                if (Pg.perime(existant, cfg, maintenant)) return;                                                     // périmé et non purgeable (porteur d'un crédit...) : jamais de courriel pour lui
                 await confirmer(existant, emailCle, cfg, courrier, 'inscription', maintenant);
                 return;
             }
@@ -87,9 +89,11 @@ function demanderReinit({ email, cfg, courrier, maintenant = new Date() }) {
         const cle = typeof email === 'string' && email.length <= 254 ? emailCle(email) : null;
         const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
         if (!compte) return;
+        if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return; }   // O3 : pas de lien de réinitialisation pour un compte non confirmé de 48 h ou plus (il serait refusé)
         // B8 (tour 1, O1 corrigé) : le courrier n'est pas une arme — au plus `renvoiParCompteHeure` liens par ADRESSE et par heure, d'où que viennent les demandes (le plafond par IP se contourne avec des IP).
         // Le travail est DÉTACHÉ : la réponse (202) est partie avant ce calcul, elle est donc la même que la limite morde ou non — aucune énumération par la limite. Patron de renvoyerVerification.
-        const r = await L.consommer(`reinit:${J.empreinte(cle)}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
+        // O3 (tour 1, I-2) : la limite O1 suit la même clé de BOÎTE (sinon des alias `+x` de comptes distincts contourneraient « 3 par heure »)
+        const r = await L.consommer(`reinit:${J.empreinte(cleBoite(cle))}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
         if (!r.permis) return;
         const jeton = await ecrireLien(compte._id, 'reinit', cfg, maintenant);
         await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`));
@@ -197,6 +201,11 @@ async function reinitialiser({ jeton, motDePasse, cfg, maintenant = new Date() }
     await col('comptes').updateOne({ _id: compte._id }, { $set: { motDePasse: hash } });
     await col('liens_email').updateMany({ compteId: compte._id, type: 'reinit', utiliseLe: null }, { $set: { utiliseLe: maintenant } });
     await col('sessions').deleteMany({ compteId: compte._id });
+    // O3 (tour 1, I-1) : « ferme TOUT accès » — la session n'est qu'une porte. Les installations LIÉES (l'extension, par son jeton) et les codes de liaison vivants en sont deux autres.
+    // Les installations sont DÉLIÉES (comme `delier`), pas révoquées : le jeton du tiers ne résout plus aucun porteur compte, et l'installation légitime de la victime reste utilisable comme
+    // installation seule (elle se relie par un code, sans réinstaller) ; le tiers ne peut pas la relier sans session. Les essais restent inchangés (pas de nouvel essai). Les codes vivants sont supprimés.
+    await col('installations').updateMany({ compteId: compte._id }, { $set: { compteId: null } });
+    await col('codes_liaison').deleteMany({ compteId: compte._id });
     try { await accorderOffertes(compte._id, cfg, maintenant); }
     catch (e) { console.error(`❌ [v2 reinitialisation] octroi non fait (${(e && e.name) || 'Error'}) — le renvoi du lien de vérification le rejoue`); }
     return { statut: 200 };
