@@ -48,7 +48,9 @@ function lireConfig(env = process.env) {
     if (bancLienMois > BANC_MOIS) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (au plus la durée de l'image)`);
     // Tour 1 (I-1) : au-delà de la bascule + ce délai de grâce, une ligne que la passe n'a pas pu réécrire est SUPPRIMÉE par la base seule (on préfère perdre une image que garder un lien).
     const bancGraceJours = entier('V2_BANC_GRACE_JOURS', env.V2_BANC_GRACE_JOURS, 7, 0);
-    if (bancGraceJours > 30) throw new Error(`configuration invalide : V2_BANC_GRACE_JOURS="${env.V2_BANC_GRACE_JOURS}" (30 jours au plus)`);
+    // Tour 3 (I-6) : 21 jours AU PLUS. La marge avant les 12 mois est la longueur du mois de bascule (février : 28 jours) moins la passe quotidienne et l'étalement : 27 jours est la limite, 28 les atteignent ;
+    // avec 21 il reste 6 jours (environ 12 000 lignes d'étalement). Un réglage qui violerait « 12 mois au maximum » n'est pas valide.
+    if (bancGraceJours > 21) throw new Error(`configuration invalide : V2_BANC_GRACE_JOURS="${env.V2_BANC_GRACE_JOURS}" (21 jours au plus : au-delà, le lien pourrait atteindre 12 mois en février)`);
     return gele({
         actif,
         base,

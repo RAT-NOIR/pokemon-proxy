@@ -61,11 +61,11 @@ function colAvec(crochets) {
             return (...a) => { const h = crochets[p]; return h ? Promise.resolve(h(...a)).then(() => f.apply(t, a)) : f.apply(t, a); }; } });
     };
 }
-function monde(client, colFn) {
+function monde(client, colFn, cfgX = cfg) {
     const stockage = creerStockage({ client, bucket: BUCKET, env: { V2_BANC_BUCKET: BUCKET } }); stockage.verifierBucket = async () => { };
     const env = { V2_BANC_BUCKET: BUCKET, V2_BANC_SEL: SEL };
-    const banc = creerBanc({ cfg, env, stockage, horloge: () => cur, ...(colFn ? { colFn } : {}) });
-    const creerPurge = o => require('../banc/purge').creerPurge({ cfg, env: o.env || env, stockage, horloge: () => cur, colFn: o.colFn, ...(o.parPasseMax ? { parPasseMax: o.parPasseMax } : {}) });
+    const banc = creerBanc({ cfg: cfgX, env, stockage, horloge: () => cur, ...(colFn ? { colFn } : {}) });
+    const creerPurge = o => require('../banc/purge').creerPurge({ cfg: cfgX, env: o.env || env, stockage, horloge: () => cur, colFn: o.colFn, ...(o.parPasseMax ? { parPasseMax: o.parPasseMax } : {}) });
     return { banc, purge: creerPurge({ colFn }), creerPurge, stockage };
 }
 
@@ -448,7 +448,8 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   le stockage revient : la passe suivante REJOUE la liste — objet supprimé, liste vide, alerte à 0', [client.objets.has(w.ancienneCle), (await queue()).length, (await alerte()).objetsEnAttente], [false, 0, 0]);
         // (tour 2, M-4) une alerte qui n'est plus mise à jour (la passe ne tourne plus) ne rassure pas : au-delà de 3 jours, périmée
         const Tf = await R.reconcilierTous({ cfg, maintenant: apres(2 * H1, PG1) }), Tp = await R.reconcilierTous({ cfg, maintenant: apres(5 * JOUR, PG1) });
-        H.v('   l\'état écrit par la passe est PÉRIMÉ au-delà de 3 jours sans passe : le verdict n\'est plus « propre »', [Tf.banc.perime, Tf.propre, Tp.banc.perime, Tp.propre], [false, true, true, false]);
+        const Tj = await R.reconcilierTous({ cfg, maintenant: apres(2 * H1 + 2 * JOUR, PG1) });         // tour 3 : la BORNE BASSE — deux jours après la passe, l'état est encore frais
+        H.v('   l\'état écrit par la passe est PÉRIMÉ au-delà de 3 jours sans passe (frais à +1 h et à +2 jours) : le verdict n\'est plus « propre »', [Tf.banc.perime, Tf.propre, Tj.banc.perime, Tj.propre, Tp.banc.perime, Tp.propre], [false, true, false, true, true, false]);
         // (3) le stockage est ABSENT (variable manquante) : au-delà de la grâce, les lignes partent par la base seule
         await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
         const sans = m.creerPurge({ env: {} });
@@ -475,6 +476,24 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         await m.purge.anonymiserLiens(new Date(limiteAge.getTime() + 1)); cap8.rendre();
         H.v('(6) contribution du premier instant du mois, passe le lendemain de la bascule, stockage en panne : la ligne tient pendant la grâce, puis disparaît ; ce moment est avant ses 12 mois',
             [reste, (await lignes()).length, new Date(limiteAge.getTime() + 1) < ajouterMois(C, 12)], [1, 0, true]);
+        // (7) tour 3, I-6 — LE PIRE MOIS : février d'une année non bissextile (28 jours = la marge). Contribution au premier instant du mois M (M + 11 = février), stockage en panne tout du long,
+        // une passe par jour : toute grâce QUE LA CONFIGURATION ACCEPTE doit faire disparaître la ligne avant ses 12 mois
+        let anF = T0.getUTCFullYear() + 1; while (new Date(Date.UTC(anF, 2, 0)).getUTCDate() !== 28) anF++;
+        const CF0 = new Date(Date.UTC(anF - 1, 2, 1)), BASCF = new Date(Date.UTC(anF, 1, 1)), D12 = ajouterMois(CF0, 12);
+        const acceptees = [];
+        for (const g of [0, 7, 14, 21, 22, 28, 30, 31, 40]) {
+            let cfgG; try { cfgG = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_BANC_GRACE_JOURS: String(g) }); } catch (_) { continue; }
+            acceptees.push(g);
+            await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); const cl = fauxClient(), mg = monde(cl, undefined, cfgG);
+            cur = CF0; cl.dateObjet = CF0;
+            await mg.banc.apresVerdict({ corps: consent(jetonNeuf(), CF0), scanId: hex().slice(0, 24), carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true, versionModele: 'm1' });
+            cl.panne.lire = true; cl.panne.del = true;
+            const capG = capturer(); let disparue = null;
+            for (let d = 1; d <= 60 && !disparue; d++) { const t = new Date(BASCF.getTime() + d * JOUR + 12 * H1); await mg.purge.anonymiserLiens(t); if (!(await lignes()).length) disparue = t; }
+            capG.rendre();
+            H.v(`(7) février non bissextile, grâce de ${g} j acceptée par la configuration : la ligne disparaît (passe quotidienne) avant les 12 mois de sa contribution`, [!!disparue, disparue ? disparue < D12 : null], [true, true]);
+        }
+        H.v('   les grâces acceptées par la configuration sont exactement celles de 0 à 21 jours', acceptees, [0, 7, 14, 21]);
         // (4) reconcilier lit l'alerte
         await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); await db.col('banc_alertes').deleteMany({}); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
         await db.col('questions').deleteMany({});         // aucune question ouverte : le seul motif possible d'une réconciliation non propre est l'alerte du banc
