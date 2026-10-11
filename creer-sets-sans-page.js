@@ -44,6 +44,7 @@ const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, no
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { lisible } = require('./collecte-cartes/nom-affichage');
 const { declarantesDuProduit } = require('./collecte-cartes/declarantes');
+const { verifierTirages } = require('./collecte-cartes/preuves-tirage');
 
 // LE TIRAGE DE CHAQUE EXPANSION, AVEC SA PREUVE (2026-10-04). Les preuves admises, et elles seules :
 //   codes_set — la région que codes_set écrit (japonais / occidental), quand rien ne la contredit ;
@@ -51,7 +52,13 @@ const { declarantesDuProduit } = require('./collecte-cartes/declarantes');
 //   nom       — le nom Cardmarket de l'expansion dit la langue ;
 //   CS…C      — le suffixe « C » des codes chinois de Cardmarket (§39), sur un code « CS…C » ;
 //   asymétrie — des produits désignés sont des cartes imprimées au Japon et JAMAIS dans le tirage occidental ;
-//   set       — le set existe déjà en base avec ce tirage.
+//   set       — le set existe déjà en base avec ce tirage ;
+//   declarations (ruling 2026-10-11) — des impressions de NOS cartes, déclarées par la page de carte Bulbapedia sous `jpexpansion` (japonais) /
+//               `expansion` (occidental), portent ce nom d'expansion EXACT, et aucune impression d'un autre tirage ne le porte (contrôlé à
+//               l'exécution pour chaque nom de DECLARANTES) ;
+//   page (ruling 2026-10-11) — la page Bulbapedia du produit, lue dans sa copie Wayback citée, dit la langue en toutes lettres ; admise
+//               seulement avec une seconde preuve admise OU une « citation nomme le produit ».
+// (tcgdex : héritée du 2026-10-07.) La liste vit dans collecte-cartes/preuves-tirage.js, qui REFUSE tout type absent (banc test-preuves-tirage.js).
 // Ce qui n'a aucune de ces preuves n'est PAS ici : A-VALIDER.md le propose au testeur.
 const TIRAGES = {
     6168: ['zh-hans', 'set : Adventure-Special-Pack existe (zh-hans)'], 6111: ['zh-hans', 'set : Gem-Pack-Vol-2 existe (zh-hans)'],
@@ -91,19 +98,20 @@ const TIRAGES = {
     6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)'],
     // (2026-10-11, SETS-21 : « les 21 sets jamais créés ») — lues sur nos données (impressions des pages de cartes : le tirage vient du
     // champ de page jpexpansion, donc du Japon), zéro requête ; le précédent est My First Battle (5526, 2026-10-07)
-    4187: ['jp', 'pages de cartes : 6 cartes déclarent « Everyone\'s Exciting Battle » en jp (jpexpansion)'],
-    4361: ['jp', 'pages de cartes : 45 impressions déclarent « Gift Box Mew • Lucario » en jp (jpexpansion), 15 numéros'],
-    4279: ['jp', 'pages de cartes : 17 impressions déclarent « Arceus LV.X Deck: Grass & Fire » en jp (jpexpansion), 16 numéros ; son jumeau Arceus-LVX-Deck-Lightning-Psychic (ALP) est jp en base'],
-    4352: ['jp', 'page Bulbapedia « J Promotional cards (TCG) » (copie Wayback 20260710090618) : « a series of Japanese promotional cards … Jumbo cards … a total of two cards » (2 produits) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base'],
-    1622: ['intl', 'page Bulbapedia « 2008 Burger King promotional Pokémon toys » (copie Wayback 20260804035231) : « Every toy was paired with an English Diamond & Pearl or Mysterious Treasures trading card » ; douze jouets = douze produits'],
-    5034: ['intl', 'page Bulbapedia « 2009 Burger King promotional Pokémon toys » (copie Wayback 20230420020549) : « Every toy was paired with two English Platinum trading cards » ; six jouets = douze produits'],
-    4354: ['jp', 'pages de cartes : 3 cartes déclarent « T Promotional cards » en jp (jpexpansion) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base']
+    4187: ['jp', 'declarations : 6 cartes déclarent « Everyone\'s Exciting Battle » en jp (jpexpansion), aucun autre tirage'],
+    4361: ['jp', 'declarations : 45 impressions déclarent « Gift Box Mew • Lucario » en jp (jpexpansion), 15 numéros, aucun autre tirage'],
+    4279: ['jp', 'declarations : 17 impressions déclarent « Arceus LV.X Deck: Grass & Fire » en jp (jpexpansion), 16 numéros, aucun autre tirage ; famille : son jumeau Arceus-LVX-Deck-Lightning-Psychic (ALP) est jp en base'],
+    4352: ['jp', 'page : « a series of Japanese promotional cards … Jumbo cards … a total of two cards » (copie Wayback 20260710090618, J Promotional cards (TCG)) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base'],
+    1622: ['intl', 'page : « Every toy was paired with an English Diamond & Pearl or Mysterious Treasures trading card » (copie Wayback 20260804035231) ; citation nomme le produit : « 2008 Burger King promotional Pokémon toys » (douze jouets = douze produits)'],
+    5034: ['intl', 'page : « Every toy was paired with two English Platinum trading cards » (copie Wayback 20230420020549) ; citation nomme le produit : « 2009 Burger King promotional Pokémon toys » (six jouets = douze produits)'],
+    4354: ['jp', 'declarations : 3 cartes déclarent « T Promotional cards » en jp (jpexpansion), aucun autre tirage ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base']
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
 // pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
 // le set, parce que leurs fiches naîtraient dans le set À CÔTÉ de fiches simples des mêmes produits (des doublons). Ici, au lieu de refuser :
 // chaque produit dont le nom est celui d'UNE carte déclarante est joint à cette carte (preuve `carte-declarante`), et le set est REFUSÉ si
 // une carte déclarante n'est couverte par AUCUN produit (sa fiche naîtrait seule, sans produit) ou si un nom désigne deux déclarantes.
+verifierTirages(TIRAGES);   // une preuve dont le type n'est pas dans la liste fermée ARRÊTE l'outil, avant toute connexion
 const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs', 4187: 'Everyone\'s Exciting Battle', 4361: 'Gift Box Mew • Lucario', 4279: 'Arceus LV.X Deck: Grass & Fire', 4354: 'T Promotional cards' };
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -192,6 +200,8 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         // une fiche simple porte une impression (tirage, nom d'expansion) : refusée si une carte en base déclare déjà ce couple — elle
         // ferait naître ses fiches dans le set (sauf un set existant, dont le nom d'expansion est déjà le sien)
         if (nomDecl) {
+            const autresTirages = [...declare].filter(k => k.endsWith(`|${nomDecl}`) && k.split('|')[0] !== tirage);
+            if (autresTirages.length) { refus.push({ exp, raison: `declarations : « ${nomDecl} » est aussi déclaré dans un autre tirage (${autresTirages.join(', ')})`, resume }); continue; }
             if (ambiguDecl) { refus.push({ exp, raison: `cartes déclarantes : ${ambiguDecl}`, resume }); continue; }
             if (!declarantes.length) { refus.push({ exp, raison: `aucune carte ne déclare « ${nomDecl} » en ${tirage}`, resume }); continue; }
             const couvertes = new Set(designes.filter(d => d.declarante).map(d => d.carte._id));

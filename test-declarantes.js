@@ -26,10 +26,21 @@ t('le produit « Pikachu » ordinaire ne désigne pas la Pikachu ☆', () => {
     const d = declarantesDuProduit([pikachuEtoile], 'Pikachu', produit('Pikachu', ['Gnaw']), clesNom);
     assert.deepStrictEqual(d, []);
 });
-t('deux Arceus au même nom : les attaques de la carte, toutes présentes dans les crochets du produit, départagent', () => {
-    const decl = [arceusPlante, arceusFeu, arceusLvX];
-    assert.deepStrictEqual(declarantesDuProduit(decl, 'Arceus', produit('Arceus', ['Grass', 'Leaf Refresh']), clesNom).map(c => c._id), [78932]);
-    assert.deepStrictEqual(declarantesDuProduit(decl, 'Arceus', produit('Arceus', ['Fire', 'Bright Flame']), clesNom).map(c => c._id), [78140]);
+t('départage STRICT : A[X] / B[X,Y] — produit [X,Y] => B, produit [X] => A, produit [X,Z] ou [Y] => ambiguïté qui reste', () => {
+    const A = { _id: 1, nomEn: 'Zubat', bulba: { titre: 'Zubat (S 1)' }, attaques: [{ nom: 'X' }] };
+    const B = { _id: 2, nomEn: 'Zubat', bulba: { titre: 'Zubat (S 2)' }, attaques: [{ nom: 'X' }, { nom: 'Y' }] };
+    assert.deepStrictEqual(declarantesDuProduit([A, B], 'Zubat', produit('Zubat', ['X', 'Y']), clesNom).map(c => c._id), [2]);
+    assert.deepStrictEqual(declarantesDuProduit([A, B], 'Zubat', produit('Zubat', ['X']), clesNom).map(c => c._id), [1]);
+    assert.strictEqual(declarantesDuProduit([A, B], 'Zubat', produit('Zubat', ['X', 'Z']), clesNom).length, 2);
+    assert.strictEqual(declarantesDuProduit([A, B], 'Zubat', produit('Zubat', ['Y']), clesNom).length, 2);
+});
+t('l\'égalité est celle des ENSEMBLES normalisés (casse, espaces, ordre, doublons)', () => {
+    assert.strictEqual(attaquesDeLaCarteDansLeProduit({ attaques: [{ nom: 'Leaf  Refresh' }, { nom: 'Cut' }] }, produit('X', ['cut', 'leaf refresh', 'Cut'])), true);
+});
+t('Arceus : un produit dont les crochets portent aussi un type (« Grass ») NE départage PAS — le set est refusé, pas forcé', () => {
+    const decl = [arceusPlante, arceusFeu];
+    assert.strictEqual(declarantesDuProduit(decl, 'Arceus', produit('Arceus', ['Grass', 'Leaf Refresh']), clesNom).length, 2);
+    assert.deepStrictEqual(declarantesDuProduit(decl, 'Arceus', produit('Arceus', ['Leaf Refresh']), clesNom).map(c => c._id), [78932]);
 });
 t('Arceus LV.X ne se confond pas avec Arceus', () => assert.deepStrictEqual(declarantesDuProduit([arceusPlante, arceusFeu, arceusLvX], 'Arceus LV.X', produit('Arceus LV.X', ['Multitype', 'Meteor Blast']), clesNom).map(c => c._id), [78145]));
 t('l\'ambiguïté RESTE quand les attaques ne départagent pas (aucune ou deux cartes les portent)', () => {

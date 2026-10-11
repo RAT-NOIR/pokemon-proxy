@@ -18,10 +18,14 @@ function nomsDeclarante(c) {
     return /☆/.test(String(c.bulba?.titre ?? '').replace(/\s*\([^()]*\)\s*$/, '')) ? [`${n} Gold Star`] : [n];
 }
 
-/** Les attaques de la carte (non vides) sont TOUTES des attaques du produit. */
+/**
+ * RÈGLE STRICTE (relecture SETS-21, 2026-10-11) : l'ensemble des attaques du produit est ÉGAL à celui de la carte (normalisation `nu`, ordre et
+ * doublons ignorés, ensembles non vides). Une inclusion départagerait A[X] contre B[X,Y] pour un produit qui ne liste que X, ou rendrait vraie
+ * une carte dont le produit porte en plus un type (« [Grass | Leaf Refresh] ») : l'ambiguïté reste, et l'appelant refuse le set.
+ */
 function attaquesDeLaCarteDansLeProduit(c, p) {
-    const ca = (c.attaques || []).map(a => nu(a.nom)).filter(Boolean), pa = (p.attaques || []).map(nu);
-    return ca.length > 0 && ca.every(a => pa.includes(a));
+    const ca = new Set((c.attaques || []).map(a => nu(a.nom)).filter(Boolean)), pa = new Set((p.attaques || []).map(nu).filter(Boolean));
+    return ca.size > 0 && ca.size === pa.size && [...ca].every(a => pa.has(a));
 }
 
 /** Les déclarantes qui désignent ce produit : par le nom, puis (si plusieurs) par les attaques. `clesNom` : la fonction de la jointure. */
