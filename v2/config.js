@@ -45,6 +45,9 @@ function lireConfig(env = process.env) {
     const bancLienMois = entier('V2_BANC_LIEN_MOIS', env.V2_BANC_LIEN_MOIS, 12, 1);
     if (bancLienMois > 12) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (12 mois au plus)`);
     if (bancLienMois > BANC_MOIS) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (au plus la durée de l'image)`);
+    // Tour 1 (I-1) : au-delà de la bascule + ce délai de grâce, une ligne que la passe n'a pas pu réécrire est SUPPRIMÉE par la base seule (on préfère perdre une image que garder un lien).
+    const bancGraceJours = entier('V2_BANC_GRACE_JOURS', env.V2_BANC_GRACE_JOURS, 7, 0);
+    if (bancGraceJours > 30) throw new Error(`configuration invalide : V2_BANC_GRACE_JOURS="${env.V2_BANC_GRACE_JOURS}" (30 jours au plus)`);
     return gele({
         actif,
         base,
@@ -77,7 +80,7 @@ function lireConfig(env = process.env) {
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
         // BANC-12 : le LIEN entre une contribution du banc et un compte dure bancLienMois (12 au plus) ; l'IMAGE reste bancMois (24 au plus). `analysesMois` (la ligne qui porte le scanId et le compte)
         // s'aligne sur le lien : une seule source. `mouvementsMois` reste 24 (somme des deltas = solde) mais le scanId des mouvements est retiré au bout de bancLienMois (v2/banc/anonymisation.js).
-        retention: { octroiJours: 730, annonceJours: 90, analysesMois: bancLienMois, mouvementsMois: 24, bancMois: BANC_MOIS, bancLienMois, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
+        retention: { octroiJours: 730, annonceJours: 90, analysesMois: bancLienMois, mouvementsMois: 24, bancMois: BANC_MOIS, bancLienMois, bancGraceJours, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
         annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
         banc: { versionsTexte: ['2026-10-07-v1'] },
         verdict: { bonneAffaireSous: -30, cherAuDela: 15 },

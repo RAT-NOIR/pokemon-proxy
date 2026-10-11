@@ -9,10 +9,13 @@ const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCF
 const codeDe = e => (e && (e.code || e.name)) || 'erreur';     // jamais e.message : il peut citer une clé ou une URL
 
 /**
- * BANC-12 — UNE définition de « le lien contribution ↔ compte est échu » : une ligne dont le jour (`le`) est antérieur ou égal à cette limite n'est PLUS corrigeable (routes.js, corriger)
- * et est anonymisée par la passe (anonymisation.js). Le même prédicat des deux côtés : aucune ligne n'est à la fois corrigeable et anonymisable. Mois de 30,5 jours, comme les autres rétentions.
+ * BANC-12 (tour 1, I-3) — DES COHORTES MENSUELLES. UNE définition de « le lien contribution ↔ compte est échu » : le jour D, une ligne dont le jour (`le`) est STRICTEMENT antérieur au premier jour du mois
+ * de D moins (lien − 1) mois n'est PLUS corrigeable (routes.js, corriger) et est anonymisée par la passe (anonymisation.js) — le même prédicat des deux côtés : aucune ligne n'est à la fois corrigeable
+ * et anonymisable. Une contribution du mois M bascule donc au premier instant du mois M + lien : entre (lien − 1) et lien mois d'âge, et tout un mois de contributions bascule ENSEMBLE (la date de
+ * réécriture de l'objet R2 ne dit que le mois de la cohorte). Mois CALENDAIRES (UTC), plus des mois de 30,5 jours.
  */
-const limiteLien = (cfg, maintenant) => new Date(new Date(maintenant).getTime() - cfg.retention.bancLienMois * 30.5 * JOUR_MS);
+const debutMois = (d, decalage = 0) => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + decalage, 1)); };
+const limiteLien = (cfg, maintenant) => debutMois(maintenant, -(cfg.retention.bancLienMois - 1));
 
 /** Une attente bornée : rejette avec le code DELAI après `delaiMs` (le travail sous-jacent n'est pas annulé, son résultat est ignoré). */
 function creerBorner(delaiMs) {
@@ -73,4 +76,4 @@ async function consentementAutorise(req, cfg, colFn = n => db.col(n)) {
     } catch (e) { console.error(`❌ [v2 banc] garde du jeton de consentement non conclue, rien conservé (${codeDe(e)})`); return false; }
 }
 
-module.exports = { JOUR_MS, jourUTC, codeDe, creerBorner, limiteLien, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };
+module.exports = { JOUR_MS, jourUTC, debutMois, codeDe, creerBorner, limiteLien, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };

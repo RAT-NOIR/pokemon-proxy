@@ -16,7 +16,7 @@ const { creerAnonymisation } = require('./anonymisation');
 
 const ORPHELIN_MS = 48 * 3600e3, DELAI_MS = 10000;
 
-function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.col(n), horloge = () => new Date(), delaiMs = DELAI_MS } = {}) {
+function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.col(n), horloge = () => new Date(), delaiMs = DELAI_MS, parPasseMax } = {}) {
     const col = () => colFn('banc_lignes');
     let pretS = null, dit = false;
     // Le journal ne porte JAMAIS de contenu : le code de l'erreur, pas son message (il peut citer une clé ou une URL).
@@ -36,7 +36,7 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
         } catch (e) { dire(`bucket ou endpoint non vérifié (${codeDe(e)})`); return null; }
     }
 
-    const anonymisation = creerAnonymisation({ cfg, colFn, borner });
+    const anonymisation = creerAnonymisation({ cfg, colFn, borner, ...(parPasseMax ? { parPasseMax } : {}) });
 
     return {
         /**
@@ -55,7 +55,17 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
             const s = await pret();
             if (!s) { bilan.echecs = lignes.length; return bilan; }                     // on ne peut pas effacer les objets : toutes les lignes sont gardées
             // une ligne devenue autre entre la lecture et la suppression ('changee') n'est pas effacée : elle reste une ligne de ce jeton, l'effacement le DIT (echecs)
-            for (const l of lignes) { if (await supprimerObjetPuisLigne(s, l, col, borner) === 'supprimee') bilan.supprimees++; else bilan.echecs++; }
+            for (const l of lignes) {
+                // BANC-12 (tour 1, I-4) : une ligne PRISE par l'anonymisation (coupure entre la copie et la suppression de l'ancienne) porte l'identifiant et la clé de sa COPIE anonyme : la copie part
+                // D'ABORD (objet puis ligne) ; si elle ne part pas, l'ancienne ligne reste pour une nouvelle tentative et la réponse ne la compte PAS comme supprimée.
+                if (l.anonId || l.anonCle) {
+                    try {
+                        if (l.anonCle) await borner(s.supprimer(l.anonCle));
+                        if (l.anonId) await borner(col().deleteOne({ _id: l.anonId, anonyme: true }));
+                    } catch (e) { echec('copie anonyme non effacée, ligne gardée pour une nouvelle tentative', e); bilan.echecs++; continue; }
+                }
+                if (await supprimerObjetPuisLigne(s, l, col, borner) === 'supprimee') bilan.supprimees++; else bilan.echecs++;
+            }
             return bilan;
         },
 
@@ -130,7 +140,7 @@ async function lancerCLI(argv, { connecter = connecterReel, stockage = null, hor
     journal(`purge du banc réel : ${b.lignes} ligne(s) échue(s) supprimée(s), ${b.objets} objet(s) supprimé(s), ${b.echecs} échec(s) ; filet : ${b.orphelins} orphelin(s) supprimé(s), ${b.echecsOrphelins} échec(s)`);
     // BANC-12 : la même commande coupe aussi les liens échus (12 mois) — le worker peut la lancer à la main
     const an = await purge.anonymiserLiens(horloge());
-    journal(`anonymisation du lien : ${an.lignes} ligne(s) anonymisée(s), ${an.attente} attente(s) supprimée(s), ${an.mouvements} mouvement(s), ${an.questions} question(s), ${an.analyses} analyse(s), ${an.echecs} échec(s)`);
+    journal(`anonymisation du lien : ${an.lignes} ligne(s) anonymisée(s), ${an.attente} attente(s) supprimée(s), ${an.mouvements} mouvement(s), ${an.questions} question(s), ${an.analyses} analyse(s), ${an.forcees} ligne(s) supprimée(s) au-delà de la grâce, ${an.echecs} échec(s)`);
     return b.echecs || b.echecsOrphelins || an.echecs ? 2 : 0;
 }
 

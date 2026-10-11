@@ -184,8 +184,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
                     ctx.stockage = s;
                     const ligne = await col().findOne({ _id: idLigne(o.scanId, carteDe(o)) });
                     if (!ligne || ligne.jetonEmpreinte !== c.jetonEmpreinte) return;
-                    // BANC-12 : au-delà du lien (12 mois), la correction n'est plus possible — même si la passe d'anonymisation n'a pas encore tourné (même prédicat qu'elle : commun.limiteLien)
-                    if (!(ligne.le instanceof Date) || ligne.le <= limiteLien(cfg, horloge())) return;
+                    // BANC-12 : au-delà du lien (cohorte du mois échue), la correction n'est plus possible — même si la passe d'anonymisation n'a pas encore tourné (même prédicat qu'elle : commun.limiteLien, STRICT)
+                    if (!(ligne.le instanceof Date) || ligne.le < limiteLien(cfg, horloge())) return;
                     await confirmer(ctx, s, ligne, o.idProduct, 'correction');
                 });
             } catch (e) { echec('corriger', e); }

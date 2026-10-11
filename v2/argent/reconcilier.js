@@ -15,7 +15,15 @@ async function sommeParPoche(porteur) {
     const lignes = await col('mouvements').aggregate([{ $match: filtre }, { $group: { _id: '$poche', s: { $sum: '$delta' } } }]).toArray();
     return Object.fromEntries(lignes.map(l => [l._id, l.s]));
 }
-async function reconcilier(porteur) {
+// BANC-12 (tour 1, I-2) : un débit qui GARDE son scanId au-delà du lien (cohorte échue) parce qu'il est encore utile — sous une marque non close, sous une question ouverte, ou non résolu (« rendu-* ») :
+// listé avec son âge. Il garde un débit à son SCAN, jamais une contribution du banc (la ligne du banc est réidentifiée au hasard). Sa présence n'est pas « propre ».
+async function debitsGardes(porteur, { cfg, maintenant }) {
+    const filtre = porteur.type === 'compte' ? { compteId: porteur.id } : { installationId: porteur.id };
+    const limite = require('../banc/commun').limiteLien(cfg, maintenant);
+    const l = await col('mouvements').find({ ...filtre, scanId: { $exists: true, $ne: null }, le: { $lt: limite } }).toArray();
+    return l.map(m => ({ id: m._id, scanId: m.scanId, etat: m.etat, type: m.type, ageJours: Math.floor((new Date(maintenant).getTime() - m.le.getTime()) / 86400e3) }));
+}
+async function reconcilier(porteur, { cfg = require('../config').lireConfig(process.env), maintenant = new Date() } = {}) {
     const somme = await sommeParPoche(porteur), ecarts = [], nonVerifiables = [];
     let comparees = 0;
     const comparer = (poche, attendu, reel) => {
@@ -36,7 +44,9 @@ async function reconcilier(porteur) {
     } else throw new Error(`reconcilier : type de porteur inconnu "${porteur.type}"`);
     const rendusEchoues = await lignesNonRendues(porteur);
     const marquesEnSuspens = await MS.enSuspens({ porteur });
-    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 };
+    const gardes = await debitsGardes(porteur, { cfg, maintenant });
+    return { porteur: `${porteur.type}:${porteur.id}`, ecarts, nonVerifiables, comparees, rendusEchoues, marquesEnSuspens, debitsGardes: gardes,
+        propre: ecarts.length === 0 && rendusEchoues.length === 0 && marquesEnSuspens.length === 0 && gardes.length === 0 };
 }
 // Une ligne de débit dont le rendu a échoué (« rendu-echoue ») ou n'a pas été confirmé (« rendu-en-cours ») NE se voit PAS dans la somme des deltas (le solde et le journal restent d'accord) :
 // le client est débité sans livraison. Elle est LISTÉE ici et le verdict n'est pas « propre » tant qu'il en reste une.
@@ -46,18 +56,23 @@ async function lignesNonRendues(porteur) {
     return l.map(m => ({ id: m._id, scanId: m.scanId, porteur: `${porteur.type}:${porteur.id}`, poche: m.poche, etat: m.etat, raison: m.raisonRendu ?? null }));
 }
 // Tous les porteurs de la base (curseur : pas de liste en mémoire)
-async function reconcilierTous() {
-    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], propre: true };
+async function reconcilierTous({ cfg = require('../config').lireConfig(process.env), maintenant = new Date() } = {}) {
+    const bilan = { porteurs: 0, comparees: 0, avecEcart: 0, nonVerifiables: 0, lignes: [], rendusEchoues: [], marquesEnSuspens: [], debitsGardes: [], banc: null, propre: true };
     for (const [type, nom] of [['compte', 'comptes'], ['installation', 'installations']]) {
         for await (const d of col(nom).find({}, { projection: { _id: 1 } })) {
-            const r = await reconcilier({ type, id: d._id });
+            const r = await reconcilier({ type, id: d._id }, { cfg, maintenant });
             bilan.porteurs++; bilan.comparees += r.comparees; bilan.nonVerifiables += r.nonVerifiables.length;
             if (r.ecarts.length) { bilan.avecEcart++; bilan.lignes.push(r); }
             bilan.rendusEchoues.push(...(r.rendusEchoues ?? []));
+            bilan.debitsGardes.push(...(r.debitsGardes ?? []));
         }
     }
     bilan.marquesEnSuspens = await MS.enSuspens();            // toutes, y compris celles d'un porteur disparu (un compte supprimé n'efface pas un débit sans livraison)
-    bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0;
+    // BANC-12 (tour 1, I-1) : l'état de la dernière passe d'anonymisation du banc réel — des nombres seuls : lignes échues non traitées, âge (jours depuis la bascule), objets en attente de suppression
+    const etat = await require('../banc/anonymisation').lireEtat(col);
+    bilan.banc = etat ? { lignesEnEchec: etat.lignesEnEchec, ageMaxJours: etat.ageMaxJours, objetsEnAttente: etat.objetsEnAttente } : null;
+    bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0 && bilan.debitsGardes.length === 0
+        && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0));
     return bilan;
 }
 module.exports = { reconcilier, reconcilierTous };
@@ -83,6 +98,9 @@ if (require.main === module) {
             for (const l of b.lignes) for (const e of l.ecarts) console.log(l.porteur.padEnd(46) + String(e.poche).padEnd(10) + String(e.attendu).padStart(9) + String(e.reel).padStart(8) + String(e.ecart).padStart(8));
         }
         console.log(`${b.rendusEchoues.length} ligne(s) de débit au rendu non confirmé (rendu-echoue / rendu-en-cours) — débit sans livraison tant qu'elles restent`);
+        console.log(`${b.debitsGardes.length} débit(s) qui gardent leur scanId au-delà du lien du banc (marque non close, question ouverte ou rendu non confirmé) — débit à son scan, jamais une contribution`);
+        for (const d of b.debitsGardes) console.log(`  débit ${d.id}  scan ${d.scanId}  ${d.etat}  âge ${d.ageJours} j`);
+        console.log(b.banc ? `banc réel — dernière passe d'anonymisation : ${b.banc.lignesEnEchec} ligne(s) échue(s) non traitée(s) (âge max ${b.banc.ageMaxJours} j depuis la bascule), ${b.banc.objetsEnAttente} objet(s) en attente de suppression` : 'banc réel — aucune passe d\'anonymisation enregistrée');
         console.log(`${b.marquesEnSuspens.length} scan(s) dont la marque de livraison reste en suspens (réponse peut-être jamais partie) — débit sans livraison tant qu'elles restent`);
         for (const l of b.marquesEnSuspens) console.log(`  scan ${l.scanId}  ${l.porteur}  ${l.etat}  ouverte le ${l.ouverteLe.toISOString()}${l.issue ? ` (${l.issue})` : ''}`);
         if (b.rendusEchoues.length) {
