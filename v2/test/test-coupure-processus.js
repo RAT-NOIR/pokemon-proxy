@@ -64,7 +64,8 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
     const rembs = async x => (await mouv(x)).filter(m => m.type === 'remboursement' && m.delta === 1);
     const delta = async x => (await mouv(x)).filter(m => m.type !== 'achat').reduce((t, m) => t + m.delta, 0);       // l'achat initial n'est pas un mouvement du scan
     const marqueDe = async x => db.col('scans_en_cours').findOne({ 'porteur.id': x.i._id });
-    const vieillir = async x => { await db.col('scans_en_cours').updateOne({ _id: (await marqueDe(x))._id }, { $set: { ouverteLe: new Date(Date.now() - 20 * MIN) } }); };
+    const vieillir = async x => { await db.col('scans_en_cours').updateOne({ _id: (await marqueDe(x))._id }, { $set: { ouverteLe: new Date(Date.now() - 20 * MIN), batLe: new Date(Date.now() - 20 * MIN) } }); };     // le temps passe : le processus mort ne bat plus
+    const jusquaFin = async x => jusqua(async () => { const m = await marqueDe(x); return m && !['en-suspens', 'en-reprise'].includes(m.etat) ? m : null; });
     // somme(delta) = solde poche par poche : le solde réel vaut la dotation initiale + la somme des delta de chaque poche (réconciliation, lue ici ET par reconcilier)
     async function conserve(x) {
         const par = (await mouv(x)).reduce((t, m) => { t[m.poche] = (t[m.poche] || 0) + m.delta; return t; }, {});
@@ -149,7 +150,7 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         } finally { await c2.arreter(); }
     }
 
-    // ═══════════ SCÉNARIO (c) : coupure juste AVANT l'envoi, la réponse finale étant déjà stockée => CONFIRMÉ, jamais rendu
+    // ═══════════ SCÉNARIO (c) : coupure juste AVANT l'envoi, la réponse finale étant déjà stockée et la marque close => JAMAIS rendu, rejeu = réponse figée
     {
         const x = await instal(1, 5), k = cle();
         const c1 = await lancer('c');
@@ -159,16 +160,63 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         H.v('(c) l\'enfant est mort AU MOMENT d\'envoyer : le client n\'a rien reçu, mais la réponse finale est STOCKÉE (claim fini, statut 200) et le scan est débité (essai 0, acheté 3)', [Boolean(erreur), claim && claim.etat, claim && claim.statut, await poche(x)], [true, 'fini', 200, [0, 3]]);
         H.vrai(`   (arrêt net VOULU : marqueur COUPURE=c, SIGKILL, code ${s1.code}, aucune exception dans le stderr de l'enfant)`, c1.stdout().includes('COUPURE=c') && !/enfant-coupure|Error/.test(c1.stderr()) && s1.code !== 0);
         const m0 = await marqueDe(x);
-        H.v('   la marque est en suspens (la clôture n\'a pas eu lieu)', m0.etat, 'en-suspens');
-        await vieillir(x);
+        H.v('   la marque est DÉJÀ close « livre » (le gestionnaire l\'a close quand il a produit le résultat, avant d\'envoyer) : la passe n\'a rien à faire', m0.etat, 'livre');
+        await vieillir(x);                                    // sans effet sur une marque close : la preuve que la passe ne la touche pas
         const c2 = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
         try {
-            const fait = await jusqua(async () => { const m = await marqueDe(x); return m && !['en-suspens', 'en-reprise'].includes(m.etat) ? m : null; });
-            H.v('   le second processus CONFIRME : marque confirme (reponse-stockee), AUCUN remboursement, crédits toujours pris (le client peut rejouer sa réponse)', [fait && fait.etat, fait && fait.issue, (await rembs(x)).length, await poche(x)], ['confirme', 'reponse-stockee', 0, [0, 3]]);
+            await attendre(1500);
+            const fait = await marqueDe(x);
+            H.v('   le second processus (passe de démarrage) ne touche à rien : marque toujours livre, AUCUN remboursement, crédits toujours pris (le client peut rejouer sa réponse)', [fait && fait.etat, fait && fait.issue, (await rembs(x)).length, await poche(x)], ['livre', undefined, 0, [0, 3]]);
             const j = await poster(c2.url, x.jeton, k);
             H.v('   le client rejoue sa clé : il reçoit la réponse figée (200, Idempotency-Replayed), du MÊME scan, sans 2e débit', [j.statut, j.entetes['idempotency-replayed'], j.json.scanId === String(m0._id), (await debits(x)).length, await poche(x)], [200, 'true', true, 3, [0, 3]]);
             H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE (la marque confirmée n\'est pas un reste)', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
         } finally { await c2.arreter(); }
+    }
+
+    // ═══════════ SCÉNARIO (c2) : coupure juste APRÈS l'écriture de `analyses`, avant la clôture de la marque et avant tout stockage de la réponse => CONFIRMÉ par l'analyse écrite
+    {
+        const x = await instal(1, 5), k = cle();
+        const c1 = await lancer('c2');
+        let erreur = null; try { await poster(c1.url, x.jeton, k); } catch (e) { erreur = e; }
+        const s1 = await c1.fin;
+        const claim = await db.col('idempotence').findOne({ cle: `installation:${x.i._id}|identifier|${k}` });
+        H.v('(c2) l\'enfant est mort juste après l\'écriture de `analyses` : le client n\'a rien reçu, la réponse n\'est PAS stockée (claim « en-cours »), l\'analyse EST écrite, la marque est encore en-suspens, 3 crédits pris', [Boolean(erreur), claim && claim.etat, await db.col('analyses').countDocuments({ porteur: `installation:${x.i._id}` }), (await marqueDe(x)).etat, await poche(x)], [true, 'en-cours', 1, 'en-suspens', [0, 3]]);
+        H.vrai(`   (arrêt net VOULU : marqueur COUPURE=c2, SIGKILL, code ${s1.code}, aucune exception dans le stderr de l'enfant)`, c1.stdout().includes('COUPURE=c2') && !/enfant-coupure|Error/.test(c1.stderr()) && s1.code !== 0);
+        await vieillir(x);
+        const c2 = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
+        try {
+            const fait = await jusquaFin(x);
+            H.v('   le second processus CONFIRME (fait durable : la ligne analyses de ce scan) — marque confirme/analyse-ecrite, AUCUN remboursement, crédits pris (le résultat produit vaut livraison)', [fait && fait.etat, fait && fait.issue, (await rembs(x)).length, await poche(x)], ['confirme', 'analyse-ecrite', 0, [0, 3]]);
+            await db.col('idempotence').updateMany({}, { $set: { expireLe: new Date(Date.now() - 1000) } });
+            const j = await poster(c2.url, x.jeton, k);
+            H.v('   limite ASSUMÉE : une installation (extension, sans compte) ne peut relire son résultat NULLE PART ; son rejeu reste DEBIT (ni gratuit ni double débit) — le crédit couvre le travail fait', [j.statut, j.json.erreur.code, (await debits(x)).length, await poche(x)], [429, 'DEBIT', 3, [0, 3]]);
+            H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
+        } finally { await c2.arreter(); }
+    }
+
+    // ═══════════ SCÉNARIO (d) : la PASSE elle-même est tuée entre le claim `rb|scanId` et le rendu des unités ; une seconde passe finit, avec EXACTEMENT le bon nombre de crédits
+    {
+        const x = await instal(1, 5), k = cle();
+        const c1 = await lancer('b');                         // un lot de 25 : 3 unités prises, aucune réponse
+        try { await poster(c1.url, x.jeton, k); } catch (e) { /* mort voulue */ }
+        await c1.fin;
+        H.v('(d) point de départ : lot mort après le supplément — 3 unités prises (essai 0, acheté 3)', [await poche(x), (await debits(x)).length], [[0, 3], 3]);
+        await vieillir(x);
+        const cp = await lancer('p', { COUPURE_DIFFERE_MS: '0' });                                     // sa passe de démarrage meurt en route
+        const sp = await cp.fin;
+        const claimOrphelin = await db.col('mouvements').findOne({ installationId: x.i._id, cleIdempotence: new RegExp('^rb\\|') });
+        H.vrai(`   (la PASSE est morte en route : marqueur COUPURE=p, SIGKILL, code ${sp.code})`, cp.stdout().includes('COUPURE=p') && sp.code !== 0);
+        const mp = await marqueDe(x), rp = await R.reconcilier(x.p, cfg);
+        H.v('   état laissé : claim rb|scanId ORPHELIN, 3 unités toujours prises (essai 0, acheté 3), 0 ligne +1, marque en-reprise — et la réconciliation la LISTE (non propre)', [Boolean(claimOrphelin), await poche(x), (await rembs(x)).length, mp.etat, rp.marquesEnSuspens.map(y => y.etat), rp.propre], [true, [0, 3], 0, 'en-reprise', ['en-reprise'], false]);
+        await db.col('scans_en_cours').updateOne({ _id: mp._id }, { $set: { priseLe: new Date(Date.now() - 20 * MIN) } });      // la passe morte est jugée périmée
+        const cs = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
+        try {
+            const fait = await jusquaFin(x);
+            H.v('   la seconde passe REPREND le remboursement unité par unité : essai 1, acheté 5 (EXACTEMENT les 3 unités), 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [await poche(x), (await rembs(x)).length, await delta(x), fait && fait.etat, fait && fait.issue], [[1, 5], 3, 0, 'rendu', 'repris']);
+            H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
+            await attendre(1200);
+            H.v('   rien de plus rendu ensuite (3 lignes +1 toujours, essai 1, acheté 5)', [(await rembs(x)).length, await poche(x)], [3, [1, 5]]);
+        } finally { await cs.arreter(); }
     }
     for (const e of vivants) { try { e.kill(); } catch { /* déjà mort */ } }
     await mongoose.disconnect(); await H.arreterBanc();

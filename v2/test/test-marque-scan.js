@@ -18,6 +18,7 @@ const MIN = 60e3;
 let nIp = 0; const ip = () => { nIp++; return { 'x-forwarded-for': `10.12.${Math.floor(nIp / 250)}.${nIp % 250 + 1}` }; };
 let nCle = 0; const cle = () => `banc-o5-${Date.now().toString(36)}-${++nCle}`;
 const attendre = ms => new Promise(r => setTimeout(r, ms));
+async function jusqua(f, delaiMs = 10000) { const t0 = Date.now(); for (;;) { if (await f()) return true; if (Date.now() - t0 > delaiMs) return false; await attendre(20); } }
 const marques = () => db.col('scans_en_cours');
 const lireMarque = id => marques().findOne({ _id: id });
 const essais = async p => (await db.col('installations').findOne({ _id: p.id })).essais;
@@ -55,7 +56,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const p = await inst(); const scanId = new ObjectId();
         await MS.ouvrir({ scanId, porteur: p, cleDebit: `scan|installation:${p.id}|forme1`, cleClaim: `installation:${p.id}|identifier|forme1` });
         const m = await lireMarque(scanId);
-        H.v('1. marque ouverte : champs exacts (_id, porteur, cleDebit, cleClaim, etat, ouverteLe) — ni IP, ni titre, ni description, ni image', Object.keys(m).sort(), ['_id', 'cleClaim', 'cleDebit', 'etat', 'ouverteLe', 'porteur']);
+        H.v('1. marque ouverte : champs exacts (_id, porteur, cleDebit, cleClaim, etat, ouverteLe, batLe) — ni IP, ni titre, ni description, ni image', Object.keys(m).sort(), ['_id', 'batLe', 'cleClaim', 'cleDebit', 'etat', 'ouverteLe', 'porteur']);
         H.v('   etat en-suspens, porteur {type,id}, aucune date de clôture ni expiration (une marque non close ne doit JAMAIS expirer)', [m.etat, m.porteur, m.closLe, m.expireLe], ['en-suspens', { type: 'installation', id: p.id }, undefined, undefined]);
         const { BSON } = require('mongodb');
         const tOuverte = BSON.calculateObjectSize(m);
@@ -68,11 +69,20 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.vrai('   deux index déclarés dans modeles.js : (etat, ouverteLe) et un TTL sur expireLe, et verifierIndex n\'en manque aucun', idx.some(i => i.expireAfterSeconds === 0 && i.key.expireLe === 1) && idx.some(i => i.key.etat === 1 && i.key.ouverteLe === 1) && (await M.verifierIndex()).manquants.length === 0);
     }
 
-    // ═══════════ 2. une marque trop jeune n'est pas touchée
+    // ═══════════ 2. une marque trop jeune, ou dont le processus BAT encore, n'est pas touchée
     {
-        const s = await scanMort({ age: 14 * MIN });
+        const jeune = await scanMort({ age: 4 * MIN });                         // sous le plancher d'âge de 5 min (horloge décalée entre instances) : même sans battement
+        const vivant = await scanMort({ age: 40 * MIN });                       // une requête de 40 min mais VIVANTE : elle vient de battre (l'heure du serveur Mongo)
+        await MS.battre(vivant.scanId);
         const b = await MS.rattraper(sec);
-        H.v('2. marque de 14 min (seuil 15) : non examinée, non rendue, solde inchangé (essais 2), état en-suspens', [b.examinees, await essais(s.p), (await lireMarque(s.scanId)).etat], [0, 2, 'en-suspens']);
+        H.v('2. marque de 4 min (plancher 5 min) : non examinée, solde inchangé (essais 2)', [await essais(jeune.p), (await lireMarque(jeune.scanId)).etat], [2, 'en-suspens']);
+        H.v('   marque de 40 min dont le battement est FRAIS : non examinée, non rendue (essais 2) — une requête longue mais vivante n\'est jamais rendue ; 0 examen au total', [await essais(vivant.p), (await lireMarque(vivant.scanId)).etat, b.examinees], [2, 'en-suspens', 0]);
+        await MS.battre(vivant.scanId);
+        const perimee = await scanMort({ age: 40 * MIN }); await marques().updateOne({ _id: perimee.scanId }, { $set: { batLe: new Date(Date.now() - 2 * MIN) } });
+        const b2 = await MS.rattraper(sec);
+        H.v('   battement vieux de 2 min (3 battements manqués = 90 s) : prise et rendue ; la marque qui bat reste intacte', [b2.examinees, await essais(perimee.p), (await lireMarque(perimee.scanId)).etat, (await lireMarque(vivant.scanId)).etat], [1, 3, 'rendu', 'en-suspens']);
+        H.v('   le battement ne se pose que sur une marque en-suspens, à l\'heure de la base (batLe plus récent après battre())', (await lireMarque(vivant.scanId)).batLe.getTime() > Date.now() - 30e3, true);
+        await marques().deleteOne({ _id: jeune.scanId }); await marques().deleteOne({ _id: vivant.scanId });
     }
 
     // ═══════════ 3. un scan mort depuis plus de 15 min est rendu, sans plafond, motif arret-serveur
@@ -208,13 +218,19 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const m = await lireMarque(s.scanId);
         H.v('10b. rendu impossible (poche au plafond) : marque en echec (raison écrite), ligne de débit restituée, jamais de boucle (2e passe : 0 examen)', [m.etat, typeof m.issue, (await MS.rattraper(sec)).examinees], ['echec', 'string', 0]);
         void b;
+        // 10c. (mutant « enSuspens sans les echec ») : un echec est LISTÉ par la réconciliation et le verdict n'est pas propre — sans limite d'âge
+        const rec = await R.reconcilier(s.p);
+        H.v('10c. une marque en echec est listée par la réconciliation (elle n\'expire jamais) et rend le verdict non propre', [rec.marquesEnSuspens.map(x => x.etat), rec.propre], [['echec'], false]);
     }
 
     // ═══════════ 11. la réconciliation liste les marques en suspens (et le verdict n'est pas « propre » tant qu'il en reste)
     {
-        const jeune = await scanMort({ age: 5 * MIN });
+        const jeune = await scanMort({ age: 3 * MIN });
         const rj = await R.reconcilier(jeune.p);
-        H.v('11. marque de 5 min : pas encore « en suspens » pour la réconciliation (un scan peut durer) ; verdict propre', [rj.marquesEnSuspens.length, rj.propre], [0, true]);
+        H.v('11. marque de 3 min : pas encore « en suspens » pour la réconciliation (un scan peut durer) ; verdict propre', [rj.marquesEnSuspens.length, rj.propre], [0, true]);
+        const long = await scanMort({ age: 40 * MIN }); await MS.battre(long.scanId);
+        const rl = await R.reconcilier(long.p);
+        H.v('   marque de 40 min dont le processus BAT encore : pas listée (requête longue mais vivante) ; verdict propre', [rl.marquesEnSuspens.length, rl.propre], [0, true]);
         const vieux = await scanMort({ age: 20 * MIN });
         const rv = await R.reconcilier(vieux.p);
         H.v('   marque de 20 min : listée (scanId, état, âge), verdict NON propre alors que somme(delta) = solde', [rv.marquesEnSuspens.map(x => [String(x.scanId), x.etat]), rv.ecarts.length, rv.propre], [[[String(vieux.scanId), 'en-suspens']], 0, false]);
@@ -231,6 +247,83 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const repris = await MS.rattraper(sec);
         H.v('   et la passe suivante la REPREND (priseLe périmée) et rend une fois', [repris.examinees, (await lireMarque(reprise.scanId)).etat, await essais(reprise.p), await rembs(reprise.p)], [1, 'rendu', 3, 1]);
     }
+    // ═══════════ 11b. LA RÉCONCILIATION GLOBALE, sur un état PROPRE (rien d'autre ne la rend non propre) — le mutant « reconcilierTous sans les marques »
+    {
+        for (const c of ['mouvements', 'installations', 'comptes', 'scans_en_cours', 'idempotence', 'questions', 'analyses', 'plafonds']) await db.col(c).deleteMany({});
+        const vide = await R.reconcilierTous();
+        H.v('11b. base vide de tout reste : reconcilierTous est propre (contrôle : le verdict peut être vrai)', [vide.propre, vide.marquesEnSuspens.length, vide.avecEcart, vide.rendusEchoues.length], [true, 0, 0, 0]);
+        const s = await scanMort({ age: 20 * MIN });
+        const t = await R.reconcilierTous();
+        H.v('   un seul scan mort (marque périmée, somme(delta) = solde, aucune ligne en échec) : reconcilierTous le liste et n\'est PAS propre', [t.marquesEnSuspens.map(x => String(x.scanId)), t.avecEcart, t.rendusEchoues.length, t.propre], [[String(s.scanId)], 0, 0, false]);
+        await MS.rattraper(sec);
+        H.v('   après la passe : propre', (await R.reconcilierTous()).propre, true);
+    }
+
+    // ═══════════ 11c. un remboursement INTERROMPU par la mort de la passe (ou du scan) : le claim `rb|scanId` est là, les unités sont encore prises — la passe les REPREND (jamais « deja-rembourse » pris pour une preuve)
+    {
+        const s = await scanMort({ unites: 3, essaisInit: 1, acheteInit: 4 });                // 1 essai + 2 achetés pris
+        await db.col('mouvements').insertOne({ installationId: s.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: s.scanId, etat: 'rembourse', cleIdempotence: `rb|${s.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
+        const b = await MS.rattraper(sec);
+        const m = await lireMarque(s.scanId);
+        H.v('11c. claim rb|scanId orphelin (3 unités encore prises) : les 3 unités sont reprises une à une — essai 1, acheté 4, 3 lignes +1, somme(delta) 0, marque rendu issue « repris »', [[await essais(s.p), await achete(s.p)], await rembs(s.p), await somme(s.p), m.etat, m.issue, b.reprises], [[1, 4], 3, 0, 'rendu', 'repris', 3]);
+        const b2 = await MS.rattraper(sec);
+        H.v('   jouée de nouveau : rien de plus (chaque unité ne se rend qu\'une fois)', [b2.examinees, await rembs(s.p), await essais(s.p)], [0, 3, 1]);
+        // reprise PARTIELLE : une unité déjà rendue par le scan avant sa mort, deux encore prises
+        const t = await scanMort({ unites: 3, essaisInit: 1, acheteInit: 4 });
+        await db.col('mouvements').insertOne({ installationId: t.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: t.scanId, etat: 'rembourse', cleIdempotence: `rb|${t.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
+        const premiere = (await db.col('mouvements').find({ installationId: t.p.id, type: 'debit', scanId: t.scanId }).sort({ _id: 1 }).toArray())[0];
+        const une = await argent.rembourserLigne(t.p, premiere.cleIdempotence, 'arret-serveur');
+        const b3 = await MS.rattraper(sec);
+        H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [1, 4], 0]);
+    }
+
+    // ═══════════ 11d. la passe REND AUSSI d'une passe qui rend en parallèle d'une autre passe lente : l'état final ne se pose que si la marque est encore à NOUS (mutant « finir sans condition »)
+    {
+        const s = await scanMort();
+        let lacher; const portillon = new Promise(r => { lacher = r; });
+        const lente = { rembourser: async () => { await portillon; return { rendu: false, raisonNonRembourse: 'poche-introuvable' }; }, rembourserLigne: argent.rembourserLigne };
+        const pA = MS.rattraper({ argent: lente });
+        await jusqua(async () => (await lireMarque(s.scanId)).etat === 'en-reprise');
+        await marques().updateOne({ _id: s.scanId }, { $set: { priseLe: new Date(Date.now() - 20 * MIN) } });    // la passe lente est jugée morte : une autre reprend
+        const bB = await MS.rattraper(sec);
+        lacher(); const bA = await pA;
+        const m = await lireMarque(s.scanId);
+        H.v('11d. une passe lente est dépassée par une autre qui rend : la marque reste « rendu » (la passe lente ne réécrit PAS en echec), un seul remboursement (essais 3)', [m.etat, m.issue, bB.rendues, bA.echecs, await essais(s.p), await rembs(s.p)], ['rendu', 'rendu', 1, 1, 3, 1]);
+    }
+
+    // ═══════════ 11e. une question DÉJÀ RÉPONDUE par un candidat : un résultat A été livré — la passe ne rend rien et clôt en « livre » (mutant « deja-livre traité comme rendu »)
+    {
+        const s = await scanMort();
+        await argent.reserverQuestion(s.p, { poche: 'essai' }, { scanId: s.scanId, carte: 0, raison: 'egalite', candidats: [1, 2], choix: [{ id: 'a', idProduct: 1 }, { id: 'b', idProduct: 2 }] });
+        const rep = await argent.repondreQuestion(s.p, { scanId: s.scanId, carte: 0, choix: 'a' });
+        const b = await MS.rattraper(sec);
+        const m = await lireMarque(s.scanId);
+        H.v('11e. question répondue par un candidat puis passe : rien rendu (essais 2, 0 ligne +1), marque « livre » issue question-repondue, comptée confirmée', [rep.statut, await essais(s.p), await rembs(s.p), m.etat, m.issue, b.confirmees], [200, 2, 0, 'livre', 'question-repondue', 1]);
+    }
+
+    // ═══════════ 11f. le fait durable « l'analyse est écrite » : la passe CONFIRME (le résultat est consultable), ne rend rien
+    {
+        const s = await scanMort();
+        await db.col('analyses').insertOne({ _id: s.scanId, porteur: `installation:${s.p.id}`, surface: 'extension', statut: 'identifiee', cartes: [], produits: [], facturation: { debite: 1 }, creeLe: new Date(), expireLe: new Date(Date.now() + 86400e3) });
+        const autre = await scanMort();                                                        // l'analyse d'un AUTRE porteur au même _id ne vaut rien (porteur vérifié)
+        await db.col('analyses').insertOne({ _id: autre.scanId, porteur: 'installation:inconnu', surface: 'extension', statut: 'identifiee', cartes: [], produits: [], facturation: { debite: 1 }, creeLe: new Date(), expireLe: new Date(Date.now() + 86400e3) });
+        const b = await MS.rattraper(sec);
+        H.v('11f. marque périmée avec ligne analyses de CE scan et de CE porteur : confirmée (issue analyse-ecrite), 0 remboursement ; une analyse au nom d\'un autre porteur ne confirme pas (rendu)',
+            [(await lireMarque(s.scanId)).etat, (await lireMarque(s.scanId)).issue, await essais(s.p), await rembs(s.p), (await lireMarque(autre.scanId)).etat, await essais(autre.p), b.confirmees], ['confirme', 'analyse-ecrite', 2, 0, 'rendu', 3, 1]);
+    }
+
+    // ═══════════ 11g. la suppression d'un compte purge ses marques ; celles d'une installation (qui survit) et d'un autre compte restent
+    {
+        const MDP = require('../comptes/mots-de-passe'); const S = require('../comptes/service');
+        const motDePasse = 'un-mot-de-passe-solide-1';
+        const c = await compte({ solde: { accueil: 0, achete: 0 }, motDePasse: await MDP.hacher(motDePasse) });
+        const autre = await compte({ solde: { accueil: 0, achete: 0 } });
+        const i = await inst({ essais: 1 });
+        for (const [porteur, ageMin] of [[c, 20], [autre, 20], [i, 20]]) await MS.ouvrir({ scanId: new ObjectId(), porteur, cleDebit: `scan|${porteur.type}:${porteur.id}|suppr`, maintenant: new Date(Date.now() - ageMin * MIN) });
+        const r = await S.supprimerCompte({ compte: c.compte, motDePasse, renonciation: true, cfg });
+        H.v('11g. supprimerCompte : 200, la marque du compte supprimé a disparu ; celle d\'un autre compte et celle d\'une installation restent', [r.statut, await marques().countDocuments({ 'porteur.id': c.id }), await marques().countDocuments({ 'porteur.id': autre.id }), await marques().countDocuments({ 'porteur.id': i.id })], [200, 0, 1, 1]);
+    }
+
     // nettoyage des marques pour que la suite compte juste
     await marques().deleteMany({}); await db.col('idempotence').deleteMany({});
 
@@ -262,10 +355,13 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
     const poster = (url, jeton, k = cle(), c = corps()) => H.appel(url, '/api/identifier', { methode: 'POST', corps: c, entetes: { origin: ORIGINE, ...ip(), authorization: `Bearer ${jeton}`, 'idempotency-key': k } });
     {
         const x = await instJ(); const k = cle();
-        const r = await poster(sv.url, x.jeton, k);
-        await attendre(150);                                       // 'finish' ferme la marque APRÈS l'envoi : on lui laisse le temps d'écrire
+        const suivis = [], suivreOrig = MS.suivre;                    // espion : le gestionnaire BAT pendant qu'il traite et arrête son battement
+        MS.suivre = (id, o) => { const s = suivreOrig(id, o); const rec = { id: String(id), arrete: false }; suivis.push(rec); return { arreter() { rec.arrete = true; return s.arreter(); } }; };
+        let r; try { r = await poster(sv.url, x.jeton, k); } finally { MS.suivre = suivreOrig; }
+        await attendre(150);
+        H.v('12. le gestionnaire démarre UN suivi (battement) pour le scan et l\'arrête à la fin', [suivis.length, suivis[0] && suivis[0].id === r.json.scanId, suivis[0] && suivis[0].arrete], [1, true, true]);
         const ms = await marques().find({ 'porteur.id': x.i._id }).toArray();
-        H.v('12. une carte identifiée (200) : UNE marque, close livre, ouverte AVANT la chaîne (vue en-suspens pendant la lecture), débit unique', [r.statut, ms.length, ms[0] && ms[0].etat, vuPendant && vuPendant.etat, (await mouvements(x.p)).filter(m => m.type === 'debit').length], [200, 1, 'livre', 'en-suspens', 1]);
+        H.v('   une carte identifiée (200) : UNE marque, close livre, ouverte AVANT la chaîne (vue en-suspens pendant la lecture), débit unique', [r.statut, ms.length, ms[0] && ms[0].etat, vuPendant && vuPendant.etat, (await mouvements(x.p)).filter(m => m.type === 'debit').length], [200, 1, 'livre', 'en-suspens', 1]);
         H.v('   la marque porte le scanId de la réponse, les deux clés (débit et claim d\'idempotence), et rien d\'autre', [String(ms[0]._id) === r.json.scanId, ms[0].cleDebit === `scan|installation:${x.i._id}|${k}`, ms[0].cleClaim === `installation:${x.i._id}|identifier|${k}`], [true, true, true]);
         const rej = await poster(sv.url, x.jeton, k);
         H.v('   le MÊME appel rejoué : la réponse figée d\'idempotence, aucune nouvelle marque, aucun nouveau débit', [rej.entetes['idempotency-replayed'], await marques().countDocuments({ 'porteur.id': x.i._id }), (await mouvements(x.p)).filter(m => m.type === 'debit').length], ['true', 1, 1]);
@@ -294,7 +390,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         let r; try { r = await poster(sv.url, x.jeton); await attendre(150); } finally { console.error = e0; chaineImpl = null; }
         const m = await marques().findOne({ 'porteur.id': x.i._id });
         H.v('14. la chaîne lève : 500 SERVEUR remboursé par la route, marque close livre (la réponse est partie), la passe ne rend pas une 2e fois', [r.statut, await essais(x.p), m.etat], [500, 3, 'livre']);
-        await marques().updateOne({ _id: m._id }, { $set: { etat: 'en-suspens', ouverteLe: new Date(Date.now() - 20 * MIN) }, $unset: { closLe: '', expireLe: '' } });
+        await marques().updateOne({ _id: m._id }, { $set: { etat: 'en-suspens', ouverteLe: new Date(Date.now() - 20 * MIN), batLe: new Date(Date.now() - 20 * MIN) }, $unset: { closLe: '', expireLe: '' } });
         await MS.rattraper(sec);
         H.v('   (même scan, marque rouverte à la main : la passe voit « déjà remboursé » et ne rend rien de plus)', [await essais(x.p), await rembs(x.p), (await lireMarque(m._id)).issue], [3, 1, 'deja-rembourse']);
     }
@@ -320,27 +416,71 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         let r; try { r = await poster(sv.url, x.jeton); } finally { db.col = colOrig; console.error = e0; }
         H.v('16. marque impossible à écrire : 503 INDISPONIBLE, AUCUN crédit pris (essais 3), aucun mouvement — jamais un débit sans marque', [r.statut, r.json.erreur.code, await essais(x.p), (await mouvements(x.p)).length], [503, 'INDISPONIBLE', 3, 0]);
     }
+    // 16b. C1 — le CLIENT coupe avant la réponse (scanner sans clé, extension, peu importe) : le gestionnaire va au bout, ferme sa marque lui-même ; la passe, même vieillie, ne rend RIEN
+    {
+        const x = await instJ();
+        chaineImpl = async (req, res) => { await attendre(500); return res.json({ ...aff(PID).corps, scanId: String(req.scanIdImpose) }); };
+        const ctl = new AbortController();
+        const p = fetch(sv.url + '/api/identifier', { method: 'POST', signal: ctl.signal, headers: { 'content-type': 'application/json', origin: ORIGINE, ...ip(), authorization: `Bearer ${x.jeton}`, 'idempotency-key': cle() }, body: JSON.stringify(corps()) }).catch(e => e);
+        await attendre(150); ctl.abort(); const coupe = await p;
+        await jusqua(async () => { const m = await marques().findOne({ 'porteur.id': x.i._id }); return m && m.etat === 'livre'; });
+        chaineImpl = null;
+        const m = await marques().findOne({ 'porteur.id': x.i._id });
+        H.v('16b. le client coupe la connexion (150 ms, la chaîne en met 500) : le gestionnaire finit, l\'analyse est écrite, la marque est « livre » SANS réponse reçue ; 1 crédit pris (essais 2)', [Boolean(coupe && coupe.name === 'AbortError'), m && m.etat, await db.col('analyses').countDocuments({ porteur: `installation:${x.i._id}` }), await essais(x.p)], [true, 'livre', 1, 2]);
+        await marques().updateOne({ _id: m._id }, { $set: { ouverteLe: new Date(Date.now() - 60 * MIN), batLe: new Date(Date.now() - 60 * MIN) } });
+        const b = await MS.rattraper(sec);
+        H.v('   des heures plus tard la passe ne rend rien : 0 examen, 0 remboursement « arret-serveur » (une coupure du client ne se rembourse jamais), essais 2', [b.examinees, await rembs(x.p), await essais(x.p)], [0, 0, 2]);
+    }
+    // 16c. M1 — un débit qui LÈVE : la route répond INDISPONIBLE, la marque reste OUVERTE (jamais close « livre »), la passe tranche (aucun débit enregistré => sans-debit)
+    {
+        const x = await instJ(); const argentRoute = registre.obtenir('argent'), debiterOrig = argentRoute.debiter;     // le registre du montage de la route (l'assembleur l'a re-fourni)
+        argentRoute.debiter = async () => { throw Object.assign(new Error('x'), { code: 'PANNE' }); };
+        const e0 = console.error; console.error = () => { };
+        let r; try { r = await poster(sv.url, x.jeton); await attendre(150); } finally { argentRoute.debiter = debiterOrig; console.error = e0; }
+        const m = await marques().findOne({ 'porteur.id': x.i._id });
+        H.v('16c. le débit lève : 503 INDISPONIBLE, aucun crédit pris, la marque reste en-suspens (jamais close livre)', [r.statut, await essais(x.p), m && m.etat], [503, 3, 'en-suspens']);
+        await marques().updateOne({ _id: m._id }, { $set: { ouverteLe: new Date(Date.now() - 20 * MIN), batLe: new Date(Date.now() - 20 * MIN) } });
+        const b = await MS.rattraper(sec);
+        H.v('   la passe la clôt « sans-debit » (aucune ligne de débit pour ce scan) sans rien rendre', [(await lireMarque(m._id)).etat, b.sansDebit, await rembs(x.p), await essais(x.p)], ['sans-debit', 1, 0, 3]);
+    }
     await sv.fermer(); await svLot.fermer();
+
+    // ═══════════ 16d. le suivi (battement) : il bat à l'heure de la base, s'arrête, et ne retient pas le processus
+    {
+        const posees = [];
+        const minuteurs = { setInterval: (f, ms) => { const o = { f, ms, unref() { this.u = true; return this; } }; posees.push(o); return o; }, setTimeout: (f, ms) => { const o = { f, ms, unref() { this.u = true; return this; } }; posees.push(o); return o; },
+            clearInterval: o => { o.annule = true; }, clearTimeout: o => { o.annule = true; } };
+        const s = await scanMort({ age: 40 * MIN });
+        const avant = (await lireMarque(s.scanId)).batLe.getTime();
+        const suivi = MS.suivre(s.scanId, { minuteurs });
+        const i = posees[0];
+        H.v('16d. suivre : un intervalle de 30 s et un filet de 30 min, tous deux unref', [posees.length, i.ms, posees[1].ms, i.u === true && posees[1].u === true], [2, MS.BATTEMENT_MS, MS.SUIVI_MAX_MS, true]);
+        await i.f(); await attendre(200);
+        H.vrai('   un battement rafraîchit batLe (de 40 min en arrière à maintenant)', (await lireMarque(s.scanId)).batLe.getTime() > avant + 30 * MIN);
+        suivi.arreter();
+        H.vrai('   arreter() annule l\'intervalle et le filet', i.annule === true && posees[1].annule === true);
+        await marques().deleteOne({ _id: s.scanId });
+    }
 
     // ═══════════ 17. la passe de démarrage ET la passe périodique (modèle : la purge du banc, B6.4)
     {
-        H.vrai('17. l\'intervalle de la passe est ≤ le seuil (sinon une marque trop jeune au démarrage ne serait traitée qu\'après un tour de plus que prévu)', MS.INTERVALLE_MS <= MS.SEUIL_MS && MS.INTERVALLE_MS > 0);
-        H.v('   seuil 15 min = au-dessus de la fenêtre maximale d\'une requête sous idempotence (battement 10 min + claim 2 min = 12 min) ; différé de démarrage ≤ 1 min', [MS.SEUIL_MS, MS.SEUIL_MS > (cfg.retention.idempotenceBattementMaxMinutes + cfg.retention.idempotenceEnCoursMinutes) * MIN, MS.DIFFERE_MS <= MIN], [15 * MIN, true, true]);
+        H.vrai('17. l\'intervalle de la passe est ≤ le plancher d\'âge (une marque trop jeune au démarrage est prise au plus un tour plus tard) ; il n\'y a plus de seuil de durée', MS.INTERVALLE_MS <= MS.PLANCHER_MS && MS.INTERVALLE_MS > 0 && MS.SEUIL_MS === undefined);
+        H.v('   battement 30 s, périmé à trois battements manqués (90 s), plancher d\'âge 5 min ; différé de démarrage ≤ 1 min', [MS.BATTEMENT_MS, MS.PERIME_MS, MS.PLANCHER_MS, MS.DIFFERE_MS <= MIN], [30e3, 90e3, 5 * MIN, true]);
         const posees = [];
         const minuteurs = {
             setTimeout: (f, ms) => { const o = { f, ms, unref() { this.u = true; return this; } }; posees.push(['timeout', o]); return o; },
             setInterval: (f, ms) => { const o = { f, ms, unref() { this.u = true; return this; } }; posees.push(['interval', o]); return o; },
             clearTimeout: o => { o.annule = true; }, clearInterval: o => { o.annule = true; }
         };
-        const jeune = await scanMort({ age: 5 * MIN }), vieux = await scanMort({ age: 25 * MIN });
+        const jeune = await scanMort({ age: 3 * MIN }), vieux = await scanMort({ age: 25 * MIN });
         MS.demarrerRattrapage({ minuteurs, argent: () => argent });
         const t = posees.find(x => x[0] === 'timeout')[1], i = posees.find(x => x[0] === 'interval')[1];
-        H.v('   démarrage : un différé et un intervalle, tous deux unref (ils ne retiennent jamais le processus), intervalle ≤ seuil', [posees.length, t.u === true, i.u === true, i.ms <= MS.SEUIL_MS, t.ms <= MIN], [2, true, true, true, true]);
+        H.v('   démarrage : un différé et un intervalle, tous deux unref (ils ne retiennent jamais le processus), intervalle ≤ seuil', [posees.length, t.u === true, i.u === true, i.ms <= MS.PLANCHER_MS, t.ms <= MIN], [2, true, true, true, true]);
         await t.f(); await attendre(250);
-        H.v('   la passe différée au démarrage rend le scan mort (25 min) et laisse la marque de 5 min', [await essais(vieux.p), (await lireMarque(vieux.scanId)).etat, (await lireMarque(jeune.scanId)).etat, await essais(jeune.p)], [3, 'rendu', 'en-suspens', 2]);
-        await marques().updateOne({ _id: jeune.scanId }, { $set: { ouverteLe: new Date(Date.now() - 16 * MIN) } });         // le temps passe : la marque vieillit
+        H.v('   la passe différée au démarrage rend le scan mort (25 min) et laisse la marque de 3 min', [await essais(vieux.p), (await lireMarque(vieux.scanId)).etat, (await lireMarque(jeune.scanId)).etat, await essais(jeune.p)], [3, 'rendu', 'en-suspens', 2]);
+        await marques().updateOne({ _id: jeune.scanId }, { $set: { ouverteLe: new Date(Date.now() - 16 * MIN), batLe: new Date(Date.now() - 16 * MIN) } });         // le temps passe : la marque vieillit, son processus ne bat plus
         await i.f(); await attendre(250);
-        H.v('   la passe PÉRIODIQUE la traite quand elle a vieilli au-delà du seuil (essais 3, rendu une fois)', [await essais(jeune.p), (await lireMarque(jeune.scanId)).etat, await rembs(jeune.p)], [3, 'rendu', 1]);
+        H.v('   la passe PÉRIODIQUE la traite quand elle a vieilli au-delà du plancher et que son battement est périmé (essais 3, rendu une fois)', [await essais(jeune.p), (await lireMarque(jeune.scanId)).etat, await rembs(jeune.p)], [3, 'rendu', 1]);
         MS.arreterRattrapage();
         H.vrai('   arrêter annule le différé et l\'intervalle', t.annule === true && i.annule === true);
         // pas de passe sans Mongo prêt
@@ -351,8 +491,13 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
     // ═══════════ 18. aucun interrupteur de panne dans la production ; l'interrupteur v2 éteint ne monte rien
     {
         const lire = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
-        const prod = ['argent/marque-scan.js', 'identifier/routes.js', 'identifier/lot.js', 'identifier/monter.js', 'argent/lot.js', 'transport/idempotence.js']      // (reconcilier.js a un CLI qui sort par process.exit : hérité, sans rapport avec une panne).map(f => [f, lire(f)]);
-        H.vrai('18. aucun fichier de production touché par O5 ne contient process.exit, process.kill, ni de lecture d\'environnement pour une panne', prod.every(([, s]) => !/process\.(exit|kill|abort)\(/.test(s.replace(/\/\/.*$/gm, '')) && !/process\.env\.\w*(PANNE|COUPURE|ARRET_TEST|CRASH)/i.test(s)));
+        // (reconcilier.js a un CLI qui sort par process.exit : hérité, sans rapport avec une panne, donc hors de cette liste)
+        const FICHIERS = ['argent/marque-scan.js', 'identifier/routes.js', 'identifier/lot.js', 'identifier/monter.js', 'argent/lot.js', 'transport/idempotence.js'];
+        const prod = FICHIERS.map(f => [f, lire(f)]);
+        const fautif = s => /process\.(exit|kill|abort)\(/.test(s.replace(/\/\/.*$/gm, '')) || /process\.env\.\w*(PANNE|COUPURE|ARRET_TEST|CRASH)/i.test(s.replace(/\/\/.*$/gm, ''));
+        H.vrai('18. le prédicat d\'inertie MORD (contrôle) : il signale un texte qui arrête le processus, ou qui lit une variable de panne', fautif('if (process.env.PANNE_TEST) process.exit(1);') && fautif('process.kill(process.pid)') && !fautif('const x = 1; // process.exit(1)'));
+        H.vrai(`   les ${FICHIERS.length} fichiers sont bien LUS (6 textes de plus de 1000 caractères : un prédicat sur des noms de fichiers ne mord sur rien)`, prod.length === 6 && prod.every(([, s]) => typeof s === 'string' && s.length > 1000));
+        H.vrai('   aucun fichier de production touché par O5 ne contient process.exit, process.kill, ni de lecture d\'environnement pour une panne', prod.every(([, s]) => !fautif(s)));
         H.vrai('   marque-scan.js ne lit aucune variable d\'environnement', !/process\.env/.test(lire('argent/marque-scan.js').replace(/\/\/.*$/gm, '')));
         const { demarrer, appeler, RACINE } = require('../../verrou/serveur');
         const FAUX = path.join(RACINE, 'verrou', 'faux-reseau.js');

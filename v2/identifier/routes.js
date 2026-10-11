@@ -206,7 +206,7 @@ async function consulterRegleG({ deps, cfg, entree, scanId, resultat, corpsChain
 
 function traiterIdentifier(cfg, deps = {}) {
     const catalogue = deps.catalogue || creerCatalogue({ cfg });
-    return async function traiterIdentifierV2(req, res) {
+    const interne = async function traiterIdentifierV2(req, res, etat) {
         const porteur = req.v2 && req.v2.porteur, entree = req.entree;
         let argent;
         try {
@@ -224,16 +224,17 @@ function traiterIdentifier(cfg, deps = {}) {
         const cleIdem = req.headers['idempotency-key'];
         const cleDebit = `scan|${porteur.type}:${porteur.id}|${cleIdem}`;
         // 2 bis. O5 — LA MARQUE DE LIVRAISON, avant le débit (v2/argent/marque-scan.js) : aucun crédit n'est pris sans marque, pour une carte comme pour un lot, extension comme scanner.
-        // Ouverte AVANT le débit (et non après) pour qu'aucun arrêt du processus ne tombe entre la prise du crédit et l'écriture de la marque ; retirée si le débit n'a rien pris ;
-        // close quand la réponse est remise au transport (`finish`). Une marque qui ne s'écrit pas BLOQUE : rien n'est débité, 503. Sinon une marque `en-suspens` plus vieille que
-        // le seuil est rendue (ou confirmée) par la passe de rattrapage — voir marque-scan.js pour le sens favorable au client et la borne de durée.
+        // Ouverte AVANT le débit (et non après) pour qu'aucun arrêt du processus ne tombe entre la prise du crédit et l'écriture de la marque ; retirée si le débit n'a rien pris.
+        // Tant que ce gestionnaire traite, il BAT (suivre) ; il CLÔT la marque lui-même quand il a PRODUIT le résultat (fermer, plus bas), que le client soit encore là ou non : une coupure du
+        // client ne rend jamais un scan. Une marque qui ne s'écrit pas BLOQUE : rien n'est débité, 503. Une marque dont le battement s'est arrêté (processus mort) est rendue ou confirmée par la passe.
         try { await MS.ouvrir({ scanId, porteur, cleDebit, cleClaim: (req.idempotence && req.idempotence.cle) || null }); }
         catch (e) { journalErreur('marque de livraison', e); return repondreErreur(res, 'INDISPONIBLE'); }
-        res.once('finish', () => { MS.clore(scanId).catch(e => journalErreur('clôture de la marque', e)); });
+        etat.suivi = MS.suivre(scanId);
         const sansMarque = async () => { try { await MS.retirer(scanId); } catch (e) { journalErreur('retrait de la marque', e); } };   // un retrait raté laisse une marque que la passe clora (aucun débit : rien à rendre)
+        const fermer = async () => { if (etat.suivi) etat.suivi.arreter(); try { await MS.clore(scanId); } catch (e) { journalErreur('clôture de la marque', e); } };   // un échec laisse la marque : la passe la confirme (analyse écrite) ou la rend
         // 3. LE DÉBIT, avant toute chose
         let debit;
-        // (un débit qui LÈVE garde sa marque : le crédit a pu être pris — la passe le dira)
+        // (un débit qui LÈVE garde sa marque OUVERTE, battement arrêté : le crédit a pu être pris, la passe le dira — jamais close ici)
         try { debit = await argent.debiter(porteur, { scanId, cleIdempotence: cleDebit }); }
         catch (e) { journalErreur('débit', e); return repondreErreur(res, 'INDISPONIBLE'); }
         // ni refus, ni rejeu, ni administrateur ne prennent de crédit : pas de marque
@@ -363,16 +364,19 @@ function traiterIdentifier(cfg, deps = {}) {
             try { facturation = facturationDe('panne', { admin, rendu, question: false, cause: rendu ? null : (cause ? raisonPublique(cause) : 'erreur') }); }
             catch (e3) { journalErreur('facturation après exception', e3); facturation = { debite: rendu || admin ? 0 : 1, reserve: 0, rembourse: rendu, motif: admin ? 'administrateur' : 'panne', raisonNonRembourse: rendu || admin ? null : 'erreur' }; }
             const s = await soldeSur();
+            await fermer();                                // le scan est rendu (ou dit non rendu) : le résultat est produit
             return repondreErreur(res, 'SERVEUR', undefined, { facturation, ...(s !== undefined ? { solde: s } : {}) });
         }
         // 7. le solde, relu APRÈS les mouvements
         const solde = await soldeSur();
         if (erreurLot) {                              // un lot qu'on ne peut pas payer (QUOTA « lot-trop-grand »…) : le crédit initial est déjà rendu, la facturation le dit
+            await fermer();
             return repondreErreur(res, erreurLot.code, undefined, { facturation: erreurLot.facturation, ...(erreurLot.detail !== undefined ? { detail: erreurLot.detail } : {}),
                 ...(erreurLot.code === 'QUOTA' && porteur.type === 'compte' ? { achat: { url: URL_RECHARGE } } : {}), ...(solde !== undefined ? { solde } : {}) });
         }
         const { resultat, facturation } = sortie;
         if (resultat.issue === 'panne') {
+            await fermer();
             return repondreErreur(res, resultat.erreur.code, undefined, { facturation, ...(solde !== undefined ? { solde } : {}) });
         }
         // 8. la règle de verdict (au scanner : null — la surface le dit ; ici l'extension)
@@ -395,9 +399,14 @@ function traiterIdentifier(cfg, deps = {}) {
             });
         } catch (e) { journalErreur('analyses', e); }
         try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); }
+        await fermer();                                // le résultat est PERSISTÉ (analyses) : la marque est close avant la réponse, que le client soit encore là ou non
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
+    };
+    return async function traiterIdentifierV2(req, res) {
+        const etat = { suivi: null };
+        try { return await interne(req, res, etat); } finally { if (etat.suivi) etat.suivi.arreter(); }   // le battement s'arrête quoi qu'il arrive
     };
 }
 

@@ -15,6 +15,7 @@ module.exports = {
             historique: (porteur, suite) => S.historique(porteur, typeof suite === 'object' && suite !== null ? suite : { suite }, cfg),
             debiter: (porteur, o) => Lg.debiter(porteur, o, cfg),
             rembourser: (porteur, credit, motif, o) => Lg.rembourser(porteur, credit, motif, o, cfg),
+            rembourserLigne: (porteur, cle, motif, o) => Lg.rembourserLigne(porteur, cle, motif, o, cfg),      // O5 : la reprise unité par unité d'un remboursement interrompu
             reserverQuestion: (porteur, credit, q, maintenant) => Q.reserverQuestion(porteur, credit, q, cfg, maintenant),
             repondreQuestion: (porteur, o, maintenant) => Q.repondreQuestion(porteur, o, cfg, maintenant),
             balayerQuestions: o => Q.balayerQuestions(o, cfg),
