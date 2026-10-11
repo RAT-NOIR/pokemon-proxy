@@ -86,6 +86,90 @@ function planifier(ligne, setsParId) {
     return { action: 'collecter' };
 }
 
+// ───────────────────────── LES « À REGARDER » REGARDÉS À L'ŒIL (coordinateur, 2026-10-11)
+// 41 lignes étaient restées « À REGARDER » (score sous le seuil, même dessin à l'œil). Le testeur a délégué la décision au coordinateur, qui a REGARDÉ les 41
+// paires (LOGOS-A-REGARDER-1.png, -2.png, -3.png ; planche = numéro de la planche, 14 rangées chacune) : MÊME LOGO pour 38, HÉSITATION pour 3.
+// LISTE FERMÉE : une entrée par ligne promue. La clé est la ligne de la table (part + fichier) ET le candidat exact regardé (sha256 de la table) ET le set de
+// la ligne. Une ligne « À REGARDER » absente d'ici n'est jamais promue. La promotion ne change que le VERDICT : elle ne contourne aucune autre garde de
+// planifier/verifierUrl/refusLangue/juger (URL exacte sur la ligne, hôtes fermés, langue prouvée par l'adresse, même fichier que la phase 1 par sha256,
+// tirage du set, report des « Bulbapedia seule »).
+// LES SETS « ? » (setSur false : le set vient du code Pokécardex, non confirmé) ne sont SÛRS que si `confirmeNomJa` est vrai DANS LA BASE au moment du
+// lancement : un set, et un seul, porte un `nomJa` ÉGAL au texte japonais du logo (écrit sur la ligne de LISTE-LOGOS-A-CHERCHER.md), de tirage jp.
+// Mesuré en lecture seule le 2026-10-11 : M4 (Ninja-Spinner) et SV10 (The-Glory-of-Team-Rocket) le sont ; Dark-Phantasma, Incandescent-Arcana, VMAX-Rising
+// et Champion-Road ont nomJa null → ces quatre lignes restent écartées tant que la base ne le porte pas. Pas de confirmation, pas de promotion.
+const REGARDES_2026_10_11 = [
+    { part: 'FR', fichier: 'Logo FR/HearthGold et Soulsilver/Heartgold_et_soulsilver.png', planche: 1, set: 'HeartGold-SoulSilver', candidatSha256: '344c66da3ad7d1ff84277af169abb0dbfc3d36f77bc884a8a962fd826f7d5869', raison: 'même dessin à l\'œil (texte, coloris, mise en page), cadrage différent, score 0.903' },
+    { part: 'JP', fichier: 'Logo JP/ADV3.png', planche: 1, set: 'Rulers-of-the-Heavens', candidatSha256: 'df9b871acccc2688e43ab4d92c68f0fd5e2346142e5a23f905f4e34edaf1445d', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.647' },
+    { part: 'JP', fichier: 'Logo JP/ADV4.png', planche: 1, set: 'Magma-VS-Aqua-Two-Ambitions', candidatSha256: '9efca9f6483353ed943f9d20141b9dbd53f60eca7aecb67bc8711943f198f4fd', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.729' },
+    { part: 'JP', fichier: 'Logo JP/BW8B.png', planche: 1, set: 'Thunder-Knuckle', candidatSha256: '27746547d1d9c1ed3eb620faa0267bb2e801358e5095b1a505097c577e86528a', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.68' },
+    { part: 'JP', fichier: 'Logo JP/BW8P.png', planche: 1, set: 'Spiral-Force', candidatSha256: 'dc569ea6f5af73b80de251ab3afb214267e3aaa943247d05dfbc156eb056ce47', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.731' },
+    { part: 'JP', fichier: 'Logo JP/CP1.png', planche: 1, set: 'Magma-Gang-VS-Aqua-Gang-Double-Crisis', candidatSha256: '8dde64a1ebfbd36227fe2285d35709e2352254b3bcb7c6be18d2478db654ec2b', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.849' },
+    { part: 'JP', fichier: 'Logo JP/DP2.png', planche: 1, set: 'Secret-of-the-Lakes', candidatSha256: '833c1d7730680c8d834b16d5c5faed0199aaf0142c4320d390f3b3f8390cd1b0', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.673' },
+    { part: 'JP', fichier: 'Logo JP/DP4M.png', planche: 1, set: 'Moonlit-Pursuit', candidatSha256: 'abba82bf882b00c989e2c96eca48725311bab28c314dc5f30a396157347eba12', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.559' },
+    { part: 'JP', fichier: 'Logo JP/DP5C.png', planche: 1, set: 'Cry-from-the-Mysterious', candidatSha256: 'e612510a63907c5079d6409392cec88de77ef0f821cdeb47ef2777b491bdc157', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.753' },
+    { part: 'JP', fichier: 'Logo JP/DP5T.png', planche: 1, set: 'Temple-of-Anger', candidatSha256: '43ea667e8658d9455fc9ed7f9385b405ba2113627ec0c212fede3b979554865f', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.76' },
+    { part: 'JP', fichier: 'Logo JP/M4.png', planche: 1, set: 'Ninja-Spinner', candidatSha256: 'a6ba7c965ee1373efeeb994994aab6eaef5113105c474b3ba2c98feb19366ae4', confirmeNomJa: { set: 'Ninja-Spinner', nomJa: 'ニンジャスピナー' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.888' },
+    { part: 'JP', fichier: 'Logo JP/NEO4.png', planche: 1, set: 'Darkness-and-to-Light', candidatSha256: 'b4910f65592be32014f449dc305e8248563a14d2098fb6a40c61e019782266a0', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.889' },
+    { part: 'JP', fichier: 'Logo JP/PCG1.png', planche: 1, set: 'Flight-of-Legends', candidatSha256: '5149acdd888ab08e478b165fc7a70fcf558c1e8913fe1e50c1962a1d6b23a8d8', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.772' },
+    { part: 'JP', fichier: 'Logo JP/PCG4.png', planche: 2, set: 'Golden-Sky-Silvery-Ocean', candidatSha256: '5a50d700c98655b529aa2cfc45a7b7d8ed364df94a01476d83e71bbb0e1695e4', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.656' },
+    { part: 'JP', fichier: 'Logo JP/PCG5.png', planche: 2, set: 'Mirage-Forest', candidatSha256: '836de80a4634ba2574ab0087e73bd53d352080116538045f4fe2ae78019945c8', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.812' },
+    { part: 'JP', fichier: 'Logo JP/PCG6.png', planche: 2, set: 'Holon-Research-Tower', candidatSha256: 'badc60760022b9c307f2661ae3bbb95004950802dbcc3e014daa38cb9c93aa5a', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.79' },
+    { part: 'JP', fichier: 'Logo JP/PCG8.png', planche: 2, set: 'Miracle-Crystal', candidatSha256: '8ab019f11f4e001f4dc1c1ea2fd54809f7b62c48a169744183bcf20d922ce4b3', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.886' },
+    { part: 'JP', fichier: 'Logo JP/PT4.png', planche: 2, set: 'Advent-of-Arceus', candidatSha256: '03525b892fc1f26ced8535b09a8a37066ddfe3ab381e6b648dec005a073c079c', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.803' },
+    { part: 'JP', fichier: 'Logo JP/S10A.png', planche: 2, set: 'Dark-Phantasma', candidatSha256: 'cbc964962beef6f64ef97782f8f2e6df264766104316cd1010f6db7412298b13', confirmeNomJa: { set: 'Dark-Phantasma', nomJa: 'ダークファンタズマ' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.858' },
+    { part: 'JP', fichier: 'Logo JP/S10D.png', planche: 2, set: 'Time-Gazer', candidatSha256: '3f0ef7fe7c5be0c939a67cae18171af8dda2629ad7272c9ddaaa0508072f1ca5', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.886' },
+    { part: 'JP', fichier: 'Logo JP/S11A.png', planche: 2, set: 'Incandescent-Arcana', candidatSha256: '5c930525aea6a1f81c332112b54b527879f1b764ccd580f612f4a5f7cab0b236', confirmeNomJa: { set: 'Incandescent-Arcana', nomJa: '白熱のアルカナ' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.842' },
+    { part: 'JP', fichier: 'Logo JP/S1A.png', planche: 2, set: 'VMAX-Rising', candidatSha256: 'a2447f3256ec93e33ab0e8955cb4237b033e13975e3668848c65556c9b4ddd63', confirmeNomJa: { set: 'VMAX-Rising', nomJa: 'VMAXライジング' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.8' },
+    { part: 'JP', fichier: 'Logo JP/S1W.png', planche: 2, set: 'Sword', candidatSha256: '5f5bae953016edb14bd1bdf50699759bf8da3728573f0c31c35d09f2f4d8f7fb', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.887' },
+    { part: 'JP', fichier: 'Logo JP/S4A.png', planche: 2, set: 'Shiny-Star-V', candidatSha256: '6afb8ccd20977d9462bc14dcffbd70be203ee13500e545d5a507d8566ded81ba', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.773' },
+    { part: 'JP', fichier: 'Logo JP/S6H.png', planche: 2, set: 'Silver-Lance', candidatSha256: 'fbca947edd987cf5e1e67c2c30fc59ccd830e21d0c10e1c38602411063cf3630', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.71' },
+    { part: 'JP', fichier: 'Logo JP/S6K.png', planche: 2, set: 'Jet-Black-Spirit', candidatSha256: 'f6450fa5da8c69d70fd68715ad35717e2179f8e328c9a342ff1c340f211ed798', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.705' },
+    { part: 'JP', fichier: 'Logo JP/SM1M.png', planche: 3, set: 'Collection-Moon', candidatSha256: 'f4691bb766810050f143adada3e9397a663fbeed5370128a8f0f44d7c3b79799', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.861' },
+    { part: 'JP', fichier: 'Logo JP/SM2K.png', planche: 3, set: 'Islands-Await-You', candidatSha256: '1c07aced44c86f283f34f2acfd22ed99bc5edeeae23c3dd9074899937424117f', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.851' },
+    { part: 'JP', fichier: 'Logo JP/SM2L.png', planche: 3, set: 'Alolan-Moonlight', candidatSha256: '6687bc8dcbfe540fb39df676231b974545b739796f7f3c91b8eba7b9875a75a6', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.705' },
+    { part: 'JP', fichier: 'Logo JP/SM5M.png', planche: 3, set: 'Ultra-Moon', candidatSha256: 'b8510a60a7964eeff335546c5f1cbd3205ee61ebf22f225a204d661a58ce50d3', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.883' },
+    { part: 'JP', fichier: 'Logo JP/SM6B.png', planche: 3, set: 'Champion-Road', candidatSha256: '4065004c857f65f1f46ee7c9a05c27b250ffa6038f2e136a194a1db2e3bb919e', confirmeNomJa: { set: 'Champion-Road', nomJa: 'チャンピオンロード' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.802' },
+    { part: 'JP', fichier: 'Logo JP/SM8.png', planche: 3, set: 'Super-Burst-Impact', candidatSha256: 'c59fc0fc22bf7852b6e73d308aae5c64873515eda9bd69ea134e8647359f86b9', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.88' },
+    { part: 'JP', fichier: 'Logo JP/SM9.png', planche: 3, set: 'Tag-Bolt', candidatSha256: 'b4c810f18b31fc3f10649e3179ef1c57815448c3f6a9cf9240463736a3d74826', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.777' },
+    { part: 'JP', fichier: 'Logo JP/SV10.png', planche: 3, set: 'The-Glory-of-Team-Rocket', candidatSha256: '9f8f7f832a492e6a54410c4fbfec13276888f98521311acf50f3077a0edf6773', confirmeNomJa: { set: 'The-Glory-of-Team-Rocket', nomJa: 'ロケット団の栄光' }, raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.8' },
+    { part: 'JP', fichier: 'Logo JP/SV6A.png', planche: 3, set: 'Night-Wanderer', candidatSha256: '516b3154cae6d43f556125d2f1ffa780c1ee3d6fbc697fa1d7a705f88eb37722', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.867' },
+    { part: 'JP', fichier: 'Logo JP/XY1R.png', planche: 3, set: 'Collection-Y', candidatSha256: '99c8eac08db8527c41a418483fc48540a7e4b493f4aeab4703e4fe26b2706a7c', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.304' },
+    { part: 'JP', fichier: 'Logo JP/XY5G.png', planche: 3, set: 'Tidal-Storm', candidatSha256: '5958e87d0b7ae9ec4de2b1773f9171376806df4a08b4fc531bfa0d5363028978', raison: 'même dessin à l\'œil (texte, coloris, mise en page), rendu différent (halo, résolution, marges), score 0.88' },
+];
+// Ce que le coordinateur a regardé et NE promeut PAS : couleur nettement différente (même dessin) → au testeur ; ou aucun set à confirmer.
+const EXCLUS_2026_10_11 = [
+    { part: 'JP', fichier: 'Logo JP/OR4.png', planche: 1, raison: 'hésitation : contour rouge contre noir (Rocket-Gang, rangée 13) — au testeur' },
+    { part: 'JP', fichier: 'Logo JP/SM11B.png', planche: 2, raison: 'hésitation : arc-en-ciel contre bleu (Dream-League, rangée 28) — au testeur' },
+    { part: 'JP', fichier: 'Logo JP/SV11W.png', planche: 3, raison: 'hésitation : teinte beige contre blanc/rouge (White-Flare-JP, rangée 38) — au testeur' },
+    { part: 'JP', fichier: 'Logo JP/SM5P.png', planche: 3, raison: 'set non identifié (aucun set ne porte ce fichier) : rien à confirmer par nomJa' }
+];
+/**
+ * Promeut UNE ligne « À REGARDER » de la liste fermée, ou dit pourquoi non. Rend { ligne } (copie promue OFFICIEL) ou { raison }. `setsParId` : Map slug → { tirage,
+ * region, nomJa } (la base, en lecture). Ne touche à rien d'autre que le verdict, setSur (seulement sur confirmation du nomJa) et bulbapediaSeule (une source
+ * Bulbapedia est reportée comme les 32 autres).
+ */
+function promouvoir(ligne, setsParId, { regardes = REGARDES_2026_10_11, exclus = EXCLUS_2026_10_11 } = {}) {
+    if (ligne?.verdict !== 'À REGARDER') return { raison: 'pas une ligne À REGARDER : aucune promotion' };
+    const cle = x => x.part === ligne.part && x.fichier === ligne.fichier;
+    const e = regardes.find(cle);
+    if (!e) { const x = exclus.find(cle); return { raison: x ? `regardée, non promue : ${x.raison}` : 'À REGARDER non listée dans la liste fermée des regardés : non promue' }; }
+    if (ligne.set !== e.set) return { raison: `le set de la ligne (${ligne.set}) n'est plus celui qui a été regardé (${e.set})` };
+    if (ligne.cache?.sha256 !== e.candidatSha256) return { raison: 'le candidat de la ligne n\'est plus celui qui a été regardé (sha256)' };
+    let setSur = ligne.setSur;
+    if (!setSur) {
+        const c = e.confirmeNomJa;
+        if (!c || c.set !== ligne.set) return { raison: 'set non sûr et aucune confirmation par nomJa dans la liste : non promue' };
+        const s = setsParId.get(c.set);
+        if (!s || s.nomJa !== c.nomJa) return { raison: `set « ${c.set} » non confirmé : nomJa de la base (${s?.nomJa ?? 'null'}) ≠ texte du logo « ${c.nomJa} » (nomJa non confirmé)` };
+        const porteurs = [...setsParId.values()].filter(x => x.nomJa === c.nomJa);
+        if (porteurs.length !== 1) return { raison: `nomJa « ${c.nomJa} » porté par ${porteurs.length} sets : ambigu (nomJa non confirmé)` };
+        if ((s.tirage ?? s.region) !== 'jp') return { raison: `set « ${c.set} » de tirage ${s.tirage ?? s.region}, pas jp (nomJa non confirmé)` };
+        setSur = true;
+    }
+    return { ligne: { ...ligne, verdict: 'OFFICIEL', setSur, bulbapediaSeule: !!(ligne.bulbapediaSeule || ligne.source === 'bulbapedia'),
+        regardePar: `coordinateur 2026-10-11, planche ${e.planche}`, raisonRegarde: e.raison, confirmationSet: e.confirmeNomJa ?? null } };
+}
+
 /**
  * Le fichier téléchargé est-il celui de la ligne ? Une image PNG/WebP/JPEG lisible, pas une copie connue de Pokécardex, puis : le MÊME fichier que celui que
  * la phase 1 a comparé (sha256), sinon la re-mesure contre le fichier Pokécardex par la fonction de la phase 1, au seuil de la phase 1.
@@ -235,7 +319,7 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
     const entree = {
         cleR2, w: meta.width, h: meta.height, octets: fichier.buf.length, sha256: fichier.sha256, format: meta.format, langue: ligne.langue,
         source: ligne.source, urlSource: fichier.url, lot: LOT, mention: MENTION, le, vignette: { cleR2: cv, w: vg.w, h: vg.h },
-        preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null }
+        preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null, ...(ligne.regardePar ? { regardePar: ligne.regardePar, raisonRegarde: ligne.raisonRegarde, confirmationSet: ligne.confirmationSet } : {}) }
     };
     const u = await S.updateOne({ _id: set, [champ]: { $exists: false } }, { $set: { [champ]: entree } });
     if (u.modifiedCount === 1) return { action: 'ecrit', cleR2, vignette: cv };
@@ -268,7 +352,7 @@ async function retirerLot({ S, r2, bucket, lot, ecrire = false, journal = m => c
     return { sets, cles };
 }
 
-module.exports = { LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
+module.exports = { REGARDES_2026_10_11, EXCLUS_2026_10_11, promouvoir, LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
 
 // ───────────────────────── la ligne de commande
 const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/];
@@ -285,11 +369,13 @@ if (require.main === module) (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const cx = await ouvrirConnexions({ production: false, buckets: ECRIRE ? ['R2_BUCKET_IMAGES'] : [] });
     const S = cx.cartes.db.collection('sets');
-    const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1 } }).toArray()).map(s => [s._id, s]));
+    const sets = new Map((await S.find({}, { projection: { tirage: 1, region: 1, nomJa: 1 } }).toArray()).map(s => [s._id, s]));
     if (!sets.size) throw new Error('collection sets vide : base fausse');
-    const officiels = table.lignes.filter(l => l.verdict === 'OFFICIEL');
+    const regardes = table.lignes.filter(l => l.verdict === 'À REGARDER').map(l => ({ l, p: promouvoir(l, sets) }));
+    const officiels = [...table.lignes.filter(l => l.verdict === 'OFFICIEL'), ...regardes.filter(r => r.p.ligne).map(r => r.p.ligne)];
     console.log(`DÉNOMINATEUR : ${table.lignes.length} lignes dans la table · ${officiels.length} OFFICIEL · ${sets.size} sets en base · lot ${LOT}`);
-    const verdicts = officiels.map(l => ({ l, ...planifier(l, sets) }));
+    const verdicts = [...officiels.map(l => ({ l, ...planifier(l, sets) })), ...regardes.filter(r => !r.p.ligne).map(r => ({ l: r.l, action: 'ecartee', raison: r.p.raison }))];
+    console.log(`REGARDÉS À L'ŒIL (2026-10-11) : ${regardes.length} À REGARDER · ${regardes.filter(r => r.p.ligne).length} promus OFFICIEL · ${regardes.filter(r => !r.p.ligne).length} non promus`);
     const compte = {}; for (const v of verdicts) compte[v.action] = (compte[v.action] || 0) + 1;
     console.log(`PLAN (avant tout téléchargement) : ${Object.entries(compte).map(([k, n]) => `${k} ${n}`).join(' · ')}`);
     const aCollecter = verdicts.filter(v => v.action === 'collecter').map(v => v.l);

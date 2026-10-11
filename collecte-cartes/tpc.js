@@ -377,6 +377,6 @@ function planRetrait(cartes) {
 module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
-    preuveDeCorrespondance, planifierTpc, dejaServi, reglesDuNom, nomCompare,
+    preuveDeCorrespondance, planifierTpc, dejaServi, reglesDuNom, nomCompare, entites,
     autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait
 };

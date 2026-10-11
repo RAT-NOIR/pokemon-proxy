@@ -43,6 +43,8 @@ const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { lisible } = require('./collecte-cartes/nom-affichage');
+const { declarantesDuProduit } = require('./collecte-cartes/declarantes');
+const { verifierTirages } = require('./collecte-cartes/preuves-tirage');
 
 // LE TIRAGE DE CHAQUE EXPANSION, AVEC SA PREUVE (2026-10-04). Les preuves admises, et elles seules :
 //   codes_set — la région que codes_set écrit (japonais / occidental), quand rien ne la contredit ;
@@ -50,7 +52,13 @@ const { lisible } = require('./collecte-cartes/nom-affichage');
 //   nom       — le nom Cardmarket de l'expansion dit la langue ;
 //   CS…C      — le suffixe « C » des codes chinois de Cardmarket (§39), sur un code « CS…C » ;
 //   asymétrie — des produits désignés sont des cartes imprimées au Japon et JAMAIS dans le tirage occidental ;
-//   set       — le set existe déjà en base avec ce tirage.
+//   set       — le set existe déjà en base avec ce tirage ;
+//   declarations (ruling 2026-10-11) — des impressions de NOS cartes, déclarées par la page de carte Bulbapedia sous `jpexpansion` (japonais) /
+//               `expansion` (occidental), portent ce nom d'expansion EXACT, et aucune impression d'un autre tirage ne le porte (contrôlé à
+//               l'exécution pour chaque nom de DECLARANTES) ;
+//   page (ruling 2026-10-11) — la page Bulbapedia du produit, lue dans sa copie Wayback citée, dit la langue en toutes lettres ; admise
+//               seulement avec une seconde preuve admise OU une « citation nomme le produit ».
+// (tcgdex : héritée du 2026-10-07.) La liste vit dans collecte-cartes/preuves-tirage.js, qui REFUSE tout type absent (banc test-preuves-tirage.js).
 // Ce qui n'a aucune de ces preuves n'est PAS ici : A-VALIDER.md le propose au testeur.
 const TIRAGES = {
     6168: ['zh-hans', 'set : Adventure-Special-Pack existe (zh-hans)'], 6111: ['zh-hans', 'set : Gem-Pack-Vol-2 existe (zh-hans)'],
@@ -59,7 +67,7 @@ const TIRAGES = {
     4246: ['jp', 'codes_set : japonais (smL)'], 5718: ['jp', 'codes_set : japonais (pcgL)'], 4250: ['jp', 'codes_set : japonais (smI)'],
     4515: ['jp', 'codes_set : japonais (sKV)'], 5219: ['jp', 'codes_set : japonais (svAL)'], 5299: ['jp', 'codes_set : japonais (svC)'],
     6017: ['jp', 'codes_set : japonais (svOD)'], 6016: ['jp', 'codes_set : japonais (svOM)'], 5865: ['jp', 'codes_set : japonais (advI)'],
-    5866: ['jp', 'codes_set : japonais (advH)'], 4381: ['jp', 'codes_set : japonais (sp5) ; famille sp1, sp2, sp4, sp6 : jp'], 4217: ['jp', 'codes_set : japonais (CS1)'],
+    5866: ['jp', 'codes_set : japonais (advH)'], 4381: ['jp', 'codes_set : japonais (sp5) ; famille : sp1, sp2, sp4, sp6 sont jp'], 4217: ['jp', 'codes_set : japonais (CS1)'],
     4347: ['intl', 'codes_set : occidental (CEL)'], 2361: ['intl', 'codes_set : occidental (MCD18F) ; TCGdex « Collection McDonald\'s 2018 » (data/, cardmarket 2361)'], 1623: ['intl', 'codes_set : occidental (MCD11)'],
     6596: ['idth', 'famille : MA1, MA4, MA6 sont idth (MA5)'], 6417: ['idth', 'famille : MA1, MA4, MA6 sont idth (MA2)'],
     2070: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK11)'], 1627: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK2)'], 1628: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK3)'],
@@ -77,8 +85,8 @@ const TIRAGES = {
     // La série AS est indonésienne et thaïe (2026-10-07, zéro requête) : TCGdex data-asia/SM/AS1a…AS4b (noms `id`, et `th` pour AS1 ;
     // dates `id` 2019-08-09, `th` 2019-02-01 pour AS1) ; page « Sky Ruler (ATCG) » (copie Wayback) : « exclusively available in
     // Indonesian and Thai » ; le slug Cardmarket de 6703 dit « ID-TH ». Aucun fichier de carte chez TCGdex pour ces quatre sets.
-    6700: ['idth', 'TCGdex data-asia AS4a/AS4b « Booster Pack Penguasa Langit » (id) ; page « Sky Ruler (ATCG) » : « exclusively available in Indonesian and Thai » (AS4)'],
-    6701: ['idth', 'TCGdex data-asia AS3a/AS3b « Booster Pack Bayangan Tersembunyi » (id) ; famille AS1, AS2, AS4 : idth (AS3)'],
+    6700: ['idth', 'TCGdex data-asia AS4a/AS4b « Booster Pack Penguasa Langit » (id) ; complément : page « Sky Ruler (ATCG) » : « exclusively available in Indonesian and Thai » (AS4)'],
+    6701: ['idth', 'TCGdex data-asia AS3a/AS3b « Booster Pack Bayangan Tersembunyi » (id) ; famille : AS1, AS2, AS4 sont idth (AS3)'],
     6702: ['idth', 'TCGdex data-asia AS1a/AS1b « Matahari & Bulan: Hantaman Pertama » (id) et « ซันแอนด์มูน เฟิร์สอิมแพค » (th) (AS1)'],
     6703: ['idth', 'nom : « Legends Awakened ID-TH » (slug Cardmarket) ; TCGdex data-asia AS2a/AS2b « Booster Pack Kebangkitan Legenda » (id) (AS2)'],
     6635: ['zh-hans', 'famille : CSVM1C est zh-hans (CSVM2) ; asymétrie : 30 désignés, 25 en zh-hans seul, 1 en zh-hant seul'],
@@ -86,15 +94,25 @@ const TIRAGES = {
     // (2026-10-07, testeur : « crée leurs sets par la voie normale (preuve de tirage, date, logo composé si besoin) ») — lues sur nos données
     // et le clone TCGdex, zéro requête :
     5526: ['intl', 'pages de cartes : Potion et Switch déclarent « My First Battle » en intl (decks Pikachu, Bulbasaur, Charmander, Squirtle)'],
-    6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; aucun set thaï de ce code'],
-    6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)']
+    6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; complément : aucun set thaï de ce code'],
+    6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)'],
+    // (2026-10-11, SETS-21 : « les 21 sets jamais créés ») — lues sur nos données (impressions des pages de cartes : le tirage vient du
+    // champ de page jpexpansion, donc du Japon), zéro requête ; le précédent est My First Battle (5526, 2026-10-07)
+    4187: ['jp', 'declarations : 6 cartes déclarent « Everyone\'s Exciting Battle » en jp (jpexpansion), aucun autre tirage'],
+    4361: ['jp', 'declarations : 45 impressions déclarent « Gift Box Mew • Lucario » en jp (jpexpansion), 15 numéros, aucun autre tirage'],
+    4279: ['jp', 'declarations : 17 impressions déclarent « Arceus LV.X Deck: Grass & Fire » en jp (jpexpansion), 16 numéros, aucun autre tirage ; famille : son jumeau Arceus-LVX-Deck-Lightning-Psychic (ALP) est jp en base'],
+    4352: ['jp', 'page : « a series of Japanese promotional cards … Jumbo cards … a total of two cards » (copie Wayback 20260710090618, J Promotional cards (TCG)) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base'],
+    1622: ['intl', 'page : « Every toy was paired with an English Diamond & Pearl or Mysterious Treasures trading card » (copie Wayback 20260804035231) ; citation nomme le produit : « 2008 Burger King promotional Pokémon toys » (douze jouets = douze produits)'],
+    5034: ['intl', 'page : « Every toy was paired with two English Platinum trading cards » (copie Wayback 20230420020549) ; citation nomme le produit : « 2009 Burger King promotional Pokémon toys » (six jouets = douze produits)'],
+    4354: ['jp', 'declarations : 3 cartes déclarent « T Promotional cards » en jp (jpexpansion), aucun autre tirage ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base']
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
 // pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
 // le set, parce que leurs fiches naîtraient dans le set À CÔTÉ de fiches simples des mêmes produits (des doublons). Ici, au lieu de refuser :
 // chaque produit dont le nom est celui d'UNE carte déclarante est joint à cette carte (preuve `carte-declarante`), et le set est REFUSÉ si
 // une carte déclarante n'est couverte par AUCUN produit (sa fiche naîtrait seule, sans produit) ou si un nom désigne deux déclarantes.
-const DECLARANTES = { 5526: 'My First Battle' };
+verifierTirages(TIRAGES);   // une preuve dont le type n'est pas dans la liste fermée ARRÊTE l'outil, avant toute connexion
+const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs', 4187: 'Everyone\'s Exciting Battle', 4361: 'Gift Box Mew • Lucario', 4279: 'Arceus LV.X Deck: Grass & Fire', 4354: 'T Promotional cards' };
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
@@ -144,7 +162,9 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         for (const p of aJoindre) {
             if (nomDecl) {
                 const nomP = (p.nom || decomposerNomCardmarket(p.name ?? '').nom || '').trim();
-                const dd = declarantes.filter(c => clesNom(nomJointDe(c)).some(k => clesNom(nomP).includes(k)));
+                // (2026-10-11) collecte-cartes/declarantes.js : le ☆ se joint sous « Gold Star », et deux déclarantes au même nom se départagent par
+                // leurs attaques (banc test-declarantes.js) ; sinon l'ambiguïté reste et le set est refusé
+                const dd = declarantesDuProduit(declarantes, nomP, p, clesNom);
                 if (dd.length > 1) { ambiguDecl = `« ${nomP} » désigne ${dd.length} cartes déclarantes`; break; }
                 if (dd.length === 1) { designes.push({ p, carte: dd[0], declarante: true }); continue; }
             }
@@ -180,6 +200,8 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         // une fiche simple porte une impression (tirage, nom d'expansion) : refusée si une carte en base déclare déjà ce couple — elle
         // ferait naître ses fiches dans le set (sauf un set existant, dont le nom d'expansion est déjà le sien)
         if (nomDecl) {
+            const autresTirages = [...declare].filter(k => k.endsWith(`|${nomDecl}`) && k.split('|')[0] !== tirage);
+            if (autresTirages.length) { refus.push({ exp, raison: `declarations : « ${nomDecl} » est aussi déclaré dans un autre tirage (${autresTirages.join(', ')})`, resume }); continue; }
             if (ambiguDecl) { refus.push({ exp, raison: `cartes déclarantes : ${ambiguDecl}`, resume }); continue; }
             if (!declarantes.length) { refus.push({ exp, raison: `aucune carte ne déclare « ${nomDecl} » en ${tirage}`, resume }); continue; }
             const couvertes = new Set(designes.filter(d => d.declarante).map(d => d.carte._id));

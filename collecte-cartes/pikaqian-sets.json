@@ -1,0 +1,912 @@
+[
+ {
+  "slug": "Shining-Synergy-GX-Starter-Deck",
+  "code": "CSM2DC",
+  "codePk": "csm2dc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 357,
+  "tuiles": null,
+  "mesure": "page /sets/csm2dc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Storming-Emergence-GX-Starter-Deck",
+  "code": "CSM1DC",
+  "codePk": "csm1dc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 298,
+  "tuiles": null,
+  "mesure": "page /sets/csm1dc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Scarlet-Violet-Simplified-Chinese-Promos",
+  "code": "SV-P/CS",
+  "codePk": "promo-sv-p",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 274,
+  "tuiles": null,
+  "mesure": "page /sets/promo-sv-p listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Stellar-Crystal",
+  "code": "CSV9C",
+  "codePk": "csv9c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 266,
+  "tuiles": null,
+  "mesure": "page /sets/csv9c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brilliant-Fantasy",
+  "code": "CSV8C",
+  "codePk": "csv8c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 264,
+  "tuiles": null,
+  "mesure": "page /sets/csv8c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Blade-Awakening",
+  "code": "CSV7C",
+  "codePk": "csv7c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 259,
+  "tuiles": null,
+  "mesure": "page /sets/csv7c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Battle-Party-Shining-Dream",
+  "code": "CSVE2C",
+  "codePk": "csve2c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 232,
+  "tuiles": null,
+  "mesure": "page /sets/csve2c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dynamax-Clash-V-Starter-Deck",
+  "code": "CS1DC",
+  "codePk": "cs1dc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 220,
+  "tuiles": null,
+  "mesure": "page /sets/cs1dc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dynamax-Clash-Thunder",
+  "code": "CS1aC",
+  "codePk": "cs1ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 217,
+  "tuiles": null,
+  "mesure": "page /sets/cs1ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Storming-Emergence-Abundant",
+  "code": "CSM1cC",
+  "codePk": "csm1cc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 212,
+  "tuiles": null,
+  "mesure": "page /sets/csm1cc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Storming-Emergence-Radiant",
+  "code": "CSM1aC",
+  "codePk": "csm1ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 210,
+  "tuiles": null,
+  "mesure": "page /sets/csm1ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Storming-Emergence-Verdant",
+  "code": "CSM1bC",
+  "codePk": "csm1bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 202,
+  "tuiles": null,
+  "mesure": "page /sets/csm1bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Battle-Party-Dream-Together",
+  "code": "CSVE1C",
+  "codePk": "csve1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 201,
+  "tuiles": null,
+  "mesure": "page /sets/csve1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dynamax-Clash-Flame",
+  "code": "CS1bC",
+  "codePk": "cs1bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 199,
+  "tuiles": 315,
+  "mesure": "page /sets/cs1bc ouverte et appariée le 2026-10-10 (315 tuiles)"
+ },
+ {
+  "slug": "Sword-Shield-Simplified-Chinese-Promos",
+  "code": "S-P/CS",
+  "codePk": "promo-s-p",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 197,
+  "tuiles": null,
+  "mesure": "page /sets/promo-s-p listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Shining-Synergy-Shower",
+  "code": "CSM2aC",
+  "codePk": "csm2ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 193,
+  "tuiles": null,
+  "mesure": "page /sets/csm2ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Shining-Synergy-Supreme",
+  "code": "CSM2bC",
+  "codePk": "csm2bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 193,
+  "tuiles": null,
+  "mesure": "page /sets/csm2bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Shining-Synergy-Summon",
+  "code": "CSM2cC",
+  "codePk": "csm2cc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 192,
+  "tuiles": null,
+  "mesure": "page /sets/csm2cc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Collect-151",
+  "code": "151C",
+  "codePk": "151c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 192,
+  "tuiles": 470,
+  "mesure": "page /sets/151c ouverte et appariée le 2026-10-10 (470 tuiles)"
+ },
+ {
+  "slug": "Terastal-Gathering",
+  "code": "CSV9.5C",
+  "codePk": "csv9.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 190,
+  "tuiles": null,
+  "mesure": "page /sets/csv9.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Nine-Colors-Gathering-Friends",
+  "code": "CS4aC",
+  "codePk": "cs4ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 184,
+  "tuiles": null,
+  "mesure": "page /sets/cs4ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Primordial-Arts-V-Starter-Deck",
+  "code": "CS3DC",
+  "codePk": "cs3dc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 183,
+  "tuiles": null,
+  "mesure": "page /sets/cs3dc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Primordial-Arts-Overgrow",
+  "code": "CS3aC",
+  "codePk": "cs3ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 182,
+  "tuiles": null,
+  "mesure": "page /sets/cs3ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Primordial-Arts-Torrent",
+  "code": "CS3bC",
+  "codePk": "cs3bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 179,
+  "tuiles": null,
+  "mesure": "page /sets/cs3bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brave-Stars-Brave",
+  "code": "CS5bC",
+  "codePk": "cs5bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 178,
+  "tuiles": null,
+  "mesure": "page /sets/cs5bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Nine-Colors-Gathering-Origin",
+  "code": "CS4bC",
+  "codePk": "cs4bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 176,
+  "tuiles": null,
+  "mesure": "page /sets/cs4bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brave-Stars-Charm",
+  "code": "CS5aC",
+  "codePk": "cs5ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 176,
+  "tuiles": null,
+  "mesure": "page /sets/cs5ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Azure-Shadow-Pursuit",
+  "code": "CS6bC",
+  "codePk": "cs6bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 170,
+  "tuiles": null,
+  "mesure": "page /sets/cs6bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Azure-Shadow-Roar",
+  "code": "CS6aC",
+  "codePk": "cs6ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 169,
+  "tuiles": null,
+  "mesure": "page /sets/cs6ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Eternal-Birth",
+  "code": "CSV1C",
+  "codePk": "csv1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 167,
+  "tuiles": null,
+  "mesure": "page /sets/csv1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Fearless-Terastal",
+  "code": "CSV3C",
+  "codePk": "csv3c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 165,
+  "tuiles": null,
+  "mesure": "page /sets/csv3c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "30th-Celebration-Simplified-Chinese",
+  "code": "30thC",
+  "codePk": "30thc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 165,
+  "tuiles": null,
+  "mesure": "page /sets/30thc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Bonus-Round",
+  "code": "CSV4C",
+  "codePk": "csv4c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 164,
+  "tuiles": null,
+  "mesure": "page /sets/csv4c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Miracle-Journey",
+  "code": "CSV2C",
+  "codePk": "csv2c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 163,
+  "tuiles": null,
+  "mesure": "page /sets/csv2c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "True-Mystery",
+  "code": "CSV6C",
+  "codePk": "csv6c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 163,
+  "tuiles": null,
+  "mesure": "page /sets/csv6c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brave-Stars-V-Starter-Deck",
+  "code": "CS5DC",
+  "codePk": "cs5dc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 161,
+  "tuiles": null,
+  "mesure": "page /sets/cs5dc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol5",
+  "code": "CBB5C",
+  "codePk": "cbb5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 154,
+  "tuiles": null,
+  "mesure": "page /sets/cbb5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol-6",
+  "code": "CBB6C",
+  "codePk": "cbb6c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 154,
+  "tuiles": null,
+  "mesure": "page /sets/cbb6c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Vivid-Portrayals-Obsidian",
+  "code": "CS2aC",
+  "codePk": "cs2ac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 143,
+  "tuiles": null,
+  "mesure": "page /sets/cs2ac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Vivid-Portrayals-Indigo",
+  "code": "CS2bC",
+  "codePk": "cs2bc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 141,
+  "tuiles": null,
+  "mesure": "page /sets/cs2bc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dark-Crystal-Blaze",
+  "code": "CSV5C",
+  "codePk": "csv5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 134,
+  "tuiles": null,
+  "mesure": "page /sets/csv5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol-4",
+  "code": "CBB4C",
+  "codePk": "cbb4c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 126,
+  "tuiles": null,
+  "mesure": "page /sets/cbb4c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Happy-Set-Lucario-Greninja-Zamazenta-Mabosstiff",
+  "code": "CSVH2C",
+  "codePk": "csvh2c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 114,
+  "tuiles": null,
+  "mesure": "page /sets/csvh2c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Chasing-Glory-Together",
+  "code": "CSV10C",
+  "codePk": "csv10c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 103,
+  "tuiles": 683,
+  "mesure": "page /sets/csv10c ouverte et appariée le 2026-10-10 (683 tuiles)"
+ },
+ {
+  "slug": "Striking-Competition",
+  "code": "CSM2.5C",
+  "codePk": "csm2.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 99,
+  "tuiles": null,
+  "mesure": "page /sets/csm2.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Victory-Star-Guide",
+  "code": "CS6.5C",
+  "codePk": "cs6.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 95,
+  "tuiles": null,
+  "mesure": "page /sets/cs6.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dynamax-Tactics",
+  "code": "CS1.5C",
+  "codePk": "cs1.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 94,
+  "tuiles": null,
+  "mesure": "page /sets/cs1.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Travel-Special-Pack",
+  "code": "CSVL2C",
+  "codePk": "csvl2c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 93,
+  "tuiles": null,
+  "mesure": "page /sets/csvl2c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Happy-Set-Altaria-Latios-Infernape-Maushold",
+  "code": "CSVH3C",
+  "codePk": "csvh3c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 93,
+  "tuiles": null,
+  "mesure": "page /sets/csvh3c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Scorching-Skies",
+  "code": "CS3.5C",
+  "codePk": "cs3.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 90,
+  "tuiles": null,
+  "mesure": "page /sets/cs3.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Shadow-of-Glory",
+  "code": "CS5.5C",
+  "codePk": "cs5.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 88,
+  "tuiles": null,
+  "mesure": "page /sets/cs5.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Happy-Set-Pikachu-Clefairy-Turtwig-Gimmighoul",
+  "code": "CSVH1C",
+  "codePk": "csvh1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 88,
+  "tuiles": null,
+  "mesure": "page /sets/csvh1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol-2",
+  "code": "CBB2C",
+  "codePk": "cbb2c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 87,
+  "tuiles": null,
+  "mesure": "page /sets/cbb2c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Battle-Elite",
+  "code": "CSM1.5C",
+  "codePk": "csm1.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 87,
+  "tuiles": null,
+  "mesure": "page /sets/csm1.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol-3",
+  "code": "CBB3C",
+  "codePk": "cbb3c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 85,
+  "tuiles": null,
+  "mesure": "page /sets/cbb3c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Final-Flame-Dance",
+  "code": "CS4.5C",
+  "codePk": "cs4.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 83,
+  "tuiles": null,
+  "mesure": "page /sets/cs4.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brilliant-Counterattack",
+  "code": "CS2.5C",
+  "codePk": "cs2.5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 79,
+  "tuiles": null,
+  "mesure": "page /sets/cs2.5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Variety-Treasure-Box",
+  "code": "CSZC",
+  "codePk": "cszc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 68,
+  "tuiles": null,
+  "mesure": "page /sets/cszc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Adventure-Special-Pack",
+  "code": "CSVL1C",
+  "codePk": "csvl1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 68,
+  "tuiles": null,
+  "mesure": "page /sets/csvl1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Gem-Pack-Vol-1",
+  "code": "CBB1C",
+  "codePk": "cbb1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 60,
+  "tuiles": null,
+  "mesure": "page /sets/cbb1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Golden-Energy",
+  "code": "CSM2.1C",
+  "codePk": "csm2.1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 54,
+  "tuiles": null,
+  "mesure": "page /sets/csm2.1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Sun-Moon-Simplified-Chinese-Promos",
+  "code": "SM-P/CS",
+  "codePk": "promo-sm-p",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 50,
+  "tuiles": null,
+  "mesure": "page /sets/promo-sm-p listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "30th-Anniversary-Celebration-Simplified-Chinese",
+  "code": "30th-P",
+  "codePk": "promo-30th-p",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 33,
+  "tuiles": null,
+  "mesure": "page /sets/promo-30th-p listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Land-of-Kitakami-Special-Pack",
+  "code": "CSVNC",
+  "codePk": "csvnc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 28,
+  "tuiles": null,
+  "mesure": "page /sets/csvnc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Return-of-the-Dragon",
+  "code": "CSFC",
+  "codePk": "csfc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 26,
+  "tuiles": null,
+  "mesure": "page /sets/csfc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Pikachu-Legendary-Celebration",
+  "code": "CSDC",
+  "codePk": "csdc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 25,
+  "tuiles": null,
+  "mesure": "page /sets/csdc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Radiant-Energy-Vol-3",
+  "code": "CS6.1C",
+  "codePk": "cs6.1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 24,
+  "tuiles": null,
+  "mesure": "page /sets/cs6.1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Brave-Stars-Deck-Building-Gift-Box",
+  "code": "CSNC",
+  "codePk": "csnc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 24,
+  "tuiles": null,
+  "mesure": "page /sets/csnc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Dynamax-Clash-Deck-Building-Box",
+  "code": "CSAC",
+  "codePk": "csac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 24,
+  "tuiles": null,
+  "mesure": "page /sets/csac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Radiant-Energy-Vol-2",
+  "code": "CS5.1C",
+  "codePk": "cs5.1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 23,
+  "tuiles": null,
+  "mesure": "page /sets/cs5.1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Radiant-Energy-Vol-1",
+  "code": "CS4.1C",
+  "codePk": "cs4.1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 23,
+  "tuiles": null,
+  "mesure": "page /sets/cs4.1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Happy-Set-Decidueye-Melmetal-Koraidon-Miraidon",
+  "code": "CSVH4C",
+  "codePk": "csvh4c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 23,
+  "tuiles": null,
+  "mesure": "page /sets/csvh4c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Happy-Set-Mewtwo-Dragonite-Camerupt-Sinistcha",
+  "code": "CSVH5C",
+  "codePk": "csvh5c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 21,
+  "tuiles": null,
+  "mesure": "page /sets/csvh5c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Giratina-VSTAR-Deck-Building-Gift-Box",
+  "code": "CSXC",
+  "codePk": "csxc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 20,
+  "tuiles": null,
+  "mesure": "page /sets/csxc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Four-Party-Connection-Gift-Box",
+  "code": "CSEC",
+  "codePk": "csec",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 20,
+  "tuiles": null,
+  "mesure": "page /sets/csec listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Mew-Confluence-Deck-Building-Advanced-Gift-Box",
+  "code": "CSOC",
+  "codePk": "csoc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 19,
+  "tuiles": null,
+  "mesure": "page /sets/csoc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Arceus-Dialga-Palkia-GX-Premium-Deck-Building-Box",
+  "code": "CSMAC",
+  "codePk": "csmac",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 19,
+  "tuiles": null,
+  "mesure": "page /sets/csmac listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Primordial-Arts-Deck-Building-Gift-Box-Blastoise",
+  "code": "CSCC",
+  "codePk": "cscc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 19,
+  "tuiles": null,
+  "mesure": "page /sets/cscc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Primordial-Arts-Deck-Building-Gift-Box-Venusaur",
+  "code": "CSBC",
+  "codePk": "csbc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 19,
+  "tuiles": null,
+  "mesure": "page /sets/csbc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Pokemon-Art-Illustration-Celebration-Gathering",
+  "code": "CSYC",
+  "codePk": "csyc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 16,
+  "tuiles": null,
+  "mesure": "page /sets/csyc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Pokemon-Art-Illustration-Celebration-Scene",
+  "code": "CSJC",
+  "codePk": "csjc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 16,
+  "tuiles": null,
+  "mesure": "page /sets/csjc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Shining-Pokemon-Poke-Ball-Box",
+  "code": "CSMJC",
+  "codePk": "csmjc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 15,
+  "tuiles": null,
+  "mesure": "page /sets/csmjc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Display-Set-Gift-Box-Gengar",
+  "code": "CSUC",
+  "codePk": "csuc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 13,
+  "tuiles": null,
+  "mesure": "page /sets/csuc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Pokemon-Card-Display-Set-Gift-Box-Charizard",
+  "code": "CSMC",
+  "codePk": "csmc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 13,
+  "tuiles": null,
+  "mesure": "page /sets/csmc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Meowths-Little-Tricks",
+  "code": "CS2.1C",
+  "codePk": "cs2.1c",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 10,
+  "tuiles": null,
+  "mesure": "page /sets/cs2.1c listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Eevee-Advanced-Gift-Box",
+  "code": "CSHC",
+  "codePk": "cshc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 9,
+  "tuiles": null,
+  "mesure": "page /sets/cshc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Pokemon-Card-Display-Set-Gift-Box-Eevee",
+  "code": "CSGC",
+  "codePk": "csgc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 8,
+  "tuiles": null,
+  "mesure": "page /sets/csgc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Sword-Shield-Trainer-Collection-Gift-Box",
+  "code": "CSIC",
+  "codePk": "csic",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 8,
+  "tuiles": null,
+  "mesure": "page /sets/csic listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Eeveelutions-GX-Gift-Box",
+  "code": "CSMYC",
+  "codePk": "csmyc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 8,
+  "tuiles": null,
+  "mesure": "page /sets/csmyc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "Lillies-Support-Gift-Box",
+  "code": "CSMLC",
+  "codePk": "csmlc",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 5,
+  "tuiles": null,
+  "mesure": "page /sets/csmlc listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ },
+ {
+  "slug": "M-P-Simplified-Chinese-Promos",
+  "code": "M-P/CS",
+  "codePk": "promo-m-p",
+  "langue": "zh-hans",
+  "tirage": "zh-hans",
+  "trous": 2,
+  "tuiles": null,
+  "mesure": "page /sets/promo-m-p listée par /sets le 2026-10-10 ; ni ouverte ni appariée à ce jour"
+ }
+]
