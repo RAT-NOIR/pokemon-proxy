@@ -40,6 +40,11 @@ function lireConfig(env = process.env) {
     // B8.1 : même garde que Turnstile — un cookie de session SANS Secure n'est admis que sur un banc (test_scratch) ; en production allumée, V2_COOKIE_SECURE=0 est une configuration invalide.
     const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
     if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
+    // BANC-12 (décision du testeur, 2026-10-11) : le lien contribution ↔ compte dure 12 mois AU PLUS, puis anonymisation définitive. Au-delà de 12 (ou de la durée de l'image) : configuration invalide.
+    const BANC_MOIS = 24;
+    const bancLienMois = entier('V2_BANC_LIEN_MOIS', env.V2_BANC_LIEN_MOIS, 12, 1);
+    if (bancLienMois > 12) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (12 mois au plus)`);
+    if (bancLienMois > BANC_MOIS) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (au plus la durée de l'image)`);
     return gele({
         actif,
         base,
@@ -70,7 +75,9 @@ function lireConfig(env = process.env) {
                     extensionDev: banc ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
                     site: 'https://rat-market.fr' },
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
-        retention: { octroiJours: 730, annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
+        // BANC-12 : le LIEN entre une contribution du banc et un compte dure bancLienMois (12 au plus) ; l'IMAGE reste bancMois (24 au plus). `analysesMois` (la ligne qui porte le scanId et le compte)
+        // s'aligne sur le lien : une seule source. `mouvementsMois` reste 24 (somme des deltas = solde) mais le scanId des mouvements est retiré au bout de bancLienMois (v2/banc/anonymisation.js).
+        retention: { octroiJours: 730, annonceJours: 90, analysesMois: bancLienMois, mouvementsMois: 24, bancMois: BANC_MOIS, bancLienMois, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
         annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },
         banc: { versionsTexte: ['2026-10-07-v1'] },
         verdict: { bonneAffaireSous: -30, cherAuDela: 15 },

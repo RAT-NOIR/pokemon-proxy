@@ -27,11 +27,16 @@ function traiterEffacement(purge) {
 const INTERVALLE_PURGE_MS = 24 * 3600 * 1000;
 let minuteurPurge = null;
 async function purgerUneFois({ etatMongo = () => mongoose.connection.readyState, purge } = {}) {
-    try {
-        if (etatMongo() !== 1) return false;
-        await purge.purgerBanc(new Date());
-        return true;
-    } catch (e) { console.error(`❌ [v2 banc-purge] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); return false; }   // jamais e.message
+    if (etatMongo() !== 1) return false;
+    let ok = true;
+    try { await purge.purgerBanc(new Date()); }
+    catch (e) { console.error(`❌ [v2 banc-purge] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); ok = false; }   // jamais e.message
+    // BANC-12 : la purge PUIS la coupure des liens échus (12 mois), chacune sans que l'autre l'arrête : une panne de R2 ne doit pas laisser vivre un lien.
+    if (typeof purge.anonymiserLiens === 'function') {
+        try { await purge.anonymiserLiens(new Date()); }
+        catch (e) { console.error(`❌ [v2 banc-anonymisation] passe échouée (${(e && (e.code || e.name)) || 'erreur'})`); ok = false; }
+    }
+    return ok;
 }
 // Une passe DIFFÉRÉE au démarrage (10 min : le temps que Mongo soit prêt) puis toutes les 24 h : un processus redéployé chaque jour ne verrait jamais l'intervalle de 24 h
 // se déclencher, et la purge (le seul effaceur) ne tournerait jamais. Même schéma que la purge des annonces (B1b.7). Un seul différé et un seul intervalle par processus.

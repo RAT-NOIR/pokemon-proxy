@@ -8,6 +8,12 @@ const JOUR_MS = 86400e3;
 const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())); };
 const codeDe = e => (e && (e.code || e.name)) || 'erreur';     // jamais e.message : il peut citer une clé ou une URL
 
+/**
+ * BANC-12 — UNE définition de « le lien contribution ↔ compte est échu » : une ligne dont le jour (`le`) est antérieur ou égal à cette limite n'est PLUS corrigeable (routes.js, corriger)
+ * et est anonymisée par la passe (anonymisation.js). Le même prédicat des deux côtés : aucune ligne n'est à la fois corrigeable et anonymisable. Mois de 30,5 jours, comme les autres rétentions.
+ */
+const limiteLien = (cfg, maintenant) => new Date(new Date(maintenant).getTime() - cfg.retention.bancLienMois * 30.5 * JOUR_MS);
+
 /** Une attente bornée : rejette avec le code DELAI après `delaiMs` (le travail sous-jacent n'est pas annulé, son résultat est ignoré). */
 function creerBorner(delaiMs) {
     return p => new Promise((res, rej) => {
@@ -67,4 +73,4 @@ async function consentementAutorise(req, cfg, colFn = n => db.col(n)) {
     } catch (e) { console.error(`❌ [v2 banc] garde du jeton de consentement non conclue, rien conservé (${codeDe(e)})`); return false; }
 }
 
-module.exports = { JOUR_MS, jourUTC, codeDe, creerBorner, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };
+module.exports = { JOUR_MS, jourUTC, codeDe, creerBorner, limiteLien, limiteAttente, lignesEchues, supprimerObjetPuisLigne, consentementAutorise };

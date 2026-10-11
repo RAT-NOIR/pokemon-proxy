@@ -12,6 +12,7 @@ const db = require('../db');
 const S = require('./stockage');
 const { FORME_JETON } = require('./consentement');
 const { codeDe, creerBorner, lignesEchues, supprimerObjetPuisLigne } = require('./commun');
+const { creerAnonymisation } = require('./anonymisation');
 
 const ORPHELIN_MS = 48 * 3600e3, DELAI_MS = 10000;
 
@@ -35,7 +36,15 @@ function creerPurge({ cfg, env = process.env, stockage = null, colFn = n => db.c
         } catch (e) { dire(`bucket ou endpoint non vérifié (${codeDe(e)})`); return null; }
     }
 
+    const anonymisation = creerAnonymisation({ cfg, colFn, borner });
+
     return {
+        /**
+         * BANC-12 — la passe d'anonymisation à bancLienMois (12 mois) : voir anonymisation.js. Sans stockage prêt, les lignes ne peuvent pas être re-clefées (comptées en échec, gardées),
+         * mais les mouvements, questions et analyses sont traités quand même : le lien ne doit pas survivre à une panne de R2. Ne lève pas pour R2.
+         */
+        async anonymiserLiens(maintenant = horloge()) { return anonymisation.anonymiser(await pret(), new Date(maintenant)); },
+
         /** DELETE /api/banc/contributions : TOUTES les lignes du jeton et leurs objets. La forme du jeton est vérifiée ici aussi (jamais une requête avec autre chose). */
         async effacerParJeton(jeton) {
             if (typeof jeton !== 'string' || !FORME_JETON.test(jeton)) throw Object.assign(new Error('jeton invalide'), { code: 'ENTREE' });
@@ -119,7 +128,10 @@ async function lancerCLI(argv, { connecter = connecterReel, stockage = null, hor
     const purge = creerPurge({ cfg: cfg || require('../config').lireConfig(env), env, stockage, horloge });
     const b = await purge.purgerBanc(horloge());
     journal(`purge du banc réel : ${b.lignes} ligne(s) échue(s) supprimée(s), ${b.objets} objet(s) supprimé(s), ${b.echecs} échec(s) ; filet : ${b.orphelins} orphelin(s) supprimé(s), ${b.echecsOrphelins} échec(s)`);
-    return b.echecs || b.echecsOrphelins ? 2 : 0;
+    // BANC-12 : la même commande coupe aussi les liens échus (12 mois) — le worker peut la lancer à la main
+    const an = await purge.anonymiserLiens(horloge());
+    journal(`anonymisation du lien : ${an.lignes} ligne(s) anonymisée(s), ${an.attente} attente(s) supprimée(s), ${an.mouvements} mouvement(s), ${an.questions} question(s), ${an.analyses} analyse(s), ${an.echecs} échec(s)`);
+    return b.echecs || b.echecsOrphelins || an.echecs ? 2 : 0;
 }
 
 module.exports = { creerPurge, analyserArgs, lancerCLI, FORME_JETON, ORPHELIN_MS };
