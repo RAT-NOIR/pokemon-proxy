@@ -334,8 +334,60 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('retrait sans --effacer-r2 : R2 n\'est pas consulté (ni vérifié ni supprimé)', ordreR2, []);
 
     // ── 8. la langue ──────────────────────────────────────────────────────────────────────────────────────────────────
-    verifier('langue : la preuve écrite en base porte le VRAI compte (53 témoins, 55 images ouvertes) et plus « 42 »', [/53 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /55 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 53]);
+    verifier('langue : la preuve écrite en base porte le VRAI compte (70 témoins, 78 images ouvertes) et plus « 42 »', [/70 témoins/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /78 images/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), /42/.test(langueDuVisuel({ source: 'pokemontcg.io' }).preuve), P.TABLE_PTCGIO.reduce((n, l) => n + l.temoins.length, 0)], [true, true, false, 70]);
     verifier('langue : pokemontcg.io → « en » avec sa preuve ; une autre source inconnue → null', [langueDuVisuel({ source: 'pokemontcg.io' }).langue, !!langueDuVisuel({ source: 'pokemontcg.io' }).preuve, langueDuVisuel({ source: 'inconnue' }).langue], ['en', true, null]);
+
+    // ── 9. T2 (2026-10-12) : la source numérote parfois « SM246 », « TG05 » — le jeton d'URL s'écrit par ce qu'il AUTORISE ───────────────────────────
+    const JT = { prefixe: 'TG', largeur: 2 };
+    verifier('jeton d\'URL : un préfixe et une largeur donnent « TG05 », « SM246 », « SWSH301 » ; sans jeton, l\'entier nu', [P.urlHires('swsh9tg', 5, JT), P.urlHires('smp', 246, { prefixe: 'SM', largeur: 2 }), P.urlHires('swshp', 301, { prefixe: 'SWSH', largeur: 3 }), P.urlHires('mcd12', 6)],
+        ['https://images.pokemontcg.io/swsh9tg/TG05_hires.png', 'https://images.pokemontcg.io/smp/SM246_hires.png', 'https://images.pokemontcg.io/swshp/SWSH301_hires.png', 'https://images.pokemontcg.io/mcd12/6_hires.png']);
+    verifier('jeton d\'URL : un préfixe hors de la liste énumérée LÈVE (rien ne se construit sur un préfixe inconnu)', (() => { try { P.urlHires('x1', 5, { prefixe: 'FOO', largeur: 2 }); return 'passe'; } catch (e) { return 'leve'; } })(), 'leve');
+    verifier('jeton d\'URL : les préfixes autorisés sont énumérés', P.JETONS_URL, ['SM', 'SWSH', 'XY', 'HGSS', 'BW', 'DP', 'TG', 'GG']);
+    tr = reseau(normal); c = client(tr);
+    for (const u of ['https://images.pokemontcg.io/smp/FOO01_hires.png', 'https://images.pokemontcg.io/smp/sm01_hires.png', 'https://images.pokemontcg.io/smp/SM1234_hires.png', 'https://images.pokemontcg.io/smp/SMSM01_hires.png', 'https://images.pokemontcg.io/smp/SM01.png']) {
+        err = null; try { await c.image(u); } catch (e) { err = e.message; }
+        verifier(`client : un nom de fichier hors des formes énumérées est refusé sans requête (${u.slice(30)})`, [!!err, tr.appels.length], [true, 0]);
+    }
+    tr = reseau(url => url.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 200, type: 'image/png', octets: png }); c = client(tr);
+    await c.image(P.urlHires('smp', 246, { prefixe: 'SM', largeur: 2 })); await c.image(P.urlHires('swsh9tg', 5, JT));
+    verifier('client : « SM246 » et « TG05 » sont acceptés (hôte et chemin énumérés)', tr.appels.map(u => u.replace('https://images.pokemontcg.io', '')), ['/robots.txt', '/smp/SM246_hires.png', '/swsh9tg/TG05_hires.png']);
+
+    // les cinq sets prouvés le 2026-10-12 (T2) : numéros d'URL, jetons, segments — chacun a son « NON »
+    const SMP = L('SM-Black-Star-Promos', 'smp'), BRS = L('Brilliant-Stars', 'swsh9tg'), LOR = L('Lost-Origin', 'swsh11tg'), HSP = L('HGSS-Black-Star-Promos', 'hsp'), M21 = L('McDonalds-Collection-25th-Anniversary', 'mcd21');
+    verifier('T2 : les cinq lignes existent', [SMP, BRS, LOR, HSP, M21].map(l => !!l), [true, true, true, true, true]);
+    verifier('SM promos : « 246 » et « 89 » → URL SM246 / SM89 ; 88 (sous le segment prouvé), 249, « SM240 » (autre forme), null → rien', [P.adresseDe(SMP, '246'), P.adresseDe(SMP, '89'), P.adresseDe(SMP, '88'), P.adresseDe(SMP, '249'), P.adresseDe(SMP, 'SM240'), P.adresseDe(SMP, null)], [246, 89, null, null, null, null]);
+    verifier('Trainer Gallery : « TG10 » → 10 ; « TG31 » hors segment, « 10 » (le set principal) et « TG-10 » ne passent pas', [P.adresseDe(BRS, 'TG10'), P.adresseDe(BRS, 'TG31'), P.adresseDe(BRS, '10'), P.adresseDe(BRS, 'TG-10'), P.adresseDe(BRS, 'tg10')], [10, null, null, null, null]);
+    verifier('Lost Origin : le segment commence là où le premier témoin a parlé (TG03) : TG03 passe, TG02 non', [P.adresseDe(LOR, 'TG03'), P.adresseDe(LOR, 'TG02'), P.adresseDe(LOR, 'TG30'), P.adresseDe(LOR, 'TG31')], [3, null, 30, null]);
+    verifier('HGSS promos : 17 à 25 seulement ; McDonald\'s 25th : 1 à 25 seulement', [[16, 17, 25, 26].map(n => P.adresseDe(HSP, String(n))), [0, 1, 25, 26].map(n => P.adresseDe(M21, String(n)))], [[null, 17, 25, null], [null, 1, 25, null]]);
+    verifier('jetons : SM→2 chiffres, SWSH hors table, TG→2 chiffres, HGSS→2 chiffres, McDonald\'s→entier nu', [SMP, BRS, LOR, HSP, M21].map(l => l.jeton ? `${l.jeton.prefixe}${l.jeton.largeur}` : null), ['SM2', 'TG2', 'TG2', 'HGSS2', null]);
+    verifier('jetons : toute ligne de la table n\'emploie qu\'un préfixe énuméré', P.TABLE_PTCGIO.filter(l => l.jeton && !P.JETONS_URL.includes(l.jeton.prefixe)).map(l => l.id), []);
+    verifier('verdict : les cinq sets prouvés', ['SM-Black-Star-Promos', 'Brilliant-Stars', 'Lost-Origin', 'HGSS-Black-Star-Promos', 'McDonalds-Collection-25th-Anniversary'].map(s => P.verdictDuSet(s).verdict), ['prouve', 'prouve', 'prouve', 'prouve', 'prouve']);
+    verifier('verdict : les sets sondés et NON prouvés restent des trous (SWSH promos 2 témoins sur 3, Best of Game variantes, SV promos, kits : 404, McDonald\'s 2014/2017/2024)',
+        ['SWSH-Black-Star-Promos', 'Best-of-Game-Cards-Promos', 'SV-Black-Star-Promos', 'XY-Trainer-Kit', 'SM-Trainer-Kit-Lycanroc-Alolan-Raichu', 'HS-Trainer-Kit', 'BW-Trainer-Kit', 'DP-Trainer-Kit', 'McDonalds-Collection-2014', 'McDonalds-Collection-2017', 'McDonalds-Collection-2024', 'XY-Black-Star-Promos', 'HeartGold-SoulSilver'].map(s => P.verdictDuSet(s).verdict),
+        Array(13).fill('non-apparie'));
+    const planT = (slug, trous) => P.planifierPtcgio({ slug, trous });
+    const pTG = planT('Brilliant-Stars', [t(carte(31, 'Houndoom'), 'TG10', 501), t(carte(32, 'Zekrom'), 'TG05', 502, '5'), t(carte(33, 'Pikachu'), '10', 503, '10'), t(carte(34, 'Eevee'), 'TG31', 504)]);
+    verifier('plan Trainer Gallery : TG10 → …/swsh9tg/TG10_hires.png ; le numéro du set principal (10) est « hors set » ; TG31 « non couvert » ; fiche et adresse doivent concorder',
+        [pTG.plan.map(p => [p.carteId, p.url]), pTG.restes.map(r => [r.carteId, r.motif])], [[[31, 'https://images.pokemontcg.io/swsh9tg/TG10_hires.png'], [32, 'https://images.pokemontcg.io/swsh9tg/TG05_hires.png']], [[33, 'numero-hors-set'], [34, 'non-couvert-par-un-temoin']]]);
+    const pSM = planT('SM-Black-Star-Promos', [t(carte(41, 'Sabrina & Brycen'), '246', 601), t(carte(42, 'Pikachu'), '246', 602, '99')]);
+    verifier('plan SM promos : « 246 » → …/smp/SM246_hires.png ; une fiche qui contredit le numéro refuse', [pSM.plan.map(p => p.url), pSM.restes.map(r => r.motif)], [['https://images.pokemontcg.io/smp/SM246_hires.png'], ['numero-contradictoire']]);
+    verifier('plan HGSS promos : « 24 » → …/hsp/HGSS24_hires.png', planT('HGSS-Black-Star-Promos', [t(carte(51, 'Hitmonchan'), '24', 701)]).plan.map(p => p.url), ['https://images.pokemontcg.io/hsp/HGSS24_hires.png']);
+
+    // ── 10. T2, tour de correction 1 : un numéro qui porte 2 produits Cardmarket ou plus (V1/V2/V3) — la source n'a qu'un fichier par numéro, la note le DIT ──
+    const NOTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
+    const pV = P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', tousNumerosCm: ['90', '90', '246', '089', 'SM240', '156', '156', '156'], trous: [t(carte(61, 'Raichu-GX'), '90', 801), t(carte(62, 'Sabrina & Brycen'), '246', 802), t(carte(63, 'Zoroark'), '89', 803), t(carte(64, 'Dragonite-GX'), '156', 804)] });
+    verifier('note de variante : OUI sur un numéro doublé (90 ×2, 156 ×3), NON sur un numéro seul (246, « 089 » = 89), comptés par le numéro du produit', pV.plan.map(p => [p.carteId, p.noteVariante ?? null]), [[61, NOTE], [62, null], [63, null], [64, NOTE]]);
+    verifier('note de variante : sans la liste des numéros du set, aucune note n\'est inventée', P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', trous: [t(carte(65, 'Raichu-GX'), '90', 805)] }).plan.map(p => p.noteVariante ?? null), [null]);
+    verifier('note de variante : « SM240 » (autre forme) ne compte pas pour le numéro 240', P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', tousNumerosCm: ['240', 'SM240'], trous: [t(carte(66, 'Espeon & Deoxys-GX'), '240', 806)] }).plan.map(p => p.noteVariante ?? null), [null]);
+    verifier('note de variante : deux produits au même NOM mais à deux numéros ne la portent pas (jamais comptée par le nom)', P.planifierPtcgio({ slug: 'McDonalds-Collection-25th-Anniversary', tousNumerosCm: ['13', '17'], trous: [t(carte(67, 'Squirtle'), '17', 807), t(carte(68, 'Squirtle'), '13', 808)] }).plan.map(p => p.noteVariante ?? null), [null, null]);
+    {   // de bout en bout : le collecteur écrit la note sur l'entrée cartes.images (et le document images) — numéro doublé seulement
+        const Bv = fausseBase(); semer(Bv);
+        const lireDouble = async () => new Map([...Object.entries(NUMEROS_CM), [99, '011']].map(([k, v]) => [Number(k), v]));
+        await lanceur(Bv, fauxR2(), { lireNumeros: lireDouble });
+        const e = id => (Bv.col('cartes').get(id).images || []).filter(x => x.source === 'pokemontcg.io').map(x => x.noteVariante ?? null);
+        verifier('collecteur : l\'entrée du numéro doublé (Mew 011) porte la note, celle du numéro seul (Pikachu 005) ne la porte pas', [e(2), e(1)], [[NOTE], [null]]);
+        verifier('collecteur : le document images porte la même note (Mew) et les entrées des autres sources ne bougent pas', [Bv.col('images').get(P.idImagePtcgio(SLUG, 2, '011')).noteVariante, Bv.col('cartes').get(1).images.filter(x => x.source !== 'pokemontcg.io').map(x => Object.keys(x).sort().join())], [NOTE, ['cleR2,numero,set,source']]);
+    }
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
