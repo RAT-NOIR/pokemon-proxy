@@ -20,10 +20,23 @@ const { corrigerImpressions } = require('./corrections-impressions');
 const PARAMS_TEXTE = new Set(['effect', 'jtrans', 'dex', 'jdex', 'transdex', 'text', 'jtext', 'rule', 'jrule', 'trivia', 'jgroup']);
 
 /**
+ * Retire les commentaires HTML AVANT tout découpage (sémantique MediaWiki : `<!--` … `-->`, non gourmand,
+ * multi-lignes ; un `<!--` jamais fermé court jusqu'à la fin du texte). Sans cela le découpage au `|` lit
+ * le texte commenté (`cardno=102<!--` + une impression japonaise fantôme, 2026-10-11).
+ * ⚠️ Les positions `debut`/`fin` des gabarits se rapportent au texte SANS commentaires.
+ */
+function sansCommentaires(texte) {
+    const s = String(texte ?? '');
+    if (!s.includes('<!--')) return s;
+    return s.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+}
+
+/**
  * Gabarits de premier niveau d'un wikitext.
  * @returns {Array<{nom: string, params: object, positionnels: string[], brut: string, debut: number, fin: number}>}
  */
 function gabarits(texte) {
+    texte = sansCommentaires(texte);
     const out = [];
     let i = 0;
     const n = texte.length;
@@ -549,6 +562,7 @@ function natureIgnoree(brut) {
  *     que le filtre a écartée (sa PREMIÈRE référence désigne autre chose).
  */
 function entreesDeLaSetlist(texte, b) {
+    texte = sansCommentaires(texte);   // le repli « tout le wikitext » lit le texte par expressions régulières, hors gabarits
     const echapper = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nomsExpansion = [].concat(b.expansion);
     const nomsSections = b.setlist === null ? null : (b.setlist || nomsExpansion);
@@ -613,4 +627,4 @@ function entreesDeLaSetlist(texte, b) {
     return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
+module.exports = { sansCommentaires, gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
