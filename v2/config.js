@@ -55,7 +55,14 @@ function lireConfig(env = process.env) {
                    inscriptionIpHeure: entier('V2_INSCRIPTION_IP_HEURE', env.V2_INSCRIPTION_IP_HEURE, 10, 1), oubliIpHeure: entier('V2_OUBLI_IP_HEURE', env.V2_OUBLI_IP_HEURE, 10, 1),
                    reinitIpHeure: entier('V2_REINIT_IP_HEURE', env.V2_REINIT_IP_HEURE, 10, 1), verificationIpHeure: entier('V2_VERIFICATION_IP_HEURE', env.V2_VERIFICATION_IP_HEURE, 30, 1),
                    connexionIpHeure: entier('V2_CONNEXION_IP_HEURE', env.V2_CONNEXION_IP_HEURE, 30, 1), suppressionParCompteHeure: entier('V2_SUPPRESSION_COMPTE_HEURE', env.V2_SUPPRESSION_COMPTE_HEURE, 10, 1),
-                   renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1) },
+                   renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1),
+                   collectionEcrituresParCompteHeure: 1000 },
+        // « Ma collection » : bornes écrites par ce qu'elles protègent — la taille de la grappe de production (457 Mo pour un arrêt dur à 480 Mo). Pas de variable d'environnement : une borne qu'on desserre se décide.
+        // clesService : plafond GLOBAL (toutes les clés de tous les comptes), VALEUR PROVISOIRE — la décision finale revient au testeur. Un compteur unique, voir collection/service.js.
+        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000, clesService: 100000,
+                      // clesService et forfaitDocument comptent des PLACES (une clé = 1). forfaitDocument : places que coûte un DOCUMENT neuf (un set neuf pour un compte), en plus de sa première clé
+                      // = le maximum MESURÉ (collStats après fsync : données + index d'un document d'une clé, divisés par le coût mesuré d'une clé maximale, moins la clé) arrondi vers le haut = 7 ; test-collection.js le mesure et échoue au-dessus.
+                      forfaitDocument: 7 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24 },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },

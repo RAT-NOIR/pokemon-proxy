@@ -206,8 +206,12 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         'POST /api/banc/correction': { auth: 'bearer', base: () => ({ scanId: new mongoose.Types.ObjectId().toHexString(), idProduct: ID_A, consentementBanc: { version: cfg.banc.versionsTexte[0], le: new Date().toISOString(), jeton: 'jeton-de-banc-abcdefghij1234' } }), nullables: [] },
         'DELETE /api/banc/contributions': { auth: 'bearer', base: () => ({ jeton: 'jeton-de-banc-abcdefghij9999' }), nullables: [] },
         'POST /api/scanner/analyses': { auth: 'session', multipart: true, idem: true, base: () => ({ source: 'camera' }), nullables: [] },
-        'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` }
+        'POST /api/scanner/analyses/:id/reponse': { auth: 'session', base: () => ({ choix: 'a' }), nullables: [], idem: true, chemin: () => `/api/scanner/analyses/${new mongoose.Types.ObjectId().toHexString()}/reponse` },
+        // lot COLLECTION : le corps est un booléen (aucun champ texte à injecter : la cellule (a) est « sans objet », dite) ; le compte de l'acteur est vérifié ; la clé et le slug sont ceux d'une fiche plausible
+        'PUT /api/collection/sets/:slug/fiches/:cle': { auth: 'session', base: () => ({ possedee: true }), nullables: [], chemin: () => `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}` }
     };
+    // les routes en LECTURE à paramètre de chemin : le banc les joue avec un paramètre ordinaire (un « :slug » littéral n'est pas un slug)
+    const CHEMIN_LECTURE = { 'GET /api/collection/sets/:slug': '/api/collection/sets/Banc-Set' };
     const ecarts = [];                                     // tout ce que le banc reproche au serveur
     const ecart = (cible, charge, msg) => { ecarts.push(`${cible} [${charge}] ${msg}`); };
     const toleres = new Map();                             // acceptations NOMMÉES : clé -> nombre de variantes
@@ -352,6 +356,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     mode = 'affirmee';
     await raw('journal_scans').insertOne({ _id: new mongoose.Types.ObjectId(scanA), userId: `v2:installation:${A.i._id}`, prixLive: null, idProduct: ID_A });
     const CA = await compte(); const CAinst = await instLiee(CA);
+    await envoyer(V, { methode: 'PUT', chemin: `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}`, entetes: siteH(CA.cookie), corps: { possedee: true } });   // la victime coche une fiche
     const jetonBancA = 'jeton-banc-victime-abcdefghij12'; secret(jetonBancA, 'jeton de consentement');
     await raw('banc_lignes').insertOne({ _id: 'ligne-victime', cleR2: 'banc/final/x.webp', etat: 'confirmee', jetonEmpreinte: crypto.createHash('sha256').update(jetonBancA).digest('hex'), le: new Date(), expireLe: new Date(Date.now() + 86400e3), source: 'affirme', verite: ID_A });
     const codeA = (await envoyer(V, { methode: 'POST', chemin: '/api/compte/code', entetes: siteH(CA.cookie), corps: {} })).json;
@@ -368,9 +373,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     const etatA = async () => ({
         question: await raw('questions').findOne({ _id: `${scanA}:0` }), analyse: await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(scanA) }),
         journal: await raw('journal_scans').findOne({ _id: new mongoose.Types.ObjectId(scanA) }), ligne: await raw('banc_lignes').countDocuments({ _id: 'ligne-victime' }),
-        installationCompte: await raw('installations').findOne({ _id: CAinst.i._id })
+        installationCompte: await raw('installations').findOne({ _id: CAinst.i._id }),
+        collection: await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()
     });
     const avantA = JSON.stringify(await etatA());
+    H.v('(e) contrôle de l\'instrument — la collection de la victime A existe (une clé cochée par elle)', [(await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()).map(d => d.cles)], [[['895789|001']]]);
 
     const nonRejoue = (rep) => !rep.entetes['idempotency-replayed'];
     for (const r of ecritures) {
@@ -435,6 +442,13 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         else if (r.cle === 'POST /api/banc/correction') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { scanId: scanA, idProduct: ID_A } }); attendu = [404]; }
         else if (r.cle === 'DELETE /api/banc/contributions') { rep = await envoyer(V, { methode: 'DELETE', chemin: r.chemin, entetes: extH(B.jeton), corps: { jeton: 'jeton-banc-autrui-abcdefghij34' } }); attendu = [200]; }
         else if (r.cle === 'DELETE /api/compte/installations/:id') { rep = await envoyer(V, { methode: 'DELETE', chemin: `/api/compte/installations/${CAinst.i._id}`, entetes: siteH(CB.cookie) }); attendu = [404]; }
+        else if (r.cle === 'PUT /api/collection/sets/:slug/fiches/:cle') {
+            // B « décoche » la clé de A dans le MÊME set : 200, mais sur SA collection (0 fiche) — la clé de A est invisible et ne se modifie pas (état de A comparé plus bas)
+            rep = await envoyer(V, { methode: 'PUT', chemin: cible.chemin(), entetes: siteH(CB.cookie), corps: { possedee: false } }); attendu = [200];
+            const lu = await envoyer(V, { methode: 'GET', chemin: '/api/collection/sets/Banc-Set', entetes: siteH(CB.cookie) });
+            if (rep.json && rep.json.possedees !== 0) ecart(r.cle, 'e', `B voit ${rep.json.possedees} fiche(s) cochée(s) dans le set de A`);
+            if (!lu.json || lu.json.possedees.length) ecart(r.cle, 'e', 'la lecture de B montre une clé de A');
+        }
         else if (r.cle === 'POST /api/scanner/analyses/:id/reponse') { rep = await envoyer(V, { methode: 'POST', chemin: `/api/scanner/analyses/${scanSA}/reponse`, entetes: siteH(CB.cookie), corps: { choix: 'a' } }); attendu = [404]; }
         else if (r.cle === 'POST /api/compte/lier') { rep = await envoyer(V, { methode: 'POST', chemin: r.chemin, entetes: extH(B.jeton), corps: { code: codeA.code } }); attendu = [404, 410]; }
         else if (r.cle === 'POST /api/installation') {
@@ -468,9 +482,9 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     H.v('toute cellule est jouée ou déclarée sans objet AVEC sa raison', cellules.length === ecritures.length * 6 && cellules.every(c => c.etat === 'jouee' || c.raison), true);
     // la route en LECTURE (GET /api/compte) : sa chaîne de requête passe la même garde
     for (const r of lectures) {
-        const c = await compte(); let bons = 0, n = 0;
-        for (const qs of ['?a[$ne]=1', '?constructor[prototype][x]=1', '?suite[$ne]=x']) { n++; const rep = await envoyer(V, { methode: r.methode, chemin: r.chemin + qs, entetes: siteH(c.cookie) }); if (rep.statut === 400) bons++; }
-        const ok = await envoyer(V, { methode: r.methode, chemin: r.chemin, entetes: siteH(c.cookie) });
+        const c = await compte(); let bons = 0, n = 0; const ch = CHEMIN_LECTURE[r.cle] || r.chemin;
+        for (const qs of ['?a[$ne]=1', '?constructor[prototype][x]=1', '?suite[$ne]=x']) { n++; const rep = await envoyer(V, { methode: r.methode, chemin: ch + qs, entetes: siteH(c.cookie) }); if (rep.statut === 400) bons++; }
+        const ok = await envoyer(V, { methode: r.methode, chemin: ch, entetes: siteH(c.cookie) });
         H.v(`(f) ${r.cle} : ${n} requêtes hostiles → 400, la requête ordinaire → 200`, [bons, ok.statut], [n, 200]);
     }
     for (const [t, n] of toleres) console.log(`   toléré (${n} variante(s)) : ${t}`);
