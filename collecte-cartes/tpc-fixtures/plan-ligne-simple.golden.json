@@ -158,5 +158,50 @@
     "detail": "symbole « https://asia.pokemon-card.com/id/card-img/mark/SV1.png » dans une liste au symbole « https://asia.pokemon-card.com/id/card-img/mark/MA5.png »"
    }
   ]
+ },
+ "smp": {
+  "plan": [
+   {
+    "carteId": 30,
+    "nomEn": "Pikachu",
+    "numero": "SM001",
+    "idProduct": 31,
+    "fiche": {
+     "idFiche": 5001,
+     "nom": "Pikachu",
+     "numero": "SM001",
+     "denominateur": "SM-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/smSM001.png",
+     "dex": 25,
+     "pv": 60
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 5001 : n° SM001/SM-P, nom « Pikachu » = « Pikachu », Pokédex 25, PV 60 ; set SM-P (liste filtrée par la source)"
+   },
+   {
+    "carteId": 31,
+    "nomEn": "Eevee",
+    "numero": "SM002",
+    "idProduct": 32,
+    "fiche": {
+     "idFiche": 5002,
+     "nom": "Eevee",
+     "numero": "SM002",
+     "denominateur": "SM-P",
+     "image": "https://asia.pokemon-card.com/id/card-img/smSM002.png"
+    },
+    "voie": "nom",
+    "preuve": "tpc-asie fiche 5002 : n° SM002/SM-P, nom « Eevee » = « Eevee » ; set SM-P (liste filtrée par la source)"
+   }
+  ],
+  "restes": [
+   {
+    "carteId": 32,
+    "nomEn": "Mew",
+    "numero": "a005",
+    "idProduct": 33,
+    "motif": "absente-de-la-source"
+   }
+  ]
  }
 }

@@ -75,6 +75,7 @@ verifier('REGLES surveille seuils-images.js ET collecteur-images-tpc.js', ['seui
 // ➕ 2026-10-11 : PIKAQIAN — 300 px par décision du testeur, SANS être une source officielle : la liste officielle ne bouge pas, celle des 300 px la contient + pikaqian
 verifier('pikaqian → 300, et n\'est PAS dans SOURCES_OFFICIELLES (que ce banc garde = TPC + pokemon-com)', [S.largeurMinDe('pikaqian'), S.SOURCES_OFFICIELLES.includes('pikaqian'), S.SOURCES_A_300.includes('pikaqian')], [300, false, true]);
 verifier('REGLES surveille le collecteur, le client/la preuve, la table (et son JSON) de pikaqian', ['collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json'].map(x => (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes(`'${x}'`)), [true, true, true, true]);
+verifier('REGLES surveille la table des unités TPC (tpc-sets.js : refuse-table si le commit du worker ne la porte pas)', (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes("'collecte-cartes/tpc-sets.js'"), true);
 verifier('sources-en-service : pikaqian est en service, bulbapedia suspendu', [require('./collecte-cartes/sources-en-service').enService('pikaqian'), require('./collecte-cartes/sources-en-service').enService('bulbapedia')], [true, false]);
 
 // §44 — « si la règle changeait demain, quel fichier bougerait ? » : tout fichier que seuils-images.js charge (donc dont dépend

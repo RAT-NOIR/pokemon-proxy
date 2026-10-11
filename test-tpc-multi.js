@@ -31,20 +31,34 @@ const fm = (n, nom, den, sym) => ({ idFiche: 2000 + Number(n), nom, numero: n, d
 const S1 = 'https://asia.pokemon-card.com/id/card-img/mark/MA5.png', S2 = 'https://asia.pokemon-card.com/id/card-img/mark/SV1.png';
 const fichesM = [fm('165', 'Chespin', '164', S1), fm('166', 'Fomantis', '164', S1), fm('167', 'Fennekin', '164', S1), fm('168', 'Armarouge', '198', S1), fm('169', 'Goldeen', '164', S2)];
 const tm = n => ({ carte: { _id: Number(n), nomEn: fichesM.find(f => f.numero === n).nom }, numeroFiche: n, idProduct: Number(n) });
-const rejouerLigneSimple = () => ({
-    sv: T.planifierTpc({ trous, fiches, code: 'SV-P', site: 'tpc-asie' }),
-    ma5: T.planifierTpc({ trous: ['165', '166', '167', '168', '169'].map(tm), fiches: fichesM, code: 'MA5', site: 'tpc-asie' })
+// une ligne existante à numéros PRÉFIXÉS : promos « SM001 » (le préfixe fait partie du numéro des deux côtés) et un numéro à jeton « a005 »
+// que la fiche TPC écrit « 005 » (aucune correspondance : un trou, jamais la fiche voisine)
+const fp = (n, nom, extra = {}) => ({ idFiche: 5000 + Number(n.replace(/\D/g, '')), nom, numero: n, denominateur: 'SM-P', image: `https://asia.pokemon-card.com/id/card-img/sm${n}.png`, ...extra });
+const trousSM = [
+    { carte: { _id: 30, nomEn: 'Pikachu', categorie: 'pokemon', ndex: 25, pv: 60 }, numeroFiche: 'SM001', idProduct: 31 },
+    { carte: { _id: 31, nomEn: 'Eevee', categorie: 'pokemon' }, numeroFiche: 'SM002', idProduct: 32 },
+    { carte: { _id: 32, nomEn: 'Mew', categorie: 'pokemon' }, numeroFiche: 'a005', idProduct: 33 }
+];
+const fichesSM = [fp('SM001', 'Pikachu', { dex: 25, pv: 60 }), fp('SM002', 'Eevee'), fp('005', 'Mew')];
+// `TP` : le module tpc.js à rejouer — celui d'aujourd'hui, ou (--module=<fichier>) celui d'AVANT le lot, pour prouver le plan figé
+const rejouerLigneSimple = TP => ({
+    sv: TP.planifierTpc({ trous, fiches, code: 'SV-P', site: 'tpc-asie' }),
+    ma5: TP.planifierTpc({ trous: ['165', '166', '167', '168', '169'].map(tm), fiches: fichesM, code: 'MA5', site: 'tpc-asie' }),
+    smp: TP.planifierTpc({ trous: trousSM, fiches: fichesSM, code: 'SM-P', site: 'tpc-asie' })
 });
+const moduleArg = process.argv.find(a => a.startsWith('--module='))?.slice(9);
+const TP_REJEU = moduleArg ? require(path.resolve(moduleArg)) : T;
 
 if (process.argv.includes('--figer')) {
-    fs.writeFileSync(GOLDEN, JSON.stringify(rejouerLigneSimple(), null, 1));
-    console.log('plan de référence écrit :', GOLDEN);
+    fs.writeFileSync(GOLDEN, JSON.stringify(rejouerLigneSimple(TP_REJEU), null, 1));
+    console.log('plan de référence écrit :', GOLDEN, moduleArg ? `(avec ${moduleArg})` : '(avec le tpc.js COURANT)');
     process.exit(0);
 }
 
 (async () => {
     // ── 1. UNE LIGNE EXISTANTE NE BOUGE PAS ───────────────────────────────────────────────────────────────────────────
-    verifier('le plan d\'une ligne à une liste est identique, octet pour octet, à celui d\'avant le lot', JSON.stringify(rejouerLigneSimple()), JSON.stringify(JSON.parse(fs.readFileSync(GOLDEN, 'utf8'))));
+    verifier('le plan de trois lignes existantes (SV-P, MA5, SM-P à numéros préfixés) est identique, octet pour octet, à celui d\'avant le lot', JSON.stringify(rejouerLigneSimple(TP_REJEU)), JSON.stringify(JSON.parse(fs.readFileSync(GOLDEN, 'utf8'))));
+    verifier('   la ligne à numéros préfixés : SM001 et SM002 prouvés, « a005 » face à une fiche « 005 » = trou', [rejouerLigneSimple(TP_REJEU).smp.plan.map(x => x.numero), rejouerLigneSimple(TP_REJEU).smp.restes.map(r => `${r.numero}:${r.motif}`)], [['SM001', 'SM002'], ['a005:absente-de-la-source']]);
     const sans = S.TABLE_TPC.filter(l => !l.listes);
     verifier('les 70 lignes d\'avant sont toujours là, aucune ne porte `listes`', [S.TABLE_TPC.filter(l => !['First-Impact', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler'].includes(l.slug)).length, sans.length >= 70 ? 'ok' : sans.length], [70, 'ok']);
     verifier('listesDe(ligne existante) = UNE liste, sans préfixe, au code et au compte de la ligne',

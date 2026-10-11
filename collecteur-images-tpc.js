@@ -29,6 +29,7 @@ const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collec
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
+const { cleNumero } = require('./collecte-cartes/jointure');
 const { TABLE_TPC, ligneTpc, listesDe } = require('./collecte-cartes/tpc-sets');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
@@ -346,9 +347,11 @@ if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === 
 
 /**
  * `--plan-reel` : LIT les listes et les fiches à la source (le VRAI verrou global du site, cadence et robots du client de production),
- * apparie, imprime le plan — et ne télécharge AUCUNE image, n'écrit RIEN dans la base ni dans R2 (seul le verrou global, qui est le geste
- * du collecteur, s'y écrit). Les listes et les fiches lues se gardent dans un dossier LOCAL (`--cache`), jamais dans `tpc_fiches` : un
- * second passage ne redemande rien, et la base n'a pas bougé. Pure de ses entrées pour le banc : `ouvrir` et `fabriquer` sont injectables.
+ * apparie, imprime le plan — et ne télécharge AUCUNE image. CE QU'IL ÉCRIT : le seul verrou global `tpc-asie` (pris puis rendu, le geste du
+ * collecteur) ; RIEN d'autre dans la base, RIEN dans R2 — pas même l'alerte `source-bloquee` : un blocage se rapporte dans la sortie
+ * (`arret: 'bloque'`). Les listes et les fiches lues se gardent dans un dossier LOCAL (`--cache`), jamais dans `tpc_fiches`. La sortie
+ * porte le compte des statuts HTTP par hôte (`statutsHttp`). Les AUTRES modes : `--plan` (cache seulement) et `--verrou` ne font aucune
+ * requête et n'écrivent rien ; la collecte (`collecterSet`, le worker) écrit images, R2, jointures et l'alerte de blocage.
  */
 function baseLocale(reelle, fichier, noms = ['collecte_images_etat', 'tpc_fiches']) {
     const fs = require('fs'), path = require('path');
@@ -383,6 +386,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
     const local = baseLocale(cx.db, fichierCache);
     const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transport } : {}), ...(cadenceMs != null ? { cadenceMs, reessaiMs: 0 } : {}) });
     const bilan = [];
+    const statutsHttp = () => ({ [T.SITES[site].hote]: client.statuts() });     // 200/3xx/403/429/5xx par hôte
     try {
         for (const slug of sets) {
             const L = ligneDe(site, slug);
@@ -406,15 +410,18 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
                 // y cherche la position n par INTERPOLATION et on LIT la fiche trouvée — la preuve vient de son propre numéro, jamais de la position.
                 // Une position qui ne mène nulle part est dite « fiche-non-lue » (un trou de NOTRE travail), pas « absente-de-la-source ».
                 const P0 = await planifier(local, slug, L, []);
-                const voulus = new Map();
-                for (const r of P0.restes) { const m = /^([A-Za-z]*)0*(\d+)/.exec(String(r.numero ?? '')); if (!m) continue; const p = m[1].toUpperCase(); (voulus.get(p) || voulus.set(p, new Set()).get(p)).add(Number(m[2])); }
+                // la CLÉ DE PRODUCTION (`cleNumero`, préfixe compris) décide de tout : « A19 » n'est jamais « 19 » ni « B19 ». Chiffres seuls : la distance.
+                const voulus = new Map();       // clé → { p: préfixe, n: chiffres }
+                for (const r of P0.restes) { const k = cleNumero(r.numero), m = /^([A-Z-]*)(\d+)/.exec(k ?? ''); if (k && m) voulus.set(k, { p: m[1], n: Number(m[2]) }); }
                 for (const { S, l } of lues) {
-                    const p = String(S.prefixe ?? '').toUpperCase(), dejaLues = new Map(), vus = new Map();
+                    const p = String(S.prefixe ?? '').toUpperCase(), dejaLues = new Map();
+                    const cleDe = f => cleNumero(L.listes ? `${p}${f.numero}` : f.numero);
+                    const mesVoulus = [...voulus].filter(([, v]) => !L.listes || v.p === p).sort((a, b) => a[1].n - b[1].n);
                     const lireA = async i => {
                         if (!dejaLues.has(i)) { const [f] = await lireFiches(local, client, site, L, [l.ids[i]], { compter: () => { } }); dejaLues.set(i, f ? { ...f, ...(L.listes ? { prefixe: S.prefixe, listeCode: S.code } : {}) } : null); }
                         return dejaLues.get(i);
                     };
-                    for (const n of [...(voulus.get(p) || [])].sort((a, b) => a - b)) {
+                    for (const [cle, { n }] of mesVoulus) {
                         let i = Math.min(Math.max(n - 1, 0), l.ids.length - 1), trouve = false;
                         const passes = new Set();
                         while (!passes.has(i) && passes.size < 6) {
@@ -422,17 +429,17 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
                             const f = await lireA(i);
                             const m = Number(String(f?.numero ?? '').replace(/\D/g, ''));
                             if (!f || !Number.isFinite(m)) break;
-                            if (m === n) { trouve = true; break; }
+                            if (cleDe(f) === cle) { trouve = true; break; }
                             i = Math.min(Math.max(i + (n - m), 0), l.ids.length - 1);
                         }
-                        if (!trouve) nonLues.add(`${p}${n}`);
+                        if (!trouve) nonLues.add(cle);
                     }
                     fiches.push(...[...dejaLues.values()].filter(Boolean));
                 }
             }
             local.ecrireFichier();
             const P = await planifier(local, slug, L, fiches);
-            for (const r of P.restes) if (r.motif === 'absente-de-la-source') { const m = /^([A-Za-z]*)0*(\d+)/.exec(String(r.numero ?? '')); if (m && nonLues.has(`${m[1].toUpperCase()}${Number(m[2])}`)) r.motif = 'fiche-non-lue'; }
+            for (const r of P.restes) if (r.motif === 'absente-de-la-source') { if (nonLues.has(cleNumero(r.numero))) r.motif = 'fiche-non-lue'; }
             const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
             const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
             const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
@@ -443,11 +450,11 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
         local.ecrireFichier();
         if (!e.bloque) throw e;
         const msg = `${site} BLOQUÉ : ${e.message}`;
-        await E.updateOne({ _id: idAlerteBloquee(site) }, { $set: { active: true, constateLe: new Date(), motif: e.message, status: e.status ?? null, unite: 'plan-reel', requetes: client.compteRequetes() }, $setOnInsert: { depuis: new Date() } }, { upsert: true });
-        console.error(`⛔ ${msg}`);
-        return { arret: 'bloque', erreur: e.message, bilan, requetes: client.compteRequetes() };
+        // MODE PLAN : aucune écriture hors du verrou — pas d'alerte en base ; l'arrêt se rapporte ici, dans la sortie
+        console.error(`⛔ ${msg} — rapporté ici seulement (aucune alerte écrite par le mode plan)`);
+        return { arret: 'bloque', erreur: e.message, bilan, requetes: client.compteRequetes(), statutsHttp: statutsHttp() };
     } finally { await verrou.rendre(); }
-    return { bilan, requetes: client.compteRequetes(), cadenceMs: client.cadence() };
+    return { bilan, requetes: client.compteRequetes(), cadenceMs: client.cadence(), statutsHttp: statutsHttp() };
 }
 
 (async () => {
@@ -459,7 +466,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
         if (!sets || !cache) { console.error('❌ --plan-reel exige --sets=<slug,…> et --cache=<dossier>'); await fermer(); process.exit(2); }
         const { modeles } = require('./collecte-cartes/schemas');
         const r = await planReel({ cx, M: modeles(cx), sets, fichierCache: require('path').join(cache, 'plan-reel.json'), seulementTrous: process.argv.includes('--fiches-des-trous') });
-        console.log('\nRÉSULTAT', JSON.stringify({ requetesReelles: r.requetes, cadenceMs: r.cadenceMs, arret: r.arret ?? null }));
+        console.log('\nRÉSULTAT', JSON.stringify({ requetesReelles: r.requetes, cadenceMs: r.cadenceMs, arret: r.arret ?? null, statutsHttp: r.statutsHttp ?? null }));
         require('fs').writeFileSync(require('path').join(cache, 'plan-reel-resultat.json'), JSON.stringify(r, null, 1));
         await fermer(); return;
     }

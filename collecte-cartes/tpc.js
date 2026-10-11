@@ -276,6 +276,7 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
     const S = SITES[site];
     if (!S) throw new Error(`TPC : site « ${site} » hors de la liste (${SOURCES_TPC.join(', ')})`);
     let lie = verrou, file = Promise.resolve(), dernier = 0, compte = 0, bloque = null, robots;   // robots : undefined = pas encore lu
+    const statuts = {};
     let cadenceEff = cadenceMs;                                     // relevée par un Crawl-delay plus lent, jamais abaissée
     const pause = ms => new Promise(r => setTimeout(r, ms));
     function garde() {
@@ -289,7 +290,9 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         if (attente > 0) await pause(attente);
         garde();                                                     // le verrou a pu être perdu pendant l'attente
         dernier = Date.now(); compte++;
-        return transport.get(url, o);
+        const rep = await transport.get(url, o);
+        statuts[rep.status] = (statuts[rep.status] || 0) + 1;       // le compte des statuts HTTP reçus (200, 3xx, 403, 429, 5xx…) : l'absence de blocage se LIT
+        return rep;
     }
     const bloquer = (r, url) => { bloque = Object.assign(new Error(`${site} BLOQUÉ (HTTP ${r.status}) sur ${url} — on s'arrête, plus aucune requête`), { bloque: true, status: r.status }); throw bloque; };
     async function requete(url, o = {}) {
@@ -351,6 +354,7 @@ function fabriquerClientTpc({ site, transport = transportFetch, cadenceMs = CADE
         json: async url => { const r = await obtenir(url); if (r == null) return null; try { return JSON.parse(r.texte); } catch { throw new Error(`${site} : réponse non JSON sur ${url}`); } },
         image: async url => { const r = await obtenir(url, { binaire: true }); if (r == null) return null; if (!r.octets) throw new Error(`${site} : « ${r.type} » n'est pas une image (${url})`); return r.octets; },
         compteRequetes: () => compte,
+        statuts: () => ({ ...statuts }),
         cadence: () => cadenceEff,
         bloque: () => bloque
     };
