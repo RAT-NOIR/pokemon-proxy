@@ -69,6 +69,7 @@ const TABLE_PTCGIO = Object.freeze([
       temoins: [t(1, 'Bulbasaur', '1/25'), t(13, 'Tepig', '13/25'), t(17, 'Squirtle', '17/25'), t(25, 'Pikachu', '25/25')], lu: '2026-10-12' }
 ].map(l => Object.freeze({ lu: '2026-10-10', ...l })));
 
+const NOTE_VARIANTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
 const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
 
 /** Le numéro d'URL (entier) d'un numéro de produit qui a la FORME de cette ligne (suffixe/préfixe du kit), couvert ou non ; sinon null. */
@@ -109,8 +110,13 @@ function verdictDuSet(slug) {
  * même numéro, ou sans numéro dans le set) n'y figure jamais — additif.
  * @param {{slug: string, trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>}} o
  */
-function planifierPtcgio({ slug, trous }) {
+function planifierPtcgio({ slug, trous, tousNumerosCm = null }) {
     const V = verdictDuSet(slug), lignes = lignesDe(slug);
+    // 🔑 T2 : la source n'a qu'UN fichier par numéro ; quand 2 produits Cardmarket du set ou plus portent ce numéro (V1/V2/V3), le choix de la variante n'est
+    // pas prouvé et l'entrée le DIT (`noteVariante`, lue par le site). Compté par le numéro du PRODUIT (l'adresse qu'il fait), jamais par le nom ; sans la
+    // liste des numéros du set, aucune note n'est inventée.
+    const parAdresse = new Map();
+    for (const nc of tousNumerosCm || []) for (const l of lignes) { const n = adresseDe(l, nc); if (n != null) { const k = `${l.id}|${n}`; parAdresse.set(k, (parAdresse.get(k) || 0) + 1); break; } }
     const vus = new Set(), plan = [], restes = [];
     for (const x of trous) {
         // 🔴 LE NUMÉRO QUI FAIT L'ADRESSE EST CELUI DU PRODUIT CARDMARKET (`numeroCm`), pas `numeroFiche` : une réimpression porte en fiche le
@@ -135,7 +141,7 @@ function planifierPtcgio({ slug, trous }) {
         const cle = `${x.carte._id}|${hit.l.id}|${hit.n}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
-        plan.push({ ...base, ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton), voie: 'set-prouve+numero',
+        plan.push({ ...base, ...((parAdresse.get(`${hit.l.id}|${hit.n}`) || 0) >= 2 ? { noteVariante: NOTE_VARIANTE } : {}), ligneId: hit.l.id, n: hit.n, url: urlHires(hit.l.id, hit.n, hit.l.jeton), voie: 'set-prouve+numero',
             preuve: `images.pokemontcg.io set ${hit.l.id} n°${hit.n} ; numéro identique au nôtre (Cardmarket ${x.numeroCm}${x.numeroFiche != null ? `, fiche ${x.numeroFiche}` : ''}) ; set prouvé à l'œil le ${hit.l.lu} sur ${hit.l.temoins.map(w => `n°${w.n} ${w.nom} ${w.imprime}`).join(', ')} ; marque : ${hit.l.marque}` });
     }
     return { plan, restes };
@@ -249,6 +255,6 @@ function planRetraitPtcgio(cartes) {
 
 module.exports = {
     SOURCE, HOTE, HOTE_NOM, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
-    TABLE_PTCGIO, JETONS_URL, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
+    TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

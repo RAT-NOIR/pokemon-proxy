@@ -373,6 +373,22 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     verifier('plan SM promos : « 246 » → …/smp/SM246_hires.png ; une fiche qui contredit le numéro refuse', [pSM.plan.map(p => p.url), pSM.restes.map(r => r.motif)], [['https://images.pokemontcg.io/smp/SM246_hires.png'], ['numero-contradictoire']]);
     verifier('plan HGSS promos : « 24 » → …/hsp/HGSS24_hires.png', planT('HGSS-Black-Star-Promos', [t(carte(51, 'Hitmonchan'), '24', 701)]).plan.map(p => p.url), ['https://images.pokemontcg.io/hsp/HGSS24_hires.png']);
 
+    // ── 10. T2, tour de correction 1 : un numéro qui porte 2 produits Cardmarket ou plus (V1/V2/V3) — la source n'a qu'un fichier par numéro, la note le DIT ──
+    const NOTE = 'variante Cardmarket : la source ne distingue pas les variantes de ce numéro — une image par numéro';
+    const pV = P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', tousNumerosCm: ['90', '90', '246', '089', 'SM240', '156', '156', '156'], trous: [t(carte(61, 'Raichu-GX'), '90', 801), t(carte(62, 'Sabrina & Brycen'), '246', 802), t(carte(63, 'Zoroark'), '89', 803), t(carte(64, 'Dragonite-GX'), '156', 804)] });
+    verifier('note de variante : OUI sur un numéro doublé (90 ×2, 156 ×3), NON sur un numéro seul (246, « 089 » = 89), comptés par le numéro du produit', pV.plan.map(p => [p.carteId, p.noteVariante ?? null]), [[61, NOTE], [62, null], [63, null], [64, NOTE]]);
+    verifier('note de variante : sans la liste des numéros du set, aucune note n\'est inventée', P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', trous: [t(carte(65, 'Raichu-GX'), '90', 805)] }).plan.map(p => p.noteVariante ?? null), [null]);
+    verifier('note de variante : « SM240 » (autre forme) ne compte pas pour le numéro 240', P.planifierPtcgio({ slug: 'SM-Black-Star-Promos', tousNumerosCm: ['240', 'SM240'], trous: [t(carte(66, 'Espeon & Deoxys-GX'), '240', 806)] }).plan.map(p => p.noteVariante ?? null), [null]);
+    verifier('note de variante : deux produits au même NOM mais à deux numéros ne la portent pas (jamais comptée par le nom)', P.planifierPtcgio({ slug: 'McDonalds-Collection-25th-Anniversary', tousNumerosCm: ['13', '17'], trous: [t(carte(67, 'Squirtle'), '17', 807), t(carte(68, 'Squirtle'), '13', 808)] }).plan.map(p => p.noteVariante ?? null), [null, null]);
+    {   // de bout en bout : le collecteur écrit la note sur l'entrée cartes.images (et le document images) — numéro doublé seulement
+        const Bv = fausseBase(); semer(Bv);
+        const lireDouble = async () => new Map([...Object.entries(NUMEROS_CM), [99, '011']].map(([k, v]) => [Number(k), v]));
+        await lanceur(Bv, fauxR2(), { lireNumeros: lireDouble });
+        const e = id => (Bv.col('cartes').get(id).images || []).filter(x => x.source === 'pokemontcg.io').map(x => x.noteVariante ?? null);
+        verifier('collecteur : l\'entrée du numéro doublé (Mew 011) porte la note, celle du numéro seul (Pikachu 005) ne la porte pas', [e(2), e(1)], [[NOTE], [null]]);
+        verifier('collecteur : le document images porte la même note (Mew) et les entrées des autres sources ne bougent pas', [Bv.col('images').get(P.idImagePtcgio(SLUG, 2, '011')).noteVariante, Bv.col('cartes').get(1).images.filter(x => x.source !== 'pokemontcg.io').map(x => Object.keys(x).sort().join())], [NOTE, ['cleR2,numero,set,source']]);
+    }
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

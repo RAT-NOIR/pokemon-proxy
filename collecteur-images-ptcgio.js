@@ -45,7 +45,7 @@ async function planifierSlug(db, slug, numerosCm) {
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null))
         .map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, numeroCm: numerosCm.get(l.idProduct) ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous }) };
+    return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous, tousNumerosCm: [...numerosCm.values()] }) };
 }
 
 /** Les numéros des produits Cardmarket du set (`numeros_cartes.numero`, base de production en LECTURE SEULE) : idProduct -> numéro. */
@@ -160,7 +160,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
             await deposer(bucket, cleR2, o.webp.data, 'image/webp');
             await M.Image.updateOne({ _id: o._id }, {
                 $set: {
-                    source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct, preuve: p.preuve, voie: p.voie, urlOriginal: p.url,
+                    source: P.SOURCE, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct, preuve: p.preuve, voie: p.voie, urlOriginal: p.url, ...(p.noteVariante ? { noteVariante: p.noteVariante } : {}),
                     wOriginal: o.meta.width, hOriginal: o.meta.height, sha1Original: o.sha1Original, octetsOriginal: o.octetsOriginal,
                     cleR2, sha256: sha('sha256', o.webp.data), octets: o.webp.data.length, w: o.webp.info.width, h: o.webp.info.height, fmt: 'webp',
                     langueSource: 'en', ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: 'en' })),
@@ -187,7 +187,7 @@ async function collecterSlug(slug, M, { verrou, client, lireNumeros, vignetter =
                     continue;
                 }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
-                    numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    numero: im.numero, ...(im.noteVariante ? { noteVariante: im.noteVariante } : {}), attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
@@ -288,7 +288,7 @@ if (inconnus.length || modes.length !== 1 || (args.includes('--ecrire') && !args
             const Pl = await planifierSlug(cx.db, slug, await lireNumeros(slug));
             trous += Pl.trous; prouves += Pl.plan.length; produits += Pl.produits;
             const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
-            console.log(`${slug.padEnd(42)} ${P.lignesDe(slug).map(l => l.id).join('+').padEnd(10)} produits ${String(Pl.produits).padStart(4)} · trous ${String(Pl.trous).padStart(4)} · PROUVÉS (fichiers) ${String(Pl.plan.length).padStart(4)} · restes ${JSON.stringify(motifs)}`);
+            console.log(`${slug.padEnd(42)} ${P.lignesDe(slug).map(l => l.id).join('+').padEnd(10)} produits ${String(Pl.produits).padStart(4)} · trous ${String(Pl.trous).padStart(4)} · PROUVÉS (fichiers) ${String(Pl.plan.length).padStart(4)} · dont avec note de variante ${String(Pl.plan.filter(p => p.noteVariante).length).padStart(3)} · restes ${JSON.stringify(motifs)}`);
         }
         const requetes = prouves + 1;
         console.log(`\nSIMULATION (zéro requête) : ${prouves} fichiers sur ${trous} trous (${produits} produits) · ${requetes} requêtes vers ${P.HOTE_NOM} (1 robots.txt + ${prouves} images, 0 réessai) · cadence ${P.CADENCE_MS / 1000} s ≈ ${Math.ceil(requetes * P.CADENCE_MS / 60000)} min · autres hôtes : 0`);
