@@ -7,6 +7,7 @@
 //   COUPURE_MODE=b       après le supplément du lot, avant la réponse : la première écriture de la ligne `analyses` meurt ;
 //   COUPURE_MODE=c       juste avant la remise de la réponse, une fois la réponse finale STOCKÉE par l'idempotence (et la marque déjà close) : res.send meurt ;
 //   COUPURE_MODE=c2      juste après l'écriture de la ligne `analyses`, avant la clôture de la marque : le résultat est persisté, la réponse n'est pas stockée ;
+//   COUPURE_MODE=r       la PASSE meurt entre la prise d'une unité (posée `rembourse`) et le rendu de son crédit ;
 //   COUPURE_MODE=p       la PASSE de rattrapage meurt en route (après le claim `rb|scanId`, avant la prise de la 1re unité) ;
 //   COUPURE_MODE=normal  aucun arrêt (sert les rejeux et la passe de rattrapage) ;
 //   COUPURE_DIFFERE_MS   délai de la passe de démarrage (défaut : 600000, c'est-à-dire pas de passe pendant le banc).
@@ -28,6 +29,8 @@ const mort = () => { try { require('fs').writeSync(1, `COUPURE=${process.env.COU
     if (mode === 'c2') db.col = nom => (nom === 'analyses' ? new Proxy(orig(nom), { get: (t, k) => (k === 'insertOne' ? async (...a) => { await t.insertOne(...a); mort(); } : t[k]) }) : orig(nom));
     // p : la PASSE de rattrapage elle-même meurt, entre le claim `rb|scanId` (déjà inséré) et le rendu de la 1re unité (sa prise atomique)
     if (mode === 'p') db.col = nom => (nom === 'mouvements' ? new Proxy(orig(nom), { get: (t, k) => (k === 'findOneAndUpdate' ? async () => mort() : t[k]) }) : orig(nom));
+    // r : la PASSE meurt entre la prise d'une unité (le ledger la pose `rembourse`) et le rendu de son crédit (le $inc de la poche) — l'ordre du ledger, R4
+    if (mode === 'r') db.col = nom => (nom === 'installations' ? new Proxy(orig(nom), { get: (t, k) => (k === 'updateOne' ? async () => mort() : t[k]) }) : orig(nom));
     const express = require('express');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret'); const M = require('../modeles');
     const { lireConfig } = require('../config');

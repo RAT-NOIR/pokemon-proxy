@@ -9,8 +9,9 @@
 // ne fait pas paraître périmée la marque d'une instance vivante. Seule la 1re valeur de `batLe` (à l'ouverture) vient de l'horloge de l'instance : le PLANCHER D'ÂGE (5 min sur `ouverteLe`) écarte ce
 // risque pendant le premier intervalle (avant le 1er battement), et un décalage de plus de 5 min entre une instance et la base n'est pas couvert (NTP).
 // La passe PREND la marque (une écriture conditionnelle : un seul gagnant, même entre deux processus) puis
-//   · CONFIRME si un fait DURABLE, écrit avant que la réponse parte, prouve que le client peut obtenir le résultat : la ligne `analyses` de CE scan (lisible par l'historique), ou la réponse finale
-//     stockée par `idempotente` (`etat: 'fini'`, statut < 300, corps portant CE scanId, non expirée — rejouable avec la même Idempotency-Key) ;
+//   · CONFIRME seulement si la RÉPONSE COMPLÈTE est rejouable : stockée par `idempotente` (`etat: 'fini'`, statut < 300, corps portant CE scanId, non expirée — rejouable avec la même
+//     Idempotency-Key). Une ligne `analyses` écrite n'est PAS un résultat livré (l'historique ne donne ni le prix ni les candidats) : une marque d'un processus mort sans réponse stockée est rendue.
+//     (Le gestionnaire VIVANT, lui, ferme `livre` quand il a produit le résultat : une coupure du client ne rend rien.)
 //   · sinon REND par la primitive existante `argent.rembourser` (claim `rb|scanId`, prise atomique de chaque unité) — sans plafond (faute du SERVEUR), motif `arret-serveur` —, PUIS VÉRIFIE
 //     unité par unité, dans le ledger, que chaque unité est effectivement rendue : un claim orphelin (passe ou scan tués entre le claim et le rendu) n'est jamais lu comme une preuve ; les unités
 //     restantes sont reprises une à une par `rembourserLigne` (prise atomique par unité : idempotent).
@@ -61,10 +62,8 @@ function suivre(scanId, { intervalleMs = BATTEMENT_MS, minuteurs = global } = {}
     return { arreter() { minuteurs.clearInterval(t); minuteurs.clearTimeout(fin); } };
 }
 
-// ── les faits durables : la ligne `analyses` de CE scan, ou sa réponse finale stockée par idempotente (rejouable)
+// ── le fait durable : la réponse COMPLÈTE de CE scan, stockée par idempotente (rejouable)
 async function resultatPersiste(m, maintenant) {
-    const a = await db.col('analyses').findOne({ _id: m._id, porteur: `${m.porteur.type}:${m.porteur.id}` }, { projection: { _id: 1 } });
-    if (a) return 'analyse-ecrite';
     if (!m.cleClaim) return null;
     const d = await db.col('idempotence').findOne({ cle: m.cleClaim });
     if (!d || d.etat !== 'fini' || !(d.statut < 300) || typeof d.reponse !== 'string' || !(d.expireLe > maintenant)) return null;
@@ -82,8 +81,25 @@ const rendreALaPasse = (m, issue) => col().updateOne({ _id: m._id, etat: 'en-rep
 const unitesNonRendues = (m) => db.col('mouvements').find({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
     type: 'debit', scanId: m._id, credit: { $ne: null }, etat: { $nin: ['rembourse', 'rendu-en-cours'] } }).toArray();
 
+// R4 — le ledger (rendreLeScan) pose `rembourse` sur une unité AVANT de lui rendre son crédit : un arrêt entre les deux laisse une unité « rendue » sans crédit, invisible aux lignes de débit
+// comme à somme(delta) = solde. On compare donc, pour ce scan, les unités `rembourse` (avec leur clé : une unité ANNULÉE par le supplément n'en a plus et a sa propre trace sans scanId)
+// aux lignes de remboursement +1 de CE scan. Aucun recrédit automatique : l'ordre du ledger se corrige au lot MOYENS.
+async function creditsManquants(m) {
+    const unites = await db.col('mouvements').countDocuments({ ...(m.porteur.type === 'compte' ? { compteId: m.porteur.id } : { installationId: m.porteur.id }),
+        type: 'debit', scanId: m._id, credit: { $ne: null }, etat: 'rembourse', cleIdempotence: { $type: 'string' } });
+    const credits = await db.col('mouvements').countDocuments({ type: 'remboursement', scanId: m._id, delta: 1 });
+    return Math.max(0, unites - credits);
+}
+
 async function traiter(m, argent, maintenant, bilan) {
     const porteur = { type: m.porteur.type, id: m.porteur.id, surface: null };
+    // « rendu » ne s'écrit que si chaque unité rendue a SA ligne de crédit : sinon `echec` (issue unite-sans-credit), listé par la réconciliation
+    const conclureRendu = async (issue) => {
+        const manque = await creditsManquants(m);
+        if (manque > 0) { await finir(m, 'echec', 'unite-sans-credit', maintenant); bilan.echecs++; journalScan(m._id, `${manque} unité(s) marquée(s) remboursée(s) SANS ligne de crédit +1 — crédit peut-être NON rendu, marque en échec`); return; }
+        await finir(m, 'rendu', issue, maintenant);
+        if (issue === 'deja-rembourse') bilan.dejaRendues++; else bilan.rendues++;
+    };
     try {
         const fait = await resultatPersiste(m, maintenant);
         if (fait) { await finir(m, 'confirme', fait, maintenant); bilan.confirmees++; return; }
@@ -95,16 +111,17 @@ async function traiter(m, argent, maintenant, bilan) {
         if ((r && r.rendu) || raison === 'deja-rembourse') {
             // « deja-rembourse » (claim `rb|scanId` présent) n'est JAMAIS une preuve : un claim orphelin laisse des unités prises. On relit le ledger unité par unité et on reprend le reste.
             const restantes = await unitesNonRendues(m);
-            if (!restantes.length) { const issue = r && r.rendu ? 'rendu' : 'deja-rembourse'; await finir(m, 'rendu', issue, maintenant); if (issue === 'rendu') bilan.rendues++; else bilan.dejaRendues++; return; }
+            if (!restantes.length) { await conclureRendu(r && r.rendu ? 'rendu' : 'deja-rembourse'); return; }
             let repris = 0, echec = null;
             for (const d of restantes) {
                 const u = await argent.rembourserLigne(porteur, d.cleIdempotence, 'arret-serveur');
-                if (u && u.rendu) repris++; else echec = echec || (u && u.raisonNonRembourse) || 'erreur';
+                if (u && (u.rendu || u.raisonNonRembourse === 'deja-rembourse')) repris++;      // rendue entre la lecture et la reprise (par le scan lui-même) : rendue
+                else echec = echec || (u && u.raisonNonRembourse) || 'erreur';
             }
             bilan.reprises += repris;
             if (echec === 'erreur') { await rendreALaPasse(m, 'erreur'); bilan.erreurs++; journalScan(m._id, `${restantes.length - repris} unité(s) non rendue(s) (erreur), reprises à la prochaine passe`); return; }
             if (echec) { await finir(m, 'echec', echec, maintenant); bilan.echecs++; journalScan(m._id, `${restantes.length - repris} unité(s) NON rendue(s) (${echec}) — marque en échec, à voir par la réconciliation`); return; }
-            await finir(m, 'rendu', 'repris', maintenant); bilan.rendues++; return;
+            await conclureRendu('repris'); return;
         }
         if (raison === 'aucun-debit') { await finir(m, 'sans-debit', 'aucun-debit', maintenant); bilan.sansDebit++; return; }          // la marque a précédé un débit qui n'a jamais eu lieu
         if (raison === 'deja-livre') { await finir(m, 'livre', 'question-repondue', maintenant); bilan.confirmees++; return; }          // une question a été répondue : un résultat A été livré

@@ -255,6 +255,33 @@ async function parcourir() {
         H.v('   administrateur : motif administrateur, aucun remboursement', [x.json.facturation.motif, x.json.facturation.rembourse, await soldeCompte(ad.c)], ['administrateur', false, 25]);
     }
 
+    // ═══ (5 bis) O5 : la marque de livraison se clôt en DERNIER, après le remboursement sans-prix (la dernière opération d'argent de la requête) ═══
+    {
+        const MS = require('../argent/marque-scan'); const argentR = registre.obtenir('argent');
+        const rbOrig = argentR.rembourser, closOrig = MS.clore, ordre = [];
+        argentR.rembourser = async (p, cr, motif, o) => { ordre.push(`rb:${motif}`); return rbOrig(p, cr, motif, o); };
+        MS.clore = async (...a) => { ordre.push('clore'); return closOrig(...a); };
+        const { c, cookie } = await compte(); mode = 'sans-prix';
+        let r; try { r = await scanner(sv.url, cookie, { nom: '5b' }); } finally { argentR.rembourser = rbOrig; MS.clore = closOrig; }
+        await attendre(100);
+        const m = await raw('scans_en_cours').findOne({ 'porteur.id': c._id });
+        H.v('5b. scanner, carte sans prix : l\'ordre est remboursement sans-prix PUIS clôture de la marque (livre), une seule clôture', [ordre.filter(x => x === 'rb:sans-prix' || x === 'clore'), m && m.etat], [['rb:sans-prix', 'clore'], 'livre']);
+        // l'arrêt entre le débit et la clôture : le remboursement sans-prix ne revient jamais (le processus meurt), la marque est ENCORE ouverte — la passe rend le scan en entier
+        const c2 = await compte(); let bloque = 0;
+        argentR.rembourser = async (p, cr, motif, o) => { if (motif === 'sans-prix') { bloque++; return new Promise(() => { }); } return rbOrig(p, cr, motif, o); };
+        const ctl = new AbortController(); let p;
+        try {
+            p = fetch(sv.url + '/api/scanner/analyses', { method: 'POST', body: formulaire(), signal: ctl.signal, headers: { cookie: c2.cookie, origin: SITE, 'x-rat-market': '1', 'x-forwarded-for': `10.8.7.${++nIp % 250 + 1}` } }).catch(e => e);
+            for (let k = 0; k < 100 && !bloque; k++) await attendre(50);
+            await attendre(150);
+            const mb = await raw('scans_en_cours').findOne({ 'porteur.id': c2.c._id });
+            H.v('   le processus « meurt » pendant le remboursement sans-prix : la marque est encore EN SUSPENS (pas close avant le dernier geste d\'argent), le crédit est encore pris (24)', [bloque, mb && mb.etat, await soldeCompte(c2.c)], [1, 'en-suspens', 24]);
+            await raw('scans_en_cours').updateOne({ _id: mb._id }, { $set: { ouverteLe: new Date(Date.now() - 20 * 60e3), batLe: new Date(Date.now() - 20 * 60e3) } });
+            const bilan = await MS.rattraper({ argent: { rembourser: rbOrig, rembourserLigne: argentR.rembourserLigne } });
+            H.v('   la passe rend le scan en entier (solde 25), marque rendu — le scan n\'est ni facturé ni offert à moitié', [await soldeCompte(c2.c), (await raw('scans_en_cours').findOne({ _id: mb._id })).etat, bilan.rendues], [25, 'rendu', 1]);
+        } finally { argentR.rembourser = rbOrig; ctl.abort(); if (p) await p; }
+    }
+
     // ═══ (6) lot : la valeur est SOMME des tendances avec couverture — le client la calcule, le serveur ne la sert pas ═══
     {
         const svLot = await monter({ identifierLot: lotFabrique });

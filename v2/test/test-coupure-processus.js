@@ -173,7 +173,7 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         } finally { await c2.arreter(); }
     }
 
-    // ═══════════ SCÉNARIO (c2) : coupure juste APRÈS l'écriture de `analyses`, avant la clôture de la marque et avant tout stockage de la réponse => CONFIRMÉ par l'analyse écrite
+    // ═══════════ SCÉNARIO (c2) : coupure juste APRÈS l'écriture de `analyses`, avant la clôture de la marque et avant tout stockage de la réponse => RENDU (pas de réponse rejouable)
     {
         const x = await instal(1, 5), k = cle();
         const c1 = await lancer('c2');
@@ -186,11 +186,11 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         const c2 = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
         try {
             const fait = await jusquaFin(x);
-            H.v('   le second processus CONFIRME (fait durable : la ligne analyses de ce scan) — marque confirme/analyse-ecrite, AUCUN remboursement, crédits pris (le résultat produit vaut livraison)', [fait && fait.etat, fait && fait.issue, (await rembs(x)).length, await poche(x)], ['confirme', 'analyse-ecrite', 0, [0, 3]]);
+            H.v('   le second processus REND (une analyse écrite n\'est pas une réponse rejouable : l\'historique ne donne ni prix ni candidats) — marque rendu, essai 1 acheté 5, 3 lignes +1, somme(delta) 0', [fait && fait.etat, fait && fait.issue, await poche(x), (await rembs(x)).length, await delta(x)], ['rendu', 'rendu', [1, 5], 3, 0]);
+            H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
             await db.col('idempotence').updateMany({}, { $set: { expireLe: new Date(Date.now() - 1000) } });
             const j = await poster(c2.url, x.jeton, k);
-            H.v('   limite ASSUMÉE : une installation (extension, sans compte) ne peut relire son résultat NULLE PART ; son rejeu reste DEBIT (ni gratuit ni double débit) — le crédit couvre le travail fait', [j.statut, j.json.erreur.code, (await debits(x)).length, await poche(x)], [429, 'DEBIT', 3, [0, 3]]);
-            H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
+            H.v('   le rejeu après la passe est une NOUVELLE tentative payée (200, lot, 3 crédits), jamais gratuite — l\'installation sans compte n\'est plus un cas à part', [j.statut, j.json.analyse && j.json.analyse.statut, await poche(x)], [200, 'lot', [0, 3]]);
         } finally { await c2.arreter(); }
     }
 
@@ -216,6 +216,27 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
             H.v('   somme(delta) = solde poche par poche, et la réconciliation est PROPRE', [await conserve(x), (await R.reconcilier(x.p, cfg)).propre], [[true, true], true]);
             await attendre(1200);
             H.v('   rien de plus rendu ensuite (3 lignes +1 toujours, essai 1, acheté 5)', [(await rembs(x)).length, await poche(x)], [3, [1, 5]]);
+        } finally { await cs.arreter(); }
+    }
+
+    // ═══════════ SCÉNARIO (e) : R4 — la PASSE est tuée entre la prise d'une unité (le ledger la pose `rembourse`) et le rendu de son crédit : l'unité est « rendue » SANS crédit
+    {
+        const x = await instal(1, 5), k = cle();
+        const c1 = await lancer('b');
+        try { await poster(c1.url, x.jeton, k); } catch (e) { /* mort voulue */ }
+        await c1.fin;
+        await vieillir(x);
+        const cr = await lancer('r', { COUPURE_DIFFERE_MS: '0' });
+        const sr = await cr.fin;
+        const unitesRembourse = (await debits(x)).filter(d => d.etat === 'rembourse').length;
+        H.v('(e) la passe meurt entre la prise de l\'unité et le rendu de son crédit (marqueur COUPURE=r) : 1 unité posée « rembourse », AUCUN crédit rendu (essai 0, acheté 3), 0 ligne +1', [cr.stdout().includes('COUPURE=r') && sr.code !== 0, unitesRembourse, await poche(x), (await rembs(x)).length], [true, 1, [0, 3], 0]);
+        await db.col('scans_en_cours').updateOne({ _id: (await marqueDe(x))._id }, { $set: { priseLe: new Date(Date.now() - 20 * MIN) } });
+        const cs = await lancer('normal', { COUPURE_DIFFERE_MS: '0' });
+        try {
+            const fait = await jusquaFin(x);
+            H.v('   la seconde passe reprend les 2 unités restantes mais N\'ÉCRIT PAS « rendu » : marque ECHEC (unite-sans-credit), 2 lignes +1 pour 3 unités rendues — le crédit manquant n\'est pas recrédité (acheté 5, essai 0)', [fait && fait.etat, fait && fait.issue, (await rembs(x)).length, await poche(x)], ['echec', 'unite-sans-credit', 2, [0, 5]]);
+            const rec = await R.reconcilier(x.p, cfg);
+            H.v('   la réconciliation LISTE la marque : verdict non propre', [rec.marquesEnSuspens.map(y => [y.etat, y.issue]), rec.propre], [[['echec', 'unite-sans-credit']], false]);
         } finally { await cs.arreter(); }
     }
     for (const e of vivants) { try { e.kill(); } catch { /* déjà mort */ } }

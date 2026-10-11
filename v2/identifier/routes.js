@@ -399,14 +399,18 @@ function traiterIdentifier(cfg, deps = {}) {
             });
         } catch (e) { journalErreur('analyses', e); }
         try { await conserverAnnonce(String(scanId), { titre: annonce.titre, description: annonce.description, expurgeeParServeur: annonce.expurgeeParServeur }, cfg); } catch (e) { journalErreur('annonces', e); }
-        await fermer();                                // le résultat est PERSISTÉ (analyses) : la marque est close avant la réponse, que le client soit encore là ou non
+        // La clôture est la DERNIÈRE opération d'argent de la requête : un arrêt avant elle se rattrape (la marque reste ouverte, la passe rend ou confirme). Au scanner, le remboursement
+        // `sans-prix` se fait DANS res.json (scanner/routes.js, habiller) : c'est lui qui clôt, après ce geste ; le battement reste alors vivant jusque-là (etat.differe).
+        // Le gestionnaire VIVANT ferme `livre` lui-même, que le client soit encore là ou non : une coupure du client ne rend rien.
+        if (req.marqueFermeeParLaReponse === true) { req.fermerMarque = fermer; etat.differe = true; } else await fermer();
         // 10. la réponse (B6.4 : le crochet du banc réel — jamais attendu, ne lève jamais, rien n'en entre dans la réponse)
         require('../banc/crochet').apresIdentifier({ cfg, deps, req, scanId, analyse });
         return res.status(200).json({ success: true, contrat: 2, scanId: String(scanId), analyse, facturation, ...(solde !== undefined ? { solde } : {}) });
     };
     return async function traiterIdentifierV2(req, res) {
-        const etat = { suivi: null };
-        try { return await interne(req, res, etat); } finally { if (etat.suivi) etat.suivi.arreter(); }   // le battement s'arrête quoi qu'il arrive
+        const etat = { suivi: null, differe: false };
+        // le battement s'arrête quoi qu'il arrive (sauf clôture différée à la réponse : elle l'arrête elle-même, le filet de 30 min couvre un oubli)
+        try { return await interne(req, res, etat); } finally { if (etat.suivi && !etat.differe) etat.suivi.arreter(); }
     };
 }
 

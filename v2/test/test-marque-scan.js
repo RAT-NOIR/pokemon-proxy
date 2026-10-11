@@ -277,6 +277,15 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.v('   remboursement PARTIEL (1 unité rendue avant la mort, 2 restantes) : la passe reprend exactement les 2 autres — 3 lignes +1 au total, aucune en double', [une.rendu, b3.reprises, await rembs(t.p), [await essais(t.p), await achete(t.p)], await somme(t.p)], [true, 2, 3, [1, 4], 0]);
     }
 
+    // 11c bis. m3 — une unité rendue ENTRE la lecture et la reprise (par le scan lui-même) répond `deja-rembourse` à la reprise : c'est une unité rendue, pas un échec
+    {
+        const s = await scanMort({ unites: 2, essaisInit: 3 });
+        await db.col('mouvements').insertOne({ installationId: s.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: s.scanId, etat: 'rembourse', cleIdempotence: `rb|${s.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
+        const concurrent = { rembourser: argent.rembourser, rembourserLigne: async (p, cle, motif) => { await argent.rembourserLigne(p, cle, motif); return { rendu: false, raisonNonRembourse: 'deja-rembourse' }; } };
+        const b = await MS.rattraper({ argent: concurrent });
+        H.v('11c bis. la reprise répond « deja-rembourse » (rendue entre-temps) : comptée rendue, marque rendu/repris, pas echec', [(await lireMarque(s.scanId)).etat, (await lireMarque(s.scanId)).issue, b.echecs, await rembs(s.p)], ['rendu', 'repris', 0, 2]);
+    }
+
     // ═══════════ 11d. la passe REND AUSSI d'une passe qui rend en parallèle d'une autre passe lente : l'état final ne se pose que si la marque est encore à NOUS (mutant « finir sans condition »)
     {
         const s = await scanMort();
@@ -301,15 +310,33 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.v('11e. question répondue par un candidat puis passe : rien rendu (essais 2, 0 ligne +1), marque « livre » issue question-repondue, comptée confirmée', [rep.statut, await essais(s.p), await rembs(s.p), m.etat, m.issue, b.confirmees], [200, 2, 0, 'livre', 'question-repondue', 1]);
     }
 
-    // ═══════════ 11f. le fait durable « l'analyse est écrite » : la passe CONFIRME (le résultat est consultable), ne rend rien
+    // ═══════════ 11f. une ligne `analyses` écrite N'EST PAS un résultat livré (l'historique ne donne ni le prix ni les candidats) : la marque d'un processus MORT sans réponse rejouable est RENDUE
     {
         const s = await scanMort();
         await db.col('analyses').insertOne({ _id: s.scanId, porteur: `installation:${s.p.id}`, surface: 'extension', statut: 'identifiee', cartes: [], produits: [], facturation: { debite: 1 }, creeLe: new Date(), expireLe: new Date(Date.now() + 86400e3) });
-        const autre = await scanMort();                                                        // l'analyse d'un AUTRE porteur au même _id ne vaut rien (porteur vérifié)
-        await db.col('analyses').insertOne({ _id: autre.scanId, porteur: 'installation:inconnu', surface: 'extension', statut: 'identifiee', cartes: [], produits: [], facturation: { debite: 1 }, creeLe: new Date(), expireLe: new Date(Date.now() + 86400e3) });
         const b = await MS.rattraper(sec);
-        H.v('11f. marque périmée avec ligne analyses de CE scan et de CE porteur : confirmée (issue analyse-ecrite), 0 remboursement ; une analyse au nom d\'un autre porteur ne confirme pas (rendu)',
-            [(await lireMarque(s.scanId)).etat, (await lireMarque(s.scanId)).issue, await essais(s.p), await rembs(s.p), (await lireMarque(autre.scanId)).etat, await essais(autre.p), b.confirmees], ['confirme', 'analyse-ecrite', 2, 0, 'rendu', 3, 1]);
+        H.v('11f. marque périmée, analyse écrite mais AUCUNE réponse stockée : rendue (essais 3, 1 ligne +1), pas confirmée', [(await lireMarque(s.scanId)).etat, (await lireMarque(s.scanId)).issue, await essais(s.p), await rembs(s.p), b.confirmees], ['rendu', 'rendu', 3, 1, 0]);
+    }
+
+    // ═══════════ 11h. R4 — le ledger pose `rembourse` sur l'unité AVANT de lui rendre son crédit : un arrêt entre les deux laisse une unité « rendue » SANS crédit. La passe ne l'écrit JAMAIS « rendu »
+    {
+        const s = await scanMort();
+        // le repro du relecteur : claim à delta 0, unité marquée `rembourse`, aucune ligne +1 (ce que laisse un SIGKILL entre la prise de l'unité et le rendu de son crédit)
+        await db.col('mouvements').insertOne({ installationId: s.p.id, le: new Date(), surface: null, type: 'remboursement', delta: 0, poche: null, motif: 'orphelin', scanId: s.scanId, etat: 'rembourse', cleIdempotence: `rb|${s.scanId}`, expireLe: new Date(Date.now() + 86400e3) });
+        await db.col('mouvements').updateOne({ installationId: s.p.id, type: 'debit', scanId: s.scanId }, { $set: { etat: 'rembourse' } });
+        const e0 = console.error; const journalR4 = []; console.error = (...a) => { journalR4.push(a.join(' ')); };
+        let b; try { b = await MS.rattraper(sec); } finally { console.error = e0; }
+        const m = await lireMarque(s.scanId), rec = await R.reconcilier(s.p);
+        H.v('11h. unité `rembourse` sans ligne de crédit : marque ECHEC (issue unite-sans-credit), jamais « rendu » ; crédit non recrédité (essais 2) ; journalisé', [m.etat, m.issue, b.echecs, await essais(s.p), journalR4.some(l => /SANS ligne de crédit/.test(l))], ['echec', 'unite-sans-credit', 1, 2, true]);
+        H.v('   la réconciliation la LISTE : verdict non propre (alors que somme(delta) = solde)', [rec.marquesEnSuspens.map(x => [x.etat, x.issue]), rec.propre], [[['echec', 'unite-sans-credit']], false]);
+        // contrôle (pas de fausse alerte) : une unité de supplément ANNULÉE (sans clé, trace sans scanId) puis le remboursement propre du scan par la route : la passe écrit « rendu/deja-rembourse »
+        const p = await inst({ essais: 1, achete: 1 }); const scanId = new ObjectId(), cleDebit = `scan|installation:${p.id}|annul`;
+        await MS.ouvrir({ scanId, porteur: p, cleDebit, maintenant: new Date(Date.now() - 20 * MIN) });
+        await argent.debiter(p, { scanId, cleIdempotence: cleDebit });
+        const sup = await argent.debiterSupplement(p, { scanId, unites: 3, cleIdempotence: `${cleDebit}|supplement` });       // plus d'unités que le solde : tout ou rien, la 1re est ANNULÉE
+        const r0 = await argent.rembourser(p, { poche: 'essai' }, 'lot-trop-grand', { scanId, compteur: 'panne', sansPlafond: true });
+        const b2 = await MS.rattraper(sec); const m2 = await lireMarque(scanId);
+        H.v('   contrôle : supplément annulé + remboursement propre du scan, puis passe : « rendu/deja-rembourse », pas de fausse alerte (essais 1, acheté 1)', [sup.ok, r0.rendu, m2.etat, m2.issue, b2.echecs, await essais(p), await achete(p)], [false, true, 'rendu', 'deja-rembourse', 0, 1, 1]);
     }
 
     // ═══════════ 11g. la suppression d'un compte purge ses marques ; celles d'une installation (qui survit) et d'un autre compte restent
@@ -436,9 +463,11 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const x = await instJ(); const argentRoute = registre.obtenir('argent'), debiterOrig = argentRoute.debiter;     // le registre du montage de la route (l'assembleur l'a re-fourni)
         argentRoute.debiter = async () => { throw Object.assign(new Error('x'), { code: 'PANNE' }); };
         const e0 = console.error; console.error = () => { };
-        let r; try { r = await poster(sv.url, x.jeton); await attendre(150); } finally { argentRoute.debiter = debiterOrig; console.error = e0; }
+        const suivis = [], suivreOrig = MS.suivre;                    // N5 : sur ce chemin SANS fermer(), seul le `finally` du gestionnaire arrête le battement
+        MS.suivre = (id, o) => { const s = suivreOrig(id, o); const rec = { arrete: false }; suivis.push(rec); return { arreter() { rec.arrete = true; return s.arreter(); } }; };
+        let r; try { r = await poster(sv.url, x.jeton); await attendre(150); } finally { MS.suivre = suivreOrig; argentRoute.debiter = debiterOrig; console.error = e0; }
         const m = await marques().findOne({ 'porteur.id': x.i._id });
-        H.v('16c. le débit lève : 503 INDISPONIBLE, aucun crédit pris, la marque reste en-suspens (jamais close livre)', [r.statut, await essais(x.p), m && m.etat], [503, 3, 'en-suspens']);
+        H.v('16c. le débit lève : 503 INDISPONIBLE, aucun crédit pris, la marque reste en-suspens (jamais close livre), le battement est ARRÊTÉ par le finally du gestionnaire', [r.statut, await essais(x.p), m && m.etat, suivis.length, suivis[0] && suivis[0].arrete], [503, 3, 'en-suspens', 1, true]);
         await marques().updateOne({ _id: m._id }, { $set: { ouverteLe: new Date(Date.now() - 20 * MIN), batLe: new Date(Date.now() - 20 * MIN) } });
         const b = await MS.rattraper(sec);
         H.v('   la passe la clôt « sans-debit » (aucune ligne de débit pour ce scan) sans rien rendre', [(await lireMarque(m._id)).etat, b.sansDebit, await rembs(x.p), await essais(x.p)], ['sans-debit', 1, 0, 3]);
@@ -459,6 +488,13 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         H.vrai('   un battement rafraîchit batLe (de 40 min en arrière à maintenant)', (await lireMarque(s.scanId)).batLe.getTime() > avant + 30 * MIN);
         suivi.arreter();
         H.vrai('   arreter() annule l\'intervalle et le filet', i.annule === true && posees[1].annule === true);
+        // N6 : la péremption se juge à l'heure de MONGO ($$NOW), pas à celle de l'instance. L'horloge de l'instance est décalée de +1 h : le battement reste à l'heure de la base,
+        // et une marque dont le battement est frais n'est pas prise par une passe dont l'instance croit être une heure plus tard.
+        const RD = Date;
+        global.Date = class extends RD { constructor(...a) { if (a.length === 0) super(RD.now() + 3600e3); else super(...a); } static now() { return RD.now() + 3600e3; } };
+        let apresDecalage, bDecalee;
+        try { await MS.battre(s.scanId); apresDecalage = (await lireMarque(s.scanId)).batLe.getTime(); bDecalee = await MS.rattraper(sec); } finally { global.Date = RD; }
+        H.v('   horloge de l\'instance décalée de +1 h : batLe reste à l\'heure de la base (à 30 s de l\'heure réelle, pas +1 h), et la passe ne prend pas une marque qui bat', [Math.abs(apresDecalage - RD.now()) < 30e3, bDecalee.examinees], [true, 0]);
         await marques().deleteOne({ _id: s.scanId });
     }
 
