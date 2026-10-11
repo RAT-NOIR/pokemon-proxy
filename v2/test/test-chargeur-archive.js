@@ -1,9 +1,10 @@
 'use strict';
 // COTES-VISUELS, tour 2 — l'ARCHIVE telle que l'API la reçoit : plafonds (la bombe gzip de la revue I1), scellement HMAC avant toute décompression, validation de CHAQUE entrée (I3), objet R2 privé lu
 // avec un FAUX client (I8) : variables fermées par défaut, taille annoncée et lue, délai. Aucun réseau, aucun bucket réel.
-const zlib = require('zlib'); const { Readable } = require('stream');
+const zlib = require('zlib'); const fs = require('fs'); const path = require('path'); const { Readable } = require('stream');
 const H = require('./_harnais');
 const F = require('../chargeur/format'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const I = require('../chargeur');
+const DEPOT = require('../migrations/depot-r2');                   // le dépôt (PutObject) : côté PRODUCTEUR seulement, jamais dans ce que charge l'API
 const E = require('../chargeur/etat'); const VB = require('./_visuels-banc');
 
 const SECRET = 'secret-hmac-de-banc-0123456789-abcdefghij';       // 42 caractères
@@ -87,13 +88,51 @@ const refus = async (fn) => { try { await fn(); return null; } catch (e) { retur
     H.v('   un client qui ne répond jamais : DÉLAI (borné par delaiMs)', /délai/.test(await rr(muet, { delaiMs: 40 }) || ''), true);
     clearTimeout(veille);
     commandes.length = 0;
-    await R2.deposerObjet({ client: faux2(Buffer.alloc(1)), bucket: 'seau-prive', objet: 'v2/visuels.rmv', corps: scelle });
+    await DEPOT.deposerObjet({ client: faux2(Buffer.alloc(1)), bucket: 'seau-prive', objet: 'v2/visuels.rmv', corps: scelle });
     H.v('dépôt : PutObject, Content-Type binaire, AUCUN Content-Encoding (M4)', [commandes[0][0], commandes[0][1].ContentType, 'ContentEncoding' in commandes[0][1]], ['PutObjectCommand', 'application/octet-stream', false]);
 
     // ── 5. LES VARIABLES : fermées par défaut, des NOMS dans le journal
     const tout = { V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS_R2_CLE_ID: 'k', V2_VISUELS_R2_SECRET: 's', V2_VISUELS_R2_BUCKET: 'b', V2_VISUELS_R2_OBJET: 'o', V2_VISUELS_HMAC: SECRET };
     H.v('lecture : toutes présentes ⇒ ok', R2.configLecture(tout).ok, true);
     for (const n of R2.NOMS_LECTURE) { const e = { ...tout }; delete e[n]; const r = R2.configLecture(e); H.v(`   ${n} absente ⇒ fermé, la raison NOMME la variable et aucune valeur`, [r.ok, r.raison.includes(n), /secret-hmac|\bs\b=/.test(r.raison)], [false, true, false]); }
-    H.v('   écriture : variables d\'ÉCRITURE distinctes de celles de lecture (jamais les mêmes clés)', [R2.NOMS_ECRITURE.filter(n => /_ECR_/.test(n)), R2.NOMS_LECTURE.some(n => /_ECR_/.test(n))], [['V2_VISUELS_R2_ECR_CLE_ID', 'V2_VISUELS_R2_ECR_SECRET'], false]);
+    H.v('   écriture : variables d\'ÉCRITURE distinctes de celles de lecture (jamais les mêmes clés)', [DEPOT.NOMS_ECRITURE.filter(n => /_ECR_/.test(n)), R2.NOMS_LECTURE.some(n => /_ECR_/.test(n))], [['V2_VISUELS_R2_ECR_CLE_ID', 'V2_VISUELS_R2_ECR_SECRET'], false]);
+    H.v('   la configuration d\'écriture complète se lit (et nomme ce qui manque)', [DEPOT.configEcriture({ ...tout, V2_VISUELS_R2_ECR_CLE_ID: 'k', V2_VISUELS_R2_ECR_SECRET: 's' }).ok, DEPOT.configEcriture(tout).raison.includes('V2_VISUELS_R2_ECR_CLE_ID')], [true, true]);
+
+    // ── 6. TOUR 3 (ruling 2) : AUCUNE écriture R2 dans le code que charge l'API. Un processus NEUF charge ce que le serveur charge (montage + chargeur + r2-prive) et liste les fichiers lus.
+    const enfant = require('child_process').spawnSync(process.execPath, [path.join(__dirname, '_graphe-serveur.js')], { encoding: 'utf8', timeout: 60000 });
+    let graphe = null; try { graphe = JSON.parse(enfant.stdout); } catch { /* le test échouera sur la forme */ }
+    H.vrai(`le graphe du serveur est lu (${graphe ? graphe.fichiers.length : 0} fichiers : tout v2/chargeur, identifier/monter et identifier/visuels)`, graphe && graphe.fichiers.length >= 8 && graphe.fichiers.some(f => /r2-prive\.js$/.test(f)) && graphe.fichiers.some(f => /montage\.js$/.test(f)));
+    const sources = (graphe ? graphe.fichiers : []).map(f => [f, fs.readFileSync(f, 'utf8')]);
+    H.v('   ce que r2-prive.js exporte : aucune écriture (ni dépôt, ni configuration d\'écriture)', graphe && graphe.exportsR2.filter(k => /d[ée]pos|put|[ée]cri|write|upload/i.test(k)), []);
+    H.v('   aucun fichier chargé par le serveur ne nomme PutObject, ne lit une variable d\'ÉCRITURE (_ECR_) ni ne référence le dossier migrations', sources.filter(([, t]) => /PutObject|_ECR_|\.\.\/migrations|depot-r2/.test(t.replace(/\/\/.*$/gm, ''))).map(([f]) => path.basename(f)), []);
+    H.v('   les seules commandes du SDK que le serveur utilise : GetObjectCommand (et le client)', [...new Set(sources.flatMap(([, t]) => [...t.replace(/\/\/.*$/gm, '').matchAll(/const\s*\{([^}]*)\}\s*=\s*require\('@aws-sdk\/client-s3'\)/g)].flatMap(m => m[1].split(',').map(x => x.trim()))))].sort(), ['GetObjectCommand', 'S3Client']);
+    H.v('   le module du dépôt vit côté producteur (v2/migrations/depot-r2.js) et lui seul parle de PutObject', [fs.existsSync(path.join(__dirname, '..', 'migrations', 'depot-r2.js')), /PutObjectCommand/.test(fs.readFileSync(path.join(__dirname, '..', 'migrations', 'depot-r2.js'), 'utf8'))], [true, true]);
+
+    // ── 7. TOUR 3 (ruling 4, N2) : une archive NON scellée (une bombe) n'est JAMAIS décompressée — mesuré par un espion sur zlib et par la mémoire, pas par le message
+    const espion = { appels: 0 }; const orig = {};
+    for (const k of ['gunzip', 'gunzipSync', 'createGunzip', 'unzip', 'unzipSync', 'inflate', 'inflateSync', 'inflateRaw', 'inflateRawSync']) { orig[k] = zlib[k]; try { zlib[k] = function (...a) { espion.appels++; return orig[k].apply(this, a); }; } catch { delete orig[k]; } }       // certaines (createGunzip…) sont en lecture seule : celles qu'on peut espionner le sont
+    H.vrai(`   (espion posé sur ${Object.keys(orig).length} fonctions de décompression de zlib, dont gunzip : celle de format.js)`, Object.keys(orig).includes('gunzip'));
+    let nonScellee;
+    try {
+        const bombe = Buffer.concat([Buffer.from('RMVS'), zeros, Buffer.alloc(32, 9)]);              // la sonde de 250 Mo, magie juste, balise FAUSSE
+        const rss0 = process.memoryUsage().rss;
+        nonScellee = await I.executerDepuisFichier({ lireFichier: async () => bombe, secret: SECRET })();
+        espion.rss = process.memoryUsage().rss - rss0;
+    } finally { for (const k of Object.keys(orig)) zlib[k] = orig[k]; }
+    H.v('bombe NON scellée (balise fausse) : refusée « HMAC faux », la décompression n\'est JAMAIS tentée (0 appel à zlib)', [nonScellee.ok, /HMAC faux/.test(nonScellee.raison || ''), espion.appels], [false, true, 0]);
+    H.vrai(`   ... et la mémoire du processus ne bouge pas (+${(espion.rss / 1048576).toFixed(0)} Mo, borne 100 Mo ; décompressée : +250 Mo)`, espion.rss < 100 * 1048576);
+
+    // ── 8. TOUR 3 (ruling 3) : le rejugement des 67 590 entrées rend la main à la boucle — blocage MAXIMAL mesuré sur le chargement entier d'une archive de la taille réelle
+    const GROS = 67590;
+    const grosV = VB.construire(Array.from({ length: GROS }, (_, i) => VB.doc(100000 + i, { numero: String(i % 400), rarete: 'Rare', lien: `${CM}/Base-Set/P${i}-BS${i % 400}`, idMetacard: 1 + (i % 9000), setNom: `Set ${i % 700}` })), [['Set-G', '1|001', [100000]]]);
+    const grosScelle = S.sceller(await gzDe(grosV), SECRET);
+    const { performance } = require('perf_hooks');
+    const blocage = async (fn) => { let max = 0, dernier = performance.now(), fin = false; (function tic() { const t = performance.now(); max = Math.max(max, t - dernier); dernier = t; if (!fin) setImmediate(tic); })(); await attendre(20); max = 0; dernier = performance.now(); const r = await fn(); fin = true; await attendre(5); return { max, r }; };
+    const chargement = await blocage(() => I.executerDepuisFichier({ lireFichier: async () => grosScelle, secret: SECRET })());
+    H.v(`archive de ${GROS} entrées chargée par le chargeur (scellement, décompression, structure, rejugement) : ok`, [chargement.r.ok, chargement.r.comptes.visuels], [true, GROS]);
+    const { rejugerEntrees } = require('../chargeur/version');
+    const synchrone = await blocage(async () => rejugerEntrees(grosV));
+    console.log(`   mesure : rejugement SYNCHRONE seul = ${synchrone.max.toFixed(0)} ms de boucle bloquée ; chargement entier avec rejugement par paquets = ${chargement.max.toFixed(0)} ms au plus`);
+    H.vrai(`le chargement entier ne bloque jamais la boucle plus de 100 ms (${chargement.max.toFixed(0)} ms ; le rejugement d'un bloc en prend ${synchrone.max.toFixed(0)})`, chargement.max < 100);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

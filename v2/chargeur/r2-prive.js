@@ -6,7 +6,6 @@
 const { FormatInvalide } = require('./format');
 
 const NOMS_LECTURE = Object.freeze(['V2_VISUELS_R2_COMPTE', 'V2_VISUELS_R2_CLE_ID', 'V2_VISUELS_R2_SECRET', 'V2_VISUELS_R2_BUCKET', 'V2_VISUELS_R2_OBJET', 'V2_VISUELS_HMAC']);
-const NOMS_ECRITURE = Object.freeze(['V2_VISUELS_R2_COMPTE', 'V2_VISUELS_R2_ECR_CLE_ID', 'V2_VISUELS_R2_ECR_SECRET', 'V2_VISUELS_R2_BUCKET', 'V2_VISUELS_R2_OBJET', 'V2_VISUELS_HMAC']);
 const DELAI_MS = 60 * 1000;
 const texte = x => (typeof x === 'string' && x.trim() ? x.trim() : null);
 const refuser = m => { throw new FormatInvalide(m); };
@@ -19,7 +18,6 @@ function configDe(env, noms) {
     return { ok: true, c: { compte: nom('V2_VISUELS_R2_COMPTE'), cleId: nom(noms[1]), secret: nom(noms[2]), bucket: nom('V2_VISUELS_R2_BUCKET'), objet: nom('V2_VISUELS_R2_OBJET'), hmac: nom('V2_VISUELS_HMAC'), endpoint: texte(env.V2_VISUELS_R2_ENDPOINT) } };
 }
 const configLecture = env => configDe(env, NOMS_LECTURE);
-const configEcriture = env => configDe(env, NOMS_ECRITURE);
 
 /** Le client S3 de R2 (région `auto`), chargé ici seulement. L'endpoint générique, ou V2_VISUELS_R2_ENDPOINT (juridiction UE : `<compte>.eu.r2.cloudflarestorage.com`). */
 function creerClient({ compte, cleId, secret, endpoint }) {
@@ -43,9 +41,5 @@ async function lireObjet({ client, bucket, objet, max, delaiMs = DELAI_MS, siAbs
     if (total === 0) refuser('objet vide');
     return Buffer.concat(morceaux, total);
 }
-async function deposerObjet({ client, bucket, objet, corps }) {
-    const { PutObjectCommand } = require('@aws-sdk/client-s3');
-    // Content-Type binaire et AUCUN Content-Encoding : un objet déposé « gzip » serait décodé en route (le magasin ou un intermédiaire), l'archive scellée perdrait son HMAC
-    await client.send(new PutObjectCommand({ Bucket: bucket, Key: objet, Body: corps, ContentType: 'application/octet-stream' }));
-}
-module.exports = { configLecture, configEcriture, creerClient, lireObjet, deposerObjet, NOMS_LECTURE, NOMS_ECRITURE, DELAI_MS };
+// L'ÉCRITURE (PutObject, variables _ECR_) vit côté PRODUCTEUR seulement : v2/migrations/depot-r2.js. Ce module-ci est tout ce que l'API charge, et il n'écrit rien (test-chargeur-archive §6).
+module.exports = { configLecture, configDe, creerClient, lireObjet, NOMS_LECTURE, DELAI_MS };

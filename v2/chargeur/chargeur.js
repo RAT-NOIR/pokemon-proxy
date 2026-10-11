@@ -69,17 +69,17 @@ function executerDepuisFichier({ lireFichier, secret, nonScelleBanc = false }) {
     // FERMÉE par défaut : sans secret HMAC, aucune archive n'est ouverte. Seul un banc déclare explicitement `nonScelleBanc` (archive locale sans scellement).
     if (!nonScelleBanc && !require('./scellement').secretValide(secret)) return async () => ({ ok: false, raison: 'secret HMAC (V2_VISUELS_HMAC) absent ou trop court : aucune archive n\'est ouverte' });
     return async () => {
-        const F = require('./format'); const { rejugerEntrees } = require('./version');
+        const F = require('./format'); const { rejugerEntreesParPaquets } = require('./version');
         let v, ent;
         try {
             const lu = await lireFichier();
             const gz = nonScelleBanc ? lu : require('./scellement').ouvrir(lu, secret);          // taille, magie et HMAC AVANT toute décompression
             const plein = await F.decompresser(gz);                                              // 16 Mo compressés / 48 Mo décompressés au plus
             v = F.deserialiser(plein); ent = F.lireEntete(plein).entree || {};
-            const rejuge = rejugerEntrees(v);                                                    // lireEntree sur CHAQUE entrée chargée (ruling 4) : l'archive entière est refusée au premier rejet
+            const rejuge = await rejugerEntreesParPaquets(v);                                    // lireEntree sur CHAQUE entrée chargée (ruling 4), la main rendue à la boucle tous les 4 000 : l'archive entière est refusée au premier rejet
             if (!rejuge.ok) return { ok: false, raison: `fichier refusé : ${rejuge.refusees} entrée(s) rejetée(s) par la validation d'entrée (${Object.entries(rejuge.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` };
         } catch (e) { return { ok: false, raison: e && e.name === 'FormatInvalide' ? `fichier refusé : ${e.motif}` : `fichier illisible (${nom(e)})` }; }
-        return { ok: true, version: v, comptes: { sets: ent.sets ?? 0, cartes: ent.cartes ?? 0, produits: ent.produits ?? 0, catalogue: ent.catalogue ?? 0, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs,
+        return { ok: true, version: v, comptes: { sets: ent.sets ?? 0, cartes: ent.cartes ?? 0, produits: ent.produits ?? 0, catalogue: ent.catalogue ?? 0, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs, doublons: v.comptes.doublons ?? 0, doublonsContradictoires: v.comptes.doublonsContradictoires ?? 0,
             fichesLiees: v.comptes.fichesLiees, setsAvecLiens: v.comptes.setsAvecLiens, produitsLies: v.comptes.produitsLies } };
     };
 }
@@ -104,7 +104,7 @@ function creerChargeur(opts = {}) {
             const r = await executer({ catalogue: meta });
             if (!r.ok) { journal(`ℹ️ [v2 chargeur] sans chargement, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'} : ${r.raison}`); return { ok: false, motif: r.raison }; }
             comptes = r.comptes; const v = r.version;
-            const dit = `sets ${comptes.sets} · cartes ${comptes.cartes} · cartes_produits ${comptes.produits} · catalogue ${comptes.catalogue} · entrées ${comptes.visuels} · refusées ${comptes.refusees}${comptes.refusees ? ` (${Object.entries(comptes.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` : ''} · fiches liées ${comptes.fichesLiees} (produits ${comptes.produitsLies}, sets ${comptes.setsAvecLiens})`;
+            const dit = `sets ${comptes.sets} · cartes ${comptes.cartes} · cartes_produits ${comptes.produits} · catalogue ${comptes.catalogue} · entrées ${comptes.visuels} · refusées ${comptes.refusees}${comptes.refusees ? ` (${Object.entries(comptes.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` : ''}${comptes.doublonsContradictoires ? ` · ${comptes.doublonsContradictoires} produit(s) sans visuel (doublons contradictoires)` : ''} · fiches liées ${comptes.fichesLiees} (produits ${comptes.produitsLies}, sets ${comptes.setsAvecLiens})`;
             // les critères d'ÉCHEC : écrits par ce qu'ils protègent (jamais une version vide ni amputée)
             if (!v || comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`);
             if (comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`);

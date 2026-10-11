@@ -70,6 +70,33 @@ const entrees = [
     H.v('   les métacartes suivent la dernière valeur (le produit 10 n\'est plus dans la métacarte 1)', [dv.produitsDeMetacarte(1), dv.produitsDeMetacarte(2)], [[20], [10]]);
     H.v('   les identifiants sont strictement croissants (le format les exige)', Array.from(dv.identifiants()), [10, 20]);
 
+    // TOUR 3 (ruling 1) : deux entrées d'un même produit aux visuels DIFFÉRENTS ⇒ AUCUN visuel pour ce produit (un visuel absent est honnête, celui d'un autre tirage ne l'est pas) ; identiques ⇒ une seule
+    const dc = creerConstructeur();
+    dc.entree(brut(10, { vignette: img('vignettes/A.webp', 200, 279), idMetacard: 1 })); dc.entree(brut(20, { idMetacard: 1 })); dc.entree(brut(10, { vignette: img('vignettes/B.webp', 200, 279), idMetacard: 1 }));
+    dc.entree(brut(30, { grande: img('cartes/g1.webp', 600, 838) })); dc.entree(brut(30, { grande: img('cartes/g2.webp', 600, 838) }));      // seule la GRANDE image diffère
+    dc.entree(brut(40, { vignette: img('vignettes/A.webp', 200, 279) })); dc.entree(brut(40, { vignette: img('vignettes/B.webp', 200, 279) })); dc.entree(brut(40, { vignette: img('vignettes/A.webp', 200, 279) }));   // A, B, A : toujours contradictoire
+    dc.entree(brut(50, { setNom: 'Premier' })); dc.entree(brut(50, { setNom: 'Dernier' }));                                                    // visuels identiques, le reste diffère : une seule, la dernière
+    dc.lien('Set-C', '1|1', [10, 20]);
+    const dcv = dc.finir();
+    H.v('doublon CONTRADICTOIRE (deux vignettes, ou deux grandes images, ou A-B-A) : aucune entrée pour ce produit', [dcv.entree(10), dcv.entree(30), dcv.entree(40)], [null, null, null]);
+    H.v('   les visuels identiques d\'un doublon : une seule entrée, la dernière ; les autres produits intacts', [dcv.entree(50).setNom, dcv.entree(20).idProduct, Array.from(dcv.identifiants())], ['Dernier', 20, [20, 50]]);
+    H.v('   dénominateur : 10 lues, 2 admises, 3 produits contradictoires, 1 doublon identique', [dcv.comptes.lues, dcv.comptes.visuels, dcv.comptes.doublonsContradictoires, dcv.comptes.doublons], [10, 2, 3, 1]);
+    H.v('   un produit sans visuel ne reste pas dans sa métacarte', dcv.produitsDeMetacarte(1), [20]);
+    const tout = creerConstructeur(); tout.entree(brut(1, { vignette: img('vignettes/A.webp', 1, 1) })); tout.entree(brut(1, { vignette: img('vignettes/B.webp', 1, 1) })); tout.lien('S', '1|1', [1]);
+    H.v('   si TOUT est contradictoire, le constructeur annonce 0 admise (jamais une version à entrées fantômes)', [tout.etat().admises, (() => { try { tout.finir(); return 'a fini'; } catch { return 'a levé'; } })()], [0, 'a levé']);
+
+    // TOUR 3 (ruling 3) : le rejugement rend la main à la boucle PAR PAQUETS, avec la MÊME validation (lireEntree) et le même verdict que la version synchrone
+    const { rejugerEntrees, rejugerEntreesParPaquets, PAQUET_REJUGEMENT } = require('../chargeur/version');
+    const faux = n => ({ identifiants: () => Int32Array.from({ length: n }, (_, i) => i + 1), entree: id => (id % 4000 === 17 ? brut(id, { vignette: img('https://exemple.org/x.webp', 1, 1) }) : brut(id, { vignette: img(`vignettes/${id}.webp`, 1, 1) })) });
+    const fv = faux(10000);
+    let rendus = 0;
+    const par = await rejugerEntreesParPaquets(fv, { rendre: async () => { rendus++; } });
+    const sync = rejugerEntrees(fv);
+    H.v('paquet de rejugement : 4 000 entrées', PAQUET_REJUGEMENT, 4000);
+    H.v('rejugement par paquets : même verdict que le synchrone (3 rejetées sur 10 000, mêmes motifs)', [par.ok, par.refusees, JSON.stringify(par.motifs) === JSON.stringify(sync.motifs), sync.refusees], [false, 3, true, 3]);
+    H.v('   la main est rendue à la boucle entre les paquets : 10 000 entrées ⇒ 2 reprises (4 000 + 4 000 + 2 000) ; 3 999 entrées ⇒ aucune', [rendus, await (async () => { let k = 0; await rejugerEntreesParPaquets(faux(3999), { rendre: async () => { k++; } }); return k; })()], [2, 0]);
+    H.v('   par défaut la reprise est une VRAIE cession de la boucle (un setImmediate se déclenche pendant le rejugement)', await (async () => { let tic = 0, fin = false; setImmediate(function boucle() { tic++; if (!fin) setImmediate(boucle); }); await rejugerEntreesParPaquets(faux(12000)); fin = true; return tic > 0; })(), true);
+
     // la voie « fil » juge la STRUCTURE comme la voie « fichier » (une seule définition : version.verifierStructure)
     const { depuisPaquet, StructureInvalide } = require('../chargeur/version');
     const p = v.paquet().donnees;

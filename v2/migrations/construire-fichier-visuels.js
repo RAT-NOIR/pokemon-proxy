@@ -20,10 +20,10 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     const vers = arg('vers'), catalogueJson = arg('catalogue'), deposer = argv.includes('--deposer'), ignorer = argv.includes('--ignorer-precedente');
     const stop = m => { console.error(`❌ ARRÊT : ${m}`); return 1; };
     if (!vers && !deposer) return stop('--deposer ou --vers=<archive> est requis (rien à produire sinon)');
-    const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format');
+    const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format'); const DEPOT = require('./depot-r2');
     if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
     let ecriture = null;
-    if (deposer) { ecriture = R2.configEcriture(env); if (!ecriture.ok) return stop(`dépôt R2 : ${ecriture.raison}`); }
+    if (deposer) { ecriture = DEPOT.configEcriture(env); if (!ecriture.ok) return stop(`dépôt R2 : ${ecriture.raison}`); }
     const j = LS.jugerVariables(env); if (!j.ok && !deps.source) return stop(j.raison);                  // refus AVANT toute connexion
     const { fabriquerFichier } = require('../chargeur/precalcul'); const { sourceCartes } = require('../chargeur/source');
     let catalogue = new Map();
@@ -45,7 +45,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
     try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC }); }
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
     const c = f.comptes;
-    console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct ${c.doublons || 0} (le dernier gagne) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+    console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct identiques ${c.doublons || 0} (une seule entrée gardée) · contradictoires ${c.doublonsContradictoires || 0} (visuels différents : AUCUN visuel pour ces produits) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
 
     let client = null;
     if (deposer) {
@@ -74,7 +74,7 @@ async function principal(argv = process.argv, env = process.env, deps = {}) {
         console.log(`✅ ${vers} : ${(f.brut.length / 1048576).toFixed(1)} Mo brut, ${(f.scelle.length / 1048576).toFixed(2)} Mo scellé`);
     }
     if (deposer) {
-        try { await R2.deposerObjet({ client, bucket: ecriture.c.bucket, objet: ecriture.c.objet, corps: f.scelle }); }
+        try { await DEPOT.deposerObjet({ client, bucket: ecriture.c.bucket, objet: ecriture.c.objet, corps: f.scelle }); }
         catch (e) { return stop(`dépôt R2 refusé (${(e && (e.name || e.code)) || 'erreur'}) : rien n'a été publié`); }
         console.log(`✅ publié : ${(f.scelle.length / 1048576).toFixed(2)} Mo scellés, bucket et objet des variables V2_VISUELS_R2_BUCKET / V2_VISUELS_R2_OBJET`);
     }

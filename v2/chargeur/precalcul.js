@@ -4,7 +4,7 @@
 // Le producteur ne publie JAMAIS ce que le consommateur refuserait : il fait un ALLER-RETOUR complet (désérialise sa propre sortie avec le code du consommateur, rejuge chaque entrée) et refuse sinon.
 const { calculer } = require('./calcul');
 const F = require('./format');
-const { rejugerEntrees } = require('./version');
+const { rejugerEntreesParPaquets } = require('./version');
 const { sceller } = require('./scellement');
 
 const echec = motif => Object.assign(new Error('archive refusée'), { motif });
@@ -24,7 +24,7 @@ async function fabriquerFichier({ source, catalogue, regle = () => require('./re
     // ALLER-RETOUR : le consommateur lirait-il ce que je m'apprête à publier ? (identifiants uniques, structure, validation de chaque entrée, comptes)
     let relu;
     try { relu = F.deserialiser(await F.decompresser(gz)); } catch (e) { throw echec(`aller-retour : le consommateur refuse l'archive (${e && e.motif ? e.motif : (e && e.name) || 'erreur'}) : aucun fichier écrit`); }
-    const rj = rejugerEntrees(relu);
+    const rj = await rejugerEntreesParPaquets(relu);
     if (!rj.ok) throw echec(`aller-retour : ${rj.refusees} entrée(s) rejetée(s) par la validation d'entrée (${Object.entries(rj.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')}) : aucun fichier écrit`);
     if (relu.comptes.visuels !== r.comptes.visuels || relu.comptes.fichesLiees !== r.comptes.fichesLiees) throw echec('aller-retour : les comptes relus diffèrent des comptes calculés : aucun fichier écrit');
     return { brut, gz, scelle: secret ? sceller(gz, secret) : null, comptes: r.comptes, entree, dureeMs: Date.now() - t0 };

@@ -17,8 +17,13 @@ const im = (set, numero, n) => ({ set, numero, cleR2: `cartes/${n}.webp`, w: 600
 const imp = (numero, exp = 'Set A') => ({ tirage: 'intl', expansion: exp, numero, total: '100', rarete: 'Rare' });
 const SETS = [{ _id: 'Set-A', idExpansion: 100, code: 'SA', nomAffichage: 'Set A', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set A' } },
     { _id: 'Set-B', idExpansion: 200, code: 'SB', nomAffichage: 'Set B', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set B' } }];
-function donnees(n, { doublon = false } = {}) {
+function donnees(n, { doublon = false, paires = false } = {}) {
     const docs = [], lignes = [];
+    if (paires) {          // n produits, n/2 cartes : DEUX produits par fiche (les visuels ne bougent pas, les fiches liées tombent de moitié)
+        for (let k = 1; k <= n / 2; k++) docs.push({ _id: k, nomEn: `Carte ${k}`, sets: ['Set-A'], impressions: [imp(String(k).padStart(3, '0'))], images: [im('Set-A', String(k).padStart(3, '0'), `c${k}`)] });
+        for (let i = 1; i <= n; i++) lignes.push({ idProduct: 1000 + i, carteId: Math.ceil(i / 2), idExpansion: 100, numeroFiche: String(Math.ceil(i / 2)).padStart(3, '0'), slug: `P${i}-SA${i}`, slugSet: 'Set-A' });
+        return { sets: SETS, docs, lignes };
+    }
     for (let i = 1; i <= n; i++) {
         const num = String(i).padStart(3, '0');
         docs.push({ _id: i, nomEn: `Carte ${i}`, sets: ['Set-A'], impressions: [imp(num)], images: [im('Set-A', num, `c${i}`)] });
@@ -60,9 +65,12 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
 
     // ── 2. LE PRODUCTEUR n'écrit rien que le consommateur refuse (I2) et refuse l'amputé (P1, ruling 4)
     const dd = await fabriquerFichier({ source: source(donnees(30, { doublon: true })), catalogue, secret: SECRET });
-    H.v('un produit rattaché à DEUX cartes (deux sets) : deux entrées émises, UNE gardée (le dernier gagne, comme l\'ancien import), compté', [dd.comptes.doublons, dd.comptes.visuels], [1, 30]);
+    H.v('un produit rattaché à DEUX cartes (deux sets) aux visuels DIFFÉRENTS : deux entrées émises, AUCUN visuel servi pour ce produit (ruling 1), compté comme contradictoire', [dd.comptes.doublonsContradictoires, dd.comptes.doublons, dd.comptes.visuels], [1, 0, 29]);
     const lu = await I.executerDepuisFichier({ lireFichier: async () => dd.scelle, secret: SECRET })();
-    H.v('   et le CONSOMMATEUR lit cette archive (aller-retour réel) : 30 visuels, le dernier gagne (Set B)', [lu.ok, lu.comptes.visuels, lu.version.entree(1005).setNom], [true, 30, 'Set B']);
+    H.v('   et le CONSOMMATEUR lit cette archive (aller-retour réel) : 29 visuels, le produit 1005 n\'a aucun visuel, les autres sont intacts', [lu.ok, lu.comptes.visuels, lu.version.entree(1005), lu.version.entree(1004).setNom, lu.comptes.doublonsContradictoires], [true, 29, null, 'Set A', 1]);
+    const dm = donnees(30, { doublon: true }); dm.docs[dm.docs.length - 1].images = [im('Set-B', '001', 'c5')];      // la carte du Set B porte le MÊME fichier (cleR2 et vignette) que la carte 5 du Set A
+    const ddm = await fabriquerFichier({ source: source(dm), catalogue, secret: SECRET });
+    H.v('   le même produit rattaché à deux cartes au MÊME visuel : une seule entrée gardée, compté comme doublon identique, pas contradictoire', [ddm.comptes.doublons, ddm.comptes.doublonsContradictoires, ddm.comptes.visuels], [1, 0, 30]);
     const sansImage = donnees(3); sansImage.docs.forEach(x => { x.images = []; });
     let m0 = null; try { await fabriquerFichier({ source: source(sansImage), catalogue, secret: SECRET }); } catch (e) { m0 = e.motif; }
     H.v('rien d\'admissible (aucune image) : AUCUN fichier produit, motif nommé', /0 visuel.*aucun fichier/.test(m0 || ''), true);
@@ -109,6 +117,22 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     H.v('   la voie fichier N\'ATTEND PAS la base de l\'API (aucune connexion ici) : l\'archive est installée en moins d\'une seconde', [E.version() && E.version().comptes.visuels, Date.now() - t0 < 1000], [30, true]);
     H.v('   lue sur le bucket et l\'objet DES VARIABLES (GetObject), rien d\'autre', mag.commandes.map(x => x.slice(0, 3)), [['GetObjectCommand', 'seau-prive', 'v2/visuels.rmv']]);
     I.arreterChargeur(); E.vider();
+    // N4 (ruling 4) : le plafond de LECTURE du montage (16 Mo + 64) est celui de format.js — annoncé trop grand : refusé SANS lire un octet ; annonce menteuse : lecture ARRÊTÉE au plafond
+    const MAX_LECTURE = F.PLAFONDS.archive + 64;
+    const lectureDu = async (client) => {
+        const jr = []; I.arreterChargeur(); E.vider();
+        const ch2 = demarrerPourConfig(cfgProd, { env: envLecture, client, journal: m => jr.push(m) });
+        for (let k = 0; k < 40 && ch2 && !jr.some(m => /sans chargement|échec/.test(m)); k++) await attendre(25);
+        I.arreterChargeur();
+        return jr.join(' | ');
+    };
+    let lus = 0;
+    const morceaux = (n, taille = 1048576) => (async function* () { for (let i = 0; i < n; i++) { lus++; yield Buffer.alloc(taille, 1); } })();
+    const trop = await lectureDu({ send: async () => ({ ContentLength: MAX_LECTURE + 1, Body: morceaux(40) }) });
+    H.v('objet annoncé plus grand que 16 Mo + 64 : refusé, motif nommé, AUCUN octet lu', [/plus grand que la taille permise \(annoncée\)/.test(trop), lus], [true, 0]);
+    lus = 0;
+    const menteur = await lectureDu({ send: async () => ({ ContentLength: 1000, Body: morceaux(40) }) });
+    H.v('   annonce menteuse (1 000 octets, 40 Mo servis) : refusé « lue », la lecture S\'ARRÊTE au plafond (≤ 18 blocs de 1 Mo lus sur 40)', [/plus grand que la taille permise \(lue\)/.test(menteur), lus <= 18], [true, true]);
     const mauvais = magasin(S.sceller(f.gz, SECRET.replace('s', 'z')));
     demarrerPourConfig(cfgProd, { env: envLecture, client: mauvais });
     await attendre(300);
@@ -151,6 +175,26 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     H.v('archive précédente ILLISIBLE : « je ne sais pas » ⇒ refus, AUCUNE publication', [p4.code, /illisible/.test(p4.texte), m5.objet.equals(Buffer.from('objet précédent corrompu'))], [1, true, true]);
     const p5 = await lancer(['--deposer', '--ignorer-precedente'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: m5 });
     H.v('   --ignorer-precedente (l\'acte explicite) : publiée', [p5.code, m5.objet.equals(Buffer.from('objet précédent corrompu'))], [0, false]);
+    // N5 (ruling 4) : l'archive précédente n'a pas pu être LUE (R2 refuse, ou secret différent) ⇒ on ne publie pas, règle écrite : « je ne sais pas » est un refus ; l'acte explicite passe outre.
+    // Justification : publier à l'aveugle peut remplacer une bonne archive par une amputée ; refuser ne coûte qu'une journée avec l'archive de la veille.
+    const getRefuse = { commandes: [], send: async cmd => { getRefuse.commandes.push(cmd.constructor.name); if (cmd.constructor.name === 'PutObjectCommand') return {}; throw Object.assign(new Error('x'), { name: 'AccessDenied' }); } };
+    const p6 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: getRefuse });
+    H.v('archive précédente NON LISIBLE (R2 refuse la lecture) : code 1, la raison est dite, AUCUN PutObject', [p6.code, /précédente n'a pas pu être lue/.test(p6.texte), getRefuse.commandes.includes('PutObjectCommand')], [1, true, false]);
+    getRefuse.commandes.length = 0;
+    const p7 = await lancer(['--deposer', '--ignorer-precedente'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: getRefuse });
+    H.v('   --ignorer-precedente : publiée malgré tout', [p7.code, getRefuse.commandes.includes('PutObjectCommand')], [0, true]);
+    const mAutre = magasin(S.sceller(f.gz, SECRET.replace('s', 'z')));
+    const p8 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: mAutre });
+    H.v('archive précédente scellée avec un AUTRE secret : refus (illisible pour nous), AUCUN PutObject', [p8.code, mAutre.commandes.some(x => x[0] === 'PutObjectCommand')], [1, false]);
+    // N6 : la garde des 10 % juge AUSSI les fiches liées (100 visuels, 100 fiches → 100 visuels, 50 fiches)
+    const m6 = magasin();
+    await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: m6 });
+    const avant6 = m6.objet; m6.commandes.length = 0;
+    const p9 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100, { paires: true })), catalogue: cat100, client: m6 });
+    H.v('fiches liées 100 → 50 à visuels CONSTANTS (100) : REFUSÉE, code 1, les fiches liées sont nommées, AUCUN PutObject, objet inchangé', [p9.code, /chute de plus de 10 % des fiches liées.*\(100 → 50\)/.test(p9.texte) || p9.texte.slice(0, 300), m6.commandes.some(x => x[0] === 'PutObjectCommand'), m6.objet.equals(avant6)], [1, true, false, true]);
+    // le dénominateur des doublons est IMPRIMÉ par le producteur
+    const p10 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100, { doublon: true })), catalogue: cat100, client: magasin() });
+    H.v('le producteur imprime les doublons : identiques et CONTRADICTOIRES (produits sans visuel)', [p10.code, /doublons d'idProduct identiques 0/.test(p10.texte), /contradictoires 1/.test(p10.texte)], [0, true, true]);
     const sansHmac = await lancer(['--deposer'], { ...ENV_ECR, V2_VISUELS_HMAC: undefined }, { source: source(donnees(100)), catalogue: cat100, client: magasin() });
     H.v('sans secret HMAC : code 1, rien n\'est calculé ni publié', [sansHmac.code, /V2_VISUELS_HMAC/.test(sansHmac.texte)], [1, true]);
     const sansEcr = await lancer(['--deposer'], { V2_VISUELS_HMAC: SECRET }, { source: source(donnees(100)), catalogue: cat100, client: magasin() });

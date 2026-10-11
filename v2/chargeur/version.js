@@ -98,8 +98,10 @@ function creerConstructeur() {
     const fSet = [], fCarte = colonne(), fNum = colonne(), fDebut = colonne(), fFin = colonne(), prods = colonne();
     const motifs = {}; let lues = 0, refusees = 0, doublons = 0;
     const rang = new Map();                                                          // idProduct → rang dans les colonnes : un produit n'a qu'UNE entrée
+    const contradictoires = new Set();                                               // idProduct dont deux entrées portent des visuels DIFFÉRENTS : aucun visuel n'est servi pour eux
+    const VISUEL = [1, 2, 3, 4, 5, 6].map(i => COLS[i]);                             // vig, vw, vh, gra, gw, gh : ce qui est AFFICHÉ (le reste de l'entrée n'est pas un visuel)
     return {
-        etat: () => ({ lues, admises: c.id.n, refusees, doublons, motifs, fiches: fSet.length }),
+        etat: () => ({ lues, admises: c.id.n - contradictoires.size, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, fiches: fSet.length }),
         entree(e) {
             lues++;
             const r = lireEntree(e);                                                // la validation d'entrée s'applique à CHAQUE entrée chargée
@@ -108,10 +110,15 @@ function creerConstructeur() {
             // les valeurs, dans l'ordre de COLS
             const v = [d.idProduct, texte.id(d.vignette.cle), d.vignette.w, d.vignette.h, d.grande ? texte.id(d.grande.cle) : -1, d.grande ? d.grande.w : 0, d.grande ? d.grande.h : 0,
                 texte.id(d.mention), d.idMetacard === null ? -1 : d.idMetacard, texte.id(d.numero), texte.id(d.rarete), texte.id(d.total), texte.id(d.variante), texte.id(d.setNom), liensR.id(d.lien)];
-            // UN produit, UNE entrée — la règle de l'ancien import (v2/migrations/importer-visuels.js::preparer, retiré au tour 1) : « un doublon d'idProduct dans le lot : le dernier gagne »
-            // (`parId.set(r.doc.idProduct, r.doc)`). Un produit rattaché à deux cartes (CLAUDE.md §32) émet deux entrées ; le consommateur refuse des identifiants non strictement croissants.
+            // UN produit, UNE entrée. Un produit rattaché à deux cartes (CLAUDE.md §32) émet deux entrées ; le consommateur refuse des identifiants non strictement croissants.
+            // RÈGLE DU TOUR 3 (le coordinateur remplace « le dernier gagne » de l'ancien import, dont l'ordre de lecture était arbitraire) : deux entrées aux visuels IDENTIQUES ⇒ une seule (la dernière,
+            // pour le reste) ; deux entrées aux visuels DIFFÉRENTS ⇒ AUCUN visuel pour ce produit — un visuel absent est honnête, celui d'un autre tirage ne l'est pas. Compté dans les deux cas.
+            if (contradictoires.has(d.idProduct)) return true;
             const r0 = rang.get(d.idProduct);
-            if (r0 !== undefined) { doublons++; COLS.forEach((k, i) => c[k].set(r0, v[i])); return true; }
+            if (r0 !== undefined) {
+                if (!VISUEL.every((k, j) => c[k].get(r0) === v[j + 1])) { contradictoires.add(d.idProduct); return true; }
+                doublons++; COLS.forEach((k, i) => c[k].set(r0, v[i])); return true;
+            }
             rang.set(d.idProduct, c.id.n);
             COLS.forEach((k, i) => c[k].push(v[i]));
             return true;
@@ -123,11 +130,12 @@ function creerConstructeur() {
             fDebut.push(prods.n); for (const p of idProducts) prods.push(p); fFin.push(prods.n);
         },
         finir(chargeLe = new Date()) {
-            const n = c.id.n;
+            // tri par idProduct : une permutation (sans les produits contradictoires), puis chaque colonne est réécrite dans l'ordre
+            const idsBruts = c.id.vue(); const gardes = [];
+            for (let i = 0; i < idsBruts.length; i++) if (!contradictoires.has(idsBruts[i])) gardes.push(i);
+            const n = gardes.length;
             if (n === 0) throw new Error('aucune entrée admise : jamais une version vide');
-            // tri par idProduct : une permutation, puis chaque colonne est réécrite dans l'ordre
-            const ordre = new Int32Array(n); for (let i = 0; i < n; i++) ordre[i] = i;
-            const idsBruts = c.id.vue(); ordre.sort((a, b) => idsBruts[a] - idsBruts[b]);
+            const ordre = Int32Array.from(gardes); ordre.sort((a, b) => idsBruts[a] - idsBruts[b]);
             const cols = {};
             for (const k of COLS) { const src = c[k].vue(), dst = new Int32Array(n); for (let i = 0; i < n; i++) dst[i] = src[ordre[i]]; cols[k] = dst; }
             // métacartes : paires (métacarte, produit) triées
@@ -143,7 +151,7 @@ function creerConstructeur() {
             const prefixe = plusLongPrefixe(liensR.liste);
             const liens = { ...encoder(liensR.liste, s => s.slice(prefixe.length)), prefixe };
             const t = encoder(texte.liste);
-            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, doublonsContradictoires: contradictoires.size, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length });
             return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe });
         }
     };
@@ -189,9 +197,27 @@ function depuisPaquet(donnees) { verifierStructure(donnees); return assembler(do
  * prouve son intégrité, pas qu'il est honnête (CLAUDE.md « 0 faux affirmé »). @returns {{ ok: boolean, refusees: number, motifs: object }}
  */
 function rejugerEntrees(version) {
-    const motifs = {}; let refusees = 0;
-    for (const id of version.identifiants()) { const r = lireEntree(version.entree(id)); if (!r.ok) { refusees++; motifs[r.motif] = (motifs[r.motif] || 0) + 1; } }
-    return { ok: refusees === 0, refusees, motifs };
+    const acc = { refusees: 0, motifs: {} }, ids = version.identifiants();
+    rejugerPlage(version, ids, 0, ids.length, acc);
+    return { ok: acc.refusees === 0, refusees: acc.refusees, motifs: acc.motifs };
+}
+/** Le geste unique : lireEntree (la validation d'entrée de visuels.js, PAS une copie) sur les rangs [de, a) — partagé par la version synchrone et la version par paquets. */
+function rejugerPlage(version, ids, de, a, acc) {
+    for (let i = de; i < a; i++) { const r = lireEntree(version.entree(ids[i])); if (!r.ok) { acc.refusees++; acc.motifs[r.motif] = (acc.motifs[r.motif] || 0) + 1; } }
+}
+const PAQUET_REJUGEMENT = 4000;
+const cederLaBoucle = () => new Promise(ok => setImmediate(ok));
+/**
+ * Le même rejugement, qui rend la main à la boucle d'événements tous les PAQUET_REJUGEMENT entrées (mesuré : 67 590 entrées bloquaient la boucle ~200 ms d'un coup ; la requête qui réveille
+ * l'instance attendait en plus). Même verdict que rejugerEntrees. `rendre` est injectable (les bancs comptent les reprises).
+ */
+async function rejugerEntreesParPaquets(version, { taille = PAQUET_REJUGEMENT, rendre = cederLaBoucle } = {}) {
+    const acc = { refusees: 0, motifs: {} }, ids = version.identifiants();
+    for (let de = 0; de < ids.length; de += taille) {
+        rejugerPlage(version, ids, de, Math.min(de + taille, ids.length), acc);
+        if (de + taille < ids.length) await rendre();
+    }
+    return { ok: acc.refusees === 0, refusees: acc.refusees, motifs: acc.motifs };
 }
 
-module.exports = { creerConstructeur, depuisPaquet, verifierStructure, rejugerEntrees, StructureInvalide };
+module.exports = { creerConstructeur, depuisPaquet, verifierStructure, rejugerEntrees, rejugerEntreesParPaquets, PAQUET_REJUGEMENT, StructureInvalide };
