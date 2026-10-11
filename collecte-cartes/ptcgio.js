@@ -54,8 +54,20 @@ const TABLE_PTCGIO = Object.freeze([
     { slug: 'Dragon-Majesty', id: 'sm75', segments: [[1, 70], [71, 78]], marque: 'symbole Dragon Majesty, ©2018, dénominateur /70 (principal 1-70, secrètes 71-78)',
       temoins: [t(1, 'Charmander', '1/70'), t(2, 'Charmeleon', '2/70'), t(30, 'Phione', '30/70'), t(41, 'Altaria-GX', '41/70'), t(63, 'Wela Volcano Park', '63/70'), t(65, 'Reshiram-GX', '65/70'), t(69, 'Blaine\'s Last Stand', '69/70'), t(70, 'Zinnia', '70/70'),
           t(75, 'Dragon Talon', '75/70'), t(77, 'Switch Raft', '77/70'), t(78, 'Ultra Necrozma-GX', '78/70')] },
-    { slug: 'POP-Series-5', id: 'pop5', segments: [[1, 16]], marque: 'symbole POP Series 5, ©2007, dénominateur /17 (le n° 17 n\'a pas de témoin : non couvert)', temoins: [t(1, 'Ho-Oh', '1/17'), t(9, 'δ Rainbow Energy', '9/17'), t(16, 'Espeon ☆', '16/17')] }
-].map(l => Object.freeze({ ...l, lu: '2026-10-10' })));
+    { slug: 'POP-Series-5', id: 'pop5', segments: [[1, 16]], marque: 'symbole POP Series 5, ©2007, dénominateur /17 (le n° 17 n\'a pas de témoin : non couvert)', temoins: [t(1, 'Ho-Oh', '1/17'), t(9, 'δ Rainbow Energy', '9/17'), t(16, 'Espeon ☆', '16/17')] },
+    // ── T2 (2026-10-12) : cinq sets de plus, prouvés à l'œil (23 images ouvertes, dont 17 gardées ici ; 36 requêtes sur 80 permises). Le numéro de FICHIER
+    // de la source n'est pas l'entier nu : `jeton` dit le préfixe (liste énumérée JETONS_URL) ; `prefixe` (numéro Cardmarket « TG10 ») ne sert qu'aux Trainer Gallery.
+    { slug: 'SM-Black-Star-Promos', id: 'smp', jeton: { prefixe: 'SM', largeur: 2 }, segments: [[89, 248]], marque: 'étoile noire « Black Star » des promos Sun & Moon, numéro imprimé « SMnn » à côté du copyright (©2018 puis ©2021)',
+      temoins: [t(89, 'Zoroark', 'SM89'), t(156, 'Dragonite-GX', 'SM156'), t(246, 'Sabrina & Brycen', 'SM246'), t(248, 'Pikachu & Zekrom-GX', 'SM248')], lu: '2026-10-12' },
+    { slug: 'Brilliant-Stars', id: 'swsh9tg', prefixe: 'TG', jeton: { prefixe: 'TG', largeur: 2 }, segments: [[1, 30]], marque: 'Trainer Gallery de Brilliant Stars : « TGnn/TG30 » imprimé, symbole de l\'extension Brilliant Stars, ©2022',
+      temoins: [t(1, 'Flareon', 'TG01/TG30'), t(15, 'Sylveon VMAX', 'TG15/TG30'), t(30, 'Rapid Strike Urshifu VMAX', 'TG30/TG30')], lu: '2026-10-12' },
+    { slug: 'Lost-Origin', id: 'swsh11tg', prefixe: 'TG', jeton: { prefixe: 'TG', largeur: 2 }, segments: [[3, 30]], marque: 'Trainer Gallery de Lost Origin : « TGnn/TG30 » imprimé, symbole de l\'extension Lost Origin, ©2022 (segment à partir de TG03, le premier témoin)',
+      temoins: [t(3, 'Charizard', 'TG03/TG30'), t(17, 'Pikachu VMAX', 'TG17/TG30'), t(30, 'Mew VMAX', 'TG30/TG30')], lu: '2026-10-12' },
+    { slug: 'HGSS-Black-Star-Promos', id: 'hsp', jeton: { prefixe: 'HGSS', largeur: 2 }, segments: [[17, 25]], marque: 'étoile noire « Black Star » des promos HeartGold SoulSilver, numéro imprimé « HGSSnn », ©2010',
+      temoins: [t(17, 'Minun', 'HGSS17'), t(24, 'Hitmonchan', 'HGSS24'), t(25, 'Hitmonlee', 'HGSS25')], lu: '2026-10-12' },
+    { slug: 'McDonalds-Collection-25th-Anniversary', id: 'mcd21', segments: [[1, 25]], marque: 'collection de 25 cartes ©2021 ; logo « 25 » de la célébration sur l\'illustration et symbole McDonald\'s près du dénominateur /25',
+      temoins: [t(1, 'Bulbasaur', '1/25'), t(13, 'Tepig', '13/25'), t(17, 'Squirtle', '17/25'), t(25, 'Pikachu', '25/25')], lu: '2026-10-12' }
+].map(l => Object.freeze({ lu: '2026-10-10', ...l })));
 
 const lignesDe = slug => TABLE_PTCGIO.filter(l => l.slug === slug);
 
