@@ -2321,7 +2321,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT, detail `borne-set` (2 000 clés par set), `borne-compte` (20 000 par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (plafond de TOUS les comptes ensemble, valeur provisoire 100 000 clés) : rien n'est écrit, rien n'est perdu.",
+            "description": "CONFLIT, detail `borne-set` (2 000 clés par set), `borne-compte` (20 000 par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (plafond de TOUS les comptes ensemble, en PLACES : une clé = 1, un set neuf = 1 + un forfait de 4 ; valeur provisoire 100 000 places) : rien n'est écrit, rien n'est perdu.",
             "content": {
               "application/json": {
                 "schema": {

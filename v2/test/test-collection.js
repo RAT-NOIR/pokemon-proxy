@@ -51,6 +51,8 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
     const lireSet = (sv, c, slug) => H.appel(sv.url, `/api/collection/sets/${encodeURIComponent(slug)}`, { entetes: siteH(c && c.cookie) });
     const lireSets = (sv, c) => H.appel(sv.url, '/api/collection', { entetes: siteH(c && c.cookie) });
     const nDocs = () => raw(NOM).countDocuments({});
+    // les PLACES réellement occupées : les clés + (documents × forfait), comptées par deux requêtes indépendantes de la formule du service
+    const placesReelles = async c => { const r = await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray(); return (r.length ? r[0].n : 0) + (await nDocs()) * c.collection.forfaitDocument; };
     const docs = c => raw(NOM).find({ compteId: c.c._id }).toArray();
     const code = r => r.json && r.json.erreur && r.json.erreur.code;
     const detail = r => r.json && r.json.erreur && r.json.erreur.detail;
@@ -265,39 +267,72 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             } },
         // ── M-1 : deux PUT true simultanés de la MÊME clé ne comptent qu'une fois (set neuf : l'upsert ; set existant : la mise à jour). Le compteur global le montre.
         { nom: 'même clé posée deux fois en même temps (set neuf puis set existant, 30 itérations) : le compteur global ne bouge que de 1 à chaque fois', attendu: [0, 0],
-            mut: [['service.js', [['{ compteId, set: slug, ...SOUS_LA_BORNE(cfg), cles: { $ne: cle } }', '{ compteId, set: slug, ...SOUS_LA_BORNE(cfg) }']]], ['service.js', [['if (!r.ajoute) await rendre(1);', '']]]],
+            mut: [['service.js', [['{ compteId, set: slug, ...SOUS_LA_BORNE(cfg), cles: { $ne: cle } }', '{ compteId, set: slug, ...SOUS_LA_BORNE(cfg) }']]], ['service.js', [['if (!r.ajoute) await rendre(cout);', '']]]],
             async scene({ svc, cfg }) {
                 const A = await compte(), id = A.c._id; const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                await svc.recompter(); let mauvaisNeuf = 0, mauvaisExistant = 0;
+                await svc.recompter(cfg); let mauvaisNeuf = 0, mauvaisExistant = 0; const F = cfg.collection.forfaitDocument;
                 for (let i = 0; i < 30; i++) {
                     const slug = `S-Meme-${i}`;
                     const a = (cle, k) => svc.cocher({ compteId: id, slug, cle, possedee: true, cfg, maintenant: new Date(Date.now() + k) });
                     let n0 = await n(); await Promise.all([a('1|1', 1), a('1|1', 2)]);
-                    if ((await n()) - n0 !== 1) mauvaisNeuf++;
+                    if ((await n()) - n0 !== 1 + F) mauvaisNeuf++;      // une clé + le forfait du document neuf, UNE fois
                     n0 = await n(); await Promise.all([a('2|1', 3), a('2|1', 4)]);
                     if ((await n()) - n0 !== 1) mauvaisExistant++;
                 }
                 return [mauvaisNeuf, mauvaisExistant];
             } },
         // ── I-1 : le plafond GLOBAL (clés de tous les comptes), un compteur unique `$inc` conditionnel avant l'écriture
-        { nom: 'plafond global ATOMIQUE : 20 écritures simultanées de 2 comptes avec 5 places libres au service en gardent exactement 5, les 15 autres sont refusées « borne-service », compteur = clés réelles',
-            mut: [['service.js', [['n: { $lt: cfg.collection.clesService }', 'n: { $gte: 0 }']]]], attendu: [5, 15, ['borne-service'], 5],
-            async scene({ svc }) {
-                const base = await svc.recompter(); const cfgX = variante({ collection: { clesService: base + 5 } });
+        { nom: 'plafond global ATOMIQUE : 20 écritures simultanées dans des sets existants avec 5 places libres au service en gardent exactement 5, les 15 autres sont refusées « borne-service », compteur = places réelles',
+            mut: [['service.js', [['n: { $lte: cfg.collection.clesService - cout }', 'n: { $gte: 0 }']]]], attendu: [5, 15, ['borne-service'], 5],
+            async scene({ svc, cfg }) {
                 const A = await compte(), B = await compte();
+                for (const [c, s] of [[A, 'S-Svc-1'], [B, 'S-Svc-0']]) await svc.cocher({ compteId: c.c._id, slug: s, cle: '999|1', possedee: true, cfg });
+                const base = await svc.recompter(cfg); const cfgX = variante({ collection: { clesService: base + 5 } });
                 const r = await Promise.all(Array.from({ length: 20 }, (_, i) => svc.cocher({ compteId: (i % 2 ? A : B).c._id, slug: `S-Svc-${i % 2}`, cle: `${i + 1}|1`, possedee: true, cfg: cfgX })));
-                const reel = (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
                 const refus = r.filter(x => x.refus);
-                return [reel - base, refus.length, [...new Set(refus.map(x => x.refus))], (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base];
+                return [await placesReelles(cfg) - base, refus.length, [...new Set(refus.map(x => x.refus))], (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base];
+            } },
+        // ── plafond en PLACES : un set neuf coûte 1 clé + le forfait du document, réservés d'un seul `$inc` conditionnel ; rendu à la suppression du document vide
+        { nom: 'places : un set neuf consomme 1 + le forfait, une clé de plus 1 ; le dernier retrait supprime le document et RENDRE son forfait',
+            mut: [['service.js', [['await rendre(cfg.collection.forfaitDocument); // forfait rendu', '']]]], attendu: [5, 6, 5, 0, 0],
+            async scene({ svc, cfg }) {
+                const base = await svc.recompter(cfg); const F = cfg.collection.forfaitDocument;
+                const A = await compte(), id = A.c._id; const c = (cle, possedee) => svc.cocher({ compteId: id, slug: 'S-Forfait', cle, possedee, cfg });
+                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
+                await c('1|1', true); const n1 = await cpt(); await c('2|1', true); const n2 = await cpt();
+                await c('2|1', false); const n3 = await cpt(); await c('1|1', false); const n4 = await cpt();
+                return [n1 === 1 + F ? 5 : n1, n2 === 2 + F ? 6 : n2, n3 === 1 + F ? 5 : n3, n4, (await docs(A)).length];
+            } },
+        { nom: 'places : 12 écritures simultanées dans 12 sets NEUFS avec la place de 3 documents en gardent exactement 3 ; le compteur ne dépasse jamais le plafond',
+            mut: [['service.js', [['const cout = 1 + (doc ? 0 : cfg.collection.forfaitDocument);', 'const cout = 1;']]]], attendu: [3, 9, 3 * 5, true],
+            async scene({ svc, cfg }) {
+                const base = await svc.recompter(cfg); const F = cfg.collection.forfaitDocument; const plafond = base + 3 * (1 + F); const cfgX = variante({ collection: { clesService: plafond } });
+                const A = await compte();
+                const r = await Promise.all(Array.from({ length: 12 }, (_, i) => svc.cocher({ compteId: A.c._id, slug: `S-Neuf-${i}`, cle: '1|1', possedee: true, cfg: cfgX })));
+                const n = (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
+                return [r.filter(x => !x.refus).length, r.filter(x => x.refus === 'borne-service').length, n - base === 3 * (1 + F) ? 15 : n - base, n <= plafond];
+            } },
+        { nom: 'places : deux clés DIFFÉRENTES posées en même temps dans un set neuf ne paient le forfait qu\'UNE fois (le perdant de la création le rend), 30 itérations',
+            mut: [['service.js', [['else if (cout > 1 && !r.cree) await rendre(cout - 1);', '']]]], attendu: [0],
+            async scene({ svc, cfg }) {
+                const A = await compte(), id = A.c._id; const F = cfg.collection.forfaitDocument; await svc.recompter(cfg); let mauvais = 0;
+                const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
+                for (let i = 0; i < 30; i++) {
+                    const n0 = await n(); await Promise.all(['1|1', '2|1'].map(cle => svc.cocher({ compteId: id, slug: `S-Deux-${i}`, cle, possedee: true, cfg })));
+                    if ((await n()) - n0 !== 2 + F) mauvais++;
+                }
+                return [mauvais];
             } },
         { nom: 'plafond global : au plafond, une clé déjà posée ne consomme rien, une nouvelle est refusée sans rien écrire ; un retrait libère UNE place, une seule fois',
             mut: [['service.js', [['await rendre(1); // retrait', '']]]], attendu: [[3, 3], 'borne-service', [3, 3, 3], [2, 2], 1, 'borne-service'],
-            async scene({ svc }) {
-                const base = await svc.recompter(); const cfgX = variante({ collection: { clesService: base + 3 } });
-                const A = await compte(), id = A.c._id; const c = (cle, possedee = true) => svc.cocher({ compteId: id, slug: 'S-Plein', cle, possedee, cfg: cfgX });
+            async scene({ svc, cfg }) {
+                const A = await compte(), id = A.c._id; await svc.recompter(cfg);
+                await svc.cocher({ compteId: id, slug: 'S-Plein', cle: '1|1', possedee: true, cfg });            // le document existe désormais : seules les clés suivantes se paient
+                const base = (await svc.recompter(cfg)) - 1; const cfgX = variante({ collection: { clesService: base + 3 } });   // base = tout sauf la clé 1|1 (forfait du document compris)
+                const c = (cle, possedee = true) => svc.cocher({ compteId: id, slug: 'S-Plein', cle, possedee, cfg: cfgX });
                 const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
                 const cles = async () => (await docs(A))[0].cles.length;
-                for (const k of ['1|1', '2|1', '3|1']) await c(k);
+                for (const k of ['2|1', '3|1']) await c(k);
                 const plein = [await cpt(), await cles()];
                 const refus = (await c('4|1')).refus;
                 const idem = await c('1|1');
@@ -307,23 +342,24 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 const neuve = await c('4|1'); const encore = await c('5|1');
                 return [plein, refus, apresRefus, libre, neuve.possedees === 3 ? 1 : 0, encore.refus];
             } },
-        { nom: 'plafond global : supprimer un compte libère ses clés', mut: [['service.js', [['if (k > 0) await rendre(k);', '']]]], attendu: [3, 0, 0],
+        { nom: 'places : supprimer un compte rend ses clés ET les forfaits de tous ses documents (3 clés dans 2 sets : 11 places)', mut: [['service.js', [['k + n * cfg.collection.forfaitDocument', 'k']]]], attendu: [11, 0, 0],
             async scene({ svc, cfg }) {
-                const base = await svc.recompter(); const A = await compte(), id = A.c._id;
+                const base = await svc.recompter(cfg); const A = await compte(), id = A.c._id;
                 for (const [s, k] of [['S1', '1|1'], ['S1', '2|1'], ['S2', '3|1']]) await svc.cocher({ compteId: id, slug: s, cle: k, possedee: true, cfg });
                 const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
-                const avant = await cpt(); await svc.supprimerDuCompte(id);
+                const avant = await cpt(); await svc.supprimerDuCompte(id, cfg);
                 return [avant, await cpt(), (await docs(A)).length];
             } },
-        { nom: 'plafond global : le recompte corrige un compteur FAUX, vers le haut, vers le bas, ou absent', mut: [['service.js', [['{ $set: { n } }', '{ $set: { n: 0 } }']]]], attendu: [true, true, true],
+        { nom: 'places : le recompte compte les clés ET les documents × forfait, et corrige un compteur FAUX vers le haut, vers le bas, ou absent', mut: [['service.js', [['{ $add: [{ $size: \'$cles\' }, cfg.collection.forfaitDocument] }', '{ $size: \'$cles\' }']]], ['service.js', [['{ $set: { n } }', '{ $set: { n: 0 } }']]]], attendu: [true, true, true, true],
             async scene({ svc, cfg }) {
                 const A = await compte(); await svc.cocher({ compteId: A.c._id, slug: 'S-Rec', cle: '1|1', possedee: true, cfg });
-                const reel = async () => (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
                 const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 999999 } }); const r1 = await svc.recompter(); const ok1 = (await lire()) === (await reel()) && r1 === (await reel());
-                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 0 } }); await svc.recompter(); const ok2 = (await lire()) === (await reel());
-                await raw('compteurs').deleteMany({}); await svc.recompter(); const ok3 = (await lire()) === (await reel());
-                return [ok1, ok2, ok3];
+                const reel = () => placesReelles(cfg);
+                const cles = (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n, nDocs = await raw(NOM).countDocuments({});
+                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 999999 } }); const r1 = await svc.recompter(cfg); const ok1 = (await lire()) === (await reel()) && r1 === (await reel());
+                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 0 } }); await svc.recompter(cfg); const ok2 = (await lire()) === (await reel());
+                await raw('compteurs').deleteMany({}); await svc.recompter(cfg); const ok3 = (await lire()) === (await reel());
+                return [ok1, ok2, ok3, (await reel()) === cles + nDocs * cfg.collection.forfaitDocument];
             } }
     ];
     for (const g of GARDES) {
@@ -357,18 +393,37 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
 
     // ═══════════════ 4 bis. LE PLAFOND GLOBAL par HTTP, et le recompte AU MONTAGE ═══════════════
     {
-        const base = await svcReel.recompter();
-        const s6 = await serveur(variante({ collection: { clesService: base + 1 } })); const A = await compte();
+        const base = await svcReel.recompter(cfg);
+        const s6 = await serveur(variante({ collection: { clesService: base + 1 + cfg.collection.forfaitDocument } })); const A = await compte();
         const ok = await put(s6, A, 'S-Global', '1|1', true), non = await put(s6, A, 'S-Global', '2|1', true);
         H.v('4 bis. plafond global atteint : 409 CONFLIT « borne-service », le message dit que la limite est celle du SERVICE, rien n\'est écrit', [ok.statut, non.statut, code(non), detail(non), /service/i.test(non.json.erreur.message) && /compte/i.test(non.json.erreur.message), (await docs(A))[0].cles], [200, 409, 'CONFLIT', 'borne-service', true, ['1|1']]);
         // le recompte au montage : un compteur faux est corrigé quand le lot est monté (le montage est le démarrage du processus)
         const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
-        const reel = async () => (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
-        const monte = async mod => { await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 987654 } }); const r = express.Router(); mod.routes(r, cfg, {}); for (let i = 0; i < 40 && (await lire()) === 987654; i++) await attendre(50); return (await lire()) === (await reel()); };
+        const reel = () => placesReelles(cfg);
+        const monte =async mod => { await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 987654 } }); const r = express.Router(); mod.routes(r, cfg, {}); for (let i = 0; i < 40 && (await lire()) === 987654; i++) await attendre(50); return (await lire()) === (await reel()); };
         H.vrai('   montage du lot : un compteur faux (987 654) est recompté depuis les données réelles', await monte(require('../collection/monter')));
-        const mutMonter = charger('monter.js', [['service.initialiser()', 'Promise.resolve()']]);
+        const mutMonter = charger('monter.js', [['service.initialiser(cfg)', 'Promise.resolve()']]);
         H.vrai('   ↳ copie mutée de monter.js (sans recompte au montage) : le compteur reste faux — la garde sait dire NON', !(await monte(mutMonter)));
-        await svcReel.recompter();
+        await svcReel.recompter(cfg);
+    }
+
+    // ═══════════════ 4 ter. LE FORFAIT, CALCULÉ ; le pire cas en octets sous le plafond, pour les deux formes extrêmes ═══════════════
+    {
+        const { calculateObjectSize, ObjectId } = require('bson');
+        const cle = '999999999999|' + 'x'.repeat(32);                                   // la clé la plus longue admise (12 chiffres + « | » + 32 caractères)
+        const doc = n => ({ _id: new ObjectId(), compteId: new ObjectId(), set: 'a'.repeat(80), cles: Array.from({ length: n }, () => cle), majLe: new Date() });   // le slug le plus long
+        const INDEX_PAR_DOCUMENT = 60;                                                 // estimation grossière d'une entrée de l'index unique (compteId + set + localisation)
+        const vide = calculateObjectSize(doc(0)), plein = calculateObjectSize(doc(2000));
+        const coutCle = (plein - vide) / 2000, entete = vide + INDEX_PAR_DOCUMENT, forfaitMesure = Math.ceil(entete / coutCle);
+        console.log(`   forfait : en-tête d'un document ${vide} o + index ${INDEX_PAR_DOCUMENT} o = ${entete} o ; coût d'une clé maximale ${coutCle.toFixed(2)} o ; forfait = ceil(${entete} / ${coutCle.toFixed(2)}) = ${forfaitMesure} places`);
+        H.v('4 ter. le forfait par défaut est la valeur MESURÉE, arrondie vers le haut', cfg.collection.forfaitDocument, forfaitMesure);
+        // pire cas en octets avec P places : 1 clé par document (P / (1 + F) documents) ; 2 000 clés par document (P / (2 000 + F) documents)
+        const pire = (C, forme) => { const F = C.collection.forfaitDocument, P = C.collection.clesService, k = forme === 'un' ? 1 : 2000; return Math.floor(P / (k + F)) * (calculateObjectSize(doc(k)) + INDEX_PAR_DOCUMENT); };
+        const MARGE = 23 * 1048576, Mo = x => (x / 1048576).toFixed(1);
+        console.log(`   pire cas sous ${cfg.collection.clesService} places : 1 clé par document ${Mo(pire(cfg, 'un'))} Mo ; 2 000 clés par document ${Mo(pire(cfg, 'deux-mille'))} Mo ; marge de la grappe 23 Mo`);
+        H.vrai('   sous le plafond par défaut, les deux formes extrêmes tiennent dans la marge de 23 Mo', pire(cfg, 'un') < MARGE && pire(cfg, 'deux-mille') < MARGE);
+        const sansForfait = variante({ collection: { forfaitDocument: 0 } });
+        H.vrai('   ↳ sans forfait (0), la forme « 1 clé par document » DÉPASSE la marge — le calcul sait dire NON', pire(sansForfait, 'un') >= MARGE);
     }
 
     // ═══════════════ 5. LA CONCURRENCE : la borne par compte se contrôle AVANT l'écriture ; son dépassement est BORNÉ ═══════════════

@@ -7,6 +7,6 @@ module.exports = {
     enTete(app, cfg) { },
     routes(router, cfg, deps) {
         routesCollection(router, cfg, deps);
-        service.initialiser().catch(e => console.error(`❌ [v2 collection] recompte du compteur global à rejouer à la première écriture (${(e && (e.code || e.name)) || 'erreur'})`));
+        service.initialiser(cfg).catch(e => console.error(`❌ [v2 collection] recompte du compteur global à rejouer à la première écriture (${(e && (e.code || e.name)) || 'erreur'})`));
     }
 };

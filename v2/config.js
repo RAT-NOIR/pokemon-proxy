@@ -59,7 +59,10 @@ function lireConfig(env = process.env) {
                    collectionEcrituresParCompteHeure: 1000 },
         // « Ma collection » : bornes écrites par ce qu'elles protègent — la taille de la grappe de production (457 Mo pour un arrêt dur à 480 Mo). Pas de variable d'environnement : une borne qu'on desserre se décide.
         // clesService : plafond GLOBAL (toutes les clés de tous les comptes), VALEUR PROVISOIRE — la décision finale revient au testeur. Un compteur unique, voir collection/service.js.
-        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000, clesService: 100000 },
+        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000, clesService: 100000,
+                      // clesService et forfaitDocument comptent des PLACES (une clé = 1). forfaitDocument : places que coûte un DOCUMENT neuf (un set neuf pour un compte), en plus de sa première clé
+                      // = ceil((en-tête BSON 160 o + entrée d'index ~60 o) / coût d'une clé maximale 55,45 o) = 4 ; test-collection.js le recalcule.
+                      forfaitDocument: 4 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24 },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
