@@ -266,6 +266,12 @@ async function parcourir() {
         await attendre(100);
         const m = await raw('scans_en_cours').findOne({ 'porteur.id': c._id });
         H.v('5b. scanner, carte sans prix : l\'ordre est remboursement sans-prix PUIS clôture de la marque (livre), une seule clôture', [ordre.filter(x => x === 'rb:sans-prix' || x === 'clore'), m && m.etat], [['rb:sans-prix', 'clore'], 'livre']);
+        // une carte AVEC prix (aucun remboursement) : c'est le wrapper de réponse qui clôt aussi, la marque est « livre » (D3)
+        const c3 = await compte(); mode = 'affirmee';
+        const ra = await scanner(sv.url, c3.cookie, { nom: '5c' }); await attendre(100);
+        const m3 = await raw('scans_en_cours').findOne({ 'porteur.id': c3.c._id });
+        H.v('   scanner, carte AVEC prix : la clôture déposée est exécutée par la réponse : marque « livre »', [ra.statut, m3 && m3.etat], [200, 'livre']);
+        mode = 'sans-prix';
         // l'arrêt entre le débit et la clôture : le remboursement sans-prix ne revient jamais (le processus meurt), la marque est ENCORE ouverte — la passe rend le scan en entier
         const c2 = await compte(); let bloque = 0;
         argentR.rembourser = async (p, cr, motif, o) => { if (motif === 'sans-prix') { bloque++; return new Promise(() => { }); } return rbOrig(p, cr, motif, o); };
