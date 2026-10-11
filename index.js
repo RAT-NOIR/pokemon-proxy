@@ -257,7 +257,11 @@ const { creerVerifierJeton } = require('./jeton-api');
 if (!String(process.env.JETON_API || '').trim()) {
     console.error("🛑 JETON_API n'est pas défini — les routes protégées répondront 503 tant que la variable manque.");
 }
-const verifierJeton = creerVerifierJeton(process.env.JETON_API);
+const gardeJeton = creerVerifierJeton(process.env.JETON_API);
+// Fonction de premier niveau, même nom : chemin-du-scan.js et le cliquet de couverture l'énumèrent par ce nom.
+function verifierJeton(req, res, next) {
+    return gardeJeton(req, res, next);
+}
 
 // ============================================================
 // CONFIG — à ajuster facilement

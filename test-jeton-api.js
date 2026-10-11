@@ -66,10 +66,15 @@ if (creerVerifierJeton) {
 
 // Test STATIQUE sur index.js
 const src = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
-verifier('index.js construit verifierJeton par le module jeton-api',
-    /const\s+verifierJeton\s*=\s*creerVerifierJeton\(\s*process\.env\.JETON_API\s*\)/.test(src) && /require\(\s*['"]\.\/jeton-api['"]\s*\)/.test(src));
+const garde = src.match(/^const\s+(\w+)\s*=\s*creerVerifierJeton\(\s*process\.env\.JETON_API\s*\)/m);
+verifier('index.js construit la garde par creerVerifierJeton(process.env.JETON_API) depuis ./jeton-api',
+    !!garde && /require\(\s*['"]\.\/jeton-api['"]\s*\)/.test(src));
+const fnJeton = src.match(/^function\s+verifierJeton\s*\(\s*req\s*,\s*res\s*,\s*next\s*\)\s*\{([\s\S]*?)^\}/m);
+verifier('index.js : verifierJeton est une fonction de premier niveau (vue par chemin-du-scan et le cliquet)', !!fnJeton);
+verifier('verifierJeton delegue a la garde construite par creerVerifierJeton',
+    !!fnJeton && !!garde && new RegExp(`return\\s+${garde[1]}\\(\\s*req\\s*,\\s*res\\s*,\\s*next\\s*\\)`).test(fnJeton[1]) && !/next\(\)/.test(fnJeton[1]));
 verifier('index.js : aucun "return next()" conditionne a l\'absence du jeton',
-    !/if\s*\(\s*!\s*JETON_API\s*\)\s*return\s+next\(\)/.test(src) && !/function\s+verifierJeton\s*\(/.test(src));
+    !/if\s*\(\s*!\s*JETON_API\s*\)\s*return\s+next\(\)/.test(src) && !/if\s*\(\s*!\s*process\.env\.JETON_API\s*\)[^;\n]*next\(\)/.test(src));
 verifier('index.js : plus de message "accepte toute requete locale"', !/accepte toute requête/.test(src));
 
 console.log(`${ok}/${total}`);
