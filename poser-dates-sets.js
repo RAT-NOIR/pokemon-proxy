@@ -280,6 +280,21 @@ for (const [k, v] of Object.entries(RELEVES_2026_10_07)) RELEVES_BULBAPEDIA[k] =
 // le même mois ; ses clés ne désignent pas notre set TK2 (pas d'idExpansion Cardmarket, nom et code différents), elle ne vote donc pas.
 RELEVES_BULBAPEDIA['EX-Trainer-Kit-2'] = { jour: 'March 2006', url: `${W}20260914024349/${P('EX_Trainer_Kit_2_(TCG)')}`, lu: '2026-10-11',
     citation: 'Release date March 2006 — « The EX Trainer Kit 2 is a special Half Deck Trainer Kit … features the Pokémon Plusle and Minun. It was released in English and European languages only » ; TCGdex tk-ex-m / tk-ex-p : 2006-03-01 (même mois)' };
+// ➕ 2026-10-11 (SETS-21, « les 21 sets jamais créés ») : 8 sets nés par creer-sets-sans-page.js, dont les pages Bulbapedia ont été lues dans
+// leur COPIE Wayback (archive.org seulement, 12 requêtes à ≥ 10 s dont 2 de découverte CDX, aucune à Bulbapedia). Chaque page NOMME le produit (le titre ou la phrase
+// de tête le disent) ; la valeur citée est celle de l'infobox « Release date » ou « Release period » rendue dans la copie. Un mois seul reste
+// un mois (dateSortieMois), une période se range à son début.
+const RELEVES_2026_10_11 = {
+    'Quick-Construction-Packs': { jour: 'January 16, 2005', url: `${W}20260913035423/${P('Quick_Construction_Packs_(TCG)')}`, citation: 'Release date January 16, 2005 — « a Japanese-exclusive collection of six 15-card quarter decks » (Quick Construction Pack, クイック・コンストラクション・パック)' },
+    'Everyones-Exciting-Battle': { jour: 'November 16, 2012', url: `${W}20260813015144/${P('Everyone%27s_Exciting_Battle_(TCG)')}`, citation: 'Release date November 16, 2012 — « released in Japan on November 16, 2012 at a cost of ¥3,500 » (Japanese-exclusive boxed collection of eight 15-card quarter decks)' },
+    'Gift-Box-Mew-Lucario': { jour: 'November 16, 2005', url: `${W}20260217122045/${P('Gift_Box_Mew_%E2%80%A2_Lucario_(TCG)')}`, citation: 'Release date November 16, 2005 — « a Japanese-exclusive Half Deck collection » (Gift Box Mew • Lucario ver., four quarter decks)' },
+    'Arceus-LVX-Deck-Grass-Fire': { jour: 'July 8, 2009', url: `${W}20260723051856/${P('Arceus_LV.X_Deck:_Grass_%26_Fire_(TCG)')}`, citation: 'Release date July 8, 2009 — « a Japanese-exclusive Standard Deck that complements the Advent of Arceus expansion »' },
+    'T-Promos': { periode: { texte: 'January 2002 - March 2003', debut: 'January 2002', fin: 'March 2003', debutIso: '2002-01' }, url: `${W}20260723072331/${P('T_Promotional_cards_(TCG)')}`, citation: 'Release period January 2002 - March 2003 — « a series of Japanese promotional cards … inserts from volume 14 … until volume 21 » du magazine Pokémon Card Trainers' },
+    'J-Promos': { periode: { texte: 'August 2001 - July 2002', debut: 'August 2001', fin: 'July 2002', debutIso: '2001-08' }, url: `${W}20260710090618/${P('J_Promotional_cards_(TCG)')}`, citation: 'Release period August 2001 - July 2002 — « a series of Japanese promotional cards that focus solely on Jumbo cards … a total of two cards »' },
+    'Burger-King-DP-Promos-2008': { periode: { texte: 'July 7 - August 12, 2008', debut: 'July 7, 2008', fin: 'August 12, 2008', debutIso: '2008-07-07' }, url: `${W}20260804035231/${P('2008_Burger_King_promotional_Pok%C3%A9mon_toys')}`, citation: '« toys distributed with Kids Meals at Burger King … between July 7 and August 12, 2008. Every toy was paired with an English Diamond & Pearl or Mysterious Treasures trading card. There are twelve toys »' },
+    'Burger-King-Platinum-Promos-2009': { periode: { texte: 'June 1 - 22, 2009', debut: 'June 1, 2009', fin: 'June 22, 2009', debutIso: '2009-06-01' }, url: `${W}20230420020549/${P('Burger_King_Promos_2009')}`, citation: '« distributed with Kids Meals at Burger King restaurants from June 1 to 22, 2009. Every toy was paired with two English Platinum trading cards. There are six toys »' }
+};
+for (const [k, v] of Object.entries(RELEVES_2026_10_11)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-11' };
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };
@@ -571,5 +586,5 @@ async function principal() {
     await fermer();
 }
 
-module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES };
+module.exports = { jourComplet, parties, dateBulbapedia, pairerIntl, lireSetsTcgdex, depuisIso, periodeDe, isoPartiel, majorite, texteDeIso, OFFICIELLES, RELEVES_BULBAPEDIA };
 if (require.main === module) principal().catch(e => { console.error(e); process.exit(1); });
