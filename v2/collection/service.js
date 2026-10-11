@@ -24,11 +24,9 @@ async function totalDuCompte(compteId) {
 // ── le compteur global (en PLACES)
 async function reserver(cfg, cout) {
     const filtre = { cle: CLE_TOTAL, n: { $lte: cfg.collection.clesService - cout } };
-    try { await col(COMPTEURS).findOneAndUpdate(filtre, { $inc: { n: cout } }, { upsert: true }); return true; }     // sans document : il naît au coût ; au plafond : l'insertion échoue (11000) = refus
-    catch (e) {
-        if (!(e && e.code === 11000)) throw e;
-        return (await col(COMPTEURS).findOneAndUpdate(filtre, { $inc: { n: cout } })) !== null;                     // deux créations simultanées du compteur : la perdante réessaie sans upsert
-    }
+    if ((await col(COMPTEURS).findOneAndUpdate(filtre, { $inc: { n: cout } })) !== null) return true;           // JAMAIS d'upsert : seul le recompte crée le compteur
+    if (!(await col(COMPTEURS).findOne({ cle: CLE_TOTAL }, { projection: { _id: 1 } }))) throw new Error('compteur-absent');   // ABSENT : les écritures ferment (503) jusqu'au prochain recompte
+    return false;                                                                                            // présent : le plafond est atteint
 }
 async function rendre(k) {
     if (k > 0) await col(COMPTEURS).updateOne({ cle: CLE_TOTAL }, [{ $set: { n: { $max: [0, { $subtract: ['$n', k] }] } } }]);
@@ -123,11 +121,17 @@ async function lireSets(compteId) {
     return col(NOM).aggregate([{ $match: { compteId, 'cles.0': { $exists: true } } }, { $project: { _id: 0, slug: '$set', possedees: { $size: '$cles' }, majLe: 1 } }, { $sort: { slug: 1 } }]).toArray();
 }
 
-/** La collection d'un compte part avec lui (comptes/service.js supprimerCompte) ; ses clés et les forfaits de ses documents sont rendus au compteur global. */
+/** La collection d'un compte part avec lui (comptes/service.js supprimerCompte). Document par document (au plus `setsParCompte`) : chaque suppression rend ce qu'elle a RÉELLEMENT retiré — la longueur de `cles`
+ *  au moment de la suppression, plus le forfait —, jamais une lecture d'avant : un retrait en vol a déjà rendu sa clé, la compter une seconde fois ferait passer le compteur SOUS le réel. */
 async function supprimerDuCompte(compteId, cfg) {
-    const k = await totalDuCompte(compteId);
-    const n = (await col(NOM).deleteMany({ compteId })).deletedCount;
-    await rendre(k + n * cfg.collection.forfaitDocument);
+    let n = 0, rendu = 0;
+    for (;;) {
+        const d = await col(NOM).findOneAndDelete({ compteId }, { projection: { cles: 1 } });
+        if (!d) break;
+        n++; rendu += d.cles.length + cfg.collection.forfaitDocument;
+    }
+    await rendre(rendu);
     return n;
 }
 module.exports = { NOM, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser };
+// Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.
