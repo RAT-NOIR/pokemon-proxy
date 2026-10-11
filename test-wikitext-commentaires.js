@@ -27,6 +27,12 @@ verifier('Paradise Resort : numéro propre', tous(f2), [['intl', 'MEP Black Star
 const t3 = carte('|expansion={{TCG|Base Set}}\n|cardno=5/102\n<!--\n|rarity={{rar|Rare}}');
 verifier('non fermé : la page reste lue', intl(W.faitsDeCarte(t3, 'Truc')), [['Base Set', '5', '102']]);
 verifier('sansCommentaires non fermé : seul l\'ouvreur part', W.sansCommentaires('a<!--b'), 'ab');
+// 3 bis. LIMITE FIXÉE : un commentaire FERMÉ qui traverse `}}` est retiré ENTIER (comme MediaWiki) — la fin du gabarit part avec lui,
+//        la structure change (ici le gabarit B disparaît, A avale `w`). Ce test existe pour que cela ne change pas en silence.
+const t3b = '{{A\n|x=1<!--\n|y=2\n}}\n{{B\n|z=3-->\n|w=4\n}}';
+verifier('commentaire fermé traversant }} : retiré entier', W.sansCommentaires(t3b), '{{A\n|x=1\n|w=4\n}}');
+verifier('commentaire fermé traversant }} : un seul gabarit', W.gabarits(t3b).map(g => [g.nom, g.params]), [['A', { x: '1', w: '4' }]]);
+
 // 4. commentaire sans `|`
 verifier('sans barre', W.sansCommentaires('x<!-- note -->y'), 'xy');
 verifier('non gourmand, plusieurs', W.sansCommentaires('1<!--a-->2<!--b\nc-->3'), '123');

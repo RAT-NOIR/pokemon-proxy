@@ -1,5 +1,5 @@
 // TEST — corriger-numeros-commentaires.js : planification pure et écritures sur une FAUSSE base. Aucun réseau, aucune base.
-const { CIBLES, planifier, appliquer } = require('./corriger-numeros-commentaires');
+const { CIBLES, planifier, appliquer, verifierRelu } = require('./corriger-numeros-commentaires');
 const { compterEtat, comparer } = require('./collecte-cartes/garde-lot');
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {
@@ -52,6 +52,16 @@ refus('refus : valeur lue sans rapport avec la corrompue', { carte: carteO(), im
 
 // 4. la liste est fermée : deux cartes, Unown « ! » n'y est pas
 verifier('liste fermée', CIBLES.map(c => c.id), [295618, 294172]);
+
+// 4 bis. relecture après écriture : comparée à l'ATTENDU du lot (numero === neuf partout, longueurs inchangées), pas à l'absence de « <!-- »
+const avantO = carteO(), apresO = p1.carteApres, docsApres = [{ carteId: 295618, set: ODDISH.set, numero: '102' }];
+verifier('relue conforme : aucun écart', verifierRelu(ODDISH, '102', avantO, apresO, docsApres), []);
+verifier('relue : impression restée corrompue', verifierRelu(ODDISH, '102', avantO, { ...apresO, impressions: avantO.impressions }, docsApres).length, 1);
+verifier('relue : numero propre mais FAUX (pas l\'attendu)', verifierRelu(ODDISH, '102', avantO, { ...apresO, images: [{ ...apresO.images[0], numero: '103' }] }, docsApres).length, 1);
+verifier('relue : document images non corrigé', verifierRelu(ODDISH, '102', avantO, apresO, [{ carteId: 295618, set: ODDISH.set, numero: '102<!--' }]).length, 1);
+verifier('relue : tableau impressions raccourci', verifierRelu(ODDISH, '102', avantO, { ...apresO, impressions: apresO.impressions.slice(0, 1) }, docsApres).length, 1);
+verifier('relue : tableau images allongé', verifierRelu(ODDISH, '102', avantO, { ...apresO, images: [...apresO.images, apresO.images[0]] }, docsApres).length >= 1, true);
+verifier('relue : carte disparue', verifierRelu(ODDISH, '102', avantO, null, docsApres).length, 1);
 
 // 5. écritures sur une fausse base : filtres bornés à la valeur corrompue
 const appels = [];

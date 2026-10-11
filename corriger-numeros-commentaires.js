@@ -68,7 +68,25 @@ async function appliquer(db, cible, neuf) {
     return { cartes: r1.modifiedCount, images: r2.modifiedCount };
 }
 
-module.exports = { CIBLES, planifier, appliquer };
+/**
+ * Relecture APRÈS écriture, comparée à l'ATTENDU du lot (pas à l'absence d'un motif) : `numero === neuf` sur l'impression intl, l'entrée
+ * cartes.images du set et le document images ; longueurs des tableaux inchangées. @returns {string[]} les écarts (vide = conforme)
+ */
+function verifierRelu(cible, neuf, avant, relu, docsImages) {
+    if (!relu) return ['carte introuvable à la relecture'];
+    const ecarts = [];
+    if ((relu.impressions || []).length !== (avant.impressions || []).length) ecarts.push(`impressions : ${(avant.impressions || []).length} → ${(relu.impressions || []).length}`);
+    if ((relu.images || []).length !== (avant.images || []).length) ecarts.push(`images : ${(avant.images || []).length} → ${(relu.images || []).length}`);
+    const imp = (relu.impressions || []).filter(i => i && i.tirage === 'intl' && i.expansion === cible.expansion && (i.numero === neuf || i.numero === cible.corrompu));
+    if (imp.length !== 1 || imp[0].numero !== neuf) ecarts.push(`impression intl « ${cible.expansion} » : numero ${JSON.stringify(imp.map(i => i.numero))} au lieu de « ${neuf} »`);
+    const ent = (relu.images || []).filter(m => m && m.set === cible.set && (m.numero === neuf || m.numero === cible.corrompu));
+    if (ent.length !== 1 || ent[0].numero !== neuf) ecarts.push(`cartes.images du set « ${cible.set} » : numero ${JSON.stringify(ent.map(m => m.numero))} au lieu de « ${neuf} »`);
+    const docs = (docsImages || []).filter(d => d && d.set === cible.set && (d.numero === neuf || d.numero === cible.corrompu));
+    if (docs.length !== 1 || docs[0].numero !== neuf) ecarts.push(`document images du set « ${cible.set} » : numero ${JSON.stringify(docs.map(d => d.numero))} au lieu de « ${neuf} »`);
+    return ecarts;
+}
+
+module.exports = { CIBLES, planifier, appliquer, verifierRelu };
 
 if (require.main === module) (async () => {
     const AUTORISES = [/^--ecrire$/];
@@ -107,11 +125,10 @@ if (require.main === module) (async () => {
         for (const { cible, p } of plans) {
             const r = await appliquer(cx.db, cible, p.neuf);
             const relu = await cx.db.collection('cartes').findOne({ _id: cible.id }, { projection: { impressions: 1, images: 1 } });
-            // seuls les `numero` comptent : `illustrateurPreuve` cite l'ancienne valeur dans sa phrase, et n'est pas touché
-            const reste = [...(relu.impressions || []), ...(relu.images || [])].some(x => x && String(x.numero ?? '').includes('<!--'));
-            const imgReste = await cx.db.collection('images').countDocuments({ carteId: cible.id, numero: { $regex: '<!--' } });
-            console.log(`   ✅ ${cible.id} : cartes modifiée ${r.cartes}, images modifiés ${r.images} · relu : ${reste ? '🔴 un numero corrompu reste dans la carte' : 'plus aucun numero corrompu dans la carte'}, ${imgReste} document(s) images corrompus`);
-            if (reste || imgReste || r.cartes !== 1 || r.images !== 1) code = 1;
+            const docs = await cx.db.collection('images').find({ carteId: cible.id }).toArray();
+            const ecarts = verifierRelu(cible, p.neuf, plans.find(x => x.cible === cible).carte, relu, docs);
+            console.log(`   ${ecarts.length || r.cartes !== 1 || r.images !== 1 ? '🔴' : '✅'} ${cible.id} : cartes modifiée ${r.cartes}, images modifiés ${r.images} · relu vs attendu « ${p.neuf} » : ${ecarts.length ? ecarts.join(' ; ') : 'conforme'}`);
+            if (ecarts.length || r.cartes !== 1 || r.images !== 1) code = 1;
         }
         process.exitCode = code;
     } finally { await fermer(); }
