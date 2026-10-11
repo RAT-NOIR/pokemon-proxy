@@ -102,6 +102,7 @@ const { col } = require('../db');
 const RG = require('./regle-g');                 // appelée À TRAVERS l'objet du module (RG.decisionRegleG) : un banc peut l'espionner
 const { arbitrer } = require('./arbitrage-g');
 const { executerLot } = require('./lot');
+const MS = require('../argent/marque-scan');
 const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');
 
 // Les motifs par lesquels la chaîne héritée REFUSE par égalité (et rembourse d'office) : index.js ~4846 et ~5019.
@@ -222,10 +223,21 @@ function traiterIdentifier(cfg, deps = {}) {
         const scanId = new mongoose.Types.ObjectId();
         const cleIdem = req.headers['idempotency-key'];
         const cleDebit = `scan|${porteur.type}:${porteur.id}|${cleIdem}`;
+        // 2 bis. O5 — LA MARQUE DE LIVRAISON, avant le débit (v2/argent/marque-scan.js) : aucun crédit n'est pris sans marque, pour une carte comme pour un lot, extension comme scanner.
+        // Ouverte AVANT le débit (et non après) pour qu'aucun arrêt du processus ne tombe entre la prise du crédit et l'écriture de la marque ; retirée si le débit n'a rien pris ;
+        // close quand la réponse est remise au transport (`finish`). Une marque qui ne s'écrit pas BLOQUE : rien n'est débité, 503. Sinon une marque `en-suspens` plus vieille que
+        // le seuil est rendue (ou confirmée) par la passe de rattrapage — voir marque-scan.js pour le sens favorable au client et la borne de durée.
+        try { await MS.ouvrir({ scanId, porteur, cleDebit, cleClaim: (req.idempotence && req.idempotence.cle) || null }); }
+        catch (e) { journalErreur('marque de livraison', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        res.once('finish', () => { MS.clore(scanId).catch(e => journalErreur('clôture de la marque', e)); });
+        const sansMarque = async () => { try { await MS.retirer(scanId); } catch (e) { journalErreur('retrait de la marque', e); } };   // un retrait raté laisse une marque que la passe clora (aucun débit : rien à rendre)
         // 3. LE DÉBIT, avant toute chose
         let debit;
+        // (un débit qui LÈVE garde sa marque : le crédit a pu être pris — la passe le dira)
         try { debit = await argent.debiter(porteur, { scanId, cleIdempotence: cleDebit }); }
         catch (e) { journalErreur('débit', e); return repondreErreur(res, 'INDISPONIBLE'); }
+        // ni refus, ni rejeu, ni administrateur ne prennent de crédit : pas de marque
+        if (!debit || !debit.ok || debit.rejoue || debit.administrateur === true) await sansMarque();
         if (!debit || !debit.ok) {
             const code = debit && ['QUOTA', 'VERIFICATION', 'EN_RECONCILIATION'].includes(debit.code) ? debit.code : 'INDISPONIBLE';
             if (code === 'INDISPONIBLE') return repondreErreur(res, code);
@@ -245,8 +257,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
-        // 🔴 BLOQUANT avant le branchement RÉEL de `deps.identifierLot` : un arrêt du processus entre le supplément et la réponse laisse un DÉBIT À VIE (jusqu'à 10 crédits)
-        // que `argent/reconcilier.js` ne voit pas (ligne de débit dans son état normal, solde et journal d'accord). Voir AUDIT-SECURITE-V2.md §5 (O5, M5 de B1b.8).
+        // ✅ O5 (M5 de B1b.8) : un arrêt du processus entre le débit (ou le supplément) et la réponse laissait un DÉBIT À VIE (jusqu'à 10 crédits) que la réconciliation ne voyait pas.
+        // La marque de livraison ouverte plus haut (v2/argent/marque-scan.js) couvre TOUS les débits du scan, supplément compris : la passe de rattrapage rend le scan, ou le confirme.
         const modeLot = typeof deps.identifierLot === 'function';
         let erreurLot = null, injecte = null;
         try {

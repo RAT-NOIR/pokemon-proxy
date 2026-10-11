@@ -854,6 +854,8 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 | remboursement refusé (plafond atteint) | 1 | 0 | non, et `raisonNonRembourse` dit pourquoi | `plafond-jour` |
 | compte administrateur | 0 | 0 | — | `administrateur` |
 
+**Arrêt du serveur pendant un scan (O5).** Un scan dont la réponse n'est jamais partie (déploiement, arrêt brutal) est **rendu en entier, toutes ses unités, sans compter dans aucun plafond du client**, par une passe du serveur qui se joue au plus tôt 15 minutes après le débit, ou **confirmé** (rien n'est rendu) quand la réponse finale du scan est déjà stockée : le client la retrouve en rejouant la même `Idempotency-Key` pendant 24 heures. Le motif interne de ce remboursement est `arret-serveur`; il n'apparaît ni dans la réponse ni dans `historique` (qui ne sert que les analyses et les octrois, achats et migrations de crédits). Un client qui rejoue sa requête avant cette passe reçoit `DEBIT` (« en cours », `reessayerDans: 2`), jamais une lecture gratuite ni un second débit ; après le remboursement, la même clé est une nouvelle tentative payée.
+
 `solde.total` compte déjà les réserves en moins. Le solde se débite dans l'ordre `essai` → `accueil` → `hebdo` → `abonnement` → `achete` (réglable côté serveur). Une installation non liée n'a que ses 3 essais ; un compte **vérifié** reçoit 25 analyses offertes une seule fois, plus 2 par semaine ISO (non cumulables).
 
 ---

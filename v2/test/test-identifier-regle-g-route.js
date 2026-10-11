@@ -309,7 +309,7 @@ function chargerFixtures() {
     // ── (5) le montage final : registre (annonce, visuels, taux), UN balayage et UNE purge par processus, tous unref
     {
         const monter = require('../identifier/monter');
-        monter.arreterBalayage(); if (monter.arreterPurge) monter.arreterPurge();
+        monter.arreterBalayage(); if (monter.arreterPurge) monter.arreterPurge(); require('../argent/marque-scan').arreterRattrapage();
         registre.vider();
         const cree = [], efface = new Set(); const siOrig = global.setInterval, ciOrig = global.clearInterval;
         global.setInterval = (f, ms, ...r) => { const t = siOrig(f, ms, ...r); cree.push({ t, ms }); return t; };
@@ -321,9 +321,10 @@ function chargerFixtures() {
             mk(); a2 = cree.filter(c => !efface.has(c.t)).map(c => c.ms);
         } finally { global.setInterval = siOrig; global.clearInterval = ciOrig; }
         const vivants = cree.filter(c => !efface.has(c.t));
-        H.v('5. un montage arme UN balayage des questions (1/min) et UNE purge des annonces (24 h)', [...a1].sort((x, y) => x - y), [60 * 1000, 24 * 3600 * 1000]);
-        H.v('   un second montage dans le même processus n\'en arme pas un second (toujours 1 + 1 minuteurs vivants, les premiers sont arrêtés)', [...a2].sort((x, y) => x - y), [60 * 1000, 24 * 3600 * 1000]);
-        H.vrai('   tous les minuteurs vivants sont unref (ils ne retiennent jamais le processus)', vivants.length === 2 && vivants.every(c => c.t.hasRef() === false));
+        // O5 : un troisième minuteur, la passe de rattrapage des scans dont la réponse n'est jamais partie (5 min, ≤ le seuil de 15 min)
+        H.v('5. un montage arme UN balayage des questions (1/min), UNE passe de rattrapage des scans en suspens (5 min, O5) et UNE purge des annonces (24 h)', [...a1].sort((x, y) => x - y), [60 * 1000, 5 * 60 * 1000, 24 * 3600 * 1000]);
+        H.v('   un second montage dans le même processus n\'en arme pas un second (toujours 1 + 1 + 1 minuteurs vivants, les premiers sont arrêtés)', [...a2].sort((x, y) => x - y), [60 * 1000, 5 * 60 * 1000, 24 * 3600 * 1000]);
+        H.vrai('   tous les minuteurs vivants sont unref (ils ne retiennent jamais le processus)', vivants.length === 3 && vivants.every(c => c.t.hasRef() === false));
         const noms = ['annonce', 'visuels', 'taux'];
         const presents = noms.map(n => { try { return typeof registre.obtenir(n) === 'object'; } catch { return false; } });
         H.v('   le registre porte annonce, visuels, taux', presents, [true, true, true]);
