@@ -302,6 +302,13 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     r = silencieux();
     try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
     verifier('   un second passage : 0 requête (cache local), même plan', [R.bilan[0]?.prouves, tr.appels.length], [2, 0]);
+    // --fiches-des-trous : seules les fiches des numéros voulus ; un numéro qu'on n'a pas pu lire n'est jamais dit « absent de la source »
+    const BQ = fausseBase(); semerAS(BQ, 'a019', 'b050');
+    vp = fauxVerrou(); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BQ.db }, M: BQ.M, sets: [SLUG_AS], fichierCache: path.join(dossier, 'q.json'), verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS, seulementTrous: true }); } finally { r(); }
+    verifier('plan des trous : a019 prouvé par la fiche lue ; b050 introuvable par position → « fiche-non-lue », pas « absente-de-la-source »',
+        [R.bilan[0]?.prouves, R.bilan[0]?.trousParCause, tr.appels.some(u => u.includes('/card-img/'))], [1, { 'fiche-non-lue': 1 }, false]);
     vp = fauxVerrou({ pid: 7, hote: 'ailleurs', ageS: 5 }); tr = reseau(asie());
     r = silencieux();
     try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }

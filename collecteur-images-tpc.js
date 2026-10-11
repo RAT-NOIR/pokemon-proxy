@@ -337,7 +337,7 @@ module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
 
-const AUTORISES = [/^--plan$/, /^--plan-reel$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/, /^--cache=[^\s]+$/];
+const AUTORISES = [/^--plan$/, /^--plan-reel$/, /^--fiches-des-trous$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/, /^--cache=[^\s]+$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
 if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--plan-reel' || a === '--verrou')) {
     console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=slug,…], --plan-reel --sets=slug,… --cache=<dossier>, --verrou. La collecte est celle du worker.`);
@@ -372,7 +372,7 @@ function baseLocale(reelle, fichier, noms = ['collecte_images_etat', 'tpc_fiches
         lire
     };
 }
-async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, transport, cadenceMs, ligneDe = ligneTpc }) {
+async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, transport, cadenceMs, ligneDe = ligneTpc, seulementTrous = false }) {
     const E = cx.db.collection('collecte_images_etat');
     const site = 'tpc-asie';
     const bloquee = await E.findOne({ _id: idAlerteBloquee(site), active: true });
@@ -398,9 +398,41 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
             }
             if (refus) { console.error(`❌ ${slug} : ${refus} — ligne refusée`); bilan.push({ slug, refus }); continue; }
             const fiches = [];
-            for (const { S, l } of lues) fiches.push(...(await lireFiches(local, client, site, L, l.ids, { compter: () => { } })).map(f => L.listes ? { ...f, prefixe: S.prefixe, listeCode: S.code } : f));
+            const nonLues = new Set();                  // (préfixe + numéro) que la recherche par position n'a pas pu lire : jamais présentées comme « absentes »
+            if (!seulementTrous) {
+                for (const { S, l } of lues) fiches.push(...(await lireFiches(local, client, site, L, l.ids, { compter: () => { } })).map(f => L.listes ? { ...f, prefixe: S.prefixe, listeCode: S.code } : f));
+            } else {
+                // LE PLAN SANS LIRE TOUTE LA LISTE : seules les fiches des numéros dont NOUS avons besoin. La liste TPC suit l'ordre des numéros ; on
+                // y cherche la position n par INTERPOLATION et on LIT la fiche trouvée — la preuve vient de son propre numéro, jamais de la position.
+                // Une position qui ne mène nulle part est dite « fiche-non-lue » (un trou de NOTRE travail), pas « absente-de-la-source ».
+                const P0 = await planifier(local, slug, L, []);
+                const voulus = new Map();
+                for (const r of P0.restes) { const m = /^([A-Za-z]*)0*(\d+)/.exec(String(r.numero ?? '')); if (!m) continue; const p = m[1].toUpperCase(); (voulus.get(p) || voulus.set(p, new Set()).get(p)).add(Number(m[2])); }
+                for (const { S, l } of lues) {
+                    const p = String(S.prefixe ?? '').toUpperCase(), dejaLues = new Map(), vus = new Map();
+                    const lireA = async i => {
+                        if (!dejaLues.has(i)) { const [f] = await lireFiches(local, client, site, L, [l.ids[i]], { compter: () => { } }); dejaLues.set(i, f ? { ...f, ...(L.listes ? { prefixe: S.prefixe, listeCode: S.code } : {}) } : null); }
+                        return dejaLues.get(i);
+                    };
+                    for (const n of [...(voulus.get(p) || [])].sort((a, b) => a - b)) {
+                        let i = Math.min(Math.max(n - 1, 0), l.ids.length - 1), trouve = false;
+                        const passes = new Set();
+                        while (!passes.has(i) && passes.size < 6) {
+                            passes.add(i);
+                            const f = await lireA(i);
+                            const m = Number(String(f?.numero ?? '').replace(/\D/g, ''));
+                            if (!f || !Number.isFinite(m)) break;
+                            if (m === n) { trouve = true; break; }
+                            i = Math.min(Math.max(i + (n - m), 0), l.ids.length - 1);
+                        }
+                        if (!trouve) nonLues.add(`${p}${n}`);
+                    }
+                    fiches.push(...[...dejaLues.values()].filter(Boolean));
+                }
+            }
             local.ecrireFichier();
             const P = await planifier(local, slug, L, fiches);
+            for (const r of P.restes) if (r.motif === 'absente-de-la-source') { const m = /^([A-Za-z]*)0*(\d+)/.exec(String(r.numero ?? '')); if (m && nonLues.has(`${m[1].toUpperCase()}${Number(m[2])}`)) r.motif = 'fiche-non-lue'; }
             const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
             const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
             const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
@@ -426,7 +458,7 @@ async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, trans
         const cache = process.argv.find(a => a.startsWith('--cache='))?.slice(8);
         if (!sets || !cache) { console.error('❌ --plan-reel exige --sets=<slug,…> et --cache=<dossier>'); await fermer(); process.exit(2); }
         const { modeles } = require('./collecte-cartes/schemas');
-        const r = await planReel({ cx, M: modeles(cx), sets, fichierCache: require('path').join(cache, 'plan-reel.json') });
+        const r = await planReel({ cx, M: modeles(cx), sets, fichierCache: require('path').join(cache, 'plan-reel.json'), seulementTrous: process.argv.includes('--fiches-des-trous') });
         console.log('\nRÉSULTAT', JSON.stringify({ requetesReelles: r.requetes, cadenceMs: r.cadenceMs, arret: r.arret ?? null }));
         require('fs').writeFileSync(require('path').join(cache, 'plan-reel-resultat.json'), JSON.stringify(r, null, 1));
         await fermer(); return;
