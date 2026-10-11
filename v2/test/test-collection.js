@@ -173,8 +173,10 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 }
                 return [vus, (await nDocs()) - n0];
             } },
-        { nom: 'compte vérifié : l\'écriture d\'un compte non vérifié rend 403 VERIFICATION (rien d\'écrit) ; sa lecture reste permise', mut: [['routes.js', [['exigerVerifie, parCompte]', 'parCompte]']]]],
-            attendu: [403, 'VERIFICATION', null, 200, 0],
+        // O3 : un compte non confirmé n'est plus un porteur (porteur.js) — sa session ne passe même plus la garde de session : 401 SESSION en écriture ET en lecture. La garde `exigerVerifie` de routes.js
+        // reste en profondeur derrière ; elle n'est plus atteignable par une requête, donc sa copie mutée ne changerait rien (`mut` vide, dit ici). La preuve du refus est test-comptes-o3.js (3a, 4a).
+        { nom: 'compte vérifié (O3) : un compte non vérifié n\'est plus un porteur — 401 SESSION en écriture ET en lecture, rien d\'écrit', mut: [],
+            attendu: [401, 'SESSION', null, 401, 0],
             async scene({ sv }) {
                 const A = await compte({ verifie: false }); const n0 = await nDocs();
                 const w = await put(sv, A, 'Set-A', '1|001', true); const r = await lireSets(sv, A);

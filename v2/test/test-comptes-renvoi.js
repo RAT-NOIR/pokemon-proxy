@@ -23,7 +23,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     // plafond par compte : 3 par heure
     const nv2 = await creer('insiste@exemple.fr', false); courrier.envoyes.length = 0;
     for (let i = 0; i < 6; i++) { await renvoyer('insiste@exemple.fr'); await A.attendre(); }
-    H.v('6 demandes pour un même compte : 3 courriers au plus (pas de bombardement d\'une boîte)', courrier.envoyes.length, 3);
+    H.v('6 demandes pour un même compte : UN courrier au plus par 24 h (O3 ; l\'ancienne borne de 3 par heure est remplacée)', courrier.envoyes.length, 1);
     // IP
     const codes = []; for (let i = 0; i < 31; i++) codes.push((await renvoyer('inconnu@exemple.fr', {}, 8000)).statut);
     H.v('31 demandes de la même IP dans l\'heure : 30 passent, la 31e est 429', [codes.filter(x => x === 202).length, codes[30]], [30, 429]);

@@ -38,7 +38,7 @@ async function lier({ installation, code, argent, maintenant = new Date() }) {
     }
     const rendre = () => col('codes_liaison').updateOne({ _id: pris._id }, { $set: { utiliseLe: null } });
     const compte = await col('comptes').findOne({ _id: pris.compteId });
-    if (!compte) return { statut: 404, code: 'CODE_INVALIDE' };
+    if (!compte || compte.verifie !== true) return { statut: 404, code: 'CODE_INVALIDE' };   // O3 : jamais de liaison à un compte non confirmé (le code est consommé : réponse = code inconnu)
     const jeton = J.genererJeton();
     const r = await col('installations').updateOne({ _id: installation._id, compteId: null, revoqueeLe: null, jetonEmpreinte: installation.jetonEmpreinte },
         { $set: { compteId: compte._id, lieeLe: maintenant, jetonEmpreinte: J.empreinte(jeton) } });

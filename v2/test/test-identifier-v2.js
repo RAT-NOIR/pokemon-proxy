@@ -214,7 +214,8 @@ async function semer(mode) {                                  // 'double' | 'sim
         const ia0 = appelsIA(srvOn), m0 = await nMouv();
         const r = await poster(urlOn, jeton, corps(), { nom: '12' }), j = r.json || {};
         await attendre(300);
-        H.v('12. compte non vérifié : 403 VERIFICATION, facturation null, aucun appel IA ni mouvement', [r.statut, j.erreur && j.erreur.code, j.facturation, appelsIA(srvOn) - ia0, await nMouv() - m0], [403, 'VERIFICATION', null, 0, 0]);
+        // O3 : un compte non confirmé n'est plus un porteur (porteur.js) ; l'installation qui lui était liée redevient une installation SANS compte, avec ses propres essais (0 ici) : 429 QUOTA, jamais un crédit du compte.
+        H.v('12. compte non vérifié (O3 : plus un porteur) : installation liée = installation seule, 0 essai : 429 QUOTA, facturation null, aucun appel IA ni mouvement', [r.statut, j.erreur && j.erreur.code, j.facturation, appelsIA(srvOn) - ia0, await nMouv() - m0], [429, 'QUOTA', null, 0, 0]);
     }
 
     // ── 13. CORS de l'extension sur CHAQUE réponse reçue ci-dessus, erreurs comprises

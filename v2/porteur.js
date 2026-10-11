@@ -2,7 +2,8 @@
 // L'identité d'une requête v2. Écrit par ce qu'il AUTORISE : tout ce qui n'est pas un jeton ou un cookie valide, en base, est « personne ».
 const { col } = require('./db'); const J = require('./comptes/jetons'); const S = require('./comptes/sessions'); const { repondreErreur } = require('./erreurs');
 const RE_BEARER = /^Bearer ([A-Za-z0-9_-]{20,64})$/;
-async function compteDe(id) { return id ? col('comptes').findOne({ _id: id }) : null; }
+// O3 : seul un compte CONFIRMÉ (`verifie === true`) est un porteur. Un compte non confirmé est inactif : une session ou une installation qui le désignerait (héritage, écriture directe) ne donne rien.
+async function compteDe(id) { const c = id ? await col('comptes').findOne({ _id: id }) : null; return c && c.verifie === true ? c : null; }
 function porteurDeCompte(compte, surface) { return { type: 'compte', id: compte._id, compte, installation: null, surface, administrateur: compte.role === 'administrateur' }; }
 function resoudrePorteur(cfg) {
     return async function resoudre(req, res, next) {

@@ -43,7 +43,9 @@ const hmac = cle => crypto.createHmac('sha256', SECRET).update(`octroi|${cle}`).
     await post('/api/compte/verification', { jeton: new URL(courrier.envoyes.filter(e => e.type === 'verification').pop().lien).searchParams.get('jeton') });
     H.v('autre écriture Gmail de l\'adresse : toujours refusée', (await accueil('xy@gmail.com')).solde.accueil, 0);
     // 4 : un compte jamais vérifié, supprimé, n'a pas consommé l'offre
-    const nv = await creer('jamais@exemple.fr'); await supprimer(nv);
+    // O3 : un compte non confirmé n'a plus de session, il ne se supprime donc plus lui-même : il est PURGÉ à 48 h (comptes/purge.js), ce qui est le vrai chemin de ce cas.
+    const nv = await creer('jamais@exemple.fr');
+    await db.col('comptes').updateOne({ _id: nv._id }, { $set: { creeLe: new Date(Date.now() - 49 * 3600e3) } }); await require('../comptes/purge').purgerNonConfirmes({ cfg });
     const nv2 = await creer('jamais@exemple.fr'); await post('/api/compte/verification', { jeton: await lien(nv2._id) });
     H.v('compte supprimé sans offertes : la réinscription les reçoit', (await accueil('jamais@exemple.fr')).solde.accueil, 25);
     // 5 : I3(b) réinitialisation

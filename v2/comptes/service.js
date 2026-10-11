@@ -7,7 +7,7 @@
 // `hebdo.compteId` est l'ObjectId du compte (index du plan).
 const crypto = require('crypto');
 const { col } = require('../db'); const M = require('../modeles'); const L = require('../transport/limites');
-const J = require('./jetons'); const P = require('./mots-de-passe'); const S = require('./sessions'); const { emailCle } = require('./email-cle');
+const J = require('./jetons'); const P = require('./mots-de-passe'); const S = require('./sessions'); const { emailCle } = require('./email-cle'); const Pg = require('./purge');
 
 const HEURE = 3600e3;
 
@@ -33,28 +33,51 @@ async function ecrireLien(compteId, type, cfg, maintenant) {
     return jeton;
 }
 
-/** Crée un compte neutre + son lien de vérification. Une adresse déjà prise est SILENCIEUSE ; le hachage est calculé dans les deux cas. */
+/**
+ * O3 — UN courriel de confirmation par adresse et par 24 h, inscription et renvoi CONFONDUS (compteur persistant `limites`, fenêtre glissante, par empreinte d'adresse). Rend vrai si le courriel est parti
+ * (ou a échoué à partir : la prise est consommée, un pilote en panne ne se rattrape pas en bombardant une boîte). Appelé APRÈS la réponse (travail détaché) : la limite ne se lit jamais dans la réponse.
+ */
+async function confirmer(compte, cle, cfg, courrier, nom, maintenant) {
+    const r = await L.reserver(`confirmation:${J.empreinte(cle)}`, { delaiMs: cfg.comptes.confirmationHeures * HEURE, maintenant });
+    if (!r.permis) return false;
+    const jeton = await ecrireLien(compte._id, 'verification', cfg, maintenant);
+    await envoyer(nom, () => courrier.envoyerVerification(compte.email, lienVerification(cfg, jeton), { purgeHeures: cfg.comptes.nonConfirmeHeures }));
+    return true;
+}
+
+/**
+ * Crée un compte INACTIF + son lien de vérification (l'inscription ne donne aucun porteur : voir `connecter`). Le travail est détaché de la réponse, qui est la même quelle que soit l'adresse.
+ * Adresse déjà prise : confirmée = rien ; en attente = le PREMIER inscrit garde la place (ni mot de passe ni rien d'autre ne change) et un courriel part SEULEMENT si la limite le permet ;
+ * en attente depuis 48 h ou plus (balayage pas encore passé) = ce compte est purgé à l'instant, l'adresse est libre. Le hachage est calculé dans tous les cas.
+ */
 function inscrire({ email, emailCle, motDePasse, cfg, courrier, maintenant = new Date() }) {
     return detacher('inscription', async () => {
         const hash = await P.hacher(motDePasse);
         const compte = M.nouveauCompte({ email, emailCle, motDePasse: hash, now: maintenant });
-        try { await col('comptes').insertOne(compte); }
-        catch (e) { if (e.code === 11000) return; throw e; }
-        const jeton = await ecrireLien(compte._id, 'verification', cfg, maintenant);
-        await envoyer('inscription', () => courrier.envoyerVerification(email, lienVerification(cfg, jeton)));
+        for (let tour = 0; ; tour++) {
+            try { await col('comptes').insertOne(compte); break; }
+            catch (e) {
+                if (e.code !== 11000) throw e;
+                const existant = await col('comptes').findOne({ emailCle });
+                if (!existant || existant.verifie !== false) return;                                                  // confirmé (ou illisible) : silence
+                if (tour === 0 && Pg.perime(existant, cfg, maintenant)) { await Pg.purgerCompte(existant, cfg, maintenant); continue; }   // périmé : l'adresse est libre, on réessaie UNE fois
+                if (tour === 0 && !(await col('comptes').findOne({ _id: existant._id }))) continue;                    // purgé entre-temps
+                await confirmer(existant, emailCle, cfg, courrier, 'inscription', maintenant);
+                return;
+            }
+        }
+        await confirmer(compte, emailCle, cfg, courrier, 'inscription', maintenant);
     });
 }
 
-/** Renvoi du lien de vérification d'un compte NON vérifié (I3a). Au plus `renvoiParCompteHeure` par adresse et par heure. */
+/** Renvoi du lien de vérification d'un compte NON vérifié et NON périmé (I3a). Mêmes limites que l'inscription : un courriel par adresse et par 24 h (O3). */
 function renvoyerVerification({ email, cfg, courrier, maintenant = new Date() }) {
     return detacher('renvoi-verification', async () => {
         const cle = typeof email === 'string' && email.length <= 254 ? emailCle(email) : null;
         const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
-        if (!compte || compte.verifie) return;
-        const r = await L.consommer(`renvoi:${J.empreinte(cle)}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
-        if (!r.permis) return;
-        const jeton = await ecrireLien(compte._id, 'verification', cfg, maintenant);
-        await envoyer('renvoi-verification', () => courrier.envoyerVerification(compte.email, lienVerification(cfg, jeton)));
+        if (!compte || compte.verifie !== false) return;
+        if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return; }
+        await confirmer(compte, cle, cfg, courrier, 'renvoi-verification', maintenant);
     });
 }
 
@@ -110,6 +133,7 @@ async function noterAdresse(cle, cfg, maintenant) {
 async function accorderOffertes(compteId, cfg, maintenant) {
     const compte = await col('comptes').findOne({ _id: compteId });
     if (!compte) return false;
+    if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return false; }   // O3 : un compte non confirmé de 48 h ou plus ne s'active plus (il va être, ou est déjà, purgé)
     const dejaOctroyee = await col('adresses_octroyees').findOne({ empreinte: empreinteAdresse(compte.emailCle, cfg) });
     const r = dejaOctroyee ? { modifiedCount: 0 } : await col('comptes').updateOne({ _id: compteId, offertesAccordeesLe: null },
         { $set: { verifie: true, verifieLe: maintenant, offertesAccordeesLe: maintenant }, $inc: { 'solde.accueil': cfg.quotas.accueil } });
@@ -122,7 +146,9 @@ async function accorderOffertes(compteId, cfg, maintenant) {
     } else {
         await col('comptes').updateOne({ _id: compteId, verifie: false }, { $set: { verifie: true, verifieLe: maintenant } });   // jamais d'octroi hors des deux gardes
     }
-    return true;
+    // O3 : « vrai » ne se dit que d'un compte PRÉSENT et confirmé. La purge peut avoir supprimé le compte entre la lecture et les écritures ci-dessus (elles ne trouvent alors rien et ne
+    // lèvent pas) : sans cette relecture, la vérification répondrait 200 pour un compte qui n'existe plus.
+    return Boolean(await col('comptes').findOne({ _id: compteId, verifie: true }, { projection: { _id: 1 } }));
 }
 
 /** Vérification de l'adresse. Ordre : lien regardé, octroi (idempotent), PUIS lien brûlé : une panne entre les deux laisse un lien rejouable
@@ -142,7 +168,10 @@ async function connecter({ email, motDePasse, cfg, maintenant = new Date() }) {
     const mdp = typeof motDePasse === 'string' && motDePasse.length <= 1000 ? motDePasse : '';
     const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
     if (!compte) { await P.verifierFactice(mdp); return { ok: false }; }
-    if (!(await P.verifier(mdp, compte.motDePasse))) return { ok: false };
+    // O3 : le scrypt est payé AVANT de regarder l'état du compte — un compte non confirmé répond comme un mauvais mot de passe (même calcul, même réponse) ; ni le statut, ni le corps, ni le temps ne disent
+    // que l'adresse existe. Écrit par ce qu'il AUTORISE : seul `verifie === true` ouvre une session.
+    const motDePasseBon = await P.verifier(mdp, compte.motDePasse);
+    if (!motDePasseBon || compte.verifie !== true) return { ok: false };
     const session = await S.creerSession(compte._id, maintenant, cfg.comptes.sessionJours);
     await col('comptes').updateOne({ _id: compte._id }, { $set: { derniereConnexionLe: maintenant } });
     return { ok: true, compte, session };
@@ -160,6 +189,7 @@ async function reinitialiser({ jeton, motDePasse, cfg, maintenant = new Date() }
     if (v.echec) return refus(v.echec);
     const compte = await col('comptes').findOne({ _id: v.lien.compteId });
     if (!compte) return refus('inconnu');
+    if (Pg.perime(compte, cfg, maintenant)) { await Pg.purgerCompte(compte, cfg, maintenant); return refus('inconnu'); }   // O3 : pas de réactivation d'un compte non confirmé de 48 h ou plus
     const faute = P.politique(motDePasse, compte.emailCle);
     if (faute) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: faute };
     const hash = await P.hacher(motDePasse);

@@ -167,12 +167,13 @@ async function parcourir() {
         H.v('   aucune chaîne appelée, aucun mouvement', [appelsChaine - a0, await nMouv() - m0], [0, 0]);
         const nv = await compte({ verifie: false, solde: { accueil: 0, achete: 0 } });
         const c = await scanner(sv.url, nv.cookie, { nom: '1d' });
-        H.v('   compte non vérifié : 403 VERIFICATION', [c.statut, c.json.erreur.code, c.json.facturation], [403, 'VERIFICATION', null]);
+        // O3 : un compte non confirmé n'est plus un porteur (porteur.js) : sa session est refusée comme une session inconnue. La garde 403 VERIFICATION du scanner reste derrière, en profondeur, sans requête qui l'atteigne.
+        H.v('   compte non vérifié (O3 : plus un porteur) : 401 SESSION', [c.statut, c.json.erreur.code, c.json.facturation], [401, 'SESSION', null]);
         H.v('   (toujours aucune chaîne appelée, aucun mouvement)', [appelsChaine - a0, await nMouv() - m0], [0, 0]);
         // M3 : un compte NON vérifié dont la base porte 25 « accueil » n'a aucun crédit utilisable : VERIFICATION, rien débité
         const nv25 = await compte({ verifie: false, solde: { accueil: 25, achete: 0 } });
         const c25 = await scanner(sv.url, nv25.cookie, { nom: '1e' });
-        H.v('M3. compte non vérifié avec accueil 25 : 403 VERIFICATION, rien débité, chaîne non appelée', [c25.statut, c25.json.erreur.code, await soldeCompte(nv25.c), await nMouv() - m0, appelsChaine - a0], [403, 'VERIFICATION', 25, 0, 0]);
+        H.v('M3. compte non vérifié avec accueil 25 (O3 : plus un porteur) : 401 SESSION, rien débité, chaîne non appelée', [c25.statut, c25.json.erreur.code, await soldeCompte(nv25.c), await nMouv() - m0, appelsChaine - a0], [401, 'SESSION', 25, 0, 0]);
     }
 
     // ═══ I2a : « peut-il payer ? » se juge AVANT de lire le corps (jamais 12 Mo lus pour un refus d'argent) ═══
@@ -186,7 +187,7 @@ async function parcourir() {
         require('v8').setFlagsFromString('--expose-gc'); const gc = require('vm').runInNewContext('gc'); const ab = async () => { for (let k = 0; k < 4; k++) { gc(); await attendre(80); } return process.memoryUsage().arrayBuffers; };
         const ab0 = await ab();
         const a = await brut(sv.url, { cookie: nv.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
-        H.v('N2/I2a. compte non vérifié, client qui envoie 5 Mo : 403 VERIFICATION COMPLET (statut, JSON), connexion non coupée', [a.statut, a.json && a.json.erreur.code, a.json && a.json.facturation, a.erreur, a.entetes.connection !== 'close'], [403, 'VERIFICATION', null, null, true]);
+        H.v('N2/I2a. compte non vérifié (O3 : plus un porteur), client qui envoie 5 Mo : 401 SESSION COMPLET (statut, JSON), connexion non coupée', [a.statut, a.json && a.json.erreur.code, a.json && a.json.facturation, a.erreur, a.entetes.connection !== 'close'], [401, 'SESSION', null, null, true]);
         const b = await brut(sv.url, { cookie: vide.cookie, entetes: taille5Mo, delaiMs: 15000, ecrire: envoyer5Mo });
         H.v('   compte vérifié sans crédit, 5 Mo : 429 QUOTA complet, avec solde, facturation null ET achat.url', [b.statut, b.json && b.json.erreur.code, b.json && b.json.facturation, b.json && b.json.solde && b.json.solde.total, b.json && b.json.achat && typeof b.json.achat.url, b.erreur], [429, 'QUOTA', null, 0, 'string', null]);
         const ab1 = await ab();
@@ -194,9 +195,10 @@ async function parcourir() {
         H.v('   la porte n\'a rien gardé', [SC.etatPorte().enCours, SC.etatPorte().comptes], [0, 0]);
         // l'échéance coupe un client trop lent : le refus part (Connection: close) et la socket est détruite
         const svLent = await monter({ scannerDelaiLectureMs: 300 });
-        const lent = await brut(svLent.url, { cookie: nv.cookie, entetes: { 'content-length': '5000' }, ecrire: req => { req.write('0123456789'); } });
+        // O3 : le client lent portait un compte non vérifié (403 VERIFICATION) ; ce compte n'est plus un porteur. La même mécanique (refus d'argent décidé AVANT la lecture du corps, échéance, socket détruite) se prouve avec le compte VÉRIFIÉ sans crédit : 429 QUOTA.
+        const lent = await brut(svLent.url, { cookie: vide.cookie, entetes: { 'content-length': '5000' }, ecrire: req => { req.write('0123456789'); } });
         for (let k = 0; k < 30 && !lent.fermee; k++) await attendre(100);
-        H.v('   client trop lent (10 octets sur 5 000) : à l\'échéance, 403 + Connection: close, socket détruite', [lent.statut, lent.json && lent.json.erreur.code, lent.entetes.connection, lent.fermee], [403, 'VERIFICATION', 'close', true]);
+        H.v('   client trop lent (10 octets sur 5 000) : à l\'échéance, refus d\'argent (429 QUOTA) + Connection: close, socket détruite', [lent.statut, lent.json && lent.json.erreur.code, lent.entetes.connection, lent.fermee], [429, 'QUOTA', 'close', true]);
         await svLent.fermer();
         const ad = await compte({ role: 'administrateur', solde: { accueil: 0, achete: 0 } });
         const c = await scanner(sv.url, ad.cookie, { nom: 'I2a-admin' });

@@ -19,7 +19,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const lier = (jeton, c, ipn) => H.appel(srv.url, '/api/compte/lier', { methode: 'POST', corps: { code: c }, entetes: bearer(jeton, ipn) });
     const posterCode = async (compteId, texte, decalageMs = 600e3) => { await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(texte), compteId, creeLe: new Date(), expireLe: new Date(Date.now() + decalageMs), utiliseLe: null }); return texte; };
 
-    const { c: cA, cookie: ckA } = await creerCompte('vous@exemple.fr', false);   // 9 : non vérifié
+    const { c: cA, cookie: ckA } = await creerCompte('vous@exemple.fr', true);   // 9 : O3 — un compte non confirmé n'est plus un porteur (il ne peut ni créer un code ni être lié : test-comptes-o3.js 2a) ; ce banc juge la liaison d'un compte CONFIRMÉ
     // 1
     const r1 = await code(ckA);
     H.v('code : 200, 6 caractères [A-Z0-9], expire fourni', [r1.statut, /^[A-Z0-9]{6}$/.test(r1.json.code), typeof r1.json.expire], [200, true, 'string']);
@@ -38,7 +38,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const { i: i1, jeton: j1 } = await creerInst(0);
     const rl = await lier(j1, r1.json.code);
     const apres = await db.col('installations').findOne({ _id: i1._id });
-    H.v('lier : 200, compte masqué, nouveau jeton', [rl.statut, rl.json.success, rl.json.compte, rl.json.jetonInstallation.length, rl.json.jetonInstallation !== j1], [200, true, { emailMasque: 'v•••@exemple.fr', verifie: false }, 43, true]);
+    H.v('lier : 200, compte masqué, nouveau jeton', [rl.statut, rl.json.success, rl.json.compte, rl.json.jetonInstallation.length, rl.json.jetonInstallation !== j1], [200, true, { emailMasque: 'v•••@exemple.fr', verifie: true }, 43, true]);
     H.v('installation liée, empreinte du NOUVEAU jeton', [String(apres.compteId), apres.lieeLe instanceof Date, apres.jetonEmpreinte === J.empreinte(rl.json.jetonInstallation)], [String(cA._id), true, true]);
     H.v('fusionnerALaLiaison appelé UNE fois avec { installation, compteId }', [fusions.length, fusions[0].installation._id === i1._id, String(fusions[0].compteId)], [1, true, String(cA._id)]);
     const ancien = await H.appel(srv.url, '/api/compte/delier', { methode: 'POST', corps: {}, entetes: bearer(j1) });
