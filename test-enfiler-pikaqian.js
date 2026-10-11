@@ -110,6 +110,9 @@ const SET = E.SET_TEST;
     const src = fs.readFileSync(path.join(__dirname, 'enfiler-pikaqian.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     verifier('la ligne de commande garde la garde du commit du worker (etatDuWorker de remettre-en-file.js)', /require\('\.\/remettre-en-file'\)/.test(src) && /etatDuWorker\(cx\)/.test(src), true);
 
+    // le worker charge le collecteur pikaqian DANS un try : une erreur de chargement ne tue pas la boucle
+    const workerSrc = fs.readFileSync(path.join(__dirname, 'collecteur-images.js'), 'utf8').split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+    verifier('collecteur-images.js : require(\'./collecteur-images-pikaqian\') dans un try, l\'erreur est retenue', /try \{ pkImg = require\('\.\/collecteur-images-pikaqian'\); \} catch \(e\) \{ erreurChargement = e; \}/.test(workerSrc) && !/const pkImg = require/.test(workerSrc), true);
     // l'ALIMENTATEUR n'enfile PAS pikaqian (zh-hans reste « sans source légale » pour lui) : aucune ligne pikaqian dans ses tables, aucune mention dans son code
     const sansCommentaires = t => t.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     verifier('alimentateur.js ne mentionne pas pikaqian, et TABLE_TPC n\'a aucune ligne pikaqian', [/pikaqian/i.test(sansCommentaires(fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'alimentateur.js'), 'utf8'))), require('./collecte-cartes/tpc-sets').TABLE_TPC.some(l => /pikaqian/i.test(`${l.site}${l.slug}`))], [false, false]);

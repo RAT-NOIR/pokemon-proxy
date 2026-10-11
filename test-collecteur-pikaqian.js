@@ -110,11 +110,11 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     verifier('   l\'entrée porte mention, lot, langue + preuve, provenance, adresse d\'origine', [c1.images[1].mention, c1.images[1].lot, c1.images[1].langue, !!c1.images[1].languePreuve, /officiel chinois/.test(c1.images[1].provenance), c1.images[1].urlOriginal, c1.images[1].attribution],
         ['© Pokémon / The Pokémon Company', 'pikaqian-2026-10', 'zh-hans', true, true, `https://images.pikaqian.com/cs1bc/${UUID(1)}.webp`, '© Pokémon / The Pokémon Company']);
     verifier('une carte déjà servie à ce numéro par une autre source : intacte (additif)', c2.images.map(e => `${e.source}:${e.numero}`), ['tcgdex:002']);
-    verifier('un nom anglais divergent : aucun visuel, le trou est nommé dans le bilan', [c3.images.length, b.restes], [0, { 'nom-different': 1 }]);
+    verifier('un nom anglais divergent : aucun visuel, le trou est nommé dans le bilan', [c3.images.length, b.restes], [0, { 'tuile-a-suffixe': 1 }]);   // « Eevee Plus » prolonge notre « Eevee » : pas la tuile de base
     const bilan = B.col('sets').get(SLUG).visuelsPikaqian;
     verifier('le bilan du set : 1 prouvé, garde verte, concordance, lot, mention, vignettes', [bilan?.prouves, bilan?.garde?.ok, bilan?.concordance, bilan?.lot, bilan?.mention, bilan?.vignettes?.echecs],
         [1, true, true, 'pikaqian-2026-10', '© Pokémon / The Pokémon Company', 0]);
-    verifier('le bilan est aussi sur l\'unité (collecte_images_etat), les restes avec leur motif', [B.col('collecte_images_etat').get(`pikaqian/${SLUG}`)?.phase, B.col('collecte_images_etat').get(`pikaqian/${SLUG}`)?.restes?.[0]?.motif], ['verifie', 'nom-different']);
+    verifier('le bilan est aussi sur l\'unité (collecte_images_etat), les restes avec leur motif', [B.col('collecte_images_etat').get(`pikaqian/${SLUG}`)?.phase, B.col('collecte_images_etat').get(`pikaqian/${SLUG}`)?.restes?.[0]?.motif], ['verifie', 'tuile-a-suffixe']);
     verifier('les vignettes sont fabriquées APRÈS la jointure (un appel)', vignetter.n, 1);
 
     // la page qui DÉCLARE l'origine de la carte (flux embarqué) : la provenance la nomme, sur le document ET sur l'entrée
@@ -196,10 +196,52 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     tr = reseau(url => url.endsWith('.webp') ? { status: 503, texte: 'indisponible' } : normal()(url));
     const pageDeuxCartes = url => url === 'https://pikaqian.com/sets/cs1bc' ? { status: 200, texte: PAGE } : null;
     ({ b } = await lancer(B3c, tr));
-    verifier('un 503 sur l\'image n°1 puis sur l\'image n°2 : ARRÊT (erreur répétée), unité « incomplet-transitoire » (revient en file), pas de refus', [b.etat, b.bloque ?? null, B3c.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian') ?? null],
-        ['incomplet-transitoire', null, null]);
+    verifier('un 503 sur l\'image n°1 puis sur l\'image n°2 : ARRÊT (erreur répétée), unité « incomplet-transitoire » (revient en file), et l\'ALERTE est posée', [b.etat, b.bloque ?? null, B3c.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian')?.active ?? null],
+        ['incomplet-transitoire', null, true]);
+    verifier('   le compteur persisté repart à zéro (l\'alerte a pris le relais)', B3c.col('collecte_images_etat').get('etat/echecs-de-suite/pikaqian')?.suite, 0);
     verifier('   les images en échec sont notées « echec » avec leur erreur (reprise possible)', [...B3c.col('images').values()].map(d => d.etat), ['echec', 'echec']);
     verifier('   le nombre d\'images demandées s\'arrête au deuxième échec', tr.appels.filter(u => u.endsWith('.webp')).length, 2);
+
+    // ── 5 ter. LE COMPTEUR D'ÉCHECS SURVIT À L'UNITÉ : deux unités successives en 5xx ⇒ la 2e conclut l'arrêt et pose l'alerte ; aucune 3e requête ne part ──────────
+    const BP = fausseBase(); semer(BP);
+    BP.col('sets').set('Autre-Flame', { _id: 'Autre-Flame', tirage: 'zh-hans' });
+    const page500 = url => url === 'https://pikaqian.com/sets/cs1bc' ? { status: 500, texte: 'oups' } : normal()(url);
+    tr = reseau(page500);
+    ({ b } = await lancer(BP, tr));
+    verifier('1re unité, page en 500 : « incomplet-transitoire », compteur persisté à 1, pas d\'alerte', [b.etat, BP.col('collecte_images_etat').get('etat/echecs-de-suite/pikaqian')?.suite, BP.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian') ?? null], ['incomplet-transitoire', 1, null]);
+    tr = reseau(page500);
+    ({ b } = await lancer(BP, tr));
+    const alertePk = BP.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian');
+    verifier('2e unité (client NEUF), page en 500 : l\'échec est le DEUXIÈME de suite → arrêt, alerte posée, compteur remis à zéro', [b.etat, alertePk?.active, /échecs de suite/.test(alertePk?.motif ?? ''), BP.col('collecte_images_etat').get('etat/echecs-de-suite/pikaqian')?.suite], ['refuse-source-bloquee', true, true, 0]);
+    tr = reseau(normal());
+    ({ b } = await lancer(BP, tr));
+    verifier('3e unité : refusée, AUCUNE requête', [b.etat, tr.appels.length], ['refuse-source-bloquee', 0]);
+    // un succès entre deux échecs remet le compteur à zéro entre les unités
+    const BQ = fausseBase(); semer(BQ);
+    await lancer(BQ, reseau(page500));
+    ({ b } = await lancer(BQ, reseau(normal())));
+    verifier('échec, puis une unité réussie : compteur à zéro, pas d\'alerte', [b.etat, BQ.col('collecte_images_etat').get('etat/echecs-de-suite/pikaqian')?.suite, BQ.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian') ?? null], ['verifie', 0, null]);
+    // une image illisible (sharp) compte : deux de suite → arrêt + alerte
+    const BI = fausseBase(); semer(BI);
+    BI.col('cartes_produits').set('9|99', { _id: '9|99', carteId: 9, idProduct: 99, numeroFiche: '002', slugSet: SLUG });
+    BI.col('cartes').set(9, { _id: 9, nomEn: 'Raichu', images: [] }); BI.col('cartes').get(2).images = [];
+    ({ b } = await lancer(BI, reseau(url => url.endsWith('.webp') ? { status: 200, type: 'image/webp', octets: Buffer.from('pas une image') } : normal()(url))));
+    verifier('deux fichiers illisibles de suite → arrêt, alerte posée', [BI.col('collecte_images_etat').get('alerte/source-bloquee/pikaqian')?.active, [...BI.col('images').values()].filter(d => d.etat === 'echec').length], [true, 2]);
+    // le plafond de requêtes de l'unité : une page qui ne mène qu'à 1 image ne peut pas déclencher d'avalanche
+    const BL = fausseBase(); semer(BL);
+    const clientPlafond = P.fabriquerClientPikaqian({ transport: reseau(normal()), cadenceMs: 0, verrou, pause: async () => { }, horloge: () => 0 });
+    clientPlafond.plafonner(1);
+    const rr0 = silencieux();
+    try { var pl = await collecterSet(uniteDeLaLigne(lignePikaqian(SLUG)), BL.M, { verrou, client: clientPlafond, deposer: async () => { }, fabriquerVerrouSet: verrouSet, vignetter: vignetteOk() }); } finally { rr0(); }
+    verifier('plafond posé avant l\'unité (1 requête) : la 2e requête est refusée, aucune image prise', [pl.etat !== 'verifie', [...BL.col('images').values()].length], [true, 0]);
+
+    // le plafond que le COLLECTEUR pose lui-même (taille du plan + marge) : une redirection d'image en boucle est coupée avant les 3 sauts du client
+    const BM = fausseBase(); semer(BM);
+    tr = reseau(url => url === `https://images.pikaqian.com/cs1bc/${UUID(1)}.webp` ? { status: 302, location: `/cs1bc/${UUID(1)}.webp` } : normal()(url));
+    ({ b } = await lancer(BM, tr));
+    verifier('image en redirection sans fin : coupée par le plafond de l\'unité (3 essais, pas 4)', [tr.appels.filter(u => u.endsWith('.webp')).length, b.etat !== 'verifie'], [3, true]);
+    // la provenance par défaut n'AFFIRME pas une copie officielle : elle dit ce que la page ne déclare pas
+    verifier('provenance par défaut : « origine non déclarée par la page », sans affirmer « copie du visuel officiel »', [/origine non déclarée par la page/.test(im?.provenance ?? ''), /copie du visuel officiel/.test(im?.provenance ?? '')], [true, false]);
 
     // ── 6. la TAILLE de la base : au-delà du seuil, STOP avant toute requête ──────────────────────────────────────────
     const B4 = fausseBase({ dataSize: 300, indexSize: 300 }); semer(B4);

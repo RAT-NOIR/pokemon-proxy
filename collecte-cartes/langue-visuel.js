@@ -48,7 +48,7 @@ function langueDuVisuel(im) {
     // ➕ 2026-10-11 — pikaqian.com : des copies des scans officiels CHINOIS (texte en sinogrammes simplifiés lisible sur les 3 images ouvertes à l'œil
     // le 2026-10-10, MESURE-PIKAQIAN.md §5) ; la collecte n'écrit que sous un set au tirage `zh-hans`. Par ce qu'elle autorise : une autre langue source n'a pas de règle.
     if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'
-        ? { langue: 'zh-hans', preuve: 'pikaqian.com : copie du scan officiel chinois (sinogrammes simplifiés lisibles sur 3 images ouvertes à l\'œil le 2026-10-10), sous un set au tirage zh-hans' }
+        ? { langue: 'zh-hans', preuve: 'pikaqian.com : scan de la carte chinoise imprimée (sinogrammes simplifiés lisibles sur 3 images ouvertes à l\'œil le 2026-10-10), sous un set au tirage zh-hans' }
         : { langue: null, preuve: `pikaqian, langue source « ${im.langueSource} » sans règle` };
     if (im.source === 'pokemon-card-com') return { langue: 'ja', preuve: 'pokemon-card.com (Japon) : le scan de l\'impression japonaise' };
     if (im.source === 'bulbapedia') {

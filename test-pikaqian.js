@@ -80,6 +80,14 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     verifier('image : une adresse hors du motif /<code>/<uuid>.webp refusée', [!!e, w.appels.length], [true, 0]);
     e = await leve(() => w.client.page('https://images.pikaqian.com/sets/cs1bc'));
     verifier('page demandée sur l\'hôte d\'images : refusé', [!!e, w.appels.length], [true, 0]);
+    // 🔴 LA GARDE DE CHEMINS SE TIENT SEULE : un robots.txt qui n'interdit RIEN ne doit pas ouvrir /api/ — c'est la liste d'interdits du client qui refuse, sans requête
+    const robotsOuvert = { 'https://pikaqian.com/robots.txt': () => ({ status: 200, texte: 'User-agent: *\nAllow: /\n' }), 'https://images.pikaqian.com/robots.txt': () => ({ status: 200, texte: 'User-agent: *\nAllow: /\n' }) };
+    for (const c of ['/api/cards', '/api/sets/cs1bc', '/admin/x', '/auth/login', '/login', '/logout', '/currency']) {
+        w = monde({ repondre: normal(robotsOuvert) });
+        e = await leve(() => w.client.page('https://pikaqian.com' + c));
+        const e2 = await leve(() => w.client.image('https://images.pikaqian.com' + c));
+        verifier(`robots.txt OUVERT : ${c} refusé par la garde de chemins elle-même (message « interdit »), 0 requête`, [/interdit/.test(e?.message ?? ''), /interdit/.test(e2?.message ?? ''), w.appels.length], [true, true, 0]);
+    }
 
     // robots.txt qui interdit une page : AUCUNE requête vers elle (même si l'allow-list la laisserait passer)
     w = monde({ repondre: normal({ 'https://pikaqian.com/robots.txt': () => ({ status: 200, texte: 'User-agent: *\nDisallow: /sets/cs1bc\n' }) }) });
@@ -97,7 +105,7 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => ({ status: 403, texte: 'Forbidden' }) }) });
     e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
     verifier('robots.txt en 403 sans marque S3 → BLOQUÉ, l\'image n\'est pas demandée', [e?.bloque === true, chemins(w.appels).length], [true, 1]);
-    for (const [nom, rep] of [['le corps AccessDenied mais un serveur Cloudflare', { ...s3, server: 'cloudflare' }], ['le corps AccessDenied mais cf-mitigated', { ...s3, cfMitigated: 'challenge' }],
+    for (const [nom, rep] of [['le corps AccessDenied, via CloudFront mais serveur Cloudflare', { ...s3, server: 'cloudflare', via: '1.1 abc.cloudfront.net (CloudFront)' }], ['le corps AccessDenied mais un serveur Cloudflare', { ...s3, server: 'cloudflare' }], ['le corps AccessDenied mais cf-mitigated', { ...s3, cfMitigated: 'challenge' }],
         ['le corps AccessDenied sans aucun en-tête S3', { status: 403, texte: s3.texte }], ['un serveur S3 mais un corps qui n\'est pas AccessDenied', { ...s3, texte: '<html>Forbidden</html>' }]]) {
         w = monde({ repondre: normal({ 'https://images.pikaqian.com/robots.txt': () => rep }) });
         e = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp'));
@@ -158,6 +166,35 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     w = monde({ repondre: normal({ ['https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp']: () => ({ status: 404, texte: '<Error/>' }) }) });
     verifier('image en 404 → null', await w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(3) + '.webp'), null);
 
+    // le compteur d'échecs de suite PERSISTÉ : relu au début d'une unité (fixerSuite), un seul échec de plus suffit à l'arrêt ; un succès le remet à zéro
+    w = monde({ repondre: normal({ 'https://pikaqian.com/sets/cs1bc': () => ({ status: 500, texte: 'oups' }) }) });
+    w.client.fixerSuite(1);
+    e = await leve(() => w.client.page('https://pikaqian.com/sets/cs1bc'));
+    verifier('compteur relu à 1 : le premier échec de cette unité est le deuxième de suite → ARRÊT (repetee)', [e?.arret === true && e?.repetee === true, w.client.suiteEchecs()], [true, 2]);
+    w = monde({ repondre: normal() });
+    w.client.fixerSuite(1);
+    await w.client.page('https://pikaqian.com/sets/cs1bc');
+    verifier('compteur relu à 1, puis un succès → remis à zéro', w.client.suiteEchecs(), 0);
+    // un fichier que l'appelant ne sait pas lire compte comme un échec (deux de suite → arrêt)
+    w = monde({ repondre: normal() });
+    const illisible = async () => { throw new Error('Input buffer contains unsupported image format'); };
+    const i1 = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp', illisible));
+    const i3 = await leve(() => w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(2) + '.webp', illisible));
+    verifier('deux images illisibles de suite → arrêt ; la première est une erreur simple', [i1?.illisible === true && !i1.arret, i3?.arret === true && i3?.repetee === true], [true, true]);
+    // le PLAFOND de requêtes de l'unité
+    w = monde({ repondre: normal() });
+    w.client.plafonner(2);
+    await w.client.page('https://pikaqian.com/sets/cs1bc');
+    e = await leve(() => w.client.page('https://pikaqian.com/sets/csv10c'));
+    verifier('plafond de 2 requêtes (robots.txt + page) : la suivante est refusée sans requête', [e?.plafond === true, w.appels.length], [true, 2]);
+    // la lecture BORNÉE du corps, avec ou sans content-length
+    const corps = (taille, entetes = {}) => new Response(new ReadableStream({ start(c) { for (let i = 0; i < taille; i += 10) c.enqueue(new Uint8Array(Math.min(10, taille - i))); c.close(); } }), { headers: entetes });
+    verifier('lireBorne : un corps sous le plafond est rendu en entier', (await P.lireBorne(corps(25), 30)).length, 25);
+    e = await leve(() => P.lireBorne(corps(100), 30));
+    verifier('lireBorne : un corps SANS content-length qui dépasse le plafond est coupé', [e?.reseau === true, /plus de 30 octets/.test(e?.message ?? '')], [true, true]);
+    e = await leve(() => P.lireBorne(corps(10, { 'content-length': '5000' }), 30));
+    verifier('lireBorne : un content-length au-dessus du plafond est refusé avant toute lecture', e?.reseau === true, true);
+
     // LA CADENCE : ≥ 10 s entre deux requêtes quelles qu'elles soient (hôtes confondus), dans une FILE
     w = monde({ repondre: normal() });
     await Promise.all([w.client.page('https://pikaqian.com/sets/cs1bc'), w.client.page('https://pikaqian.com/sets/csv10c'), w.client.image('https://images.pikaqian.com/cs1bc/' + UUID(1) + '.webp')]);
@@ -212,7 +249,16 @@ const chemins = appels => appels.map(a => a.url.replace('https://', ''));
     verifier('   la preuve nomme le set, le numéro, le nom et la tuile', [/cs1bc/.test(R.plan[0]?.preuve), /001/.test(R.plan[0]?.preuve), /Pikachu/.test(R.plan[0]?.preuve), !!R.plan[0]?.preuve?.includes(UUID(1))], [true, true, true, true]);
     verifier('   le numéro de la tuile fait l\'adresse : « 1 » et « 001 » sont le même numéro', plan([trou(carte(1, 'Pikachu'), '1')], [T(1, '001', 'Pikachu')]).plan.length, 1);
     R = plan([trou(carte(1, 'Pikachu'), '001')], [T(2, '001', 'Pikachu Reverse Holo')]);
-    verifier('seule une tuile FOIL au numéro → un trou nommé', [R.plan.length, R.restes[0]?.motif], [0, 'tuile-foil-seulement']);
+    verifier('seule une tuile FOIL au numéro → un trou nommé', [R.plan.length, R.restes[0]?.motif], [0, 'tuile-a-suffixe']);
+    // la règle s'écrit par ce qu'elle AUTORISE : la tuile de base est celle dont le nom ne laisse AUCUN suffixe, connu ou non
+    R = plan([trou(carte(1, 'Shaymin'), '007')], [T(7, '007', 'Shaymin Rainbow Foil')]);
+    verifier('« Shaymin Rainbow Foil » SEULE au numéro (suffixe inconnu) → un trou, et le suffixe inconnu est COMPTÉ', [R.plan.length, R.restes[0]?.motif, R.suffixesInconnus.map(s => s.nom)], [0, 'tuile-a-suffixe', ['Shaymin Rainbow Foil']]);
+    R = plan([trou(carte(1, 'Shaymin'), '007')], [T(7, '007', 'Shaymin Rainbow Foil'), T(8, '007', 'Shaymin')]);
+    verifier('   avec sa base au même numéro : la base est prouvée, le suffixe inconnu compté quand même', [R.plan.map(p => p.tuile.nom), R.suffixesInconnus.length], [['Shaymin'], 1]);
+    R = plan([trou(carte(1, 'Pikachu'), '001')], [T(1, '001', 'Pikachu'), T(2, '001', 'Pikachu Reverse Holo')]);
+    verifier('   un suffixe CONNU (Holo) n\'est pas compté comme inconnu', R.suffixesInconnus.length, 0);
+    R = plan([trou(carte(1, 'Pikachu'), '001')], [T(2, '001', 'Pikachu ex')]);
+    verifier('   « Pikachu ex » pour notre « Pikachu » : pas la tuile de base', [R.plan.length, R.restes[0]?.motif], [0, 'tuile-a-suffixe']);
     R = plan([trou(carte(1, 'Pikachu'), '001')], [T(1, '001', 'Pikachu'), T(5, '001', 'Pikachu')]);
     verifier('DEUX tuiles sans foil au même numéro → un trou (ambigu), jamais la première', [R.plan.length, R.restes[0]?.motif], [0, 'tuile-ambigue']);
     R = plan([trou(carte(1, 'Emcee\'s Hype'), '010')], [T(1, '010', 'Iris\'s Fighting Spirit')]);

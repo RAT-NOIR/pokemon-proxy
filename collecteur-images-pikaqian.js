@@ -109,13 +109,16 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     const tenuPar = await verrouSet.prendre();
     if (tenuPar) { console.error(`❌ ${idEtat} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote}.`); return { code: unite._id, etat: 'refuse-verrou' }; }
     const client = clientInjecte || P.fabriquerClientPikaqian({ verrou });
+    // 🔑 « DEUX ÉCHECS DE SUITE » SE COMPTENT ENTRE LES UNITÉS : le client est neuf à chaque unité, le compteur est relu ici et réécrit à la fin
+    // (un succès le remet à zéro). Un arrêt par erreur répétée pose l'alerte de blocage ; la reprise est une décision (enfiler-pikaqian.js --reprendre).
+    client.fixerSuite((await E.findOne({ _id: P.ID_SUITE }))?.suite ?? 0);
     let bloque = null, arretClient = null;
     try {
         // ---- 1. LA PAGE du set ------------------------------------------------------------------------------------------
         let html;
         try { html = await client.page(P.urlSet(L.codePk)); }
         catch (e) {
-            if (e.bloque) { bloque = e; return await conclureBloque(E, unite, bloque, client); }
+            if (e.bloque || (e.arret && !e.plafond)) { bloque = e; return await conclureBloque(E, unite, bloque, client); }   // défi, ou erreur répétée entre unités : l'alerte
             // une erreur passagère (5xx, coupure) n'est pas un verdict sur le set (§58) : l'unité revient en file ; sinon elle refuse, la cause écrite
             console.error(`🔴 ${unite._id} : page illisible — ${e.message}`);
             return { code: unite._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
@@ -128,7 +131,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
         const Pl = await planifier(db, slug, L, tuiles);
         const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
-        console.log(`\n══ ${unite._id} → ${P.SOURCE} ${L.codePk} : ${V.bonnes}/${V.tuiles} tuiles au code du set · ${Pl.trous} trous sur ${Pl.produits} produits · PROUVÉS ${Pl.plan.length} · restes ${JSON.stringify(motifs)} ══`);
+        console.log(`\n══ ${unite._id} → ${P.SOURCE} ${L.codePk} : ${V.bonnes}/${V.tuiles} tuiles au code du set · ${Pl.trous} trous sur ${Pl.produits} produits · PROUVÉS ${Pl.plan.length} · restes ${JSON.stringify(motifs)} · tuiles à suffixe INCONNU ${Pl.suffixesInconnus.length}${Pl.suffixesInconnus.length ? ` (${Pl.suffixesInconnus.slice(0, 3).map(s => s.nom).join(' | ')})` : ''} ══`);
+        client.plafonner(Pl.plan.length + 3);                  // robots.txt des images + une marge : le plan borne les requêtes de l'unité
         await E.updateOne({ _id: idEtat }, { $set: { phase: 'telechargement', restes: Pl.restes.slice(0, 1000), derniereRequete: new Date(), requetes: client.compteRequetes() } }, { upsert: true });
 
         // ---- 4. TÉLÉCHARGEMENT ------------------------------------------------------------------------------------------
@@ -144,7 +148,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             // déjà jugé trop petit à la même adresse : on ne le redemande pas — SAUF si le seuil a baissé depuis (`aRejuger`, §23)
             if (deja?.etat === 'trop-petit' && deja.urlOriginal === p.url && !aRejuger(deja, P.SOURCE)) { tropPetits++; continue; }
             try {
-                const buffer = await client.image(p.url);
+                // le fichier illisible par sharp est un ÉCHEC pour le client (il compte dans les « deux de suite »), pas un succès
+                const buffer = await client.image(p.url, async b => { const m = await sharp(b).metadata(); if (!m.width) throw new Error('largeur illisible'); });
                 if (!buffer) { absents++; continue; }                                   // 404 : l'image listée n'existe pas, le trou reste (et se compte)
                 const meta = await sharp(buffer).metadata();
                 if (!meta.width || meta.width < largeurMinDe(P.SOURCE)) {
@@ -184,6 +189,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
             }
         }
         if (bloque) await conclureBloque(E, unite, bloque, client, { seulementAlerte: true });
+        else if (arretClient && !arretClient.plafond) await conclureBloque(E, unite, arretClient, client, { seulementAlerte: true });   // l'erreur répétée pose l'alerte aussi
         if (!bloque && !arretClient && (arretDemande || !verrou.tenu)) return { code: unite._id, etat: 'interrompu', telecharges };
 
         // ---- 5. JOINTURE ADDITIVE, sous sa garde -------------------------------------------------------------------------------
@@ -220,7 +226,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const complet = {
             source: P.SOURCE, langue: P.LANGUE, code: L.code, codePk: L.codePk, mention: P.MENTION, lot: P.LOT, provenance: P.PROVENANCE_PAR_DEFAUT,
             page: { tuiles: V.tuiles, auCodeDuSet: V.bonnes }, vignettes: W.vg,
-            produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs,
+            produits: Pl.produits, trous: Pl.trous, prouves: Pl.plan.length, restes: motifs, suffixesInconnus: Pl.suffixesInconnus.length, exemplesSuffixesInconnus: Pl.suffixesInconnus.slice(0, 5).map(s => s.nom),
             telecharges, sautes, absents, echecs, echecsTransitoires, tropPetits, retires, joints, dejaParAutre, cartesAbsentes,
             garde: { autresAvant: avant.nAutres, autresApres: apres.nAutres, autresIdentiques: avant.autres === apres.autres, siennesApres: apres.siennes, ok: garde },
             requetes: client.compteRequetes(), requetesParHote: client.requetesParHote(), bloque: bloque ? bloque.message : null, arret: arretClient ? arretClient.message : null, erreurJointure,
@@ -239,6 +245,9 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
         const transitoire = !complet.concordance && echecs > 0 && echecs === echecsTransitoires;
         return { code: unite._id, etat: complet.concordance ? 'verifie' : transitoire ? 'incomplet-transitoire' : 'incomplet', ...(arretClient ? { erreur: arretClient.message } : {}), ...complet };
     } finally {
+        // le compteur d'échecs de suite survit à l'unité ; un arrêt par erreur répétée l'a converti en alerte, il repart à zéro
+        const arrete = client.arret();
+        await E.updateOne({ _id: P.ID_SUITE }, { $set: { suite: arrete?.repetee ? 0 : client.suiteEchecs(), le: new Date() } }, { upsert: true });
         await verrouSet.rendre();
     }
 }
@@ -324,7 +333,7 @@ if (inconnus.length || modes.length !== 1 || (modes[0] !== '--verrou' && !voulus
                 trous += Pl.trous; prouves += Pl.plan.length; produits += Pl.produits;
                 const motifs = {}; for (const r of Pl.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
                 const foils = tuiles.filter(t => P.estFoil(t.nom)).length;
-                console.log(`${slug.padEnd(42)} ${L.codePk.padEnd(8)} tuiles ${V.tuiles} (au code ${V.bonnes}, foil ${foils}) · produits ${String(Pl.produits).padStart(4)} · trous ${String(Pl.trous).padStart(4)} · APPARIÉS ${String(Pl.plan.length).padStart(4)} · restes ${JSON.stringify(motifs)}`);
+                console.log(`${slug.padEnd(42)} ${L.codePk.padEnd(8)} tuiles ${V.tuiles} (au code ${V.bonnes}, foil ${foils}) · produits ${String(Pl.produits).padStart(4)} · trous ${String(Pl.trous).padStart(4)} · APPARIÉS ${String(Pl.plan.length).padStart(4)} · restes ${JSON.stringify(motifs)} · tuiles à suffixe INCONNU ${Pl.suffixesInconnus.length}${Pl.suffixesInconnus.length ? ` (${Pl.suffixesInconnus.slice(0, 3).map(s => s.nom).join(' | ')})` : ''}`);
                 for (const r of Pl.restes.slice(0, 8)) console.log(`      trou ${r.motif} : carte ${r.carteId} « ${r.nomEn} » n° ${r.numero}${r.detail ? ` — ${r.detail}` : ''}`);
             }
         } catch (e) { console.error(`❌ ${e.message}`); process.exitCode = 1; }

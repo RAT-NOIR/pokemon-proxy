@@ -859,7 +859,14 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                 // 🔑 PIKAQIAN (décision du testeur, 2026-10-11) : un site de prix tiers qui copie les visuels officiels chinois — verrou global PROPRE
                 // (un autre serveur, §17), lié au client ; arrêt au premier défi (alerte) et à la première erreur répétée (l'unité revient en file).
                 // L'alimentateur n'insère AUCUNE unité pikaqian : elles viennent de enfiler-pikaqian.js, après redéploiement.
-                const pkImg = require('./collecteur-images-pikaqian');
+                // le chargement du collecteur est DANS un try : une erreur de chargement ne tue pas la boucle, l'unité attend une heure, la cause écrite
+                let pkImg = null, erreurChargement = null;
+                try { pkImg = require('./collecteur-images-pikaqian'); } catch (e) { erreurChargement = e; }
+                if (erreurChargement) {
+                    console.error(`🔴 ${suivant._id} : le collecteur pikaqian ne se charge pas — ${erreurChargement.message} — remise en attente (1 h), rien n'est demandé à personne.`);
+                    await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'collecteur-illisible', pasAvant: new Date(Date.now() + 60 * 60 * 1000), erreur: `chargement : ${erreurChargement.message}` }, $unset: { pris: 1 } });
+                    continue;
+                }
                 await verrouGlobal.rendre();
                 const vk = fabriquerVerrou({ Modele: M.EtatImages, id: pkImg.VERROU_GLOBAL, dureeMs: VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${sourceDuSet}` });
                 let tenuPar = await vk.prendre();

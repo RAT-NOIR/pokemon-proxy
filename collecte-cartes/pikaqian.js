@@ -28,10 +28,12 @@ const UA = T.UA;                                            // l'agent du dépô
 const VERROU_GLOBAL = 'pikaqian/__collecteur__';
 const VERROU_GLOBAL_MS = 3 * 60 * 1000;
 const ID_ALERTE = 'alerte/source-bloquee/pikaqian';
+const ID_SUITE = 'etat/echecs-de-suite/pikaqian';          // le compteur d'échecs de suite, persisté entre deux unités (collecte_images_etat)
 const CRAWL_DELAY_MAX_S = 60;
 const LANGUE = 'zh-hans';
 const ECHECS_DE_SUITE_MAX = 2;                              // « deux échecs de suite » : la première erreur RÉPÉTÉE arrête
-const PROVENANCE_PAR_DEFAUT = 'copie du visuel officiel chinois (pokemon.cn), d\'après la mesure du 2026-10-10 : images.pikaqian.com sert des copies des visuels officiels, la page de set ne désigne pas leur adresse d\'origine';
+const PROVENANCE_PAR_DEFAUT = 'origine non déclarée par la page (la mesure du 2026-10-10 relève que pikaqian reprend le canal officiel chinois)';
+const PAGE_MAX_OCTETS = 8 * 1024 * 1024, IMAGE_MAX_OCTETS = 2 * 1024 * 1024;   // une page de 700 tuiles pèse 1,5 Mo, une image 35 Ko
 
 // ── LA LECTURE DE LA PAGE DE SET ─────────────────────────────────────────────────────────────────────────────────────
 // Une tuile : `<a … href="/cards/<uuid>"> … <img alt="Nom" src="https://images.pikaqian.com/<code>/<uuid>.webp"> … <h2>Nom</h2><p>csv10c<!-- --> · 007</p>`.
@@ -97,7 +99,7 @@ function verdictDePage({ tuiles, code }) {
 function planifierPikaqian({ trous, tuiles, code, slug }) {
     const parNumero = new Map();
     for (const t of tuiles || []) { if (t.code !== code) continue; const k = cleNumero(t.numero); if (!k) continue; (parNumero.get(k) || parNumero.set(k, []).get(k)).push(t); }
-    const vus = new Set(), plan = [], restes = [];
+    const vus = new Set(), plan = [], restes = [], suffixesInconnus = new Map();
     for (const x of trous) {
         const numero = x.numeroFiche ?? null;
         if (T.dejaServi(x.carte, slug, numero)) continue;
@@ -110,17 +112,22 @@ function planifierPikaqian({ trous, tuiles, code, slug }) {
         if (!x.carte.nomEn) { restes.push({ ...base, motif: 'sans-nom' }); continue; }
         const c = parNumero.get(k) || [];
         if (!c.length) { restes.push({ ...base, motif: 'absente-de-la-source' }); continue; }
-        const sansFoil = c.filter(t => !estFoil(t.nom));
-        if (!sansFoil.length) { restes.push({ ...base, motif: 'tuile-foil-seulement', detail: c.map(t => t.nom).join(' | ') }); continue; }
-        if (sansFoil.length > 1) { restes.push({ ...base, motif: 'tuile-ambigue', detail: sansFoil.map(t => t.id).join(', ') }); continue; }
-        const t = sansFoil[0];
-        if (T.nomCompare(t.nom) !== T.nomCompare(x.carte.nomEn)) { restes.push({ ...base, motif: 'nom-different', detail: `« ${t.nom} » à la source, « ${x.carte.nomEn} » chez nous` }); continue; }
+        // 🔑 LA TUILE DE BASE SE DÉFINIT PAR CE QU'ELLE AUTORISE : son nom, comparé au nom du produit par la normalisation de production, ne laisse AUCUN
+        // suffixe — connu (« Holo ») ou inconnu (« Rainbow Foil »). Toute tuile dont le nom prolonge le nôtre est une variante, pas la base ; les suffixes que
+        // `estFoil` ne connaît pas sont COMPTÉS (suffixesInconnus) pour qu'un set non mesuré le dise à sa première lecture.
+        const nomNotre = T.nomCompare(x.carte.nomEn);
+        const prolonge = t => { const n = T.nomCompare(t.nom); return n.length > nomNotre.length && n.startsWith(nomNotre); };
+        for (const t of c) if (prolonge(t) && !estFoil(t.nom)) suffixesInconnus.set(t.id, t.nom);
+        const exactes = c.filter(t => T.nomCompare(t.nom) === nomNotre);
+        if (exactes.length > 1) { restes.push({ ...base, motif: 'tuile-ambigue', detail: exactes.map(t => t.id).join(', ') }); continue; }
+        if (!exactes.length) { restes.push({ ...base, motif: c.some(prolonge) ? 'tuile-a-suffixe' : 'nom-different', detail: `${c.map(t => `« ${t.nom} »`).join(' | ')} à la source, « ${x.carte.nomEn} » chez nous` }); continue; }
+        const t = exactes[0];
         // l'adresse de l'image est celle DE CETTE tuile, dans le dossier de CE set : sinon la page se contredit
         if (t.img !== urlImage(code, t.id)) { restes.push({ ...base, motif: 'image-incoherente', detail: `${t.img} pour la tuile ${t.id} du set ${code}` }); continue; }
         plan.push({ ...base, tuile: t, url: t.img, voie: 'set+numero+tuile-sans-foil+nom',
-            preuve: `pikaqian.com set ${code} : tuile ${t.id} n° ${t.numero}, nom « ${t.nom} » = « ${x.carte.nomEn} » ; numéro identique au nôtre (fiche ${numero}) ; seule tuile sans suffixe de foil à ce numéro (${c.length} tuile${c.length > 1 ? 's' : ''} au numéro)` });
+            preuve: `pikaqian.com set ${code} : tuile ${t.id} n° ${t.numero}, nom « ${t.nom} » = « ${x.carte.nomEn} » ; numéro identique au nôtre (fiche ${numero}) ; seule tuile dont le nom ne laisse aucun suffixe à ce numéro (${c.length} tuile${c.length > 1 ? 's' : ''} au numéro)` });
     }
-    return { plan, restes };
+    return { plan, restes, suffixesInconnus: [...suffixesInconnus].map(([id, nom]) => ({ id, nom })) };
 }
 
 // ── LES ADRESSES ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -143,16 +150,30 @@ const transportFetch = {
         const entetes = { cfMitigated: r.headers.get('cf-mitigated'), server: r.headers.get('server'), via: r.headers.get('via') };
         if (r.status >= 300 && r.status < 400) return { status: r.status, location: r.headers.get('location'), ...entetes };
         const type = r.headers.get('content-type') || '';
-        if (binaire && r.ok && /^image\//.test(type)) {
-            if (Number(r.headers.get('content-length')) > 8 * 1024 * 1024) throw Object.assign(new Error(`image de plus de 8 Mo ${url}`), { reseau: false });
-            return { status: r.status, type, octets: Buffer.from(await r.arrayBuffer()), ...entetes };
-        }
-        return { status: r.status, type, texte: await r.text(), ...entetes };
+        // le type exigé est celui que la mesure a vu (image/webp) ; le corps est lu BORNÉ, avec ou sans content-length
+        if (binaire && r.ok && /^image\/webp\b/i.test(type)) return { status: r.status, type, octets: await lireBorne(r, IMAGE_MAX_OCTETS, url), ...entetes };
+        return { status: r.status, type, texte: (await lireBorne(r, PAGE_MAX_OCTETS, url)).toString('utf8'), ...entetes };
     }
 };
+/** Le corps d'une réponse, lu par morceaux et ARRÊTÉ au plafond (un content-length absent ou menteur ne protège de rien). Un dépassement compte comme un échec. */
+async function lireBorne(reponse, max, url = '') {
+    const depasse = () => Object.assign(new Error(`ERR_CORPS_TROP_GROS plus de ${max} octets ${url}`), { reseau: true });
+    if (Number(reponse.headers?.get?.('content-length')) > max) throw depasse();
+    const lecteur = reponse.body?.getReader?.();
+    if (!lecteur) { const b = Buffer.from(await reponse.arrayBuffer()); if (b.length > max) throw depasse(); return b; }
+    const morceaux = []; let total = 0;
+    for (;;) {
+        const { done, value } = await lecteur.read();
+        if (done) break;
+        total += value.length;
+        if (total > max) { await lecteur.cancel().catch(() => { }); throw depasse(); }
+        morceaux.push(Buffer.from(value));
+    }
+    return Buffer.concat(morceaux);
+}
 const DEFI = /Just a moment|cf-chl|challenge-platform|g-recaptcha|h-captcha|hcaptcha|Attention Required/i;
 // robots.txt d'un hôte de fichiers (S3) : « AccessDenied » d'un S3 sans cette clé veut dire « pas de robots.txt » — pas un défi (aucune marque Cloudflare)
-const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
+const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && !/cloudflare/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /AmazonS3|CloudFront/i.test(`${r.server ?? ''} ${r.via ?? ''}`) && /<Code>AccessDenied<\/Code>/.test(String(r.texte ?? '').slice(0, 2000));
 
 /**
  * Le SEUL chemin vers pikaqian.com / images.pikaqian.com. Garde FERMÉE : aucune requête sans verrou global lié, tenu et non perdu ; hôtes
@@ -162,7 +183,7 @@ const robotsAbsentS3 = r => r.status === 403 && !r.cfMitigated && /AmazonS3|Clou
  * DEUX échecs de suite (5xx, coupure, réponse illisible) : ARRÊT — un arrêt, dans les deux cas, ne se lève pas tout seul.
  */
 function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADENCE_MS, verrou = null, pause = ms => new Promise(r => setTimeout(r, ms)), horloge = Date.now, agent = UA } = {}) {
-    let lie = verrou, file = Promise.resolve(), dernier = -Infinity, compte = 0, bloque = null, arret = null, suite = 0;
+    let lie = verrou, file = Promise.resolve(), dernier = -Infinity, compte = 0, bloque = null, arret = null, suite = 0, plafond = Infinity;
     const parHote = {}, robots = new Map();
     let cadenceEff = Math.max(CADENCE_MS, Number(cadenceMs) || 0);        // relevée par un Crawl-delay plus lent, jamais abaissée sous 10 s
     function garde() {
@@ -198,6 +219,8 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
         const attente = dernier + cadenceEff - horloge();
         if (attente > 0) await pause(attente);
         garde();
+        // le PLAFOND de requêtes de l'unité (taille du plan + marge) : une boucle ou une page démesurée ne peut pas frapper la source sans fin
+        if (compte >= plafond) throw Object.assign(new Error(`${SOURCE} : plafond de ${plafond} requêtes atteint pour cette unité — aucune requête de plus`), { arret: true, plafond: true });
         dernier = horloge(); compte++;
         const h = new URL(url).hostname; parHote[h] = (parHote[h] || 0) + 1;
         try { return await transport.get(url, o); }
@@ -213,10 +236,9 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
             if (u.hostname !== hote || u.pathname !== '/robots.txt') break;      // un robots.txt redirigé ailleurs : on ne peut pas conclure
             url = u.href;
         }
-        if (r.status === 404 || r.status === 410 || robotsAbsentS3(r)) { suite = 0; robots.set(hote, null); return; }
+        if (r.status === 404 || r.status === 410 || robotsAbsentS3(r)) { robots.set(hote, null); return; }   // (robots.txt réussi ne remet PAS le compteur d'échecs à zéro : seul un contenu le fait)
         if (defi(r)) bloquer(r, url);
         if (r.status !== 200) { try { echec(Object.assign(new Error(`${r.status} ${url} : robots.txt illisible — on ne peut pas conclure, aucune page`), { robots: true, status: r.status })); } catch (e) { e.robots = true; throw e; } }
-        suite = 0;
         const texte = r.texte ?? '';
         const d = T.delaiDesRobots(texte, agent);
         if (d && d > CRAWL_DELAY_MAX_S) { bloque = arret = Object.assign(new Error(`${SOURCE} : robots.txt de ${hote} demande un Crawl-delay de ${d} s (au-delà de ${CRAWL_DELAY_MAX_S} s) — on s'arrête`), { bloque: true, arret: true, robots: true }); throw arret; }
@@ -241,7 +263,9 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
                 }
                 if (r.status === 404 || r.status === 410) { suite = 0; return null; }
                 if (r.status >= 400) return echec(Object.assign(new Error(`${r.status} ${courant.url}`), { status: r.status }));
-                if (o?.binaire && !r.octets) return echec(new Error(`${SOURCE} : « ${r.type} » n'est pas une image (${courant.url})`));
+                if (o?.binaire && !r.octets) return echec(new Error(`${SOURCE} : « ${r.type} » n'est pas une image webp (${courant.url})`));
+                // un fichier que l'appelant ne sait pas lire (sharp) est un échec, pas un succès : il compte dans les « deux de suite »
+                if (o?.verifier) { try { await o.verifier(r.octets); } catch (e) { return echec(Object.assign(new Error(`${SOURCE} : image illisible (${e.message}) ${courant.url}`), { illisible: true })); } }
                 suite = 0;
                 return r;
             }
@@ -250,7 +274,11 @@ function fabriquerClientPikaqian({ transport = transportFetch, cadenceMs = CADEN
     return {
         lier(v) { lie = v; },
         page: async url => { const c = cible(url, HOTE_PAGES); if (!/^\/sets\//.test(c.chemin)) throw new Error(`${SOURCE} : une page se demande sous /sets/ (${c.chemin})`); garde(); return (await obtenir(c))?.texte ?? null; },
-        image: async url => { const c = cible(url, HOTE_IMAGES); if (c.chemin === '/robots.txt') throw new Error(`${SOURCE} : une image se demande sous /<code>/<uuid>.webp`); garde(); return (await obtenir(c, { binaire: true }))?.octets ?? null; },
+        image: async (url, verifier = null) => { const c = cible(url, HOTE_IMAGES); if (c.chemin === '/robots.txt') throw new Error(`${SOURCE} : une image se demande sous /<code>/<uuid>.webp`); garde(); return (await obtenir(c, { binaire: true, verifier }))?.octets ?? null; },
+        /** Le compteur d'échecs de suite, PERSISTÉ par l'appelant entre deux unités (le client est neuf à chaque unité) : relu ici, écrit à la fin. */
+        fixerSuite(n) { suite = Math.max(0, Number(n) || 0); },
+        suiteEchecs: () => suite,
+        plafonner(n) { plafond = compte + n; },
         compteRequetes: () => compte,
         requetesParHote: () => ({ ...parHote }),
         cadence: () => cadenceEff,
@@ -274,6 +302,6 @@ function planRetraitPikaqian(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX,
+    SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian
 };
