@@ -232,4 +232,4 @@ function routesScanner(router, cfg, deps = {}) {
         resoudrePorteur(cfg), exigerSession, exigerOrigineSite(cfg), scanIdDuChemin, idempotente('reponse-scanner', { obligatoire: false }, cfg), reponseAuScanner, traiterReponse(cfg, depsScanner));
 }
 
-module.exports = { routesScanner, etatPorte, PORTE_MAX, decoderHeicParDefaut };
+module.exports = { routesScanner, etatPorte, PORTE_MAX, decoderHeicParDefaut, repondreEtFermer };   // repondreEtFermer : exporté pour que les bancs appellent la fermeture de production au lieu de la recopier (B8)

@@ -64,6 +64,10 @@ function demanderReinit({ email, cfg, courrier, maintenant = new Date() }) {
         const cle = typeof email === 'string' && email.length <= 254 ? emailCle(email) : null;
         const compte = cle ? await col('comptes').findOne({ emailCle: cle }) : null;
         if (!compte) return;
+        // B8 (tour 1, O1 corrigé) : le courrier n'est pas une arme — au plus `renvoiParCompteHeure` liens par ADRESSE et par heure, d'où que viennent les demandes (le plafond par IP se contourne avec des IP).
+        // Le travail est DÉTACHÉ : la réponse (202) est partie avant ce calcul, elle est donc la même que la limite morde ou non — aucune énumération par la limite. Patron de renvoyerVerification.
+        const r = await L.consommer(`reinit:${J.empreinte(cle)}`, { max: cfg.limites.renvoiParCompteHeure, fenetreMs: HEURE, maintenant });
+        if (!r.permis) return;
         const jeton = await ecrireLien(compte._id, 'reinit', cfg, maintenant);
         await envoyer('mot-de-passe-oublie', () => courrier.envoyerReinitialisation(compte.email, `${cfg.urls.reinit}?jeton=${jeton}`));
     });

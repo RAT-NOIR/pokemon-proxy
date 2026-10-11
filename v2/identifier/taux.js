@@ -13,6 +13,7 @@ const MARQUE = '__lu';                // document de `taux` { devise: '__lu', da
 const arrondi6 = x => Math.round(x * 1e6) / 1e6;
 const journalDefaut = m => { try { console.warn(`[taux] ${m}`); } catch { /* journal muet */ } };
 const forme = d => /^[A-Za-z]{3}$/.test(d);
+const codeErr = e => (e && (e.code || e.name)) || 'erreur';   // B8 : jamais e.message au journal ni dans `raison` (un chemin de fichier, une URL, une erreur de pilote)
 
 // Jour civil et heure à Paris (l'heure d'été se gère seule)
 function parisDe(maintenant) {
@@ -42,7 +43,7 @@ function lireTauxBCE(xml, { journal = journalDefaut } = {}) {
             taux[devise] = x;
         }
         return Object.keys(taux).length ? { date, taux } : vide;
-    } catch (e) { try { journal(`lecture du fichier de taux impossible : ${e.message}`); } catch { /* muet */ } return vide; }
+    } catch (e) { try { journal(`lecture du fichier de taux impossible : ${codeErr(e)}`); } catch { /* muet */ } return vide; }
 }
 
 const NUL = () => ({ versEUR: null, tauxDate: null });
@@ -58,7 +59,7 @@ async function versEUR(devise, { maintenant = new Date(), col = null, journal = 
         if (!doc || !(Number.isFinite(doc.rate) && doc.rate > 0) || typeof doc.date !== 'string') return NUL();
         if (joursEntre(doc.date, jour) > AGE_MAX_JOURS) return NUL();
         return { versEUR: arrondi6(1 / doc.rate), tauxDate: doc.date };
-    } catch (e) { try { journal(`lecture du taux de ${devise} impossible : ${e.message}`); } catch { /* muet */ } return NUL(); }
+    } catch (e) { try { journal(`lecture du taux de ${devise} impossible : ${codeErr(e)}`); } catch { /* muet */ } return NUL(); }
 }
 
 async function regleVerdict(devise, opts = {}) { return { ...REGLE, ...(await versEUR(devise, opts)) }; }
@@ -81,14 +82,14 @@ async function rafraichirTaux({ fetch: lire = globalThis.fetch, maintenant = new
         if (!pris || pris.modifiedCount !== 1) return { lu: false, raison: 'pas d\'essai permis aujourd\'hui (déjà lu, pause de 1 h, ou 3 essais faits)' };
         try {
             const r = await lire(URL_BCE, { headers: { accept: 'application/xml' }, signal: AbortSignal.timeout(15000) });
-            if (!r || !r.ok) throw new Error(`réponse HTTP ${r && r.status}`);
+            if (!r || !r.ok) throw Object.assign(new Error('réponse HTTP'), { code: `taux-http-${r && r.status}` });
             const { date, taux } = lireTauxBCE(await r.text(), { journal });
-            if (!date) throw new Error('aucun taux lisible dans le fichier');
+            if (!date) throw Object.assign(new Error('aucun taux lisible dans le fichier'), { code: 'taux-aucun-taux-lisible' });
             for (const [devise, x] of Object.entries(taux)) await c.updateOne({ devise, date }, { $set: { devise, date, rate: x, luLe: maintenant } }, { upsert: true });
             await c.updateOne({ devise: MARQUE, date: jour }, { $set: { ok: true } });
             return { lu: true, date, devises: Object.keys(taux).length };
-        } catch (e) { try { journal(`rafraîchissement des taux échoué : ${e.message}`); } catch { /* muet */ } return { lu: false, raison: e.message }; }
-    } catch (e) { try { journal(`rafraîchissement des taux impossible : ${e.message}`); } catch { /* muet */ } return { lu: false, raison: e.message }; }
+        } catch (e) { try { journal(`rafraîchissement des taux échoué : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
+    } catch (e) { try { journal(`rafraîchissement des taux impossible : ${codeErr(e)}`); } catch { /* muet */ } return { lu: false, raison: codeErr(e) }; }
 }
 
 module.exports = { lireTauxBCE, versEUR, regleVerdict, rafraichirTaux, parisDe, URL_BCE, REGLE, AGE_MAX_JOURS, HEURE_LECTURE_PARIS };

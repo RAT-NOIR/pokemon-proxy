@@ -34,7 +34,7 @@ function resoudrePorteur(cfg) {
                     }
                 }   // ni Bearer ni cookie : porteur null, echec 'jeton-absent'
             }
-        } catch (e) { console.error(`❌ [v2 porteur] ${e.message}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
+        } catch (e) { console.error(`❌ [v2 porteur] ${(e && (e.code || e.name)) || 'erreur'}`); return repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible'); }
         next();
     };
 }

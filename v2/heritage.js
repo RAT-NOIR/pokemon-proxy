@@ -27,7 +27,7 @@ function aiguilleur(pred) {
             if (r && typeof r.then === 'function') { r.then(() => {}, () => {}); signaler('prédicat asynchrone (Promise) : un booléen synchrone est exigé'); }
             else if (typeof r !== 'boolean') signaler(`prédicat non booléen (${typeof r}) : un booléen est exigé`);
             else v = r;
-        } catch (e) { signaler(`prédicat qui lève : ${e && e.message}`); }
+        } catch (e) { signaler(`prédicat qui lève : ${(e && (e.code || e.name)) || 'erreur'}`); }
         return v ? next() : next('route');
     };
     f[MARQUE] = true;

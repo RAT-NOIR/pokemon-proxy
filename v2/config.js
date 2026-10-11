@@ -21,18 +21,25 @@ function lireConfig(env = process.env) {
     if (new Set(ordre).size !== ordre.length) throw new Error('configuration invalide : doublon dans V2_ORDRE_POCHES');
     const base = (env.MONGODB_BASE || '').trim() || null;
     const actif = env.RM_API_V2 === '1';
+    // B8 (tour 1, m4) — le MODE BANC (secret de bac, Turnstile off, cookie sans Secure, origine d'extension de développement) exige DEUX témoins : le nom `test_scratch` (une étiquette,
+    // qui existe aussi sur la production : v2/db.js:21-23) ET `BANC_ISOLE=1`, que seul le harnais des bancs pose (test/_env-banc.js, purgerEnv) — lu sur process.env, car les bancs passent des
+    // objets d'environnement littéraux à lireConfig. Un `MONGODB_BASE=test_scratch` posé par erreur sur Render n'ouvre donc plus rien. Un nom n'est pas une preuve (CLAUDE.md §50).
+    const banc = base === 'test_scratch' && process.env.BANC_ISOLE === '1';
     // Lot B2. Secret d'empreinte des adresses (HMAC) : v2 allumée sans secret = configuration invalide (fail-closed). Seul le bac de test_scratch
     // reçoit un secret de bac, jamais la production.
     const secretEmpreinte = (() => {
         const s = env.V2_SECRET_EMPREINTE;
         if (s !== undefined && s !== '') { if (String(s).length < 16) throw new Error('configuration invalide : V2_SECRET_EMPREINTE trop court (16 caractères au moins)'); return String(s); }
-        if (base === 'test_scratch') return 'secret-de-bac-test_scratch-uniquement';
+        if (banc) return 'secret-de-bac-test_scratch-uniquement';
         if (!actif) return null;
         throw new Error('configuration invalide : V2_SECRET_EMPREINTE absent (v2 allumée)');
     })();
     const url = (nom, v, defaut) => { if (v === undefined || v === '') return defaut; if (!/^https:\/\/\S+$/.test(v)) throw new Error(`configuration invalide : ${nom} doit commencer par https://`); return v; };
     const turnstile = (() => { const t = env.V2_TURNSTILE; if (t === undefined || t === '') return 'on'; if (t === 'on' || t === 'off') return t; throw new Error(`configuration invalide : V2_TURNSTILE="${t}" (attendu on ou off)`); })();
-    if (actif && turnstile === 'off' && base !== 'test_scratch') throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur MONGODB_BASE=test_scratch');
+    if (actif && turnstile === 'off' && !banc) throw new Error('configuration invalide : V2_TURNSTILE=off n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
+    // B8.1 : même garde que Turnstile — un cookie de session SANS Secure n'est admis que sur un banc (test_scratch) ; en production allumée, V2_COOKIE_SECURE=0 est une configuration invalide.
+    const cookieSecure = booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true);
+    if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     return gele({
         actif,
         base,
@@ -53,7 +60,7 @@ function lireConfig(env = process.env) {
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
-                    extensionDev: base === 'test_scratch' ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
+                    extensionDev: banc ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
                     site: 'https://rat-market.fr' },
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
         retention: { octroiJours: 730, annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
@@ -66,7 +73,7 @@ function lireConfig(env = process.env) {
         versionMinExtension: env.V2_VERSION_MIN_EXTENSION || '2.0.0',
         regleG: booleen('V2_REGLE_G', env.V2_REGLE_G, false),
         turnstile,
-        cookieSecure: booleen('V2_COOKIE_SECURE', env.V2_COOKIE_SECURE, true)
+        cookieSecure
     });
 }
 module.exports = { lireConfig, POCHES };

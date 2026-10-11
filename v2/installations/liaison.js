@@ -45,7 +45,7 @@ async function lier({ installation, code, argent, maintenant = new Date() }) {
     if (r.modifiedCount !== 1) { await rendre(); return { statut: 409, code: 'DEJA_LIE' }; }
     try { await argent.fusionnerALaLiaison({ installation, compteId: compte._id }); }
     catch (e) {   // la liaison n'est annoncée que si la fusion a eu lieu : on défait, le client garde son ancien jeton
-        console.error(`❌ [v2 liaison] fusion en échec (${e.message}) — liaison défaite`);
+        console.error(`❌ [v2 liaison] fusion en échec (${(e && (e.code || e.name)) || 'erreur'}) — liaison défaite`);
         await col('installations').updateOne({ _id: installation._id }, { $set: { compteId: null, lieeLe: installation.lieeLe ?? null, jetonEmpreinte: installation.jetonEmpreinte } });
         await rendre();
         return { statut: 503, code: 'INDISPONIBLE' };

@@ -24,12 +24,17 @@ const attente = ms => new Promise(r => setTimeout(r, ms));
     H.vrai(`inscription : adresse nouvelle ${moy(t.insNouvelle).toFixed(0)} ms / existante ${moy(t.insExistante).toFixed(0)} ms, écart ${ecart(t.insNouvelle, t.insExistante).toFixed(1)} ms < 30 (${ESSAIS} essais par branche)`, ecart(t.insNouvelle, t.insExistante) < 30);
     H.vrai(`mot de passe oublié : connue ${moy(t.oubliConnu).toFixed(0)} ms / inconnue ${moy(t.oubliInconnu).toFixed(0)} ms, écart ${ecart(t.oubliConnu, t.oubliInconnu).toFixed(1)} ms < 30 (${ESSAIS} essais par branche)`, ecart(t.oubliConnu, t.oubliInconnu) < 30);
     H.vrai(`le courrier lent n'est jamais attendu : toutes les branches < 120 ms de moyenne`, [t.insNouvelle, t.oubliConnu].every(l => moy(l) < 120));
-    H.v('et le courrier part bel et bien (travail détaché terminé : 20 nouvelles inscriptions + 21 oublis connus)', [envoyes.filter(e => e[0] === 'v').length, envoyes.filter(e => e[0] === 'r').length], [ESSAIS, ESSAIS + 1]);
+    // B8 (O1) : ce banc est un banc de TEMPS ; son « 21 courriers » était un incident de sa construction (une IP neuve à chaque appel neutralise la limite par IP, 21 demandes pour UNE adresse),
+    // pas une spécification. Depuis la limite par adresse (renvoiParCompteHeure par heure, comme le renvoi de vérification), l'assertion dit ce qu'elle voulait dire : le courrier part bel et bien
+    // (au moins un, jamais plus que la borne), les 20 inscriptions neuves envoient toutes leur lien. Les durées (lignes ci-dessus) sont inchangées : la limite est jugée DANS le travail détaché.
+    H.v('et le courrier part bel et bien (travail détaché terminé : 20 nouvelles inscriptions ; oublis connus : au moins 1 et au plus la borne par adresse)', [envoyes.filter(e => e[0] === 'v').length, envoyes.filter(e => e[0] === 'r').length >= 1 && envoyes.filter(e => e[0] === 'r').length <= cfg.limites.renvoiParCompteHeure], [ESSAIS, true]);
     // une panne du pilote est journalisée sans adresse ni message brut
     const trace = []; const orig = console.error; console.error = (...a) => trace.push(a.join(' '));
-    A.registre.fournir('courrier', { envoyerVerification: async () => { throw new Error('Brevo 401 pour secret@exemple.fr'); }, envoyerReinitialisation: async () => { throw new Error('Brevo 401 pour existe@exemple.fr'); } });
+    A.registre.fournir('courrier', { envoyerVerification: async () => { throw new Error('Brevo 401 pour secret@exemple.fr'); }, envoyerReinitialisation: async () => { throw new Error('Brevo 401 pour autre@exemple.fr'); } });
     await mesure('/api/compte/inscription', { email: 'secret@exemple.fr', motDePasse: MDP, turnstile: 't' });
-    await mesure('/api/compte/mot-de-passe-oublie', { email: 'existe@exemple.fr' });
+    // B8 (O1) : la première adresse a épuisé sa borne par heure ; la panne du pilote se prouve sur une AUTRE adresse connue (même pilote, même chemin), qui a encore son droit à un courrier
+    await db.col('comptes').insertOne(M.nouveauCompte({ email: 'autre@exemple.fr', emailCle: 'autre@exemple.fr', motDePasse: await P.hacher(MDP) }));
+    await mesure('/api/compte/mot-de-passe-oublie', { email: 'autre@exemple.fr' });
     console.error = orig;
     H.vrai(`échec du courrier journalisé (${trace.length} lignes) sans adresse ni message brut`, trace.length >= 2 && !trace.join('\n').includes('exemple.fr') && !trace.join('\n').includes('Brevo 401'));
     await srv.fermer(); await H.fermerBac(); H.bilan();

@@ -59,13 +59,13 @@ async function reserverQuestion(porteur, credit, { scanId, carte = 0, raison, ca
                 return { etat: ex.etat, rejoue: true };
             }
         }
-        return repli(`écriture refusée (${e.message})`);
+        return repli(`écriture refusée (${(e && (e.code || e.name)) || 'erreur'})`);   // jamais e.message : une E11000 cite la collection et la clé
     }
     try {
         if (!lot) await col('mouvements').updateOne({ ...base(porteur), type: 'debit', scanId, etat: 'debite' }, { $set: { etat: 'reserve' } });   // débité à la réponse, rendu à l'abandon
     } catch (e) {
         try { await col('questions').deleteOne({ _id, etat: 'en-attente' }); } catch (_) { /* le repli rend le crédit : la question orpheline ne peut plus être répondue */ }
-        return repli(`réserve refusée (${e.message})`);
+        return repli(`réserve refusée (${(e && (e.code || e.name)) || 'erreur'})`);
     }
     return { etat: 'en-attente' };
 }
@@ -130,7 +130,7 @@ async function balayerQuestions({ maintenant = new Date(), max = 500 } = {}, cfg
         if (!q) break;
         let fin = null;
         try { fin = await regler(q, 'question-abandonnee', cfg, maintenant); }
-        catch (e) { bilan.erreurs++; console.error(`🔴 [v2 question-balayage] ${q._id} : ${e.message} — reste « en-reglement », à vérifier à la main`); continue; }
+        catch (e) { bilan.erreurs++; console.error(`🔴 [v2 question-balayage] ${q._id} : ${(e && (e.code || e.name)) || 'erreur'} — reste « en-reglement », à vérifier à la main`); continue; }
         if (q.lot) { bilan.lots++; continue; }
         bilan.reglees++;
         bilan.abandonnees.push({ scanId: String(q.scanId), carte: q.carte });

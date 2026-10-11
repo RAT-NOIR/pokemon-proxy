@@ -125,7 +125,7 @@ function adapter({ statutHttp, corps } = {}, ctx = {}) {
         return traduire(statutHttp, corps, ctx);
     } catch (e) {
         const code = e instanceof Panne ? e.code : 'SERVEUR';           // un cas non prévu tombe sur le défaut qui n'affirme rien
-        const diagnostic = e instanceof Panne ? e.message : `exception : ${e && e.message}`;
+        const diagnostic = e instanceof Panne ? e.message : `exception : ${(e && (e.code || e.name)) || 'erreur'}`;   // jamais le message d'une exception interne (seule une Panne, phrase fabriquée ici, est dite en entier)
         console.warn(`⚠️ [adaptateur-v2] panne ${code} : ${diagnostic}`);
         return { issue: 'panne', analyse: null, erreur: { code }, diagnostic };
     }
