@@ -53,6 +53,8 @@ const refuse = (fn) => { try { fn(); return null; } catch (e) { return e.name ==
     H.vrai('   identifiants plus triés (deux échangés, RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b => { const o = ids.s.debut; const a = b.readInt32LE(o), c = b.readInt32LE(o + 4); b.writeInt32LE(c, o); b.writeInt32LE(a, o + 4); }))) !== null);
     const vig = echange('vig');
     H.vrai('   indice de chaîne hors de la réserve (RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b => { b.writeInt32LE(999999, vig.s.debut); }))) !== null);
+    const numF = echange('fiches.num');
+    H.vrai('   indice de numéro de fiche hors de la réserve (RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b => { b.writeInt32LE(999999, numF.s.debut); }))) !== null);
     const fin = echange('fiches.fin');
     H.vrai('   fin de fiche au-delà des produits (RESCELLÉ) : refusé par la structure', refuse(() => F.deserialiser(retouche(b => { b.writeInt32LE(123456789, fin.s.debut); }))) !== null);
     H.vrai('   en-tête qui ment sur la longueur d\'une section : refusé', refuse(() => { const e = F.lireEntete(brutF); e.sections[0].n += 1000; F.deserialiser(F.reecrireEntete(brutF, e)); }) !== null);
