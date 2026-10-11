@@ -10,16 +10,22 @@ const rss = pid => Number(execFileSync('powershell', ['-NoProfile', '-Command', 
 (async () => {
     await H.ouvrirBancV2();
     const { demarrer, RACINE } = require('../../../verrou/serveur');
-    const FAUX = path.join(RACINE, 'verrou', 'faux-reseau.js'), CHARGES = path.join(RACINE, 'verrou', 'charges.json');
+    const CHARGES = path.join(RACINE, 'verrou', 'charges.json');
     const v2 = arg('v2', '1') === '1';
+    const archive = arg('archive', null);                                           // --archive=<fichier.rmv.gz> : le serveur installe cette archive au montage (banc) ET rejoue le chargeur 3 fois
+    const FAUX = archive ? path.join(__dirname, 'mesure-serveur-preload.js') : path.join(RACINE, 'verrou', 'faux-reseau.js');
     const t0 = Date.now();
-    const srv = await demarrer(FAUX, { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-mesure', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', RM_API_V2: v2 ? '1' : '' });
+    const srv = await demarrer(FAUX, { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-mesure', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', RM_API_V2: v2 ? '1' : '',
+        ...(archive ? { MESURE_ARCHIVE: archive, V2_VISUELS_BANC_FICHIER: archive } : {}) });
     const ecoute = Date.now() - t0;
     const mongo = await srv.attendreMongo();
     const prete = Date.now() - t0;
     const mesures = [];
     for (let i = 0; i < 4; i++) { await new Promise(r => setTimeout(r, 2500)); mesures.push(Mo(rss(srv.enfant.pid))); }
-    console.log('MESURE-SERVEUR ' + JSON.stringify({ v2, ecouteMs: ecoute, mongoPretMs: prete, mongo, rssMo: mesures }));
+    console.log('MESURE-SERVEUR ' + JSON.stringify({ v2, archive: Boolean(archive), ecouteMs: ecoute, mongoPretMs: prete, mongo, rssMo: mesures }));
+    if (archive) {
+        for (let k = 0; k < 60; k++) { const l = srv.lire().split(/\r?\n/).find(x => x.startsWith('MESURE-SERVEUR-CHARGEUR ')); if (l) { console.log(l); break; } await new Promise(r => setTimeout(r, 1000)); }
+    }
     srv.enfant.kill(); await H.arreterBanc();
     process.exit(0);
 })().catch(e => { console.error('❌', e); process.exit(1); });

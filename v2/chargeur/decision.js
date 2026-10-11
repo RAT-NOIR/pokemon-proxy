@@ -27,7 +27,9 @@ function verifierRegle(regle) {
  * @param regle     la règle du site (six fonctions) ; @param journal fonction(texte)
  * @returns {Promise<{ entrees: object[], denominateurs: object, liens: Map<string, Map<string, number[]>> }>} — n'écrit rien nulle part.
  */
-async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true }) {
+async function decider({ sets, docs, lignes, metacarte, regle, journal = () => { }, cederLaMain = true, sink = null }) {
+    // `sink` { entree(e), lien(setId, cle, idProducts) } : les résultats sortent UN À UN (le chargeur les range en colonnes sans jamais tenir le tableau des entrées ni la Map des liens) ;
+    // sans sink, ils sont rendus en tableau et en Map (les bancs, l'exporteur de comparaison).
     verifierRegle(regle);
     const Lg = L();
     if (!sets.length) throw new Error('aucun document dans `sets` : base fausse (un vide parfait n\'est pas « zéro visuel »)');
@@ -54,7 +56,7 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
     // la fiche du site de chaque produit, set par set : sur TOUS les documents du set (la fiche par impression se décide sur le set entier)
     const lignesParSet = new Map();
     for (const l of lignes) for (const s of candidats(l)) { if (!lignesParSet.has(s._id)) lignesParSet.set(s._id, []); lignesParSet.get(s._id).push(l); }
-    const fiches = new Map(), liens = new Map();
+    const fiches = new Map(), liens = new Map(), compte = { sets: 0, fiches: 0, produits: 0 };
     let n = 0;
     for (const [id, ls] of lignesParSet) {
         const s = setsBase.get(id), membres = (parSet.get(id) || []).filter(d => typeof d.nomEn === 'string' && d.nomEn !== '');
@@ -64,10 +66,14 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const parCle = new Map();                                             // clé de fiche → idProducts (triés : une sortie stable)
         for (const [idProduct, f] of fiche) { const cle = cleFiche(f.carteId, f.numero); if (!parCle.has(cle)) parCle.set(cle, []); parCle.get(cle).push(idProduct); }
         for (const v of parCle.values()) v.sort((a, b) => a - b);
-        if (parCle.size) liens.set(id, parCle);
+        if (parCle.size) {
+            compte.sets++; compte.fiches += parCle.size;
+            for (const v of parCle.values()) compte.produits += v.length;
+            if (sink) { for (const [cle, ids] of parCle) sink.lien(id, cle, ids); } else liens.set(id, parCle);
+        }
         if (++n % 20 === 0) await pause();
     }
-    journal(`sets : ${sets.length} · cartes : ${docs.length} · cartes_produits : ${lignes.length} · catalogue : ${metacarte.size} · sets à fiches : ${liens.size}`);
+    journal(`sets : ${sets.length} · cartes : ${docs.length} · cartes_produits : ${lignes.length} · catalogue : ${metacarte.size} · sets à fiches : ${compte.sets}`);
     const choisir = l => {
         const cs = candidats(l).map(s => ({ s, f: fiches.get(s._id)?.get(l.idProduct) }));
         const avec = cs.filter(x => x.f && x.f.carteId === l.carteId);
@@ -76,10 +82,10 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
 
     const d = { catalogue: metacarte.size, avecLigne: lignes.length, sansLigne: 0, duSet: 0, substitut: 0, autreTirage: 0, aucun: 0,
         aucunDetail: { 'carte absente': 0, 'aucun set candidat': 0, 'aucun visuel': 0 }, ecrites: 0, sansFicheDuSite: 0, rareteContredite: 0, idMetacardAbsent: 0, plusieursSets: 0,
-        setsAvecLiens: liens.size, fichesLiees: 0, produitsLies: 0 };
+        setsAvecLiens: compte.sets, fichesLiees: compte.fiches, produitsLies: compte.produits };
     const vus = new Set(lignes.map(l => l.idProduct));
     for (const id of metacarte.keys()) if (!vus.has(id)) d.sansLigne++;
-    for (const m of liens.values()) { d.fichesLiees += m.size; for (const v of m.values()) d.produitsLies += v.length; }
+    vus.clear();
     const entrees = [];
     n = 0;
     for (const l of lignes) {
@@ -115,9 +121,9 @@ async function decider({ sets, docs, lignes, metacarte, regle, journal = () => {
         const vs = im.vignette ?? vignetteDuFichier.get(im.cleR2);
         const v = vs && fichierDe(vs.cleR2, vs.w, vs.h);
         if (v) e.vignette = v;
-        entrees.push(e);
+        if (sink) sink.entree(e); else entrees.push(e);
+        d.ecrites++;
     }
-    d.ecrites = entrees.length;
     entrees.sort((a, b) => a.idProduct - b.idProduct);
     return { entrees, denominateurs: d, liens };
 }

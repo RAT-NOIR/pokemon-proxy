@@ -4010,7 +4010,7 @@
           },
           "cotes": {
             "type": "object",
-            "description": "Par clé de fiche : sa cote, ou `null`. Une fiche absente vaut `null`. Dans cette version : toujours `{}`.",
+            "description": "Par clé de fiche : sa cote, ou `null`. Une fiche absente vaut `null`. `{}` tant qu'aucun chargement n'a réussi (l'état « sans visuel ») ou pour un set sans lien fiche → produits.",
             "additionalProperties": {
               "oneOf": [
                 {

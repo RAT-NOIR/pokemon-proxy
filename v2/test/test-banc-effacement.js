@@ -517,14 +517,16 @@ async function section(nom, f) {
     await section('crochet', async () => {
         const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret');
         const EXP = 990003, ID_A = 895801, ID_B = 895802;
-        for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+        for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
         await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
+        const VB = require('./_visuels-banc'); const VIS = [];
         for (const [id, variante] of [[ID_A, 'normale'], [ID_B, 'reverse']]) {
             await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990301 });
             await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
             await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
-            await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990301, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+            VIS.push(VB.doc(id, { variante, idMetacard: 990301 }));
         }
+        VB.installer(VIS);                                              // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
         const carteCorps = (id, ambigu) => ({ idProduct: id, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu });
         const ETAT = { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null };
         const cand = id => ({ idProduct: id, nom: 'Tropius', numero: '001', set: 'Banc Set', prix: 1, photoUrl: null });

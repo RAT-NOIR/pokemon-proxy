@@ -1,43 +1,137 @@
 'use strict';
-// COTES-VISUELS — le CHARGEUR : décision du testeur (2026-10-11) « visuels et cotes de Ma collection : AUCUN import dans la grappe de production ; l'API lit la base cartes en
-// LECTURE SEULE et charge en mémoire ce qu'il lui faut. Au démarrage, puis une fois par jour. Si le chargement échoue, elle garde la version précédente (jamais vide) ; si elle
-// n'en a aucune, elle rend cotes:{} et l'état « sans visuel » actuel. »
-//   · UN chargement = lecture seule de `cartes` (v2/chargeur/lecture-seule.js) → decider (la décision partagée, règle EMBARQUÉE) → version compacte → bascule ATOMIQUE.
-//   · ÉCHEC (la version en place reste, l'échec se journalise avec ses comptes) : une exception ; 0 visuel ou 0 lien sur une base non vide (§41) ; plus de 10 % d'entrées perdues.
-//   · Le démarrage ne l'attend pas : demarrer() ne lit rien, diffère le premier chargement et arme un minuteur quotidien (unref). Un échec TRANSITOIRE se reprend (3 fois, toutes les 30 min) ;
-//     un refus de configuration (variable absente, droits de plus que la lecture) ne se rejoue pas avant le prochain jour.
+// COTES-VISUELS — le CHARGEUR : décision du testeur (2026-10-11) « visuels et cotes de Ma collection : AUCUN import dans la grappe de production ; l'API charge en mémoire ce qu'il lui faut.
+// Si le chargement échoue, elle garde la version précédente (jamais vide) ; si elle n'en a aucune, elle rend cotes:{} et l'état « sans visuel ». »
+//   · UN chargement = calcul (dans un FIL DE TRAVAIL plafonné : lecture seule de `cartes` en flux → decider → colonnes) OU lecture d'un fichier précalculé (même format) → bascule ATOMIQUE.
+//   · Le fil est plafonné (`resourceLimits`) : un dépassement tue le FIL, jamais le serveur ; le résultat revient en tampons transférables (aucune copie). La boucle du serveur n'est jamais occupée.
+//   · ÉCHEC (la version en place reste servie, l'échec se journalise avec ses comptes) : une exception, un fil tué, 0 visuel, 0 lien (§41), plus de 10 % d'entrées perdues.
+//   · RÈGLE DE REPRISE (testeur, 2026-10-11) : AUCUN nouvel essai après un échec. Le prochain essai est le rechargement quotidien suivant. Aucune minuterie de reprise n'existe dans ce fichier.
+//   · Le démarrage ne l'attend jamais : demarrer() ne lit rien ; le premier chargement est différé et attend que la base de l'API soit prête (attente bornée, pas un essai).
 // Les messages d'erreur du pilote ne sont jamais recopiés (ils peuvent porter une adresse) : le motif est écrit ici, avec des NOMS et des comptes.
+const path = require('path');
 const etat = require('./etat');
-const { construireVersion } = require('./version');
+const { depuisPaquet } = require('./version');
+const { calculer } = require('./calcul');
+const { sourceCartes, PROJECTIONS } = require('./source');
 
 const JOUR_MS = 24 * 3600 * 1000;
-const REPRISE_MS = 30 * 60 * 1000, REPRISES_MAX = 3;
 const PERTE_MAX = 0.10;
+const FIL = path.join(__dirname, 'fil.js');
+// plafonds du fil : un dépassement tue LE FIL (ERR_WORKER_OUT_OF_MEMORY), jamais le processus principal
+const LIMITES_FIL = Object.freeze({ maxOldGenerationSizeMb: 192, maxYoungGenerationSizeMb: 24, codeRangeSizeMb: 16, stackSizeMb: 4 });
+const DELAI_FIL_MS = 30 * 60 * 1000;
+const ATTENTE_BASE_MS = 10 * 60 * 1000;
 
-// Ce que l'API lit dans `cartes` : TROIS collections, ces champs, rien d'autre (la liste du rapport ; le banc de lecture seule refuse toute autre collection).
-const PROJECTIONS = Object.freeze({
-    sets: Object.freeze({ idExpansion: 1, nomAffichage: 1, tirage: 1, region: 1, code: 1, 'bulba.expansion': 1 }),
-    cartes: Object.freeze({ nomEn: 1, sets: 1, 'impressions.tirage': 1, 'impressions.expansion': 1, 'impressions.numero': 1, 'impressions.total': 1, 'impressions.rarete': 1,
-        'images.set': 1, 'images.cleR2': 1, 'images.w': 1, 'images.h': 1, 'images.numero': 1, 'images.langue': 1, 'images.languePreuve': 1, 'images.source': 1,
-        'images.vignette.cleR2': 1, 'images.vignette.w': 1, 'images.vignette.h': 1 }),
-    cartes_produits: Object.freeze({ carteId: 1, idProduct: 1, idExpansion: 1, numeroFiche: 1, slug: 1, slugSet: 1, visuelSubstitut: 1 })
-});
-
-class Echec extends Error { constructor(motif, transitoire) { super(motif); this.motif = motif; this.transitoire = transitoire; } }
+class Echec extends Error { constructor(motif) { super(motif); this.motif = motif; } }
 const nom = e => (e && (e.codeName || e.code || e.name)) || 'erreur';
 
-/** La source par défaut : la lecture seule de `cartes` (ouvrir injectable). Rend { ok:true, sets, docs, lignes, fermer } ou { ok:false, raison }. */
-async function sourceCartes({ env = process.env, ouvrir = require('./lecture-seule').ouvrir } = {}) {
-    const o = await ouvrir({ env });
-    if (!o.ok) return o;
-    const c = o.cartes;
-    try {
-        const sets = await c.collection('sets').find({}, { projection: PROJECTIONS.sets }).toArray();
-        const docs = await c.collection('cartes').find({}, { projection: PROJECTIONS.cartes }).toArray();
-        const lignes = await c.collection('cartes_produits').find({}, { projection: PROJECTIONS.cartes_produits }).toArray();
-        return { ok: true, sets, docs, lignes, fermer: () => c.fermer() };
-    } catch (e) { try { await c.fermer(); } catch { /* déjà fermée */ } throw e; }
+/** Le calcul EN LIGNE (les bancs, la mesure sans fil) : même `calculer` que dans le fil. @returns {Promise<{ok, version, comptes} | {ok:false, raison}>} */
+function executerEnLigne({ source, regle = () => require('./regle-site').regleEmbarquee(), decider }) {
+    return async ({ catalogue }) => {
+        const src = await source();
+        if (!src.ok) return { ok: false, raison: src.raison };
+        try { const r = await calculer({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: catalogue, regle: await regle(), decider }); return { ok: true, version: r.version, comptes: r.comptes }; }
+        finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
+    };
 }
+
+/** Le calcul dans un FIL PLAFONNÉ. `creerFil(donnees, limites)` est injectable (le banc passe un fil de test, ou un faux). */
+function executerDansUnFil({ env = process.env, limites = LIMITES_FIL, delaiMs = DELAI_FIL_MS, creerFil = null, fichierFil = FIL } = {}) {
+    return async ({ catalogue }) => {
+        const j = require('./lecture-seule').jugerVariables(env);                       // le refus de configuration se juge ICI, avant de lancer un fil
+        if (!j.ok) return { ok: false, raison: j.raison };
+        const ids = new Int32Array(catalogue.size), metas = new Int32Array(catalogue.size);
+        let i = 0; for (const [a, b] of catalogue) { ids[i] = a; metas[i] = Number.isInteger(b) ? b : -1; i++; }
+        // seules les DEUX variables de lecture passent au fil, explicitement : ce que dotenv ajouterait à l'environnement du fil ne compte pas
+        const donnees = { env: { MONGODB_CARTES_LECTURE_URI: env.MONGODB_CARTES_LECTURE_URI, MONGODB_CARTES_URI: env.MONGODB_CARTES_URI }, ids, metas };
+        const { Worker } = require('worker_threads');
+        const w = creerFil ? creerFil(donnees, limites) : new Worker(fichierFil, { workerData: donnees, resourceLimits: limites, transferList: [ids.buffer, metas.buffer] });
+        return new Promise(resolve => {
+            let fini = false;
+            const clore = r => { if (fini) return; fini = true; clearTimeout(minuteur); try { w.terminate(); } catch { /* déjà terminé */ } resolve(r); };
+            const minuteur = setTimeout(() => clore({ ok: false, raison: `fil arrêté : délai de ${Math.round(delaiMs / 60000)} min dépassé` }), delaiMs);
+            if (minuteur.unref) minuteur.unref();
+            w.on('message', m => {
+                if (!m || typeof m !== 'object') return clore({ ok: false, raison: 'fil : message illisible' });
+                if (m.type === 'refus') return clore({ ok: false, raison: String(m.raison).slice(0, 300) });
+                if (m.type === 'erreur') return clore({ ok: false, raison: `fil en erreur (${String(m.nom).slice(0, 40)})` });
+                if (m.type !== 'resultat') return clore({ ok: false, raison: 'fil : message inconnu' });
+                try { clore({ ok: true, version: m.donnees ? depuisPaquet(m.donnees) : null, comptes: m.comptes }); } catch (e) { clore({ ok: false, raison: `fil : résultat illisible (${nom(e)})` }); }
+            });
+            w.on('error', e => clore({ ok: false, raison: e && e.code === 'ERR_WORKER_OUT_OF_MEMORY' ? `fil tué : dépassement de mémoire (plafond ${limites.maxOldGenerationSizeMb} Mo de tas)` : `fil en erreur (${nom(e)})` }));
+            w.on('exit', code => clore({ ok: false, raison: `fil terminé sans résultat (code ${code})` }));
+        });
+    };
+}
+
+/** La voie « fichier précalculé » : `lireFichier()` rend l'archive (gzip) ; la structure est jugée par format.js. Aucun calcul, aucune lecture de `cartes`. */
+function executerDepuisFichier({ lireFichier }) {
+    return async () => {
+        const F = require('./format');
+        let v, ent;
+        try { const plein = await F.decompresser(await lireFichier()); v = F.deserialiser(plein); ent = F.lireEntete(plein).entree || {}; } catch (e) { return { ok: false, raison: e && e.name === 'FormatInvalide' ? `fichier refusé : ${e.motif}` : `fichier illisible (${nom(e)})` }; }
+        return { ok: true, version: v, comptes: { sets: ent.sets ?? 0, cartes: ent.cartes ?? 0, produits: ent.produits ?? 0, catalogue: ent.catalogue ?? 0, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs,
+            fichesLiees: v.comptes.fichesLiees, setsAvecLiens: v.comptes.setsAvecLiens, produitsLies: v.comptes.produitsLies } };
+    };
+}
+
+function creerChargeur(opts = {}) {
+    const catalogue = opts.catalogue || catalogueApi;
+    const executer = opts.executer || (opts.source ? executerEnLigne({ source: opts.source, regle: opts.regle, decider: opts.decider }) : executerDansUnFil({ env: opts.env || process.env }));
+    const pret = opts.pret || attendreBase;
+    const journal = opts.journal || (m => (/^(✅|ℹ️)/.test(m) ? console.log(m) : console.error(m)));
+    const T = opts.minuteurs || { setInterval, clearInterval };
+    const planifier = opts.planifier || (fn => setImmediate(fn));
+    let enCours = false, jour = null, vivant = false;
+
+    /** @returns {Promise<{ ok: boolean, motif?: string, comptes?: object }>} — ne lève jamais. */
+    async function charger() {
+        if (enCours) return { ok: false, motif: 'un chargement est déjà en cours' };
+        enCours = true;
+        const t0 = Date.now();
+        let comptes = {};
+        try {
+            const meta = await catalogue();
+            const r = await executer({ catalogue: meta });
+            if (!r.ok) { journal(`ℹ️ [v2 chargeur] sans chargement, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'} : ${r.raison}`); return { ok: false, motif: r.raison }; }
+            comptes = r.comptes; const v = r.version;
+            const dit = `sets ${comptes.sets} · cartes ${comptes.cartes} · cartes_produits ${comptes.produits} · catalogue ${comptes.catalogue} · entrées ${comptes.visuels} · refusées ${comptes.refusees}${comptes.refusees ? ` (${Object.entries(comptes.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` : ''} · fiches liées ${comptes.fichesLiees} (produits ${comptes.produitsLies}, sets ${comptes.setsAvecLiens})`;
+            // les critères d'ÉCHEC : écrits par ce qu'ils protègent (jamais une version vide ni amputée)
+            if (!v || comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`);
+            if (comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`);
+            const prev = etat.version();
+            if (prev) {
+                const perdu = (a, b) => a > 0 && b < a * (1 - PERTE_MAX);
+                if (perdu(prev.comptes.visuels, comptes.visuels)) throw new Echec(`perte de plus de 10 % des visuels (${prev.comptes.visuels} → ${comptes.visuels}) — ${dit}`);
+                if (perdu(prev.comptes.fichesLiees, comptes.fichesLiees)) throw new Echec(`perte de plus de 10 % des fiches liées (${prev.comptes.fichesLiees} → ${comptes.fichesLiees}) — ${dit}`);
+            }
+            etat.installer(v);                                                       // LA bascule : un seul pointeur, la version précédente n'est plus référencée ensuite
+            journal(`✅ [v2 chargeur] chargé en ${((Date.now() - t0) / 1000).toFixed(1)} s : ${dit} · ${(v.octets.total / 1048576).toFixed(1)} Mo en colonnes`);
+            return { ok: true, comptes };
+        } catch (e) {
+            const motif = e instanceof Echec ? e.motif : `lecture impossible (${nom(e)})`;
+            journal(`❌ [v2 chargeur] échec, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'}, prochain essai au rechargement quotidien : ${motif}`);
+            return { ok: false, motif, comptes };
+        } finally { enCours = false; }
+    }
+
+    /** Un essai du cycle : attendre la base de l'API (bornée), puis UN chargement. Jamais de reprise. */
+    async function essai() {
+        if (!vivant) return;
+        if (!(await pret())) { journal('❌ [v2 chargeur] la base de l\'API n\'est pas prête : pas de chargement, prochain essai au rechargement quotidien'); return; }
+        await charger();
+    }
+    /** Ne lit RIEN : le premier chargement est différé, le minuteur est quotidien. Idempotent (un seul minuteur vivant). */
+    function demarrer() {
+        arreter();
+        vivant = true;
+        planifier(() => { essai(); });
+        jour = T.setInterval(() => { essai(); }, JOUR_MS);
+        if (jour && jour.unref) jour.unref();
+    }
+    function arreter() { vivant = false; if (jour) { T.clearInterval(jour); jour = null; } }
+    return { charger, demarrer, arreter };
+}
+
 /** Le catalogue de l'API (sa propre base) : idProduct → idMetacard. */
 async function catalogueApi() {
     const m = new Map();
@@ -45,75 +139,12 @@ async function catalogueApi() {
     for await (const c of curseur) m.set(c.idProduct, c.idMetacard);
     return m;
 }
-
-function creerChargeur(opts = {}) {
-    const source = opts.source || (() => sourceCartes({ env: opts.env || process.env }));
-    const catalogue = opts.catalogue || catalogueApi;
-    const regle = opts.regle || (() => require('./regle-site').regleEmbarquee());
-    const decider = opts.decider || (a => require('./decision').decider(a));
-    const journal = opts.journal || (m => (/^(✅|ℹ️)/.test(m) ? console.log(m) : console.error(m)));
-    const T = opts.minuteurs || { setTimeout, setInterval, clearTimeout, clearInterval };
-    const planifier = opts.planifier || (fn => setImmediate(fn));
-    let enCours = false, jour = null, reprise = null, reprises = 0, vivant = false;
-
-    /** @returns {Promise<{ ok: boolean, motif?: string, transitoire?: boolean, comptes?: object }>} — ne lève jamais. */
-    async function charger() {
-        if (enCours) return { ok: false, motif: 'un chargement est déjà en cours', transitoire: false };
-        enCours = true;
-        const t0 = Date.now();
-        let comptes = {};
-        try {
-            const src = await source();
-            if (!src.ok) { journal(`ℹ️ [v2 chargeur] sans chargement : ${src.raison}`); return { ok: false, motif: src.raison, transitoire: false }; }
-            let r;
-            try {
-                const meta = await catalogue();
-                r = await decider({ sets: src.sets, docs: src.docs, lignes: src.lignes, metacarte: meta, regle: await regle(), cederLaMain: true });
-                comptes = { sets: src.sets.length, cartes: src.docs.length, produits: src.lignes.length, catalogue: meta.size };
-            } finally { try { await src.fermer(); } catch { /* déjà fermée */ } }
-            const v = construireVersion({ entrees: r.entrees, liens: r.liens });
-            comptes = { ...comptes, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs, setsAvecLiens: v.comptes.setsAvecLiens, fichesLiees: v.comptes.fichesLiees, produitsLies: v.comptes.produitsLies };
-            const dit = `sets ${comptes.sets} · cartes ${comptes.cartes} · cartes_produits ${comptes.produits} · catalogue ${comptes.catalogue} · entrées ${v.comptes.visuels} · refusées ${v.comptes.refusees}${v.comptes.refusees ? ` (${Object.entries(v.comptes.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` : ''} · fiches liées ${v.comptes.fichesLiees} (produits ${v.comptes.produitsLies}, sets ${v.comptes.setsAvecLiens})`;
-            // les critères d'ÉCHEC : écrits par ce qu'ils protègent (jamais une version vide ni amputée)
-            if (v.comptes.visuels === 0) throw new Echec(`0 visuel sur une base non vide — ${dit}`, false);
-            if (v.comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`, false);
-            const prev = etat.version();
-            if (prev) {
-                const perdu = (a, b) => a > 0 && b < a * (1 - PERTE_MAX);
-                if (perdu(prev.visuels.size, v.comptes.visuels)) throw new Echec(`perte de plus de 10 % des visuels (${prev.visuels.size} → ${v.comptes.visuels}) — ${dit}`, false);
-                if (perdu(prev.comptes.fichesLiees, v.comptes.fichesLiees)) throw new Echec(`perte de plus de 10 % des fiches liées (${prev.comptes.fichesLiees} → ${v.comptes.fichesLiees}) — ${dit}`, false);
-            }
-            etat.installer(v);                                                       // LA bascule : un seul pointeur, la version précédente n'est plus référencée ensuite
-            journal(`✅ [v2 chargeur] chargé en ${((Date.now() - t0) / 1000).toFixed(1)} s : ${dit}`);
-            return { ok: true, comptes };
-        } catch (e) {
-            const motif = e instanceof Echec ? e.motif : `lecture impossible (${nom(e)})`;
-            const transitoire = e instanceof Echec ? e.transitoire : true;
-            journal(`❌ [v2 chargeur] échec, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'} : ${motif}${e instanceof Echec ? '' : ` — ${Object.entries(comptes).map(([k, n]) => `${k} ${typeof n === 'object' ? '…' : n}`).join(' · ') || 'aucun compte'}`}`);
-            return { ok: false, motif, transitoire, comptes };
-        } finally { enCours = false; }
-    }
-
-    async function tenter() {
-        const r = await charger();
-        if (!vivant) return r;
-        if (r.ok) reprises = 0;
-        else if (r.transitoire && reprises < REPRISES_MAX) { reprises++; reprise = T.setTimeout(tenter, REPRISE_MS); if (reprise && reprise.unref) reprise.unref(); }
-        return r;
-    }
-    /** Ne lit RIEN et ne rend la main à personne : le premier chargement est différé, le minuteur est quotidien. Idempotent (un seul minuteur vivant). */
-    function demarrer() {
-        arreter();
-        vivant = true; reprises = 0;
-        planifier(() => { if (vivant) tenter(); });
-        jour = T.setInterval(() => { reprises = 0; tenter(); }, JOUR_MS);
-        if (jour && jour.unref) jour.unref();
-    }
-    function arreter() {
-        vivant = false;
-        if (jour) { T.clearInterval(jour); jour = null; }
-        if (reprise) { T.clearTimeout(reprise); reprise = null; }
-    }
-    return { charger, demarrer, arreter };
+/** Attend la connexion de la base de l'API (bornée) : une ATTENTE, pas un essai de chargement. */
+async function attendreBase({ delaiMs = ATTENTE_BASE_MS, pasMs = 5000 } = {}) {
+    const mongoose = require('mongoose');
+    const fin = Date.now() + delaiMs;
+    while (mongoose.connection.readyState !== 1) { if (Date.now() >= fin) return false; await new Promise(r => { const t = setTimeout(r, pasMs); if (t.unref) t.unref(); }); }
+    return true;
 }
-module.exports = { creerChargeur, sourceCartes, catalogueApi, PROJECTIONS, JOUR_MS, REPRISE_MS, REPRISES_MAX, PERTE_MAX };
+
+module.exports = { creerChargeur, executerEnLigne, executerDansUnFil, executerDepuisFichier, sourceCartes, catalogueApi, attendreBase, PROJECTIONS, JOUR_MS, PERTE_MAX, LIMITES_FIL, DELAI_FIL_MS, FIL };

@@ -1,15 +1,16 @@
 'use strict';
-// B1b.4 — les visuels servis depuis NOS fichiers (collection `visuels`, importée par v2/migrations/importer-visuels.js) et les impressions
-// d'une métacarte. Les règles d'admission d'un visuel vivent dans le SITE (§5 Q11) : le serveur sert ce qu'on lui a DONNÉ, et ne les recopie pas.
-// 🔑 L'API ne lit JAMAIS la base `cartes` (autre grappe, MONGODB_CARTES_URI) : tout ce qu'elle sert d'une impression (numéro, total, rareté, set,
-// variante, lien) est porté par le document `visuels` ET DONNÉ À L'IMPORT. Seul le guide de prix se lit en direct (il vit dans la base de l'API).
+// B1b.4 puis COTES-VISUELS — les visuels servis depuis NOS fichiers et les impressions d'une métacarte, lus dans la version EN MÉMOIRE que le chargeur (v2/chargeur) bascule d'un geste.
+// Les règles d'admission d'un visuel vivent dans le SITE (§5 Q11) : le serveur sert ce qu'on lui a DONNÉ (la décision, calculée hors de la requête), et ne les recopie pas.
+// 🔑 La collection `visuels` N'EXISTE PLUS (décision du testeur, 2026-10-11 : aucun import dans la grappe de production). Ce module ne lit AUCUNE collection de `cartes` ; seul le guide
+// de prix se lit en direct (il vit dans la base de l'API). Chaque entrée chargée passe par lireEntree (v2/chargeur/version.js).
 // Écrit par ce qu'il AUTORISE : une clé n'est servie que si elle est un chemin relatif propre ; le reste donne null.
 const { lireConfig } = require('../config');
 const db = require('../db');
+const etat = require('../chargeur/etat');
 const { VARIANTES } = require('./produit');
 
 // LISTE FERMÉE des collections que ce module lit. Tout autre nom est refusé AVANT la lecture ; un test échoue si ce fichier en nomme une autre.
-const COLLECTIONS_LUES = Object.freeze(['visuels', 'guide_prix']);
+const COLLECTIONS_LUES = Object.freeze(['guide_prix']);
 function colLue(nom) {
     if (!COLLECTIONS_LUES.includes(nom)) throw new Error(`visuels.js : la collection "${nom}" n'est pas lisible (liste fermée : ${COLLECTIONS_LUES.join(', ')}) — l'API ne lit jamais la base cartes`);
     return db.col(nom);
@@ -87,10 +88,14 @@ function prixGuide(g) {
 function creerVisuels(opts = {}) {
     const cfg = opts.cfg || lireConfig();
     const hote = cfg.images.hotesPublics[0];
+    // La version EN MÉMOIRE (v2/chargeur/etat.js) : relue à CHAQUE appel, jamais gardée (la bascule du chargeur est visible tout de suite). Aucune version = l'état « sans visuel ».
+    const version = opts.version || (() => etat.version());
+    /** L'entrée d'un produit (le document validé par lireEntree au chargement), ou null. Synchrone : la mémoire seule. */
+    function entree(idProduct) { const v = version(); return v && Number.isInteger(idProduct) ? v.entree(idProduct) : null; }
 
     async function resoudre(idProduct) {
         if (!Number.isInteger(idProduct)) return null;
-        const d = await colLue('visuels').findOne({ idProduct });
+        const d = entree(idProduct);
         if (!d) return null;
         const v = fichier(d.vignette, 'vignette').fichier;
         if (!v) return null;                                                   // une clé interdite posée hors import n'est jamais servie
@@ -101,8 +106,9 @@ function creerVisuels(opts = {}) {
     // Les impressions d'une métacarte : les documents `visuels` de même idMetacard (index visuels_metacarte), rien d'autre. Le lien n'est servi
     // que si numéro ET rareté sont connus (la rareté vient de l'import, lue sur cartes.impressions[].rarete, jamais devinée).
     async function impressions(idMetacard) {
-        if (!Number.isInteger(idMetacard)) return [];
-        const docs = await colLue('visuels').find({ idMetacard }).toArray();
+        const v = version();
+        if (!v || !Number.isInteger(idMetacard)) return [];
+        const docs = v.produitsDeMetacarte(idMetacard).map(id => v.entree(id)).filter(Boolean);
         if (!docs.length) return [];
         const guides = new Map((await colLue('guide_prix').find({ idProduct: { $in: docs.map(d => d.idProduct) } }).toArray()).map(g => [g.idProduct, g]));
         const sortie = docs.map(d => {
@@ -116,7 +122,7 @@ function creerVisuels(opts = {}) {
         });
         return sortie.sort((a, b) => (Number(a.numero) || 1e9) - (Number(b.numero) || 1e9) || a.idProduct - b.idProduct);
     }
-    return { resoudre, impressions };
+    return { resoudre, impressions, entree };
 }
 
-module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION };
+module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION, prix, dateGuide };

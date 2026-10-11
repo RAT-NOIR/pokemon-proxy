@@ -97,6 +97,7 @@ module.exports = {
         });
         demarrerBalayage();
         demarrerPurge();
+        require('../chargeur/montage').demarrerPourConfig(cfg);        // COTES-VISUELS : ne lit RIEN ici (premier chargement différé) ; en banc : aucun réseau
     },
     balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge
 };

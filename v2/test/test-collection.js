@@ -102,6 +102,18 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         H.v('   une seconde fiche : 2, majLe avancé', [p2.json.possedees, d2.majLe.getTime() > d1.majLe.getTime()], [2, true]);
         const g = await lireSet(sv, A, 'Set-Essai');
         H.v('   GET du set : les deux clés (triées), cotes {}, majLe ISO', [g.json.possedees, g.json.cotes, g.json.majLe === d2.majLe.toISOString()], [['895789|001', '895790|-'], {}, true]);
+        // COTES-VISUELS : avec une version chargée (lien fiche → produits EN MÉMOIRE) et le guide de l'API, la route rend la cote de chaque fiche du set — la règle du contrat §1.8
+        {
+            const VB = require('./_visuels-banc');
+            await raw('guide_prix').insertMany([{ idProduct: 1, trend: 4.5, guideDu: '2026-10-01' }, { idProduct: 2, trend: 2, guideDu: '2026-10-01' }, { idProduct: 3, trend: 3, guideDu: '2026-10-01' }]);
+            VB.installer([VB.doc(1), VB.doc(2), VB.doc(3)], [['Set-Essai', '895789|001', [1]], ['Set-Essai', '895790|-', [2, 3]], ['Autre-Set', '7|001', [1]]]);
+            const gc = await lireSet(sv, A, 'Set-Essai');
+            H.v('   avec un lien chargé : cotes = la cote de la fiche à UN produit, null pour la fiche dont les deux produits ne s\'accordent pas (jamais une moyenne)', gc.json.cotes, { '895789|001': { tendance: 4.5, date: '2026-10-01' }, '895790|-': null });
+            H.v('   un set sans lien : cotes {} ; la réponse garde sa forme', [(await lireSet(sv, A, 'Set-Sans-Lien')).json.cotes, Object.keys(gc.json)], [{}, ['success', 'set', 'possedees', 'cotes', 'majLe']]);
+            VB.vider();
+            H.v('   aucune version chargée : cotes {} (l\'état « sans visuel »)', (await lireSet(sv, A, 'Set-Essai')).json.cotes, {});
+            await raw('guide_prix').deleteMany({});
+        }
         await put(sv, A, 'Autre-Set', '12|SWSH155 (Top Left)', true);
         const l = await lireSets(sv, A);
         H.v('   GET /api/collection : seulement les sets cochés, triés par slug, { slug, possedees, majLe }', l.json.sets.map(s => [s.slug, s.possedees, typeof s.majLe === 'string' && !Number.isNaN(Date.parse(s.majLe))]), [['Autre-Set', 1, true], ['Set-Essai', 2, true]]);

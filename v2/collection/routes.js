@@ -9,6 +9,7 @@ const S = require('../comptes/sessions');
 const { resoudrePorteur, exigerSession } = require('../porteur');
 const F = require('./forme');
 const svc = require('./service');
+const { cotesDuSet } = require('./cotes');
 
 const nomErreur = e => (e && e.name) || 'Error';           // jamais e.message : un pilote peut y mettre une adresse
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
@@ -44,8 +45,10 @@ function routesCollection(router, cfg) {
             if (!F.slugValide(req.params.slug)) return entree(res, 'slug');
             const s = await svc.lireSet(compteId(req), req.params.slug);
             res.setHeader('Cache-Control', 'no-store');
-            // `cotes` : toujours {} dans cette version — la cote d'une fiche demande une table fiche → produits qui vit dans la base `cartes`, que l'API ne lit pas (CONTRAT-API-V2.md §1.8). Le site lit {} comme « null pour toute fiche ».
-            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, cotes: {}, majLe: s.majLe ? s.majLe.toISOString() : null });
+            // `cotes` : la cote du guide de chaque fiche du set connue du lien EN MÉMOIRE (collection/cotes.js, CONTRAT-API-V2.md §1.8). Aucun chargement réussi, ou une panne du guide : {} — le site lit {} comme « null pour toute fiche ».
+            let cotes = {};
+            try { cotes = await cotesDuSet(req.params.slug); } catch (e) { console.error(`❌ [v2 collection] cotes (le guide ne répond pas, {} rendu) : ${nomErreur(e)}`); }
+            return res.status(200).json({ success: true, set: req.params.slug, possedees: s.cles, cotes, majLe: s.majLe ? s.majLe.toISOString() : null });
         } catch (e) { console.error(`❌ [v2 collection] lecture d'un set : ${nomErreur(e)}`); return indispo(res); }
     });
 

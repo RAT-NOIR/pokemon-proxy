@@ -65,9 +65,11 @@ const corpsId = (o = {}) => ({ contrat: 2, imageUrls: [IMAGE], title: null, desc
 
 // ── catalogue FABRIQUÉ (seul l'idProduct de A et B vient de la charge)
 const ID_A = 895789, ID_B = 895790, ID_C = 895791, EXP = 990001;
-async function semer(mode) {                               // 'double' (A, B) | 'triple' (A, B, C sans prix) | 'vide'
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
-    if (mode === 'vide') return;
+const VB = require('./_visuels-banc'); const VIS = new Map(); let FICHIER_VIS = null;
+async function semer(mode) {                              // 'double' (A, B) | 'triple' (A, B, C sans prix) | 'vide'
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
+    VIS.clear();
+    if (mode === 'vide') { VB.vider(); return; }
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     // 'double' : les prix de test-retour-live-v2.js (1180 contre 1) — deux prix très écartés, la chaîne héritée pose une vraie question et écrit sa ligne de journal ;
     // avec 1,00 contre 2,50 elle REFUSE par égalité (remboursement différé, question réservée par v2) et n'écrit aucune ligne de journal : pas de retour-live possible.
@@ -76,8 +78,9 @@ async function semer(mode) {                               // 'double' (A, B) | 
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 + (id === ID_C ? 1 : 0) });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
         if (trend !== null) await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: 0.5, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
-        await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+        VIS.set(id, VB.doc(id, { variante }));
     }
+    FICHIER_VIS = VB.fichier([...VIS.values()]);          // installe la version dans CE processus ET écrit l'archive pour l'enfant
 }
 const journalDe = async scanId => { for (let k = 0; k < 40; k++) { const l = await raw('journal_scans').findOne({ _id: new mongoose.Types.ObjectId(scanId) }); if (l) return l; await attendre(150); } return null; };
 // une clé d'idempotence DÉJÀ prise par une requête en cours (le seul moyen honnête de fabriquer le 429 DEBIT « requête identique en cours » sans course)
@@ -111,7 +114,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     const { demarrer } = require('../../verrou/serveur');
     await semer('double');
     const FAUX = path.join(__dirname, 'faux-reseau-scanner.js');          // = faux-reseau-v2.js (le faux réseau du verrou) + le data-URL du scanner rejoué
-    const baseEnv = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '' };
+    const baseEnv = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '', V2_VISUELS_BANC_FICHIER: FICHIER_VIS };
     const srv = await demarrer(FAUX, { ...baseEnv, RM_API_V2: '1' });
     if (!await srv.attendreMongo()) throw new Error('Mongo non connecté');
     const U = `http://127.0.0.1:${srv.port}`;
