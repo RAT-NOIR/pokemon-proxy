@@ -20,10 +20,30 @@ const { corrigerImpressions } = require('./corrections-impressions');
 const PARAMS_TEXTE = new Set(['effect', 'jtrans', 'dex', 'jdex', 'transdex', 'text', 'jtext', 'rule', 'jrule', 'trivia', 'jgroup']);
 
 /**
+ * Retire les commentaires HTML AVANT tout découpage (sémantique MediaWiki pour un commentaire FERMÉ : `<!--` … `-->`,
+ * non gourmand, multi-lignes). Sans cela le découpage au `|` lit le texte commenté (`cardno=102<!--` + une
+ * impression japonaise fantôme, 2026-10-11).
+ * ⚠️ Un `<!--` JAMAIS FERMÉ ne court PAS jusqu'à la fin (MediaWiki le ferait) : seul l'ouvreur est retiré. RAISON : l'archive R2
+ * est ÉPURÉE, le `-->` hors gabarit y est perdu ; Master Ball (25399) perdait 20 impressions.
+ * ⚠️ LIMITE CONNUE : un commentaire fermé qui TRAVERSE une frontière de gabarit (ouvert dans un paramètre, fermé après le `}}`)
+ * est retiré entier, comme MediaWiki — la structure des gabarits change (l'infobox peut avaler les suivants). Sur une page BRUTE
+ * (collecte neuve) une recollecte peut donc extraire autre chose que le rejeu de l'archive épurée. Fixé par test-wikitext-commentaires.js.
+ * ⚠️ Les positions `debut`/`fin` des gabarits se rapportent au texte SANS commentaires.
+ */
+function sansCommentaires(texte) {
+    const s = String(texte ?? '');
+    if (!s.includes('<!--')) return s;
+    // ⚠️ DÉVIATION ASSUMÉE de MediaWiki, MESURÉE : un `<!--` sans `-->` y court jusqu'à la fin, mais l'archive R2 est ÉPURÉE
+    // (le texte hors gabarit est perdu, le `-->` avec) — Master Ball (25399) perdait 20 impressions. Seul l'ouvreur est retiré.
+    return s.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '');
+}
+
+/**
  * Gabarits de premier niveau d'un wikitext.
  * @returns {Array<{nom: string, params: object, positionnels: string[], brut: string, debut: number, fin: number}>}
  */
 function gabarits(texte) {
+    texte = sansCommentaires(texte);
     const out = [];
     let i = 0;
     const n = texte.length;
@@ -549,6 +569,7 @@ function natureIgnoree(brut) {
  *     que le filtre a écartée (sa PREMIÈRE référence désigne autre chose).
  */
 function entreesDeLaSetlist(texte, b) {
+    texte = sansCommentaires(texte);   // le repli « tout le wikitext » lit le texte par expressions régulières, hors gabarits
     const echapper = n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const nomsExpansion = [].concat(b.expansion);
     const nomsSections = b.setlist === null ? null : (b.setlist || nomsExpansion);
@@ -613,4 +634,4 @@ function entreesDeLaSetlist(texte, b) {
     return { entrees, sections, surToutLeWikitext, chemin, lues, horsSet, jetonDominant, masquees };
 }
 
-module.exports = { gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
+module.exports = { sansCommentaires, gabarits, epurer, faitsDeCarte, nomDeLaCarte, faitsDeSet, sectionsSetlist, entreeDeSetlist, entreesDeLaSetlist, natureIgnoree, RE_TCG_ID, tcgIdLisible, plat, nomDePage, numeroTotal, contientGabarit, cheminsAGabarit, PARAMS_TEXTE, ENERGIE_DE_BASE };
