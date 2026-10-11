@@ -265,7 +265,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     await semer('triple');
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources'); const { assembler, LOTS } = require('../index');          // LOTS : la liste de v2/index.js, UNE seule définition (tour 1, I7)
-    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 7);
+    H.vrai(`LOTS lu de v2/index.js : ${LOTS.length} lots`, Array.isArray(LOTS) && LOTS.length === 8);   // 7 → 8 : le lot COLLECTION entre dans LOTS (ruling 1 du lot) ; le dénominateur suit la liste, aucune garde n'est desserrée
     const { creerCourrierMemoire } = require('../comptes/courrier');
     const courrier = creerCourrierMemoire();
     registre.fournir('courrier', courrier); registre.fournir('turnstile', { verifier: async () => true });
@@ -595,6 +595,41 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await rep('même Idempotency-Key encore en cours (DEBIT)', 429, c, rb.json.scanId, { choix: 'a' }, siteH(c.cookie, { 'idempotency-key': k2 }));
         void r1;
     }
+    // « Ma collection » (lot COLLECTION) : chaque statut documenté des trois routes, sur un montage aux bornes et au limiteur RÉDUITS (2 clés par set, 3 par compte, 5 écritures par heure) pour les atteindre sans milliers de requêtes
+    {
+        const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, clesParSet: 2, clesParCompte: 3, setsParCompte: 10 } };
+        const svC = await monter(cfgC), U = svC.url;
+        const ch = (slug, cle) => `/api/collection/sets/${encodeURIComponent(slug)}/fiches/${encodeURIComponent(cle)}`;
+        const R_PUT = 'PUT /api/collection/sets/{slug}/fiches/{cle}', R_SET = 'GET /api/collection/sets/{slug}', R_LISTE = 'GET /api/collection';
+        const c1 = await compte();
+        await jouer(U, R_LISTE, 'compte sans rien de coché', 200, '/api/collection', { entetes: siteH(c1.cookie) });
+        await jouer(U, R_SET, 'set jamais touché (possedees [], majLe null)', 200, '/api/collection/sets/Banc-Set', { entetes: siteH(c1.cookie) });
+        await jouer(U, R_PUT, 'cocher une fiche', 200, ch('Banc-Set', '895789|001'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
+        await jouer(U, R_PUT, 'cocher une fiche sans numéro (« - »)', 200, ch('Banc-Set', '895790|-'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
+        await jouer(U, R_PUT, 'set plein (borne par set, CONFLIT borne-set)', 409, ch('Banc-Set', '895791|001'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
+        await jouer(U, R_LISTE, 'compte avec un set coché', 200, '/api/collection', { entetes: siteH(c1.cookie) });
+        await jouer(U, R_SET, 'set coché (deux clés, cotes {})', 200, '/api/collection/sets/Banc-Set', { entetes: siteH(c1.cookie) });
+        const c2 = await compte();
+        await jouer(U, R_PUT, 'compte : première fiche', 200, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(c2.cookie) });
+        await jouer(U, R_PUT, 'compte : deuxième fiche', 200, ch('S1', '2|1'), { corps: { possedee: true }, entetes: siteH(c2.cookie) });
+        await jouer(U, R_PUT, 'compte : troisième fiche, autre set', 200, ch('S2', '3|1'), { corps: { possedee: true }, entetes: siteH(c2.cookie) });
+        await jouer(U, R_PUT, 'compte plein (borne par compte, CONFLIT borne-compte)', 409, ch('S2', '4|1'), { corps: { possedee: true }, entetes: siteH(c2.cookie) });
+        await jouer(U, R_PUT, 'décocher', 200, ch('S2', '3|1'), { corps: { possedee: false }, entetes: siteH(c2.cookie) });
+        const c3 = await compte();
+        for (let i = 1; i <= 5; i++) await jouer(U, R_PUT, `écriture ${i} sur 5 permises`, 200, ch('S1', `${Math.ceil(i / 2)}|1`), { corps: { possedee: i % 2 === 1 }, entetes: siteH(c3.cookie) });
+        await jouer(U, R_PUT, 'limiteur d\'écriture dépassé (DEBIT, Retry-After)', 429, ch('S1', '9|1'), { corps: { possedee: true }, entetes: siteH(c3.cookie) });
+        const c4 = await compte();
+        await jouer(U, R_SET, 'slug illisible (ENTREE slug)', 400, '/api/collection/sets/a%20b', { entetes: siteH(c4.cookie) });
+        await jouer(U, R_PUT, 'clé mal formée (ENTREE cle)', 400, ch('S1', 'abc'), { corps: { possedee: true }, entetes: siteH(c4.cookie) });
+        await jouer(U, R_PUT, 'corps sans booléen (ENTREE possedee)', 400, ch('S1', '1|1'), { corps: { possedee: 'oui' }, entetes: siteH(c4.cookie) });
+        await jouer(U, R_LISTE, 'sans session', 401, '/api/collection', { entetes: siteH(null) });
+        await jouer(U, R_SET, 'sans session', 401, '/api/collection/sets/Banc-Set', { entetes: siteH(null) });
+        await jouer(U, R_PUT, 'sans session', 401, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(null) });
+        await jouer(U, R_PUT, 'sans Origin du site (ORIGINE)', 403, ch('S1', '1|1'), { corps: { possedee: true }, entetes: { cookie: c4.cookie, ...ip() } });
+        const cnv = await compte({ verifie: false });
+        await jouer(U, R_PUT, 'compte non vérifié (VERIFICATION)', 403, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(cnv.cookie) });
+        await svC.fermer();
+    }
     // le banc réel (routes publiées au tour 1) et le paiement (route servie, NON publiée : « publiée quand implémentée »)
     {
         const x = await inst(3); mode = 'affirmee';
@@ -636,14 +671,17 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
             'DELETE /api/banc/contributions': { chemin: '/api/banc/contributions', corps: { jeton: 'jeton-inconnu-abcdefghij1234' } },
             'DELETE /api/compte/installations/{id}': { chemin: `/api/compte/installations/${'a'.repeat(32)}` },
             'POST /api/scanner/analyses': { chemin: '/api/scanner/analyses', form: true },
-            'POST /api/scanner/analyses/{id}/reponse': { chemin: `/api/scanner/analyses/${fauxId}/reponse`, corps: { choix: 'a' } }
+            'POST /api/scanner/analyses/{id}/reponse': { chemin: `/api/scanner/analyses/${fauxId}/reponse`, corps: { choix: 'a' } },
+            'GET /api/collection': { chemin: '/api/collection' },
+            'GET /api/collection/sets/{slug}': { chemin: '/api/collection/sets/Banc-Set' },
+            'PUT /api/collection/sets/{slug}/fiches/{cle}': { chemin: '/api/collection/sets/Banc-Set/fiches/1%7C001', corps: { possedee: true } }
         };
         const sansRequete = OPERATIONS.filter(o => o.route !== 'GET /ping' && !REQ503[o.route]).map(o => o.route);
         H.v('503 : chaque route de `paths` (hors /ping) a sa requête de la garde d\'index', sansRequete, []);
         for (const [route, q] of Object.entries(REQ503)) {
             const entetes = { origin: EXT, ...siteH(null), ...(q.entetes || {}) };
             if (q.form) await jouerFormulaire(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, formulaire(), { ...siteH('rm_session=x'), ...ip() }, { garde: true });
-            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') ? SITE : EXT } });
+            else await jouer(V, route, 'garde d\'index : routes v2 fermées', 503, q.chemin, { corps: q.corps, garde: true, entetes: { ...entetes, origin: route.includes('/compte') || route.includes('/scanner') || route.includes('/collection') ? SITE : EXT } });
         }
         pret.armer(M.verifierIndex);
     }

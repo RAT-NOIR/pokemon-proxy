@@ -38,6 +38,9 @@ Deux adresses pour le même serveur, même base, mêmes réponses : `https://api
 | `DELETE /api/compte/installations/{id}` | site | cookie | non | rien → `ReponseSimple` |
 | `POST /api/scanner/analyses` *(conditionnelle, lot B9)* | site | cookie | non | multipart `RequeteScanner` → `ReponseAnalyse` |
 | `POST /api/scanner/analyses/{id}/reponse` *(conditionnelle, lot B9)* | site | cookie | non | `RequeteReponse` → `ReponseQuestion` |
+| `GET /api/collection` | site | cookie | non | rien → `ReponseMesSets` (§1.8) |
+| `GET /api/collection/sets/{slug}` | site | cookie | non | rien → `ReponseCollectionSet` (§1.8) |
+| `PUT /api/collection/sets/{slug}/fiches/{cle}` | site | cookie, **compte vérifié** | non (idempotent par nature) | `RequeteCocher` → `ReponseCocher` (§1.8) |
 | `GET /ping` | les deux | aucune | non | santé ; v2 allumée, ajoute `versionMinExtension` |
 
 **Sans `contrat: 2` dans le corps, `POST /api/identifier` répond comme aujourd'hui** (la 1.0.x continue de marcher). De même `POST /api/solde` et `POST /api/retour-live` sans `Authorization: Bearer` gardent leur forme d'aujourd'hui.
@@ -737,6 +740,55 @@ Un prix lu à plus de 100 fois sous le guide du même produit (le défaut des mi
 - **Le scanner du site n'écrit jamais dans le banc** : sa route de réponse (`/api/scanner/analyses/{id}/reponse`) ne transmet au traitement que `scanId`, `choix` et `carte` ; un `consentementBanc` présenté au scanner est ignoré. Cette règle est tenue **deux fois** : à l'entrée du scanner (liste blanche) et dans le crochet du banc lui-même, qui ne CONSERVE (écriture d'objet, confirmation d'une ligne) que pour une surface autorisée — l'extension et l'installation — jamais pour `scanner`, ni pour une surface inconnue ou absente.
 - **Effacer n'est jamais conserver** : un abandon (`choix` = `aucune` ou `ne-sait-pas`) **efface** la ligne `attente` et son objet depuis **toute surface du même porteur** — y compris le scanner qui répond à un scan de l'extension sur le même compte. Aucun consentement n'est requis pour effacer.
 
+### 1.8 Ma collection (site) — lot COLLECTION
+
+Un compte coche, set par set, les fiches qu'il possède. **Trois routes, sur la session du compte** (cookie, comme le scanner). La forme est celle que le site a proposée (`DEMANDE-COLLECTION.md`, `collectionContrat.ts`) ; les écarts sont listés plus bas.
+
+```json schema=ReponseMesSets
+{
+  "success": true,
+  "sets": [
+    { "slug": "Fictif-Set", "possedees": 2, "majLe": "2026-10-10T09:00:00.000Z" }
+  ]
+}
+```
+
+```json schema=ReponseCollectionSet
+{
+  "success": true,
+  "set": "Fictif-Set",
+  "possedees": ["9000001|001", "9000002|-"],
+  "cotes": {},
+  "majLe": "2026-10-10T09:00:00.000Z"
+}
+```
+
+```json schema=RequeteCocher
+{ "possedee": true }
+```
+
+```json schema=ReponseCocher
+{ "success": true, "possedees": 3 }
+```
+
+- `GET /api/collection` : les seuls sets où **au moins une fiche** est cochée, triés par slug. `GET /api/collection/sets/{slug}` : les clés cochées (triées), `majLe` nul si rien n'est coché. `PUT /api/collection/sets/{slug}/fiches/{cle}` avec `{ "possedee": true | false }` rend le **nombre de fiches cochées du set après l'écriture**. Seul `{ possedee: booléen }` est admis (une clé de plus, un autre type : `400 ENTREE`, detail `possedee`). Les trois réponses portent `Cache-Control: no-store`.
+- **Idempotent.** `true` est un `$addToSet`, `false` un `$pull` : écrire deux fois rend le même nombre. `majLe` est la date de la dernière écriture **qui a changé quelque chose** (cocher une clé déjà cochée ne la bouge pas). Un set qui n'a plus aucune clé est supprimé.
+- **Identité.** Cookie de session seulement (un jeton d'installation rend `401 SESSION`). **Lire** demande une session. **Écrire** demande en plus `Origin: https://rat-market.fr` + `X-Rat-Market: 1` (`403 ORIGINE`) **et un compte vérifié** (`403 VERIFICATION`, sans `solde` : aucun crédit n'est en jeu). Raison : ces données sont stockées sur la grappe de production. Un compte non vérifié peut **lire** (il ne reçoit que du vide). L'ordre des refus : `SESSION`, `ORIGINE`, `VERIFICATION`, `DEBIT`, puis la forme (`slug`, `cle`, `possedee`), puis l'écriture.
+- **La clé d'une fiche** est `idInterne|numero` : `idInterne` est un entier positif sans zéro de tête (12 chiffres au plus) ; `numero` est le numéro de l'impression dans le set, ou `-` pour une fiche sans numéro. **Le serveur ne peut pas savoir si une clé désigne une fiche réelle** (l'API ne lit jamais la base `cartes`) : il en juge la **forme**, et la garde est écrite par ce qu'elle **autorise**. Un numéro : lettres, chiffres, espace, `( ) . ! ? -`, 32 caractères au plus, ni espace de tête ni de queue ; **jamais `|`**. Un slug : lettres, chiffres, `-` et `/`, 80 caractères au plus, ni début ni fin sur `-` ou `/`, jamais `//`. Ce jeu est **dérivé des données du site** (`CORRECTION-ILLUSTRATEURS.json`, `logos-officiels.json`, `LISTE-FICHES-SANS-VISUEL.json`, en lecture seule) : **39 648 clés et 410 slugs examinés, 39 646 clés et 410 slugs admis**. Les deux clés refusées (`295618|102<!--`, `294172|092<!--`) ont un numéro **corrompu à la source** (reste de commentaire wikitext) : elles rendent `400 ENTREE`, detail `cle`, et sont à corriger dans le catalogue. Une forme refusée rend `400 ENTREE` avec le champ nommé dans `detail` (`slug`, `cle`, `possedee`).
+- **Un slug peut contenir `/`** (les codes de set comme `S-P/ID`) : il s'envoie **encodé** (`S-P%2FID`) et arrive entier dans le paramètre. Le `/` non encodé est un autre chemin (404) ; un `%2F` encodé deux fois reste littéral (`%` refusé).
+- **Bornes**, écrites par ce qu'elles protègent (la grappe de production, 457 Mo pour un arrêt dur à 480 Mo) : **2 000 clés par set**, **20 000 clés par compte** (tous sets confondus) et **1 000 sets par compte** (le coût d'un document dépasse celui d'une clé : sans cette borne, 20 000 sets d'une clé chacun tiendraient dans la limite précédente). Un dépassement rend **`409 CONFLIT`**, detail `borne-set`, `borne-compte` ou `borne-sets`, le message nomme la borne ; rien n'est écrit, **rien n'est perdu** (une case refusée se dit). Cocher une clé **déjà** cochée n'est jamais refusé, décocher libère de la place. La borne par set est **atomique** dans l'écriture (un filtre sur la taille du tableau) ; les bornes par compte et par sets sont contrôlées **avant** l'écriture : deux écritures simultanées d'un même compte peuvent la franchir ensemble, **le dépassement est borné par le nombre d'écritures en vol** (au plus la limite d'écriture ci-dessous, chacune n'ajoutant qu'une clé), et l'écriture suivante voit le vrai total et est refusée.
+- **Limite d'écriture** : 1 000 `PUT` par compte et par heure (le limiteur existant, clé `collection`) ; au-delà `429 DEBIT` avec `reessayerDans` et `Retry-After`. La lecture n'est pas limitée.
+- **Stockage** : un document par (compte, set) dans la collection v2 `collection_fiches` (`{ compteId, set, cles, majLe }`, index unique `collection_cle`, gardé par la garde d'index : sans lui, `503`). Ni adresse, ni nom, ni IP.
+- **Suppression du compte** : `DELETE /api/compte` supprime aussi toute sa collection (aucun autre chemin ne supprime un compte ; `test-collection.js` le vérifie par le texte de la production).
+- **CORS** : le préflight du site sur `/api/collection…` autorise `GET, PUT` (jamais `POST` ni `DELETE`), avec `Allow-Credentials`. Le profil du site ailleurs ne change pas.
+
+**Les cotes.** Cette version rend `cotes: {}`, que le site lit comme « `null` pour toute fiche ». Relier une fiche (`cartes._id|numero`) à ses produits Cardmarket demande une table qui vit dans la base `cartes`, que l'API ne lit pas ; sa source (importer une table fiche → produits dans la base de l'API, ou laisser le site envoyer les produits de chaque fiche) est une **décision du testeur**, non prise : **aucun code de résolution n'existe**. La **règle** est écrite dès maintenant, pour qu'elle ne soit pas inventée plus tard : la cote d'une fiche (`{ tendance, date }`, la tendance du guide et la date **du guide**, jamais celle de l'import)
+- est celle de son produit si la fiche **n'a qu'un produit** ;
+- si elle en a **plusieurs**, n'existe que si **tous** ont la même tendance **et** la même date de guide ;
+- vaut `null` dans tous les autres cas. **Jamais une moyenne, un minimum ou un maximum.**
+
+**Écarts avec la forme proposée par le site** (le site s'alignera) : (1) l'écriture exige un **compte vérifié** (`403 VERIFICATION`) — la demande ne le disait pas ; (2) les **bornes** (`409 CONFLIT`) et le **limiteur** (`429 DEBIT`) sont des refus que le faux serveur du site ne connaît pas ; (3) la **forme** de la clé et du slug est contrôlée (`400 ENTREE`, detail `slug` / `cle` / `possedee`) ; le faux serveur renvoyait `400 SERVEUR` pour un corps invalide ; (4) `possedees` de la liste est ≥ 1 (un set vidé disparaît) ; (5) `cotes` est `{}` ; (6) le site doit envoyer un slug encodé (`encodeURIComponent`, ce qu'il fait déjà) et traiter `409` sans réessayer.
+
 ---
 
 ## 2. Les règles du contrat
@@ -810,9 +862,9 @@ La liste des marchés (`marche`) n'est pas un `enum` du schéma : elle vient de 
 
 - **Toute écriture authentifiée par cookie** exige `Origin: https://rat-market.fr` **et** l'en-tête `X-Rat-Market: 1` (un formulaire tiers ne sait pas le poser). Sinon `403 ORIGINE`.
 - **CORS de l'extension** : origine exacte `chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb` ; `Allow-Methods: GET, POST` ; `Allow-Headers: Authorization, Content-Type, Idempotency-Key` ; `Max-Age: 600` ; **sans** `Allow-Credentials`.
-- **CORS du site** : origine exacte `https://rat-market.fr`, **avec** `Allow-Credentials: true` ; `Allow-Methods: GET, POST, DELETE` ; `Allow-Headers: Content-Type, X-Rat-Market, Idempotency-Key` ; `Max-Age: 600`.
+- **CORS du site** : origine exacte `https://rat-market.fr`, **avec** `Allow-Credentials: true` ; `Allow-Methods: GET, POST, DELETE` (sur `/api/collection…` : `GET, PUT`) ; `Allow-Headers: Content-Type, X-Rat-Market, Idempotency-Key` ; `Max-Age: 600`.
 - Jamais `*`. `Vary: Origin` partout. **Les en-têtes CORS figurent aussi sur les 4xx, 5xx et 429.** Aucune origine `*.onrender.com` n'est autorisée.
-- **Limites** : 2 installations par IP et par jour (au-delà de 500 installations dotées d'essais par jour, une installation naît à 0 essai) ; 5 essais faux de code de liaison par installation et par heure (20 par IP) ; 10 essais de connexion par compte et par heure ; 120 identifications par compte et par heure.
+- **Limites** : 2 installations par IP et par jour (au-delà de 500 installations dotées d'essais par jour, une installation naît à 0 essai) ; 5 essais faux de code de liaison par installation et par heure (20 par IP) ; 10 essais de connexion par compte et par heure ; 120 identifications par compte et par heure ; 1 000 écritures de collection par compte et par heure.
 - **Mot de passe** : 10 caractères au moins. **Liens** de vérification et de réinitialisation : 24 h, usage unique. **Code de liaison** : 6 caractères `[A-Z0-9]`, 10 minutes, usage unique, 3 vivants au plus par compte.
 - `libelle` d'une installation : texte libre de 60 caractères au plus, affiché sur la page du compte, **jamais interprété**.
 
@@ -859,6 +911,7 @@ Tout refus a la forme `ReponseErreur` : `{ success: false, erreur: { code, messa
 | `CODE_EXPIRE` | 410 | code (10 min), lien (24 h) ou question (24 h) échu | redemander |
 | `DEJA_LIE` | 409 | l'installation est déjà liée | proposer de la délier d'abord |
 | `CONFLIT` | 409 | réponse différente sur une carte déjà tranchée ; **ou** `/api/retour-live` : prix live déjà renvoyé pour ce scan (sans `detail`) | ne pas rejouer ; afficher le résultat déjà obtenu |
+| `CONFLIT` + `detail: "borne-set"` · `"borne-compte"` · `"borne-sets"` | 409 | `PUT /api/collection/…` : une borne de la collection est atteinte (§1.8) ; le message la nomme | **ne pas réessayer** : décocher d'abord, ou afficher le message |
 | `CONFLIT` + `detail: "carte-non-identifiee"` | 409 | `/api/retour-live`, lecture ratée définitive (`sans-prix`) sur une carte qui n'est pas identifiée (question en attente, abandonnée, introuvable, lot, analyse absente) | **refus définitif** : rien n'a été remboursé, ne pas réessayer ; à distinguer du 409 « déjà complété » (celui-ci n'a pas de `detail`) |
 | `INDISPONIBLE` + `detail: "analyse-absente"` | 503 | `/api/identifier/reponse` : l'analyse du scan n'est pas enregistrée côté serveur, la question existe | la question est **intacte**, la réponse n'a pas été prise : **réessayer** plus tard (ce n'est pas un 404 « scan d'un autre porteur ») |
 | `CREDITS_ACHETES` | 409 | suppression d'un compte qui porte des crédits achetés | demander une renonciation explicite (`renonciation: true`) |

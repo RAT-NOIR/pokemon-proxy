@@ -32,6 +32,9 @@
       "name": "scanner"
     },
     {
+      "name": "collection"
+    },
+    {
       "name": "sante"
     }
   ],
@@ -2116,6 +2119,248 @@
         }
       }
     },
+    "/api/collection": {
+      "get": {
+        "operationId": "mesSets",
+        "tags": [
+          "collection"
+        ],
+        "summary": "Ma collection : les sets où au moins une fiche est cochée",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Les sets cochés, triés par slug (vide si rien n'est coché).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseMesSets"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collection/sets/{slug}": {
+      "get": {
+        "operationId": "collectionDuSet",
+        "tags": [
+          "collection"
+        ],
+        "summary": "Ma collection : les fiches cochées d'un set (et leurs cotes, `{}` dans cette version)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SlugDeSet"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Les clés cochées du set (triées), `cotes` toujours `{}` dans cette version (voir CONTRAT-API-V2.md §1.8), `majLe` nul si rien n'est coché.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseCollectionSet"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (detail `slug`) : le slug n'a pas la forme admise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collection/sets/{slug}/fiches/{cle}": {
+      "put": {
+        "operationId": "cocherFiche",
+        "tags": [
+          "collection"
+        ],
+        "summary": "Ma collection : cocher ou décocher une fiche (idempotent ; compte vérifié)",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRatMarket"
+          },
+          {
+            "$ref": "#/components/parameters/SlugDeSet"
+          },
+          {
+            "$ref": "#/components/parameters/CleDeFiche"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequeteCocher"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Le nombre de fiches cochées du set APRÈS l'écriture. Cocher deux fois, décocher deux fois : le même nombre.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseCocher"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ENTREE (detail `slug`, `cle` ou `possedee`) : la forme n'est pas admise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "SESSION (cookie absent, expiré ou révoqué).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ORIGINE (Origin exacte du site et X-Rat-Market obligatoires) ou VERIFICATION (adresse non confirmée : seule l'écriture exige un compte vérifié).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLIT, detail `borne-set` (2 000 clés par set), `borne-compte` (20 000 par compte) ou `borne-sets` (1 000 sets par compte) : rien n'est écrit, rien n'est perdu.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "DEBIT : plus de 1 000 écritures par heure pour ce compte (avec `reessayerDans`, en-tête `Retry-After` aussi).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReponseErreur"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/ping": {
       "get": {
         "operationId": "ping",
@@ -2185,6 +2430,28 @@
           "enum": [
             "1"
           ]
+        }
+      },
+      "SlugDeSet": {
+        "name": "slug",
+        "in": "path",
+        "required": true,
+        "description": "Le slug du set. Un code de set peut contenir `/` (`S-P/ID`) : il s'envoie encodé (`S-P%2FID`).",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9/-]{0,78}[A-Za-z0-9])?$",
+          "maxLength": 80
+        }
+      },
+      "CleDeFiche": {
+        "name": "cle",
+        "in": "path",
+        "required": true,
+        "description": "La clé stable d'une fiche : `idInterne|numero` (`-` pour une fiche sans numéro). S'envoie encodée (`895789%7C001`). Le serveur en juge la FORME ; il ne sait pas si elle désigne une fiche réelle.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,11}\\|[A-Za-z0-9().!?-](?:[A-Za-z0-9 ().!?-]{0,30}[A-Za-z0-9().!?-])?$",
+          "maxLength": 50
         }
       }
     },
@@ -3666,6 +3933,142 @@
         },
         "required": [
           "success"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseMesSets": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "slug": {
+                  "type": "string"
+                },
+                "possedees": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "majLe": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+                }
+              },
+              "required": [
+                "slug",
+                "possedees",
+                "majLe"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "success",
+          "sets"
+        ],
+        "additionalProperties": false
+      },
+      "CoteFiche": {
+        "type": "object",
+        "description": "La cote du GUIDE d'une fiche : la tendance et la date du guide. Règle au contrat (§1.8) ; le serveur n'en sert pas encore.",
+        "properties": {
+          "tendance": {
+            "type": "number",
+            "minimum": 0
+          },
+          "date": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tendance",
+          "date"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseCollectionSet": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "set": {
+            "type": "string"
+          },
+          "possedees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2000
+          },
+          "cotes": {
+            "type": "object",
+            "description": "Par clé de fiche : sa cote, ou `null`. Une fiche absente vaut `null`. Dans cette version : toujours `{}`.",
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/CoteFiche"
+                }
+              ]
+            }
+          },
+          "majLe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "success",
+          "set",
+          "possedees",
+          "cotes",
+          "majLe"
+        ],
+        "additionalProperties": false
+      },
+      "RequeteCocher": {
+        "type": "object",
+        "properties": {
+          "possedee": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "possedee"
+        ],
+        "additionalProperties": false
+      },
+      "ReponseCocher": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "possedees": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "success",
+          "possedees"
         ],
         "additionalProperties": false
       },

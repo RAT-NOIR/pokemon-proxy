@@ -29,7 +29,9 @@ const INDEX = Object.freeze([
     I('visuels', 'visuels_metacarte', { idMetacard: 1 }),                 // B1b.4 : les impressions d'une métacarte se lisent dans `visuels`, jamais par balayage
     I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
-    I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees')
+    I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),
+    // lot COLLECTION : un document par (compte, set) ; l'unicité sert l'upsert et l'isolement, et son préfixe `compteId` sert le compte, la suppression et les bornes. Pas de TTL : la collection d'un compte est son bien.
+    I('collection_fiches', 'collection_cle', { compteId: 1, set: 1 }, { unique: true })
 ]);
 
 // `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle. `colFn` est injectable pour les bancs.

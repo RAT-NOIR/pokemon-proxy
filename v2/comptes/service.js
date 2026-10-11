@@ -195,6 +195,7 @@ async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintena
     await col('hebdo').deleteMany({ compteId: id });
     await col('codes_liaison').deleteMany({ compteId: id });
     await col('liens_email').deleteMany({ compteId: id });
+    await require('../collection/service').supprimerDuCompte(id);                      // « Ma collection » part avec le compte
     await col('comptes').deleteOne({ _id: id });                                       // en dernier : une panne en cours de route se rejoue
     return { statut: 200 };
 }

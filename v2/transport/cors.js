@@ -12,7 +12,7 @@ function profils(cfg) {
           chemins: [/^\/ping$/, /^\/api\/(installation|solde|retour-live|identifier|identifier\/reponse|creer-recharge)$/, /^\/api\/compte\/(lier|delier)$/, /^\/api\/banc\/.+$/],
           methodes: 'GET, POST', entetes: 'Authorization, Content-Type, Idempotency-Key' },
         { nom: 'site', origines: new Set([o.site]), credentials: true,
-          chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/],
+          chemins: [/^\/ping$/, /^\/api\/compte(\/.*)?$/, /^\/api\/scanner\/.+$/, /^\/api\/solde$/, /^\/api\/creer-recharge$/, /^\/api\/collection(\/.*)?$/],
           methodes: 'GET, POST, DELETE', entetes: 'Content-Type, X-Rat-Market, Idempotency-Key' }
     ];
 }
@@ -34,7 +34,9 @@ function middlewareV2(cfg) {
             // L'effacement par jeton est un DROIT : son préflight doit autoriser DELETE (il ne doit pas échouer en silence). Pour ce SEUL chemin de l'extension,
             // (le plan §1 lui donne GET, POST partout ailleurs) ; le sous-chemin ou tout autre chemin garde GET, POST.
             const delPermis = p.nom === 'extension' && /^\/api\/banc\/contributions$/.test(chemin);
-            res.setHeader('Access-Control-Allow-Methods', delPermis ? `${p.methodes}, DELETE` : p.methodes);
+            // « Ma collection » (site) : GET et PUT seulement, jamais POST ni DELETE — le profil du site ailleurs est inchangé.
+            const collection = p.nom === 'site' && /^\/api\/collection(\/.*)?$/.test(chemin);
+            res.setHeader('Access-Control-Allow-Methods', collection ? 'GET, PUT' : delPermis ? `${p.methodes}, DELETE` : p.methodes);
             res.setHeader('Access-Control-Allow-Headers', p.entetes);
             res.setHeader('Access-Control-Max-Age', '600');
             return res.status(204).end();

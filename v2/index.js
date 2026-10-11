@@ -8,7 +8,9 @@ const { repondreErreur } = require('./erreurs');
 
 // L'ORDRE est celui du graphe des lots ; chaque emplacement est un fichier que SEUL son lot réécrit.
 const LOTS = [require('./transport/monter'), require('./installations/monter'), require('./comptes/monter'), require('./argent/monter'),
-              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter')];
+              require('./identifier/monter'), require('./banc/monter'), require('./scanner/monter'), require('./collection/monter')];
+// Les chemins PROPRES à la v2 (aucune route héritée dessous) : fermés en 503 quand la configuration est invalide. test-collection.js la compare aux routes MONTÉES (§21 bis : deux listes, une vérité).
+const CHEMINS_FERMES_503 = Object.freeze(['/api/installation', '/api/compte', '/api/scanner', '/api/banc', '/api/collection']);
 
 let cfg = null, erreurConfig = null;
 function lire(env) { if (cfg || erreurConfig) return; try { cfg = lireConfig(env); } catch (e) { erreurConfig = e; console.error(`🔴 [v2] ${e.message} — les routes v2 répondront 503`); } }
@@ -23,7 +25,7 @@ function monterEnTete(app, env = process.env) {
 function monter(app, deps = {}, env = process.env) {
     lire(env);
     if (!cfg) {   // configuration invalide : les chemins PROPRES à la v2 sont fermés en 503, l'ancien serveur continue de servir
-        for (const chemin of ['/api/installation', '/api/compte', '/api/scanner', '/api/banc'])
+        for (const chemin of CHEMINS_FERMES_503)
             app.use(chemin, (req, res) => res.status(503).json({ success: false, erreur: { code: 'INDISPONIBLE', message: 'Service momentanément indisponible' }, facturation: null }));
         return;
     }
@@ -129,4 +131,4 @@ function assembler(lots, cfgLots, deps = {}) {
     return router;
 }
 // /ping additif : la route héritée reste en place et appelle ping() (voir index.js racine)
-module.exports = { LOTS, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
+module.exports = { LOTS, CHEMINS_FERMES_503, monterEnTete, monter, assembler, aiguilleur, cleInterdite, requeteRefusee, parametresRefuses, FORME_CLE, ping: () => (cfg ? { versionMinExtension: cfg.versionMinExtension } : {}), arreter: () => { cfg = null; erreurConfig = null; pret.desarmer(); } };
