@@ -69,11 +69,11 @@ async function verifierIndex() {
 const maintenant = () => new Date();
 const nouveauCompte = ({ email, emailCle, motDePasse, now = maintenant() }) => ({
     _id: new (require('mongoose').Types.ObjectId)(), email, emailCle, motDePasse, verifie: false, verifieLe: null, creeLe: now,
-    offertesAccordeesLe: null, solde: { accueil: 0, achete: 0 },
+    offertesAccordeesLe: null, solde: { accueil: 0, achete: 0 }, generation: 0,   // O3 tour 2 : incrémentée par la réinitialisation ; session, code de liaison et installation liée la portent
     abonnement: { actif: false, quotaMensuel: 0, moisCle: null, restant: 0, jusquAu: null }, stripeClient: null, derniereConnexionLe: null
 });
 const nouvelleInstallation = ({ jetonEmpreinte, essais, libelle, now = maintenant() }) => ({
     _id: crypto.randomBytes(16).toString('hex'), jetonEmpreinte, compteId: null, essais, libelle, creeLe: now, lieeLe: null, revoqueeLe: null,
-    heriteEmpreinte: null, derniereAnalyseLe: null, achete: 0
+    heriteEmpreinte: null, derniereAnalyseLe: null, achete: 0, generation: 0   // O3 tour 2 : la liaison y pose la génération du code ; sans égalité avec celle du compte, l'installation est anonyme
 });
 module.exports = { INDEX, creerIndex, verifierIndex, nouveauCompte, nouvelleInstallation };

@@ -7,7 +7,8 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const fusions = []; let fusionCasse = false;
     A.registre.fournir('argent', {
         solde: async p => ({ total: p.installation ? p.installation.essais : 0, compte: Boolean(p.compte) }),
-        fusionnerALaLiaison: async o => { if (fusionCasse) throw new Error('boum'); fusions.push(o); }
+        // O3 tour 2 (I-B) : faux FIDÈLE à la signature réelle (`{ compteId, installationId }`) ; panne par exception OU par `{ ok:false }` comme le vrai module
+        fusionnerALaLiaison: async o => { if (fusionCasse === true) throw new Error('boum'); if (fusionCasse === 'ok-faux') return { ok: false, raison: 'compte-inconnu' }; return require('./_fusion-fidele').fusionFidele(fusions)(o); }
     });
     const srv = await A.demarrer(cfg);
     let n = 0;
@@ -17,7 +18,7 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const bearer = (jeton, ipn = ++n) => ({ authorization: `Bearer ${jeton}`, ...A.ip(ipn) });
     const code = cookie => H.appel(srv.url, '/api/compte/code', { methode: 'POST', corps: {}, entetes: site(cookie) });
     const lier = (jeton, c, ipn) => H.appel(srv.url, '/api/compte/lier', { methode: 'POST', corps: { code: c }, entetes: bearer(jeton, ipn) });
-    const posterCode = async (compteId, texte, decalageMs = 600e3) => { await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(texte), compteId, creeLe: new Date(), expireLe: new Date(Date.now() + decalageMs), utiliseLe: null }); return texte; };
+    const posterCode = async (compteId, texte, decalageMs = 600e3) => { await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(texte), compteId, generation: 0, creeLe: new Date(), expireLe: new Date(Date.now() + decalageMs), utiliseLe: null }); return texte; };   // O3 tour 2 : un code porte la génération du compte (0 à la création)
 
     const { c: cA, cookie: ckA } = await creerCompte('vous@exemple.fr', true);   // 9 : O3 — un compte non confirmé n'est plus un porteur (il ne peut ni créer un code ni être lié : test-comptes-o3.js 2a) ; ce banc juge la liaison d'un compte CONFIRMÉ
     // 1
@@ -40,7 +41,8 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const apres = await db.col('installations').findOne({ _id: i1._id });
     H.v('lier : 200, compte masqué, nouveau jeton', [rl.statut, rl.json.success, rl.json.compte, rl.json.jetonInstallation.length, rl.json.jetonInstallation !== j1], [200, true, { emailMasque: 'v•••@exemple.fr', verifie: true }, 43, true]);
     H.v('installation liée, empreinte du NOUVEAU jeton', [String(apres.compteId), apres.lieeLe instanceof Date, apres.jetonEmpreinte === J.empreinte(rl.json.jetonInstallation)], [String(cA._id), true, true]);
-    H.v('fusionnerALaLiaison appelé UNE fois avec { installation, compteId }', [fusions.length, fusions[0].installation._id === i1._id, String(fusions[0].compteId)], [1, true, String(cA._id)]);
+    // O3 tour 2 (I-B) : l'ancienne assertion figeait la MAUVAISE forme `{ installation, compteId }` (la vraie fusion attend `installationId` et rendait `ok:false` sans que rien ne le voie)
+    H.v('fusionnerALaLiaison appelé UNE fois avec la forme RÉELLE { compteId, installationId } (et rien d\'autre)', [fusions.length, fusions[0].installationId === i1._id, String(fusions[0].compteId), Object.keys(fusions[0]).sort()], [1, true, String(cA._id), ['compteId', 'installationId']]);
     const ancien = await H.appel(srv.url, '/api/compte/delier', { methode: 'POST', corps: {}, entetes: bearer(j1) });
     H.v('l\'ancien jeton : 401 JETON', [ancien.statut, ancien.json.erreur.code], [401, 'JETON']);
     // 3 usage unique / échu
@@ -78,6 +80,11 @@ const { lireConfig } = require('../config'); const J = require('../comptes/jeton
     const rr = await lier(jr, cr); fusionCasse = false;
     const ir = await db.col('installations').findOne({ jetonEmpreinte: J.empreinte(jr) });
     H.v('argent en panne : 503, installation non liée, ancien jeton intact, code rendu', [rr.statut, Boolean(ir) && ir.compteId, (await db.col('codes_liaison').findOne({ codeEmpreinte: J.empreinte(cr) })).utiliseLe], [503, null, null]);
+    // la fusion qui rend `{ ok:false }` SANS lever (le vrai module : installation ou compte inconnu) défait la liaison comme une exception (O3 tour 2, I-B)
+    const { jeton: jo } = await creerInst(0); const co = await posterCode(cA._id, 'OKFAUX'); fusionCasse = 'ok-faux';
+    const ro = await lier(jo, co); fusionCasse = false;
+    const io = await db.col('installations').findOne({ jetonEmpreinte: J.empreinte(jo) });
+    H.v('fusion { ok:false } : 503, installation non liée, ancien jeton intact, code rendu', [ro.statut, Boolean(io) && io.compteId, (await db.col('codes_liaison').findOne({ codeEmpreinte: J.empreinte(co) })).utiliseLe], [503, null, null]);
     // 7 délier
     const dj = rl.json.jetonInstallation;
     const dd = await H.appel(srv.url, '/api/compte/delier', { methode: 'POST', corps: {}, entetes: bearer(dj) });

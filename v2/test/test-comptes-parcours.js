@@ -10,7 +10,8 @@ const { lireConfig } = require('../config'); const { creerCourrierMemoire } = re
     A.registre.fournir('argent', {
         solde: async p => p.compte ? { accueil: p.compte.solde.accueil, essai: 0 } : { essai: p.installation.essais },
         historique: async () => ({ lignes: [], suite: null }),
-        fusionnerALaLiaison: async ({ installation, compteId }) => { fusions.push(installation._id); await db.col('installations').updateOne({ _id: installation._id }, { $set: { essais: 0 } }); }
+        // O3 tour 2 (I-B) : un faux FIDÈLE à la signature réelle (`{ compteId, installationId }`), pas un qui accepte n'importe quelle forme
+        fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele(fusions, { apres: o => db.col('installations').updateOne({ _id: o.installationId }, { $set: { essais: 0 } }) })
     });
     const srv = await A.demarrer(cfg); let n = 0;
     const ip = () => A.ip(++n);

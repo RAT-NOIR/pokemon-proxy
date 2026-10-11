@@ -176,7 +176,8 @@ async function connecter({ email, motDePasse, cfg, maintenant = new Date() }) {
     // que l'adresse existe. Écrit par ce qu'il AUTORISE : seul `verifie === true` ouvre une session.
     const motDePasseBon = await P.verifier(mdp, compte.motDePasse);
     if (!motDePasseBon || compte.verifie !== true) return { ok: false };
-    const session = await S.creerSession(compte._id, maintenant, cfg.comptes.sessionJours);
+    // O3 tour 2 (I-A) : la génération est celle lue AVEC le compte, avant le hachage ci-dessus : une réinitialisation survenue pendant le hachage rend cette session inutilisable
+    const session = await S.creerSession(compte._id, maintenant, cfg.comptes.sessionJours, Number.isInteger(compte.generation) ? compte.generation : null);
     await col('comptes').updateOne({ _id: compte._id }, { $set: { derniereConnexionLe: maintenant } });
     return { ok: true, compte, session };
 }
@@ -198,7 +199,9 @@ async function reinitialiser({ jeton, motDePasse, cfg, maintenant = new Date() }
     if (faute) return { statut: 422, code: 'MOT_DE_PASSE_FAIBLE', detail: faute };
     const hash = await P.hacher(motDePasse);
     if (!(await bruler(v.lien, maintenant))) return refus('inconnu');
-    await col('comptes').updateOne({ _id: compte._id }, { $set: { motDePasse: hash } });
+    // O3 tour 2 (I-A) : la GÉNÉRATION d'abord, dans la même écriture atomique que le nouveau mot de passe. Un ordre d'opérations (sessions, puis installations, puis codes) ne ferme pas une requête déjà
+    // partie ; une génération, si : tout objet qui ouvre un accès au compte (session, code de liaison, installation liée) porte celle qu'il a lue, et n'est accepté que si elle est ÉGALE à celle du compte.
+    await col('comptes').updateOne({ _id: compte._id }, { $set: { motDePasse: hash }, $inc: { generation: 1 } });
     await col('liens_email').updateMany({ compteId: compte._id, type: 'reinit', utiliseLe: null }, { $set: { utiliseLe: maintenant } });
     await col('sessions').deleteMany({ compteId: compte._id });
     // O3 (tour 1, I-1) : « ferme TOUT accès » — la session n'est qu'une porte. Les installations LIÉES (l'extension, par son jeton) et les codes de liaison vivants en sont deux autres.

@@ -1,5 +1,5 @@
 'use strict';
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'); const { domainToASCII } = require('url');
 const JETABLES = new Set(fs.readFileSync(path.join(__dirname, 'domaines-jetables.txt'), 'utf8').split(/\r?\n/).map(s => s.trim().toLowerCase()).filter(s => s && !s.startsWith('#')));
 // O3 (tour 1, I-2a) — le domaine est écrit par ce qu'on AUTORISE : au moins deux étiquettes non vides (lettres ou chiffres, tirets au milieu seulement), la dernière de deux caractères au moins.
 // Tout le reste — un point final (« gmail.com. » : le même domaine pour un serveur de courrier, une autre clé pour nous), un point doublé, une étiquette vide, un tiret en bordure — est une forme
@@ -23,7 +23,11 @@ function emailCle(brut) {
     const m = /^([^@\s]+)@([^@\s]+)$/.exec(s);
     if (!m) return null;
     let [, local, domaine] = m;
-    if (!domaineAdmis(domaine)) return null;
+    // O3 tour 2 (M-1) : la partie locale n'admet aucun caractère invisible, de format ou d'espacement (Cc, Cf, Zs, Zl, Zp : un U+200B donnerait une autre clé pour la même boîte) ; le domaine se compare
+    // en ASCII (Punycode) : `bücher.example` et `xn--bcher-kva.example` sont la MÊME clé. Une forme que `domainToASCII` ne sait pas rendre (chaîne vide) est refusée.
+    if (/[\p{Cc}\p{Cf}\p{Zs}\p{Zl}\p{Zp}]/u.test(local)) return null;
+    domaine = domainToASCII(domaine);
+    if (!domaine || !domaineAdmis(domaine)) return null;
     if (domaine === 'googlemail.com') domaine = 'gmail.com';
     if (domaine === 'gmail.com') { local = local.split('+')[0].replace(/\./g, ''); if (!local) return null; }
     return `${local}@${domaine}`;

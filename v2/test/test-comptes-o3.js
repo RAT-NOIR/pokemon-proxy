@@ -43,7 +43,7 @@ const HEURE = 3600e3;
     const jetonCode = 'ABC123';
     await db.col('codes_liaison').insertOne({ codeEmpreinte: J.empreinte(jetonCode), compteId: nv._id, creeLe: new Date(), expireLe: new Date(Date.now() + 600e3), utiliseLe: null });
     const inst = M.nouvelleInstallation({ jetonEmpreinte: J.empreinte('jeton-inst-o3'), essais: 3, libelle: 'x' }); await db.col('installations').insertOne(inst);
-    const lie = await liaison.lier({ installation: inst, code: jetonCode, argent: { fusionnerALaLiaison: async () => { } } });
+    const lie = await liaison.lier({ installation: inst, code: jetonCode, argent: { fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele([]) } });
     H.v('2a. liaison par un code qui désigne un compte non confirmé : refusée (CODE_INVALIDE), installation non liée', [lie.statut, lie.code, (await db.col('installations').findOne({ _id: inst._id })).compteId], [404, 'CODE_INVALIDE', null]);
     const { resoudrePorteur } = require('../porteur');
     const resoudre = async entetes => { const q = { headers: entetes, ip: '1.1.1.1', get(k) { return this.headers[k.toLowerCase()]; } }; await resoudrePorteur(cfg)(q, { status() { return this; }, json() { return this; }, setHeader() { } }, () => { }); return q.v2; };
@@ -282,7 +282,7 @@ const HEURE = 3600e3;
         const clic = (await post('/api/compte/verification', { jeton: lien1 })).statut, cx = await conn('cible@exemple.fr', 'mot-de-passe-de-l-attaquant');
         H.v('16a. RÉSIDUEL : la victime clique le lien du courriel de l\'inscription du tiers -> compte actif, mot de passe du TIERS', [clic, cx.statut], [200, 200]);
         // le tiers, connecté, s'installe : un code de liaison, une installation LIÉE, un second code laissé vivant
-        A.registre.fournir('argent', { solde: async () => ({}), fusionnerALaLiaison: async () => { } });
+        A.registre.fournir('argent', { solde: async () => ({}), fusionnerALaLiaison: require('./_fusion-fidele').fusionFidele([]) });   // forme RÉELLE exigée (tour 2, I-B)
         const ckT = `rm_session=${/rm_session=([^;]+)/.exec(cx.entetes['set-cookie'])[1]}`, cible = await compteDe('cible@exemple.fr');
         const code = () => H.appel(srv.url, '/api/compte/code', { methode: 'POST', corps: {}, entetes: { ...A.SITE, ...A.ip(++n), cookie: ckT } });
         const c1 = await code(), c2 = await code();
@@ -317,7 +317,11 @@ const HEURE = 3600e3;
         H.v('T1b. aucun compte pour ces formes', await db.col('comptes').countDocuments({ emailCle: { $regex: /^victime@(\.|-|gmail)/ } }), 0);
         H.v('T1c. connexion / renvoi / oubli avec une telle forme : réponse neutre habituelle (aucune écriture)', [(await conn('victime@gmail.com.', MDP)).statut, (await renv('victime@gmail.com.')).statut, await db.col('liens_email').countDocuments({ compteId: null })], [401, 202, 0]);
         const E = require('../comptes/email-cle');
-        H.v('T1d. emailCle : domaines IDN et à tirets admis, formes douteuses nulles', [E.emailCle('a@bücher.example'), E.emailCle('a@xn--bcher-kva.example'), E.emailCle('a@mon-site.co.uk'), E.emailCle('a@exemple.fr.'), E.emailCle('a@exemple..fr')], ['a@bücher.example', 'a@xn--bcher-kva.example', 'a@mon-site.co.uk', null, null]);
+        H.v('T1d. emailCle : domaines IDN (comparés en Punycode : une SEULE clé) et à tirets admis, formes douteuses nulles', [E.emailCle('a@bücher.example'), E.emailCle('a@xn--bcher-kva.example'), E.emailCle('a@mon-site.co.uk'), E.emailCle('a@exemple.fr.'), E.emailCle('a@exemple..fr')], ['a@xn--bcher-kva.example', 'a@xn--bcher-kva.example', 'a@mon-site.co.uk', null, null]);
+        // O3 tour 2 (M-1) : la partie locale n'admet aucun caractère invisible, de format ou d'espacement (U+200B, U+00AD, U+2060, U+200E, U+0007, U+2003)
+        const invisibles = ['victime​@outlook.com', 'vic­time@outlook.com', 'victime⁠@outlook.com', '‎victime@outlook.com', 'vic\u0007time@outlook.com', 'vic time@outlook.com'];
+        const avantN = await db.col('comptes').countDocuments({}), ri = []; for (const f of invisibles) ri.push(await post('/api/compte/inscription', { email: f, motDePasse: MDP, turnstile: 'ok' }));
+        H.v('T1e. un caractère invisible / de format / d\'espacement dans la partie locale : refusé comme toute adresse invalide (422, mêmes octets), emailCle nul, aucun compte', [ri.map(r => r.statut === 422 && r.texte === neutre.texte), invisibles.map(f => E.emailCle(f)), (await db.col('comptes').countDocuments({})) - avantN], [invisibles.map(() => true), invisibles.map(() => null), 0]);
     }
     {   // I-2b : la limite d'un courriel de confirmation se compte par BOÎTE
         courrier.envoyes.length = 0; await liberer();
@@ -356,6 +360,14 @@ const HEURE = 3600e3;
         await ins('perime-reinit@exemple.fr'); const c = await compteDe('perime-reinit@exemple.fr'); await vieillir(c._id, 49);
         const r0 = courrier.envoyes.filter(e => e.type === 'reinit').length; await post('/api/compte/mot-de-passe-oublie', { email: 'perime-reinit@exemple.fr' }); await A.attendre();
         H.v('T7. mot de passe oublié pour un compte non confirmé de plus de 48 h : aucun courriel, le compte est purgé à l\'usage', [courrier.envoyes.filter(e => e.type === 'reinit').length - r0, await compteDe('perime-reinit@exemple.fr')], [0, null]);
+    }
+    {   // M-7 (tour 1, sans test) : une inscription sur une adresse dont le compte est PÉRIMÉ mais non purgeable (il porte une installation liée) n'envoie aucun courriel et ne le remplace pas
+        await ins('m7@exemple.fr'); const c = await compteDe('m7@exemple.fr'); await vieillir(c._id, 100);
+        await db.col('installations').insertOne({ ...M.nouvelleInstallation({ jetonEmpreinte: J.empreinte('m7-inst'), essais: 0, libelle: 'm7' }), compteId: c._id });
+        await liberer(); const avant = courrier.envoyes.length; await ins('m7@exemple.fr', MDP_VICTIME);
+        const apres = await compteDe('m7@exemple.fr');
+        H.v('T8. compte périmé non purgeable : aucun courriel, le compte n\'est pas remplacé (même _id) ni purgé', [courrier.envoyes.length - avant, apres && apres._id.equals(c._id)], [0, true]);
+        await db.col('installations').deleteMany({ libelle: 'm7' }); await db.col('comptes').deleteMany({ _id: c._id });
     }
     {   // R26 : un compteur qui ne peut pas conclure REFUSE (une garde qui ne sait pas bloque)
         const L2 = require('../transport/limites'); const proto = Object.getPrototypeOf(db.col('limites')); const orig = proto.insertOne;
