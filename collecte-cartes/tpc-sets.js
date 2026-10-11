@@ -152,9 +152,29 @@ const TABLE_TPC = Object.freeze([
     { slug: "30th-Celebration-Premium-Deck-Set", site: "pokemon-card-com", langue: "ja", code: "mF", tirage: "jp", trous: 1, cartes: 49,
       mesure: "49 cartes chez pokemon-card.com pour pg=mF, 1 trous sur 44 produits (2026-10-07)" },
     { slug: "ex-Starter-Set-Pikachu-ex-Pawmot", site: "pokemon-card-com", langue: "ja", code: "svC", tirage: "jp", trous: 1, cartes: 24,
-      mesure: "24 cartes chez pokemon-card.com pour pg=svC, 1 trous sur 24 produits (2026-10-07)" }
+      mesure: "24 cartes chez pokemon-card.com pour pg=svC, 1 trous sur 24 produits (2026-10-07)" },
+    // ── LIGNES À DEMI-LISTES (lot TPC-AS, mesure du 2026-10-11 : scratch/mesure-tpc-asie-2.json, 33 requêtes) ─────────────────────────────
+    // TPC Asie (indonésien) sert les sets idth AS1-AS4 par DEMI-LISTES `expansionCodes=<code>a|b` ; notre `numeroFiche` porte la lettre de la
+    // demi-liste (a019, b016) et le numéro est le MÊME dans la liste (calibré : b016 « EspeonGX » = Espeon GX, a019 « Celebi Bersinar » =
+    // Shining Celebi par le Pokédex 251). `code` est celui de l'unité de file ; `listes` dit, par préfixe, QUELLE liste source et SON total mesuré
+    // (la garde du collecteur compare chaque liste à son total, pas leur somme). La liste « D » (AS1D…) n'est pas une demi-liste : non lue.
+    // `trous` : les produits dont le numéro est <= au dénominateur de leur demi-liste (les secrètes au-delà sont absentes de la liste TPC).
+    { slug: "First-Impact", site: "tpc-asie", langue: "id", code: "AS1", tirage: "idth", trous: 22, cartes: 300,
+      listes: [{ prefixe: "a", code: "AS1a", cartes: 150 }, { prefixe: "b", code: "AS1b", cartes: 150 }],
+      mesure: "AS1a 150 + AS1b 150 cartes chez TPC Asie id ; 84 produits, au plus 22 dans les numéros listés (2026-10-11)" },
+    { slug: "Legends-Awakened-ID-TH", site: "tpc-asie", langue: "id", code: "AS2", tirage: "idth", trous: 43, cartes: 341,
+      listes: [{ prefixe: "a", code: "AS2a", cartes: 170 }, { prefixe: "b", code: "AS2b", cartes: 171 }],
+      mesure: "AS2a 170 + AS2b 171 cartes chez TPC Asie id ; 136 produits, au plus 43 dans les numéros listés (2026-10-11)" },
+    { slug: "Hidden-Shadow", site: "tpc-asie", langue: "id", code: "AS3", tirage: "idth", trous: 43, cartes: 366,
+      listes: [{ prefixe: "a", code: "AS3a", cartes: 183 }, { prefixe: "b", code: "AS3b", cartes: 183 }],
+      mesure: "AS3a 183 + AS3b 183 cartes chez TPC Asie id ; 125 produits, au plus 43 dans les numéros listés (2026-10-11)" },
+    { slug: "Sky-Ruler", site: "tpc-asie", langue: "id", code: "AS4", tirage: "idth", trous: 42, cartes: 356,
+      listes: [{ prefixe: "a", code: "AS4a", cartes: 178 }, { prefixe: "b", code: "AS4b", cartes: 178 }],
+      mesure: "AS4a 178 + AS4b 178 cartes chez TPC Asie id ; 122 produits, au plus 42 dans les numéros listés (2026-10-11)" }
 ]);
 const ligneTpc = (site, slug) => TABLE_TPC.find(l => l.site === site && l.slug === slug) || null;
+/** Les listes source d'une ligne : celles de `listes` (une par préfixe de numéro), sinon UNE liste sans préfixe — le code et le compte de la ligne. */
+const listesDe = L => L.listes ? L.listes : [{ prefixe: null, code: L.code, cartes: L.cartes }];
 /** L'unité de file d'une ligne — la forme que l'alimentateur insère et que la garde du collecteur (`releve`) accepte, mot pour mot. */
 const uniteDeLaLigne = L => ({ _id: `${L.site}/${L.slug}`, source: L.site, slugSet: L.slug, code: L.code, langue: L.langue, trous: L.trous });
-module.exports = { TABLE_TPC, ligneTpc, uniteDeLaLigne };
+module.exports = { TABLE_TPC, ligneTpc, uniteDeLaLigne, listesDe };

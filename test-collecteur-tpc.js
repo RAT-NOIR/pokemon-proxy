@@ -238,6 +238,106 @@ const LISTE = F('asie-id-liste-SV-P-page1.html').replace(/class="resultNumber">2
     verifier('nouvelle adresse : 0 requête, document « ok », visuel servi, garde verte, « verifie »',
         [tr.appels.length, B12.col('images').get('tpc-asie/Scarlet-Violet-Indonesian-Promos/1/001/id').etat, B12.col('cartes').get(1).images.some(e => e.source === 'tpc-asie'), b.garde?.ok, b.etat], [0, 'ok', true, true, 'verifie']);
 
+    // ── 10. LIGNE À DEMI-LISTES (lot TPC-AS) : AS1 = AS1a + AS1b, le préfixe de notre numéro EST la liste ────────────────────
+    const SLUG_AS = 'First-Impact';
+    const ficheAsie = (n, nom, { dex, pv, den = '150', img }) => `<h1 class="pageHeader cardDetail">${nom}</h1><span class="collectorNumber">${n} / ${den}</span><span class="hitPoint">HP</span> <span class="number">${pv}</span><div class="extraInformation"><h3>No. ${dex}</h3></div><div class="cardImage"><img src="/id/card-img/${img}.png"></div>`;
+    const listeAsie = (total, ...ids) => `${total == null ? '' : `<span class="resultNumber">${total}</span>`}<span class="resultTotalPages">Total 1 halaman</span>${ids.map(i => `<li class="card"><a href="/id/card-search/detail/${i}/"></a></li>`).join('')}`;
+    const semerAS = (B, numA = 'a019', numB = 'b016') => {
+        B.col('sets').set(SLUG_AS, { _id: SLUG_AS, tirage: 'idth', region: 'intl' });
+        B.col('cartes').set(1, { _id: 1, nomEn: 'Shining Celebi', categorie: 'pokemon', ndex: 251, pv: 70, images: [] });
+        B.col('cartes').set(2, { _id: 2, nomEn: 'Espeon GX', categorie: 'pokemon', ndex: 196, pv: 200, images: [] });
+        B.col('cartes_produits').set('1|10', { _id: '1|10', carteId: 1, idProduct: 10, numeroFiche: numA, slugSet: SLUG_AS });
+        B.col('cartes_produits').set('2|11', { _id: '2|11', carteId: 2, idProduct: 11, numeroFiche: numB, slugSet: SLUG_AS });
+    };
+    const ligneAS = (s, sl) => { const L = ligneTpc(s, sl); return L && { ...L, cartes: 2, listes: L.listes.map(l => ({ ...l, cartes: 1 })) }; };
+    const uniteAS = uniteDeLaLigne(ligneTpc('tpc-asie', SLUG_AS));
+    const asie = (totalB = 1, totalA = 1) => u => u.endsWith('/robots.txt') ? { status: 200, texte: '' }
+        : u.includes('expansionCodes=AS1a') ? { status: 200, texte: listeAsie(totalA, 9019) }
+            : u.includes('expansionCodes=AS1b') ? { status: 200, texte: listeAsie(totalB, 9116) }
+                : u.endsWith('/detail/9019/') ? { status: 200, texte: ficheAsie('019', 'Celebi Bersinar', { dex: 251, pv: 70, img: 'a019' }) }
+                    : u.endsWith('/detail/9116/') ? { status: 200, texte: ficheAsie('016', 'EspeonGX', { dex: 196, pv: 200, img: 'b016' }) }
+                        : /\/card-img\/[ab]0\d\d\.png$/.test(u) ? { status: 200, type: 'image/png', octets: png }
+                            : { status: 404, texte: 'non' };
+    const BA = fausseBase(); semerAS(BA);
+    tr = reseau(asie());
+    ({ b, depots } = await lancer(BA, tr, { unite: uniteAS, ligneDe: ligneAS }));
+    verifier('AS1 : « verifie », 2 prouvés (a019 et b016), chacun dans SA liste',
+        [b.etat, b.prouves, tr.appels.map(u => u.replace('https://asia.pokemon-card.com', '')).filter(u => !u.startsWith('/id/card-img'))],
+        ['verifie', 2, ['/robots.txt', '/id/card-search/list/?expansionCodes=AS1a', '/id/card-search/list/?expansionCodes=AS1b', '/id/card-search/detail/9019/', '/id/card-search/detail/9116/']]);
+    verifier('   les cartes reçoivent leur visuel au numéro AVEC préfixe', [BA.col('cartes').get(1).images.map(e => `${e.source}:${e.set}:${e.numero}`), BA.col('cartes').get(2).images.map(e => e.numero)], [[`tpc-asie:${SLUG_AS}:a019`], ['b016']]);
+    verifier('   documents `images` distincts par préfixe, clé R2 au numéro préfixé', [BA.col('images').has('tpc-asie/First-Impact/1/a019/id'), BA.col('images').has('tpc-asie/First-Impact/2/b016/id'), depots.map(d => d[1]).sort()],
+        [true, true, ['tpc-asie/First-Impact/a019-1-id.webp', 'tpc-asie/First-Impact/b016-2-id.webp']]);
+    verifier('   l\'état garde chaque liste sous son préfixe', [BA.col('collecte_images_etat').get(`tpc-asie/${SLUG_AS}`)?.listes?.a?.total, BA.col('collecte_images_etat').get(`tpc-asie/${SLUG_AS}`)?.listes?.b?.code], [1, 'AS1b']);
+    // la reprise : listes et fiches gardées, 0 requête
+    tr = reseau(asie());
+    ({ b } = await lancer(BA, tr, { unite: uniteAS, ligneDe: ligneAS }));
+    verifier('   un second passage : « verifie », 0 requête', [b.etat, tr.appels.length], ['verifie', 0]);
+    // une liste dont le total s'écarte de la mesure DE SA LISTE → la ligne est refusée avant toute fiche
+    const BB = fausseBase(); semerAS(BB);
+    tr = reseau(asie(99));
+    ({ b } = await lancer(BB, tr, { unite: uniteAS, ligneDe: ligneAS }));
+    verifier('une liste (b) au total hors mesure → « refuse-liste », aucune fiche lue, rien joint', [b.etat, tr.appels.filter(u => u.includes('/detail/')).length, BB.col('images').size], ['refuse-liste', 0, 0]);
+    // le total se compare à CELUI DE SA LISTE (jamais à la somme des listes : 23 + 1 passerait contre 2×2+20), borne haute ET basse, et `null` refuse
+    for (const [nom, tb, ta] of [['borne haute de b (23 > 2×1+20, la somme 24 serait passée)', 23, 1], ['borne haute de a', 1, 23], ['borne basse (0 < ½)', 0, 1], ['total illisible (null)', null, 1]]) {
+        const BT = fausseBase(); semerAS(BT);
+        tr = reseau(asie(tb, ta));
+        ({ b } = await lancer(BT, tr, { unite: uniteAS, ligneDe: ligneAS }));
+        verifier(`liste hors mesure — ${nom} → « refuse-liste », aucune fiche`, [b.etat, tr.appels.filter(u => u.includes('/detail/')).length], ['refuse-liste', 0]);
+    }
+    // un produit sans préfixe sur la ligne : un trou, rien de téléchargé pour lui
+    const BC = fausseBase(); semerAS(BC, '019', 'b016');
+    tr = reseau(asie());
+    ({ b, depots } = await lancer(BC, tr, { unite: uniteAS, ligneDe: ligneAS }));
+    verifier('un produit sans préfixe (019) → trou « prefixe-absent », seul b016 est téléchargé', [b.etat, b.prouves, b.restes, depots.map(d => d[1])], ['verifie', 1, { 'prefixe-absent': 1 }, ['tpc-asie/First-Impact/b016-2-id.webp']]);
+
+    // ── 11. `--plan-reel` : lit à la source, apparie, ne télécharge rien et n'écrit rien dans la base ─────────────────────────
+    const os = require('os');
+    const dossier = fs.mkdtempSync(path.join(os.tmpdir(), 'plan-reel-'));
+    const fichierCache = path.join(dossier, 'plan-reel.json');
+    const fauxVerrou = (tenuPar = null) => { const v = { appels: [], tenu: !tenuPar, perdu: false, async prendre() { v.appels.push('prendre'); return tenuPar; }, async rendre() { v.appels.push('rendre'); } }; return v; };
+    const BP = fausseBase(); semerAS(BP);
+    const empreinte = () => JSON.stringify([...BP.cols].filter(([, m]) => m.size).map(([n, m]) => [n, [...m]]));   // une collection LUE mais vide n'est pas une écriture
+    const avant = empreinte();
+    let vp = fauxVerrou(); tr = reseau(asie());
+    let r = silencieux(), R;
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('plan réel : 2 prouvés, 5 requêtes (robots, 2 listes, 2 fiches), AUCUNE image demandée', [R.bilan[0]?.prouves, R.requetes, tr.appels.some(u => u.includes('/card-img/'))], [2, 5, false]);
+    verifier('   le verrou global est pris puis rendu', vp.appels, ['prendre', 'rendre']);
+    verifier('   la base n\'a pas bougé d\'un octet (ni `images`, ni `tpc_fiches`, ni l\'état, ni les cartes)', empreinte(), avant);
+    verifier('   les listes et les fiches sont gardées dans le cache LOCAL', fs.existsSync(fichierCache) && Object.keys(JSON.parse(fs.readFileSync(fichierCache, 'utf8')).tpc_fiches).length, 2);
+    vp = fauxVerrou(); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('   un second passage : 0 requête (cache local), même plan', [R.bilan[0]?.prouves, tr.appels.length], [2, 0]);
+    // --fiches-des-trous : seules les fiches des numéros voulus ; un numéro qu'on n'a pas pu lire n'est jamais dit « absent de la source »
+    const BQ = fausseBase(); semerAS(BQ, 'a019', 'b050');
+    vp = fauxVerrou(); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BQ.db }, M: BQ.M, sets: [SLUG_AS], fichierCache: path.join(dossier, 'q.json'), verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS, seulementTrous: true }); } finally { r(); }
+    verifier('plan des trous : a019 prouvé par la fiche lue ; b050 introuvable par position → « fiche-non-lue », pas « absente-de-la-source »',
+        [R.bilan[0]?.prouves, R.bilan[0]?.trousParCause, tr.appels.some(u => u.includes('/card-img/'))], [1, { 'fiche-non-lue': 1 }, false]);
+    // la position se vérifie par la CLÉ DE PRODUCTION (préfixe compris) : une fiche « 001 » ne valide jamais « p001 »
+    const BR = fausseBase(); semer(BR); BR.col('cartes_produits').get('1|10').numeroFiche = 'p001';
+    vp = fauxVerrou(); tr = reseau(normal);
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BR.db }, M: BR.M, sets: [SLUG], fichierCache: path.join(dossier, 'r.json'), verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneBanc, seulementTrous: true }); } finally { r(); }
+    verifier('fiche « 001 » face à un numéro « p001 » : jamais validée → « fiche-non-lue » (la position ne prouve rien)', [R.bilan[0]?.prouves, R.bilan[0]?.trousParCause?.['fiche-non-lue'] ?? 0], [0, 1]);
+    // mode plan : AUCUNE écriture hors du verrou, même quand la source bloque — l'arrêt se rapporte dans la sortie ; les statuts HTTP se comptent par hôte
+    const BS = fausseBase(); semerAS(BS);
+    vp = fauxVerrou(); tr = reseau(u => u.endsWith('/robots.txt') ? { status: 200, texte: '' } : { status: 403, texte: 'Forbidden' });
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BS.db }, M: BS.M, sets: [SLUG_AS], fichierCache: path.join(dossier, 's.json'), verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('plan réel bloqué (403) : arrêt rapporté, AUCUNE alerte écrite en base, verrou rendu', [R.arret, [...BS.col('collecte_images_etat').keys()], vp.appels], ['bloque', [], ['prendre', 'rendre']]);
+    verifier('   les statuts HTTP sont comptés par hôte (200 robots.txt, 403 de la liste)', R.statutsHttp, { 'https://asia.pokemon-card.com': { 200: 1, 403: 1 } });
+    vp = fauxVerrou(); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache: path.join(dossier, 'p2.json'), verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('plan réel normal : 5 statuts 200 comptés, aucun 3xx/403/429/5xx', R.statutsHttp, { 'https://asia.pokemon-card.com': { 200: 5 } });
+    vp = fauxVerrou({ pid: 7, hote: 'ailleurs', ageS: 5 }); tr = reseau(asie());
+    r = silencieux();
+    try { R = await require('./collecteur-images-tpc').planReel({ cx: { db: BP.db }, M: BP.M, sets: [SLUG_AS], fichierCache, verrouAttendu: vp, transport: tr, cadenceMs: 0, ligneDe: ligneAS }); } finally { r(); }
+    verifier('verrou global tenu par un autre → on s\'arrête, 0 requête, le verrou d\'un autre n\'est pas rendu', [R.arret, tr.appels.length, vp.appels], ['verrou-tenu', 0, ['prendre']]);
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ ERREUR DU BANC', e); process.exit(1); });

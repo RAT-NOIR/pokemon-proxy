@@ -69,6 +69,8 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ idem : la liste des sources officielles de `largeurMinDe` est dérivée de `SITES` (tpc.js) — ajouter ou retirer un site
     // change la règle sans toucher seuils-images.js (test-seuils-images.js casse si une dépendance de seuils-images manque ici)
     'collecte-cartes/tpc.js',
+    // ➕ 2026-10-11 : la TABLE des unités TPC (lignes AS1-AS4 à demi-listes) : le collecteur refuse `refuse-table` une unité que son commit ne porte pas
+    'collecte-cartes/tpc-sets.js',
     // ➕ 2026-10-11 : PIKAQIAN. Le collecteur, le client/la preuve (que seuils-images.js charge : la liste des sources à 300 px en vient) et la table des sets
     // (la garde de l'unité la lit mot pour mot) : un worker qui n'a pas ces trois-là sortirait l'unité `refuse-table` / `source-inconnue`.
     'collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json',

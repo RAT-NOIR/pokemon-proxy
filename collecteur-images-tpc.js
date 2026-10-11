@@ -29,7 +29,8 @@ const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collec
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
-const { TABLE_TPC, ligneTpc } = require('./collecte-cartes/tpc-sets');
+const { cleNumero } = require('./collecte-cartes/jointure');
+const { TABLE_TPC, ligneTpc, listesDe } = require('./collecte-cartes/tpc-sets');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const LISTE_VALIDE_MS = 30 * 24 * 3600 * 1000;
@@ -60,9 +61,13 @@ const urlListe = (site, L, page) => site === 'tpc-asie'
 const urlFiche = (site, L, id) => site === 'tpc-asie' ? `/${L.langue}/card-search/detail/${id}/` : `/card-search/details.php/card/${id}/regu/all`;
 
 /** 1. La liste, page par page, ou celle qu'on a déjà (complète, de moins de 30 jours). */
-async function lireListe(db, client, site, L, idEtat) {
+// `prefixe` : null pour une ligne à UNE liste (l'état garde `liste`, comme avant) ; la lettre de la demi-liste pour une ligne à plusieurs
+// (l'état garde `listes.<lettre>`). `L.code` est alors le code de CETTE liste (AS1a), posé par l'appelant.
+async function lireListe(db, client, site, L, idEtat, prefixe = null) {
     const E = db.collection('collecte_images_etat');
-    const deja = (await E.findOne({ _id: idEtat }, { projection: { liste: 1 } }))?.liste;
+    const champ = prefixe == null ? 'liste' : `listes.${prefixe}`;
+    const doc = await E.findOne({ _id: idEtat }, { projection: { liste: 1, listes: 1 } });
+    const deja = prefixe == null ? doc?.liste : doc?.listes?.[prefixe];
     if (deja?.complete && deja.code === L.code && deja.langue === L.langue && Date.now() - new Date(deja.luLe) < LISTE_VALIDE_MS) return { ...deja, reprise: true };
     const ids = [];
     let total = null, pages = null;
@@ -85,7 +90,7 @@ async function lireListe(db, client, site, L, idEtat) {
         }
     }
     const liste = { code: L.code, langue: L.langue, ids, total, pages, complete: total != null && ids.length === total, luLe: new Date() };
-    await E.updateOne({ _id: idEtat }, { $set: { liste } }, { upsert: true });
+    await E.updateOne({ _id: idEtat }, { $set: { [champ]: liste } }, { upsert: true });
     return liste;
 }
 
@@ -116,7 +121,7 @@ async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site }) };
+    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null }) };
 }
 
 /** La garde de la jointure : les entrées des AUTRES sources, chacune par son empreinte (carte, source, set, numéro, clé) — elles ne
@@ -171,17 +176,30 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     try {
         let liste, fiches;
         try {
-            liste = await lireListe(db, client, site, L, idEtat);
-            // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
-            // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
-            // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
-            if (!Number.isFinite(L.cartes) || liste.total == null || liste.total < L.cartes / 2 || liste.total > 2 * L.cartes + 20) {
-                const motif = `la liste filtrée rend ${liste.total ?? '?'} cartes pour ${L.code}, la mesure du 2026-10-07 en disait ${L.cartes} : le filtre ne désigne peut-être plus ce set`;
-                await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
-                console.error(`❌ ${unite._id} : ${motif}.`);
-                return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
+            // UNE liste (toutes les lignes d'avant) ou PLUSIEURS, chacune liée à un préfixe de numéro : chaque liste est lue ET jugée contre SON
+            // total avant qu'une seule fiche ne soit demandée — une liste hors mesure refuse la ligne entière.
+            const sources = listesDe(L);
+            const lues = [];
+            for (const S of sources) {
+                const l = await lireListe(db, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+                // LE TOTAL DE LA LISTE contre la MESURE de la table (relecture du 2026-10-07) : une source qui ignorerait son filtre rendrait
+                // des milliers de cartes d'autres sets, et un dénominateur numérique ne le dirait pas. Hors de [½ ; 2 × + 20] : refus, aucune fiche.
+                // sans compte mesuré, la garde ne peut pas conclure : elle REFUSE (une garde ne passe pas par défaut — seconde relecture)
+                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) {
+                    const motif = `la liste filtrée rend ${l.total ?? '?'} cartes pour ${S.code}, la mesure en disait ${S.cartes} : le filtre ne désigne peut-être plus ce set`;
+                    await E.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-liste', motif } });
+                    console.error(`❌ ${unite._id} : ${motif}.`);
+                    return { code: unite._id, etat: 'refuse-liste', erreur: motif, sansJointure: true };
+                }
+                lues.push({ S, l });
             }
-            fiches = await lireFiches(db, client, site, L, liste.ids, { compter });
+            if (!L.listes) { liste = lues[0].l; fiches = await lireFiches(db, client, site, L, liste.ids, { compter }); }
+            else {
+                fiches = [];
+                for (const { S, l } of lues) fiches.push(...(await lireFiches(db, client, site, L, l.ids, { compter })).map(f => ({ ...f, prefixe: S.prefixe, listeCode: S.code })));
+                // le bilan d'une ligne à plusieurs listes : les sommes, `complete` seulement si TOUTES le sont
+                liste = { ids: lues.flatMap(x => x.l.ids), total: lues.reduce((n, x) => n + x.l.total, 0), complete: lues.every(x => x.l.complete), reprise: lues.every(x => x.l.reprise) };
+            }
         } catch (e) { if (!e.bloque) throw e; bloque = e; }
         if (bloque) return await conclureBloque(E, unite, site, bloque, client);
         if (arretDemande || !verrou.tenu) return { code: unite._id, etat: 'interrompu', sansJointure: true };
@@ -223,7 +241,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 await M.Image.updateOne({ _id }, {
                     $set: {
                         source: site, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
-                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: `${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}`,
+                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: `${p.fiche.prefixe ?? ''}${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}`,
                         preuve: p.preuve, voie: p.voie, urlOriginal: url,
                         wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
@@ -314,20 +332,144 @@ async function conclureBloque(E, unite, site, err, client, { seulementAlerte = f
     return { code: unite._id, etat: 'refuse-source-bloquee', erreur: err.message, sansJointure: true };
 }
 
-module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC };
+// `planReel` et `baseLocale` (plus bas) sont des déclarations de fonction : hissées, donc exportables ici, avant la garde de la ligne de commande.
+module.exports = { collecterSet, releve, planifier, idAlerteBloquee, STOP_OCTETS, TABLE_TPC, planReel, baseLocale };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
 
-const AUTORISES = [/^--plan$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/];
+const AUTORISES = [/^--plan$/, /^--plan-reel$/, /^--fiches-des-trous$/, /^--verrou$/, /^--sets=[^,\s][^\s]*$/, /^--cache=[^\s]+$/];
 const inconnus = process.argv.slice(2).filter(a => !AUTORISES.some(r => r.test(a)));
-if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--verrou')) {
-    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=slug,…], --verrou. La collecte est celle du worker.`);
+if (inconnus.length || !process.argv.slice(2).some(a => a === '--plan' || a === '--plan-reel' || a === '--verrou')) {
+    console.error(`❌ ${inconnus.length ? `argument inconnu : ${inconnus.join(' ')} — ` : ''}autorisés : --plan [--sets=slug,…], --plan-reel --sets=slug,… --cache=<dossier>, --verrou. La collecte est celle du worker.`);
     process.exit(2);
 }
+
+/**
+ * `--plan-reel` : LIT les listes et les fiches à la source (le VRAI verrou global du site, cadence et robots du client de production),
+ * apparie, imprime le plan — et ne télécharge AUCUNE image. CE QU'IL ÉCRIT : le seul verrou global `tpc-asie` (pris puis rendu, le geste du
+ * collecteur) ; RIEN d'autre dans la base, RIEN dans R2 — pas même l'alerte `source-bloquee` : un blocage se rapporte dans la sortie
+ * (`arret: 'bloque'`). Les listes et les fiches lues se gardent dans un dossier LOCAL (`--cache`), jamais dans `tpc_fiches`. La sortie
+ * porte le compte des statuts HTTP par hôte (`statutsHttp`). Les AUTRES modes : `--plan` (cache seulement) et `--verrou` ne font aucune
+ * requête et n'écrivent rien ; la collecte (`collecterSet`, le worker) écrit images, R2, jointures et l'alerte de blocage.
+ */
+function baseLocale(reelle, fichier, noms = ['collecte_images_etat', 'tpc_fiches']) {
+    const fs = require('fs'), path = require('path');
+    const mem = new Map(noms.map(n => [n, new Map()]));
+    if (fs.existsSync(fichier)) { const j = JSON.parse(fs.readFileSync(fichier, 'utf8')); for (const n of noms) for (const [k, v] of Object.entries(j[n] || {})) mem.get(n).set(k, v); }
+    const lire = (o, k) => k.split('.').reduce((x, p) => x?.[p], o);
+    const ecrire = (o, k, v) => { const ps = k.split('.'); let x = o; for (const p of ps.slice(0, -1)) x = x[p] ??= {}; x[ps.at(-1)] = v; };
+    const col = n => ({
+        async findOne(f) { return structuredClone(mem.get(n).get(f._id) ?? null); },
+        find(f) { return { toArray: async () => structuredClone((f?._id?.$in || []).map(i => mem.get(n).get(i)).filter(Boolean)) }; },
+        async updateOne(f, u, o = {}) {
+            let d = mem.get(n).get(f._id);
+            if (!d) { if (!o.upsert) return { matchedCount: 0 }; d = { _id: f._id }; mem.get(n).set(f._id, d); }
+            for (const [k, v] of Object.entries(u.$set || {})) ecrire(d, k, v);
+            return { matchedCount: 1 };
+        }
+    });
+    return {
+        collection: n => noms.includes(n) ? col(n) : reelle.collection(n),
+        ecrireFichier: () => { fs.mkdirSync(path.dirname(fichier), { recursive: true }); fs.writeFileSync(fichier, JSON.stringify(Object.fromEntries(noms.map(n => [n, Object.fromEntries(mem.get(n))])))); },
+        lire
+    };
+}
+async function planReel({ cx, M, sets, fichierCache, verrouAttendu = null, transport, cadenceMs, ligneDe = ligneTpc, seulementTrous = false }) {
+    const E = cx.db.collection('collecte_images_etat');
+    const site = 'tpc-asie';
+    const bloquee = await E.findOne({ _id: idAlerteBloquee(site), active: true });
+    if (bloquee) { console.error(`⛔ ${site} a bloqué (${bloquee.motif}) — aucune requête.`); return { arret: 'source-bloquee' }; }
+    const verrou = verrouAttendu || fabriquerVerrou({ Modele: M.EtatImages, id: T.SITES[site].verrou, dureeMs: T.VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${site}` });
+    const tenuPar = await verrou.prendre();
+    if (tenuPar) { console.error(`⛔ verrou global ${site} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — on s'arrête, aucune requête.`); return { arret: 'verrou-tenu', tenuPar }; }
+    const local = baseLocale(cx.db, fichierCache);
+    const client = T.fabriquerClientTpc({ site, verrou, ...(transport ? { transport } : {}), ...(cadenceMs != null ? { cadenceMs, reessaiMs: 0 } : {}) });
+    const bilan = [];
+    const statutsHttp = () => ({ [T.SITES[site].hote]: client.statuts() });     // 200/3xx/403/429/5xx par hôte
+    try {
+        for (const slug of sets) {
+            const L = ligneDe(site, slug);
+            if (!L) { console.error(`❌ ${slug} : absent de collecte-cartes/tpc-sets.js`); bilan.push({ slug, erreur: 'absent de la table' }); continue; }
+            const set = await M.Set.findById(slug).select('tirage region').lean();
+            if (!set || (set.tirage ?? set.region) !== L.tirage) { console.error(`❌ ${slug} : set absent ou au mauvais tirage en base`); bilan.push({ slug, erreur: 'set absent ou mauvais tirage' }); continue; }
+            const idEtat = `${site}/${slug}`, lues = [];
+            let refus = null;
+            for (const S of listesDe(L)) {
+                const l = await lireListe(local, client, site, { ...L, code: S.code }, idEtat, S.prefixe);
+                if (!Number.isFinite(S.cartes) || l.total == null || l.total < S.cartes / 2 || l.total > 2 * S.cartes + 20) { refus = `liste ${S.code} : total ${l.total ?? '?'} pour une mesure de ${S.cartes}`; break; }
+                lues.push({ S, l });
+            }
+            if (refus) { console.error(`❌ ${slug} : ${refus} — ligne refusée`); bilan.push({ slug, refus }); continue; }
+            const fiches = [];
+            const nonLues = new Set();                  // (préfixe + numéro) que la recherche par position n'a pas pu lire : jamais présentées comme « absentes »
+            if (!seulementTrous) {
+                for (const { S, l } of lues) fiches.push(...(await lireFiches(local, client, site, L, l.ids, { compter: () => { } })).map(f => L.listes ? { ...f, prefixe: S.prefixe, listeCode: S.code } : f));
+            } else {
+                // LE PLAN SANS LIRE TOUTE LA LISTE : seules les fiches des numéros dont NOUS avons besoin. La liste TPC suit l'ordre des numéros ; on
+                // y cherche la position n par INTERPOLATION et on LIT la fiche trouvée — la preuve vient de son propre numéro, jamais de la position.
+                // Une position qui ne mène nulle part est dite « fiche-non-lue » (un trou de NOTRE travail), pas « absente-de-la-source ».
+                const P0 = await planifier(local, slug, L, []);
+                // la CLÉ DE PRODUCTION (`cleNumero`, préfixe compris) décide de tout : « A19 » n'est jamais « 19 » ni « B19 ». Chiffres seuls : la distance.
+                const voulus = new Map();       // clé → { p: préfixe, n: chiffres }
+                for (const r of P0.restes) { const k = cleNumero(r.numero), m = /^([A-Z-]*)(\d+)/.exec(k ?? ''); if (k && m) voulus.set(k, { p: m[1], n: Number(m[2]) }); }
+                for (const { S, l } of lues) {
+                    const p = String(S.prefixe ?? '').toUpperCase(), dejaLues = new Map();
+                    const cleDe = f => cleNumero(L.listes ? `${p}${f.numero}` : f.numero);
+                    const mesVoulus = [...voulus].filter(([, v]) => !L.listes || v.p === p).sort((a, b) => a[1].n - b[1].n);
+                    const lireA = async i => {
+                        if (!dejaLues.has(i)) { const [f] = await lireFiches(local, client, site, L, [l.ids[i]], { compter: () => { } }); dejaLues.set(i, f ? { ...f, ...(L.listes ? { prefixe: S.prefixe, listeCode: S.code } : {}) } : null); }
+                        return dejaLues.get(i);
+                    };
+                    for (const [cle, { n }] of mesVoulus) {
+                        let i = Math.min(Math.max(n - 1, 0), l.ids.length - 1), trouve = false;
+                        const passes = new Set();
+                        while (!passes.has(i) && passes.size < 6) {
+                            passes.add(i);
+                            const f = await lireA(i);
+                            const m = Number(String(f?.numero ?? '').replace(/\D/g, ''));
+                            if (!f || !Number.isFinite(m)) break;
+                            if (cleDe(f) === cle) { trouve = true; break; }
+                            i = Math.min(Math.max(i + (n - m), 0), l.ids.length - 1);
+                        }
+                        if (!trouve) nonLues.add(cle);
+                    }
+                    fiches.push(...[...dejaLues.values()].filter(Boolean));
+                }
+            }
+            local.ecrireFichier();
+            const P = await planifier(local, slug, L, fiches);
+            for (const r of P.restes) if (r.motif === 'absente-de-la-source') { if (nonLues.has(cleNumero(r.numero))) r.motif = 'fiche-non-lue'; }
+            const motifs = {}; for (const r of P.restes) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
+            const parPrefixe = {}; for (const x of P.plan) { const k = String(x.numero ?? '').match(/^[A-Za-z]*/)[0] || '-'; parPrefixe[k] = (parPrefixe[k] || 0) + 1; }
+            const ligne = { slug, listes: lues.map(({ S, l }) => `${S.code} ${l.ids.length}/${l.total}${l.reprise ? ' (cache)' : ''}`), fiches: fiches.length, produits: P.produits, trous: P.trous, prouves: P.plan.length, parPrefixe, trousParCause: motifs };
+            console.log(JSON.stringify(ligne));
+            bilan.push({ ...ligne, exemplesProuves: P.plan.slice(0, 4).map(x => `${x.numero} ${x.nomEn} ← ${x.fiche.nom} (${x.voie})`), exemplesTrous: P.restes.slice(0, 6).map(r => `${r.numero ?? '—'} ${r.nomEn}: ${r.motif}`) });
+        }
+    } catch (e) {
+        local.ecrireFichier();
+        if (!e.bloque) throw e;
+        const msg = `${site} BLOQUÉ : ${e.message}`;
+        // MODE PLAN : aucune écriture hors du verrou — pas d'alerte en base ; l'arrêt se rapporte ici, dans la sortie
+        console.error(`⛔ ${msg} — rapporté ici seulement (aucune alerte écrite par le mode plan)`);
+        return { arret: 'bloque', erreur: e.message, bilan, requetes: client.compteRequetes(), statutsHttp: statutsHttp() };
+    } finally { await verrou.rendre(); }
+    return { bilan, requetes: client.compteRequetes(), cadenceMs: client.cadence(), statutsHttp: statutsHttp() };
+}
+
 (async () => {
     const { ouvrirConnexions } = require('./collecte-cartes/garde');
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
+    if (process.argv.includes('--plan-reel')) {
+        const sets = process.argv.find(a => a.startsWith('--sets='))?.slice(7).split(',');
+        const cache = process.argv.find(a => a.startsWith('--cache='))?.slice(8);
+        if (!sets || !cache) { console.error('❌ --plan-reel exige --sets=<slug,…> et --cache=<dossier>'); await fermer(); process.exit(2); }
+        const { modeles } = require('./collecte-cartes/schemas');
+        const r = await planReel({ cx, M: modeles(cx), sets, fichierCache: require('path').join(cache, 'plan-reel.json'), seulementTrous: process.argv.includes('--fiches-des-trous') });
+        console.log('\nRÉSULTAT', JSON.stringify({ requetesReelles: r.requetes, cadenceMs: r.cadenceMs, arret: r.arret ?? null, statutsHttp: r.statutsHttp ?? null }));
+        require('fs').writeFileSync(require('path').join(cache, 'plan-reel-resultat.json'), JSON.stringify(r, null, 1));
+        await fermer(); return;
+    }
     const E = cx.db.collection('collecte_images_etat');
     if (process.argv.includes('--verrou')) {
         for (const site of T.SOURCES_TPC) {
