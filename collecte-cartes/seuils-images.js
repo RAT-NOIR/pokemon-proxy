@@ -34,8 +34,12 @@ const LARGEUR_MIN_OFFICIELLE = 300;
 // §21 bis : les sites TPC viennent de la SOURCE UNIQUE (`SITES` de tpc.js) — un site TPC ajouté là passe à 300 sans autre geste.
 // `pokemon-com` n'a pas encore de collecteur, donc pas de site : il s'ajoute ici, à la main.
 const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);
+// ➕ 2026-10-11, DÉCISION DU TESTEUR : « PikaQian : seuil de 300 px pour cette source officielle (usage : vignette de 157 px) ». PikaQian n'est
+// PAS une source officielle (un site de prix tiers qui copie les visuels de pokemon.cn, images 300 × 419) : elle n'entre donc pas dans
+// SOURCES_OFFICIELLES (que test-seuils-images garde = TPC + pokemon-com) mais dans sa propre liste, fermée, qui ne touche aucune autre source.
+const SOURCES_A_300 = Object.freeze([...SOURCES_OFFICIELLES, require('./pikaqian').SOURCE]);
 function largeurMinDe(source) {
-    return typeof source === 'string' && SOURCES_OFFICIELLES.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;
+    return typeof source === 'string' && SOURCES_A_300.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;
 }
 
 // Une décision de seuil se RELIT (§23). Un document `trop-petit` porte le seuil appliqué (`seuilApplique`) ; un document SANS ce
@@ -54,7 +58,7 @@ function aRejuger(doc, source) {
 // uniteDeLaLigne de TPC) ; les anciennes unités artofpkm n'en ont pas (collecte-massive les crée sans) — on lit alors le préfixe de
 // l'_id (`tpc-asie/…`, `pokemon-card-com/…`, `tcgdex/…`), et à défaut de préfixe (un code de set nu) le défaut de l'appelant.
 // sources de visuels connues : les officielles (dérivées ci-dessus) + les trois autres collecteurs
-const SOURCES_CONNUES = Object.freeze([...SOURCES_OFFICIELLES, 'tcgdex', 'artofpkm', 'bulbapedia']);
+const SOURCES_CONNUES = Object.freeze([...SOURCES_A_300, 'tcgdex', 'artofpkm', 'bulbapedia']);
 function sourceDeUnite(unite, defaut) {
     if (typeof unite?.source === 'string' && unite.source) return unite.source;
     // le préfixe n'est accepté que s'il appartient à la liste FERMÉE des sources connues : des CODES DE SET contiennent « / »
@@ -71,4 +75,4 @@ function sourceDeUnite(unite, defaut) {
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, largeurMinDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };

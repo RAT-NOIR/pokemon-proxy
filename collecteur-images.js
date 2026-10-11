@@ -855,11 +855,38 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
                     console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
                 }
                 finally { await vp.rendre(); }
+            } else if (sourceDuSet === 'pikaqian') {
+                // 🔑 PIKAQIAN (décision du testeur, 2026-10-11) : un site de prix tiers qui copie les visuels officiels chinois — verrou global PROPRE
+                // (un autre serveur, §17), lié au client ; arrêt au premier défi (alerte) et à la première erreur répétée (l'unité revient en file).
+                // L'alimentateur n'insère AUCUNE unité pikaqian : elles viennent de enfiler-pikaqian.js, après redéploiement.
+                // le chargement du collecteur est DANS un try : une erreur de chargement ne tue pas la boucle, l'unité attend une heure, la cause écrite
+                let pkImg = null, erreurChargement = null;
+                try { pkImg = require('./collecteur-images-pikaqian'); } catch (e) { erreurChargement = e; }
+                if (erreurChargement) {
+                    console.error(`🔴 ${suivant._id} : le collecteur pikaqian ne se charge pas — ${erreurChargement.message} — remise en attente (1 h), rien n'est demandé à personne.`);
+                    await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'collecteur-illisible', pasAvant: new Date(Date.now() + 60 * 60 * 1000), erreur: `chargement : ${erreurChargement.message}` }, $unset: { pris: 1 } });
+                    continue;
+                }
+                await verrouGlobal.rendre();
+                const vk = fabriquerVerrou({ Modele: M.EtatImages, id: pkImg.VERROU_GLOBAL, dureeMs: VERROU_GLOBAL_MS, surInsertion: { phase: 'collecteur' }, surPerte, nom: `verrou global ${sourceDuSet}` });
+                let tenuPar = await vk.prendre();
+                for (let essai = 0; tenuPar && !arretDemande; essai++) {
+                    if (essai === 0) console.log(`⏳ verrou global ${sourceDuSet} tenu par pid ${tenuPar.pid} sur ${tenuPar.hote} (battement il y a ${tenuPar.ageS} s) — j'attends, ${ATTENTE_VERROU_MS / 1000} s entre deux essais.`);
+                    await new Promise(r => setTimeout(r, ATTENTE_VERROU_MS));
+                    tenuPar = await vk.prendre();
+                }
+                if (tenuPar) { await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente' }, $unset: { pris: 1 } }); break; }
+                try { b = await pkImg.collecterSet(suivant, M, { verrou: vk }); }
+                catch (e) {
+                    b = { code: suivant._id, etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };
+                    console.error(`🔴 ${suivant._id} : exception pendant la collecte ${sourceDuSet} — ${e.message}`);
+                }
+                finally { await vk.rendre(); }
             } else if (sourceDuSet === SOURCE) b = await collecterSet(suivant._id, M, dossierRapport);
             else {
                 // 🔴 PLAN-POKECARDEX.md §5 (demande du testeur, 2026-09-27) : le `else` final envoyait TOUTE source inconnue chez artofpkm —
                 // une unité d'une source neuve, lue par un worker antérieur, aurait frappé le mauvais serveur sous le mauvais verrou.
-                // L'aiguillage s'écrit par ce qu'il AUTORISE (§51) : artofpkm, bulbapedia, tcgdex, tpc-asie, pokemon-card-com ; tout le reste attend un worker qui
+                // L'aiguillage s'écrit par ce qu'il AUTORISE (§51) : artofpkm, bulbapedia, tcgdex, tpc-asie, pokemon-card-com, pikaqian ; tout le reste attend un worker qui
                 // la connaît (une heure, puis relue), la cause ÉCRITE sur l'unité — ni refus définitif, ni boucle.
                 console.error(`🔴 ${suivant._id} : source « ${sourceDuSet} » inconnue de ce worker — remise en attente (1 h), rien n'est demandé à personne.`);
                 await File.updateOne({ _id: suivant._id }, { $set: { etat: 'attente', resultat: 'source-inconnue', pasAvant: new Date(Date.now() + 60 * 60 * 1000), erreur: `source « ${sourceDuSet} » inconnue de ce worker` }, $unset: { pris: 1 } });
@@ -889,7 +916,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // `REVALIDATION_SECRET` doit exister dans l'environnement du worker.
             if (APRES_JOINTURE.test(String(b?.etat)) && !b.sansJointure) {
                 // une unité TPC porte son set (`slugSet`) : ses sets n'ont pas toujours de ligne de table (fiches simples, promos régionales)
-                const slugUnite = SOURCES_TPC.includes(sourceDuSet) ? suivant.slugSet : ligneDeTable(suivant.code || String(suivant._id).replace(/^tcgdex\//, ''))?.slugSet;
+                const slugUnite = SOURCES_TPC.includes(sourceDuSet) || sourceDuSet === 'pikaqian' ? suivant.slugSet : ligneDeTable(suivant.code || String(suivant._id).replace(/^tcgdex\//, ''))?.slugSet;
                 let rv;
                 // ⚠️ « rien téléchargé » ne veut pas dire « rien joint » : un passage qui suit un passage INTERROMPU joint des images
                 // téléchargées avant — sauter sa revalidation laisserait la page ancienne. Coût borné : 1 appel par passage joint,

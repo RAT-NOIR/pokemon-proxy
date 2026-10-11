@@ -69,6 +69,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ idem : la liste des sources officielles de `largeurMinDe` est dérivée de `SITES` (tpc.js) — ajouter ou retirer un site
     // change la règle sans toucher seuils-images.js (test-seuils-images.js casse si une dépendance de seuils-images manque ici)
     'collecte-cartes/tpc.js',
+    // ➕ 2026-10-11 : PIKAQIAN. Le collecteur, le client/la preuve (que seuils-images.js charge : la liste des sources à 300 px en vient) et la table des sets
+    // (la garde de l'unité la lit mot pour mot) : un worker qui n'a pas ces trois-là sortirait l'unité `refuse-table` / `source-inconnue`.
+    'collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
