@@ -86,7 +86,7 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
 
     // ═══════════ 0 bis. TAILLE PAR DÉFAUT (20) : le contrôle, un refus de taille, et une coupure en pleine lecture rattrapée par la passe (plafonds PLAFONDS : la passe ne les compte pas)
     {
-        const D = { COUPURE_CARTES_MAX: '20' };
+        const D = { COUPURE_CARTES_MAX: 'defaut' };         // l'enfant ne pose aucune V2_LOT_CARTES_MAX : la taille par défaut du serveur
         const x = await instal(1, 5); const c = await lancer('normal', { ...D, COUPURE_CARTES: '20' });
         try {
             const r = await poster(c.url, x.jeton, cle());
