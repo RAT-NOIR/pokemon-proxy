@@ -9,7 +9,9 @@ const mongoose = require('mongoose');
     const banc = await H.ouvrirBancV2();                       // AVANT tout require qui lit l'environnement
     const { facadeLecture } = require('../../collecte-cartes/base-banc');
     const X = require('../migrations/exporter-visuels');
-    const Imp = require('../migrations/importer-visuels');
+    const V = require('../identifier/visuels');
+    const { decider } = require('../chargeur/decision');
+    const { regleEmbarquee } = require('../chargeur/regle-site');
     const cx = await mongoose.createConnection(banc.uri, { dbName: 'banc_cartes' }).asPromise();
     const cp = await mongoose.createConnection(banc.uri, { dbName: 'banc_prod' }).asPromise();
     try {
@@ -53,7 +55,7 @@ const mongoose = require('mongoose');
 
         const regle = await X.chargerRegle();
         const lire = () => X.exporter({ cartes: facadeLecture(cx.db), prod: facadeLecture(cp.db), regle });
-        const { entrees, denominateurs: d } = await lire();
+        const { entrees, denominateurs: d, liens } = await lire();
         const e = id => entrees.find(x => x.idProduct === id);
 
         H.v('dénominateurs : catalogue 13, produits à ligne 13, catalogue sans ligne 1', [d.catalogue, d.avecLigne, d.sansLigne], [13, 13, 1]);
@@ -79,10 +81,28 @@ const mongoose = require('mongoose');
         H.v('1009 visuel sans vignette : champ vignette absent (l\'importeur le refusera)', 'vignette' in e(1009), false);
         H.v('tous les champs PRÉSENTS exigés par l\'importeur sont là (null admis) sur chaque entrée', entrees.every(x => ['idMetacard', 'numero', 'rarete', 'total'].every(c => x[c] !== undefined)), true);
 
-        // le fichier passe preparer() de l'importeur : refus attendus, et seulement eux
-        const p = Imp.preparer(Imp.entreesDuFichier(JSON.parse(JSON.stringify(entrees))));
-        H.v('preparer() : 10 lus, 7 importés, 3 refusés', [p.lus, p.importes, p.refuses], [10, 7, 3]);
-        H.v('preparer() : motifs = substitut sans mention + 2 vignettes absentes (1009, 1014), rien d\'autre', p.motifs, { 'visuel de substitution sans mention': 1, 'vignette absente': 2 });
+        // chaque entrée passe la validation d'entrée de visuels.js (lireEntree) : refus attendus, et seulement eux
+        const lues = JSON.parse(JSON.stringify(entrees)).map(x => V.lireEntree(x));
+        const motifs = {}; for (const r of lues) if (!r.ok) motifs[r.motif] = (motifs[r.motif] || 0) + 1;
+        H.v('lireEntree : 10 lues, 7 admises, 3 refusées', [lues.length, lues.filter(r => r.ok).length, lues.filter(r => !r.ok).length], [10, 7, 3]);
+        H.v('lireEntree : motifs = substitut sans mention + 2 vignettes absentes (1009, 1014), rien d\'autre', motifs, { 'visuel de substitution sans mention': 1, 'vignette absente': 2 });
+
+        // le LIEN fiche → produits (cotes) : set → clé `idInterne|numero` → idProducts
+        const lien = (set, cle) => (liens.get(set) || new Map()).get(cle);
+        H.v('liens : Set-A, fiche 1|001 → [1001] ; 7|007 (deux impressions au même numéro) → [1007] ; 4|004 → [1004]', [lien('Set-A', '1|001'), lien('Set-A', '7|007'), lien('Set-A', '4|004')], [[1001], [1007], [1004]]);
+        H.v('   Set-JP : 22|001 → [1012]', lien('Set-JP', '22|001'), [1012]);
+        H.v('   un produit sans fiche du site (1010) n\'est lié à AUCUNE fiche ; 1013 (visuel refusé, fiche existante) l\'est', [[...liens.values()].some(m => [...m.values()].some(v => v.includes(1010))), lien('Set-A', '23|013')], [false, [1013]]);
+        H.v('   dénominateurs du lien : 2 sets, produits liés = 12 (13 lignes − 1 sans fiche)', [d.setsAvecLiens, d.produitsLies], [2, 12]);
+        // une fiche sans numéro : la clé porte « - »
+        const sans = await decider({ sets: [{ _id: 'Set-C', idExpansion: 7, code: 'SC', nomAffichage: 'Set C', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set C' } }],
+            docs: [{ _id: 30, nomEn: 'Sans numéro', sets: ['Set-C'], impressions: [], images: [] }], lignes: [{ idProduct: 3030, carteId: 30, idExpansion: 7, numeroFiche: null, slug: 'X', slugSet: 'Set-C' }],
+            metacarte: new Map([[3030, 1]]), regle });
+        H.v('fiche sans numéro : clé « 30|- »', [...sans.liens.get('Set-C').keys()], ['30|-']);
+
+        // la règle EMBARQUÉE décide EXACTEMENT comme celle du site (mêmes entrées, mêmes liens)
+        const emb = await decider({ sets: await cx.db.collection('sets').find({}).toArray(), docs: await cx.db.collection('cartes').find({}).toArray(), lignes: await cx.db.collection('cartes_produits').find({}).toArray(),
+            metacarte: new Map(metas.map(([a, b]) => [a, b])), regle: await regleEmbarquee() });
+        H.v('règle embarquée : entrées et liens identiques à ceux de la règle du site', [JSON.stringify(emb.entrees) === JSON.stringify(entrees), JSON.stringify([...emb.liens].map(([k, m]) => [k, [...m]])) === JSON.stringify([...liens].map(([k, m]) => [k, [...m]]))], [true, true]);
 
         // UN SEUL exemplaire de la décision de visuel : la fonction des logos, paramétrée (jamais copiée) sur la politique du substitut sans mention
         const L = require('../../exporter-donnees-logos-site');
@@ -92,8 +112,9 @@ const mongoose = require('mongoose');
         H.v('choisirVisuel, politique refus (v2) : mention null, rien d\'inventé', L.choisirVisuel({ ...base, substitutSansMention: 'refus' }).mention, null);
         let pol = null; try { L.choisirVisuel({ ...base }); } catch (x) { pol = x.message; }
         H.v('choisirVisuel sans politique : lève (le choix est nommé, jamais un défaut)', /substitutSansMention/.test(pol || ''), true);
-        H.v('l\'exporteur v2 n\'a plus de copie de la décision (il appelle choisirVisuel)', /choisirVisuel\(/.test(require('fs').readFileSync(require.resolve('../migrations/exporter-visuels'), 'utf8')) && !/visuelAutreTirage\(/.test(require('fs').readFileSync(require.resolve('../migrations/exporter-visuels'), 'utf8')), true);
-        H.v('le résumé de l\'exporteur reprend celui de l\'importeur', X.resumer({ entrees, denominateurs: d }, Imp).includes(Imp.resume(p)), true);
+        const lireSrc = m => require('fs').readFileSync(require.resolve(m), 'utf8');
+        H.v('UNE seule copie de la décision : decision.js appelle choisirVisuel ; l\'exporteur n\'en porte pas (il appelle decider)',
+            [/choisirVisuel\(/.test(lireSrc('../chargeur/decision')), !/visuelAutreTirage\(|choisirVisuel\(/.test(lireSrc('../migrations/exporter-visuels')), /decider\(/.test(lireSrc('../migrations/exporter-visuels'))], [true, true, true]);
 
         // une règle du site introuvable LÈVE (jamais un repli)
         let lev = null; try { await X.exporter({ cartes: facadeLecture(cx.db), prod: facadeLecture(cp.db), regle: { ...regle, setParImpression: undefined } }); } catch (x) { lev = x.message; }
