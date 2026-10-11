@@ -36,6 +36,10 @@ function verifierTirages(T) {
         const segments = String(texte ?? '').split(' ; ').map(x => x.trim()).filter(Boolean);
         const types = segments.map(typeDePreuve);
         if (!types.length || types[0] == null) throw new Error(`exp ${exp} : type de preuve absent de la liste fermée (${TYPES.join(', ')}) : « ${String(texte).slice(0, 80)} »`);
+        // CHAQUE segment porte un type de la liste fermée (ou le complément « citation nomme le produit ») : un segment inconnu ne passe pas
+        segments.forEach((seg, i) => {
+            if (types[i] == null && !/^(citation nomme le produit|complément)\s*:/.test(seg)) throw new Error(`exp ${exp} : segment ${i + 1} sans type de la liste fermée (${TYPES.join(', ')}) : « ${seg.slice(0, 80)} »`);
+        });
         segments.forEach((seg, i) => {
             const ty = types[i];
             if (ty === 'declarations' && /^declarations/.test(seg) &&!/\d+ (cartes?|impressions?)/.test(seg)) throw new Error(`exp ${exp} : declarations sans le nombre de cartes ou d'impressions : « ${seg.slice(0, 80)} »`);

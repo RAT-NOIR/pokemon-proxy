@@ -67,7 +67,7 @@ const TIRAGES = {
     4246: ['jp', 'codes_set : japonais (smL)'], 5718: ['jp', 'codes_set : japonais (pcgL)'], 4250: ['jp', 'codes_set : japonais (smI)'],
     4515: ['jp', 'codes_set : japonais (sKV)'], 5219: ['jp', 'codes_set : japonais (svAL)'], 5299: ['jp', 'codes_set : japonais (svC)'],
     6017: ['jp', 'codes_set : japonais (svOD)'], 6016: ['jp', 'codes_set : japonais (svOM)'], 5865: ['jp', 'codes_set : japonais (advI)'],
-    5866: ['jp', 'codes_set : japonais (advH)'], 4381: ['jp', 'codes_set : japonais (sp5) ; famille sp1, sp2, sp4, sp6 : jp'], 4217: ['jp', 'codes_set : japonais (CS1)'],
+    5866: ['jp', 'codes_set : japonais (advH)'], 4381: ['jp', 'codes_set : japonais (sp5) ; famille : sp1, sp2, sp4, sp6 sont jp'], 4217: ['jp', 'codes_set : japonais (CS1)'],
     4347: ['intl', 'codes_set : occidental (CEL)'], 2361: ['intl', 'codes_set : occidental (MCD18F) ; TCGdex « Collection McDonald\'s 2018 » (data/, cardmarket 2361)'], 1623: ['intl', 'codes_set : occidental (MCD11)'],
     6596: ['idth', 'famille : MA1, MA4, MA6 sont idth (MA5)'], 6417: ['idth', 'famille : MA1, MA4, MA6 sont idth (MA2)'],
     2070: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK11)'], 1627: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK2)'], 1628: ['intl', 'famille : TK5, TK6, TK7, TK8 sont intl (TK3)'],
@@ -85,8 +85,8 @@ const TIRAGES = {
     // La série AS est indonésienne et thaïe (2026-10-07, zéro requête) : TCGdex data-asia/SM/AS1a…AS4b (noms `id`, et `th` pour AS1 ;
     // dates `id` 2019-08-09, `th` 2019-02-01 pour AS1) ; page « Sky Ruler (ATCG) » (copie Wayback) : « exclusively available in
     // Indonesian and Thai » ; le slug Cardmarket de 6703 dit « ID-TH ». Aucun fichier de carte chez TCGdex pour ces quatre sets.
-    6700: ['idth', 'TCGdex data-asia AS4a/AS4b « Booster Pack Penguasa Langit » (id) ; page « Sky Ruler (ATCG) » : « exclusively available in Indonesian and Thai » (AS4)'],
-    6701: ['idth', 'TCGdex data-asia AS3a/AS3b « Booster Pack Bayangan Tersembunyi » (id) ; famille AS1, AS2, AS4 : idth (AS3)'],
+    6700: ['idth', 'TCGdex data-asia AS4a/AS4b « Booster Pack Penguasa Langit » (id) ; complément : page « Sky Ruler (ATCG) » : « exclusively available in Indonesian and Thai » (AS4)'],
+    6701: ['idth', 'TCGdex data-asia AS3a/AS3b « Booster Pack Bayangan Tersembunyi » (id) ; famille : AS1, AS2, AS4 sont idth (AS3)'],
     6702: ['idth', 'TCGdex data-asia AS1a/AS1b « Matahari & Bulan: Hantaman Pertama » (id) et « ซันแอนด์มูน เฟิร์สอิมแพค » (th) (AS1)'],
     6703: ['idth', 'nom : « Legends Awakened ID-TH » (slug Cardmarket) ; TCGdex data-asia AS2a/AS2b « Booster Pack Kebangkitan Legenda » (id) (AS2)'],
     6635: ['zh-hans', 'famille : CSVM1C est zh-hans (CSVM2) ; asymétrie : 30 désignés, 25 en zh-hans seul, 1 en zh-hant seul'],
@@ -94,7 +94,7 @@ const TIRAGES = {
     // (2026-10-07, testeur : « crée leurs sets par la voie normale (preuve de tirage, date, logo composé si besoin) ») — lues sur nos données
     // et le clone TCGdex, zéro requête :
     5526: ['intl', 'pages de cartes : Potion et Switch déclarent « My First Battle » en intl (decks Pikachu, Bulbasaur, Charmander, Squirtle)'],
-    6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; aucun set thaï de ce code'],
+    6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; complément : aucun set thaï de ce code'],
     6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)'],
     // (2026-10-11, SETS-21 : « les 21 sets jamais créés ») — lues sur nos données (impressions des pages de cartes : le tirage vient du
     // champ de page jpexpansion, donc du Japon), zéro requête ; le précédent est My First Battle (5526, 2026-10-07)
