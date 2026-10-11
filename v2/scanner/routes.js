@@ -200,11 +200,19 @@ function routesScanner(router, cfg, deps = {}) {
     function habiller(transformer, aRembourser, idScan) {
         return (req, res, next) => {
             const origine = res.json;
+            // O5 : la marque de livraison du scan se clôt en DERNIER, APRÈS le remboursement sans-prix (la dernière opération d'argent de la requête) : traiterIdentifier dépose sa clôture dans
+            // `req.fermerMarque` au lieu de l'exécuter. Un arrêt entre le débit et cette clôture se rattrape (la marque reste ouverte).
+            req.marqueFermeeParLaReponse = true;
+            const fermer = async () => { if (typeof req.fermerMarque === 'function') { try { await req.fermerMarque(); } catch (e) { journalErreur('clôture de la marque', e); } } };
             res.json = function (corps) {
                 res.json = origine;
                 corps = transformer(corps);
-                if (!aRembourser(corps)) return origine.call(this, corps);
-                rembourserSansPrix(req, corps, idScan(req, corps)).catch(e => { journalErreur('remboursement sans-prix', e); return corps; }).then(c => origine.call(this, c));
+                if (!aRembourser(corps)) {
+                    if (typeof req.fermerMarque !== 'function') return origine.call(this, corps);
+                    fermer().then(() => origine.call(this, corps));
+                    return this;
+                }
+                rembourserSansPrix(req, corps, idScan(req, corps)).catch(e => { journalErreur('remboursement sans-prix', e); return corps; }).then(async c => { await fermer(); return origine.call(this, c); });
                 return this;
             };
             next();

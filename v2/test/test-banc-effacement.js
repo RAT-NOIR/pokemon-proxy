@@ -21,7 +21,8 @@ let Lg, Q;
 const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
 const ORIGINE = cfg.origines.extension;
 const BUCKET = 'bucket-banc-test', SEL = 'sel-de-banc-A';
-const T0 = new Date('2026-10-10T12:00:00Z'), H1 = 3600e3, JOUR = 86400e3;
+// T0 = maintenant (et non une date figée) : le consentement du banc porte `le: new Date()`, et une horloge figée au 2026-10-10 12:00Z le refusait dès le 2026-10-11 12:00Z (bombe à retardement du banc, sans rapport avec O5).
+const T0 = new Date(), H1 = 3600e3, JOUR = 86400e3;
 const attendre = ms => new Promise(r => setTimeout(r, ms));
 const jusque = async (cond, ms = 3000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (await cond()) return true; await attendre(25); } return false; };
 const empreinte = j => crypto.createHash('sha256').update(j).digest('hex');

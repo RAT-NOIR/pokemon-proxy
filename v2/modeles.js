@@ -18,6 +18,8 @@ const INDEX = Object.freeze([
     I('hebdo', 'hebdo_cle', { compteId: 1, semaine: 1 }, { unique: true }), TTL('hebdo'),
     I('plafonds', 'plafonds_cle', { porteur: 1, jour: 1, type: 1 }, { unique: true }), TTL('plafonds'),
     I('questions', 'questions_etat', { etat: 1, poseeLe: 1 }),
+    // O5 : la marque de livraison d'un scan (v2/argent/marque-scan.js). (etat, ouverteLe) sert la passe de rattrapage et la réconciliation ; le TTL ne porte que sur les marques CLOSES (une marque non close n'a pas d'expireLe).
+    I('scans_en_cours', 'scans_etat', { etat: 1, ouverteLe: 1 }), TTL('scans_en_cours'),
     I('analyses', 'analyses_porteur', { porteur: 1, creeLe: -1 }), TTL('analyses'),
     TTL('annonces'),
     I('idempotence', 'idempotence_cle', { cle: 1 }, { unique: true }), TTL('idempotence'),

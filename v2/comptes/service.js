@@ -190,6 +190,7 @@ async function supprimerCompte({ compte, motDePasse, renonciation, cfg, maintena
     await col('installations').updateMany({ compteId: id }, { $set: { compteId: null, essais: 0 } });
     await col('mouvements').updateMany({ compteId: id }, { $unset: { compteId: '' }, $set: { supprime: true } });
     await col('analyses').deleteMany({ porteur: { $in: porteurs } });
+    await col('scans_en_cours').deleteMany({ 'porteur.type': 'compte', 'porteur.id': id });   // O5 : les marques de livraison du compte partent avec lui (celles de ses installations restent : l'installation survit)
     await col('questions').deleteMany({ porteur: { $in: porteurs } });
     await col('plafonds').deleteMany({ porteur: { $in: porteurs } });
     await col('hebdo').deleteMany({ compteId: id });
