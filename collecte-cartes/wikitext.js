@@ -28,7 +28,9 @@ const PARAMS_TEXTE = new Set(['effect', 'jtrans', 'dex', 'jdex', 'transdex', 'te
 function sansCommentaires(texte) {
     const s = String(texte ?? '');
     if (!s.includes('<!--')) return s;
-    return s.replace(/<!--[\s\S]*?(?:-->|$)/g, '');
+    // ⚠️ DÉVIATION ASSUMÉE de MediaWiki, MESURÉE : un `<!--` sans `-->` y court jusqu'à la fin, mais l'archive R2 est ÉPURÉE
+    // (le texte hors gabarit est perdu, le `-->` avec) — Master Ball (25399) perdait 20 impressions. Seul l'ouvreur est retiré.
+    return s.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--/g, '');
 }
 
 /**

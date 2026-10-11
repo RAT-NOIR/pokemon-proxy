@@ -21,11 +21,12 @@ const t2 = carte('|expansion={{TCG|MEP Black Star Promos}}\n|cardno=092<!--\n|jp
 const f2 = W.faitsDeCarte(t2, 'Truc');
 verifier('Paradise Resort : numéro propre', tous(f2), [['intl', 'MEP Black Star Promos', '092']]);
 
-// 3. commentaire jamais fermé : court jusqu'à la fin du texte (sémantique MediaWiki)
-const t3 = carte('|expansion={{TCG|Base Set}}\n|cardno=5/102') + '\n<!-- note jamais fermée {{PokémoncardInfobox/Expansion|expansion={{TCG|Faux}}|cardno=9}}';
-verifier('non fermé : le contenu est coupé', W.faitsDeCarte(t3, 'Truc').impressions.map(i => i.expansion), ['Base Set']);
-verifier('sansCommentaires non fermé', W.sansCommentaires('a<!--b'), 'a');
-
+// 3. commentaire JAMAIS FERMÉ. MediaWiki le ferait courir jusqu'à la fin, mais l'archive R2 est ÉPURÉE (le texte hors gabarit est
+//    perdu, donc un `-->` peut avoir disparu) : mesuré sur Master Ball (25399), « jusqu'à la fin » effaçait 20 impressions. Seul
+//    l'ouvreur est retiré ; ce qui suit se lit comme avant.
+const t3 = carte('|expansion={{TCG|Base Set}}\n|cardno=5/102\n<!--\n|rarity={{rar|Rare}}');
+verifier('non fermé : la page reste lue', intl(W.faitsDeCarte(t3, 'Truc')), [['Base Set', '5', '102']]);
+verifier('sansCommentaires non fermé : seul l\'ouvreur part', W.sansCommentaires('a<!--b'), 'ab');
 // 4. commentaire sans `|`
 verifier('sans barre', W.sansCommentaires('x<!-- note -->y'), 'xy');
 verifier('non gourmand, plusieurs', W.sansCommentaires('1<!--a-->2<!--b\nc-->3'), '123');
