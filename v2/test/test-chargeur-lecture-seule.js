@@ -37,7 +37,7 @@ const env = (o = {}) => ({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_U
     f = fausse(statut()); r = await LS.ouvrir({ env: env({ MONGODB_CARTES_LECTURE_URI: '   ' }), connecter: f.connecter });
     H.v('variable de lecture vide : refus, aucune connexion', [r.ok, nb(f.appels, 'connecter')], [false, 0]);
     f = fausse(statut()); r = await LS.ouvrir({ env: env({ MONGODB_CARTES_LECTURE_URI: ECRITURE }), connecter: f.connecter });
-    H.v('variable de lecture = MONGODB_CARTES_URI (l\'écriture) : refus, aucune connexion', [r.ok, nb(f.appels, 'connecter')], [false, 0]);
+    H.v('variable de lecture = MONGODB_CARTES_URI (l\'écriture) : refus, aucune connexion, raison « égale »', [r.ok, /égale/.test(r.raison || ''), nb(f.appels, 'connecter')], [false, true, 0]);
     f = fausse(statut()); r = await LS.ouvrir({ env: env({ MONGODB_CARTES_LECTURE_URI: `mongodb+srv://ecrivain:autre@grappe-cartes.exemple.net/cartes` }), connecter: f.connecter });
     H.v('même UTILISATEUR que l\'écriture (autre mot de passe) : refus, aucune connexion', [r.ok, /utilisateur/.test(r.raison || ''), nb(f.appels, 'connecter')], [false, true, 0]);
     f = fausse(statut()); r = await LS.ouvrir({ env: env({ MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://grappe-cartes.exemple.net/cartes' }), connecter: f.connecter });
@@ -58,7 +58,7 @@ const env = (o = {}) => ({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_U
     }
     for (const [nom, st] of [['authInfo absent', { ok: 1 }], ['aucun utilisateur authentifié', statut(LIRE_SEUL, { authenticatedUsers: [] })], ['aucun privilège', statut(LIRE_SEUL, { authenticatedUserPrivileges: [] })],
         ['privilèges non tableau', statut(LIRE_SEUL, { authenticatedUserPrivileges: 'tout' })], ['actions non tableau', statut(LIRE_SEUL, { authenticatedUserPrivileges: [{ resource: {}, actions: 'find' }] })],
-        ['réponse vide', null], ['actions vides', statut([])]]) {
+        ['réponse vide', null], ['actions vides', statut([])], ['aucun droit find (dbStats, collStats seuls)', statut(['dbStats', 'collStats'])]]) {
         f = fausse(st); r = await LS.ouvrir({ env: env(), connecter: f.connecter });
         H.v(`   « ${nom} » : je ne sais pas ⇒ refus, connexion fermée`, [r.ok, nb(f.appels, 'close')], [false, 1]);
     }

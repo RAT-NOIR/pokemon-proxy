@@ -2,3 +2,5 @@
 * text=auto
 # Référence comparée par v2/test/test-logos-sortie-identique.js : jamais réécrite par core.autocrlf (ce seul fichier, aucun autre du dossier)
 v2/test/fixtures/logos-sortie-avant.json -text
+# La copie EMBARQUÉE des règles du site : ses octets sont empreintés (sha256) et comparés à la régénération ; aucune conversion de fin de ligne ne doit les changer (v2/chargeur/copier-regle-site.js)
+v2/chargeur/regle-site/* -text
