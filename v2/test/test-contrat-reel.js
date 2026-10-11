@@ -20,7 +20,7 @@ const R = path.join(__dirname, '..', '..');
 const CHARGES = path.join(R, 'verrou', 'charges.json');
 const IMAGE = require(CHARGES).charges.find(c => c.cellule === 'occidentale').imageUrl;
 const IMAGE_INCONNUE = 'https://images1.vinted.net/t/00_rm-b7b1/f800/inconnue.webp';
-const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3' });
+const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_INSCRIPTION_IP_HEURE: '3', V2_OUBLI_IP_HEURE: '3', V2_REINIT_IP_HEURE: '3', V2_VERIFICATION_IP_HEURE: '3', V2_LOT_CARTES_MAX: '100' });   // les lots de ce banc dépassent 20 cartes (le défaut les refuserait : test-plafonds.js)
 const EXT = cfg.origines.extension, SITE = cfg.origines.site;
 const raw = n => mongoose.connection.db.collection(n);
 const attendre = ms => new Promise(r => setTimeout(r, ms));

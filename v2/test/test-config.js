@@ -10,7 +10,7 @@ H.v('essais', c.quotas.essai, 3);
 H.v('accueil', c.quotas.accueil, 25);
 H.v('hebdo', c.quotas.hebdo, 2);
 H.v('ordre des poches par défaut', c.ordrePoches, ['essai', 'accueil', 'hebdo', 'abonnement', 'achete']);
-H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30 });
+H.v('plafonds de remboursement', c.plafonds, { panne: 5, question: 30, sansPrix: 5, lotTropGrand: 10 });
 H.v('délai d\'une question (24 h)', c.questionDelaiMs, 86400000);
 H.v('idempotence : battement 30 s', c.retention.idempotenceBattementMs, 30000);
 H.v('idempotence : au plus 10 min', c.retention.idempotenceBattementMaxMinutes, 10);
