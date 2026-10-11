@@ -251,16 +251,16 @@ const limiteurRetourLive = rateLimit({
 // Jeton partagé entre l'extension et le serveur. Empêche une page web d'utiliser
 // ton serveur même si elle contournait le CORS. À définir dans le .env :
 //   JETON_API=une_chaine_longue_et_aleatoire
-// et à recopier dans content.js. Si absent, la protection est simplement inactive.
-const JETON_API = process.env.JETON_API || null;
-if (!JETON_API) {
-    console.warn("⚠️ Aucun JETON_API défini dans .env — le serveur accepte toute requête locale.");
+// et à recopier dans content.js. Si absent, les routes protégées sont FERMÉES (503), jamais ouvertes
+// (règle dans jeton-api.js).
+const { creerVerifierJeton } = require('./jeton-api');
+if (!String(process.env.JETON_API || '').trim()) {
+    console.error("🛑 JETON_API n'est pas défini — les routes protégées répondront 503 tant que la variable manque.");
 }
+const gardeJeton = creerVerifierJeton(process.env.JETON_API);
+// Fonction de premier niveau, même nom : chemin-du-scan.js et le cliquet de couverture l'énumèrent par ce nom.
 function verifierJeton(req, res, next) {
-    if (!JETON_API) return next();
-    if (req.headers['x-jeton'] === JETON_API) return next();
-    console.warn("🚫 Requête refusée : jeton absent ou invalide.");
-    return res.status(401).json({ success: false, error: "Non autorisé" });
+    return gardeJeton(req, res, next);
 }
 
 // ============================================================

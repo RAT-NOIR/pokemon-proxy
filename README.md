@@ -16,7 +16,7 @@ son historique sont dans `PASSATION-SERVEUR.md`.
 | `MONGODB_URI` | connexion Atlas. ⚠️ La base de PRODUCTION s'appelle `test` ; le bac à sable `test_scratch`. |
 | `MONGODB_BASE` | si posée, fait foi et un écart est fatal au démarrage (voir index.js, bloc MONGODB). |
 | `OPENROUTER_API_KEY` | l'appel de vision. |
-| `JETON_API` | jeton partagé extension ⇄ serveur (`x-jeton`). Absent = toute requête acceptée, avec avertissement au démarrage. |
+| `JETON_API` | jeton partagé extension ⇄ serveur (`x-jeton`). Absent ou vide = routes protégées fermées (503), avec message au démarrage. |
 | `CODE_ILLIMITE` | code maître : une requête qui le porte n'est ni limitée ni décomptée. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_P20/P50/P100/P200`, `SITE_URL` | paiement. Le secret de webhook est le seul réglage dont l'absence ne se voit qu'après un vrai paiement. |
 | `RENDER_GIT_COMMIT` | posée par Render ; c'est la `version` écrite au journal et rendue par `/ping`. |
