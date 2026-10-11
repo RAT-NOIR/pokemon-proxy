@@ -9,13 +9,14 @@ const jourUTC = d => { const t = new Date(d); return new Date(Date.UTC(t.getUTCF
 const codeDe = e => (e && (e.code || e.name)) || 'erreur';     // jamais e.message : il peut citer une clé ou une URL
 
 /**
- * BANC-12 (tour 1, I-3) — DES COHORTES MENSUELLES. UNE définition de « le lien contribution ↔ compte est échu » : le jour D, une ligne dont le jour (`le`) est STRICTEMENT antérieur au premier jour du mois
- * de D moins (lien − 1) mois n'est PLUS corrigeable (routes.js, corriger) et est anonymisée par la passe (anonymisation.js) — le même prédicat des deux côtés : aucune ligne n'est à la fois corrigeable
- * et anonymisable. Une contribution du mois M bascule donc au premier instant du mois M + lien : entre (lien − 1) et lien mois d'âge, et tout un mois de contributions bascule ENSEMBLE (la date de
- * réécriture de l'objet R2 ne dit que le mois de la cohorte). Mois CALENDAIRES (UTC), plus des mois de 30,5 jours.
+ * BANC-12 (tour 1, I-3 ; marge au tour 2) — DES COHORTES MENSUELLES décalées d'UN mois. UNE définition de « le lien contribution ↔ compte est échu » : le jour D, une ligne dont le jour (`le`) est
+ * STRICTEMENT antérieur au premier jour du mois de D moins (lien − 2) mois n'est PLUS corrigeable (routes.js, corriger) et est anonymisée par la passe (anonymisation.js) — le même prédicat des deux
+ * côtés : aucune ligne n'est à la fois corrigeable et anonymisable. Une contribution du mois M bascule donc au premier instant du mois M + (lien − 1) : entre (lien − 2) et (lien − 1) mois d'âge
+ * (avec 12 : entre 10 et 11 mois), et tout un mois de contributions bascule ENSEMBLE (la date de réécriture de l'objet R2 ne dit que le mois de la cohorte). La marge d'un mois absorbe la passe
+ * quotidienne, la grâce et l'étalement du plafond par passe : le lien reste STRICTEMENT sous `lien` mois. Mois CALENDAIRES (UTC), plus des mois de 30,5 jours.
  */
 const debutMois = (d, decalage = 0) => { const t = new Date(d); return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + decalage, 1)); };
-const limiteLien = (cfg, maintenant) => debutMois(maintenant, -(cfg.retention.bancLienMois - 1));
+const limiteLien = (cfg, maintenant) => debutMois(maintenant, -(cfg.retention.bancLienMois - 2));
 
 /** Une attente bornée : rejette avec le code DELAI après `delaiMs` (le travail sous-jacent n'est pas annulé, son résultat est ignoré). */
 function creerBorner(delaiMs) {

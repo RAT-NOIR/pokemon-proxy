@@ -70,9 +70,12 @@ async function reconcilierTous({ cfg = require('../config').lireConfig(process.e
     bilan.marquesEnSuspens = await MS.enSuspens();            // toutes, y compris celles d'un porteur disparu (un compte supprimé n'efface pas un débit sans livraison)
     // BANC-12 (tour 1, I-1) : l'état de la dernière passe d'anonymisation du banc réel — des nombres seuls : lignes échues non traitées, âge (jours depuis la bascule), objets en attente de suppression
     const etat = await require('../banc/anonymisation').lireEtat(col);
-    bilan.banc = etat ? { lignesEnEchec: etat.lignesEnEchec, ageMaxJours: etat.ageMaxJours, objetsEnAttente: etat.objetsEnAttente } : null;
+    // (tour 2) objetsRefuses : des clés que le stockage refuse pour toujours, comptées À PART (elles ne tiennent pas l'alerte des lignes) ; perime : l'état n'a pas été mis à jour depuis plus de 3 jours
+    // (la passe ne tourne plus : un « 0 » ancien ne rassure pas). Aucune passe enregistrée (null) : dit, sans bloquer (v2 éteinte, ou pas encore de passe).
+    bilan.banc = etat ? { lignesEnEchec: etat.lignesEnEchec, ageMaxJours: etat.ageMaxJours, objetsEnAttente: etat.objetsEnAttente, objetsRefuses: etat.objetsRefuses ?? 0,
+        perime: new Date(maintenant).getTime() - new Date(etat.majLe).getTime() > 3 * 86400e3 } : null;
     bilan.propre = bilan.avecEcart === 0 && bilan.rendusEchoues.length === 0 && bilan.marquesEnSuspens.length === 0 && bilan.debitsGardes.length === 0
-        && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0));
+        && !(bilan.banc && (bilan.banc.lignesEnEchec > 0 || bilan.banc.objetsEnAttente > 0 || bilan.banc.perime));
     return bilan;
 }
 module.exports = { reconcilier, reconcilierTous };
@@ -100,7 +103,7 @@ if (require.main === module) {
         console.log(`${b.rendusEchoues.length} ligne(s) de débit au rendu non confirmé (rendu-echoue / rendu-en-cours) — débit sans livraison tant qu'elles restent`);
         console.log(`${b.debitsGardes.length} débit(s) qui gardent leur scanId au-delà du lien du banc (marque non close, question ouverte ou rendu non confirmé) — débit à son scan, jamais une contribution`);
         for (const d of b.debitsGardes) console.log(`  débit ${d.id}  scan ${d.scanId}  ${d.etat}  âge ${d.ageJours} j`);
-        console.log(b.banc ? `banc réel — dernière passe d'anonymisation : ${b.banc.lignesEnEchec} ligne(s) échue(s) non traitée(s) (âge max ${b.banc.ageMaxJours} j depuis la bascule), ${b.banc.objetsEnAttente} objet(s) en attente de suppression` : 'banc réel — aucune passe d\'anonymisation enregistrée');
+        console.log(b.banc ? `banc réel — dernière passe d'anonymisation : ${b.banc.lignesEnEchec} ligne(s) échue(s) non traitée(s) (âge max ${b.banc.ageMaxJours} j depuis la bascule), ${b.banc.objetsEnAttente} objet(s) en attente de suppression, ${b.banc.objetsRefuses} objet(s) refusé(s) par le stockage${b.banc.perime ? ' — ÉTAT PÉRIMÉ (plus de 3 jours sans passe)' : ''}` : 'banc réel — aucune passe d\'anonymisation enregistrée');
         console.log(`${b.marquesEnSuspens.length} scan(s) dont la marque de livraison reste en suspens (réponse peut-être jamais partie) — débit sans livraison tant qu'elles restent`);
         for (const l of b.marquesEnSuspens) console.log(`  scan ${l.scanId}  ${l.porteur}  ${l.etat}  ouverte le ${l.ouverteLe.toISOString()}${l.issue ? ` (${l.issue})` : ''}`);
         if (b.rendusEchoues.length) {

@@ -42,7 +42,8 @@ function lireConfig(env = process.env) {
     if (actif && !cookieSecure && !banc) throw new Error('configuration invalide : V2_COOKIE_SECURE=0 n\'est accepté que sur une base de banc (MONGODB_BASE=test_scratch ET BANC_ISOLE=1)');
     // BANC-12 (décision du testeur, 2026-10-11) : le lien contribution ↔ compte dure 12 mois AU PLUS, puis anonymisation définitive. Au-delà de 12 (ou de la durée de l'image) : configuration invalide.
     const BANC_MOIS = 24;
-    const bancLienMois = entier('V2_BANC_LIEN_MOIS', env.V2_BANC_LIEN_MOIS, 12, 1);
+    // Tour 2 : 3 mois au moins — la cohorte bascule (lien − 2) mois après le début de son mois ; en dessous, le décalage d'un mois qui sert de marge n'a plus de sens.
+    const bancLienMois = entier('V2_BANC_LIEN_MOIS', env.V2_BANC_LIEN_MOIS, 12, 3);
     if (bancLienMois > 12) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (12 mois au plus)`);
     if (bancLienMois > BANC_MOIS) throw new Error(`configuration invalide : V2_BANC_LIEN_MOIS="${env.V2_BANC_LIEN_MOIS}" (au plus la durée de l'image)`);
     // Tour 1 (I-1) : au-delà de la bascule + ce délai de grâce, une ligne que la passe n'a pas pu réécrire est SUPPRIMÉE par la base seule (on préfère perdre une image que garder un lien).

@@ -24,12 +24,13 @@ const H1 = 3600e3, JOUR = 86400e3, MIN = 60e3;
 const LIEN_MOIS = cfg.retention.bancLienMois, GRACE_J = cfg.retention.bancGraceJours;
 const T0 = new Date(jourUTC(new Date()).getTime() + 12 * H1);       // la contribution : aujourd'hui à 12:00Z (jamais une date en dur)
 const apres = (ms, de = T0) => new Date(de.getTime() + ms);
-// BANC-12 tour 1 (I-3) : des COHORTES MENSUELLES. Le jour D, on anonymise toute ligne antérieure au premier jour du mois de D moins (lien − 1) mois : une contribution du mois M bascule au premier
-// instant du mois M + lien (= BASC pour M = le mois de T0), entre 11 et 12 mois d'âge, avec tout son mois.
+// BANC-12 tour 1 (I-3) puis tour 2 (marge) : des COHORTES MENSUELLES décalées d'UN mois. Le jour D, on anonymise toute ligne antérieure au premier jour du mois de D moins (lien − 2) mois : une
+// contribution du mois M bascule au premier instant du mois M + lien − 1 (= BASC pour M = le mois de T0), entre 10 et 11 mois d'âge, avec tout son mois : même avec la passe quotidienne, la grâce
+// et un étalement, le lien reste STRICTEMENT sous 12 mois.
 const debutMois = (d, n = 0) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
 // n mois CALENDAIRES plus tard, le jour ramené au dernier jour du mois d'arrivée s'il n'y existe pas (31 octobre + 11 mois = 30 septembre, jamais le 1er octobre)
 const ajouterMois = (d, n) => { const fin = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n + 1, 0)).getUTCDate(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, Math.min(d.getUTCDate(), fin), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds())); };
-const BASC = debutMois(T0, LIEN_MOIS);
+const BASC = debutMois(T0, LIEN_MOIS - 1);
 const T_AVANT = new Date(BASC.getTime() - 1), T_APRES = new Date(BASC.getTime() + H1);   // « le dernier instant avant la bascule » et « une heure après »
 const LIEN_MS = BASC.getTime() - T0.getTime();
 let cur = T0;                                                         // l'horloge du banc d'écriture / de correction
@@ -168,8 +169,15 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   le document ne contient AUCUNE valeur qui permette de recalculer le lien (scanId, sel, jeton, empreinte, compte, ancien id, ancienne clé, jour)', Object.entries(secrets).filter(([, v]) => brut.includes(v)).map(([k]) => k), []);
         H.vrai('   l\'identifiant est neuf et aléatoire (32 hex), pas SHA-256(scanId…)', /^[0-9a-f]{32}$/.test(l._id) && l._id !== idLigne(w.s1));
         H.v('   le contenu utile reste : verite, source, état, versions', [l.verite, l.source, l.etat, l.versionModele, l.versionTexte, l.anonyme], [4242, 'affirme', 'confirmee', 'm1', '2026-10-07-v1', true]);
-        const mois = new Date(Date.UTC(ancienne.expireLe.getUTCFullYear(), ancienne.expireLe.getUTCMonth(), 1));
-        H.v('   l\'expiration est ramenée au début de son MOIS (≤ l\'ancienne, jamais plus de 24 mois) : elle ne redonne plus le jour', [l.expireLe.getTime(), l.expireLe <= ancienne.expireLe], [mois.getTime(), true]);
+        // (tour 2, I-5) en mois CIVILS : premier jour du mois de la contribution + bancMois mois — jamais dérivé du jour (l'ancienne formule glissait les derniers jours du mois dans le suivant)
+        const attenduExp = new Date(Date.UTC(T0.getUTCFullYear(), T0.getUTCMonth() + cfg.retention.bancMois, 1));
+        H.v('   l\'expiration est le premier jour du mois de la contribution + 24 mois civils : elle ne redonne que le mois, et jamais plus de 24 mois', [l.expireLe.getTime(), l.expireLe <= ajouterMois(T0, cfg.retention.bancMois)], [attenduExp.getTime(), true]);
+        // (tour 2, M-1) l'alerte écrite par la passe : des NOMBRES et la date de la passe, rien d'autre
+        const al = await db.col('banc_alertes').findOne({ _id: 'anonymisation' });
+        const brutAl = JSON.stringify(al);
+        H.v('   l\'alerte de la passe ne porte que des nombres et `majLe` : ni jeton, ni jour de contribution, ni scanId, ni compte, ni clé d\'objet',
+            [Object.keys(al).sort(), Object.entries(al).filter(([k]) => !['_id', 'majLe'].includes(k)).every(([, v]) => typeof v === 'number'), [empreinte(w.jeton), String(w.s1), String(w.porteur.id), T0.toISOString().slice(0, 10), 'banc-reel'].filter(v => brutAl.includes(v))],
+            [['_id', 'ageMaxJours', 'lignesEnEchec', 'majLe', 'objetsEnAttente', 'objetsRefuses'], true, []]);
         // — chemin 4 : l'objet R2 —
         H.v('chemin 4 — R2 : les anciens objets sont supprimés, deux objets, sous des clés NEUVES (celles des lignes)', [clientB.objets.has(ancienneCle), clientB.objets.has(w.ancienneCle4), clientB.objets.size, [...clientB.objets.keys()].sort()], [false, false, 2, [l.cleR2, l4.cleR2].sort()]);
         H.vrai('   l\'image est lisible sous sa clé neuve', (await mB.stockage.lire(l.cleR2)).length > 0);
@@ -197,6 +205,9 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         const R1 = await R.reconcilier({ type: 'compte', id: w.porteur.id }, { cfg, maintenant: T_APRES });
         H.v('réconciliation APRÈS : aucun écart ; somme des deltas = solde = celle d\'avant', [R1.ecarts, await sommeDeltas(w), await soldeTotal(w)], [[], s0, t0]);
         H.v('   elle LISTE le débit gardé (s4, sous question ouverte) avec son âge (≥ 11 mois), et n\'est plus « propre » à cause de lui', [R1.debitsGardes.map(x => String(x.scanId)), R1.debitsGardes.every(x => x.ageJours >= 300), R1.propre], [[String(w.s4)], true, false]);
+        // (tour 2, M-1) le verdict GLOBAL liste lui aussi le débit gardé ; il n'a ici AUCUN autre motif d'être « non propre » (marque close, rien d'échoué, alerte à 0)
+        const RT = await R.reconcilierTous({ cfg, maintenant: T_APRES });
+        H.v('   reconcilierTous : le débit gardé est listé, et c\'est le seul motif de « non propre » (alerte du banc à 0)', [RT.debitsGardes.map(x => String(x.scanId)), RT.marquesEnSuspens.length, RT.rendusEchoues.length, RT.banc && RT.banc.lignesEnEchec, RT.banc && RT.banc.objetsEnAttente, RT.propre], [[String(w.s4)], 0, 0, 0, 0, false]);
         const sold = await soldeTotal(w);
         const rej = await Lg.rembourser(w.porteur, { poche: 'accueil' }, 'panne', { scanId: w.s2, maintenant: T_APRES }, cfg);
         H.v('rejouer le remboursement d\'un scan de plus de 12 mois ne rend RIEN (aucun débit retrouvé : pas de double remboursement)', [rej.rendu, rej.raisonNonRembourse, await soldeTotal(w)], [false, 'aucun-debit', sold]);
@@ -230,6 +241,13 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('une marque en « echec » : son débit garde son scanId', await db.col('mouvements').countDocuments({ scanId: sc2 }), 1);
         const R1 = await R.reconcilier({ type: 'compte', id: w.porteur.id }, { cfg, maintenant: T_APRES });
         H.v('   la réconciliation liste la marque en échec ET le débit gardé (scanId, âge ≥ 11 mois)', [R1.marquesEnSuspens.map(x => String(x.scanId)), R1.debitsGardes.filter(x => String(x.scanId) === String(sc2)).map(x => [x.ageJours >= 300, x.etat])], [[String(sc2)], [[true, 'debite']]]);
+        // (tour 2, M-1) une marque « en-reprise » (prise par une passe de rattrapage) protège son débit elle aussi
+        const sc3 = new mongoose.Types.ObjectId();
+        await Lg.debiter(w.porteur, { scanId: sc3, cleIdempotence: `scan|${pk}|reprise`, surface: 'extension', maintenant: T0 }, cfg);
+        await MS.ouvrir({ scanId: sc3, porteur: { type: 'compte', id: w.porteur.id }, cleDebit: `scan|${pk}|reprise`, maintenant: new Date(Date.now() - H1) });
+        await db.col('scans_en_cours').updateOne({ _id: sc3 }, { $set: { etat: 'en-reprise', priseLe: new Date() } });
+        await mB.purge.anonymiserLiens(T_APRES);
+        H.v('une marque « en-reprise » : son débit garde son scanId', await db.col('mouvements').countDocuments({ scanId: sc3 }), 1);
     });
 
     // ═══ La correction est refusée après 12 mois MÊME SI la passe n'a pas encore tourné (même prédicat des deux côtés) ═══
@@ -339,8 +357,10 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         const jetons = { L0: jetonNeuf(), L1: jetonNeuf(), L2: jetonNeuf() }, scans = {};
         for (const [k, t] of Object.entries(instants)) { cur = t; client.dateObjet = t; scans[k] = hex().slice(0, 24); await m.banc.apresVerdict({ corps: consent(jetons[k], t), scanId: scans[k], carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true, versionModele: 'm1' }); }
         H.v('départ : trois contributions — premier instant du mois M, dernier instant de M, premier instant de M+1 — trois lignes à jeton', [(await lignes()).length, (await lignes()).every(l => l.jetonEmpreinte)], [3, true]);
-        H.v('la bascule de la cohorte M est le PREMIER instant de M + lien (BASC) ; le dernier instant de M y est à 11 mois, le premier à 12 mois : jamais plus de 12 mois, jamais moins de 11',
-            [ajouterMois(instants.L0, LIEN_MOIS) >= BASC, ajouterMois(instants.L1, LIEN_MOIS - 1) <= BASC, ajouterMois(instants.L1, LIEN_MOIS) > BASC], [true, true, true]);
+        H.v('la bascule de la cohorte M est le PREMIER instant de M + lien − 1 (BASC) : le premier instant de M y est à 11 mois (au plus), le dernier instant de M à 10 mois (au moins)',
+            [ajouterMois(instants.L0, LIEN_MOIS - 1) >= BASC, ajouterMois(instants.L1, LIEN_MOIS - 2) <= BASC, ajouterMois(instants.L1, LIEN_MOIS - 1) > BASC], [true, true, true]);
+        H.v('   la MARGE : même avec la passe quotidienne (+1 jour) et la grâce, le plus ancien de la cohorte reste STRICTEMENT sous 12 mois',
+            ajouterMois(instants.L0, LIEN_MOIS) > new Date(BASC.getTime() + (1 + GRACE_J) * JOUR), true);
         client.dateObjet = new Date(BASC.getTime() - 1);
         const b0 = await m.purge.anonymiserLiens(new Date(BASC.getTime() - 1));
         H.v('au dernier instant AVANT la bascule : rien n\'est anonymisé (3 lignes à jeton)', [b0.lignes, (await lignes()).filter(l => l.jetonEmpreinte).length], [0, 3]);
@@ -362,7 +382,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
     // ═══ Les bornes exactes des AUTRES magasins (mouvements, analyses, questions) : strictement avant la limite ═══
     await section('bornes strictes', async () => {
         await vider(); const client = fauxClient(), m = monde(client);
-        const L = debutMois(BASC, -(LIEN_MOIS - 1)), avantL = new Date(L.getTime() - 1);
+        const L = debutMois(BASC, -(LIEN_MOIS - 2)), avantL = new Date(L.getTime() - 1);       // la limite que la passe calcule à l'instant de la bascule
         const mv = async (le, k) => { const scanId = new mongoose.Types.ObjectId(); await db.col('mouvements').insertOne({ compteId: new mongoose.Types.ObjectId(), le, surface: 'extension', type: 'debit', delta: 0, poche: null, credit: null, motif: 'administrateur', scanId, etat: 'debite', cleIdempotence: `borne-${k}-${hex()}`, expireLe: apres(2 * LIEN_MS) }); return scanId; };
         const sM1 = await mv(L, 'L'), sM0 = await mv(avantL, 'avant');
         const an = async (creeLe) => { const _id = new mongoose.Types.ObjectId(); await db.col('analyses').insertOne({ _id, porteur: 'compte:borne', surface: 'extension', statut: 'x', cartes: [], produits: [], facturation: {}, creeLe, expireLe: apres(2 * LIEN_MS) }); return _id; };
@@ -407,6 +427,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   AU-DELÀ de la grâce : la ligne est SUPPRIMÉE par la base seule (0 ligne), l\'alerte retombe à 0', [e1.forcees, (await lignes()).length, a1 && a1.lignesEnEchec, a1 && a1.objetsEnAttente], [1, 0, 0, 0]);
         // (2) le stockage est EN PANNE (lecture ET suppression) : dans la grâce la ligne reste ; au-delà elle est supprimée et ses clés mises en attente
         await vider(); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
+        await db.col('questions').deleteMany({});         // aucune question ouverte : aucun débit gardé, le verdict ne dépend que de l'alerte du banc
         client.panne.lire = true; client.panne.del = true;
         const cap3 = capturer(); const f0 = await m.purge.anonymiserLiens(PG0); cap3.rendre();
         const prise = (await lignes())[0], a2 = await alerte();
@@ -417,9 +438,17 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   stockage encore en panne AU-DELÀ : la ligne est supprimée, ses deux clés (ancienne et copie) sont mises en attente — des clés SEULES', [f1.forcees, (await lignes()).length, q.map(x => x._id).sort(), q.map(x => Object.keys(x).join())], [1, 0, cles, ['_id', '_id']]);
         const brutQ = JSON.stringify(q);
         H.v('   rien ne relie plus : ni jeton, ni scanId, ni compte, ni jour dans la liste ; l\'alerte compte 2 objets en attente', [[empreinte(w.jeton), String(w.s1), String(w.porteur.id), T0.toISOString().slice(0, 10)].filter(v => brutQ.includes(v)), a3 && a3.objetsEnAttente, a3 && a3.lignesEnEchec], [[], 2, 0]);
+        // (tour 2, M-1) un rejeu pendant que le stockage est TOUJOURS en panne ne perd aucune clé (l'entrée n'est retirée qu'une fois l'objet supprimé)
+        const capR = capturer(); await m.purge.anonymiserLiens(apres(H1, PG1)); capR.rendre();
+        H.v('   un rejeu avec le stockage toujours en panne ne PERD aucune clé : 2 entrées, 2 objets en attente', [(await queue()).length, (await alerte()).objetsEnAttente], [2, 2]);
+        const Tq = await R.reconcilierTous({ cfg, maintenant: apres(H1, PG1) });
+        H.v('   la réconciliation : 0 ligne en échec mais 2 objets en attente suffisent à la rendre « non propre »', [Tq.banc.lignesEnEchec, Tq.banc.objetsEnAttente, Tq.propre], [0, 2, false]);
         client.panne.lire = false; client.panne.del = false;
-        const f2 = await m.purge.anonymiserLiens(apres(H1, PG1));
+        const f2 = await m.purge.anonymiserLiens(apres(2 * H1, PG1));
         H.v('   le stockage revient : la passe suivante REJOUE la liste — objet supprimé, liste vide, alerte à 0', [client.objets.has(w.ancienneCle), (await queue()).length, (await alerte()).objetsEnAttente], [false, 0, 0]);
+        // (tour 2, M-4) une alerte qui n'est plus mise à jour (la passe ne tourne plus) ne rassure pas : au-delà de 3 jours, périmée
+        const Tf = await R.reconcilierTous({ cfg, maintenant: apres(2 * H1, PG1) }), Tp = await R.reconcilierTous({ cfg, maintenant: apres(5 * JOUR, PG1) });
+        H.v('   l\'état écrit par la passe est PÉRIMÉ au-delà de 3 jours sans passe : le verdict n\'est plus « propre »', [Tf.banc.perime, Tf.propre, Tp.banc.perime, Tp.propre], [false, true, true, false]);
         // (3) le stockage est ABSENT (variable manquante) : au-delà de la grâce, les lignes partent par la base seule
         await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
         const sans = m.creerPurge({ env: {} });
@@ -434,6 +463,18 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('(5) départ dans la grâce : la copie anonyme existe, l\'ancienne ligne reste (2 lignes, 2 objets)', [(await lignes()).length, client.objets.size], [2, 2]);
         const h1 = await monde(client, colJamais).purge.anonymiserLiens(PG1); cap7.rendre();
         H.v('   AU-DELÀ : l\'ancienne ET la copie sont supprimées, leurs deux objets aussi (0 ligne, 0 objet)', [h1.forcees, (await lignes()).length, client.objets.size], [1, 0, 0]);
+        // (6) l'ÂGE MAXIMAL réel : une contribution du premier instant de son mois, une passe qui ne passe que le lendemain, un stockage en panne tout du long : la ligne est supprimée au plus tard
+        // à la bascule + 1 jour + la grâce — et ce moment est STRICTEMENT avant ses 12 mois
+        await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); client = fauxClient(); m = monde(client);
+        const C = debutMois(T0, 0), tardif = new Date(BASC.getTime() + JOUR), limiteAge = new Date(BASC.getTime() + JOUR + GRACE_J * JOUR);
+        cur = C; client.dateObjet = C; const scL = hex().slice(0, 24);
+        await m.banc.apresVerdict({ corps: consent(jetonNeuf(), C), scanId: scL, carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true, versionModele: 'm1' });
+        client.panne.lire = true; client.panne.del = true;
+        const cap8 = capturer(); await m.purge.anonymiserLiens(tardif);
+        const reste = (await lignes()).length;
+        await m.purge.anonymiserLiens(new Date(limiteAge.getTime() + 1)); cap8.rendre();
+        H.v('(6) contribution du premier instant du mois, passe le lendemain de la bascule, stockage en panne : la ligne tient pendant la grâce, puis disparaît ; ce moment est avant ses 12 mois',
+            [reste, (await lignes()).length, new Date(limiteAge.getTime() + 1) < ajouterMois(C, 12)], [1, 0, true]);
         // (4) reconcilier lit l'alerte
         await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); await db.col('banc_alertes').deleteMany({}); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
         await db.col('questions').deleteMany({});         // aucune question ouverte : le seul motif possible d'une réconciliation non propre est l'alerte du banc
@@ -459,6 +500,50 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('effacement avec la copie récalcitrante : 0 supprimée, 1 échec ; l\'ancienne ligne (au jeton) est GARDÉE pour la reprise', [e1, (await lignes()).filter(l => l.jetonEmpreinte).length, (await lignes()).filter(l => l.anonyme).length], [{ supprimees: 0, echecs: 1 }, 1, 1]);
         const e2 = await monde(client).purge.effacerParJeton(w.jeton);
         H.v('effacement relancé : 1 supprimée, 0 échec ; PLUS aucune ligne, PLUS aucun objet (la copie anonyme est partie avec)', [e2, (await lignes()).length, client.objets.size], [{ supprimees: 1, echecs: 0 }, 0, 0]);
+    });
+
+    // ═══ (tour 2, M-1) les gardes de la lecture de l'argent : question « en-reglement », garde illisible ═══
+    await section('gardes de l\'argent', async () => {
+        await vider(); let client = fauxClient(), m = monde(client); let w = await fabriquer(m, client, { image });
+        await db.col('questions').updateOne({ _id: `${w.s4}:0` }, { $set: { etat: 'en-reglement', priseLe: T0 } });
+        const n4 = await db.col('mouvements').countDocuments({ scanId: w.s4 });
+        client.dateObjet = T_APRES; await m.purge.anonymiserLiens(T_APRES);
+        H.v('une question « en-reglement » protège elle aussi le débit de son scan', [n4 >= 1, await db.col('mouvements').countDocuments({ scanId: w.s4 })], [true, n4]);
+        await vider(); client = fauxClient(); w = await fabriquer(monde(client), client, { image });
+        // les marques ne se lisent pas : la passe ne sait pas quels débits sont encore utiles
+        const illisible = n => { const r = db.col(n); return n !== 'scans_en_cours' ? r : new Proxy(r, { get(t, p) { if (p === 'find') return () => ({ toArray: async () => { throw Object.assign(new Error('lecture'), { code: 'ILLISIBLE' }); } }); const f = t[p]; return typeof f === 'function' ? f.bind(t) : f; } }); };
+        const n = await avecScanId(); client.dateObjet = T_APRES;
+        const cap = capturer(); const b = await monde(client).creerPurge({ colFn: illisible }).anonymiserLiens(T_APRES); cap.rendre();
+        H.v('garde illisible : la passe ne retire RIEN (aucun mouvement touché) et dit son échec', [b.mouvements, await avecScanId(), b.echecs >= 1], [0, n, true]);
+    });
+
+    // ═══ (tour 2, I-5) l'expiration de la copie est au grain du MOIS CIVIL : le premier et le dernier jour d'un mois donnent le MÊME `expireLe` ═══
+    await section('expireLe au grain du mois', async () => {
+        const an = T0.getUTCFullYear();
+        for (const [nom, mois] of [['janvier', 0], ['février', 1], ['juin', 5], ['décembre', 11]]) {
+            await vider(); const client = fauxClient(), m = monde(client);
+            const dernierJour = new Date(Date.UTC(an, mois + 1, 0)).getUTCDate();
+            const jours = [...new Set([1, 15, dernierJour - 2, dernierJour - 1, dernierJour])];
+            for (const j of jours) { const t = new Date(Date.UTC(an, mois, j, 12)); cur = t; client.dateObjet = t; await m.banc.apresVerdict({ corps: consent(jetonNeuf(), t), scanId: hex().slice(0, 24), carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true, versionModele: 'm1' }); }
+            const P = new Date(debutMois(new Date(Date.UTC(an, mois, 1)), LIEN_MOIS - 1).getTime() + H1); client.dateObjet = P;
+            await m.purge.anonymiserLiens(P);
+            const ls = await lignes(), exp = [...new Set(ls.map(l => l.expireLe.getTime()))];
+            H.v(`${nom} (${jours.length} jours de contribution, du 1er au ${dernierJour}) : toutes les copies anonymes ont le MÊME expireLe = 1er du mois + 24 mois civils, jamais plus de 24 mois après la contribution`,
+                [ls.length, ls.every(l => l.anonyme), exp, exp[0] <= ajouterMois(new Date(Date.UTC(an, mois, 1, 12)), cfg.retention.bancMois).getTime()], [jours.length, true, [Date.UTC(an, mois + cfg.retention.bancMois, 1)], true]);
+        }
+    });
+
+    // ═══ (tour 2, M-2) une clé d'objet que le stockage refuse pour toujours est comptée À PART : l'alerte des lignes peut retomber à 0 ═══
+    await section('objets refusés par le stockage', async () => {
+        await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); await db.col('banc_alertes').deleteMany({});
+        const client = fauxClient(), m = monde(client);
+        await db.col('banc_objets_a_supprimer').insertOne({ _id: 'banc-reel/v2/refusee-pour-toujours.webp' });      // une forme que le stockage refuse (cle-refusee)
+        const cap = capturer(); await m.purge.anonymiserLiens(T_APRES); await m.purge.anonymiserLiens(apres(H1, T_APRES)); cap.rendre();
+        const al = await db.col('banc_alertes').findOne({ _id: 'anonymisation' }), q = await db.col('banc_objets_a_supprimer').find({}).toArray();
+        H.v('la clé refusée est comptée à part (1 objet refusé) ; l\'alerte « objets en attente » et celle des lignes retombent à 0', [al.objetsRefuses, al.objetsEnAttente, al.lignesEnEchec], [1, 0, 0]);
+        H.v('   elle reste listée, marquée refusée (rien n\'est rejoué en boucle)', q.map(x => [x._id, x.refuse]), [['banc-reel/v2/refusee-pour-toujours.webp', true]]);
+        const T = await R.reconcilierTous({ cfg, maintenant: apres(H1, T_APRES) });
+        H.v('   la réconciliation la dit (objets refusés : 1) sans bloquer le verdict à cause d\'elle', [T.banc.objetsRefuses, T.banc.objetsEnAttente, T.propre], [1, 0, true]);
     });
 
     // ═══ Le câblage : la passe quotidienne anonymise après avoir purgé ═══

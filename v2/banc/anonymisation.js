@@ -7,8 +7,10 @@
 //     `le` (le jour) et `expireLe` (qui en dérive) ;
 //   · l'objet R2 : sa date de dernière modification coïncide avec `mouvements.le` / `analyses.creeLe` du porteur ;
 //   · `mouvements.scanId` et, DANS LEUR CLÉ, `rb|<scanId>` (remboursements) ; `questions.scanId` ; `analyses` (_id = scanId, porteur) ; les marques `scans_en_cours` (_id = scanId, porteur).
-// CE QUE LA PASSE FAIT — DES COHORTES MENSUELLES (tour 1, I-3) : le jour D, toute ligne dont le jour est antérieur au premier jour du mois de D moins (lien − 1) mois (commun.limiteLien) :
-//   1. la ligne CONFIRMÉE reçoit un identifiant ALÉATOIRE, perd `scanId` (jamais écrit), jeton, jour ; son expiration est ramenée au début de son mois ; son objet est RÉÉCRIT sous une clé neuve
+// CE QUE LA PASSE FAIT — DES COHORTES MENSUELLES (tour 1, I-3), DÉCALÉES D'UN MOIS (tour 2) : le jour D, toute ligne dont le jour est antérieur au premier jour du mois de D moins (lien − 2) mois
+// (commun.limiteLien) — une contribution est anonymisée entre (lien − 2) et (lien − 1) mois d'âge, donc, même avec la passe quotidienne, la grâce et un étalement, STRICTEMENT sous lien mois :
+//   1. la ligne CONFIRMÉE reçoit un identifiant ALÉATOIRE, perd `scanId` (jamais écrit), jeton, jour ; son expiration est le PREMIER JOUR du mois de la contribution + bancMois mois civils (tour 2, I-5 :
+//      jamais dérivée du jour, toute une cohorte expire le même jour) ; son objet est RÉÉCRIT sous une clé neuve
 //      (la date de l'objet devient celle de la passe : tout un mois bascule ensemble, elle ne dit que le MOIS de la cohorte) puis l'ancien est supprimé. Une ligne EN ATTENTE de cet âge (la purge
 //      à 24 h l'a ratée) est supprimée avec son objet : jamais anonymisée. Les lignes sont traitées dans l'ordre de leur `_id` (une empreinte), jamais dans l'ordre de `le` ;
 //   2. les mouvements d'argent RESTENT (somme des deltas = solde) mais perdent leur `scanId`, et leur clé qui le contient devient `anon|<_id du mouvement>` (unique, sans scanId) — SAUF un débit encore
@@ -32,7 +34,7 @@ const ETATS_QUESTION_OUVERTS = Object.freeze(['en-attente', 'en-reglement']);
 const ETATS_MARQUE_NON_CLOSE = Object.freeze(['en-suspens', 'en-reprise', 'echec']);
 const ID_ALERTE = 'anonymisation';
 
-/** L'état écrit par la dernière passe, pour la réconciliation : { lignesEnEchec, ageMaxJours, objetsEnAttente, majLe } ou null si aucune passe n'a tourné. */
+/** L'état écrit par la dernière passe, pour la réconciliation : { lignesEnEchec, ageMaxJours, objetsEnAttente, objetsRefuses, majLe } (des NOMBRES et la date de la passe) ou null si aucune passe n'a tourné. */
 async function lireEtat(colFn) { return colFn('banc_alertes').findOne({ _id: ID_ALERTE }); }
 
 function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX }) {
@@ -59,7 +61,7 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
         catch (e) { echec('objet non réécrit, ligne gardée pour la prochaine passe', e); return 'echec'; }
         try {
             await borner(col().insertOne({ _id: c.anonId, verite: c.verite, source: c.source, etat: 'confirmee', versionModele: c.versionModele ?? null, versionTexte: c.versionTexte,
-                cleR2: c.anonCle, expireLe: debutMois(c.expireLe), anonyme: true }));
+                cleR2: c.anonCle, expireLe: debutMois(c.le, cfg.retention.bancMois), anonyme: true }));
         } catch (e) { if (!e || e.code !== 11000) { echec('copie anonyme non écrite', e); return 'echec'; } }     // 11000 : la copie d'une reprise existe déjà
         let r;
         try { r = await borner(col().deleteOne({ _id: c._id, etat: 'anonymisation' })); }
@@ -96,9 +98,13 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
 
     async function rejouerObjets(s) {
         try {
-            for (const o of await borner(colFn('banc_objets_a_supprimer').find({}).limit(OBJETS_PAR_PASSE_MAX).toArray())) {
-                try { await borner(s.supprimer(o._id)); await borner(colFn('banc_objets_a_supprimer').deleteOne({ _id: o._id })); }
-                catch (e) { echec('objet en attente toujours non supprimé', e); }
+            for (const o of await borner(colFn('banc_objets_a_supprimer').find({ refuse: { $ne: true } }).limit(OBJETS_PAR_PASSE_MAX).toArray())) {
+                try { await borner(s.supprimer(o._id)); await borner(colFn('banc_objets_a_supprimer').deleteOne({ _id: o._id })); }       // l'entrée n'est retirée qu'une fois l'objet supprimé
+                catch (e) {
+                    echec('objet en attente toujours non supprimé', e);
+                    // (tour 2, M-2) une clé que le stockage refuse POUR TOUJOURS (forme) ne se rejoue pas en boucle : marquée « refusée », comptée à part dans l'alerte
+                    if (e && e.code === 'cle-refusee') { try { await borner(colFn('banc_objets_a_supprimer').updateOne({ _id: o._id }, { $set: { refuse: true } })); } catch (e2) { echec('clé refusée non marquée', e2); } }
+                }
             }
         } catch (e) { echec('liste des objets à supprimer', e); }
     }
@@ -157,11 +163,12 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
             let ageMaxJours = 0;
             if (restantes) {
                 const [plus] = await borner(col().find(filtre).sort({ le: 1 }).limit(1).toArray());
-                if (plus) ageMaxJours = Math.max(0, Math.floor((now.getTime() - debutMois(plus.le, cfg.retention.bancLienMois).getTime()) / JOUR_MS));
+                if (plus) ageMaxJours = Math.max(0, Math.floor((now.getTime() - debutMois(plus.le, cfg.retention.bancLienMois - 1).getTime()) / JOUR_MS));
             }
-            const objetsEnAttente = await borner(colFn('banc_objets_a_supprimer').countDocuments({}));
-            await borner(colFn('banc_alertes').replaceOne({ _id: ID_ALERTE }, { _id: ID_ALERTE, lignesEnEchec: restantes, ageMaxJours, objetsEnAttente, majLe: now }, { upsert: true }));
-            if (restantes || objetsEnAttente) console.error(`🔴 [v2 banc-anonymisation] ${restantes} ligne(s) échue(s) non traitée(s) (âge max ${ageMaxJours} j depuis la bascule), ${objetsEnAttente} objet(s) en attente de suppression`);
+            const objetsEnAttente = await borner(colFn('banc_objets_a_supprimer').countDocuments({ refuse: { $ne: true } }));
+            const objetsRefuses = await borner(colFn('banc_objets_a_supprimer').countDocuments({ refuse: true }));        // M-2 : comptés à part, ils ne tiennent pas l'alerte des lignes
+            await borner(colFn('banc_alertes').replaceOne({ _id: ID_ALERTE }, { _id: ID_ALERTE, lignesEnEchec: restantes, ageMaxJours, objetsEnAttente, objetsRefuses, majLe: now }, { upsert: true }));
+            if (restantes || objetsEnAttente || objetsRefuses) console.error(`🔴 [v2 banc-anonymisation] ${restantes} ligne(s) échue(s) non traitée(s) (âge max ${ageMaxJours} j depuis la bascule), ${objetsEnAttente} objet(s) en attente de suppression, ${objetsRefuses} objet(s) refusé(s) par le stockage`);
         } catch (e) { echec('alerte non écrite', e); bilan.echecs++; }
         return bilan;
     }
