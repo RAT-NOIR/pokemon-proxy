@@ -32,14 +32,15 @@ function creerCatalogue(opts = {}) {
         const [cats, nums, guides] = await Promise.all(['catalogue_produits', 'numeros_cartes', 'guide_prix'].map(n => colLue(n).find(filtre).toArray()));
         const parId = l => new Map(l.map(d => [d.idProduct, d]));
         const C = parId(cats), N = parId(nums), G = parId(guides);
+        const vis = visuels.instantane ? visuels.instantane() : visuels;                  // UNE version pour toute la requête : jamais un visuel d'une version et une impression d'une autre
         for (const id of ids) {
-            const c = C.get(id), n = N.get(id) || {}, v = (visuels.entree && visuels.entree(id)) || {};     // le visuel et l'impression : la version EN MÉMOIRE du chargeur
+            const c = C.get(id), n = N.get(id) || {}, v = (vis.entree && vis.entree(id)) || {};     // le visuel et l'impression : la version EN MÉMOIRE du chargeur
             const nom = c && texte(c.name);
             const slug = texte(n.slugSet) || texte(n.codeSet);
             if (!nom || !slug) continue;
             const g = G.get(id);
-            const visuel = await visuels.resoudre(id);
-            const impressions = Number.isInteger(c.idMetacard) ? await visuels.impressions(c.idMetacard) : [];
+            const visuel = await vis.resoudre(id);
+            const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
             table.set(id, {
                 idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr),
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },

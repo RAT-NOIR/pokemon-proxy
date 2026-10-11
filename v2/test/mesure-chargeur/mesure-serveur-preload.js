@@ -9,9 +9,15 @@ if (process.env.MESURE_ARCHIVE) {
     const { monitorEventLoopDelay } = require('perf_hooks');
     setTimeout(async () => {
         const C = require('../../chargeur/chargeur'); const etat = require('../../chargeur/etat');
-        const ch = C.creerChargeur({ catalogue: async () => new Map(), executer: C.executerDepuisFichier({ lireFichier: () => fs.promises.readFile(process.env.MESURE_ARCHIVE) }), journal: () => { } });
+        // tour 2 : le client S3 est CRÉÉ avant (son coût de RSS entre dans la base mesurée) et l'archive est SCELLÉE comme en production (HMAC vérifié, entrées rejugées)
+        const SECRET = 'secret-de-mesure-0123456789-abcdefghijklmnop';
+        const sdkDejaCharge = Object.keys(require.cache).some(k => /@aws-sdk[\\/]client-s3/.test(k));          // le serveur (legacy ou banc réel) l'a-t-il déjà chargé ?
+        const avantSdk = process.memoryUsage().rss;
+        require('../../chargeur/r2-prive').creerClient({ compte: 'c', cleId: 'k', secret: 's' });
+        const S = require('../../chargeur/scellement');
+        const ch = C.creerChargeur({ catalogue: async () => new Map(), executer: C.executerDepuisFichier({ lireFichier: async () => S.sceller(await fs.promises.readFile(process.env.MESURE_ARCHIVE), SECRET), secret: SECRET }), journal: () => { } });
         const pause = ms => new Promise(r => setTimeout(r, ms));
-        const sortie = { baseRssMo: Mo(process.memoryUsage().rss), basePicMo: Mo(process.resourceUsage().maxRSS * 1024), chargements: [] };
+        const sortie = { sdkDejaChargeParLeServeur: sdkDejaCharge, coutClientS3Mo: Mo(process.memoryUsage().rss - avantSdk), baseRssMo: Mo(process.memoryUsage().rss), basePicMo: Mo(process.resourceUsage().maxRSS * 1024), chargements: [] };
         for (let i = 0; i < 3; i++) {
             const h = monitorEventLoopDelay({ resolution: 5 }); h.enable();
             let pic = 0; const t = setInterval(() => { pic = Math.max(pic, process.memoryUsage().rss); }, 20);

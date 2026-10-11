@@ -8,16 +8,26 @@
 const etat = require('../chargeur/etat');
 const { prix, dateGuide } = require('../identifier/visuels');
 
-const PRODUITS_MAX = 20000;                                  // un set réel en compte quelques milliers : au-delà, on ne lit pas (la réponse reste {})
+// BORNE DURE (revue I7 : la lecture n'est pas limitée, un compte non vérifié peut la boucler sur la grappe de production) : 5 000 produits au plus par appel — le plus gros set RÉEL en compte
+// moins de la moitié (mesuré sur l'archive réelle, voir le rapport) —, trois champs, `maxTimeMS`, et l'index unique `idProduct` de `guide_prix` (schéma de import-price-guide.js, ligne 71 : la requête est un `$in` sur cette clé). Au-delà : cotes PARTIELLES, DITES au contrat
+// §1.8 (les fiches qui ne tiennent pas dans la borne sont absentes de `cotes`, donc `null` pour le site) et journalisées.
+const PRODUITS_MAX = 5000, DELAI_LECTURE_MS = 2000;
 
-async function cotesDuSet(slug, { version = () => etat.version(), col = nom => require('../db').col(nom) } = {}) {
+async function cotesDuSet(slug, { version = () => etat.version(), col = nom => require('../db').col(nom), journal = m => console.error(m) } = {}) {
     const v = version();
     if (!v || typeof slug !== 'string') return {};
-    const fiches = v.fichesDuSet(slug);
-    if (!fiches.length) return {};
-    const ids = [...new Set(fiches.flatMap(f => f.produits))];
-    if (ids.length > PRODUITS_MAX) return {};
-    const lignes = await col('guide_prix').find({ idProduct: { $in: ids } }, { projection: { _id: 0, idProduct: 1, trend: 1, guideDu: 1 } }).toArray();
+    const toutes = v.fichesDuSet(slug);
+    if (!toutes.length) return {};
+    const vus = new Set(), fiches = [];
+    for (const f of toutes) {
+        const nouveaux = f.produits.filter(id => !vus.has(id));
+        if (vus.size + nouveaux.length > PRODUITS_MAX) { journal(`ℹ️ [v2 collection] cotes PARTIELLES : ${fiches.length} fiches sur ${toutes.length} (borne de ${PRODUITS_MAX} produits par appel)`); break; }
+        for (const id of nouveaux) vus.add(id);
+        fiches.push(f);
+    }
+    const ids = [...vus];
+    if (!ids.length) return {};
+    const lignes = await col('guide_prix').find({ idProduct: { $in: ids } }, { projection: { _id: 0, idProduct: 1, trend: 1, guideDu: 1 }, maxTimeMS: DELAI_LECTURE_MS }).toArray();
     const parProduit = new Map();
     for (const l of lignes) { const t = prix(l.trend), d = dateGuide(l.guideDu); if (t !== null && d !== null) parProduit.set(l.idProduct, { tendance: t, date: d }); }
     const sortie = {};
@@ -28,4 +38,4 @@ async function cotesDuSet(slug, { version = () => etat.version(), col = nom => r
     }
     return sortie;
 }
-module.exports = { cotesDuSet, PRODUITS_MAX };
+module.exports = { cotesDuSet, PRODUITS_MAX, DELAI_LECTURE_MS };

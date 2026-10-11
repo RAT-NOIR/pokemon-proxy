@@ -61,5 +61,22 @@ const entrees = [
     H.v('2000 entrées insérées à l\'envers : toutes retrouvées par leur idProduct (dénominateur 2000)', Array.from({ length: 2000 }, (_, k) => gv.entree(5001 + k)?.idProduct === 5001 + k).filter(Boolean).length, 2000);
     H.v('   voisins absents (5000, 7001) → null', [gv.entree(5000), gv.entree(7001)], [null, null]);
     H.v('   la métacarte 9003 : ses ~286 produits, triés', [gv.produitsDeMetacarte(9003).length, gv.produitsDeMetacarte(9003).every((x, k, a) => k === 0 || a[k - 1] < x)], [286, true]);
+    // I2 : UN produit, UNE entrée — « le dernier gagne » (la règle de l'ancien import), comptée ; le consommateur n'a jamais deux fois le même identifiant
+    const dd = creerConstructeur();
+    dd.entree(brut(10, { setNom: 'Premier', idMetacard: 1 })); dd.entree(brut(20, { setNom: 'Seul', idMetacard: 1 })); dd.entree(brut(10, { setNom: 'Dernier', idMetacard: 2, numero: '9' }));
+    dd.lien('Set-D', '1|1', [10, 20]);
+    const dv = dd.finir();
+    H.v('doublon d\'idProduct : une seule entrée, la DERNIÈRE ; comptes : 3 lues, 2 admises, 1 doublon', [dv.entree(10).setNom, dv.entree(10).numero, dv.entree(10).idMetacard, dv.comptes.lues, dv.comptes.visuels, dv.comptes.doublons], ['Dernier', '9', 2, 3, 2, 1]);
+    H.v('   les métacartes suivent la dernière valeur (le produit 10 n\'est plus dans la métacarte 1)', [dv.produitsDeMetacarte(1), dv.produitsDeMetacarte(2)], [[20], [10]]);
+    H.v('   les identifiants sont strictement croissants (le format les exige)', Array.from(dv.identifiants()), [10, 20]);
+
+    // la voie « fil » juge la STRUCTURE comme la voie « fichier » (une seule définition : version.verifierStructure)
+    const { depuisPaquet, StructureInvalide } = require('../chargeur/version');
+    const p = v.paquet().donnees;
+    const casse = (patch) => { const c = JSON.parse(JSON.stringify({ n: 0 })); void c; const d = { ...p, cols: { ...p.cols } }; patch(d); try { depuisPaquet(d); return null; } catch (e) { return e instanceof StructureInvalide ? e.motif : `AUTRE:${e.name}`; } };
+    H.v('paquet intact : accepté', casse(() => { }), null);
+    H.vrai('paquet aux identifiants non triés : refusé', /non strictement croissants/.test(casse(d => { const a = Int32Array.from(d.cols.id); [a[0], a[1]] = [a[1], a[0]]; d.cols.id = a; }) || ''));
+    H.vrai('paquet aux identifiants dupliqués : refusé', /non strictement croissants/.test(casse(d => { const a = Int32Array.from(d.cols.id); a[1] = a[0]; d.cols.id = a; }) || ''));
+    H.vrai('paquet aux comptes menteurs : refusé', /comptes de l'en-tête/.test(casse(d => { d.comptes = { ...d.comptes, visuels: d.comptes.visuels + 1 }; }) || ''));
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

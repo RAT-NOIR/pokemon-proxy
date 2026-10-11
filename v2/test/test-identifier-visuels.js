@@ -59,6 +59,17 @@ const brut = (id, o = {}) => ({ idProduct: id, vignette: img(`vignettes/${id}.we
         2003: { vignette: img('vignettes/cardmarket-x.webp'), grande: null }, 2004: { vignette: img('vignettes//x.webp'), grande: null } })[id] || null, produitsDeMetacarte: () => [] };
     const Sh = V.creerVisuels({ cfg, version: () => hostile });
     H.v('   une version qui porterait des clés interdites : jamais servies (grande fausse => grande null)', [await Sh.resoudre(2001), (await Sh.resoudre(2002)).grande, await Sh.resoudre(2003), await Sh.resoudre(2004)], [null, null, null, null]);
+    // V2 : un lien d'un autre hôte que Cardmarket n'est JAMAIS servi comme lien (numéro et rareté connus), le lien Cardmarket l'est
+    const versionEtrange = { produitsDeMetacarte: () => [9001, 9002], entree: id => ({
+        9001: { idProduct: 9001, numero: '5', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: 'https://exemple.test/evil', vignette: img('v/1.webp') },
+        9002: { idProduct: 9002, numero: '6', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: `${CM}/Base-Set/Ok-6`, vignette: img('v/2.webp') } })[id] || null };
+    const imE = await V.creerVisuels({ cfg, version: () => versionEtrange }).impressions(1);
+    H.v('   un lien d\'un autre hôte que Cardmarket n\'est JAMAIS servi (null), le lien Cardmarket l\'est', imE.map(i => [i.idProduct, i.lien]), [[9001, null], [9002, `${CM}/Base-Set/Ok-6`]]);
+    // M6 : un jeu de lecteurs LIÉ à la version en place à cet instant : la bascule d'une autre version ne s'y mêle pas
+    E.installer(VB.construire([brut(4001, { setNom: 'Version A' })]));
+    const fige = V.creerVisuels({ cfg }).instantane();
+    E.installer(VB.construire([brut(4001, { setNom: 'Version B' })]));
+    H.v('   instantane() : lié à la version A même après la bascule vers B ; le lecteur ordinaire, lui, voit B', [fige.entree(4001).setNom, V.creerVisuels({ cfg }).entree(4001).setNom], ['Version A', 'Version B']);
     E.vider();
     H.v('   AUCUNE version chargée : « sans visuel » (null), impressions [], aucune exception', [await S.resoudre(1001), await S.impressions(77), S.entree(1001)], [null, [], null]);
 

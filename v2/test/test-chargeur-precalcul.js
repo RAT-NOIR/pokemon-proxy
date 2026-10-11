@@ -1,121 +1,174 @@
 'use strict';
-// COTES-VISUELS, tour 1 — la voie « FICHIER PRÉCALCULÉ » de bout en bout : le script autonome, le téléchargement, le montage, et l'équivalence avec le calcul en ligne. Aucun réseau réel : fetch
-// injecté, serveur enfant en banc (aucune connexion à cartes, prouvée par un écouteur local qui compte les connexions).
+// COTES-VISUELS, tours 1-2 — la voie « FICHIER PRÉCALCULÉ » de bout en bout : l'équivalence avec le calcul en ligne, le chargeur sur archive scellée, le MONTAGE (fermé par défaut, sans attendre la base),
+// le PRODUCTEUR (doublons, aller-retour, 0 lien, garde des 10 % contre l'archive publiée, dépôt) et un serveur enfant. Aucun réseau réel : faux client R2, serveur enfant en banc (aucune connexion à cartes,
+// prouvée par un écouteur local qui compte les connexions).
 const net = require('net'); const fs = require('fs'); const os = require('os'); const path = require('path'); const zlib = require('zlib');
 const H = require('./_harnais');
-const E = require('../chargeur/etat'); const F = require('../chargeur/format');
+const E = require('../chargeur/etat'); const F = require('../chargeur/format'); const S = require('../chargeur/scellement');
 const I = require('../chargeur');
 const { fabriquerFichier } = require('../chargeur/precalcul');
-const { telecharger } = require('../chargeur/telechargement');
 const { demarrerPourConfig } = require('../chargeur/montage');
 const { lireConfig } = require('../config');
+const { principal } = require('../migrations/construire-fichier-visuels');
 
+const SECRET = 'secret-hmac-de-banc-0123456789-abcdefghij';
 const vig = n => ({ cleR2: `vignettes/${n}.webp`, w: 200, h: 279 });
 const im = (set, numero, n) => ({ set, numero, cleR2: `cartes/${n}.webp`, w: 600, h: 838, vignette: vig(n), langue: 'en', source: 'tcgdex' });
-const imp = (numero) => ({ tirage: 'intl', expansion: 'Set A', numero, total: '100', rarete: 'Rare' });
-const SETS = [{ _id: 'Set-A', idExpansion: 100, code: 'SA', nomAffichage: 'Set A', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set A' } }];
-function donnees(n) {
+const imp = (numero, exp = 'Set A') => ({ tirage: 'intl', expansion: exp, numero, total: '100', rarete: 'Rare' });
+const SETS = [{ _id: 'Set-A', idExpansion: 100, code: 'SA', nomAffichage: 'Set A', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set A' } },
+    { _id: 'Set-B', idExpansion: 200, code: 'SB', nomAffichage: 'Set B', tirage: 'intl', region: 'intl', bulba: { expansion: 'Set B' } }];
+function donnees(n, { doublon = false } = {}) {
     const docs = [], lignes = [];
     for (let i = 1; i <= n; i++) {
         const num = String(i).padStart(3, '0');
         docs.push({ _id: i, nomEn: `Carte ${i}`, sets: ['Set-A'], impressions: [imp(num)], images: [im('Set-A', num, `c${i}`)] });
         lignes.push({ idProduct: 1000 + i, carteId: i, idExpansion: 100, numeroFiche: num, slug: `P${i}-SA${i}`, slugSet: 'Set-A' });
     }
+    if (doublon) {           // le produit 1005 est AUSSI rattaché à une carte d'un autre set : decider émet DEUX entrées pour un même idProduct (CLAUDE.md §32)
+        docs.push({ _id: 900, nomEn: 'Carte 900', sets: ['Set-B'], impressions: [imp('001', 'Set B')], images: [im('Set-B', '001', 'c900')] });
+        lignes.push({ idProduct: 1005, carteId: 900, idExpansion: 200, numeroFiche: '001', slug: 'P5-SB1', slugSet: 'Set-B' });
+    }
     return { sets: SETS, docs, lignes };
 }
-const catalogue = new Map(Array.from({ length: 30 }, (_, i) => [1001 + i, 5000 + (i % 4)]));
+const catalogue = new Map(Array.from({ length: 40 }, (_, i) => [1001 + i, 5000 + (i % 4)]));
 const source = d => async () => ({ ok: true, ...d, fermer: async () => { } });
 const attendre = ms => new Promise(r => setTimeout(r, ms));
+// un faux magasin R2 : Get / Put en mémoire, chaque commande notée
+function magasin(initial = null) {
+    const m = { objet: initial, commandes: [], send: async cmd => {
+        m.commandes.push([cmd.constructor.name, cmd.input.Bucket, cmd.input.Key, cmd.input.ContentType ?? null]);
+        if (cmd.constructor.name === 'PutObjectCommand') { m.objet = Buffer.from(cmd.input.Body); return {}; }
+        if (m.objet === null) throw Object.assign(new Error('x'), { name: 'NoSuchKey' });
+        return { ContentLength: m.objet.length, Body: (async function* () { yield m.objet; })() };
+    } };
+    return m;
+}
+const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS_R2_ECR_CLE_ID: 'k', V2_VISUELS_R2_ECR_SECRET: 's', V2_VISUELS_R2_BUCKET: 'seau-prive', V2_VISUELS_R2_OBJET: 'v2/visuels.rmv' };
 
 (async () => {
     // ── 1. le fichier précalculé donne EXACTEMENT ce que le calcul en ligne donne
     const d = donnees(30);
     const enLigne = await I.executerEnLigne({ source: source(d) })({ catalogue });
-    const f = await fabriquerFichier({ source: source(d), catalogue });
-    const viaFichier = await I.executerDepuisFichier({ lireFichier: async () => f.gz })();
-    H.v('fichier : ok, mêmes comptes que le calcul en ligne (30 visuels, 30 fiches)', [viaFichier.ok, viaFichier.comptes.visuels, viaFichier.comptes.fichesLiees, enLigne.comptes.visuels], [true, 30, 30, 30]);
+    const f = await fabriquerFichier({ source: source(d), catalogue, secret: SECRET });
+    const viaFichier = await I.executerDepuisFichier({ lireFichier: async () => f.scelle, secret: SECRET })();
+    H.v('fichier scellé : ok, mêmes comptes que le calcul en ligne (30 visuels, 30 fiches)', [viaFichier.ok, viaFichier.comptes.visuels, viaFichier.comptes.fichesLiees, enLigne.comptes.visuels], [true, 30, 30, 30]);
     const ids = Array.from({ length: 30 }, (_, i) => 1001 + i);
     H.v('   chaque entrée identique (30), les métacartes et les fiches aussi', [ids.filter(id => JSON.stringify(viaFichier.version.entree(id)) === JSON.stringify(enLigne.version.entree(id))).length,
         JSON.stringify([5000, 5001, 5002, 5003].map(m => viaFichier.version.produitsDeMetacarte(m))) === JSON.stringify([5000, 5001, 5002, 5003].map(m => enLigne.version.produitsDeMetacarte(m))),
         JSON.stringify(viaFichier.version.fichesDuSet('Set-A')) === JSON.stringify(enLigne.version.fichesDuSet('Set-A'))], [30, true, true]);
-    H.v('   les dénominateurs d\'entrée voyagent avec le fichier (sets, cartes, produits, catalogue)', [viaFichier.comptes.sets, viaFichier.comptes.cartes, viaFichier.comptes.produits, viaFichier.comptes.catalogue], [1, 30, 30, 30]);
-    const sansImage = donnees(3); sansImage.docs.forEach(x => { x.images = []; });
-    let vide = null; try { await fabriquerFichier({ source: source(sansImage), catalogue }); } catch (e) { vide = e.motif; }
-    H.v('rien d\'admissible (aucune image) : AUCUN fichier produit, motif nommé', typeof vide === 'string' ? /0 visuel.*aucun fichier/.test(vide) : vide, true);
+    H.v('   les dénominateurs d\'entrée voyagent avec le fichier (sets, cartes, produits, catalogue)', [viaFichier.comptes.sets, viaFichier.comptes.cartes, viaFichier.comptes.produits, viaFichier.comptes.catalogue], [2, 30, 30, 40]);
 
-    // ── 2. le chargeur sur la voie fichier : bascule, refus d'un fichier abîmé, version gardée, AUCUNE reprise
+    // ── 2. LE PRODUCTEUR n'écrit rien que le consommateur refuse (I2) et refuse l'amputé (P1, ruling 4)
+    const dd = await fabriquerFichier({ source: source(donnees(30, { doublon: true })), catalogue, secret: SECRET });
+    H.v('un produit rattaché à DEUX cartes (deux sets) : deux entrées émises, UNE gardée (le dernier gagne, comme l\'ancien import), compté', [dd.comptes.doublons, dd.comptes.visuels], [1, 30]);
+    const lu = await I.executerDepuisFichier({ lireFichier: async () => dd.scelle, secret: SECRET })();
+    H.v('   et le CONSOMMATEUR lit cette archive (aller-retour réel) : 30 visuels, le dernier gagne (Set B)', [lu.ok, lu.comptes.visuels, lu.version.entree(1005).setNom], [true, 30, 'Set B']);
+    const sansImage = donnees(3); sansImage.docs.forEach(x => { x.images = []; });
+    let m0 = null; try { await fabriquerFichier({ source: source(sansImage), catalogue, secret: SECRET }); } catch (e) { m0 = e.motif; }
+    H.v('rien d\'admissible (aucune image) : AUCUN fichier produit, motif nommé', /0 visuel.*aucun fichier/.test(m0 || ''), true);
+    let m1 = null; try { await fabriquerFichier({ source: source(donnees(5)), catalogue, secret: SECRET, decider: async ({ sink }) => { sink.entree({ idProduct: 1001, visuel: 'du-set', mention: null, idMetacard: 5000, numero: '001', rarete: 'Rare', total: '10', variante: null, setNom: 'S', lien: null, grande: null, vignette: { cle: 'v/1.webp', w: 1, h: 1 } }); return { denominateurs: { setsAvecLiens: 0, produitsLies: 0 } }; } }); } catch (e) { m1 = e.motif; }
+    H.v('0 lien fiche → produits (des entrées, aucun lien) : AUCUN fichier produit, motif nommé', /0 lien.*aucun fichier/.test(m1 || ''), true);
+
+    // ── 3. le chargeur sur archive scellée : bascule, refus d'une archive abîmée, version gardée
     E.vider();
     const journal = [];
-    const ch = lire => I.creerChargeur({ catalogue: async () => new Map(), executer: I.executerDepuisFichier({ lireFichier: lire }), journal: m => journal.push(m), pret: async () => true });
-    const r1 = await ch(async () => f.gz).charger();
-    H.v('chargeur sur fichier : ok, 30 visuels en place', [r1.ok, E.version().comptes.visuels], [true, 30]);
+    const ch = lire => I.creerChargeur({ catalogue: async () => new Map(), executer: I.executerDepuisFichier({ lireFichier: lire, secret: SECRET }), journal: m => journal.push(m), pret: async () => true });
+    const r1 = await ch(async () => f.scelle).charger();
+    H.v('chargeur sur fichier scellé : ok, 30 visuels en place', [r1.ok, E.version().comptes.visuels], [true, 30]);
+    H.vrai('   le journal dit la date de l\'archive et son âge', journal.some(m => /archive du \d{4}-\d{2}-\d{2}T.*âge \d+ h/.test(m)));
     const garde = E.version();
-    for (const [nom, octets] of [['archive tronquée', f.gz.subarray(0, f.gz.length >> 1)], ['pas du gzip', Buffer.from('pas du gzip')], ['octet retourné', (() => { const b = Buffer.from(zlib.gunzipSync(f.gz)); b[b.length >> 1] ^= 1; return zlib.gzipSync(b); })()], ['vide', Buffer.alloc(0)]]) {
+    const gz = zlib.gunzipSync(zlib.gzipSync(f.brut));
+    for (const [nom, octets] of [['archive tronquée', f.scelle.subarray(0, f.scelle.length >> 1)], ['pas du tout une archive', Buffer.from('pas du gzip')], ['octet retourné', (() => { const b = Buffer.from(f.scelle); b[b.length >> 1] ^= 1; return b; })()], ['vide', Buffer.alloc(0)]]) {
         const r = await ch(async () => octets).charger();
-        H.v(`${nom} : refusé, version précédente gardée`, [r.ok, E.version() === garde], [false, true]);
+        H.v(`${nom} : refusée, version précédente gardée`, [r.ok, E.version() === garde], [false, true]);
     }
     const rPanne = await ch(async () => { throw new Error('panne'); }).charger();
-    H.v('lecture du fichier qui échoue : échec, version gardée', [rPanne.ok, E.version() === garde], [false, true]);
-    H.vrai('   le journal dit « fichier refusé » avec le motif de structure, sans texte de pilote', journal.some(m => /fichier refusé|fichier illisible/.test(m)));
-
-    // ── 3. le téléchargement : seulement l'hôte public, https, sans redirection, borné
-    const hotes = ['pub-abc.r2.dev', 'rat-market.fr'];
-    const rep = (corps, o = {}) => async (url, opts) => { rep.dernier = { url, opts }; return { status: 200, headers: { get: () => null }, body: (async function* () { yield corps; })(), ...o }; };
-    const ok = await telecharger('https://pub-abc.r2.dev/v2/visuels-api.rmv.gz', { hotes, fetchFn: rep(f.gz) });
-    H.v('téléchargement : les octets, sans suivre de redirection', [ok.equals(f.gz), rep.dernier.opts.redirect], [true, 'error']);
-    const refus = async (nom, url, fetchFn, o = {}) => { let m = null; try { await telecharger(url, { hotes, fetchFn, ...o }); } catch (e) { m = e.name === 'Telechargement' ? e.motif : `AUTRE:${e.name}`; } H.vrai(`   refusé : ${nom} (${m})`, typeof m === 'string' && !m.startsWith('AUTRE')); };
-    await refus('http', 'http://pub-abc.r2.dev/x', rep(f.gz));
-    await refus('hôte hors liste', 'https://evil.example/x', rep(f.gz));
-    await refus('identifiant dans l\'adresse', 'https://u:p@pub-abc.r2.dev/x', rep(f.gz));
-    await refus('port', 'https://pub-abc.r2.dev:8443/x', rep(f.gz));
-    await refus('adresse illisible', 'pas une url', rep(f.gz));
-    await refus('404', 'https://pub-abc.r2.dev/x', rep(f.gz, { status: 404 }));
-    await refus('redirection (le fetch lève)', 'https://pub-abc.r2.dev/x', async () => { throw Object.assign(new Error('redirect'), { name: 'TypeError' }); });
-    await refus('taille annoncée trop grande', 'https://pub-abc.r2.dev/x', rep(f.gz, { headers: { get: () => '999999999' } }));
-    await refus('taille lue trop grande', 'https://pub-abc.r2.dev/x', rep(Buffer.alloc(5000)), { max: 1000 });
-    await refus('fichier vide', 'https://pub-abc.r2.dev/x', rep(Buffer.alloc(0)));
-    const veille = setTimeout(() => { }, 5000);            // AbortSignal.timeout est « unref » : sans cette veille, le banc sortirait avant l'échéance (un vrai fetch tient le processus par sa socket)
-    await refus('délai dépassé', 'https://pub-abc.r2.dev/x', (url, o) => new Promise((_, ko) => o.signal.addEventListener('abort', () => ko(Object.assign(new Error('t'), { name: 'TimeoutError' })))), { delaiMs: 30 });
-    clearTimeout(veille);
-
-    // ── 4. le montage : banc = aucun réseau ; production = l'archive à la clé publique ; rien ne se lit au montage
-    const cfgBanc = lireConfig({ MONGODB_BASE: 'test_scratch' });
-    let appels = 0; const fetchCompte = async (...a) => { appels++; return rep(f.gz)(...a); };
-    E.vider(); I.arreterChargeur();
-    H.v('banc sans archive : aucun chargeur, aucun réseau', [demarrerPourConfig(cfgBanc, { env: { BANC_ISOLE: '1' }, fetchFn: fetchCompte }), appels], [null, 0]);
-    const fichierBanc = path.join(os.tmpdir(), `archive-banc-${process.pid}.rmv.gz`); fs.writeFileSync(fichierBanc, f.gz);
-    demarrerPourConfig({ ...cfgBanc, visuels: { ...cfgBanc.visuels, fichierBanc } }, { env: { BANC_ISOLE: '1' }, fetchFn: fetchCompte });
-    H.v('banc avec archive locale : installée TOUT DE SUITE (30 visuels), aucun réseau', [E.version() && E.version().comptes.visuels, appels], [30, 0]);
-    E.vider(); fs.writeFileSync(fichierBanc, 'abîmée');
-    demarrerPourConfig({ ...cfgBanc, visuels: { ...cfgBanc.visuels, fichierBanc } }, { env: { BANC_ISOLE: '1' }, fetchFn: fetchCompte });
-    H.v('banc avec archive abîmée : refusée, « sans visuel »', E.version(), null);
-    fs.unlinkSync(fichierBanc);
-    const cfgProd = lireConfig({ MONGODB_BASE: 'test' });
-    const t0 = Date.now(); const c = demarrerPourConfig(cfgProd, { env: {}, fetchFn: fetchCompte });
-    H.v('production, source fichier : le montage ne lit RIEN (aucun appel réseau), chargeur démarré', [appels, c !== null, Date.now() - t0 < 100], [0, true, true]);
-    const rp = await I.chargeurCourant().charger();
-    H.v('   le chargement télécharge l\'archive à la clé publique de la configuration et la charge', [rp.ok, rep.dernier.url, appels, E.version().comptes.visuels], [true, `https://${cfgProd.images.hotesPublics[0]}/${cfgProd.visuels.cle}`, 1, 30]);
-    I.arreterChargeur();
+    H.v('lecture de l\'objet qui échoue : échec, version gardée', [rPanne.ok, E.version() === garde], [false, true]);
+    // une archive plus ANCIENNE que celle en place est refusée (M5)
+    const vieille = await fabriquerFichier({ source: source(d), catalogue, secret: SECRET });
+    const viellie = F.reecrireEntete(vieille.brut, { ...F.lireEntete(vieille.brut), chargeLe: '2020-01-01T00:00:00.000Z' });
+    const rv = await ch(async () => S.sceller(await F.compresser(viellie), SECRET)).charger();
+    H.v('archive plus ancienne que celle en place : refusée, motif nommé', [rv.ok, /plus ancienne/.test(rv.motif || '')], [false, true]);
     E.vider();
-    const cc = demarrerPourConfig(lireConfig({ MONGODB_BASE: 'test', V2_VISUELS_SOURCE: 'calcul' }), { env: {}, fetchFn: fetchCompte });
-    H.v('production, source calcul : un chargeur (fil), toujours rien de lu au montage', [cc !== null, appels], [true, 1]);
-    I.arreterChargeur();
 
-    // ── 5. le script autonome : refus avant toute connexion, aucun fichier
-    const script = path.join(__dirname, '..', 'migrations', 'construire-fichier-visuels.js');
-    const sortie = path.join(os.tmpdir(), `sortie-script-${process.pid}.rmv.gz`);
-    // EN PROCESSUS, avec un environnement explicite : lancé comme enfant, le script chargerait le .env du dépôt (dotenv) et pourrait toucher une vraie base — un banc ne le fait jamais
-    const { principal } = require('../migrations/construire-fichier-visuels');
+    // ── 4. le MONTAGE : fermé par défaut ; la voie fichier n'attend PAS la base ; banc = aucun réseau
+    const cfgBanc = lireConfig({ MONGODB_BASE: 'test_scratch' });
+    const cfgProd = lireConfig({ MONGODB_BASE: 'test' });
+    let creations = 0; const jm = [];
+    I.arreterChargeur(); E.vider();
+    H.v('production, variables absentes : AUCUN chargeur, « sans visuel », le journal NOMME les variables (jamais une valeur)', [demarrerPourConfig(cfgProd, { env: {}, journal: m => jm.push(m), client: { send: () => { creations++; } } }), /V2_VISUELS_R2_COMPTE/.test(jm[0] || ''), /V2_VISUELS_HMAC/.test(jm[0] || ''), creations], [null, true, true, 0]);
+    jm.length = 0;
+    H.v('   une seule variable manquante (le secret HMAC) : fermé', [demarrerPourConfig(cfgProd, { env: { ...ENV_ECR, V2_VISUELS_R2_CLE_ID: 'k', V2_VISUELS_R2_SECRET: 's', V2_VISUELS_HMAC: undefined }, journal: m => jm.push(m) }), /V2_VISUELS_HMAC/.test(jm[0] || '')], [null, true]);
+    jm.length = 0;
+    H.v('   un secret HMAC trop court : fermé, le journal le dit', [demarrerPourConfig(cfgProd, { env: { ...ENV_ECR, V2_VISUELS_R2_CLE_ID: 'k', V2_VISUELS_R2_SECRET: 's', V2_VISUELS_HMAC: 'court' }, journal: m => jm.push(m) }), /trop court/.test(jm[0] || '')], [null, true]);
+    const mag = magasin(f.scelle);
+    const envLecture = { V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS_R2_CLE_ID: 'k', V2_VISUELS_R2_SECRET: 's', V2_VISUELS_R2_BUCKET: 'seau-prive', V2_VISUELS_R2_OBJET: 'v2/visuels.rmv', V2_VISUELS_HMAC: SECRET };
+    const t0 = Date.now(); const c = demarrerPourConfig(cfgProd, { env: envLecture, client: mag });
+    H.v('variables présentes : chargeur démarré, rien de lu au montage (le montage rend la main sans attendre)', [c !== null, mag.commandes.length, Date.now() - t0 < 100], [true, 0, true]);
+    for (let k = 0; k < 40 && !E.version(); k++) await attendre(25);
+    H.v('   la voie fichier N\'ATTEND PAS la base de l\'API (aucune connexion ici) : l\'archive est installée en moins d\'une seconde', [E.version() && E.version().comptes.visuels, Date.now() - t0 < 1000], [30, true]);
+    H.v('   lue sur le bucket et l\'objet DES VARIABLES (GetObject), rien d\'autre', mag.commandes.map(x => x.slice(0, 3)), [['GetObjectCommand', 'seau-prive', 'v2/visuels.rmv']]);
+    I.arreterChargeur(); E.vider();
+    const mauvais = magasin(S.sceller(f.gz, SECRET.replace('s', 'z')));
+    demarrerPourConfig(cfgProd, { env: envLecture, client: mauvais });
+    await attendre(300);
+    H.v('un objet scellé avec un AUTRE secret : jamais installé (« sans visuel »)', E.version(), null);
+    I.arreterChargeur();
+    H.v('banc sans archive : aucun chargeur, aucun réseau', [demarrerPourConfig(cfgBanc, { env: { BANC_ISOLE: '1', ...envLecture }, client: { send: () => { creations++; } } }), creations], [null, 0]);
+    const fichierBanc = path.join(os.tmpdir(), `archive-banc-${process.pid}.rmv.gz`); fs.writeFileSync(fichierBanc, zlib.gzipSync(f.brut));
+    demarrerPourConfig({ ...cfgBanc, visuels: { ...cfgBanc.visuels, fichierBanc } }, { env: { BANC_ISOLE: '1' } });
+    H.v('banc avec archive locale : installée TOUT DE SUITE (30 visuels)', E.version() && E.version().comptes.visuels, 30);
+    E.vider(); fs.writeFileSync(fichierBanc, 'abîmée'); const jb = [];
+    demarrerPourConfig({ ...cfgBanc, visuels: { ...cfgBanc.visuels, fichierBanc } }, { env: { BANC_ISOLE: '1' }, journal: m => jb.push(m) });
+    H.v('banc avec archive abîmée : refusée, « sans visuel », journalisé', [E.version(), jb.length], [null, 1]);
+    fs.writeFileSync(fichierBanc, zlib.gzipSync(zeros250())); E.vider();
+    demarrerPourConfig({ ...cfgBanc, visuels: { ...cfgBanc.visuels, fichierBanc } }, { env: { BANC_ISOLE: '1' }, journal: m => jb.push(m) });
+    H.v('banc avec une bombe gzip : refusée aussi (mêmes plafonds que la voie réelle)', E.version(), null);
+    fs.unlinkSync(fichierBanc);
+    const cc = demarrerPourConfig(lireConfig({ MONGODB_BASE: 'test', V2_VISUELS_SOURCE: 'calcul' }), { env: {} });
+    H.v('production, source calcul : un chargeur (fil), toujours rien de lu au montage', cc !== null, true);
+    I.arreterChargeur(); E.vider();
+
+    // ── 5. le script PRODUCTEUR : garde des 10 % contre l'archive publiée, dépôt scellé, refus sans publication
+    const lancer = async (argv, env, deps) => {
+        const sortie = []; const lo = console.log, le = console.error; console.log = m => sortie.push(String(m)); console.error = m => sortie.push(String(m));
+        try { const code = await principal(['node', 'script', ...argv], env, deps); return { code, texte: sortie.join('\n') }; } finally { console.log = lo; console.error = le; }
+    };
+    const cat100 = new Map(Array.from({ length: 100 }, (_, i) => [1001 + i, 5000 + (i % 4)]));
+    const m5 = magasin();
+    const p1 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: m5 });
+    H.v('première publication : code 0, dite (rien à comparer), PutObject sur le bucket et l\'objet des variables, Content-Type binaire', [p1.code, /première publication/.test(p1.texte), m5.commandes.filter(x => x[0] === 'PutObjectCommand').map(x => x.slice(1)).flat()], [0, true, ['seau-prive', 'v2/visuels.rmv', 'application/octet-stream']]);
+    const publie = m5.objet;
+    H.v('   l\'objet publié est SCELLÉ et se lit avec le code du consommateur (100 visuels)', (await I.executerDepuisFichier({ lireFichier: async () => publie, secret: SECRET })()).comptes.visuels, 100);
+    const p2 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(95)), catalogue: cat100, client: m5 });
+    H.v('une baisse de 5 % : publiée, comparaison dite', [p2.code, /chute ≤ 10 %/.test(p2.texte)], [0, true]);
+    const apres2 = m5.objet;
+    m5.commandes.length = 0;
+    const p3 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(60)), catalogue: cat100, client: m5 });
+    H.v('une chute de 37 % (95 → 60) : REFUSÉE, code 1, journal à l\'appui, AUCUN PutObject, l\'objet publié est inchangé', [p3.code, /chute de plus de 10 % des visuels.*\(95 → 60\)/.test(p3.texte) || p3.texte.slice(0, 300), m5.commandes.some(x => x[0] === 'PutObjectCommand'), m5.objet.equals(apres2)], [1, true, false, true]);
+    m5.objet = Buffer.from('objet précédent corrompu');
+    const p4 = await lancer(['--deposer'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: m5 });
+    H.v('archive précédente ILLISIBLE : « je ne sais pas » ⇒ refus, AUCUNE publication', [p4.code, /illisible/.test(p4.texte), m5.objet.equals(Buffer.from('objet précédent corrompu'))], [1, true, true]);
+    const p5 = await lancer(['--deposer', '--ignorer-precedente'], ENV_ECR, { source: source(donnees(100)), catalogue: cat100, client: m5 });
+    H.v('   --ignorer-precedente (l\'acte explicite) : publiée', [p5.code, m5.objet.equals(Buffer.from('objet précédent corrompu'))], [0, false]);
+    const sansHmac = await lancer(['--deposer'], { ...ENV_ECR, V2_VISUELS_HMAC: undefined }, { source: source(donnees(100)), catalogue: cat100, client: magasin() });
+    H.v('sans secret HMAC : code 1, rien n\'est calculé ni publié', [sansHmac.code, /V2_VISUELS_HMAC/.test(sansHmac.texte)], [1, true]);
+    const sansEcr = await lancer(['--deposer'], { V2_VISUELS_HMAC: SECRET }, { source: source(donnees(100)), catalogue: cat100, client: magasin() });
+    H.v('sans variables d\'écriture R2 : code 1, elles sont NOMMÉES', [sansEcr.code, /V2_VISUELS_R2_ECR_CLE_ID/.test(sansEcr.texte)], [1, true]);
+    const vide0 = await lancer([], ENV_ECR, { source: source(donnees(100)), catalogue: cat100 });
+    H.v('ni --deposer ni --vers : code 1', vide0.code, 1);
+    const fv = path.join(os.tmpdir(), `sortie-script-${process.pid}.rmv`);
+    const pv = await lancer([`--vers=${fv}`], { V2_VISUELS_HMAC: SECRET }, { source: source(donnees(100)), catalogue: cat100 });
+    H.v('--vers : le fichier local est SCELLÉ et lisible par le consommateur', [pv.code, (await I.executerDepuisFichier({ lireFichier: async () => fs.readFileSync(fv), secret: SECRET })()).comptes.visuels], [0, 100]);
+    fs.unlinkSync(fv);
     const erreurs = []; const ancienne = console.error; console.error = m => erreurs.push(String(m));
-    let code1, code2, code3;
+    let code1, code3;
     try {
-        code1 = await principal(['node', script, `--vers=${sortie}`], {});
-        code2 = await principal(['node', script], { MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://lecteur:x@h.exemple.net/cartes' });
-        code3 = await principal(['node', script, `--vers=${sortie}`], { MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://u:x@h.exemple.net/cartes', MONGODB_CARTES_URI: 'mongodb+srv://u:y@h.exemple.net/cartes' });
+        code1 = await principal(['node', 'script', '--deposer', '--vers=x'], { V2_VISUELS_HMAC: SECRET, ...ENV_ECR });
+        code3 = await principal(['node', 'script', '--vers=x'], { V2_VISUELS_HMAC: SECRET, MONGODB_CARTES_LECTURE_URI: 'mongodb+srv://u:x@h.exemple.net/cartes', MONGODB_CARTES_URI: 'mongodb+srv://u:y@h.exemple.net/cartes' });
     } finally { console.error = ancienne; }
-    H.v('script sans variable de lecture : code 1, refus nommé, AUCUN fichier', [code1, /MONGODB_CARTES_LECTURE_URI/.test(erreurs[0] || ''), fs.existsSync(sortie)], [1, true, false]);
-    H.v('script sans --vers : code 1', code2, 1);
-    H.v('script avec le même utilisateur en lecture et en écriture : code 1 AVANT toute connexion (aucune adresse n\'existe ici)', [code3, /utilisateur/.test(erreurs[2] || '')], [1, true]);
+    H.v('script sans variable de lecture de cartes : code 1, refus nommé AVANT toute connexion', [code1, /MONGODB_CARTES_LECTURE_URI/.test(erreurs[0] || '')], [1, true]);
+    H.v('script avec le même utilisateur en lecture et en écriture : code 1 AVANT toute connexion', [code3, /utilisateur/.test(erreurs[1] || '')], [1, true]);
 
     // ── 6. serveur enfant : interrupteur éteint = aucune connexion à cartes ; allumé en banc = aucune non plus (écouteur local qui compte)
     await H.ouvrirBancV2();
@@ -135,3 +188,5 @@ const attendre = ms => new Promise(r => setTimeout(r, ms));
     await H.arreterBanc();
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });
+
+function zeros250() { return Buffer.alloc(60 * 1048576); }

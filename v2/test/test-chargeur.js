@@ -76,13 +76,14 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
 
     // ── 6. la bascule est ATOMIQUE : pendant un chargement lent, l'ancienne version sert encore, jamais un état à moitié chargé
     let ouvrir; const porte = new Promise(r => { ouvrir = r; });
-    const lent = fabriquer({ source: async () => { await porte; return { ok: true, ...donnees(40), fermer: async () => { } }; } });
+    let appelsSource = 0;
+    const lent = fabriquer({ source: async () => { appelsSource++; await porte; return { ok: true, ...donnees(40), fermer: async () => { } }; } });
     const avant = E.version();
     const enCours = lent.charger();
     await new Promise(r => setImmediate(r));
     H.v('pendant le chargement : la version en place est inchangée (même objet)', E.version() === avant, true);
-    const second = await lent.charger();
-    H.v('   un second chargement simultané est refusé (« en cours »), pas empilé', [second.ok, /en cours/.test(second.motif)], [false, true]);
+    const second = await Promise.race([lent.charger(), attendre(300).then(() => ({ ok: 'BLOQUÉ : le second chargement est parti et attend la porte' }))]);      // C4 : s'il était admis, il se bloquerait ici
+    H.v('   un second chargement simultané est refusé (« en cours »), pas empilé : la source n\'a été interrogée qu\'UNE fois', [second.ok, /en cours/.test(second.motif), appelsSource], [false, true, 1]);
     ouvrir(); const fini = await enCours;
     H.v('après : la version est ENTIÈRE (40 visuels), d\'un seul geste', [fini.ok, E.version().comptes.visuels, E.version() !== avant, fini.motif], [true, 40, true, undefined]);
 
@@ -150,6 +151,15 @@ const attendre = ms => new Promise(r => SETTIMEOUT(r, ms));
     const memeUri = await executerDansUnFil({ env: { MONGODB_CARTES_LECTURE_URI: ENV.MONGODB_CARTES_URI, MONGODB_CARTES_URI: ENV.MONGODB_CARTES_URI }, creerFil: () => { crees++; throw new Error('non'); } })({ catalogue: catalogue(3) });
     H.v('variable de lecture = écriture : refus AVANT de lancer un fil', [memeUri.ok, crees], [false, 0]);
     H.vrai('   aucun journal ne contient de valeur d\'URI', !journal.join('\n').includes(SECRET));
+    // M3 : le mot de passe de l'URI d'ÉCRITURE ne voyage pas jusqu'au fil
+    let vue = null;
+    const veilleFil = setTimeout(() => { }, 2000);                  // le délai du fil est « unref » : sans veille, le banc sortirait avant son échéance
+    await executerDansUnFil({ env: ENV, creerFil: (don) => { vue = JSON.stringify(don.env); return { on() { }, terminate() { } }; }, delaiMs: 20 })({ catalogue: catalogue(3) });
+    clearTimeout(veilleFil);
+    H.v('le fil reçoit l\'URI d\'écriture SANS mot de passe (l\'utilisateur reste pour la comparaison), la lecture telle quelle', [vue.includes(SECRET + '@') && vue.includes('ecrivain:'), vue.includes('ecrivain@h.exemple.net'), vue.includes('lecteur:' + SECRET)], [false, true, true]);
+    // C6 (équivalent, une ligne) : etat.installer refuse une version non gelée ; la version produite par assembler() est TOUJOURS gelée, donc le chemin « non gelée » n'est pas atteignable par le chargeur
+    let nonGelee = null; try { E.installer({ comptes: {} }); } catch (e) { nonGelee = e.message; }
+    H.vrai('etat.installer refuse une version non gelée', typeof nonGelee === 'string');
     H.v('plafonds du fil écrits : tas ≤ 192 Mo, jeune ≤ 24 Mo', [LIMITES_FIL.maxOldGenerationSizeMb, LIMITES_FIL.maxYoungGenerationSizeMb], [192, 24]);
 
     H.bilan();

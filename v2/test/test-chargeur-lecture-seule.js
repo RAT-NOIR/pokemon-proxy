@@ -25,7 +25,8 @@ function fausse(st, { leveSurStatut = false } = {}) {
         }),
         dropDatabase: async () => appels.push(['dropDatabase'])
     };
-    return { appels, connecter: async uri => { appels.push(['connecter']); return { db, close: async () => { appels.push(['close']); } }; } };
+    const vus = [];
+    return { appels, vus, connecter: async uri => { vus.push(uri); appels.push(['connecter']); return { db, close: async () => { appels.push(['close']); } }; } };
 }
 const nb = (appels, k) => appels.filter(a => a[0] === k).length;
 const env = (o = {}) => ({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_URI: ECRITURE, ...o });
@@ -71,9 +72,10 @@ const env = (o = {}) => ({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_U
     f = fausse(statut()); r = await LS.ouvrir({ env: env(), connecter: f.connecter });
     const c = r.cartes;
     H.v('façade : find sur sets, cartes, cartes_produits', await Promise.all(['sets', 'cartes', 'cartes_produits'].map(n => c.collection(n).find({}, { projection: { _id: 1 } }).toArray())), [[{ _id: 1 }], [{ _id: 1 }], [{ _id: 1 }]]);
-    H.v('   aggregate sans $out/$merge', await c.collection('sets').aggregate([{ $match: {} }]).toArray(), [{ _id: 1 }]);
     const leve = (fn) => { try { const x = fn(); return x && typeof x.then === 'function' ? x.then(() => null, e => e.message) : null; } catch (e) { return e.message; } };
     const refus = async (nom, fn) => { const m = await leve(fn); H.vrai(`   refusé : ${nom}`, typeof m === 'string'); };
+    await refus('aggregate (jamais appelé par l\'API : un pipeline peut lire d\'autres collections par $lookup / $unionWith / $graphLookup — revue M1)', () => c.collection('sets').aggregate([{ $match: {} }]));
+    await refus('aggregate avec $lookup vers une collection hors liste', () => c.collection('sets').aggregate([{ $lookup: { from: 'images', pipeline: [], as: 'x' } }]));
     for (const nom of ['images', 'collecte_images_etat', 'numeros_cartes', 'comptes', 'system.users', '$cmd']) await refus(`collection « ${nom} » (liste fermée)`, () => c.collection(nom));
     for (const m of ['insertOne', 'updateOne', 'deleteMany', 'drop', 'createIndex', 'findOne']) await refus(`collection.${m}`, () => c.collection('sets')[m]({}));
     await refus('aggregate avec $out', () => c.collection('sets').aggregate([{ $out: 'x' }]));
@@ -87,6 +89,21 @@ const env = (o = {}) => ({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_U
     H.vrai('   fermer() ferme la connexion', (await c.fermer(), nb(f.appels, 'close') >= 1));
 
     // ── 4. la liste des actions autorisées est celle d'un rôle de lecture (garde écrite par ce qu'elle autorise)
+    // L6 : la liste est comparée à la liste LITTÉRALE du rôle `read` d'Atlas (plus listDatabases) — ajouter une action (collMod…) fait tomber ce banc
+    H.v('ACTIONS_DE_LECTURE : égale à la liste littérale d\'un rôle de lecture', [...LS.ACTIONS_DE_LECTURE].sort(), ['changeStream', 'collStats', 'dbHash', 'dbStats', 'find', 'killCursors', 'listCollections', 'listDatabases', 'listIndexes', 'listSearchIndexes', 'planCacheRead']);
+    // L1 : TOUS les privilèges sont jugés, pas le premier seulement
+    const deux = { ok: 1, authInfo: { authenticatedUsers: [{ user: 'lecteur', db: 'admin' }], authenticatedUserPrivileges: [{ resource: { db: 'cartes', collection: '' }, actions: LIRE_SEUL }, { resource: { db: 'cartes', collection: 'sets' }, actions: ['find', 'update'] }] } };
+    f = fausse(deux); r = await LS.ouvrir({ env: env(), connecter: f.connecter });
+    H.v('deux privilèges, le SECOND écrit : refus (tous les privilèges sont jugés), connexion fermée', [r.ok, /update/.test(r.raison || ''), nb(f.appels, 'close')], [false, true, 1]);
+    f = fausse({ ok: 1, authInfo: { ...deux.authInfo, authenticatedUserPrivileges: [deux.authInfo.authenticatedUserPrivileges[0], { resource: {}, actions: ['find'] }] } }); r = await LS.ouvrir({ env: env(), connecter: f.connecter });
+    H.v('   deux privilèges de lecture : accepté', r.ok, true);
+    // L2 : la connexion se fait par la variable de LECTURE, jamais avec celle de l'écriture
+    f = fausse(statut()); await LS.ouvrir({ env: env(), connecter: f.connecter });
+    H.v('la connexion est ouverte avec MONGODB_CARTES_LECTURE_URI, jamais avec MONGODB_CARTES_URI', [f.vus.length, f.vus[0] === LECTURE, f.vus.includes(ECRITURE)], [1, true, false]);
+    // M3 : le mot de passe de l'URI d'écriture ne voyage pas
+    H.v('sansMotDePasse : l\'adresse et l\'utilisateur restent, le mot de passe part ; absente ⇒ undefined', [LS.sansMotDePasse(ECRITURE).includes(SECRET), LS.sansMotDePasse(ECRITURE), LS.sansMotDePasse(undefined), LS.sansMotDePasse('mongodb://h1:1,h2:2/cartes?x=1')], [false, 'mongodb+srv://ecrivain@grappe-cartes.exemple.net/cartes', undefined, 'mongodb://h1:1,h2:2/cartes?x=1']);
+    H.v('   la comparaison d\'utilisateur survit à la suppression du mot de passe', LS.jugerVariables({ MONGODB_CARTES_LECTURE_URI: LECTURE, MONGODB_CARTES_URI: LS.sansMotDePasse(ECRITURE) }).ok, true);
+    H.v('   ... et refuse toujours le même utilisateur', LS.jugerVariables({ MONGODB_CARTES_LECTURE_URI: `mongodb+srv://ecrivain:autre@grappe-cartes.exemple.net/cartes`, MONGODB_CARTES_URI: LS.sansMotDePasse(ECRITURE) }).ok, false);
     H.v('ACTIONS_DE_LECTURE : aucune action d\'écriture connue', LS.ACTIONS_DE_LECTURE.filter(a => /^(insert|update|remove|create|drop|rename|anyAction|bypass|convert|enable|apply|setFreeMonitoring|compact)/i.test(a)), []);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

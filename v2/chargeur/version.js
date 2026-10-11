@@ -13,7 +13,7 @@ const COLS = ['id', 'vig', 'vw', 'vh', 'gra', 'gw', 'gh', 'men', 'meta', 'num', 
 
 function colonne() {
     let a = new Int32Array(1024), n = 0;
-    return { push(v) { if (n === a.length) { const b = new Int32Array(a.length * 2); b.set(a); a = b; } a[n++] = v; }, get n() { return n; }, get(i) { return a[i]; }, vue: () => a.subarray(0, n) };
+    return { push(v) { if (n === a.length) { const b = new Int32Array(a.length * 2); b.set(a); a = b; } a[n++] = v; }, set(i, v) { a[i] = v; }, get n() { return n; }, get(i) { return a[i]; }, vue: () => a.subarray(0, n) };
 }
 function reserve() {
     const index = new Map(), liste = [];
@@ -57,6 +57,8 @@ function assembler(d) {
     const parSet = new Map(fiches.sets);                                        // slug → [premier, dernier+1] dans les colonnes de fiches
     const V = {
         chargeLe, comptes, octets,
+        /** Les identifiants de produit, triés (une vue de la colonne : à ne pas modifier). */
+        identifiants: () => ids,
         entree(id) {
             if (!Number.isInteger(id)) return null;
             const r = chercher(ids, id);
@@ -94,18 +96,24 @@ function creerConstructeur() {
     const c = {}; for (const k of COLS) c[k] = colonne();
     const texte = reserve(), liensR = reserve();
     const fSet = [], fCarte = colonne(), fNum = colonne(), fDebut = colonne(), fFin = colonne(), prods = colonne();
-    const motifs = {}; let lues = 0, refusees = 0;
+    const motifs = {}; let lues = 0, refusees = 0, doublons = 0;
+    const rang = new Map();                                                          // idProduct → rang dans les colonnes : un produit n'a qu'UNE entrée
     return {
-        etat: () => ({ lues, admises: c.id.n, refusees, motifs, fiches: fSet.length }),
+        etat: () => ({ lues, admises: c.id.n, refusees, doublons, motifs, fiches: fSet.length }),
         entree(e) {
             lues++;
             const r = lireEntree(e);                                                // la validation d'entrée s'applique à CHAQUE entrée chargée
             if (!r.ok) { refusees++; motifs[r.motif] = (motifs[r.motif] || 0) + 1; return false; }
             const d = r.doc;
-            c.id.push(d.idProduct); c.vig.push(texte.id(d.vignette.cle)); c.vw.push(d.vignette.w); c.vh.push(d.vignette.h);
-            if (d.grande) { c.gra.push(texte.id(d.grande.cle)); c.gw.push(d.grande.w); c.gh.push(d.grande.h); } else { c.gra.push(-1); c.gw.push(0); c.gh.push(0); }
-            c.men.push(texte.id(d.mention)); c.meta.push(d.idMetacard === null ? -1 : d.idMetacard); c.num.push(texte.id(d.numero)); c.rar.push(texte.id(d.rarete));
-            c.tot.push(texte.id(d.total)); c.variante.push(texte.id(d.variante)); c.set.push(texte.id(d.setNom)); c.lien.push(liensR.id(d.lien));
+            // les valeurs, dans l'ordre de COLS
+            const v = [d.idProduct, texte.id(d.vignette.cle), d.vignette.w, d.vignette.h, d.grande ? texte.id(d.grande.cle) : -1, d.grande ? d.grande.w : 0, d.grande ? d.grande.h : 0,
+                texte.id(d.mention), d.idMetacard === null ? -1 : d.idMetacard, texte.id(d.numero), texte.id(d.rarete), texte.id(d.total), texte.id(d.variante), texte.id(d.setNom), liensR.id(d.lien)];
+            // UN produit, UNE entrée — la règle de l'ancien import (v2/migrations/importer-visuels.js::preparer, retiré au tour 1) : « un doublon d'idProduct dans le lot : le dernier gagne »
+            // (`parId.set(r.doc.idProduct, r.doc)`). Un produit rattaché à deux cartes (CLAUDE.md §32) émet deux entrées ; le consommateur refuse des identifiants non strictement croissants.
+            const r0 = rang.get(d.idProduct);
+            if (r0 !== undefined) { doublons++; COLS.forEach((k, i) => c[k].set(r0, v[i])); return true; }
+            rang.set(d.idProduct, c.id.n);
+            COLS.forEach((k, i) => c[k].push(v[i]));
             return true;
         },
         lien(setId, cle, idProducts) {
@@ -135,13 +143,55 @@ function creerConstructeur() {
             const prefixe = plusLongPrefixe(liensR.liste);
             const liens = { ...encoder(liensR.liste, s => s.slice(prefixe.length)), prefixe };
             const t = encoder(texte.liste);
-            const comptes = Object.freeze({ lues, visuels: n, refusees, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length });
+            const comptes = Object.freeze({ lues, visuels: n, refusees, doublons, motifs, setsAvecLiens: groupes.size, fichesLiees: m, produitsLies: fiches.produits.length });
             return assembler({ cols, texte: t, liens, meta, fiches, comptes, chargeLe });
         }
     };
 }
 
-/** Reçoit le paquet d'un autre fil (ses tampons sont devenus les nôtres) et rend la version. */
-function depuisPaquet(donnees) { return assembler(donnees); }
+class StructureInvalide extends Error { constructor(motif) { super(motif); this.name = 'StructureInvalide'; this.motif = motif; } }
+/**
+ * La STRUCTURE d'une version reçue (d'un fichier ou d'un autre fil) : écrite par ce qu'elle AUTORISE. Colonnes de même longueur, identifiants strictement croissants, indices de chaînes
+ * dans la réserve, bornes des fiches et des sets dans leurs colonnes, comptes annoncés = comptes des colonnes. UNE seule définition pour les deux voies (§21 bis).
+ */
+function verifierStructure(d) {
+    const refuser = m => { throw new StructureInvalide(m); };
+    const n = d.cols.id.length; if (n === 0) refuser('aucune entrée');
+    for (const k of Object.keys(d.cols)) if (d.cols[k].length !== n) refuser(`colonne « ${k} » de longueur différente`);
+    for (let i = 1; i < n; i++) if (d.cols.id[i] <= d.cols.id[i - 1]) refuser('identifiants de produit non strictement croissants');
+    for (const r of [d.texte, d.liens]) {
+        if (r.off.length < 1 || r.off[0] !== 0 || r.off[r.off.length - 1] !== r.octets.length) refuser('réserve de chaînes incohérente');
+        for (let i = 1; i < r.off.length; i++) if (r.off[i] < r.off[i - 1]) refuser('réserve de chaînes : décalages décroissants');
+    }
+    const nT = d.texte.off.length - 1, nL = d.liens.off.length - 1;
+    const dansT = (a, min) => { for (let i = 0; i < a.length; i++) if (a[i] < min || a[i] >= nT) return false; return true; };
+    if (!dansT(d.cols.vig, 0)) refuser('indice de chaîne hors de la réserve (vig)');
+    for (const k of ['gra', 'men', 'num', 'rar', 'tot', 'variante', 'set']) if (!dansT(d.cols[k], -1)) refuser(`indice de chaîne hors de la réserve (${k})`);
+    for (let i = 0; i < n; i++) if (d.cols.lien[i] < -1 || d.cols.lien[i] >= nL) refuser('indice de lien hors de la réserve');
+    if (d.meta.cle.length !== d.meta.produit.length) refuser('métacartes : colonnes de longueur différente');
+    for (let i = 1; i < d.meta.cle.length; i++) if (d.meta.cle[i] < d.meta.cle[i - 1]) refuser('métacartes non triées');
+    const m = d.fiches.carte.length;
+    for (const k of ['num', 'debut', 'fin']) if (d.fiches[k].length !== m) refuser(`fiches : colonne « ${k} » de longueur différente`);
+    if (!dansT(d.fiches.num, 0)) refuser('fiches : indice de numéro hors de la réserve');
+    for (let i = 0; i < m; i++) if (d.fiches.debut[i] < 0 || d.fiches.debut[i] > d.fiches.fin[i] || d.fiches.fin[i] > d.fiches.produits.length) refuser('fiches : bornes de produits hors des produits');
+    if (!Array.isArray(d.fiches.sets)) refuser('sets illisibles');
+    for (const s of d.fiches.sets) if (!Array.isArray(s) || typeof s[0] !== 'string' || !Array.isArray(s[1]) || !(s[1][0] >= 0 && s[1][0] <= s[1][1] && s[1][1] <= m)) refuser('sets : bornes hors des fiches');
+    const c = d.comptes;
+    if (!c || typeof c !== 'object' || c.visuels !== n || c.fichesLiees !== m || c.produitsLies !== d.fiches.produits.length) refuser('comptes de l\'en-tête différents de ceux des colonnes');
+    if (typeof d.liens.prefixe !== 'string' || d.liens.prefixe.length > 300) refuser('préfixe de lien illisible');
+}
 
-module.exports = { creerConstructeur, depuisPaquet };
+/** Reçoit le paquet d'un autre fil (ses tampons sont devenus les nôtres) et rend la version, après avoir jugé sa STRUCTURE comme pour un fichier. */
+function depuisPaquet(donnees) { verifierStructure(donnees); return assembler(donnees); }
+
+/**
+ * Rejoue lireEntree (la validation d'entrée de visuels.js : cleMotif, lien Cardmarket, substitut avec mention, forme des champs) sur CHAQUE produit d'une version reçue : le hachage d'un fichier
+ * prouve son intégrité, pas qu'il est honnête (CLAUDE.md « 0 faux affirmé »). @returns {{ ok: boolean, refusees: number, motifs: object }}
+ */
+function rejugerEntrees(version) {
+    const motifs = {}; let refusees = 0;
+    for (const id of version.identifiants()) { const r = lireEntree(version.entree(id)); if (!r.ok) { refusees++; motifs[r.motif] = (motifs[r.motif] || 0) + 1; } }
+    return { ok: refusees === 0, refusees, motifs };
+}
+
+module.exports = { creerConstructeur, depuisPaquet, verifierStructure, rejugerEntrees, StructureInvalide };

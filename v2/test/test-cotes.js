@@ -3,7 +3,7 @@
 // La règle : une fiche à UN produit a la cote de ce produit ; à PLUSIEURS, une cote seulement si TOUS ont la même tendance ET la même date de guide ; sinon null. Jamais une moyenne.
 const H = require('./_harnais');
 const { creerConstructeur } = require('../chargeur/version');
-const { cotesDuSet } = require('../collection/cotes');
+const { cotesDuSet, PRODUITS_MAX, DELAI_LECTURE_MS } = require('../collection/cotes');
 
 const brut = id => ({ idProduct: id, vignette: { cle: `v/${id}.webp`, w: 2, h: 3 }, grande: null, visuel: 'du-set', mention: null, idMetacard: null, numero: null, rarete: null, total: null, variante: null, setNom: null, lien: null });
 function version(fiches) {
@@ -46,5 +46,19 @@ const g = (idProduct, trend, guideDu = '2026-10-01') => ({ idProduct, trend, gui
     H.v('aucun produit au guide : toutes les fiches à null', sansGuide, { '20|009': null });
     let leve = null; try { await cotesDuSet('Set-A', { version: () => V, col: () => ({ find: () => ({ toArray: async () => { throw new Error('panne'); } }) }) }); } catch (e) { leve = e.message; }
     H.v('une panne du guide REMONTE (la route décide de la dégrader en {}, ce module ne ment pas)', leve, 'panne');
+    // ── la BORNE DURE (revue I7) : 5 000 produits par appel au plus, cotes PARTIELLES dites, maxTimeMS, projection minimale
+    H.v('PRODUITS_MAX = 5 000 et un délai de lecture de 2 s', [PRODUITS_MAX, DELAI_LECTURE_MS], [5000, 2000]);
+    H.vrai('   la requête porte maxTimeMS et la projection minimale (3 champs, pas de _id)', (() => { const o = JSON.parse(guide.appels[0][2]); return o.maxTimeMS === 2000 && Object.keys(o.projection).sort().join() === '_id,guideDu,idProduct,trend'; })());
+    const grosse = creerConstructeur();
+    for (let id = 1; id <= 7000; id++) grosse.entree(brut(id));
+    for (let k = 0; k < 7000; k++) grosse.lien('Gros-Set', `${k + 1}|${String(k + 1).padStart(4, '0')}`, [k + 1]);
+    const GV = grosse.finir();
+    const journaux = []; const G = fauxGuide(Array.from({ length: 7000 }, (_, k) => g(k + 1, 1 + k)));
+    const cg = await cotesDuSet('Gros-Set', { version: () => GV, col: G.col, journal: m => journaux.push(m) });
+    H.v('un set de 7 000 produits : cotes PARTIELLES (les 5 000 premières fiches), le reste absent (= null pour le site), UNE requête de 5 000 ids', [Object.keys(cg).length, cg['5000|5000'], cg['5001|5001'], G.appels.length, JSON.parse(G.appels[0][1]).idProduct.$in.length], [5000, { tendance: 5000, date: '2026-10-01' }, undefined, 1, 5000]);
+    H.vrai('   et la troncature est JOURNALISÉE (« cotes PARTIELLES »)', journaux.length === 1 && /PARTIELLES.*5000 fiches sur 7000/.test(journaux[0]));
+    const pile = creerConstructeur(); for (let id = 1; id <= 5000; id++) pile.entree(brut(id)); for (let k = 0; k < 5000; k++) pile.lien('Pile', `${k + 1}|x`, [k + 1]);
+    const j2 = []; const cp = await cotesDuSet('Pile', { version: () => pile.finir(), col: fauxGuide(Array.from({ length: 5000 }, (_, k) => g(k + 1, 2))).col, journal: m => j2.push(m) });
+    H.v('   un set de 5 000 produits pile : complet, rien de tronqué', [Object.keys(cp).length, j2.length], [5000, 0]);
     H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

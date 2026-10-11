@@ -98,13 +98,13 @@ function creerVisuels(opts = {}) {
         const d = entree(idProduct);
         if (!d) return null;
         const v = fichier(d.vignette, 'vignette').fichier;
-        if (!v) return null;                                                   // une clé interdite posée hors import n'est jamais servie
+        if (!v) return null;                                                   // une clé interdite n'est jamais servie (défense en profondeur : le chargement l'a déjà refusée)
         const g = d.grande ? fichier(d.grande, 'grande').fichier : null;
         return { url: urlDe(hote, v), w: v.w, h: v.h, grande: g ? { url: urlDe(hote, g), w: g.w, h: g.h } : null, mention: texte(d.mention) };
     }
 
-    // Les impressions d'une métacarte : les documents `visuels` de même idMetacard (index visuels_metacarte), rien d'autre. Le lien n'est servi
-    // que si numéro ET rareté sont connus (la rareté vient de l'import, lue sur cartes.impressions[].rarete, jamais devinée).
+    // Les impressions d'une métacarte : les entrées EN MÉMOIRE de même idMetacard, rien d'autre. Le lien n'est servi
+    // que si numéro ET rareté sont connus (la rareté vient du chargement, lue sur cartes.impressions[].rarete, jamais devinée).
     async function impressions(idMetacard) {
         const v = version();
         if (!v || !Number.isInteger(idMetacard)) return [];
@@ -122,7 +122,9 @@ function creerVisuels(opts = {}) {
         });
         return sortie.sort((a, b) => (Number(a.numero) || 1e9) - (Number(b.numero) || 1e9) || a.idProduct - b.idProduct);
     }
-    return { resoudre, impressions, entree };
+    /** Un jeu de lecteurs LIÉ à la version en place À CET INSTANT : une requête qui lit le visuel, l'entrée et les impressions d'un produit ne mêle jamais deux versions (revue M6). */
+    function instantane() { const fixe = version(); return creerVisuels({ ...opts, cfg, version: () => fixe }); }
+    return { resoudre, impressions, entree, instantane };
 }
 
 module.exports = { creerVisuels, lireEntree, cleMotif, colLue, COLLECTIONS_LUES, CHAMPS_IMPRESSION, prix, dateGuide };

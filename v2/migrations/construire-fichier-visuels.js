@@ -1,23 +1,34 @@
 'use strict';
-// COTES-VISUELS, tour 1 — le SCRIPT AUTONOME qui précalcule l'archive compacte des visuels et du lien fiche → produits, HORS de l'API (il est destiné au worker de l'agent catalogue : l'API, sur
-// une offre gratuite qui se met en veille et redémarre ~11 fois par jour, ne recalcule pas 380 s de lecture à chaque réveil — elle télécharge l'archive et la charge en ~0,1 s).
-//   node v2/migrations/construire-fichier-visuels.js --vers=<archive.rmv.gz> [--catalogue=<products_singles_6.json>]
-// LECTURE SEULE : `cartes` par MONGODB_CARTES_LECTURE_URI (la même garde que l'API : variables, privilèges, façade à trois collections) ; le catalogue (idProduct → idMetacard) vient de l'export
-// Cardmarket local (--catalogue=) ou de `test` par MONGODB_LECTURE_URI (privilèges jugés par la même garde, façade de lecture). Il n'écrit QUE le fichier --vers (par un fichier temporaire puis un
-// renommage : jamais une archive à moitié écrite). Il ne dépose rien sur R2 : le dépôt est le geste de celui qui l'héberge (clé `visuels.cle` de la configuration, hôte public).
-// Même calcul (calculer), même format (format.js) que la voie « fil » de l'API. 0 visuel ou 0 lien : AUCUN fichier n'est écrit.
+// COTES-VISUELS, tours 1-2 — le SCRIPT AUTONOME qui précalcule l'archive des visuels et du lien fiche → produits, HORS de l'API (destiné au worker de l'agent catalogue : l'API, sur une offre gratuite qui
+// se met en veille ~11 fois par jour, ne recalcule pas 380 s de lecture à chaque réveil — elle lit l'objet R2 et le charge en ~0,1 s).
+//   node v2/migrations/construire-fichier-visuels.js --deposer [--vers=<archive.rmv>] [--catalogue=<products_singles_6.json>] [--ignorer-precedente]
+// ENTRÉES (variables, des NOMS ici, jamais une valeur) :
+//   lecture de `cartes`   MONGODB_CARTES_LECTURE_URI (+ MONGODB_CARTES_URI seulement pour refuser une lecture qui serait l'écriture) — la garde de l'API : variables, privilèges, façade à trois collections ;
+//   catalogue             --catalogue=<export Cardmarket local> OU MONGODB_LECTURE_URI (base `test`, privilèges jugés par la même garde) ;
+//   scellement            V2_VISUELS_HMAC (≥ 32 caractères, le MÊME secret que l'API) ;
+//   dépôt R2 PRIVÉ        V2_VISUELS_R2_COMPTE, V2_VISUELS_R2_ECR_CLE_ID, V2_VISUELS_R2_ECR_SECRET (une clé d'ÉCRITURE limitée à ce bucket), V2_VISUELS_R2_BUCKET, V2_VISUELS_R2_OBJET, [V2_VISUELS_R2_ENDPOINT].
+// SORTIES : l'objet R2 (Content-Type application/octet-stream, aucun Content-Encoding) et/ou le fichier --vers (écrit par un fichier temporaire puis un renommage). Rien d'autre.
+// REFUS (code 1, AUCUNE publication) : 0 visuel ou 0 lien ; l'aller-retour (le consommateur refuserait l'archive : doublon, structure, entrée rejetée) ; une CHUTE de plus de 10 % des visuels ou des fiches liées
+// par rapport à la dernière archive publiée (même objet, même secret) — la garde de garde-lot.js, au bon endroit : l'API redémarre sans version en mémoire et ne peut pas comparer. Si l'archive précédente
+// existe mais ne se lit pas, le script refuse aussi (« je ne sais pas ») ; --ignorer-precedente est l'acte explicite qui passe outre. Première publication (objet absent) : rien à comparer, DIT.
 const fs = require('fs'); const path = require('path');
 
-async function principal(argv = process.argv, env = process.env) {
+const PERTE_MAX = 0.10;
+
+async function principal(argv = process.argv, env = process.env, deps = {}) {
     const arg = n => { const a = argv.find(x => x.startsWith(`--${n}=`)); return a ? a.slice(n.length + 3) : null; };
-    const vers = arg('vers'), catalogueJson = arg('catalogue');
+    const vers = arg('vers'), catalogueJson = arg('catalogue'), deposer = argv.includes('--deposer'), ignorer = argv.includes('--ignorer-precedente');
     const stop = m => { console.error(`❌ ARRÊT : ${m}`); return 1; };
-    if (!vers) return stop('--vers=<archive.rmv.gz> est requis');
-    const LS = require('../chargeur/lecture-seule');
-    const j = LS.jugerVariables(env); if (!j.ok) return stop(j.raison);                        // refus AVANT toute connexion
+    if (!vers && !deposer) return stop('--deposer ou --vers=<archive> est requis (rien à produire sinon)');
+    const LS = require('../chargeur/lecture-seule'); const S = require('../chargeur/scellement'); const R2 = require('../chargeur/r2-prive'); const F = require('../chargeur/format');
+    if (!S.secretValide(env.V2_VISUELS_HMAC)) return stop(`V2_VISUELS_HMAC absent ou trop court (${S.SECRET_MIN} caractères au moins) : une archive non scellée n'est jamais produite`);
+    let ecriture = null;
+    if (deposer) { ecriture = R2.configEcriture(env); if (!ecriture.ok) return stop(`dépôt R2 : ${ecriture.raison}`); }
+    const j = LS.jugerVariables(env); if (!j.ok && !deps.source) return stop(j.raison);                  // refus AVANT toute connexion
     const { fabriquerFichier } = require('../chargeur/precalcul'); const { sourceCartes } = require('../chargeur/source');
     let catalogue = new Map();
-    if (catalogueJson) {
+    if (deps.catalogue) catalogue = deps.catalogue;
+    else if (catalogueJson) {
         for (const p of JSON.parse(fs.readFileSync(catalogueJson, 'utf8')).products) catalogue.set(p.idProduct, p.idMetacard);
     } else {
         const uri = env.MONGODB_LECTURE_URI; if (!uri) return stop('ni --catalogue= ni MONGODB_LECTURE_URI : le catalogue (idMetacard) manque');
@@ -31,17 +42,45 @@ async function principal(argv = process.argv, env = process.env) {
         } finally { await cx.close(); }
     }
     let f;
-    try { f = await fabriquerFichier({ source: () => sourceCartes({ env }), catalogue }); }
+    try { f = await fabriquerFichier({ source: deps.source || (() => sourceCartes({ env })), catalogue, secret: env.V2_VISUELS_HMAC }); }
     catch (e) { return stop(e && e.motif ? e.motif : `calcul impossible (${(e && (e.name || e.code)) || 'erreur'})`); }
-    const tmp = `${vers}.tmp-${process.pid}`;
-    fs.mkdirSync(path.dirname(path.resolve(vers)), { recursive: true });
-    fs.writeFileSync(tmp, f.gz); fs.renameSync(tmp, vers);
     const c = f.comptes;
-    console.log(`✅ ${vers} : ${(f.brut.length / 1048576).toFixed(1)} Mo brut, ${(f.gz.length / 1048576).toFixed(2)} Mo compressé, calculé en ${(f.dureeMs / 1000).toFixed(0)} s`);
-    console.log(`   sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+    console.log(`   calculé en ${(f.dureeMs / 1000).toFixed(0)} s : sets ${c.sets} · cartes ${c.cartes} · cartes_produits ${c.produits} · catalogue ${c.catalogue} · entrées ${c.visuels} · refusées ${c.refusees} · doublons d'idProduct ${c.doublons || 0} (le dernier gagne) · fiches liées ${c.fichesLiees} (produits ${c.produitsLies}, sets ${c.setsAvecLiens})`);
+
+    let client = null;
+    if (deposer) {
+        client = deps.client || R2.creerClient(ecriture.c);
+        // la GARDE des 10 % : contre la dernière archive publiée
+        let precedente;
+        try { precedente = await R2.lireObjet({ client, bucket: ecriture.c.bucket, objet: ecriture.c.objet, max: F.PLAFONDS.archive + 64, siAbsent: 'null' }); }
+        catch (e) { if (!ignorer) return stop(`l'archive précédente n'a pas pu être lue (${e && e.motif ? e.motif : 'erreur'}) : je ne sais pas si la nouvelle est amputée — AUCUNE publication (--ignorer-precedente pour passer outre, en le décidant)`); precedente = undefined; }
+        if (precedente === null) console.log('   première publication : aucune archive précédente à comparer');
+        else if (precedente !== undefined) {
+            let p;
+            try { p = F.deserialiser(await F.decompresser(S.ouvrir(precedente, env.V2_VISUELS_HMAC))); }
+            catch (e) { if (!ignorer) return stop(`l'archive précédente est illisible (${e && e.motif ? e.motif : 'erreur'}) : AUCUNE publication (--ignorer-precedente pour passer outre, en le décidant)`); p = null; }
+            if (p) {
+                const perdu = (a, b) => a > 0 && b < a * (1 - PERTE_MAX);
+                if (perdu(p.comptes.visuels, c.visuels)) return stop(`chute de plus de 10 % des visuels par rapport à l'archive publiée (${p.comptes.visuels} → ${c.visuels}) : AUCUNE publication`);
+                if (perdu(p.comptes.fichesLiees, c.fichesLiees)) return stop(`chute de plus de 10 % des fiches liées par rapport à l'archive publiée (${p.comptes.fichesLiees} → ${c.fichesLiees}) : AUCUNE publication`);
+                console.log(`   comparée à l'archive publiée (${p.chargeLe.toISOString()}) : visuels ${p.comptes.visuels} → ${c.visuels}, fiches liées ${p.comptes.fichesLiees} → ${c.fichesLiees} : chute ≤ 10 %`);
+            }
+        }
+    }
+    if (vers) {
+        const tmp = `${vers}.tmp-${process.pid}`;
+        fs.mkdirSync(path.dirname(path.resolve(vers)), { recursive: true });
+        fs.writeFileSync(tmp, f.scelle); fs.renameSync(tmp, vers);
+        console.log(`✅ ${vers} : ${(f.brut.length / 1048576).toFixed(1)} Mo brut, ${(f.scelle.length / 1048576).toFixed(2)} Mo scellé`);
+    }
+    if (deposer) {
+        try { await R2.deposerObjet({ client, bucket: ecriture.c.bucket, objet: ecriture.c.objet, corps: f.scelle }); }
+        catch (e) { return stop(`dépôt R2 refusé (${(e && (e.name || e.code)) || 'erreur'}) : rien n'a été publié`); }
+        console.log(`✅ publié : ${(f.scelle.length / 1048576).toFixed(2)} Mo scellés, bucket et objet des variables V2_VISUELS_R2_BUCKET / V2_VISUELS_R2_OBJET`);
+    }
     return 0;
 }
-module.exports = { principal };
+module.exports = { principal, PERTE_MAX };
 
 if (require.main === module) {
     require('dotenv').config();

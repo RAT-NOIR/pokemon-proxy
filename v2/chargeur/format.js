@@ -15,7 +15,10 @@ const SECTIONS = Object.freeze([
     { nom: 'texte.off', t: 'u32' }, { nom: 'texte.octets', t: 'u8' }, { nom: 'liens.off', t: 'u32' }, { nom: 'liens.octets', t: 'u8' }
 ]);
 const TAILLE = { i32: 4, u32: 4, u8: 1 }, CLASSE = { i32: Int32Array, u32: Uint32Array, u8: Uint8Array };
-const ENTETE_MAX = 4 * 1048576, FICHIER_MAX = 256 * 1048576;
+// PLAFONDS, écrits par ce qu'ils protègent : la mémoire de l'instance (512 Mio dont ~110 à 150 Mo de base de serveur, offre gratuite, ~11 réveils par jour sans version en mémoire : un dépassement
+// serait un redémarrage en boucle). L'archive réelle fait 2,8 Mo compressée et 11 Mo décompressée : 16 Mo (×5,7) et 48 Mo (×4,4). Dépassement = échec de chargement, jamais un redémarrage.
+const ARCHIVE_MAX = 16 * 1048576, PLAT_MAX = 48 * 1048576, PLAFONDS = Object.freeze({ archive: ARCHIVE_MAX, decompresse: PLAT_MAX });
+const ENTETE_MAX = 4 * 1048576, FICHIER_MAX = PLAT_MAX;
 
 class FormatInvalide extends Error { constructor(motif) { super(motif); this.name = 'FormatInvalide'; this.motif = motif; } }
 const refuser = m => { throw new FormatInvalide(m); };
@@ -83,38 +86,20 @@ function deserialiser(buf) {
         o += aligner(octets);
     });
     if (o !== buf.length - 32) refuser('octets en trop entre la dernière section et le hachage');
-    // ── la STRUCTURE (un fichier menteur a un hachage juste)
-    const n = d.cols.id.length; if (n === 0) refuser('aucune entrée');
-    for (const k of Object.keys(d.cols)) if (d.cols[k].length !== n) refuser(`colonne « ${k} » de longueur différente`);
-    for (let i = 1; i < n; i++) if (d.cols.id[i] <= d.cols.id[i - 1]) refuser('identifiants de produit non strictement croissants');
-    for (const r of [d.texte, d.liens]) {
-        if (r.off.length < 1 || r.off[0] !== 0 || r.off[r.off.length - 1] !== r.octets.length) refuser('réserve de chaînes incohérente');
-        for (let i = 1; i < r.off.length; i++) if (r.off[i] < r.off[i - 1]) refuser('réserve de chaînes : décalages décroissants');
-    }
-    const nT = d.texte.off.length - 1, nL = d.liens.off.length - 1;
-    const dansT = (a, min) => { for (let i = 0; i < a.length; i++) if (a[i] < min || a[i] >= nT) return false; return true; };
-    for (const k of ['vig']) if (!dansT(d.cols[k], 0)) refuser(`indice de chaîne hors de la réserve (${k})`);
-    for (const k of ['gra', 'men', 'num', 'rar', 'tot', 'variante', 'set']) if (!dansT(d.cols[k], -1)) refuser(`indice de chaîne hors de la réserve (${k})`);
-    for (let i = 0; i < n; i++) if (d.cols.lien[i] < -1 || d.cols.lien[i] >= nL) refuser('indice de lien hors de la réserve');
-    if (d.meta.cle.length !== d.meta.produit.length) refuser('métacartes : colonnes de longueur différente');
-    for (let i = 1; i < d.meta.cle.length; i++) if (d.meta.cle[i] < d.meta.cle[i - 1]) refuser('métacartes non triées');
-    const m = d.fiches.carte.length;
-    for (const k of ['num', 'debut', 'fin']) if (d.fiches[k].length !== m) refuser(`fiches : colonne « ${k} » de longueur différente`);
-    if (!dansT(d.fiches.num, 0)) refuser('fiches : indice de numéro hors de la réserve');
-    for (let i = 0; i < m; i++) if (d.fiches.debut[i] < 0 || d.fiches.debut[i] > d.fiches.fin[i] || d.fiches.fin[i] > d.fiches.produits.length) refuser('fiches : bornes de produits hors des produits');
-    if (!Array.isArray(entete.sets)) refuser('sets illisibles');
-    for (const s of entete.sets) if (!Array.isArray(s) || typeof s[0] !== 'string' || !Array.isArray(s[1]) || !(s[1][0] >= 0 && s[1][0] <= s[1][1] && s[1][1] <= m)) refuser('sets : bornes hors des fiches');
-    const c = entete.comptes;
-    if (!c || typeof c !== 'object' || c.visuels !== n || c.fichesLiees !== m || c.produitsLies !== d.fiches.produits.length) refuser('comptes de l\'en-tête différents de ceux des colonnes');
-    if (typeof entete.prefixe !== 'string' || entete.prefixe.length > 300) refuser('préfixe de lien illisible');
+    // ── la STRUCTURE (un fichier menteur a un hachage juste) : UNE définition, celle de version.js, aussi pour la voie « fil »
     const quand = new Date(entete.chargeLe); if (Number.isNaN(quand.getTime())) refuser('date illisible');
-    return depuisPaquet({ ...d, comptes: Object.freeze({ ...c }), chargeLe: quand, liens: { ...d.liens, prefixe: entete.prefixe }, fiches: { ...d.fiches, sets: entete.sets } });
+    const c = entete.comptes;
+    if (!c || typeof c !== 'object' || Array.isArray(c)) refuser('comptes de l\'en-tête illisibles');
+    try { return depuisPaquet({ ...d, comptes: Object.freeze({ ...c }), chargeLe: quand, liens: { ...d.liens, prefixe: entete.prefixe }, fiches: { ...d.fiches, sets: entete.sets } }); }
+    catch (e) { if (e && e.name === 'StructureInvalide') refuser(e.motif); throw e; }
 }
 
 const gzip = b => new Promise((ok, ko) => zlib.gzip(b, { level: 9 }, (e, r) => (e ? ko(e) : ok(r))));
 async function compresser(buf) { return gzip(buf); }
-async function decompresser(buf, { max = FICHIER_MAX } = {}) {
+async function decompresser(buf, { max = PLAT_MAX, maxArchive = ARCHIVE_MAX } = {}) {
+    if (!Buffer.isBuffer(buf)) throw new FormatInvalide('ce n\'est pas un tampon');
+    if (buf.length > maxArchive) throw new FormatInvalide(`archive plus grande que la taille permise (${Math.round(maxArchive / 1048576)} Mo compressée)`);     // AVANT d'ouvrir
     return new Promise((ok, ko) => zlib.gunzip(buf, { maxOutputLength: max }, (e, r) => (e ? ko(new FormatInvalide(e.code === 'ERR_BUFFER_TOO_LARGE' ? 'archive plus grande que la taille permise' : 'archive gzip illisible')) : ok(r))));
 }
 
-module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, SECTIONS };
+module.exports = { serialiser, deserialiser, lireEntete, reecrireEntete, sections, sceller, compresser, decompresser, FormatInvalide, FORMAT, SECTIONS, PLAFONDS };

@@ -18,7 +18,13 @@ const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     const siteLib = C.SITE_LIB;
     const etat = C.verifier({ siteLib });
     if (etat.etat === 'site-absent') console.log(`⚠️ SITE ABSENT (${path.basename(path.dirname(siteLib))}) : la synchronisation avec le site n'est PAS vérifiée par ce banc — jamais un vert à lire comme « à jour »`);
-    else H.v('le site présent : chaque fichier source porte l\'empreinte de la copie, et la régénération donne la copie octet pour octet', [etat.etat, etat.derives], ['ok', []]);
+    else {
+        H.v('le site présent : chaque fichier source porte l\'empreinte de la copie, et la régénération donne la copie octet pour octet', [etat.etat, etat.derives], ['ok', []]);
+        // M7 : une régénération SAUTÉE (Node sans stripTypeScriptTypes) ne doit pas passer pour « comparée » — le vert muet est interdit
+        if (etat.regenerationSautee) console.log('⚠️ RÉGÉNÉRATION SAUTÉE (Node sans stripTypeScriptTypes) : seules les empreintes des sources ont été comparées, pas la copie produite — non vérifiée');
+        else H.v('   la régénération a été COMPARÉE (pas sautée)', etat.regenerationSautee, undefined);
+        // S2 (équivalent) : retirer cette comparaison laisse les empreintes des six sources ET celles des fichiers produits (vérifiées plus haut) : la couche est redondante, elle ne diffère que si l'outil lui-même change
+    }
 
     // les cas fabriqués : la dérive est vue, et nommée
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'regle-site-'));

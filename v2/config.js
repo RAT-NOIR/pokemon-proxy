@@ -69,11 +69,12 @@ function lireConfig(env = process.env) {
         origines: { extension: 'chrome-extension://fgibgdgmadfejkaapeohbhaoolhgpkhb',
                     extensionDev: banc ? (env.V2_ORIGINE_EXTENSION_DEV || null) : null,
                     site: 'https://rat-market.fr' },
-        // COTES-VISUELS : d'où l'API charge la décision des visuels et le lien fiche → produits. 'fichier' (défaut) : l'archive compacte précalculée HORS de l'API, téléchargée sur l'hôte public R2 à la clé ci-dessous
-        // (voir v2/chargeur/format.js) ; 'calcul' : calculée dans un fil plafonné depuis `cartes` en lecture seule (pic mesuré ~320 Mo : à n'allumer que sur un service qui l'accepte).
+        // COTES-VISUELS : d'où l'API charge la décision des visuels et le lien fiche → produits. 'fichier' (défaut) : l'archive compacte précalculée HORS de l'API, objet R2 PRIVÉ lu avec des clés de lecture
+        // dédiées et authentifié par un HMAC (variables V2_VISUELS_R2_* et V2_VISUELS_HMAC, lues par chargeur/montage.js, fermées par défaut : absentes ⇒ « sans visuel ») ; 'calcul' : calculée dans un fil plafonné
+        // depuis `cartes` en lecture seule (pic mesuré ~320 Mo : à n'allumer que sur un service qui l'accepte).
         // `fichierBanc` : une archive LOCALE, honorée SEULEMENT en mode banc (comme extensionDev) — c'est ce qui permet aux bancs de semer des visuels sans toucher `cartes`.
         visuels: { source: (() => { const s = env.V2_VISUELS_SOURCE; if (s === undefined || s === '') return 'fichier'; if (s === 'fichier' || s === 'calcul') return s; throw new Error(`configuration invalide : V2_VISUELS_SOURCE="${s}" (attendu fichier ou calcul)`); })(),
-                   cle: 'v2/visuels-api.rmv.gz', fichierBanc: banc ? (env.V2_VISUELS_BANC_FICHIER || null) : null },
+                   fichierBanc: banc ? (env.V2_VISUELS_BANC_FICHIER || null) : null },
         images: { hotesPublics: ['pub-7d992e666c3d4a2b870b680a920045b6.r2.dev', 'rat-market.fr'], imageUrlsMax: 20, scannerOctetsMax: 12 * 1024 * 1024 },
         retention: { octroiJours: 730, annonceJours: 90, analysesMois: 24, mouvementsMois: 24, bancMois: 24, idempotenceHeures: 24, idempotenceEnCoursMinutes: 2, idempotenceBattementMs: 30000, idempotenceBattementMaxMinutes: 10 },
         annonce: { conservee: booleen('V2_DESCRIPTION_CONSERVEE', env.V2_DESCRIPTION_CONSERVEE, true), auModele: booleen('V2_DESCRIPTION_AU_MODELE', env.V2_DESCRIPTION_AU_MODELE, false) },

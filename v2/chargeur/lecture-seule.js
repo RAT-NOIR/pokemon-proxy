@@ -4,8 +4,7 @@
 //   1. AVANT toute connexion : la variable existe, elle n'est pas MONGODB_CARTES_URI (l'écriture), elle ne porte pas le même utilisateur, elle en porte un.
 //   2. AU BRANCHEMENT : `connectionStatus` avec `showPrivileges` ; chaque action de chaque privilège doit être dans ACTIONS_DE_LECTURE (la liste d'un rôle `read`).
 //      Une action hors de la liste, une réponse illisible, aucun utilisateur, aucun privilège : « je ne sais pas » = REFUS, connexion fermée, aucune lecture.
-//   3. ENSUITE : la façade de collecte-cartes/facade-lecture.js (la même que celle des bancs, pas une copie) enveloppée d'une liste FERMÉE — trois collections,
-//      find et aggregate seulement (aggregate sans $out ni $merge, vérifié par la façade).
+//   3. ENSUITE : la façade de collecte-cartes/facade-lecture.js (la même que celle des bancs, pas une copie) enveloppée d'une liste FERMÉE — trois collections, `find` seulement.
 // Aucune raison ne contient une valeur de variable, d'URI ou de message du pilote : des NOMS seulement.
 const { facadeLecture } = require('../../collecte-cartes/facade-lecture');
 
@@ -20,6 +19,12 @@ function utilisateurDe(uri) {
     const m = /^mongodb(?:\+srv)?:\/\/([^:@/?#]+)(?::[^@/?#]*)?@/i.exec(texte(uri) || '');
     if (!m) return null;
     try { return decodeURIComponent(m[1]); } catch { return null; }
+}
+
+/** La même URI sans son mot de passe (`mongodb+srv://utilisateur@hôte/…`) : ce qui peut voyager vers le fil — la comparaison n'a besoin que de l'adresse et de l'utilisateur. Absente : undefined. */
+function sansMotDePasse(uri) {
+    const t = texte(uri);
+    return t === null ? undefined : t.replace(/^(mongodb(?:\+srv)?:\/\/[^:@/?#]+):[^@/?#]*@/i, '$1@');
 }
 
 /** Les refus qui ne demandent AUCUNE connexion. Pure. @returns {{ ok: boolean, raison?: string }} */
@@ -58,7 +63,8 @@ function restreindre(facade) {
     const collection = nom => {
         if (!COLLECTIONS_LUES.includes(nom)) throw new Error(`🔴 LECTURE SEULE : la collection « ${String(nom).slice(0, 40)} » n'est pas dans la liste fermée (${COLLECTIONS_LUES.join(', ')})`);
         const c = facade.collection(nom);
-        return Object.freeze({ find: (...a) => c.find(...a), aggregate: (...a) => c.aggregate(...a) });
+        // `find` SEULEMENT (revue, M1) : l'API n'appelle jamais aggregate, et un pipeline peut lire d'autres collections ($lookup, $unionWith, $graphLookup) ou exécuter du code ($function) — hors de la liste fermée.
+        return Object.freeze({ find: (...a) => c.find(...a) });
     };
     return new Proxy({}, {
         get(_, p) {
@@ -99,4 +105,4 @@ async function ouvrir({ env = process.env, connecter = connecterParDefaut } = {}
     }
 }
 
-module.exports = { ouvrir, jugerVariables, jugerPrivileges, utilisateurDe, restreindre, COLLECTIONS_LUES, ACTIONS_DE_LECTURE };
+module.exports = { ouvrir, jugerVariables, jugerPrivileges, utilisateurDe, sansMotDePasse, restreindre, COLLECTIONS_LUES, ACTIONS_DE_LECTURE };

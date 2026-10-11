@@ -7,7 +7,7 @@ async function calculer({ sets, docs, lignes, metacarte, regle, decider = a => r
     const b = creerConstructeur();
     const r = await decider({ sets, docs, lignes, metacarte, regle, cederLaMain: true, sink: { entree: e => b.entree(e), lien: (s, c, i) => b.lien(s, c, i) } });
     const e = b.etat();
-    const comptes = { sets: sets.length, cartes: docs.length, produits: lignes.length, catalogue: metacarte.size, visuels: e.admises, refusees: e.refusees, motifs: e.motifs, fichesLiees: e.fiches,
+    const comptes = { sets: sets.length, cartes: docs.length, produits: lignes.length, catalogue: metacarte.size, visuels: e.admises, refusees: e.refusees, doublons: e.doublons, motifs: e.motifs, fichesLiees: e.fiches,
         setsAvecLiens: r.denominateurs.setsAvecLiens, produitsLies: r.denominateurs.produitsLies };
     return { version: e.admises > 0 ? b.finir() : null, comptes, denominateurs: r.denominateurs };
 }

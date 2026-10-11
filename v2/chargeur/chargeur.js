@@ -42,7 +42,8 @@ function executerDansUnFil({ env = process.env, limites = LIMITES_FIL, delaiMs =
         const ids = new Int32Array(catalogue.size), metas = new Int32Array(catalogue.size);
         let i = 0; for (const [a, b] of catalogue) { ids[i] = a; metas[i] = Number.isInteger(b) ? b : -1; i++; }
         // seules les DEUX variables de lecture passent au fil, explicitement : ce que dotenv ajouterait à l'environnement du fil ne compte pas
-        const donnees = { env: { MONGODB_CARTES_LECTURE_URI: env.MONGODB_CARTES_LECTURE_URI, MONGODB_CARTES_URI: env.MONGODB_CARTES_URI }, ids, metas };
+        // (le mot de passe de l'URI d'ÉCRITURE ne voyage pas : la comparaison à la variable de lecture n'a besoin que de l'adresse et de l'utilisateur)
+        const donnees = { env: { MONGODB_CARTES_LECTURE_URI: env.MONGODB_CARTES_LECTURE_URI, MONGODB_CARTES_URI: require('./lecture-seule').sansMotDePasse(env.MONGODB_CARTES_URI) }, ids, metas };
         const { Worker } = require('worker_threads');
         const w = creerFil ? creerFil(donnees, limites) : new Worker(fichierFil, { workerData: donnees, resourceLimits: limites, transferList: [ids.buffer, metas.buffer] });
         return new Promise(resolve => {
@@ -64,11 +65,20 @@ function executerDansUnFil({ env = process.env, limites = LIMITES_FIL, delaiMs =
 }
 
 /** La voie « fichier précalculé » : `lireFichier()` rend l'archive (gzip) ; la structure est jugée par format.js. Aucun calcul, aucune lecture de `cartes`. */
-function executerDepuisFichier({ lireFichier }) {
+function executerDepuisFichier({ lireFichier, secret, nonScelleBanc = false }) {
+    // FERMÉE par défaut : sans secret HMAC, aucune archive n'est ouverte. Seul un banc déclare explicitement `nonScelleBanc` (archive locale sans scellement).
+    if (!nonScelleBanc && !require('./scellement').secretValide(secret)) return async () => ({ ok: false, raison: 'secret HMAC (V2_VISUELS_HMAC) absent ou trop court : aucune archive n\'est ouverte' });
     return async () => {
-        const F = require('./format');
+        const F = require('./format'); const { rejugerEntrees } = require('./version');
         let v, ent;
-        try { const plein = await F.decompresser(await lireFichier()); v = F.deserialiser(plein); ent = F.lireEntete(plein).entree || {}; } catch (e) { return { ok: false, raison: e && e.name === 'FormatInvalide' ? `fichier refusé : ${e.motif}` : `fichier illisible (${nom(e)})` }; }
+        try {
+            const lu = await lireFichier();
+            const gz = nonScelleBanc ? lu : require('./scellement').ouvrir(lu, secret);          // taille, magie et HMAC AVANT toute décompression
+            const plein = await F.decompresser(gz);                                              // 16 Mo compressés / 48 Mo décompressés au plus
+            v = F.deserialiser(plein); ent = F.lireEntete(plein).entree || {};
+            const rejuge = rejugerEntrees(v);                                                    // lireEntree sur CHAQUE entrée chargée (ruling 4) : l'archive entière est refusée au premier rejet
+            if (!rejuge.ok) return { ok: false, raison: `fichier refusé : ${rejuge.refusees} entrée(s) rejetée(s) par la validation d'entrée (${Object.entries(rejuge.motifs).map(([m, n]) => `${m} : ${n}`).join(' ; ')})` };
+        } catch (e) { return { ok: false, raison: e && e.name === 'FormatInvalide' ? `fichier refusé : ${e.motif}` : `fichier illisible (${nom(e)})` }; }
         return { ok: true, version: v, comptes: { sets: ent.sets ?? 0, cartes: ent.cartes ?? 0, produits: ent.produits ?? 0, catalogue: ent.catalogue ?? 0, visuels: v.comptes.visuels, refusees: v.comptes.refusees, motifs: v.comptes.motifs,
             fichesLiees: v.comptes.fichesLiees, setsAvecLiens: v.comptes.setsAvecLiens, produitsLies: v.comptes.produitsLies } };
     };
@@ -100,16 +110,18 @@ function creerChargeur(opts = {}) {
             if (comptes.fichesLiees === 0) throw new Echec(`0 lien fiche → produits sur une base non vide — ${dit}`);
             const prev = etat.version();
             if (prev) {
+                // une archive plus ANCIENNE que celle en place (rejouée à l'envers) est refusée ; sa date et son âge sont journalisés au chargement
+                if (v.chargeLe < prev.chargeLe) throw new Echec(`archive plus ancienne que celle en place (${v.chargeLe.toISOString()} < ${prev.chargeLe.toISOString()})`);
                 const perdu = (a, b) => a > 0 && b < a * (1 - PERTE_MAX);
                 if (perdu(prev.comptes.visuels, comptes.visuels)) throw new Echec(`perte de plus de 10 % des visuels (${prev.comptes.visuels} → ${comptes.visuels}) — ${dit}`);
                 if (perdu(prev.comptes.fichesLiees, comptes.fichesLiees)) throw new Echec(`perte de plus de 10 % des fiches liées (${prev.comptes.fichesLiees} → ${comptes.fichesLiees}) — ${dit}`);
             }
             etat.installer(v);                                                       // LA bascule : un seul pointeur, la version précédente n'est plus référencée ensuite
-            journal(`✅ [v2 chargeur] chargé en ${((Date.now() - t0) / 1000).toFixed(1)} s : ${dit} · ${(v.octets.total / 1048576).toFixed(1)} Mo en colonnes`);
+            journal(`✅ [v2 chargeur] chargé en ${((Date.now() - t0) / 1000).toFixed(1)} s : ${dit} · ${(v.octets.total / 1048576).toFixed(1)} Mo en colonnes · archive du ${v.chargeLe.toISOString()} (âge ${Math.max(0, Math.round((Date.now() - v.chargeLe.getTime()) / 3600000))} h)`);
             return { ok: true, comptes };
         } catch (e) {
             const motif = e instanceof Echec ? e.motif : `lecture impossible (${nom(e)})`;
-            journal(`❌ [v2 chargeur] échec, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'}, prochain essai au rechargement quotidien : ${motif}`);
+            journal(`❌ [v2 chargeur] échec, ${etat.version() ? 'version précédente gardée' : 'aucune version en place (sans visuel)'}, aucun nouvel essai (prochain essai : le prochain réveil de l'instance ou le rechargement quotidien) : ${motif}`);
             return { ok: false, motif, comptes };
         } finally { enCours = false; }
     }
@@ -140,7 +152,7 @@ async function catalogueApi() {
     return m;
 }
 /** Attend la connexion de la base de l'API (bornée) : une ATTENTE, pas un essai de chargement. */
-async function attendreBase({ delaiMs = ATTENTE_BASE_MS, pasMs = 5000 } = {}) {
+async function attendreBase({ delaiMs = ATTENTE_BASE_MS, pasMs = 250 } = {}) {
     const mongoose = require('mongoose');
     const fin = Date.now() + delaiMs;
     while (mongoose.connection.readyState !== 1) { if (Date.now() >= fin) return false; await new Promise(r => { const t = setTimeout(r, pasMs); if (t.unref) t.unref(); }); }
