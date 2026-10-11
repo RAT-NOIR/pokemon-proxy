@@ -187,6 +187,12 @@ const plaf = async(p, jour, type) => (await db.col('plafonds').findOne({ porteur
     const e19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: 'sans_prix', maintenant: t }, cfg);
     H.v('19. compteur inconnu (« sans_prix », faute de frappe) : refusé { rendu:false, erreur }, crédit resté débité (4), aucun compteur de plafond créé, aucun claim',
         [e19, (await lire(p19)).solde.achete, await db.col('plafonds').countDocuments({ porteur: `compte:${p19.id}` }), await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|cinc' })], [{ rendu: false, raisonNonRembourse: 'erreur' }, 4, 0, 0]);
+    // noms hérités du prototype : ils ne sont PAS des compteurs (propriété propre exigée, pas `in`) — sinon plafond = une fonction/un objet, donc jamais atteint
+    const h19 = [];
+    for (const nom of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) h19.push(await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: nom, maintenant: t }, cfg));
+    H.v('    noms hérités du prototype (constructor, __proto__, toString, hasOwnProperty) : tous refusés, crédit resté débité (4), aucun compteur ni claim',
+        [h19.map(r => [r.rendu, r.raisonNonRembourse]), (await lire(p19)).solde.achete, await db.col('plafonds').countDocuments({ porteur: `compte:${p19.id}` }), await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|cinc' })],
+        [Array(4).fill([false, 'erreur']), 4, 0, 0]);
     const n19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: null, maintenant: t }, cfg);
     H.v('    compteur null : refusé aussi ; le défaut (sans compteur) reste « panne »', [n19.rendu, (await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', maintenant: t }, cfg)).rendu, (await plaf(p19, '2026-10-08', 'panne')).count], [false, true, 1]);
     await H.fermerBac(); H.bilan();
