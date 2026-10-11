@@ -649,7 +649,9 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             const noms = [...source.matchAll(/catch\s*\(\s*([A-Za-z_$][\w$]*)\s*\)/g)].map(m => m[1]);
             const echapper = n => n.replace(/\$/g, '\\$');
             const re = [/\.message\b/, /\[\s*['"`]message['"`]\s*\]/, /\bcatch\s*\(\s*\{[^)]*\bmessage\b/];
-            for (const n of new Set(noms)) { const x = echapper(n); re.push(new RegExp('\\$\\{\\s*' + x + '\\s*\\}'), new RegExp('\\bString\\(\\s*' + x + '\\s*\\)'), new RegExp('\\b' + x + '\\.(?:stack\\b|toString\\()'), new RegExp('[\'"`]\\s*\\+\\s*' + x + '\\b')); }
+            for (const n of new Set(noms)) { const x = echapper(n); re.push(new RegExp('\\$\\{\\s*' + x + '\\s*\\}'), new RegExp('\\bString\\(\\s*' + x + '\\s*\\)'), new RegExp('\\b' + x + '\\.(?:stack\\b|toString\\()'), new RegExp('[\'"`]\\s*\\+\\s*' + x + '\\b'),
+                new RegExp('\\bconsole\\.\\w+\\((?:[^()]*,)?\\s*' + x + '\\s*[,)]'),                      // console.* reçoit DIRECTEMENT la variable : pile et message imprimés
+                new RegExp('\\{[^}]*\\bmessage\\b[^}]*\\}\\s*=\\s*' + x + '\\b')); }                      // const { message: m } = e
             return re;
         };
         const fautifsDe = (rel, source) => { const re = formesDe(source); return source.split(/\r?\n/).map(l => l.replace(/\s\/\/.*$/, '')).map((l, i) => ({ l, i })).filter(({ l }) => re.some(r => r.test(l)) && !EXCEPTIONS.some(x => x.fichier === rel && l.includes(x.contient))).map(({ i }) => `${rel}:${i + 1}`); };
@@ -666,7 +668,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
         const reintroduit = q.replace('repli(`écriture refusée (${(e && (e.code || e.name)) || \'erreur\'})`)', 'repli(`écriture refusée (${e.message})`)');
         H.v('step 3 : contrôle de l\'instrument — un `repli(e.message)` réintroduit dans argent/questions.js fait tomber la règle (et la version actuelle ne la fait pas tomber)', [reintroduit !== q, fautifsDe('argent/questions.js', reintroduit).length, fautifsDe('argent/questions.js', q).length], [true, 1, 0]);
         // la règle voit AUSSI les contournements nommés par la relecture (R3 à R8) ; un `catch` qui ne dit que le code ou le nom de l'erreur n'est pas signalé
-        const contournements = ['catch ({ message }) { journal(message); }', 'catch (e) { journal(`${e}`); }', 'catch (e) { journal(e[\'message\']); }', 'catch (e) { journal(String(e)); }', 'catch (e) { journal(e.stack); }', 'catch (e) { journal(e.toString()); }', 'catch (e) { journal(\'x\' + e); }'];
+        const contournements = ['catch ({ message }) { journal(message); }', 'catch (e) { journal(`${e}`); }', 'catch (e) { journal(e[\'message\']); }', 'catch (e) { journal(String(e)); }', 'catch (e) { journal(e.stack); }', 'catch (e) { journal(e.toString()); }', 'catch (e) { journal(\'x\' + e); }', 'catch (e) { console.error(e); }', 'catch (err) { console.warn(\'x\', err); }', 'catch (e) { console.log(`x`, e, 1); }', 'catch (e) { const { message: m } = e; journal(m); }', 'catch (e) { const { code, message: m } = e; journal(m); }'];
         H.v('step 3 : contrôle de l\'instrument — catch ({ message }), `${e}`, e[\'message\'], String(e), e.stack, e.toString(), \'x\' + e sont TOUS signalés', contournements.filter(f => fautifsDe('x.js', f).length === 0), []);
         H.v('step 3 : ... et un catch qui ne dit que le code ou le nom de l\'erreur n\'est pas signalé', fautifsDe('x.js', 'catch (e) { journal((e && (e.code || e.name)) || \'erreur\'); }').length, 0);
     }
@@ -804,11 +806,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             const cellulesDe = ligne => ligne.split(/(?<!\\)\|/).slice(1, -1).map(c => c.trim());
             // jugement pur : les fragments sans verdict (aucune ligne du §10 dont la 1re cellule le porte, ou verdict vide), et les fragments non uniques
             const jugerDettes = (registre, section) => {
-                const fragments = dettesDe(registre), lignes = section.split(/\r?\n/).filter(l => l.startsWith('|')).map(cellulesDe);
-                const sans = fragments.filter(f => { const l = lignes.filter(c => c.length >= 4 && normaliser(c[0]).startsWith(f)); return l.length !== 1 || l[0][3].length < 8; });
+                const fragments = dettesDe(registre), tab = section.split(/\r?\n/).filter(l => l.startsWith('|'));
+                const sep = tab.findIndex(l => /^\|[\s:|-]+\|$/.test(l)), lignes = (sep < 0 ? tab : tab.slice(sep + 1)).map(cellulesDe).filter(c => c.length >= 4);   // l'en-tête et le séparateur ne sont pas des verdicts
+                const sans = fragments.filter(f => { const l = lignes.filter(c => normaliser(c[0]).startsWith(f)); return l.length !== 1 || l[0][3].length < 8; });
                 const doubles = [...new Set(fragments.filter((f, i) => fragments.indexOf(f) !== i))];
-                return { trouvees: fragments.length, sans, doubles };
+                // sens inverse : un verdict dont la 1re cellule ne retrouve aucune ligne marquée du périmètre
+                const orphelins = lignes.filter(c => !fragments.some(f => normaliser(c[0]).startsWith(f))).map(c => normaliser(c[0]).slice(0, 40));
+                return { trouvees: fragments.length, verdicts: lignes.length, sans, doubles, orphelins };
             };
+            // accepté seulement si : au moins une ligne marquée (0 = clé fausse), tout fragment a UN verdict, aucun doublon, aucun verdict orphelin, effectifs ÉGAUX
+            const verdictGlobal = j => j.trouvees > 0 && j.sans.length === 0 && j.doubles.length === 0 && j.orphelins.length === 0 && j.trouvees === j.verdicts;
             const doc = fs.readFileSync(path.join(__dirname, '..', '..', 'AUDIT-SECURITE-V2.md'), 'utf8');
             const i10 = doc.indexOf('## 10.'), i11 = doc.indexOf('## 11.'), sect = i10 >= 0 && i11 > i10 ? doc.slice(i10, i11) : '';
             // ── preuve de l'INSTRUMENT sur un registre fabriqué : insérer ou retirer des lignes AILLEURS ne change rien ; retirer un verdict, si ; la sentinelle borne le périmètre
@@ -820,11 +827,21 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
                 const apres = `${base}\n- **Task B8: complete (fabriquée)\n- Task Z3: minor (deferred): dette écrite APRÈS la sentinelle`;
                 const sansSentinelle = `${base}\n- Task Z3: minor (deferred): dette écrite sans sentinelle`;
                 H.v('N1 instrument : registre fabriqué — 2 dettes, 2 verdicts', [jugerDettes(base, sectionZ).trouvees, jugerDettes(base, sectionZ).sans], [2, []]);
-                H.v('N1 instrument : des lignes INSÉRÉES et RETIRÉES ailleurs (les numéros de ligne changent tous) ne changent rien', jugerDettes(decale, sectionZ), { trouvees: 2, sans: [], doubles: [] });
+                H.v('N1 instrument : des lignes INSÉRÉES et RETIRÉES ailleurs (les numéros de ligne changent tous) ne changent rien', jugerDettes(decale, sectionZ), { trouvees: 2, verdicts: 2, sans: [], doubles: [], orphelins: [] });
                 H.v('N1 instrument : une dette écrite APRÈS la sentinelle n\'est pas jugée', [jugerDettes(apres, sectionZ).trouvees, jugerDettes(apres, sectionZ).sans], [2, []]);
                 H.v('N1 instrument : SANS sentinelle, tout le fichier est jugé (la dette de plus n\'a pas de verdict : le banc tomberait)', jugerDettes(sansSentinelle, sectionZ).sans.map(f => f.slice(0, 20)), ['Task Z3: minor (defe']);
                 H.v('N1 instrument : un verdict retiré ou VIDE fait tomber le banc', [jugerDettes(base, sectionZ.split('\n')[0]).sans.length, jugerDettes(base, sectionZ.replace(/assumée : fabriquée/g, '')).sans.length], [1, 2]);
                 H.v('N1 instrument : deux dettes au même fragment sont signalées (le fragment doit être UNIQUE)', jugerDettes(`${l1}\n${l1}`, sectionZ).doubles.length, 1);
+                // N3 : la correspondance est BIDIRECTIONNELLE et COMPTÉE ; zéro ligne marquée sur un registre présent n'est pas un monde vide mais une clé fausse (CLAUDE.md §41)
+                const sectionPlus = `${sectionZ}\n| ${fragmentDe('- Task Z9: parked — verdict sans ligne au registre')} | Z9 | dette neuf | assumée : fabriquée |`;
+                const sentinelleEnTete = ['- **Task B8: complete (en première ligne)', l1, l2].join('\n');
+                const sansMarqueur = '- ligne ordinaire 1\n- ligne ordinaire 2\n- ligne ordinaire 3';
+                H.vrai('N3 instrument : un registre cohérent (2 lignes, 2 verdicts) est accepté', verdictGlobal(jugerDettes(base, sectionZ)));
+                H.vrai('N3 instrument : des lignes insérées/retirées ailleurs restent acceptées', verdictGlobal(jugerDettes(decale, sectionZ)));
+                H.vrai('N3 instrument : un registre NON VIDE SANS AUCUN marqueur est REFUSÉ (0 ligne, 0 verdict ne passe plus)', !verdictGlobal(jugerDettes(sansMarqueur, sectionZ)) && !verdictGlobal(jugerDettes(sansMarqueur, '')));
+                H.vrai('N3 instrument : la sentinelle en PREMIÈRE ligne (périmètre vide) est REFUSÉE', !verdictGlobal(jugerDettes(sentinelleEnTete, sectionZ)));
+                H.vrai('N3 instrument : un §10 avec un verdict de PLUS que le registre est REFUSÉ (effectifs inégaux, orphelin nommé)', !verdictGlobal(jugerDettes(base, sectionPlus)) && jugerDettes(base, sectionPlus).orphelins.length === 1);
+                H.v('N3 instrument : les deux effectifs sont comptés', [jugerDettes(base, sectionPlus).trouvees, jugerDettes(base, sectionPlus).verdicts], [2, 3]);
                 let leve = null; try { lireRegistre(__dirname); } catch (e) { leve = e.code || e.name; }
                 H.vrai('N1 instrument : un registre présent mais illisible (ici un dossier) LÈVE — un échec de lecture reste un échec', Boolean(leve));
             }
@@ -836,6 +853,11 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
                 console.log(`   registre lu (${process.env.RM_PROGRESS ? 'copie RM_PROGRESS' : 'chemin du poste'}), sentinelle ${sentinelle ? 'présente' : 'absente (tout le fichier est jugé)'} : ${j.trouvees} lignes de dette trouvées, ${j.trouvees - j.sans.length} verdicts au §10`);
                 H.v(`I-2 : ${j.trouvees} lignes trouvées, ${j.trouvees - j.sans.length} verdicts (les fragments sans verdict sont listés)`, j.sans, []);
                 H.v('I-2 : chaque fragment est UNIQUE parmi les lignes de dette jugées', j.doubles, []);
+                console.log(`   N3 : ${j.trouvees} lignes marquées dans le registre, ${j.verdicts} verdicts au §10, ${j.orphelins.length} verdict(s) sans ligne`);
+                H.vrai(`N3 : un registre présent rend au moins une ligne marquée (${j.trouvees}) — zéro sur un registre non vide est une clé fausse`, j.trouvees > 0);
+                H.v('N3 : chaque verdict du §10 retrouve sa ligne au registre (verdicts sans ligne)', j.orphelins, []);
+                H.v('N3 : effectifs ÉGAUX, lignes marquées / verdicts', [j.trouvees, j.verdicts], [j.trouvees, j.trouvees]);
+                H.vrai('N3 : verdict global (au moins une ligne, un verdict chacune, aucun orphelin, effectifs égaux)', verdictGlobal(j));
             }
         }
         // TURNSTILE_SECRET absent : le pilote réel LÈVE (503), il n'accepte jamais « faute de secret » ; sans pilote branché, l'inscription ferme aussi

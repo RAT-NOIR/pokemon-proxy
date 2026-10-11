@@ -245,6 +245,8 @@ function traiterIdentifier(cfg, deps = {}) {
         // B1b.8 : le crochet `deps.identifierLot` ABSENT (ou autre chose qu'une fonction) => une seule carte, comme avant le lot, octet pour octet. Présent, la requête est
         // un LOT : v2/identifier/lot.js (coût par tranche de 10, ordre par valeur, supplément tout-ou-rien). La règle G ne s'y applique jamais : elle juge UNE carte et
         // n'est consultée que dans la branche à une carte ci-dessous.
+        // 🔴 BLOQUANT avant le branchement RÉEL de `deps.identifierLot` : un arrêt du processus entre le supplément et la réponse laisse un DÉBIT À VIE (jusqu'à 10 crédits)
+        // que `argent/reconcilier.js` ne voit pas (ligne de débit dans son état normal, solde et journal d'accord). Voir AUDIT-SECURITE-V2.md §5 (O5, M5 de B1b.8).
         const modeLot = typeof deps.identifierLot === 'function';
         let erreurLot = null, injecte = null;
         try {
