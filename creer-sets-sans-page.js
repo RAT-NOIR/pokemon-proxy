@@ -43,6 +43,7 @@ const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { produitsDeLExpansion, decomposerNomCardmarket, estCarteCode, clesNom, nomJointDe } = require('./collecte-cartes/jointure');
 const { indexer, indexerMetacartes, designerCroise } = require('./collecte-cartes/cle-nom-attaques');
 const { lisible } = require('./collecte-cartes/nom-affichage');
+const { declarantesDuProduit } = require('./collecte-cartes/declarantes');
 
 // LE TIRAGE DE CHAQUE EXPANSION, AVEC SA PREUVE (2026-10-04). Les preuves admises, et elles seules :
 //   codes_set — la région que codes_set écrit (japonais / occidental), quand rien ne la contredit ;
@@ -87,14 +88,23 @@ const TIRAGES = {
     // et le clone TCGdex, zéro requête :
     5526: ['intl', 'pages de cartes : Potion et Switch déclarent « My First Battle » en intl (decks Pikachu, Bulbasaur, Charmander, Squirtle)'],
     6600: ['id', 'TCGdex : le set indonésien SV3s « Kilau Hitam » porte le code Cardmarket SV3s (et « kilau hitam » = « black sparkle ») ; aucun set thaï de ce code'],
-    6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)']
+    6767: ['intl', 'famille : 30C est intl (30th-Celebration) (x30C, ses Additionals)'],
+    // (2026-10-11, SETS-21 : « les 21 sets jamais créés ») — lues sur nos données (impressions des pages de cartes : le tirage vient du
+    // champ de page jpexpansion, donc du Japon), zéro requête ; le précédent est My First Battle (5526, 2026-10-07)
+    4187: ['jp', 'pages de cartes : 6 cartes déclarent « Everyone\'s Exciting Battle » en jp (jpexpansion)'],
+    4361: ['jp', 'pages de cartes : 45 impressions déclarent « Gift Box Mew • Lucario » en jp (jpexpansion), 15 numéros'],
+    4279: ['jp', 'pages de cartes : 17 impressions déclarent « Arceus LV.X Deck: Grass & Fire » en jp (jpexpansion), 16 numéros ; son jumeau Arceus-LVX-Deck-Lightning-Psychic (ALP) est jp en base'],
+    4352: ['jp', 'page Bulbapedia « J Promotional cards (TCG) » (copie Wayback 20260710090618) : « a series of Japanese promotional cards … Jumbo cards … a total of two cards » (2 produits) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base'],
+    1622: ['intl', 'page Bulbapedia « 2008 Burger King promotional Pokémon toys » (copie Wayback 20260804035231) : « Every toy was paired with an English Diamond & Pearl or Mysterious Treasures trading card » ; douze jouets = douze produits'],
+    5034: ['intl', 'page Bulbapedia « 2009 Burger King promotional Pokémon toys » (copie Wayback 20230420020549) : « Every toy was paired with two English Platinum trading cards » ; six jouets = douze produits'],
+    4354: ['jp', 'pages de cartes : 3 cartes déclarent « T Promotional cards » en jp (jpexpansion) ; famille : S-P, SM-P, XY-P, BW-P, P-P, L-P, ADV-P, PCG-P, DP-P, DPt-P, PPP-P sont jp en base']
 };
 // LES CARTES DÉCLARANTES (2026-10-07, testeur : « My First Battle : feu vert, rattache les 8 produits à Potion et Switch, sous la garde ») :
 // pour ces expansions, des cartes de la base déclarent DÉJÀ le nom d'expansion — la garde « des cartes en base déclarent déjà … » refuserait
 // le set, parce que leurs fiches naîtraient dans le set À CÔTÉ de fiches simples des mêmes produits (des doublons). Ici, au lieu de refuser :
 // chaque produit dont le nom est celui d'UNE carte déclarante est joint à cette carte (preuve `carte-declarante`), et le set est REFUSÉ si
 // une carte déclarante n'est couverte par AUCUN produit (sa fiche naîtrait seule, sans produit) ou si un nom désigne deux déclarantes.
-const DECLARANTES = { 5526: 'My First Battle' };
+const DECLARANTES = { 5526: 'My First Battle', 5723: 'Quick Construction Packs', 4187: 'Everyone\'s Exciting Battle', 4361: 'Gift Box Mew • Lucario', 4279: 'Arceus LV.X Deck: Grass & Fire', 4354: 'T Promotional cards' };
 const RISQUE = 'désignation croisée calibrée sur 63 129 produits joints par le numéro : 0 faux de la clé, vraie carte présente ; 0,21 % d\'un autre texte désigné quand le texte manque chez nous (9 391 chinois)';
 const nuNom = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
@@ -144,7 +154,9 @@ const nuNum = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+
         for (const p of aJoindre) {
             if (nomDecl) {
                 const nomP = (p.nom || decomposerNomCardmarket(p.name ?? '').nom || '').trim();
-                const dd = declarantes.filter(c => clesNom(nomJointDe(c)).some(k => clesNom(nomP).includes(k)));
+                // (2026-10-11) collecte-cartes/declarantes.js : le ☆ se joint sous « Gold Star », et deux déclarantes au même nom se départagent par
+                // leurs attaques (banc test-declarantes.js) ; sinon l'ambiguïté reste et le set est refusé
+                const dd = declarantesDuProduit(declarantes, nomP, p, clesNom);
                 if (dd.length > 1) { ambiguDecl = `« ${nomP} » désigne ${dd.length} cartes déclarantes`; break; }
                 if (dd.length === 1) { designes.push({ p, carte: dd[0], declarante: true }); continue; }
             }
