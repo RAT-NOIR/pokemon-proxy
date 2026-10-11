@@ -5,6 +5,19 @@ renégocie pas en cours de route.
 
 ---
 
+## MÉTHODE OBLIGATOIRE — À RELIRE APRÈS TOUTE REPRISE OU COUPURE
+
+- Au démarrage et après toute coupure : recharger les skills Superpowers, relire HANDOFF-CATALOGUE.md et RAPPORT-CATALOGUE.md.
+- Coordinateur seul ; sous-agents Sonnet 5.5 ; Haiku pour le mécanique.
+- Relecteur DISTINCT de l'implémenteur ; relectures proportionnées au risque : 1 passe (faible), 2 (moyen), 3 (production, sécurité).
+- 3 tours de correction maximum, puis arrêt et rapport.
+- TDD avec rouge vu ; vérification exécutée avant de déclarer fini.
+- Toute écriture en base sous la garde de lot : sauvegarde, simulation, aucune baisse non annoncée, revalidation 200.
+- Rien n'est poussé ; dossiers de travail dans C:\Users\Yung\rat-market-travail\catalogue\.
+- RAPPORT-CATALOGUE.md tenu à jour après CHAQUE lot (en cas de coupure, ce fichier est le rapport).
+
+---
+
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
 
 > # **L'OBJECTIF EST FIXÉ (2026-09-23) : chaque produit qui a une fiche et un visuel chez Cardmarket doit avoir chez nous la BONNE fiche et la BONNE image.**
