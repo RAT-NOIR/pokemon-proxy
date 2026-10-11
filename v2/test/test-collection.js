@@ -248,6 +248,82 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 await c('S2', '2|1', false);
                 const libre = await c('S3', '3|1');
                 return [[r.refus, r.borne], nSets, dans.possedees, !libre.refus];
+            } },
+        // ── I-2 : la garde de course du `deleteOne` d'un document vide. PUT false de la dernière clé EN MÊME TEMPS qu'un PUT true d'une autre clé du même set : aucune clé perdue.
+        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (60 itérations) ne perd aucune clé', mut: [['service.js', [[', cles: { $size: 0 } }', ' }']]]], attendu: [0],
+            async scene({ svc, cfg }) {
+                const A = await compte(), id = A.c._id; let perdues = 0;
+                for (let i = 0; i < 60; i++) {
+                    const slug = `S-Course-${i}`; const a = (cle, possedee) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
+                    await a('1|1', true);
+                    const ops = [() => a('1|1', false), () => a('2|1', true)]; if (i % 2) ops.reverse();
+                    await Promise.all(ops.map(f => f()));
+                    const d = await raw(NOM).findOne({ compteId: id, set: slug });
+                    if (!d || !d.cles.includes('2|1')) perdues++;
+                }
+                return [perdues];
+            } },
+        // ── M-1 : deux PUT true simultanés de la MÊME clé ne comptent qu'une fois (set neuf : l'upsert ; set existant : la mise à jour). Le compteur global le montre.
+        { nom: 'même clé posée deux fois en même temps (set neuf puis set existant, 30 itérations) : le compteur global ne bouge que de 1 à chaque fois', attendu: [0, 0],
+            mut: [['service.js', [['{ compteId, set: slug, ...SOUS_LA_BORNE(cfg), cles: { $ne: cle } }', '{ compteId, set: slug, ...SOUS_LA_BORNE(cfg) }']]], ['service.js', [['if (!r.ajoute) await rendre(1);', '']]]],
+            async scene({ svc, cfg }) {
+                const A = await compte(), id = A.c._id; const n = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
+                await svc.recompter(); let mauvaisNeuf = 0, mauvaisExistant = 0;
+                for (let i = 0; i < 30; i++) {
+                    const slug = `S-Meme-${i}`;
+                    const a = (cle, k) => svc.cocher({ compteId: id, slug, cle, possedee: true, cfg, maintenant: new Date(Date.now() + k) });
+                    let n0 = await n(); await Promise.all([a('1|1', 1), a('1|1', 2)]);
+                    if ((await n()) - n0 !== 1) mauvaisNeuf++;
+                    n0 = await n(); await Promise.all([a('2|1', 3), a('2|1', 4)]);
+                    if ((await n()) - n0 !== 1) mauvaisExistant++;
+                }
+                return [mauvaisNeuf, mauvaisExistant];
+            } },
+        // ── I-1 : le plafond GLOBAL (clés de tous les comptes), un compteur unique `$inc` conditionnel avant l'écriture
+        { nom: 'plafond global ATOMIQUE : 20 écritures simultanées de 2 comptes avec 5 places libres au service en gardent exactement 5, les 15 autres sont refusées « borne-service », compteur = clés réelles',
+            mut: [['service.js', [['n: { $lt: cfg.collection.clesService }', 'n: { $gte: 0 }']]]], attendu: [5, 15, ['borne-service'], 5],
+            async scene({ svc }) {
+                const base = await svc.recompter(); const cfgX = variante({ collection: { clesService: base + 5 } });
+                const A = await compte(), B = await compte();
+                const r = await Promise.all(Array.from({ length: 20 }, (_, i) => svc.cocher({ compteId: (i % 2 ? A : B).c._id, slug: `S-Svc-${i % 2}`, cle: `${i + 1}|1`, possedee: true, cfg: cfgX })));
+                const reel = (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
+                const refus = r.filter(x => x.refus);
+                return [reel - base, refus.length, [...new Set(refus.map(x => x.refus))], (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base];
+            } },
+        { nom: 'plafond global : au plafond, une clé déjà posée ne consomme rien, une nouvelle est refusée sans rien écrire ; un retrait libère UNE place, une seule fois',
+            mut: [['service.js', [['await rendre(1); // retrait', '']]]], attendu: [[3, 3], 'borne-service', [3, 3, 3], [2, 2], 1, 'borne-service'],
+            async scene({ svc }) {
+                const base = await svc.recompter(); const cfgX = variante({ collection: { clesService: base + 3 } });
+                const A = await compte(), id = A.c._id; const c = (cle, possedee = true) => svc.cocher({ compteId: id, slug: 'S-Plein', cle, possedee, cfg: cfgX });
+                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
+                const cles = async () => (await docs(A))[0].cles.length;
+                for (const k of ['1|1', '2|1', '3|1']) await c(k);
+                const plein = [await cpt(), await cles()];
+                const refus = (await c('4|1')).refus;
+                const idem = await c('1|1');
+                const apresRefus = [await cpt(), await cles(), idem.possedees];
+                await c('1|1', false); await c('1|1', false);          // deux retraits de la même clé : une seule place libérée
+                const libre = [await cpt(), await cles()];
+                const neuve = await c('4|1'); const encore = await c('5|1');
+                return [plein, refus, apresRefus, libre, neuve.possedees === 3 ? 1 : 0, encore.refus];
+            } },
+        { nom: 'plafond global : supprimer un compte libère ses clés', mut: [['service.js', [['if (k > 0) await rendre(k);', '']]]], attendu: [3, 0, 0],
+            async scene({ svc, cfg }) {
+                const base = await svc.recompter(); const A = await compte(), id = A.c._id;
+                for (const [s, k] of [['S1', '1|1'], ['S1', '2|1'], ['S2', '3|1']]) await svc.cocher({ compteId: id, slug: s, cle: k, possedee: true, cfg });
+                const cpt = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n - base;
+                const avant = await cpt(); await svc.supprimerDuCompte(id);
+                return [avant, await cpt(), (await docs(A)).length];
+            } },
+        { nom: 'plafond global : le recompte corrige un compteur FAUX, vers le haut, vers le bas, ou absent', mut: [['service.js', [['{ $set: { n } }', '{ $set: { n: 0 } }']]]], attendu: [true, true, true],
+            async scene({ svc, cfg }) {
+                const A = await compte(); await svc.cocher({ compteId: A.c._id, slug: 'S-Rec', cle: '1|1', possedee: true, cfg });
+                const reel = async () => (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
+                const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
+                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 999999 } }); const r1 = await svc.recompter(); const ok1 = (await lire()) === (await reel()) && r1 === (await reel());
+                await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 0 } }); await svc.recompter(); const ok2 = (await lire()) === (await reel());
+                await raw('compteurs').deleteMany({}); await svc.recompter(); const ok3 = (await lire()) === (await reel());
+                return [ok1, ok2, ok3];
             } }
     ];
     for (const g of GARDES) {
@@ -277,6 +353,22 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         await put(s5, B, 'S1', '1|1', true);
         const bss = await put(s5, B, 'S2', '1|1', true);
         H.v('   un 2e set avec une limite à 1 : 409 CONFLIT « borne-sets », le message nomme 1', [bss.statut, code(bss), detail(bss), /\b1\b/.test(bss.json.erreur.message)], [409, 'CONFLIT', 'borne-sets', true]);
+    }
+
+    // ═══════════════ 4 bis. LE PLAFOND GLOBAL par HTTP, et le recompte AU MONTAGE ═══════════════
+    {
+        const base = await svcReel.recompter();
+        const s6 = await serveur(variante({ collection: { clesService: base + 1 } })); const A = await compte();
+        const ok = await put(s6, A, 'S-Global', '1|1', true), non = await put(s6, A, 'S-Global', '2|1', true);
+        H.v('4 bis. plafond global atteint : 409 CONFLIT « borne-service », le message dit que la limite est celle du SERVICE, rien n\'est écrit', [ok.statut, non.statut, code(non), detail(non), /service/i.test(non.json.erreur.message) && /compte/i.test(non.json.erreur.message), (await docs(A))[0].cles], [200, 409, 'CONFLIT', 'borne-service', true, ['1|1']]);
+        // le recompte au montage : un compteur faux est corrigé quand le lot est monté (le montage est le démarrage du processus)
+        const lire = async () => (await raw('compteurs').findOne({ cle: 'collection-cles' })).n;
+        const reel = async () => (await raw(NOM).aggregate([{ $group: { _id: null, n: { $sum: { $size: '$cles' } } } }]).toArray())[0].n;
+        const monte = async mod => { await raw('compteurs').updateOne({ cle: 'collection-cles' }, { $set: { n: 987654 } }); const r = express.Router(); mod.routes(r, cfg, {}); for (let i = 0; i < 40 && (await lire()) === 987654; i++) await attendre(50); return (await lire()) === (await reel()); };
+        H.vrai('   montage du lot : un compteur faux (987 654) est recompté depuis les données réelles', await monte(require('../collection/monter')));
+        const mutMonter = charger('monter.js', [['service.initialiser()', 'Promise.resolve()']]);
+        H.vrai('   ↳ copie mutée de monter.js (sans recompte au montage) : le compteur reste faux — la garde sait dire NON', !(await monte(mutMonter)));
+        await svcReel.recompter();
     }
 
     // ═══════════════ 5. LA CONCURRENCE : la borne par compte se contrôle AVANT l'écriture ; son dépassement est BORNÉ ═══════════════

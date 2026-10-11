@@ -58,7 +58,8 @@ function lireConfig(env = process.env) {
                    renvoiParCompteHeure: entier('V2_RENVOI_COMPTE_HEURE', env.V2_RENVOI_COMPTE_HEURE, 3, 1),
                    collectionEcrituresParCompteHeure: 1000 },
         // « Ma collection » : bornes écrites par ce qu'elles protègent — la taille de la grappe de production (457 Mo pour un arrêt dur à 480 Mo). Pas de variable d'environnement : une borne qu'on desserre se décide.
-        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000 },
+        // clesService : plafond GLOBAL (toutes les clés de tous les comptes), VALEUR PROVISOIRE — la décision finale revient au testeur. Un compteur unique, voir collection/service.js.
+        collection: { clesParSet: 2000, clesParCompte: 20000, setsParCompte: 1000, clesService: 100000 },
         comptes: { motDePasseMin: 10, lienHeures: 24, codeLongueur: 6, codeMinutes: 10, codesVivants: 3, sessionJours: 30, libelleMax: 60, glissementHeures: 24 },
         urls: { verification: url('V2_URL_VERIFICATION', env.V2_URL_VERIFICATION, 'https://rat-market.fr/fr/verification'), reinit: url('V2_URL_REINIT', env.V2_URL_REINIT, 'https://rat-market.fr/fr/reinitialisation') },
         empreinte: { secret: secretEmpreinte, jours: entier('V2_EMPREINTE_JOURS', env.V2_EMPREINTE_JOURS, 365, 1) },

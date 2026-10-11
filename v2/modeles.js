@@ -31,7 +31,9 @@ const INDEX = Object.freeze([
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),
     // lot COLLECTION : un document par (compte, set) ; l'unicité sert l'upsert et l'isolement, et son préfixe `compteId` sert le compte, la suppression et les bornes. Pas de TTL : la collection d'un compte est son bien.
-    I('collection_fiches', 'collection_cle', { compteId: 1, set: 1 }, { unique: true })
+    I('collection_fiches', 'collection_cle', { compteId: 1, set: 1 }, { unique: true }),
+    // lot COLLECTION : le compteur GLOBAL de clés ({ cle: 'collection-cles', n }), un document ; l'unicité de `cle` fait échouer en 11000 la création simultanée du compteur
+    I('compteurs', 'compteurs_cle', { cle: 1 }, { unique: true })
 ]);
 
 // `collections` : liste de noms (seuls leurs index sont créés) ; absente = tout le socle. `colFn` est injectable pour les bancs.

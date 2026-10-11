@@ -16,7 +16,8 @@ const corpsValide = b => b !== null && typeof b === 'object' && !Array.isArray(b
 const MESSAGES_BORNE = Object.freeze({
     'borne-set': n => `Au plus ${n} fiches cochées par set`,
     'borne-compte': n => `Au plus ${n} fiches cochées au total sur un compte`,
-    'borne-sets': n => `Au plus ${n} sets avec des fiches cochées par compte`
+    'borne-sets': n => `Au plus ${n} sets avec des fiches cochées par compte`,
+    'borne-service': n => `Limite atteinte pour l'ensemble du service (${n} fiches cochées en tout), pas pour votre compte : réessayez plus tard`
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
 function exigerVerifie(req, res, next) {
