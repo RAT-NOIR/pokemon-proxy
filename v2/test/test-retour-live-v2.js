@@ -145,8 +145,8 @@ async function semer() {
         H.v('D0. avant : scan répondu « a » = débité (essais 2)', await essais(s.i._id), 2);
         const r = await rl(s.jeton, { scanId: s.scanId, carte: 0, lectureRatee: { cause: 'sans-prix', definitive: true } }), j = r.json || {};
         H.v('D3. definitive:true : 200, facturation { debite:0, rembourse:true, motif:sans-prix }, solde.essai 3', [r.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, j.solde && j.solde.essai, await essais(s.i._id)], [200, 0, true, 'sans-prix', 3, 3]);
-        const pl = await raw('plafonds').findOne({ porteur: `installation:${s.i._id}`, type: 'question' });
-        H.v('    compté sous le plafond des QUESTIONS (30/jour), pas celui des pannes', [pl && pl.count, await raw('plafonds').countDocuments({ porteur: `installation:${s.i._id}`, type: 'panne' })], [1, 0]);
+        const pl = await raw('plafonds').findOne({ porteur: `installation:${s.i._id}`, type: 'sans-prix' });
+        H.v('    compté sous le compteur PROPRE sans-prix (5/jour), ni celui des QUESTIONS (30/jour) ni celui des pannes', [pl && pl.count, await raw('plafonds').countDocuments({ porteur: `installation:${s.i._id}`, type: { $in: ['panne', 'question'] } })], [1, 0]);
         const r2 = await rl(s.jeton, { scanId: s.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), j2 = r2.json || {};
         H.v('    rejeu : AUCUN second crédit — deja-rembourse', [r2.statut, j2.facturation && j2.facturation.rembourse, j2.facturation && j2.facturation.raisonNonRembourse, await essais(s.i._id), await rembNet(s.i._id)], [200, false, 'deja-rembourse', 3, 1]);
         // definitive:false (un défi Cloudflare) : rien rendu
@@ -158,9 +158,9 @@ async function semer() {
         H.v('    puis définitive sur le même scan : remboursée (la non-définitive n\'a rien consommé)', [rd.json.facturation && rd.json.facturation.rembourse, await essais(t.i._id)], [true, 3]);
         // 4. plafond atteint
         const u = await scanRepondu();
-        await raw('plafonds').insertOne({ porteur: `installation:${u.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'question', count: cfg.plafonds.question, expireLe: new Date(Date.now() + 3 * 86400e3) });
+        await raw('plafonds').insertOne({ porteur: `installation:${u.i._id}`, jour: new Date().toISOString().slice(0, 10), type: 'sans-prix', count: cfg.plafonds.sansPrix, expireLe: new Date(Date.now() + 3 * 86400e3) });
         const rp = await rl(u.jeton, { scanId: u.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } }), jp = rp.json || {};
-        H.v('D4. plafond des questions atteint : motif plafond-jour, rembourse:false, debite 1, essais 2', [rp.statut, jp.facturation && jp.facturation.motif, jp.facturation && jp.facturation.rembourse, jp.facturation && jp.facturation.debite, jp.facturation && jp.facturation.raisonNonRembourse, await essais(u.i._id)], [200, 'plafond-jour', false, 1, 'plafond-jour', 2]);
+        H.v('D4. plafond sans-prix atteint : motif plafond-jour, rembourse:false, debite 1, essais 2', [rp.statut, jp.facturation && jp.facturation.motif, jp.facturation && jp.facturation.rembourse, jp.facturation && jp.facturation.debite, jp.facturation && jp.facturation.raisonNonRembourse, await essais(u.i._id)], [200, 'plafond-jour', false, 1, 'plafond-jour', 2]);
         // lecture ratée sur un scan d'un autre porteur : 404, rien rendu
         const v = await scanRepondu(), autre = await inst(3);
         const ra = await rl(autre.jeton, { scanId: v.scanId, lectureRatee: { cause: 'sans-prix', definitive: true } });

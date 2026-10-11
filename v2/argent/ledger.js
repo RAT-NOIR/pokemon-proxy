@@ -166,7 +166,10 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let cle = `rb|${scanId}`;
     const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
-    const type = compteur === 'question' ? 'question' : 'panne', plafond = cfg.plafonds[type], porteurCle = `${porteur.type}:${porteur.id}`;
+    // Quatre compteurs, un par nature de remboursement (jour UTC, par porteur) : `panne` (défaut, tout compteur inconnu), `question`, et les deux PROPRES du lot PLAFONDS — `sans-prix`
+    // (« prix illisible, définitif » déclaré par le client) et `lot-trop-grand` (refus d'un lot trop grand ou impayable). Le plafond se lit dans la configuration, jamais en dur.
+    const COMPTEURS = { panne: cfg.plafonds.panne, question: cfg.plafonds.question, 'sans-prix': cfg.plafonds.sansPrix, 'lot-trop-grand': cfg.plafonds.lotTropGrand };
+    const type = Object.hasOwn(COMPTEURS, compteur) ? compteur : 'panne', plafond = COMPTEURS[type], porteurCle = `${porteur.type}:${porteur.id}`;
     // « ne rend jamais plus que ce qui a été pris » : on juge sur les DÉBITS enregistrés pour ce scan et CE porteur, jamais sur un objet `credit` présenté par l'appelant
     let pendantes;
     try {
@@ -196,7 +199,12 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         pendantes.sort((a, b) => String(a._id) < String(b._id) ? -1 : 1);
         if (!sansPlafond) {
             const c = await incPlafond(porteurCle, jour, type, maintenant); compteurPris = true;
-            if (c.count > plafond) { await liberer(); return { rendu: false, raisonNonRembourse: 'plafond-jour' }; }
+            if (c.count > plafond) {
+                await liberer();
+                // les deux compteurs propres se journalisent à CHAQUE refus : ni message d'erreur ni identifiant de porteur (type seulement), le scan permet de remonter
+                if (type === 'sans-prix' || type === 'lot-trop-grand') console.warn(`⚠️ [v2 plafond] ${type} : plafond du jour atteint (${plafond}) — remboursement refusé, porteur ${porteur.type}, scan ${scanId}, jour ${jour}`);
+                return { rendu: false, raisonNonRembourse: 'plafond-jour' };
+            }
         }
         for (const d of pendantes) {
             const pris = await col('mouvements').findOneAndUpdate({ _id: d._id, etat: { $nin: ETATS_CLOS } }, { $set: { etat: 'rembourse', expireLe: expireMouvement(maintenant, cfg) } }, { returnDocument: 'before' });   // une ligne « rendu-echoue » reprise retrouve son expiration

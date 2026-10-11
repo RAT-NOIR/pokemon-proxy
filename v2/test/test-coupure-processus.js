@@ -24,7 +24,7 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
     await connecterMongo({ script: 'test-coupure-processus.js', ecrit: true });
     const db = require('../db'); db.brancher(mongoose.connection.db);
     const M = require('../modeles'); const J = require('../comptes/jetons'); const { lireConfig } = require('../config'); const R = require('../argent/reconcilier');
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0' });
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' });   // ce banc joue des lots de 25 cartes (le défaut 20 les refuserait : test-plafonds.js)
     await M.creerIndex();
     const raw = n => mongoose.connection.db.collection(n);
     const EXP = 990801, PID = 990901;

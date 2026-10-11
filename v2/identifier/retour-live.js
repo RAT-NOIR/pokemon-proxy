@@ -4,8 +4,8 @@
 // elle l'appelle avec l'identité v2 (`userId = v2:<type>:<id>`, celle que la chaîne héritée a écrite dans le journal du scan) et traduit sa réponse en forme du contrat 2.
 // Ce que le contrat 2 AJOUTE :
 //   · `verdictAffiche` et `lectureRatee { cause, definitive }` : listes fermées (400 sinon) ;
-//   · une lecture ratée DÉFINITIVE rembourse (motif `sans-prix`), UNE fois par scan (le ledger refuse le second : `deja-rembourse`), sous le compteur des QUESTIONS
-//     (30/jour) ; une non définitive (un défi Cloudflare) ne rembourse rien ;
+//   · une lecture ratée DÉFINITIVE rembourse (motif `sans-prix`), UNE fois par scan (le ledger refuse le second : `deja-rembourse`), sous un compteur PROPRE
+//     `sans-prix` (5/jour et par porteur, V2_SANS_PRIX_JOUR ; les questions abandonnées gardent le leur, 30/jour) ; une non définitive (un défi Cloudflare) ne rembourse rien ;
 //   · un prix lu plus de 100 fois sous le guide du même produit est écrit `douteux: true` dans le journal : l'extension de la 1.0.5 renvoyait 1,18 € pour 1 180 €.
 // Le scan d'un autre porteur n'existe pas : 404 (la route héritée dit 403, qui révélerait son existence).
 const mongoose = require('mongoose');
@@ -15,7 +15,7 @@ const { fauxRes } = require('./captureres');
 const { col } = require('../db');
 const { colLue } = require('./catalogue');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
-const { CARTES_PAR_SCAN_MAX } = require('./cartes-par-scan');
+const { cartesParScanMax } = require('./cartes-par-scan');
 
 const VERDICTS = Object.freeze(['bonne-affaire', 'correct', 'cher', 'aucun']);
 const CAUSES = Object.freeze(['defi', 'blocage', 'grille-vide', 'sans-prix', 'sans-offre-reverse', 'onglet']);
@@ -64,7 +64,7 @@ function traiterRetourLive(cfg, deps = {}) {
         if (!b || typeof b !== 'object' || Array.isArray(b)) return entreeInvalide('corps');
         if (typeof b.scanId !== 'string' || !FORME_ID.test(b.scanId)) return entreeInvalide('scan-id');
         const carte = b.carte === undefined ? 0 : b.carte;
-        if (!Number.isInteger(carte) || carte < 0 || carte >= CARTES_PAR_SCAN_MAX) return entreeInvalide('carte');
+        if (!Number.isInteger(carte) || carte < 0 || carte >= cartesParScanMax(cfg)) return entreeInvalide('carte');
         if (b.verdictAffiche !== undefined && !VERDICTS.includes(b.verdictAffiche)) return entreeInvalide('verdict-affiche');
         const lr = b.lectureRatee;
         if (lr !== undefined && (!lr || typeof lr !== 'object' || Array.isArray(lr) || !CAUSES.includes(lr.cause) || typeof lr.definitive !== 'boolean')) return entreeInvalide('lecture-ratee');
@@ -121,7 +121,8 @@ function traiterRetourLive(cfg, deps = {}) {
                 else {
                     let r;
                     // `credit` n'est lu que pour sa présence : le ledger juge sur les DÉBITS enregistrés de ce scan et de ce porteur, jamais sur l'objet présenté
-                    try { r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'question' }); }
+                    // compteur PROPRE `sans-prix` (5 par jour et par porteur, V2_SANS_PRIX_JOUR) : il ne vide pas celui des questions abandonnées (30), et inversement
+                    try { r = await argent.rembourser(porteur, { poche: null }, 'sans-prix', { scanId, compteur: 'sans-prix' }); }
                     catch (e) { journalErreur('remboursement', e); return repondreErreur(res, 'INDISPONIBLE'); }
                     facturation = facturationDeLecture(r);
                 }
