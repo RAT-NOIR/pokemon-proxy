@@ -4,6 +4,7 @@
 // par l'appelant (le serveur ne détecte pas la carte : tant qu'elles manquent, rien n'est conservé), (3) le sel V2_BANC_SEL, (4) un stockage dont le bucket
 // est celui de V2_BANC_BUCKET ET dont `verifierBucket()` (endpoint UE) a réussi AVANT la première écriture. Tout manque => rien, sans bruit côté client.
 // Le document `banc_lignes` n'a que les clés listées dans DOC ; aucun scanId, compteId, installationId, IP, URL, titre, vendeur ne s'y écrit.
+// BANC-12 : son lien à un compte (SHA-256(scanId, carte, sel), jeton de consentement, jour) ne dure que bancLienMois (12) ; ensuite v2/banc/anonymisation.js le coupe pour toujours.
 // Une écriture ratée ou lente ne touche jamais la réponse : chaque entrée publique ne lève pas et rend la main en TIMEOUT_MS au plus.
 const crypto = require('crypto');
 const mongoose = require('mongoose');
@@ -12,7 +13,7 @@ const { lireConsentement } = require('./consentement');
 const S = require('./stockage');
 const { repondreErreur } = require('../erreurs');
 
-const { JOUR_MS, jourUTC, creerBorner, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
+const { JOUR_MS, jourUTC, creerBorner, limiteLien, lignesEchues, supprimerObjetPuisLigne, consentementAutorise } = require('./commun');
 
 const TIMEOUT_MS = 2000;
 const FORME_ID = /^[0-9a-f]{24}$/i;
@@ -110,7 +111,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
             if (l && l.cleR2 === ancienne) return suppr(finale, 'copie finale non supprimée');
             echec('issue inconnue, objets gardés', null);
         } else {
-            await col().updateOne({ _id: ligne._id }, { $set: { verite, source, etat: 'confirmee' } });
+            // BANC-12 : conditionnée à l'état — une ligne PRISE par l'anonymisation (etat 'anonymisation') ou déjà remplacée n'est jamais écrite : la correction et l'anonymisation se suivent, l'une PUIS l'autre.
+            await col().updateOne({ _id: ligne._id, etat: 'confirmee' }, { $set: { verite, source, etat: 'confirmee' } });
         }
     }
 
@@ -182,6 +184,8 @@ function creerBanc({ cfg, env = process.env, stockage = null, colFn = n => db.co
                     ctx.stockage = s;
                     const ligne = await col().findOne({ _id: idLigne(o.scanId, carteDe(o)) });
                     if (!ligne || ligne.jetonEmpreinte !== c.jetonEmpreinte) return;
+                    // BANC-12 : au-delà du lien (cohorte du mois échue), la correction n'est plus possible — même si la passe d'anonymisation n'a pas encore tourné (même prédicat qu'elle : commun.limiteLien, STRICT)
+                    if (!(ligne.le instanceof Date) || ligne.le < limiteLien(cfg, horloge())) return;
                     await confirmer(ctx, s, ligne, o.idProduct, 'correction');
                 });
             } catch (e) { echec('corriger', e); }
