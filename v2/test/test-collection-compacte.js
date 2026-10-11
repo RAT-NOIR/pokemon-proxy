@@ -29,7 +29,9 @@ const dbInjecte = surcharges => {
     return db.brancher(faux);
 };
 /** Le catalogue chargé : { 'Set': ['id|num', …] } (un produit bidon par fiche) ; sans argument : AUCUN catalogue (l'état « sans visuel »). */
-const catalogue = liens => { if (!liens) return VB.vider(); VB.installer([VB.doc(1)], Object.entries(liens).flatMap(([set, cles]) => cles.map(c => [set, c, [1]]))); };
+// TOUR 1 (I2) : `catalogue(null)` charge un catalogue qui ne connaît AUCUNE des fiches des bancs (les clés vont dans `hors`) ; `sansCatalogue()` est l'état « aucun chargement » (écrire une clé neuve y est refusé).
+const catalogue = liens => { if (!liens) liens = { 'S-Autre-Catalogue': ['1|1'] }; VB.installer([VB.doc(1)], Object.entries(liens).flatMap(([set, cles]) => cles.map(c => [set, c, [1]]))); };
+const sansCatalogue = () => VB.vider();
 const bitsDe = d => Object.entries(d.mots || {}).reduce((n, [, w]) => n + [...(BigInt.asUintN(64, w.toBigInt ? w.toBigInt() : BigInt(w))).toString(2)].filter(x => x === '1').length, 0);
 const docsDe = id => raw(NOM).find({ compteId: id }, { promoteLongs: false }).toArray();
 const registreDe = slug => raw(REG).findOne({ _id: slug });
@@ -107,23 +109,31 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
             }
             H.v('   création simultanée du registre d\'un set neuf par 20 clés distinctes (40 sets) : aucune écriture en erreur, 20 positions distinctes à chaque fois', [erreurs, incomplets], [0, 0]);
         }
-        // une clé que le catalogue ne connaît pas n'entre JAMAIS au registre ; sans catalogue chargé, rien n'entre
+        // une clé que le catalogue ne connaît pas n'entre JAMAIS au registre ; sans catalogue chargé, rien ne s'écrit
         const B = new ObjectId();
         catalogue({ 'S-Inconnue': ['5|001'] });
         await co({ compteId: B, slug: 'S-Inconnue', cle: '666|999', possedee: true });        // clé inventée, set connu
         await co({ compteId: B, slug: 'S-Absent-Du-Catalogue', cle: '5|001', possedee: true });  // set absent du catalogue
         H.v('   une clé inconnue du catalogue (ou d\'un set inconnu) n\'entre JAMAIS au registre : elle va dans `hors`', [await registreDe('S-Inconnue'), await registreDe('S-Absent-Du-Catalogue'), (await docsDe(B)).map(x => [x.set, x.hors, bitsDe(x)]).sort()], [null, null, [['S-Absent-Du-Catalogue', ['5|001'], 0], ['S-Inconnue', ['666|999'], 0]]]);
-        catalogue(null);
-        const Cc = new ObjectId();
-        await co({ compteId: Cc, slug: 'S-Reg', cle: '2|002', possedee: true });             // connu du catalogue d'avant, mais AUCUN catalogue n'est chargé
+        sansCatalogue();
+        const Cc = new ObjectId(); const b0 = await svc.recompter(cfg);
+        const sans = await co({ compteId: Cc, slug: 'S-Reg', cle: '2|002', possedee: true });             // inconnue du registre, et AUCUN catalogue n'est chargé : ni registre ni hors
         const reg = await registreDe('S-Reg');
-        H.v('   sans catalogue chargé (démarrage, échec) : rien n\'entre au registre, tout va dans `hors`', [reg.cles, (await docsDe(Cc))[0].hors], [['1|001'], ['2|002']]);
+        H.v('   sans catalogue chargé (démarrage, échec) : une clé neuve rend « catalogue » avec reessayerDans, rien n\'est écrit (ni registre, ni compte, ni octets)', [sans.refus, sans.reessayerDans > 0, reg.cles, (await docsDe(Cc)).length, (await compteur()) === b0], ['catalogue', true, ['1|001'], 0, true]);
+        const bitSans = await co({ compteId: Cc, slug: 'S-Reg', cle: '1|001', possedee: true });             // déjà au registre : sa position est en base, le cochage reste permis
+        const decSans = await co({ compteId: Cc, slug: 'S-Reg', cle: '1|001', possedee: false });
+        H.v('   sans catalogue : une clé DÉJÀ au registre se coche, et décocher est toujours permis ; la lecture aussi', [bitSans.possedees, decSans.possedees, (await svc.lireSet(Cc, 'S-Reg')).cles], [1, 0, []]);
+        const mutSans = charger('service.js', [['if (v === null) return { refus: \'catalogue\'', 'if (false) return { refus: \'catalogue\'']]);
+        const Cm = new ObjectId(); sansCatalogue();
+        let vuSans; try { vuSans = (await co({ compteId: Cm, slug: 'S-Reg-Sans', cle: '3|3', possedee: true }, mutSans)).refus; } catch (e) { vuSans = 'exception'; }
+        H.vrai('   ↳ copie mutée (le refus sans catalogue retiré) : la clé est rangée dans `hors` par accident — la garde sait dire NON', vuSans !== 'catalogue' && (await docsDe(Cm)).length === 1);
+        catalogue({ 'S-Inconnue': ['5|001'] });
         const mutAppartenance = charger('service.js', [['function connue(slug, cle) {', 'function connue(slug, cle) { return true;']]);
         const D = new ObjectId(); catalogue({ 'S-Inconnue': ['5|001'] });
         await co({ compteId: D, slug: 'S-Inconnue', cle: '777|888', possedee: true }, mutAppartenance);
         H.vrai('   ↳ copie mutée (le contrôle d\'appartenance au catalogue retiré) : une clé inventée ENTRE au registre — la garde sait dire NON', (await registreDe('S-Inconnue')).cles.includes('777|888'));
         // le registre ne porte que { _id, cles }
-        H.v('   le registre ne porte que `_id` et `cles` (aucun compte, aucune date, aucune IP)', Object.keys(await registreDe('S-Reg')).sort(), ['_id', 'cles']);
+        H.v('   le registre ne porte que `_id`, `cles` et son `epoque` aléatoire (aucun compte, aucune date, aucune IP)', [Object.keys(await registreDe('S-Reg')).sort(), /^[0-9a-f]{16}$/.test((await registreDe('S-Reg')).epoque)], [['_id', 'cles', 'epoque'], true]);
     }
 
     // ═══════════════ 3. L'UNION : une clé ne vit qu'à UN endroit pour un compte ═══════════════
@@ -141,7 +151,7 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         const Dp = new ObjectId(); catalogue(null); await co({ compteId: Dp, slug: 'S-Union', cle: '30|001', possedee: true }); catalogue({ 'S-Union': ['30|001', '31|002'] });
         await co({ compteId: Dp, slug: 'S-Union', cle: '30|001', possedee: true }, mutPrio);
         const dDp = (await docsDe(Dp))[0];
-        H.vrai('   ↳ copie mutée (la priorité de `hors` retirée) : la clé existe à DEUX endroits (bit ET hors) — la garde sait dire NON', bitsDe(dDp) === 1 && dDp.hors.length === 1);
+        H.v('   ↳ copie mutée (la priorité de `hors` retirée) : la clé existe à DEUX endroits (bit ET hors) — la garde sait dire NON', [bitsDe(dDp), dDp.hors], [1, ['30|001']]);
         await co({ compteId: A, slug: 'S-Union', cle: '31|002', possedee: true });
         const lu = await svc.lireSet(A, 'S-Union'), ls = await svc.lireSets(A);
         d = (await docsDe(A))[0];
@@ -187,7 +197,7 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         for (const k of cles) await co({ compteId: A, slug: 'S-Mots', cle: k, possedee: true });       // positions 0…199 dans l'ordre
         const reg = (await registreDe('S-Mots')).cles;
         const d0 = (await docsDe(A))[0];
-        H.v('4. le document porte exactement { _id, compteId, set, mots, hors, majLe } (ni adresse, ni nom, ni IP) ; 200 clés → 4 mots de 64 bits', [Object.keys(d0).sort(), Object.keys(d0.mots).sort(), bitsDe(d0), reg.length], [['_id', 'compteId', 'hors', 'majLe', 'mots', 'set'], ['0', '1', '2', '3'], 200, 200]);
+        H.v('4. le document porte exactement { _id, compteId, set, mots, hors, majLe } (ni adresse, ni nom, ni IP) ; 200 clés → 4 mots de 64 bits', [Object.keys(d0).sort(), Object.keys(d0.mots).sort(), bitsDe(d0), reg.length], [['_id', 'compteId', 'epoque', 'hors', 'majLe', 'mots', 'set'], ['0', '1', '2', '3'], 200, 200]);
         H.vrai('   les mots sont des entiers de 64 bits (Long)', Object.values(d0.mots).every(w => w instanceof Long));
         const lus = (await svc.lireSet(A, 'S-Mots')).cles;
         H.v('   les 200 clés relues, y compris aux frontières de mot (positions 63, 64, 127, 128, 191, 192)', [lus.length, [63, 64, 127, 128, 191, 192].every(p => lus.includes(reg[p]))], [200, true]);
@@ -229,9 +239,17 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         await co({ compteId: A, slug: 'S-Qte', cle: '888|1', possedee: true, quantite: 2 });
         l = await svc.lireSet(A, 'S-Qte'); const d2 = (await docsDe(A))[0];
         H.v('   changer la quantité d\'une clé déjà cochée la change, sans changer le nombre de fiches ; majLe avance', [l.quantites, l.cles.length, d2.majLe.getTime() > avant], [{ '70|001': 5, '888|1': 2 }, 3, true]);
-        await co({ compteId: A, slug: 'S-Qte', cle: '70|001', possedee: true });                     // quantité absente = 1
+        // TOUR 1 (I6) : `quantite` absente sur une clé DÉJÀ cochée laisse la quantité INCHANGÉE (un ancien onglet ne rétrograde plus un double) ; seule une quantité explicite la change
+        const sans = await co({ compteId: A, slug: 'S-Qte', cle: '70|001', possedee: true });
+        const sansH = await co({ compteId: A, slug: 'S-Qte', cle: '888|1', possedee: true });
         l = await svc.lireSet(A, 'S-Qte');
-        H.v('   `quantite` absente vaut 1 : elle remet la clé à 1 (l\'entrée `qte` disparaît)', [l.quantites, (await docsDe(A))[0].qte], [{ '888|1': 2 }, {}]);
+        H.v('   `quantite` absente sur une clé DÉJÀ cochée : la quantité reste inchangée (registre comme hors), rien n\'est réécrit', [l.quantites, sans.possedees, sansH.possedees], [{ '70|001': 5, '888|1': 2 }, 3, 3]);
+        const mutQ = charger('service.js', [['a.quantite === undefined ? (qAvant > 0 ? qAvant : 1) : a.quantite', 'a.quantite === undefined ? 1 : a.quantite']]);
+        const Aq = new ObjectId(); await co({ compteId: Aq, slug: 'S-Qte', cle: '70|001', possedee: true, quantite: 4 }); await co({ compteId: Aq, slug: 'S-Qte', cle: '70|001', possedee: true }, mutQ);
+        H.vrai('   ↳ copie mutée (absente = 1 même sur une clé cochée) : la quantité est rétrogradée — la garde sait dire NON', JSON.stringify((await svc.lireSet(Aq, 'S-Qte')).quantites) !== JSON.stringify({ '70|001': 4 }));
+        await co({ compteId: A, slug: 'S-Qte', cle: '70|001', possedee: true, quantite: 1 });          // quantité EXPLICITE 1 : la clé redevient simple
+        l = await svc.lireSet(A, 'S-Qte');
+        H.v('   `quantite: 1` explicite remet la clé à 1 (l\'entrée `qte` disparaît)', [l.quantites, (await docsDe(A))[0].qte], [{ '888|1': 2 }, {}]);
         await co({ compteId: A, slug: 'S-Qte', cle: '888|1', possedee: false });
         H.v('   décocher efface la quantité (hors comme registre) et la clé', [(await svc.lireSet(A, 'S-Qte')).cles, (await svc.lireSet(A, 'S-Qte')).quantites, (await docsDe(A))[0].hors], [['70|001', '71|001'], {}, []]);
         const B = new ObjectId(); await co({ compteId: B, slug: 'S-Qte', cle: '70|001', possedee: true, quantite: 4 }); await co({ compteId: B, slug: 'S-Qte', cle: '70|001', possedee: false });
@@ -294,12 +312,14 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         const MESURE = { plusGrandCompte: 68792, fichesDeLArchive: 64858, hors: 3934, clesDuSite: 39648 };
         H.vrai(`le plafond par compte (${cfg.collection.clesParCompte}) couvre le plus grand compte mesuré (${MESURE.plusGrandCompte} = max(règle du site, archive ${MESURE.fichesDeLArchive}, données du site ${MESURE.clesDuSite}))`, cfg.collection.clesParCompte >= Math.max(MESURE.plusGrandCompte, MESURE.fichesDeLArchive, MESURE.clesDuSite));
         H.vrai(`le plafond hors catalogue (${cfg.collection.horsCatalogueParCompte}) couvre le nombre mesuré (${MESURE.hors}) avec une marge`, cfg.collection.horsCatalogueParCompte > MESURE.hors && cfg.collection.horsCatalogueParCompte <= 10000);
-        H.v('   budget provisoire de 10 Mo, quantité maximale 99, 1 000 sets par compte, 1 000 écritures par heure', [cfg.collection.octetsService, cfg.collection.quantiteMax, cfg.collection.setsParCompte, cfg.limites.collectionEcrituresParCompteHeure], [10485760, 99, 1000, 1000]);
-        const FICHIER = 'C:\\Users\\Yung\\rat-market-travail\\api\\_mesures\\collection\\mesure.json';
-        if (fs.existsSync(FICHIER)) {
-            const m = JSON.parse(fs.readFileSync(FICHIER, 'utf8'));
-            H.v('   la mesure sur disque (si elle est là) est celle que ce banc cite', [m.plusGrandCompte, m.horsRegistre.total, m.archive.fiches], [MESURE.plusGrandCompte, MESURE.hors, MESURE.fichesDeLArchive]);
-        } else console.log(`   SAUT DIT : ${FICHIER} absent de cette machine — les constantes de ce banc ne sont pas confrontées au fichier de mesure`);
+        // TOUR 1 (I1) : une MARGE réelle (le catalogue grandit : 141 fiches simples au lot 6, un set récent compte 200 à 300 fiches) — le défaut ne frôle plus la mesure
+        H.vrai(`marges : ${cfg.collection.clesParCompte} fiches par compte = +${Math.round((cfg.collection.clesParCompte / MESURE.plusGrandCompte - 1) * 100)} % sur le plus grand compte mesuré ; ${cfg.collection.horsCatalogueParCompte} hors catalogue = +${Math.round((cfg.collection.horsCatalogueParCompte / MESURE.hors - 1) * 100)} % sur la mesure (au moins +40 % chacun)`, cfg.collection.clesParCompte >= 1.4 * MESURE.plusGrandCompte && cfg.collection.horsCatalogueParCompte >= 1.4 * MESURE.hors);
+        H.v('   défauts : 100 000 fiches, 6 000 hors, 10 000 quantités par compte ; budget provisoire de 10 Mo, quantité maximale 99, 1 000 sets par compte, 1 000 écritures par heure', [cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.quantitesParCompte, cfg.collection.octetsService, cfg.collection.quantiteMax, cfg.collection.setsParCompte, cfg.limites.collectionEcrituresParCompteHeure], [100000, 6000, 10000, 10485760, 99, 1000, 1000]);
+        // (M5) la mesure est COMMITÉE dans le dépôt : aucun saut en vert sur une autre machine
+        const FICHIER = path.join(__dirname, 'mesure-chargeur', 'mesure-collection.json');
+        H.vrai('   le fichier de mesure est dans le dépôt', fs.existsSync(FICHIER));
+        const m = JSON.parse(fs.readFileSync(FICHIER, 'utf8'));
+        H.v('   la mesure du dépôt est celle que ce banc cite (plus grand compte, hors registre, fiches de l\'archive, fiches simples)', [m.plusGrandCompte, m.horsRegistre.total, m.archive.fiches, m.cartesAIdNegatif], [MESURE.plusGrandCompte, MESURE.hors, MESURE.fichesDeLArchive, 1512]);
     }
 
     // ═══════════════ 8. LE BUDGET EN OCTETS : réservation atomique, recompte par collStats, compteur absent, suppression de compte ═══════════════
@@ -374,8 +394,15 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         await svc.recompter(cfg); await raw(CPT).deleteMany({}); const av86 = await raw(NOM).countDocuments({}); const Q = new ObjectId();
         let leve86 = false; try { await svc.cocher({ cfg, compteId: Q, slug: 'S-Absent', cle: '1|1', possedee: true }); } catch (e) { leve86 = true; }
         const etat86 = [leve86, (await raw(NOM).countDocuments({})) - av86, await raw(CPT).countDocuments({})];
-        await svc.recompter(cfg); const ok86 = await svc.cocher({ cfg, compteId: Q, slug: 'S-Absent', cle: '1|1', possedee: true });
-        H.v('8.6 compteur ABSENT : les écritures ferment (rien d\'écrit, le compteur n\'est PAS recréé par l\'incrément) jusqu\'au recompte, qui le recrée', [...etat86, ok86.possedees], [true, 0, 0, 1]);
+        // TOUR 1 (M7) : l'écriture refusée remet le recompte à rejouer, la suivante le fait (un compteur supprimé à la main ne ferme plus jusqu'au prochain montage)
+        const ok86 = await svc.cocher({ cfg, compteId: Q, slug: 'S-Absent', cle: '1|1', possedee: true });
+        H.v('8.6 compteur ABSENT : les écritures ferment (rien d\'écrit, le compteur n\'est PAS recréé par l\'incrément) ; la suivante rejoue le recompte, qui le recrée', [...etat86, ok86.possedees], [true, 0, 0, 1]);
+        const mutAbs = charger('service.js', [['initialisation = null; throw new Error(\'compteur-absent\');', 'throw new Error(\'compteur-absent\');']]);
+        await mutAbs.initialiser(cfg); await raw(CPT).deleteMany({});
+        const sMut = async () => { try { await mutAbs.cocher({ cfg, compteId: new ObjectId(), slug: 'S-Absent2', cle: '1|1', possedee: true }); return true; } catch (e) { return false; } };
+        await sMut(); const secondeMut = await sMut();
+        H.vrai('   ↳ copie mutée (le recompte n\'est pas remis à rejouer) : la seconde écriture reste fermée — la garde sait dire NON', secondeMut === false);
+        await svc.recompter(cfg);
 
         // 8.7 le compteur ne passe jamais sous 0
         await raw(CPT).updateOne({ cle: CLE_CPT }, { $set: { n: 0 } });
@@ -419,6 +446,182 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         const W3 = new ObjectId(); const bW3 = await compteur();      // '1|1' est déjà au registre : le coût d'un compte neuf est exactement celui de son document
         await Promise.all([svc.cocher({ cfg, compteId: W3, slug: 'S-Mod', cle: '1|1', possedee: true }), svc.cocher({ cfg, compteId: W3, slug: 'S-Mod', cle: '1|1', possedee: true })]);
         H.v('   la même clé posée deux fois en même temps (set neuf) ne coûte qu\'une fois : le perdant de la création rend son surplus', (await compteur()) - bW3, (await docsDe(W3)).reduce((n, d) => n + C.coutDuDocument(d), 0));
+    }
+
+    // ═══════════════ 9. TOUR 1 (M1) : la course INVERSE hors → registre (le catalogue charge une version qui connaît la clé entre deux PUT de la même clé) ═══════════════
+    {
+        let nSwap = 0;
+        const sceneSwap = async s => {
+            const slug = `S-Swap-${++nSwap}`;                                                              // un set NEUF à chaque passage : un registre qui porte déjà la clé enverrait la scène sur le chemin bit
+            await s.initialiser(cfg);                                                                    // le recompte du module (une copie mutée n'en a pas fait) ne doit pas retarder la lecture de A
+            const A = new ObjectId(); catalogue({ [slug]: ['1|1'] });                                  // version 1 : ne connaît pas « 9|9 »
+            let premier = true, arrive, liberer; const atteint = new Promise(r => { arrive = r; }), retenue = new Promise(r => { liberer = r; });
+            dbInjecte({ [NOM]: c => { const w = Object.create(c); w.findOneAndUpdate = async (...a) => { if (premier) { premier = false; arrive(); await retenue; } return c.findOneAndUpdate(...a); }; return w; } });
+            const pA = co({ compteId: A, slug: slug, cle: '9|9', possedee: true }, s);              // version 1 : inconnue → `hors`, écriture RETENUE au seuil
+            await atteint; catalogue({ [slug]: ['1|1', '9|9'] });                                       // version 2 : elle la connaît
+            try { await co({ compteId: A, slug: slug, cle: '9|9', possedee: true }, s); } finally { liberer(); }   // → registre, bit posé AVANT l'écriture de A
+            try { await pA; } finally { dbInjecte(null); }
+            const d = (await docsDe(A))[0];
+            return [d.hors || [], bitsDe(d), (await svc.lireSets(A))[0].possedees, (await svc.lireSet(A, slug)).cles];
+        };
+        const attenduSwap = [[], 1, 1, ['9|9']];
+        H.v('9. course inverse (le catalogue connaît la clé entre deux PUT de la même clé) : la clé n\'existe qu\'à UN endroit, `possedees` = clés rendues', await sceneSwap(svc), attenduSwap);
+        const mutSwap = charger('service.js', [['if (doublon) {', 'if (false) {']]);
+        const vuSwap = await sceneSwap(mutSwap);
+        H.vrai('   ↳ copie mutée (le doublon bit/hors n\'est plus repris côté `hors`) : `possedees` rend 2 pour une clé — la garde sait dire NON', JSON.stringify(vuSwap) !== JSON.stringify(attenduSwap));
+    }
+
+    // ═══════════════ 10. TOUR 1 (I4, M2) : la perte ou la recréation du registre ne montre JAMAIS d'autres cartes — marqueur d'ÉPOQUE ═══════════════
+    {
+        const nomErreur = async f => { try { await f(); return null; } catch (e) { return e && e.name; } };
+        const A = new ObjectId(), H0 = new ObjectId(); catalogue({ 'S-Epoque': ['1|1', '2|1', '3|1'] });
+        await co({ compteId: A, slug: 'S-Epoque', cle: '2|1', possedee: true }); await co({ compteId: A, slug: 'S-Epoque', cle: '3|1', possedee: true });
+        await co({ compteId: H0, slug: 'S-Epoque', cle: '777|7', possedee: true });                    // un compte qui n'a que du `hors` dans ce set
+        const reg0 = await registreDe('S-Epoque');
+        H.v('10. chaque document de compte porte l\'ÉPOQUE du registre contre lequel ses bits ont été écrits ; un document `hors` seul n\'en porte pas', [(await docsDe(A))[0].epoque === reg0.epoque, (await docsDe(H0))[0].epoque], [true, undefined]);
+        // le registre est supprimé, puis RECRÉÉ par d'autres clés aux mêmes positions
+        await raw(REG).deleteOne({ _id: 'S-Epoque' });
+        const sans = [await nomErreur(() => svc.lireSet(A, 'S-Epoque')), await nomErreur(() => svc.lireSets(A))];
+        const B = new ObjectId(); await co({ compteId: B, slug: 'S-Epoque', cle: '1|1', possedee: true }); await co({ compteId: B, slug: 'S-Epoque', cle: '3|1', possedee: true });
+        const avantA = JSON.stringify(await docsDe(A)), cptAvant = await compteur();
+        const vus = [await nomErreur(() => svc.lireSet(A, 'S-Epoque')), await nomErreur(() => svc.lireSets(A)), await nomErreur(() => co({ compteId: A, slug: 'S-Epoque', cle: '2|1', possedee: true, quantite: 3 })),
+            await nomErreur(() => co({ compteId: A, slug: 'S-Epoque', cle: '1|1', possedee: true })), await nomErreur(() => co({ compteId: A, slug: 'S-Epoque', cle: '2|1', possedee: false }))];
+        H.v('   registre ABSENT puis RECRÉÉ (autre époque) : lecture du set, liste, cochage (clé du compte ou autre), décochage → tous « RegistreIllisible » ; rien n\'est écrit (document et compteur inchangés)', [sans, vus, JSON.stringify(await docsDe(A)) === avantA, (await compteur()) === cptAvant], [['RegistreIllisible', 'RegistreIllisible'], Array(5).fill('RegistreIllisible'), true, true]);
+        H.v('   ... pendant que les autres comptes continuent : B lit ses clés, et le compte qui n\'a que du `hors` lit le sien', [(await svc.lireSet(B, 'S-Epoque')).cles, (await svc.lireSet(H0, 'S-Epoque')).cles], [['1|1', '3|1'], ['777|7']]);
+        const mutEpoque = charger('service.js', [['doc.epoque !== meta.epoque', 'false']]);
+        const luMut = await mutEpoque.lireSet(A, 'S-Epoque').then(r => r.cles, e => `exception ${e.name}`);
+        H.vrai('   ↳ copie mutée (l\'époque n\'est plus comparée) : les bits d\'A désignent d\'AUTRES cartes (' + JSON.stringify(luMut) + ') — la garde sait dire NON', JSON.stringify(luMut) === JSON.stringify(['1|1', '3|1']));
+        // M2 : un bit au-delà du registre est une corruption (même traitement), jamais « ignoré sans bruit »
+        const E = new ObjectId(); await co({ compteId: E, slug: 'S-Epoque', cle: '1|1', possedee: true });
+        await raw(NOM).updateOne({ compteId: E, set: 'S-Epoque' }, { $bit: { 'mots.0': { or: Long.fromBits(1 << 9, 0) } } });
+        H.v('   M2 : un bit au-delà du registre → lecture du set ET liste lèvent, `possedees` et `lireSet` ne divergent jamais', [await nomErreur(() => svc.lireSet(E, 'S-Epoque')), await nomErreur(() => svc.lireSets(E))], ['RegistreIllisible', 'RegistreIllisible']);
+        const mutN = charger('service.js', [['positions[positions.length - 1] >= meta.n', 'false']]);
+        H.vrai('   ↳ copie mutée (la garde « au-delà du registre » retirée) : la lecture ignore le bit sans bruit — la garde sait dire NON', (await nomErreur(() => mutN.lireSet(E, 'S-Epoque'))) === null);
+    }
+
+    // ═══════════════ 11. TOUR 1 (I3) : la borne des QUANTITÉS par compte ═══════════════
+    {
+        const A = new ObjectId(); catalogue({ 'S-QB': ['1|1', '2|1', '3|1', '4|1'] });
+        const pas = (extra) => co({ cfg: variante({ quantitesParCompte: 2, clesParCompte: 100, horsCatalogueParCompte: 50 }), compteId: A, slug: 'S-QB', ...extra });
+        await pas({ cle: '1|1', possedee: true, quantite: 2 }); await pas({ cle: '2|1', possedee: true, quantite: 3 });
+        const plein = await pas({ cle: '3|1', possedee: true, quantite: 2 });
+        const horsPlein = await pas({ cle: '9|9', possedee: true, quantite: 2 });                          // une clé `hors` à quantité compte aussi
+        const memeBorne = await pas({ cle: '1|1', possedee: true, quantite: 5 });                           // déjà à n ≥ 2 : changer sa quantité n'en ajoute pas
+        const simple = await pas({ cle: '4|1', possedee: true });                                             // une clé neuve à quantité 1 n'en compte pas
+        await pas({ cle: '1|1', possedee: false });
+        const libre = await pas({ cle: '3|1', possedee: true, quantite: 2 });
+        H.v('11. borne des QUANTITÉS par compte (réglée à 2) : refusée « borne-quantites » au 3e double (registre ou hors), pas pour une quantité qui change ni une clé à 1 ; décocher libère', [[plein.refus, plein.borne], horsPlein.refus, memeBorne.refus, simple.refus, libre.refus], [['borne-quantites', 2], 'borne-quantites', undefined, undefined, undefined]);
+        const mutQB = charger('service.js', [['cfg.collection.quantitesParCompte', '1e9']]);
+        const A2 = new ObjectId(); for (const k of ['1|1', '2|1', '3|1']) await co({ cfg: variante({ quantitesParCompte: 2 }), compteId: A2, slug: 'S-QB', cle: k, possedee: true, quantite: 2 }, mutQB);
+        H.vrai('   ↳ copie mutée (la borne des quantités retirée) : trois doubles passent — la garde sait dire NON', Object.keys((await svc.lireSet(A2, 'S-QB')).quantites).length === 3);
+    }
+
+    // ═══════════════ 12. TOUR 1 (I5) : couverture rendue — courses sur le chemin BIT, exactitude du compteur, remboursement, forçage ═══════════════
+    {
+        const C = require('../collection/couts');
+        const modeleTotal = async () => {
+            const docs = await raw(NOM).find({}, { promoteLongs: false }).toArray(), regs = await raw(REG).find({}).toArray();
+            return docs.reduce((n, d) => n + C.coutDuDocument(d), 0) + regs.reduce((n, r) => n + C.registreDocument(r._id) + r.cles.reduce((m, k) => m + C.registreEntree(k), 0), 0);
+        };
+        // X9 : suppression de compte pendant des retraits (bit + hors + quantités)
+        {
+            catalogue({ 'S-X9': ['1|1', '2|1', '3|1'] }); await svc.recompter(cfg); const b = await compteur(), m0 = await modeleTotal();
+            for (let i = 0; i < 40; i++) {
+                const id = new ObjectId(), slug = 'S-X9';
+                for (const [k, q] of [['1|1', 2], ['2|1', 1], ['77|7', 3]]) await co({ compteId: id, slug, cle: k, possedee: true, quantite: q });
+                await Promise.all([...['1|1', '2|1', '77|7'].map(k => co({ compteId: id, slug, cle: k, possedee: false })), svc.supprimerDuCompte(id, cfg)]);
+                await svc.supprimerDuCompte(id, cfg);
+            }
+            H.v('12. X9 compteur == modèle du stocké après 40 suppressions de compte concurrentes à des retraits (bit, hors, quantités)', (await compteur()) - b, (await modeleTotal()) - m0);
+        }
+        // X10 : retirer la dernière clé (bit) pendant qu'une autre est posée : aucune clé perdue, compteur exact (60 tours)
+        {
+            const scene = async s => {
+                catalogue({ 'S-X10': ['1|1', '2|1'] }); await svc.recompter(cfg); const b = await compteur(), m0 = await modeleTotal(), A = new ObjectId(); let perdues = 0;
+                for (let i = 0; i < 60; i++) {
+                    const slug = 'S-X10'; await co({ compteId: A, slug, cle: '1|1', possedee: true }, s);
+                    const ops = [() => co({ compteId: A, slug, cle: '1|1', possedee: false }, s), () => co({ compteId: A, slug, cle: '2|1', possedee: true }, s)]; if (i % 2) ops.reverse();
+                    await Promise.all(ops.map(f => f()));
+                    if (!(await svc.lireSet(A, slug)).cles.includes('2|1')) perdues++;
+                    await co({ compteId: A, slug, cle: '2|1', possedee: false }, s);
+                }
+                return [perdues, (await compteur()) - b === (await modeleTotal()) - m0];
+            };
+            H.v('   X10 retirer la dernière clé (chemin bit) pendant qu\'une autre est posée, 60 tours : aucune clé perdue, compteur == modèle', await scene(svc), [0, true]);
+            const mutVide2 = charger('service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]);
+            H.vrai('   ↳ copie mutée (la garde « vide » retirée) : des clés sont perdues sur le chemin bit — la garde sait dire NON', JSON.stringify(await scene(mutVide2).catch(() => 'exception')) !== JSON.stringify([0, true]));
+        }
+        // X11 : dernier retrait → document supprimé ET octets rendus (bit avec quantité, puis hors)
+        {
+            const scene = async s => {
+                catalogue({ 'S-X11': ['1|1'] }); await svc.recompter(cfg); const b = await compteur(), m0 = await modeleTotal(), A = new ObjectId();
+                await co({ compteId: A, slug: 'S-X11', cle: '1|1', possedee: true, quantite: 5 }, s); await co({ compteId: A, slug: 'S-X11', cle: '55|5', possedee: true }, s);
+                await co({ compteId: A, slug: 'S-X11', cle: '1|1', possedee: false }, s); await co({ compteId: A, slug: 'S-X11', cle: '55|5', possedee: false }, s);
+                return [(await compteur()) - b === (await modeleTotal()) - m0, await raw(NOM).countDocuments({ compteId: A })];
+            };
+            H.v('   X11 après tout retiré : plus aucun document et le compteur == le modèle (le registre seul reste)', await scene(svc), [true, 0]);
+            const mutQr = charger('service.js', [['if (avant.qte && avant.qte[reg.pos] >= 2) rendu += C.qte;', '']]);
+            const mutDoc = charger('service.js', [['if (supprime) rendu += C.coutDuDocument(supprime);', '']]);
+            H.vrai('   ↳ copie mutée (la quantité d\'un bit retiré n\'est pas rendue) : le compteur dérive — la garde sait dire NON', JSON.stringify(await scene(mutQr)) !== JSON.stringify([true, 0]));
+            H.vrai('   ↳ copie mutée (le document supprimé au dernier retrait ne rend rien) : le compteur dérive — la garde sait dire NON', JSON.stringify(await scene(mutDoc)) !== JSON.stringify([true, 0]));
+        }
+        // M21 / M13 : la réservation ATOMIQUE sur le chemin REGISTRE (un mot neuf, une entrée de registre) — exactement 5 passent au bord du plafond
+        for (const [nom, prefixe, fragment, entree] of [['M21 mot neuf', 'S-Bord2', 'cout += C.mot;', false], ['M13 entrée de registre', 'S-Bord3', 'cout += C.registreEntree(cle);', true]]) {
+            const cles = Array.from({ length: 50 }, (_, i) => `${100000 + i}|1`);
+            const preparer = async () => {
+                catalogue({ [prefixe]: cles });
+                const P = new ObjectId(); await co({ compteId: P, slug: prefixe, cle: cles[49], possedee: true });                          // le registre du set existe déjà
+                if (!entree) for (const k of cles.slice(0, 49)) await co({ compteId: P, slug: prefixe, cle: k, possedee: true });        // et toutes ses entrées (seul le MOT du compte neuf reste à payer)
+            };
+            const cout = (cle) => C.document(prefixe) + C.mot + (entree ? C.registreEntree(cle) : 0), K = 40;      // K × (mot ou entrée) doit dépasser un document entier pour que le mutant en laisse passer un de plus
+            const scene = async s => {
+                await preparer(); await svc.recompter(cfg); const b = await compteur(); const cx = variante({ octetsService: b + K * cout(cles[0]) });
+                const r = await Promise.all(cles.slice(0, 49).map((k, i) => s.cocher({ cfg: cx, compteId: new ObjectId(), slug: prefixe, cle: k, possedee: true })));
+                const n = await compteur();
+                return [r.filter(x => !x.refus).length, n - b, n <= b + K * cout(cles[0])];
+            };
+            const att = [K, K * cout(cles[0]), true];
+            H.v(`   ${nom} : 49 écritures concurrentes au bord du plafond (chemin registre) en laissent passer exactement 5, jamais au-dessus`, await scene(svc), att);
+            const mut = charger('service.js', [[fragment, '']]);
+            H.vrai(`   ↳ copie mutée (« ${nom} » non réservé) : le plafond est dépassé — la garde sait dire NON`, JSON.stringify(await scene(mut)) !== JSON.stringify(att));
+        }
+        void 0;
+        // M09b : un coût RÉEL plus grand que la réservation (le document a disparu entre la lecture et l'écriture) est compté quand même
+        {
+            const scene = async s => {
+                catalogue({ 'S-Force': ['1|1', '2|1'] }); const A = new ObjectId();
+                await co({ compteId: new ObjectId(), slug: 'S-Force', cle: '2|1', possedee: true }, s);                       // « 2|1 » est déjà au registre : seul le compte A paie
+                await co({ compteId: A, slug: 'S-Force', cle: '1|1', possedee: true }, s); await svc.recompter(cfg); const b = await compteur();
+                let fait = false;
+                dbInjecte({ [NOM]: c => { const w = Object.create(c); w.findOneAndUpdate = async (...a) => { if (!fait && a[1] && a[1].$bit) { fait = true; await raw(NOM).deleteOne({ compteId: A, set: 'S-Force' }); } return c.findOneAndUpdate(...a); }; return w; } });
+                try { await co({ compteId: A, slug: 'S-Force', cle: '2|1', possedee: true }, s); } finally { dbInjecte(null); }
+                return (await compteur()) - b;
+            };
+            const att = C.document('S-Force') + C.mot;
+            H.v('   M09b le document disparaît entre la lecture et l\'écriture : le coût réel (document + mot) est compté quand même (forçage)', await scene(svc), att);
+            H.vrai('   ↳ copie mutée (le dépassement n\'est pas forcé) : le compteur sous-compte — la garde sait dire NON', (await scene(charger('service.js', [['if (delta < 0) await forcer(-delta);', '']]))) !== att);
+        }
+        // M19 : une écriture qui ÉCHOUE rend sa réservation
+        {
+            const scene = async s => {
+                catalogue({ 'S-Rend': ['1|1'] }); const P = new ObjectId(); await co({ compteId: P, slug: 'S-Rend', cle: '1|1', possedee: true });     // '1|1' est au registre
+                await svc.recompter(cfg); const b = await compteur(); let leve = false;
+                dbInjecte({ [NOM]: c => { const w = Object.create(c); w.findOneAndUpdate = async () => { throw new Error('panne simulée'); }; return w; } });
+                try { await co({ compteId: new ObjectId(), slug: 'S-Rend', cle: '1|1', possedee: true }, s); } catch (e) { leve = true; } finally { dbInjecte(null); }
+                return [leve, (await compteur()) - b];
+            };
+            H.v('   M19 une écriture qui échoue après sa réservation la RENDRE : le compteur n\'a pas bougé', await scene(svc), [true, 0]);
+            H.vrai('   ↳ copie mutée (la réservation n\'est pas rendue sur échec) : le compteur monte — la garde sait dire NON', JSON.stringify(await scene(charger('service.js', [['await rendre(reserve - payeRegistre);', '']]))) !== JSON.stringify([true, 0]));
+        }
+        // le recompte corrige un compteur trop bas, trop haut ou absent
+        {
+            const reel = async () => { await svc.recompter(cfg); return compteur(); };
+            const vrai = await reel();
+            await raw(CPT).updateOne({ cle: CLE_CPT }, { $set: { n: 5 } }); const bas = await svc.recompter(cfg);
+            await raw(CPT).updateOne({ cle: CLE_CPT }, { $set: { n: 999999999 } }); const haut = await svc.recompter(cfg);
+            await raw(CPT).deleteMany({}); const abs = await svc.recompter(cfg);
+            H.vrai('   le recompte corrige un compteur trop bas, trop haut ou ABSENT (même valeur : les collections n\'ont pas bougé)', Math.abs(bas - vrai) < 4096 && haut === bas && abs === bas);
+        }
     }
 
     await mongoose.disconnect();

@@ -13,12 +13,12 @@ const { cotesDuSet } = require('./cotes');
 
 const nomErreur = e => (e && e.name) || 'Error';           // jamais e.message : un pilote peut y mettre une adresse
 const indispo = res => repondreErreur(res, 'INDISPONIBLE', 'Service momentanément indisponible');
-// Le corps : { possedee: booléen } ; l'extension FACULTATIVE { possedee: true, quantite: n } (n entier de 1 à 99) pour les doubles. `quantite` absente vaut 1. Tout autre champ ou type : 400 ENTREE, le `detail` nomme
+// Le corps : { possedee: booléen } ; l'extension FACULTATIVE { possedee: true, quantite: n } (n entier de 1 à 99) pour les doubles. `quantite` absente : 1 sur une clé neuve, inchangée sur une clé déjà cochée. Tout autre champ ou type : 400 ENTREE, le `detail` nomme
 // le champ fautif (`quantite` pour une quantité hors 1…99, un type faux, ou une quantité avec `possedee: false` ; `possedee` pour tout le reste).
 function lireCorps(b, max) {
     if (b === null || typeof b !== 'object' || Array.isArray(b) || typeof b.possedee !== 'boolean') return { detail: 'possedee' };
     if (Object.keys(b).some(k => k !== 'possedee' && k !== 'quantite')) return { detail: 'possedee' };
-    if (!Object.hasOwn(b, 'quantite')) return { possedee: b.possedee, quantite: 1 };
+    if (!Object.hasOwn(b, 'quantite')) return { possedee: b.possedee, quantite: undefined };       // absente : 1 sur une clé neuve, INCHANGÉE sur une clé déjà cochée (service.js)
     if (b.possedee !== true || !Number.isInteger(b.quantite) || b.quantite < 1 || b.quantite > max) return { detail: 'quantite' };
     return { possedee: true, quantite: b.quantite };
 }
@@ -26,6 +26,7 @@ const MESSAGES_BORNE = Object.freeze({
     'borne-compte': n => `Au plus ${n} fiches cochées au total sur un compte`,
     'borne-sets': n => `Au plus ${n} sets avec des fiches cochées par compte`,
     'borne-hors': n => `Au plus ${n} fiches cochées hors du catalogue sur un compte`,
+    'borne-quantites': n => `Au plus ${n} fiches avec une quantité de plus d'un exemplaire par compte`,
     'borne-service': () => 'Limite atteinte pour l\'ensemble du service (budget de stockage partagé), pas pour votre compte : réessayez plus tard'
 });
 // un compte dont l'adresse n'est pas confirmée n'écrit pas : même refus que le scanner pour ses crédits (403 VERIFICATION), sans solde (aucun crédit n'est en jeu)
@@ -69,6 +70,8 @@ function routesCollection(router, cfg) {
             const corps = lireCorps(req.body, cfg.collection.quantiteMax);
             if (corps.detail) return entree(res, corps.detail);
             const r = await svc.cocher({ compteId: compteId(req), slug: req.params.slug, cle: req.params.cle, possedee: corps.possedee, quantite: corps.quantite, cfg });
+            // aucun catalogue chargé et la clé n'est pas encore au registre : RIEN n'est écrit, le site réessaie dans quelques secondes (le chargement part au démarrage de l'instance)
+            if (r.refus === 'catalogue') return repondreErreur(res, 'INDISPONIBLE', 'Le catalogue des fiches n\'est pas encore chargé : réessayez dans quelques secondes', { detail: 'catalogue', reessayerDans: r.reessayerDans });
             if (r.refus) return repondreErreur(res, 'CONFLIT', MESSAGES_BORNE[r.refus](r.borne), { detail: r.refus });
             res.setHeader('Cache-Control', 'no-store');
             return res.status(200).json({ success: true, possedees: r.possedees });

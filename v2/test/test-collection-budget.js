@@ -14,14 +14,15 @@ const hex = n => crypto.randomBytes(Math.ceil(n / 2)).toString('hex').slice(0, n
 const cle45 = () => `${String(Math.floor(Math.random() * 9e11) + 1e11)}|${hex(32)}`;                  // la clé la plus longue admise : 12 chiffres + « | » + 32 caractères = 45 o
 const cleReelle = () => `${Math.floor(Math.random() * 760000) + 1}|${String(Math.floor(Math.random() * 300) + 1).padStart(3, '0')}`;   // ~ la clé moyenne du catalogue réel (6 chiffres, « | », 3)
 const PLEIN = Long.fromBits(-1, -1), Mo = x => (x / 1048576).toFixed(2);
-const FICHIER = 'C:\\Users\\Yung\\rat-market-travail\\api\\_mesures\\collection\\mesure.json';
+// la mesure est COMMITÉE dans le dépôt (v2/test/mesure-chargeur/mesure-collection.json, produite par mesurer-collection.js) : jamais de saut en vert sur une autre machine
+const FICHIER = require('path').join(__dirname, 'mesure-chargeur', 'mesure-collection.json');
 
 (async () => {
     await H.ouvrirBancV2();
     const bdd = (async () => { process.env.MONGODB_BASE = 'test_scratch'; const { connecterMongo } = require('../../mongo-connexion'); await connecterMongo({ script: 'test-collection-budget.js', ecrit: true }); return mongoose.connection.db; })();
     const B = await bdd;
     const formes = [];       // { nom, indexUnique, docs: () => iterable, modele: doc => octets }
-    const fiche = (compteId, set, mots, horsL, qte) => ({ compteId, set, mots, hors: horsL, ...(qte ? { qte } : {}), majLe: new Date() });
+    const fiche = (compteId, set, mots, horsL, qte) => ({ compteId, set, ...(Object.keys(mots).length ? { epoque: hex(16) } : {}), mots, hors: horsL, ...(qte ? { qte } : {}), majLe: new Date() });
     const motsPleins = n => Object.fromEntries(Array.from({ length: n }, (_, i) => [String(i), PLEIN]));
     const modeleFiche = d => C.coutDuDocument(d);
     const modeleRegistre = d => C.registreDocument(d._id) + d.cles.reduce((n, k) => n + C.registreEntree(k), 0);
@@ -44,13 +45,27 @@ const FICHIER = 'C:\\Users\\Yung\\rat-market-travail\\api\\_mesures\\collection\
     formes.push({ nom: `M. compte MALVEILLANT : ${NH} clés hors de 45 o sur ${NS} sets fictifs de 80 caractères`, fiches: true, unCompte: true, docs: malveillant });
 
     // ── le COLLECTIONNEUR COMPLET : toutes les fiches du plus grand compte mesuré, réparties sur les vrais sets de la sauvegarde
-    let mesure = null;
-    if (fs.existsSync(FICHIER)) mesure = JSON.parse(fs.readFileSync(FICHIER, 'utf8'));
-    else console.log(`   SAUT DIT : ${FICHIER} absent de cette machine — le collectionneur complet n'est pas mesuré`);
-    if (mesure) {
+    const mesure = JSON.parse(fs.readFileSync(FICHIER, 'utf8'));
+    {
         const idC = new ObjectId();
         formes.push({ nom: `K. collectionneur COMPLET : ${mesure.regleDuSite.fiches} fiches (${mesure.archive.fiches} au registre + ${mesure.horsRegistre.total} hors) sur ${mesure.parSet.length} sets`, fiches: true, unCompte: true, complet: true,
             docs: () => mesure.parSet.map(([id, site, arch]) => fiche(idC, id, motsPleins(Math.ceil(arch / 64)), Array.from({ length: site - arch }, cleReelle))) });
+        // TOUR 1 (I3) : le compte le PLUS LOURD que TOUTES les bornes permettent — les plus gros vrais sets à mots pleins (ceux qui portent les quantités de bits), le reste en sets fictifs de 80 caractères pour atteindre 1 000 sets, `hors` plein de clés de 45 o à quantité,
+        // les quantités pleines (quantitesParCompte : celles de `hors` et le reste en `qte`)
+        formes.push({ nom: `W. compte le plus LOURD sous TOUTES les bornes : ${cfg.collection.setsParCompte} sets, ${cfg.collection.horsCatalogueParCompte} clés hors de 45 o, ${cfg.collection.quantitesParCompte} quantités, bits des plus gros sets`, fiches: true, unCompte: true,
+            docs: () => {
+                // le plus lourd : le MINIMUM de vrais sets (les plus gros, qui portent les 4 000 quantités de bits) et tout le reste en sets fictifs de 80 caractères (un slug long pèse deux fois : donnée et index)
+                const id = new ObjectId(), NSet = cfg.collection.setsParCompte, parSetHors = cfg.collection.horsCatalogueParCompte / NSet; let qBits = cfg.collection.quantitesParCompte - cfg.collection.horsCatalogueParCompte;
+                const hors = () => Array.from({ length: parSetHors }, () => `${cle45()}\n99`);
+                const docs = [];
+                for (const [sid, site, arch] of [...mesure.parSet].sort((x, y) => y[2] - x[2])) {
+                    if (qBits <= 0) break;
+                    const n = Math.min(arch, qBits); qBits -= n;
+                    docs.push(fiche(id, sid, motsPleins(Math.ceil(arch / 64)), hors(), Object.fromEntries(Array.from({ length: n }, (_, p) => [String(p), 99]))));
+                }
+                while (docs.length < NSet) docs.push(fiche(id, hex(80), {}, hors()));
+                return docs;
+            } });
         formes.push({ nom: `R. le REGISTRE complet de ces ${mesure.parSet.length} sets (${mesure.archive.fiches} clés)`, registre: true, complet: true,
             docs: () => mesure.parSet.map(([id, site, arch]) => ({ _id: id, cles: Array.from({ length: arch }, cleReelle) })) });
     }
@@ -88,18 +103,31 @@ const FICHIER = 'C:\\Users\\Yung\\rat-market-travail\\api\\_mesures\\collection\
     H.vrai('   ↳ un document modélisé à 150 o (au lieu de 300 + 2 × slug) ne couvre PAS la forme A — le banc sait dire NON', A1.n * (150 + 2 * 80 + C.mot) < A1.net);
 
     // ── 2. les MESURES du contrat
-    const M = formes.find(f => f.nom.startsWith('M.')), K = formes.find(f => f.nom.startsWith('K.')), R = formes.find(f => f.nom.startsWith('R.'));
+    const M = formes.find(f => f.nom.startsWith('M.')), K = formes.find(f => f.nom.startsWith('K.')), R = formes.find(f => f.nom.startsWith('R.')), W = formes.find(f => f.nom.startsWith('W.'));
     const plafond = cfg.collection.octetsService;
     console.log(`   MESURE compte malveillant : ${M.net} o mesurés (modèle ${M.modele}) → ${Math.floor(plafond / M.modele)} comptes malveillants remplissent ${Mo(plafond)} Mo (au modèle) ; ${Math.floor(plafond / M.net)} au mesuré`);
     H.vrai('2. un compte malveillant (hors plein sur 1 000 sets) pèse moins que le plafond du service : une écriture refusée est possible avant qu\'il ne le dépasse', M.modele < plafond);
-    if (K) {
+    {
         const registre = R.net, parCollectionneur = K.net, parCollectionneurModele = K.modele;
         const tenusMesure = Math.floor((plafond - registre) / parCollectionneur), tenusModele = Math.floor((plafond - R.modele) / parCollectionneurModele);
         console.log(`   MESURE collectionneur complet : ${K.net} o mesurés (${(K.net / 1024).toFixed(1)} Ko), modèle ${K.modele} o ; registre complet : ${R.net} o mesurés (${(R.net / 1024).toFixed(1)} Ko), modèle ${R.modele} o`);
         console.log(`   MESURE ce que tiennent ${Mo(plafond)} Mo : (plafond − registre complet) / collectionneur = ${tenusMesure} collectionneurs complets au mesuré, ${tenusModele} au modèle (le compteur réserve le modèle)`);
         console.log(`   MESURE pire cas en octets sous le plafond : le compteur refuse au-delà de ${plafond} o du MODÈLE ; la forme la plus défavorable mesurée est ${(Math.max(...formes.map(f => f.net / f.modele))).toFixed(3)} × le modèle → au plus ${Mo(plafond * Math.max(...formes.map(f => f.net / f.modele)))} Mo réels, plus le dépassement concurrent borné (écritures en vol × le coût d'une écriture au pire : ${C.document('x'.repeat(80)) + C.mot + C.registreEntree(cle45()) + C.registreDocument('x'.repeat(80)) + C.qte} o)`);
+        // I3 : le nombre MINIMAL de comptes qui remplissent le budget = le compte le plus lourd que les bornes permettent, registre complet compris (il faut le remplir pour poser les bits)
+        const minMesure = Math.ceil((plafond - R.net) / W.net), minModele = Math.ceil((plafond - R.modele) / W.modele);
+        console.log(`   MESURE compte le PLUS LOURD sous toutes les bornes : ${W.net} o mesurés (${(W.net / 1024).toFixed(1)} Ko), modèle ${W.modele} o ; registre complet ${R.net} o (mesuré) / ${R.modele} o (modèle)`);
+        console.log(`   MESURE NOMBRE MINIMAL de comptes qui remplissent ${Mo(plafond)} Mo : ${minMesure} au mesuré ((plafond − registre) / compte le plus lourd = (${plafond} − ${R.net}) / ${W.net}), ${minModele} au modèle (ce que le compteur réserve) ; sans compter le registre : ${Math.ceil(plafond / W.net)} au mesuré`);
+        H.vrai('   le compte le plus lourd sous toutes les bornes est plus lourd que le malveillant « hors seul » et que le collectionneur complet (la forme M n\'était pas le pire)', W.net > M.net && W.net > K.net);
+        H.vrai('   le nombre minimal de comptes est au moins 1 et fini', Number.isFinite(minMesure) && minMesure >= 1);
         H.vrai('   un collectionneur COMPLET tient sous le plafond du service avec de la marge (registre compris)', K.modele + R.modele < plafond && tenusModele >= 1);
         H.vrai('   le plafond par compte couvre le collectionneur complet mesuré (bits + hors)', mesure.regleDuSite.fiches <= cfg.collection.clesParCompte && mesure.horsRegistre.total <= cfg.collection.horsCatalogueParCompte);
+    }
+    // (outil d'exploitation) RM_BUDGET_SORTIE=<fichier> : écrit les nombres mesurés, pour les citer au contrat sans les recopier à la main
+    if (process.env.RM_BUDGET_SORTIE) {
+        const pire = Math.max(...formes.map(f => f.net / f.modele));
+        fs.writeFileSync(process.env.RM_BUDGET_SORTIE, JSON.stringify({ K: { net: K.net, modele: K.modele }, R: { net: R.net, modele: R.modele }, W: { net: W.net, modele: W.modele }, M: { net: M.net, modele: M.modele },
+            collectionneursModele: Math.floor((plafond - R.modele) / K.modele), collectionneursMesure: Math.floor((plafond - R.net) / K.net), minMesure: Math.ceil((plafond - R.net) / W.net), minModele: Math.ceil((plafond - R.modele) / W.modele), minSansRegistre: Math.ceil(plafond / W.net),
+            pireRapport: pire.toFixed(3), pireMo: Mo(plafond * pire), coutEcriture: C.document('x'.repeat(80)) + C.mot + C.registreEntree(cle45()) + C.registreDocument('x'.repeat(80)) + C.qte }));
     }
     await mongoose.disconnect();
     await H.arreterBanc();

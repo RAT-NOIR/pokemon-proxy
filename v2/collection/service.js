@@ -17,13 +17,15 @@
 //   ont RÉELLEMENT retiré (le modèle de ce qui était stocké). Au montage le compteur est RECOMPTÉ depuis `collStats` (`size` + `totalIndexSize`) des DEUX collections ; un recompte qui échoue FERME les
 //   écritures (503) et se rejoue à l'écriture suivante ; un compteur ABSENT les ferme aussi (seul le recompte le crée) ; il ne descend jamais sous 0. Toute dérive possible va vers le HAUT (fermeture).
 // Le stockage ne juge pas si une clé désigne une fiche réelle autrement que par l'appartenance au catalogue chargé : la forme est jugée à la porte (forme.js).
+const crypto = require('crypto');
 const { Long } = require('mongoose').mongo;
 const { col, base } = require('../db');
 const etat = require('../chargeur/etat');
 const C = require('./couts');
 const NOM = 'collection_fiches', REGISTRE = 'collection_registre', COMPTEURS = 'compteurs', CLE_TOTAL = 'collection-octets';
 const LECTURE = { promoteLongs: false };                       // les mots sont des Long : jamais promus en nombre (un entier de 64 bits ne tient pas dans un Number)
-const PROJ = { set: 1, mots: 1, hors: 1, qte: 1 };
+const PROJ = { set: 1, mots: 1, hors: 1, qte: 1, epoque: 1 };
+const REESSAI_CATALOGUE_S = 5;                                  // « le catalogue n'est pas chargé » : le chargement vient en quelques secondes, le site réessaie
 
 // ── les bits
 const masque = b => (b < 32 ? Long.fromBits(1 << b, 0) : Long.fromBits(0, 1 << (b - 32)));
@@ -44,22 +46,23 @@ const indexHors = (hors, cle) => (hors || []).findIndex(e => C.lireElementHors(e
 // ── le catalogue chargé (EN MÉMOIRE, COTES-VISUELS) : la clé est-elle connue de CE set ? Un cache borné par version (la version est gelée et remplacée d'un geste).
 const CACHE_SETS = 16;
 const caches = new WeakMap();
+/** true : le catalogue chargé connaît la clé pour ce set ; false : un catalogue CHARGÉ ne la connaît pas (une fiche sans produit) ; null : on ne sait pas (aucun catalogue, ou un catalogue qui lève). */
 function connue(slug, cle) {
-    let v; try { v = etat.version(); } catch (e) { return false; }
-    if (!v) return false;                                                      // aucun catalogue chargé : rien n'entre au registre
+    let v; try { v = etat.version(); } catch (e) { return null; }
+    if (!v) return null;                                                       // aucun catalogue chargé : une clé neuve ne s'écrit nulle part (jamais rangée dans `hors` par accident)
     try {
         let m = caches.get(v); if (!m) { m = new Map(); caches.set(v, m); }
         let s = m.get(slug);
         if (!s) { s = new Set(v.fichesDuSet(slug).map(f => f.cle)); if (m.size >= CACHE_SETS) m.delete(m.keys().next().value); m.set(slug, s); }
         return s.has(cle);
-    } catch (e) { return false; }                                              // un catalogue qui lève n'est pas un catalogue qui connaît
+    } catch (e) { return null; }                                               // un catalogue qui lève n'est pas un catalogue qui connaît : « je ne sais pas » n'est jamais « inconnue »
 }
 
 // ── le compteur global (en OCTETS)
 async function reserver(cfg, cout) {
     const filtre = { cle: CLE_TOTAL, n: { $lte: cfg.collection.octetsService - cout } };
     if ((await col(COMPTEURS).findOneAndUpdate(filtre, { $inc: { n: cout } })) !== null) return true;           // JAMAIS d'upsert : seul le recompte crée le compteur
-    if (!(await col(COMPTEURS).findOne({ cle: CLE_TOTAL }, { projection: { _id: 1 } }))) throw new Error('compteur-absent');   // ABSENT : les écritures ferment (503) jusqu'au prochain recompte
+    if (!(await col(COMPTEURS).findOne({ cle: CLE_TOTAL }, { projection: { _id: 1 } }))) { initialisation = null; throw new Error('compteur-absent'); }   // ABSENT : cette écriture ferme (503) et la suivante rejoue le recompte, seul à créer le compteur
     return false;                                                                                            // présent : le plafond est atteint
 }
 async function rendre(k) {
@@ -87,43 +90,62 @@ function initialiser(cfg) {
 const assurer = cfg => initialisation || initialiser(cfg);
 
 // ── le registre
+// L'ÉPOQUE : chaque document de registre porte une valeur aléatoire posée à sa création (`$setOnInsert`) ; chaque document de compte porte celle du registre contre lequel ses bits ont été écrits.
+// Un registre perdu, vidé ou recréé seul change d'époque : les bits des comptes ne désignent plus les mêmes cartes, et rien d'autre ne le dirait — ils sont alors ILLISIBLES (503, journal), jamais lus.
+class RegistreIllisible extends Error { constructor(motif) { super(motif); this.name = 'RegistreIllisible'; } }
+function illisible(slug, motif) {
+    console.error(`❌ [v2 collection] registre recréé ou corrompu : bits illisibles (set ${slug}, ${motif}) — rien n'est lu ni écrit pour ce document`);
+    return new RegistreIllisible(motif);
+}
+/** Le registre du set : { existe, pos (de la clé, -1 si absente), epoque, n (nombre de cases) }. */
 async function positionDuRegistre(slug, cle) {
-    const r = await col(REGISTRE).aggregate([{ $match: { _id: slug } }, { $project: { i: { $indexOfArray: ['$cles', cle] } } }]).toArray();
-    return r.length ? { existe: true, pos: r[0].i } : { existe: false, pos: -1 };
+    const r = await col(REGISTRE).aggregate([{ $match: { _id: slug } }, { $project: { i: { $indexOfArray: ['$cles', cle] }, epoque: 1, n: { $size: '$cles' } } }]).toArray();
+    return r.length ? { existe: true, pos: r[0].i, epoque: r[0].epoque, n: r[0].n } : { existe: false, pos: -1, epoque: null, n: 0 };
+}
+/** Les bits d'un document de compte ne se lisent que contre le registre de LEUR époque, et ne vont jamais au-delà de ses cases. Une garde qui ne peut pas conclure BLOQUE. */
+function verifierBits(doc, meta, slug) {
+    const positions = positionsPosees(doc && doc.mots);
+    if (!positions.length) return;                                             // aucun bit : rien à lire, rien à contredire
+    if (!meta.existe) throw illisible(slug, 'registre absent');
+    if (!doc.epoque || doc.epoque !== meta.epoque) throw illisible(slug, 'époque différente');
+    if (positions[positions.length - 1] >= meta.n) throw illisible(slug, 'bit au-delà du registre');
 }
 /** Ajoute la clé (UNE position, même à 50 simultanés) et rend sa position ; `ajoute`/`docCree` disent ce que CET appel a écrit (le coût du registre ne se paie qu'une fois). */
 async function ajouterAuRegistre(slug, cle) {
     let r = null;
     for (let essai = 0; essai < 5; essai++) {
-        try { r = await col(REGISTRE).updateOne({ _id: slug, cles: { $ne: cle } }, { $push: { cles: cle } }, { upsert: true }); break; }
+        try { r = await col(REGISTRE).updateOne({ _id: slug, cles: { $ne: cle } }, { $push: { cles: cle }, $setOnInsert: { epoque: crypto.randomBytes(8).toString('hex') } }, { upsert: true }); break; }
         catch (e) {
             if (!(e && e.code === 11000)) throw e;                                  // doublon d'_id : le document existe — soit il porte DÉJÀ la clé (un concurrent l'a posée), soit il vient d'être créé par une autre clé et l'upsert perdant doit REJOUER
             const deja = await positionDuRegistre(slug, cle);
-            if (deja.pos >= 0) return { pos: deja.pos, ajoute: false, docCree: false };
+            if (deja.pos >= 0) return { pos: deja.pos, epoque: deja.epoque, ajoute: false, docCree: false };
         }
     }
     const p = await positionDuRegistre(slug, cle);
     if (p.pos < 0) throw new Error('registre-introuvable');
-    return { pos: p.pos, ajoute: Boolean(r && (r.modifiedCount === 1 || r.upsertedCount === 1)), docCree: Boolean(r && r.upsertedCount === 1) };
+    return { pos: p.pos, epoque: p.epoque, ajoute: Boolean(r && (r.modifiedCount === 1 || r.upsertedCount === 1)), docCree: Boolean(r && r.upsertedCount === 1) };
 }
 
 // ── lectures
-const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1 }, ...LECTURE }).toArray();
+const docsDuCompte = compteId => col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, qte: 1 }, ...LECTURE }).toArray();
 async function totalDuCompte(compteId) { return (await docsDuCompte(compteId)).reduce((n, d) => n + nbCoches(d), 0); }
-/** Où est la clé pour ce compte ? { doc, h (indice dans hors, -1), reg ({ existe, pos }), qAvant (0 : pas cochée) } */
+/** Les clés à quantité ≥ 2 d'un document : les entrées `qte` (registre) et les clés `hors` qui portent « \n N ». */
+const nbQuantites = d => Object.keys(d.qte || {}).length + (d.hors || []).filter(e => e.includes('\n')).length;
+/** Où est la clé pour ce compte ? { doc, h (indice dans hors, -1), reg (le registre du set), qAvant (0 : pas cochée) }. LÈVE RegistreIllisible si les bits du document ne se lisent pas contre ce registre. */
 async function situation(compteId, slug, cle) {
     const doc = await col(NOM).findOne({ compteId, set: slug }, { projection: PROJ, ...LECTURE });
     const h = doc ? indexHors(doc.hors, cle) : -1;
-    const reg = h < 0 ? await positionDuRegistre(slug, cle) : { existe: true, pos: -1 };
+    const reg = await positionDuRegistre(slug, cle);
+    verifierBits(doc, reg, slug);
     const qAvant = h >= 0 ? C.lireElementHors(doc.hors[h]).q : (doc && reg.pos >= 0 && bitPose(doc, reg.pos) ? quantiteBit(doc, reg.pos) : 0);
     return { doc, h, reg, qAvant };
 }
 
 // ── écritures
 const sansCe = cle => ({ $ne: [{ $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] }, { $literal: cle }] });   // les éléments de `hors` qui ne sont PAS cette clé (avec ou sans quantité)
-async function ecrireBit(c, { compteId, slug, p, q, maintenant }) {
+async function ecrireBit(c, { compteId, slug, p, q, epoque, maintenant }) {
     const champ = `mots.${Math.floor(p / 64)}`, b = p % 64;
-    const maj = { $bit: { [champ]: { or: masque(b) } }, $set: { majLe: maintenant }, $setOnInsert: { hors: [] } };
+    const maj = { $bit: { [champ]: { or: masque(b) } }, $set: { majLe: maintenant, epoque }, $setOnInsert: { hors: [] } };
     if (q >= 2) maj.$set[`qte.${p}`] = q; else maj.$unset = { [`qte.${p}`]: '' };
     return c.findOneAndUpdate({ compteId, set: slug }, maj, { upsert: true, returnDocument: 'before', projection: PROJ, ...LECTURE });
 }
@@ -132,19 +154,46 @@ async function ecrireHors(c, { compteId, slug, cle, q, maintenant }) {
     return c.findOneAndUpdate({ compteId, set: slug }, pipe, { upsert: true, returnDocument: 'before', projection: PROJ, ...LECTURE });
 }
 
+/** La clé est-elle AUSSI un bit de ce document ? (la position se relit : un concurrent a pu l'ajouter au registre depuis) */
+async function doublonAvecBit(c, compteId, slug, cle) {
+    const r = await positionDuRegistre(slug, cle);
+    if (r.pos < 0) return false;
+    return bitPose(await c.findOne({ compteId, set: slug }, { projection: { mots: 1 }, ...LECTURE }), r.pos);
+}
+/** Retire la clé de `hors` (avec sa quantité) ; rend l'élément retiré, ou null s'il n'y était pas. */
+async function retirerDeHors(c, compteId, slug, cle, maintenant) {
+    const filtre = { compteId, set: slug, $expr: { $in: [{ $literal: cle }, { $map: { input: { $ifNull: ['$hors', []] }, in: { $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] } } }] } };
+    const avant = await c.findOneAndUpdate(filtre, [{ $set: { hors: { $filter: { input: { $ifNull: ['$hors', []] }, cond: sansCe(cle) } }, majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { hors: 1 } });
+    return avant ? avant.hors[indexHors(avant.hors, cle)] : null;
+}
+
 async function ajouter(a, essai = 0) {
-    const { compteId, slug, cle, cfg } = a, q = a.quantite, c = col(NOM);
+    const { compteId, slug, cle, cfg } = a, c = col(NOM);
     await assurer(cfg);
     const { doc, h, reg, qAvant } = await situation(compteId, slug, cle);
+    const q = a.quantite === undefined ? (qAvant > 0 ? qAvant : 1) : a.quantite;                             // `quantite` absente : 1 sur une clé NEUVE, INCHANGÉE sur une clé déjà cochée (un ancien onglet ne rétrograde pas un double)
     if (qAvant === q) return { possedees: nbCoches(doc) };                                                  // idempotent : rien ne change, rien n'est consommé, même au plafond
     const pos = reg.pos;
-    const registre = h < 0 && (pos >= 0 || connue(slug, cle));                                              // la clé est au registre, ou le catalogue chargé la connaît pour ce set : sinon `hors`
-    if (qAvant === 0) {                                                                                      // une clé NEUVE : les bornes (une quantité qui change n'ajoute aucune clé)
+    // ORDRE DE DÉCISION : (1) la clé est déjà dans `hors` → elle y reste ; (2) elle est déjà au registre (sa position est en base) → bit ; (3) sinon le catalogue CHARGÉ tranche : il la connaît → ajout au registre,
+    // il ne la connaît pas → `hors` (une fiche sans produit) ; aucun catalogue chargé → on n'écrit RIEN (503 « catalogue ») : `hors` ne reçoit jamais une clé par accident.
+    let registre;
+    if (h >= 0) registre = false;
+    else if (pos >= 0) registre = true;
+    else {
+        const v = connue(slug, cle);
+        if (v === null) return { refus: 'catalogue', reessayerDans: REESSAI_CATALOGUE_S };
+        registre = v;
+    }
+    const nouvelle = qAvant === 0, montee = q >= 2 && qAvant < 2;
+    if (nouvelle || montee) {                                                                                // les bornes (une quantité qui change sans franchir 2 n'ajoute rien)
         const tous = await docsDuCompte(compteId);
-        const total = tous.reduce((n, d) => n + nbCoches(d), 0);
-        if (total >= cfg.collection.clesParCompte) return { refus: 'borne-compte', borne: cfg.collection.clesParCompte };
-        if (!doc && tous.length >= cfg.collection.setsParCompte) return { refus: 'borne-sets', borne: cfg.collection.setsParCompte };
-        if (!registre && tous.reduce((n, d) => n + (d.hors ? d.hors.length : 0), 0) >= cfg.collection.horsCatalogueParCompte) return { refus: 'borne-hors', borne: cfg.collection.horsCatalogueParCompte };
+        if (nouvelle) {
+            const total = tous.reduce((n, d) => n + nbCoches(d), 0);
+            if (total >= cfg.collection.clesParCompte) return { refus: 'borne-compte', borne: cfg.collection.clesParCompte };
+            if (!doc && tous.length >= cfg.collection.setsParCompte) return { refus: 'borne-sets', borne: cfg.collection.setsParCompte };
+            if (!registre && tous.reduce((n, d) => n + (d.hors ? d.hors.length : 0), 0) >= cfg.collection.horsCatalogueParCompte) return { refus: 'borne-hors', borne: cfg.collection.horsCatalogueParCompte };
+        }
+        if (montee && tous.reduce((n, d) => n + nbQuantites(d), 0) >= cfg.collection.quantitesParCompte) return { refus: 'borne-quantites', borne: cfg.collection.quantitesParCompte };
     }
     // le coût AU PIRE, en octets : un document neuf, un mot neuf, une entrée de registre (et son document), une quantité, ou une clé `hors`
     let cout = doc ? 0 : C.document(slug);
@@ -158,12 +207,16 @@ async function ajouter(a, essai = 0) {
         const now = await situation(compteId, slug, cle);                                                    // la clé a pu arriver entre-temps (même clé simultanée) : idempotent, pas un refus
         return now.qAvant === q ? { possedees: nbCoches(now.doc) } : { refus: 'borne-service', borne: cfg.collection.octetsService };
     }
-    let avant, payeRegistre = 0, p = pos;
+    let avant, payeRegistre = 0, p = pos, epoque = reg.epoque, doublon = false;
     try {
         if (registre) {
-            if (p < 0) { const r = await ajouterAuRegistre(slug, cle); p = r.pos; payeRegistre = (r.ajoute ? C.registreEntree(cle) : 0) + (r.docCree ? C.registreDocument(slug) : 0); }
-            avant = await ecrireBit(c, { compteId, slug, p, q, maintenant: a.maintenant });
-        } else avant = await ecrireHors(c, { compteId, slug, cle, q, maintenant: a.maintenant });
+            if (p < 0) { const r = await ajouterAuRegistre(slug, cle); p = r.pos; epoque = r.epoque; payeRegistre = (r.ajoute ? C.registreEntree(cle) : 0) + (r.docCree ? C.registreDocument(slug) : 0); }
+            avant = await ecrireBit(c, { compteId, slug, p, q, epoque, maintenant: a.maintenant });
+        } else {
+            avant = await ecrireHors(c, { compteId, slug, cle, q, maintenant: a.maintenant });
+            doublon = await doublonAvecBit(c, compteId, slug, cle);                                          // la course INVERSE : un autre PUT de la même clé a posé le bit (le catalogue venait de la connaître) pendant ce temps
+            if (doublon) { await retirerDeHors(c, compteId, slug, cle, a.maintenant); }
+        }
     } catch (e) {
         await rendre(reserve - payeRegistre);                                                                // rien n'a été ajouté au compte : le registre, lui, est payé
         if (e && e.code === 11000 && essai < 3) return ajouter(a, essai + 1);                                // création simultanée du même document (index unique) : on rejoue
@@ -178,7 +231,7 @@ async function ajouter(a, essai = 0) {
         reel = (avant ? 0 : C.document(slug)) + (motAbsent ? C.mot : 0) + (q >= 2 && !avait ? C.qte : 0) - (q < 2 && avait ? C.qte : 0) + payeRegistre;
     } else {
         const i = avant ? indexHors(avant.hors, cle) : -1;
-        reel = (avant ? 0 : C.document(slug)) + C.hors(cle, q) - (i >= 0 ? C.hors(cle, C.lireElementHors(avant.hors[i]).q) : 0);
+        reel = (avant ? 0 : C.document(slug)) + (doublon ? 0 : C.hors(cle, q)) - (i >= 0 ? C.hors(cle, C.lireElementHors(avant.hors[i]).q) : 0);
     }
     const delta = reserve - reel;
     if (delta > 0) await rendre(delta);
@@ -196,13 +249,13 @@ async function retirer({ compteId, slug, cle, maintenant }) {
     const c = col(NOM);
     const doc = await c.findOne({ compteId, set: slug }, { projection: PROJ, ...LECTURE });
     if (!doc) return { possedees: 0 };
+    const reg = await positionDuRegistre(slug, cle);
+    verifierBits(doc, reg, slug);                                                                           // décocher reste permis SANS catalogue, jamais sur des bits illisibles
     let rendu = 0, change = false;
     if (indexHors(doc.hors, cle) >= 0) {
-        const filtre = { compteId, set: slug, $expr: { $in: [{ $literal: cle }, { $map: { input: { $ifNull: ['$hors', []] }, in: { $arrayElemAt: [{ $split: ['$$this', '\n'] }, 0] } } }] } };
-        const avant = await c.findOneAndUpdate(filtre, [{ $set: { hors: { $filter: { input: { $ifNull: ['$hors', []] }, cond: sansCe(cle) } }, majLe: { $literal: maintenant } } }], { returnDocument: 'before', projection: { hors: 1 } });
-        if (avant) { const i = indexHors(avant.hors, cle); rendu += C.hors(cle, C.lireElementHors(avant.hors[i]).q); change = true; }
+        const retire = await retirerDeHors(c, compteId, slug, cle, maintenant);
+        if (retire) { rendu += C.hors(cle, C.lireElementHors(retire).q); change = true; }
     }
-    const reg = await positionDuRegistre(slug, cle);
     if (reg.pos >= 0) {
         const w = `mots.${Math.floor(reg.pos / 64)}`, b = reg.pos % 64;
         const avant = await c.findOneAndUpdate({ compteId, set: slug, [w]: { $bitsAllSet: [b] } }, { $bit: { [w]: { and: inverse(b) } }, $unset: { [`qte.${reg.pos}`]: '' }, $set: { majLe: maintenant } },
@@ -218,13 +271,20 @@ async function retirer({ compteId, slug, cle, maintenant }) {
     return { possedees: apres ? nbCoches(apres) : 0 };
 }
 
-/** Coche (`possedee` true, avec sa `quantite` de 1 à 99 : 1 si absente) ou décoche (false, qui efface la quantité) ; les deux sont idempotents. Rend { possedees } ou { refus: 'borne-compte'|'borne-sets'|'borne-hors'|'borne-service', borne }. */
-function cocher({ compteId, slug, cle, possedee, quantite = 1, cfg, maintenant = new Date() }) {
+/** Coche (`possedee` true, avec sa `quantite` de 1 à 99 : absente = 1 sur une clé neuve, INCHANGÉE sur une clé déjà cochée) ou décoche (false, qui efface la quantité) ; les deux sont idempotents.
+ *  Rend { possedees }, ou { refus: 'borne-compte'|'borne-sets'|'borne-hors'|'borne-quantites'|'borne-service', borne }, ou { refus: 'catalogue', reessayerDans } (aucun catalogue chargé et la clé n'est pas encore au registre :
+ *  rien n'est écrit). LÈVE RegistreIllisible quand les bits du document ne se lisent pas contre le registre. */
+function cocher({ compteId, slug, cle, possedee, quantite, cfg, maintenant = new Date() }) {
     if (!possedee) return retirer({ compteId, slug, cle, maintenant });
-    if (!Number.isInteger(quantite) || quantite < 1 || quantite > cfg.collection.quantiteMax) throw new Error('quantite');   // les routes la refusent déjà en 400 : ceci ne s'atteint pas par HTTP
+    if (quantite !== undefined && (!Number.isInteger(quantite) || quantite < 1 || quantite > cfg.collection.quantiteMax)) throw new Error('quantite');   // les routes la refusent déjà en 400 : ceci ne s'atteint pas par HTTP
     return ajouter({ compteId, slug, cle, quantite, cfg, maintenant });
 }
 
+/** Les mots d'un document, lus contre le registre de LEUR époque (LÈVE RegistreIllisible sinon). */
+async function metaDuRegistre(slug) {
+    const r = await col(REGISTRE).aggregate([{ $match: { _id: slug } }, { $project: { epoque: 1, n: { $size: '$cles' } } }]).toArray();
+    return r.length ? { existe: true, epoque: r[0].epoque, n: r[0].n } : { existe: false, epoque: null, n: 0 };
+}
 async function lireSet(compteId, slug) {
     const doc = await col(NOM).findOne({ compteId, set: slug }, { ...LECTURE });
     if (!doc) return { cles: [], quantites: {}, majLe: null };
@@ -232,17 +292,23 @@ async function lireSet(compteId, slug) {
     for (const e of doc.hors || []) { const { cle, q } = C.lireElementHors(e); toutes.set(cle, q); }
     const positions = positionsPosees(doc.mots);
     if (positions.length) {
+        verifierBits(doc, await metaDuRegistre(slug), slug);
         const reg = await col(REGISTRE).findOne({ _id: slug });
-        for (const p of positions) { const k = reg && reg.cles[p]; if (k !== undefined && !toutes.has(k)) toutes.set(k, quantiteBit(doc, p)); }
+        for (const p of positions) { const k = reg.cles[p]; if (!toutes.has(k)) toutes.set(k, quantiteBit(doc, p)); }
     }
     const cles = [...toutes.keys()].sort(), quantites = {};
     for (const k of cles) if (toutes.get(k) >= 2) quantites[k] = toutes.get(k);
     return { cles, quantites, majLe: doc.majLe };
 }
 
-/** Les sets où au moins une fiche est cochée : [{ slug, possedees, majLe }], triés par slug. */
+/** Les sets où au moins une fiche est cochée : [{ slug, possedees, majLe }], triés par slug. LÈVE RegistreIllisible si les bits d'un set ne se lisent pas : `possedees` et `lireSet` ne divergent jamais. */
 async function lireSets(compteId) {
-    const docs = await col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, majLe: 1 }, ...LECTURE }).toArray();
+    const docs = await col(NOM).find({ compteId }, { projection: { set: 1, mots: 1, hors: 1, majLe: 1, epoque: 1 }, ...LECTURE }).toArray();
+    const avecBits = docs.filter(d => nbBits(d.mots) > 0);
+    if (avecBits.length) {
+        const metas = new Map((await col(REGISTRE).aggregate([{ $match: { _id: { $in: avecBits.map(d => d.set) } } }, { $project: { epoque: 1, n: { $size: '$cles' } } }]).toArray()).map(r => [r._id, { existe: true, epoque: r.epoque, n: r.n }]));
+        for (const d of avecBits) verifierBits(d, metas.get(d.set) || { existe: false, epoque: null, n: 0 }, d.set);
+    }
     return docs.map(d => ({ slug: d.set, possedees: nbCoches(d), majLe: d.majLe })).filter(s => s.possedees > 0).sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
 }
 
@@ -258,5 +324,5 @@ async function supprimerDuCompte(compteId, cfg) {
     await rendre(rendu);
     return n;
 }
-module.exports = { NOM, REGISTRE, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser };
+module.exports = { NOM, REGISTRE, RegistreIllisible, cocher, lireSet, lireSets, totalDuCompte, supprimerDuCompte, recompter, initialiser };
 // Limite connue (M-C, relecture finale) : le recompte est ABSOLU ; avec plusieurs instances, un recompte lancé pendant que l'autre écrit peut écraser des incréments en vol (dérive basse d'au plus le nombre d'écritures en vol). Une seule instance aujourd'hui.

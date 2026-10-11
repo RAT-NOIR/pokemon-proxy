@@ -14,9 +14,10 @@ const ELEMENT = 12;
 const SUFFIXE_QUANTITE = 3;
 // le DOCUMENT d'un compte pour un set : `_id` (17), `compteId` (22), `set` (≥ 10 + octets), `majLe` (15), `mots`/`hors`/`qte` (au plus 3 sous-documents vides de 11 o), en-tête (5) ; l'entrée de l'index
 // unique (compteId, set) et celle de `_id` (≥ 30 + 12 + octets du slug) — mesuré, voir le banc. Le slug compte deux fois (donnée et index).
-const DOCUMENT_BASE = 300;
-// le DOCUMENT du registre d'un set : `_id` = le slug (index `_id` compris), l'en-tête du tableau `cles`.
-const REGISTRE_BASE = 90;
+// (+ l'`epoque` du registre recopiée dans le document : type 1 + nom 7 + longueur 4 + 16 caractères + NUL = 29 o, d'où 330 et non 300)
+const DOCUMENT_BASE = 330;
+// le DOCUMENT du registre d'un set : `_id` = le slug (index `_id` compris), l'en-tête du tableau `cles`, et son `epoque` (29 o) : 90 + 30.
+const REGISTRE_BASE = 120;
 
 const document = slug => DOCUMENT_BASE + 2 * octets(slug);
 const hors = (cle, q = 1) => ELEMENT + octets(cle) + (q >= 2 ? SUFFIXE_QUANTITE : 0);

@@ -121,6 +121,13 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             H.v('   le guide / le lien en panne : 200, cotes {}, possedees et majLe INTACTS (la route ne meurt pas)', [gp.statut, gp.json.cotes, gp.json.possedees.length, typeof gp.json.majLe], [200, {}, 2, 'string']);
             VB.vider();
             H.v('   aucune version chargée : cotes {} (l\'état « sans visuel »)', (await lireSet(sv, A, 'Set-Essai')).json.cotes, {});
+            // TOUR 1 (I2) : AUCUN catalogue chargé → une clé neuve rend 503 INDISPONIBLE (detail catalogue, reessayerDans, Retry-After) et rien ne s'écrit ; décocher, recocher une clé DÉJÀ au registre et lire restent permis
+            const n0 = await nDocs(); const sans = await put(sv, A, 'Autre-Set', '12|SWSH155 (Top Left)', true);
+            H.v('   aucun catalogue chargé : PUT d\'une clé neuve → 503 INDISPONIBLE, detail catalogue, reessayerDans et Retry-After, rien d\'écrit', [sans.statut, code(sans), detail(sans), sans.json.erreur.reessayerDans > 0 && Number(sans.entetes['retry-after']) === sans.json.erreur.reessayerDans, (await nDocs()) - n0], [503, 'INDISPONIBLE', 'catalogue', true, 0]);
+            const decSans = await put(sv, A, 'Set-Essai', '895789|001', false), recSans = await put(sv, A, 'Set-Essai', '895789|001', true), luSans = await lireSet(sv, A, 'Set-Essai');
+            H.v('   ... mais décocher et recocher une clé DÉJÀ au registre passent (200), et la lecture aussi', [decSans.statut, decSans.json.possedees, recSans.statut, recSans.json.possedees, luSans.statut, luSans.json.possedees], [200, 1, 200, 2, 200, ['895789|001', '895790|-']]);
+            // le catalogue se charge : un catalogue qui ne connaît pas les fiches des bancs (leurs clés iront dans `hors`) reste en place pour la suite
+            VB.installer([VB.doc(1)], [['Set-Hors-Essai', '1|1', [1]]]);
             await raw('guide_prix').deleteMany({});
         }
         await put(sv, A, 'Autre-Set', '12|SWSH155 (Top Left)', true);
@@ -142,7 +149,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
         H.v('   le set vidé n\'est plus listé', l2.json.sets.map(s => s.slug), ['Autre-Set']);
         const tout = JSON.stringify(await raw(NOM).find({}).toArray()) + JSON.stringify(await raw('collection_registre').find({}).toArray());
         H.v('   le document stocké ne porte que _id, compteId, set, hors, majLe (une clé hors catalogue) — jamais d\'adresse ni d\'IP ; celui d\'une clé du registre porte en plus mots', [Object.keys((await docs(A))[0]).sort(), Object.keys((await docs(A)).find(d => d.set === 'Autre-Set')).sort()], [['_id', 'compteId', 'hors', 'majLe', 'set'], ['_id', 'compteId', 'hors', 'majLe', 'set']]);
-        H.v('   le registre du set ne porte que _id et cles (les deux fiches, dans l\'ordre où le premier compte les a cochées)', [Object.keys(await raw('collection_registre').findOne({ _id: 'Set-Essai' })).sort(), (await raw('collection_registre').findOne({ _id: 'Set-Essai' })).cles], [['_id', 'cles'], ['895789|001', '895790|-']]);
+        H.v('   le registre du set ne porte que _id et cles (les deux fiches, dans l\'ordre où le premier compte les a cochées)', [Object.keys(await raw('collection_registre').findOne({ _id: 'Set-Essai' })).sort(), (await raw('collection_registre').findOne({ _id: 'Set-Essai' })).cles], [['_id', 'cles', 'epoque'], ['895789|001', '895790|-']]);
         H.vrai('   la collection ne contient ni l\'adresse, ni l\'IP, ni le jeton de session d\'un compte', !tout.includes(A.adresse) && !tout.includes('10.66.') && !tout.includes(A.token));
         // isolement par HTTP : un autre compte ne voit rien et sa écriture ne touche pas la collection du premier
         const B = await compte(); const avant = JSON.stringify(await docs(A));
@@ -237,8 +244,8 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 }
                 return [[...new Set(vus)], (await nDocs()) - n0];
             } },
-        { nom: 'quantité acceptée : 1, 2 et 99 (la clé et la quantité se relisent) ; 98 puis 99 puis 1 : la quantité suit, `quantites` ne porte que n ≥ 2', mut: [['routes.js', [['quantite: corps.quantite, cfg', 'quantite: 1, cfg']]]],
-            attendu: [[200, 200, 200, 200], { '1|001': 99 }, { '1|001': 2 }, {}, ['success', 'set', 'possedees', 'cotes', 'majLe'], [200, 1]],
+        { nom: 'quantité acceptée : 1, 2 et 99 (la clé et la quantité se relisent) ; `quantite` ABSENTE sur une clé déjà cochée laisse la quantité INCHANGÉE (tour 1, I6), `quantite: 1` explicite la remet à 1 ; `quantites` ne porte que n ≥ 2', mut: [['routes.js', [['quantite: corps.quantite, cfg', 'quantite: 1, cfg']]]],
+            attendu: [[200, 200, 200, 200], { '1|001': 99 }, { '1|001': 2 }, { '1|001': 2 }, ['success', 'set', 'possedees', 'quantites', 'cotes', 'majLe'], [200, 1], {}, ['success', 'set', 'possedees', 'cotes', 'majLe']],
             async scene({ sv }) {
                 const A = await compte(); const vus = [];
                 const q = async (quantite) => (await put(sv, A, 'Set-Q', '1|001', true, { corps: quantite === undefined ? { possedee: true } : { possedee: true, quantite } }));
@@ -247,7 +254,8 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 const a = (await lireSet(sv, A, 'Set-Q')).json.quantites;
                 await q(2); const b = (await lireSet(sv, A, 'Set-Q')).json.quantites;
                 const r1 = await q(undefined); const c = (await lireSet(sv, A, 'Set-Q')).json;
-                return [vus, a, b, c.quantites === undefined ? {} : c.quantites, Object.keys(c), [r1.statut, r1.json.possedees]];
+                await q(1); const d = (await lireSet(sv, A, 'Set-Q')).json;
+                return [vus, a, b, c.quantites === undefined ? {} : c.quantites, Object.keys(c), [r1.statut, r1.json.possedees], d.quantites === undefined ? {} : d.quantites, Object.keys(d)];
             } },
         { nom: 'limiteur : au-delà de 3 écritures par heure (réglé à 3), 429 DEBIT avec Retry-After, par compte ; la lecture n\'est pas limitée', cfg: variante({ limites: { collectionEcrituresParCompteHeure: 3 } }),
             mut: [['routes.js', [['exigerVerifie, parCompte]', 'exigerVerifie]']]]], attendu: [[200, 200, 200, 429], 'DEBIT', true, 200, 200, 3],
@@ -296,10 +304,10 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
                 return [[r.refus, r.borne], nSets, dans.possedees, !libre.refus];
             } },
         // ── I-2 : la garde de course du `deleteOne` d'un document vide. PUT false de la dernière clé EN MÊME TEMPS qu'un PUT true d'une autre clé du même set : aucune clé perdue.
-        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (60 itérations) ne perd aucune clé', mut: [['service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]]], attendu: [0],
+        { nom: 'course : retirer la dernière clé d\'un set pendant qu\'une autre y est posée (200 itérations) ne perd aucune clé', mut: [['service.js', [['{ compteId, set: slug, ...VIDE }', '{ compteId, set: slug }']]]], attendu: [0],
             async scene({ svc, cfg }) {
                 const A = await compte(), id = A.c._id; let perdues = 0;
-                for (let i = 0; i < 60; i++) {
+                for (let i = 0; i < 200; i++) {
                     const slug = `S-Course-${i}`; const a = (cle, possedee) => svc.cocher({ compteId: id, slug, cle, possedee, cfg });
                     await a('1|1', true);
                     const ops = [() => a('1|1', false), () => a('2|1', true)]; if (i % 2) ops.reverse();
@@ -341,7 +349,7 @@ const variante = o => ({ ...cfg, limites: { ...cfg.limites, ...(o.limites || {})
             H.vrai(`   ↳ copie mutée de ${rel} : la même scène donne un AUTRE résultat — la garde sait dire NON`, JSON.stringify(vu) !== JSON.stringify(g.attendu));
         }
     }
-    H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes : 70 000 clés par compte (le catalogue complet), 5 000 hors catalogue, 1 000 sets par compte ; budget du service 10 485 760 o', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.setsParCompte, cfg.collection.octetsService], [1000, 70000, 5000, 1000, 10485760]);
+    H.v('   la limite d\'écritures par défaut est de 1 000 par heure et par compte ; les bornes : 100 000 clés par compte (le catalogue complet + 45 %), 6 000 hors catalogue, 10 000 quantités, 1 000 sets par compte ; budget du service 10 485 760 o', [cfg.limites.collectionEcrituresParCompteHeure, cfg.collection.clesParCompte, cfg.collection.horsCatalogueParCompte, cfg.collection.quantitesParCompte, cfg.collection.setsParCompte, cfg.collection.octetsService], [1000, 100000, 6000, 10000, 1000, 10485760]);
 
     // ═══════════════ 4. LES BORNES PAR HTTP : le code de la liste fermée, le message qui nomme la borne ═══════════════
     {

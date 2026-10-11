@@ -2234,7 +2234,7 @@
             }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "description": "INDISPONIBLE (index manquants, base injoignable). Aussi quand les bits du set ne se lisent pas contre son registre (registre recréé ou corrompu) : jamais d'autres cartes montrées.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2321,7 +2321,7 @@
             }
           },
           "409": {
-            "description": "CONFLIT, detail `borne-compte` (70 000 fiches cochées par compte : le catalogue complet), `borne-hors` (5 000 fiches hors catalogue par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
+            "description": "CONFLIT, detail `borne-compte` (100 000 fiches cochées par compte : le catalogue complet plus 45 %), `borne-hors` (6 000 fiches hors catalogue par compte), `borne-quantites` (10 000 fiches à plus d'un exemplaire par compte), `borne-sets` (1 000 sets par compte) ou `borne-service` (budget de stockage de TOUS les comptes ensemble, en OCTETS mesurés par collStats ; valeur provisoire de 10 Mo, relevée au passage en Flex) : rien n'est écrit, rien n'est perdu.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2349,7 +2349,7 @@
             }
           },
           "503": {
-            "description": "INDISPONIBLE (index manquants, base injoignable).",
+            "description": "INDISPONIBLE (index manquants, base injoignable). Avec `detail: \"catalogue\"` : aucun catalogue de fiches n'est chargé et la clé n'est pas encore au registre du set — RIEN n'est écrit, `reessayerDans` (et `Retry-After`) en secondes ; décocher, recocher une clé déjà au registre et lire restent permis. Aussi quand les bits du set ne se lisent pas contre son registre (registre recréé : jamais d'autres cartes montrées).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4006,7 +4006,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 70000
+            "maxItems": 100000
           },
           "quantites": {
             "type": "object",

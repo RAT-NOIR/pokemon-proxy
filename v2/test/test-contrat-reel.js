@@ -605,6 +605,10 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         VB.installer([VB.doc(1)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]]]);
         const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, horsCatalogueParCompte: 2, clesParCompte: 3, setsParCompte: 10 } };
         const svC = await monter(cfgC), U = svC.url;
+        // TOUR 1 (I2) : aucun catalogue chargé → une clé neuve rend 503 INDISPONIBLE (detail catalogue, reessayerDans, Retry-After) ; le catalogue se charge ensuite
+        etatMem.vider(); const cS = await compte();
+        await jouer(U, 'PUT /api/collection/sets/{slug}/fiches/{cle}', 'aucun catalogue chargé (INDISPONIBLE, detail catalogue)', 503, '/api/collection/sets/Banc-Set/fiches/' + encodeURIComponent('895789|001'), { corps: { possedee: true }, entetes: siteH(cS.cookie) });
+        VB.installer([VB.doc(1)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]]]);
         const ch = (slug, cle) => `/api/collection/sets/${encodeURIComponent(slug)}/fiches/${encodeURIComponent(cle)}`;
         const R_PUT = 'PUT /api/collection/sets/{slug}/fiches/{cle}', R_SET = 'GET /api/collection/sets/{slug}', R_LISTE = 'GET /api/collection';
         const c1 = await compte();
