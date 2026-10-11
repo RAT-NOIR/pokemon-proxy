@@ -600,8 +600,15 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
     }
     // « Ma collection » (lot COLLECTION) : chaque statut documenté des trois routes, sur un montage aux bornes et au limiteur RÉDUITS (2 clés par set, 3 par compte, 5 écritures par heure) pour les atteindre sans milliers de requêtes
     {
-        const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, clesParSet: 2, clesParCompte: 3, setsParCompte: 10 } };
+        // COLLECTION-COMPACTE : le catalogue EN MÉMOIRE connaît S1 (1|1, 2|1) et S2 (3|1, 4|1) : leurs clés entrent au REGISTRE ; celles de « Banc-Set » n'y sont pas : elles vont dans `hors` (2 au plus ici)
+        const etatMem = require('../chargeur/etat'), versionAvant = etatMem.version();
+        VB.installer([VB.doc(1)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]]]);
+        const cfgC = { ...cfg, limites: { ...cfg.limites, collectionEcrituresParCompteHeure: 5 }, collection: { ...cfg.collection, horsCatalogueParCompte: 2, clesParCompte: 3, setsParCompte: 10 } };
         const svC = await monter(cfgC), U = svC.url;
+        // TOUR 1 (I2) : aucun catalogue chargé → une clé neuve rend 503 INDISPONIBLE (detail catalogue, reessayerDans, Retry-After) ; le catalogue se charge ensuite
+        etatMem.vider(); const cS = await compte();
+        await jouer(U, 'PUT /api/collection/sets/{slug}/fiches/{cle}', 'aucun catalogue chargé (INDISPONIBLE, detail catalogue)', 503, '/api/collection/sets/Banc-Set/fiches/' + encodeURIComponent('895789|001'), { corps: { possedee: true }, entetes: siteH(cS.cookie) });
+        VB.installer([VB.doc(1)], [['S1', '1|1', [1]], ['S1', '2|1', [1]], ['S2', '3|1', [1]], ['S2', '4|1', [1]]]);
         const ch = (slug, cle) => `/api/collection/sets/${encodeURIComponent(slug)}/fiches/${encodeURIComponent(cle)}`;
         const R_PUT = 'PUT /api/collection/sets/{slug}/fiches/{cle}', R_SET = 'GET /api/collection/sets/{slug}', R_LISTE = 'GET /api/collection';
         const c1 = await compte();
@@ -609,7 +616,7 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(U, R_SET, 'set jamais touché (possedees [], majLe null)', 200, '/api/collection/sets/Banc-Set', { entetes: siteH(c1.cookie) });
         await jouer(U, R_PUT, 'cocher une fiche', 200, ch('Banc-Set', '895789|001'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
         await jouer(U, R_PUT, 'cocher une fiche sans numéro (« - »)', 200, ch('Banc-Set', '895790|-'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
-        await jouer(U, R_PUT, 'set plein (borne par set, CONFLIT borne-set)', 409, ch('Banc-Set', '895791|001'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
+        await jouer(U, R_PUT, 'clés hors catalogue pleines (CONFLIT borne-hors)', 409, ch('Banc-Set', '895791|001'), { corps: { possedee: true }, entetes: siteH(c1.cookie) });
         await jouer(U, R_LISTE, 'compte avec un set coché', 200, '/api/collection', { entetes: siteH(c1.cookie) });
         await jouer(U, R_SET, 'set coché (deux clés, cotes {})', 200, '/api/collection/sets/Banc-Set', { entetes: siteH(c1.cookie) });
         const c2 = await compte();
@@ -631,7 +638,18 @@ async function claimEnCours(porteur, routeIdem, valeur, corps) {
         await jouer(U, R_PUT, 'sans Origin du site (ORIGINE)', 403, ch('S1', '1|1'), { corps: { possedee: true }, entetes: { cookie: c4.cookie, ...ip() } });
         const cnv = await compte({ verifie: false });
         await jouer(U, R_PUT, 'compte non vérifié (O3 : plus un porteur)', 401, ch('S1', '1|1'), { corps: { possedee: true }, entetes: siteH(cnv.cookie) });
+        // COLLECTION-COMPACTE : la quantité facultative des doubles, et le budget du service (CONFLIT borne-service) à un montage au plafond d'octets
+        const c5 = await compte();
+        await jouer(U, R_PUT, 'cocher avec une quantité (doubles)', 200, ch('S1', '2|1'), { corps: { possedee: true, quantite: 3 }, entetes: siteH(c5.cookie) });
+        await jouer(U, R_SET, 'set avec une quantité ≥ 2 (`quantites`)', 200, '/api/collection/sets/S1', { entetes: siteH(c5.cookie) });
+        await jouer(U, R_PUT, 'quantité hors 1…99 (ENTREE quantite)', 400, ch('S1', '2|1'), { corps: { possedee: true, quantite: 100 }, entetes: siteH(c5.cookie) });
         await svC.fermer();
+        const baseOctets = await require('../collection/service').recompter(cfg);
+        const svB = await monter({ ...cfgC, limites: { ...cfgC.limites, collectionEcrituresParCompteHeure: 50 }, collection: { ...cfgC.collection, octetsService: baseOctets } });
+        const c6 = await compte();
+        await jouer(svB.url, R_PUT, 'budget du service atteint (CONFLIT borne-service)', 409, ch('S1', '4|1'), { corps: { possedee: true }, entetes: siteH(c6.cookie) });
+        await svB.fermer();
+        if (versionAvant) etatMem.installer(versionAvant); else etatMem.vider();
     }
     // le banc réel (routes publiées au tour 1) et le paiement (route servie, NON publiée : « publiée quand implémentée »)
     {

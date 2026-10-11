@@ -7,7 +7,8 @@
 //   · slug : lettres, chiffres, « - », et « / » (les codes de set comme `S-P/ID`) ; 80 caractères au plus ; ni début ni fin sur « - » ou « / », jamais « // ».
 const CARACTERES_NUMERO = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ().!?-';
 const NUMERO = /^[A-Za-z0-9().!?-](?:[A-Za-z0-9 ().!?-]{0,30}[A-Za-z0-9().!?-])?$/;
-const CLE = /^([1-9][0-9]{0,11})\|(.+)$/s;
+// idInterne : un entier sans zéro de tête, 12 chiffres au plus, NÉGATIF pour une fiche simple (`_id < 0` de la carte : 1 512 le 2026-10-11, ruling 8 bis) — jamais « -0 », jamais « + ».
+const CLE = /^(-?[1-9][0-9]{0,11})\|(.+)$/s;
 const SLUG = /^[A-Za-z0-9](?:[A-Za-z0-9/-]{0,78}[A-Za-z0-9])?$/;
 
 const cleValide = c => {
