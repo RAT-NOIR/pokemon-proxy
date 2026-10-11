@@ -64,7 +64,7 @@ const compteur = async () => (await raw(CPT).findOne({ cle: CLE_CPT })).n;
         const attendu = [['12|003', '10|001', '11|002'], ['10|001', '11|002', '12|003'], ['12|003', '10|001', '11|002'], 5, ['10|001', '11|002', '12|003', '13|004'], ['90|001']];
         H.v('1. position STABLE : deux versions de catalogue l\'une après l\'autre (fiches ajoutées devant, une retirée) — la lecture rend exactement les mêmes clés, aucune case ne bouge', await scene(svc), attendu);
         // mutant : la position vient de l'ORDRE DU CATALOGUE (indice dans fichesDuSet) au lieu du registre
-        const mut = charger('service.js', [['const p = await positionDuRegistre(slug, cle);\n    if (p.pos < 0) throw', 'const p = { pos: (require(\'../chargeur/etat\').version().fichesDuSet(slug).findIndex(f => f.cle === cle)) };\n    if (p.pos < 0) throw']]);
+        const mut = charger('service.js', [['const p = await positionDuRegistre(slug, cle);', 'const p = { pos: (require(\'../chargeur/etat\').version().fichesDuSet(slug).findIndex(f => f.cle === cle)) };']]);
         let vu; try { vu = await scene(mut); } catch (e) { vu = `exception ${(e && e.name) || 'erreur'}`; }
         H.vrai('   ↳ copie mutée (la position vient de l\'ordre du catalogue) : la même scène donne un AUTRE résultat — la garde sait dire NON', JSON.stringify(vu) !== JSON.stringify(attendu));
     }
