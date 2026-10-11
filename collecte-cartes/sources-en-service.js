@@ -9,7 +9,9 @@
 // Rouvrir Bulbapedia = l'ajouter ici, dans un commit qui dit pourquoi : la décision a une seule adresse.
 // ➕ 2026-10-07 (soir) — LES SOURCES OFFICIELLES TPC, sur décision de l'éditeur : TPC Asie et pokemon-card.com (impression exacte,
 // rien de protégé, robots.txt respecté, cadence lente, arrêt au premier blocage — collecte-cartes/tpc.js). TPC Chine reste fermé.
-const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex', 'tpc-asie', 'pokemon-card-com']));
+// ➕ 2026-10-11 — PIKAQIAN, sur décision du testeur (basse priorité, à ses risques, retirable en un lot — collecte-cartes/pikaqian.js). Elle est EN SERVICE pour le
+// worker, mais l'alimentateur n'en insère AUCUNE unité (zh-hans reste « sans source légale » pour lui) : ses unités viennent de enfiler-pikaqian.js.
+const SOURCES_EN_SERVICE = Object.freeze(new Set(['artofpkm', 'tcgdex', 'tpc-asie', 'pokemon-card-com', 'pikaqian']));
 const SOURCES_SUSPENDUES = Object.freeze({ bulbapedia: 'suspendu depuis le 2026-10-04 (403 Cloudflare, défi anti-robot) : plus aucune requête' });
 const enService = source => SOURCES_EN_SERVICE.has(source);
 module.exports = { SOURCES_EN_SERVICE, SOURCES_SUSPENDUES, enService };
