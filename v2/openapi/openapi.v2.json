@@ -4548,7 +4548,8 @@
           "carte": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 99
+            "maximum": 99,
+            "description": "Plafond absolu (100 - 1). La valeur réelle dérive de V2_LOT_CARTES_MAX (taille d'un lot, 20 par défaut) : indice de 0 à taille - 1."
           },
           "idProduct": {
             "type": "integer",

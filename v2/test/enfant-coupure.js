@@ -34,7 +34,7 @@ const mort = () => { try { require('fs').writeSync(1, `COUPURE=${process.env.COU
     const express = require('express');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index'); const pret = require('../pret'); const M = require('../modeles');
     const { lireConfig } = require('../config');
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: '100' });   // comme test-coupure-processus.js : lots de 25 cartes
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_HEBDO: '0', V2_LOT_CARTES_MAX: process.env.COUPURE_CARTES_MAX || '100' });   // 100 par défaut du banc (lots de 25 cartes) ; COUPURE_CARTES_MAX='20' joue la taille PAR DÉFAUT du serveur
     const PID = Number(process.env.COUPURE_PID);
     const carteCorps = { idProduct: PID, nomProduit: 'Tropius', nom: 'Tropius', numero: '001', total: '064', setCode: 'PBL', rarete: null, langue: 'FR', ambigu: false };
     const aff = { statutHttp: 200, corps: { success: true, question: null, carte: carteCorps, etat: { estimeIA: null, confianceIA: null, defautsVus: [], declareVendeur: null, declareCardmarket: null, retenu: null },

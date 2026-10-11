@@ -166,10 +166,12 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
     if (!scanId) { console.error('❌ [v2 rembourser] scanId absent : la clé rb|… serait commune à tous les scans — refusé'); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     let cle = `rb|${scanId}`;
     const jour = (jourDe instanceof Date && !Number.isNaN(jourDe.getTime()) ? jourDe : maintenant).toISOString().slice(0, 10);
-    // Quatre compteurs, un par nature de remboursement (jour UTC, par porteur) : `panne` (défaut, tout compteur inconnu), `question`, et les deux PROPRES du lot PLAFONDS — `sans-prix`
+    // Quatre compteurs, un par nature de remboursement (jour UTC, par porteur) : `panne` (défaut quand aucun n'est nommé), `question`, et les deux PROPRES du lot PLAFONDS — `sans-prix`
     // (« prix illisible, définitif » déclaré par le client) et `lot-trop-grand` (refus d'un lot trop grand ou impayable). Le plafond se lit dans la configuration, jamais en dur.
     const COMPTEURS = { panne: cfg.plafonds.panne, question: cfg.plafonds.question, 'sans-prix': cfg.plafonds.sansPrix, 'lot-trop-grand': cfg.plafonds.lotTropGrand };
-    const type = Object.hasOwn(COMPTEURS, compteur) ? compteur : 'panne', plafond = COMPTEURS[type], porteurCle = `${porteur.type}:${porteur.id}`;
+    // Une garde s'écrit par ce qu'elle AUTORISE : un compteur qui n'est pas dans la table est REFUSÉ (jamais rabattu sur `panne`, qui imputerait en silence une faute de frappe)
+    if (!Object.hasOwn(COMPTEURS, compteur)) { console.error(`❌ [v2 rembourser] compteur inconnu (${typeof compteur === 'string' ? compteur.slice(0, 30) : typeof compteur}) : refusé`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
+    const type = compteur, plafond = COMPTEURS[type], porteurCle = `${porteur.type}:${porteur.id}`;
     // « ne rend jamais plus que ce qui a été pris » : on juge sur les DÉBITS enregistrés pour ce scan et CE porteur, jamais sur un objet `credit` présenté par l'appelant
     let pendantes;
     try {

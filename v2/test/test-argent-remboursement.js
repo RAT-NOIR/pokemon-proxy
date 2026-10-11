@@ -182,5 +182,12 @@ const plaf = async(p, jour, type) => (await db.col('plafonds').findOne({ porteur
     const pb = await Lg.rembourserLot(p18, [u18a.credit], 'introuvable', { scanId: 'pp', maintenant: t }, cfgH1);
     H.v('   la même semaine ISO que le débit : l\'unité restée débitée est rendue (pas deja-rembourse)', [pb.rendu, pb.unites, pb.raisonNonRembourse], [true, 1, null]);
     H.v('   plus aucun débit ouvert', await db.col('mouvements').countDocuments({ compteId: p18.id, type: 'debit', scanId: 'pp', etat: { $ne: 'rembourse' } }), 0);
+    // 19. une garde s'écrit par ce qu'elle AUTORISE : un compteur inconnu est REFUSÉ (jamais rabattu sur « panne »), le crédit reste débité, aucun compteur n'est touché
+    const p19 = await compte({ solde: { accueil: 0, achete: 5 } }); const cr19 = await prendre(p19, 'cinc');
+    const e19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: 'sans_prix', maintenant: t }, cfg);
+    H.v('19. compteur inconnu (« sans_prix », faute de frappe) : refusé { rendu:false, erreur }, crédit resté débité (4), aucun compteur de plafond créé, aucun claim',
+        [e19, (await lire(p19)).solde.achete, await db.col('plafonds').countDocuments({ porteur: `compte:${p19.id}` }), await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|cinc' })], [{ rendu: false, raisonNonRembourse: 'erreur' }, 4, 0, 0]);
+    const n19 = await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', compteur: null, maintenant: t }, cfg);
+    H.v('    compteur null : refusé aussi ; le défaut (sans compteur) reste « panne »', [n19.rendu, (await Lg.rembourser(p19, cr19, 'ia-echec', { scanId: 'cinc', maintenant: t }, cfg)).rendu, (await plaf(p19, '2026-10-08', 'panne')).count], [false, true, 1]);
     await H.fermerBac(); H.bilan();
 })().catch(e => { console.error('❌', e); process.exit(1); });

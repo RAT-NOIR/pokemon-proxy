@@ -75,6 +75,8 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         }
         H.v('C4. valeurs invalides (texte, négatif, décimal, espaces ; cartesMax 1 et 0 sous le minimum 2) : configuration invalide (10 sur 10)', rejets.filter(Boolean).length, 10);
         H.v('C5. V2_LOT_CARTES_MAX=2 est le minimum accepté', lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '2' }).lot.cartesMax, 2);
+        let haut = null; try { lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '101' }); } catch (x) { haut = x.message; }
+        H.v('C6. borne haute : 100 (l\'ancien plafond dur) accepté, 101 = configuration invalide', [lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '100' }).lot.cartesMax, /configuration invalide/.test(haut || '')], [100, true]);
     }
 
     await H.ouvrirBancV2();
@@ -237,6 +239,14 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
         const k2 = cle(); const p1 = await poster(svLot.url, y.jeton, corps(), k2); const p2 = await poster(svLot.url, y.jeton, corps(), k2);
         H.v('R4b. refus facturé rejoué avec sa clé : 1re réponse facturée (debite 1), le rejeu = DEBIT 429 sans effet ; compteur 10, UN seul débit, achete 29',
             [p1.statut, p1.json.facturation.debite, p2.statut, p2.json.erreur.code, await compteur(pky, 'lot-trop-grand'), (await lignes(y.c._id)).length, (await solde(y.c)).achete], [400, 1, 429, 'DEBIT', 10, 1, 29]);
+        // (c) un refus RENDU n'est pas figé (une réponse >= 300 n'est jamais rejouée) : la même clé rejouée est une NOUVELLE tentative payée (I2) = un NOUVEAU refus compté, borné par le plafond
+        const z = await compteLie({ accueil: 0, achete: 30 }); const pkz = `compte:${z.c._id}`; lot(nAff(21)); const k3 = cle();
+        const q1 = await poster(svLot.url, z.jeton, corps(), k3), q2 = await poster(svLot.url, z.jeton, corps(), k3);
+        H.v('R4c. même clé rejouée après un refus RENDU : 2 réponses 400 rendues (pas de DEBIT figé), 2 refus comptés, 2 débits rendus, solde intact (30)',
+            [q1.statut, q2.statut, q1.json.facturation.rembourse, q2.json.facturation.rembourse, await compteur(pkz, 'lot-trop-grand'), (await lignes(z.c._id)).length, (await solde(z.c)).achete], [400, 400, true, true, 2, 2, 30]);
+        await raw('plafonds').updateOne({ porteur: pkz, jour: jourUTC(), type: 'lot-trop-grand' }, { $set: { count: cfg.plafonds.lotTropGrand } });
+        const q3 = await poster(svLot.url, z.jeton, corps(), k3);
+        H.v('    plafond atteint : la même clé rejouée encore = facturée (debite 1), le compteur ne dépasse pas 10', [q3.statut, q3.json.facturation.debite, q3.json.facturation.rembourse, await compteur(pkz, 'lot-trop-grand')], [400, 1, false, 10]);
         lot(nAff(21));
     }
     {   // administrateur : le plafond de taille s'applique, rien n'est payé ni compté
@@ -257,6 +267,15 @@ const capter = async f => { const lignes = []; const e = console.error, w = cons
             await repondre(sv30.url, y.jeton, { scanId: inconnu, carte: 29, choix: 'a' }), await repondre(sv30.url, y.jeton, { scanId: inconnu, carte: 30, choix: 'a' })];
         await sv30.fermer(); await (await monter(cfg, {})).fermer();
         H.v('    avec V2_LOT_CARTES_MAX=30 : les deux routes suivent (29 acceptée, 30 refusée)', b.map(r => r.statut), [404, 400, 404, 400]);
+        // /api/banc/correction (v2/banc/routes.js) : même source. La carte est jugée AVANT la recherche du scan : 400 « carte » ou 404 « scan introuvable »
+        const { resoudrePorteur, exigerInstallation } = require('../porteur'); const { traiterCorrection } = require('../banc/routes');
+        const montercorr = async c => { const app = express(); app.use(express.json()); app.post('/api/banc/correction', resoudrePorteur(c), exigerInstallation, traiterCorrection(c, { corriger: async () => { } })); return H.serveur(app); };
+        const corr = (sv, n) => H.appel(sv.url, '/api/banc/correction', { methode: 'POST', corps: { scanId: inconnu, carte: n, idProduct: P }, entetes: entetes(x.jeton) });
+        const svC = await montercorr(cfg); const svC30 = await montercorr(lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '30' }));
+        const cc = [await corr(svC, 19), await corr(svC, 20), await corr(svC30, 29), await corr(svC30, 30)].map(r => [r.statut, r.json.erreur && r.json.erreur.detail]);
+        await svC.fermer(); await svC30.fermer();
+        H.v('    /api/banc/correction : taille - 1 acceptée (404 scan inconnu), taille refusée (400 carte) — par défaut (19/20) et avec V2_LOT_CARTES_MAX=30 (29/30)', cc, [[404, undefined], [400, 'carte'], [404, undefined], [400, 'carte']]);
+        H.vrai('    plus de « 99 » en dur dans v2/banc/routes.js', !/<=\s*99\b/.test(fs.readFileSync(path.join(__dirname, '..', 'banc', 'routes.js'), 'utf8')));
         const mod = require('../identifier/cartes-par-scan');
         H.v('    une seule source : cartes-par-scan.js n\'exporte plus de constante numérique, il dérive de cfg.lot.cartesMax', [typeof mod.CARTES_PAR_SCAN_MAX, typeof mod.cartesParScanMax, mod.cartesParScanMax && mod.cartesParScanMax(cfg), mod.cartesParScanMax && mod.cartesParScanMax(lireConfig({ ...BASE, V2_LOT_CARTES_MAX: '7' }))], ['undefined', 'function', 20, 7]);
         const src = n => fs.readFileSync(path.join(__dirname, '..', 'identifier', n), 'utf8');

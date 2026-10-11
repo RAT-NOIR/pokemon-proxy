@@ -84,6 +84,34 @@ async function jusqua(f, delaiMs = 40000) { const t0 = Date.now(); for (;;) { co
         } finally { await c.arreter(); }
     }
 
+    // ═══════════ 0 bis. TAILLE PAR DÉFAUT (20) : le contrôle, un refus de taille, et une coupure en pleine lecture rattrapée par la passe (plafonds PLAFONDS : la passe ne les compte pas)
+    {
+        const D = { COUPURE_CARTES_MAX: '20' };
+        const x = await instal(1, 5); const c = await lancer('normal', { ...D, COUPURE_CARTES: '20' });
+        try {
+            const r = await poster(c.url, x.jeton, cle());
+            const ok = await jusqua(async () => { const m = await marqueDe(x); return m && m.etat === 'livre'; });
+            H.v('0 bis. taille par défaut, lot de 20 : 200, 2 crédits (essai 0, acheté 4), marque livre, réconciliation propre', [r.statut, await poche(x), Boolean(ok), (await R.reconcilier(x.p, cfg)).propre], [200, [0, 4], true, true]);
+        } finally { await c.arreter(); }
+        const y = await instal(1, 5); const c21 = await lancer('normal', { ...D, COUPURE_CARTES: '21' });
+        try {
+            const r = await poster(c21.url, y.jeton, cle());
+            const ok = await jusqua(async () => { const m = await marqueDe(y); return m && m.etat === 'livre'; });
+            H.v('    taille par défaut, lot de 21 : REFUSÉ 400 lot-trop-grand-taille, crédit rendu (essai 1, acheté 5), somme(delta) 0, marque livre, réconciliation propre',
+                [r.statut, r.json.erreur && r.json.erreur.detail, await poche(y), await delta(y), Boolean(ok), (await R.reconcilier(y.p, cfg)).propre], [400, 'lot-trop-grand-taille', [1, 5], 0, true, true]);
+        } finally { await c21.arreter(); }
+        const z = await instal(1, 5), k = cle(); const m1 = await lancer('a', { ...D, COUPURE_CARTES: '20' });
+        try { await poster(m1.url, z.jeton, k); } catch { /* l'enfant meurt en pleine lecture */ }
+        await m1.fin; await vieillir(z);
+        const passe = await lancer('normal', { ...D, COUPURE_DIFFERE_MS: '0' });
+        try {
+            const fait = await jusquaFin(z); await attendre(500);
+            const plaf = await db.col('plafonds').find({ porteur: `installation:${z.i._id}` }).toArray();
+            H.v('    taille par défaut, mort en pleine lecture d\'un lot de 20 : la passe rend le scan (essai 1, acheté 5, marque rendu), somme(delta) 0, AUCUN plafond (sans-prix, lot-trop-grand, panne, question) consommé',
+                [await poche(z), fait && fait.etat, await delta(z), plaf.reduce((t, p) => t + p.count, 0)], [[1, 5], 'rendu', 0, 0]);
+        } finally { await passe.arreter(); }
+    }
+
     // ═══════════ SCÉNARIO (a) : coupure PENDANT LA LECTURE (après le débit initial)
     {
         const x = await instal(1, 5), k = cle();
