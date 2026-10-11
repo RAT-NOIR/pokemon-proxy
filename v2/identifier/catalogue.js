@@ -1,8 +1,8 @@
 'use strict';
 // B1b.3 — la lecture du catalogue de l'API : les LIGNES (ProduitSource) que construireProduit/l'adaptateur attendent, pour une liste d'idProduct.
-// 🔑 L'API ne lit JAMAIS la base `cartes` (ruling de B1b.4, autre grappe) : LISTE FERMÉE de quatre collections, toutes dans la base de l'API —
-//    `numeros_cartes` (numéro, code et slug de set, nom français), `catalogue_produits` (nom Cardmarket, métacarte), `guide_prix` (prix daté),
-//    `visuels` (fichiers servis, importés par v2/migrations/importer-visuels.js ; lus par visuels.js). Une autre collection est refusée AVANT la lecture.
+// 🔑 Aucune lecture de la base `cartes` ici : LISTE FERMÉE de trois collections, toutes dans la base de l'API —
+//    `numeros_cartes` (numéro, code et slug de set, nom français), `catalogue_produits` (nom Cardmarket, métacarte), `guide_prix` (prix daté).
+//    Les visuels et les impressions viennent de la version EN MÉMOIRE du chargeur (visuels.js, `entree`) : plus de collection `visuels`. Une autre collection est refusée AVANT la lecture.
 // Écrit par ce qu'il AUTORISE : un produit n'entre dans la table que s'il a un nom Cardmarket ET un set nommable ; sinon il en est ABSENT, et l'adaptateur
 // refuse alors d'affirmer (panne SERVEUR remboursée) — on n'invente ni un nom ni un set. Une lecture qui ÉCHOUE lève : l'appelant en fait une panne
 // INDISPONIBLE (jamais un « introuvable »).
@@ -11,7 +11,7 @@ const { lireConfig } = require('../config');
 const { creerVisuels } = require('./visuels');
 const { VARIANTES } = require('./produit');
 
-const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix', 'visuels']);
+const COLLECTIONS_LUES = Object.freeze(['numeros_cartes', 'catalogue_produits', 'guide_prix']);
 function colLue(nom) {
     if (!COLLECTIONS_LUES.includes(nom)) throw new Error(`catalogue.js : la collection "${nom}" n'est pas lisible (liste fermée : ${COLLECTIONS_LUES.join(', ')}) — l'API ne lit jamais la base cartes`);
     return db.col(nom);
@@ -29,17 +29,18 @@ function creerCatalogue(opts = {}) {
         const table = new Map();
         if (!ids.length) return table;
         const filtre = { idProduct: { $in: ids } };
-        const [cats, nums, guides, vis] = await Promise.all(['catalogue_produits', 'numeros_cartes', 'guide_prix', 'visuels'].map(n => colLue(n).find(filtre).toArray()));
+        const [cats, nums, guides] = await Promise.all(['catalogue_produits', 'numeros_cartes', 'guide_prix'].map(n => colLue(n).find(filtre).toArray()));
         const parId = l => new Map(l.map(d => [d.idProduct, d]));
-        const C = parId(cats), N = parId(nums), G = parId(guides), V = parId(vis);
+        const C = parId(cats), N = parId(nums), G = parId(guides);
+        const vis = visuels.instantane ? visuels.instantane() : visuels;                  // UNE version pour toute la requête : jamais un visuel d'une version et une impression d'une autre
         for (const id of ids) {
-            const c = C.get(id), n = N.get(id) || {}, v = V.get(id) || {};
+            const c = C.get(id), n = N.get(id) || {}, v = (vis.entree && vis.entree(id)) || {};     // le visuel et l'impression : la version EN MÉMOIRE du chargeur
             const nom = c && texte(c.name);
             const slug = texte(n.slugSet) || texte(n.codeSet);
             if (!nom || !slug) continue;
             const g = G.get(id);
-            const visuel = await visuels.resoudre(id);
-            const impressions = Number.isInteger(c.idMetacard) ? await visuels.impressions(c.idMetacard) : [];
+            const visuel = await vis.resoudre(id);
+            const impressions = Number.isInteger(c.idMetacard) ? await vis.impressions(c.idMetacard) : [];
             table.set(id, {
                 idProduct: id, nomCardmarket: nom, nomFr: texte(n.nomFr),
                 set: { slug, nom: texte(v.setNom) || lisible(slug), code: texte(n.codeSet), tirage: null, annee: null, symbole: null },

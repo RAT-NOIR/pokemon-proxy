@@ -100,6 +100,7 @@ module.exports = {
         // O5 : la passe de rattrapage des scans dont la réponse n'est jamais partie — une passe différée au démarrage, puis toutes les 5 min (≤ le seuil de 15 min). `deps.rattrapage` ne règle que
         // les DÉLAIS (les bancs de coupure) : aucune panne n'est injectable par là.
         require('../argent/marque-scan').demarrerRattrapage({ ...(deps && deps.rattrapage && typeof deps.rattrapage === 'object' ? { differeMs: deps.rattrapage.differeMs, intervalleMs: deps.rattrapage.intervalleMs } : {}) });
+        require('../chargeur/montage').demarrerPourConfig(cfg);        // COTES-VISUELS : ne lit RIEN ici (premier chargement différé) ; en banc : aucun réseau
     },
     balayerQuestionsUneFois, demarrerBalayage, arreterBalayage, purgerAnnoncesUneFois, demarrerPurge, arreterPurge
 };

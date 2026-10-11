@@ -11,7 +11,7 @@
 //     est réellement retirée, quand un document vidé est supprimé (son forfait) et à la suppression d'un compte (ses clés et les forfaits de tous ses documents). Toute dérive possible
 //     (arrêt entre `$inc` et l'écriture) va vers le HAUT, donc vers la fermeture ; le compteur est RECOMPTÉ depuis les données réelles (clés + documents × forfait) au montage du lot.
 //     Plusieurs instances : un recompte lancé pendant que l'autre écrit peut sous-compter quelques écritures en vol ; le prochain recompte le corrige.
-// Le serveur ne peut pas savoir si une clé désigne une fiche réelle (l'API ne lit jamais la base `cartes`) : la forme est jugée à la porte (forme.js), jamais ici.
+// Le stockage ne juge pas si une clé désigne une fiche réelle (le lien fiche → produits n'existe qu'en mémoire, après le démarrage — v2/chargeur) : la forme est jugée à la porte (forme.js), jamais ici.
 const { col } = require('../db');
 const NOM = 'collection_fiches', COMPTEURS = 'compteurs', CLE_TOTAL = 'collection-cles';
 const SOUS_LA_BORNE = cfg => ({ [`cles.${cfg.collection.clesParSet - 1}`]: { $exists: false } });

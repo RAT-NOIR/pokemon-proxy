@@ -31,14 +31,16 @@ const consentement = () => ({ version: cfg.banc.versionsTexte[0], le: new Date()
     const sharp = require('sharp');
     const JPEG = await sharp(crypto.randomBytes(24 * 24 * 3), { raw: { width: 24, height: 24, channels: 3 } }).jpeg().toBuffer();
     const CARTE = await sharp({ create: { width: 640, height: 894, channels: 3, background: { r: 30, g: 120, b: 60 } } }).jpeg().toBuffer();
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    const VB = require('./_visuels-banc'); const VIS = [];
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     for (const [id, variante, trend] of [[ID_A, 'normale', 1.0], [ID_B, 'reverse', 2.5]]) {
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
         await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: 0.5, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
-        await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+        VIS.push(VB.doc(id, { variante }));
     }
+    VB.installer(VIS);                                       // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
 
     // ── le banc réel, avec un stockage dont CHAQUE commande est comptée (verifierBucket n'est pas une commande de données)
     const { creerBanc } = require('../banc/routes'); const { creerStockageMemoire } = require('../banc/stockage');

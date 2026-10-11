@@ -27,8 +27,6 @@ const INDEX = Object.freeze([
     // B6.4 : PAS de TTL sur banc_lignes. La purge (v2/banc/purge.js) est le SEUL effaceur : Mongo supprimerait la ligne avant que la purge ait effacé son objet R2
     // (objets d'abord, lignes ensuite) et l'objet resterait orphelin, hors rétention. Un index simple sur expireLe sert la requête de la purge.
     I('banc_lignes', 'banc_jeton', { jetonEmpreinte: 1 }), I('banc_lignes', 'banc_lignes_expire', { expireLe: 1 }),
-    I('visuels', 'visuels_produit', { idProduct: 1 }, { unique: true }),
-    I('visuels', 'visuels_metacarte', { idMetacard: 1 }),                 // B1b.4 : les impressions d'une métacarte se lisent dans `visuels`, jamais par balayage
     I('taux', 'taux_cle', { devise: 1, date: 1 }, { unique: true }),
     // lot B2 : HMAC de l'emailCle d'un compte qui a reçu ses offertes, conservé après la suppression du compte
     I('adresses_octroyees', 'adresses_empreinte', { empreinte: 1 }, { unique: true }), TTL('adresses_octroyees'),

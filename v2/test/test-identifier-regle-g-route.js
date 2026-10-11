@@ -39,8 +39,9 @@ const semerProduit = async id => {
     await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 });
     await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte' });
     await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
-    await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante: 'normale', setNom: 'Banc Set', lien: null });
+    VIS.push(VB.doc(id));
 };
+const VB = require('./_visuels-banc'); const VIS = [];
 
 // ── les fixtures du labo : une ligne qui AFFIRME et une qui pose une QUESTION, trouvées par l'enveloppe elle-même
 function chargerFixtures() {
@@ -76,9 +77,10 @@ function chargerFixtures() {
     await connecterMongo({ script: 'test-identifier-regle-g-route.js', ecrit: true });
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     for (const id of new Set([ID_A, ID_B, P, ...Q])) await semerProduit(id);
+    VB.installer(VIS);                                                  // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
 
     const express = require('express'); const pret = require('../pret'); const registre = require('../registre');
     const { dansUnScan } = require('../../sources');

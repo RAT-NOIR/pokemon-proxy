@@ -29,8 +29,9 @@ const semer = async (id, trend) => {
     await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990200 + (id % 1000) });
     await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Lot', source: 'cardmarket', certitude: 'exacte' });
     if (trend !== undefined) await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: trend / 2, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
-    await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990200 + (id % 1000), numero: '001', rarete: 'Common', total: '064', variante: 'normale', setNom: 'Banc Lot', lien: null });
+    VIS.push(VB.doc(id, { idMetacard: 990200 + (id % 1000), setNom: 'Banc Lot' }));
 };
+const VB = require('./_visuels-banc'); const VIS = [];
 const P5 = 910001, P20A = 910002, PNOG = 910003, P20B = 910004, P1 = 910005, POOL = Array.from({ length: 40 }, (_, i) => 910100 + i);
 
 // ── résultats FABRIQUÉS du crochet (forme de la chaîne héritée : { statutHttp, corps })
@@ -84,10 +85,11 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
     await connecterMongo({ script: 'test-identifier-lot.js', ecrit: true });
     db.brancher(mongoose.connection.db);
     await M.creerIndex();
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     await semer(P5, 5); await semer(P20A, 20); await semer(PNOG); await semer(P20B, 20); await semer(P1, 1);
     for (const id of POOL) await semer(id, 2);
+    VB.installer(VIS);                                                  // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
 
     const express = require('express'); const pret = require('../pret');
     const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');

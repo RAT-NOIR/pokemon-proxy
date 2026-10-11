@@ -10,6 +10,7 @@ const H = require('./_harnais');
 const path = require('path');
 const mongoose = require('mongoose');
 const db = require('../db'); const M = require('../modeles'); const J = require('../comptes/jetons');
+const VB = require('./_visuels-banc'); const VIS = new Map();
 const { lireConfig } = require('../config'); const { valider } = require('../openapi/valider'); const SCHEMA = require('../openapi/openapi.v2.json');
 const { verifierEntree } = require('../identifier/routes'); const { preparerAnnonce } = require('../annonce/verifier');
 const { choixPour } = require('../choix');
@@ -59,14 +60,14 @@ const solde = async id => (await raw('installations').findOne({ _id: id }));
 
 const ID_A = 895789, ID_B = 895790, EXP = 990001;
 async function semer(mode) {                                  // 'double' | 'simple' | 'vide' — catalogue FABRIQUÉ (seul l'idProduct vient de la charge)
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     if (mode === 'vide') return;
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
     for (const [id, variante] of (mode === 'double' ? [[ID_A, 'normale'], [ID_B, 'reverse']] : [[ID_A, 'normale']])) {
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
         await raw('guide_prix').insertOne({ idProduct: id, avg: 1.1, low: 0.5, trend: 1.0, avg1: 1.0, avg7: 1.0, avg30: 1.1, guideDu: new Date('2026-10-04') });
-        await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+        VIS.set(id, VB.doc(id, { variante }));                  // les visuels vivent EN MÉMOIRE (archive de banc lue par l'enfant), plus dans une collection
     }
 }
 
@@ -85,6 +86,7 @@ async function semer(mode) {                                  // 'double' | 'sim
     const FAUX = path.join(__dirname, 'faux-reseau-v2.js');
     const base = { VERROU_CHARGES: CHARGES, JETON_API: 'jeton-verrou', MONGODB_BASE: 'test_scratch', OPENROUTER_API_KEY: '' };
     await semer('double');
+    base.V2_VISUELS_BANC_FICHIER = VB.fichier([...VIS.values()]);     // l'archive de banc (honorée par l'enfant en mode banc seulement)
 
     // ── 1. SANS contrat 2 : la route héritée répond comme aujourd'hui, octet pour octet (v2 éteinte contre v2 allumée, mêmes requêtes, même base)
     // (la référence d'A0.5 se rejoue sur un catalogue réel de test_scratch ; ici la base est en mémoire et fabriquée : la référence ne se rejoue pas, on compare

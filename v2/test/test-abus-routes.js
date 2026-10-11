@@ -96,14 +96,16 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
 
     // ── catalogue FABRIQUÉ (comme test-contrat-reel.js)
     const ID_A = 895789, ID_B = 895790, EXP = 990001;
-    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set', 'visuels']) await raw(c).deleteMany({});
+    for (const c of ['catalogue_produits', 'numeros_cartes', 'guide_prix', 'codes_set']) await raw(c).deleteMany({});
     await raw('codes_set').insertOne({ idExpansion: EXP, codeSet: 'PBL', apprisLe: new Date() });
+    const VB = require('./_visuels-banc'); const VIS = [];
     for (const [id, variante, trend] of [[ID_A, 'normale', 1180], [ID_B, 'reverse', 1.0]]) {
         await raw('catalogue_produits').insertOne({ idProduct: id, name: 'Tropius (PBL 001)', idExpansion: EXP, idMetacard: 990101 });
         await raw('numeros_cartes').insertOne({ idProduct: id, idExpansion: EXP, numero: '001', numeroUrl: 'PBL001', codeSet: 'PBL', nomFr: 'Tropius', slug: 'Tropius-PBL001', slugSet: 'Banc-Set', source: 'cardmarket', certitude: 'exacte', ...(id === ID_B ? { variante: 'V2' } : {}) });
         await raw('guide_prix').insertOne({ idProduct: id, avg: trend, low: 0.5, trend, avg1: trend, avg7: trend, avg30: trend, guideDu: new Date('2026-10-04') });
-        await raw('visuels').insertOne({ idProduct: id, vignette: { cle: `banc/${id}-v.webp`, w: 300, h: 420 }, grande: null, mention: null, idMetacard: 990101, numero: '001', rarete: 'Common', total: '064', variante, setNom: 'Banc Set', lien: null });
+        VIS.push(VB.doc(id, { variante }));
     }
+    VB.installer(VIS);                                                  // les visuels vivent EN MÉMOIRE (v2/chargeur), plus dans une collection
 
     // ── porteurs
     async function inst(essais = 3, o = {}) {
@@ -754,6 +756,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
             V2_DESCRIPTION_CONSERVEE: [c => c.annonce.conservee, true, '2', 'leve'], V2_DESCRIPTION_AU_MODELE: [c => c.annonce.auModele, false, '2', 'leve'],
             V2_MARCHES: [c => c.marches.length, 16, '%%', { ferme: c => !c.marches.includes('vinted.fr') }],   // un marché mal écrit : plus aucun marché réel (422 pour tous), jamais un marché de plus
             V2_VERSION_MIN_EXTENSION: [c => c.versionMinExtension, '2.0.0', '%%', { ferme: c => require('../identifier/routes').comparerVersions('2.0.0', c.versionMinExtension) === null }],   // illisible : 400 pour tous
+            V2_VISUELS_SOURCE: [c => c.visuels.source, 'fichier', 'cartes', 'leve'],
+            V2_VISUELS_BANC_FICHIER: [c => c.visuels.fichierBanc, null, 'C:\\tmp\\intrus.rmv.gz', { ferme: c => c.visuels.fichierBanc === null }, PROD],   // honorée SEULEMENT en mode banc : en production elle est ignorée
             V2_REGLE_G: [c => c.regleG, false, '2', 'leve'], V2_COOKIE_SECURE: [c => c.cookieSecure, true, '2', 'leve']
         };
         H.v('step 6 : chaque variable lue par v2/config.js a une ligne de la table (et réciproquement)', [noms.filter(n => !T[n]), Object.keys(T).filter(n => !noms.includes(n))], [[], []]);
