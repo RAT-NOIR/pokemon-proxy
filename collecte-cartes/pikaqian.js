@@ -80,6 +80,10 @@ function lireOrigines(html) {
     }
     return sorties;
 }
+/** Le nombre d'ANCRES de cartes que la page porte (`<a … href="/cards/<uuid>">`), tuiles lisibles ou non : le dénominateur de `lireTuiles` (même découpage). */
+function compterAncresCartes(html) {
+    return String(html ?? '').split(/<a\s[^>]*?href="\/cards\//).slice(1).filter(p => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"/.test(p)).length;
+}
 /** Une tuile de VARIANTE de foil (le même numéro, un autre produit) : le nom se termine par « … Holo » (Reverse Holo, Pokeball Holo, Master Ball Holo…). */
 const estFoil = nom => /\sHolo$/i.test(String(nom ?? '').trim());
 
@@ -303,7 +307,7 @@ function planRetraitPikaqian(cartes) {
 }
 
 module.exports = {
-    SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne,
+    SOURCE, HOTE_PAGES, HOTE_IMAGES, LOT, MENTION, CADENCE_MS, UA, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, LANGUE, PROVENANCE_PAR_DEFAUT, ECHECS_DE_SUITE_MAX, ID_SUITE, lireBorne, PAGE_MAX_OCTETS, CODE_PK, compterAncresCartes,
     lireTuiles, lireOrigines, estFoil, verdictDePage, planifierPikaqian, urlSet, urlImage, fabriquerClientPikaqian, idImagePikaqian, planRetraitPikaqian,
     // le jugement « défi / blocage » d'une réponse : UNE définition, relue par le réessai espacé (collecte-cartes/reessai-pikaqian.js), jamais recopiée
     defi, DEFI
