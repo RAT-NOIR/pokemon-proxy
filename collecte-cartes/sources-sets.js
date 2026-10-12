@@ -132,9 +132,14 @@ const ARTOFPKM = {
     // (sous-section-image.js) — le deck d'en face, ou une énergie que nous nommons autrement, reste un trou nommé, jamais un visuel d'une autre carte.
     MSM: { ids: [140], noms: ["Movie Commemoration VS Pack: Sea's Manaphy"], note: 'Cardmarket « Entry Pack DP » ; 19/19 numéro+nom ; pages lues 001/019 Phantom\'s Beedrill, 010/019 Ash\'s Aipom, 019/019 Rainbow Energy ; originaux 593 px' },
     // la liste 176 est lue par DEUX lignes (DHD, GHD) : `setDeBase` sur les deux, sans quoi la seconde cherche ses images sous son propre slug (collecteur-images.js l.386)
-    DHD: { ids: [176], noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'Cardmarket « Giratina vs Dialga Deck Kit », sous-section 649 « Dialga Half Deck » ; 13/14 numéro+nom ; pages lues 007/014 Dialga, 014/014 Conductive Quarry ; originaux 500 px ; liste partagée avec GHD' },
-    GHD: { ids: [176], noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'sous-section 648 « Giratina Half Deck » ; 12/13 numéro+nom ; page lue 007/014 Giratina ; Warp Point sans carte chez nous ; liste partagée avec DHD' },
-    MED: { ids: [206], noms: ['Leafeon vs Metagross Expert Deck +Online'], note: 'sous-section 643 « Metagross Deck » ; 14/14 numéro+nom (le deck Leafeon, sous-section 642, est refusé par le nom : 0 jointe) ; pages lues 005/014 Metagross ×2 (deux images au même numéro), 008/014 Dual Ball ; originaux 444-500 px' }
+    // `sousSection` (V8, tour 1) : la ligne ne mesure, ne joint et ne partage ses clés QUE dans cette sous-section (echantillon-mesure.js, sous-section-image.js, images-cle-partagee.js)
+    DHD: { ids: [176], sousSection: 649, noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'Cardmarket « Giratina vs Dialga Deck Kit », sous-section 649 « Dialga Half Deck » ; 13/14 numéro+nom ; pages lues 007/014 Dialga, 014/014 Conductive Quarry ; originaux 500 px ; liste partagée avec GHD' },
+    GHD: { ids: [176], sousSection: 648, noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'sous-section 648 « Giratina Half Deck » ; 12/13 numéro+nom ; page lue 007/014 Giratina ; Warp Point sans carte chez nous ; liste partagée avec DHD' },
+    MED: { ids: [206], sousSection: 643, noms: ['Leafeon vs Metagross Expert Deck +Online'], note: 'sous-section 643 « Metagross Deck » ; 13/14 numéro+nom (Metagross 005 : deux images, 643/5 et 643/6, clé partagée = aucune ne le désigne) ; pages lues 005/014 Metagross ×2, 008/014 Dual Ball ; originaux 444-500 px' },
+    // Classic jp (liste 545, un deck par sous-section). CLF (676) n'a PAS de source : les 3 premières de SA sous-section mesurent 321, 321, 500 px (médiane 321 < 350) — refus certain,
+    // dit dans sources-sets-en-attente.json. CLL (677) et CLK (678) : leur sous-section n'a qu'UNE largeur lue chacune (1432 et 428 px) ; le worker mesure les trois siennes et décide.
+    CLL: { ids: [545], sousSection: 677, noms: ['Pokémon Card Game Classic'], setDeBase: 'CLL', note: 'Cardmarket « Pokemon Card Game Classic Charizard Ho Oh ex Deck » ; sous-section 677 ; page lue 020/032 Ultra Ball ; liste partagée avec CLK' },
+    CLK: { ids: [545], sousSection: 678, noms: ['Pokémon Card Game Classic'], setDeBase: 'CLL', note: 'Cardmarket « Pokemon Card Game Classic Blastoise Suicune ex Deck » ; sous-section 678 ; page lue 010/032 Suicune ex ; liste partagée avec CLL' }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,

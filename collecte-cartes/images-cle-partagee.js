@@ -16,10 +16,12 @@ const numeroSansChiffre = n => n != null && String(n).trim() !== '' && !/\d/.tes
  * @param {{carteId: *, im: {numero: *, sha256: string}}[]} resolues  les images dont la jointure a désigné UNE carte
  * @returns {Set<string>}  les clés « carteId|numéro » refusées : numéro sans chiffre, porté par ≥ 2 images DIFFÉRENTES
  */
-function clesPartagees(resolues) {
+function clesPartagees(resolues, { numerotes = false } = {}) {
+    // 🔑 LOT V8 (tour 1) : `numerotes` étend LA MÊME règle aux numéros chiffrés, pour les seules lignes qui déclarent une sous-section (deux images au même
+    // numéro ET au même nom dans un deck : Metagross 005, 643/5 et 643/6 — la dernière lue n'est pas une preuve). Hors déclaration : portée d'avant, inchangée.
     const parCle = new Map();
     for (const { carteId, im } of resolues) {
-        if (!numeroSansChiffre(im.numero)) continue;
+        if (!numerotes && !numeroSansChiffre(im.numero)) continue;
         const k = `${carteId}|${String(im.numero).trim()}`;
         (parCle.get(k) || parCle.set(k, new Set()).get(k)).add(im.sha256);
     }

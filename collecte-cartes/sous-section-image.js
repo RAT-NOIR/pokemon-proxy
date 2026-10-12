@@ -19,7 +19,13 @@
  * @param cleNom  la normalisation du nom (nomImage du collecteur)
  * @returns { cands, preuve, raison } — cands vide si refusée, `raison` dit laquelle des conditions manque
  */
-function jointureSousSection(im, cands, preuve, ids, cleNom, { correction = false } = {}) {
+function jointureSousSection(im, cands, preuve, ids, cleNom, { correction = false, sousSection = null } = {}) {
+    // 🔑 LOT V8 (tour 1) : une ligne qui DÉCLARE sa sous-section (`sousSection`, sources-sets.js) ne joint QUE les entrées de celle-ci. Une image appartient à
+    // un TIRAGE (§19) : le Mom's Kindness 013 du demi-deck Dialga (649) n'est pas le visuel du demi-deck Giratina (648), même au numéro ET au nom.
+    // Sans déclaration, rien ne change (aucune ligne existante ne la porte).
+    if (sousSection != null && !correction && im.sourceSetId != null && Number(im.sourceSetId) !== Number(sousSection)) {
+        return { cands: [], preuve, raison: `image d'une autre sous-section (${im.sourceSetId}) que celle déclarée par la ligne (${sousSection})` };
+    }
     const deLaListe = im.sourceSetId == null || (ids || []).map(Number).includes(Number(im.sourceSetId));
     if (deLaListe || correction) return { cands, preuve, raison: null };
     const parLeNumero = preuve === 'numero' || preuve === 'numero+nom';
