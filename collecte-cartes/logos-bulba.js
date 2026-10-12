@@ -19,7 +19,8 @@ const LOT_BULBA = 'logos-officiels-bulba-2026-10';
 // L'instant avant lequel aucune requête vers Bulbapedia ne part (suspension du 2026-10-04 + 7 jours après le dernier essai : relevé du testeur).
 const SONDE_APRES_MS = Date.parse('2026-10-15T19:29:00Z');
 const FRAICHEUR_MS = 24 * 3600 * 1000;   // un SERVI de plus de 24 h ne dit plus rien de l'état du site
-const DELAI_FILE_S = 5;                  // la file de bulba.js : une requête toutes les 5 s (DELAI_MS) — un Crawl-delay plus long ne se tient pas : arrêt
+const PLAFOND_REQUETES = 40;             // robots.txt + fichiers, explicite et imprimé (les 38 candidats de la table en demandent au plus 39)
+const DELAI_FILE_S = 5;                 // la file de bulba.js : une requête toutes les 5 s (DELAI_MS) — un Crawl-delay plus long ne se tient pas : arrêt
 // Les deux collecteurs qui posent un `sets.logo` depuis Bulbagarden Archives, tous deux sous langue-logo.js : collecter-logos-sets.js (paramètre `setlogo`)
 // et collecter-logos-demande.js (fichiers trouvés par l'agent du site). Liste fermée : toute autre source (« manuel »…) n'a pas cette provenance.
 const SOURCES_BULBAGARDEN = new Set(['bulbapedia:setlogo', 'bulbagarden:demande-site']);
@@ -219,11 +220,20 @@ async function ecrireA({ S, r2, bucket, item, le = new Date() }) {
  * page HTML/erreur inconnue ARRÊTE tout (jamais de reprise après un défi) ; seul un 404 est propre à un fichier. `noterArret(message)` écrit la suspension.
  * `plan` : [{ ligne, set, url, nom }]. Rend { fichiers, refus, requetes, arret }.
  */
-async function executerB({ plan, feuVert, lireRobots, telecharger, noterArret = null, juger = M.juger, pokecardexDe = async () => null }) {
+async function executerB({ plan, feuVert, lireRobots, telecharger, noterArret = null, juger = M.juger, pokecardexDe = async () => null, relireFeuVert = null, plafond = PLAFOND_REQUETES, estPerdu = () => false }) {
     const sortie = { fichiers: [], refus: [], requetes: 0, arret: null };
     if (!feuVert || feuVert.ok !== true) { sortie.arret = `feu vert de la sonde absent : ${feuVert?.raison ?? 'non fourni'} — aucune requête`; return sortie; }
     const arreter = async raison => { sortie.arret = raison; if (noterArret) await noterArret(raison); return sortie; };
+    // AVANT CHAQUE REQUÊTE : le feu vert est relu (une suspension ou un défi écrit entre-temps arrête tout, sans réécrire ce qui est déjà écrit), le verrou
+    // global est encore à nous, et le plafond explicite de requêtes n'est pas atteint. Cette garde n'a qu'un chemin vers « la requête part ».
+    const avantRequete = async () => {
+        if (relireFeuVert) { const f = await relireFeuVert(); if (!f || f.ok !== true) { sortie.arret = `feu vert de la sonde perdu en route : ${f?.raison ?? 'illisible'} — plus aucune requête`; return false; } }
+        if (estPerdu()) { sortie.arret = 'verrou global perdu en route : plus aucune requête'; return false; }
+        if (sortie.requetes >= plafond) { sortie.arret = `plafond de ${plafond} requêtes atteint : arrêt`; return false; }
+        return true;
+    };
     let rob;
+    if (!await avantRequete()) return sortie;
     try { sortie.requetes++; rob = await lireRobots(); } catch (e) { return arreter(`robots.txt illisible (${e.code || e.message}) : je ne sais pas, je ne demande rien`); }
     if (!rob || rob.status !== 200) return arreter(`robots.txt : HTTP ${rob?.status ?? '∅'} (défi ou panne) : arrêt`);
     if (typeof rob.texte !== 'string' || !/^\s*user-agent\s*:/im.test(rob.texte)) return arreter('robots.txt : réponse qui n\'est pas un robots.txt lisible : arrêt');
@@ -232,8 +242,10 @@ async function executerB({ plan, feuVert, lireRobots, telecharger, noterArret = 
     for (const p of plan) if (!autoriseParRobots(rob.texte, new URL(p.url).pathname, E.UA)) return arreter(`robots.txt interdit ${new URL(p.url).pathname} : arrêt`);
     for (const p of plan) {
         let rep;
+        if (!await avantRequete()) return sortie;
         try { sortie.requetes++; rep = await telecharger(p.url); }
         catch (e) {
+            if (e?.refusRedirection) { sortie.refus.push({ ligne: p.ligne, action: 'refus', raison: e.message }); continue; }   // redirection hors de la liste fermée : refus NOMMÉ de ce fichier (bulba.js)
             const st = /^Bulbagarden (\d{3})\b/.exec(e?.message ?? '')?.[1];
             if (st === '404') { sortie.refus.push({ ligne: p.ligne, action: 'refus', raison: 'fichier absent chez la source (404)' }); continue; }
             return arreter(`${p.url} : ${e?.message ?? e} — arrêt, plus aucune requête`);
@@ -261,4 +273,76 @@ async function ecrireB({ S, r2, bucket, item, setDoc, le = new Date() }) {
     });
 }
 
-module.exports = { LOT_BULBA, SONDE_APRES_MS, FRAICHEUR_MS, feuVertSonde, noterVerdict, urlDirecte, nomFichier, candidats, planifierBulba, collecterA, ecrireA, executerB, ecrireB };
+/** Prend le verrou global, mais l'attente est BORNÉE : au-delà, on renonce (le verrou n'est pas à nous : rien à rendre). Rend { pris, essais, detenteur }. */
+async function prendreVerrou(verrou, { attenteMaxMs = 10 * 60 * 1000, pauseMs = 2000, attendre = ms => new Promise(r => setTimeout(r, ms)), journal = () => { } } = {}) {
+    let ecoule = 0, essais = 0, detenteur = null;
+    for (; ;) {
+        essais++;
+        detenteur = await verrou.prendre();
+        if (!detenteur) return { pris: true, essais, detenteur: null };
+        if (ecoule + pauseMs > attenteMaxMs) return { pris: false, essais, detenteur };
+        if (essais === 1) journal(`⏳ verrou global tenu par pid ${detenteur.pid} sur ${detenteur.hote} — j'attends, au plus ${Math.round(attenteMaxMs / 1000)} s.`);
+        await attendre(pauseMs); ecoule += pauseMs;
+    }
+}
+
+/**
+ * LE CÂBLAGE DE LA ROUTE B (la CLI n'en garde que la connexion) : plafond → feu vert → verrou global (attente bornée) → feu vert RELU après la prise →
+ * robots.txt, PAUSE de la cadence de la file (5 s) avant le premier fichier → fichiers (cache : un fichier obtenu ne se redemande pas) avec le feu vert relu
+ * avant CHAQUE requête → au premier arrêt, un DEFI est écrit dans l'état. Le verrou pris est toujours rendu.
+ * Injections : etatCol (collection de l'état), verrou {prendre, rendre}, lireRobotsBrut() → { status, headers, texte }, telecharger(url) → { buffer, type },
+ * attendre(ms), cache (dossier), estPerdu(). Rend { fichiers, refus, requetes, arret }.
+ */
+async function lancerRouteB({ plan, etatCol, verrou, lireRobotsBrut, telecharger, attendre = ms => new Promise(r => setTimeout(r, ms)), cache, pokecardexDe = async () => null, maintenant = Date.now, plafond = PLAFOND_REQUETES, attenteVerrouMs, pauseVerrouMs, estPerdu = () => false, journal = () => { }, juger = M.juger }) {
+    const fs = require('fs'), path = require('path');
+    const vide = arret => ({ fichiers: [], refus: [], requetes: 0, arret });
+    if (plan.length + 1 > plafond) return vide(`plafond de ${plafond} requêtes : ${plan.length} fichiers + robots.txt dépassent — rien ne part`);
+    const relire = async () => feuVertSonde(await etatCol.findOne({ _id: E.ID_ETAT }), maintenant());
+    let fv = await relire();
+    if (!fv.ok) return vide(`feu vert de la sonde absent : ${fv.raison} — aucune requête`);
+    const v = await prendreVerrou(verrou, { attenteMaxMs: attenteVerrouMs, pauseMs: pauseVerrouMs, attendre, journal });
+    if (!v.pris) return vide(`verrou global bulbapedia non obtenu après ${v.essais} essais (détenu par pid ${v.detenteur?.pid} sur ${v.detenteur?.hote}) : aucune requête`);
+    try {
+        fv = await relire();   // l'attente a pu durer : un défi écrit ou les 24 h dépassées arrêtent tout
+        if (!fv.ok) return vide(`feu vert de la sonde perdu pendant l'attente du verrou : ${fv.raison} — aucune requête`);
+        const lireRobots = async () => {
+            const rep = await lireRobotsBrut();
+            await attendre(DELAI_FILE_S * 1000);   // la file de bulba.js ne voit pas cette requête : la cadence se tient ici
+            return { status: /challenge/i.test(rep?.headers?.get?.('cf-mitigated') || '') ? 403 : rep?.status, texte: rep?.texte };
+        };
+        const avecCache = async url => {
+            const cle = path.join(cache, sha256(Buffer.from(url)));
+            if (fs.existsSync(`${cle}.bin`) && fs.existsSync(`${cle}.json`)) {
+                const j = JSON.parse(fs.readFileSync(`${cle}.json`, 'utf8')), b = fs.readFileSync(`${cle}.bin`);
+                if (j.url === url && j.sha256 === sha256(b) && maintenant() - Date.parse(j.le) < 36 * 3600 * 1000) return { buffer: b, type: j.type };
+            }
+            const r = await telecharger(url);
+            fs.writeFileSync(`${cle}.bin`, r.buffer); fs.writeFileSync(`${cle}.json`, JSON.stringify({ url, sha256: sha256(r.buffer), type: r.type, le: new Date(maintenant()).toISOString() }));
+            return r;
+        };
+        return await executerB({
+            plan, feuVert: fv, relireFeuVert: relire, lireRobots, telecharger: avecCache, pokecardexDe, plafond, estPerdu, juger,
+            noterArret: async raison => { await noterVerdict(etatCol, { verdict: 'DEFI', motif: `logos officiels route B : ${raison}` }, maintenant()); journal(`🛑 ${raison} — suspension écrite (${E.ID_ETAT}), plus aucune requête`); }
+        });
+    } finally { await verrou.rendre(); }
+}
+
+/**
+ * LA SONDE --noter : UNE requête (robots.txt), écrite dans l'état SANS jamais rouvrir une suspension. La règle est celle de la politique existante
+ * (E.POLITIQUE_BULBA.autoriser : suspension non échue, cadence, état illisible → pas de requête), la prise est atomique (magasinMongo.reserver) et l'ÉCRITURE est
+ * conditionnelle à NOTRE réservation : si quelqu'un a écrit l'état pendant la requête (un DEFI de la route B), rien n'est écrit et la sonde le dit (elle lève).
+ * Un échec réseau écrit son verdict d'échec (AUTRE) : il n'y a pas de SERVI sans réponse 200 lisible. Rend { envoye, verdict?, raison?, motif? }.
+ */
+async function sonderEtNoter({ collection, client, maintenant = Date.now }) {
+    const base = E.magasinMongo(collection);
+    const magasin = {
+        ...base,
+        async ecrire({ _id, ...champs }) {
+            const r = await collection.updateOne({ _id: E.ID_ETAT, reserve: true, dernierEssai: champs.dernierEssai }, { $set: champs });
+            if (!r || r.matchedCount !== 1) throw new Error('verdict non écrit : la réservation de l\'essai n\'est plus la nôtre (l\'état a été écrit pendant la requête) — rien n\'est modifié');
+        }
+    };
+    return E.fabriquerEssaiEspace({ client, magasin, maintenant, allume: true }).essayer();
+}
+
+module.exports = { LOT_BULBA, SONDE_APRES_MS, FRAICHEUR_MS, PLAFOND_REQUETES, feuVertSonde, noterVerdict, sonderEtNoter, prendreVerrou, lancerRouteB, urlDirecte, nomFichier, candidats, planifierBulba, collecterA, ecrireA, executerB, ecrireB };

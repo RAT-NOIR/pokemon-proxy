@@ -62,7 +62,7 @@ if (require.main === module) (async () => {
     const etatCol = cx.cartes.db.collection('collecte_images_etat');
     const etat = await etatCol.findOne({ _id: E.ID_ETAT });
     const fv = B.feuVertSonde(etat, Date.now());
-    console.log(`\nROUTE B (inerte) : ${planB.length} fichiers seraient demandés à archives.bulbagarden.net (+1 robots.txt), à ${bulba.DELAI_MS / 1000} s d'écart ≈ ${Math.ceil((planB.length + 1) * bulba.DELAI_MS / 60000)} min · FEU VERT DE LA SONDE : ${fv.ok ? 'OUI' : `NON — ${fv.raison}`}`);
+    console.log(`\nROUTE B (inerte, plafond ${B.PLAFOND_REQUETES} requêtes) : ${planB.length} fichiers seraient demandés à archives.bulbagarden.net (+1 robots.txt), à ${bulba.DELAI_MS / 1000} s d'écart ≈ ${Math.ceil((planB.length + 1) * bulba.DELAI_MS / 60000)} min · FEU VERT DE LA SONDE : ${fv.ok ? 'OUI' : `NON — ${fv.raison}`}`);
     for (const p of planB) console.log(`   → ${p.set} : ${p.url}`);
 
     if (arg('rapport')) fs.writeFileSync(arg('rapport'), JSON.stringify({ lot: B.LOT_BULBA, le: new Date().toISOString(), A: A.parRoute.A.map(i => ({ set: i.set, fichier: i.ligne.fichier, logo: i.logo.fichier })), deja: A.deja.map(ligneDe), B: planB.map(p => ({ set: p.set, url: p.url })), refus: A.refus.map(x => ({ ligne: ligneDe(x), action: x.action, raison: x.raison })), feuVert: fv }, null, 1));
@@ -82,36 +82,15 @@ if (require.main === module) (async () => {
     const M = modeles(cx.cartes);
     let verrouPerdu = false;
     const verrou = fabriquerVerrou({ Modele: M.EtatImages, id: 'bulbapedia/__collecteur__', dureeMs: 3 * 60 * 1000, surInsertion: { phase: 'logos' }, surPerte: () => { verrouPerdu = true; }, nom: 'verrou global bulbapedia (logos officiels)' });
-    for (let essai = 0; ; essai++) {
-        const tenu = await verrou.prendre();
-        if (!tenu) break;
-        if (essai === 0) console.log(`⏳ verrou global tenu par pid ${tenu.pid} sur ${tenu.hote} — j'attends.`);
-        await dodo(2000);
-    }
-    console.log('🔒 verrou global pris.');
     let bilan = null;
     try {
-        const client = E.fabriquerClientDirect(fetch, 'https://archives.bulbagarden.net/robots.txt');
-        const lireRobots = async () => {
-            const rep = await client();
-            await dodo(bulba.DELAI_MS);   // la file de bulba.js ne voit pas cette requête : la cadence se tient ici
-            return { status: /challenge/i.test(rep.headers.get('cf-mitigated') || '') ? 403 : rep.status, texte: rep.texte };
-        };
-        const telecharger = async url => {
-            const cle = path.join(cache, sha256(Buffer.from(url)));
-            if (fs.existsSync(`${cle}.bin`) && fs.existsSync(`${cle}.json`)) {
-                const j = JSON.parse(fs.readFileSync(`${cle}.json`, 'utf8')), b = fs.readFileSync(`${cle}.bin`);
-                if (j.url === url && j.sha256 === sha256(b) && Date.now() - Date.parse(j.le) < 36 * 3600 * 1000) return { buffer: b, type: j.type };
-            }
-            if (verrouPerdu) throw new Error('Bulbagarden verrou global perdu : arrêt');
-            const r = await bulba.telecharger(url);
-            fs.writeFileSync(`${cle}.bin`, r.buffer); fs.writeFileSync(`${cle}.json`, JSON.stringify({ url, sha256: sha256(r.buffer), type: r.type, le: new Date().toISOString() }));
-            return r;
-        };
+        // tout le câblage (plafond, feu vert relu après la prise du verrou et avant chaque requête, attente bornée, pause après robots.txt, arrêt = DEFI écrit)
+        // est dans collecte-cartes/logos-bulba.js : lancerRouteB, testé par test-logos-bulba-cablage.js
+        const clientRobots = E.fabriquerClientDirect(fetch, 'https://archives.bulbagarden.net/robots.txt');
         const pokecardexDe = async ligne => { const f = path.join(racine, ligne.fichier); if (!fs.existsSync(f)) return null; const b = fs.readFileSync(f); return sha256(b) === ligne.pokecardexSha256 ? b : null; };
-        const noterArret = async raison => { await B.noterVerdict(etatCol, { verdict: 'DEFI', motif: `logos officiels route B : ${raison}` }, Date.now()); console.error(`🛑 ${raison} — suspension écrite (${E.ID_ETAT}), plus aucune requête`); };
-        const r = await B.executerB({ plan: planB, feuVert: fv, lireRobots, telecharger, noterArret, pokecardexDe });
-        console.log(`\nROUTE B : ${r.fichiers.length} fichiers obtenus · ${r.refus.length} refusés · requêtes réseau réelles (file bulba.js) : ${bulba.compteRequetes()}${r.arret ? ` · ARRÊT : ${r.arret}` : ''}`);
+        console.log(`PLAFOND : ${B.PLAFOND_REQUETES} requêtes au plus (robots.txt + fichiers) pour ${planB.length} fichiers.`);
+        const r = await B.lancerRouteB({ plan: planB, etatCol, verrou, lireRobotsBrut: clientRobots, telecharger: url => bulba.telecharger(url), cache, pokecardexDe, estPerdu: () => verrouPerdu, journal: m => console.log(m) });
+        console.log(`\nROUTE B : ${r.fichiers.length} fichiers obtenus · ${r.refus.length} refusés · requêtes comptées ${r.requetes}/${B.PLAFOND_REQUETES} · requêtes réseau réelles de la file bulba.js (sauts compris) : ${bulba.compteRequetes()}${r.arret ? ` · ARRÊT : ${r.arret}` : ''}`);
         for (const x of r.refus) console.log(`   🔴 ${ligneDe(x)} : ${x.raison}`);
         bilan = { ecrits: 0, deja: 0, refus: 0 };
         const dd = M_reduire(r.fichiers);
