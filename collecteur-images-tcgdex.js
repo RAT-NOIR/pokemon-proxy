@@ -41,6 +41,7 @@ const { ligne, TABLE } = require('./collecte-cartes/table-sets');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { remplacerBasseDefinition } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { normaliserNom } = require('./collecte-cartes/jointure');
 const { fabriquerClient, estDuSet, VERROU_GLOBAL, VERROU_GLOBAL_MS } = require('./collecte-cartes/tcgdex');
 const { cartesEn, cartesLangue, fabriquerAppariement, setDeLaLigne, compagnonsDuSet } = require('./collecte-cartes/tcgdex-cache');
@@ -215,10 +216,12 @@ async function collecterSet(unite, M, { verrou }) {
         const controle = CONTROLE_PAR_IMAGE.has(langue) ? Object.fromEntries(await Promise.all(['a-controler', 'accepte', 'refuse'].map(async e => [e, await M.Image.countDocuments({ source: SOURCE, set: slug, etat: 'ok', langue: LANGUE.langue, 'controle.etat': e })]))) : null;
         const parCarte = new Map();
         for (const im of images) (parCarte.get(im.carteId) || parCarte.set(im.carteId, []).get(im.carteId)).push(im);
-        let bulbaRetirees = 0;
+        let bulbaRetirees = 0, basseDefRemplacees = 0;
         for (const [carteId, ims] of parCarte) {
             const numeros = ims.map(im => im.numero);
             const entrees = ims.map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve, numero: im.numero, attribution: 'TCGdex', langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() }));
+            // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place à ce scan — la règle est celle du module
+            for (const e of entrees) basseDefRemplacees += await remplacerBasseDefinition(M, carteId, e);
             const avant = await M.Carte.findById(carteId).select('images').lean();
             // une autre langue ne retire que SES entrées (avant le 2026-10-03, le retrait prenait toutes les entrées TCGdex du set : une
             // unité thaïe sur un set idth aurait effacé ses visuels indonésiens) ; l'anglais garde son geste
@@ -234,7 +237,7 @@ async function collecterSet(unite, M, { verrou }) {
         const complet = {
             langue, tcgdexSet: set.id, tcgdexNom: set.name, compagnons: P.compagnons, compagnonsNonLus: P.compagnonsNonLus,
             impressions: P.impressions, aCollecter: P.plan.length, imagesOk: images.length,
-            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, restes: P.motifs, sansScanAnglais: P.restes,
+            telecharges, sautes, echecs, echecsTransitoires, tropPetits, bulbaRemplacees: bulbaRetirees, basseDefinitionRemplacees: basseDefRemplacees, restes: P.motifs, sansScanAnglais: P.restes,
             requetes: client.compteRequetes(),
             // une langue contrôlée par l'image : la concordance porte sur le TÉLÉCHARGEMENT (tout le plan est sur R2), le contrôle se compte
             // à part — un visuel refusé par l'image n'est pas un échec de collecte, c'est « ce qui ne passe pas reste vide »

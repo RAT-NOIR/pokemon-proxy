@@ -84,7 +84,10 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-06 : les sources en service (Bulbapedia suspendu) — une unité enfilée sous un worker qui ne la connaît pas frapperait Bulbagarden
     'collecte-cartes/sources-en-service.js',
     // ➕ 2026-10-08 : le témoin du nom dans la jointure des images artofpkm — un worker qui ne l'a pas joindrait encore sans témoin
-    'collecte-cartes/temoin-images-artofpkm.js'];
+    'collecte-cartes/temoin-images-artofpkm.js',
+    // ➕ 2026-10-12 : la marque « basseDefinition » (posée par TPC et PikaQian) et le REMPLACEMENT automatique (appelé par artofpkm, Bulbapedia, TCGdex) :
+    // un worker qui ne la porte pas poserait des entrées sous 350 px sans marque, ou ne remplacerait jamais une basse définition par une meilleure image
+    'collecte-cartes/basse-definition.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma

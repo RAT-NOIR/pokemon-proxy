@@ -53,6 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { remplacerBasseDefinition } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
@@ -534,6 +535,9 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // carte (`images.carteId`) et absentes de `cartes.images`, sur 165 sets — Shiny Treasure ex 292, Terastal Festival
             // 184, VSTAR Universe 163. Le §32 bis et le §45 l'avaient écrit ; la jointure du TEXTE et celle de Bulbapedia le
             // faisaient, celle-ci non (§21 bis). `numero: null` (sources sans numéro, Gym) reste une entrée par carte.
+            // ➕ 2026-10-12 : AVANT le $pull (qui retire tout ce qui est à ce numéro), la règle du module marque « remplace » le document de l'entrée
+            // « basseDefinition » de même langue qu'elle évince — la traçabilité ; le $pull ci-dessous reste le geste d'avant, inchangé
+            await remplacerBasseDefinition(M, c._id, entree);
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, numero: entree.numero } } });
             // un numéro LU À L'ŒIL (corrections-images.js) : la MÊME image (même cleR2), posée avant sans numéro, quitte cette place
             // pour la sienne — sinon elle resterait deux fois, et l'entrée sans numéro garderait le set « une fiche par document »

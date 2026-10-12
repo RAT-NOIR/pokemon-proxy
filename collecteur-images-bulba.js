@@ -41,6 +41,7 @@ const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-imag
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { remplacerBasseDefinition } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
 const SOURCE = 'bulbapedia';
 const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
@@ -226,6 +227,8 @@ async function collecterSet(code, M, { mesurerSeulement }) {
             const avant = await M.Carte.findById(carteId).select('images').lean();
             const servisParTcgdex = new Set((avant?.images || []).filter(e => e.set === slug && e.source === 'tcgdex').map(e => e.numero));
             const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), jointeLe: new Date() }));
+            // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place — règle du module, langue connue exigée
+            for (const e of entrees) await remplacerBasseDefinition(M, carteId, e);
             await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
             if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
         }

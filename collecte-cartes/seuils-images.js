@@ -30,16 +30,40 @@ const LARGEUR_MIN = 350;
 // plus une largeur à un nombre (§21 bis).
 // 🔑 La liste est FERMÉE et la comparaison EXACTE (une garde s'écrit par ce qu'elle autorise) : une source inconnue, absente,
 // d'une autre casse ou héritée de Object.prototype reçoit 350.
-const LARGEUR_MIN_OFFICIELLE = 300;
-// §21 bis : les sites TPC viennent de la SOURCE UNIQUE (`SITES` de tpc.js) — un site TPC ajouté là passe à 300 sans autre geste.
+// ⬇️ 2026-10-12, DÉCISION DU TESTEUR : « Seuil des sources OFFICIELLES (TPC Asie, pokemon-card.com) : 257 px. Chaque image sous 350 px reçoit une marque
+// basseDefinition: true, que le site lira pour ne jamais l'agrandir au-delà de sa taille réelle. Une meilleure image de même impression la remplace
+// automatiquement dès qu'une source la fournit. Le seuil de 350 px des autres sources ne change pas. » (300 → 257 ; 255 `trop-petit` TPC à rejuger.)
+const LARGEUR_MIN_OFFICIELLE = 257;
+// §21 bis : les sites TPC viennent de la SOURCE UNIQUE (`SITES` de tpc.js) — un site TPC ajouté là passe à 257 sans autre geste.
 // `pokemon-com` n'a pas encore de collecteur, donc pas de site : il s'ajoute ici, à la main.
 const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);
-// ➕ 2026-10-11, DÉCISION DU TESTEUR : « PikaQian : seuil de 300 px pour cette source officielle (usage : vignette de 157 px) ». PikaQian n'est
+// ➕ 2026-10-11, DÉCISION DU TESTEUR : « PikaQian : seuil de 300 px pour cette source (usage : vignette de 157 px) ». PikaQian n'est
 // PAS une source officielle (un site de prix tiers qui copie les visuels de pokemon.cn, images 300 × 419) : elle n'entre donc pas dans
 // SOURCES_OFFICIELLES (que test-seuils-images garde = TPC + pokemon-com) mais dans sa propre liste, fermée, qui ne touche aucune autre source.
-const SOURCES_A_300 = Object.freeze([...SOURCES_OFFICIELLES, require('./pikaqian').SOURCE]);
+// ⚠️ 2026-10-12 : la décision de 257 px ne vaut QUE pour les officielles — PikaQian GARDE ses 300 px (`LARGEUR_MIN_PIKAQIAN`).
+const LARGEUR_MIN_PIKAQIAN = 300;
+const PIKAQIAN = require('./pikaqian').SOURCE;
+// la liste des sources ADMISES SOUS LARGEUR_MIN (350) : les officielles + PikaQian. Le nom historique `SOURCES_A_300` est gardé (importé par
+// d'autres outils) ; il ne dit plus le nombre, seulement « sous 350 ».
+const SOURCES_A_300 = Object.freeze([...SOURCES_OFFICIELLES, PIKAQIAN]);
 function largeurMinDe(source) {
-    return typeof source === 'string' && SOURCES_A_300.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;
+    if (typeof source !== 'string') return LARGEUR_MIN;
+    if (SOURCES_OFFICIELLES.includes(source)) return LARGEUR_MIN_OFFICIELLE;
+    if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;
+    return LARGEUR_MIN;
+}
+
+// ➕ 2026-10-12 — « BASSE DÉFINITION » : UNE fonction, toutes sources confondues (§21 bis : aucun collecteur ne compare un nombre lui-même).
+// Une image est de basse définition quand la largeur de son ORIGINAL est sous LARGEUR_MIN (350). C'est la largeur de l'ORIGINAL qui compte, pas
+// celle du fichier servi : l'original borne ce que l'image contient (un fichier servi n'est jamais agrandi, `withoutEnlargement`), donc c'est lui
+// qui borne l'agrandissement que le site peut se permettre. Une largeur INCONNUE n'est pas « basse » (inconnu n'est ni bas ni haut : on ne marque pas).
+const estBasseDefinition = largeur => typeof largeur === 'number' && Number.isFinite(largeur) && largeur > 0 && largeur < LARGEUR_MIN;
+// La largeur d'origine d'un document `images` : `wOriginal`; à défaut `w` (la largeur servie), mais seulement s'il est SOUS le plafond servi —
+// un fichier plafonné à 700 a été réduit, son original est plus large et on ne le sait pas ; un fichier plus étroit n'a jamais été touché.
+function largeurOriginaleDe(doc) {
+    if (typeof doc?.wOriginal === 'number' && Number.isFinite(doc.wOriginal) && doc.wOriginal > 0) return doc.wOriginal;
+    if (typeof doc?.w === 'number' && Number.isFinite(doc.w) && doc.w > 0 && doc.w < WEBP_LARGEUR) return doc.w;
+    return null;
 }
 
 // Une décision de seuil se RELIT (§23). Un document `trop-petit` porte le seuil appliqué (`seuilApplique`) ; un document SANS ce
@@ -75,4 +99,4 @@ function sourceDeUnite(unite, defaut) {
 const WEBP_LARGEUR = 700;
 const WEBP_QUALITE = 80;
 
-module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
+module.exports = { LARGEUR_MIN, LARGEUR_MIN_OFFICIELLE, LARGEUR_MIN_PIKAQIAN, SOURCES_OFFICIELLES, SOURCES_A_300, largeurMinDe, estBasseDefinition, largeurOriginaleDe, aRejuger, sourceDeUnite, WEBP_LARGEUR, WEBP_QUALITE };
