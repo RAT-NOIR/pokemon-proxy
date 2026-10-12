@@ -17,12 +17,14 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     }
 
     await H.ouvrirBac('test-limites-porteur.js'); await M.creerIndex();
-    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COMPTE_HEURE: '3', V2_SOLDE_HEURE: '3', V2_REPONSE_HEURE: '3', V2_RETOUR_LIVE_HEURE: '3' });
+    // Tour 1 (I-1) : QUATRE valeurs DISTINCTES. Avec une valeur commune, brancher une route sur la variable d'une autre laissait le banc vert (mutations M9, M10).
+    const N = { 'GET /api/compte': 3, 'POST /api/solde': 4, 'POST /api/identifier/reponse': 5, 'POST /api/retour-live': 6 };
+    const cfg = lireConfig({ MONGODB_BASE: 'test_scratch', V2_COMPTE_HEURE: '3', V2_SOLDE_HEURE: '4', V2_REPONSE_HEURE: '5', V2_RETOUR_LIVE_HEURE: '6' });
     A.registre.fournir('courrier', creerCourrierMemoire()); A.registre.fournir('turnstile', { verifier: async () => true });
     const cors = require('../transport/cors'); const { dansUnScan } = require('../../sources'); const { assembler } = require('../index');
     const app = express(); app.set('trust proxy', true); app.use(cors.middlewareV2(cfg)); app.use(express.json()); app.use((q, s, n) => dansUnScan(n));
     pret.armer(M.verifierIndex);
-    app.use(assembler([require('../argent/monter'), require('../installations/monter'), require('../comptes/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { gererIdentifier: async () => { throw new Error('chaîne atteinte'); } }));
+    app.use(assembler([require('../argent/monter'), require('../installations/monter'), require('../comptes/monter'), require('../identifier/monter'), require('../scanner/monter'), require('../collection/monter')], cfg, { gererIdentifier: async () => { throw new Error('chaîne atteinte'); }, gererRetourLive: async (q, s) => s.json({ success: true }) }));   // M-3 : le montage est complet, une requête admise ATTEINT la route
     const srv = await H.serveur(app); let n = 0; const ip = () => ({ 'x-forwarded-for': `10.8.${Math.floor(++n / 250)}.${n % 250 + 1}` });
     const SITE = { origin: cfg.origines.site, 'x-rat-market': '1' }, EXT = { origin: cfg.origines.extension };
     const post = (ch, corps, entetes = {}) => H.appel(srv.url, ch, { methode: 'POST', corps, entetes: { ...ip(), ...entetes } });
@@ -43,21 +45,37 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     };
     const A1 = await installation(), B1 = await installation();
     const entetesPour = { 'GET /api/compte': [{ cookie: comptes[0].cookie }, { cookie: comptes[1].cookie }], 'POST /api/solde': [A1, B1], 'POST /api/identifier/reponse': [A1, B1], 'POST /api/retour-live': [A1, B1] };
-    const ordre = [];
+    // M-3 : ce que rend une requête ADMISE, par route — chacun de ces statuts ne peut venir que du traitement de la route (après le limiteur) : le compte et le solde lisent (200) ;
+    // la réponse et le retour live, sans question ni prix, refusent l'entrée (400 ENTREE) depuis leur propre code.
+    const ADMIS = { 'GET /api/compte': [200, undefined], 'POST /api/solde': [200, undefined], 'POST /api/identifier/reponse': [400, 'ENTREE'], 'POST /api/retour-live': [400, 'ENTREE'] };
     for (const [route, appeler] of Object.entries(ROUTES)) {
-        const [hA, hB] = entetresDe(route);
-        const vus = []; for (let i = 0; i < 3; i++) vus.push((await appeler(hA)).statut);
-        const r4 = await appeler(hA);
-        H.v(`${route} : 3 requêtes passent (pas de 429), la 4e du MÊME porteur rend 429 DEBIT`, [vus.filter(s => s === 429).length, r4.statut, code(r4)], [0, 429, 'DEBIT']);
-        H.vrai(`${route} : Retry-After présent, ≥ 1 et égal à reessayerDans`, Number(r4.entetes['retry-after']) >= 1 && r4.json.erreur.reessayerDans === Number(r4.entetes['retry-after']));
+        const [hA, hB] = entetesPour[route], max = N[route];
+        const vus = []; for (let i = 0; i < max; i++) { const r = await appeler(hA); vus.push([r.statut, code(r)]); }
+        const rN1 = await appeler(hA);
+        H.v(`${route} : ${max} requêtes passent ET atteignent la route (${ADMIS[route][0]}${ADMIS[route][1] ? ' ' + ADMIS[route][1] : ''}), la ${max + 1}e du MÊME porteur rend 429 DEBIT`,
+            [vus.every(v => v[0] === ADMIS[route][0] && v[1] === ADMIS[route][1]), rN1.statut, code(rN1)], [true, 429, 'DEBIT']);
+        H.vrai(`${route} : Retry-After présent, ≥ 1 et égal à reessayerDans`, Number(rN1.entetes['retry-after']) >= 1 && rN1.json.erreur.reessayerDans === Number(rN1.entetes['retry-after']));
         const rB = await appeler(hB);
         H.v(`${route} : un AUTRE porteur n'est pas touché`, rB.statut === 429, false);
-        ordre.push(route);
+    }
+    // M-2 : le limiteur de /api/identifier/reponse passe AVANT l'idempotence. La MÊME Idempotency-Key rejouée N+1 fois (N = 5) rend 429 à la N+1e : si le limiteur venait après
+    // `idempotente`, un rejeu servi par la clé échapperait au plafond (M12).
+    {
+        // Une réponse n'est mise de côté par la clé que si elle est un succès (< 300) : la scène doit donc rendre un VRAI 200. Un administrateur n'a rien débité (aucune question réservée) :
+        // la réponse se résout sur la ligne `analyses` seule (choix « aucune »). La ligne est semée à la main, au nom de l'installation D.
+        const D = await installation(), cleRejeu = { 'idempotency-key': 'cle-de-rejeu-0001' }, nR = N['POST /api/identifier/reponse'];
+        const jeton = D.authorization.replace(/^Bearer /, ''); const inst = await col('installations').findOne({ jetonEmpreinte: require('../comptes/jetons').empreinte(jeton) });
+        const sid = new (require('mongoose').Types.ObjectId)();
+        await col('analyses').insertOne({ _id: sid, porteur: `installation:${inst._id}`, facturation: { motif: 'administrateur' }, statut: 'a-trancher', cartes: [{ statut: 'a-trancher', question: { choix: [{ id: 'a', idProduct: 1 }, { id: 'b', idProduct: 2 }] } }], produits: [] });
+        const corps = { scanId: String(sid), carte: 0, choix: 'aucune' };
+        const vus = []; for (let i = 0; i < nR; i++) vus.push(await post('/api/identifier/reponse', corps, { ...D, ...cleRejeu }));
+        const dernier = await post('/api/identifier/reponse', corps, { ...D, ...cleRejeu });
+        H.v('M-2 : la scène rend un vrai succès : la 1re réponse est 200, les rejeux de la même clé aussi', vus.map(r => r.statut), Array(nR).fill(200));
+        H.v(`M-2 : la même Idempotency-Key rejouée ${nR} fois ne dépasse pas le plafond, la ${nR + 1}e rend 429 DEBIT (le limiteur précède l'idempotence)`, [dernier.statut, code(dernier)], [429, 'DEBIT']);
     }
     // les compteurs sont propres à chaque route : le porteur A de /api/solde est à 4, mais /api/retour-live de A a son compte (épuisé aussi), et un TROISIÈME porteur est libre partout
     const C1 = await installation();
     const libres = []; for (const route of ['POST /api/solde', 'POST /api/identifier/reponse', 'POST /api/retour-live']) libres.push((await ROUTES[route](C1)).statut === 429);
     H.v('un porteur neuf n\'est limité sur aucune route (compteurs par porteur ET par route)', libres, [false, false, false]);
-    function entetresDe(route) { return entetesPour[route]; }
     await srv.fermer(); await H.fermerBac(); H.bilan();
 })().catch(e => { console.error(e); process.exit(1); });
