@@ -1,0 +1,79 @@
+{
+ "origine": "jugement.json de l'instantané du 2026-10-12 06:22 UTC (cartes_produits réel) ; couples tirés du run D",
+ "couples": [
+  {
+   "reponse": 805556,
+   "verite": 805556,
+   "attendu": "exact",
+   "source": "IMG_3237 vérité contre elle-même"
+  },
+  {
+   "reponse": 740794,
+   "verite": 805556,
+   "attendu": "carte",
+   "source": "run D, IMG_3237 : niveau « carte » écrit dans resultats-20261012-064548.json"
+  },
+  {
+   "reponse": 553788,
+   "verite": 291582,
+   "attendu": "carte",
+   "source": "run D, IMG_3225 : candidat unique de la chaîne"
+  },
+  {
+   "reponse": 570579,
+   "verite": 570089,
+   "attendu": "carte",
+   "source": "run D, IMG_3227 : candidat unique de la chaîne"
+  },
+  {
+   "reponse": 740794,
+   "verite": 660428,
+   "attendu": "faux",
+   "source": "IMG_3229 (660428) contre IMG_3237 : deux cartes différentes"
+  }
+ ],
+ "lignes": [
+  {
+   "carteId": 294662,
+   "idProduct": 740794,
+   "slugSet": "Paradox-Rift",
+   "numeroFiche": "251"
+  },
+  {
+   "carteId": 272725,
+   "idProduct": 660428,
+   "slugSet": "Sword-Shield-Promos",
+   "numeroFiche": "214"
+  },
+  {
+   "carteId": 211485,
+   "idProduct": 553788,
+   "slugSet": "XY-Promos",
+   "numeroFiche": "215"
+  },
+  {
+   "carteId": 49454,
+   "idProduct": 570579,
+   "slugSet": "PCG-Promos",
+   "numeroFiche": "093"
+  },
+  {
+   "carteId": 211485,
+   "idProduct": 291582,
+   "slugSet": "XY-Black-Star-Promos",
+   "numeroFiche": "XY141"
+  },
+  {
+   "carteId": 294662,
+   "idProduct": 805556,
+   "slugSet": "Prismatic-Evolutions",
+   "numeroFiche": "162"
+  },
+  {
+   "carteId": 49454,
+   "idProduct": 570089,
+   "numeroFiche": null,
+   "slugSet": "Movie-Commemoration-VS-Pack-Auras-Lucario"
+  }
+ ]
+}
