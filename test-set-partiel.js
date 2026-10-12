@@ -125,5 +125,93 @@ t('lignesDe : même forme que les réimpressions déjà jointes (preuve, route, 
     assert.ok(!('visuelSubstitut' in l) && !('images' in l));
 });
 
+// ════ S6 (session 3) : la forme « code collé au numéro » (Rainbow-Energy-TR17) et la TABLE FERMÉE d'origines (Pikachu World Collection) ════
+t('S6 décodage collé : « Rainbow-Energy-TR17 » sous PR → code TR n°17', () => assert.deepStrictEqual(SP.decoderCollee('Rainbow-Energy-TR17', 'PR'), { code: 'TR', num: '17' }));
+t('S6 décodage collé : le code de l\'expansion elle-même (PR14, PR0, PR42) est CIRCULAIRE → null', () => {
+    for (const s of ['Fire-Energy-PR14', 'Metal-Energy-V1-PR0', 'Water-Energy-V1-PR42', 'Ancient-Mew-PR11']) assert.strictEqual(SP.decoderCollee(s, 'PR'), null, s);
+});
+t('S6 décodage collé : un slug sans chiffres final ou à tiret (ASCMEG-131) n\'est pas la forme collée', () => {
+    for (const s of ['Victory-Medal-V7-PR', 'Ultra-Ball-V7-ASCMEG-131', null, '']) assert.strictEqual(SP.decoderCollee(s, 'PR'), null, String(s));
+});
+t('S6 la forme collée est OPT-IN : sans ctx.formeCollee, « Rainbow-Energy-TR17 » reste « nonDecode » (poser-reimpressions.js ne change pas)', () => {
+    const ctx = ctxDe({ expsDuCode: new Map([['TR', new Set([20])]]), parExpNum: new Map([['20|17', [950]]]), cartesDe: new Map([[950, new Set([4])]]) });
+    assert.strictEqual(SP.resoudreProduit(p(5, 'Rainbow-Energy-TR17'), 'PR', ctx).cause, 'nonDecode');
+    const r = SP.resoudreProduit(p(5, 'Rainbow-Energy-TR17'), 'PR', { ...ctx, formeCollee: true });
+    assert.strictEqual(r.cause, 'resolu'); assert.strictEqual(r.carteId, 4); assert.strictEqual(r.code, 'TR'); assert.strictEqual(r.num, '17'); assert.strictEqual(r.source, 'slug-collee');
+});
+t('S6 la forme collée ne résout JAMAIS un code absent de codes_set (un doute est un trou)', () => {
+    const ctx = ctxDe({ formeCollee: true });
+    assert.strictEqual(SP.resoudreProduit(p(5, 'Rainbow-Energy-TR17'), 'PR', ctx).cause, 'codeInconnu');
+});
+t('S6 la slug décodable l\'emporte sur la forme collée (source « slug »)', () => {
+    const r = SP.resoudreProduit(p(5, 'Ultra-Ball-V1-PRBRS-150'), 'PR', { ...ctxDe(), formeCollee: true });
+    assert.strictEqual(r.cause, 'resolu'); assert.strictEqual(r.source, 'slug');
+});
+t('S6 table fermée : l\'origine (code, numéro) vient de la table pour un produit dont le slug ne dit rien', () => {
+    const ctx = ctxDe({ origines: new Map([[5, { code: 'BRS', num: '150', langue: 'Spanish', ligne: 'Wizards 26' }]]) });
+    const r = SP.resoudreProduit(p(5, 'Pikachu-V13'), 'PWC', ctx);
+    assert.strictEqual(r.cause, 'resolu'); assert.strictEqual(r.carteId, 1); assert.strictEqual(r.source, 'table'); assert.strictEqual(r.langue, 'Spanish');
+});
+const cartePika = (att) => new Map([[1, { _id: 1, nomEn: 'Pikachu', attaques: att.map(nom => ({ nom })), impressions: impr('150') }]]);
+const classerT = (produit, att, langue) => SP.classerProduits({
+    produits: [produit], CODE: 'PWC', ctx: ctxDe({ origines: new Map([[produit.idProduct, { code: 'BRS', num: '150', langue, ligne: 'Wizards 26' }]]), verifierAttaques: true }),
+    cartesParId: cartePika(att), poolDe: () => [...cartePika(att).values()],
+});
+t('S6 table : langue occidentale + attaques EXACTEMENT celles du produit → PROUVÉ', () => {
+    const r = classerT(prod(5, 'Pikachu-V13', 'Pikachu [Scratch | Thunderbolt]'), ['Scratch', 'Thunderbolt'], 'Spanish');
+    assert.strictEqual(r.prouves.length, 1); assert.strictEqual(r.prouves[0].source, 'table');
+});
+t('S6 table : attaques qui ne sont pas celles du produit → reste « attaques-non-concordantes » (deux témoins indépendants doivent s\'accorder)', () => {
+    const r = classerT(prod(5, 'Pikachu-V13', 'Pikachu [Scratch | Thunderbolt]'), ['Gnaw', 'Thunder Jolt'], 'Spanish');
+    assert.strictEqual(r.prouves.length, 0); assert.strictEqual(r.restes[0].cause, 'attaques-non-concordantes');
+});
+t('S6 table : langue hors tirage (Chinese, Korean) → reste « langue-hors-tirage », jamais prouvé', () => {
+    for (const l of ['Chinese', 'Korean', 'Japanese', '']) {
+        const r = classerT(prod(5, 'Pikachu-V15', 'Pikachu [Scratch | Thunderbolt]'), ['Scratch', 'Thunderbolt'], l);
+        assert.strictEqual(r.prouves.length, 0, l); assert.strictEqual(r.restes[0].cause, 'langue-hors-tirage', l);
+    }
+});
+t('S6 table : le titre de la page de la carte cité par la ligne doit être celui de la base (sinon « titre-non-concordant »)', () => {
+    const mk = (titreBase) => {
+        const c = new Map([[1, { _id: 1, nomEn: 'Pikachu', bulba: { titre: titreBase }, attaques: [{ nom: 'Scratch' }, { nom: 'Thunderbolt' }], impressions: impr('150') }]]);
+        return SP.classerProduits({ produits: [prod(5, 'Pikachu-V13', 'Pikachu [Scratch | Thunderbolt]')], CODE: 'PWC', ctx: ctxDe({ origines: new Map([[5, { code: 'BRS', num: '150', langue: 'Spanish', ligne: 'Wizards 26', titre: 'Pikachu (Wizards Promo 26)' }]]), verifierAttaques: true }), cartesParId: c, poolDe: () => [...c.values()] });
+    };
+    assert.strictEqual(mk('Pikachu (Wizards Promo 26)').prouves.length, 1);
+    const r = mk('Pikachu (Wizards Promo 4)');
+    assert.strictEqual(r.prouves.length, 0); assert.strictEqual(r.restes[0].cause, 'titre-non-concordant');
+    assert.strictEqual(mk(undefined).restes[0].cause, 'titre-non-concordant');
+});
+t('S6 les langues du tirage intl sont les 7 occidentales de la page', () => assert.deepStrictEqual(SP.LANGUES_INTL, ['English', 'German', 'French', 'Dutch', 'Italian', 'Portuguese', 'Spanish']));
+t('S6 lignesDe : une ligne issue de la table dit sa source et sa page dans origine et detail', () => {
+    const C = classerT(prod(5, 'Pikachu-V13', 'Pikachu [Scratch | Thunderbolt]'), ['Scratch', 'Thunderbolt'], 'Spanish');
+    const L = SP.lignesDe({ slugSet: 'Pikachu-World-Collection', CODE: 'PWC', classement: C, idExpansion: 4392, le: new Date(0) });
+    assert.strictEqual(L.length, 1); assert.strictEqual(L[0].origine.source, 'table'); assert.strictEqual(L[0].origine.numero, '150');
+    assert.ok(/table fermée/.test(L[0].detail) && /Wizards 26/.test(L[0].detail) && /Spanish/.test(L[0].detail));
+    assert.strictEqual(L[0].preuve, 'reimpression+origine+numero');
+});
+t('S6 lignesDe : une ligne issue du slug garde EXACTEMENT sa forme (origine = { code, numero } seulement)', () => {
+    const L = SP.lignesDe({ slugSet: 'Promos', CODE: 'PR', classement: classe(), idExpansion: 2107, le: new Date(0) });
+    assert.deepStrictEqual(L[0].origine, { code: 'BRS', numero: '150' });
+});
+
+// ── la TABLE FERMÉE PWC : chaque entrée cite sa page et sa ligne, et une langue hors tirage est refusée au chargement ──
+const TP = require('./collecte-cartes/table-pwc');
+t('S6 table PWC : 7 entrées, toutes en langue occidentale, chacune avec sa ligne de page et la copie Wayback à 14 chiffres', () => {
+    assert.strictEqual(TP.TABLE_PWC.length, 7);
+    for (const e of TP.TABLE_PWC) { assert.ok(SP.LANGUES_INTL.includes(e.langue), e.langue); assert.ok(/^Wizards \d+$/.test(e.ligne)); assert.ok(/copie Wayback \d{14}/.test(e.page)); assert.strictEqual(e.code, 'WP'); }
+    assert.deepStrictEqual(TP.TABLE_PWC.map(e => e.ligne.split(' ')[1]).sort((a, b) => a - b), ['1', '4', '24', '25', '26', '27', '28']);
+});
+t('S6 table PWC : les deux produits de langue hors tirage (chinois, coréen) sont NOMMÉS dans les exclus, avec leur ligne', () => {
+    assert.deepStrictEqual(TP.EXCLUS_PWC.map(e => e.langue).sort(), ['Chinese', 'Korean']);
+    for (const e of TP.EXCLUS_PWC) assert.ok(/copie Wayback \d{14}/.test(e.page) && e.ligne);
+});
+t('S6 verifierTablePwc LÈVE sur une langue hors liste, un idProduct doublé, une page sans copie datée', () => {
+    const bonne = TP.TABLE_PWC[0];
+    assert.throws(() => TP.verifierTablePwc([{ ...bonne, langue: 'Chinese' }]), /langue/);
+    assert.throws(() => TP.verifierTablePwc([bonne, bonne]), /doublon/);
+    assert.throws(() => TP.verifierTablePwc([{ ...bonne, page: 'la page dit' }]), /Wayback/);
+    assert.strictEqual(TP.verifierTablePwc(TP.TABLE_PWC), true);
+});
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

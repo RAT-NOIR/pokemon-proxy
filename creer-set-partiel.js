@@ -18,8 +18,17 @@ const { cleNumero } = require('./collecte-cartes/jointure');
 const { nommerLesNouveaux, insererSetNeuf } = require('./collecte-cartes/set-nomme');
 const SP = require('./collecte-cartes/set-partiel');
 
+const TP = require('./collecte-cartes/table-pwc');
+
 // La liste FERMÉE des sets partiels : l'expansion, le slugSet Cardmarket, le code de famille (codeSet) et la route.
-const PARTIELS = { 2107: { slug: 'Promos', CODE: 'PR', route: 'pr' } };
+//   2107 Promos : le set EXISTE (53/93 posés le 2026-10-12) ; `formeCollee` (S6) y ajoute Rainbow-Energy-TR17 — un COMPLÉMENT d'un set existant
+//        est une MODIFICATION (compteurs `partiel`, reste à retirer) : la simulation le dit, l'écriture le REFUSE tant qu'un feu vert nommé n'a pas
+//        ajouté un chemin de mise à jour.
+//   4392 Pikachu World Collection (S6) : origines lues dans la TABLE FERMÉE (collecte-cartes/table-pwc.js), attaques de Cardmarket vérifiées.
+const PARTIELS = {
+    2107: { slug: 'Promos', CODE: 'PR', route: 'pr', formeCollee: true },
+    4392: { slug: 'Pikachu-World-Collection', CODE: 'PWC', route: 'pwc', origines: TP.originesPwc, verifierAttaques: true, lecture: `par la table fermée (${TP.PAGE})`, chemin: 'ligne de la page de l\'expansion → numéro Wizards Black Star Promos → produit d\'origine → une seule carte au même titre → attaques de Cardmarket = celles de la carte → impression intl à ce numéro ; langue occidentale lue sur la page' },
+};
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
 const INCONNUS = process.argv.slice(2).filter(a => !/^--(set|attendu|sortie)=.+$/.test(a) && a !== '--ecrire');
@@ -44,17 +53,17 @@ const INCONNUS = process.argv.slice(2).filter(a => !/^--(set|attendu|sortie)=.+$
     for (const l of await lireMongo(cx.db.collection('cartes_produits'), {}, { nom: 'cartes_produits', projection: { idProduct: 1, carteId: 1 } })) (cartesDe.get(l.idProduct) || cartesDe.set(l.idProduct, new Set()).get(l.idProduct)).add(l.carteId);
 
     const produits = cat.map(p => { const n = numDe.get(p.idProduct); return { idProduct: p.idProduct, idExpansion: p.idExpansion, idMetacard: p.idMetacard, name: p.name, appris: !!n, slug: n?.slug ?? null, slugSet: n?.slugSet ?? null }; });
-    const ctx = { expsDuCode, parExpNum, cartesDe };
+    const ctx = { expsDuCode, parExpNum, cartesDe, ...(conf.origines ? { origines: conf.origines() } : {}), ...(conf.formeCollee ? { formeCollee: true } : {}), ...(conf.verifierAttaques ? { verifierAttaques: true } : {}) };
     // 1re passe : les cartes désignées et le pool (cartes des sets d'ORIGINE) — lus en une fois
     const resolus = produits.filter(p => p.appris && !cartesDe.has(p.idProduct)).map(p => SP.resoudreProduit(p, conf.CODE, ctx)).filter(x => x.cause === 'resolu');
-    const PROJ = { nomEn: 1, niveau: 1, attaques: 1, impressions: 1, sets: 1 };
+    const PROJ = { nomEn: 1, niveau: 1, attaques: 1, impressions: 1, sets: 1, 'bulba.titre': 1 };
     const cartesParId = new Map((await cx.db.collection('cartes').find({ _id: { $in: [...new Set(resolus.map(x => x.carteId))] } }, { projection: PROJ }).toArray()).map(c => [c._id, c]));
     const slugsOrigine = [...new Set(resolus.flatMap(x => x.cands.map(id => numDe.get(id)?.slugSet)).filter(Boolean))];
     const poolBrut = await cx.db.collection('cartes').find({ sets: { $in: slugsOrigine } }, { projection: PROJ }).toArray();
     if (resolus.length && !poolBrut.length) throw new Error(`pool des cartes d'origine VIDE pour ${slugsOrigine.length} sets d'origine : le témoin du nom se tairait sur tout — arrêt`);
     const poolDe = x => { const sl = new Set(x.cands.map(id => numDe.get(id)?.slugSet).filter(Boolean)); return poolBrut.filter(c => (c.sets || []).some(s => sl.has(s))); };
     const C = SP.classerProduits({ produits, CODE: conf.CODE, ctx, cartesParId, poolDe });
-    const P = SP.partielDe(C);
+    const P = SP.partielDe(C, conf.chemin ? { chemin: conf.chemin } : undefined);
 
     console.log(`\n════ DÉNOMINATEUR : ${cat.length} produits au catalogue (exp ${EXP}) · ${numeros.length} lignes numeros_cartes lues · ${cartesDe.size} produits déjà joints (toute la base) ════`);
     console.log(`   prouvés ${C.prouves.length} · contredits par le nom ${C.contredits.length} · restes ${C.restes.length} · déjà joints ${C.deja.length} · cartes-code hors dénominateur ${C.horsDenominateur.length} · total ${P.total}  (somme ${C.prouves.length + C.contredits.length + C.restes.length + C.deja.length + C.horsDenominateur.length} = ${cat.length})`);
@@ -75,7 +84,7 @@ const INCONNUS = process.argv.slice(2).filter(a => !/^--(set|attendu|sortie)=.+$
 
     const le = new Date();
     const existant = await cx.db.collection('sets').findOne({ _id: conf.slug }, { projection: { _id: 1, idExpansion: 1, partiel: 1 } });
-    const doc = SP.docSetPartiel({ slug: conf.slug, code: conf.CODE, exps: [EXP], route: conf.route, partiel: P, le });
+    const doc = SP.docSetPartiel({ slug: conf.slug, code: conf.CODE, exps: [EXP], route: conf.route, partiel: P, le, ...(conf.lecture ? { lecture: conf.lecture } : {}) });
     const nommes = await nommerLesNouveaux(cx.db, prod.db, [doc]);   // lève « SET SANS NOM REFUSÉ » avant toute écriture
     console.log(`   set « ${conf.slug} » : ${existant ? `EXISTE déjà (idExpansion ${JSON.stringify(existant.idExpansion)}) — rien ne sera modifié` : 'à créer'} · nom affiché : « ${nommes.champsDe.get(conf.slug)?.nomAffichage ?? '(set existant)'} » (${nommes.champsDe.get(conf.slug)?.nomAffichageSource ?? '—'})`);
     console.log(`   ${P.mention}`);
@@ -87,6 +96,8 @@ const INCONNUS = process.argv.slice(2).filter(a => !/^--(set|attendu|sortie)=.+$
     if (arg('sortie')) { require('fs').writeFileSync(arg('sortie'), JSON.stringify({ doc: { ...doc, ...(nommes.champsDe.get(conf.slug) ?? {}) }, lignes, restes, cartes: cartesTouchees }, null, 1), 'utf8'); console.log(`   simulation écrite : ${arg('sortie')}`); }
     if (!ecrire) { console.log('\n   (mesure seule — relancer avec --attendu=' + C.prouves.length + ' --ecrire)'); await fermer(); return; }
     if (attendu !== C.prouves.length) { console.log(`\n   🔴 ${C.prouves.length} prouvés contre ${attendu} attendus : RIEN ne s'écrit`); await fermer(); process.exitCode = 1; return; }
+    // (S6) un set qui EXISTE déjà ne se complète pas ici : ses compteurs `partiel` et ses `restes` seraient périmés — c'est une MODIFICATION
+    if (existant && existant.partiel && existant.partiel.prouves !== C.prouves.length) { console.log(`\n   🔴 le set « ${conf.slug} » existe avec ${existant.partiel.prouves} prouvés, la simulation en trouve ${C.prouves.length} : COMPLÉMENT = MODIFICATION (compteurs partiel, restes à retirer), il attend un feu vert nommé — RIEN ne s'écrit`); await fermer(); process.exitCode = 1; return; }
 
     const crees = await insererSetNeuf(cx.db.collection('sets'), doc, nommes);
     const r = await cx.db.collection('cartes_produits').bulkWrite(lignes.map(({ _id, ...corps }) => ({ updateOne: { filter: { _id }, update: { $setOnInsert: corps }, upsert: true } })), { ordered: false });
