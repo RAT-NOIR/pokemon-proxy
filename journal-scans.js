@@ -800,6 +800,14 @@ const journalScanSchema = new mongoose.Schema({
     // Mesuré le 2026-08-08 sur 65 scans : 32 % des réserves fortes, 51 % faibles.
     niveauReserve: String,
 
+    // D2 (2026-10-13) — LA GARDE PROVISOIRE DES JUMEAUX (garde-jumeaux.js). `gardeJumeaux` : l'issue ('aucun' = recherche réussie,
+    // aucun jumeau · 'jumeaux' = 1 ou 2 jumeaux, réponse sous réserve · 'trop' = plus de 3 produits, refus · 'echec' = recherche en
+    // échec, réponse sous réserve · 'non-jouee' = la réponse était déjà sous réserve). null = ligne antérieure à la garde.
+    // `gardeJumeauxCause` : la cause d'un échec ; `gardeJumeauxIds` : les jumeaux trouvés.
+    gardeJumeaux: String,
+    gardeJumeauxCause: String,
+    gardeJumeauxIds: [Number],
+
     // L'idProduct du concurrent renvoyé à l'extension, quand il y en a un. Le champ
     // complet (nom, codeSet, prixGuide) part dans la RÉPONSE ; ici on ne garde que
     // l'identifiant, qui suffit à retrouver le reste et ne duplique aucun catalogue.
@@ -1131,6 +1139,10 @@ function enregistrerScan(d = {}) {
             setCodeResolution: d.setCodeResolution || null,
             raisonReserve: d.raisonReserve || null,
             niveauReserve: d.niveauReserve || null,
+            // D2 : la garde des jumeaux. `null` = la garde n'a pas joué sur cette ligne (refus en amont, ligne antérieure).
+            gardeJumeaux: d.gardeJumeaux || null,
+            gardeJumeauxCause: d.gardeJumeauxCause ? String(d.gardeJumeauxCause).slice(0, 200) : null,
+            gardeJumeauxIds: Array.isArray(d.gardeJumeauxIds) ? d.gardeJumeauxIds.map(Number).filter(Number.isFinite).slice(0, 3) : null,
             // ── LE DÉPARTAGE PAR L'IMAGE, À CHAQUE SCAN ─────────────────────
             // ⚠️ ÉCRITS MÊME QUAND IL NE TRANCHE PAS, et c'est tout l'intérêt. `raisonReserve`
             // ne dira `image-departage` que sur les scans où l'image a CHANGÉ le gagnant :
@@ -1240,6 +1252,8 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
     // `nbExAequo` donnait le nombre, jamais les identifiants : impossible de savoir si le
     // groupe était couvert par un index, ni de mesurer la clôture après coup.
     exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
+    // D2 : la garde des jumeaux, sur le refus `jumeaux-trop-nombreux` (le seul refus qu'elle produit).
+    gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds,
     // ⚠️ LA PHRASE DU DÉPARTAGE PAR LE SYMBOLE — ajoutée le 2026-09-02, MÊME MOTIF QUE
     // `champsImage` : elle n'existe que là où le départage a été consulté, donc elle passe
     // par l'appelant. Sur les sorties en amont du symbole elle reste null, et null y veut
@@ -1313,6 +1327,7 @@ function enregistrerEchec({ route, userId, cardInfo, motifEchec, rembourse, imag
         prixParEtat, nbOffresParEtat,
         msIA, msCatalogue, nbPhotos,
         exAequoIds, vivierIds, vivierTaille, messageErreur, candidatsRendus,
+        gardeJumeaux, gardeJumeauxCause, gardeJumeauxIds,
         // Tout ce que l'IA avait lu. Sur 'ia-echec' tout reste nul, et c'est l'information :
         // la lecture elle-même a échoué, il n'y a rien à reprocher à l'aval.
         nom: c.name, numero: c.number, total: c.total,
