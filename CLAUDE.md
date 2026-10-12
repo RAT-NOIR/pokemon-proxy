@@ -34,6 +34,17 @@ fichiers, rien ne les rendait : 208 récupérés depuis R2, 63 + 84 à redépose
 3. **Un dossier partagé vidé ne se réinstalle pas en silence** : il se SIGNALE (au testeur, et à l'autre session si elle est en cause), et une restauration de fichiers du
    testeur attend sa décision.
 
+### Règle commune, recopiée mot pour mot de `pokemon-proxy-api-v2/CLAUDE.md` (commit `5f1db12a`, demande du testeur du 2026-10-13)
+
+- 🔴 **RETIRER UN WORKTREE OU UNE COPIE — RÈGLE COMMUNE À TOUS LES AGENTS** (testeur, 2026-10-13) :
+  1. Jamais de `git worktree remove --force`, ni de suppression récursive (`Remove-Item -Recurse`, `rmdir /s`, `rm -rf`, `fs.rmSync(…, { recursive: true })`), sur un dossier qui contient des jonctions ou des liens symboliques.
+  2. Pour retirer un worktree : lister ses jonctions et ses liens ; retirer chaque LIEN seul, sans suivre sa cible (`cmd /c rmdir "<lien>"`, sans `/s`) ; vérifier que les cibles sont intactes (nombre de fichiers avant et après) ; seulement ensuite, retirer le worktree.
+  3. Aucune jonction vers un dossier d'apports manuels (`Logo FR`, `apport-manuel`, `Desktop\LOGO`, ou tout dossier que le testeur remplit lui-même), jamais.
+  - Chez l'agent API, cette procédure est appliquée par UN SEUL outil, `outils/retirer-worktree.js`, qui REFUSE de continuer si une cible change de taille. Les sous-agents n'utilisent que lui. Tant qu'il n'est pas fusionné, aucun sous-agent ne retire de copie : il la laisse en place et le dit.
+
+> **Chez l'agent catalogue (décision du testeur, 2026-10-13)** : on utilise ce même outil de retrait unique dès qu'il est fusionné sur `main` ; d'ici là, **aucun retrait de worktree
+> contenant des jonctions** — ni par `scratch\retirer-worktree.ps1`, ni par un sous-agent : la copie reste en place et le registre le dit.
+
 ---
 
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
