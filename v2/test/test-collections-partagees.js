@@ -15,8 +15,12 @@ const t = new Date('2026-10-08T10:00:00Z');
 // Les collections de la base de production `test` utilisées par le code HÉRITÉ (modèles de acces.js, index.js, journal-scans.js, import-*.js,
 // departage-image.js, apprentissage-commun.js) + les trois collections de la base `cartes` que l'API lit. Source : RAPPORT-API.md « Contrôle Atlas »
 // (16 collections mesurées dans `test`) et les déclarations mongoose du dépôt.
-const HERITEES = Object.freeze(['credits', 'quotas_semaine', 'remboursements', 'remboursements_questions', 'questions', 'numeros_cartes', 'codes_set', 'catalogue_produits',
-    'guide_prix', 'guide_prix_meta', 'evenements_stripe', 'journal_scans', 'references_image', 'cardprices', 'quotas', 'sets', 'cartes', 'cartes_produits']);
+// Les 16 collections de la base `test` : relevé de C:\Users\Yung\Desktop\pokemon-proxy\mesures\taille-bases.jsonl (ligne 1), base `test`. ÉPINGLÉ : si la
+// production en gagne une, ce relevé change et ce banc doit le dire (assertion « 16 noms » plus bas).
+const TEST_PROD = Object.freeze(['references_image', 'catalogue_produits', 'guide_prix', 'numeros_cartes', 'journal_scans', 'codes_set', 'credits', 'evenements_stripe',
+    'cardprices', 'remboursements', 'quotas', 'catalogue_export_meta', 'quotas_semaine', 'guide_prix_meta', 'remboursements_questions', 'questions']);
+const BASE_CARTES = Object.freeze(['sets', 'cartes', 'cartes_produits']);
+const HERITEES = Object.freeze([...TEST_PROD, ...BASE_CARTES]);
 // Les partages VOULUS, déclarés à AUDIT-SECURITE-V2.md (tableau « nom · lecture/écriture · voulu ? »). Rien d'autre.
 const VOULUS = Object.freeze(['credits', 'journal_scans', 'catalogue_produits', 'guide_prix', 'numeros_cartes', 'codes_set', 'guide_prix_meta', 'references_image', 'cardprices', 'sets', 'cartes', 'cartes_produits']);
 
@@ -73,6 +77,7 @@ function citations(racine) {
 
     // 3. LA GARDE : le dénominateur est imprimé, tout nom hérité cité hors VOULUS échoue
     const racine = path.join(__dirname, '..');
+    H.v('la liste des collections héritées de `test` compte 16 noms distincts, égale au relevé de mesures (16 collections), + 3 de la base `cartes`', [TEST_PROD.length, new Set(TEST_PROD).size, HERITEES.length], [16, 16, 19]);
     const cites = citations(racine);
     const hors = cites.filter(c => !VOULUS.includes(c.nom));
     console.log(`   garde : ${fichiersV2(racine).length} fichiers v2 hors bancs lus, ${cites.length} citations d'un nom hérité (${HERITEES.length} noms), dont ${cites.length - hors.length} déclarées voulues`);
