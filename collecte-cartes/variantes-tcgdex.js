@@ -16,6 +16,8 @@ function finDuBloc(t, debut) {
     for (let i = debut; i < t.length; i++) {
         const c = t[i];
         if (c === '"' || c === '\'' || c === '`') { for (i++; i < t.length && t[i] !== c; i++) if (t[i] === '\\') i++; continue; }
+        if (c === '/' && t[i + 1] === '/') { while (i < t.length && t[i] !== '\n') i++; continue; }             // commentaire de ligne (une apostrophe n'y ouvre pas une chaîne)
+        if (c === '/' && t[i + 1] === '*') { const f = t.indexOf('*/', i + 2); if (f < 0) return -1; i = f + 1; continue; }
         if (c === '[' || c === '{') profondeur++;
         else if (c === ']' || c === '}') { profondeur--; if (profondeur === 0) return i; }
     }
@@ -32,6 +34,8 @@ function litteralVersJson(l) {
             for (i++; i < l.length && l[i] !== c; i++) { if (l[i] === '\\') { s += l[i] + (l[i + 1] ?? ''); i++; } else s += l[i] === '"' ? '\\"' : l[i]; }
             sortie += `"${s}"`; continue;
         }
+        if (c === '/' && l[i + 1] === '/') { while (i < l.length && l[i] !== '\n') i++; continue; }
+        if (c === '/' && l[i + 1] === '*') { const f = l.indexOf('*/', i + 2); if (f < 0) throw new Error('commentaire non fermé'); i = f + 1; continue; }
         if (/[A-Za-z_$]/.test(c)) { let j = i; while (j < l.length && /[\w$]/.test(l[j])) j++; const mot = l.slice(i, j); let k = j; while (/\s/.test(l[k] || '')) k++; sortie += l[k] === ':' ? `"${mot}"` : mot; i = j - 1; continue; }
         sortie += c;
     }

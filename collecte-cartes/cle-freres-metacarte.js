@@ -18,7 +18,7 @@ const { temoinAttaques } = require('./cle-setlist-metacarte');
 const PREUVE = 'metacarte+freres';
 
 /**
- * @param {Array<{idProduct:number, carteId:number, slugSet:string|null, preuve?:string}>} lignes  cartes_produits
+ * @param {Array<{idProduct:number, carteId:number, slugSet:string|null, numeroFiche?:string|null, preuve?:string}>} lignes  cartes_produits
  * @param {Map<number,{idMetacard:number|null, idExpansion:number|null}>} metaDe  l'export Cardmarket
  * @returns {Map<string, Map<number, Array<{carteId:number, slugSet:string|null}>>>}  « métacarte|expansion » -> produit -> ses lignes
  */
@@ -30,7 +30,7 @@ function indexerFreres(lignes, metaDe) {
         if (!e || e.idMetacard == null || e.idExpansion == null) continue;
         const k = `${e.idMetacard}|${e.idExpansion}`;
         const g = idx.get(k) || idx.set(k, new Map()).get(k);
-        (g.get(l.idProduct) || g.set(l.idProduct, []).get(l.idProduct)).push({ carteId: l.carteId, slugSet: l.slugSet ?? null });
+        (g.get(l.idProduct) || g.set(l.idProduct, []).get(l.idProduct)).push({ carteId: l.carteId, slugSet: l.slugSet ?? null, numeroFiche: l.numeroFiche ?? null });
     }
     return idx;
 }
@@ -90,6 +90,13 @@ function designerParFreres({ freres, set }, p, { sauf = null } = {}) {
     return { carte: c, raison: null, niveau, atteint: true, freres: ids, carteDesFreres };
 }
 
+/** Les cartes (à nom) de chaque set voulu : `cartes.sets` — la même appartenance que le site et que la jointure lisent. @returns {Map<string, object[]>} */
+function repartirParSet(cartes, voulus) {
+    const m = new Map();
+    for (const c of cartes) if (c.nomEn) for (const s of new Set(c.sets || [])) if (voulus.has(s)) (m.get(s) || m.set(s, []).get(s)).push(c);
+    return m;
+}
+
 /** Les AUTRES cartes du set qui portent le nom de `c` (mêmes clés que la désignation) — la population du danger « homonyme » de la calibration. */
 function homonymesDe(set, c) {
     const h = new Map();
@@ -97,4 +104,4 @@ function homonymesDe(set, c) {
     return [...h.values()];
 }
 
-module.exports = { PREUVE, indexerFreres, preparerSet, designerParFreres, homonymesDe };
+module.exports = { PREUVE, indexerFreres, preparerSet, designerParFreres, homonymesDe, repartirParSet };

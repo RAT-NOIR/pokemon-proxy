@@ -64,6 +64,15 @@ function monde() {
     verifier('   une preuve FICTIVE dans la liste effaçable est détectée', classer(produites, [...PREUVES_DE_JOINDRE, 'fictive+x'], PREUVES_GARDEES_PRODUITES), ['effaçable mais jointure.js ne la produit plus : fictive+x']);
     verifier('   une preuve NEUVE produite par jointure.js et non classée est détectée', classer(new Set([...produites, 'neuve+preuve']), PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES), ['produite par jointure.js et classée nulle part : neuve+preuve']);
     verifier('   … classée explicitement GARDÉE, elle est acceptée', classer(new Set([...produites, 'neuve+preuve']), PREUVES_DE_JOINDRE, ['neuve+preuve']), []);
+    // ── lot M2 : la preuve des outils d'écriture est CLASSÉE (gardée par un rejeu), et liée au code qui la pose ──
+    const P = require(path.join(DIR, 'collecte-cartes', 'preuves-jointure'));
+    const outils = [['poser-fiches-par-setlist.js', 'metacarte+setlist'], ['poser-fiches-par-freres.js', 'metacarte+freres']];
+    verifier('lot M2 : la liste des preuves d\'outils gardées par un rejeu est exactement celle des outils écrits', [...(P.PREUVES_D_OUTILS_GARDEES || [])].sort(), ['metacarte+freres', 'metacarte+setlist']);
+    for (const [fichier, attendue] of outils) {
+        const preuve = require(path.join(DIR, fichier)).PREUVE;
+        verifier(`   ${fichier} : sa PREUVE exportée est « ${attendue} », classée gardée, absente de la liste effaçable, hors du filtre d'effacement`, [preuve, (P.PREUVES_D_OUTILS_GARDEES || []).includes(preuve), PREUVES_DE_JOINDRE.includes(preuve), P.filtreDeRegeneration([1], [5]).preuve.$in.includes(preuve)], [attendue, true, false, false]);
+    }
+    verifier('   le rejeu GARDE une ligne metacarte+freres (le faux modèle l\'efface seulement si elle est refabricable)', await (async () => { const w2 = monde(); w2.lignes.push({ _id: 'z', carteId: 1, idProduct: 99, idExpansion: 5, preuve: 'metacarte+freres' }); await effacerRefabricables(w2.M, [1, 2], [5]); return w2.lignes.some(l => l._id === 'z'); })(), true);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })();

@@ -63,6 +63,29 @@ const carteDeuxTp = `const card: Card = {
 export default card
 `;
 
+const carteCommentaires = `const card: Card = {
+	thirdParty: {
+		cardmarket: 278643 // l'idProduct, « don't » touch
+	},
+	variants: [
+		{
+			type: "normal",
+			thirdParty: { cardmarket: 41 },
+		},
+		{
+			// TPCi Annual Distributors Meeting 2009 (don't break on this apostrophe) http://x
+			type: "normal",
+			/* un commentaire "bloc" avec une accolade } */
+			stamp: ["chicago-2009", "http://exemple.org/a//b"],
+		},
+	],
+
+}
+export default card
+`;
+const ac = V.analyserCarte(carteCommentaires);
+verifier('les commentaires // et /* */ dans un littéral sont sautés (Platinum/Rising Rivals/69.ts) ; « // » dans une chaîne n\'en est pas un', [ac.cardmarket, ac.variantes.map(v => [v.type, v.stamp, v.cardmarket])], [278643, [['normal', [], 41], ['normal', ['chicago-2009', 'http://exemple.org/a//b'], null]]]);
+
 const a = V.analyserCarte(carte113);
 verifier('analyserCarte : l\'idProduct de niveau carte est lu (thirdParty de la carte, pas celui d\'une variante)', a.cardmarket, 299514);
 verifier('   quatre variantes, type/foil/stamp lus, stamp absent = []', a.variantes.map(v => [v.type, v.foil, v.stamp]), [['normal', null, []], ['reverse', null, []], ['reverse', null, ['staff']], ['holo', 'cracked-ice', ['prerelease', 'staff']]]);

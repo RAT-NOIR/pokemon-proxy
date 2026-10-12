@@ -67,6 +67,7 @@ verifier('un set préparé avec `sauf` mais une désignation SANS `sauf` (ou l\'
 // ── l'index ──
 const idx = K.indexerFreres([ligne(11, 1), ligne(12, 1), ligne(99, 1)], metaDe);
 verifier('indexerFreres : clé « métacarte|expansion », produit -> cartes ; un produit absent de l\'export n\'entre pas', [[...idx.keys()], [...idx.get('100|7').keys()]], [['100|7'], [11, 12]]);
+verifier('   chaque ligne garde son numeroFiche (la règle du numéro de la fiche lit celui des frères)', idx.get('100|7').get(11), [{ carteId: 1, slugSet: 'SetX', numeroFiche: '1' }]);
 
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

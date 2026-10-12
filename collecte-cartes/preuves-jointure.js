@@ -17,6 +17,14 @@ const PREUVES_DE_JOINDRE = Object.freeze(['set+numero', 'setlist+numero', 'set+n
  */
 const PREUVES_GARDEES_PRODUITES = Object.freeze([]);
 
+/**
+ * Les preuves posées par d'AUTRES outils d'écriture (poser-fiches-par-setlist.js, poser-fiches-par-freres.js) : joindre() ne les refait pas, le filtre ci-dessous
+ * (liste fermée PREUVES_DE_JOINDRE) ne les efface donc jamais — elles sont GARDÉES par construction, et classées ici pour que ce soit écrit. Le banc
+ * test-reparser-filtre.js lit la constante `PREUVE` exportée par chaque outil : une preuve d'outil qui ne figure pas ici, ou qui figurerait dans
+ * PREUVES_DE_JOINDRE, fait échouer le banc.
+ */
+const PREUVES_D_OUTILS_GARDEES = Object.freeze(['metacarte+setlist', 'metacarte+freres']);
+
 /** Le filtre d'effacement d'un rejeu : les lignes des cartes du set, de ses expansions, ET d'une preuve que joindre() refabrique. */
 const filtreDeRegeneration = (idsCartes, expsDeCeSet) => ({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet }, preuve: { $in: [...PREUVES_DE_JOINDRE] } });
 
@@ -39,4 +47,4 @@ async function effacerRefabricables(M, idsCartes, expsDeCeSet) {
     return { gardees };
 }
 
-module.exports = { PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES, filtreDeRegeneration, effacerRefabricables };
+module.exports = { PREUVES_DE_JOINDRE, PREUVES_GARDEES_PRODUITES, PREUVES_D_OUTILS_GARDEES, filtreDeRegeneration, effacerRefabricables };
