@@ -55,6 +55,7 @@ const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
 const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
+const { entreesDeMesure, entreesDeLaLigne } = require('./collecte-cartes/echantillon-mesure');   // V8 : les mesures de largeur d'une ligne à sous-section se prennent dans CETTE sous-section
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
@@ -216,10 +217,21 @@ async function collecterSet(code, M, dossierRapport) {
             // `pagesListe` : page, entrées lues, nouvelles — la preuve d'une pagination, en base et pas en log.
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`entrees.${id}`]: entrees[id], [`pagesListe.${id}`]: entrees[id].pages || null, phase: 'liste', derniereRequete: new Date() } });
         }
+        if (S.sousSection != null) {   // V8 : la ligne ne traite que sa sous-section (en mémoire : l'état garde la liste entière)
+            const toutes = entrees[id].length; entrees[id] = entreesDeLaLigne(entrees[id], S);
+            console.log(`   sous-section ${S.sousSection} déclarée : ${entrees[id].length} entrées retenues sur ${toutes} (les autres decks de la liste ne sont ni mesurés ni téléchargés)`);
+        }
         console.log(`1. liste ${id} : ${entrees[id].length} entrées${etat.entrees?.[id]?.length ? ' (reprises de l\'état)' : ''}`);
         if (!mesures[id]?.length) {
             const m = [];
-            for (const e of entrees[id].slice(0, 3)) m.push({ url: e.original, ...(await src.enTeteImage(e.original)) });
+            // V8 : une ligne qui déclare sa sous-section mesure DANS elle (collecte-cartes/echantillon-mesure.js) ; aucune entrée de cette sous-section = refus
+            const echantillon = entreesDeMesure(entrees[id], S);
+            if (S.sousSection != null && !echantillon.length) {
+                console.error(`❌ ${code} : la sous-section ${S.sousSection} déclarée par la ligne n'a AUCUNE entrée dans la liste ${id} — set REFUSÉ, on ne mesure pas un autre deck.`);
+                await M.EtatImages.updateOne({ _id: idEtat }, { $set: { phase: 'refuse-sous-section-absente', fini: new Date() } });
+                await liberer(); return { code, etat: 'refuse-sous-section-absente' };
+            }
+            for (const e of echantillon) m.push({ url: e.original, ...(await src.enTeteImage(e.original)) });
             mesures[id] = m;
             await M.EtatImages.updateOne({ _id: idEtat }, { $set: { [`mesures.${id}`]: m, phase: 'mesure' } });
         }
@@ -350,6 +362,10 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // `simuler` (2026-10-05) : la passe 1 (quelle carte pour chaque image) tourne, RIEN ne s'écrit — ni image, ni carte, ni reste, ni
     // complétude, ni rapport. C'est la mesure d'une règle de jointure AVANT de la rejouer : `preuves` et `resolues` disent ce qu'elle ferait.
     const code = L.code;
+    // 🔑 V8 tour 2 (B-I1, §21 bis) : LA SÉLECTION « entrées de la sous-section de la ligne » se fait ICI, dans la fonction que TOUS les appelants traversent (collecterSet, le
+    // rejeu `--rejouer-jointure` qui relit la liste d'état NON filtrée, le banc) — pas dans chacun. Sans elle le rejeu écrivait `entreesSource` 28 pour DHD, `emplacements` vrai
+    // et `concordance` fausse dans `sets.completImages`. Idempotent : une liste déjà filtrée ressort identique.
+    entrees = Object.fromEntries(Object.entries(entrees || {}).map(([id, es]) => [id, entreesDeLaLigne(es, S)]));
     const dire = (...a) => { if (!silencieux) console.log(...a); };
     // ---- 4. jointure image -> carte --------------------------------------------------------
     const cartes = await M.Carte.find({ sets: slug }).lean();
@@ -455,7 +471,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         }
         // une image de SOUS-SECTION (set source hors des ids de la ligne) ne se joint que par le numéro ET le nom — collecte-cartes/
         // sous-section-image.js (2026-10-06 : un deck numéroté depuis 1 désignait par le numéro seul une carte de l'autre deck)
-        const gss = jointureSousSection(im, cands, preuve, S?.ids, nomImage, { correction: !!corr });
+        const gss = jointureSousSection(im, cands, preuve, S?.ids, nomImage, { correction: !!corr, sousSection: S?.sousSection ?? null });   // V8 : une ligne qui déclare sa sous-section ne joint que les siennes
         if (cands.length && !gss.cands.length) {
             restes.push({ set: slug, type: 'image-sous-section-non-confirmee', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'} (sous-section ${im.sourceSetId}) -> ${cands.map(c => `${c._id} « ${c.nomEn} »`).join(', ')} : ${gss.raison}`, le: new Date() });
             continue;
@@ -476,7 +492,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const poolTemoins = await M.Carte.find(filtreCartesDuSet(slug, nomsCibles, TIRAGE)).select('_id nomEn nomJa niveau impressions attaques').lean();
     // ⚠️ ORDRE : les clés partagées se calculent sur les résolues d'AVANT le témoin (il ne peut que RETIRER, jamais faire servir une image
     // restée seule sur une clé qui en portait trois) — `jugerResolues`.
-    const { gardees, contredites, refusees } = jugerResolues(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }), clesPartagees);
+    const { gardees, contredites, refusees } = jugerResolues(resolues, fabriquerTemoinImages({ ligne: L, cartes: poolTemoins }), rs => clesPartagees(rs, { numerotes: S?.sousSection != null }));   // V8 : même règle, étendue aux numéros chiffrés pour les seules lignes qui déclarent une sous-section
     resolues = gardees;
     for (const x of contredites) restes.push({ set: slug, type: 'image-contredite-par-le-nom', detail: `${x.im._id} « ${x.im.titre} » n°${x.im.numero ?? '—'} -> carte ${x.c._id} « ${x.c.nomEn} » refusée : ${x.verdict.raison}`, le: new Date() });
     // CONCORDANCE DES DECKS, par (carte, NUMÉRO) pour les cartes touchées par une contredite : chaque emplacement attendu est servi ou NOMMÉ en
@@ -597,7 +613,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
 
 // ➕ 2026-10-12 : `joindreImages` s'exporte pour le banc de bout en bout (`test-jointure-basse-definition.js`) ; requis, ce fichier ne lance RIEN
 // (ni lecture de la ligne de commande, ni connexion) — le worker et les outils le lancent en ligne de commande, où `require.main === module`.
-module.exports = { joindreImages };
+module.exports = { joindreImages, collecterSet };   // `collecterSet` : pour le banc de bout en bout de V8 (test-collecte-sous-section-v8.js), client et base FAUX
 if (require.main !== module) return;
 
 // 🔴 LA LIGNE DE COMMANDE DU REJEU S'ÉCRIT PAR CE QU'ELLE AUTORISE (relecture du 2026-10-05, §54) : `--simuler` n'est qu'un drapeau ;

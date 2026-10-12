@@ -99,7 +99,13 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/corrections-impressions.js',
     // ➕ 2026-10-12 : la marque « basseDefinition » (posée par TPC et PikaQian) et le REMPLACEMENT automatique (appelé par artofpkm, Bulbapedia, TCGdex) :
     // un worker qui ne la porte pas poserait des entrées sous 350 px sans marque, ou ne remplacerait jamais une basse définition par une meilleure image
-    'collecte-cartes/basse-definition.js'];
+    'collecte-cartes/basse-definition.js',
+    // ➕ 2026-10-12 (V8, tour 2) : les règles de la JOINTURE artofpkm que `collecteur-images.js` charge — sélection des entrées d'une ligne à `sousSection` et prédicat
+    // « même sous-section » (echantillon-mesure.js), garde de sous-section (sous-section-image.js), clés partagées (images-cle-partagee.js), voie des fiches simples
+    // (image-fiche-simple.js), clé de numéro et témoin du nom (jointure.js), client de la source (artofpkm.js), schéma et verrou (schemas.js, verrou-source.js) et
+    // l'alimentateur qui insère les unités : un worker qui n'a pas l'un d'eux appliquerait l'ANCIENNE règle à une ligne qui déclare `sousSection` (champ inconnu = liste entière).
+    'collecte-cartes/echantillon-mesure.js', 'collecte-cartes/sous-section-image.js', 'collecte-cartes/images-cle-partagee.js', 'collecte-cartes/image-fiche-simple.js',
+    'collecte-cartes/jointure.js', 'collecte-cartes/artofpkm.js', 'collecte-cartes/schemas.js', 'collecte-cartes/verrou-source.js', 'collecte-cartes/alimentateur.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma
