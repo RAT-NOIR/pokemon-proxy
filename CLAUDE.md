@@ -18,6 +18,24 @@ renégocie pas en cours de route.
 
 ---
 
+## 🛑 DOSSIERS D'APPORTS MANUELS — JAMAIS DÉPLACÉS NI SUPPRIMÉS, PAR AUCUN AGENT (testeur, 2026-10-13)
+
+> **`Logo FR`, `apport-manuel`, `C:\Users\Yung\Desktop\LOGO`, et tout dossier que le testeur a rempli lui-même, ne sont JAMAIS déplacés, vidés, renommés ni supprimés —
+> par aucun agent, dans aucune session, sous aucun motif (ménage, worktree, copie, mutation, restauration).** On y lit ; on n'y écrit que sur sa demande nommée.
+
+🔴 **L'occurrence (2026-10-12, 21:54:14 UTC)** : une copie de travail (worktree de relecture de l'agent API) portait des JONCTIONS vers `Logo FR`, `apport-manuel`,
+`node_modules` et `.banc-local\node_modules` de main ; `git worktree remove --force` sur cette copie a TRAVERSÉ les jonctions et vidé les quatre cibles. Git ne suivant pas ces
+fichiers, rien ne les rendait : 208 récupérés depuis R2, 63 + 84 à redéposer à la main.
+🔑 **La parade, mécanique :**
+1. **Aucune jonction vers un dossier d'apports manuels.** Une copie qui en a besoin COPIE les fichiers (lecture seule), elle ne les relie pas.
+2. **Avant de supprimer une copie qui contient une jonction** (`node_modules`, `.banc-local\node_modules`…) : retirer chaque jonction par `cmd /c rmdir <jonction>` ou
+   `(Get-Item <jonction>).Delete()` — NON récursif —, vérifier qu'il ne reste AUCUN point de jonction (`Get-ChildItem -Recurse -Attributes ReparsePoint`), PUIS seulement
+   `git worktree remove` / `Remove-Item`. Jamais `Remove-Item -Recurse` ni `worktree remove --force` sur un dossier qui contient encore une jonction.
+3. **Un dossier partagé vidé ne se réinstalle pas en silence** : il se SIGNALE (au testeur, et à l'autre session si elle est en cause), et une restauration de fichiers du
+   testeur attend sa décision.
+
+---
+
 ## 🎯 L'OBJECTIF DU CHANTIER : 100 % DU CATALOGUE CARDMARKET
 
 > # **L'OBJECTIF EST FIXÉ (2026-09-23) : chaque produit qui a une fiche et un visuel chez Cardmarket doit avoir chez nous la BONNE fiche et la BONNE image.**
