@@ -41,6 +41,7 @@ const { resoudreTirages, numeroEntier } = require('./collecte-cartes/tirage-imag
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 
 const SOURCE = 'bulbapedia';
 const VERROU_GLOBAL = `${SOURCE}/__collecteur__`;
@@ -129,6 +130,30 @@ function relevedeCeCollecteur(L) {
     return { ok: true, tirage: L.bulba.tirage || 'intl' };
 }
 
+/** La jointure image -> carte de Bulbapedia (exportée : le banc de bout en bout `test-jointure-basse-definition.js` exécute CE chemin, pas une copie). */
+async function joindreImagesBulba(M, slug, images) {
+    const parCarte = new Map();
+    for (const im of images) { if (!parCarte.has(im.carteId)) parCarte.set(im.carteId, []); parCarte.get(im.carteId).push(im); }
+    let entreesMultiples = 0;
+    for (const [carteId, ims] of parCarte) {
+        ims.sort((a, b) => (numeroEntier(a.numero) ?? 1e9) - (numeroEntier(b.numero) ?? 1e9));
+        if (ims.length > 1) entreesMultiples++;
+        // 🔑 LA PRÉSÉANCE DE TCGdex (2026-09-23) : un (set, numéro) que collecteur-images-tcgdex.js a servi porte le scan
+        // ANGLAIS, prouvé ; le fichier Bulbapedia du même tirage est peut-être le jumeau japonais. Le rejoindre ici
+        // referait deux visuels pour un tirage — le remplacement se défait au premier rejeu. Même règle, deux côtés (§21 bis).
+        const avant = await M.Carte.findById(carteId).select('images').lean();
+        const servisParTcgdex = new Set((avant?.images || []).filter(e => e.set === slug && e.source === 'tcgdex').map(e => e.numero));
+        // ➕ 2026-10-12 (I1) : l'entrée reprend la MARQUE `basseDefinition` du document (`marqueDe`) — un rejeu fait $pull puis $push d'une entrée neuve,
+        // et sans elle la marque posée par le rattrapage serait effacée (le site agrandirait l'image)
+        const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), ...marqueDe(im), jointeLe: new Date() }));
+        // ➕ 2026-10-12 : une entrée « basseDefinition » (TPC, PikaQian) de même (set, numéro, langue) cède la place — règle du module, langue connue exigée
+        for (const e of entrees) await remplacerBasseDefinition(M, carteId, e);
+        await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
+        if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
+    }
+    return { parCarte, entreesMultiples };
+}
+
 async function collecterSet(code, M, { mesurerSeulement }) {
     const L = ligne(code);
     const R = relevedeCeCollecteur(L);
@@ -214,21 +239,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
 
         // ---- 5. jointure -------------------------------------------------------------------------
         const images = await M.Image.find({ source: SOURCE, set: slug, etat: 'ok' }).lean();
-        const parCarte = new Map();
-        for (const im of images) { if (!parCarte.has(im.carteId)) parCarte.set(im.carteId, []); parCarte.get(im.carteId).push(im); }
-        let entreesMultiples = 0;
-        for (const [carteId, ims] of parCarte) {
-            ims.sort((a, b) => (numeroEntier(a.numero) ?? 1e9) - (numeroEntier(b.numero) ?? 1e9));
-            if (ims.length > 1) entreesMultiples++;
-            // 🔑 LA PRÉSÉANCE DE TCGdex (2026-09-23) : un (set, numéro) que collecteur-images-tcgdex.js a servi porte le scan
-            // ANGLAIS, prouvé ; le fichier Bulbapedia du même tirage est peut-être le jumeau japonais. Le rejoindre ici
-            // referait deux visuels pour un tirage — le remplacement se défait au premier rejeu. Même règle, deux côtés (§21 bis).
-            const avant = await M.Carte.findById(carteId).select('images').lean();
-            const servisParTcgdex = new Set((avant?.images || []).filter(e => e.set === slug && e.source === 'tcgdex').map(e => e.numero));
-            const entrees = ims.filter(im => !servisParTcgdex.has(im.numero)).map(im => ({ set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: `page de la carte + ${im.preuve}`, numero: im.numero, attribution: 'Bulbapedia', page: im.page, ...langueDeLEntree(im), jointeLe: new Date() }));
-            await M.Carte.updateOne({ _id: carteId }, { $pull: { images: { set: slug, source: SOURCE } } });
-            if (entrees.length) await M.Carte.updateOne({ _id: carteId }, { $push: { images: { $each: entrees } } });
-        }
+        const { parCarte, entreesMultiples } = await joindreImagesBulba(M, slug, images);
 
         // ---- 6. complétude -----------------------------------------------------------------------
         const couvertes = new Set(parCarte.keys());
@@ -260,7 +271,7 @@ async function collecterSet(code, M, { mesurerSeulement }) {
     }
 }
 
-module.exports = { collecterSet, resoudreSet, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
+module.exports = { collecterSet, joindreImagesBulba, resoudreSet, SOURCE, VERROU_GLOBAL, VERROU_GLOBAL_MS };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE (2026-09-19). Le worker Render `collecteur-images.js --boucle`
 // importe `collecterSet` et prend LUI-MÊME le verrou global de cette source : sans cette garde, un simple

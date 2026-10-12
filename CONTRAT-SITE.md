@@ -33,6 +33,24 @@ Une entrée de `images[]` :
 | `sha256` | | identité de l'octet |
 | `urlOriginal`, `preuve`, `jointeLe` | | traçabilité, pas d'usage d'affichage |
 
+### ➕ `basseDefinition` (2026-10-12) — ne JAMAIS agrandir l'image au-delà de `w`
+
+| champ | valeur | sens |
+|---|---|---|
+| `basseDefinition` | `true`, ou **absent** | l'image **ORIGINALE** est sous 350 px de large (`LARGEUR_MIN` de `collecte-cartes/seuils-images.js`) |
+
+**Ce que le site en fait : ne jamais afficher cette image plus large que `w`** (ni la mettre à l'échelle d'une vue pleine carte, ni l'étirer pour
+remplir une grille). Pour une image marquée, `w` EST la largeur de l'original — le fichier servi n'est jamais agrandi à l'encodage
+(`withoutEnlargement`, 700 px au plus), donc `w` = ce que l'image contient réellement (257 à 349 px pour les sources officielles TPC et
+pokemon-card.com ; 300 px pour PikaQian ; ailleurs un original déjà sous 350). Un champ **absent** ne veut rien dire d'autre que « pas sous 350 px
+ou largeur inconnue » : jamais `false`, on ne l'écrit pas.
+- **Où il vit** : sur **l'entrée** de `cartes.images[]` (ce que le site lit) ET sur le document `images` qui l'a produite (traçabilité). Posé
+  par les collecteurs à l'écriture (TPC Asie, pokemon-card.com, PikaQian) ; `poser-basse-definition.js` le pose sur ce qui existait avant.
+- **Le remplacement est automatique** : quand une source fournit, pour la **même impression** (même carte, même `set`, même `numero`) et la **même
+  `langue`** (connue, non `null`), une image **sans** la marque, l'entrée marquée **sort** de `cartes.images` — le site n'a rien à décider. Jamais
+  l'inverse : une image de basse définition ne remplace jamais une image sans la marque. Le document `images` de l'entrée remplacée reste, en
+  `etat: 'remplace'` (avec `remplacePar` : source et cleR2 de la remplaçante).
+
 ⚠️ **Une carte sans image n'est pas un échec** : la source ne liste pas les énergies de base. Sur
 EXP, les 3 cartes sans image sont des énergies. Le catalogue affiche alors le symbole du set.
 

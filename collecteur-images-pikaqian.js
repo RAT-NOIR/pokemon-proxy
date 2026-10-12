@@ -25,6 +25,7 @@ const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
+const { marqueDe } = require('./collecte-cartes/basse-definition');
 const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jointure');
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
@@ -163,6 +164,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                 const cleR2 = `${P.SOURCE}/${slug}/${cleNum(p.numero)}-${p.carteId}-${P.LANGUE}.webp`;
                 await deposer(bucket, cleR2, webp.data, 'image/webp');                   // R2 AVANT la ligne
+                const marque = marqueDe({ wOriginal: meta.width });                      // 2026-10-12 : basse définition d'après l'ORIGINAL (collecte-cartes/basse-definition.js)
                 const origine = origines.get(p.tuile.id) ?? null;
                 await M.Image.updateOne({ _id }, {
                     $set: {
@@ -173,8 +175,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est la langue de la page
                         langueSource: P.LANGUE, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: P.SOURCE, langueSource: P.LANGUE })),
-                        attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok'
-                    }, $unset: { erreur: 1 }
+                        attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
+                    }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
                 }, { upsert: true });
                 telecharges++;
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
@@ -213,7 +215,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 }
                 const entree = { set: slug, source: P.SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, preuve: im.preuve,
                     numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue, languePreuve: im.languePreuve,
-                    provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, jointeLe: new Date() };
+                    provenance: im.provenance, urlOfficielle: im.urlOfficielle ?? null, urlOrigineDeclaree: im.urlOrigineDeclaree ?? null, ...marqueDe(im), jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: P.SOURCE, numero: im.numero } } });
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
