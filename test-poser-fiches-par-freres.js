@@ -15,7 +15,7 @@ const verifier = (nom, obtenu, attendu) => { const a = JSON.stringify(obtenu), b
 // ── la fausse base (même forme que celle de SEA-2 : $setOnInsert, $addToSet/$each, upsert) ──
 function fakeDb(init) {
     const cols = new Map(Object.entries(init).map(([n, docs]) => [n, new Map(docs.map(d => [d._id, structuredClone(d)]))]));
-    const stats = { upserts: 0, panneAvantCartes: false, perdreDerniereLigne: false, perdreOperationsCartes: false };
+    const stats = { upserts: 0, panneAvantCartes: false, perdreDerniereLigne: false, perdreOperationsCartes: false, effacerNumeros: false };
     const get = (o, p) => p.split('.').reduce((x, k) => x?.[k], o);
     const set = (o, p, v) => { const ks = p.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] ??= {}; x[ks.at(-1)] = v; };
     const correspond = (d, f) => Object.entries(f).every(([k, v]) => k === '_id' ? (v && typeof v === 'object' && v.$in ? v.$in.includes(d._id) : d._id === v) : get(d, k) === v);
@@ -35,6 +35,7 @@ function fakeDb(init) {
                 let d = m.get(filter._id), cree = false;
                 if (!d) { if (!upsert) continue; d = { _id: filter._id }; m.set(d._id, d); cree = true; stats.upserts++; }
                 appliquer(d, update, cree);
+                if (nom === 'cartes_produits' && stats.effacerNumeros) d.numeroFiche = null;   // une écriture qui range une ligne SANS son numéro, sans erreur
             }
             return { upsertedCount: 0 };
         }
@@ -163,6 +164,10 @@ const A = ['--codes=X'], ECR = ['--codes=X', '--attendu=X:3', '--avec-numero=X:1
     w = monde(); w.db.stats.perdreOperationsCartes = true;
     r = await lancer(w, ECR);
     verifier('relecture : des cartes non mises à jour (sans erreur) → exit 1 (cartes 2/3)', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /cartes avec tous leurs idProduct et leur set 2\/3/.test(r.sorties)], [1, true, true]);
+
+    w = monde(); w.db.stats.effacerNumeros = true;
+    r = await lancer(w, ECR);
+    verifier('relecture : une ligne écrite SANS son numeroFiche (le visuel est une décision séparée) → exit 1 (lignes 2/3 : le numéro du plan n\'est pas celui de la base)', [r.code, /relecture ne retrouve pas/.test(r.erreurs), /lignes \(preuve et numeroFiche du plan\) 2\/3/.test(r.sorties)], [1, true, true]);
 
     console.log(`\n${ok} passés, ${ko} en échec`);
     try { for (const f of fs.readdirSync(os.tmpdir())) if (f.startsWith(`export-test-freres-${process.pid}`)) fs.unlinkSync(path.join(os.tmpdir(), f)); } catch { }

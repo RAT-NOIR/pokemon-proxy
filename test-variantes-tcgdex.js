@@ -106,6 +106,8 @@ verifier('   idProduct de carte ET de variante indexés : 299514 -> carte 113 sa
     [[{ setId: 'sm3', localId: '113', variante: null }], [{ setId: 'sm3', localId: '113', variante: { type: 'holo', foil: 'cracked-ice', stamp: ['prerelease', 'staff'], cardmarket: 777001 } }]]);
 verifier('   les variantes tamponnées d\'une carte sont retrouvées par (set, numéro)', clone.carte('sm3', '113').variantes.filter(v => v.stamp.length).length, 2);
 verifier('   un set sans carte, ou un dossier vide, LÈVE (un zéro sur un clone non vide est une lecture fausse, pas un résultat)', (() => { try { V.lireClone(path.join(racine, 'inexistant')); return 'rien'; } catch (e) { return 'leve'; } })(), 'leve');
+fs.mkdirSync(path.join(racine, 'vide', 'Une Serie'), { recursive: true });
+verifier('   un dossier EXISTANT mais sans aucun set (mauvais dossier) LÈVE aussi', (() => { try { V.lireClone(path.join(racine, 'vide')); return 'rien'; } catch (e) { return /0 set/.test(e.message) ? 'leve' : e.message; } })(), 'leve');
 fs.rmSync(racine, { recursive: true, force: true });
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

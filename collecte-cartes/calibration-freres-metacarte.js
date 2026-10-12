@@ -56,8 +56,7 @@ function calibrer({ lignes, cartes, export: exp, sets, ecrits = [], log = () => 
     const metaDe = new Map([...exp].map(([id, v]) => [id, { idMetacard: v.idMetacard ?? null, idExpansion: v.idExpansion ?? null }]));
     const freres = K.indexerFreres(lignes, metaDe);
     const intl = new Set(sets.filter(s => (s.tirage ?? s.region) === 'intl').map(s => s._id));
-    const cartesParSet = new Map();
-    for (const c of cartes) for (const s of c.sets || []) if (intl.has(s)) (cartesParSet.get(s) || cartesParSet.set(s, []).get(s)).push(c);
+    const cartesParSet = K.repartirParSet(cartes, intl);
     const carteParId = new Map(cartes.map(c => [c._id, c]));
     const produit = id => { const v = exp.get(id); return v ? { idProduct: id, name: v.name, ...J.decomposerNomCardmarket(v.name), idMetacard: v.idMetacard ?? null, idExpansion: v.idExpansion ?? null } : null; };
 
