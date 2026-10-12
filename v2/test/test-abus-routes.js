@@ -358,7 +358,8 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     mode = 'affirmee';
     await raw('journal_scans').insertOne({ _id: new mongoose.Types.ObjectId(scanA), userId: `v2:installation:${A.i._id}`, prixLive: null, idProduct: ID_A });
     const CA = await compte(); const CAinst = await instLiee(CA);
-    await envoyer(V, { methode: 'PUT', chemin: `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}`, entetes: siteH(CA.cookie), corps: { possedee: true } });   // la victime coche une fiche
+    const prepCoche = await envoyer(V, { methode: 'PUT', chemin: `/api/collection/sets/Banc-Set/fiches/${encodeURIComponent('895789|001')}`, entetes: siteH(CA.cookie), corps: { possedee: true } });   // la victime coche une fiche
+    H.v('(e) contrôle de l\'instrument : la préparation (la victime coche une fiche) a réussi — une préparation qui échoue en silence fausserait la comparaison d\'état plus bas', prepCoche.statut, 200);
     const jetonBancA = 'jeton-banc-victime-abcdefghij12'; secret(jetonBancA, 'jeton de consentement');
     await raw('banc_lignes').insertOne({ _id: 'ligne-victime', cleR2: 'banc/final/x.webp', etat: 'confirmee', jetonEmpreinte: crypto.createHash('sha256').update(jetonBancA).digest('hex'), le: new Date(), expireLe: new Date(Date.now() + 86400e3), source: 'affirme', verite: ID_A });
     const codeA = (await envoyer(V, { methode: 'POST', chemin: '/api/compte/code', entetes: siteH(CA.cookie), corps: {} })).json;

@@ -27,7 +27,10 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const c = Object.assign(M.nouveauCompte({ email: 'cible@exemple.fr', emailCle: 'cible@exemple.fr', motDePasse: await P.hacher(MDP) }), { verifie: true, offertesAccordeesLe: new Date(), solde: { accueil: 25, achete: 5 }, abonnement: { actif: true, quotaMensuel: 100, moisCle: mois, restant: 40, jusquAu: new Date(Date.now() + 40 * 864e5) } });
     await col('comptes').insertOne(c);
     const conn = await post('/api/compte/connexion', { email: 'cible@exemple.fr', motDePasse: MDP }); const cookie = String(conn.entetes['set-cookie']).split(';')[0];
-    await H.appel(srv.url, '/api/collection/sets/Set-A/fiches/' + encodeURIComponent('1|001'), { methode: 'PUT', corps: { possedee: true }, entetes: { ...SITE, ...ip(), cookie } });
+    // préparation : depuis COLLECTION-COMPACTE, une clé hors registre sans catalogue chargé rend 503 INDISPONIBLE (voulu). Le banc charge donc un catalogue qui connaît la clé posée, et VÉRIFIE le statut.
+    const VB = require('./_visuels-banc'); VB.installer([VB.doc(1)], [['Set-A', '1|001', [1]]]);
+    const prep = await H.appel(srv.url, '/api/collection/sets/Set-A/fiches/' + encodeURIComponent('1|001'), { methode: 'PUT', corps: { possedee: true }, entetes: { ...SITE, ...ip(), cookie } });
+    H.v('A00. préparation : la fiche de départ est écrite (200)', prep.statut, 200); if (prep.statut !== 200) throw new Error('préparation échouée (' + prep.statut + ') : le banc s\'arrête ici');
     await col('mouvements').insertOne({ compteId: c._id, le: new Date(), type: 'octroi', delta: 25, poche: 'accueil', motif: 'octroi-accueil', etat: 'debite', cleIdempotence: `octroi-accueil|${c._id}` });
     // l'installation du tiers : 3 essais (naissance) et 2 « achetés » avant la liaison ; la VRAIE fusion les passe au compte
     const cr = await post('/api/installation', { libelle: 'tiers' }, EXT);
