@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const P = require('./collecte-cartes/pikaqian');
+const R = require('./recepteur-pikaqian');
 
 let ok = 0, ko = 0;
 const verifier = (nom, obtenu, attendu) => {
@@ -24,7 +26,14 @@ verifier('@match : les pages de set de pikaqian.com, rien d\'autre', valeurs('ma
 verifier('@grant : GM_xmlhttpRequest seulement (ni cookie, ni stockage, ni GM_openInTab)', valeurs('grant'), ['GM_xmlhttpRequest']);
 verifier('@connect : 127.0.0.1 SEULEMENT', valeurs('connect'), ['127.0.0.1']);
 const adresses = [...sansCommentaires.matchAll(/\b[a-z][a-z0-9+.-]*:\/\/[^\s'"`)]*/gi)].map(x => x[0]);
-verifier('dans le code : toute adresse est http://127.0.0.1:<port>/…', adresses.every(a => /^http:\/\/127\.0\.0\.1:\d{4,5}\/apprendre$/.test(a)) && adresses.length >= 1, true);
+verifier('dans le code : toute adresse est http://127.0.0.1:<port> (le port vient de la constante PORT)', adresses.every(a => /^http:\/\/127\.0\.0\.1:$/.test(a)) && adresses.length >= 1, true);
+const PORT_US = /^\s*var PORT = (\d{4,5});/m.exec(code);
+verifier('PORT : une constante unique en tête du script, égale au port par défaut du récepteur', [!!PORT_US, Number(PORT_US?.[1]) === R.PORT_DEFAUT, (code.match(/\bPORT\b/g) || []).length >= 2, code.indexOf('var PORT') < code.indexOf('GM_xmlhttpRequest')], [true, true, true, true]);
+const CODE_US = /var CODE_DE_SET = '([^']+)';/.exec(code);
+verifier('le motif de code de set du script est celui de CODE_PK (pikaqian.js)', `^${CODE_US?.[1]}$`, P.CODE_PK.source);
+const ENTETE_US = /'X-Rat-Market':\s*'([^']+)'/.exec(code);
+verifier('l\'en-tête fixe du script est celui que le récepteur exige', [R.ENTETE_MARQUE, ENTETE_US?.[1]], ['x-rat-market', R.VALEUR_MARQUE]);
+verifier('le script ne pose PAS d\'en-tête Origin (la garde n\'en dépend pas)', /['"]Origin['"]/i.test(sansCommentaires), false);
 verifier('aucun nom d\'hôte de pikaqian, de son CDN ou du CDN officiel dans le code exécutable', /pikaqian|pokemon-tcg|pokemon\.cn|localhost/i.test(sansCommentaires), false);
 const interdits = [
     ['location.href =', /location\s*\.\s*href\s*=[^=]/], ['location.assign/replace', /location\s*\.\s*(assign|replace)\s*\(/], ['location = ', /\blocation\s*=[^=]/],
@@ -72,10 +81,16 @@ function fabriquerMonde({ reponse = { status: 200, responseText: JSON.stringify(
     verifier('POST vers http://127.0.0.1:<port>/apprendre', [a.method, /^http:\/\/127\.0\.0\.1:\d{4,5}\/apprendre$/.test(a.url || '')], ['POST', true]);
     const corps = JSON.parse(a.data || '{}');
     verifier('corps : exactement url (sans requête ni ancre) et html (outerHTML tel que le navigateur l\'a)', [Object.keys(corps).sort(), corps.url, corps.html], [['html', 'url'], 'https://pikaqian.com/sets/cs1bc', '<html><body>PAGE-DU-NAVIGATEUR</body></html>']);
-    verifier('en-têtes : Content-Type JSON et Origin de la page, rien d\'autre', [Object.keys(a.headers || {}).sort(), a.headers?.['Content-Type'], a.headers?.Origin], [['Content-Type', 'Origin'], 'application/json', 'https://pikaqian.com']);
+    verifier('en-têtes : Content-Type JSON et l\'en-tête fixe, rien d\'autre', [Object.keys(a.headers || {}).sort(), a.headers?.['Content-Type'], a.headers?.['X-Rat-Market']], [['Content-Type', 'X-Rat-Market'], 'application/json', R.VALEUR_MARQUE]);
     verifier('aucun cookie demandé (anonymous / pas de withCredentials)', [a.anonymous === true || a.anonymous === undefined, a.withCredentials === undefined || a.withCredentials === false], [true, true]);
     const affiche = w.elements.map(e => e.textContent).join(' | ');
     verifier('la réponse du récepteur s\'affiche : tuiles lues, au code du set, adresses officielles', /315/.test(affiche) && /officiel/i.test(affiche) && /1/.test(affiche), true);
+    // l'anomalie « flux absent » est montrée au testeur
+    w = fabriquerMonde({ reponse: { status: 200, responseText: JSON.stringify({ ok: true, code: 'cs1bc', ancres: 315, tuilesLues: 315, tuilesAuCode: 315, flux: 'absent', officielles: 0, fichier: 'x.json', anomalie: 'FLUX DE DONNÉES ABSENT : test' }) } });
+    vm.runInNewContext(SRC, w.bac);
+    w.elements.find(e => e.ecouteurs.click).ecouteurs.click({});
+    await new Promise(r => setTimeout(r, 30));
+    verifier('flux absent : l\'anomalie est affichée', /FLUX DE DONNÉES ABSENT/.test(w.elements.map(e => e.textContent).join(' | ')), true);
 
     // un refus du récepteur : son motif est affiché
     w = fabriquerMonde({ reponse: { status: 422, responseText: JSON.stringify({ ok: false, motif: '3 tuiles sur 9 portent le code cs1bc : la page ne désigne pas ce set' }) } });

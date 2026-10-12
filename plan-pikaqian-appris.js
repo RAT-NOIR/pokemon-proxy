@@ -14,14 +14,15 @@ const fs = require('fs');
 const path = require('path');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN } = require('./collecte-cartes/pikaqian-sets');
-const { DOSSIER_DEFAUT } = require('./recepteur-pikaqian');
+const { DOSSIER_DEFAUT, attenduParTable } = require('./recepteur-pikaqian');
+const { largeurMinDe } = require('./collecte-cartes/seuils-images');
 
-const NOM_FICHIER = /^([a-z0-9][a-z0-9.-]{0,30})--(\d{8}T\d{6}Z)(?:-\d+)?\.json$/;
-const CODE = /^[a-z0-9][a-z0-9.-]{0,30}$/;
+const CODE = P.CODE_PK;     // le motif de code de set de la production, jamais recopié
+const NOM_FICHIER = new RegExp(`^(${CODE.source.slice(1, -1)})--(\\d{8}T\\d{6}Z)(?:-\\d+)?\\.json$`);
 const somme = (a, b) => { for (const [k, v] of Object.entries(b)) a[k] = (a[k] || 0) + v; return a; };
 
 /** Les fiches du dossier : { fiches (la plus récente par code), anciens, illisibles, fichiers }. Un fichier qui ne tient pas à la relecture n'est pas mesuré, et sa raison s'écrit. */
-function lireApprises(dossier) {
+function lireApprises(dossier, attendu = attenduParTable) {
     const noms = fs.readdirSync(dossier).filter(n => n.endsWith('.json'));
     const illisibles = [], parCode = new Map();
     for (const nom of noms) {
@@ -33,6 +34,10 @@ function lireApprises(dossier) {
         // le verdict ne se croit pas sur parole : la relecture par la fonction de production, sur les tuiles du fichier
         const V = P.verdictDePage({ tuiles: fiche.tuiles, code: fiche.code });
         if (!V.ok) { illisibles.push({ fichier: nom, motif: V.motif }); continue; }
+        // défense en profondeur : le récepteur refuse déjà ces pages ; un fichier qui en viendrait d'ailleurs (ancien, édité) ne fait pas compter de « absente-de-la-source »
+        if (Number.isInteger(fiche.ancres) && fiche.ancres > fiche.tuiles.length) { illisibles.push({ fichier: nom, motif: `page partielle ou forme changée : ${fiche.ancres} ancres, ${fiche.tuiles.length} tuiles` }); continue; }
+        const voulu = attendu(fiche.code);
+        if (voulu && fiche.tuiles.length < voulu) { illisibles.push({ fichier: nom, motif: `page incomplète : ${fiche.tuiles.length} tuiles lues, ${voulu} relevées pour ce set à la mesure` }); continue; }
         const courante = parCode.get(fiche.code);
         // la plus récente par code (l'horodatage du nom, puis le nom) ; les autres sont comptées, jamais mesurées
         if (!courante || m[2] > courante.horodatage || (m[2] === courante.horodatage && nom > courante.fichier)) parCode.set(fiche.code, { fichier: nom, horodatage: m[2], fiche, verdict: V, compteAnciens: courante ? courante.compteAnciens + 1 : 0 });
@@ -44,28 +49,38 @@ function lireApprises(dossier) {
 
 /**
  * @param {{dossier: string, db: object, planifier?: Function, table?: object[]}} o
- * `db` : lecture seule (collection().find().toArray()). `planifier` : celle du collecteur par défaut ; injectable seulement pour les bancs.
+ * `db` : lecture seule (find, findOne, countDocuments). `C` : le collecteur (planifier, releve, gardeTirage, gardeProduits, uniteDeLaLigne — SES fonctions, rejouées avant
+ * de planifier, comme `collecterSet` les applique avant toute requête) ; injectable seulement pour les bancs. Ce qui ne se rejoue pas sans fichier ou sans écriture :
+ * le seuil de taille (jugé au téléchargement sur la largeur du fichier), la taille de la base (dbStats) et l'alerte de blocage — dits dans la sortie.
  */
-async function mesurer({ dossier, db, planifier = require('./collecteur-images-pikaqian').planifier, table = TABLE_PIKAQIAN }) {
-    const L = lireApprises(dossier);
+async function mesurer({ dossier, db, C = require('./collecteur-images-pikaqian'), table = TABLE_PIKAQIAN, attendu = attenduParTable }) {
+    const { uniteDeLaLigne } = require('./collecte-cartes/pikaqian-sets');
+    const L = lireApprises(dossier, attendu);
     const sets = [];
     for (const { fichier, fiche, verdict } of L.fiches.sort((a, b) => a.fiche.code.localeCompare(b.fiche.code))) {
         const lignes = table.filter(l => l.codePk === fiche.code);
-        if (!lignes.length) { sets.push({ code: fiche.code, fichier, slug: null, motif: 'code sans ligne dans collecte-cartes/pikaqian-sets.js', tuiles: fiche.tuilesLues, auCode: verdict.bonnes }); continue; }
+        if (!lignes.length) { sets.push({ code: fiche.code, fichier, slug: null, motif: 'code sans ligne dans collecte-cartes/pikaqian-sets.js', tuiles: fiche.tuiles.length, auCode: verdict.bonnes }); continue; }
         const officielles = new Map(fiche.origines.map(([id, o]) => [id, o?.officielle ?? null]));
         const declarees = [...officielles.values()].filter(Boolean).length;
         for (const ligne of lignes) {
-            const Pl = await planifier(db, ligne.slug, ligne, fiche.tuiles);
+            // LES GARDES DU COLLECTEUR, rejouées par ses fonctions : la ligne de table (releve), le tirage du set en base, les produits joints
+            const base = { code: fiche.code, fichier, slug: ligne.slug, tuiles: fiche.tuiles.length, auCode: verdict.bonnes };
+            const G = C.releve(uniteDeLaLigne(ligne));
+            const set = await db.collection('sets').findOne({ _id: ligne.slug }, { projection: { tirage: 1, region: 1 } });
+            const produitsJoints = await db.collection('cartes_produits').countDocuments({ slugSet: ligne.slug });
+            const refus = !G.ok ? G : [C.gardeTirage(set, ligne, ligne.slug), C.gardeProduits(produitsJoints, ligne.slug)].find(g => !g.ok);
+            if (refus) { sets.push({ ...base, produits: produitsJoints, refuse: { etat: refus.etat, motif: refus.motif } }); continue; }
+            const Pl = await C.planifier(db, ligne.slug, ligne, fiche.tuiles);
             const restes = {};
             for (const r of Pl.restes) restes[r.motif] = (restes[r.motif] || 0) + 1;
             sets.push({
-                code: fiche.code, fichier, slug: ligne.slug, tuiles: fiche.tuilesLues, auCode: verdict.bonnes, produits: Pl.produits, trous: Pl.trous, apparies: Pl.plan.length,
+                ...base, produits: Pl.produits, trous: Pl.trous, apparies: Pl.plan.length,
                 restes, appariesAvecOfficielle: Pl.plan.filter(p => officielles.get(p.tuile.id)).length, officiellesDeclarees: declarees, suffixesInconnus: Pl.suffixesInconnus.length
             });
         }
     }
-    const mesures = sets.filter(s => s.slug);
-    const totaux = { sets: mesures.length, produits: 0, trous: 0, apparies: 0, appariesAvecOfficielle: 0, restes: {} };
+    const mesures = sets.filter(s => s.slug && !s.refuse);
+    const totaux = { sets: mesures.length, refuses: sets.filter(s => s.refuse).length, produits: 0, trous: 0, apparies: 0, appariesAvecOfficielle: 0, restes: {} };
     for (const s of mesures) { totaux.produits += s.produits; totaux.trous += s.trous; totaux.apparies += s.apparies; totaux.appariesAvecOfficielle += s.appariesAvecOfficielle; somme(totaux.restes, s.restes); }
     return { dossier, fichiers: L.fichiers, anciens: L.anciens, illisibles: L.illisibles, sets, totaux };
 }
@@ -77,10 +92,12 @@ function formater(M) {
     if (!M.sets.length) l.push('(aucune page apprise : ouvre une page de set, clique « Apprendre cette page », puis relance cette mesure)');
     for (const s of M.sets) {
         if (!s.slug) { l.push(`${s.code.padEnd(12)} NON MESURÉ : ${s.motif} (tuiles ${s.tuiles})`); continue; }
-        l.push(`${s.slug.padEnd(34)} ${s.code.padEnd(8)} tuiles ${s.tuiles} (au code ${s.auCode}) · produits ${s.produits} · trous ${s.trous} · APPARIÉS ${s.apparies} · dont adresse officielle déclarée ${s.appariesAvecOfficielle} (la page en déclare ${s.officiellesDeclarees}) · restes ${JSON.stringify(s.restes)}${s.suffixesInconnus ? ` · tuiles à suffixe INCONNU ${s.suffixesInconnus}` : ''}`);
+        if (s.refuse) { l.push(`${s.slug.padEnd(34)} ${s.code.padEnd(8)} REFUSÉ PAR LE COLLECTEUR (${s.refuse.etat}) : ${s.refuse.motif} — non mesuré`); continue; }
+        l.push(`${s.slug.padEnd(34)} ${s.code.padEnd(8)} tuiles ${s.tuiles} (au code ${s.auCode}) · produits ${s.produits} · trous ${s.trous} · apparié(s), téléchargement non décidé : ${s.apparies} · dont adresse officielle déclarée ${s.appariesAvecOfficielle} (la page en déclare ${s.officiellesDeclarees}) · restes ${JSON.stringify(s.restes)}${s.suffixesInconnus ? ` · tuiles à suffixe INCONNU ${s.suffixesInconnus}` : ''}`);
     }
     const t = M.totaux;
-    l.push(`\nTOTAL sur ${t.sets} set(s) mesuré(s) : ${t.produits} produits · ${t.trous} trous · ${t.apparies} APPARIÉS (${t.trous ? (100 * t.apparies / t.trous).toFixed(1) : '0.0'} % des trous) · ${t.appariesAvecOfficielle} avec une adresse officielle déclarée par la page · restes ${JSON.stringify(t.restes)}`);
+    l.push(`\nTOTAL sur ${t.sets} set(s) mesuré(s)${t.refuses ? ` (${t.refuses} refusé(s) par les gardes du collecteur, non comptés)` : ''} : ${t.produits} produits · ${t.trous} trous · ${t.apparies} apparié(s), téléchargement non décidé (${t.trous ? (100 * t.apparies / t.trous).toFixed(1) : '0.0'} % des trous) · ${t.appariesAvecOfficielle} avec une adresse officielle déclarée par la page · restes ${JSON.stringify(t.restes)}`);
+    l.push(`Gardes du collecteur rejouées par ses fonctions : ligne de table, tirage du set en base, produits joints. NON rejouées : seuil de taille non jugé : jugé au téléchargement (largeur de l'original ≥ ${largeurMinDe(P.SOURCE)} px), taille de la base (400 Mo) et alerte de blocage de la source (état de l'écriture, hors lecture).`);
     l.push('Aucune requête réseau, aucune écriture. « Apparié » n\'est pas « téléchargeable » : le téléchargement depuis le CDN officiel n\'est pas décidé (voir PIKAQIAN-PASSIF.md).');
     return l.join('\n');
 }
@@ -98,7 +115,7 @@ if (require.main === module) {
         require('dotenv').config();
         const mongoose = require('mongoose');
         const { jugerLecture, verifierPrivilegesLecture, facadeLecture } = require('./collecte-cartes/base-banc');
-        const planifier = require('./collecteur-images-pikaqian').planifier;
+        const C = require('./collecteur-images-pikaqian');
         process.on('SIGINT', () => process.exit(130));        // le collecteur importé capte SIGINT sans quitter : ici on quitte
         if (!fs.existsSync(dossier)) { console.error(`❌ le dossier « ${dossier} » n'existe pas : aucune page apprise.`); process.exit(1); }
         const j = jugerLecture(process.env, 'cartes', 'la base « cartes » (trous des fiches, mesure PikaQian passive)');
@@ -107,7 +124,7 @@ if (require.main === module) {
         try {
             const v = await verifierPrivilegesLecture(cx.db, 'cartes');
             if (!v.ok) { console.error(v.raison); process.exit(1); }
-            const M = await mesurer({ dossier, db: facadeLecture(cx.db), planifier });
+            const M = await mesurer({ dossier, db: facadeLecture(cx.db), C });
             console.log(formater(M));
         } finally { await cx.close(); }
     })().catch(e => { console.error('❌', e.message); process.exit(1); });

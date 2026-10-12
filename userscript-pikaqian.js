@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Rat-Market — Apprentissage passif PikaQian
 // @namespace    rat-market
-// @version      1.0
+// @version      1.1
 // @description  Un bouton « Apprendre cette page » sur les pages de set que TU ouvres. Au clic seulement, envoie l'adresse et le HTML de la page au récepteur LOCAL (127.0.0.1). Ne navigue jamais, ne clique rien, ne télécharge rien.
 // @match        https://pikaqian.com/sets/*
 // @grant        GM_xmlhttpRequest
@@ -19,12 +19,18 @@
 //   (sans requête ni ancre) et son HTML tel que le navigateur l'a. Ni cookie, ni stockage, ni en-tête du site.
 // · Aucune requête vers pikaqian.com ni vers aucun autre hôte (@connect 127.0.0.1 seulement). Aucune image téléchargée.
 // · Le script ne navigue jamais, ne clique rien, n'ouvre aucune fenêtre, ne programme aucune action différée.
+// · Il pose deux en-têtes : Content-Type application/json et X-Rat-Market: rat-market-passif (le récepteur exige les deux ; ni l'un ni l'autre ne peut être posé par
+//   une page web vers un autre site sans prévol, et il ne dépend d'AUCUN en-tête Origin que Tampermonkey pourrait ne pas transmettre).
 // Ce que la page ouverte porte en dehors de ses tuiles (les adresses officielles, rares) est lu PAR LE RÉCEPTEUR, avec les fonctions de la production.
 // Le test statique (test-userscript-pikaqian.js) refuse toute adresse autre que 127.0.0.1 dans ce fichier.
 (function () {
     'use strict';
-    var RECEPTEUR = 'http://127.0.0.1:8765/apprendre';
-    var PAGE_DE_SET = /^\/sets\/[a-z0-9][a-z0-9.-]{0,30}$/;
+    // LE PORT du récepteur : la valeur de `--port` de recepteur-pikaqian.js (défaut 8765). Les deux changent ENSEMBLE (un test les compare).
+    var PORT = 8765;
+    var RECEPTEUR = 'http://127.0.0.1:' + PORT + '/apprendre';
+    // le motif de code de set : celui de CODE_PK (collecte-cartes/pikaqian.js) ; un test les compare
+    var CODE_DE_SET = '[a-z0-9][a-z0-9.-]{0,30}';
+    var PAGE_DE_SET = new RegExp('^/sets/' + CODE_DE_SET + '$');
 
     var panneau = document.createElement('div');
     panneau.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:2147483647;max-width:340px;font:13px/1.4 sans-serif;color:#111;background:#fff;border:1px solid #888;border-radius:6px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,.3)';
@@ -50,7 +56,7 @@
         GM_xmlhttpRequest({
             method: 'POST',
             url: RECEPTEUR,
-            headers: { 'Content-Type': 'application/json', 'Origin': location.origin },
+            headers: { 'Content-Type': 'application/json', 'X-Rat-Market': 'rat-market-passif' },
             data: JSON.stringify({ url: url, html: html }),
             anonymous: true,
             timeout: 30000,
@@ -59,8 +65,9 @@
                 var j = null;
                 try { j = JSON.parse(r.responseText); } catch (e) { j = null; }
                 if (j && j.ok) {
-                    etat.textContent = 'Appris : ' + j.code + '\n' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
-                        j.officielles + ' adresse(s) officielle(s) déclarée(s) par la page\nfichier ' + j.fichier;
+                    etat.textContent = 'Appris : ' + j.code + '\n' + j.ancres + ' ancres, ' + j.tuilesLues + ' tuiles lues, ' + j.tuilesAuCode + ' au code du set\n' +
+                        j.officielles + ' adresse(s) officielle(s) déclarée(s) par la page (flux ' + j.flux + ')\nfichier ' + j.fichier +
+                        (j.anomalie ? '\n⚠ ' + j.anomalie : '');
                 } else {
                     etat.textContent = 'Refusé (HTTP ' + r.status + ') : ' + ((j && j.motif) || 'réponse illisible du récepteur');
                 }

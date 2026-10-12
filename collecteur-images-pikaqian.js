@@ -51,6 +51,17 @@ function releve(unite, ligneDe = lignePikaqian) {
     return { ok: true, L };
 }
 
+/** Les gardes de SET de l'unité, pures et nommées pour que la mesure passive (plan-pikaqian-appris.js) les REJOUE au lieu de les recopier. Messages mot pour mot. */
+function gardeTirage(set, L, slug) {
+    if (!set) return { ok: false, etat: 'refuse-set', motif: `set ${slug} absent de la base` };
+    if ((set.tirage ?? set.region) !== L.tirage) return { ok: false, etat: 'refuse-set', motif: `tirage ${set.tirage ?? set.region} en base, ${L.tirage} dans la table` };
+    return { ok: true };
+}
+function gardeProduits(produits, slug) {
+    if (!produits) return { ok: false, etat: 'refuse-set', motif: `aucun produit joint au set ${slug} (cartes_produits.slugSet)` };
+    return { ok: true };
+}
+
 /** Les trous du set et le plan — lecture seule de la base. */
 async function planifier(db, slug, L, tuiles) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
@@ -94,8 +105,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     const bloquee = await E.findOne({ _id: P.ID_ALERTE, active: true });
     if (bloquee) return refus('refuse-source-bloquee', `${P.SOURCE} a bloqué le ${new Date(bloquee.depuis).toISOString()} (${bloquee.motif}) — aucune requête`);
     const set = await M.Set.findById(slug).select('tirage region').lean();
-    if (!set) return refus('refuse-set', `set ${slug} absent de la base`);
-    if ((set.tirage ?? set.region) !== L.tirage) return refus('refuse-set', `tirage ${set.tirage ?? set.region} en base, ${L.tirage} dans la table`);
+    const gT = gardeTirage(set, L, slug);
+    if (!gT.ok) return refus(gT.etat, gT.motif);
     // la TAILLE de la base, avant toute requête : au-delà de 400 Mo, STOP, et c'est écrit
     const st = await db.command({ dbStats: 1 });
     if (st.dataSize + st.indexSize > stopOctets) {
@@ -105,7 +116,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
     }
     // un set sans produit joint n'a rien à combler : ni requête, ni « verifie » (§41 — une clé `slugSet` fausse rendrait un succès parfait sur du vide)
     const produits = await db.collection('cartes_produits').countDocuments({ slugSet: slug });
-    if (!produits) return refus('refuse-set', `aucun produit joint au set ${slug} (cartes_produits.slugSet)`);
+    const gP = gardeProduits(produits, slug);
+    if (!gP.ok) return refus(gP.etat, gP.motif);
     const idEtat = `${P.SOURCE}/${slug}`;
     const verrouSet = fabriquerVerrouSet({ Modele: M.EtatImages, id: idEtat, dureeMs: VERROU_SET_MS, surInsertion: { debute: new Date(), phase: 'page' }, surPerte, nom: `verrou de set ${idEtat}` });
     const tenuPar = await verrouSet.prendre();
@@ -288,7 +300,7 @@ async function lancerEcriture(slugs, M, { verrou, client, R2 = r2, bucket = proc
     return { code, resultats };
 }
 
-module.exports = { collecterSet, releve, planifier, lancerEcriture, provenanceDe, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
+module.exports = { collecterSet, releve, gardeTirage, gardeProduits, planifier, lancerEcriture, provenanceDe, STOP_OCTETS, TABLE_PIKAQIAN, SOURCE: P.SOURCE, VERROU_GLOBAL: P.VERROU_GLOBAL };
 
 // ⚠️ EXÉCUTÉ SEULEMENT EN LIGNE DE COMMANDE : le worker importe `collecterSet`.
 if (require.main !== module) return;
