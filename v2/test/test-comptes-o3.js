@@ -95,7 +95,7 @@ const HEURE = 3600e3;
 
     // ============================ ruling 3 : purge à 48 h ============================
     H.vrai('7a. le module de purge existe', typeof Pg.purgerNonConfirmes === 'function');
-    const avantInstant = async () => Object.fromEntries(await Promise.all(['comptes', 'liens_email', 'sessions', 'mouvements', 'installations', 'codes_liaison', 'hebdo', 'analyses', 'questions', 'plafonds', 'collection_fiches', 'adresses_octroyees', 'limites'].map(async c => [c, await db.col(c).countDocuments({})])));
+    const avantInstant = async () => Object.fromEntries(await Promise.all(['comptes', 'liens_email', 'sessions', 'mouvements', 'installations', 'codes_liaison', 'hebdo', 'analyses', 'questions_v2', 'plafonds', 'collection_fiches', 'adresses_octroyees', 'limites'].map(async c => [c, await db.col(c).countDocuments({})])));
     await vieillir(nv._id, 47.99);   // 47 h 59 min 24 s
     const ref = await avantInstant();
     const p47 = await purger();

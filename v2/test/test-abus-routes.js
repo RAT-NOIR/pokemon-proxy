@@ -374,7 +374,7 @@ async function envoyer(base, { methode, chemin, entetes = {}, corps, brut, type 
     await raw('credits').insertOne({ userId: 'ancien-user-victime-0001', soldeGratuit: 2, soldeScans: 0 });
     const heritageA = await envoyer(V, { methode: 'POST', chemin: '/api/installation', entetes: extH(null), corps: { versionExtension: '2.0.0', libelle: 'victime', userIdHerite: 'ancien-user-victime-0001' } });
     const etatA = async () => ({
-        question: await raw('questions').findOne({ _id: `${scanA}:0` }), analyse: await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(scanA) }),
+        question: await raw('questions_v2').findOne({ _id: `${scanA}:0` }), analyse: await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(scanA) }),
         journal: await raw('journal_scans').findOne({ _id: new mongoose.Types.ObjectId(scanA) }), ligne: await raw('banc_lignes').countDocuments({ _id: 'ligne-victime' }),
         installationCompte: await raw('installations').findOne({ _id: CAinst.i._id }),
         collection: await raw('collection_fiches').find({ compteId: CA.c._id }).toArray()

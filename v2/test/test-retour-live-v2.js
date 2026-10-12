@@ -92,7 +92,7 @@ async function semer() {
     // un scan « identifié » : ambigu, puis répondu « a » (débité UNE fois) ; la ligne du journal hérité est attendue
     const scanRepondu = async (essais = 3, choix = 'a') => {
         const x = await inst(essais); const r = await identifier(x.jeton); const scanId = r.json.scanId;
-        const q = await raw('questions').findOne({ _id: `${scanId}:0` }); const rep = await repondre(x.jeton, scanId, choix);
+        const q = await raw('questions_v2').findOne({ _id: `${scanId}:0` }); const rep = await repondre(x.jeton, scanId, choix);
         if (rep.statut !== 200) throw new Error(`réponse refusée ${rep.statut}`);
         await journal(scanId);
         return { ...x, scanId, q, idRepondu: (q.choix.find(c => c.id === choix) || {}).idProduct };
@@ -189,7 +189,7 @@ async function semer() {
             const m0 = (await mouv(x.i._id)).length;
             const r = await rl(x.jeton, LR(scanId));
             H.v('G1. question EN ATTENTE + sans-prix : 409 CONFLIT (carte-non-identifiee), jamais un remboursement', refus(r), [409, 'CONFLIT', 'carte-non-identifiee']);
-            const q = await raw('questions').findOne({ _id: `${scanId}:0` });
+            const q = await raw('questions_v2').findOne({ _id: `${scanId}:0` });
             H.v('    crédit et question inchangés : essais 2, question en-attente, aucun mouvement de plus, aucun plafond consommé', [await essais(x.i._id), q.etat, (await mouv(x.i._id)).length - m0, await raw('plafonds').countDocuments({ porteur: `installation:${x.i._id}` })], [2, 'en-attente', 0, 0]);
             // la question répondue ensuite redevient remboursable : la garde suit l'état, pas une marque posée une fois
             await repondre(x.jeton, scanId, 'a');

@@ -46,16 +46,16 @@ async function requete(p, scanId, { le = t } = {}) {
     // 4. poserQuestion d'acces.js => ligne dans questions v2, req.questionId posé
     const p6 = await compte({ solde: { accueil: 0, achete: 3 } }); const q6 = await requete(p6, 'pont-s6');
     const pq = await acces.poserQuestion(q6, { scanId: 'pont-s6', raison: 'egalite', candidats: [111, 222] });
-    const ligne = await db.col('questions').findOne({ _id: 'pont-s6:0' });
+    const ligne = await db.col('questions_v2').findOne({ _id: 'pont-s6:0' });
     H.v('poserQuestion : en-attente, ligne dans questions v2, req.questionId posé', [pq.etat, ligne && ligne.etat, ligne && ligne.candidats, q6.questionId], ['en-attente', 'en-attente', [111, 222], 'pont-s6']);
     H.v('   le débit est passé en reserve (rendu à l\'abandon, débité à la réponse)', (await db.col('mouvements').findOne({ compteId: p6.id, type: 'debit', scanId: 'pont-s6' })).etat, 'reserve');
     // une panne APRÈS la question, dans la même requête : la question est annulée D'ABORD, le crédit n'est rendu qu'une fois
     const r6 = await dansUnScan(async () => await acces.rembourserScan(q6, 'exception-apres-question'));
-    H.v('panne après la question : remboursé une fois, la question n\'attend plus de réponse', [r6, (await db.col('questions').findOne({ _id: 'pont-s6:0' })).etat, (await lire(p6)).solde.achete, await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|pont-s6' })], [true, 'non-remboursee', 3, 1]);
+    H.v('panne après la question : remboursé une fois, la question n\'attend plus de réponse', [r6, (await db.col('questions_v2').findOne({ _id: 'pont-s6:0' })).etat, (await lire(p6)).solde.achete, await db.col('mouvements').countDocuments({ cleIdempotence: 'rb|pont-s6' })], [true, 'non-remboursee', 3, 1]);
     const bal = await require('../argent/questions').balayerQuestions({ maintenant: new Date(t.getTime() + 30 * 3600e3), max: 20 }, cfg);
     H.v('   le balayage ne rend rien de plus (24 h plus tard)', [bal.reglees, (await lire(p6)).solde.achete], [0, 3]);
     // la question qui ne peut pas s'écrire : repli, remboursée tout de suite
-    const p7 = await compte({ solde: { accueil: 0, achete: 3 } }); const q7 = await requete(p7, 'pont-s7'); await db.col('questions').insertOne({ _id: 'pont-s7:0', etat: 'x' });
+    const p7 = await compte({ solde: { accueil: 0, achete: 3 } }); const q7 = await requete(p7, 'pont-s7'); await db.col('questions_v2').insertOne({ _id: 'pont-s7:0', etat: 'x' });
     const pr = await acces.poserQuestion(q7, { scanId: 'pont-s7', raison: 'egalite', candidats: [1] });
     H.v('écriture refusée : repli remboursée, req.scanRembourse posé, solde rendu', [pr.etat, typeof pr.repli, q7.scanRembourse, (await lire(p7)).solde.achete], ['remboursee', 'string', true, 3]);
     const pcn = await acces.poserQuestion({ body: {}, credit: Pont.creditPourReq(pad, null, cfg, { scanId: 'x' }) }, { scanId: 'pont-adm2', raison: 'x', candidats: [] });

@@ -192,8 +192,8 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         lot([aff(P5), qst(Q1), aff(P20A), qst(Q2), qst(Q3)]);
         const r = await poster(sv.url, x.jeton); const j = r.json || {}; const cs = (j.analyse || {}).cartes || [];
         const ts = cs.filter(c => c.statut === 'a-trancher');
-        const lignes = await raw('questions').find({ scanId: new mongoose.Types.ObjectId(j.scanId) }).sort({ _id: 1 }).toArray();
-        H.v('7. 3 questions : chacune a sa propre question (3 candidats distincts les uns des autres), scanId commun, une ligne `questions` par carte (_id scanId:index, lot:true, en-attente)',
+        const lignes = await raw('questions_v2').find({ scanId: new mongoose.Types.ObjectId(j.scanId) }).sort({ _id: 1 }).toArray();
+        H.v('7. 3 questions : chacune a sa propre question (3 candidats distincts les uns des autres), scanId commun, une ligne `questions_v2` par carte (_id scanId:index, lot:true, en-attente)',
             [ts.length, new Set(ts.map(c => JSON.stringify(c.candidats.map(p => p.idProduct)))).size, lignes.map(q => [q.carte, q.lot, q.etat])], [3, 3, [[1, true, 'en-attente'], [3, true, 'en-attente'], [4, true, 'en-attente']]]);
         H.v('   le crédit n\'est pas « réservé » (une question de lot ne se règle pas) : le débit reste débité, facturation { debite:1, reserve:0, motif lot }', [(await debits(x)).map(m => m.etat), j.facturation.debite, j.facturation.reserve, j.facturation.motif], [['debite'], 1, 0, 'lot']);
         const avant = [await mouvements(x), await essais(x)].map(v => JSON.stringify(v));
@@ -322,7 +322,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
                 [r.statut, a.statut, (a.cartes || []).length, a.lot, r.json.facturation.motif, await essais(x), appelsLot, appelsChaine], [200, 'identifiee', 1, null, 'affirmee', 2, 1, 0]);
             const y = await inst(); const Q = [POOL[20], POOL[21]]; lot([qst(Q)]); appelsLot = 0; appelsChaine = 0;
             const q = await poster(sv.url, y.jeton); const qa = q.json.analyse || {};
-            const ligne = await raw('questions').findOne({ _id: `${q.json.scanId}:0` });
+            const ligne = await raw('questions_v2').findOne({ _id: `${q.json.scanId}:0` });
             H.v('U2. 1 résultat à trancher : a-trancher à 2 candidats, facturation { debite:0, reserve:1, motif question }, question réservée (PAS de lot:true), crochet 1 fois, chaîne 0',
                 [q.statut, qa.statut, (qa.cartes[0].candidats || []).length, qa.lot, q.json.facturation, ligne && ligne.etat, ligne && ligne.lot, appelsLot, appelsChaine],
                 [200, 'a-trancher', 2, null, { debite: 0, reserve: 1, rembourse: false, motif: 'question', raisonNonRembourse: null }, 'en-attente', false, 1, 0]);
@@ -366,7 +366,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
         H.v('3a. 3 introuvables + 1 question : NON remboursé (motif lot, essai 2), question posée à l\'index 3 et répondable (200 identifiee)', [j.facturation.rembourse, j.facturation.motif, await essais(x), j.analyse.lot.aTrancher, rep.statut, rep.json.carte && rep.json.carte.statut], [false, 'lot', 2, 1, 200, 'identifiee']);
         const y = await inst(); lot([qst([POOL[24], POOL[25]]), qst([POOL[26], POOL[27]])]);
         const r2 = await poster(sv.url, y.jeton);
-        const n = await raw('questions').countDocuments({ scanId: new mongoose.Types.ObjectId(r2.json.scanId), etat: 'en-attente' });
+        const n = await raw('questions_v2').countDocuments({ scanId: new mongoose.Types.ObjectId(r2.json.scanId), etat: 'en-attente' });
         H.v('   un lot de questions seules : NON remboursé (essai 2), 2 questions en attente', [r2.json.analyse.statut, r2.json.facturation.rembourse, await essais(y), n], ['lot', false, 2, 2]);
     }
     // ── 3b. deux lots de 25 du même porteur, clés différentes : deux jeux de clés de supplément
@@ -396,7 +396,7 @@ const soldeCompte = async x => (await raw('comptes').findOne({ _id: x.c._id })).
             argentReg.debiterSupplement = origS;
             argentReg.reserverQuestion = async () => { throw new Error('panne simulée : réservation'); }; const z = await inst(); lot([qst([POOL[28], POOL[29]]), aff(P5)]);
             const r3 = await poster(sv.url, z.jeton);
-            const ouvertes = await raw('questions').countDocuments({ scanId: new mongoose.Types.ObjectId(r3.json.scanId || '0'.repeat(24)), etat: 'en-attente' });
+            const ouvertes = await raw('questions_v2').countDocuments({ scanId: new mongoose.Types.ObjectId(r3.json.scanId || '0'.repeat(24)), etat: 'en-attente' });
             H.v('   réservation de question qui échoue dans un lot : 500 SERVEUR remboursée (essai 3, somme 0), aucune question en attente', [r3.statut, r3.json.erreur && r3.json.erreur.code, await essais(z), await net(z, 'réservation qui échoue'), ouvertes], [500, 'SERVEUR', 3, 0, 0]);
         } finally { argentReg.debiterSupplement = origS; argentReg.reserverQuestion = origQ; console.error = e; }
     }

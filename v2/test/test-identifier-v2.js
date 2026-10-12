@@ -123,7 +123,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         H.v('4. ambiguë : 200, a-trancher, 2 candidats', [r.statut, j.success, j.analyse && j.analyse.statut, j.analyse && j.analyse.cartes[0].candidats.length], [200, true, 'a-trancher', 2]);
         H.v('   facturation réservée { debite:0, reserve:1, motif:question }', [j.facturation.debite, j.facturation.reserve, j.facturation.rembourse, j.facturation.motif], [0, 1, false, 'question']);
         H.v('   solde.total déjà en moins (3 -> 2)', [j.solde.total, j.solde.essai], [2, 2]);
-        const q = await raw('questions').findOne({ _id: `${j.scanId}:0` });
+        const q = await raw('questions_v2').findOne({ _id: `${j.scanId}:0` });
         H.v('   question en base : en-attente, choix = choixPour(candidats)', [q && q.etat, q && q.choix], ['en-attente', choixPour([ID_A, ID_B])]);
         // 14. analyses sans texte ni IP ; annonces expurgées
         await attendre(300);
@@ -287,7 +287,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         const etat = async (x, scanId) => {
             const mv = await raw('mouvements').find({ installationId: x.i._id }).toArray();
             const ins = await raw('installations').findOne({ _id: x.i._id });
-            const q = await raw('questions').findOne({ _id: `${scanId}:0` });
+            const q = await raw('questions_v2').findOne({ _id: `${scanId}:0` });
             return { essais: ins.essais, net: mv.reduce((s, m) => s + m.delta, 0), mouvements: mv.length, debitsOuverts: mv.filter(m => m.type === 'debit' && m.etat !== 'rembourse').map(m => m.etat), question: q && { etat: q.etat, choix: q.choix } };
         };
         const parcours = async (m, choix) => {
@@ -348,7 +348,7 @@ async function semer(mode) {                                  // 'double' | 'sim
         // ── m1 : la question n'a pas pu être écrite (repli)
         {
             const colOrig = db.col;
-            const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
+            const sansEcritureQuestion = () => { db.col = nom => { const c = colOrig(nom); if (nom !== 'questions_v2') return c; return new Proxy(c, { get(t, p) { if (p === 'insertOne') return async () => { throw new Error('panne simulée : écriture de la question'); }; const v = t[p]; return typeof v === 'function' ? v.bind(t) : v; } }); }; };
             mode = 'refus-egalite';
             // (a) repli REMBOURSÉ : candidats montrés gratuitement
             const a = await inst(3); sansEcritureQuestion(); let ra;

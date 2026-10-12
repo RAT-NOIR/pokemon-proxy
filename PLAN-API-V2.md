@@ -160,7 +160,7 @@ AUDIT-SECURITE-V2.md                                                            
 | `mouvements` | un débit, remboursement, octroi, achat, migration | `compteId` ou `installationId`, `le`, `surface`, `type`, `delta`, `poche`, `motif`, `scanId`, `etat` (`debite`/`reserve`/`rembourse`), `cleIdempotence`, `expireLe` | `cleIdempotence` **unique partiel** ; `(compteId,le)` ; `(installationId,le)` ; **TTL** `expireLe` (24 mois) |
 | `hebdo` | compteur hebdomadaire | `compteId`, `semaine`, `count` | `(compteId, semaine)` unique ; TTL `expireLe` (60 j) |
 | `plafonds` | compteur de remboursements | `porteur`, `jour`, `type` (`panne`/`question`), `count`, `expireLe` | `(porteur, jour, type)` unique ; TTL |
-| `questions` | question en attente (réserve) | `_id` = scanId, `porteur`, `credit {poche, semaineIso, moisCle}`, `candidats[]`, `poseeLe`, `etat`, `reponse`, `priseLe`, `regleeLe`, `rembourse` | `(etat, poseeLe)` |
+| `questions_v2` (renommée le 2026-10-12, MOYENS-A : `questions` appartient au code hérité, `acces.js`) | question en attente (réserve) | `_id` = scanId, `porteur`, `credit {poche, semaineIso, moisCle}`, `candidats[]`, `poseeLe`, `etat`, `reponse`, `priseLe`, `regleeLe`, `rembourse` | `(etat, poseeLe)` |
 | `analyses` | une analyse (sans texte d'annonce) | `_id` = scanId, `porteur`, `surface`, `statut`, `cartes[] (idProduct, statut, raison)`, `facturation`, `creeLe`, `expireLe` | `(porteur, creeLe)` ; TTL `expireLe` (24 mois) |
 | `annonces` | titre/description EXPURGÉS d'un scan | `_id` = scanId, `titre`, `description`, `expurgeeParServeur`, `creeLe`, `expireLe` | **TTL** `expireLe` (90 jours) |
 | `idempotence` | une requête rejouable | `cle` (`porteur|route|valeur`), `empreinteCorps`, `etat` (`en-cours`/`fini`), `statut`, `reponse`, `expireLe` | `cle` unique ; TTL (24 h) |
@@ -1763,7 +1763,7 @@ async function rembourser(porteur, credit, motif, { scanId, compteur = 'panne', 
 `reserverQuestion(porteur, credit, { scanId, carte = 0, raison, candidats:[idProduct], choix:[{id, idProduct}], lot = false }, cfg, now?)` → `{ etat:'en-attente'|'remboursee'|'non-remboursee', repli? }` ;
 `repondreQuestion(porteur, { scanId, carte, choix }, cfg, now?)` → `{ statut:200|404|409|410, etat?, question?, facturation? }` (`choix` : un `id` de `question.choix`, `'aucune'` ou `'ne-sait-pas'`) ;
 `balayerQuestions({ maintenant, max }, cfg)` → `{ reglees, remboursees, nonRemboursees, erreurs, bloquees }`.
-Document `questions` : `_id` = `"<scanId>:<carte>"`, `porteur:{type,id}`, `credit`, `choix`, `candidats`, `poseeLe`, `etat` ∈ `en-attente · repondue · en-reglement · remboursee · non-remboursee`, `reponse`, `lot`.
+Document `questions_v2` (collection renommée, MOYENS-A) : `_id` = `"<scanId>:<carte>"`, `porteur:{type,id}`, `credit`, `choix`, `candidats`, `poseeLe`, `etat` ∈ `en-attente · repondue · en-reglement · remboursee · non-remboursee`, `reponse`, `lot`.
 
 - [ ] **Step 1 : assertions du test :**
   1. réservée : le mouvement de débit passe `etat:'reserve'` ; `solde` (B3.5) déjà en moins ; **rien n'est débité de plus à la réponse** ;

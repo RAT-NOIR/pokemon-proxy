@@ -190,7 +190,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
         const s = await scanMort();
         await argent.reserverQuestion(s.p, { poche: 'essai' }, { scanId: s.scanId, carte: 0, raison: 'egalite', candidats: [1, 2], choix: [{ id: 'a', idProduct: 1 }, { id: 'b', idProduct: 2 }] });
         await MS.rattraper(sec);
-        const q = await db.col('questions').findOne({ _id: `${s.scanId}:0` });
+        const q = await db.col('questions_v2').findOne({ _id: `${s.scanId}:0` });
         H.v('9. scan mort avec question réservée : question annulée (non-remboursee, annuleePar arret-serveur), crédit rendu UNE fois (essais 3, 1 ligne +1)', [q.etat, q.annuleePar, await essais(s.p), await rembs(s.p)], ['non-remboursee', 'arret-serveur', 3, 1]);
         const rep = await argent.repondreQuestion(s.p, { scanId: s.scanId, carte: 0, choix: 'a' });
         H.v('   répondre ensuite à cette question ne rend rien de plus et n\'offre rien (409 : plus en attente) ; solde inchangé', [rep.statut, await essais(s.p), await rembs(s.p)], [409, 3, 1]);
@@ -249,7 +249,7 @@ const rembs = async p => (await mouvements(p)).filter(m => m.type === 'rembourse
     }
     // ═══════════ 11b. LA RÉCONCILIATION GLOBALE, sur un état PROPRE (rien d'autre ne la rend non propre) — le mutant « reconcilierTous sans les marques »
     {
-        for (const c of ['mouvements', 'installations', 'comptes', 'scans_en_cours', 'idempotence', 'questions', 'analyses', 'plafonds']) await db.col(c).deleteMany({});
+        for (const c of ['mouvements', 'installations', 'comptes', 'scans_en_cours', 'idempotence', 'questions_v2', 'analyses', 'plafonds']) await db.col(c).deleteMany({});
         const vide = await R.reconcilierTous();
         H.v('11b. base vide de tout reste : reconcilierTous est propre (contrôle : le verdict peut être vrai)', [vide.propre, vide.marquesEnSuspens.length, vide.avecEcart, vide.rendusEchoues.length], [true, 0, 0, 0]);
         const s = await scanMort({ age: 20 * MIN });
