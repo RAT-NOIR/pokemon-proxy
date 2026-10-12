@@ -56,6 +56,11 @@ t('les trois sets à numéro lu sur 3 pages disent 3 pages (premier, milieu, der
     for (const c of ['sm1+', 'sm2+', 'ADV1']) assert.ok(/3 pages lues/.test(sourceDe(c).note), c);
     assert.ok(/2 pages lues/.test(sourceDe('MCRP').note) && /2 pages lues/.test(sourceDe('MEDK').note) && /1 page lue/.test(sourceDe('CGH').note));
 });
+t('(tour 2) les six lignes DÉCLARENT la parade `gardeSansNumero` ; aucune autre ligne de source ne la porte (IPB, déjà servi, reste inerte)', () => {
+    for (const c of Object.keys(ATTENDU)) assert.strictEqual(sourceDe(c).gardeSansNumero, true, c);
+    const autres = Object.entries({ ...ARTOFPKM_AUTO, ...ARTOFPKM }).filter(([c, s]) => s.gardeSansNumero && !ATTENDU[c]).map(([c]) => c);
+    assert.deepStrictEqual(autres, []); assert.strictEqual(sourceDe('IPB').gardeSansNumero, undefined);
+});
 t('aucun set non prouvé ne reçoit de source active', () => {
     for (const c of Object.keys(NON_PROUVES)) assert.strictEqual(sourceDe(c), null, `${c} a une source active`);
 });

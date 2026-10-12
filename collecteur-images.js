@@ -415,6 +415,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     const cartesAvecImage = new Set();
     let jointes = 0, clesRefusees = 0;
     const preuves = {};
+    const sansNumeroRefusees = [];        // tour 1 du lot JA : les images sans numéro refusées sur une carte à plusieurs numéros (nommées en reste, listées par la simulation)
     let resolues = [];                    // passe 1 : la carte de chaque image ; passe 2 (plus bas) : l'écriture
     for (const imSource of images) {
         // (2026-10-07) une correction lue à l'œil peut porter le NUMÉRO que la source n'écrit pas (artofpkm ne numérote pas le Mew
@@ -477,6 +478,17 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             continue;
         }
         cands = gss.cands; preuve = gss.preuve;
+        // 🔴 LOT JA, TOUR 1 (2026-10-13) : UNE IMAGE SANS NUMÉRO NE SE JOINT PAS PAR LE NOM À UNE CARTE QUI PORTE AU MOINS DEUX NUMÉROS (∅ compris) DANS LE SET. Deux Énergies de base
+        // (sm1+ Basic Grass Energy 60754 : ∅ et 068 ; sm2+ Basic Darkness Energy 23485 : 066 et ∅) recevaient l'image sans numéro en plus de l'image numérotée : la carte portait
+        // alors un numéro nul à côté d'un vrai, le document devenait « ambigu » pour la règle du site et TOUT le set passait « par document » (68 → 53 fiches, 66 → 52). Le nom ne dit
+        // pas laquelle des impressions l'image est : reste NOMMÉ, jamais un visuel choisi par l'ordre de lecture. Hors du cas (carte à un numéro ou aucun, image numérotée) rien ne change.
+        // TOUR 2 : ACTIVE SEULEMENT SUR UNE LIGNE QUI LA DÉCLARE (`gardeSansNumero`, sources-sets.js). Mesuré : sur IPB (Intro-Pack-Bulbasaur, déjà servi), deux Énergies à numéro nul (28/66, 28/68) sont
+        // servies aujourd'hui (40/41 produits, « par document ») ; la parade globale les retirerait (38/41) : une baisse non annoncée de visuels servis est interdite. IPB reste un cas connu, à trancher par le testeur.
+        if (S?.gardeSansNumero && !corr && cands.length === 1 && im.numero == null && String(preuve).startsWith('nom') && new Set(impsDe(cands[0]).map(i => cleNumero(i.numero) || '∅')).size >= 2) {
+            restes.push({ set: slug, type: 'image-sans-numero-carte-numerotee', detail: `${im._id} « ${im.titre} » sans numéro -> carte ${cands[0]._id} « ${cands[0].nomEn} » : la carte porte plusieurs numéros dans le set (${impsDe(cands[0]).map(i => i.numero ?? '∅').join(', ')}), le nom ne dit pas lequel — refusée`, le: new Date() });
+            sansNumeroRefusees.push({ cleR2: im.cleR2, carteId: cands[0]._id });
+            continue;
+        }
         if (cands.length === 1) resolues.push({ im, carteId: cands[0]._id, c: cands[0], preuve });
         else if (!cands.length) restes.push({ set: slug, type: 'image-sans-carte', detail: `${im._id} « ${im.titre} » n°${im.numero ?? '—'}`, le: new Date() });
         else restes.push({ set: slug, type: 'image-vers-plusieurs-cartes', detail: `${im._id} « ${im.titre} » -> cartes ${cands.map(c => c._id).join(', ')}`, le: new Date() });
@@ -521,7 +533,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         for (const r of resolues) if (!refusees.has(`${r.c._id}|${String(r.im.numero).trim()}`)) finales.set(cle(r.c._id, r.im.numero), r);
         const decrire = r => ({ cleR2: r.im.cleR2, numero: r.im.numero ?? null, nomImage: r.im.nomEn ?? r.im.titre, carteId: r.c._id, nomCarte: r.c.nomEn, preuve: r.preuve });
         return { simule: true, couverture, imagesOk: images.length, preuves: parPreuve, contredites: contredites.map(x => ({ cleR2: x.im.cleR2, numero: x.im.numero ?? null, carteId: x.c._id, nomCarte: x.c.nomEn, nomJaCarte: x.c.nomJa ?? null, nomImage: x.im.nomEn, nomJaImage: x.im.nomJa ?? null, regle: x.verdict.regle, ja: x.verdict.ja, temoins: (x.verdict.autres || []).map(a => `${a._id} « ${a.nomEn} »`), serviraitSansTemoin: !refusees.has(`${x.c._id}|${String(x.im.numero).trim()}`) })),
-            restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}),
+            restes: restes.reduce((a, r) => (a[r.type] = (a[r.type] || 0) + 1, a), {}), sansNumeroRefusees,
             nouvelles: [...finales].filter(([k]) => !deja.has(k)).map(([, r]) => decrire(r)),
             remplacees: [...finales].filter(([k, r]) => deja.has(k) && deja.get(k) !== r.im.cleR2).map(([k, r]) => ({ ...decrire(r), avant: deja.get(k) })) };
     }
@@ -568,7 +580,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     // (symbole du set, mention d'indisponibilité). Elles se COMPTENT et se nomment, elles ne sont
     // pas des restes.
     const cartesSansImage = cartes.filter(c => !cartesAvecImage.has(c._id)).map(c => ({ carteId: c._id, nomEn: c.nomEn }));
-    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee', 'image-contredite-par-le-nom'] } });
+    await M.Reste.deleteMany({ set: slug, type: { $in: ['image-sans-carte', 'carte-sans-image', 'image-vers-plusieurs-cartes', 'image-cle-partagee', 'image-contredite-par-le-nom', 'image-sans-numero-carte-numerotee'] } });
     if (restes.length) await M.Reste.insertMany(restes);
 
     // ---- 5. complétude ----------------------------------------------------------------------
@@ -593,7 +605,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         // les cartes sont couvertes. Dans les deux cas : les originaux valent les entrées de la source.
         // Une image refusée pour clé partagée n'est pas un original perdu : elle est NOMMÉE (reste `image-cle-partagee`).
         concordance: nEntrees === images.length
-            && (emplacements ? !cartesNonCouvertes(cartes, { numerosDe: numerosAttendus, servis: servisEmpl, nommes: nommesEmpl, cartesAvecImage, cartesContredites }).length : jointes + clesRefusees + contredites.length === images.length)
+            && (emplacements ? !cartesNonCouvertes(cartes, { numerosDe: numerosAttendus, servis: servisEmpl, nommes: nommesEmpl, cartesAvecImage, cartesContredites }).length : jointes + clesRefusees + contredites.length + sansNumeroRefusees.length === images.length)
             && !restesParType['image-vers-plusieurs-cartes'],
         verifieLe: new Date()
     };
