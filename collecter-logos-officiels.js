@@ -69,21 +69,34 @@ function refusLangue(ligne, url) {
     return null;
 }
 
-/** Le plan d'UNE ligne, avant tout téléchargement : collecter / reportee / ecartee / refus. `setsParId` : Map slug → { tirage, region }. */
-function planifier(ligne, setsParId) {
-    if (ligne.verdict !== 'OFFICIEL') return { action: 'refus', raison: `verdict ${ligne.verdict} : seuls les OFFICIEL se collectent` };
-    if (ligne.bulbapediaSeule) return { action: 'reportee', raison: 'Bulbapedia seule (copie archive.org) : reportée, décision du testeur' };
+/** Le set de la ligne est-il SÛR (jamais « ? » ni « non identifié ») ? Rend { action, raison } si non, sinon null. Une seule définition : planifier ET les routes Bulbapedia (collecte-cartes/logos-bulba.js). */
+function refusSetIdentifie(ligne) {
     if (!ligne.set || !ligne.setSur) return { action: 'ecartee', raison: ligne.set ? `set « ${ligne.set} » identifié par le code seulement, non confirmé` : 'set non identifié' };
-    if (!ligne.urlChoisie) return { action: 'refus', raison: 'aucune URL de la liste fermée sur la ligne' };
-    const rU = verifierUrl(ligne, ligne.urlChoisie);
-    if (rU) return { action: 'refus', raison: rU };
-    const rL = refusLangue(ligne, ligne.urlChoisie);
-    if (rL) return { action: 'ecartee', raison: rL };
+    return null;
+}
+/** Le set est-il en base, et son tirage est-il celui du logo ? Rend { action, raison } si non, sinon null. */
+function refusSetBase(ligne, setsParId) {
     const s = setsParId.get(ligne.set);
     if (!s) return { action: 'ecartee', raison: `set « ${ligne.set} » absent de la base` };
     const tirage = s.tirage ?? s.region;
     const attendu = ligne.cible === 'fr' ? 'intl' : ligne.cible === 'ja' ? 'jp' : null;
     if (tirage !== attendu) return { action: 'ecartee', raison: `set de tirage ${tirage}, logo ${ligne.cible} (attendu ${attendu})` };
+    return null;
+}
+
+/** Le plan d'UNE ligne, avant tout téléchargement : collecter / reportee / ecartee / refus. `setsParId` : Map slug → { tirage, region }. */
+function planifier(ligne, setsParId) {
+    if (ligne.verdict !== 'OFFICIEL') return { action: 'refus', raison: `verdict ${ligne.verdict} : seuls les OFFICIEL se collectent` };
+    if (ligne.bulbapediaSeule) return { action: 'reportee', raison: 'Bulbapedia seule (copie archive.org) : reportée, décision du testeur' };
+    const rS = refusSetIdentifie(ligne);
+    if (rS) return rS;
+    if (!ligne.urlChoisie) return { action: 'refus', raison: 'aucune URL de la liste fermée sur la ligne' };
+    const rU = verifierUrl(ligne, ligne.urlChoisie);
+    if (rU) return { action: 'refus', raison: rU };
+    const rL = refusLangue(ligne, ligne.urlChoisie);
+    if (rL) return { action: 'ecartee', raison: rL };
+    const rB = refusSetBase(ligne, setsParId);
+    if (rB) return rB;
     return { action: 'collecter' };
 }
 
@@ -323,12 +336,14 @@ const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  * L'écriture d'UNE ligne : l'image et sa vignette dans R2, puis `sets.logoOfficiel.<cible>` — un champ NEUF, posé seulement s'il est absent (filtre
  * `$exists: false`). Un logoOfficiel déjà posé n'est jamais remplacé : même fichier → « deja », autre fichier → « refus ». Rien d'autre n'est écrit.
  */
-async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date() }) {
+// `lot`, `refusDeLangue` et `ajout` sont réservés aux routes Bulbapedia (collecte-cartes/logos-bulba.js) : leur langue se prouve par la règle des NOMS DE FICHIER
+// (langue-logo.js), jamais par l'adresse ; `ajout` = { entree, preuve } est ajouté à l'entrée, il ne remplace aucun champ de base.
+async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date(), lot = LOT, refusDeLangue = refusLangue, ajout = {} }) {
     const { fabriquerVignette, cleVignette, LARGEUR_VIGNETTE_LOGO } = require('./collecte-cartes/vignette');
     if (!SLUG.test(set)) return { action: 'refus', raison: `identifiant de set « ${set} » non sûr pour une clé R2` };
     if (!['fr', 'ja'].includes(ligne.cible)) return { action: 'refus', raison: `cible « ${ligne.cible} » inconnue` };
     // LA LANGUE (ruling du coordinateur) : la garde est ici AUSSI, sur l'adresse du fichier qu'on s'apprête à écrire — pas seulement dans planifier
-    const rL = refusLangue(ligne, fichier.url);
+    const rL = refusDeLangue(ligne, fichier.url);
     if (rL) return { action: 'refus', raison: rL };
     const champ = `logoOfficiel.${ligne.cible}`;
     const doc = await S.findOne({ _id: set }, { projection: { logoOfficiel: 1 } });
@@ -342,9 +357,10 @@ async function ecrireLigne({ S, r2, bucket, ligne, set, fichier, le = new Date()
     const d1 = await r2.deposerBinaire(bucket, cleR2, fichier.buf, contentType(fichier.ext));
     const d2 = await r2.deposerBinaire(bucket, cv, vg.buffer, 'image/webp');
     const entree = {
+        ...(ajout.entree ?? {}),
         cleR2, w: meta.width, h: meta.height, octets: fichier.buf.length, sha256: fichier.sha256, format: meta.format, langue: ligne.langue,
-        source: ligne.source, urlSource: fichier.url, lot: LOT, mention: MENTION, le, vignette: { cleR2: cv, w: vg.w, h: vg.h },
-        preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null, ...(ligne.regardePar ? { regardePar: ligne.regardePar, raisonRegarde: ligne.raisonRegarde, confirmationSet: ligne.confirmationSet } : {}) }
+        source: ligne.source, urlSource: fichier.url, lot, mention: MENTION, le, vignette: { cleR2: cv, w: vg.w, h: vg.h },
+        preuve: { urlSource: fichier.url, verifie: fichier.via, corr: fichier.corr ?? null, comparePhase1: ligne.cache?.sha256 === fichier.sha256, fichierPokecardex: ligne.fichier, pokecardexSha256: ligne.pokecardexSha256, setDeLaLigne: ligne.set, scorePhase1: ligne.score ?? null, ...(ligne.regardePar ? { regardePar: ligne.regardePar, raisonRegarde: ligne.raisonRegarde, confirmationSet: ligne.confirmationSet } : {}), ...(ajout.preuve ?? {}) }
     };
     const u = await S.updateOne({ _id: set, [champ]: { $exists: false } }, { $set: { [champ]: entree } });
     if (u.modifiedCount === 1) return { action: 'ecrit', cleR2, vignette: cv };
@@ -377,7 +393,7 @@ async function retirerLot({ S, r2, bucket, lot, ecrire = false, journal = m => c
     return { sets, cles };
 }
 
-module.exports = { REGARDES_2026_10_11, EXCLUS_2026_10_11, promouvoir, LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
+module.exports = { REGARDES_2026_10_11, EXCLUS_2026_10_11, promouvoir, LOT, MENTION, HOTES_COLLECTE, CADENCE_MS, sourceDe, verifierUrl, refusSetIdentifie, refusSetBase, planifier, juger, reduireDoublons, creerClient, regleRobots, autorise, ecrireLigne, retirerLot, ArretDefi, ArretHote, langueProuvee, refusLangue };
 
 // ───────────────────────── la ligne de commande
 const AUTORISES = [/^--table=.+\.json$/, /^--pokecardex=.+$/, /^--cache=.+$/, /^--rapport=.+\.json$/, /^--ecrire$/];

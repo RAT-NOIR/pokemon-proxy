@@ -76,7 +76,10 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json',
     // ➕ 2026-10-12 : le RÉESSAI ESPACÉ de PikaQian bloqué et la sonde du serveur d'images officiel (le worker les appelle à chaque tour), avec la machine
     // d'espacement qu'ils partagent avec Bulbapedia : un worker qui ne les a pas ne retenterait jamais, et laisserait les 91 unités refusées sous une alerte levée
-    'collecte-cartes/reessai-pikaqian.js', 'collecte-cartes/bulba-espacement.js', 'collecte-cartes/sonde-cdn-pokemon-tcg.js',
+    'collecte-cartes/reessai-pikaqian.js', 'collecte-cartes/bulba-espacement.js',
+    // ➕ 2026-10-12 (L2) : le CLIENT Bulbagarden (bulba.js, que bulba-espacement.js charge) : ses redirections ne sortent plus de la liste fermée d'hôtes (§75) —
+    // un worker qui ne le porte pas suivrait encore 5 redirections vers n'importe quel hôte
+    'collecte-cartes/bulba.js', 'collecte-cartes/sonde-cdn-pokemon-tcg.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
