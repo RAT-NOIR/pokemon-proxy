@@ -1,0 +1,83 @@
+{{PokémoncardInfobox
+|cardname=Oddish
+|jname=ナゾノクサ
+|jtrans=
+|image=OddishSVPPromo102.jpg
+|caption=Illus. [[Miranda Branley]]
+|species=Oddish
+|evostage=Basic
+|type=Grass
+|hp=60
+|weakness=Fire
+|retreatcost=1
+}}
+{{PokémoncardInfobox/Expansion
+|type=Grass
+|expansion={{TCG|SVP Black Star Promos}}
+|cardno=102<!--
+|jpexpansion={{TCG|SV-P Promotional cards}}
+|jpcardno=???/SV-P-->
+}}
+{{PokémoncardInfobox/Footer
+|type=Grass
+|species=Oddish
+}}
+{{ct
+|Grass
+}}
+{{TCG
+|SVP Black Star Promos
+}}
+{{Cardtext/Header
+|type=Grass
+}}
+{{Cardtext/Attack
+|type=Grass
+|cost={{e|Grass}}
+|name=Razor Leaf
+|jname=はっぱカッター
+|jtrans=
+|damage=10
+|effect=
+}}
+{{Cardtext/Attack
+|type=Grass
+|cost={{e|Grass}}{{e|Grass}}
+|name=Grass Knot
+|jname=くさむすび
+|jtrans=
+|damage=20×
+|effect=
+}}
+{{Cardtext/Footer
+}}
+{{Carddex
+|type=Grass
+|name=Oddish
+|species=Weed
+|ndex=0043
+|height=1'8"
+|jheight=0.5
+|weight=11.9
+|jweight=5.4
+|dex=
+|jdex=
+}}
+{{TCG
+|Paradox Rift
+}}
+{{m
+|Razor Leaf
+}}
+{{m
+|Grass Knot
+}}
+{{p
+|Oddish
+}}
+{{pkmn
+|Sword and Shield
+|Pokémon Shield
+}}
+{{Project TCG notice
+}}

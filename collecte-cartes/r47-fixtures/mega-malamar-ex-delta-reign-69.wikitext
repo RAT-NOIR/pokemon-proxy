@@ -1,0 +1,121 @@
+{{TCG Pre-prerelease
+|[https://press.pokemon.com/en/releases/MEDIA-ALERT-New-Pokemon-Trading-Card-Game-Mega-EvolutionDelta-Reign-Ex Pokémon Official Press]
+}}
+{{PokémoncardInfobox
+|cardname=Mega Malamar
+|jname=メガカラマネロex
+|jtrans=
+|image=MegaMalamarexDeltaReign69.jpg
+|caption=Regular print<br>Illus. [[5ban Graphics]]
+|reprints=2
+|reprint1=MegaMalamarexStormEmeralda94.jpg
+|recaption1={{TCG|Ultra rare}} print<br>Illus. [[5ban Graphics]]
+|species=Malamar
+|evostage=Stage 1
+|evoicon=686
+|evospecies=Inkay
+|evoname=Inkay
+|type=Darkness
+|hp=320
+|weakness=Grass
+|retreatcost=2
+|class=Mega ex
+}}
+{{PokémoncardInfobox/Expansion
+|type=Darkness
+|expansion={{TCG|Delta Reign}}
+|rarity={{rar|Double Rare}}
+|cardno=069/103
+|jpexpansion={{TCG|Storm Emeralda}}
+|jprarity={{rar|RR}}
+|jpcardno=048/076
+}}
+{{PokémoncardInfobox/Expansion
+|type=Darkness<!--
+|expansion={{TCG|Delta Reign}}
+|rarity={{rar|Ultra Rare}}
+|cardno=XXX/103-->
+|jpexpansion={{TCG|Storm Emeralda}}
+|jprarity={{rar|SR}}
+|jpcardno=094/076
+}}
+{{PokémoncardInfobox/Footer
+|type=Darkness
+|species=Malamar
+}}
+{{Mega ex
+}}
+{{ct
+|Darkness
+}}
+{{TCG
+|Pokémon ex
+|Mega Evolution Pokémon ex
+}}
+{{TCG
+|Delta Reign
+}}
+{{Cardtext/Header
+|type=Darkness
+}}
+{{Cardtext/Mega Species
+|Malamar
+}}
+{{Cardtext/Attack
+|type=Darkness
+|cost={{e|Darkness}}{{e|Darkness}}
+|name=Psychic Marionette
+|jname=サイコマリオネット
+|jtrans=
+|damage=70×
+|effect=
+}}
+{{Cardtext/Attack
+|type=Darkness
+|cost={{e|Darkness}}{{e|Darkness}}{{e|Darkness}}
+|name=Eerie Wave
+|jname=ぶきみなねんぱ
+|jtrans=
+|damage=200
+|effect=
+}}
+{{Cardtext/Mega ex
+|type=Darkness
+|ndex=0687
+}}
+{{Cardtext/Footer
+}}
+{{TCG
+|Full Art card
+|Full Art
+}}
+{{TCG
+|ultra rare
+}}
+{{TCG
+|Delta Reign
+}}
+{{TCG
+|Storm Emeralda
+}}
+{{TCGGallery
+|type=Darkness
+|image1=MegaMalamarexDeltaReign69.jpg
+|caption1=Regular print<br>Illus. [[5ban Graphics]]
+|image2=MegaMalamarexStormEmeralda94.jpg
+|caption2={{TCG|Ultra rare}} print<br>Illus. [[5ban Graphics]]
+}}
+{{me
+|Malamar
+}}
+{{TCG
+|XY Black Star Promos
+|XY Black Star Promo
+}}
+{{TCG ID
+|XY Promo
+|Trevenant
+|14
+}}
+{{Project TCG notice
+}}

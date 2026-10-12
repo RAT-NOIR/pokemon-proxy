@@ -88,6 +88,11 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/sources-en-service.js',
     // ➕ 2026-10-08 : le témoin du nom dans la jointure des images artofpkm — un worker qui ne l'a pas joindrait encore sans témoin
     'collecte-cartes/temoin-images-artofpkm.js',
+    // ➕ 2026-10-12 (R7) : collecteur-images-bulba.js charge tirage-image.js, qui ôte désormais les commentaires HTML du wikitext avant de lire
+    // les fichiers et les paires jp/occidental (wikitext.js : sansCommentaires, qui charge corrections-impressions.js) — un worker sans eux relirait le texte commenté
+    'collecte-cartes/tirage-image.js',
+    'collecte-cartes/wikitext.js',
+    'collecte-cartes/corrections-impressions.js',
     // ➕ 2026-10-12 : la marque « basseDefinition » (posée par TPC et PikaQian) et le REMPLACEMENT automatique (appelé par artofpkm, Bulbapedia, TCGdex) :
     // un worker qui ne la porte pas poserait des entrées sous 350 px sans marque, ou ne remplacerait jamais une basse définition par une meilleure image
     'collecte-cartes/basse-definition.js'];

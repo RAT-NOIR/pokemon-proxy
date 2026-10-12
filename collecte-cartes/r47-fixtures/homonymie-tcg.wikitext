@@ -1,0 +1,7 @@
+{{TCG
+|Pikachu
+}}
+{{tcgdisambig
+}}
+{{Project TCG notice
+}}
