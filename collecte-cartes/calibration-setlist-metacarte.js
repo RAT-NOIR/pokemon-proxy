@@ -49,11 +49,11 @@ function compter(acc, r, nom) {
 }
 function compterRetrait(acc, r, nom) { acc.cas++; if (r.atteint) acc.atteints++; if (r.faux) { acc.fauxCarte++; acc.faux.push(nom); } else acc.silences++; }
 
-/** Charge l'export (idProduct -> { name, idMetacard }). */
+/** Charge l'export (idProduct -> { name, idMetacard, idExpansion }). `idExpansion` ajouté pour le lot M2 (frères de métacarte) : additif, SEA-2 ne le lit pas. */
 function chargerExport(chemin) {
     const E = JSON.parse(fs.readFileSync(chemin, 'utf8'));
     if (!Array.isArray(E.products) || !E.products.length) throw new Error(`${chemin} : aucun produit lu (champ « products »)`);
-    return new Map(E.products.map(p => [p.idProduct, { name: p.name, idMetacard: p.idMetacard ?? null }]));
+    return new Map(E.products.map(p => [p.idProduct, { name: p.name, idMetacard: p.idMetacard ?? null, idExpansion: p.idExpansion ?? null }]));
 }
 
 /**
