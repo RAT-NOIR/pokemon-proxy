@@ -52,6 +52,13 @@ verifier('une entrée de Setlist sans numéro ne donne pas de numeroFiche → re
 d = designerParSetlist(ctx({ 1: { 900: [321492] } }, [{ carte: rabsca, numero: '184' }]), P1, { sauf: 321492 });
 verifier('calibration « vraie carte retirée » : la carte retirée ne peut être désignée', [d.carte], [null]);
 
+// `sauf` doit s'appliquer à la Setlist ET à la métacarte : ici la métacarte ne désigne que la vieille page, la Setlist porte les deux. Sans `sauf` sur la
+// Setlist, deux cartes candidates → refus ; avec lui, la vieille page est la seule candidate et elle est désignée (la métacarte vidée ne suffit pas à passer).
+d = designerParSetlist(ctx({ 1: { 900: [300001] } }, [{ carte: rabsca, numero: '184' }, { carte: rabscaVieille, numero: '12' }]), P1, { sauf: 321492 });
+verifier('sauf est appliqué à la SETLIST : la carte retirée n\'y compte plus, la seule candidate restante est désignée', [d.carte?._id, d.numero, d.atteint], [300001, '12', true]);
+d = designerParSetlist(ctx({ 1: { 900: [300001] } }, [{ carte: rabsca, numero: '184' }, { carte: rabscaVieille, numero: '12' }]), P1);
+verifier('… sans sauf, la Setlist porte DEUX cartes à ce nom et ces attaques → refus, mais le cas est ATTEINT (la clé a eu à choisir)', [d.carte, d.atteint], [null, true]);
+
 // ── le plan d'un set ──
 const { planDuSet } = require('./collecte-cartes/cle-setlist-metacarte');
 const bas = meta({ 1: { 900: [321492] } });

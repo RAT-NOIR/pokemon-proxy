@@ -29,7 +29,10 @@ const clesDuProduit = p => { const alias = ALIAS_CARDMARKET_VERS_BULBAPEDIA[p.no
  * @returns {{carte: object|null, numero: string|null, raison: string|null}}
  */
 function designerParSetlist({ parMeta, metacarteDe, setlist }, p, { sauf = null } = {}) {
-    const non = raison => ({ carte: null, numero: null, raison });
+    // `atteint` : la clé a dû CHOISIR — la métacarte a passé (une seule carte) ET la Setlist a au moins une candidate. Une calibration qui ne compte
+    // pas ses cas atteints peut afficher « 0 faux » sur des cas où la clé n'a jamais eu de choix à faire (§76, relecture A de SEA-2).
+    let atteint = false;
+    const non = raison => ({ carte: null, numero: null, raison, atteint });
     if (!(p.attaques || []).length) return non('produit sans attaque : le nom seul ne désigne pas (« Honey » est Sweet Honey)');
     // (1) la métacarte
     const m = metacarteDe(p.idProduct);
@@ -41,12 +44,13 @@ function designerParSetlist({ parMeta, metacarteDe, setlist }, p, { sauf = null 
     const kp = clesDuProduit(p);
     const entrees = (setlist || []).filter(e => e.carte._id !== sauf && clesNom(nomJointDe(e.carte)).some(k => kp.includes(k)) && compatible(e.carte, p, 'incluses'));
     const cartes = [...new Set(entrees.map(e => e.carte._id))];
+    atteint = cartes.length > 0;
     if (!cartes.length) return non('aucune carte de la Setlist de ce set à ce nom et ces attaques');
     if (cartes.length > 1) return non(`${cartes.length} cartes de la Setlist à ce nom et ces attaques`);
     if (entrees.length > 1) return non(`la Setlist range cette carte à plusieurs numéros (${entrees.length} entrées : ${entrees.map(e => e.numero ?? '—').join(', ')})`);
     if (entrees[0].numero == null || String(entrees[0].numero).trim() === '') return non('entrée de Setlist sans numéro');
     if (cartes[0] !== [...cartesMeta][0]) return non(`désaccord métacarte (${[...cartesMeta][0]}) / Setlist (${cartes[0]})`);
-    return { carte: entrees[0].carte, numero: String(entrees[0].numero).trim(), raison: null };
+    return { carte: entrees[0].carte, numero: String(entrees[0].numero).trim(), raison: null, atteint };
 }
 
 /**
@@ -88,7 +92,9 @@ function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, ex
         if (!x.d.carte) { refus.push({ p: x.p, raison: x.d.raison }); continue; }
         const deja = lignesDuSet.filter(l => l.carteId === x.d.carte._id && l.numeroFiche != null).map(l => k(l.numeroFiche));
         const imps = (x.d.carte.impressions || []).filter(i => i && i.tirage === tirage && i.expansion === expansion);
-        if (deja.some(n => n !== k(x.d.numero)) || imps.some(i => i.numero != null && k(i.numero) !== k(x.d.numero))) ecartes.push(x); else retenus.push(x);
+        // une impression de l'expansion SANS numéro (posée par le parseur) : y ajouter la nôtre ferait deux impressions du même set, dont une sans numéro —
+        // la fiche sans numéro et la fiche numérotée se mélangent (relecture B de SEA-2). Écarté, nommé.
+        if (deja.some(n => n !== k(x.d.numero)) || imps.some(i => i.numero == null || String(i.numero).trim() === '' || k(i.numero) !== k(x.d.numero))) ecartes.push(x); else retenus.push(x);
     }
     const impressions = new Map();
     for (const x of retenus) if (!(x.d.carte.impressions || []).some(i => i && i.tirage === tirage && i.expansion === expansion && k(i.numero) === k(x.d.numero))) impressions.set(`${x.d.carte._id}|${k(x.d.numero)}`, x);

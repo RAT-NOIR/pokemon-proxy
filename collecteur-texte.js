@@ -27,6 +27,7 @@ const { champsDeNaissance } = require('./collecte-cartes/set-nomme');
 const r2 = require('./collecte-cartes/r2');
 const bulba = require('./collecte-cartes/bulba');
 const { epurer, faitsDeCarte, faitsDeSet, entreesDeLaSetlist, natureIgnoree } = require('./collecte-cartes/wikitext');
+const { effacerRefabricables } = require('./collecte-cartes/preuves-jointure');
 const { ligne: ligneDeTable, EXPANSIONS_INTL } = require('./collecte-cartes/table-sets');
 const { modeles } = require('./collecte-cartes/schemas');
 const { joindre, produitsDeLExpansion, impressionsDepuisSetlist, cleNumero } = require('./collecte-cartes/jointure');
@@ -333,12 +334,11 @@ const ATTENTE_VERROU_MS = 30 * 1000;
         // rendre — restaurées depuis la sauvegarde du lot. La condition d'effacement est celle de la réécriture.
         const expsDeCeSet = [L.exp, ...(TIRAGE === 'jp' ? Object.values(EXPANSIONS_INTL) : [])];
         const idsCartes = deja.map(c => c._id);
-        await M.CarteProduit.deleteMany({ carteId: { $in: idsCartes }, idExpansion: { $in: expsDeCeSet } });
-        // les liens dénormalisés se recomposent depuis ce qui RESTE en cartes_produits
-        for (const id of idsCartes) {
-            const restants = (await M.CarteProduit.find({ carteId: id }).select('idProduct').lean()).map(x => x.idProduct);
-            await M.Carte.updateOne({ _id: id }, { $set: { 'liens.idProduct': restants, 'liens.idMetacards': [] }, $unset: { 'liens.idMetacard': 1 } });
-        }
+        // 🔴 §59 (SEA-2) : une régénération ne retire que ce qu'elle sait REFABRIQUER — la liste fermée des `preuve` que joindre() produit
+        // (collecte-cartes/preuves-jointure.js). Les lignes posées par un autre outil (metacarte+setlist, metacarte+nom+attaques, wcd…, fiches
+        // simples) et leurs liens survivent au rejeu ; les liens dénormalisés se recomposent depuis ce qui RESTE.
+        const regen = await effacerRefabricables(M, idsCartes, expsDeCeSet);
+        if (regen.gardees) console.log(`   --reparser : ${regen.gardees} ligne(s) posée(s) par un autre outil que joindre() GARDÉE(S) (preuve hors de la liste que la jointure refabrique)`);
     }
     for (let i = 0; i < aFaire.length && !arretDemande; i += 50) {
         const lot = aFaire.slice(i, i + 50);
