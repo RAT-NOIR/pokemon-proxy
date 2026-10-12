@@ -293,6 +293,10 @@ const imageDe = async larg => sharp({ create: { width: larg, height: Math.round(
     const B9b = fausseBase(); semer(B9b);
     ({ b } = await lancer(B9b, reseau(normal(webp300))));
     verifier('image de 300 px (le seuil) → « ok » et jointe', [b.tropPetits, B9b.col('images').get(P.idImagePikaqian(SLUG, 1, '001'))?.etat, B9b.col('cartes').get(1).images.length], [0, 'ok', 2]);
+    // ➕ 2026-10-12 — BASSE DÉFINITION : 300 px est sous 350 → la marque sur le document ET sur l'entrée ; PikaQian GARDE son seuil de 300 (257 est pour les officielles)
+    verifier('   300 px → `basseDefinition: true` sur le document images ET sur l\'entrée de la carte',
+        [B9b.col('images').get(P.idImagePikaqian(SLUG, 1, '001'))?.basseDefinition, B9b.col('cartes').get(1).images.find(e => e.source === 'pikaqian')?.basseDefinition], [true, true]);
+    verifier('   PikaQian garde 300 : 299 px reste « trop-petit » avec seuilApplique 300 (pas 257)', [petit?.etat, petit?.seuilApplique], ['trop-petit', 300]);
     const B9c = fausseBase(); semer(B9c);
     ({ b } = await lancer(B9c, reseau(normal(webp320))));
     verifier('image de 320 px → « ok »', B9c.col('images').get(P.idImagePikaqian(SLUG, 1, '001'))?.etat, 'ok');

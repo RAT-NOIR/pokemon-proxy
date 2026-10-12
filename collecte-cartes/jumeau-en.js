@@ -13,7 +13,8 @@
 //      TCGdex n'a pas l'IMAGE de ces sets (motif `tcgdex-sans-image`) mais il a le nom : c'est un témoin, pas une source de visuel.
 // Ce qui ne passe pas l'un des deux reste TEL QUEL (le scan japonais, refusé par le site : un trou honnête) et le dit.
 const { cleNumero: cleNumeroTcgdex } = require('./tcgdex-appariement');
-// ptcgio.js (la table, le client) ne se charge qu'à l'usage : le worker lit CE module pour la préséance de Bulbapedia, et n'a pas à charger la source d'images
+// ⚠️ ptcgio.js (la table, le client) est EXÉCUTÉ par le worker : la préséance de Bulbapedia (`numerosServisParRemplacement`) lit `ptcgio().SOURCE`. Le chargement est
+// retardé à l'usage, mais le fichier fait partie de ce que le worker exécute — il est dans `REGLES` (remettre-en-file.js), comme ce module.
 const ptcgio = () => require('./ptcgio');
 
 const LOT_JUMEAU = 'ptcgio-jumeau-en-2026-10';
@@ -83,7 +84,7 @@ function exigerLeNom(plan, prouves) {
 function planifierRemplacement({ slug, tirage, lignes, cartes, numerosCm, nomsProuves }) {
     const L = lignes.map(l => ({ ...l, numeroCm: numerosCm.get(l.idProduct) ?? null }));
     const T = trousDeRemplacement({ tirage, slug, lignes: L, cartes });
-    const adr = ptcgio().planifierPtcgio({ slug, trous: T.trous, tousNumerosCm: [...numerosCm.values()] });
+    const adr = ptcgio().planifierPtcgio({ slug, trous: T.trous, tousNumerosCm: ptcgio().numerosDuSet(lignes, numerosCm) });
     const N = exigerLeNom(adr.plan, nomsProuves);
     const plan = N.plan.map(p => {
         const jumeau = T.jumeaux.get(cleNom(p.carteId, p.numero));

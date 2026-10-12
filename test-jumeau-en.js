@@ -197,6 +197,46 @@ function fausseBase({ dataSize = 1000, indexSize = 100 } = {}) {
     const r5 = silencieux(); let bAdd; try { bAdd = await collecterSlug(SLUG, B5.M, { verrou, client: clA, vignetter, lireNumeros, deposer: async () => { }, fabriquerVerrouSet: verrouSet }); } finally { r5(); }
     verifier('mode additif inchangé : seul le vrai trou (n°8) est demandé, aucun jumeau touché', [trAdd.appels.filter(u => /hires/.test(u)).map(u => u.slice(-12)), B5.col('cartes').get(1).images[0].source], [['/8_hires.png'], 'bulbapedia']);
 
+    // ── 6. tour de correction 1 ─────────────────────────────────────────────────────────────────────────────────────────────
+    // (A-I) noteVariante : le décompte voit AUSSI le produit sans ligne `numeros_cartes` (SL Zorua 52 : 302190 et 368730 partagent UNE image)
+    {
+        const cs = new Map([[9, carte(9, 'Zorua', [ja('52', { set: 'Shining-Legends' })])]]);
+        const ls = [{ carteId: 9, idProduct: 302190, numeroFiche: '52' }, { carteId: 9, idProduct: 368730, numeroFiche: '52' }];
+        const Pz = J.planifierRemplacement({ slug: 'Shining-Legends', tirage: 'intl', lignes: ls, cartes: cs, numerosCm: new Map([[302190, '52']]), nomsProuves: new Set([J.cleNom(9, '52')]) });
+        verifier('noteVariante : 2 produits au n°52 dont un sans numeros_cartes → UN fichier, AVEC la note (le décompte lit aussi le numéro de fiche)', [Pz.plan.length, Pz.plan[0]?.noteVariante], [1, P.NOTE_VARIANTE]);
+        const Ps = J.planifierRemplacement({ slug: 'Shining-Legends', tirage: 'intl', lignes: [ls[0]], cartes: cs, numerosCm: new Map([[302190, '52']]), nomsProuves: new Set([J.cleNom(9, '52')]) });
+        verifier('noteVariante : un seul produit au numéro → aucune note', Ps.plan[0]?.noteVariante ?? null, null);
+        verifier('numerosDuSet : le numéro Cardmarket d\'abord, sinon celui de la ligne, sinon rien', P.numerosDuSet([{ idProduct: 1, numeroFiche: 'x' }, { idProduct: 2, numeroFiche: '52' }, { idProduct: 3, numeroFiche: null }], new Map([[1, '7']])), ['7', '52']);
+        // T2 (mode additif) : même défaut, même correction
+        const lignesT2 = [{ carteId: 1, idProduct: 10, numeroFiche: '005' }, { carteId: 2, idProduct: 11, numeroFiche: '005' }];
+        verifier('T2 additif : un produit sans numeros_cartes au même numéro compte aussi', P.planifierPtcgio({ slug: 'Celebrations', trous: [{ carte: carte(1, 'Pikachu'), numeroCm: '005', numeroFiche: '005', idProduct: 10 }], tousNumerosCm: P.numerosDuSet(lignesT2, new Map([[10, '005']])) }).plan.map(p => p.noteVariante ?? null), [P.NOTE_VARIANTE]);
+    }
+    // (B-I1/B-I2) LE CÂBLAGE : le rejeu de la jointure Bulbapedia (`joindreImagesBulba`, EXÉCUTÉE comme le worker l'exécute) ne remet PAS le scan japonais
+    {
+        const { joindreImagesBulba } = require(process.argv.find(a => a.startsWith('--bulba='))?.slice(8) || './collecteur-images-bulba');
+        const SL = 'Set-Banc';
+        const docBulba = (n, extra = {}) => ({ _id: `bulba:${n}`, source: 'bulbapedia', set: SL, carteId: 1, numero: n, cleR2: `bulbapedia/${SL}/${n}.webp`, sha256: 'h', w: 600, h: 840, fmt: 'webp', wOriginal: 600, hOriginal: 840, urlOriginal: 'u', preuve: 'p', page: 'P', etat: 'ok', langue: 'ja', languePreuve: 'banc', ...extra });
+        const enLot = { set: SL, source: 'pokemontcg.io', lot: J.LOT_JUMEAU, numero: '1', cleR2: 'pokemontcg.io/x-en.webp', langue: 'en' };
+        const rejouer = async (entrees, docs) => {
+            const Bj = fausseBase();
+            Bj.col('cartes').set(1, { _id: 1, nomEn: 'Spidops', images: structuredClone(entrees) });
+            for (const d of docs) Bj.col('images').set(d._id, structuredClone(d));
+            await joindreImagesBulba(Bj.M, SL, structuredClone(docs));
+            return Bj.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}:${e.langue}`);
+        };
+        verifier('REJEU Bulbapedia : l\'entrée anglaise du lot jumeau est en place → le scan japonais du même numéro n\'est PAS remis (celui du numéro 2 l\'est)', await rejouer([enLot], [docBulba('1'), docBulba('2')]), ['pokemontcg.io:1:en', 'bulbapedia:2:ja']);
+        verifier('REJEU Bulbapedia : le lot ADDITIF ne prime pas (rien n\'y remplace un jumeau) — le scan est joint comme avant', (await rejouer([{ ...enLot, lot: P.LOT }], [docBulba('1')])).sort(), ['bulbapedia:1:ja', 'pokemontcg.io:1:en']);
+        // l'ordre avec le remplacement « basse définition » de R1 : le numéro préservé est filtré AVANT, l'autre numéro reste remplaçable — pas de contradiction
+        const tpc = (n, extra = {}) => ({ set: SL, source: 'tpc-asie', numero: n, cleR2: `tpc-asie/${SL}/${n}.webp`, w: 300, langue: 'ja', basseDefinition: true, ...extra });
+        const docTpc = n => ({ _id: `doc:tpc${n}`, source: 'tpc-asie', set: SL, cleR2: `tpc-asie/${SL}/${n}.webp`, etat: 'ok', wOriginal: 300, w: 300, basseDefinition: true, langue: 'ja' });
+        const Bk = fausseBase();
+        Bk.col('cartes').set(1, { _id: 1, nomEn: 'Spidops', images: [enLot, tpc('1'), tpc('2')] });
+        for (const d of [docBulba('1'), docBulba('2'), docTpc('1'), docTpc('2')]) Bk.col('images').set(d._id, structuredClone(d));
+        await joindreImagesBulba(Bk.M, SL, [docBulba('1'), docBulba('2')]);
+        verifier('ORDRE avec la basse définition de R1 : au n°1 (anglais du lot en place) la jointure ne joint rien et ne touche pas l\'entrée basse ; au n°2 la candidate remplace l\'entrée basse',
+            [Bk.col('cartes').get(1).images.map(e => `${e.source}:${e.numero}${e.basseDefinition ? ':basse' : ''}`).sort(), Bk.col('images').get('doc:tpc1').etat, Bk.col('images').get('doc:tpc2').etat], [['bulbapedia:2', 'pokemontcg.io:1', 'tpc-asie:1:basse'].sort(), 'ok', 'remplace']);
+    }
+
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

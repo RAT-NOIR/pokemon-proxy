@@ -113,6 +113,18 @@ function verdictDuSet(slug) {
 }
 
 /**
+ * ➕ R5 (tour 1, A-I) — LES NUMÉROS DE TOUS LES PRODUITS DU SET, pour le décompte de `noteVariante` : le numéro Cardmarket (`numeros_cartes`) quand le
+ * produit en a un, SINON le numéro de sa ligne de jointure (`cartes_produits.numeroFiche`). Un produit jamais appris par Cardmarket (SL Marshadow 368764,
+ * Zorua 368730 : pas de ligne `numeros_cartes`) partage pourtant l'image de son frère au même numéro ; sans lui, la note manquait. Le numéro de fiche ne
+ * sert qu'au DÉCOMPTE (il n'adresse rien : `planifierPtcgio` n'adresse que par `numeroCm`).
+ */
+function numerosDuSet(lignes, numerosCm) {
+    // tous les numéros Cardmarket connus (comme avant) + celui de la ligne pour chaque produit qui n'en a pas
+    const sans = (lignes || []).filter(l => !numerosCm.has(l.idProduct)).map(l => l.numeroFiche);
+    return [...numerosCm.values(), ...sans].filter(n => n != null && String(n).trim() !== '').map(String);
+}
+
+/**
  * LE PLAN, pur : chaque trou (carte, numéro) reçoit l'adresse de SON numéro dans la ligne prouvée, ou un MOTIF. Un trou déjà servi (au
  * même numéro, ou sans numéro dans le set) n'y figure jamais — additif.
  * @param {{slug: string, trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>}} o
@@ -262,6 +274,6 @@ function planRetraitPtcgio(cartes) {
 
 module.exports = {
     SOURCE, HOTE, HOTE_NOM, LOT, MENTION, CADENCE_MS, CADENCE_MIN_MS, VERROU_GLOBAL, VERROU_GLOBAL_MS, ID_ALERTE, UA,
-    TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
+    TABLE_PTCGIO, NOTE_VARIANTE, JETONS_URL, lignesDe, lireNumero, adresseDe, numerosDuSet, urlHires, verdictDuSet, planifierPtcgio, dimensionsAdmises,
     fabriquerClientPtcgio, idImagePtcgio, planRetraitPtcgio
 };

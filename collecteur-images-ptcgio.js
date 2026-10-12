@@ -47,7 +47,7 @@ async function planifierSlug(db, slug, numerosCm) {
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche ?? numerosCm.get(l.idProduct) ?? null))
         .map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, numeroCm: numerosCm.get(l.idProduct) ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous, tousNumerosCm: [...numerosCm.values()] }) };
+    return { produits: lignes.length, trous: trous.length, ...P.planifierPtcgio({ slug, trous, tousNumerosCm: P.numerosDuSet(lignes, numerosCm) }) };
 }
 
 /** Les numéros des produits Cardmarket du set (`numeros_cartes.numero`, base de production en LECTURE SEULE) : idProduct -> numéro. */

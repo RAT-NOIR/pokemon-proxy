@@ -53,6 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
+const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
@@ -62,6 +63,7 @@ const { fabriquerTemoinImages, jugerResolues, cartesNonCouvertes } = require('./
 const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');   // les cartes qui DÉCLARENT l'impression, slug ou non : les témoins
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
+const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
@@ -527,13 +529,16 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
             // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
             // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
             // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur
             // carte (`images.carteId`) et absentes de `cartes.images`, sur 165 sets — Shiny Treasure ex 292, Terastal Festival
             // 184, VSTAR Universe 163. Le §32 bis et le §45 l'avaient écrit ; la jointure du TEXTE et celle de Bulbapedia le
             // faisaient, celle-ci non (§21 bis). `numero: null` (sources sans numéro, Gym) reste une entrée par carte.
+            // ➕ 2026-10-12 : AVANT le $pull (qui retire tout ce qui est à ce numéro), la règle du module marque « remplace » le document de l'entrée
+            // « basseDefinition » de même langue qu'elle évince — la traçabilité ; le $pull ci-dessous reste le geste d'avant, inchangé
+            await remplacerBasseDefinition(M, c._id, entree);
             await M.Carte.updateOne({ _id: c._id }, { $pull: { images: { set: slug, numero: entree.numero } } });
             // un numéro LU À L'ŒIL (corrections-images.js) : la MÊME image (même cleR2), posée avant sans numéro, quitte cette place
             // pour la sienne — sinon elle resterait deux fois, et l'entrée sans numéro garderait le set « une fiche par document »
@@ -589,6 +594,11 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     fs.writeFileSync(path.join(dossierRapport, `images-${code}-${new Date().toISOString().slice(0, 10)}.json`), JSON.stringify({ complet, restes, echantillon: images.slice(0, 5) }, null, 1));
     return complet;
 }
+
+// ➕ 2026-10-12 : `joindreImages` s'exporte pour le banc de bout en bout (`test-jointure-basse-definition.js`) ; requis, ce fichier ne lance RIEN
+// (ni lecture de la ligne de commande, ni connexion) — le worker et les outils le lancent en ligne de commande, où `require.main === module`.
+module.exports = { joindreImages };
+if (require.main !== module) return;
 
 // 🔴 LA LIGNE DE COMMANDE DU REJEU S'ÉCRIT PAR CE QU'ELLE AUTORISE (relecture du 2026-10-05, §54) : `--simuler` n'est qu'un drapeau ;
 // mal écrit (« --simule », « --simuler=1 »), il n'était pas vu, et le rejeu ÉCRIVAIT. Sur le chemin `--rejouer-jointure`, un argument
@@ -751,6 +761,10 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // boucle (la file déjà pleine continue de tourner) — mais il crie.
             try { await alimenter(cx.db, { journal: console, M }); }   // M : le manque réel lit les cartes par le plan du collecteur TCGdex
             catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
+            // 🔑 PIKAQIAN BLOQUÉ (décision du testeur, 2026-10-12) : la tentative espacée (6 h, puis 24 h, suspendue au 3e blocage) et la sonde UNIQUE du serveur d'images
+            // officiel. Chacune ne part que si son état en base l'y autorise ; une panne ici ne tue pas la boucle (collecte-cartes/reessai-pikaqian.js).
+            try { await passerLesTachesSources(cx.db, { journal: console }); }
+            catch (e) { console.error(`🔴 tâches des sources bloquées en échec : ${e.message}`); }
             // 🔑 LES IMPORTS QUOTIDIENS (testeur, 2026-10-06 : « sans cron Render payant, le worker lance lui-même, une fois par jour vers
             // 5 h UTC, l'import du catalogue et celui du guide des prix ») — ENTRE deux unités, aucune image en cours ; les gardes de l'import
             // vivent dans les deux scripts, lancés tels qu'à la main (collecte-cartes/imports-quotidiens.js, banc test-imports-quotidiens.js).

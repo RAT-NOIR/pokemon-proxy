@@ -74,20 +74,27 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     // ➕ 2026-10-11 : PIKAQIAN. Le collecteur, le client/la preuve (que seuils-images.js charge : la liste des sources à 300 px en vient) et la table des sets
     // (la garde de l'unité la lit mot pour mot) : un worker qui n'a pas ces trois-là sortirait l'unité `refuse-table` / `source-inconnue`.
     'collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json',
+    // ➕ 2026-10-12 : le RÉESSAI ESPACÉ de PikaQian bloqué et la sonde du serveur d'images officiel (le worker les appelle à chaque tour), avec la machine
+    // d'espacement qu'ils partagent avec Bulbapedia : un worker qui ne les a pas ne retenterait jamais, et laisserait les 91 unités refusées sous une alerte levée
+    'collecte-cartes/reessai-pikaqian.js', 'collecte-cartes/bulba-espacement.js', 'collecte-cartes/sonde-cdn-pokemon-tcg.js',
     'collecte-cartes/table-sets.js', 'collecte-cartes/table-sets-auto.json', 'collecte-cartes/table-sets-sans-page.json',
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
     'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js',
     // ➕ 2026-10-12 (R5) : la PRÉSÉANCE du scan anglais qui a remplacé un jumeau japonais — le rejeu de Bulbapedia (collecteur-images-bulba.js) la lit ; un worker qui
     // ne l'a pas referait le scan japonais à côté de l'anglais
-    'collecte-cartes/jumeau-en.js',
+    // + ptcgio.js : jumeau-en.js le charge (`ptcgio().SOURCE`), donc le worker l'exécute
+    'collecte-cartes/jumeau-en.js', 'collecte-cartes/ptcgio.js',
     // ➕ 2026-09-24 : ce que le worker fait d'une unité finie (une surcharge passagère n'est plus un refus) — une remise en
     // file sous un commit antérieur retomberait en `refuse` au premier 503.
     'collecte-cartes/issue-unite.js',
     // ➕ 2026-10-06 : les sources en service (Bulbapedia suspendu) — une unité enfilée sous un worker qui ne la connaît pas frapperait Bulbagarden
     'collecte-cartes/sources-en-service.js',
     // ➕ 2026-10-08 : le témoin du nom dans la jointure des images artofpkm — un worker qui ne l'a pas joindrait encore sans témoin
-    'collecte-cartes/temoin-images-artofpkm.js'];
+    'collecte-cartes/temoin-images-artofpkm.js',
+    // ➕ 2026-10-12 : la marque « basseDefinition » (posée par TPC et PikaQian) et le REMPLACEMENT automatique (appelé par artofpkm, Bulbapedia, TCGdex) :
+    // un worker qui ne la porte pas poserait des entrées sous 350 px sans marque, ou ne remplacerait jamais une basse définition par une meilleure image
+    'collecte-cartes/basse-definition.js'];
 
 // 🔴 LA COLLECTION EST `collecte_images_etat`, PAS `etatimages` — et ma première version de cette
 // garde a interrogé `etatimages` (le nom du MODÈLE mongoose, pas celui de la collection : le schéma
@@ -201,29 +208,46 @@ async function etatDuWorker(cx, { comparerArbre = require('./collecte-cartes/tab
  * en file une unité TPC `fait` ; une remise à la main, hors `etatDuWorker`, laissait un worker sur l'ancien code rejuger et refuser de nouveau, §23).
  *   node remettre-en-file.js --reprendre-tpc=<slug>,<slug>,…            mesure seule (défaut) : ce qui serait remis, et la garde
  *   node lot-additif.js … -- node remettre-en-file.js --reprendre-tpc=<slug>,… --ecrire     l'écriture passe par lot-additif (sauvegarde, comptes, journal)
- * Écrit par ce qu'elle AUTORISE : une liste FERMÉE de slugs nommés en argument (jamais « tous »), chacun une ligne pokemon-card-com de tpc-sets.js,
- * dont l'unité `pokemon-card-com/<slug>` est en état `fait` — rien d'autre (attente, en-cours, refus, absente : refusé, avec sa raison). La garde du commit
+ * ➕ 2026-10-12 : vaut pour tpc-asie ET pokemon-card-com (`<slug>` ou `<source>/<slug>` ; un slug des deux sources sans préfixe : refusé « ambigu »).
+ * Écrit par ce qu'elle AUTORISE : une liste FERMÉE de slugs nommés en argument (jamais « tous »), chacun une ligne TPC de tpc-sets.js,
+ * dont l'unité `<source>/<slug>` est en état `fait` — rien d'autre (attente, en-cours, refus, absente : refusé, avec sa raison). La garde du commit
  * du worker décide AVANT toute écriture : bloquée (ou impossible à conclure) → aucune écriture. Le motif s'écrit sur la ligne, avec le commit du worker.
  * @param {{slugs:string[], file:{findOne:Function, updateOne:Function}, garde:{bloque:boolean,commit?:string,phrase?:string}, ecrire:boolean, lignes:(slug:string)=>object|null, maintenant?:Date}} o
  */
-async function reprendreTpc({ slugs, file, garde, ecrire, lignes, maintenant = new Date() }) {
+async function reprendreTpc({ slugs, file, garde, ecrire, lignes, lignesDe, maintenant = new Date() }) {
     const rep = { retenues: [], refusees: [], ecrites: 0, ecriture: false, bloque: false, raison: null };
-    if (!Array.isArray(slugs) || !slugs.length || slugs.some(s => !/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(String(s)))) { rep.bloque = true; rep.raison = 'liste fermée vide ou malformée : des slugs pokemon-card.com nommés un à un'; return rep; }
+    // ➕ 2026-10-12 : la reprise vaut pour les DEUX sources TPC. `lignesDe(site, slug)` rend la ligne de tpc-sets.js ; l'ancien paramètre `lignes(slug)`
+    // (pokemon-card.com seul) reste accepté. Un argument est `<slug>` ou `<source>/<slug>` (source de la liste fermée SOURCES_TPC) ; un slug porté
+    // par les deux sources sans préfixe est refusé « ambigu ».
+    const SITES_TPC = require('./collecte-cartes/tpc').SOURCES_TPC;
+    const ligneDe = lignesDe || ((site, slug) => (site === 'pokemon-card-com' && lignes ? lignes(slug) : null));
+    const motifArg = new RegExp(`^((${SITES_TPC.join('|')})/)?[A-Za-z0-9][A-Za-z0-9.-]*$`);
+    if (!Array.isArray(slugs) || !slugs.length || slugs.some(s => !motifArg.test(String(s)))) { rep.bloque = true; rep.raison = 'liste fermée vide ou malformée : des slugs TPC (tpc-asie, pokemon-card-com) nommés un à un, éventuellement préfixés « <source>/ »'; return rep; }
     if (slugs.length > 30) { rep.bloque = true; rep.raison = `${slugs.length} unités : au-delà de 30, ce n'est plus une liste fermée`; return rep; }
-    for (const slug of [...new Set(slugs)]) {
-        if (!lignes(slug)) { rep.refusees.push({ slug, motif: 'hors-table', detail: `${slug} n'est pas une ligne pokemon-card-com de tpc-sets.js` }); continue; }
-        const u = await file.findOne({ _id: `pokemon-card-com/${slug}` });
-        if (!u) { rep.refusees.push({ slug, motif: 'unite-absente', detail: 'aucune unité : elle s\'enfile par l\'alimentateur, pas par une reprise' }); continue; }
-        if (u.etat !== 'fait') { rep.refusees.push({ slug, motif: 'etat-non-fait', detail: `état « ${u.etat}${u.resultat ? '/' + u.resultat : ''} » : seule une unité terminée se reprend` }); continue; }
-        rep.retenues.push({ slug, etat: `${u.etat}/${u.resultat ?? '—'}` });
+    const unites = [];
+    for (const arg of [...new Set(slugs)]) {
+        const m = /^(?:([^/]+)\/)?(.+)$/.exec(arg), slug = m[2];
+        const porteurs = (m[1] ? [m[1]] : SITES_TPC).filter(site => ligneDe(site, slug));
+        if (!porteurs.length) { rep.refusees.push({ slug: arg, motif: 'hors-table', detail: `${arg} n'est une ligne ${m[1] ?? SITES_TPC.join(' ni ')} de tpc-sets.js` }); continue; }
+        if (porteurs.length > 1) { rep.refusees.push({ slug: arg, motif: 'ambigu', detail: `${slug} est une ligne de ${porteurs.join(' ET de ')} : nommer la source (« ${porteurs[0]}/${slug} »)` }); continue; }
+        unites.push({ arg, slug, site: porteurs[0] });
+    }
+    for (const { arg, slug, site } of unites) {
+        const u = await file.findOne({ _id: `${site}/${slug}` });
+        if (!u) { rep.refusees.push({ slug: arg, motif: 'unite-absente', detail: 'aucune unité : elle s\'enfile par l\'alimentateur, pas par une reprise' }); continue; }
+        if (u.etat !== 'fait') { rep.refusees.push({ slug: arg, motif: 'etat-non-fait', detail: `état « ${u.etat}${u.resultat ? '/' + u.resultat : ''} » : seule une unité terminée se reprend` }); continue; }
+        rep.retenues.push({ slug, site, etat: `${u.etat}/${u.resultat ?? '—'}` });
     }
     // la garde se lit TOUJOURS ; elle ne bloque que l'écriture (la mesure reste lisible)
     if (garde?.bloque !== false || !garde.commit) { rep.bloque = true; rep.raison = `garde du commit du worker : ${garde?.phrase ?? 'impossible à conclure'}`; return rep; }
     if (!ecrire) return rep;
     rep.ecriture = true;
     for (const x of rep.retenues) {
-        const r = await file.updateOne({ _id: `pokemon-card-com/${x.slug}`, etat: 'fait' }, {
-            $set: { etat: 'attente', remisEnFileLe: maintenant, remisEnFileMotif: `règles A/B de tpc.js, commit ${garde.commit} (preuve des fiches sans numéro et des fiches simples) — état précédent ${x.etat}` },
+        const motif = x.site === 'tpc-asie'
+            ? `seuil 257 px des sources officielles et marque basseDefinition (seuils-images.js, basse-definition.js), commit ${garde.commit} — état précédent ${x.etat}`
+            : `règles A/B de tpc.js, commit ${garde.commit} (preuve des fiches sans numéro et des fiches simples) — état précédent ${x.etat}`;
+        const r = await file.updateOne({ _id: `${x.site ?? 'pokemon-card-com'}/${x.slug}`, etat: 'fait' }, {
+            $set: { etat: 'attente', remisEnFileLe: maintenant, remisEnFileMotif: motif },
             $unset: { resultat: '', pris: '', fini: '' }
         });
         rep.ecrites += r.modifiedCount ?? 0;
@@ -247,8 +271,8 @@ if (require.main !== module) return;
     if (argTpc) {
         // chemin étroit : ni mesure du catalogue, ni --malgre-le-commit (la garde n'a pas d'échappatoire ici)
         const { ligneTpc } = require('./collecte-cartes/tpc-sets');
-        const r = await reprendreTpc({ slugs: argTpc.slice(16).split(',').map(s => s.trim()).filter(Boolean), file: cx.db.collection('file_images'), garde: W, ecrire, lignes: slug => ligneTpc('pokemon-card-com', slug) });
-        for (const x of r.retenues) console.log(`   ${r.ecriture ? '♻️' : '➕ (mesure)'} pokemon-card-com/${x.slug} : ${x.etat} → attente`);
+        const r = await reprendreTpc({ slugs: argTpc.slice(16).split(',').map(s => s.trim()).filter(Boolean), file: cx.db.collection('file_images'), garde: W, ecrire, lignesDe: (site, slug) => ligneTpc(site, slug) });
+        for (const x of r.retenues) console.log(`   ${r.ecriture ? '♻️' : '➕ (mesure)'} ${x.site}/${x.slug} : ${x.etat} → attente`);
         for (const x of r.refusees) console.log(`   ⛔ ${x.slug} : ${x.motif} — ${x.detail}`);
         if (r.bloque) { console.log(`\n🔴 RIEN N'EST ÉCRIT. ${r.raison}`); process.exitCode = 1; }
         else console.log(ecrire ? `\n   ✅ remises en file : ${r.ecrites}` : `\n   (mesure seule — ${r.retenues.length} unité(s) seraient remises ; relancer sous lot-additif avec --ecrire)`);

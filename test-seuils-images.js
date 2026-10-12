@@ -14,7 +14,7 @@ const verifier = (nom, obtenu, attendu) => {
 verifier('largeurMinDe est exportée', typeof S.largeurMinDe, 'function');
 if (typeof S.largeurMinDe === 'function') {
     const f = S.largeurMinDe;
-    for (const s of ['tpc-asie', 'pokemon-card-com', 'pokemon-com']) verifier(`officielle ${s} → 300`, f(s), 300);
+    for (const s of ['tpc-asie', 'pokemon-card-com', 'pokemon-com']) verifier(`officielle ${s} → 257 (décision du testeur, 2026-10-12)`, f(s), 257);
     for (const s of ['bulbapedia', 'artofpkm', 'tcgdex']) verifier(`${s} → 350`, f(s), 350);
     verifier('source inconnue → 350', f('quelque-part'), 350);
     verifier('undefined → 350', f(undefined), 350);
@@ -26,8 +26,8 @@ if (typeof S.largeurMinDe === 'function') {
 
 // ── §21 bis : la liste officielle est DÉRIVÉE de la source unique des sites TPC, pas recopiée ───────────────────────────
 const TPC = require('./collecte-cartes/tpc');
-verifier('chaque site de SITES (tpc.js) est à 300 : une source TPC ajoutée ne peut pas rester à 350',
-    TPC.SOURCES_TPC.map(s => S.largeurMinDe(s)), TPC.SOURCES_TPC.map(() => 300));
+verifier('chaque site de SITES (tpc.js) est à 257 : une source TPC ajoutée ne peut pas rester à 350',
+    TPC.SOURCES_TPC.map(s => S.largeurMinDe(s)), TPC.SOURCES_TPC.map(() => 257));
 verifier('la liste officielle = SOURCES_TPC + pokemon-com, rien d\'autre', [...(S.SOURCES_OFFICIELLES || [])].sort(), [...TPC.SOURCES_TPC, 'pokemon-com'].sort());
 
 // ── une décision de seuil se relit (§23) : aRejuger(document trop-petit, source) ───────────────────────────────────────
@@ -35,9 +35,16 @@ verifier('aRejuger est exportée', typeof S.aRejuger, 'function');
 if (typeof S.aRejuger === 'function') {
     const r = S.aRejuger;
     verifier('tpc-asie, 320 px, sans seuilApplique (jugé à 350) → à rejuger', r({ wOriginal: 320 }, 'tpc-asie'), true);
-    verifier('tpc-asie, 290 px, sans seuilApplique → reste trop petit', r({ wOriginal: 290 }, 'tpc-asie'), false);
+    verifier('tpc-asie, 250 px, sans seuilApplique → reste trop petit (sous 257)', r({ wOriginal: 250 }, 'tpc-asie'), false);
     verifier('artofpkm, 320 px, sans seuilApplique → reste trop petit (350)', r({ w: 320 }, 'artofpkm'), false);
-    verifier('tpc-asie, 320 px, jugé à 300 → rien à relire', r({ wOriginal: 320, seuilApplique: 300 }, 'tpc-asie'), false);
+    verifier('tpc-asie, 320 px, jugé à 300 → rejugé : 320 ≥ 257 alors que le verdict date de 300 (le seuil a baissé)', r({ wOriginal: 320, seuilApplique: 300 }, 'tpc-asie'), true);
+    // ➕ 2026-10-12 : LES 255 — des `trop-petit` TPC jugés à 300, largeur d'origine entre 257 et 299, redevenus admissibles à 257
+    verifier('tpc-asie, 280 px, jugé à 300 → à rejuger (c\'est ce qui fait retélécharger les 255)', r({ wOriginal: 280, seuilApplique: 300, etat: 'trop-petit' }, 'tpc-asie'), true);
+    verifier('tpc-asie, 257 px pile, jugé à 300 → à rejuger', r({ wOriginal: 257, seuilApplique: 300 }, 'tpc-asie'), true);
+    verifier('tpc-asie, 256 px, jugé à 300 → reste trop petit', r({ wOriginal: 256, seuilApplique: 300 }, 'tpc-asie'), false);
+    verifier('pokemon-card-com, 270 px, jugé à 300 → à rejuger', r({ wOriginal: 270, seuilApplique: 300 }, 'pokemon-card-com'), true);
+    verifier('tpc-asie, 280 px, jugé à 257 → rien à relire (déjà jugé sous la règle d\'aujourd\'hui)', r({ wOriginal: 280, seuilApplique: 257 }, 'tpc-asie'), false);
+    verifier('pikaqian, 280 px, jugé à 300 → PAS rejugé : PikaQian garde 300', r({ wOriginal: 280, seuilApplique: 300 }, 'pikaqian'), false);
     verifier('tpc-asie, largeur inconnue, sans seuilApplique → à rejuger (on ne sait pas conclure)', r({}, 'tpc-asie'), true);
     verifier('source inconnue, 320 px → pas de rejugement', r({ wOriginal: 320 }, 'quelque-part'), false);
 }
@@ -74,6 +81,20 @@ verifier('REGLES surveille seuils-images.js ET collecteur-images-tpc.js', ['seui
 
 // ➕ 2026-10-11 : PIKAQIAN — 300 px par décision du testeur, SANS être une source officielle : la liste officielle ne bouge pas, celle des 300 px la contient + pikaqian
 verifier('pikaqian → 300, et n\'est PAS dans SOURCES_OFFICIELLES (que ce banc garde = TPC + pokemon-com)', [S.largeurMinDe('pikaqian'), S.SOURCES_OFFICIELLES.includes('pikaqian'), S.SOURCES_A_300.includes('pikaqian')], [300, false, true]);
+
+// ➕ 2026-10-12 — « BASSE DÉFINITION » : UNE fonction dit si une largeur d'ORIGINE est sous LARGEUR_MIN (350), toutes sources confondues
+verifier('estBasseDefinition est exportée', typeof S.estBasseDefinition, 'function');
+if (typeof S.estBasseDefinition === 'function') {
+    const b = S.estBasseDefinition;
+    verifier('257, 300, 349 → basse définition', [b(257), b(300), b(349)], [true, true, true]);
+    verifier('350 pile, 700 → pas de basse définition (le seuil des autres sources ne change pas)', [b(350), b(700)], [false, false]);
+    verifier('largeur inconnue (null, undefined, 0, NaN, chaîne) → false : inconnu n\'est pas « bas »', [b(null), b(undefined), b(0), b(NaN), b('300')], [false, false, false, false, false]);
+    verifier('largeurOriginaleDe : wOriginal d\'abord ; à défaut `w` seulement s\'il est sous le plafond servi (700, donc non réduit)',
+        [S.largeurOriginaleDe({ wOriginal: 300, w: 300 }), S.largeurOriginaleDe({ w: 300 }), S.largeurOriginaleDe({ w: 700 }), S.largeurOriginaleDe({})], [300, 300, null, null]);
+}
+verifier('le SEUIL des autres sources ne bouge pas : LARGEUR_MIN = 350', S.LARGEUR_MIN, 350);
+verifier('aucun collecteur ne compare un nombre lui-même à 350 : aucune « < 350 » dans les collecteurs (§21 bis)',
+    ['collecteur-images-tpc.js', 'collecteur-images-pikaqian.js', 'collecte-cartes/basse-definition.js'].map(f => /<\s*350\b/.test(sansCommentaires(lire(f)))), [false, false, false]);
 verifier('REGLES surveille le collecteur, le client/la preuve, la table (et son JSON) de pikaqian', ['collecteur-images-pikaqian.js', 'collecte-cartes/pikaqian.js', 'collecte-cartes/pikaqian-sets.js', 'collecte-cartes/pikaqian-sets.json'].map(x => (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes(`'${x}'`)), [true, true, true, true]);
 verifier('REGLES surveille la table des unités TPC (tpc-sets.js : refuse-table si le commit du worker ne la porte pas)', (lire('remettre-en-file.js').match(/const REGLES = \[([\s\S]*?)\];/)?.[1] ?? '').includes("'collecte-cartes/tpc-sets.js'"), true);
 verifier('sources-en-service : pikaqian est en service, bulbapedia suspendu', [require('./collecte-cartes/sources-en-service').enService('pikaqian'), require('./collecte-cartes/sources-en-service').enService('bulbapedia')], [true, false]);

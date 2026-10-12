@@ -27,6 +27,7 @@ const r2 = require('./collecte-cartes/r2');
 const { fabriquerVerrou } = require('./collecte-cartes/verrou-source');
 const { largeurMinDe, aRejuger, WEBP_LARGEUR, WEBP_QUALITE } = require('./collecte-cartes/seuils-images');
 const { echecTransitoire } = require('./collecte-cartes/issue-unite');
+const { marqueDe } = require('./collecte-cartes/basse-definition');
 const { langueDuVisuel } = require('./collecte-cartes/langue-visuel');
 const T = require('./collecte-cartes/tpc');
 const { cleNumero } = require('./collecte-cartes/jointure');
@@ -240,6 +241,9 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const webp = await sharp(buffer).resize({ width: WEBP_LARGEUR, withoutEnlargement: true }).webp({ quality: WEBP_QUALITE }).toBuffer({ resolveWithObject: true });
                 const cleR2 = `${site}/${slug}/${cleNum(p.numero)}-${p.carteId}-${langueImage}.webp`;
                 await deposer(bucket, cleR2, webp.data, 'image/webp');   // R2 AVANT la ligne
+                // ➕ 2026-10-12 : BASSE DÉFINITION — la marque d'après la largeur de l'ORIGINAL (`meta.width`, pas celle du WebP servi) ; une marque qui ne
+                // décrit plus l'image (refournie plus large) s'efface du document. La règle vit dans collecte-cartes/basse-definition.js.
+                const marque = marqueDe({ wOriginal: meta.width });
                 await M.Image.updateOne({ _id }, {
                     $set: {
                         source: site, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
@@ -249,8 +253,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
                         // la langue par LA règle (collecte-cartes/langue-visuel.js), celle qu'un rejeu relira : `langueSource` est le site
                         langueSource: L.langue, ...(({ langue, preuve }) => ({ langue, languePreuve: preuve }))(langueDuVisuel({ source: site, langueSource: L.langue })),
-                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok'
-                    }, $unset: { erreur: 1 }
+                        attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, telechargeLe: new Date(), etat: 'ok', ...marque
+                    }, $unset: { erreur: 1, ...(marque.basseDefinition ? {} : { basseDefinition: 1 }) }
                 }, { upsert: true });
                 telecharges++;
                 if (telecharges % 25 === 0) await E.updateOne({ _id: idEtat }, { $set: { derniereRequete: new Date(), requetes: client.compteRequetes() } });
@@ -285,7 +289,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                     continue;
                 }
                 const entree = { set: slug, source: site, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, urlFiche: im.urlFiche, preuve: im.preuve,
-                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, jointeLe: new Date() };
+                    numero: im.numero, attribution: T.MENTION, mention: T.MENTION, lot: T.LOT, langue: im.langue, languePreuve: im.languePreuve, ...marqueDe(im), jointeLe: new Date() };
                 await M.Carte.updateOne({ _id: im.carteId }, { $pull: { images: { set: slug, source: site, numero: im.numero } } });
                 await M.Carte.updateOne({ _id: im.carteId }, { $push: { images: entree } });
                 joints++;
