@@ -7,7 +7,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const C = 'collecte-cartes/pikaqian.js', COL = 'collecteur-images-pikaqian.js', RET = 'retirer-visuels-pikaqian.js', ENF = 'enfiler-pikaqian.js', SEUIL = 'collecte-cartes/seuils-images.js', LANG = 'collecte-cartes/langue-visuel.js';
-const BC = 'test-pikaqian.js', BCOL = 'test-collecteur-pikaqian.js', BENF = 'test-enfiler-pikaqian.js', BSEUIL = 'test-seuils-images.js';
+const BC = 'test-pikaqian.js', BCOL = 'test-collecteur-pikaqian.js', BENF = 'test-enfiler-pikaqian.js', BSEUIL = 'test-seuils-images.js', REE = 'collecte-cartes/reessai-pikaqian.js', BREE = 'test-reessai-pikaqian.js';
 const M = (nom, fichier, de, vers, banc) => ({ nom, fichier, de, vers, banc });
 const MUTANTS = [
     // ── le client ──
@@ -61,8 +61,10 @@ const MUTANTS = [
     M('retrait : le lot n\'est pas jugé (toute entrée pikaqian part)', C, 'e.source === SOURCE && e.lot === LOT)', 'e.source === SOURCE)', BC),
     M('retrait : la vignette n\'est pas listée', C, '[e.cleR2, e.vignette?.cleR2].filter(Boolean)', '[e.cleR2].filter(Boolean)', BC),
     // ── le seuil ──
-    M('seuil : pikaqian retirée de la liste des 300 px', SEUIL, 'require(\'./pikaqian\').SOURCE]);', "'aucune-source']);", BC),
-    M('seuil : 300 px pour toutes les sources', SEUIL, "SOURCES_A_300.includes(source) ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;", 'true ? LARGEUR_MIN_OFFICIELLE : LARGEUR_MIN;', BC),
+    M('seuil : pikaqian retirée de la liste des sources sous 350 px', SEUIL, "const PIKAQIAN = require('./pikaqian').SOURCE;", "const PIKAQIAN = 'aucune-source';", BC),
+    M('seuil : le seuil de pikaqian (300) s\'applique à toutes les sources', SEUIL, "    if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;\n    return LARGEUR_MIN;", "    return LARGEUR_MIN_PIKAQIAN;", BC),
+    M('seuil : pikaqian prend le seuil des officielles (257) au lieu de 300', SEUIL, 'if (source === PIKAQIAN) return LARGEUR_MIN_PIKAQIAN;', 'if (source === PIKAQIAN) return LARGEUR_MIN_OFFICIELLE;', BC),
+    M('seuil : les officielles prennent le seuil de pikaqian (300) au lieu de 257', SEUIL, 'if (SOURCES_OFFICIELLES.includes(source)) return LARGEUR_MIN_OFFICIELLE;', 'if (SOURCES_OFFICIELLES.includes(source)) return LARGEUR_MIN_PIKAQIAN;', BC),
     M('seuil : pikaqian entre dans SOURCES_OFFICIELLES (la liste officielle gardée par le banc des seuils)', SEUIL, "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com']);", "const SOURCES_OFFICIELLES = Object.freeze([...require('./tpc').SOURCES_TPC, 'pokemon-com', 'pikaqian']);", BSEUIL),
     M('langue : pikaqian sans règle de langue', LANG, "if (im.source === 'pikaqian') return im.langueSource === 'zh-hans'", "if (im.source === 'pikaqian') return false && im.langueSource === 'zh-hans'", BCOL),
     // ── le collecteur ──
@@ -88,8 +90,14 @@ const MUTANTS = [
     M('collecteur : le plafond de l\'unité n\'est pas posé', COL, 'client.plafonner(Pl.plan.length + 3);', '', BCOL),
     M('collecteur : le fichier illisible n\'est pas vérifié par le client', COL, "await client.image(p.url, async b => { const m = await sharp(b).metadata(); if (!m.width) throw new Error('largeur illisible'); });", 'await client.image(p.url);', BCOL),
     M('worker : le collecteur pikaqian se charge hors du try', 'collecteur-images.js', "try { pkImg = require('./collecteur-images-pikaqian'); } catch (e) { erreurChargement = e; }", "pkImg = require('./collecteur-images-pikaqian');", BENF),
-    M('collecteur : un défi ne pose pas l\'alerte', COL, "await E.updateOne({ _id: P.ID_ALERTE }, { $set: { active: true, constateLe: new Date(), motif: err.message", "await E.updateOne({ _id: 'alerte/inerte' }, { $set: { active: true, constateLe: new Date(), motif: err.message", BCOL),
-    M('collecteur : une panne passagère de la page devient un refus définitif', COL, "etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };\n        }\n        if (html == null)", "etat: 'erreur', erreur: e.message, sansJointure: true };\n        }\n        if (html == null)", BCOL),
+    M('collecteur : un défi ne pose pas l\'alerte (le blocage n\'est plus compté en base)', COL, "await noterBlocage(E, { unite: unite._id,", "await noterBlocage({ findOne: async () => null, updateOne: async () => ({}) }, { unite: unite._id,", BCOL),
+    M('collecteur : une panne passagère de la page devient un refus définitif', COL, "etat: echecTransitoire(e) ? 'incomplet-transitoire' : 'erreur', erreur: e.message, sansJointure: true };", "etat: 'erreur', erreur: e.message, sansJointure: true };", BCOL),
+    // ── le réessai espacé (R2) ──
+    M('réessai : une source retirée par décision est retentée', REE, "if (etat.retrait === true) return { ok: false", "if (false) return { ok: false", BREE),
+    M('réessai : la suspension (3e blocage) n\'interdit plus la tentative', REE, "if (etat.suspendue === true || bl.length >= BLOCAGES_MAX) return { ok: false", "if (false) return { ok: false", BREE),
+    M('réessai : le 3e blocage ne suspend plus (le collecteur compte sans fin)', REE, "const BLOCAGES_MAX = 3;", "const BLOCAGES_MAX = 999;", BREE),
+    M('réessai : le 3e blocage relevé par le worker ne suspend pas', REE, "const suspendue = tous.length >= BLOCAGES_MAX;\n            const pasAvant = suspendue ? null : now + Math.max(", "const suspendue = false;\n            const pasAvant = suspendue ? null : now + Math.max(", BREE),
+    M('réessai : le défi n\'est plus jugé par la définition du client', REE, "if (P.defi({ status: rep.status, cfMitigated: h('cf-mitigated'), texte }))", "if (false)", BREE),
     M('collecteur : plus de mention sur le document', COL, 'attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat:', 'attribution: P.MENTION, lot: P.LOT, telechargeLe: new Date(), etat:', BCOL),
     M('collecteur : plus de lot sur l\'entrée de la carte', COL, "numero: im.numero, attribution: P.MENTION, mention: P.MENTION, lot: P.LOT, langue: im.langue", "numero: im.numero, attribution: P.MENTION, mention: P.MENTION, langue: im.langue", BCOL),
     M('collecteur : plus de provenance sur l\'entrée de la carte', COL, 'provenance: im.provenance, urlOfficielle', 'urlOfficielle', BCOL),
@@ -116,13 +124,15 @@ const lire = f => { if (!original.has(f)) original.set(f, fs.readFileSync(path.j
 const restaurer = () => { for (const [f, t] of original) fs.writeFileSync(path.join(__dirname, f), t); };
 process.on('exit', restaurer);
 
-function banc(b) { const r = spawnSync(process.execPath, [b], { cwd: __dirname, encoding: 'utf8' }); return { code: r.status, rouges: (r.stdout.match(/^❌/gm) || []).length, sortie: r.stdout }; }
+function banc(b) { const r = spawnSync(process.execPath, [b], { cwd: __dirname, encoding: 'utf8' }); return { code: r.status, rouges: (r.stdout.match(/^(❌|\s*ECHEC )/gm) || []).length, sortie: r.stdout }; }
 let tues = 0, vivants = [], sansAttache = [], redondants = [];
-for (const b of [BC, BCOL, BENF, BSEUIL]) { const r = banc(b); if (r.code !== 0) { console.error(`❌ le banc ${b} n'est pas vert avant les mutants (code ${r.code})`); process.exit(2); } }
+for (const b of [BC, BCOL, BENF, BSEUIL, BREE]) { const r = banc(b); if (r.code !== 0) { console.error(`❌ le banc ${b} n'est pas vert avant les mutants (code ${r.code})`); process.exit(2); } }
 console.log(`bancs verts avant mutation ; ${MUTANTS.length} mutants\n`);
 for (const m of MUTANTS) {
     const t = lire(m.fichier);
-    const des = [].concat(m.de), vers = [].concat(m.vers);
+    // un fichier de production peut être en CRLF (extraction Windows) : les attaches multi-lignes s'écrivent en LF et s'adaptent au fichier
+    const eol = s => (t.includes('\r\n') ? s.replace(/\r?\n/g, '\r\n') : s);
+    const des = [].concat(m.de).map(eol), vers = [].concat(m.vers).map(eol);
     const manque = des.filter(d => t.split(d).length - 1 !== 1);
     if (manque.length) { sansAttache.push(`${m.nom} (pas exactement 1 occurrence de ${JSON.stringify(manque[0].slice(0, 60))} dans ${m.fichier})`); continue; }
     if (!m.banc) { redondants.push(m.nom); continue; }
