@@ -91,7 +91,7 @@ const { copierTranche, viderTranche } = require('./verrou/tranche');
 const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
-const { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus, environnementDuCliquet } = require('./verrou/environnement-banc');
+const { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus, environnementDuCliquet, nomsDuDotenv } = require('./verrou/environnement-banc');
 
 // Le jeton vient de l'environnement du banc ; AUCUN repli en dur (R8, 2026-10-12) : absent, le verrou refuse avant de démarrer quoi que ce soit.
 let JETON = null;
@@ -597,7 +597,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     } else {
         try {
             execFileSync(process.execPath, ['couverture-index.js', '--cliquet', `--avec=${DOSSIER_COUVERTURE}`],
-                { cwd: __dirname, stdio: 'inherit', env: environnementDuCliquet(envOrigine) });
+                { cwd: __dirname, stdio: 'inherit', env: environnementDuCliquet(envOrigine, nomsDuDotenv()) });
         } catch (e) {
             echecs++;
             console.log('  ❌ le cliquet a reculé (voir ci-dessus)');

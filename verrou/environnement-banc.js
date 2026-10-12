@@ -46,22 +46,36 @@ function jetonOuRefus(env = process.env) {
     return { ok: true, jeton: j };
 }
 
-// ── L'ENVIRONNEMENT DU CLIQUET (R8 B-I). Ses suites ouvrent chacune leur propre banc (ouvrirBanc) : elles ont besoin de l'environnement d'ORIGINE pour JUGER la grappe
-// (hôtes de MONGODB_URI / MONGODB_CARTES_URI) et exiger des URI de lecture distinctes — pas des IDENTIFIANTS d'écriture. Écrit par ce qu'il autorise : on garde les URI
-// de LECTURE (liste fermée de deux noms) ; toute autre variable MONGODB_*URI garde son HÔTE mais reçoit un identifiant inerte (« neutre »), jamais le vrai ; les clés R2 de
-// production sont vidées (les suites n'utilisent que R2_BANC_*, garde-banc.clesR2). Un hôte illisible LÈVE : doute = refus.
-const URI_LECTURE = new Set(['MONGODB_LECTURE_URI', 'MONGODB_CARTES_LECTURE_URI']);
-function environnementDuCliquet(origine = process.env) {
-    const e = { ...origine };
-    for (const [nom, v] of Object.entries(origine)) {
-        if (!/^MONGODB_.*URI$/.test(nom) || typeof v !== 'string' || !v.trim() || URI_LECTURE.has(nom)) continue;
-        const m = /^(mongodb(?:\+srv)?):\/\/(?:[^@/]*@)?([^/?#]+)/i.exec(v.trim());
-        if (!m) throw new Error(`🔴 CLIQUET REFUSÉ — ${nom} est illisible : je ne peux pas la neutraliser, doute = refus.`);
-        e[nom] = `${m[1]}://neutre:neutre@${m[2]}/`;
-    }
-    if (typeof origine.MONGODB_URI !== 'string' || !origine.MONGODB_URI.trim()) throw new Error('🔴 CLIQUET REFUSÉ — MONGODB_URI est absente : les suites ne pourraient pas juger la grappe.');
-    for (const k of ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) e[k] = '';
+// ── L'ENVIRONNEMENT DU CLIQUET (R8 B-I, tour 2) : UNE LISTE FERMÉE de noms transmis, et RIEN d'autre. Une garde s'écrit par ce qu'elle autorise : la version du tour 1 copiait tout
+// l'environnement puis neutralisait quelques variables (clés Stripe, OpenRouter, R2_ENDPOINT, jetons passaient). Ici, seul ce qui est NOMMÉ passe ; chaque nom a sa raison.
+//   · système (le processus fils ne démarre pas sans eux) : chemin, dossiers système, temporaire, profil, machine ;
+//   · MONGOMS_DOWNLOAD_DIR : où les suites qui ouvrent leur banc (mongodb-memory-server) trouvent le binaire mongod déjà téléchargé ;
+//   · MONGODB_LECTURE_URI, MONGODB_CARTES_LECTURE_URI : les utilisateurs Atlas en LECTURE SEULE (privilèges constatés par ouvrirBanc) ;
+//   · R2_BUCKET_BANC, R2_BANC_ACCESS_KEY_ID, R2_BANC_SECRET_ACCESS_KEY : le bucket et les clés R2 de BANC (garde-banc.clesR2 n'utilise que celles-ci sous banc).
+// JAMAIS transmises : MONGODB_URI / MONGODB_CARTES_URI / MONGODB_TEST_URI (écriture : ni la valeur, ni l'hôte avec un faux identifiant), R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY,
+// Stripe, OpenRouter, jetons, tout nom inconnu. Aucun motif large : des noms exacts.
+const VARIABLES_TRANSMISES = [
+    'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'SystemDrive', 'windir', 'ComSpec', 'TEMP', 'TMP', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'HOMEDRIVE', 'HOMEPATH',
+    'ProgramData', 'ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'CommonProgramFiles', 'CommonProgramFiles(x86)', 'CommonProgramW6432', 'ALLUSERSPROFILE', 'OS',
+    'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'COMPUTERNAME', 'USERNAME', 'USERDOMAIN', 'NO_COLOR',
+    'MONGOMS_DOWNLOAD_DIR',
+    'MONGODB_LECTURE_URI', 'MONGODB_CARTES_LECTURE_URI',
+    'R2_BUCKET_BANC', 'R2_BANC_ACCESS_KEY_ID', 'R2_BANC_SECRET_ACCESS_KEY'
+];
+/**
+ * L'environnement des suites du cliquet. `nomsDotenv` : les noms que le .env remettrait (les suites font `require('dotenv').config()`, qui REMPLIT toute variable absente) :
+ * ceux qui ne sont pas transmis sont posés VIDES — une variable présente, même vide, n'est jamais remise par dotenv (même raison que base-banc.appliquer()).
+ */
+function environnementDuCliquet(origine = process.env, nomsDotenv = []) {
+    const e = {};
+    for (const nom of VARIABLES_TRANSMISES) if (typeof origine[nom] === 'string') e[nom] = origine[nom];
+    for (const nom of nomsDotenv) if (!VARIABLES_TRANSMISES.includes(nom)) e[nom] = '';
     return e;
 }
 
-module.exports = { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus, environnementDuCliquet };
+/** Les noms que porte le .env de la racine (jamais les valeurs). Illisible ou absent : [] (rien à remettre). */
+function nomsDuDotenv(fichier = require('path').join(__dirname, '..', '.env')) {
+    try { return Object.keys(require('dotenv').parse(require('fs').readFileSync(fichier))); } catch (_) { return []; }
+}
+
+module.exports = { verifierEnvironnementBanc, uriDuBanc, jetonOuRefus, environnementDuCliquet, VARIABLES_TRANSMISES, nomsDuDotenv };

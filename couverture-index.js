@@ -48,9 +48,15 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 // (« aucun banc n'écrit dans la production » : elle charge index.js, qui se connecte à la production) ; elle faisait échouer le cliquet — donc le verrou — à chaque
 // passage. Elle sort de la liste TANT QU'ELLE N'EST PAS RÉÉCRITE sur une tranche en base de banc (décision du testeur, non tranchée), et le cliquet l'IMPRIME à
 // chaque passage : une suite retirée en silence est une protection perdue sans le dire. Son retour dans SUITES_HORS_LIGNE est la réparation.
-const SUITES_REFUSEES = { 'test-setcode-numero.js': 'refuse de démarrer depuis le 2026-10-08 (lit la production à travers index.js) — à réécrire sur une tranche de banc' };
+// 🔴 R8 tour 2 : `test-table-vintage.js` sort aussi. Elle LIT la production (codes_set, numeros_cartes) par `ouvrirBanc({ lit })`, et `jugerLecture` (base-banc.js) vérifie que l'URI de
+// lecture vise LA MÊME GRAPPE que MONGODB_URI — il lui faut donc l'URI d'ÉCRITURE de production, que l'environnement du cliquet (liste fermée, verrou/environnement-banc.js) ne transmet
+// plus. Lui donner l'hôte de production avec un faux identifiant, ou une valeur de banc (« ne vise pas la grappe » → refus), est impossible sans changer base-banc.js.
+const SUITES_REFUSEES = {
+    'test-setcode-numero.js': 'refuse de démarrer depuis le 2026-10-08 (lit la production à travers index.js) — à réécrire sur une tranche de banc',
+    'test-table-vintage.js': 'exige MONGODB_URI (écriture) pour juger la grappe de lecture ; non transmise au cliquet — se lance à la main : node test-table-vintage.js'
+};
 const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
-    'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
+    'test-pokedex.js', 'test-acces.js',
     'test-journal-echecs.js', 'test-symbole-departage.js', 'test-banc-seaux.js',
     // ⚠️ « HORS LIGNE » VEUT DIRE « NE LIT PAS LA PRODUCTION », PAS « SANS BASE ».
     // test-acces, test-journal-echecs et celui-ci écrivent dans test_scratch — ce qui est
