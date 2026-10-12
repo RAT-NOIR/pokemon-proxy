@@ -50,19 +50,51 @@ function verdictDe(rep) {
     return { verdict: 'SERVI', motif: `200 sans défi (${resume})`, crawlDelayS: delaiDesRobots(texte, UA) };
 }
 
-/** Le client direct : UNE requête vers robots.txt, en-tête User-Agent seul, redirection jamais suivie, ni file ni verrou. */
-function fabriquerClientDirect(fetchImpl = fetch) {
+/** Le client direct : UNE requête vers robots.txt, en-tête User-Agent seul, redirection jamais suivie, ni file ni verrou. `url` : par défaut celui de Bulbapedia. */
+function fabriquerClientDirect(fetchImpl = fetch, url = `${HOTE}/robots.txt`) {
     return async () => {
-        const r = await fetchImpl(`${HOTE}/robots.txt`, { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) });
+        const r = await fetchImpl(url, { headers: { 'User-Agent': UA }, redirect: 'manual', signal: AbortSignal.timeout(45000) });
         return { status: r.status, headers: r.headers, texte: await r.text() };
     };
 }
 
+// ── LA POLITIQUE : ce qui varie d'une source à l'autre (état autorisé, suite d'un verdict). La MACHINE ci-dessous est unique (§21 bis) :
+// PikaQian (collecte-cartes/reessai-pikaqian.js) fournit la sienne — 6 h, puis 24 h, suspension au 3e blocage — sans recopier la garde,
+// la prise atomique ni l'écriture. Celle de Bulbapedia est extraite MOT POUR MOT de l'ancienne machine (test-bulba-espacement.js, inchangé).
+const POLITIQUE_BULBA = Object.freeze({
+    sansEtat: true,                                     // aucun état = jamais essayé : l'essai est autorisé
+    // On n'autorise QUE : un état complet — active booléen, dernierEssai fini, cadence écoulée, et si suspendu une échéance finie et échue.
+    autoriser(etat, now) {
+        if (typeof etat !== 'object' || Array.isArray(etat) || typeof etat.active !== 'boolean') return { ok: false, raison: 'état illisible (active non booléen) : on ne peut pas conclure' };
+        if (etat.active === true) {
+            if (!Number.isFinite(etat.jusqua)) return { ok: false, raison: 'suspendu, échéance illisible : on ne peut pas conclure' };
+            if (now < etat.jusqua) return { ok: false, raison: `suspendu jusqu'à ${new Date(etat.jusqua).toISOString()} (${etat.motif})` };
+        }
+        if (!Number.isFinite(etat.dernierEssai)) return { ok: false, raison: 'état sans date d\'essai : on ne peut pas conclure' };
+        const cadence = Math.max(CADENCE_ESSAI_MS, Number.isFinite(etat.cadenceMs) ? etat.cadenceMs : 0);
+        if (now < etat.dernierEssai + cadence) return { ok: false, raison: 'cadence d\'essai non écoulée' };
+        return { ok: true };
+    },
+    // Rend le document à écrire (sans _id) et ce que l'appelant verra.
+    apres(v, etat, now, id = ID_ETAT) {
+        if (v.verdict === 'SERVI') {
+            const cadenceMs = Math.max(CADENCE_ESSAI_MS, (v.crawlDelayS || 0) * 1000);
+            return { doc: { _id: id, active: false, dernierEssai: now, cadenceMs, verdict: 'SERVI', motif: v.motif, constateLe: now }, retour: { envoye: true, verdict: 'SERVI', motif: v.motif } };
+        }
+        const base = v.verdict === 'DEFI' ? SUSPENSION_DEFI_MS : SUSPENSION_AUTRE_MS;
+        const duree = Math.max(base, (v.retryAfterS || 0) * 1000);
+        const depuis = etat && etat.active === true && Number.isFinite(etat.depuis) ? etat.depuis : now;
+        return { doc: { _id: id, active: true, depuis, dernierEssai: now, jusqua: now + duree, verdict: v.verdict, motif: v.motif, constateLe: now }, retour: { envoye: true, verdict: v.verdict, motif: v.motif, jusqua: now + duree } };
+    }
+});
+
 /**
  * La machine d'état. `magasin` = { lire(): doc|null, ecrire(doc) }. `allume` doit être EXACTEMENT true.
+ * `politique` : POLITIQUE_BULBA par défaut. `surServi` (optionnel) : appelé APRÈS un verdict SERVI et AVANT l'écriture de l'état — s'il lève,
+ * l'état n'est pas écrit (l'alerte reste, le prochain essai recommence : une levée ne s'écrit jamais avant ce qu'elle déclenche).
  * Rend { envoye, verdict?, raison? } ; ne lève que si l'écriture d'une suspension échoue (le dire plutôt que laisser repartir).
  */
-function fabriquerEssaiEspace({ client, magasin, maintenant = Date.now, allume = false }) {
+function fabriquerEssaiEspace({ client, magasin, maintenant = Date.now, allume = false, politique = POLITIQUE_BULBA, verdict = verdictDe, id = ID_ETAT, surServi = null }) {
     let enVol = false;
     async function essayer() {
         if (allume !== true) return { envoye: false, raison: 'éteint (décision du testeur requise)' };
@@ -73,57 +105,44 @@ function fabriquerEssaiEspace({ client, magasin, maintenant = Date.now, allume =
             let etat;
             try { etat = await magasin.lire(); } catch (e) { return { envoye: false, raison: `état illisible (${e.message}) : on ne peut pas conclure` }; }
             if (typeof magasin.reserver !== 'function') return { envoye: false, raison: 'magasin sans prise atomique : on ne peut pas conclure' };
-            // On n'autorise QUE : aucun état (jamais essayé), ou un état complet — active booléen, dernierEssai fini, cadence écoulée,
-            // et si suspendu une échéance finie et échue. Tout autre cas bloque et le dit.
             if (etat != null) {
-                if (typeof etat !== 'object' || Array.isArray(etat) || typeof etat.active !== 'boolean') return { envoye: false, raison: 'état illisible (active non booléen) : on ne peut pas conclure' };
-                if (etat.active === true) {
-                    if (!Number.isFinite(etat.jusqua)) return { envoye: false, raison: 'suspendu, échéance illisible : on ne peut pas conclure' };
-                    if (now < etat.jusqua) return { envoye: false, raison: `suspendu jusqu'à ${new Date(etat.jusqua).toISOString()} (${etat.motif})` };
-                }
-                if (!Number.isFinite(etat.dernierEssai)) return { envoye: false, raison: 'état sans date d\'essai : on ne peut pas conclure' };
-                const cadence = Math.max(CADENCE_ESSAI_MS, Number.isFinite(etat.cadenceMs) ? etat.cadenceMs : 0);
-                if (now < etat.dernierEssai + cadence) return { envoye: false, raison: 'cadence d\'essai non écoulée' };
-            }
+                const g = politique.autoriser(etat, now);
+                if (!g || g.ok !== true) return { envoye: false, raison: g?.raison ?? 'état non autorisé : on ne peut pas conclure' };
+            } else if (politique.sansEtat !== true) return { envoye: false, raison: 'aucun état lisible : on ne peut pas conclure' };
             // Prise atomique de l'essai (deux workers : un seul passe). Un refus ou une erreur = pas de requête.
             let prise = false;
             try { prise = (await magasin.reserver(etat ?? null, now)) === true; } catch (e) { return { envoye: false, raison: `réservation impossible (${e.message})` }; }
             if (!prise) return { envoye: false, raison: 'essai pris par un autre processus' };
 
             let v;
-            try { v = verdictDe(await client()); } catch (e) { v = { verdict: 'AUTRE', motif: `erreur réseau : ${e.code || e.message}` }; }
+            try { v = verdict(await client()); } catch (e) { v = { verdict: 'AUTRE', motif: `erreur réseau : ${e.code || e.message}` }; }
 
-            if (v.verdict === 'SERVI') {
-                const cadenceMs = Math.max(CADENCE_ESSAI_MS, (v.crawlDelayS || 0) * 1000);
-                await magasin.ecrire({ _id: ID_ETAT, active: false, dernierEssai: now, cadenceMs, verdict: 'SERVI', motif: v.motif, constateLe: now });
-                return { envoye: true, verdict: 'SERVI', motif: v.motif };
-            }
-            const base = v.verdict === 'DEFI' ? SUSPENSION_DEFI_MS : SUSPENSION_AUTRE_MS;
-            const duree = Math.max(base, (v.retryAfterS || 0) * 1000);
-            const depuis = etat && etat.active === true && Number.isFinite(etat.depuis) ? etat.depuis : now;
-            await magasin.ecrire({ _id: ID_ETAT, active: true, depuis, dernierEssai: now, jusqua: now + duree, verdict: v.verdict, motif: v.motif, constateLe: now });
-            return { envoye: true, verdict: v.verdict, motif: v.motif, jusqua: now + duree };
+            const suite = politique.apres(v, etat, now, id);
+            if (v.verdict === 'SERVI' && surServi) await surServi({ now, etat, verdict: v });
+            await magasin.ecrire(suite.doc);
+            return suite.retour;
         } finally { enVol = false; }
     }
     return { essayer };
 }
 
 /** Adaptateur Mongo (collection `collecte_images_etat`, base `cartes`) : testé sur une fausse collection (test-bulba-espacement.js). */
-function magasinMongo(collection) {
+function magasinMongo(collection, id = ID_ETAT) {
     return {
-        lire: () => collection.findOne({ _id: ID_ETAT }),
+        lire: () => collection.findOne({ _id: id }),
         // Prise atomique : conditionnelle à l'état LU. Absent : insertOne (le doublon de clé refuse). Présent : findOneAndUpdate sur
         // (active, dernierEssai) lus — si un autre processus a pris l'essai entre-temps, le filtre ne correspond plus.
+        // Un état sans `dernierEssai` (l'alerte écrite par le collecteur avant tout essai) se filtre par l'ABSENCE du champ.
         async reserver(lu, now) {
             try {
-                if (lu == null) { await collection.insertOne({ _id: ID_ETAT, active: false, dernierEssai: now, reserve: true }); return true; }
-                const r = await collection.findOneAndUpdate({ _id: ID_ETAT, active: lu.active, dernierEssai: lu.dernierEssai }, { $set: { dernierEssai: now, reserve: true } });
+                if (lu == null) { await collection.insertOne({ _id: id, active: false, dernierEssai: now, reserve: true }); return true; }
+                const r = await collection.findOneAndUpdate({ _id: id, active: lu.active, dernierEssai: lu.dernierEssai === undefined ? { $exists: false } : lu.dernierEssai }, { $set: { dernierEssai: now, reserve: true } });
                 const doc = r && typeof r === 'object' && 'value' in r && 'ok' in r ? r.value : r;   // anciens pilotes : { value, ok }
                 return !!doc;
             } catch (e) { return false; }
         },
-        ecrire: ({ _id, ...champs }) => collection.updateOne({ _id: ID_ETAT }, { $set: champs }, { upsert: true })
+        ecrire: ({ _id, ...champs }) => collection.updateOne({ _id: id }, { $set: champs }, { upsert: true })
     };
 }
 
-module.exports = { UA, HOTE, ID_ETAT, CADENCE_ESSAI_MS, SUSPENSION_DEFI_MS, SUSPENSION_AUTRE_MS, verdictDe, fabriquerClientDirect, fabriquerEssaiEspace, magasinMongo };
+module.exports = { UA, HOTE, ID_ETAT, CADENCE_ESSAI_MS, SUSPENSION_DEFI_MS, SUSPENSION_AUTRE_MS, POLITIQUE_BULBA, verdictDe, fabriquerClientDirect, fabriquerEssaiEspace, magasinMongo };

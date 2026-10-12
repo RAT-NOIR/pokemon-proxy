@@ -29,6 +29,7 @@ const { vignetterApresJointure } = require('./collecte-cartes/vignettes-apres-jo
 const T = require('./collecte-cartes/tpc');
 const P = require('./collecte-cartes/pikaqian');
 const { TABLE_PIKAQIAN, lignePikaqian } = require('./collecte-cartes/pikaqian-sets');
+const { noterBlocage } = require('./collecte-cartes/reessai-pikaqian');
 
 const VERROU_SET_MS = 10 * 60 * 1000;
 const STOP_OCTETS = 400 * 1024 * 1024;                 // consigne de l'éditeur : au-delà de 400 Mo (plafond M0 512), STOP
@@ -254,7 +255,8 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
 
 /** Une source qui bloque : l'ALERTE s'écrit (lue par file-a-l-arret.js), on s'arrête. Elle ne se rouvre que par une décision (l'alerte désactivée à la main). */
 async function conclureBloque(E, unite, err, client, { seulementAlerte = false } = {}) {
-    await E.updateOne({ _id: P.ID_ALERTE }, { $set: { active: true, constateLe: new Date(), motif: err.message, status: err.status ?? null, unite: unite._id, requetes: client.compteRequetes() }, $setOnInsert: { depuis: new Date() } }, { upsert: true });
+    // le blocage se COMPTE en base (collecte-cartes/reessai-pikaqian.js) : date, adresse, statut — le worker retente à 6 h puis 24 h, et suspend au 3e
+    await noterBlocage(E, { unite: unite._id, motif: err.message, status: err.status ?? null, url: /https:\/\/\S+/.exec(err.message)?.[0] ?? null, requetes: client.compteRequetes(), nature: err.bloque ? 'defi' : 'erreur-repetee' });
     console.error(`⛔ ${unite._id} : ${err.message}`);
     if (seulementAlerte) return null;
     return { code: unite._id, etat: 'refuse-source-bloquee', erreur: err.message, status: err.status ?? null, sansJointure: true };

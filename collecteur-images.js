@@ -62,6 +62,7 @@ const { fabriquerTemoinImages, jugerResolues, cartesNonCouvertes } = require('./
 const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');   // les cartes qui DÉCLARENT l'impression, slug ou non : les témoins
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
 const { alimenter } = require('./collecte-cartes/alimentateur');     // la file se remplit d'elle-même sous le seuil
+const { passerLesTaches: passerLesTachesSources } = require('./collecte-cartes/reessai-pikaqian');   // PikaQian bloqué : réessai espacé + sonde du serveur d'images officiel
 const { issueDeLUnite, echecTransitoire } = require('./collecte-cartes/issue-unite');  // fait, attente ou refus : une seule définition
 const { SOURCES_SUSPENDUES } = require('./collecte-cartes/sources-en-service');       // Bulbapedia suspendu le 2026-10-04 : ni unité ni requête
 const { SOURCES_TPC, SITES: SITES_TPC } = require('./collecte-cartes/tpc');         // TPC Asie et pokemon-card.com (éditeur, 2026-10-07 soir)
@@ -751,6 +752,10 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // boucle (la file déjà pleine continue de tourner) — mais il crie.
             try { await alimenter(cx.db, { journal: console, M }); }   // M : le manque réel lit les cartes par le plan du collecteur TCGdex
             catch (e) { console.error(`🔴 alimentateur en échec : ${e.message} — la file ne se remplira pas d'elle-même tant que ce n'est pas corrigé`); }
+            // 🔑 PIKAQIAN BLOQUÉ (décision du testeur, 2026-10-12) : la tentative espacée (6 h, puis 24 h, suspendue au 3e blocage) et la sonde UNIQUE du serveur d'images
+            // officiel. Chacune ne part que si son état en base l'y autorise ; une panne ici ne tue pas la boucle (collecte-cartes/reessai-pikaqian.js).
+            try { await passerLesTachesSources(cx.db, { journal: console }); }
+            catch (e) { console.error(`🔴 tâches des sources bloquées en échec : ${e.message}`); }
             // 🔑 LES IMPORTS QUOTIDIENS (testeur, 2026-10-06 : « sans cron Render payant, le worker lance lui-même, une fois par jour vers
             // 5 h UTC, l'import du catalogue et celui du guide des prix ») — ENTRE deux unités, aucune image en cours ; les gardes de l'import
             // vivent dans les deux scripts, lancés tels qu'à la main (collecte-cartes/imports-quotidiens.js, banc test-imports-quotidiens.js).
