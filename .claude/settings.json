@@ -4,7 +4,8 @@
       "PowerShell(node poser-par-metacarte.js --codes=SM)",
       "PowerShell(node v2/test/test-cors.js)",
       "PowerShell(node v2/test/capturer-identifier.js --ecrire=*)",
-      "PowerShell(node v2/test/capturer-identifier.js --contre=*)"
+      "PowerShell(node v2/test/capturer-identifier.js --contre=*)",
+      "PowerShell(node C:\\Users\\Yung\\Desktop\\pokemon-proxy\\mesurer-taille-bases.js*)"
     ]
   },
   "hooks": {
