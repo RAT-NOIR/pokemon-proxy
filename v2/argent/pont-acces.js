@@ -10,7 +10,8 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
     const scanDe = req => (ctx.scanId && (typeof ctx.scanId === 'function' ? ctx.scanId(req) : ctx.scanId)) || (req && req.scanId) || null;
     return {
         // → true si un crédit a été RENDU ; sinon false, et la cause remonte par noterNonRemboursement (liste fermée de sources.js)
-        async rembourser(req, motif, { compteur, jourDe } = {}) {
+        // `sansPlafond: true` (JUMEAU-V2) : le refus est le NÔTRE (la garde des jumeaux), pas un échec du client — il ne compte pas dans le plafond de pannes. L'unicité par scan reste (claim rb|scanId).
+        async rembourser(req, motif, { compteur, jourDe, sansPlafond } = {}) {
             if (req.scanRembourse) { noterNonRemboursement('deja-rembourse'); return false; }      // un seul par requête
             req.scanRembourse = true;
             const scanId = scanDe(req), now = quand(ctx), question = compteur === 'question';
@@ -19,7 +20,7 @@ function creditV2(porteur, credit, cfg, ctx = {}) {
                 try { await col('questions').updateOne({ _id: `${req.questionId}:0`, etat: 'en-attente' }, { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'deja-rembourse', annuleePar: motif, regleeLe: now } }); }
                 catch (e) { console.error(`🔴 [v2 question-annulation] ${req.questionId} : ${(e && (e.code || e.name)) || 'erreur'} — la panne n'est PAS remboursée ici`); noterNonRemboursement('erreur'); return false; }
             }
-            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'question' : 'panne', jourDe, maintenant: now }, cfg);
+            const r = await rembourser(porteur, credit, motif, { scanId, compteur: question ? 'question' : 'panne', jourDe, sansPlafond: sansPlafond === true, maintenant: now }, cfg);
             if (r.rendu) { req.scanRendu = true; return true; }
             noterNonRemboursement(raisonPublique(r.raisonNonRembourse));
             return false;

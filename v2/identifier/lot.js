@@ -13,7 +13,7 @@
 //     jusqu'à 10 cartes : un prix manquant sur l'une n'annule pas la lecture des autres — c'est aussi pourquoi `sans-prix` ne rembourse rien sur un lot, retour-live.js).
 const { dansUnScan } = require('../../sources');
 const { adapter, codeLangueDe } = require('./adaptateur');
-const { fournisseurDe, idsACharger } = require('./jumeaux');
+const { fournisseurParDefaut, idsACharger } = require('./jumeaux');
 const etatChargeur = require('../chargeur/etat');
 const { col } = require('../db');
 const { facturation: fabriquerFacturation, raisonPublique } = require('../argent/facturation');
@@ -64,8 +64,8 @@ async function executerLot(p) {
             : fabriquerFacturation({ debite: 1, rembourse: false, motif: 'lot', raisonNonRembourse: r.cause ?? 'erreur' });
         return { code, detail, facturation };
     };
-    const panne = async (code, dejaRendu = false) => {
-        const r = dejaRendu ? { rendu: true, cause: null } : await rendre(`panne-${code}`);
+    const panne = async (code, dejaRendu = false, o = {}) => {
+        const r = dejaRendu ? { rendu: true, cause: null } : await rendre(`panne-${code}`, o);
         return { sortie: { resultat: { issue: 'panne', analyse: null, erreur: { code } }, facturation: p.facturationDe('panne', { admin, rendu: r.rendu, question: false, cause: r.cause }), lecture: null, desaccord: null } };
     };
     // 1. la lecture des cartes — APRÈS le débit, sans crédit dans la requête
@@ -96,21 +96,24 @@ async function executerLot(p) {
     const corpsDe = r => (r && r.corps && typeof r.corps === 'object' ? r.corps : {});
     let produits;
     // JUMEAU-V2 : la même garde que la route d'une carte (une version de la colonne pour tout le lot) ; les jumeaux d'une affirmation qui tient dans une question sont chargés avec elle
-    const jumeaux = deps.jumeaux || fournisseurDe(etatChargeur.version());
+    const jumeaux = deps.jumeaux || await fournisseurParDefaut(catalogue, etatChargeur.version());
     try { produits = await catalogue.lire(resultats.flatMap(r => { const c = corpsDe(r); return [...entiers(c.candidats), ...(c.carte && Number.isInteger(c.carte.idProduct) ? [c.carte.idProduct] : []), ...idsACharger(c, jumeaux)]; })); }
     catch (e) { journal('catalogue', e); return panne('INDISPONIBLE'); }
     // 3. une carte par résultat, dans l'ordre d'ENTRÉE ; une carte illisible devient « introuvable / panne-lecture » (comptée vue : la lecture a eu lieu)
     const adapterFn = deps.adapter || adapter;
     const pannes = [];
+    const motifs = [];                                                             // JUMEAU-V2 : le motif de la garde PAR CARTE (interne : écrit dans analyses.cartes[i], jamais servi)
     const cartes = resultats.map((r, i) => {
         let a = null;
         try { a = adapterFn({ statutHttp: r && r.statutHttp, corps: r && r.corps }, { produits, langueInterface: entree.langueInterface, cfg, ficheServie: false, jumeaux }); } catch (e) { journal('adaptateur', e); }
+        motifs[i] = a && typeof a.motif === 'string' ? a.motif : null;
         const c = a && a.issue !== 'panne' && a.analyse && Array.isArray(a.analyse.cartes) ? a.analyse.cartes[0] : null;
         if (!c) { pannes.push(a && a.erreur ? a.erreur.code : 'SERVEUR'); return { index: i, statut: 'introuvable', carte: null, candidats: [], question: null, raison: 'panne-lecture', etat: null, prixLive: null, zone: null }; }
         return { ...c, index: i, zone: zoneValide(corpsDe(r).zone) };
     });
     const lectures = resultats.map(r => ({ codeLangue: codeLangueDe(corpsDe(r)), reverseStrategie: corpsDe(r).reverse && typeof corpsDe(r).reverse.strategie === 'string' ? corpsDe(r).reverse.strategie : null }));
-    if (pannes.length === cartes.length) return panne(pannes[0]);                  // aucune carte lue du tout : une panne, pas un « introuvable »
+    // aucune carte lue du tout : une panne, pas un « introuvable » ; si TOUTES le sont par la garde des jumeaux (notre colonne), le crédit est rendu hors plafond de pannes
+    if (pannes.length === cartes.length) return panne(pannes[0], false, motifs.every(Boolean) ? { sansPlafond: true } : {});
     const lotInfo = compterLot(cartes, cfg);
     // 4. le supplément : max(1, ceil(N/10)) - 1 unités, TOUT OU RIEN (un administrateur ne paie rien)
     const cout = argent.coutDuLot(cartes.length), supplement = cout - 1;
@@ -133,7 +136,7 @@ async function executerLot(p) {
     // 5. un lot ENTIÈREMENT introuvable est remboursé (toutes ses unités) ; un seul identifié ou une seule question et il ne l'est jamais
     let facturation;
     if (lotInfo.identifiees === 0 && lotInfo.aTrancher === 0) {
-        const r = await rendre('introuvable');
+        const r = await rendre('introuvable', motifs.some(Boolean) ? { sansPlafond: true } : {});          // un refus de la garde des jumeaux est le NÔTRE : hors plafond de pannes
         facturation = p.facturationDe('introuvable', { admin, rendu: r.rendu, question: false, cause: r.cause });
         if (!admin && !r.rendu) facturation = { ...facturation, debite: cout };          // remboursement refusé : le client a payé TOUT le lot, la facturation le dit
     } else facturation = admin ? fabriquerFacturation({ motif: 'administrateur', rembourse: false }) : fabriquerFacturation({ debite: cout, motif: 'lot' });
@@ -154,7 +157,7 @@ async function executerLot(p) {
         }
     }
     const analyse = { statut: 'lot', cartes: ordonnerParValeur(cartes), lot: lotInfo, raison: null };
-    return { sortie: { resultat: { issue: 'lot', analyse, erreur: null }, facturation, lecture: null, lectures, cartesEntree: cartes, desaccord: null } };
+    return { sortie: { resultat: { issue: 'lot', analyse, erreur: null }, facturation, lecture: null, lectures, cartesEntree: cartes, motifs, desaccord: null } };
 }
 
 module.exports = { executerLot, ordonnerParValeur, compterLot, valeurDe };

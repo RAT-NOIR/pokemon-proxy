@@ -28,8 +28,8 @@ const MOTIFS_ABSENCE = Object.freeze(['carte-introuvable', 'aucun-candidat', 'au
 const MOTIFS_EGALITE = Object.freeze(['egalite-parfaite', 'nom-contredit-egalite', 'nom-contredit-sans-repli']);
 const CODE_CHINOIS = 6;
 
-class Panne extends Error { constructor(code, diagnostic) { super(diagnostic); this.code = code; } }
-const panne = (code, diagnostic) => { throw new Panne(code, diagnostic); };
+class Panne extends Error { constructor(code, diagnostic, motif = null) { super(diagnostic); this.code = code; this.motif = motif; } }
+const panne = (code, diagnostic, motif) => { throw new Panne(code, diagnostic, motif); };
 
 const etatValide = x => (ETATS.includes(x) ? x : null);
 function etatDe(e) {
@@ -63,7 +63,7 @@ function enveloppe(issue, c, extra = {}) {
 }
 // Liste FERMÉE des raisons d'un « introuvable » (PLAN §2) : le contrat publié (v2/openapi) la compare à celle-ci, ensemble pour ensemble.
 // L'adaptateur n'en émet que deux ; les trois autres sont posées par B1b (en amont de la chaîne héritée). Une raison hors liste lève.
-const RAISONS = Object.freeze(['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture']);
+const RAISONS = Object.freeze(['photo-illisible', 'pas-une-carte', 'hors-catalogue', 'plusieurs-cartes-non-separees', 'panne-lecture', 'impression-indeterminee']);
 function introuvable(raison) {
     if (!RAISONS.includes(raison)) throw new Error(`adaptateur : raison d'introuvable hors liste : ${raison}`);
     return enveloppe('introuvable', carte('introuvable', { raison }));
@@ -93,7 +93,8 @@ function traduire(statutHttp, corps, ctx) {
             const sourceP = source(ctx, c.idProduct);
             const g = garde(ctx, c.idProduct);
             if (g.action === 'question') return question(g.ids, etat, ctx);
-            if (g.action === 'introuvable') return { ...introuvable('photo-illisible'), motif: g.motif };
+            if (g.action === 'introuvable') return { ...introuvable('impression-indeterminee'), motif: g.motif };     // la carte est reconnue, son impression ne se tranche pas (plus de 3 produits) : on ne ment pas par « photo-illisible »
+            if (g.action !== 'affirmer') panne('INDISPONIBLE', `jumeaux : ${g.motif || 'indisponibles'}`, g.motif || 'jumeaux-indisponibles');     // notre infrastructure (colonne absente, périmée, incomplète), jamais un introuvable
             const produit = construireProduit(sourceP, pctx(ctx));
             return enveloppe('affirmee', carte('identifiee', { carte: produit, etat, prixLive: prixLiveDe(corps, c.idProduct, etat) }));
         }
@@ -136,7 +137,7 @@ function adapter({ statutHttp, corps } = {}, ctx = {}) {
         const code = e instanceof Panne ? e.code : 'SERVEUR';           // un cas non prévu tombe sur le défaut qui n'affirme rien
         const diagnostic = e instanceof Panne ? e.message : `exception : ${(e && (e.code || e.name)) || 'erreur'}`;   // jamais le message d'une exception interne (seule une Panne, phrase fabriquée ici, est dite en entier)
         console.warn(`⚠️ [adaptateur-v2] panne ${code} : ${diagnostic}`);
-        return { issue: 'panne', analyse: null, erreur: { code }, diagnostic };
+        return { issue: 'panne', analyse: null, erreur: { code }, diagnostic, ...(e instanceof Panne && e.motif ? { motif: e.motif } : {}) };
     }
 }
 // codeLangueDe / prixLiveDe : exportés pour que /api/identifier/reponse (B1b.5) fabrique le prixLive d'une carte tranchée par la MÊME règle que l'adaptateur (§21 bis : jamais une copie).

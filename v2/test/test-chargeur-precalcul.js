@@ -79,7 +79,7 @@ const ENV_ECR = { V2_VISUELS_HMAC: SECRET, V2_VISUELS_R2_COMPTE: 'c', V2_VISUELS
     // JUMEAU-V2 : le fichier porte la colonne des jumeaux (relue à l'identique) ; un producteur qui ne l'émet pas ne publie rien
     H.v('JUMEAU-V2 : l\'archive porte la colonne des jumeaux, relue à l\'identique du calcul en ligne (jumeaux de chaque produit)', [viaFichier.version.colonneJumeaux, ids.every(id => JSON.stringify(viaFichier.version.jumeauxDe(id)) === JSON.stringify(enLigne.version.jumeauxDe(id)))], [true, true]);
     let m2 = null; try { await fabriquerFichier({ source: source(donnees(5)), catalogue, secret: SECRET, decider: a => require('../chargeur/decision').decider({ ...a, sink: { entree: a.sink.entree, lien: a.sink.lien } }) }); } catch (e) { m2 = e.motif; }
-    H.v('   un producteur qui n\'émet pas les jumeaux : AUCUN fichier produit, motif nommé', /colonne des jumeaux.*aucun fichier/.test(m2 || ''), true);
+    H.v('   un producteur qui n\'émet pas les jumeaux : AUCUN fichier produit, par SON propre refus (la garde du producteur, pas celle de l\'aller-retour : chacune est épinglée seule)', /^JUMEAU-V2 : la version calculée n'a pas la colonne des jumeaux.*aucun fichier écrit$/.test(m2 || ''), true);
 
     // ── 3. le chargeur sur archive scellée : bascule, refus d'une archive abîmée, version gardée
     E.vider();

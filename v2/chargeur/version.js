@@ -92,6 +92,8 @@ function assembler(d) {
         },
         /** La colonne des jumeaux est-elle chargée ? (un fichier d'avant la colonne : non — aucune affirmation ne peut alors être conclue.) */
         colonneJumeaux: Boolean(jum),
+        /** Le catalogue que la colonne décrit : { n: nombre de produits, max: plus grand idProduct } — la route le compare à celui d'aujourd'hui (une colonne périmée ne conclut pas). null sans colonne. */
+        empreinteJumeaux() { return jum && jum.id.length ? { n: jum.id.length, max: jum.id[jum.ordre[jum.id.length - 1]] } : null; },
         /** Les jumeaux d'un produit (idProduct triés), ou null quand on ne peut PAS conclure : colonne absente, produit hors colonne, métacarte inconnue. [] = conclu, aucun jumeau. */
         jumeauxDe(id) {
             if (!jum || !Number.isInteger(id)) return null;

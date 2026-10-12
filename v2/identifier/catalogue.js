@@ -23,6 +23,22 @@ function creerCatalogue(opts = {}) {
     const cfg = opts.cfg || lireConfig();
     const visuels = opts.visuels || creerVisuels({ cfg });
 
+    // JUMEAU-V2 : l'EMPREINTE du catalogue d'aujourd'hui — { n: nombre de produits, max: plus grand idProduct } — comparée à celle que porte la colonne des jumeaux (jumeaux.js : une colonne
+    // dont le catalogue a bougé ne conclut plus). Deux lectures O(1)/O(log n) (compte estimé + tête de l'index idProduct), gardées 30 s : jamais une lecture par scan. Une lecture qui échoue LÈVE
+    // (l'appelant en fait « on ne peut pas conclure »), et rien n'est gardé.
+    const DUREE_EMPREINTE_MS = 30 * 1000;
+    let empreinteGardee = null;
+    async function empreinte() {
+        const maintenant = (opts.maintenant || Date.now)();
+        if (empreinteGardee && maintenant - empreinteGardee.le < DUREE_EMPREINTE_MS) return empreinteGardee.valeur;
+        const c = colLue('catalogue_produits');
+        const n = await c.estimatedDocumentCount();
+        const tete = await c.find({}, { projection: { idProduct: 1 } }).sort({ idProduct: -1 }).limit(1).toArray();
+        const valeur = { n, max: tete.length ? tete[0].idProduct : 0 };
+        empreinteGardee = { le: maintenant, valeur };
+        return valeur;
+    }
+
     /** @returns Promise<Map<idProduct, ProduitSource>> — les produits introuvables ou innommables sont ABSENTS de la table. */
     async function lire(idProducts) {
         const ids = [...new Set((Array.isArray(idProducts) ? idProducts : []).filter(Number.isInteger))];
@@ -53,6 +69,6 @@ function creerCatalogue(opts = {}) {
         }
         return table;
     }
-    return { lire };
+    return { lire, empreinte };
 }
 module.exports = { creerCatalogue, COLLECTIONS_LUES, colLue };

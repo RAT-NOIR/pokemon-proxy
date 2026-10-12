@@ -28,7 +28,12 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     c.jumeau(J(2, 222, 1, '1', 'intl')); c.jumeau(J(3, 222, 2, '1', 'jp'));
     c.jumeau(J(4, 333, 1, '1', 'intl')); c.jumeau(J(4, 333, 2, '1', 'intl'));   // deux lignes qui se contredisent : le créneau devient inconnu
     c.jumeau(J(5, 333, 7, '5', 'intl'));
+    c.jumeau(J(60, 600, null, null, 'intl')); c.jumeau(J(61, 600, null, null, 'intl'));   // DEUX créneaux inconnus : jamais « le même créneau » (M7 de la relecture 1)
+    c.jumeau(J(70, null, 1, '1', 'intl')); c.jumeau(J(71, null, 2, '1', 'intl'));         // métacarte inconnue : on ne peut pas conclure (M14b de la relecture 1)
     const v = c.finir(new Date('2026-10-12T10:00:00.000Z'));
+    H.v('DEUX créneaux inconnus dans la même métacarte : jumeaux l\'un de l\'autre (jamais comptés « même créneau »)', [v.jumeauxDe(60), v.jumeauxDe(61)], [[61], [60]]);
+    H.v('un produit dont la métacarte est inconnue : null (on ne peut pas conclure), jamais [] « aucun jumeau »', [v.jumeauxDe(70), v.jumeauxDe(71)], [null, null]);
+    H.v('l\'empreinte de la colonne : le nombre de produits du catalogue qu\'elle décrit et le plus grand idProduct', v.empreinteJumeaux(), { n: 15, max: 900004 });
     H.v('la version porte la colonne', v.colonneJumeaux, true);
     H.v('IMG_3237 : les jumeaux de 740794 = la vérité 805556 + les deux inconnus ; ni la variante du même créneau, ni l\'autre langue', v.jumeauxDe(740794), [805556, 900003, 900004]);
     H.v('   réciproque : 805556 a pour jumeaux 740794, la variante 900001 (son créneau diffère), et les deux inconnus', v.jumeauxDe(805556), [740794, 900001, 900003, 900004]);
@@ -74,21 +79,27 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     H.v('P + 2 jumeaux = 3 produits : une question à 3', [TROIS.issue, ids(TROIS)], ['question', [700, 701, 702]]);
 
     const QUATRE = A(700, table(new Map([[700, [701, 702, 703]]])));
-    H.v('P + 3 jumeaux = 4 produits : introuvable, jamais un choix de 3 parmi N', [QUATRE.issue, QUATRE.analyse.cartes[0].statut, QUATRE.analyse.cartes[0].raison], ['introuvable', 'introuvable', 'photo-illisible']);
+    H.v('P + 3 jumeaux = 4 produits : introuvable, jamais un choix de 3 parmi N ; la raison SERVIE dit la vérité (impression-indeterminee, pas photo-illisible)', [QUATRE.issue, QUATRE.analyse.cartes[0].statut, QUATRE.analyse.cartes[0].raison], ['introuvable', 'introuvable', 'impression-indeterminee']);
+    H.vrai('   « impression-indeterminee » est dans la liste fermée de l\'adaptateur (RAISONS), additive', require('../identifier/adaptateur').RAISONS.includes('impression-indeterminee') && require('../identifier/adaptateur').RAISONS.includes('photo-illisible'));
     H.v('   le motif distinct est dit (jumeaux-trop-nombreux)', QUATRE.motif, 'jumeaux-trop-nombreux');
     const GROS = A(700, table(new Map([[700, [701, 702, 703, 704]]])));
     H.v('   5 produits : de même', [GROS.issue, GROS.motif], ['introuvable', 'jumeaux-trop-nombreux']);
 
     const SANSFOURNISSEUR = adapter({ statutHttp: 200, corps: succes(700) }, { produits, langueInterface: 'fr', cfg });
-    H.v('AUCUN fournisseur de jumeaux dans le contexte : aucune affirmation, motif visible', [SANSFOURNISSEUR.issue, SANSFOURNISSEUR.analyse.cartes[0].statut, SANSFOURNISSEUR.motif], ['introuvable', 'introuvable', 'jumeaux-indisponibles']);
+    // I1 de la relecture 1 : une colonne qui manque est une panne de NOTRE côté (INDISPONIBLE, remboursée sans plafond), jamais un « introuvable » (la photo n'y est pour rien)
+    const estPanne = (r, motif) => [r.issue, r.erreur && r.erreur.code, r.analyse, r.motif].join('|') === ['panne', 'INDISPONIBLE', null, motif].join('|');
+    H.vrai('AUCUN fournisseur de jumeaux dans le contexte : aucune affirmation, PANNE INDISPONIBLE, motif jumeaux-indisponibles', estPanne(SANSFOURNISSEUR, 'jumeaux-indisponibles'));
     const NONCONCLU = A(700, table(new Map()));
-    H.v('colonne absente (le fournisseur ne peut pas conclure pour ce produit) : aucune affirmation, motif visible', [NONCONCLU.issue, NONCONCLU.motif], ['introuvable', 'jumeaux-indisponibles']);
+    H.vrai('colonne absente (le fournisseur ne conclut pas pour ce produit) : PANNE INDISPONIBLE, motif jumeaux-indisponibles', estPanne(NONCONCLU, 'jumeaux-indisponibles'));
     const PLANTE = A(700, () => { throw new Error('boom'); });
-    H.v('un fournisseur qui LÈVE : aucune affirmation (jamais le défaut passant)', [PLANTE.issue, PLANTE.motif], ['introuvable', 'jumeaux-indisponibles']);
+    H.vrai('un fournisseur qui LÈVE : PANNE INDISPONIBLE (jamais le défaut passant)', estPanne(PLANTE, 'jumeaux-indisponibles'));
     const MAL = A(700, () => ({ conclu: true, ids: 'x' }));
-    H.v('un fournisseur qui rend une forme inconnue : aucune affirmation', [MAL.issue, MAL.motif], ['introuvable', 'jumeaux-indisponibles']);
+    H.vrai('un fournisseur qui rend une forme inconnue : PANNE INDISPONIBLE', estPanne(MAL, 'jumeaux-indisponibles'));
     const ABSENT = A(740794, table(new Map([[740794, [999999]]])));
-    H.v('un jumeau qui n\'a pas de ligne au catalogue de l\'API (donc pas de question possible) : introuvable, jamais une affirmation ni une panne', [ABSENT.issue, ABSENT.motif], ['introuvable', 'jumeaux-incomplets']);
+    H.vrai('un jumeau qui n\'a pas de ligne au catalogue de l\'API (pas de question possible) : PANNE INDISPONIBLE, motif jumeaux-incomplets', estPanne(ABSENT, 'jumeaux-incomplets'));
+    const PERIME = A(700, () => ({ conclu: false, ids: [], motif: 'jumeaux-perimes' }));
+    H.vrai('une colonne PÉRIMÉE (le fournisseur le dit) : PANNE INDISPONIBLE, motif jumeaux-perimes, jamais une affirmation', estPanne(PERIME, 'jumeaux-perimes'));
+    H.vrai('   un motif inconnu rendu par un fournisseur retombe sur jumeaux-indisponibles (liste fermée)', estPanne(A(700, () => ({ conclu: false, ids: [], motif: 'autre-chose' })), 'jumeaux-indisponibles'));
     H.v('un jumeau égal à P lui-même est ignoré (dédoublonné)', A(700, table(new Map([[700, [700, 701]]]))).issue, 'question');
 
     // les autres issues ne passent PAS par la garde : une ambiguë reste une question, un refus reste un refus
@@ -105,9 +116,22 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
 
     // ── 4. le fournisseur de la route : lit la version EN PLACE, une version à la fois
     const four = C.fournisseurDe(v);
-    H.v('fournisseurDe(version) : conclu + ids', [four(740794), four(424242)], [{ conclu: true, ids: [805556, 900003, 900004] }, { conclu: false, ids: [] }]);
-    H.v('fournisseurDe(null) : ne conclut jamais', C.fournisseurDe(null)(740794), { conclu: false, ids: [] });
-    H.v('fournisseurDe(version sans colonne) : ne conclut jamais', C.fournisseurDe(sansColonne)(1), { conclu: false, ids: [] });
+    H.v('fournisseurDe(version) : conclu + ids ; un produit hors colonne : ne conclut pas', [four(740794), four(424242)], [{ conclu: true, ids: [805556, 900003, 900004] }, { conclu: false, ids: [], motif: 'jumeaux-indisponibles' }]);
+    H.v('fournisseurDe(null) : ne conclut jamais', C.fournisseurDe(null)(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
+    H.v('fournisseurDe(version sans colonne) : ne conclut jamais', C.fournisseurDe(sansColonne)(1), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
+    // I2 de la relecture 1 : la colonne décrit UN catalogue ; si le catalogue de la route a bougé (produit ajouté), elle ne conclut plus
+    const live = { n: 15, max: 900004 };
+    H.v('fournisseurDe(version, empreinte du catalogue identique) : conclut', C.fournisseurDe(v, live)(740794).conclu, true);
+    H.v('   un produit AJOUTÉ au catalogue depuis l\'archive (n différent) : ne conclut plus, motif jumeaux-perimes', C.fournisseurDe(v, { n: 16, max: 900004 })(740794), { conclu: false, ids: [], motif: 'jumeaux-perimes' });
+    H.v('   un autre plus grand idProduct (même n) : périmée aussi', C.fournisseurDe(v, { n: 15, max: 900005 })(740794).motif, 'jumeaux-perimes');
+    H.v('   l\'empreinte du catalogue illisible (null) : ne conclut pas, motif jumeaux-indisponibles', C.fournisseurDe(v, null)(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
+    H.v('   une empreinte de forme inconnue : ne conclut pas', C.fournisseurDe(v, { n: 'x' })(740794).conclu, false);
+    H.v('   la colonne absente reste « ne conclut pas », empreinte ou non', [C.fournisseurDe(sansColonne, live)(1).conclu, C.fournisseurDe(null, live)(1).conclu], [false, false]);
+    // le fournisseur de PRODUCTION lit l'empreinte du catalogue lui-même ; tout ce qui n'est pas une empreinte valide empêche de conclure
+    const pd = async cat => (await C.fournisseurParDefaut(cat, v))(740794);
+    H.v('fournisseurParDefaut : empreinte identique → conclut ; différente → périmée ; qui lève, absente ou illisible → indisponible',
+        [(await pd({ empreinte: async () => live })).conclu, (await pd({ empreinte: async () => ({ n: 99, max: 900004 }) })).motif, (await pd({ empreinte: async () => { throw new Error('mongo muet'); } })).motif, (await pd({})).motif, (await pd({ empreinte: async () => ({ n: 0, max: 0 }) })).motif],
+        [true, 'jumeaux-perimes', 'jumeaux-indisponibles', 'jumeaux-indisponibles', 'jumeaux-indisponibles']);
     H.v('idsACharger : les jumeaux de l\'affirmation, seulement s\'ils tiennent dans une question (au plus 2)', [
         C.idsACharger({ success: true, carte: { idProduct: 740794, ambigu: false }, candidats: [{ idProduct: 740794 }] }, C.fournisseurDe(relue)),
         C.idsACharger({ success: true, carte: { idProduct: 1, ambigu: false }, candidats: [] }, four),
