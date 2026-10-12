@@ -26,7 +26,9 @@ const FORMES = [
 /** Les numéros d'impression numérotés d'une carte pour CE set (la définition du site : tirage ET nom d'expansion du set). */
 function numerosDuSet(impressions, set) {
     const t = set.tirage ?? set.region, noms = [].concat(set.bulba?.expansion ?? []);
-    return (impressions || []).filter(i => i && i.tirage === t && noms.includes(i.expansion)).map(i => i.numero).filter(n => n != null && String(n).trim() !== '');
+    // (T4b) un set DECK (champ `deck` du document du set, écrit par creer-sets-sans-page.js via set-deck.js et relu par corriger-numero-fiche.js : PROJECTION_SETS) ne lit que les numéros de son deck
+    const nd = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+    return (impressions || []).filter(i => i && i.tirage === t && noms.includes(i.expansion) && (set.deck == null || nd(i.deck) === nd(set.deck))).map(i => i.numero).filter(n => n != null && String(n).trim() !== '');
 }
 
 /** Les impressions (valeurs brutes) dont le numéro comparable est `cle`. */

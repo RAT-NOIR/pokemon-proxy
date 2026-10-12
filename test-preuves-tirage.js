@@ -22,4 +22,6 @@ t('OK : « page » + seconde preuve admise', () => verifierTirages({ 1: ['jp', '
 t('OK : « page » + citation qui nomme le produit', () => verifierTirages({ 1: ['intl', 'page : « English … cards » (copie Wayback 20260804035231) ; citation nomme le produit : « 2008 Burger King promotional Pokémon toys »'] }));
 t('OK : un type historique seul', () => verifierTirages({ 1: ['jp', 'codes_set : japonais (pcgG)'] }));
 t('REFUS : « declarations » sans nombre de cartes', () => refuse({ 1: ['jp', 'declarations : des cartes'] }, /declarations/));
+t('T4b fix1 — OK : « declarations » dont le nombre est CALCULÉ à l\'exécution doit le dire en toutes lettres', () => verifierTirages({ 1: ['jp', 'declarations : le nom exact « X » (deck « Y ») est déclaré en jp, numérotation Cardmarket = impressions jp du deck (calculé à l\'exécution)'] }));
+t('T4b fix1 — REFUS : « declarations » sans nombre NI mention « calculé à l\'exécution »', () => refuse({ 1: ['jp', 'declarations : le nom exact « X » est déclaré en jp'] }, /declarations/));
 console.log(process.exitCode ? `\n${ok} ok, ÉCHECS ci-dessus` : `\n${ok}/${ok} passés, 0 échec`);

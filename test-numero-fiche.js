@@ -64,5 +64,10 @@ t('numerosDuSet ne lit que (tirage, expansion) du set, et seulement les numéros
     const imps = [{ tirage: 'jp', expansion: 'Quick Construction Packs', numero: '1' }, { tirage: 'intl', expansion: 'Quick Construction Packs', numero: '2' }, { tirage: 'jp', expansion: 'Quick Construction Packs', numero: null }];
     assert.deepStrictEqual(numerosDuSet(imps, SET_QCP), ['1']);
 });
+t('numerosDuSet : un set DECK (set.deck) ne lit que les numéros de son deck ; sans deck, comme avant (T4b)', () => {
+    const imps = [{ tirage: 'jp', expansion: 'Classic', deck: 'Venusaur Deck', numero: '022' }, { tirage: 'jp', expansion: 'Classic', deck: 'Charizard Deck', numero: '023' }];
+    assert.deepStrictEqual(numerosDuSet(imps, { tirage: 'jp', bulba: { expansion: 'Classic' }, deck: ' venusaur  deck' }), ['022']);
+    assert.deepStrictEqual(numerosDuSet(imps, { tirage: 'jp', bulba: { expansion: 'Classic' } }), ['022', '023']);
+});
 t('numeroFicheDeCreation : numéro Cardmarket vide → null', () => assert.strictEqual(numeroFicheDeCreation({ numeros: ['1'], numeroCardmarket: ' ', forme: null }), null));
 console.log(`\n${ok} bancs verts`);

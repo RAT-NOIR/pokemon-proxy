@@ -50,4 +50,57 @@ t('l\'ambiguïté RESTE quand les attaques ne départagent pas (aucune ou deux c
 });
 t('une carte sans attaque ne se départage jamais par les attaques', () => assert.strictEqual(attaquesDeLaCarteDansLeProduit({ attaques: [] }, produit('X', ['A'])), false));
 t('un produit sans attaque ne désigne pas une carte à attaques', () => assert.strictEqual(attaquesDeLaCarteDansLeProduit(arceusPlante, produit('Arceus', [])), false));
+// ── T4b (2026-10-12) : le deck, le numéro témoin, le départage d'Arceus par le numéro, la passe « - » ──────────────────────────────────
+const D = require('./collecte-cartes/declarantes');
+const SET_AGF = { tirage: 'jp', expansion: 'Arceus LV.X Deck: Grass & Fire' };
+const imp = (numero, deck = null, expansion = SET_AGF.expansion) => ({ tirage: 'jp', expansion, deck, numero });
+const arcP = { ...arceusPlante, impressions: [imp('005')] }, arcF = { ...arceusFeu, impressions: [imp('008')] };
+t('deck : les déclarantes d\'un deck ne contiennent pas celles d\'un autre deck du même nom d\'expansion', () => {
+    const a = { _id: 1, nomEn: 'Rare Candy', impressions: [imp('022', 'Venusaur Deck', 'Classic'), imp('023', 'Charizard Deck', 'Classic')] };
+    const b = { _id: 2, nomEn: 'Dragonite', impressions: [imp('003', 'Charizard Deck', 'Classic')] };
+    assert.deepStrictEqual(D.declarantesDuSet([a, b], { tirage: 'jp', expansion: 'Classic', deck: 'Venusaur Deck' }).map(c => c._id), [1]);
+    assert.deepStrictEqual(D.declarantesDuSet([a, b], { tirage: 'jp', expansion: 'Classic', deck: ' charizard  deck' }).map(c => c._id), [1, 2]);
+    assert.deepStrictEqual(D.declarantesDuSet([a, b], { tirage: 'jp', expansion: 'Classic' }).map(c => c._id), [1, 2]);
+});
+t('Arceus par le NUMÉRO : produit n°005 [Grass | Leaf Refresh] => la Plante, n°008 [Fire | Bright Flame] => la Feu', () => {
+    const o = { set: SET_AGF };
+    assert.deepStrictEqual(declarantesDuProduit([arcP, arcF], 'Arceus', { nom: 'Arceus', numero: '005', attaques: ['Grass', 'Leaf Refresh'] }, clesNom, o).map(c => c._id), [78932]);
+    assert.deepStrictEqual(declarantesDuProduit([arcP, arcF], 'Arceus', { nom: 'Arceus', numero: '008', attaques: ['Fire', 'Bright Flame'] }, clesNom, o).map(c => c._id), [78140]);
+});
+t('Arceus par le numéro : le numéro SEUL ne suffit pas (attaques non incluses => l\'ambiguïté reste)', () => {
+    assert.strictEqual(declarantesDuProduit([arcP, arcF], 'Arceus', { nom: 'Arceus', numero: '005', attaques: ['Splash'] }, clesNom, { set: SET_AGF }).length, 2);
+});
+t('Arceus par le numéro : sans `o.set`, rien ne change (le comportement des 7 sets du lot 6)', () => {
+    assert.strictEqual(declarantesDuProduit([arcP, arcF], 'Arceus', { nom: 'Arceus', numero: '005', attaques: ['Grass', 'Leaf Refresh'] }, clesNom).length, 2);
+});
+t('témoin du numéro : 003 chez nous / 004 chez Cardmarket => contredit ; absent d\'un côté => ne contredit rien', () => {
+    const sceptile = { _id: 78071, nomEn: 'Sceptile', impressions: [imp('003')] };
+    assert.strictEqual(D.numeroContredit(sceptile, { numero: '004' }, SET_AGF), true);
+    assert.strictEqual(D.numeroContredit(sceptile, { numero: '003' }, SET_AGF), false);
+    assert.strictEqual(D.numeroContredit(sceptile, { numero: '03' }, SET_AGF), false);
+    assert.strictEqual(D.numeroContredit(sceptile, { numero: null }, SET_AGF), false);
+    assert.strictEqual(D.numeroContredit({ _id: 1, nomEn: 'X', impressions: [imp(null)] }, { numero: '004' }, SET_AGF), false);
+});
+const boss = { _id: 248285, nomEn: 'Boss\'s Orders', bulba: { titre: 'Boss\'s Orders (Rocket 1)' }, impressions: [imp('029', 'Venusaur & Lugia ex Deck', 'Classic')] };
+const SET_CL = { tirage: 'jp', expansion: 'Classic', deck: 'Venusaur & Lugia ex Deck' };
+t('passe « - » : « Boss\'s Orders - Giovanni » n°029 => la déclarante « Boss\'s Orders » n°029 (séparateur « - » ET même numéro)', () => {
+    assert.strictEqual(D.declarantePrefixeMemeNumero([boss], 'Boss\'s Orders - Giovanni', { numero: '029' }, SET_CL)?._id, 248285);
+});
+t('passe « - » : refus sans le séparateur (Burmy Trash Cloak), autre numéro, ou deux candidates', () => {
+    const burmy = { _id: 5, nomEn: 'Burmy', impressions: [imp('010', null, 'AoA')] };
+    assert.strictEqual(D.declarantePrefixeMemeNumero([burmy], 'Burmy Trash Cloak Lv.11', { numero: '010' }, { tirage: 'jp', expansion: 'AoA' }), null);
+    assert.strictEqual(D.declarantePrefixeMemeNumero([boss], 'Boss\'s Orders - Giovanni', { numero: '030' }, SET_CL), null);
+    assert.strictEqual(D.declarantePrefixeMemeNumero([boss, { ...boss, _id: 9 }], 'Boss\'s Orders - Giovanni', { numero: '029' }, SET_CL), null);
+    assert.strictEqual(D.declarantePrefixeMemeNumero([boss], 'Boss\'s Orders - Giovanni', { numero: null }, SET_CL), null);
+});
+// ── T4b fix1 : l'ALIAS de nom d'expansion (Conductive Quarry déclare « Giratina vs Dialga », sans « Deck Kit ») ─────────────────────────
+t('alias : une impression au nom d\'expansion ALIAS, du bon tirage et du bon deck, compte ; un autre deck ou un autre tirage non', () => {
+    const cq = { _id: 58456, nomEn: 'Conductive Quarry', impressions: [{ tirage: 'jp', expansion: 'Giratina vs Dialga', deck: 'Dialga Half Deck', numero: '014' }] };
+    const set = { tirage: 'jp', expansion: 'Giratina vs Dialga Deck Kit', deck: 'Dialga Half Deck', alias: ['Giratina vs Dialga'] };
+    assert.deepStrictEqual(D.declarantesDuSet([cq], set).map(c => c._id), [58456]);
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, deck: 'Giratina Half Deck' }), [], 'autre deck');
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, tirage: 'intl' }), [], 'autre tirage');
+    assert.deepStrictEqual(D.declarantesDuSet([cq], { ...set, alias: undefined }), [], 'sans alias déclaré, rien ne change (les autres sets)');
+    assert.deepStrictEqual(D.numerosDeclares(cq, set), ['14']);
+});
 console.log(process.exitCode ? `\n${ok} ok, ÉCHECS ci-dessus` : `\n${ok}/${ok} passés, 0 échec`);

@@ -295,6 +295,15 @@ const RELEVES_2026_10_11 = {
     'Burger-King-Platinum-Promos-2009': { periode: { texte: 'June 1 - 22, 2009', debut: 'June 1, 2009', fin: 'June 22, 2009', debutIso: '2009-06-01' }, url: `${W}20230420020549/${P('Burger_King_Promos_2009')}`, citation: '« distributed with Kids Meals at Burger King restaurants from June 1 to 22, 2009. Every toy was paired with two English Platinum trading cards. There are six toys »' }
 };
 for (const [k, v] of Object.entries(RELEVES_2026_10_11)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-11' };
+// ➕ 2026-10-12 (T4b, sets14) : les copies Wayback lues en T4a (archive.org seulement, 13 requêtes, horodatages relevés par redirection) ; Metagross : la
+// page du kit LED archivée sur R2 (rév. 4317795, lue en GetObject). Le Classic japonais n'a que « Late October 2023 » : pas de date, jamais inventée.
+const RELEVES_2026_10_12 = {
+    'Entry-Pack-DP': { jour: 'July 15, 2006', url: `${W}20260525123546/${P('Movie_Commemoration_VS_Pack:_Sea%27s_Manaphy_(TCG)')}`, citation: 'Release date July 15, 2006 — « a Japanese-exclusive Half Deck … first released on July 15, 2006 exclusively to the Pokémon Center stores in Japan » (Movie Commemoration VS Pack: Sea\'s Manaphy, 019 entrées = les 19 produits)' },
+    'Dialga-Half-Deck': { jour: 'July 10, 2008', url: `${W}20260615150011/${P('Giratina_vs_Dialga_(TCG)')}`, citation: 'Release date July 10, 2008 — « a Japanese-exclusive Half Deck Deck Kit … two Half Decks, Giratina and Dialga » (Dialga Half Deck 001-014)' },
+    'Giratina-Half-Deck': { jour: 'July 10, 2008', url: `${W}20260615150011/${P('Giratina_vs_Dialga_(TCG)')}`, citation: 'Release date July 10, 2008 — « a Japanese-exclusive Half Deck Deck Kit … two Half Decks, Giratina and Dialga » (Giratina Half Deck 001-014)' },
+    'Metagross-Expert-Deck': { jour: 'November 20, 2009', url: 'r2://bulba/89322/4317795.wikitext', citation: 'release=November 20, 2009 — infobox de « Leafeon vs Metagross Expert Deck (TCG) » (rév. 4317795, archive R2) ; Halfdecklist « Metagross Deck » 001/014-014/014 = les 14 produits' }
+};
+for (const [k, v] of Object.entries(RELEVES_2026_10_12)) RELEVES_BULBAPEDIA[k] = { ...v, lu: '2026-10-12' };
 // La version qu'un set désigne, quand sa page date plusieurs versions du même produit : le nom Cardmarket la porte (« … Pikachu »),
 // ou le set est le produit de base (« Standard »).
 const VERSION_DU_SET = { 'Beginning-Set-Pikachu': 'pikachu', 'Beginning-Set': 'standard', 'XY-Beginning-Set': 'standard' };

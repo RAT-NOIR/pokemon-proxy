@@ -28,11 +28,65 @@ function attaquesDeLaCarteDansLeProduit(c, p) {
     return ca.size > 0 && ca.size === pa.size && [...ca].every(a => pa.has(a));
 }
 
-/** Les déclarantes qui désignent ce produit : par le nom, puis (si plusieurs) par les attaques. `clesNom` : la fonction de la jointure. */
-function declarantesDuProduit(declarantes, nomProduit, p, clesNom) {
+// ── T4b (2026-10-12) : le DECK, le NUMÉRO comme témoin, et deux jointures supplémentaires qui n'entrent que par l'appelant ────────────
+const nu2 = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+const nn = n => { const s = String(n ?? '').trim(); return s ? s.replace(/^0+(?=\d)/, '').toUpperCase() : null; };
+
+/** Les impressions d'une carte qui sont CELLES du set : tirage, nom d'expansion déclaré et, si le set est un deck, ce deck (égalité normalisée). */
+// `alias` (T4b fix1) : des noms d'expansion ÉCRITS autrement par une page de carte (« Giratina vs Dialga » pour « Giratina vs Dialga Deck Kit »),
+// NOMMÉS par l'appelant pour un set précis ; sans `alias`, l'égalité exacte d'avant.
+function impressionsDuSetDeclare(c, { tirage, expansion, deck = null, alias = null }) {
+    const noms = [expansion, ...(alias || [])];
+    return (c.impressions || []).filter(i => i && i.tirage === tirage && noms.includes(i.expansion) && (deck == null || nu2(i.deck) === nu2(deck)));
+}
+
+/** Les cartes déclarantes d'un set : une impression (tirage, expansion, deck) — `deck` absent = tout le nom d'expansion (le comportement d'avant). */
+function declarantesDuSet(cartes, o) { return cartes.filter(c => impressionsDuSetDeclare(c, o).length > 0); }
+
+/** Les numéros (normalisés) que la carte déclare dans ce set. */
+function numerosDeclares(c, o) { return impressionsDuSetDeclare(c, o).map(i => nn(i.numero)).filter(Boolean); }
+
+/** Les attaques de la carte (non vides) sont TOUTES dans les crochets du produit : l'inclusion, que le départage STRICT refuse seule. */
+function attaquesIncluses(c, p) {
+    const ca = new Set((c.attaques || []).map(a => nu2(a.nom)).filter(Boolean)), pa = new Set((p.attaques || []).map(nu2).filter(Boolean));
+    return ca.size > 0 && [...ca].every(a => pa.has(a));
+}
+
+/**
+ * Les déclarantes qui désignent ce produit : par le nom, puis (si plusieurs) par les attaques ÉGALES, puis — SEULEMENT si l'appelant passe
+ * `o.set` (T4b : Arceus Lv.100 Plante / Feu) — par le NUMÉRO que la carte déclare dans ce set ET l'inclusion de ses attaques : le nom et le
+ * numéro (deux éléments) plus les attaques, à UNE seule carte ; sinon l'ambiguïté reste. `clesNom` : la fonction de la jointure.
+ */
+function declarantesDuProduit(declarantes, nomProduit, p, clesNom, o = null) {
     let dd = declarantes.filter(c => nomsDeclarante(c).some(nc => clesNom(nc).some(k => clesNom(nomProduit).includes(k))));
     if (dd.length > 1) { const f = dd.filter(c => attaquesDeLaCarteDansLeProduit(c, p)); if (f.length === 1) dd = f; }
+    if (dd.length > 1 && o?.set && nn(p.numero)) {
+        const f = dd.filter(c => numerosDeclares(c, o.set).includes(nn(p.numero)) && attaquesIncluses(c, p));
+        if (f.length === 1) dd = f;
+    }
     return dd;
 }
 
-module.exports = { nomsDeclarante, attaquesDeLaCarteDansLeProduit, declarantesDuProduit };
+/**
+ * LE TÉMOIN DU NUMÉRO : une jointure par le nom dont le numéro du produit et ceux que la carte déclare dans le set se CONTREDISENT (les deux
+ * présents, aucun égal) n'est pas écrite — une contradiction ne se tranche pas en écrivant (Sceptile 78071 : 003 chez nous, 004 chez Cardmarket
+ * et sur la page). Un numéro absent d'un côté ne contredit rien.
+ */
+function numeroContredit(c, p, setDecl) {
+    const n = nn(p.numero), ds = numerosDeclares(c, setDecl);
+    return !!n && ds.length > 0 && !ds.includes(n);
+}
+
+/**
+ * LA PASSE « MÊME NUMÉRO, NOM PRÉFIXE » (« Boss's Orders - Giovanni » → la déclarante « Boss's Orders »). Calibrée le 2026-10-12 sur les
+ * 64 181 produits joints de 769 sets (vérité = la ligne) : 268 paires vraies, 0 fausse avec le séparateur « - » (avec un simple espace : 1
+ * fausse, les formes de Burmy). Elle ne voit que les déclarantes RESTANTES du set ; une seule candidate, ou rien.
+ */
+function declarantePrefixeMemeNumero(restantes, nomProduit, p, setDecl) {
+    const n = nn(p.numero), np = nu2(nomProduit);
+    if (!n) return null;
+    const cs = restantes.filter(c => numerosDeclares(c, setDecl).includes(n) && nomsDeclarante(c).some(nc => np.startsWith(nu2(nc) + ' - ')));
+    return cs.length === 1 ? cs[0] : null;
+}
+
+module.exports = { nomsDeclarante, attaquesDeLaCarteDansLeProduit, declarantesDuProduit, impressionsDuSetDeclare, declarantesDuSet, numerosDeclares, attaquesIncluses, numeroContredit, declarantePrefixeMemeNumero };
