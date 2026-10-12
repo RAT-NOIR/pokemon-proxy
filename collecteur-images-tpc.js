@@ -121,7 +121,9 @@ async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
     const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
     const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null }) };
+    // règle B (pokemon-card.com) : le dictionnaire nomEn -> nomJa de nos cartes À PAGE (_id > 0), pour les fiches simples sans nomJa
+    const temoinNomJa = L.site === 'pokemon-card-com' ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
+    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null, temoinNomJa }) };
 }
 
 /** La garde de la jointure : les entrées des AUTRES sources, chacune par son empreinte (carte, source, set, numéro, clé) — elles ne
