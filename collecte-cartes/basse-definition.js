@@ -25,6 +25,9 @@ const { cleNumero } = require('./jointure');
 
 /** La marque d'un document `images` (ou d'une entrée) d'après la largeur de l'original : `{ basseDefinition: true }` ou `{}`. */
 function marqueDe(doc) {
+    // la marque DÉJÀ posée sur le document (collecteur, ou rattrapage `poser-basse-definition.js`) est reprise telle quelle : l'entrée d'une jointure
+    // rejouée (pull + push d'une entrée neuve) la garde ; à défaut, d'après la largeur de l'original
+    if (doc?.basseDefinition === true) return { basseDefinition: true };
     return estBasseDefinition(largeurOriginaleDe(doc)) ? { basseDefinition: true } : {};
 }
 

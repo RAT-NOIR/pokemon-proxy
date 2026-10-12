@@ -19,6 +19,7 @@ verifier('marqueDe : 300 px d\'original → { basseDefinition: true }', B.marque
 verifier('marqueDe : 349 → marquée ; 350 → rien ; 734 → rien', [B.marqueDe({ wOriginal: 349 }), B.marqueDe({ wOriginal: 350 }), B.marqueDe({ wOriginal: 734 })], [{ basseDefinition: true }, {}, {}]);
 verifier('marqueDe : c\'est l\'ORIGINAL qui compte, pas le fichier servi (original 1000, servi 700 → pas basse définition)', B.marqueDe({ wOriginal: 1000, w: 700 }), {});
 verifier('marqueDe : sans wOriginal, `w` sous le plafond servi (300) est l\'original', B.marqueDe({ w: 300 }), { basseDefinition: true });
+verifier('marqueDe : la marque déjà posée sur le document est reprise telle quelle (I1 : le rejeu d\'une jointure ne l\'efface pas)', [B.marqueDe({ basseDefinition: true }), B.marqueDe({ basseDefinition: true, w: 700 })], [{ basseDefinition: true }, { basseDefinition: true }]);
 verifier('marqueDe : largeur inconnue → pas de marque (inconnu n\'est pas bas)', [B.marqueDe({}), B.marqueDe(null)], [{}, {}]);
 
 // ── la règle de remplacement (pure) ────────────────────────────────────────────────────────────────────────────────

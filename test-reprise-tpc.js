@@ -28,6 +28,36 @@ const vert = { bloque: false, commit: 'abc1234', phrase: 'ok' }, rouge = { bloqu
     for (const mauvais of [[], ['*'], ['tous'], ['a b'], ['../x'], undefined]) { ({ r, f } = await R(mauvais, vert, true)); verifier(`liste non fermée (${JSON.stringify(mauvais)}) → refus, aucune écriture`, [r.bloque || (r.retenues.length === 0 && r.refusees.length > 0), f.ecrits.length], [true, 0]); }
     ({ r, f } = await R(Array.from({ length: 31 }, (_, i) => `S${i}`), vert, true));
     verifier('plus de 30 unités → plus une liste fermée', [r.bloque, f.ecrits.length], [true, 0]);
+    // ➕ 2026-10-12 — LA REPRISE tpc-asie (les 258 `trop-petit` jugés à 300, rejugés à 257) : le slug désigne l'unité de la source qui le porte
+    const SLUGS_ASIE = ['Sword-Shield-Indonesian-Promos', 'Sword-Shield-Thai-Promos', 'Legends-Awakened-ID-TH', 'Hidden-Shadow', 'Sky-Ruler', 'First-Impact'];
+    const reelles = SLUGS_ASIE.map(s => [s, ligneTpc('tpc-asie', s)]);
+    verifier('les 6 sets des 258 ont une ligne tpc-asie dans la table réelle (sinon le banc ne tourne pas sur le réel)', reelles.map(([, l]) => !!l), SLUGS_ASIE.map(() => true));
+    const docsAsie = () => Object.fromEntries(SLUGS_ASIE.map(s => [`tpc-asie/${s}`, { etat: 'fait', resultat: 'verifie' }]));
+    const RA = (slugs, garde, ecrire, d = docsAsie()) => { const f = fabrique(d); return reprendreTpc({ slugs, file: f, garde, ecrire, lignesDe: (site, s) => ligneTpc(site, s) }).then(r => ({ r, f })); };
+    ({ r, f } = await RA(SLUGS_ASIE, vert, true));
+    verifier('tpc-asie : les 6 unités `fait` sont remises en file (liste fermée, garde verte)', [r.ecrites, f.ecrits.map(e => e.f._id).sort(), f.ecrits.every(e => e.f.etat === 'fait' && e.u.$set.etat === 'attente')], [6, SLUGS_ASIE.map(s => `tpc-asie/${s}`).sort(), true]);
+    verifier('   le motif dit le seuil 257 et le commit (pas les « règles A/B » de pokemon-card.com)', [/257 px/.test(f.ecrits[0].u.$set.remisEnFileMotif), /commit abc1234/.test(f.ecrits[0].u.$set.remisEnFileMotif), /règles A\/B/.test(f.ecrits[0].u.$set.remisEnFileMotif)], [true, true, false]);
+    ({ r, f } = await RA(SLUGS_ASIE, vert, false));
+    verifier('tpc-asie : mesure seule → 6 retenues, AUCUNE écriture', [r.retenues.length, f.ecrits.length], [6, 0]);
+    ({ r, f } = await RA(SLUGS_ASIE, rouge, true));
+    verifier('tpc-asie : garde rouge → aucune écriture', [f.ecrits.length, r.bloque], [0, true]);
+    ({ r, f } = await RA(['Hidden-Shadow'], vert, true, { 'tpc-asie/Hidden-Shadow': { etat: 'attente' } }));
+    verifier('tpc-asie : une unité en attente n\'est jamais reprise', [r.refusees.map(x => x.motif), f.ecrits.length], [['etat-non-fait'], 0]);
+    ({ r, f } = await RA(['Hidden-Shadow'], vert, true, {}));
+    verifier('tpc-asie : une unité absente n\'est pas créée', [r.refusees.map(x => x.motif), f.ecrits.length], [['unite-absente'], 0]);
+    ({ r, f } = await RA(['tpc-asie/Hidden-Shadow'], vert, true));
+    verifier('préfixe explicite « tpc-asie/<slug> » accepté', [r.ecrites, f.ecrits[0]?.f._id], [1, 'tpc-asie/Hidden-Shadow']);
+    ({ r, f } = await RA(['pokemon-card-com/Hidden-Shadow'], vert, true));
+    verifier('préfixe explicite vers l\'autre source, sans ligne là-bas → hors-table (aucune écriture)', [r.refusees.map(x => x.motif), f.ecrits.length], [['hors-table'], 0]);
+    // un slug qui existe sous les DEUX sources : refus nommé sans préfixe, accepté avec
+    const deux = (site, s) => (s === 'Double' ? { site, slug: s } : null);
+    const RD = (slugs) => { const g = fabrique({ 'tpc-asie/Double': { etat: 'fait' }, 'pokemon-card-com/Double': { etat: 'fait' } }); return reprendreTpc({ slugs, file: g, garde: vert, ecrire: true, lignesDe: deux }).then(x => ({ r: x, f: g })); };
+    ({ r, f } = await RD(['Double']));
+    verifier('un slug porté par les deux sources, sans préfixe → refus « ambigu », aucune écriture', [r.refusees.map(x => x.motif), f.ecrits.length], [['ambigu'], 0]);
+    ({ r, f } = await RD(['pokemon-card-com/Double']));
+    verifier('   avec préfixe explicite → la bonne unité seulement', [r.ecrites, f.ecrits.map(e => e.f._id)], [1, ['pokemon-card-com/Double']]);
+    ({ r, f } = await RA(['asie/Hidden-Shadow', 'tpc-asie/', 'tpc-asie/../x', 'autre/Hidden-Shadow'], vert, true));
+    verifier('préfixe inconnu ou slug malformé → liste non fermée, aucune écriture', [r.bloque, f.ecrits.length], [true, 0]);
     console.log(`\n${ok} passés, ${ko} en échec`);
     process.exit(ko ? 1 : 0);
 })().catch(e => { console.error('❌ ERREUR DU BANC', e); process.exit(2); });

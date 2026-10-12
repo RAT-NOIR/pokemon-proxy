@@ -53,7 +53,7 @@ const VERROU_MS = 10 * 60 * 1000;
 const { largeurMinDe } = require('./collecte-cartes/seuils-images');   // une règle par source, pour tous les collecteurs
 const largeurMin = largeurMinDe('artofpkm');
 const { langueDuVisuel, langueDeLEntree } = require('./collecte-cartes/langue-visuel');
-const { remplacerBasseDefinition } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
+const { remplacerBasseDefinition, marqueDe } = require('./collecte-cartes/basse-definition');   // une meilleure image de même impression remplace une entrée « basseDefinition »
 const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
@@ -528,7 +528,7 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
             // l'une pour l'autre (149 fiches mesurées ainsi par l'agent du site).
             // ⚠️ `null` quand la source ne numérote pas — les sets Gym japonais n'ont aucun numéro,
             // et c'est une absence RÉELLE (6 % des images artofpkm), pas un champ oublié.
-            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), jointeLe: new Date() };
+            const entree = { set: slug, source: SOURCE, cleR2: im.cleR2, sha256: im.sha256, w: im.w, h: im.h, fmt: im.fmt, urlOriginal: im.urlOriginal, numero: im.numero ?? null, preuve, ...(noteVariante ? { noteVariante } : {}), ...langueDeLEntree({ source: SOURCE, ...im }), ...marqueDe(im), jointeLe: new Date() };   // 2026-10-12 (I1) : la marque du document voyage avec l'entrée — un rejeu (pull + push) ne l'efface plus
             // 🔴 LA CLÉ EST (carte, set, NUMÉRO), PAS (carte, set) — corrigé le 2026-09-24. Ce `$pull` retirait TOUTES les images
             // de la carte pour ce set avant d'en poser une : une carte à deux impressions dans le set (Sableye 121 et 291, deux
             // dessins, deux illustrateurs) n'en gardait que la DERNIÈRE jointe. Mesuré : 4 562 images artofpkm jointes à leur
@@ -593,6 +593,11 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
     fs.writeFileSync(path.join(dossierRapport, `images-${code}-${new Date().toISOString().slice(0, 10)}.json`), JSON.stringify({ complet, restes, echantillon: images.slice(0, 5) }, null, 1));
     return complet;
 }
+
+// ➕ 2026-10-12 : `joindreImages` s'exporte pour le banc de bout en bout (`test-jointure-basse-definition.js`) ; requis, ce fichier ne lance RIEN
+// (ni lecture de la ligne de commande, ni connexion) — le worker et les outils le lancent en ligne de commande, où `require.main === module`.
+module.exports = { joindreImages };
+if (require.main !== module) return;
 
 // 🔴 LA LIGNE DE COMMANDE DU REJEU S'ÉCRIT PAR CE QU'ELLE AUTORISE (relecture du 2026-10-05, §54) : `--simuler` n'est qu'un drapeau ;
 // mal écrit (« --simule », « --simuler=1 »), il n'était pas vu, et le rejeu ÉCRIVAIT. Sur le chemin `--rejouer-jointure`, un argument
