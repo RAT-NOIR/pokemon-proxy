@@ -125,6 +125,9 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     const jeton = jetonOuRefus();
     if (!jeton.ok) { console.error(jeton.raison); process.exit(1); }
     JETON = jeton.jeton;
+    // L'environnement d'ORIGINE, copié avant appliquer() : seul le cliquet le reçoit (ses suites ouvrent chacune leur propre banc et exigent l'URI de lecture
+    // distincte de celle d'écriture ; héritant de l'environnement déjà remplacé, smoke-test.js refusait « hôte = production »). Ni le verrou ni son serveur fils n'y touchent.
+    const envOrigine = { ...process.env };
     const banc = await ouvrirBanc({ lit: { production: 'la tranche de catalogue de la base « test » de la production' } });
     banc.appliquer();
     // R8 : appliquer() est CONSTATÉ, pas supposé. Les trois ouvertures de test_scratch plus bas (tranche, journal de la 7e cellule, nettoyage) et le serveur fils
@@ -594,7 +597,7 @@ const SIGNATURE_EXCEPTION = /is not a function|is not defined|Cannot read proper
     } else {
         try {
             execFileSync(process.execPath, ['couverture-index.js', '--cliquet', `--avec=${DOSSIER_COUVERTURE}`],
-                { cwd: __dirname, stdio: 'inherit' });
+                { cwd: __dirname, stdio: 'inherit', env: envOrigine });
         } catch (e) {
             echecs++;
             console.log('  ❌ le cliquet a reculé (voir ci-dessus)');

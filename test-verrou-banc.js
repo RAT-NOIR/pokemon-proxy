@@ -63,5 +63,19 @@ const iBanc = src.indexOf('banc.appliquer()'), iGarde = src.indexOf('verifierEnv
 const iTranche = src.indexOf('copierTranche(prodT'), iDemarrer = src.indexOf('await demarrer(');
 verifier('la garde passe APRÈS appliquer() et AVANT la tranche et le serveur fils', iBanc > -1 && iGarde > iBanc && iGarde < iTranche && iGarde < iDemarrer);
 
+// Le cliquet lance des SUITES qui ouvrent chacune leur propre banc (ouvrirBanc) : elles exigent l'environnement d'ORIGINE (URI de lecture distincte de celle d'écriture).
+// Héritant de l'environnement déjà remplacé par appliquer(), smoke-test.js refusait « hôte = production » (MONGODB_TEST_URI = MONGODB_URI = le banc du verrou) : rouge du 2026-10-12.
+const iOrigine = src.indexOf('envOrigine = { ...process.env }');
+verifier('l\'environnement d\'origine est copié AVANT banc.appliquer()', iOrigine > -1 && iOrigine < iBanc);
+verifier('le cliquet reçoit l\'environnement d\'origine (chaque suite ouvre son propre banc)', /couverture-index\.js'[\s\S]{0,200}env:\s*envOrigine/.test(src));
+
+// Le cliquet ne doit lister que des suites qui DÉMARRENT : test-setcode-numero.js refuse depuis le 2026-10-08 (marqueur « REFUS DE DÉMARRER ») et faisait échouer le verrou à chaque passage.
+const cliquetSrc = fs.readFileSync(path.join(__dirname, 'couverture-index.js'), 'utf8');
+const liste = (cliquetSrc.match(/const SUITES_HORS_LIGNE = \[([\s\S]*?)\];/) || [])[1] || '';
+const suitesListees = [...liste.replace(/\/\/.*$/gm, '').matchAll(/'([^']+\.js)'/g)].map(m => m[1]);
+verifier(`la liste des suites du cliquet est lue (${suitesListees.length} suites)`, suitesListees.length >= 10);
+const refusent = suitesListees.filter(s => /REFUS DE DÉMARRER/.test(fs.readFileSync(path.join(__dirname, s), 'utf8')));
+verifier('aucune suite du cliquet ne refuse de démarrer', refusent.length === 0 && /SUITES_REFUSEES/.test(cliquetSrc));
+
 console.log(`\n${ok} passés, ${ko} en échec`);
 process.exit(ko ? 1 : 0);

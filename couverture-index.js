@@ -44,8 +44,13 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 // ⚠️ LE CLIQUET N'UTILISE QUE LES SUITES HORS LIGNE. Le banc lit la base de PRODUCTION :
 // en faire dépendre une barrière avant push rendrait le push impossible dès que le réseau
 // tousse, et ferait porter à la barrière la disponibilité d'un service tiers.
+// 🔴 R8 (2026-10-12) — UNE SUITE QUI REFUSE DE DÉMARRER NE MESURE RIEN : `test-setcode-numero.js` s'arrête dès sa ligne 21 depuis la décision du 2026-10-08
+// (« aucun banc n'écrit dans la production » : elle charge index.js, qui se connecte à la production) ; elle faisait échouer le cliquet — donc le verrou — à chaque
+// passage. Elle sort de la liste TANT QU'ELLE N'EST PAS RÉÉCRITE sur une tranche en base de banc (décision du testeur, non tranchée), et le cliquet l'IMPRIME à
+// chaque passage : une suite retirée en silence est une protection perdue sans le dire. Son retour dans SUITES_HORS_LIGNE est la réparation.
+const SUITES_REFUSEES = { 'test-setcode-numero.js': 'refuse de démarrer depuis le 2026-10-08 (lit la production à travers index.js) — à réécrire sur une tranche de banc' };
 const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
-    'test-setcode-numero.js', 'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
+    'test-table-vintage.js', 'test-pokedex.js', 'test-acces.js',
     'test-journal-echecs.js', 'test-symbole-departage.js', 'test-banc-seaux.js',
     // ⚠️ « HORS LIGNE » VEUT DIRE « NE LIT PAS LA PRODUCTION », PAS « SANS BASE ».
     // test-acces, test-journal-echecs et celui-ci écrivent dans test_scratch — ce qui est
@@ -141,6 +146,7 @@ function mesurer(listeSuites, bavard) {
     return compteur;
 }
 
+for (const [s, raison] of Object.entries(SUITES_REFUSEES)) console.log(`  ⚠️ suite RETIRÉE de la mesure : ${s} — ${raison}`);
 const compteur = mesurer(suites, !cliquet);
 const couvertes = [...compteur.entries()].filter(([, c]) => c > 0).map(([n]) => n).sort();
 const jamais = [...compteur.entries()].filter(([, c]) => c === 0).map(([n]) => n).sort();
