@@ -170,7 +170,17 @@ const TABLE_TPC = Object.freeze([
       mesure: "AS3a 183 + AS3b 183 cartes chez TPC Asie id ; 125 produits, au plus 43 dans les numéros listés (2026-10-11)" },
     { slug: "Sky-Ruler", site: "tpc-asie", langue: "id", code: "AS4", tirage: "idth", trous: 42, cartes: 356,
       listes: [{ prefixe: "a", code: "AS4a", cartes: 178 }, { prefixe: "b", code: "AS4b", cartes: 178 }],
-      mesure: "AS4a 178 + AS4b 178 cartes chez TPC Asie id ; 122 produits, au plus 42 dans les numéros listés (2026-10-11)" }
+      mesure: "AS4a 178 + AS4b 178 cartes chez TPC Asie id ; 122 produits, au plus 42 dans les numéros listés (2026-10-11)" },
+    // ── AC3 (Tag Team Collection), lot SEA 2026-10-12 : CALIBRÉ par lecture réelle sous le verrou global tpc-asie (20 requêtes, 200 partout) ──
+    // AC3a (205 cartes, 11 pages) et AC3b (204, 11 pages) portent les numéros 001… au MÊME numéro que notre préfixe a/b : a001 « Venusaur & Snivy GX »,
+    // a002 « Rowlet & Alolan Exeggutor GX », a003 « Pheromosa & Buzzwole GX », a014 « VenomothGX » (Pokédex 49), b001 « Reshiram & Charizard GX » — 5 sur
+    // 5, nom ET PV d'accord. La liste « D » (AC3D, 172) n'est pas une demi-liste et n'est pas lue (nos 18 produits D n'ont aucune carte chez nous).
+    // `tirage: "id"` : celui du SET en base (le garde du plan compare `sets.tirage ?? sets.region`), pas celui de la famille idth des lignes AS.
+    // `trous` : les 48 produits dont le numéro est <= au dénominateur de leur liste ; les 152 autres (a206…a308, b205…b262 : variantes pleine
+    // illustration et secrètes) sont absents de la liste TPC et resteront des « absente-de-la-source ».
+    { slug: "Tag-Team-Collection", site: "tpc-asie", langue: "id", code: "AC3", tirage: "id", trous: 48, cartes: 409,
+      listes: [{ prefixe: "a", code: "AC3a", cartes: 205 }, { prefixe: "b", code: "AC3b", cartes: 204 }],
+      mesure: "AC3a 205 + AC3b 204 cartes chez TPC Asie id ; 266 produits dont 200 numérotés a/b, 48 dans les numéros listés (2026-10-12)" }
 ]);
 const ligneTpc = (site, slug) => TABLE_TPC.find(l => l.site === site && l.slug === slug) || null;
 /** Les listes source d'une ligne : celles de `listes` (une par préfixe de numéro), sinon UNE liste sans préfixe — le code et le compte de la ligne. */
