@@ -67,7 +67,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
     const scanAmbigu = async (essaisInit = 3, o = {}) => {
         const x = await inst(essaisInit, o); const r = await identifier(url, x.jeton); const j = r.json || {};
         if (!(j.analyse && j.analyse.statut === 'a-trancher')) throw new Error(`scan ambigu attendu, reçu ${r.statut} ${r.texte && r.texte.slice(0, 200)}`);
-        const q = await raw('questions').findOne({ _id: `${j.scanId}:0` });
+        const q = await raw('questions_v2').findOne({ _id: `${j.scanId}:0` });
         return { ...x, j, scanId: j.scanId, q, id: Object.fromEntries(j.analyse.cartes[0].question.choix.map(c => [c.id, c.idProduct])) };
     };
 
@@ -76,7 +76,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
         const s = await scanAmbigu(); const m0 = (await mouv(s.i._id)).length;
         const r = await repondre(url, null, { scanId: s.scanId, choix: 'a' }, { nom: '0' });
         H.v('0. sans Bearer : 401 JETON (corps v2), aucun mouvement de plus', [r.statut, r.json && r.json.erreur && r.json.erreur.code, (await mouv(s.i._id)).length - m0], [401, 'JETON', 0]);
-        const q = await raw('questions').findOne({ _id: `${s.scanId}:0` });
+        const q = await raw('questions_v2').findOne({ _id: `${s.scanId}:0` });
         H.v('   la question n\'a pas bougé (en-attente)', q.etat, 'en-attente');
     }
 
@@ -138,12 +138,12 @@ const VB = require('./_visuels-banc'); const VIS = [];
         H.v('   carte inexistante : 404', carte.statut, 404);
         const neg = await repondre(url, s.jeton, { scanId: s.scanId, carte: -1, choix: 'a' }, { nom: '6f' });
         H.v('   carte négative : 400', neg.statut, 400);
-        H.v('   aucune de ces erreurs n\'a touché l\'argent ni la question', [(await mouv(s.i._id)).length - m0, (await raw('questions').findOne({ _id: `${s.scanId}:0` })).etat], [0, 'en-attente']);
+        H.v('   aucune de ces erreurs n\'a touché l\'argent ni la question', [(await mouv(s.i._id)).length - m0, (await raw('questions_v2').findOne({ _id: `${s.scanId}:0` })).etat], [0, 'en-attente']);
     }
     // ── 7. après 24 h : 410, crédit rendu par le balayage
     {
         const s = await scanAmbigu();
-        await raw('questions').updateOne({ _id: `${s.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 25 * 3600e3) } });
+        await raw('questions_v2').updateOne({ _id: `${s.scanId}:0` }, { $set: { poseeLe: new Date(Date.now() - 25 * 3600e3) } });
         const bilan = await require('../argent/questions').balayerQuestions({}, cfg);
         const r = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '7' }), j = r.json || {};
         H.v('7. après 24 h (balayage passé) : 410 CODE_EXPIRE, facturation.rembourse true', [bilan.remboursees >= 1, r.statut, j.erreur && j.erreur.code, j.facturation && j.facturation.rembourse], [true, 410, 'CODE_EXPIRE', true]);
@@ -156,7 +156,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
         const m0 = (await mouv(s.i._id)).length;
         const r = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '6g' }), j = r.json || {};
         H.v('6bis. analyses absente, question du porteur présente : 503 INDISPONIBLE (detail analyse-absente), pas 404', [r.statut, j.erreur && j.erreur.code, j.erreur && j.erreur.detail, j.success], [503, 'INDISPONIBLE', 'analyse-absente', false]);
-        const q = await raw('questions').findOne({ _id: `${s.scanId}:0` });
+        const q = await raw('questions_v2').findOne({ _id: `${s.scanId}:0` });
         H.v('   la question est INTACTE (en-attente, non répondue), le crédit reste réservé, aucun mouvement de plus', [q.etat, q.reponse, (await mouv(s.i._id)).length - m0, await essais(s.i._id)], ['en-attente', null, 0, 2]);
         const rA = await repondre(url, autre.jeton, { scanId: s.scanId, choix: 'a' }, { nom: '6h' });
         H.v('   le même scan présenté par un AUTRE porteur : toujours 404 (la panne ne révèle rien)', [rA.statut, rA.json.erreur.code], [404, 'CODE_INVALIDE']);
@@ -169,7 +169,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
         const src = await raw('analyses').findOne({ _id: new mongoose.Types.ObjectId(s.scanId) });
         const sid = new mongoose.Types.ObjectId();
         await raw('analyses').insertOne({ ...src, _id: sid, porteur: `installation:${x.i._id}` });
-        await raw('questions').insertOne({ _id: `${sid}:0`, scanId: sid, carte: 0, porteur: { type: 'installation', id: x.i._id }, surface: 'extension', credit: { poche: 'essai' }, raison: 'lot', choix: s.q.choix, candidats: s.q.candidats, poseeLe: new Date(), etat: 'en-attente', reponse: null, priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: true });
+        await raw('questions_v2').insertOne({ _id: `${sid}:0`, scanId: sid, carte: 0, porteur: { type: 'installation', id: x.i._id }, surface: 'extension', credit: { poche: 'essai' }, raison: 'lot', choix: s.q.choix, candidats: s.q.candidats, poseeLe: new Date(), etat: 'en-attente', reponse: null, priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: true });
         const r = await repondre(url, x.jeton, { scanId: String(sid), choix: 'a' }, { nom: '10' }), j = r.json || {};
         H.v('10. lot : { debite:0, rembourse:false, motif:lot }, aucun mouvement, essais inchangés', [r.statut, j.facturation && j.facturation.debite, j.facturation && j.facturation.rembourse, j.facturation && j.facturation.motif, (await mouv(x.i._id)).length, await essais(x.i._id)], [200, 0, false, 'lot', 0, 3]);
         const rn = await repondre(url, x.jeton, { scanId: String(sid), choix: 'aucune' }, { nom: '10b' });
@@ -179,7 +179,7 @@ const VB = require('./_visuels-banc'); const VIS = [];
     {
         const c = await compte({ role: 'administrateur', solde: { accueil: 25, achete: 0 } });
         const s = await scanAmbigu(0, { compteId: c._id });
-        H.v('adm. a-trancher sans document de question (aucun crédit pris)', await raw('questions').countDocuments({ _id: `${s.scanId}:0` }), 0);
+        H.v('adm. a-trancher sans document de question (aucun crédit pris)', await raw('questions_v2').countDocuments({ _id: `${s.scanId}:0` }), 0);
         const r = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'b' }, { nom: 'adm' }), j = r.json || {};
         H.v('   réponse b : 200, identifiee, motif administrateur, rien débité', [r.statut, j.carte && j.carte.statut, j.carte && j.carte.carte && j.carte.carte.idProduct, j.facturation && j.facturation.motif, j.facturation && j.facturation.debite], [200, 'identifiee', s.id.b, 'administrateur', 0]);
         const r2 = await repondre(url, s.jeton, { scanId: s.scanId, choix: 'a' }, { nom: 'adm2' });

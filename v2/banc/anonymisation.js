@@ -143,7 +143,7 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
         try {
             const gardes = [];
             for (const m of await borner(colFn('scans_en_cours').find({ etat: { $in: ETATS_MARQUE_NON_CLOSE } }, { projection: { _id: 1 } }).toArray())) gardes.push(m._id);
-            for (const q of await borner(colFn('questions').find({ etat: { $in: ETATS_QUESTION_OUVERTS } }, { projection: { scanId: 1 } }).toArray())) if (q.scanId) gardes.push(q.scanId);
+            for (const q of await borner(colFn('questions_v2').find({ etat: { $in: ETATS_QUESTION_OUVERTS } }, { projection: { scanId: 1 } }).toArray())) if (q.scanId) gardes.push(q.scanId);
             const r = await borner(colFn('mouvements').updateMany(
                 { scanId: { $exists: true, $ne: null, $nin: gardes }, le: { $lt: limite }, etat: { $nin: etatsRenduNonConfirme() } },
                 [{ $set: { cleIdempotence: { $cond: [{ $and: [{ $eq: [{ $type: '$cleIdempotence' }, 'string'] }, { $gt: [{ $indexOfCP: ['$cleIdempotence', { $toString: '$scanId' }] }, -1] }] },
@@ -152,8 +152,8 @@ function creerAnonymisation({ cfg, colFn, borner, parPasseMax = PAR_PASSE_MAX })
         } catch (e) { echec('mouvements', e); bilan.echecs++; }
 
         // 3. les questions terminées (les ouvertes ne sont jamais effacées ici) et les analyses
-        try { bilan.questions = (await borner(colFn('questions').deleteMany({ poseeLe: { $lt: limite }, etat: { $in: ETATS_QUESTION_TERMINES } }))).deletedCount; }
-        catch (e) { echec('questions', e); bilan.echecs++; }
+        try { bilan.questions = (await borner(colFn('questions_v2').deleteMany({ poseeLe: { $lt: limite }, etat: { $in: ETATS_QUESTION_TERMINES } }))).deletedCount; }
+        catch (e) { echec('questions_v2', e); bilan.echecs++; }
         try { bilan.analyses = (await borner(colFn('analyses').deleteMany({ creeLe: { $lt: limite } }))).deletedCount; }
         catch (e) { echec('analyses', e); bilan.echecs++; }
 

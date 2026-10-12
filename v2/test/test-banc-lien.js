@@ -88,7 +88,7 @@ async function fabriquer(m, client, { jeton = jetonNeuf(), image, ligneS4 = fals
     const r2 = await Lg.rembourser(porteur, d2.credit, 'panne', { scanId: s2, maintenant: T0 }, cfg);
     // s3 : une question répondue ; s4 : une question encore en attente
     const d3 = await deb(s3, 'k3'); await Q.reserverQuestion(porteur, d3.credit, { scanId: s3, carte: 0, raison: 'egalite', candidats: [1, 2], choix: [], cleDebit: d3.cle }, cfg, T0);
-    await db.col('questions').updateOne({ _id: `${s3}:0` }, { $set: { etat: 'repondue', reponse: { aucune: false }, regleeLe: T0 } });
+    await db.col('questions_v2').updateOne({ _id: `${s3}:0` }, { $set: { etat: 'repondue', reponse: { aucune: false }, regleeLe: T0 } });
     const d4 = await deb(s4, 'k4'); await Q.reserverQuestion(porteur, d4.credit, { scanId: s4, carte: 0, raison: 'egalite', candidats: [1, 2], choix: [], cleDebit: d4.cle }, cfg, T0);
     await m.banc.apresVerdict({ corps: consent(jeton, T0), scanId: String(s1), carte: 0, issue: 'affirmee', idProduct: 4242, imageRedressee: image, detectionSure: true, versionModele: 'm1' });
     // (tour 1, I-2) s4 porte une question OUVERTE : son débit garde son scanId ; sa propre contribution au banc le prouve (voir « après 12 mois »)
@@ -114,17 +114,17 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
     Lg = require('../argent/ledger'); Q = require('../argent/questions'); MS = require('../argent/marque-scan'); R = require('../argent/reconcilier');
     const image = await carteImg();
     // chaque monde repart d'une base propre (lignes, mouvements, questions, analyses, marques, idempotence) : les comptes comptés sont ceux du monde, pas ceux du précédent
-    const vider = async () => { for (const n of ['banc_lignes', 'mouvements', 'questions', 'analyses', 'scans_en_cours', 'idempotence', 'comptes', 'installations']) await db.col(n).deleteMany({}); };
+    const vider = async () => { for (const n of ['banc_lignes', 'mouvements', 'questions_v2', 'analyses', 'scans_en_cours', 'idempotence', 'comptes', 'installations']) await db.col(n).deleteMany({}); };
 
     // ═══ À 12 mois − 1 jour : le lien tient, la correction marche, la passe ne touche à rien ═══
     await section('avant 12 mois', async () => {
         await vider(); const client = fauxClient(), m = monde(client); const w = await fabriquer(m, client, { image });
         H.v('départ : une ligne du banc, un objet R2, 4 scanId dans les mouvements, la ligne porte jeton et jour', [(await lignes()).length, client.objets.size, w.ligne.jetonEmpreinte === empreinte(w.jeton), w.ligne.le.getTime() === jourUTC(T0).getTime()], [1, 1, true, true]);
-        const avant = JSON.stringify(await lignes()), nScan = await avecScanId(), nQ = await db.col('questions').countDocuments({}), nA = await db.col('analyses').countDocuments({});
+        const avant = JSON.stringify(await lignes()), nScan = await avecScanId(), nQ = await db.col('questions_v2').countDocuments({}), nA = await db.col('analyses').countDocuments({});
         H.vrai('   les mouvements portent des scanId (au moins s1, s2, s3, s4) et une clé rb| qui contient un scanId', nScan >= 4 && (await mouvs(w)).some(x => /^rb\|[0-9a-f]{24}/.test(x.cleIdempotence || '')));
         const b = await m.purge.anonymiserLiens(T_AVANT);
         H.v('à 12 mois − 1 jour : la passe ne fait rien (0 ligne, 0 mouvement, 0 question, 0 analyse)', [b.lignes, b.attente, b.mouvements, b.questions, b.analyses, b.echecs], [0, 0, 0, 0, 0, 0]);
-        H.v('   ligne, mouvements, questions, analyses et objet : intacts', [JSON.stringify(await lignes()) === avant, await avecScanId(), await db.col('questions').countDocuments({}), await db.col('analyses').countDocuments({}), client.objets.size], [true, nScan, nQ, nA, 1]);
+        H.v('   ligne, mouvements, questions, analyses et objet : intacts', [JSON.stringify(await lignes()) === avant, await avecScanId(), await db.col('questions_v2').countDocuments({}), await db.col('analyses').countDocuments({}), client.objets.size], [true, nScan, nQ, nA, 1]);
         cur = T_AVANT;
         await m.banc.corriger({ corps: consent(w.jeton, T_AVANT), scanId: String(w.s1), carte: 0, idProduct: 777 });
         const l = (await lignes())[0];
@@ -190,7 +190,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   le scanId gardé (s4) ne retrouve NI la ligne du banc (SHA-256 avec le sel : rien), NI son objet (clés neuves, aucune ne dérive de s4)', [await db.col('banc_lignes').findOne({ _id: idLigne(w.s4) }), [...clientB.objets.keys()].some(k => k.includes(String(w.s4))), brut.includes(String(w.s4))], [null, false, false]);
         H.v('   les clés renommées sont uniques et sans scanId (anon|<_id mouvement>) ; les autres clés sont inchangées', [ms.filter(x => /^anon\|/.test(x.cleIdempotence || '')).length > 0, new Set(ms.map(x => x.cleIdempotence).filter(Boolean)).size === ms.filter(x => x.cleIdempotence).length, anciennesCles.filter(k => !/^rb\|/.test(k)).every(k => ms.some(x => x.cleIdempotence === k))], [true, true, true]);
         // — chemin 6 : questions, analyses, marque, idempotence —
-        H.v('chemin 6 — questions : celle du scan répondu est supprimée ; celle encore EN ATTENTE reste (une question ouverte n\'est jamais effacée ici)', [await db.col('questions').find({ scanId: w.s3 }).toArray(), (await db.col('questions').find({ scanId: w.s4 }).toArray()).map(q => q.etat)], [[], ['en-attente']]);
+        H.v('chemin 6 — questions : celle du scan répondu est supprimée ; celle encore EN ATTENTE reste (une question ouverte n\'est jamais effacée ici)', [await db.col('questions_v2').find({ scanId: w.s3 }).toArray(), (await db.col('questions_v2').find({ scanId: w.s4 }).toArray()).map(q => q.etat)], [[], ['en-attente']]);
         H.v('   analyses : plus aucune pour ce compte', await db.col('analyses').countDocuments({ porteur: w.pk }), 0);
         const marque = await db.col('scans_en_cours').findOne({ _id: w.s1 });
         H.vrai('   la marque du scan est CLOSE et expire (TTL 7 jours) avant 12 mois ; l\'idempotence de même', marque && marque.etat === 'livre' && marque.expireLe <= T_APRES && (await db.col('idempotence').findOne({ cle: `claim-${w.cle}-1` })).expireLe <= T_APRES);
@@ -263,7 +263,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
     await section('argent non résolu', async () => {
         await vider(); const client = fauxClient(), m = monde(client); const w = await fabriquer(m, client, { image });
         await db.col('mouvements').updateOne({ compteId: w.porteur.id, type: 'debit', scanId: w.s4 }, { $set: { etat: 'rendu-echoue', raisonRendu: 'poche-introuvable' }, $unset: { expireLe: '' } });
-        await db.col('questions').deleteMany({ scanId: w.s4 });      // la question ouverte protégerait déjà ce débit (I-2) : ici seul son ÉTAT « rendu-echoue » doit le protéger
+        await db.col('questions_v2').deleteMany({ scanId: w.s4 });      // la question ouverte protégerait déjà ce débit (I-2) : ici seul son ÉTAT « rendu-echoue » doit le protéger
         client.dateObjet = T_APRES; await m.purge.anonymiserLiens(T_APRES);
         const reste = await db.col('mouvements').find({ compteId: w.porteur.id, scanId: { $exists: true, $ne: null } }).toArray();
         H.v('un débit « rendu-echoue » (jamais expiré, listé par la réconciliation) GARDE son scanId ; tous les autres le perdent', [reste.map(x => [String(x.scanId), x.etat])], [[[String(w.s4), 'rendu-echoue']]]);
@@ -387,12 +387,12 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         const sM1 = await mv(L, 'L'), sM0 = await mv(avantL, 'avant');
         const an = async (creeLe) => { const _id = new mongoose.Types.ObjectId(); await db.col('analyses').insertOne({ _id, porteur: 'compte:borne', surface: 'extension', statut: 'x', cartes: [], produits: [], facturation: {}, creeLe, expireLe: apres(2 * LIEN_MS) }); return _id; };
         const aL = await an(L), aAvant = await an(avantL);
-        const qs = async (poseeLe) => { const scanId = new mongoose.Types.ObjectId(); await db.col('questions').insertOne({ _id: `${scanId}:0`, scanId, carte: 0, porteur: { type: 'compte', id: 'borne' }, etat: 'repondue', poseeLe }); return scanId; };
+        const qs = async (poseeLe) => { const scanId = new mongoose.Types.ObjectId(); await db.col('questions_v2').insertOne({ _id: `${scanId}:0`, scanId, carte: 0, porteur: { type: 'compte', id: 'borne' }, etat: 'repondue', poseeLe }); return scanId; };
         const qL = await qs(L), qAvant = await qs(avantL);
         client.dateObjet = BASC; const b = await m.purge.anonymiserLiens(BASC);
         H.v('mouvement EXACTEMENT à la limite : garde son scanId ; une milliseconde avant : le perd', [!!(await db.col('mouvements').findOne({ scanId: sM1 })), !!(await db.col('mouvements').findOne({ scanId: sM0 }))], [true, false]);
         H.v('analyse EXACTEMENT à la limite : gardée ; une milliseconde avant : supprimée', [!!(await db.col('analyses').findOne({ _id: aL })), !!(await db.col('analyses').findOne({ _id: aAvant }))], [true, false]);
-        H.v('question terminée EXACTEMENT à la limite : gardée ; une milliseconde avant : supprimée', [!!(await db.col('questions').findOne({ scanId: qL })), !!(await db.col('questions').findOne({ scanId: qAvant }))], [true, false]);
+        H.v('question terminée EXACTEMENT à la limite : gardée ; une milliseconde avant : supprimée', [!!(await db.col('questions_v2').findOne({ scanId: qL })), !!(await db.col('questions_v2').findOne({ scanId: qAvant }))], [true, false]);
         H.v('   (bilan : 1 mouvement, 1 question, 1 analyse)', [b.mouvements, b.questions, b.analyses], [1, 1, 1]);
     });
 
@@ -427,7 +427,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   AU-DELÀ de la grâce : la ligne est SUPPRIMÉE par la base seule (0 ligne), l\'alerte retombe à 0', [e1.forcees, (await lignes()).length, a1 && a1.lignesEnEchec, a1 && a1.objetsEnAttente], [1, 0, 0, 0]);
         // (2) le stockage est EN PANNE (lecture ET suppression) : dans la grâce la ligne reste ; au-delà elle est supprimée et ses clés mises en attente
         await vider(); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
-        await db.col('questions').deleteMany({});         // aucune question ouverte : aucun débit gardé, le verdict ne dépend que de l'alerte du banc
+        await db.col('questions_v2').deleteMany({});         // aucune question ouverte : aucun débit gardé, le verdict ne dépend que de l'alerte du banc
         client.panne.lire = true; client.panne.del = true;
         const cap3 = capturer(); const f0 = await m.purge.anonymiserLiens(PG0); cap3.rendre();
         const prise = (await lignes())[0], a2 = await alerte();
@@ -496,7 +496,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
         H.v('   les grâces acceptées par la configuration sont exactement celles de 0 à 21 jours', acceptees, [0, 7, 14, 21]);
         // (4) reconcilier lit l'alerte
         await vider(); await db.col('banc_objets_a_supprimer').deleteMany({}); await db.col('banc_alertes').deleteMany({}); client = fauxClient(); m = monde(client); w = await fabriquer(m, client, { image });
-        await db.col('questions').deleteMany({});         // aucune question ouverte : le seul motif possible d'une réconciliation non propre est l'alerte du banc
+        await db.col('questions_v2').deleteMany({});         // aucune question ouverte : le seul motif possible d'une réconciliation non propre est l'alerte du banc
         const T0r = await R.reconcilierTous({ cfg, maintenant: T0 });
         H.v('(4) témoin : sans aucune passe en échec, la réconciliation est propre et ne dit rien du banc', [T0r.propre, T0r.banc], [true, null]);
         client.panne.lire = true; const cap6 = capturer(); await m.purge.anonymiserLiens(PG0); cap6.rendre(); client.panne.lire = false;
@@ -524,7 +524,7 @@ async function section(nom, f) { try { await f(); } catch (e) { H.v(`${nom} : la
     // ═══ (tour 2, M-1) les gardes de la lecture de l'argent : question « en-reglement », garde illisible ═══
     await section('gardes de l\'argent', async () => {
         await vider(); let client = fauxClient(), m = monde(client); let w = await fabriquer(m, client, { image });
-        await db.col('questions').updateOne({ _id: `${w.s4}:0` }, { $set: { etat: 'en-reglement', priseLe: T0 } });
+        await db.col('questions_v2').updateOne({ _id: `${w.s4}:0` }, { $set: { etat: 'en-reglement', priseLe: T0 } });
         const n4 = await db.col('mouvements').countDocuments({ scanId: w.s4 });
         client.dateObjet = T_APRES; await m.purge.anonymiserLiens(T_APRES);
         H.v('une question « en-reglement » protège elle aussi le débit de son scan', [n4 >= 1, await db.col('mouvements').countDocuments({ scanId: w.s4 })], [true, n4]);

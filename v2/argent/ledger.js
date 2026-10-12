@@ -184,7 +184,7 @@ async function rendreLeScan(porteur, motif, { scanId, compteur = 'panne', jourDe
         if (pendantes[0].cleOrigine) cle = `rb|${scanId}|${pendantes[0]._id}`;
         // M2 — une panne ne rembourse pas une question DÉJÀ répondue par un candidat : un résultat A été livré
         // `sans-prix` est du côté des QUESTIONS (comme avant le lot PLAFONDS) : il rembourse justement une carte tranchée par une réponse, dont le prix est illisible
-        if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
+        if (compteur !== 'question' && compteur !== 'sans-prix' && await col('questions_v2').findOne({ scanId, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'repondue', lot: { $ne: true }, 'reponse.aucune': false }, { projection: { _id: 1 } }))
             return { rendu: false, raisonNonRembourse: 'deja-livre' };
     } catch (e) { console.error(`❌ [v2 rembourser] lecture des débits : ${codeErr(e)}`); return { rendu: false, raisonNonRembourse: 'erreur' }; }
     try { await col('mouvements').insertOne({ ...base(porteur), le: maintenant, surface: porteur.surface, type: 'remboursement', delta: 0, poche: null, motif, scanId, etat: 'rembourse', cleIdempotence: cle, expireLe: expireMouvement(maintenant, cfg) }); }

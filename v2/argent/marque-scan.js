@@ -104,7 +104,7 @@ async function traiter(m, argent, maintenant, bilan) {
         const fait = await resultatPersiste(m, maintenant);
         if (fait) { await finir(m, 'confirme', fait, maintenant); bilan.confirmees++; return; }
         // une question encore en attente sur ce scan est annulée D'ABORD (comme creditV2.rembourser) : un crédit rendu ne doit plus pouvoir être « répondu »
-        await db.col('questions').updateMany({ scanId: m._id, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'en-attente' },
+        await db.col('questions_v2').updateMany({ scanId: m._id, 'porteur.type': porteur.type, 'porteur.id': porteur.id, etat: 'en-attente' },
             { $set: { etat: 'non-remboursee', rembourse: false, raisonNonRembourse: 'deja-rembourse', annuleePar: 'arret-serveur', regleeLe: maintenant } });
         const r = await argent.rembourser(porteur, { rattrapage: true }, 'arret-serveur', { scanId: m._id, compteur: 'panne', sansPlafond: true, maintenant });   // `credit` ne sert qu'à passer la garde : les unités se lisent au journal
         const raison = (r && r.raisonNonRembourse) || 'erreur';

@@ -45,7 +45,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const instLiee0 = await col('installations').findOne({ jetonEmpreinte: J.empreinte(tok) });
     H.v('A0b. (avant) la liaison réelle a fusionné : l\'installation est à 0 essai et 0 acheté', [instLiee0.essais, instLiee0.achete], [0, 0]);
     // une question en attente du compte
-    await col('questions').insertOne({ _id: SID + ':0', scanId: SID, carte: 0, porteur: { type: 'compte', id: c._id }, surface: 'extension', credit: { poche: 'accueil' }, raison: null, choix: [], candidats: [], poseeLe: new Date(), etat: 'en-attente', reponse: null, priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: false });
+    await col('questions_v2').insertOne({ _id: SID + ':0', scanId: SID, carte: 0, porteur: { type: 'compte', id: c._id }, surface: 'extension', credit: { poche: 'accueil' }, raison: null, choix: [], candidats: [], poseeLe: new Date(), etat: 'en-attente', reponse: null, priseLe: null, regleeLe: null, rembourse: null, raisonNonRembourse: null, lot: false });
     await col('mouvements').insertOne({ compteId: c._id, le: new Date(), type: 'debit', delta: -1, poche: 'accueil', credit: { poche: 'accueil' }, scanId: SID, etat: 'reserve', cleIdempotence: 'scan|compte|' + SID, surface: 'extension' });
     // la victime réinitialise (lien posé directement)
     const mvAvantReinit = await col('mouvements').countDocuments({}), cAvantReinit = await col('comptes').findOne({ _id: c._id });
@@ -79,7 +79,7 @@ const pret = require('../pret'); const { lireConfig } = require('../config'); co
     const ident = await jouer('POST /api/identifier', post('/api/identifier', { contrat: 2, imageUrls: [require('../../verrou/charges.json').charges.find(x => x.cellule === 'occidentale').imageUrl], title: null, description: null, prixVinted: null, devise: null, marche: 'vinted.fr', versionExtension: '2.0.0', langueInterface: 'fr' }, { ...bearer, 'idempotency-key': `rel-${Date.now()}` }));
     H.v('B6. identification avec le jeton délié : 429 QUOTA (aucune poche : ni la sienne, vidée par la fusion, ni celle du compte), chaîne non appelée, aucun mouvement', [ident.statut, ident.json && ident.json.erreur && ident.json.erreur.code, appelsChaine, (await col('mouvements').countDocuments({})) - mv0], [429, 'QUOTA', 0, 0]);
     const rep = await jouer('POST /api/identifier/reponse', post('/api/identifier/reponse', { scanId: SID, carte: 0, choix: 'aucune' }, { ...bearer, 'idempotency-key': `rel2-${Date.now()}` }));
-    const qv = await col('questions').findOne({ _id: SID + ':0' });
+    const qv = await col('questions_v2').findOne({ _id: SID + ':0' });
     H.v('B7. répondre à la question en attente du compte avec le jeton délié : refusé (≥ 400), question intacte', [rep.statut >= 400, qv.etat], [true, 'en-attente']);
     await jouer('POST /api/retour-live', post('/api/retour-live', { scanId: SID, idProduct: 1 }, bearer));
     const cApres = await col('comptes').findOne({ _id: c._id });

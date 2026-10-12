@@ -648,7 +648,7 @@ async function parcourir() {
         const p = await parcourir();
         H.v(`10. parcours de ${p.collections} collections / ${p.docs} documents : aucun Buffer, aucune chaîne data:, aucune chaîne > 10 Ko`, p.suspects, []);
         const noms = (await mongoose.connection.db.listCollections().toArray()).map(x => x.name);
-        H.vrai('    (le dénominateur contient bien les collections écrites par un scan : analyses, annonces, journal_scans, mouvements, questions, idempotence)', ['analyses', 'annonces', 'journal_scans', 'mouvements', 'questions'].every(n => noms.includes(n)));
+        H.vrai('    (le dénominateur contient bien les collections écrites par un scan : analyses, annonces, journal_scans, mouvements, questions, idempotence)', ['analyses', 'annonces', 'journal_scans', 'mouvements', 'questions_v2'].every(n => noms.includes(n)));
         const docsBanc = []; for (const n of noms.filter(x => /banc/i.test(x))) docsBanc.push([n, await raw(n).countDocuments({})]);
         H.vrai(`    rien n'est conservé pour le banc (le scanner ne transmet aucun consentement) : 0 document dans ${docsBanc.length} collection(s) du banc (${docsBanc.map(x => x[0]).join(', ')})`, docsBanc.every(x => x[1] === 0));
     }
