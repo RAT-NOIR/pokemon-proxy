@@ -125,7 +125,16 @@ const ARTOFPKM = {
     // 2026-10-05 (nuit), prouver-sources-artofpkm.js : trois pages DISTINCTES, même critère. Refusées la même nuit : LED → 206 (le set
     // porte les DEUX decks du kit en sous-sections, la ligne un seul : n°008 « Dual Ball » du deck Metagross est chez nous Good Rod du
     // deck Leafeon) et HXY → 223 (n°038 : trois cartes « Poké Ball » chez nous, le numéro ne désigne pas UNE carte).
-    svC: { ids: [483], noms: ['Scarlet & Violet Starter set ex Pikachu ex & Pawmot'], note: 'Cardmarket « ex Starter Set Pikachu ex Pawmot » ; 3/3 : 001 Pikachu ex, 010 Lechonk, 017 Pokémon Catcher' }
+    svC: { ids: [483], noms: ['Scarlet & Violet Starter set ex Pikachu ex & Pawmot'], note: 'Cardmarket « ex Starter Set Pikachu ex Pawmot » ; 3/3 : 001 Pikachu ex, 010 Lechonk, 017 Pokémon Catcher' },
+    // 2026-10-12 (lot V8) : les quatre sets sans page créés le matin (T4b). Preuve : la liste lue (étape 1), PAGES de carte (numéro imprimé ET nom, étape 2), puis
+    // la jointure de production rejouée en simulation sur les noms et numéros — le numéro ET le nom de l'image désignent la même carte de NOTRE deck.
+    // ⚠️ Un kit à deux decks (176, 206) se range en SOUS-SECTIONS (648/649, 642/643) : leurs images ne se joignent que par le numéro ET le nom
+    // (sous-section-image.js) — le deck d'en face, ou une énergie que nous nommons autrement, reste un trou nommé, jamais un visuel d'une autre carte.
+    MSM: { ids: [140], noms: ["Movie Commemoration VS Pack: Sea's Manaphy"], note: 'Cardmarket « Entry Pack DP » ; 19/19 numéro+nom ; pages lues 001/019 Phantom\'s Beedrill, 010/019 Ash\'s Aipom, 019/019 Rainbow Energy ; originaux 593 px' },
+    // la liste 176 est lue par DEUX lignes (DHD, GHD) : `setDeBase` sur les deux, sans quoi la seconde cherche ses images sous son propre slug (collecteur-images.js l.386)
+    DHD: { ids: [176], noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'Cardmarket « Giratina vs Dialga Deck Kit », sous-section 649 « Dialga Half Deck » ; 13/14 numéro+nom ; pages lues 007/014 Dialga, 014/014 Conductive Quarry ; originaux 500 px ; liste partagée avec GHD' },
+    GHD: { ids: [176], noms: ['Battle Starter Pack Giratina vs Dialga'], setDeBase: 'DHD', note: 'sous-section 648 « Giratina Half Deck » ; 12/13 numéro+nom ; page lue 007/014 Giratina ; Warp Point sans carte chez nous ; liste partagée avec DHD' },
+    MED: { ids: [206], noms: ['Leafeon vs Metagross Expert Deck +Online'], note: 'sous-section 643 « Metagross Deck » ; 14/14 numéro+nom (le deck Leafeon, sous-section 642, est refusé par le nom : 0 jointe) ; pages lues 005/014 Metagross ×2 (deux images au même numéro), 008/014 Dual Ball ; originaux 444-500 px' }
 };
 
 // LES LIGNES AUTOMATIQUES : correspondance GÉNÉRÉE par `preparer-images-auto.js --correspondre` (nom normalisé,

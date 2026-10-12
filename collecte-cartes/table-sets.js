@@ -250,6 +250,23 @@ const TABLE = [
     // MESURÉ avant d'écrire, sur la page archivée (zéro requête) : section « EX Holon Phantoms » 111 entrées = encards 111 ;
     // 77 cartes déclarent déjà l'impression intl, 77/77 au nom de la carte TCGdex du même numéro (δ mis à part : nos noms l'omettent).
     { code: 'HP', exp: 1551, prod: 112, nom: 'EX Holon Phantoms', slugSet: 'EX-Holon-Phantoms', slugSetConstruit: 'forme des 14 expansions EX voisines (EX-<Nom>), aucun produit de 1551 appris par Cardmarket (2026-09-26)', region: 'occidental', bulba: { titre: 'EX Holon Phantoms (TCG)', tirage: 'intl', setlist: ['EX Holon Phantoms'], expansion: 'EX Holon Phantoms' }, attendu: 112, verifie: { le: '2026-09-26', page: 'EX Holon Phantoms (TCG)', entrees: { 'EX Holon Phantoms': 111, 'Holon Phantom': 52, 'Additional cards': 4 }, note: 'page archivée (celle de PCG7) : section occidentale 111 entrées = encards 111 ; 77 cartes déclarent « EX Holon Phantoms » intl, 77/77 au nom TCGdex du même numéro ; code HP (TCGdex ex13 + 17/17 slugs WCD)' } },
+
+    // ════ QUATRE SETS SANS PAGE CRÉÉS LE 2026-10-12 (lot T4b), POUR LEURS VISUELS artofpkm — lot V8, 2026-10-12 ═══════════════════════
+    // Les sets existent (creer-sets-sans-page.js : texte et fiches par désignation croisée) mais aucune LIGNE ne les portait : le collecteur d'images
+    // lit `ligne(code)` (slugSet, `bulba.expansion`, `bulba.deck`), et une unité pour un code sans ligne sort `refuse-table`. Même forme que les
+    // demi-decks du lot 6 (PtGL…) : sans page, jp, `deck` quand le kit en porte deux. ⚠️ Posées À LA MAIN dans cette table, JAMAIS dans
+    // table-sets-sans-page.json : generer-table-sans-page.js réécrit ce fichier en entier et effacerait ces lignes sans un mot.
+    // DHD et GHD : Cardmarket « Giratina vs Dialga Deck Kit » = la liste artofpkm 176 « Battle Starter Pack Giratina vs Dialga » (deux sous-sections,
+    // une par demi-deck) ; l'écriture « Giratina vs Dialga » (sans « Deck Kit ») est celle de Conductive Quarry, seule impression qui la porte.
+    // MED : le kit « Leafeon vs Metagross Expert Deck » (liste 206, sous-sections 642 Leafeon et 643 Metagross) ; la ligne ne sert que le deck Metagross
+    // (la ligne LED, elle, ne sert que Leafeon — et n'a pas de source : refusée au 2026-10-05 pour ses deux decks, levée ici par le numéro ET le nom).
+    ...[
+        ['MSM', 4319, 19, 'Entry Pack DP', 'Entry-Pack-DP', "Movie Commemoration VS Pack: Sea's Manaphy", null, 19, 'liste artofpkm 140 : 19 entrées = 19 produits, numéro ET nom concordants 19/19 ; pages lues 001/019 Phantom\'s Beedrill, 010/019 Ash\'s Aipom, 019/019 Rainbow Energy'],
+        ['DHD', 4300, 14, 'Dialga Half Deck', 'Dialga-Half-Deck', ['Giratina vs Dialga Deck Kit', 'Giratina vs Dialga'], 'Dialga Half Deck', 14, 'sous-section artofpkm 649 « Dialga Half Deck » : 13 numéros ET noms concordants sur 14 ; pages lues 007/014 Dialga, 014/014 Conductive Quarry'],
+        ['GHD', 4301, 14, 'Giratina Half Deck', 'Giratina-Half-Deck', ['Giratina vs Dialga Deck Kit', 'Giratina vs Dialga'], 'Giratina Half Deck', 13, 'sous-section artofpkm 648 « Giratina Half Deck » : 12 numéros ET noms concordants sur 13 ; page lue 007/014 Giratina ; Warp Point (n°012) sans carte chez nous : trou'],
+        ['MED', 4267, 14, 'Metagross Expert Deck', 'Metagross-Expert-Deck', 'Leafeon vs Metagross Expert Deck', 'Metagross Deck', 14, 'sous-section artofpkm 643 « Metagross Deck » : 14 numéros ET noms concordants sur 14 ; pages lues 005/014 Metagross (deux images au même numéro), 008/014 Dual Ball']
+    ].map(([code, exp, prod, nom, slugSet, expansion, deck, designes, note]) => ({ code, exp, prod, nom, slugSet, region: 'japonais', bulba: { titre: null, sansPage: true, tirage: 'jp', expansion, ...(deck ? { deck } : {}) }, attendu: prod,
+        verifie: { le: '2026-10-12', page: null, entrees: { [Array.isArray(expansion) ? expansion[0] : expansion]: designes }, note: `set créé par creer-sets-sans-page.js (T4b, ${designes} cartes désignées) ; ligne posée pour les visuels artofpkm : ${note}` } })),
 ].map(l => {
     if (l.exp || l.region === 'occidental') return l;   // une ligne qui porte son `exp` porte toutes ses colonnes
     const s = parCode[l.code];
