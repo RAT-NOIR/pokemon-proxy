@@ -1,12 +1,15 @@
 'use strict';
 // MOYENS-B1 (O4) — un limiteur PAR PORTEUR sur GET /api/compte, POST /api/solde, POST /api/identifier/reponse et POST /api/retour-live.
 // Les défauts (600 / 1 200 / 600 / 600 par heure) sont posés SANS mesure d'usage réelle : le banc fige leur existence et leur réglage, pas leur justesse.
-// Chaque variable est réglée à 3 ici ; la 4e requête d'un même porteur rend 429 DEBIT avec Retry-After, le porteur voisin n'est pas touché,
+// Les variables sont réglées à 3 / 4 / 5 / 6 ici (distinctes) ; la N+1e requête d'un même porteur rend 429 DEBIT avec Retry-After, le porteur voisin n'est pas touché,
 // et les compteurs des quatre routes sont indépendants.
 const express = require('express');
 const H = require('./_harnais'); const A = require('./_b2-aide'); const { col } = require('../db'); const M = require('../modeles'); const P = require('../comptes/mots-de-passe');
 const pret = require('../pret'); const { lireConfig } = require('../config'); const { creerCourrierMemoire } = require('../comptes/courrier');
 (async () => {
+    // Tour 2 (I-1) : les limiteurs comptent par FENÊTRE FIXE (l'heure UTC, limites.js). Un banc qui franchirait la frontière en pleine série verrait son compteur repartir à zéro (la N+1e requête rendrait 200).
+    // Même garde que test-contrat-reel.js : si la frontière d'heure est à moins de 60 s, on l'attend (le banc dure ~4 s ; 60 s couvrent aussi une machine chargée) avant de rien jouer.
+    { const FEN = 3600e3, reste = FEN - (Date.now() % FEN); if (reste < 60e3) { console.log(`   frontière de fenêtre (1 h) dans ${Math.round(reste / 1000)} s : attente avant de jouer`); await new Promise(r => setTimeout(r, reste + 2000)); } }
     // ── la configuration : défauts, réglage, valeur mal formée
     const def = lireConfig({ MONGODB_BASE: 'test_scratch' }).limites;
     H.v('défauts : compte 600, solde 1 200, réponse 600, retour-live 600 par heure', [def.compteParPorteurHeure, def.soldeParPorteurHeure, def.reponseParPorteurHeure, def.retourLiveParPorteurHeure], [600, 1200, 600, 600]);
