@@ -59,6 +59,33 @@ verifier('sauf est appliqué à la SETLIST : la carte retirée n\'y compte plus,
 d = designerParSetlist(ctx({ 1: { 900: [300001] } }, [{ carte: rabsca, numero: '184' }, { carte: rabscaVieille, numero: '12' }]), P1);
 verifier('… sans sauf, la Setlist porte DEUX cartes à ce nom et ces attaques → refus, mais le cas est ATTEINT (la clé a eu à choisir)', [d.carte, d.atteint], [null, true]);
 
+// ── tour 2 : le mécanisme de « SM-P Vikavolt » (relecture du danger) ──
+// Deux pages du même texte, orthographe d'attaque différente (« Electro Cannon » / « Electricannon »), Cardmarket les range sous UNE métacarte. Le frère joint
+// ne désigne que la page A ; la page B n'est pas « compatible » (orthographe), donc l'ancienne clé choisissait A pour un produit qui était B.
+const vikavolt = carte(216902, 'Vikavolt', ['Electro Cannon']), vikavoltB = carte(234669, 'Vikavolt', ['Electricannon']);
+const PV = produit(470104, 'Vikavolt [Strong Charge | Electro Cannon]');
+d = designerParSetlist(ctx({ 1: { 900: [216902] } }, [{ carte: vikavolt, numero: '007' }, { carte: vikavoltB, numero: '309' }]), { ...PV, idProduct: 824921 });
+verifier('homonyme à attaque d\'orthographe VOISINE (Electricannon / Electro Cannon) dans la Setlist → refus (jamais la page « compatible » par chance)', [d.carte, /attaque voisine/.test(d.raison)], [null, true]);
+d = designerParSetlist(ctx({ 1: { 900: [216902] } }, [{ carte: vikavolt, numero: '007' }, { carte: carte(234670, 'Vikavolt', ['Thunder Shock']), numero: '309' }]), { ...PV, idProduct: 824921 });
+verifier('… un homonyme aux attaques SANS rapport (Thunder Shock) ne gêne pas', [d.carte?._id, d.numero], [216902, '007']);
+// le témoin des attaques du produit contre celles de la carte (cleAttaque de la production) : un désaccord contredit ; l'absence n'est pas un désaccord
+const { temoinAttaques } = require('./collecte-cartes/cle-setlist-metacarte');
+verifier('témoin : Zacian V [Roar of the Sword | Storm Slash] contre une carte dont l\'attaque est Brave Blade → CONTREDIT', temoinAttaques(carte(244903, 'Zacian V', ['Brave Blade']), produit(1, 'Zacian V [Roar of the Sword | Storm Slash]')), 'contredit');
+verifier('témoin : au moins une attaque commune (le talent entre crochets ne compte pas) → concorde', temoinAttaques(carte(264744, 'Zacian V', ['Storm Slash']), produit(1, 'Zacian V [Roar of the Sword | Storm Slash]')), 'concorde');
+verifier('témoin : produit sans crochets, ou carte sans attaque lisible → NON contredit (inconnu)', [temoinAttaques(carte(1, 'Switch', []), produit(1, 'Switch')), temoinAttaques(carte(2, 'Mew', []), produit(1, 'Mew [Psychic]')), temoinAttaques(carte(3, 'Mew', ['Psychic']), produit(1, 'Mew'))], ['inconnu', 'inconnu', 'inconnu']);
+
+// ── tour 2 : la FORME du numéro, par les fonctions de la production (cleNumero, chiffresDuNumero) ──
+const { comparerNumeros } = require('./collecte-cartes/calibration-setlist-metacarte');
+verifier('numéros : « 22 » et « 022 » = égaux ; « SWSH022 » et « 22 » = même numéro, FORME différente ; « SWSH022 » et « SM022 » = différents ; « 22 » et « 23 » = différents',
+    [comparerNumeros('22', '022'), comparerNumeros('SWSH022', '22'), comparerNumeros('22', 'SWSH022'), comparerNumeros('SWSH022', 'SWSH022'), comparerNumeros('SWSH022', 'SM022'), comparerNumeros('22', '23')], ['egal', 'forme', 'forme', 'egal', 'different', 'different']);
+const { planDuSet: planDuSet2 } = require('./collecte-cartes/cle-setlist-metacarte');
+const bas2 = meta({ 1: { 900: [321492] } });
+const planForme = (lignesDuSet, numero) => planDuSet2({ base: bas2, entrees: [{ carte: rabsca, numero }], produits: [P1], lignesDuSet, jointsIds: new Set([900]), tirage: 'id', expansion: 'X' });
+let QF = planForme([{ carteId: 5, numeroFiche: 'SWSH001' }, { carteId: 6, numeroFiche: 'SWSH002' }], '184');
+verifier('plan : les lignes du set écrivent « SWSH001 », la Setlist « 184 » → refusé « forme du numéro », rien n\'est posé', [QF.retenus.length, QF.refus.length, /forme du numéro/.test(QF.refus[0]?.raison || '')], [0, 1, true]);
+QF = planForme([{ carteId: 5, numeroFiche: '001' }, { carteId: 6, numeroFiche: '002' }], '184');
+verifier('plan : les lignes du set écrivent des numéros nus comme la Setlist → posé', [QF.retenus.length], [1]);
+
 // ── le plan d'un set ──
 const { planDuSet } = require('./collecte-cartes/cle-setlist-metacarte');
 const bas = meta({ 1: { 900: [321492] } });

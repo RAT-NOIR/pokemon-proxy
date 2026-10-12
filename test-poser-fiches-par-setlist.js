@@ -51,12 +51,14 @@ const attaquesDe = i => [`Aa${i}`, `Bb${i}`];
 const carte = (i, id = 1000 + i) => ({ _id: id, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), impressions: [], sets: ['SetX'], liens: { idProduct: [] } });
 const nomProduit = i => `Mon${i} [${attaquesDe(i).join(' | ')}]`;
 const L = { code: 'X/ID', slugSet: 'SetX', exp: 1, bulba: { tirage: 'id', expansion: 'X Promo' } };
-function monde({ veriteFausse = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false } = {}) {
+function monde({ veriteFausse = false, veriteContredite = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false } = {}) {
     const cartes = [1, 2, 3, 4].map(i => carte(i)); const homonyme = { ...carte(3, 1503) };
+    // veriteFausse : la ligne de vérité de P1 pointe la carte 2, dont les attaques SONT celles du produit (le témoin ne la contredit pas) → un vrai faux de l'épreuve A
+    if (veriteFausse) cartes[1].attaques = attaquesDe(1).map(nom => ({ nom }));
     if (impressionSansNumero) cartes[1].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: null, source: 'parseur' });
     const produits = [], lignes = [];
     const joint = (idProduct, i, meta, carteId = 1000 + i) => { produits.push({ idProduct, name: nomProduit(i), idMetacard: meta }); lignes.push({ _id: `${carteId}|${idProduct}`, carteId, idProduct, slugSet: 'SetX', numeroFiche: String(i), preuve: 'set+numero' }); };
-    for (const i of [1, 2, 3, 4]) { joint(100 + i, i, 10 + i, veriteFausse && i === 1 ? 1002 : 1000 + i); joint(200 + i, i, 10 + i); }
+    for (const i of [1, 2, 3, 4]) { joint(100 + i, i, 10 + i, (veriteFausse || veriteContredite) && i === 1 ? 1002 : 1000 + i); joint(200 + i, i, 10 + i); }
     joint(401, 1, 11); joint(403, 3, 13);
     produits.push({ idProduct: 301, name: nomProduit(1), idMetacard: 11 }, { idProduct: 302, name: nomProduit(2), idMetacard: 12 });
     const entrees = [...cartes.map((c, i) => ({ carte: c, numero: String(i + 1) })), { carte: homonyme, numero: '13' }];
@@ -98,6 +100,9 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     w = monde({ veriteFausse: true }); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
     verifier('refus : un FAUX à l\'épreuve A (vérité de la base ≠ carte désignée) → exit 1, rien d\'écrit', [r.code, /faux de carte/.test(r.sorties), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [1, true, true]);
+    w = monde({ veriteContredite: true });
+    r = await lancer(w, ['--codes=X/ID']);
+    verifier('témoin sur la vérité : une ligne « vérité » dont la carte est CONTREDITE par les attaques du produit est écartée de la population et comptée (pas un faux de la clé)', [r.code, /CONTREDITES par les attaques du produit, écartées de la population : 1/.test(r.sorties), /faux de carte/.test(r.sorties)], [0, true, false]);
     w = monde(); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:3', '--ecrire']);
     verifier('refus : --attendu faux (3 pour 2) → exit 1, rien d\'écrit', [r.code, /rend 2, attendu 3/.test(r.erreurs), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [1, true, true]);

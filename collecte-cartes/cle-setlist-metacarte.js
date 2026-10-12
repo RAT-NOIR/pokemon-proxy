@@ -13,9 +13,9 @@
 // et ces attaques · plusieurs cartes · plusieurs numéros · entrée sans numéro · désaccord métacarte / Setlist.
 // ⚠️ Le nom entre dans la clé (2) : il ne peut plus rien témoigner. La parade est la calibration du lot (calibrer-cle-setlist-metacarte.js) :
 // vérité connue (produits id/th joints par le numéro), numéro caché, puis VRAIE CARTE RETIRÉE (`sauf`).
-const { clesNom, nomJointDe } = require('./jointure');
+const { clesNom, nomJointDe, cleAttaque, cleNumero, chiffresDuNumero } = require('./jointure');
 const { ALIAS_CARDMARKET_VERS_BULBAPEDIA } = require('./alias-noms');
-const { compatible } = require('./cle-nom-attaques');
+const { compatible, memeAttaque } = require('./cle-nom-attaques');
 
 /** @param {Array<{carte: object, numero: string|null}>} entrees les entrées de la Setlist du set, résolues en cartes à page */
 const indexerSetlist = entrees => entrees.filter(e => e && e.carte && e.carte.nomEn);
@@ -49,8 +49,50 @@ function designerParSetlist({ parMeta, metacarteDe, setlist }, p, { sauf = null 
     if (cartes.length > 1) return non(`${cartes.length} cartes de la Setlist à ce nom et ces attaques`);
     if (entrees.length > 1) return non(`la Setlist range cette carte à plusieurs numéros (${entrees.length} entrées : ${entrees.map(e => e.numero ?? '—').join(', ')})`);
     if (entrees[0].numero == null || String(entrees[0].numero).trim() === '') return non('entrée de Setlist sans numéro');
+    // LE TÉMOIN DES ATTAQUES (tour 2) : celles du produit (entre crochets) contre celles de la carte désignée, par la comparaison de la production
+    // (cleAttaque, comme temoinDuNom). Un désaccord REFUSE ; un produit ou une carte sans attaque lisible n'est pas contredit.
+    if (temoinAttaques(entrees[0].carte, p) === 'contredit') return non(`les attaques du produit contredisent celles de la carte ${cartes[0]}`);
+    // 🔴 LE MÉCANISME DE « SM-P Vikavolt » (tour 2) : deux pages du même texte dont l'orthographe d'attaque diffère (« Electro Cannon » / « Electricannon »)
+    // sont rangées sous UNE métacarte ; la page à l'autre orthographe n'est pas « compatible », donc la clé choisissait l'autre. Un homonyme de la Setlist
+    // dont une attaque est à orthographe VOISINE (sans être la même) d'une attaque du produit rend le choix indécidable : refus.
+    const voisin = (setlist || []).filter(e => e.carte._id !== sauf && e.carte._id !== cartes[0] && clesNom(nomJointDe(e.carte)).some(k => kp.includes(k)))
+        .find(e => (e.carte.attaques || []).some(a => (p.attaques || []).some(x => !memeAttaque(a.nom, x) && orthographeVoisine(a.nom, x))));
+    if (voisin) return non(`un homonyme de la Setlist (${voisin.carte._id}) porte une attaque voisine par l'orthographe d'une attaque du produit : le choix serait une chance`);
     if (cartes[0] !== [...cartesMeta][0]) return non(`désaccord métacarte (${[...cartesMeta][0]}) / Setlist (${cartes[0]})`);
     return { carte: entrees[0].carte, numero: String(entrees[0].numero).trim(), raison: null, atteint };
+}
+
+/** Deux écritures d'attaque à deux lettres près (une fois ponctuation et casse retirées) — l'orthographe, pas l'attaque. */
+const compactAttaque = a => String(a || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+function distance(a, b) {
+    const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 3;
+    let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
+    return prev[n];
+}
+const orthographeVoisine = (a, b) => { const x = compactAttaque(a), y = compactAttaque(b); return x.length >= 6 && y.length >= 6 && x !== y && distance(x, y) <= 2; };
+
+/**
+ * Le témoin des attaques : 'concorde' (au moins une attaque commune), 'contredit' (les deux côtés en ont, aucune en commun), 'inconnu' (un côté n'en a pas
+ * de lisible). La comparaison est celle de la production (cleAttaque : les mots sans leur ordre ; memeAttaque : orthographe sans ponctuation).
+ */
+function temoinAttaques(carte, p) {
+    const A = (carte.attaques || []).map(a => a.nom).filter(a => cleAttaque(a)), P = (p.attaques || []).filter(a => cleAttaque(a));
+    if (!A.length || !P.length) return 'inconnu';
+    return A.some(a => P.some(x => cleAttaque(a) === cleAttaque(x) || memeAttaque(a, x))) ? 'concorde' : 'contredit';
+}
+
+/**
+ * Comparaison de deux numéros par la production (cleNumero : préfixe gardé, zéros retirés ; chiffresDuNumero) : 'egal', 'forme' (mêmes chiffres, l'un nu
+ * et l'autre préfixé : « 22 » / « SWSH022 » — la MÊME carte écrite autrement, pas une erreur de la clé), ou 'different'.
+ */
+function comparerNumeros(a, b) {
+    const ka = cleNumero(a), kb = cleNumero(b);
+    if (ka != null && ka === kb) return 'egal';
+    const da = chiffresDuNumero(a), db = chiffresDuNumero(b);
+    if (da == null || da !== db) return 'different';
+    const nu = k => /^[A-Z-]+\d/.test(String(k));
+    return nu(ka) !== nu(kb) ? 'forme' : 'different';
 }
 
 /**
@@ -88,7 +130,13 @@ function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, ex
     const { cleNumero: k } = require('./jointure');
     const res = produits.filter(p => !jointsIds.has(p.idProduct)).map(p => ({ p, d: designerParSetlist({ ...base, setlist: entrees }, p) }));
     const retenus = [], ecartes = [], refus = [];
+    // LA FORME DU NUMÉRO : si TOUTES les lignes numérotées du set s'écrivent d'une forme (nue, ou préfixée comme « SWSH022 ») et que la Setlist écrit
+    // l'autre, le numeroFiche posé ne serait pas celui que le site compare : refus du set entier, nommé (le tour 2 : 147 « faux » de ce genre en intl).
+    const numerotees = lignesDuSet.map(l => l.numeroFiche).filter(n => n != null && String(n).trim() !== '');
+    const prefixee = n => /^[A-Z-]+\d/.test(String(cleNumero(n)));
+    const formeDuSet = numerotees.length && numerotees.every(prefixee) ? 'prefixee' : numerotees.length && numerotees.every(n => !prefixee(n)) ? 'nue' : null;
     for (const x of res) {
+        if (x.d.carte && formeDuSet && (formeDuSet === 'prefixee') !== prefixee(x.d.numero)) { refus.push({ p: x.p, raison: `forme du numéro : la Setlist écrit « ${x.d.numero} », les lignes du set s'écrivent ${formeDuSet === 'prefixee' ? 'préfixées (ex. ' + numerotees[0] + ')' : 'nues'}` }); continue; }
         if (!x.d.carte) { refus.push({ p: x.p, raison: x.d.raison }); continue; }
         const deja = lignesDuSet.filter(l => l.carteId === x.d.carte._id && l.numeroFiche != null).map(l => k(l.numeroFiche));
         const imps = (x.d.carte.impressions || []).filter(i => i && i.tirage === tirage && i.expansion === expansion);
@@ -101,4 +149,4 @@ function planDuSet({ base, entrees, produits, lignesDuSet, jointsIds, tirage, ex
     return { retenus, ecartes, refus, impressions };
 }
 
-module.exports = { designerParSetlist, indexerSetlist, lireSetlistDuSet, planDuSet };
+module.exports = { designerParSetlist, indexerSetlist, lireSetlistDuSet, planDuSet, temoinAttaques, comparerNumeros };
