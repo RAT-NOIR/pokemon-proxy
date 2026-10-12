@@ -57,6 +57,7 @@ const { correctionDe } = require('./collecte-cartes/corrections-images');
 const { importsQuotidiens, aFaire: aFaireImports, actif: importsActifs } = require('./collecte-cartes/imports-quotidiens');   // catalogue et guide des prix, une fois par jour (IMPORTS_QUOTIDIENS=1)
 const { clesPartagees } = require('./collecte-cartes/images-cle-partagee');   // une clé que plusieurs images partagent
 const { jointureSousSection } = require('./collecte-cartes/sous-section-image');   // une image de sous-section : numéro ET nom
+const { candidatesParFicheSimple, nomImage } = require('./collecte-cartes/image-fiche-simple');   // une fiche simple : numéro ET nom (T3d)
 const { fabriquerTemoinImages, jugerResolues, cartesNonCouvertes } = require('./collecte-cartes/temoin-images-artofpkm');   // le témoin du nom DANS la jointure (audit Celebrations, 2026-10-08)
 const { filtreCartesDuSet } = require('./collecte-cartes/tcgdex-appariement');   // les cartes qui DÉCLARENT l'impression, slug ou non : les témoins
 const balise = require('./collecte-cartes/balise-worker');           // « quel code tourne ici ? », au travail comme au repos
@@ -341,7 +342,7 @@ const normaliserRarete = v => String(v ?? '').replace(/\([^)]*\)/g, '').trim().t
 // (« Alakazam [Damage Swap | Confuse Ray] », lus par decomposerNomCardmarket) : les effacer là-bas
 // fondrait le nom et les attaques. Ici, sur des noms source PKMJP et des noms Bulbapedia, aucun des
 // deux n'utilise les crochets pour autre chose que la lettre.
-const nomImage = n => normaliserNom(String(n ?? '').replace(/[\[\]]/g, ' '));
+// (une seule définition, collecte-cartes/image-fiche-simple.js : la jointure d'une image à une fiche simple compare les mêmes noms)
 
 async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { silencieux = false, simuler = false } = {}) {
     // `simuler` (2026-10-05) : la passe 1 (quelle carte pour chaque image) tourne, RIEN ne s'écrit — ni image, ni carte, ni reste, ni
@@ -410,6 +411,13 @@ async function joindreImages(M, L, slug, S, entrees, mesures, dossierRapport, { 
         const corr = correctionDe(im.cleR2);
         if (corr) { cands = cartes.filter(c => c._id === corr.carteId); preuve = `correction lue à l'œil le ${corr.le} (« ${corr.lu} »)`; }
         else if (num && parNumero.size) { cands = parNumero.get(num) || []; preuve = 'numero'; }
+        // 🔴 T3d (2026-10-12) : les FICHES SIMPLES d'un set sans page portent l'expansion `lisible(slug)`, que `impsDe` (égalité avec le nom
+        // PONCTUÉ de la ligne) ne voit pas. Seulement quand la clé ordinaire n'a rien désigné (additif), et par le numéro ET le nom
+        // (collecte-cartes/image-fiche-simple.js) : un nom variant ne passe pas, il retombe sur le repli d'avant.
+        if (!corr && !cands.length && num) {
+            const fsimples = candidatesParFicheSimple(im, cartes, { slug, tirage: TIRAGE });
+            if (fsimples.length) { cands = fsimples; preuve = 'numero+nom'; }
+        }
         // 🔑 UN NUMÉRO QUI DÉSIGNE PLUSIEURS CARTES : LE NOM DE L'IMAGE DÉPARTAGE (2026-10-05, audit des visuels, cas A). Deux familles
         // y tombaient en reste « image-vers-plusieurs-cartes », l'image en base et servie à personne : les kits à deux decks que la
         // source et nous numérotons chacun depuis 1 (Gift Box Emerald : 001 Feebas ET 001 Volbeat), et les numéros que DEUX cartes de
