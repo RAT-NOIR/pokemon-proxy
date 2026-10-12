@@ -51,9 +51,12 @@ const PLANCHER = path.join(__dirname, 'verrou', 'couverture-plancher.json');
 // 🔴 R8 tour 2 : `test-table-vintage.js` sort aussi. Elle LIT la production (codes_set, numeros_cartes) par `ouvrirBanc({ lit })`, et `jugerLecture` (base-banc.js) vérifie que l'URI de
 // lecture vise LA MÊME GRAPPE que MONGODB_URI — il lui faut donc l'URI d'ÉCRITURE de production, que l'environnement du cliquet (liste fermée, verrou/environnement-banc.js) ne transmet
 // plus. Lui donner l'hôte de production avec un faux identifiant, ou une valeur de banc (« ne vise pas la grappe » → refus), est impossible sans changer base-banc.js.
+// 🔑 CETTE EXCLUSION EST TEMPORAIRE ET ACCEPTÉE PAR LE TESTEUR (2026-10-12). `jugerLecture` (base-banc.js) n'est PAS assouplie sans preuve : une garde qu'on desserre pour
+// faire passer une suite n'est plus une garde. Ce qui ferait revenir la suite dans SUITES_HORS_LIGNE : une lecture de banc qui juge la grappe SANS l'URI d'écriture, PROUVÉE
+// (elle doit refuser une grappe fausse sur un cas fabriqué avant d'être crue). Tant que cette preuve n'existe pas, la suite se lance à la main et le cliquet l'imprime à chaque passage.
 const SUITES_REFUSEES = {
     'test-setcode-numero.js': 'refuse de démarrer depuis le 2026-10-08 (lit la production à travers index.js) — à réécrire sur une tranche de banc',
-    'test-table-vintage.js': 'exige MONGODB_URI (écriture) pour juger la grappe de lecture ; non transmise au cliquet — se lance à la main : node test-table-vintage.js'
+    'test-table-vintage.js': 'exige MONGODB_URI (écriture) pour juger la grappe de lecture ; non transmise au cliquet — se lance à la main : node test-table-vintage.js. EXCLUSION TEMPORAIRE, ACCEPTÉE par le testeur le 2026-10-12 ; jugerLecture (base-banc.js) n\'est PAS assouplie sans preuve ; elle revient quand une lecture de banc juge la grappe sans l\'URI d\'écriture, prouvée'
 };
 const SUITES_HORS_LIGNE = ['test-chargement.js', 'smoke-test.js', 'scoring.js',
     'test-pokedex.js', 'test-acces.js',

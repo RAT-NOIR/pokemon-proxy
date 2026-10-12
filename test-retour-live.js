@@ -41,7 +41,9 @@ if ((process.env.MONGODB_BASE || BASE) !== BASE) {
     process.exit(1);
 }
 
-const JETON = process.env.JETON_API || 'jeton-retour-live';
+// Banc local : le serveur est lancé ICI, il n'a pas besoin du jeton de production. Jeton de test fabriqué à chaque lancement, posé dans l'environnement AVANT tout démarrage.
+const JETON = require('crypto').randomBytes(24).toString('hex');
+process.env.JETON_API = JETON;
 const MOI = `__test-retour-${Date.now()}`;
 const AUTRE = `${MOI}-autre`;
 

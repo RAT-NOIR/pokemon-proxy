@@ -9,7 +9,9 @@ const { viderBac, COLLECTIONS_SERVEUR } = require('./verrou/bac');
 const { ouvrirBanc } = require('./collecte-cartes/base-banc');
 
 const FICHIER_CHARGES = path.join(__dirname, 'verrou', 'charges.json');
-const JETON = process.env.JETON_API || 'jeton-verrou';
+// Banc local : le serveur est lancé ICI, il n'a pas besoin du jeton de production. Jeton de test fabriqué à chaque lancement, posé dans l'environnement AVANT tout démarrage.
+const JETON = require('crypto').randomBytes(24).toString('hex');
+process.env.JETON_API = JETON;
 const cible = process.argv[2] || 'Vileplume';
 
 (async () => {
