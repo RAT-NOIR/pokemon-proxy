@@ -17,6 +17,7 @@ require('dotenv').config();
 const { ouvrirConnexions } = require('./collecte-cartes/garde');
 const { lireMongo } = require('./collecte-cartes/lecture-sure');
 const { cleNumero, normaliserNom, decomposerNomCardmarket } = require('./collecte-cartes/jointure');
+const { resoudreProduit } = require('./collecte-cartes/set-partiel');
 
 const arg = n => (process.argv.find(a => a.startsWith(`--${n}=`)) || '').slice(n.length + 3);
 const CODES = arg('codes').split(',').map(s => s.trim()).filter(Boolean);
@@ -39,21 +40,11 @@ const echapper = s => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
     const aEcrire = [];
     for (const CODE of CODES) {
         const famille = tous.filter(n => n.codeSet === CODE && n.slug);
-        const MOTIF = new RegExp(`-${echapper(CODE)}([A-Z][A-Za-z0-9]*?)-([0-9]+[A-Za-z]?)$`);
         const causes = { resolu: [], nonDecode: [], codeInconnu: [], numeroAbsent: [], origineSansCarte: [], ambigu: [], deja: [], nomDiscordant: [] };
+        // (R3, 2026-10-12) le décodage du slug et la résolution vivent dans collecte-cartes/set-partiel.js, UNE fois, pour cet outil et pour le set partiel Promos (§21 bis)
         for (const p of famille) {
-            if (cartesDe.has(p.idProduct)) { causes.deja.push(p); continue; }
-            const m = MOTIF.exec(String(p.slug).replace(/-V\d+(?=-|$)/, ''));
-            if (!m) { causes.nonDecode.push(p); continue; }
-            const [, code, num] = m;
-            const exps = expsDuCode.get(code);
-            if (!exps) { causes.codeInconnu.push({ ...p, code }); continue; }
-            const cands = [...exps].flatMap(e => parExpNum.get(`${e}|${cleNumero(num)}`) || []);
-            if (!cands.length) { causes.numeroAbsent.push({ ...p, code, num }); continue; }
-            const cs = new Set(cands.flatMap(id => [...(cartesDe.get(id) || [])]));
-            if (!cs.size) { causes.origineSansCarte.push({ ...p, code, num }); continue; }
-            if (cs.size > 1) { causes.ambigu.push({ ...p, code, num }); continue; }
-            causes.resolu.push({ ...p, code, num, cands, carteId: [...cs][0], idExpansion: cat.get(p.idProduct)?.idExpansion, idMetacard: cat.get(p.idProduct)?.idMetacard });
+            const { cause, ...x } = resoudreProduit(p, CODE, { expsDuCode, parExpNum, cartesDe });
+            causes[cause].push(cause === 'resolu' ? { ...x, idExpansion: cat.get(p.idProduct)?.idExpansion, idMetacard: cat.get(p.idProduct)?.idMetacard } : x);
         }
         const cartes = new Map((await cx.db.collection('cartes').find({ _id: { $in: causes.resolu.map(x => x.carteId) } }, { projection: { nomEn: 1, attaques: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
         causes.resolu = causes.resolu.filter(x => {
