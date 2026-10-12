@@ -141,6 +141,7 @@ const J = (idProduct, idMetacard, idExpansion, numero, tirage) => ({ idProduct, 
     const casseCat = await pd(cat('leve'), [740794]);
     H.v('   la requête échoue : la garde ne conclut pas (jumeaux-indisponibles), on échoue fermé', casseCat(740794), { conclu: false, ids: [], motif: 'jumeaux-indisponibles' });
     H.v('   un catalogue sans la méthode : ne conclut pas', (await pd({}, [740794]))(740794).motif, 'jumeaux-indisponibles');
+    H.v('   une réponse qui n\'est PAS un faux franc (undefined, null, 0, « non ») : ne conclut pas — « ok » seulement sur false', [undefined, null, 0, 'non'].map(r => (async () => r)).length && (await Promise.all([undefined, null, 0, 'non'].map(async r => (await pd({ plusRecentDansMetacarte: async () => r }, [740794]))(740794).motif))), Array(4).fill('jumeaux-indisponibles'));
     H.v('   un produit hors colonne (métacarte inconnue) ou non annoncé comme affirmé : ne conclut pas', [(await pd(cat([]), [70]))(70).motif, (await pd(cat([]), [740794]))(1).motif], ['jumeaux-indisponibles', 'jumeaux-indisponibles']);
     const n0 = appels.length;
     H.v('   sans colonne : ne conclut pas, et le catalogue n\'est même pas interrogé', [(await pd(cat([]), [1], sansColonne))(1).motif, appels.length - n0], ['jumeaux-indisponibles', 0]);
