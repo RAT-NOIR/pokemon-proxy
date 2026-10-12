@@ -29,6 +29,7 @@
 // résolues pour MEW à cause de ça).
 // CONFLIT : la légende et le nom de fichier nomment deux sets différents -> non collecté, compté.
 
+const { sansCommentaires } = require('./wikitext');
 const serre = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
 /**
  * Les jetons d'une SÉRIE de promos, tirés du nom d'expansion lui-même — rien n'est deviné :
@@ -51,6 +52,10 @@ const numeroEntier = s => { const m = String(s ?? '').match(/(\d+)/); return m ?
  * japonais. Rend Map « serre(jpexpansion)#jpnum » -> { expansion, numero } (occidental).
  */
 function pairesJaponaisOccidental(wt) {
+    // 🔑 LES COMMENTAIRES HTML S'ÔTENT AVANT TOUTE LECTURE PAR EXPRESSION RÉGULIÈRE (R7, 2026-10-12) : le parseur de texte l'a fait le
+    // 2026-10-11 (`sansCommentaires`), cet extracteur lisait encore le wikitext brut — un bloc `jpexpansion` commenté créait un jumeau.
+    // Mesuré avant d'écrire : 0 changement sur les 95 pages archivées à commentaire ; la fermeture est préventive.
+    wt = sansCommentaires(wt);
     const paires = new Map();
     paires.jumeaux = new Map();   // serre(jpexpansion) -> Set(expansion occidentale appariée sur la page)
     paires.ambigus = new Set();   // clés « serre(jpexpansion)#jpnum » appariées à PLUSIEURS tirages occidentaux (la Map garde le dernier)
@@ -90,6 +95,7 @@ function pairesJaponaisOccidental(wt) {
  * @param {Array<{tirage,expansion}>} impressions  toutes les impressions de la carte
  */
 function fichiersDeLaPage(wt, impressions) {
+    wt = sansCommentaires(wt);   // même raison que pairesJaponaisOccidental : un `|reprint1=` commenté n'est pas une image de la page
     const intl = new Set(impressions.filter(i => i.tirage === 'intl').map(i => i.expansion).filter(Boolean));
     const paires = pairesJaponaisOccidental(wt);
     const exps = [...new Set(impressions.map(i => i.expansion))].filter(Boolean).sort((a, b) => serre(b).length - serre(a).length);
