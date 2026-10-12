@@ -193,9 +193,44 @@ async function etatDuWorker(cx, { comparerArbre = require('./collecte-cartes/tab
     }
 }
 
+/**
+ * ➕ T3c 2026-10-12 — LA REPRISE D'UNITÉS pokemon-card.com DÉJÀ PASSÉES, sous la garde du commit du worker (relecture B : aucun outil ne remettait
+ * en file une unité TPC `fait` ; une remise à la main, hors `etatDuWorker`, laissait un worker sur l'ancien code rejuger et refuser de nouveau, §23).
+ *   node remettre-en-file.js --reprendre-tpc=<slug>,<slug>,…            mesure seule (défaut) : ce qui serait remis, et la garde
+ *   node lot-additif.js … -- node remettre-en-file.js --reprendre-tpc=<slug>,… --ecrire     l'écriture passe par lot-additif (sauvegarde, comptes, journal)
+ * Écrit par ce qu'elle AUTORISE : une liste FERMÉE de slugs nommés en argument (jamais « tous »), chacun une ligne pokemon-card-com de tpc-sets.js,
+ * dont l'unité `pokemon-card-com/<slug>` est en état `fait` — rien d'autre (attente, en-cours, refus, absente : refusé, avec sa raison). La garde du commit
+ * du worker décide AVANT toute écriture : bloquée (ou impossible à conclure) → aucune écriture. Le motif s'écrit sur la ligne, avec le commit du worker.
+ * @param {{slugs:string[], file:{findOne:Function, updateOne:Function}, garde:{bloque:boolean,commit?:string,phrase?:string}, ecrire:boolean, lignes:(slug:string)=>object|null, maintenant?:Date}} o
+ */
+async function reprendreTpc({ slugs, file, garde, ecrire, lignes, maintenant = new Date() }) {
+    const rep = { retenues: [], refusees: [], ecrites: 0, ecriture: false, bloque: false, raison: null };
+    if (!Array.isArray(slugs) || !slugs.length || slugs.some(s => !/^[A-Za-z0-9][A-Za-z0-9.-]*$/.test(String(s)))) { rep.bloque = true; rep.raison = 'liste fermée vide ou malformée : des slugs pokemon-card.com nommés un à un'; return rep; }
+    if (slugs.length > 30) { rep.bloque = true; rep.raison = `${slugs.length} unités : au-delà de 30, ce n'est plus une liste fermée`; return rep; }
+    for (const slug of [...new Set(slugs)]) {
+        if (!lignes(slug)) { rep.refusees.push({ slug, motif: 'hors-table', detail: `${slug} n'est pas une ligne pokemon-card-com de tpc-sets.js` }); continue; }
+        const u = await file.findOne({ _id: `pokemon-card-com/${slug}` });
+        if (!u) { rep.refusees.push({ slug, motif: 'unite-absente', detail: 'aucune unité : elle s\'enfile par l\'alimentateur, pas par une reprise' }); continue; }
+        if (u.etat !== 'fait') { rep.refusees.push({ slug, motif: 'etat-non-fait', detail: `état « ${u.etat}${u.resultat ? '/' + u.resultat : ''} » : seule une unité terminée se reprend` }); continue; }
+        rep.retenues.push({ slug, etat: `${u.etat}/${u.resultat ?? '—'}` });
+    }
+    // la garde se lit TOUJOURS ; elle ne bloque que l'écriture (la mesure reste lisible)
+    if (garde?.bloque !== false || !garde.commit) { rep.bloque = true; rep.raison = `garde du commit du worker : ${garde?.phrase ?? 'impossible à conclure'}`; return rep; }
+    if (!ecrire) return rep;
+    rep.ecriture = true;
+    for (const x of rep.retenues) {
+        const r = await file.updateOne({ _id: `pokemon-card-com/${x.slug}`, etat: 'fait' }, {
+            $set: { etat: 'attente', remisEnFileLe: maintenant, remisEnFileMotif: `règles A/B de tpc.js, commit ${garde.commit} (preuve des fiches sans numéro et des fiches simples) — état précédent ${x.etat}` },
+            $unset: { resultat: '', pris: '', fini: '' }
+        });
+        rep.ecrites += r.modifiedCount ?? 0;
+    }
+    return rep;
+}
+
 // Exportée pour son banc : une garde qu'on n'a jamais VUE dire non n'a pas été vérifiée, elle a été
 // supposée (§41). `test-garde-worker.js` la fait crier sur huit états fabriqués.
-module.exports = { etatDuWorker, REGLES, COLLECTION_VERROUS };
+module.exports = { etatDuWorker, REGLES, COLLECTION_VERROUS, reprendreTpc };
 
 if (require.main !== module) return;
 
@@ -205,6 +240,17 @@ if (require.main !== module) return;
     const { cartes: cx, fermer } = await ouvrirConnexions({ production: false, buckets: [] });
     const W = await etatDuWorker(cx);
     console.log(`\n════ LE COMMIT DU WORKER ════\n   ${W.phrase}`);
+    const argTpc = process.argv.find(a => a.startsWith('--reprendre-tpc='));
+    if (argTpc) {
+        // chemin étroit : ni mesure du catalogue, ni --malgre-le-commit (la garde n'a pas d'échappatoire ici)
+        const { ligneTpc } = require('./collecte-cartes/tpc-sets');
+        const r = await reprendreTpc({ slugs: argTpc.slice(16).split(',').map(s => s.trim()).filter(Boolean), file: cx.db.collection('file_images'), garde: W, ecrire, lignes: slug => ligneTpc('pokemon-card-com', slug) });
+        for (const x of r.retenues) console.log(`   ${r.ecriture ? '♻️' : '➕ (mesure)'} pokemon-card-com/${x.slug} : ${x.etat} → attente`);
+        for (const x of r.refusees) console.log(`   ⛔ ${x.slug} : ${x.motif} — ${x.detail}`);
+        if (r.bloque) { console.log(`\n🔴 RIEN N'EST ÉCRIT. ${r.raison}`); process.exitCode = 1; }
+        else console.log(ecrire ? `\n   ✅ remises en file : ${r.ecrites}` : `\n   (mesure seule — ${r.retenues.length} unité(s) seraient remises ; relancer sous lot-additif avec --ecrire)`);
+        await fermer(); return;
+    }
 
     // 🔴 L'ÉNUMÉRATION NE SE BORNE PLUS AUX LIGNES ADMISES — corrigé le 2026-09-21, et c'est le §33
     // à un nouvel endroit. Cet outil ne regardait que `l.verifie`, alors que la question qu'il pose
