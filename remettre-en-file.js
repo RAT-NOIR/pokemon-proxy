@@ -78,6 +78,9 @@ const REGLES = ['collecte-cartes/seuils-images.js', 'collecteur-images.js', 'col
     'collecte-cartes/sources-sets.js', 'collecte-cartes/sources-sets-auto.json',
     'collecteur-images-tcgdex.js', 'collecte-cartes/tcgdex.js', 'collecte-cartes/tcgdex-cache.js', 'collecte-cartes/tcgdex-appariement.js',
     'collecte-cartes/langue-visuel.js', 'collecte-cartes/corrections-images.js',
+    // ➕ 2026-10-12 (R5) : la PRÉSÉANCE du scan anglais qui a remplacé un jumeau japonais — le rejeu de Bulbapedia (collecteur-images-bulba.js) la lit ; un worker qui
+    // ne l'a pas referait le scan japonais à côté de l'anglais
+    'collecte-cartes/jumeau-en.js',
     // ➕ 2026-09-24 : ce que le worker fait d'une unité finie (une surcharge passagère n'est plus un refus) — une remise en
     // file sous un commit antérieur retomberait en `refuse` au premier 503.
     'collecte-cartes/issue-unite.js',
