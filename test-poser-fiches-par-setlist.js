@@ -51,7 +51,7 @@ const attaquesDe = i => [`Aa${i}`, `Bb${i}`];
 const carte = (i, id = 1000 + i) => ({ _id: id, nomEn: `Mon${i}`, attaques: attaquesDe(i).map(nom => ({ nom })), impressions: [], sets: ['SetX'], liens: { idProduct: [] } });
 const nomProduit = i => `Mon${i} [${attaquesDe(i).join(' | ')}]`;
 const L = { code: 'X/ID', slugSet: 'SetX', exp: 1, bulba: { tirage: 'id', expansion: 'X Promo' } };
-function monde({ veriteFausse = false, impressionSansNumero = false, exportDecale = false } = {}) {
+function monde({ veriteFausse = false, impressionSansNumero = false, exportDecale = false, exportSansMetacarte = false } = {}) {
     const cartes = [1, 2, 3, 4].map(i => carte(i)); const homonyme = { ...carte(3, 1503) };
     if (impressionSansNumero) cartes[1].impressions.push({ tirage: 'id', expansion: 'X Promo', numero: null, source: 'parseur' });
     const produits = [], lignes = [];
@@ -62,7 +62,8 @@ function monde({ veriteFausse = false, impressionSansNumero = false, exportDecal
     const entrees = [...cartes.map((c, i) => ({ carte: c, numero: String(i + 1) })), { carte: homonyme, numero: '13' }];
     const decale = exportDecale ? 9000000 : 0;
     const chemin = path.join(os.tmpdir(), `export-test-poser-fiches-${process.pid}-${exportDecale ? 'decale' : 'bon'}.json`);
-    fs.writeFileSync(chemin, JSON.stringify({ products: produits.map(p => ({ ...p, idProduct: p.idProduct + decale })) }));
+    // un export dont les produits existent mais SANS idMetacard (le cas du relecteur A : « tout silence », sans erreur)
+    fs.writeFileSync(chemin, JSON.stringify({ products: produits.map(p => { const q = { ...p, idProduct: p.idProduct + decale }; if (exportSansMetacarte) delete q.idMetacard; return q; }) }));
     const liste = produits.map(p => ({ idProduct: p.idProduct, name: p.name, slug: null, slugSet: 'SetX', ...decomposerNomCardmarket(p.name) }));
     return { db: fakeDb({ cartes_produits: lignes, cartes: [...cartes, homonyme] }), entrees, chemin, liste };
 }
@@ -112,6 +113,10 @@ const lignesPosees = w => w.db.brut('cartes_produits').filter(l => l.preuve === 
     w = monde({ exportDecale: true }); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
     r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
     verifier('refus : un export qui n\'apparie RIEN avec la base → la calibration LÈVE (§41), rien d\'écrit', [r.code, /0 des \d+ clés|appariement/.test(r.erreurs), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [99, true, true]);
+
+    w = monde({ exportSansMetacarte: true }); avant = JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]);
+    r = await lancer(w, ['--codes=X/ID', '--attendu=X/ID:2', '--ecrire']);
+    verifier('refus : un export dont les produits sont là mais SANS idMetacard (« tout silence ») → la calibration LÈVE, rien d\'écrit', [r.code, /PORTANT idMetacard/.test(r.erreurs), JSON.stringify([w.db.brut('cartes_produits'), w.db.brut('cartes')]) === avant], [99, true, true]);
 
     // ── reprise après un arrêt ──
     w = monde(); w.db.stats.panneAvantCartes = true;
