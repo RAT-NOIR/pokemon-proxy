@@ -119,9 +119,13 @@ async function lireFiches(db, client, site, L, ids, { compter }) {
 /** 3-4. Les trous du set, et le plan — pur une fois les fiches lues. */
 async function planifier(db, slug, L, fiches) {
     const lignes = await db.collection('cartes_produits').find({ slugSet: slug }, { projection: { carteId: 1, idProduct: 1, numeroFiche: 1 } }).toArray();
-    const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1 } }).toArray()).map(c => [c._id, c]));
-    const trous = lignes.filter(l => cartes.has(l.carteId) && !T.dejaServi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
-    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null }) };
+    const cartes = new Map((await db.collection('cartes').find({ _id: { $in: [...new Set(lignes.map(l => l.carteId))] } }, { projection: { nomEn: 1, nomJa: 1, ndex: 1, pv: 1, categorie: 1, images: 1, impressions: 1 } }).toArray()).map(c => [c._id, c]));
+    const pcc = L.site === 'pokemon-card-com';
+    const servi = pcc ? T.dejaServiTpc : T.dejaServi;       // règle A : image à numéro nul, clé (carte, set, numéro) — voir dejaServiTpc
+    const trous = lignes.filter(l => cartes.has(l.carteId) && !servi(cartes.get(l.carteId), slug, l.numeroFiche)).map(l => ({ carte: cartes.get(l.carteId), numeroFiche: l.numeroFiche ?? null, idProduct: l.idProduct }));
+    // règle B : le dictionnaire nomEn -> nomJa de nos cartes À PAGE (_id > 0) ; règle A : toutes les cartes du set (servies ou non) pour l'unicité du nom
+    const temoinNomJa = pcc ? T.construireTemoinNomJa(await db.collection('cartes').find({ _id: { $gt: 0 }, nomJa: { $exists: true, $ne: null } }, { projection: { nomEn: 1, nomJa: 1 } }).toArray()) : null;
+    return { produits: lignes.length, trous: trous.length, ...T.planifierTpc({ trous, fiches, code: L.code, site: L.site, prefixes: L.listes ? L.listes.map(l => l.prefixe) : null, temoinNomJa, cartesDuSet: pcc ? [...cartes.values()] : null }) };
 }
 
 /** La garde de la jointure : les entrées des AUTRES sources, chacune par son empreinte (carte, source, set, numéro, clé) — elles ne
@@ -241,7 +245,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 await M.Image.updateOne({ _id }, {
                     $set: {
                         source: site, set: slug, carteId: p.carteId, numero: p.numero, nomEn: p.nomEn, idProduct: p.idProduct,
-                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: `${p.fiche.prefixe ?? ''}${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}`,
+                        idFiche: p.fiche.idFiche, urlFiche: p.fiche.urlFiche, nomSource: p.fiche.nom, numeroSource: p.fiche.numero ? `${p.fiche.prefixe ?? ''}${p.fiche.numero}${p.fiche.denominateur ? `/${p.fiche.denominateur}` : ''}` : null,
                         preuve: p.preuve, voie: p.voie, urlOriginal: url,
                         wOriginal: meta.width, hOriginal: meta.height, sha1Original: sha('sha1', buffer), octetsOriginal: buffer.length,
                         cleR2, sha256: sha('sha256', webp.data), octets: webp.data.length, w: webp.info.width, h: webp.info.height, fmt: 'webp',
@@ -275,7 +279,7 @@ async function collecterSet(unite, M, { verrou, client: clientInjecte = null, de
                 const c = await M.Carte.findById(im.carteId).select('images').lean();
                 if (!c) { cartesAbsentes++; continue; }            // une image sans sa carte : comptée, elle fait tomber la concordance
                 const autres = (c.images || []).filter(e => !(e.source === site && e.set === slug && e.numero === im.numero));
-                if (T.dejaServi({ images: autres }, slug, im.numero)) {
+                if ((site === 'pokemon-card-com' ? T.dejaServiTpc : T.dejaServi)({ images: autres }, slug, im.numero)) {
                     // une AUTRE source sert ce numéro (posé entre deux passages) : on ne touche pas à son entrée, et la nôtre, s'il y en avait une,
                     // lui CÈDE la place — deux visuels pour une impression, c'est un de trop
                     dejaParAutre++;

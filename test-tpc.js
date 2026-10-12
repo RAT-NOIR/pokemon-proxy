@@ -113,6 +113,50 @@ const F = f => fs.readFileSync(path.join(__dirname, 'collecte-cartes', 'tpc-fixt
     verifier('un visuel SANS numéro dans le set → on n\'ajoute rien (il peut être servi)', T.dejaServi({ images: [{ set: 'S', cleR2: 'y' }] }, 'S', '169'), true);
     verifier('un visuel au même numéro dans un AUTRE set → on ajoute', T.dejaServi({ images: [{ set: 'T', numero: '169', cleR2: 'z' }] }, 'S', '169'), false);
 
+    // ── 4 bis. pokemon-card.com : RÈGLE A (fiche sans numéro : nom + 2e élément) et RÈGLE B (fiche simple : numéro + nom par le dictionnaire) ──
+    // (T3c, 2026-10-12.) Fixtures : fiches du cache tpc_fiches (1110, 1013…) et cartes 12098 / 358180 lues en base le 2026-10-12.
+    const fp = (id, nom, extra = {}) => ({ idFiche: id, nom, numero: null, denominateur: null, pv: null, marque: 'DP1', illustrateur: null, image: `/x/${id}.jpg`, ...extra });
+    const potion = { _id: 12098, nomEn: 'Potion', nomJa: 'きずぐすり', categorie: 'dresseur', pv: null, impressions: [{ tirage: 'jp', illustrateur: 'Keiji Kinebuchi' }, { tirage: 'jp', illustrateur: 'Shin-ichi Yoshikawa' }, { tirage: 'intl', illustrateur: 'Autre' }] };
+    const A = (cartes, fiches2, extra = {}) => T.planifierTpc({ trous: cartes.map((c, i) => ({ carte: c, numeroFiche: null, idProduct: 100 + i })), fiches: fiches2, code: 'DP1', site: 'pokemon-card-com', ...extra });
+    let a = A([potion], [fp(1110, 'きずぐすり', { illustrateur: 'Shin-ichi Yoshikawa' }), fp(1114, 'ポケモンいれかえ', { illustrateur: 'Ryo Ueda' })]);
+    verifier('A : DP1 Potion (Dresseur, fiche sans numéro) → prouvée par nom + illustrateur', [a.plan.length, a.plan[0]?.voie, a.plan[0]?.numero, a.plan[0]?.fiche.idFiche], [1, 'nom+illustrateur', null, 1110]);
+    verifier('   la preuve écrite dit la voie et ses éléments', /sans numéro/.test(a.plan[0].preuve) && /illustrateur/.test(a.plan[0].preuve) && /きずぐすり/.test(a.plan[0].preuve), true);
+    verifier('A : le nom seul ne suffit pas — Dresseur dont l\'illustrateur diffère → trou', A([potion], [fp(1110, 'きずぐすり', { illustrateur: 'Quelqu\'un d\'autre' })]).restes[0]?.motif, 'contradiction-illustrateur');
+    verifier('A : le nom seul ne suffit pas — la fiche ne porte pas d\'illustrateur → trou', A([potion], [fp(1110, 'きずぐすり')]).restes[0]?.motif, 'element-independant-absent');
+    const sprig = { _id: 358180, nomEn: 'Sprigatito', nomJa: 'ニャオハ', categorie: 'pokemon', pv: 70, impressions: [] };
+    a = A([sprig], [fp(5001, 'ニャオハ', { pv: 70 })]);
+    verifier('A : Pokémon, même nom et mêmes PV → prouvé par nom + PV', [a.plan[0]?.voie, /PV 70/.test(a.plan[0]?.preuve)], ['nom+pv', true]);
+    verifier('A : même nom, PV différents → trou « contradiction-pv »', A([sprig], [fp(5001, 'ニャオハ', { pv: 80 })]).restes[0]?.motif, 'contradiction-pv');
+    verifier('A : PV d\'un seul côté → trou', A([sprig], [fp(5001, 'ニャオハ')]).restes[0]?.motif, 'element-independant-absent');
+    verifier('A : deux fiches du même nom → trou « nom-ambigu-a-la-source »', A([sprig], [fp(5001, 'ニャオハ', { pv: 70 }), fp(5002, 'ニャオハ', { pv: 70 })]).restes[0]?.motif, 'nom-ambigu-a-la-source');
+    verifier('A : deux cartes du même nomJa dans le set → trou « nom-ambigu-chez-nous » (les deux)', A([sprig, { ...sprig, _id: 358181 }], [fp(5001, 'ニャオハ', { pv: 70 })]).restes.map(r => r.motif), ['nom-ambigu-chez-nous', 'nom-ambigu-chez-nous']);
+    verifier('A : une carte DÉJÀ servie du set, au même nomJa, compte aussi (cartesDuSet) → trou', A([sprig], [fp(5001, 'ニャオハ', { pv: 70 })], { cartesDuSet: [sprig, { ...sprig, _id: 358182, images: [{ set: 'S' }] }] }).restes[0]?.motif, 'nom-ambigu-chez-nous');
+    verifier('A : la marque de la fiche n\'est pas le code du set → trou « set »', A([sprig], [fp(5001, 'ニャオハ', { pv: 70, marque: 'SV1' })]).restes[0]?.motif, 'set');
+    verifier('A : aucune fiche à ce nom → trou « absente-de-la-source »', A([sprig], [fp(5001, 'ゼニガメ', { pv: 70 })]).restes[0]?.motif, 'absente-de-la-source');
+    verifier('A : deux produits de la même carte → UN visuel', A([sprig, sprig], [fp(5001, 'ニャオハ', { pv: 70 })]).plan.length, 1);
+    verifier('A : jamais sur TPC Asie (le nom y est traduit) : « sans-numero » inchangé', T.planifierTpc({ trous: [{ carte: sprig, numeroFiche: null, idProduct: 1 }], fiches: [fp(5001, 'ニャオハ', { pv: 70 })], code: 'DP1', site: 'tpc-asie' }).restes[0]?.motif, 'sans-numero');
+    verifier('A : une carte sans nomJa reste « sans-numero »', A([{ ...sprig, nomJa: undefined }], [fp(5001, 'ニャオハ', { pv: 70 })]).restes[0]?.motif, 'sans-numero');
+    // règle B
+    const dico = T.construireTemoinNomJa([{ _id: 54063, nomEn: 'Absol', nomJa: 'アブソル' }, { _id: 9, nomEn: 'Moltres', nomJa: 'ファイヤー' }, { _id: 10, nomEn: 'Moltres', nomJa: 'ファイヤー' }, { _id: 11, nomEn: 'Vanillish', nomJa: 'バニリッチ' }, { _id: 12, nomEn: 'Vanillish', nomJa: 'バニプッチ' }, { _id: -5, nomEn: 'Zzz', nomJa: 'ゼット' }]);
+    const fb = (id, nom, n) => ({ idFiche: id, nom, numero: n, denominateur: '038', pv: 120, marque: 'smI', image: `/x/${id}.jpg` });
+    const simple = (id, nomEn, n) => ({ carte: { _id: id, nomEn, categorie: 'pokemon' }, numeroFiche: n, idProduct: -id });
+    const B = (trous2, fiches2) => T.planifierTpc({ trous: trous2, fiches: fiches2, code: 'smI', site: 'pokemon-card-com', temoinNomJa: dico });
+    let b = B([simple(-564842, 'Moltres', '002')], [fb(7002, 'ファイヤー', '002')]);
+    verifier('B : fiche simple Moltres n°002, la fiche dit ファイヤー (nomJa de nos autres Moltres) → acceptée', [b.plan[0]?.voie, /nomEn/.test('') || /autre\(s\) carte/.test(b.plan[0]?.preuve)], ['nom-temoin', true]);
+    verifier('B : Absol n°1 face à ツタージャ → refusée « nom-different »', B([simple(-523835, 'Absol', '001')], [fb(7001, 'ツタージャ', '001')]).restes[0]?.motif, 'nom-different');
+    verifier('B : le numéro reste exigé (Moltres n°003, la fiche est au 002) → trou', B([simple(-1, 'Moltres', '003')], [fb(7002, 'ファイヤー', '002')]).restes[0]?.motif, 'absente-de-la-source');
+    verifier('B : nomJa divergents entre nos cartes (Vanillish) → le dictionnaire ne témoigne pas', B([simple(-2, 'Vanillish', '005')], [fb(7005, 'バニリッチ', '005')]).restes[0]?.motif, 'nom-non-comparable');
+    verifier('B : nomEn inconnu du dictionnaire → trou ; le dictionnaire ignore les cartes sans page (_id < 0)', [B([simple(-3, 'Zzz', '006')], [fb(7006, 'ゼット', '006')]).restes[0]?.motif, dico('Zzz')], ['nom-non-comparable', null]);
+    verifier('B : le dictionnaire liste ses divergences', dico.divergents.length, 1);
+    verifier('B : jamais sur TPC Asie', T.preuveDeCorrespondance({ fiche: fb(7002, 'ファイヤー', '002'), carte: { _id: -1, nomEn: 'Moltres' }, numeroFiche: '002', code: 'smI', site: 'tpc-asie', temoinNomJa: dico }).ok, false);
+    // clé (carte, set, numéro), numéro nul — §32 bis
+    verifier('numéro nul : une carte qui a DÉJÀ un visuel à un numéro dans le set n\'en reçoit pas un second sans numéro', T.dejaServiTpc({ images: [{ set: 'S', numero: '005', cleR2: 'a' }] }, 'S', null), true);
+    verifier('numéro nul : un visuel dans un AUTRE set ne compte pas', T.dejaServiTpc({ images: [{ set: 'T', numero: '005', cleR2: 'a' }] }, 'S', null), false);
+    verifier('numéro nul : un visuel sans numéro dans le set sert la carte', T.dejaServiTpc({ images: [{ set: 'S', cleR2: 'a' }] }, 'S', null), true);
+    verifier('numéro renseigné : inchangé (un visuel à un AUTRE numéro ne sert pas)', T.dejaServiTpc({ images: [{ set: 'S', numero: '005', cleR2: 'a' }] }, 'S', '006'), false);
+    verifier('l\'identifiant du document image porte le numéro : un visuel sans numéro n\'écrase pas un visuel à numéro', T.idImageTpc('pokemon-card-com', 'S', 1, null, 'ja') !== T.idImageTpc('pokemon-card-com', 'S', 1, '005', 'ja'), true);
+    verifier('   et deux cartes sans numéro ont chacune leur document', T.idImageTpc('pokemon-card-com', 'S', 1, null, 'ja') !== T.idImageTpc('pokemon-card-com', 'S', 2, null, 'ja'), true);
+
     // ── 5. ROBOTS.TXT RESPECTÉ ────────────────────────────────────────────────────────────────────────────────────
     verifier('robots vide (TPC Asie, 2026-10-07) → autorisé', T.autoriseParRobots('', '/id/card-search/list/'), true);
     verifier('robots absent (pokemon-card.com : 404) → autorisé', T.autoriseParRobots(null, '/card-search/resultAPI.php'), true);

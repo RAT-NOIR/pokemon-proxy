@@ -125,7 +125,43 @@ function reglesDuNom(nom) {
  *                            dénominateur numérique (« 165/164 ») ne nomme pas le set : sans cette comparaison, une fiche d'un autre set
  *                            au même numéro passerait si la source ignorait son propre filtre (relecture du 2026-10-07).
  */
-function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu = {} }) {
+// ── LE TÉMOIN DU NOM JAPONAIS (règle B, T3c 2026-10-12) ──────────────────────────────────────────────────────────────────
+// Une fiche simple (carteId < 0, aucune page chez nous) n'a pas de `nomJa`. Le nom japonais de la fiche se compare alors au `nomJa` des
+// AUTRES cartes (vraies pages, _id > 0) de même `nomEn` : le numéro reste exigé (numéro + nom = deux éléments). Un `nomEn` dont les `nomJa`
+// divergent entre cartes (une faute chez nous, ex. « Vanillish » = バニプッチ) ne témoigne PAS : il est listé (`divergents`), jamais rattrapé
+// par une tolérance — la seule normalisation est `nomCompare`, celle de la preuve de production (NFKC, ponctuation, « ・ »).
+const cleNomEn = s => String(s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+/** @returns {{(nomEn:string):(null|{noms:string[],cartes:number,divergent:boolean}), divergents:string[]}} */
+function construireTemoinNomJa(cartes) {
+    const m = new Map();
+    for (const c of cartes) {
+        if (!(c?._id > 0) || !c.nomEn || !c.nomJa) continue;
+        const k = cleNomEn(c.nomEn); if (!k) continue;
+        const e = m.get(k) || m.set(k, { noms: new Set(), cartes: 0 }).get(k);
+        e.noms.add(nomCompare(c.nomJa)); e.cartes++;
+    }
+    const f = nomEn => { const e = m.get(cleNomEn(nomEn)); return e ? { noms: [...e.noms], cartes: e.cartes, divergent: e.noms.size > 1 } : null; };
+    f.divergents = [...m].filter(([, e]) => e.noms.size > 1).map(([k, e]) => `${k}: ${[...e.noms].join(' | ')}`);
+    return f;
+}
+
+// ── LE SECOND ÉLÉMENT DE LA RÈGLE A (fiche SANS numéro) : le nom seul ne suffit pas ─────────────────────────────────────────
+// Brief du testeur : deux éléments indépendants. L'appartenance à la liste du set est le cadre, pas un élément. Indépendants du nom et qui
+// ne se traduisent pas : les PV (chiffres des deux côtés) ; pour une carte sans PV (Dresseur, Énergie) l'ILLUSTRATEUR, que la fiche
+// et une de nos impressions japonaises portent. Rien des deux côtés, ou d'un seul : un trou.
+const nomIllustrateur = s => String(s ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9぀-ヿ一-鿿]+/g, '');
+function secondElement(fiche, carte) {
+    const refus = (motif, detail) => ({ ok: false, motif, detail });
+    const pvNotre = Number(carte?.pv) || null;
+    if (fiche.pv && pvNotre) return fiche.pv === pvNotre ? { ok: true, voie: 'nom+pv', plus: `PV ${fiche.pv} = ${pvNotre}` } : refus('contradiction-pv', `PV ${fiche.pv} à la source, ${pvNotre} chez nous`);
+    if (fiche.pv || pvNotre) return refus('element-independant-absent', `PV d'un seul côté (source ${fiche.pv ?? '—'}, nous ${pvNotre ?? '—'})`);
+    const ill = nomIllustrateur(fiche.illustrateur);
+    const nos = (carte?.impressions || []).filter(i => i.tirage === 'jp').map(i => nomIllustrateur(i.illustrateur)).filter(Boolean);
+    if (!ill || !nos.length) return refus('element-independant-absent', `ni PV ni illustrateur comparable (source « ${fiche.illustrateur ?? '—'} », ${nos.length} illustrateur(s) chez nous)`);
+    return nos.includes(ill) ? { ok: true, voie: 'nom+illustrateur', plus: `illustrateur « ${fiche.illustrateur} »` } : refus('contradiction-illustrateur', `illustrateur « ${fiche.illustrateur} » à la source, absent de nos impressions japonaises`);
+}
+
+function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu = {}, temoinNomJa = null }) {
     const refus = (motif, detail) => ({ ok: false, motif, detail });
     if (!SITES[site]) return refus('site', `site « ${site} » hors de la liste des sources officielles`);
     if (!fiche?.numero || !numeroFiche || cleNumero(fiche.numero) !== cleNumero(numeroFiche)) return refus('numero', `n° ${fiche?.numero ?? '—'} à la source, n° ${numeroFiche ?? '—'} chez nous`);
@@ -144,6 +180,14 @@ function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu
     const ici = `${site} fiche ${fiche.idFiche ?? '?'} : n° ${fiche.numero}${fiche.denominateur ? `/${fiche.denominateur}` : ''}, nom « ${fiche.nom} »`;
     const ok = (voie, plus = '') => ({ ok: true, voie, preuve: `${ici}${plus} ; set ${code} (liste filtrée par la source)` });
     if (nomNotre && fiche.nom && nomCompare(nomNotre) === nomCompare(fiche.nom)) return ok('nom', ` = « ${nomNotre} »${fiche.dex && dexNotre ? `, Pokédex ${fiche.dex}` : ''}${fiche.pv && pvNotre ? `, PV ${fiche.pv}` : ''}`);
+    // règle B : pas de nomJa chez nous (fiche simple) → le nom japonais de la fiche doit être LE nomJa que portent nos autres cartes de même nomEn
+    if (site === 'pokemon-card-com' && !nomNotre && temoinNomJa && carte?.nomEn && fiche.nom) {
+        const t = temoinNomJa(carte.nomEn);
+        if (!t) return refus('nom-non-comparable', `aucune carte à page ne porte le nomEn « ${carte.nomEn} » avec un nomJa`);
+        if (t.divergent) return refus('nom-non-comparable', `les nomJa de « ${carte.nomEn} » divergent entre nos cartes (${t.noms.join(' | ')}) : le dictionnaire ne témoigne pas`);
+        if (t.noms[0] === nomCompare(fiche.nom)) return ok('nom-temoin', ` = « ${fiche.nom} », le nomJa de nos ${t.cartes} autre(s) carte(s) « ${carte.nomEn} » (numéro identique)`);
+        return refus('nom-different', `« ${fiche.nom} » à la source, « ${t.noms[0]} » pour nos cartes « ${carte.nomEn} »`);
+    }
     if (site === 'tpc-asie') {
         // l'énergie de base au nom chinois : son type, et rien d'autre
         const e = energieDeBase(fiche.nom);
@@ -167,7 +211,7 @@ function preuveDeCorrespondance({ fiche, carte, numeroFiche, code, site, attendu
  * (carte, numéro) ne font qu'un visuel ; deux fiches au même numéro à la source ne désignent rien.
  * @param {{trous: Array<{carte: object, numeroFiche: string|null, idProduct: number}>, fiches: object[], code: string, site: string}} o
  */
-function planifierTpc({ trous, fiches, code, site, prefixes = null }) {
+function planifierTpc({ trous, fiches, code, site, prefixes = null, temoinNomJa = null, cartesDuSet = null }) {
     // ce que porte la majorité de la liste (preuveDeCorrespondance, `attendu`) ; une égalité de voix n'élit personne
     const majorite = xs => { const m = new Map(); for (const x of xs) if (x != null) m.set(x, (m.get(x) || 0) + 1); const t = [...m].sort((a, b) => b[1] - a[1]); return t.length && (t.length === 1 || t[0][1] > t[1][1]) ? t[0][0] : null; };
     const attenduDe = fs => ({ denominateur: majorite(fs.map(f => /^\d+$/.test(f.denominateur || '') ? f.denominateur : null)), symbole: majorite(fs.map(f => f.symbole ?? null)) });
@@ -185,13 +229,14 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null }) {
         (parNumero.get(kk) || parNumero.set(kk, []).get(kk)).push(f);
     }
     const vus = new Set(), plan = [], restes = [];
+    const sansNumero = [];       // règle A : jugés APRÈS les produits à numéro (une fiche déjà prise par un numéro n'est pas reprise)
     for (const t of trous) {
         const k = t.numeroFiche ? cleNumero(t.numeroFiche) : null;
         const cle = `${t.carte._id}|${k ?? `sans-numero:${t.idProduct}`}`;
         if (vus.has(cle)) continue;
         vus.add(cle);
         const base = { carteId: t.carte._id, nomEn: t.carte.nomEn ?? null, numero: t.numeroFiche ?? null, idProduct: t.idProduct };
-        if (!k) { restes.push({ ...base, motif: 'sans-numero' }); continue; }
+        if (!k) { if (site === 'pokemon-card-com' && t.carte.nomJa && !multi) sansNumero.push({ t, base }); else restes.push({ ...base, motif: 'sans-numero' }); continue; }
         let pref = null;
         if (multi) {
             pref = /^([A-Z]*)\d/.exec(k)?.[1] ?? '';
@@ -204,15 +249,56 @@ function planifierTpc({ trous, fiches, code, site, prefixes = null }) {
         // la fiche d'une demi-liste porte son numéro SANS la lettre : pour la preuve, elle prend celle de sa liste (a + 019 = a019) et le code de
         // SA liste ; ce qui est écrit au plan reste la fiche lue, avec son préfixe
         const f = multi ? { ...c[0], numero: `${pref.toLowerCase()}${c[0].numero}` } : c[0];
-        const p = preuveDeCorrespondance({ fiche: f, carte: t.carte, numeroFiche: t.numeroFiche, code: multi ? (c[0].listeCode ?? code) : code, site, attendu: multi ? attendu.get(pref) : attendu });
+        const p = preuveDeCorrespondance({ fiche: f, carte: t.carte, numeroFiche: t.numeroFiche, code: multi ? (c[0].listeCode ?? code) : code, site, attendu: multi ? attendu.get(pref) : attendu, temoinNomJa });
         if (!p.ok) { restes.push({ ...base, motif: p.motif, detail: p.detail }); continue; }
         plan.push({ ...base, fiche: c[0], voie: p.voie, preuve: p.preuve });
+    }
+    // ── RÈGLE A (pokemon-card.com seulement) : un produit SANS numéro de fiche. Trois éléments, tous requis :
+    //   1. le nom japonais, UNIQUE des deux côtés (une seule fiche de la liste, une seule de nos cartes du set — multiplicités comptées, §34) ;
+    //   2. un SECOND élément indépendant du nom (`secondElement` : PV, ou illustrateur pour une carte sans PV) ;
+    //   3. la marque d'extension de la fiche = le code du set, et la fiche n'est pas déjà prise par un numéro.
+    // L'appartenance à la liste filtrée est le cadre, pas un élément. Le résultat est UNE image par carte (numéro nul) ; ses autres produits suivent.
+    if (sansNumero.length) {
+        const cartesSet = new Map();
+        for (const c of cartesDuSet || trous.map(t => t.carte)) if (c?.nomJa) { const k = nomCompare(c.nomJa); (cartesSet.get(k) || cartesSet.set(k, new Set()).get(k)).add(c._id); }
+        const prises = new Set(plan.map(x => x.fiche.idFiche));
+        const parNom = new Map();
+        for (const f of fiches) if (f.nom) { const k = nomCompare(f.nom); (parNom.get(k) || parNom.set(k, []).get(k)).push(f); }
+        const jugees = new Map();
+        for (const { t, base } of sansNumero) {
+            if (!jugees.has(t.carte._id)) {
+                const nj = nomCompare(t.carte.nomJa), fs = parNom.get(nj) || [];
+                let r;
+                if (!fs.length) r = { ok: false, motif: 'absente-de-la-source', detail: `aucune fiche au nom « ${t.carte.nomJa} »` };
+                else if (fs.length > 1) r = { ok: false, motif: 'nom-ambigu-a-la-source', detail: fs.map(f => f.idFiche).join(', ') };
+                else if ((cartesSet.get(nj)?.size || 0) > 1) r = { ok: false, motif: 'nom-ambigu-chez-nous', detail: [...cartesSet.get(nj)].join(', ') };
+                else if (!fs[0].marque || String(fs[0].marque).toUpperCase() !== String(code).toUpperCase()) r = { ok: false, motif: 'set', detail: `marque « ${fs[0].marque ?? '—'} » pour le code ${code}` };
+                else if (prises.has(fs[0].idFiche)) r = { ok: false, motif: 'fiche-deja-prise', detail: `fiche ${fs[0].idFiche} déjà prouvée par un numéro` };
+                else {
+                    const s = secondElement(fs[0], t.carte);
+                    r = s.ok ? { ok: true, fiche: fs[0], voie: s.voie, preuve: `pokemon-card-com fiche ${fs[0].idFiche ?? '?'} : sans numéro, nom « ${fs[0].nom} » = « ${t.carte.nomJa} » (unique dans la liste et chez nous), ${s.plus} ; set ${code} (marque ${fs[0].marque}, liste filtrée par la source)` } : s;
+                    if (s.ok) prises.add(fs[0].idFiche);
+                }
+                r.premier = t.idProduct; jugees.set(t.carte._id, r);
+            }
+            const r = jugees.get(t.carte._id);
+            if (r.ok && r.premier === t.idProduct) plan.push({ ...base, fiche: r.fiche, voie: r.voie, preuve: r.preuve });
+            else if (!r.ok) restes.push({ ...base, motif: r.motif, detail: r.detail });
+            // r.ok et produit suivant de la même carte : servi par la même image (une par carte et par set, numéro nul)
+        }
     }
     return { plan, restes };
 }
 
 /** ADDITIF : un (carte, set, numéro) qui a déjà un visuel — au même numéro, ou sans numéro dans le set — n'est jamais touché. */
 const dejaServi = (carte, set, numero) => (carte?.images || []).some(e => e.set === set && (e.numero == null || cleNumero(e.numero) === cleNumero(numero)));
+
+/** Pour pokemon-card.com (règle A, image à numéro NUL) : clé (carte, set, numéro) — §32 bis. Sans numéro, le visuel ne dit pas lequel des numéros il sert :
+ *  il ne s'ajoute donc JAMAIS à une carte qui a déjà un visuel dans ce set (aucun doublon), et un visuel sans numéro déjà là sert tous les numéros
+ *  (`dejaServi`). L'inverse est vrai aussi : il ne peut pas en écraser un autre (sa clé porte son numéro nul). */
+const dejaServiTpc = (carte, set, numero) => (numero == null || !cleNumero(numero))
+    ? (carte?.images || []).some(e => e.set === set)
+    : dejaServi(carte, set, numero);
 
 // ── ROBOTS.TXT ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // Le groupe de notre agent s'il existe, sinon celui de « * » ; la règle la plus LONGUE qui correspond décide, Allow à égalité.
@@ -381,6 +467,6 @@ function planRetrait(cartes) {
 module.exports = {
     SITES, SOURCES_TPC, MENTION, LOT, CADENCE_MS, VERROU_GLOBAL_MS, UA,
     lireFicheAsie, lireListeAsie, lireApiPcc, lireFichePcc,
-    preuveDeCorrespondance, planifierTpc, dejaServi, reglesDuNom, nomCompare, entites,
+    preuveDeCorrespondance, planifierTpc, dejaServi, dejaServiTpc, construireTemoinNomJa, secondElement, reglesDuNom, nomCompare, entites,
     autoriseParRobots, delaiDesRobots, fabriquerClientTpc, idImageTpc, idAlerteBloquee, planRetrait
 };
